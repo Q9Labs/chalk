@@ -146,6 +146,42 @@ whiteboard are not artifacts: they are the Space's living content, which
 Episodes write into while live and reference by range or capture afterward.
 Space content is never derived by merging per-episode copies.
 
+### Recording processing
+
+A **Recording** is the Episode artifact for captured activity. It is not a
+synonym for an MP4 file, a browser player, or a particular processing job. A
+**Recording presentation** is the frozen description of what that Recording
+shows over time: source visibility, layout, shared content, and required assets.
+
+The terms below distinguish work and media representations. They do not
+introduce new public commands, artifact types, or readiness states, and do not
+promise that a proposed playback mode is implemented.
+
+| Term                  | Meaning                                                                                                                                                                                                                                                                                                           |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Media source**      | One published source belonging to a Participant, such as microphone audio, camera video, or screen-share video. A Participant can publish several sources or none. Record which source and timing each transport stream belongs to rather than treating a transport identifier as Participant identity.           |
+| **Track**             | A standard media/transport term for one audio or video stream, not a Participant. Three Participants publishing a microphone and camera each produce three audio tracks and three video tracks before any screen sharing. Transport replacement or additional encodings need not create a new domain Participant. |
+| **Source media**      | The captured audio/video used to produce a Recording's outputs, together with the timing and gap information needed to interpret it. Captured media is normally already codec-compressed. It is distinct from a finished composite file.                                                                          |
+| **Capture**           | Receiving and durably storing authorized source media and the inputs needed to reproduce the Recording presentation. Capture does not imply visual composition or creation of a finished file.                                                                                                                    |
+| **Preparation**       | Reconstructing usable, correctly timed source media from captured inputs. This can include packet assembly, container packaging, gap handling, and required codec normalization. It does not imply composing the sources into one picture.                                                                        |
+| **Audio preparation** | Preparing correctly timed microphone audio for Transcription without producing video frames or an MP4. It can still require downloading and decrypting capture bundles containing several media sources. It is distinct from speech recognition.                                                                  |
+| **Composition**       | Arranging video sources and visual layers into one output picture according to the Recording presentation. Combining compressed files in a container is not visual composition.                                                                                                                                   |
+| **Audio mixing**      | Combining audio sources into an output audio stream. It is separate from visual composition.                                                                                                                                                                                                                      |
+| **Rendering**         | Producing output visual frames from the Recording presentation, including the required composition. The existing **render job** is a broader execution unit that also performs preparation, encoding, verification, and upload; its elapsed time is not rendering time alone.                                     |
+| **Encoding**          | Compressing video frames or audio samples using a codec. **Transcoding** decodes already encoded media and encodes it again. These operations are distinct from container packaging.                                                                                                                              |
+| **Muxing**            | Packaging encoded audio/video streams and their timing into a container. **Remuxing** changes that packaging without re-encoding the media where compatibility permits. Neither operation creates a combined visual layout.                                                                                       |
+| **Codec**             | The scheme used to encode/decode media, such as H.264 or VP8 for video and AAC or Opus for audio. Codec choice is distinct from container choice.                                                                                                                                                                 |
+| **MP4**               | A standard media container. A typical Recording export contains one composed video stream and one mixed audio stream in it. MP4 is not a codec, quality level, compositor, or processing-time guarantee.                                                                                                          |
+| **Export**            | Producing a portable file from a Recording. Depending on the output, this can require preparation, rendering, audio mixing, encoding, and muxing. An existing file can be downloaded again without repeating that work. Export is not a second artifact identity.                                                 |
+| **Playback**          | Decoding and presenting recorded media to a viewer. Ordinary file playback consumes a finished media file. **Multi-source playback** synchronizes separate source media and presentation events on the viewer's device; it is a distinct product capability, not another name for an MP4 download.                |
+| **Seeking**           | Moving playback to a chosen time. Ordinary media-container/player seeking is distinct from implementing synchronized seeking across multiple sources and presentation events.                                                                                                                                     |
+
+Use explicit milestone names in design discussions: **capture complete**,
+**preparation complete**, and **export ready**. Do not say "recording ready" to
+mean different milestones interchangeably, or invent corresponding API states
+without a separate contract change. Use **recorded duration** for source length
+and **processing time** for elapsed work; never present one as the other.
+
 ### Spinoff
 
 A new Space derived from a live or ending Episode, seeded with invited

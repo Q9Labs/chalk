@@ -197,7 +197,7 @@ with authorized_job as (
         sqlc.arg(job_id), sqlc.arg(object_handle), sqlc.arg(reservation_request_id), next_values.allocation_version,
         sqlc.arg(attempt_count), sqlc.arg(fencing_generation), sqlc.arg(capture_epoch), sqlc.arg(envelope_digest),
         next_values.sequence_number, 'unknown', null, 0, 0, 0, 0,
-        format('temporary/recordings/%s/capture/%s/bundles/%s/%s.bundle', sqlc.arg(recording_id)::text, sqlc.arg(capture_epoch)::text, next_values.sequence_number::text, sqlc.arg(allocation_id)::uuid::text),
+        format('tenants/%s/recordings/%s/capture/%s/bundles/%s/%s.bundle', sqlc.arg(tenant_id)::text, sqlc.arg(recording_id)::text, sqlc.arg(capture_epoch)::text, next_values.sequence_number::text, sqlc.arg(allocation_id)::uuid::text),
         sha256(convert_to('reserved:' || sqlc.arg(allocation_id)::uuid::text, 'UTF8')), 0, decode(repeat('00', 32), 'hex'),
         'application/octet-stream', clock_timestamp() + interval '30 minutes', sqlc.arg(encryption_context_digest), 'reserved'
     from locked_recording, next_values

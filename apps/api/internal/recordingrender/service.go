@@ -59,10 +59,6 @@ func (s Service) ResolveRenderInput(ctx context.Context, authority Authority) (R
 		return ResolvedInput{}, err
 	}
 	now := s.now().UTC()
-	expiresAt, err := uploadExpiry(now, authority, s.grantTTL)
-	if err != nil {
-		return ResolvedInput{}, err
-	}
 	stored, err := s.repository.ResolveInput(ctx, authority)
 	if err != nil {
 		return ResolvedInput{}, err
@@ -72,6 +68,16 @@ func (s Service) ResolveRenderInput(ctx context.Context, authority Authority) (R
 	}
 	if err := validateStoredInput(stored); err != nil {
 		return ResolvedInput{}, err
+	}
+	expiresAt, err := uploadExpiry(now, authority, s.grantTTL)
+	if err != nil {
+		return ResolvedInput{}, err
+	}
+	if !stored.SourceExpiresAt.IsZero() && stored.SourceExpiresAt.Before(expiresAt) {
+		expiresAt = stored.SourceExpiresAt.UTC()
+	}
+	if !expiresAt.After(now) {
+		return ResolvedInput{}, ErrLeaseStale
 	}
 
 	resolved := ResolvedInput{
@@ -243,6 +249,25 @@ func (s Service) CommitRender(ctx context.Context, input CommitInput) (CommitRes
 	}
 	if s.wake != nil && result.Transcription != nil {
 		for _, jobID := range result.Transcription.JobIDs {
+			s.wake(ctx, jobID)
+		}
+	}
+	return result, nil
+}
+
+// CommitTranscriptionPreparation completes only the independently leased
+// microphone preparation job. It intentionally has no presentation artifact
+// side effect, so MP4 export and transcription can finish in either order.
+func (s Service) CommitTranscriptionPreparation(ctx context.Context, input TranscriptionPreparationInput) (*TranscriptionResult, error) {
+	if err := input.Validate(); err != nil {
+		return nil, err
+	}
+	result, err := s.repository.CommitTranscriptionPreparation(ctx, input, s.now().UTC())
+	if err != nil {
+		return nil, err
+	}
+	if s.wake != nil && result != nil {
+		for _, jobID := range result.JobIDs {
 			s.wake(ctx, jobID)
 		}
 	}

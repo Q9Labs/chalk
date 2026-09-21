@@ -80,6 +80,7 @@ type Options struct {
 	Memberships                MembershipService
 	AuditLogs                  AuditLogService
 	RecordingDownloads         RecordingDownloadService
+	RecordingExports           RecordingExportService
 	RecordingObjects           RecordingObjectService
 	Recordings                 RecordingService
 	RecordingPreparations      RecordingPreparationService

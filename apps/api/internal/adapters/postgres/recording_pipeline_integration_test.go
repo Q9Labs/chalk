@@ -408,7 +408,7 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 			},
 		}
 		allocation, err := objects.ReserveAllocation(ctx, input)
-		expectedObjectKey := fmt.Sprintf("temporary/recordings/%s/capture/%d/bundles/0/%s.bundle", reservation.RecordingID.String(), job.CaptureEpoch, input.AllocationID)
+		expectedObjectKey := fmt.Sprintf("tenants/%s/recordings/%s/capture/%d/bundles/0/%s.bundle", tenantID.String(), reservation.RecordingID.String(), job.CaptureEpoch, input.AllocationID)
 		if err != nil || allocation.ID != input.AllocationID || allocation.SequenceNumber != 0 || allocation.State != "reserved" || allocation.ObjectKey != expectedObjectKey {
 			t.Fatalf("reserve actual bundle allocation: %+v, %v", allocation, err)
 		}
@@ -875,6 +875,32 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	if err != nil || replayedCompletion.ID != completedCapture.ID || replayedCompletion.State != recordingpipeline.JobStateSucceeded || replayedCompletion.TerminalAt == nil || completedCapture.TerminalAt == nil || !replayedCompletion.TerminalAt.Equal(*completedCapture.TerminalAt) {
 		t.Fatalf("completion replay state=%s: %v", replayedCompletion.State, err)
 	}
+	var sourceCleanupCount int
+	var sourceCleanupDueAt, expectedSourceCleanupDueAt, captureCompletedAt time.Time
+	if err := pool.QueryRow(ctx, `
+		select count(*), min(due_at)
+		from transcription_cleanup_jobs
+		where recording_id = $1 and object_kind = 'recording_source'`, reservation.RecordingID.Bytes()).Scan(&sourceCleanupCount, &sourceCleanupDueAt); err != nil || sourceCleanupCount < 4 {
+		t.Fatalf("capture source cleanup rows=%d due=%v: %v", sourceCleanupCount, sourceCleanupDueAt, err)
+	}
+	if err := pool.QueryRow(ctx, `
+		select pipelines.capture_completed_at +
+			(recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second')
+		from recording_pipelines pipelines
+		join recordings on recordings.id = pipelines.recording_id
+		join episodes on episodes.id = recordings.episode_id
+		where pipelines.recording_id = $1`, reservation.RecordingID.Bytes()).Scan(&expectedSourceCleanupDueAt); err != nil {
+		t.Fatalf("read capture-anchored source cleanup deadline: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `select capture_completed_at from recording_pipelines where recording_id = $1`, reservation.RecordingID.Bytes()).Scan(&captureCompletedAt); err != nil {
+		t.Fatalf("read capture completion: %v", err)
+	}
+	if window := expectedSourceCleanupDueAt.Sub(captureCompletedAt); window != 30*24*time.Hour {
+		t.Fatalf("legacy zero retention deferred window = %s, want 30d", window)
+	}
+	if !sourceCleanupDueAt.Equal(expectedSourceCleanupDueAt) {
+		t.Fatalf("source cleanup deadline moved from capture retention: got=%s want=%s", sourceCleanupDueAt, expectedSourceCleanupDueAt)
+	}
 	for _, changed := range []string{"worker", "token", "attempt", "generation", "epoch", "digest"} {
 		t.Run("reject completed capture replay "+changed, func(t *testing.T) {
 			stale := completionLease
@@ -898,8 +924,34 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 		})
 	}
 	var renderJobs int
+	if err := pool.QueryRow(ctx, `select count(*) from recording_jobs where recording_id=$1 and kind='render'`, reservation.RecordingID.Bytes()).Scan(&renderJobs); err != nil || renderJobs != 0 {
+		t.Fatalf("capture completion must not create an MP4 export: render jobs=%d err=%v", renderJobs, err)
+	}
+	requestedRenderID := mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be048")
+	requestedRender, err := repository.RequestExport(ctx, recordingpipeline.ExportInput{TenantID: tenantID, RecordingID: reservation.RecordingID}, requestedRenderID)
+	if err != nil || requestedRender.ID != requestedRenderID || requestedRender.Kind != recordingpipeline.JobKindRender {
+		t.Fatalf("request deferred MP4 export=%+v: %v", requestedRender, err)
+	}
+	reusedRender, err := repository.RequestExport(ctx, recordingpipeline.ExportInput{TenantID: tenantID, RecordingID: reservation.RecordingID}, mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be049"))
+	if err != nil || reusedRender.ID != requestedRender.ID {
+		t.Fatalf("reuse deferred MP4 export=%+v first=%+v err=%v", reusedRender, requestedRender, err)
+	}
+	artifactState, err := repository.GetArtifactState(ctx, tenantID, reservation.RecordingID)
+	if err != nil || artifactState.SourceStatus != recordingpipeline.SourceStatusAvailable || artifactState.SourceExpiresAt == nil || !artifactState.SourceExpiresAt.Equal(expectedSourceCleanupDueAt) {
+		t.Fatalf("legacy zero deferred source state=%+v err=%v, want available through %s", artifactState, err, expectedSourceCleanupDueAt)
+	}
+	var sourceCleanupDueAfterRepeatedExport time.Time
+	if err := pool.QueryRow(ctx, `
+		select min(due_at)
+		from transcription_cleanup_jobs
+		where recording_id = $1 and object_kind = 'recording_source'`, reservation.RecordingID.Bytes()).Scan(&sourceCleanupDueAfterRepeatedExport); err != nil {
+		t.Fatalf("read source cleanup after repeated export: %v", err)
+	}
+	if !sourceCleanupDueAfterRepeatedExport.Equal(sourceCleanupDueAt) {
+		t.Fatalf("repeated export renewed source cleanup deadline: got=%s want=%s", sourceCleanupDueAfterRepeatedExport, sourceCleanupDueAt)
+	}
 	if err := pool.QueryRow(ctx, `select count(*) from recording_jobs where recording_id=$1 and kind='render'`, reservation.RecordingID.Bytes()).Scan(&renderJobs); err != nil || renderJobs != 1 {
-		t.Fatalf("render jobs after replay=%d: %v", renderJobs, err)
+		t.Fatalf("deferred export jobs after repeat=%d: %v", renderJobs, err)
 	}
 	var presentationObjectKey, assetManifestObjectKey string
 	var presentationDurationMillis int64
@@ -913,11 +965,7 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("claim render: %v", err)
 	}
-	var captureCompletedAt time.Time
-	if err := pool.QueryRow(ctx, `select capture_completed_at from recording_pipelines where recording_id = $1`, reservation.RecordingID.Bytes()).Scan(&captureCompletedAt); err != nil {
-		t.Fatalf("read capture completion: %v", err)
-	}
-	expectedRenderDeadline := captureCompletedAt.UTC().Add(recordingpipeline.MaximumRenderDuration).Format(time.RFC3339Nano)
+	expectedRenderDeadline := render.CreatedAt.UTC().Add(recordingpipeline.MaximumRenderDuration).Format(time.RFC3339Nano)
 	if render.Authority == nil || render.Authority.Envelope.HardDeadline != expectedRenderDeadline {
 		t.Fatalf("render hard deadline = %v, want %s", render.Authority, expectedRenderDeadline)
 	}
@@ -949,7 +997,7 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 		CaptureEpoch: render.Authority.Envelope.CaptureEpoch, EnvelopeDigest: render.Authority.EnvelopeDigest,
 		LeaseFor: recordingpipeline.MaximumRenderDuration + time.Hour,
 	})
-	if err != nil || renewedRender.LeaseExpiresAt == nil || !renewedRender.LeaseExpiresAt.Equal(captureCompletedAt.Add(recordingpipeline.MaximumRenderDuration)) {
+	if err != nil || renewedRender.LeaseExpiresAt == nil || !renewedRender.LeaseExpiresAt.Equal(render.CreatedAt.Add(recordingpipeline.MaximumRenderDuration)) {
 		t.Fatalf("render heartbeat must stop at immutable deadline: expiry=%v err=%v", renewedRender.LeaseExpiresAt, err)
 	}
 	renderAuthority.LeaseExpiresAt = *renewedRender.LeaseExpiresAt
@@ -1153,6 +1201,20 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	}
 	if artifact.ObjectKey != "recordings/final.mp4" {
 		t.Fatalf("artifact key = %s", artifact.ObjectKey)
+	}
+	var artifactExpiresAt, artifactCleanupDueAt time.Time
+	if err := pool.QueryRow(ctx, `
+		select artifacts.expires_at, cleanup.due_at
+		from recording_artifacts artifacts
+		join transcription_cleanup_jobs cleanup
+		  on cleanup.recording_id = artifacts.recording_id
+		 and cleanup.object_key = artifacts.object_key
+		 and cleanup.object_kind = 'recording_source'
+		where artifacts.recording_id = $1`, reservation.RecordingID.Bytes()).Scan(&artifactExpiresAt, &artifactCleanupDueAt); err != nil {
+		t.Fatalf("read capture-anchored MP4 expiry: %v", err)
+	}
+	if !artifactExpiresAt.Equal(expectedSourceCleanupDueAt) || !artifactCleanupDueAt.Equal(expectedSourceCleanupDueAt) {
+		t.Fatalf("legacy zero MP4 expiry moved from capture window: artifact=%s cleanup=%s want=%s", artifactExpiresAt, artifactCleanupDueAt, expectedSourceCleanupDueAt)
 	}
 	var recordingStatus, storageKey, contentType string
 	var storageSize, durationMillis int64
@@ -1387,6 +1449,46 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	if _, err := repository.RelinquishCapture(ctx, firstHandoffLease); !errors.Is(err, recordingpipeline.ErrJobNotFound) {
 		t.Fatalf("old handoff lease after reclaim error = %v, want %v", err, recordingpipeline.ErrJobNotFound)
 	}
+	if _, err := pool.Exec(ctx, `
+		update recording_jobs
+		set state = 'succeeded', lease_token = null, lease_owner = null, lease_expires_at = null, terminal_at = clock_timestamp()
+		where recording_id = $1 and kind = 'capture'`, handoffReservation.RecordingID.Bytes()); err != nil {
+		t.Fatalf("seed expired legacy-zero capture job: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		update recording_pipelines
+		set state = 'capture_complete', capture_completed_at = clock_timestamp() - interval '24 hours' - interval '1 microsecond'
+		where recording_id = $1`, handoffReservation.RecordingID.Bytes()); err != nil {
+		t.Fatalf("seed expired transcription source window: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		insert into recording_jobs (
+			id, tenant_id, episode_id, recording_id, kind, idempotency_key,
+			payload_schema_version, state, available_at, attempt_limit
+		) values ($1, $2, $3, $4, 'transcription', 'legacy-zero-source-window-expired', 1, 'pending', clock_timestamp(), 1)`,
+		mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be046").Bytes(), tenantID.Bytes(), episodeID.Bytes(), handoffReservation.RecordingID.Bytes()); err != nil {
+		t.Fatalf("seed expired transcription job: %v", err)
+	}
+	transcriptionEnabledRepository := repository.WithTranscriptionEnabled(true)
+	if _, err := transcriptionEnabledRepository.Claim(ctx, recordingpipeline.ClaimInput{
+		ClaimRequestID: mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be047"), Kind: recordingpipeline.JobKindRender,
+		Owner: "expired-transcription-test", LeaseToken: "expired-transcription-lease", LeaseFor: time.Minute,
+	}); !errors.Is(err, recordingpipeline.ErrJobNotFound) {
+		t.Fatalf("expired transcription source window claim error = %v, want %v", err, recordingpipeline.ErrJobNotFound)
+	}
+	if _, err := pool.Exec(ctx, `
+		update recording_pipelines
+		set state = 'capture_complete', capture_completed_at = clock_timestamp() - interval '30 days' - interval '1 microsecond'
+		where recording_id = $1`, handoffReservation.RecordingID.Bytes()); err != nil {
+		t.Fatalf("seed expired legacy-zero capture: %v", err)
+	}
+	expiredState, err := repository.GetArtifactState(ctx, tenantID, handoffReservation.RecordingID)
+	if err != nil || expiredState.SourceStatus != recordingpipeline.SourceStatusExpired || expiredState.ExportStatus != recordingpipeline.ExportStatusUnavailable {
+		t.Fatalf("legacy zero source after 30d = %+v err=%v", expiredState, err)
+	}
+	if _, err := repository.RequestExport(ctx, recordingpipeline.ExportInput{TenantID: tenantID, RecordingID: handoffReservation.RecordingID}, mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be045")); !errors.Is(err, recordingpipeline.ErrExportUnavailable) {
+		t.Fatalf("legacy zero export after 30d error = %v, want %v", err, recordingpipeline.ErrExportUnavailable)
+	}
 }
 
 func TestRecordingReservationAdmissionSerializesCaptureCompletion(t *testing.T) {
@@ -1506,7 +1608,13 @@ func TestRecordingReservationAdmissionSerializesCaptureCompletion(t *testing.T) 
 	}
 	result := <-reserveResultChannel
 	if result.err != nil || result.reservation.RecordingID != secondInput.RecordingID {
-		t.Fatalf("reservation racing render enqueue = %+v, %v; want independent capture admission", result.reservation, result.err)
+		t.Fatalf("reservation racing capture completion = %+v, %v; want independent capture admission", result.reservation, result.err)
+	}
+	requestedRender, err := repository.RequestExport(ctx, recordingpipeline.ExportInput{
+		TenantID: tenantID, RecordingID: firstRecordingID,
+	}, mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0bed12"))
+	if err != nil || requestedRender.Kind != recordingpipeline.JobKindRender || requestedRender.RecordingID != firstRecordingID {
+		t.Fatalf("request deferred render after capture completion = %+v, %v", requestedRender, err)
 	}
 	var reservedEpisodes, activeRenderPhases int
 	if err := pool.QueryRow(ctx, `select reserved_episodes, (select count(*) from recording_pipelines where capture_completed_at is not null and state in ('render_queued', 'rendering', 'verifying', 'retryable_failure')) from recording_capacity where id = 1`).Scan(&reservedEpisodes, &activeRenderPhases); err != nil {

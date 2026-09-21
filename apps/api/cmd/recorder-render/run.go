@@ -29,7 +29,7 @@ type renderWorkerConfig struct {
 	WorkRoot          string
 	NodePath          string
 	RendererScript    string
-	UIBuildSHA256     string
+	UIBuildRegistry   string
 	FFmpegPath        string
 	FFprobePath       string
 	Encoder           string
@@ -64,6 +64,10 @@ func runWorker(config renderWorkerConfig) error {
 	if err != nil {
 		return err
 	}
+	uiBuildRegistry, err := recorderworker.LoadUIBuildRegistry(strings.TrimSpace(config.UIBuildRegistry))
+	if err != nil {
+		return fmt.Errorf("load recording UI build registry: %w", err)
+	}
 	ffmpegPath, err := renderExecutable(config.FFmpegPath, "ffmpeg")
 	if err != nil {
 		return err
@@ -90,7 +94,7 @@ func runWorker(config renderWorkerConfig) error {
 		return err
 	}
 	factory, err := recorderworker.NewProductionRenderAttemptFactory(recorderworker.ProductionRenderAttemptConfig{
-		Control: control, WorkRoot: workRoot, Environment: config.Environment, UIBuildSHA256: strings.TrimSpace(config.UIBuildSHA256),
+		Control: control, WorkRoot: workRoot, Environment: config.Environment, UIBuildRegistry: uiBuildRegistry,
 		FFmpegPath: ffmpegPath, Encoder: encoder, Frames: recorderworker.NodeFrameProducer{NodePath: nodePath, ScriptPath: rendererScript, Concurrency: config.FrameConcurrency},
 		Commands: commands, Streaming: commands,
 	})

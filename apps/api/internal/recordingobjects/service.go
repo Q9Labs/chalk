@@ -78,7 +78,7 @@ func (s Service) Allocate(ctx context.Context, input AllocateInput) (AllocationR
 		MonotonicEndMillis:      input.MonotonicEndMillis,
 		MediaStartMillis:        input.MediaStartMillis,
 		MediaEndMillis:          input.MediaEndMillis,
-		ObjectKey:               canonicalObjectKey(input.Authority.RecordingID, input.Authority.CaptureEpoch, input.SequenceNumber, input.AllocationID),
+		ObjectKey:               canonicalObjectKey(input.Authority.TenantID, input.Authority.RecordingID, input.Authority.CaptureEpoch, input.SequenceNumber, input.AllocationID),
 		ExpectedByteSize:        input.ExpectedByteSize,
 		ExpectedChecksumSHA256:  append([]byte(nil), input.ExpectedChecksumSHA256...),
 		ContentType:             strings.TrimSpace(input.ContentType),
@@ -300,7 +300,14 @@ func (s Service) Commit(ctx context.Context, input CommitInput) (Bundle, error) 
 	return bundle, nil
 }
 
-func canonicalObjectKey(recordingID string, captureEpoch, sequence int64, allocationID string) string {
+func canonicalObjectKey(tenantID, recordingID string, captureEpoch, sequence int64, allocationID string) string {
+	// Capture inputs must outlive the fixed temporary/ object lifecycle so a
+	// deferred export can resolve the frozen Episode presentation. Their own
+	// source-window cleanup remains the authority for deletion.
+	return fmt.Sprintf("tenants/%s/recordings/%s/capture/%d/bundles/%d/%s.bundle", tenantID, recordingID, captureEpoch, sequence, allocationID)
+}
+
+func temporaryCanonicalObjectKey(recordingID string, captureEpoch, sequence int64, allocationID string) string {
 	return fmt.Sprintf("temporary/recordings/%s/capture/%d/bundles/%d/%s.bundle", recordingID, captureEpoch, sequence, allocationID)
 }
 
@@ -309,9 +316,10 @@ func legacyCanonicalObjectKey(recordingID string, captureEpoch, sequence int64, 
 }
 
 func hasCanonicalObjectKey(allocation Allocation) bool {
-	newKey := canonicalObjectKey(allocation.Authority.RecordingID, allocation.Authority.CaptureEpoch, allocation.SequenceNumber, allocation.ID)
+	newKey := canonicalObjectKey(allocation.Authority.TenantID, allocation.Authority.RecordingID, allocation.Authority.CaptureEpoch, allocation.SequenceNumber, allocation.ID)
+	temporaryKey := temporaryCanonicalObjectKey(allocation.Authority.RecordingID, allocation.Authority.CaptureEpoch, allocation.SequenceNumber, allocation.ID)
 	legacyKey := legacyCanonicalObjectKey(allocation.Authority.RecordingID, allocation.Authority.CaptureEpoch, allocation.SequenceNumber, allocation.ID)
-	return allocation.ObjectKey == newKey || allocation.ObjectKey == legacyKey
+	return allocation.ObjectKey == newKey || allocation.ObjectKey == temporaryKey || allocation.ObjectKey == legacyKey
 }
 
 func opaqueToken() (string, error) {

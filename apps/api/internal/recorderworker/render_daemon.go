@@ -168,7 +168,7 @@ func (d *RenderDaemon) runClaim(ctx context.Context, claim ClaimResult) error {
 				if heartbeatErr != nil {
 					return recordingpipeline.LeaseInput{}, time.Time{}, heartbeatErr
 				}
-				renewed, err := renewedRenderLease(lease, job, d.config.Lease, d.config.Now().UTC())
+				renewed, err := renewedRenderLease(lease, claim.Envelope.Kind, job, d.config.Lease, d.config.Now().UTC())
 				if err != nil {
 					return recordingpipeline.LeaseInput{}, time.Time{}, err
 				}
@@ -215,7 +215,7 @@ func (d *RenderDaemon) reportAttemptFailure(ctx context.Context, lease recording
 
 func renderLeaseInput(claim ClaimResult, leaseFor time.Duration) (recordingpipeline.LeaseInput, error) {
 	jobID, err := utilities.ParseID(claim.Envelope.JobID)
-	if err != nil || claim.Envelope.Kind != recordingpipeline.JobKindRender || claim.Envelope.AttemptCount <= 0 || claim.Envelope.FencingGeneration <= 0 || claim.Envelope.CaptureEpoch <= 0 || claim.LeaseToken == "" || claim.LeaseOwner == "" || claim.LeaseExpiresAt.IsZero() {
+	if err != nil || !isRenderWorkerJobKind(claim.Envelope.Kind) || claim.Envelope.AttemptCount <= 0 || claim.Envelope.FencingGeneration <= 0 || claim.Envelope.CaptureEpoch <= 0 || claim.LeaseToken == "" || claim.LeaseOwner == "" || claim.LeaseExpiresAt.IsZero() {
 		return recordingpipeline.LeaseInput{}, fmt.Errorf("%w: claim authority", ErrInvalidRenderDaemon)
 	}
 	input := recordingpipeline.LeaseInput{
@@ -234,8 +234,8 @@ func renderLeaseInput(claim ClaimResult, leaseFor time.Duration) (recordingpipel
 	return input, nil
 }
 
-func renewedRenderLease(previous recordingpipeline.LeaseInput, job recordingpipeline.Job, leaseFor time.Duration, now time.Time) (recordingpipeline.LeaseInput, error) {
-	if job.ID != previous.JobID || job.Kind != recordingpipeline.JobKindRender || job.AttemptCount != previous.AttemptCount || job.FencingGeneration != previous.FencingGeneration || job.CaptureEpoch != previous.CaptureEpoch || job.LeaseToken == nil || job.LeaseOwner == nil || job.LeaseExpiresAt == nil || *job.LeaseToken != previous.LeaseToken || *job.LeaseOwner != previous.LeaseOwner || !job.LeaseExpiresAt.After(now) {
+func renewedRenderLease(previous recordingpipeline.LeaseInput, expectedKind recordingpipeline.JobKind, job recordingpipeline.Job, leaseFor time.Duration, now time.Time) (recordingpipeline.LeaseInput, error) {
+	if job.ID != previous.JobID || job.Kind != expectedKind || !isRenderWorkerJobKind(job.Kind) || job.AttemptCount != previous.AttemptCount || job.FencingGeneration != previous.FencingGeneration || job.CaptureEpoch != previous.CaptureEpoch || job.LeaseToken == nil || job.LeaseOwner == nil || job.LeaseExpiresAt == nil || *job.LeaseToken != previous.LeaseToken || *job.LeaseOwner != previous.LeaseOwner || !job.LeaseExpiresAt.After(now) {
 		return recordingpipeline.LeaseInput{}, fmt.Errorf("%w: heartbeat authority mismatch", ErrInvalidRenderDaemon)
 	}
 	previous.LeaseFor = leaseFor

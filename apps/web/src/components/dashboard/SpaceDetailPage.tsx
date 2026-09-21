@@ -20,6 +20,7 @@ import { AnimatedCopy01Icon, type AnimatedCopy01IconHandle } from "@q9labsai/cha
 import { EditSpaceDialog } from "./EditSpaceDialog";
 import { SpaceDialogActions, SpaceDialogError, SpaceDialogFrame, useModalDialog } from "./SpaceDialogPrimitives";
 import { SpaceLifecycleDialog } from "./SpaceLifecycleDialog";
+import { SpaceRecordingHistorySection } from "./SpaceRecordingHistorySection";
 import { defaultSpaceHrefBuilder, episodeHistoryHref, publicSpaceHrefBuilder } from "./space-links";
 import { formatDateTime, formatJSON, statusLabel } from "./episode-utils";
 
@@ -48,6 +49,7 @@ const defaultSpaceDetailClient: SpaceDetailClient = {
 type SpaceDetailPageProps = {
   tenantID: string;
   spaceID: string;
+  transcriptionCeiling?: string | null;
   client?: SpaceDetailClient;
 };
 
@@ -55,7 +57,7 @@ type LoadState = "loading" | "ready" | "error" | "not-found";
 type PublicInviteState = "loading" | "ready" | "error" | "archived" | "members-only" | "unavailable";
 type AdmissionRequestsState = "loading" | "ready" | "error" | "archived" | "members-only" | "not-applicable" | "unavailable";
 
-export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetailClient }: SpaceDetailPageProps) {
+export function SpaceDetailPage({ tenantID, spaceID, transcriptionCeiling, client = defaultSpaceDetailClient }: SpaceDetailPageProps) {
   const [space, setSpace] = useState<Space | null>(null);
   const [episodes, setEpisodes] = useState<DashboardEpisode[]>([]);
   const [state, setState] = useState<LoadState>("loading");
@@ -282,9 +284,14 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
         </div>
         <div className="space-detail-actions" aria-label="Space actions">
           {!archived ? (
-            <a className="dashboard-button primary" href={defaultSpaceHrefBuilder(space)}>
-              Join Space
-            </a>
+            <>
+              <a className="dashboard-button primary" href={defaultSpaceHrefBuilder(space)}>
+                Join Space
+              </a>
+              <a className="dashboard-button secondary" href={`/space/${encodeURIComponent(space.slug)}?entry=dashboard&devices=off`}>
+                Join with mic and camera off
+              </a>
+            </>
           ) : null}
           <button className="dashboard-button secondary" type="button" onClick={() => setEditOpen(true)}>
             Edit
@@ -349,6 +356,8 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
         {episodes.length > 0 ? <RecentEpisodesTable episodes={episodes} /> : <p className="space-detail-empty">No Episodes have started in this Space yet.</p>}
       </section>
 
+      <SpaceRecordingHistorySection spaceID={spaceID} tenantID={tenantID} />
+
       <details className="space-detail-advanced">
         <summary>Advanced configuration</summary>
         <div className="space-detail-advanced-body">
@@ -357,7 +366,7 @@ export function SpaceDetailPage({ tenantID, spaceID, client = defaultSpaceDetail
         </div>
       </details>
 
-      <EditSpaceDialog open={editOpen} tenantID={tenantID} space={space} onClose={() => setEditOpen(false)} onSaved={replaceSpace} />
+      <EditSpaceDialog open={editOpen} tenantID={tenantID} transcriptionCeiling={transcriptionCeiling} space={space} onClose={() => setEditOpen(false)} onSaved={replaceSpace} />
       <SpaceLifecycleDialog open={lifecycle !== null} tenantID={tenantID} space={space} action={lifecycle ?? "archive"} onClose={() => setLifecycle(null)} onChanged={replaceSpace} />
       <RotatePublicInviteDialog open={rotateOpen} spaceName={space.name} busy={inviteMutation === "rotate"} error={inviteMutationError} onClose={() => setRotateOpen(false)} onConfirm={() => void rotatePublicInvite()} />
     </div>

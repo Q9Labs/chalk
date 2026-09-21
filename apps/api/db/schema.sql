@@ -65,7 +65,7 @@ create table tenant_artifact_policies (
     transcription_ceiling text not null default 'disabled',
     transcription_default_mode text not null default 'disabled',
     provider_policy_version text not null default '',
-    recording_retention_seconds bigint not null default 0,
+    recording_retention_seconds bigint not null default 2592000,
     transcript_retention_seconds bigint not null default 0,
     source_window_seconds bigint not null default 0,
     updated_at timestamptz not null default now(),
@@ -87,7 +87,7 @@ create table tenant_artifact_policies (
     constraint tenant_artifact_policies_source_window_check
         check (
             (transcription_ceiling = 'disabled' and source_window_seconds = 0)
-            or (transcription_ceiling in ('on_demand', 'automatic') and source_window_seconds between 1 and 86400)
+            or (transcription_ceiling in ('on_demand', 'automatic') and source_window_seconds between 1 and 2592000)
         ),
     constraint tenant_artifact_policies_provider_policy_check
         check (transcription_ceiling = 'disabled' or btrim(provider_policy_version) <> '')
@@ -409,13 +409,43 @@ as $$
                     or (
                         value -> 'artifact_policy' -> 'transcription' ->> 'mode' in ('on_demand', 'automatic')
                         and jsonb_typeof(value -> 'artifact_policy' -> 'transcription' -> 'source_window_seconds') = 'number'
-                        and (value -> 'artifact_policy' -> 'transcription' ->> 'source_window_seconds')::bigint between 1 and 86400
+                        and (value -> 'artifact_policy' -> 'transcription' ->> 'source_window_seconds')::bigint between 1 and 2592000
                         and value -> 'artifact_policy' -> 'transcription' ->> 'provider_policy_version' is not null
                         and btrim(value -> 'artifact_policy' -> 'transcription' ->> 'provider_policy_version') <> ''
                     )
                 )
             )
         )
+$$;
+
+-- A zero recording retention was valid before deferred Export but did not
+-- govern rendered MP4 lifetime. Keep those immutable legacy snapshots intact
+-- while giving their newly deferred source and MP4 a capture-anchored 30-day
+-- operational window. Explicit positive snapshot values remain exact.
+create function recording_deferred_retention_seconds(config_snapshot jsonb)
+returns bigint
+language sql
+immutable
+strict
+as $$
+    select coalesce(
+        nullif((config_snapshot -> 'artifact_policy' -> 'recording' ->> 'retention_seconds')::bigint, 0),
+        2592000
+    );
+$$;
+
+-- Transcription uses its immutable source window, never extending beyond the
+-- recording source window that also fences deferred Export.
+create function recording_transcription_source_window_seconds(config_snapshot jsonb)
+returns bigint
+language sql
+immutable
+strict
+as $$
+    select least(
+        recording_deferred_retention_seconds(config_snapshot),
+        coalesce((config_snapshot -> 'artifact_policy' -> 'transcription' ->> 'source_window_seconds')::bigint, 0)
+    );
 $$;
 
 create table episodes (
@@ -2051,6 +2081,7 @@ create table recordings (
 );
 create index recordings_tenant_created_at_id_idx on recordings(tenant_id, created_at desc, id desc);
 create index recordings_tenant_episode_created_at_id_idx on recordings(tenant_id, episode_id, created_at desc, id desc);
+create index recordings_tenant_space_created_at_id_idx on recordings(tenant_id, space_id, created_at desc, id desc);
 
 create table transcriptions (
     id uuid primary key,
@@ -2393,7 +2424,7 @@ create table recording_jobs (
     tenant_id uuid not null references tenants(id),
     episode_id uuid not null references episodes(id),
     recording_id uuid not null references recordings(id),
-    kind text not null check (kind in ('capture', 'render')),
+    kind text not null check (kind in ('capture', 'transcription', 'render')),
     idempotency_key text not null unique,
     payload_schema_version integer not null check (payload_schema_version > 0),
     state text not null check (state in ('pending', 'leased', 'succeeded', 'retryable_failure', 'terminal_failure', 'cancelled')),
@@ -2432,7 +2463,7 @@ create table recording_job_attempt_authorities (
     fencing_generation bigint not null check (fencing_generation > 0),
     capture_epoch bigint not null check (capture_epoch > 0),
     claim_request_id uuid not null unique,
-    kind text not null check (kind in ('capture', 'render')),
+    kind text not null check (kind in ('capture', 'transcription', 'render')),
     lease_owner text not null check (octet_length(lease_owner) between 1 and 256),
     lease_token text not null check (octet_length(lease_token) between 1 and 256),
     lease_expires_at timestamptz not null,
@@ -2783,6 +2814,8 @@ create table recording_artifacts (
     checksum bytea not null check (octet_length(checksum) between 16 and 128),
     duration_millis bigint not null check (duration_millis >= 0),
     committed_at timestamptz not null,
+    expires_at timestamptz,
+    constraint recording_artifacts_expiry_check check (expires_at is null or expires_at > committed_at),
     created_at timestamptz not null default now()
 );
 
@@ -4594,6 +4627,21 @@ create table recording_render_commits (
     unique (recording_id)
 );
 
+create table recording_transcription_preparation_commits (
+    transcription_job_id uuid primary key references recording_jobs(id) on delete restrict,
+    tenant_id uuid not null references tenants(id) on delete restrict,
+    recording_id uuid not null references recordings(id) on delete restrict,
+    attempt_count integer not null check (attempt_count > 0),
+    fencing_generation bigint not null check (fencing_generation > 0),
+    capture_epoch bigint not null check (capture_epoch > 0),
+    render_input_handle uuid not null references recording_render_inputs(render_input_handle) on delete restrict,
+    commit_digest bytea not null check (octet_length(commit_digest) = 32),
+    presentation_sha256 bytea not null check (octet_length(presentation_sha256) = 32),
+    duration_millis bigint not null check (duration_millis > 0),
+    transcription_source_id uuid references recording_transcription_sources(recording_id) on delete restrict,
+    committed_at timestamptz not null default now()
+);
+
 -- +goose StatementBegin
 create function protect_recording_render_allocation_mutation() returns trigger
 language plpgsql as $$
@@ -4704,7 +4752,7 @@ alter table recording_transcription_sources
     add constraint recording_transcription_sources_manifest_object_version_check check (manifest_object_version is null or length(manifest_object_version) between 1 and 256),
     add constraint recording_transcription_sources_manifest_etag_check check (manifest_etag is null or length(manifest_etag) between 1 and 256),
     add constraint recording_transcription_sources_status_check check (status in ('ready', 'leased', 'cleanup_pending', 'deleting', 'deleted')),
-    add constraint recording_transcription_sources_expiry_check check (expires_at > committed_at and expires_at <= committed_at + interval '24 hours'),
+    add constraint recording_transcription_sources_expiry_check check (expires_at > committed_at and expires_at <= committed_at + interval '30 days'),
     add constraint recording_transcription_sources_lease_check check (
         (lease_transcript_id is null and lease_expires_at is null)
         or (
@@ -4792,11 +4840,11 @@ alter table transcription_cleanup_jobs
     drop constraint transcription_cleanup_jobs_transcript_id_object_key_key,
     drop constraint transcription_cleanup_jobs_kind_check,
     add constraint transcription_cleanup_jobs_kind_check check (
-        object_kind in ('final_artifact', 'temp_result', 'source_manifest', 'source_chunk')
+        object_kind in ('final_artifact', 'temp_result', 'source_manifest', 'source_chunk', 'recording_source')
     ),
     add constraint transcription_cleanup_jobs_owner_check check (
         (object_kind in ('final_artifact', 'temp_result') and transcript_id is not null)
-        or (object_kind in ('source_manifest', 'source_chunk'))
+        or (object_kind in ('source_manifest', 'source_chunk', 'recording_source'))
     );
 
 create unique index transcription_cleanup_jobs_recording_object_uidx

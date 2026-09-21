@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -22,6 +23,7 @@ type recordingPipelineQuerier interface {
 	GetRecordingJobAttemptAuthorityByClaimRequest(context.Context, pgtype.UUID) (sqlc.GetRecordingJobAttemptAuthorityByClaimRequestRow, error)
 	InsertRecordingJobAttemptAuthority(context.Context, sqlc.InsertRecordingJobAttemptAuthorityParams) (sqlc.RecordingJobAttemptAuthority, error)
 	InsertRecordingRenderInput(context.Context, sqlc.InsertRecordingRenderInputParams) (sqlc.RecordingRenderInput, error)
+	RequestDeferredRecordingRender(context.Context, sqlc.RequestDeferredRecordingRenderParams) (sqlc.RequestDeferredRecordingRenderRow, error)
 	AuthorizeRecordingArtifactReplay(context.Context, sqlc.AuthorizeRecordingArtifactReplayParams) (bool, error)
 	CommitRecordingArtifact(context.Context, sqlc.CommitRecordingArtifactParams) (sqlc.CommitRecordingArtifactRow, error)
 	CompleteCaptureRecordingJob(context.Context, sqlc.CompleteCaptureRecordingJobParams) (sqlc.CompleteCaptureRecordingJobRow, error)
@@ -34,6 +36,7 @@ type recordingPipelineQuerier interface {
 	ExtendRecordingReservation(context.Context, sqlc.ExtendRecordingReservationParams) (sqlc.ExtendRecordingReservationRow, error)
 	FailRecordingJob(context.Context, sqlc.FailRecordingJobParams) (sqlc.FailRecordingJobRow, error)
 	RelinquishCaptureRecordingJob(context.Context, sqlc.RelinquishCaptureRecordingJobParams) (sqlc.RelinquishCaptureRecordingJobRow, error)
+	ListRecordingDeferredArtifactStates(context.Context, sqlc.ListRecordingDeferredArtifactStatesParams) ([]sqlc.ListRecordingDeferredArtifactStatesRow, error)
 	GetRecordingPipeline(context.Context, sqlc.GetRecordingPipelineParams) (sqlc.GetRecordingPipelineRow, error)
 	GetRecordingPipelineStopAuthority(context.Context, sqlc.GetRecordingPipelineStopAuthorityParams) (sqlc.GetRecordingPipelineStopAuthorityRow, error)
 	RequestRecordingStop(context.Context, sqlc.RequestRecordingStopParams) (sqlc.RequestRecordingStopRow, error)
@@ -52,17 +55,77 @@ type recordingPipelineQuerier interface {
 	GetRecordingPoolHealth(context.Context, string) (sqlc.GetRecordingPoolHealthRow, error)
 }
 
+func (r RecordingPipelineRepository) RequestExport(ctx context.Context, input recordingpipeline.ExportInput, renderJobID utilities.ID) (recordingpipeline.Job, error) {
+	row, err := r.queries.RequestDeferredRecordingRender(ctx, sqlc.RequestDeferredRecordingRenderParams{
+		TenantID: uuid(input.TenantID), RecordingID: uuid(input.RecordingID), RenderJobID: uuid(renderJobID),
+		PayloadSchemaVersion: recordingpipeline.DefaultPayloadSchemaVersion, Priority: 0, AttemptLimit: recordingpipeline.DefaultRenderAttemptLimit,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return recordingpipeline.Job{}, recordingpipeline.ErrExportUnavailable
+	}
+	if err != nil {
+		return recordingpipeline.Job{}, fmt.Errorf("request deferred recording export: %w", err)
+	}
+	return mapDeferredRecordingJob(row), nil
+}
+
+func (r RecordingPipelineRepository) GetArtifactState(ctx context.Context, tenantID, recordingID utilities.ID) (recordingpipeline.ArtifactState, error) {
+	states, err := r.GetArtifactStates(ctx, tenantID, []utilities.ID{recordingID})
+	if err != nil {
+		return recordingpipeline.ArtifactState{}, err
+	}
+	state, ok := states[recordingID]
+	if !ok {
+		return recordingpipeline.ArtifactState{}, recordingpipeline.ErrPipelineNotFound
+	}
+	return state, nil
+}
+
+func (r RecordingPipelineRepository) GetArtifactStates(ctx context.Context, tenantID utilities.ID, recordingIDs []utilities.ID) (map[utilities.ID]recordingpipeline.ArtifactState, error) {
+	states := make(map[utilities.ID]recordingpipeline.ArtifactState, len(recordingIDs))
+	if len(recordingIDs) == 0 {
+		return states, nil
+	}
+	ids := make([]pgtype.UUID, 0, len(recordingIDs))
+	for _, recordingID := range recordingIDs {
+		ids = append(ids, uuid(recordingID))
+	}
+	rows, err := r.queries.ListRecordingDeferredArtifactStates(ctx, sqlc.ListRecordingDeferredArtifactStatesParams{TenantID: uuid(tenantID), RecordingIds: ids})
+	if err != nil {
+		return nil, fmt.Errorf("list recording deferred artifact states: %w", err)
+	}
+	for _, row := range rows {
+		states[utilities.IDFromBytes(row.RecordingID.Bytes)] = mapDeferredRecordingArtifactState(row)
+	}
+	return states, nil
+}
+
+func mapDeferredRecordingArtifactState(row sqlc.ListRecordingDeferredArtifactStatesRow) recordingpipeline.ArtifactState {
+	state := recordingpipeline.ArtifactState{
+		SourceStatus: recordingpipeline.SourceStatus(row.SourceStatus), ExportStatus: recordingpipeline.ExportStatus(row.ExportStatus),
+		SourceExpiresAt: nullableTimestamp(row.SourceExpiresAt), Retryable: row.Retryable,
+		TranscriptionPolicy: artifactpolicy.TranscriptionMode(row.TranscriptionPolicy),
+		FailureCode:         row.FailureCode, FailureMessage: row.FailureMessage,
+	}
+	if row.ExportJobID.Valid {
+		jobID := utilities.IDFromBytes(row.ExportJobID.Bytes)
+		state.ExportJobID = &jobID
+	}
+	return state
+}
+
 type recordingPipelineTransactor interface {
 	BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
 }
 
 type RecordingPipelineRepository struct {
-	queries             recordingPipelineQuerier
-	transactor          recordingPipelineTransactor
-	decorate            func(sqlc.Querier) sqlc.Querier
-	now                 func() time.Time
-	presentationProfile *recordingpresentation.Profile
-	presentationFreezer *recordingpresentation.Freezer
+	queries              recordingPipelineQuerier
+	transactor           recordingPipelineTransactor
+	decorate             func(sqlc.Querier) sqlc.Querier
+	now                  func() time.Time
+	presentationProfile  *recordingpresentation.Profile
+	presentationFreezer  *recordingpresentation.Freezer
+	transcriptionEnabled bool
 }
 
 func NewRecordingPipelineRepository(queries recordingPipelineQuerier) RecordingPipelineRepository {
@@ -96,6 +159,13 @@ func (r RecordingPipelineRepository) WithRecordingPresentationProfile(profile re
 // lease-guarded presentation insert and render enqueue in one transaction.
 func (r RecordingPipelineRepository) WithRecordingPresentationFreezer(freezer recordingpresentation.Freezer) RecordingPipelineRepository {
 	r.presentationFreezer = &freezer
+	return r
+}
+
+// WithTranscriptionEnabled uses the existing global transcription capability
+// as the rollout gate for automatic audio-preparation jobs.
+func (r RecordingPipelineRepository) WithTranscriptionEnabled(enabled bool) RecordingPipelineRepository {
+	r.transcriptionEnabled = enabled
 	return r
 }
 
@@ -349,6 +419,7 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 			return err
 		}
 		row, err := queries.ClaimRecordingJob(ctx, sqlc.ClaimRecordingJobParams{
+			TranscriptionEnabled: r.transcriptionEnabled,
 			MaximumRenderSeconds: int32(recordingpipeline.MaximumRenderDuration / time.Second),
 			LeaseToken:           requiredTextValue(input.LeaseToken),
 			LeaseOwner:           requiredTextValue(input.Owner),
@@ -364,7 +435,7 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 		claimed = mapClaimJob(row)
 		leaseExpiresAt = timestamp(row.LeaseExpiresAt)
 		claimed.CaptureEpoch = row.CaptureEpoch
-		hardDeadline, err := recordingJobDeadline(claimed.Kind, row.EndsAt, row.CaptureCompletedAt)
+		hardDeadline, err := recordingJobDeadline(claimed.Kind, row.EndsAt, row.CreatedAt)
 		if err != nil {
 			return err
 		}
@@ -372,7 +443,7 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 			SpaceID: utilities.IDFromBytes(row.SpaceID.Bytes), PolicySnapshotVersion: row.PolicySnapshotVersion,
 			HardDeadline: hardDeadline, CaptureEpoch: row.CaptureEpoch, CaptureReadyAt: nullableTimestamp(row.CaptureReadyAt),
 		}
-		if claimed.Kind == recordingpipeline.JobKindRender {
+		if claimed.Kind == recordingpipeline.JobKindRender || claimed.Kind == recordingpipeline.JobKindTranscription {
 			claimFacts.CaptureKeyHandle = utilities.IDFromBytes(row.CaptureKeyHandle.Bytes)
 			claimFacts.PresentationHandle = utilities.IDFromBytes(row.PresentationHandle.Bytes)
 			claimFacts.PresentationSchemaVersion = row.PresentationSchemaVersion.String
@@ -390,14 +461,14 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 		if _, err := queries.InsertRecordingJobAttemptAuthority(ctx, sqlc.InsertRecordingJobAttemptAuthorityParams{
 			JobID: uuid(claimed.ID), AttemptCount: int32(claimed.AttemptCount),
 			FencingGeneration: claimed.FencingGeneration, CaptureEpoch: row.CaptureEpoch,
-			ClaimRequestID: uuid(input.ClaimRequestID), Kind: string(input.Kind),
+			ClaimRequestID: uuid(input.ClaimRequestID), Kind: string(claimed.Kind),
 			LeaseOwner: input.Owner, LeaseToken: input.LeaseToken,
 			LeaseExpiresAt: timestamptzValue(leaseExpiresAt), EnvelopeBytes: authority.EnvelopeBytes,
 			EnvelopeDigest: authority.EnvelopeDigest, IssuedAt: timestamptzValue(issuedAt),
 		}); err != nil {
 			return err
 		}
-		if claimed.Kind == recordingpipeline.JobKindRender {
+		if claimed.Kind == recordingpipeline.JobKindRender || claimed.Kind == recordingpipeline.JobKindTranscription {
 			renderInputHandle, parseInputErr := utilities.ParseID(authority.Envelope.RenderInputHandle)
 			objectHandle, parseObjectErr := utilities.ParseID(authority.Envelope.ObjectHandle)
 			if parseInputErr != nil || parseObjectErr != nil {
@@ -550,7 +621,7 @@ func (r RecordingPipelineRepository) completeCapture(ctx context.Context, input 
 			if err := insertPreparedRecordingPresentation(ctx, queries, prepared); err != nil {
 				return err
 			}
-			row, err := queries.CompleteCaptureRecordingJob(ctx, completeCaptureParams(input, renderJobID))
+			row, err := queries.CompleteCaptureRecordingJob(ctx, completeCaptureParams(input, renderJobID, r.transcriptionEnabled))
 			if errors.Is(err, pgx.ErrNoRows) {
 				return recordingpipeline.ErrJobNotFound
 			}
@@ -576,6 +647,7 @@ func (r RecordingPipelineRepository) completeCapture(ctx context.Context, input 
 		PayloadSchemaVersion: recordingpipeline.DefaultPayloadSchemaVersion,
 		Priority:             0,
 		AttemptLimit:         recordingpipeline.DefaultRenderAttemptLimit,
+		TranscriptionEnabled: r.transcriptionEnabled,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return recordingpipeline.Job{}, recordingpipeline.ErrJobNotFound
@@ -588,14 +660,14 @@ func (r RecordingPipelineRepository) completeCapture(ctx context.Context, input 
 	return job, nil
 }
 
-func completeCaptureParams(input recordingpipeline.LeaseInput, renderJobID utilities.ID) sqlc.CompleteCaptureRecordingJobParams {
+func completeCaptureParams(input recordingpipeline.LeaseInput, renderJobID utilities.ID, transcriptionEnabled bool) sqlc.CompleteCaptureRecordingJobParams {
 	return sqlc.CompleteCaptureRecordingJobParams{
 		ID: uuid(input.JobID), AttemptCount: int32(input.AttemptCount),
 		FencingGeneration: input.FencingGeneration,
 		LeaseToken:        requiredTextValue(input.LeaseToken), LeaseOwner: requiredTextValue(input.LeaseOwner),
 		CaptureEpoch: input.CaptureEpoch, EnvelopeDigest: input.EnvelopeDigest,
 		RenderJobID: uuid(renderJobID), PayloadSchemaVersion: recordingpipeline.DefaultPayloadSchemaVersion,
-		Priority: 0, AttemptLimit: recordingpipeline.DefaultRenderAttemptLimit,
+		Priority: 0, AttemptLimit: recordingpipeline.DefaultRenderAttemptLimit, TranscriptionEnabled: transcriptionEnabled,
 	}
 }
 
@@ -983,6 +1055,32 @@ func mapRecordingJob(row sqlc.RecordingJob) recordingpipeline.Job {
 	}
 }
 
+func mapDeferredRecordingJob(row sqlc.RequestDeferredRecordingRenderRow) recordingpipeline.Job {
+	return recordingpipeline.Job{
+		ID:                   utilities.IDFromBytes(row.ID.Bytes),
+		TenantID:             utilities.IDFromBytes(row.TenantID.Bytes),
+		EpisodeID:            utilities.IDFromBytes(row.EpisodeID.Bytes),
+		RecordingID:          utilities.IDFromBytes(row.RecordingID.Bytes),
+		Kind:                 recordingpipeline.JobKind(row.Kind),
+		IdempotencyKey:       row.IdempotencyKey,
+		PayloadSchemaVersion: int(row.PayloadSchemaVersion),
+		State:                recordingpipeline.JobState(row.State),
+		Priority:             int(row.Priority),
+		AvailableAt:          timestamp(row.AvailableAt),
+		AttemptCount:         int(row.AttemptCount),
+		AttemptLimit:         int(row.AttemptLimit),
+		LeaseToken:           nullableTextPointer(row.LeaseToken),
+		LeaseOwner:           nullableTextPointer(row.LeaseOwner),
+		LeaseExpiresAt:       nullableTimestamp(row.LeaseExpiresAt),
+		FencingGeneration:    row.FencingGeneration,
+		ErrorCode:            nullableTextPointer(row.ErrorCode),
+		ErrorDetail:          nullableTextPointer(row.ErrorDetail),
+		TerminalAt:           nullableTimestamp(row.TerminalAt),
+		UpdatedAt:            timestamp(row.UpdatedAt),
+		CreatedAt:            timestamp(row.CreatedAt),
+	}
+}
+
 func mapClaimJob(row sqlc.ClaimRecordingJobRow) recordingpipeline.Job {
 	return recordingpipeline.Job{
 		ID:                   utilities.IDFromBytes(row.ID.Bytes),
@@ -1042,7 +1140,7 @@ func mapAuthorityJob(row sqlc.GetRecordingJobAttemptAuthorityByClaimRequestRow) 
 	if err != nil {
 		return recordingpipeline.Job{}, err
 	}
-	hardDeadline, err := recordingJobDeadline(job.Kind, row.EndsAt, row.CaptureCompletedAt)
+	hardDeadline, err := recordingJobDeadline(job.Kind, row.EndsAt, row.CreatedAt)
 	if err != nil {
 		return recordingpipeline.Job{}, err
 	}
@@ -1062,14 +1160,14 @@ func mapAuthorityJob(row sqlc.GetRecordingJobAttemptAuthorityByClaimRequestRow) 
 	return job, nil
 }
 
-func recordingJobDeadline(kind recordingpipeline.JobKind, captureDeadline, captureCompletedAt pgtype.Timestamptz) (time.Time, error) {
-	if kind != recordingpipeline.JobKindRender {
+func recordingJobDeadline(kind recordingpipeline.JobKind, captureDeadline, jobCreatedAt pgtype.Timestamptz) (time.Time, error) {
+	if kind == recordingpipeline.JobKindCapture {
 		return timestamp(captureDeadline), nil
 	}
-	if !captureCompletedAt.Valid {
+	if !jobCreatedAt.Valid {
 		return time.Time{}, recordingpipeline.ErrInvalidEnvelope
 	}
-	return timestamp(captureCompletedAt).Add(recordingpipeline.MaximumRenderDuration), nil
+	return timestamp(jobCreatedAt).Add(recordingpipeline.MaximumRenderDuration), nil
 }
 
 func mapFailJob(row sqlc.FailRecordingJobRow) recordingpipeline.Job {

@@ -954,7 +954,7 @@ with authorized_job as (
         $1, $13, $14, next_values.allocation_version,
         $5, $6, $10, $11,
         next_values.sequence_number, 'unknown', null, 0, 0, 0, 0,
-        format('temporary/recordings/%s/capture/%s/bundles/%s/%s.bundle', $4::text, $10::text, next_values.sequence_number::text, $12::uuid::text),
+        format('tenants/%s/recordings/%s/capture/%s/bundles/%s/%s.bundle', $2::text, $4::text, $10::text, next_values.sequence_number::text, $12::uuid::text),
         sha256(convert_to('reserved:' || $12::uuid::text, 'UTF8')), 0, decode(repeat('00', 32), 'hex'),
         'application/octet-stream', clock_timestamp() + interval '30 minutes', $15, 'reserved'
     from locked_recording, next_values

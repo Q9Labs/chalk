@@ -112,8 +112,11 @@ type StoredInput struct {
 	SchemaVersion     string
 	TranscriptionMode artifactpolicy.TranscriptionMode
 	Authority         Authority
-	Capture           []CaptureObject
-	Presentation      Presentation
+	// SourceExpiresAt is the immutable capture-completion retention boundary
+	// shared by deferred presentation exports and audio preparation.
+	SourceExpiresAt time.Time
+	Capture         []CaptureObject
+	Presentation    Presentation
 }
 
 type DownloadGrant struct {
@@ -274,6 +277,17 @@ type CommitInput struct {
 	TranscriptionSource *TranscriptionSource
 }
 
+// TranscriptionPreparationInput atomically admits the microphone source
+// material prepared by the transcription job. A nil source records that the
+// sealed capture did not contain a microphone source.
+type TranscriptionPreparationInput struct {
+	Authority           Authority
+	CommitDigest        []byte
+	PresentationSHA256  []byte
+	DurationMillis      int64
+	TranscriptionSource *TranscriptionSource
+}
+
 type TranscriptionResult struct {
 	SourceID utilities.ID
 	JobIDs   []utilities.ID
@@ -293,6 +307,7 @@ type Repository interface {
 	GetObjectAllocationByTokenHash(context.Context, Authority, []byte) (Allocation, error)
 	CommitObject(context.Context, Allocation, objectstorage.ObjectFacts, time.Time) (CommittedObject, error)
 	Commit(context.Context, CommitInput, time.Time) (CommitResult, error)
+	CommitTranscriptionPreparation(context.Context, TranscriptionPreparationInput, time.Time) (*TranscriptionResult, error)
 }
 
 type DispatcherWake func(context.Context, utilities.ID)

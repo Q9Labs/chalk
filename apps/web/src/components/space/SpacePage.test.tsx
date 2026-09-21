@@ -15,6 +15,25 @@ afterEach(() => {
 });
 
 describe("public Space entry", () => {
+  it("keeps devices off for a dashboard no-device entry until a participant changes them", async () => {
+    window.history.replaceState({}, "", "/space/design-lab?entry=dashboard&devices=off");
+    const getUserMedia = vi.fn();
+    const originalMediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia } });
+    mocks.joinDashboardSpace.mockResolvedValue({ credential: mocks.prepared.credential, getAccess: mocks.prepared.getAccess, leave: mocks.finish });
+    try {
+      render(<SpacePage slug="design-lab" />);
+      expect(mocks.holder.entranceProps).toMatchObject({ defaults: { microphone: false, camera: false } });
+      expect(getUserMedia).not.toHaveBeenCalled();
+
+      await act(async () => enterName("Ada"));
+      await waitFor(() => expect(mocks.holder.chalkProps).toMatchObject({ defaults: { microphone: false, camera: false } }));
+    } finally {
+      if (originalMediaDevices) Object.defineProperty(navigator, "mediaDevices", originalMediaDevices);
+      else Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: undefined });
+    }
+  });
+
   it("ignores a stored Tenant hint the current account cannot access", async () => {
     window.history.replaceState({}, "", "/space/design-lab?entry=dashboard");
     const storage = { getItem: vi.fn(() => "old-account-tenant"), setItem: vi.fn() };

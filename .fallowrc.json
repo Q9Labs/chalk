@@ -9,6 +9,7 @@
     "apps/recording-renderer/src/cli.ts",
     "apps/recording-renderer/src/fixture.ts",
     "apps/recording-renderer/src/ui-build-cli.ts",
+    "apps/recording-renderer/src/ui-build-registry-cli.ts",
     "apps/mobile/scripts/prepare-local-bridge.mjs",
     "apps/api/docs/app.js",
     "apps/api/docs/generated-canonical-openapi.js",

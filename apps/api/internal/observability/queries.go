@@ -307,6 +307,13 @@ func (q operationQuerier) ListTenantRecordings(ctx context.Context, arg sqlc.Lis
 	return recordings, err
 }
 
+func (q operationQuerier) ListTenantSpaceRecordings(ctx context.Context, arg sqlc.ListTenantSpaceRecordingsParams) ([]sqlc.Recording, error) {
+	startedAt := time.Now()
+	recordings, err := q.next.ListTenantSpaceRecordings(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "ListTenantSpaceRecordings", startedAt, err)
+	return recordings, err
+}
+
 func (q operationQuerier) ListTenantEpisodes(ctx context.Context, arg sqlc.ListTenantEpisodesParams) ([]sqlc.Episode, error) {
 	startedAt := time.Now()
 	episodes, err := q.next.ListTenantEpisodes(ctx, arg)

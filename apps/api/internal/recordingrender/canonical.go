@@ -7,6 +7,8 @@ import (
 	"fmt"
 )
 
+const transcriptionPreparationDigestSchemaVersion = "recording_transcription_preparation.v1"
+
 type canonicalCommit struct {
 	TenantID            string                        `json:"tenant_id"`
 	SpaceID             string                        `json:"space_id"`
@@ -21,6 +23,22 @@ type canonicalCommit struct {
 	DurationMillis      int64                         `json:"duration_ms"`
 	Video               canonicalCommitObject         `json:"video"`
 	FFprobeFactsDigest  string                        `json:"ffprobe_facts_digest"`
+	TranscriptionSource *canonicalTranscriptionSource `json:"transcription_source,omitempty"`
+}
+
+type canonicalTranscriptionPreparation struct {
+	SchemaVersion       string                        `json:"schema_version"`
+	TenantID            string                        `json:"tenant_id"`
+	SpaceID             string                        `json:"space_id"`
+	EpisodeID           string                        `json:"episode_id"`
+	RecordingID         string                        `json:"recording_id"`
+	TranscriptionJobID  string                        `json:"transcription_job_id"`
+	AttemptCount        int                           `json:"attempt_count"`
+	FencingGeneration   int64                         `json:"fencing_generation"`
+	CaptureEpoch        int64                         `json:"capture_epoch"`
+	RenderInputHandle   string                        `json:"render_input_handle"`
+	PresentationSHA256  string                        `json:"presentation_sha256"`
+	DurationMillis      int64                         `json:"duration_ms"`
 	TranscriptionSource *canonicalTranscriptionSource `json:"transcription_source,omitempty"`
 }
 
@@ -98,6 +116,50 @@ func CommitDigest(input CommitInput) ([]byte, error) {
 	}
 	digest := sha256.Sum256(encoded)
 	return append([]byte(nil), digest[:]...), nil
+}
+
+// TranscriptionPreparationDigest binds prepared microphone inputs to the
+// exact leased transcription generation without coupling them to an MP4.
+func TranscriptionPreparationDigest(input TranscriptionPreparationInput) ([]byte, error) {
+	canonical := canonicalTranscriptionPreparation{
+		SchemaVersion: transcriptionPreparationDigestSchemaVersion,
+		TenantID:      input.Authority.TenantID.String(), SpaceID: input.Authority.SpaceID.String(),
+		EpisodeID: input.Authority.EpisodeID.String(), RecordingID: input.Authority.RecordingID.String(),
+		TranscriptionJobID: input.Authority.JobID.String(), AttemptCount: input.Authority.AttemptCount,
+		FencingGeneration: input.Authority.FencingGeneration, CaptureEpoch: input.Authority.CaptureEpoch,
+		RenderInputHandle:  input.Authority.RenderInputHandle.String(),
+		PresentationSHA256: hex.EncodeToString(input.PresentationSHA256), DurationMillis: input.DurationMillis,
+	}
+	if input.TranscriptionSource != nil {
+		canonical.TranscriptionSource = canonicalTranscriptionSourceValue(*input.TranscriptionSource)
+	}
+	encoded, err := json.Marshal(canonical)
+	if err != nil {
+		return nil, fmt.Errorf("encode transcription preparation commit: %w", err)
+	}
+	digest := sha256.Sum256(encoded)
+	return append([]byte(nil), digest[:]...), nil
+}
+
+func canonicalTranscriptionSourceValue(input TranscriptionSource) *canonicalTranscriptionSource {
+	source := canonicalTranscriptionSource{
+		SchemaVersion:      input.SchemaVersion,
+		PresentationSHA256: hex.EncodeToString(input.PresentationSHA256),
+		Manifest:           canonicalObject(input.Manifest),
+		Chunks:             make([]canonicalTranscriptionChunk, 0, len(input.Chunks)),
+	}
+	for _, chunk := range input.Chunks {
+		source.Chunks = append(source.Chunks, canonicalTranscriptionChunk{
+			ChunkID: chunk.ChunkID.String(), Index: chunk.Index, Generation: chunk.Generation,
+			StartMillis: chunk.StartMillis, EndMillis: chunk.EndMillis,
+			SourceStartMillis: chunk.SourceStartMillis, SourceEndMillis: chunk.SourceEndMillis,
+			ParticipantRef: chunk.ParticipantRef, ParticipantGeneration: chunk.ParticipantGeneration,
+			DisplayNameSnapshot: chunk.DisplayNameSnapshot,
+			TrackID:             chunk.TrackID, TrackEpoch: chunk.TrackEpoch, IdentityKind: chunk.IdentityKind,
+			TrackClass: chunk.TrackClass, Overlap: chunk.Overlap, Object: canonicalObject(chunk.Object),
+		})
+	}
+	return &source
 }
 
 func canonicalObject(value CommitObjectReference) canonicalCommitObject {

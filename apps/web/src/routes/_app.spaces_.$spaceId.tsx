@@ -6,6 +6,6 @@ export const Route = createFileRoute("/_app/spaces_/$spaceId")({
   component: () => {
     const { current } = useDashboardAccount();
     const { spaceId } = Route.useParams();
-    return <SpaceDetailPage tenantID={current.tenant.id} spaceID={spaceId} />;
+    return <SpaceDetailPage tenantID={current.tenant.id} spaceID={spaceId} transcriptionCeiling={current.tenant.transcription_ceiling} />;
   },
 });

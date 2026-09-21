@@ -13,6 +13,19 @@ output "lambda_execution_role_arn" {
   value       = aws_iam_role.dispatcher.arn
 }
 
+output "control_api_invoke_policy_json" {
+  description = "Exact least-privilege identity policy that the existing API runtime role must receive to asynchronously wake this dispatcher."
+  value = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid      = "InvokeTranscriptionDispatcherOnly"
+      Effect   = "Allow"
+      Action   = "lambda:InvokeFunction"
+      Resource = aws_lambda_function.dispatcher.arn
+    }]
+  })
+}
+
 output "scheduler_arn" {
   description = "One-minute EventBridge Scheduler reconciliation schedule ARN."
   value       = aws_scheduler_schedule.reconcile.arn

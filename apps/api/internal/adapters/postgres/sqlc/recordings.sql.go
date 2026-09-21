@@ -172,19 +172,24 @@ where
         or episode_id = $2::uuid
     )
     and (
-        not $3::boolean
+        $3::uuid is null
+        or space_id = $3::uuid
+    )
+    and (
+        not $4::boolean
         or (created_at, id) < (
-            $4::timestamptz,
-            $5::uuid
+            $5::timestamptz,
+            $6::uuid
         )
     )
 order by created_at desc, id desc
-limit $6::integer
+limit $7::integer
 `
 
 type ListTenantRecordingsParams struct {
 	TenantID        pgtype.UUID        `json:"tenant_id"`
 	EpisodeID       pgtype.UUID        `json:"episode_id"`
+	SpaceID         pgtype.UUID        `json:"space_id"`
 	CursorSet       bool               `json:"cursor_set"`
 	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
 	CursorID        pgtype.UUID        `json:"cursor_id"`
@@ -194,6 +199,97 @@ type ListTenantRecordingsParams struct {
 func (q *Queries) ListTenantRecordings(ctx context.Context, arg ListTenantRecordingsParams) ([]Recording, error) {
 	rows, err := q.db.Query(ctx, listTenantRecordings,
 		arg.TenantID,
+		arg.EpisodeID,
+		arg.SpaceID,
+		arg.CursorSet,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Recording
+	for rows.Next() {
+		var i Recording
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.SpaceID,
+			&i.EpisodeID,
+			&i.Status,
+			&i.StorageProvider,
+			&i.StorageKey,
+			&i.StorageContentType,
+			&i.StorageSize,
+			&i.StorageChecksum,
+			&i.DurationMillis,
+			&i.CompletedAt,
+			&i.Metadata,
+			&i.UpdatedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTenantSpaceRecordings = `-- name: ListTenantSpaceRecordings :many
+select
+    id,
+    tenant_id,
+    space_id,
+    episode_id,
+    status,
+    storage_provider,
+    storage_key,
+    storage_content_type,
+    storage_size,
+    storage_checksum,
+    duration_millis,
+    completed_at,
+    metadata,
+    updated_at,
+    created_at
+from recordings
+where
+    tenant_id = $1
+    and space_id = $2
+    and (
+        $3::uuid is null
+        or episode_id = $3::uuid
+    )
+    and (
+        not $4::boolean
+        or (created_at, id) < (
+            $5::timestamptz,
+            $6::uuid
+        )
+    )
+order by created_at desc, id desc
+limit $7::integer
+`
+
+type ListTenantSpaceRecordingsParams struct {
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	SpaceID         pgtype.UUID        `json:"space_id"`
+	EpisodeID       pgtype.UUID        `json:"episode_id"`
+	CursorSet       bool               `json:"cursor_set"`
+	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
+	CursorID        pgtype.UUID        `json:"cursor_id"`
+	PageSize        int32              `json:"page_size"`
+}
+
+func (q *Queries) ListTenantSpaceRecordings(ctx context.Context, arg ListTenantSpaceRecordingsParams) ([]Recording, error) {
+	rows, err := q.db.Query(ctx, listTenantSpaceRecordings,
+		arg.TenantID,
+		arg.SpaceID,
 		arg.EpisodeID,
 		arg.CursorSet,
 		arg.CursorCreatedAt,

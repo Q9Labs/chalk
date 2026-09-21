@@ -5,6 +5,6 @@ import { SpacesPage } from "../components/dashboard/SpacesPage";
 export const Route = createFileRoute("/_app/spaces")({
   component: () => {
     const { current } = useDashboardAccount();
-    return <SpacesPage tenantID={current.tenant.id} />;
+    return <SpacesPage tenantID={current.tenant.id} transcriptionCeiling={current.tenant.transcription_ceiling} />;
   },
 });

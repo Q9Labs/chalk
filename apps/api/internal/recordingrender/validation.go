@@ -106,6 +106,30 @@ func (input CommitInput) Validate() error {
 	return nil
 }
 
+func (input TranscriptionPreparationInput) Validate() error {
+	if err := input.Authority.Validate(); err != nil {
+		return err
+	}
+	if len(input.CommitDigest) != sha256.Size || len(input.PresentationSHA256) != sha256.Size || input.DurationMillis <= 0 || input.DurationMillis > recordingpipeline.MaximumRecordingDuration.Milliseconds() {
+		return ErrInvalidRequest
+	}
+	if input.TranscriptionSource != nil {
+		if err := input.TranscriptionSource.Validate(input.PresentationSHA256); err != nil {
+			return err
+		}
+		for _, chunk := range input.TranscriptionSource.Chunks {
+			if chunk.Generation != input.Authority.FencingGeneration || chunk.EndMillis > input.DurationMillis {
+				return ErrInvalidRequest
+			}
+		}
+	}
+	digest, err := TranscriptionPreparationDigest(input)
+	if err != nil || !bytes.Equal(digest, input.CommitDigest) {
+		return ErrInvalidRequest
+	}
+	return nil
+}
+
 func (source TranscriptionSource) Validate(presentationSHA256 []byte) error {
 	if source.SchemaVersion != TranscriptionSourceSchemaVersion || !bytes.Equal(source.PresentationSHA256, presentationSHA256) {
 		return ErrInvalidRequest

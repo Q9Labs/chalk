@@ -125,6 +125,9 @@ func newGenerator(routes []httpapi.APIRouteContract) *generator {
 	for name, schema := range scalarSchemas() {
 		gen.doc.Components.Schemas[name] = schema
 	}
+	for name, schema := range recordingArtifactSchemas() {
+		gen.doc.Components.Schemas[name] = schema
+	}
 	gen.doc.Components.Schemas["Pagination"] = paginationSchema()
 	for name, schema := range providerConfigSchemas() {
 		gen.doc.Components.Schemas[name] = schema
@@ -482,6 +485,12 @@ func (g *generator) objectSchema(t reflect.Type, request bool, currentName strin
 
 func (g *generator) fieldSchema(schemaName string, fieldName string, field reflect.StructField, request bool) map[string]any {
 	fieldType := field.Type
+	if schemaName == "Recording" && fieldName == "source" {
+		return schemaReference("RecordingSource")
+	}
+	if (schemaName == "Recording" || schemaName == "RecordingExportRequestAcceptedResponse") && fieldName == "export" {
+		return schemaReference("RecordingExport")
+	}
 	if schemaName := field.Tag.Get("schema"); schemaName != "" {
 		return schemaReference(schemaName)
 	}
@@ -542,6 +551,33 @@ func (g *generator) fieldSchema(schemaName string, fieldName string, field refle
 	return applyFieldConstraints(schema, schemaName, fieldName, request)
 }
 
+func recordingArtifactSchemas() map[string]map[string]any {
+	return map[string]map[string]any{
+		"RecordingSource": {
+			"type":                 "object",
+			"additionalProperties": false,
+			"required":             []string{"status"},
+			"properties": map[string]any{
+				"status":     map[string]any{"type": "string", "enum": []string{"pending", "available", "failed", "expired"}},
+				"expires_at": nullableSchema(timestampSchema()),
+			},
+		},
+		"RecordingExport": {
+			"type":                 "object",
+			"additionalProperties": false,
+			"required":             []string{"status", "retryable"},
+			"properties": map[string]any{
+				"job_id":            map[string]any{"type": "string", "format": "uuid"},
+				"status":            map[string]any{"type": "string", "enum": []string{"none", "pending", "ready", "failed", "unavailable"}},
+				"retryable":         map[string]any{"type": "boolean"},
+				"source_expires_at": nullableSchema(timestampSchema()),
+				"failure_code":      nullableSchema(stringSchema()),
+				"failure_message":   nullableSchema(stringSchema()),
+			},
+		},
+	}
+}
+
 func journeyAttributesSchema() map[string]any {
 	return map[string]any{
 		"type":          "object",
@@ -580,11 +616,13 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 	if fieldName == "website" || strings.HasSuffix(fieldName, "_url") {
 		schema["format"] = "uri"
 	}
-	if request && schemaTypeIs(schema, "string") && !schemaIncludesNull(schema) && len(fieldEnum(schemaName, fieldName)) == 0 {
+	if request && schemaTypeIs(schema, "string") && !schemaIncludesNull(schema) && len(fieldEnum(schemaName, fieldName)) == 0 && !requestFieldAllowsEmpty(schemaName, fieldName) {
 		schema["minLength"] = 1
 	}
 	if fieldName == "languages" && schemaTypeIs(schema, "array") {
-		schema["minItems"] = 1
+		if !requestFieldAllowsEmpty(schemaName, fieldName) {
+			schema["minItems"] = 1
+		}
 		if items, ok := schema["items"].(map[string]any); ok {
 			items["minLength"] = 1
 		}
@@ -611,6 +649,10 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 		}
 	}
 	return schema
+}
+
+func requestFieldAllowsEmpty(schemaName string, fieldName string) bool {
+	return schemaName == "RequestTranscriptRequest" && (fieldName == "language" || fieldName == "languages")
 }
 
 func fieldEnum(schemaName string, fieldName string) []string {
@@ -1024,7 +1066,7 @@ func isUUIDField(fieldName string) bool {
 }
 
 func isOpaqueIDField(schemaName string, fieldName string) bool {
-	if fieldName == "publication_id" {
+	if fieldName == "publication_id" || fieldName == "track_id" {
 		return true
 	}
 	return fieldName == "connection_id" && strings.HasPrefix(schemaName, "CloudflareSFU")

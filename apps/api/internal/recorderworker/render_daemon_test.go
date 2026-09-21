@@ -70,6 +70,28 @@ func TestRenderDaemonRenewsAttemptAuthority(t *testing.T) {
 	}
 }
 
+func TestRenderLeaseInputAcceptsAndFencesTranscriptionJobs(t *testing.T) {
+	claim := renderClaimForTest(t)
+	claim.Envelope.Kind = recordingpipeline.JobKindTranscription
+	lease, err := renderLeaseInput(claim, 30*time.Minute)
+	if err != nil {
+		t.Fatalf("render lease input for transcription job: %v", err)
+	}
+	expiresAt := time.Now().UTC().Add(time.Hour)
+	job := recordingpipeline.Job{
+		ID: lease.JobID, Kind: claim.Envelope.Kind, AttemptCount: lease.AttemptCount,
+		FencingGeneration: lease.FencingGeneration, CaptureEpoch: lease.CaptureEpoch,
+		LeaseToken: &lease.LeaseToken, LeaseOwner: &lease.LeaseOwner, LeaseExpiresAt: &expiresAt,
+	}
+	if _, err := renewedRenderLease(lease, claim.Envelope.Kind, job, 30*time.Minute, time.Now().UTC()); err != nil {
+		t.Fatalf("renew transcription lease: %v", err)
+	}
+	job.Kind = recordingpipeline.JobKindRender
+	if _, err := renewedRenderLease(lease, claim.Envelope.Kind, job, 30*time.Minute, time.Now().UTC()); err == nil {
+		t.Fatal("renewed transcription lease accepted a changed job kind")
+	}
+}
+
 func TestRenderDaemonReportsAttemptFailureWithFence(t *testing.T) {
 	claim := renderClaimForTest(t)
 	control := &renderControlPlaneStub{}

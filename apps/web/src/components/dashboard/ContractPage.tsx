@@ -2,7 +2,6 @@ import { Icon } from "./DashboardShell";
 
 const pageCopy = {
   episodes: { eyebrow: "History", title: "Episodes", description: "A Tenant-wide view of the conversations that moved your work forward.", note: "Episode history needs the canonical Tenant read model before this surface can leave preview." },
-  artifacts: { eyebrow: "Shared context", title: "Artifacts", description: "Notes, transcripts, and recordings created by your Episodes.", note: "Artifacts will appear here after processing state and authorization are canonical." },
   people: { eyebrow: "Tenant access", title: "People", description: "Invite people to your Tenant and understand where they collaborate.", note: "People is waiting on self-scoped Tenant access and invitation contracts." },
   developer: { eyebrow: "Build with Chalk", title: "Developer", description: "API keys, SDK setup, webhooks, and integration health—without taking over the product.", note: "Developer setup follows the core onboarding path and requires recent authentication for secrets." },
   activity: { eyebrow: "What changed", title: "Activity", description: "An audit-friendly timeline across your Tenant.", note: "Activity will use the canonical audit projection, with sensitive values removed." },

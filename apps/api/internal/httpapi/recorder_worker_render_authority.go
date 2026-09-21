@@ -23,6 +23,7 @@ type RecorderRenderAuthorityService interface {
 	FinalizeRenderObject(context.Context, recordingrender.FinalizeObjectInput) (recordingrender.FinalizedObject, error)
 	CommitRenderObject(context.Context, recordingrender.CommitObjectInput) (recordingrender.CommittedObject, error)
 	CommitRender(context.Context, recordingrender.CommitInput) (recordingrender.CommitResult, error)
+	CommitTranscriptionPreparation(context.Context, recordingrender.TranscriptionPreparationInput) (*recordingrender.TranscriptionResult, error)
 }
 
 type recorderRenderAuthorityBody struct {
@@ -106,6 +107,14 @@ type recorderRenderCommitBody struct {
 	Video               recorderRenderObjectReferenceBody      `json:"video"`
 	FFprobeFactsDigest  string                                 `json:"ffprobe_facts_digest"`
 	TranscriptionSource *recorderRenderTranscriptionSourceBody `json:"transcription_source"`
+}
+
+type recorderTranscriptionPreparationCommitBody struct {
+	recorderRenderAuthorityBody
+	CommitDigest        string                                 `json:"commit_digest"`
+	PresentationSHA256  string                                 `json:"presentation_sha256"`
+	DurationMillis      int64                                  `json:"duration_ms"`
+	TranscriptionSource *recorderRenderTranscriptionSourceBody `json:"transcription_source,omitempty"`
 }
 
 type recorderRenderDownloadResponse struct {
@@ -202,6 +211,11 @@ type recorderRenderCommitResponse struct {
 	TranscriptionJobIDs   []string                       `json:"transcription_job_ids"`
 }
 
+type recorderTranscriptionPreparationCommitResponse struct {
+	TranscriptionSourceID *string  `json:"transcription_source_id,omitempty"`
+	TranscriptionJobIDs   []string `json:"transcription_job_ids"`
+}
+
 func mountRecorderRenderAuthorityRoutes(r chi.Router, service RecorderRenderAuthorityService) {
 	if service == nil {
 		return
@@ -212,6 +226,7 @@ func mountRecorderRenderAuthorityRoutes(r chi.Router, service RecorderRenderAuth
 	r.Post("/render-objects/finalize", recorderFinalizeRenderObjectHandler(service))
 	r.Post("/render-objects/commit", recorderCommitRenderObjectHandler(service))
 	r.Post("/renders/commit", recorderCommitRenderHandler(service))
+	r.Post("/renders/transcription-commit", recorderCommitTranscriptionPreparationHandler(service))
 }
 
 func recorderResolveRenderInputHandler(service RecorderRenderAuthorityService) http.HandlerFunc {
@@ -368,6 +383,30 @@ func recorderCommitRenderHandler(service RecorderRenderAuthorityService) http.Ha
 	}
 }
 
+func recorderCommitTranscriptionPreparationHandler(service RecorderRenderAuthorityService) http.HandlerFunc {
+	return func(w http.ResponseWriter, request *http.Request) {
+		identity, ok := recorderRenderIdentity(w, request)
+		if !ok {
+			return
+		}
+		body, ok := decodeRecorderWorkerBody[recorderTranscriptionPreparationCommitBody](w, request)
+		if !ok {
+			return
+		}
+		input, valid := recordingTranscriptionPreparationInput(identity, body)
+		if !valid {
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recording transcription preparation commit")
+			return
+		}
+		result, err := service.CommitTranscriptionPreparation(request.Context(), input)
+		if err != nil {
+			writeRecorderRenderAuthorityError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, recorderTranscriptionPreparationCommitResponseValue(result))
+	}
+}
+
 func recorderRenderIdentity(w http.ResponseWriter, request *http.Request) (workeridentity.Identity, bool) {
 	identity, ok := recorderWorkerRequestIdentity(w, request)
 	if !ok {
@@ -418,6 +457,24 @@ func recordingRenderCommitInput(identity workeridentity.Identity, body recorderR
 		source, valid := recordingRenderTranscriptionSource(*body.TranscriptionSource)
 		if !valid {
 			return recordingrender.CommitInput{}, false
+		}
+		input.TranscriptionSource = &source
+	}
+	return input, input.Validate() == nil
+}
+
+func recordingTranscriptionPreparationInput(identity workeridentity.Identity, body recorderTranscriptionPreparationCommitBody) (recordingrender.TranscriptionPreparationInput, bool) {
+	authority, ok := recordingRenderAuthority(identity, body.recorderRenderAuthorityBody)
+	commitDigest, commitErr := decodeSHA256Hex(body.CommitDigest)
+	presentationSHA256, presentationErr := decodeSHA256Hex(body.PresentationSHA256)
+	if !ok || commitErr != nil || presentationErr != nil {
+		return recordingrender.TranscriptionPreparationInput{}, false
+	}
+	input := recordingrender.TranscriptionPreparationInput{Authority: authority, CommitDigest: commitDigest, PresentationSHA256: presentationSHA256, DurationMillis: body.DurationMillis}
+	if body.TranscriptionSource != nil {
+		source, valid := recordingRenderTranscriptionSource(*body.TranscriptionSource)
+		if !valid {
+			return recordingrender.TranscriptionPreparationInput{}, false
 		}
 		input.TranscriptionSource = &source
 	}
@@ -530,6 +587,20 @@ func recorderRenderCommitResponseValue(value recordingrender.CommitResult) recor
 		for _, jobID := range value.Transcription.JobIDs {
 			response.TranscriptionJobIDs = append(response.TranscriptionJobIDs, jobID.String())
 		}
+	}
+	return response
+}
+
+func recorderTranscriptionPreparationCommitResponseValue(value *recordingrender.TranscriptionResult) recorderTranscriptionPreparationCommitResponse {
+	response := recorderTranscriptionPreparationCommitResponse{TranscriptionJobIDs: []string{}}
+	if value == nil {
+		return response
+	}
+	sourceID := value.SourceID.String()
+	response.TranscriptionSourceID = &sourceID
+	response.TranscriptionJobIDs = make([]string, 0, len(value.JobIDs))
+	for _, jobID := range value.JobIDs {
+		response.TranscriptionJobIDs = append(response.TranscriptionJobIDs, jobID.String())
 	}
 	return response
 }

@@ -48,7 +48,9 @@ ui_build_sha256="$(jq -er '.ui_build_sha256 | select(test("^[0-9a-f]{64}$"))' "$
 for binary in recorder-capture recorder-render chalk-recorder-bootstrap; do
   [[ -x "$bundle_root/bin/$binary" ]] || { echo "release bundle is missing $binary" >&2; exit 1; }
 done
-[[ -f "$bundle_root/renderer/dist/client/recording-ui-build.json" && -x "$bundle_root/renderer/node_modules/.bin/playwright" ]] || { echo "release bundle is missing renderer runtime artifacts" >&2; exit 1; }
+[[ -f "$bundle_root/renderer/dist/client/recording-ui-build.json" && -f "$bundle_root/renderer/dist/recording-ui-builds.json" && -f "$bundle_root/renderer/dist/node/ui-build-registry-cli.js" && -x "$bundle_root/renderer/node_modules/.bin/playwright" ]] || { echo "release bundle is missing renderer runtime artifacts" >&2; exit 1; }
+
+/opt/chalk-recorder/toolchains/node-22.23.2/bin/node "$bundle_root/renderer/dist/node/ui-build-registry-cli.js" verify "$bundle_root/renderer/dist" >/dev/null
 
 export PLAYWRIGHT_BROWSERS_PATH="$bundle_root/ms-playwright"
 "$bundle_root/renderer/node_modules/.bin/playwright" install-deps chromium
@@ -75,7 +77,7 @@ cat >"$image_root/etc/chalk-recorder/render.env" <<EOF
 CHALK_RECORDING_RENDER_WORK_ROOT=/var/lib/chalk-recorder/render
 CHALK_RECORDING_NODE_PATH=/opt/chalk-recorder/toolchains/node-22.23.2/bin/node
 CHALK_RECORDING_RENDERER_SCRIPT=/opt/chalk-recorder/current/renderer/dist/node/cli.js
-CHALK_RECORDING_UI_BUILD_SHA256=$ui_build_sha256
+CHALK_RECORDING_UI_BUILD_REGISTRY=/opt/chalk-recorder/current/renderer/dist/recording-ui-builds.json
 CHALK_RECORDING_FFMPEG_PATH=/usr/bin/ffmpeg
 CHALK_RECORDING_FFPROBE_PATH=/usr/bin/ffprobe
 CHALK_RECORDING_VIDEO_ENCODER=libx264

@@ -10,7 +10,7 @@ locals {
     var.cloudflare_enabled ? ["api.cloudflare.com"] : [],
   ))
 
-  base_environment = {
+  base_environment = merge({
     CHALK_ENVIRONMENT                       = var.environment_name
     CHALK_RELEASE_ID                        = var.release_id
     CHALK_RELEASE_MANIFEST_DIGEST           = var.release_manifest_digest
@@ -22,15 +22,7 @@ locals {
     TRANSCRIPTION_TIMEOUT_RESERVE_MS        = tostring(var.completion_reserve_seconds * 1000)
     TRANSCRIPTION_PRIVACY_GATE_ACCEPTED     = tostring(var.privacy_gate_accepted)
     DEEPINFRA_ENABLED                       = tostring(var.deepinfra_enabled)
-    DEEPINFRA_ADAPTER_CONTRACT_VERSION      = var.deepinfra_adapter_contract_version
-    DEEPINFRA_CORPUS_DIGEST                 = var.deepinfra_corpus_digest
     CLOUDFLARE_AI_ENABLED                   = tostring(var.cloudflare_enabled)
-    DEEPINFRA_EXECUTION_IDENTITY_PIN        = var.deepinfra_execution_identity_pin
-    DEEPINFRA_MODEL_VERSION_PIN             = var.deepinfra_model_version_pin
-    CLOUDFLARE_ACCOUNT_ID                   = var.cloudflare_account_id
-    CLOUDFLARE_MODEL_SLUG                   = var.cloudflare_model_slug
-    CLOUDFLARE_ADAPTER_CONTRACT_VERSION     = var.cloudflare_adapter_contract_version
-    CLOUDFLARE_CORPUS_DIGEST                = var.cloudflare_corpus_digest
     TRANSCRIPTION_PROVIDER_TIMEOUT_MS       = tostring(var.provider_timeout_ms)
     TRANSCRIPTION_MAX_AUDIO_BYTES           = tostring(var.max_audio_bytes)
     TRANSCRIPTION_MAX_AUDIO_SECONDS         = tostring(var.max_audio_seconds)
@@ -46,10 +38,22 @@ locals {
     CHALK_TRANSCRIPTION_HANDLER             = var.handler
     CHALK_TRANSCRIPTION_WORK_BUDGET         = tostring(var.work_budget_seconds)
     CHALK_COMPLETION_RESERVE_SECONDS        = tostring(var.completion_reserve_seconds)
-    DEEPINFRA_TOKEN_PARAMETER_ARN           = var.deepinfra_token_parameter_arn
-    CLOUDFLARE_AI_TOKEN_PARAMETER_ARN       = var.cloudflare_token_parameter_arn
     CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN = var.api_workload_auth_parameter_arn
-  }
+    }, var.deepinfra_enabled ? merge({
+      DEEPINFRA_ADAPTER_CONTRACT_VERSION = var.deepinfra_adapter_contract_version
+      DEEPINFRA_CORPUS_DIGEST            = var.deepinfra_corpus_digest
+      DEEPINFRA_TOKEN_PARAMETER_ARN      = var.deepinfra_token_parameter_arn
+      }, var.deepinfra_execution_identity_pin == "" ? {} : {
+      DEEPINFRA_EXECUTION_IDENTITY_PIN = var.deepinfra_execution_identity_pin
+      }, var.deepinfra_model_version_pin == "" ? {} : {
+      DEEPINFRA_MODEL_VERSION_PIN = var.deepinfra_model_version_pin
+    }) : {}, var.cloudflare_enabled ? {
+    CLOUDFLARE_ACCOUNT_ID               = var.cloudflare_account_id
+    CLOUDFLARE_MODEL_SLUG               = var.cloudflare_model_slug
+    CLOUDFLARE_ADAPTER_CONTRACT_VERSION = var.cloudflare_adapter_contract_version
+    CLOUDFLARE_CORPUS_DIGEST            = var.cloudflare_corpus_digest
+    CLOUDFLARE_AI_TOKEN_PARAMETER_ARN   = var.cloudflare_token_parameter_arn
+  } : {})
 
 }
 
@@ -109,6 +113,8 @@ data "aws_iam_policy_document" "dispatcher_permissions" {
     resources = local.ssm_parameter_arns
   }
 
+  # Lambda uses the function execution role when delivering an asynchronous
+  # invocation record to its configured SQS failure destination.
   statement {
     sid       = "WriteOnlyAsyncFailureDestination"
     effect    = "Allow"
@@ -202,6 +208,11 @@ resource "aws_lambda_function" "dispatcher" {
     precondition {
       condition     = var.deepinfra_enabled || var.cloudflare_enabled
       error_message = "Select at least one qualified transcription provider explicitly."
+    }
+
+    precondition {
+      condition     = (var.control_api_invoker_principal == null) == (var.control_api_invoke_source_arn == null)
+      error_message = "Configure both control_api_invoker_principal and control_api_invoke_source_arn, or neither."
     }
 
   }
@@ -323,6 +334,7 @@ resource "aws_scheduler_schedule" "reconcile" {
   group_name                   = var.scheduler_group_name
   schedule_expression          = "rate(1 minute)"
   schedule_expression_timezone = "UTC"
+  state                        = var.scheduler_state
 
   flexible_time_window {
     mode = "OFF"

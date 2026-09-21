@@ -263,8 +263,13 @@ select
             then episodes.config_snapshot #>> '{artifact_policy,transcription,mode}'
         else 'disabled'
     end::text as transcription_mode,
-    coalesce((episodes.config_snapshot #>> '{artifact_policy,transcription,source_window_seconds}')::bigint, 0)::bigint as source_window_seconds
+    coalesce((episodes.config_snapshot #>> '{artifact_policy,transcription,source_window_seconds}')::bigint, 0)::bigint as source_window_seconds,
+    (
+        pipelines.capture_completed_at +
+        (recording_transcription_source_window_seconds(episodes.config_snapshot) * interval '1 second')
+    )::timestamptz as source_expires_at
 from recordings
+join recording_pipelines pipelines on pipelines.recording_id = recordings.id
 join episodes on episodes.tenant_id = recordings.tenant_id
     and episodes.id = recordings.episode_id
     and episodes.space_id = recordings.space_id
@@ -282,8 +287,9 @@ type GetRecordingTranscriptionPolicyForCommitParams struct {
 }
 
 type GetRecordingTranscriptionPolicyForCommitRow struct {
-	TranscriptionMode   string `json:"transcription_mode"`
-	SourceWindowSeconds int64  `json:"source_window_seconds"`
+	TranscriptionMode   string             `json:"transcription_mode"`
+	SourceWindowSeconds int64              `json:"source_window_seconds"`
+	SourceExpiresAt     pgtype.Timestamptz `json:"source_expires_at"`
 }
 
 func (q *Queries) GetRecordingTranscriptionPolicyForCommit(ctx context.Context, arg GetRecordingTranscriptionPolicyForCommitParams) (GetRecordingTranscriptionPolicyForCommitRow, error) {
@@ -294,7 +300,7 @@ func (q *Queries) GetRecordingTranscriptionPolicyForCommit(ctx context.Context, 
 		arg.RecordingID,
 	)
 	var i GetRecordingTranscriptionPolicyForCommitRow
-	err := row.Scan(&i.TranscriptionMode, &i.SourceWindowSeconds)
+	err := row.Scan(&i.TranscriptionMode, &i.SourceWindowSeconds, &i.SourceExpiresAt)
 	return i, err
 }
 

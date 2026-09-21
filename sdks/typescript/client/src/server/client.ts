@@ -24,11 +24,13 @@ import type {
   PublicAdmissionRequestPage,
   Recording,
   RecordingDownloadURL,
+  RecordingExportRequestAcceptedResponse,
   RecordingList,
   RemoveParticipantInput,
   Space,
   SpacePublicInvite,
   SpaceList,
+  UpdateSpaceInput,
   UpdateSpacePublicInviteInput,
 } from "./types.js";
 
@@ -44,15 +46,70 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
 
   return {
     spaces: {
-      archive: (spaceId) => request<Space>({ method: "POST", path: `${tenantPath}/spaces/${segment(spaceId)}/archive`, expectedStatus: 200, retry: "always" }),
-      create: (input, idempotency) => request<Space>({ method: "POST", path: `${tenantPath}/spaces`, body: createSpaceRequest(input), expectedStatus: 201, idempotency, retry: "caller_idempotency" }),
-      get: (spaceId) => request<Space>({ method: "GET", path: `${tenantPath}/spaces/${segment(spaceId)}`, expectedStatus: 200, retry: "always" }),
-      list: (input) => request<SpaceList>({ method: "GET", path: `${tenantPath}/spaces${spaceQuery(input)}`, expectedStatus: 200, retry: "always" }),
-      restore: (spaceId) => request<Space>({ method: "POST", path: `${tenantPath}/spaces/${segment(spaceId)}/restore`, expectedStatus: 200, retry: "always" }),
+      archive: (spaceId) =>
+        request<Space>({
+          method: "POST",
+          path: `${tenantPath}/spaces/${segment(spaceId)}/archive`,
+          expectedStatus: 200,
+          retry: "always",
+        }),
+      create: (input, idempotency) =>
+        request<Space>({
+          method: "POST",
+          path: `${tenantPath}/spaces`,
+          body: createSpaceRequest(input),
+          expectedStatus: 201,
+          idempotency,
+          retry: "caller_idempotency",
+        }),
+      get: (spaceId) =>
+        request<Space>({
+          method: "GET",
+          path: `${tenantPath}/spaces/${segment(spaceId)}`,
+          expectedStatus: 200,
+          retry: "always",
+        }),
+      list: (input) =>
+        request<SpaceList>({
+          method: "GET",
+          path: `${tenantPath}/spaces${spaceQuery(input)}`,
+          expectedStatus: 200,
+          retry: "always",
+        }),
+      restore: (spaceId) =>
+        request<Space>({
+          method: "POST",
+          path: `${tenantPath}/spaces/${segment(spaceId)}/restore`,
+          expectedStatus: 200,
+          retry: "always",
+        }),
+      update: (spaceId, input) =>
+        request<Space>({
+          method: "PATCH",
+          path: `${tenantPath}/spaces/${segment(spaceId)}`,
+          body: spaceUpdateRequest(input),
+          expectedStatus: 200,
+          retry: "always",
+        }),
     },
     episodes: {
-      create: (spaceId, input, idempotency) => request<Episode>({ method: "POST", path: `${tenantPath}/spaces/${segment(spaceId)}/episodes`, body: createEpisodeRequest(input), expectedStatus: 201, idempotency, retry: "caller_idempotency" }),
-      end: (spaceId, episodeId, idempotency) => request<EpisodeEnd>({ method: "POST", path: `${tenantPath}/spaces/${segment(spaceId)}/episodes/${segment(episodeId)}/end`, expectedStatus: 202, idempotency, retry: "caller_idempotency" }),
+      create: (spaceId, input, idempotency) =>
+        request<Episode>({
+          method: "POST",
+          path: `${tenantPath}/spaces/${segment(spaceId)}/episodes`,
+          body: createEpisodeRequest(input),
+          expectedStatus: 201,
+          idempotency,
+          retry: "caller_idempotency",
+        }),
+      end: (spaceId, episodeId, idempotency) =>
+        request<EpisodeEnd>({
+          method: "POST",
+          path: `${tenantPath}/spaces/${segment(spaceId)}/episodes/${segment(episodeId)}/end`,
+          expectedStatus: 202,
+          idempotency,
+          retry: "caller_idempotency",
+        }),
     },
     participants: {
       admit: async (spaceId, episodeId, input, idempotency) => {
@@ -87,32 +144,121 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
         }),
     },
     apiKeys: {
-      create: (input) => request<APIKeyWithSecret>({ method: "POST", path: `${tenantPath}/api-keys`, body: apiKeyCreateRequest(input), expectedStatus: 201, retry: "never" }),
-      list: (input) => request<APIKeyList>({ method: "GET", path: `${tenantPath}/api-keys${apiKeyQuery(input)}`, expectedStatus: 200, retry: "always" }),
-      rotate: (apiKeyId, input) => request<APIKeyWithSecret>({ method: "POST", path: `${tenantPath}/api-keys/${segment(apiKeyId)}/rotate`, body: { expires_at: input?.expiresAt }, expectedStatus: 200, retry: "never" }),
-      revoke: (apiKeyId) => request<void>({ method: "DELETE", path: `${tenantPath}/api-keys/${segment(apiKeyId)}`, expectedStatus: 204, retry: "always" }),
+      create: (input) =>
+        request<APIKeyWithSecret>({
+          method: "POST",
+          path: `${tenantPath}/api-keys`,
+          body: apiKeyCreateRequest(input),
+          expectedStatus: 201,
+          retry: "never",
+        }),
+      list: (input) =>
+        request<APIKeyList>({
+          method: "GET",
+          path: `${tenantPath}/api-keys${apiKeyQuery(input)}`,
+          expectedStatus: 200,
+          retry: "always",
+        }),
+      rotate: (apiKeyId, input) =>
+        request<APIKeyWithSecret>({
+          method: "POST",
+          path: `${tenantPath}/api-keys/${segment(apiKeyId)}/rotate`,
+          body: { expires_at: input?.expiresAt },
+          expectedStatus: 200,
+          retry: "never",
+        }),
+      revoke: (apiKeyId) =>
+        request<void>({
+          method: "DELETE",
+          path: `${tenantPath}/api-keys/${segment(apiKeyId)}`,
+          expectedStatus: 204,
+          retry: "always",
+        }),
     },
     recordings: {
-      list: (input) => request<RecordingList>({ method: "GET", path: `${tenantPath}/recordings${recordingQuery(input)}`, expectedStatus: 200, retry: "always" }),
-      get: (recordingId) => request<Recording>({ method: "GET", path: `${tenantPath}/recordings/${segment(recordingId)}`, expectedStatus: 200, retry: "always" }),
+      list: (input) =>
+        request<RecordingList>({
+          method: "GET",
+          path: `${tenantPath}/recordings${recordingQuery(input)}`,
+          expectedStatus: 200,
+          retry: "always",
+        }),
+      get: (recordingId) =>
+        request<Recording>({
+          method: "GET",
+          path: `${tenantPath}/recordings/${segment(recordingId)}`,
+          expectedStatus: 200,
+          retry: "always",
+        }),
+      requestExport: (recordingId) =>
+        request<RecordingExportRequestAcceptedResponse>({
+          method: "POST",
+          path: `${tenantPath}/recordings/${segment(recordingId)}/export`,
+          body: {},
+          expectedStatus: 202,
+          retry: "always",
+        }),
       createDownloadURL: (recordingId, input) =>
         request<RecordingDownloadURL>({
           method: "POST",
           path: `${tenantPath}/recordings/${segment(recordingId)}/download-url`,
-          body: { expires_in_seconds: input.expiresInSeconds },
+          body: {
+            expires_in_seconds: input.expiresInSeconds,
+            ...(input.download === undefined ? {} : { download: input.download }),
+          },
           expectedStatus: 200,
           retry: "always",
         }),
     },
     publicInvites: {
-      get: (spaceId) => request<SpacePublicInvite>({ method: "GET", path: `${tenantPath}/spaces/${segment(spaceId)}/public-invite`, expectedStatus: 200, retry: "always" }),
-      update: (spaceId, input) => request<SpacePublicInvite>({ method: "PATCH", path: `${tenantPath}/spaces/${segment(spaceId)}/public-invite`, body: publicInviteUpdateRequest(input), expectedStatus: 200, retry: "always" }),
-      rotate: (spaceId, idempotency) => request<SpacePublicInvite>({ method: "POST", path: `${tenantPath}/spaces/${segment(spaceId)}/public-invite/rotations`, expectedStatus: 201, idempotency, retry: "caller_idempotency" }),
+      get: (spaceId) =>
+        request<SpacePublicInvite>({
+          method: "GET",
+          path: `${tenantPath}/spaces/${segment(spaceId)}/public-invite`,
+          expectedStatus: 200,
+          retry: "always",
+        }),
+      update: (spaceId, input) =>
+        request<SpacePublicInvite>({
+          method: "PATCH",
+          path: `${tenantPath}/spaces/${segment(spaceId)}/public-invite`,
+          body: publicInviteUpdateRequest(input),
+          expectedStatus: 200,
+          retry: "always",
+        }),
+      rotate: (spaceId, idempotency) =>
+        request<SpacePublicInvite>({
+          method: "POST",
+          path: `${tenantPath}/spaces/${segment(spaceId)}/public-invite/rotations`,
+          expectedStatus: 201,
+          idempotency,
+          retry: "caller_idempotency",
+        }),
     },
     publicAdmissionRequests: {
-      list: (spaceId, input) => request<PublicAdmissionRequestPage>({ method: "GET", path: `${tenantPath}/spaces/${segment(spaceId)}/public-admission-requests${publicAdmissionRequestQuery(input)}`, expectedStatus: 200, retry: "always" }),
-      approve: (spaceId, requestHandle, idempotency) => request<PublicAdmissionRequest>({ method: "POST", path: `${tenantPath}/spaces/${segment(spaceId)}/public-admission-requests/${segment(requestHandle)}/approval`, expectedStatus: 200, idempotency, retry: "caller_idempotency" }),
-      deny: (spaceId, requestHandle, idempotency) => request<PublicAdmissionRequest>({ method: "POST", path: `${tenantPath}/spaces/${segment(spaceId)}/public-admission-requests/${segment(requestHandle)}/denial`, expectedStatus: 200, idempotency, retry: "caller_idempotency" }),
+      list: (spaceId, input) =>
+        request<PublicAdmissionRequestPage>({
+          method: "GET",
+          path: `${tenantPath}/spaces/${segment(spaceId)}/public-admission-requests${publicAdmissionRequestQuery(input)}`,
+          expectedStatus: 200,
+          retry: "always",
+        }),
+      approve: (spaceId, requestHandle, idempotency) =>
+        request<PublicAdmissionRequest>({
+          method: "POST",
+          path: `${tenantPath}/spaces/${segment(spaceId)}/public-admission-requests/${segment(requestHandle)}/approval`,
+          expectedStatus: 200,
+          idempotency,
+          retry: "caller_idempotency",
+        }),
+      deny: (spaceId, requestHandle, idempotency) =>
+        request<PublicAdmissionRequest>({
+          method: "POST",
+          path: `${tenantPath}/spaces/${segment(spaceId)}/public-admission-requests/${segment(requestHandle)}/denial`,
+          expectedStatus: 200,
+          idempotency,
+          retry: "caller_idempotency",
+        }),
     },
   };
 }
@@ -127,7 +273,16 @@ function createSpaceRequest(input: CreateSpaceInput): Record<string, unknown> {
     slug: input.slug,
     ...(input.admissionPolicy === undefined ? {} : { admission_policy: input.admissionPolicy }),
     ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
+    ...(input.recordingPolicy === undefined ? {} : { recording_policy: input.recordingPolicy }),
     ...(input.recurringPolicy === undefined ? {} : { recurring_policy: input.recurringPolicy }),
+    ...(input.transcriptionPolicy === undefined ? {} : { transcription_policy: input.transcriptionPolicy }),
+  };
+}
+
+function spaceUpdateRequest(input: UpdateSpaceInput): Record<string, unknown> {
+  return {
+    ...(input.recordingPolicy === undefined ? {} : { recording_policy: input.recordingPolicy }),
+    ...(input.transcriptionPolicy === undefined ? {} : { transcription_policy: input.transcriptionPolicy }),
   };
 }
 
@@ -188,6 +343,7 @@ function recordingQuery(input: ListRecordingsInput | undefined): string {
   setQueryValue(query, "cursor", input?.cursor);
   setQueryValue(query, "episode_id", input?.episodeId);
   setQueryValue(query, "page_size", input?.pageSize);
+  setQueryValue(query, "space_id", input?.spaceId);
   return prefixedQuery(query.toString());
 }
 
@@ -248,7 +404,9 @@ type AccessGrantWire = {
   } | null;
 };
 
-type ParticipantLifecycleWire = Omit<ParticipantLifecycle, "access"> & { readonly access?: AccessGrantWire | null };
+type ParticipantLifecycleWire = Omit<ParticipantLifecycle, "access"> & {
+  readonly access?: AccessGrantWire | null;
+};
 
 function participantLifecycle(value: ParticipantLifecycleWire): ParticipantLifecycle {
   const { access, ...lifecycle } = value;

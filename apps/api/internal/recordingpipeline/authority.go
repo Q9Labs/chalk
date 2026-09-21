@@ -30,13 +30,13 @@ func NewRecorderJobAuthority(job Job, facts ClaimFacts, claimRequestID utilities
 	if job.ID.IsZero() || job.TenantID.IsZero() || job.EpisodeID.IsZero() || job.RecordingID.IsZero() || facts.SpaceID.IsZero() {
 		return JobAuthority{}, ErrInvalidEnvelope
 	}
-	if job.Kind != JobKindCapture && job.Kind != JobKindRender || job.AttemptCount <= 0 || job.FencingGeneration <= 0 || facts.CaptureEpoch <= 0 {
+	if job.Kind != JobKindCapture && job.Kind != JobKindRender && job.Kind != JobKindTranscription || job.AttemptCount <= 0 || job.FencingGeneration <= 0 || facts.CaptureEpoch <= 0 {
 		return JobAuthority{}, ErrInvalidEnvelope
 	}
 	if facts.PolicySnapshotVersion != SupportedPolicySnapshotVersion || facts.HardDeadline.IsZero() || claimRequestID.IsZero() {
 		return JobAuthority{}, ErrInvalidEnvelope
 	}
-	if job.Kind == JobKindRender && (facts.CaptureReadyAt == nil || facts.CaptureKeyHandle.IsZero() || facts.PresentationHandle.IsZero() || facts.PresentationSchemaVersion != "recording_presentation.v1" || facts.PresentationProfileVersion == "" || len(facts.PresentationSHA256) != sha256.Size || facts.PresentationDurationMillis <= 0) {
+	if (job.Kind == JobKindRender || job.Kind == JobKindTranscription) && (facts.CaptureReadyAt == nil || facts.CaptureKeyHandle.IsZero() || facts.PresentationHandle.IsZero() || facts.PresentationSchemaVersion != "recording_presentation.v1" || facts.PresentationProfileVersion == "" || len(facts.PresentationSHA256) != sha256.Size || facts.PresentationDurationMillis <= 0) {
 		return JobAuthority{}, ErrInvalidEnvelope
 	}
 	if job.Kind == JobKindCapture && (!facts.CaptureKeyHandle.IsZero() || !facts.PresentationHandle.IsZero() || facts.PresentationSchemaVersion != "" || facts.PresentationProfileVersion != "" || len(facts.PresentationSHA256) != 0 || facts.PresentationDurationMillis != 0) {
@@ -74,7 +74,7 @@ func NewRecorderJobAuthority(job Job, facts ClaimFacts, claimRequestID utilities
 		return JobAuthority{}, fmt.Errorf("generate object authority handle: %w", err)
 	}
 	var renderInputHandle utilities.ID
-	if job.Kind == JobKindRender {
+	if job.Kind == JobKindRender || job.Kind == JobKindTranscription {
 		renderInputHandle, err = utilities.NewID()
 		if err != nil {
 			return JobAuthority{}, fmt.Errorf("generate render input handle: %w", err)
@@ -150,7 +150,7 @@ func DecodeRecorderJobEnvelope(envelopeBytes, envelopeDigest []byte) (RecorderJo
 			return RecorderJobEnvelope{}, ErrInvalidEnvelope
 		}
 	}
-	if envelope.Kind == JobKindRender {
+	if envelope.Kind == JobKindRender || envelope.Kind == JobKindTranscription {
 		if envelope.CaptureReadyAt == nil || envelope.PresentationSchemaVersion != "recording_presentation.v1" || envelope.PresentationProfileVersion == "" || envelope.PresentationDurationMillis <= 0 {
 			return RecorderJobEnvelope{}, ErrInvalidEnvelope
 		}

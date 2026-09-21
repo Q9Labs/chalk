@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -72,6 +73,9 @@ func TestTranscriptRequestEnforcesFrozenEpisodeTranscriptionPolicy(t *testing.T)
 		if transcript.RecordingID != recordingID || job.RecordingID != recordingID {
 			t.Fatalf("%s result recording ids = transcript %s, job %s; want %s", mode, transcript.RecordingID, job.RecordingID, recordingID)
 		}
+		if mode == "automatic" {
+			assertRequestedTranscriptHasEmptyLanguages(t, ctx, connection, transcript.ID)
+		}
 		assertTranscriptArtifactCounts(t, ctx, connection, recordingID, 1, 1)
 	}
 
@@ -108,11 +112,87 @@ from recordings where tenant_id = $4 and id = $5`, replayJobID.Bytes(), replayKe
 	assertTranscriptArtifactCounts(t, ctx, connection, replayRecording, 1, 1)
 }
 
+func TestRecordingArtifactStateUsesFrozenEpisodeTranscriptionPolicy(t *testing.T) {
+	if testing.Short() {
+		t.Skip("postgres integration")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	databaseURL := os.Getenv("CHALK_SYNC_OVERHAUL_TEST_DATABASE_URL")
+	if databaseURL == "" {
+		databaseURL = os.Getenv(config.DatabaseURL)
+	}
+	if databaseURL == "" {
+		databaseURL = config.DefaultDatabaseURL
+	}
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("open recording artifact state database: %v", err)
+	}
+	defer pool.Close()
+	if err := pool.Ping(ctx); err != nil {
+		t.Fatalf("ping recording artifact state database: %v", err)
+	}
+	connection, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("acquire recording artifact state connection: %v", err)
+	}
+	defer connection.Release()
+
+	tenantID := mustTenantPolicyTestID(t)
+	defer cleanupTranscriptPolicyFixture(t, ctx, connection, tenantID)
+	onDemandRecording := insertTranscriptPolicyFixture(t, ctx, connection, tenantID, "on_demand", false)
+	disabledRecording := insertTranscriptPolicyFixture(t, ctx, connection, tenantID, "disabled", false)
+	legacyRecording := insertTranscriptPolicyFixture(t, ctx, connection, tenantID, "", true)
+	for _, change := range []struct {
+		recordingID utilities.ID
+		currentMode string
+	}{
+		{recordingID: onDemandRecording, currentMode: "disabled"},
+		{recordingID: disabledRecording, currentMode: "automatic"},
+		{recordingID: legacyRecording, currentMode: "on_demand"},
+	} {
+		if _, err := connection.Exec(ctx, `
+update spaces set transcription_policy = $1
+where id = (select space_id from recordings where id = $2)`, change.currentMode, change.recordingID.Bytes()); err != nil {
+			t.Fatalf("change current Space transcription policy for %s: %v", change.recordingID, err)
+		}
+	}
+
+	states, err := NewRecordingPipelineRepositoryWithPool(pool).GetArtifactStates(ctx, tenantID, []utilities.ID{onDemandRecording, disabledRecording, legacyRecording})
+	if err != nil {
+		t.Fatalf("get batched recording artifact states: %v", err)
+	}
+	for recordingID, want := range map[utilities.ID]artifactpolicy.TranscriptionMode{
+		onDemandRecording: artifactpolicy.TranscriptionOnDemand,
+		disabledRecording: artifactpolicy.TranscriptionDisabled,
+		legacyRecording:   artifactpolicy.TranscriptionDisabled,
+	} {
+		state, ok := states[recordingID]
+		if !ok || state.TranscriptionPolicy != want {
+			t.Fatalf("recording %s frozen transcription policy=%q present=%t, want %q", recordingID, state.TranscriptionPolicy, ok, want)
+		}
+	}
+}
+
 func assertDisabledTranscriptRequest(t *testing.T, ctx context.Context, repository TranscriptRepository, tenantID, recordingID utilities.ID) {
 	t.Helper()
 	_, _, err := repository.Request(ctx, transcriptPolicyRequestInput(t, tenantID, recordingID, "disabled-"+recordingID.String()))
 	if !errors.Is(err, transcripts.ErrTranscriptionDisabled) {
 		t.Fatalf("disabled request error = %v, want ErrTranscriptionDisabled", err)
+	}
+}
+
+func assertRequestedTranscriptHasEmptyLanguages(t *testing.T, ctx context.Context, connection *pgxpool.Conn, transcriptID utilities.ID) {
+	t.Helper()
+	var languagesNull bool
+	var languageCount int
+	if err := connection.QueryRow(ctx, `select languages is null, cardinality(languages) from transcriptions where id = $1`, transcriptID.Bytes()).Scan(&languagesNull, &languageCount); err != nil {
+		t.Fatalf("read requested transcript languages: %v", err)
+	}
+	if languagesNull || languageCount != 0 {
+		t.Fatalf("requested transcript languages null=%t count=%d, want empty array", languagesNull, languageCount)
 	}
 }
 

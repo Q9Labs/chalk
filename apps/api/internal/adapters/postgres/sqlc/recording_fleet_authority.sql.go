@@ -237,7 +237,10 @@ job_demand as (
         count(*) filter (where state = 'leased' and lease_expires_at > $2::timestamptz)::integer as leased_jobs,
         max(updated_at) as job_revision
     from recording_jobs
-    where kind = $1
+    where (
+        kind = $1
+        or ($1::text = 'render' and kind = 'transcription')
+    )
       and state in ('pending', 'retryable_failure', 'leased')
       and (
           $1::text <> 'capture'

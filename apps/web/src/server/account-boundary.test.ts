@@ -175,6 +175,62 @@ describe("account boundary", () => {
     expect(oversized.status).toBe(413);
     expect(fetcher).toHaveBeenCalledOnce();
   });
+
+  it("relays only the dashboard recording and transcript routes through the tenant boundary", async () => {
+    const tenantID = "11111111-1111-4111-8111-111111111111";
+    const otherTenantID = "99999999-9999-4999-8999-999999999999";
+    const spaceID = "22222222-2222-4222-8222-222222222222";
+    const recordingID = "33333333-3333-4333-8333-333333333333";
+    const transcriptID = "44444444-4444-4444-8444-444444444444";
+    const cookie = "__Host-chalk_account=account-token; __Host-chalk_csrf=csrf-token";
+    const fetcher = vi.fn<typeof globalThis.fetch>(async () => Response.json({ ok: true }));
+    const routes: Array<{ method: "GET" | "POST"; path: string; upstreamPath: string; body?: string }> = [
+      { method: "GET", path: `/api/tenants/${tenantID}/recordings?space_id=${spaceID}&cursor=recording-cursor&page_size=20&discard=untrusted`, upstreamPath: `/v1/tenants/${tenantID}/recordings?cursor=recording-cursor&page_size=20&space_id=${spaceID}` },
+      { method: "GET", path: `/api/tenants/${tenantID}/recordings/${recordingID}`, upstreamPath: `/v1/tenants/${tenantID}/recordings/${recordingID}` },
+      { method: "POST", path: `/api/tenants/${tenantID}/recordings/${recordingID}/export`, upstreamPath: `/v1/tenants/${tenantID}/recordings/${recordingID}/export`, body: "{}" },
+      { method: "POST", path: `/api/tenants/${tenantID}/recordings/${recordingID}/download-url`, upstreamPath: `/v1/tenants/${tenantID}/recordings/${recordingID}/download-url`, body: JSON.stringify({ expires_in_seconds: 900 }) },
+      { method: "POST", path: `/api/tenants/${tenantID}/recordings/${recordingID}/transcripts`, upstreamPath: `/v1/tenants/${tenantID}/recordings/${recordingID}/transcripts`, body: JSON.stringify({ idempotency_key: "transcript-request-key-123456", language: "en", languages: ["en"] }) },
+      { method: "GET", path: `/api/tenants/${tenantID}/transcripts?recording_id=${recordingID}&cursor=transcript-cursor&page_size=2&discard=untrusted`, upstreamPath: `/v1/tenants/${tenantID}/transcripts?cursor=transcript-cursor&page_size=2&recording_id=${recordingID}` },
+      { method: "GET", path: `/api/tenants/${tenantID}/transcripts/${transcriptID}/document`, upstreamPath: `/v1/tenants/${tenantID}/transcripts/${transcriptID}/document` },
+    ];
+
+    for (const route of routes) {
+      const mutation = route.method === "POST";
+      const response = await handleAccountBoundary(
+        new Request(`${secureOrigin}${route.path}`, {
+          method: route.method,
+          headers: mutation ? { "Content-Type": "application/json", Cookie: cookie, Origin: secureOrigin, "X-Chalk-CSRF": "csrf-token" } : { Cookie: cookie },
+          ...(mutation ? { body: route.body } : {}),
+        }),
+        upstream,
+        fetcher,
+      );
+      expect(response.status).toBe(200);
+    }
+
+    expect(fetcher.mock.calls.map(([url, init]) => ({ method: init?.method, url: String(url) }))).toEqual(routes.map((route) => ({ method: route.method, url: `${upstream.CHALK_API_ORIGIN}${route.upstreamPath}` })));
+    for (const [index, [, init]] of fetcher.mock.calls.entries()) {
+      const headers = new Headers(init?.headers);
+      expect(headers.get("authorization")).toBe("Bearer account-token");
+      expect(headers.get("cookie")).toBeNull();
+      const body = init?.body;
+      if (routes[index]?.body === undefined) expect(body).toBeUndefined();
+      else expect(new TextDecoder().decode(body as ArrayBuffer)).toBe(routes[index].body);
+    }
+
+    const unauthenticated = await handleAccountBoundary(new Request(`${secureOrigin}/api/tenants/${tenantID}/recordings?space_id=${spaceID}`), upstream, fetcher);
+    expect(unauthenticated.status).toBe(401);
+    expect(fetcher).toHaveBeenCalledTimes(routes.length);
+
+    const crossTenantFetcher = vi.fn<typeof globalThis.fetch>(async () => Response.json({ error: { code: "access.forbidden", message: "Tenant access is required" } }, { status: 403 }));
+    const crossTenant = await handleAccountBoundary(new Request(`${secureOrigin}/api/tenants/${otherTenantID}/recordings/${recordingID}`, { headers: { Cookie: cookie } }), upstream, crossTenantFetcher);
+    expect(crossTenant.status).toBe(403);
+    expect(String(crossTenantFetcher.mock.calls[0]?.[0])).toBe(`${upstream.CHALK_API_ORIGIN}/v1/tenants/${otherTenantID}/recordings/${recordingID}`);
+
+    const unsupported = await handleAccountBoundary(new Request(`${secureOrigin}/api/tenants/${tenantID}/transcripts/${transcriptID}/document`, { method: "POST", headers: { Cookie: cookie, Origin: secureOrigin, "X-Chalk-CSRF": "csrf-token" }, body: "{}" }), upstream, fetcher);
+    expect(unsupported.status).toBe(404);
+    expect(fetcher).toHaveBeenCalledTimes(routes.length);
+  });
 });
 
 function jsonRequest(path: string, body: unknown, headers: HeadersInit): Request {

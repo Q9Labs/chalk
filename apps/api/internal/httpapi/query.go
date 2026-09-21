@@ -121,6 +121,10 @@ func episodeIDQueryParameter() APIParameterContract {
 	return APIParameterContract{Name: "episode_id", In: "query", Type: "string", Required: false}
 }
 
+func spaceIDQueryParameter() APIParameterContract {
+	return APIParameterContract{Name: "space_id", In: "query", Type: "string", Required: false}
+}
+
 func optionalRecordingIDQuery(r *http.Request) (utilities.ID, error) {
 	id, err := optionalQueryIDValue(r, "recording_id")
 	if err != nil {
@@ -133,6 +137,14 @@ func optionalEpisodeIDQuery(r *http.Request) (utilities.ID, error) {
 	id, err := optionalQueryIDValue(r, "episode_id")
 	if err != nil {
 		return utilities.ID{}, apiErrorInvalidEpisodeID
+	}
+	return id, nil
+}
+
+func optionalSpaceIDQuery(r *http.Request) (utilities.ID, error) {
+	id, err := optionalQueryIDValue(r, "space_id")
+	if err != nil {
+		return utilities.ID{}, apiErrorInvalidSpaceID
 	}
 	return id, nil
 }

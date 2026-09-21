@@ -84,7 +84,7 @@ func (s Service) EnqueueCleanup(ctx context.Context, input CleanupEnqueueInput) 
 	if (input.ObjectKind == "final_artifact" || input.ObjectKind == "temp_result") && input.TranscriptID.IsZero() {
 		return CleanupJob{}, ErrInvalidArtifact
 	}
-	if input.ObjectKind != "final_artifact" && input.ObjectKind != "temp_result" && input.ObjectKind != "source_manifest" && input.ObjectKind != "source_chunk" {
+	if input.ObjectKind != "final_artifact" && input.ObjectKind != "temp_result" && input.ObjectKind != "source_manifest" && input.ObjectKind != "source_chunk" && input.ObjectKind != "recording_source" {
 		return CleanupJob{}, ErrInvalidArtifact
 	}
 	return s.cleanup.EnqueueCleanup(ctx, input)

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { useEpisodeDiagnosticsAvailability } from "../../features/episode-debugger/EpisodeDiagnosticsDeveloperLink";
 import { createPreparedPublicSpace, createPublicInviteClient, joinDashboardSpace, type AccountSpaceCredential, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
 import { listAllAccountTenants, listSpaces } from "../../lib/dashboard-api";
-import { canonicalSpaceInviteLink, clearDashboardSpaceEntry, hasDashboardSpaceEntry, spaceInviteToken, verifiedSpaceInviteLink } from "../../lib/named-space-route";
+import { canonicalSpaceInviteLink, clearDashboardSpaceEntry, dashboardSpaceEntryUsesDevicesOff, hasDashboardSpaceEntry, spaceInviteToken, verifiedSpaceInviteLink } from "../../lib/named-space-route";
 import { createLocalSpaceClient, createLocalSpaceRelease } from "../../lib/local-space-client";
 import { useWebTelemetry } from "../../lib/web-telemetry-context";
 
@@ -14,6 +14,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
   const { journey, telemetry } = useWebTelemetry();
   const client = useMemo(() => createPublicInviteClient(journey), [journey]);
   const initialDisplayName = useMemo(() => new URLSearchParams(globalThis.location?.search ?? "").get("name") ?? "", []);
+  const entranceDeviceDefaults = useMemo(() => (dashboardSpaceEntryUsesDevicesOff() ? { microphone: false, camera: false } : { microphone: true, camera: true }), []);
   const [displayName, setDisplayName] = useState(initialDisplayName);
   const [entranceSettings, setEntranceSettings] = useState<EntranceSettings | null>(null);
   const [spaceAccess, setSpaceAccess] = useState<JoinedSpaceAccess | null>(null);
@@ -23,6 +24,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
   const active = useRef(true);
   const pendingRef = useRef<PendingArrival | null>(null);
   const cleanupPromise = useRef<Promise<void> | undefined>(undefined);
+  const defaultEntranceSettings = useMemo<EntranceSettings>(() => ({ displayName, ...entranceDeviceDefaults }), [displayName, entranceDeviceDefaults]);
 
   useEffect(() => {
     active.current = true;
@@ -53,7 +55,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
   );
 
   const start = useCallback(
-    (settings: EntranceSettings = { displayName, microphone: true, camera: true }) => {
+    (settings: EntranceSettings = defaultEntranceSettings) => {
       const normalizedDisplayName = settings.displayName.trim();
       const inviteToken = spaceInviteToken();
       if (!normalizedDisplayName || spaceAccess || pending || preparing) return;
@@ -101,7 +103,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
           if (active.current) setPreparing(false);
         });
     },
-    [client, complete, displayName, navigatePublicSpace, pending, preparing, slug, spaceAccess],
+    [client, complete, defaultEntranceSettings, navigatePublicSpace, pending, preparing, slug, spaceAccess],
   );
 
   useEffect(() => {
@@ -170,7 +172,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
   );
 
   if (spaceAccess) {
-    const settings = entranceSettings ?? { displayName: displayName.trim(), microphone: true, camera: true };
+    const settings = entranceSettings ?? defaultEntranceSettings;
     return (
       <LocalSpace
         credential={spaceAccess.prepared.credential}
@@ -194,7 +196,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
       <Entrance
         spaceName={slug ?? "Space"}
         defaultDisplayName={displayName}
-        defaults={entranceSettings ?? undefined}
+        defaults={entranceSettings ?? defaultEntranceSettings}
         selectedAudioInput={entranceSettings?.audioInputDeviceId}
         selectedVideoInput={entranceSettings?.videoInputDeviceId}
         selectedAudioOutput={entranceSettings?.audioOutputDeviceId}

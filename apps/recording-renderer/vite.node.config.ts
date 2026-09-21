@@ -12,6 +12,7 @@ export default defineConfig({
         cli: "src/cli.ts",
         fixture: "src/fixture.ts",
         "ui-build-cli": "src/ui-build-cli.ts",
+        "ui-build-registry-cli": "src/ui-build-registry-cli.ts",
       },
       output: {
         entryFileNames: "[name].js",

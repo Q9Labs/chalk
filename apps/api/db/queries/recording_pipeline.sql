@@ -263,14 +263,29 @@ select pg_advisory_xact_lock(hashtextextended(sqlc.arg(claim_request_id)::text, 
 -- name: ClaimRecordingJob :one
 with candidate as (
     select recording_jobs.id,
-        recording_pipelines.capture_completed_at + sqlc.arg(maximum_render_seconds)::integer * interval '1 second' as render_deadline
+        recording_pipelines.capture_completed_at +
+            ((case when recording_jobs.kind = 'transcription'
+                then recording_transcription_source_window_seconds(episodes.config_snapshot)
+                else recording_deferred_retention_seconds(episodes.config_snapshot)
+            end) * interval '1 second') as source_expires_at
     from recording_jobs
     join recording_pipelines on recording_pipelines.recording_id = recording_jobs.recording_id
     join recording_reservations on recording_reservations.id = recording_pipelines.reservation_id
-    where recording_jobs.kind = sqlc.arg(kind)
+    join episodes on episodes.id = recording_jobs.episode_id
+    where (
+        recording_jobs.kind = sqlc.arg(kind)
+        or (sqlc.arg(kind) = 'render' and recording_jobs.kind = 'transcription')
+      )
       and recording_jobs.state = 'pending'
-      and (recording_jobs.kind <> 'render' or
-          recording_pipelines.capture_completed_at + sqlc.arg(maximum_render_seconds)::integer * interval '1 second' > clock_timestamp())
+      and (recording_jobs.kind <> 'transcription' or sqlc.arg(transcription_enabled)::boolean)
+      and (recording_jobs.kind not in ('render', 'transcription') or
+          recording_pipelines.capture_completed_at +
+              ((case when recording_jobs.kind = 'transcription'
+                  then recording_transcription_source_window_seconds(episodes.config_snapshot)
+                  else recording_deferred_retention_seconds(episodes.config_snapshot)
+              end) * interval '1 second') > clock_timestamp())
+      and (recording_jobs.kind not in ('render', 'transcription') or
+          recording_jobs.created_at + sqlc.arg(maximum_render_seconds)::integer * interval '1 second' > clock_timestamp())
       and recording_jobs.available_at <= now()
       and recording_jobs.attempt_count < recording_jobs.attempt_limit
       and (recording_jobs.kind <> 'capture' or recording_pipelines.stop_operation_id is null)
@@ -279,6 +294,7 @@ with candidate as (
           and recording_reservations.ends_at > now()
       ))
       and ((recording_jobs.kind = 'capture' and recording_pipelines.state in ('reserved', 'retryable_failure'))
+        or (recording_jobs.kind = 'transcription' and recording_pipelines.state = 'capture_complete')
         or (recording_jobs.kind = 'render' and recording_pipelines.state in ('render_queued', 'retryable_failure')))
     order by recording_jobs.priority desc, recording_jobs.available_at, recording_jobs.id
     for update of recording_jobs, recording_pipelines skip locked
@@ -289,8 +305,9 @@ with candidate as (
         attempt_count = attempt_count + 1,
         lease_token = sqlc.arg(lease_token),
         lease_owner = sqlc.arg(lease_owner),
-        lease_expires_at = case when recording_jobs.kind = 'render'
-            then least(sqlc.arg(lease_expires_at)::timestamptz, candidate.render_deadline)
+		lease_expires_at = case when recording_jobs.kind in ('render', 'transcription')
+			then least(sqlc.arg(lease_expires_at)::timestamptz, candidate.source_expires_at,
+				recording_jobs.created_at + sqlc.arg(maximum_render_seconds)::integer * interval '1 second')
             else sqlc.arg(lease_expires_at)::timestamptz end,
         fencing_generation = fencing_generation + 1,
         updated_at = now()
@@ -305,14 +322,19 @@ with candidate as (
         recording_jobs.terminal_at, recording_jobs.updated_at, recording_jobs.created_at
 ), pipeline as (
     update recording_pipelines
-    set state = case when sqlc.arg(kind) = 'capture' then 'capture_leased' else 'rendering' end,
-        capture_epoch = case when sqlc.arg(kind) = 'capture' then capture_epoch + 1 else capture_epoch end,
+    set state = case
+            when leased.kind = 'capture' then 'capture_leased'
+            when leased.kind = 'render' then 'rendering'
+            else recording_pipelines.state
+        end,
+        capture_epoch = case when leased.kind = 'capture' then capture_epoch + 1 else capture_epoch end,
         updated_at = now()
     from leased
     where recording_pipelines.recording_id = leased.recording_id
-      and (sqlc.arg(kind) <> 'capture' or recording_pipelines.stop_operation_id is null)
-      and ((sqlc.arg(kind) = 'capture' and recording_pipelines.state in ('reserved', 'retryable_failure'))
-        or (sqlc.arg(kind) = 'render' and recording_pipelines.state in ('render_queued', 'retryable_failure')))
+      and (leased.kind <> 'capture' or recording_pipelines.stop_operation_id is null)
+      and ((leased.kind = 'capture' and recording_pipelines.state in ('reserved', 'retryable_failure'))
+        or (leased.kind = 'transcription' and recording_pipelines.state = 'capture_complete')
+        or (leased.kind = 'render' and recording_pipelines.state in ('render_queued', 'retryable_failure')))
     returning recording_pipelines.recording_id, recording_pipelines.capture_epoch
 )
 select leased.id, leased.tenant_id, leased.episode_id, leased.recording_id, leased.kind,
@@ -341,7 +363,7 @@ left join recording_data_keys
   on recording_data_keys.tenant_id = leased.tenant_id
  and recording_data_keys.recording_id = leased.recording_id
  and recording_data_keys.capture_epoch = pipeline.capture_epoch
-where leased.kind <> 'render'
+where leased.kind not in ('render', 'transcription')
    or (
 	   recording_presentations.presentation_handle is not null
 	   and recording_data_keys.key_handle is not null
@@ -383,7 +405,7 @@ returning job_id, attempt_count, fencing_generation, capture_epoch,
 
 -- name: HeartbeatRecordingJob :one
 update recording_jobs
-set lease_expires_at = case when recording_jobs.kind = 'render' then least(
+set lease_expires_at = case when recording_jobs.kind in ('render', 'transcription') then least(
         sqlc.arg(lease_expires_at)::timestamptz,
         (select (convert_from(authority.envelope_bytes, 'UTF8')::jsonb ->> 'hard_deadline')::timestamptz
          from recording_job_attempt_authorities authority
@@ -402,7 +424,7 @@ where id = sqlc.arg(id)
       select 1 from recording_job_attempt_authorities authority
       where authority.job_id = recording_jobs.id
         and authority.kind = recording_jobs.kind
-        and (recording_jobs.kind <> 'render' or
+        and (recording_jobs.kind not in ('render', 'transcription') or
             (convert_from(authority.envelope_bytes, 'UTF8')::jsonb ->> 'hard_deadline')::timestamptz > clock_timestamp())
         and authority.attempt_count = sqlc.arg(attempt_count)
         and authority.fencing_generation = sqlc.arg(fencing_generation)
@@ -442,6 +464,118 @@ returning id, tenant_id, episode_id, recording_id, kind, idempotency_key,
     payload_schema_version, state, priority, available_at, attempt_count,
     attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
     error_code, error_detail, terminal_at, updated_at, created_at;
+
+-- name: RequestDeferredRecordingRender :one
+-- A Recording has one canonical MP4 export. The first authorized request
+-- creates its render job; later requests reuse its pending, failed, or
+-- completed job without moving the capture-completion retention deadline.
+with candidate as (
+    select pipelines.recording_id, pipelines.state, pipelines.capture_completed_at,
+        episodes.config_snapshot
+    from recording_pipelines pipelines
+    join recordings on recordings.id = pipelines.recording_id
+    join episodes on episodes.id = recordings.episode_id
+    where pipelines.recording_id = sqlc.arg(recording_id)
+      and pipelines.tenant_id = sqlc.arg(tenant_id)
+      and recordings.tenant_id = sqlc.arg(tenant_id)
+    for update of pipelines
+), existing as (
+    select jobs.*
+    from recording_jobs jobs
+    join candidate on candidate.recording_id = jobs.recording_id
+    where jobs.kind = 'render'
+), inserted as (
+    insert into recording_jobs (
+        id, tenant_id, episode_id, recording_id, kind, idempotency_key,
+        payload_schema_version, state, priority, available_at, attempt_limit
+    )
+    select sqlc.arg(render_job_id), recordings.tenant_id, recordings.episode_id,
+        recordings.id, 'render', 'render:' || recordings.id::text,
+        sqlc.arg(payload_schema_version), 'pending', sqlc.arg(priority), now(),
+        sqlc.arg(attempt_limit)
+    from candidate
+    join recordings on recordings.id = candidate.recording_id
+    where candidate.state = 'capture_complete'
+      and candidate.capture_completed_at is not null
+      and candidate.capture_completed_at +
+          (recording_deferred_retention_seconds(candidate.config_snapshot) * interval '1 second') > clock_timestamp()
+    on conflict (recording_id, kind) do nothing
+    returning *
+), queued as (
+    update recording_pipelines
+    set state = 'render_queued', updated_at = now()
+    from inserted
+    where recording_pipelines.recording_id = inserted.recording_id
+      and recording_pipelines.state = 'capture_complete'
+    returning recording_pipelines.recording_id
+)
+select * from existing
+union all
+select * from inserted
+limit 1;
+
+-- name: ListRecordingDeferredArtifactStates :many
+with selected as (
+	select recordings.id, recordings.status as recording_status, recordings.storage_key,
+		pipelines.state as pipeline_state, pipelines.capture_completed_at,
+		(pipelines.capture_completed_at +
+			(recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second'))::timestamptz as source_expires_at,
+		case
+			when episodes.config_snapshot #>> '{artifact_policy,transcription,mode}' in ('on_demand', 'automatic')
+				then episodes.config_snapshot #>> '{artifact_policy,transcription,mode}'
+			else 'disabled'
+		end::text as transcription_policy,
+		artifacts.recording_id is not null as has_artifact,
+		artifacts.expires_at as artifact_expires_at
+    from recordings
+    left join recording_pipelines pipelines on pipelines.recording_id = recordings.id
+    join episodes on episodes.id = recordings.episode_id
+    left join recording_artifacts artifacts on artifacts.recording_id = recordings.id
+    where recordings.id = any(sqlc.arg(recording_ids)::uuid[])
+      and recordings.tenant_id = sqlc.arg(tenant_id)
+), export_job as (
+    select jobs.id, jobs.state, jobs.error_code
+    from recording_jobs jobs
+    join selected on selected.id = jobs.recording_id
+    where jobs.kind = 'render'
+)
+select selected.id as recording_id,
+    case
+        when selected.capture_completed_at is null and (selected.pipeline_state = 'terminal_failure' or selected.recording_status = 'failed') then 'failed'
+        when selected.capture_completed_at is null and selected.recording_status = 'completed' then 'expired'
+        when selected.capture_completed_at is null then 'pending'
+        when selected.source_expires_at <= clock_timestamp() then 'expired'
+        else 'available'
+	end as source_status,
+	selected.source_expires_at,
+	selected.transcription_policy,
+	export_job.id as export_job_id,
+    case
+        -- New deferred artifacts carry the capture-anchored expiry; imported
+        -- legacy completed MP4s have a null expiry and remain readable.
+        when selected.has_artifact and selected.artifact_expires_at is not null and selected.artifact_expires_at <= clock_timestamp() then 'unavailable'
+        when selected.has_artifact then 'ready'
+        when selected.recording_status = 'completed' and selected.storage_key is not null then 'ready'
+        when selected.capture_completed_at is null or selected.source_expires_at <= clock_timestamp() then 'unavailable'
+        when export_job.state in ('pending', 'leased') then 'pending'
+        when export_job.state = 'terminal_failure' then 'failed'
+        else 'none'
+    end as export_status,
+    false as retryable,
+    case
+        when selected.capture_completed_at is null and (selected.pipeline_state = 'terminal_failure' or selected.recording_status = 'failed') then 'capture_failed'
+        when selected.capture_completed_at is null or selected.source_expires_at <= clock_timestamp() then 'recording_source_expired'
+        when export_job.state = 'terminal_failure' then coalesce(export_job.error_code, 'render_failed')
+        else ''
+    end::text as failure_code,
+    case
+        when selected.capture_completed_at is null and (selected.pipeline_state = 'terminal_failure' or selected.recording_status = 'failed') then 'The recording capture did not complete.'
+        when selected.capture_completed_at is null or selected.source_expires_at <= clock_timestamp() then 'The recording source is no longer available.'
+        when export_job.state = 'terminal_failure' then 'The recording export could not be completed.'
+        else ''
+    end::text as failure_message
+from selected
+left join export_job on true;
 
 -- name: GetCompletedCaptureRecordingJob :one
 select jobs.*
@@ -490,10 +624,10 @@ with completed as (
     returning recording_jobs.*
 ), pipeline as (
     update recording_pipelines
-    set state = 'render_queued', capture_completed_at = now(), updated_at = now()
+    set state = 'capture_complete', capture_completed_at = now(), updated_at = now()
     from completed
     where recording_pipelines.recording_id = completed.recording_id
-    returning recording_pipelines.recording_id, recording_pipelines.reservation_id
+    returning recording_pipelines.recording_id, recording_pipelines.reservation_id, recording_pipelines.capture_completed_at
 ), reservation as (
     select recording_pipelines.recording_id, recording_reservations.id,
         recording_reservations.participant_count, recording_reservations.input_bitrate_bps
@@ -515,17 +649,57 @@ with completed as (
     where id in (select id from reservation)
       and exists (select 1 from capacity_release)
     returning id
-), render_job as (
+), transcription_job as (
     insert into recording_jobs (
         id, tenant_id, episode_id, recording_id, kind, idempotency_key,
         payload_schema_version, state, priority, available_at, attempt_limit
     )
-    select sqlc.arg(render_job_id), tenant_id, episode_id, recording_id, 'render',
-        'render:' || recording_id::text, sqlc.arg(payload_schema_version), 'pending',
+    select sqlc.arg(render_job_id), completed.tenant_id, completed.episode_id, completed.recording_id, 'transcription',
+        'transcription:' || completed.recording_id::text, sqlc.arg(payload_schema_version), 'pending',
         sqlc.arg(priority), now(), sqlc.arg(attempt_limit)
     from completed
+    join episodes on episodes.id = completed.episode_id
     where exists (select 1 from reservation_release)
+      and sqlc.arg(transcription_enabled)::boolean
+      and episodes.config_snapshot -> 'artifact_policy' -> 'transcription' ->> 'mode' in ('automatic', 'on_demand')
     on conflict (recording_id, kind) do nothing
+), source_cleanup_objects as (
+    select completed.tenant_id, completed.recording_id, allocations.object_key
+    from completed
+    join recording_bundle_allocations allocations
+      on allocations.recording_id = completed.recording_id
+     and allocations.state = 'committed'
+    union all
+    select completed.tenant_id, completed.recording_id, presentations.presentation_object_key
+    from completed
+    join recording_presentations presentations
+      on presentations.recording_id = completed.recording_id
+    union all
+    select completed.tenant_id, completed.recording_id, presentations.asset_manifest_object_key
+    from completed
+    join recording_presentations presentations
+      on presentations.recording_id = completed.recording_id
+    union all
+    select completed.tenant_id, completed.recording_id, assets.object_key
+    from completed
+    join recording_presentations presentations
+      on presentations.recording_id = completed.recording_id
+    join recording_presentation_assets assets
+      on assets.presentation_handle = presentations.presentation_handle
+), source_cleanup as (
+    insert into transcription_cleanup_jobs (
+        id, tenant_id, recording_id, transcript_id, object_key, object_kind, due_at
+    )
+    select gen_random_uuid(), objects.tenant_id, objects.recording_id, null,
+        objects.object_key, 'recording_source', pipeline.capture_completed_at +
+            (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second')
+    from source_cleanup_objects objects
+    join pipeline on pipeline.recording_id = objects.recording_id
+    join recordings on recordings.id = objects.recording_id
+    join episodes on episodes.id = recordings.episode_id
+    on conflict (recording_id, object_key) do update set
+        due_at = least(transcription_cleanup_jobs.due_at, excluded.due_at),
+        updated_at = now()
 )
 select * from completed;
 
@@ -562,11 +736,44 @@ with failed as (
         error_code, error_detail, terminal_at, updated_at, created_at
 ), pipeline as (
     update recording_pipelines
-    set state = case when (select state from failed) = 'terminal_failure' then 'terminal_failure' else 'retryable_failure' end,
+    set state = case
+            when (select kind from failed) = 'transcription' then recording_pipelines.state
+            when (select state from failed) = 'terminal_failure' then 'terminal_failure'
+            else 'retryable_failure'
+        end,
         updated_at = now()
     from failed
     where recording_pipelines.recording_id = failed.recording_id
     returning recording_pipelines.recording_id, (select state from failed) as job_state
+), failed_transcription_allocation_cleanup as (
+    insert into transcription_cleanup_jobs (
+        id, tenant_id, recording_id, transcript_id, object_key, object_kind, due_at
+    )
+    select gen_random_uuid(), allocations.tenant_id, allocations.recording_id, null,
+        allocations.object_key, 'recording_source', now()
+    from recording_render_object_allocations allocations
+    join failed on failed.id = allocations.render_job_id
+        and failed.attempt_count = allocations.attempt_count
+        and failed.fencing_generation = allocations.fencing_generation
+    where failed.kind = 'transcription'
+      and allocations.purpose in ('transcription_manifest', 'transcription_audio')
+      and allocations.state in ('allocated', 'committed')
+      and not exists (
+          select 1
+          from recording_transcription_sources source
+          where source.recording_id = allocations.recording_id
+            and (
+                source.manifest_allocation_id = allocations.id
+                or exists (
+                    select 1
+                    from recording_transcription_source_chunks chunks
+                    where chunks.recording_id = source.recording_id
+                      and chunks.allocation_id = allocations.id
+                )
+            )
+      )
+    on conflict (recording_id, object_key) do nothing
+    returning id
 ), reservation as (
     select recording_reservations.id, recording_reservations.participant_count, recording_reservations.input_bitrate_bps
     from pipeline
@@ -682,22 +889,35 @@ from result;
 
 -- name: RecoverExpiredRecordingJobs :many
 with expired as (
-    select jobs.id, jobs.kind = 'render' and
-        pipelines.capture_completed_at + sqlc.arg(maximum_render_seconds)::integer * interval '1 second' <= clock_timestamp() as deadline_reached,
+    select jobs.id, jobs.kind in ('render', 'transcription') and
+        pipelines.capture_completed_at +
+            ((case when jobs.kind = 'transcription'
+                then recording_transcription_source_window_seconds(episodes.config_snapshot)
+                else recording_deferred_retention_seconds(episodes.config_snapshot)
+            end) * interval '1 second') <= clock_timestamp() as source_expired,
+        jobs.kind in ('render', 'transcription') and
+            jobs.created_at + sqlc.arg(maximum_render_seconds)::integer * interval '1 second' <= clock_timestamp() as execution_deadline_reached,
         (jobs.kind = 'capture' and pipelines.stop_requested_at is not null)::boolean as capture_stopped
     from recording_jobs jobs
     join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id
+    join episodes on episodes.id = jobs.episode_id
     where (jobs.state = 'leased' and jobs.lease_expires_at <= clock_timestamp())
-       or (jobs.kind = 'render' and jobs.state in ('pending', 'leased') and
-           pipelines.capture_completed_at + sqlc.arg(maximum_render_seconds)::integer * interval '1 second' <= clock_timestamp())
+       or (jobs.kind in ('render', 'transcription') and jobs.state in ('pending', 'leased') and
+           pipelines.capture_completed_at +
+               ((case when jobs.kind = 'transcription'
+                   then recording_transcription_source_window_seconds(episodes.config_snapshot)
+                   else recording_deferred_retention_seconds(episodes.config_snapshot)
+               end) * interval '1 second') <= clock_timestamp())
+       or (jobs.kind in ('render', 'transcription') and jobs.state in ('pending', 'leased') and
+           jobs.created_at + sqlc.arg(maximum_render_seconds)::integer * interval '1 second' <= clock_timestamp())
        or (jobs.kind = 'capture' and jobs.state = 'pending' and pipelines.stop_requested_at is not null)
     for update of jobs skip locked
 ), recovered as (
     update recording_jobs
-    set state = case when attempt_count >= attempt_limit or expired.deadline_reached or expired.capture_stopped then 'terminal_failure' else 'pending' end,
+    set state = case when attempt_count >= attempt_limit or expired.source_expired or expired.execution_deadline_reached or expired.capture_stopped then 'terminal_failure' else 'pending' end,
         available_at = now(), lease_token = null, lease_owner = null, lease_expires_at = null,
-        terminal_at = case when attempt_count >= attempt_limit or expired.deadline_reached or expired.capture_stopped then now() else null end,
-        error_code = case when expired.deadline_reached then 'render_deadline_exceeded' when expired.capture_stopped then 'capture_stopped_before_completion' else coalesce(error_code, 'lease_expired') end,
+        terminal_at = case when attempt_count >= attempt_limit or expired.source_expired or expired.execution_deadline_reached or expired.capture_stopped then now() else null end,
+        error_code = case when expired.source_expired then 'recording_source_expired' when expired.execution_deadline_reached then 'render_deadline_exceeded' when expired.capture_stopped then 'capture_stopped_before_completion' else coalesce(error_code, 'lease_expired') end,
         updated_at = now()
     from expired
     where recording_jobs.id = expired.id
@@ -711,7 +931,37 @@ with expired as (
         updated_at = now()
     from recovered
     where recording_pipelines.recording_id = recovered.recording_id
+      and recovered.kind <> 'transcription'
     returning recording_pipelines.recording_id, recovered.state as job_state
+), recovered_transcription_allocation_cleanup as (
+    insert into transcription_cleanup_jobs (
+        id, tenant_id, recording_id, transcript_id, object_key, object_kind, due_at
+    )
+    select gen_random_uuid(), allocations.tenant_id, allocations.recording_id, null,
+        allocations.object_key, 'recording_source', now()
+    from recording_render_object_allocations allocations
+    join recovered on recovered.id = allocations.render_job_id
+        and recovered.attempt_count = allocations.attempt_count
+        and recovered.fencing_generation = allocations.fencing_generation
+    where recovered.kind = 'transcription'
+      and allocations.purpose in ('transcription_manifest', 'transcription_audio')
+      and allocations.state in ('allocated', 'committed')
+      and not exists (
+          select 1
+          from recording_transcription_sources source
+          where source.recording_id = allocations.recording_id
+            and (
+                source.manifest_allocation_id = allocations.id
+                or exists (
+                    select 1
+                    from recording_transcription_source_chunks chunks
+                    where chunks.recording_id = source.recording_id
+                      and chunks.allocation_id = allocations.id
+                )
+            )
+      )
+    on conflict (recording_id, object_key) do nothing
+    returning id
 ), reservation as (
     select recording_reservations.id, recording_reservations.participant_count, recording_reservations.input_bitrate_bps
     from pipeline
@@ -854,7 +1104,7 @@ cross join (select count(*) from failure_operations) projected_failures;
 
 -- name: GetRecordingArtifact :one
 select recording_id, tenant_id, render_job_id, object_key, content_type,
-    byte_size, checksum, duration_millis, committed_at, created_at
+    byte_size, checksum, duration_millis, committed_at, expires_at, created_at
 from recording_artifacts
 where tenant_id = sqlc.arg(tenant_id) and recording_id = sqlc.arg(recording_id);
 
@@ -933,7 +1183,8 @@ returning id, tenant_id, recording_id, capture_job_id, sequence_number, fencing_
 
 -- name: CommitRecordingArtifact :one
 with authorized as (
-    select recording_jobs.id, recording_jobs.recording_id, recording_jobs.tenant_id
+    select recording_jobs.id, recording_jobs.recording_id, recording_jobs.tenant_id,
+        recording_pipelines.capture_completed_at, episodes.config_snapshot
     from recording_jobs
     join recording_pipelines on recording_pipelines.recording_id = recording_jobs.recording_id
     join recording_reservations on recording_reservations.id = recording_pipelines.reservation_id
@@ -943,6 +1194,7 @@ with authorized as (
         and recordings.tenant_id = recording_jobs.tenant_id
         and recordings.space_id = recording_reservations.space_id
         and recordings.episode_id = recording_reservations.episode_id
+    join episodes on episodes.id = recordings.episode_id
     where recording_jobs.id = sqlc.arg(render_job_id)
       and recording_jobs.tenant_id = sqlc.arg(tenant_id)
       and recording_jobs.recording_id = sqlc.arg(recording_id)
@@ -965,20 +1217,35 @@ with authorized as (
             and authority.lease_owner = sqlc.arg(lease_owner)
       )
       and recording_pipelines.state = 'rendering'
+      and recording_pipelines.capture_completed_at +
+          (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second') > clock_timestamp()
       and recordings.status in ('pending', 'processing')
     for update of recordings
 ), artifact as (
     insert into recording_artifacts (
         recording_id, tenant_id, render_job_id, object_key, content_type,
-        byte_size, checksum, duration_millis, committed_at
+        byte_size, checksum, duration_millis, committed_at, expires_at
     )
     select authorized.recording_id, authorized.tenant_id, authorized.id,
         sqlc.arg(object_key), sqlc.arg(content_type), sqlc.arg(byte_size),
-        sqlc.arg(checksum), sqlc.arg(duration_millis), now()
+        sqlc.arg(checksum), sqlc.arg(duration_millis), now(),
+        authorized.capture_completed_at +
+            (recording_deferred_retention_seconds(authorized.config_snapshot) * interval '1 second')
     from authorized
     on conflict (recording_id) do nothing
     returning recording_id, tenant_id, render_job_id, object_key, content_type,
-        byte_size, checksum, duration_millis, committed_at, created_at
+        byte_size, checksum, duration_millis, committed_at, expires_at, created_at
+), artifact_cleanup as (
+    insert into transcription_cleanup_jobs (
+        id, tenant_id, recording_id, transcript_id, object_key, object_kind, due_at
+    )
+    select gen_random_uuid(), artifact.tenant_id, artifact.recording_id, null,
+        artifact.object_key, 'recording_source', artifact.expires_at
+    from artifact
+    on conflict (recording_id, object_key) do update set
+        due_at = least(transcription_cleanup_jobs.due_at, excluded.due_at),
+        updated_at = now()
+    returning id
 ), completed as (
     update recording_jobs
     set state = 'succeeded', lease_token = null, lease_owner = null, lease_expires_at = null,
@@ -1012,7 +1279,9 @@ with authorized as (
 select artifact.recording_id, artifact.tenant_id, artifact.render_job_id,
     artifact.object_key, artifact.content_type, artifact.byte_size, artifact.checksum,
     artifact.duration_millis, artifact.committed_at, artifact.created_at
-from artifact join pipeline on pipeline.recording_id = artifact.recording_id;
+from artifact
+join pipeline on pipeline.recording_id = artifact.recording_id
+cross join (select count(*) from artifact_cleanup) cleanup;
 
 -- name: ListRecordingJobsForReconciliation :many
 select id, tenant_id, episode_id, recording_id, kind, idempotency_key,

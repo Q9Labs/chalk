@@ -247,6 +247,7 @@ func run() error {
 	recordingRepository := postgres.NewRecordingRepository(operationQueries)
 	recordingService := recordings.NewService(recordingRepository)
 	recordingPipelineRepository := postgres.NewRecordingPipelineRepositoryWithQueriesAndTransactor(operationQueries, pool, diagnostics.Queries)
+	recordingPipelineRepository = recordingPipelineRepository.WithTranscriptionEnabled(cfg.Capabilities.Transcription)
 	if cfg.Capabilities.Recording {
 		profile, err := recordingpresentation.NewComposite720PProfile(cfg.RecordingUIBuildSHA256)
 		if err != nil {
@@ -354,6 +355,7 @@ func run() error {
 	var chatAttachmentService httpapi.ChatAttachmentService
 	var chatParticipantVerifier httpapi.ChatParticipantVerifier
 	var chatCleanupScheduler *chatattachments.CleanupScheduler
+	var recordingSourceCleanupScheduler *transcripts.LocalCleanupScheduler
 	var whiteboardFileService httpapi.WhiteboardFileService
 	var whiteboardParticipantVerifier httpapi.WhiteboardParticipantVerifier
 	var whiteboardCleanupScheduler *whiteboardfiles.CleanupScheduler
@@ -461,13 +463,18 @@ func run() error {
 	}
 	episodeDiagnosticsHTTPOptions := episodeDiagnostics.HTTPOptions()
 	episodeDiagnosticsHTTPOptions.AccountAuthorizer = httpapi.NewEpisodeDiagnosticsAccountAuthorizer(accountTenantService, tenantAuthz)
+	// The durable cleanup queue also owns Recording source expiry. Construct it
+	// for Recording-only deployments so turning ASR off cannot strand capture
+	// inputs past their immutable retention deadline.
+	if cfg.Capabilities.Recording || cfg.Capabilities.Transcription {
+		transcriptRepository := postgres.NewTranscriptRepositoryWithPool(operationQueries, pool)
+		transcriptService = transcripts.NewService(transcriptRepository)
+	}
 	var transcriptArtifacts httpapi.TranscriptArtifactService
 	var transcriptWorker httpapi.TranscriptWorkerService
 	var workloadAuthorizer httpapi.WorkloadAuthorizer
 	var transcriptionAuthority *transcriptionObjectAuthority
 	if cfg.Capabilities.Transcription {
-		transcriptRepository := postgres.NewTranscriptRepositoryWithPool(operationQueries, pool)
-		transcriptService = transcripts.NewService(transcriptRepository)
 		if redisClient == nil || transcriptionStorage == nil {
 			return errors.New("transcription workload auth requires Redis and R2")
 		}
@@ -492,6 +499,13 @@ func run() error {
 		transcriptArtifacts = transcriptService
 		transcriptWorker = transcriptService
 		workloadAuthorizer = authorizer
+	}
+	if cfg.Capabilities.Recording && !cfg.Capabilities.Transcription {
+		if recordingStorage == nil {
+			return errors.New("recording source cleanup requires configured R2 object storage")
+		}
+		worker := transcripts.NewLocalCleanupWorker(transcriptService, *recordingStorage)
+		recordingSourceCleanupScheduler = transcripts.NewLocalCleanupScheduler(worker, 0, logger)
 	}
 	if cfg.Capabilities.Recording {
 		renderService, err := recordingrender.NewService(*recordingStorage, recordingKMS, postgres.NewRecordingRenderRepositoryWithPool(pool, cfg.Capabilities.Transcription), recordingrender.Config{
@@ -630,6 +644,7 @@ func run() error {
 		RecorderFleetEnvironment:   cfg.Observability.Environment,
 		RecorderWorkerVerifier:     recorderWorkerVerifier,
 		Recordings:                 recordingService,
+		RecordingExports:           recordingPipelineService,
 		RecordingPreparations:      recordingPreparationService,
 		Spaces:                     spaceService,
 		Episodes:                   episodeService,
@@ -735,6 +750,12 @@ func run() error {
 		chatCleanupErr = cleanupErr
 		go func() { cleanupErr <- chatCleanupScheduler.Run(signalCtx) }()
 	}
+	var recordingSourceCleanupErr <-chan error
+	if recordingSourceCleanupScheduler != nil {
+		cleanupErr := make(chan error, 1)
+		recordingSourceCleanupErr = cleanupErr
+		go func() { cleanupErr <- recordingSourceCleanupScheduler.Run(signalCtx) }()
+	}
 	var publicInviteLifecycleErr <-chan error
 	if publicInviteLifecycleScheduler != nil {
 		lifecycleErr := make(chan error, 1)
@@ -768,6 +789,7 @@ func run() error {
 	serverResultReceived := false
 	providerBridgeResultReceived := false
 	chatCleanupResultReceived := false
+	recordingSourceCleanupResultReceived := false
 	publicInviteLifecycleResultReceived := false
 	episodeDiagnosticsRuntimeResultReceived := false
 	whiteboardCleanupResultReceived := false
@@ -805,6 +827,10 @@ func run() error {
 	case err := <-chatCleanupErr:
 		runErr = err
 		chatCleanupResultReceived = true
+		stop()
+	case err := <-recordingSourceCleanupErr:
+		runErr = err
+		recordingSourceCleanupResultReceived = true
 		stop()
 	case err := <-publicInviteLifecycleErr:
 		runErr = err
@@ -852,6 +878,11 @@ func run() error {
 	}
 	if chatCleanupErr != nil && !chatCleanupResultReceived {
 		if err := <-chatCleanupErr; runErr == nil {
+			runErr = err
+		}
+	}
+	if recordingSourceCleanupErr != nil && !recordingSourceCleanupResultReceived {
+		if err := <-recordingSourceCleanupErr; runErr == nil {
 			runErr = err
 		}
 	}

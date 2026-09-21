@@ -30,7 +30,7 @@ function MockEntrance({
 }
 
 const spacePageTestMocks = vi.hoisted(() => {
-  const holder: { chalkProps?: Record<string, unknown> } = {};
+  const holder: { chalkProps?: Record<string, unknown>; entranceProps?: Record<string, unknown> } = {};
   const journey = { headers: {}, recordDiagnostic: vi.fn(), recordHttpRequest: vi.fn(), recordRtcSummary: vi.fn() };
   const telemetry = { configureApiBaseURL: vi.fn() };
   const clientSnapshot = { connection: { episode: { id: "33333333-3333-4333-8333-333333333333" } } };
@@ -80,7 +80,13 @@ const spacePageTestMocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("@q9labsai/chalk-react", () => ({ Chalk: getSpacePageTestMocks().Chalk, Entrance: MockEntrance }));
+vi.mock("@q9labsai/chalk-react", () => ({
+  Chalk: getSpacePageTestMocks().Chalk,
+  Entrance: (props: Record<string, unknown>) => {
+    getSpacePageTestMocks().holder.entranceProps = props;
+    return createElement(MockEntrance, props as Parameters<typeof MockEntrance>[0]);
+  },
+}));
 vi.mock("../lib/chalk-access", () => ({
   createPublicInviteClient: getSpacePageTestMocks().createPublicInviteClient,
   createPreparedPublicSpace: getSpacePageTestMocks().createPreparedPublicSpace,
@@ -113,6 +119,7 @@ export const spacePageTestArrival = {
 export function resetSpacePageTestMocks(): void {
   window.history.replaceState({}, "", "/space");
   spacePageTestMocks.holder.chalkProps = undefined;
+  spacePageTestMocks.holder.entranceProps = undefined;
   spacePageTestMocks.publicClient.createPublicSpace.mockReset();
   spacePageTestMocks.publicClient.arriveBySpacePublicInvite.mockReset().mockResolvedValue(spacePageTestArrival);
   spacePageTestMocks.publicClient.getSpacePublicInviteArrival.mockReset().mockResolvedValue(spacePageTestArrival);

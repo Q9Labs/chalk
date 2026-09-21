@@ -613,6 +613,7 @@ type RecordingArtifact struct {
 	Checksum       []byte             `json:"checksum"`
 	DurationMillis int64              `json:"duration_millis"`
 	CommittedAt    pgtype.Timestamptz `json:"committed_at"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -1073,6 +1074,21 @@ type RecordingReservation struct {
 	EndsAt                pgtype.Timestamptz `json:"ends_at"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+}
+
+type RecordingTranscriptionPreparationCommit struct {
+	TranscriptionJobID    pgtype.UUID        `json:"transcription_job_id"`
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	RecordingID           pgtype.UUID        `json:"recording_id"`
+	AttemptCount          int32              `json:"attempt_count"`
+	FencingGeneration     int64              `json:"fencing_generation"`
+	CaptureEpoch          int64              `json:"capture_epoch"`
+	RenderInputHandle     pgtype.UUID        `json:"render_input_handle"`
+	CommitDigest          []byte             `json:"commit_digest"`
+	PresentationSha256    []byte             `json:"presentation_sha256"`
+	DurationMillis        int64              `json:"duration_millis"`
+	TranscriptionSourceID pgtype.UUID        `json:"transcription_source_id"`
+	CommittedAt           pgtype.Timestamptz `json:"committed_at"`
 }
 
 type RecordingTranscriptionSource struct {

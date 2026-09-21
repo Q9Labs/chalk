@@ -194,6 +194,19 @@ type renderCommitResponse struct {
 	TranscriptionJobIDs   []string `json:"transcription_job_ids"`
 }
 
+type renderTranscriptionCommitRequest struct {
+	renderAuthorityRequest
+	CommitDigest        string                            `json:"commit_digest"`
+	PresentationSHA256  string                            `json:"presentation_sha256"`
+	DurationMillis      int64                             `json:"duration_ms"`
+	TranscriptionSource *renderTranscriptionSourceRequest `json:"transcription_source,omitempty"`
+}
+
+type renderTranscriptionCommitResponse struct {
+	TranscriptionSourceID *string  `json:"transcription_source_id"`
+	TranscriptionJobIDs   []string `json:"transcription_job_ids"`
+}
+
 func (c *ControlPlaneClient) ResolveRenderInput(ctx context.Context, authority recordingrender.Authority) (recordingrender.ResolvedInput, error) {
 	if err := authority.Validate(); err != nil {
 		return recordingrender.ResolvedInput{}, ErrInvalidControlPlaneRequest
@@ -314,22 +327,7 @@ func (c *ControlPlaneClient) CommitRender(ctx context.Context, input recordingre
 		Video:                  renderObjectReferenceBody(input.Video),
 		FFprobeFactsDigest:     hex.EncodeToString(input.FFprobeFactsDigest),
 	}
-	if input.TranscriptionSource != nil {
-		source := input.TranscriptionSource
-		payload.TranscriptionSource = &renderTranscriptionSourceRequest{
-			SchemaVersion: source.SchemaVersion, PresentationSHA256: hex.EncodeToString(source.PresentationSHA256),
-			Manifest: renderObjectReferenceBody(source.Manifest), Chunks: make([]renderTranscriptionChunkRequest, 0, len(source.Chunks)),
-		}
-		for _, chunk := range source.Chunks {
-			payload.TranscriptionSource.Chunks = append(payload.TranscriptionSource.Chunks, renderTranscriptionChunkRequest{
-				ChunkID: chunk.ChunkID.String(), Index: chunk.Index, Generation: chunk.Generation,
-				StartMillis: chunk.StartMillis, EndMillis: chunk.EndMillis, SourceStartMillis: chunk.SourceStartMillis, SourceEndMillis: chunk.SourceEndMillis,
-				ParticipantRef: chunk.ParticipantRef, ParticipantGeneration: chunk.ParticipantGeneration, DisplayNameSnapshot: chunk.DisplayNameSnapshot,
-				TrackID: chunk.TrackID, TrackEpoch: chunk.TrackEpoch, IdentityKind: chunk.IdentityKind, TrackClass: chunk.TrackClass, Overlap: chunk.Overlap,
-				Object: renderObjectReferenceBody(chunk.Object),
-			})
-		}
-	}
+	payload.TranscriptionSource = renderTranscriptionSourceBody(input.TranscriptionSource)
 	body, _, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/renders/commit", payload, ControlPlaneResponseLimit)
 	if err != nil {
 		return recordingrender.CommitResult{}, err
@@ -339,6 +337,28 @@ func (c *ControlPlaneClient) CommitRender(ctx context.Context, input recordingre
 		return recordingrender.CommitResult{}, ProtocolError{Err: err}
 	}
 	return decodeRenderCommit(input, response)
+}
+
+func (c *ControlPlaneClient) CommitTranscriptionPreparation(ctx context.Context, input recordingrender.TranscriptionPreparationInput) (*recordingrender.TranscriptionResult, error) {
+	if err := input.Validate(); err != nil {
+		return nil, ErrInvalidControlPlaneRequest
+	}
+	payload := renderTranscriptionCommitRequest{
+		renderAuthorityRequest: renderAuthorityBody(input.Authority),
+		CommitDigest:           hex.EncodeToString(input.CommitDigest),
+		PresentationSHA256:     hex.EncodeToString(input.PresentationSHA256),
+		DurationMillis:         input.DurationMillis,
+		TranscriptionSource:    renderTranscriptionSourceBody(input.TranscriptionSource),
+	}
+	body, _, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/renders/transcription-commit", payload, ControlPlaneResponseLimit)
+	if err != nil {
+		return nil, err
+	}
+	var response renderTranscriptionCommitResponse
+	if err := decodeBoundedJSON(body, &response, ControlPlaneResponseLimit); err != nil {
+		return nil, ProtocolError{Err: err}
+	}
+	return decodeTranscriptionPreparationCommit(input, response)
 }
 
 func (c *ControlPlaneClient) UploadRenderObject(ctx context.Context, signed objectstorage.SignedURL, reader io.Reader, byteSize int64) error {
@@ -437,6 +457,26 @@ func renderObjectReferenceBody(reference recordingrender.CommitObjectReference) 
 	}
 }
 
+func renderTranscriptionSourceBody(source *recordingrender.TranscriptionSource) *renderTranscriptionSourceRequest {
+	if source == nil {
+		return nil
+	}
+	result := &renderTranscriptionSourceRequest{
+		SchemaVersion: source.SchemaVersion, PresentationSHA256: hex.EncodeToString(source.PresentationSHA256),
+		Manifest: renderObjectReferenceBody(source.Manifest), Chunks: make([]renderTranscriptionChunkRequest, 0, len(source.Chunks)),
+	}
+	for _, chunk := range source.Chunks {
+		result.Chunks = append(result.Chunks, renderTranscriptionChunkRequest{
+			ChunkID: chunk.ChunkID.String(), Index: chunk.Index, Generation: chunk.Generation,
+			StartMillis: chunk.StartMillis, EndMillis: chunk.EndMillis, SourceStartMillis: chunk.SourceStartMillis, SourceEndMillis: chunk.SourceEndMillis,
+			ParticipantRef: chunk.ParticipantRef, ParticipantGeneration: chunk.ParticipantGeneration, DisplayNameSnapshot: chunk.DisplayNameSnapshot,
+			TrackID: chunk.TrackID, TrackEpoch: chunk.TrackEpoch, IdentityKind: chunk.IdentityKind, TrackClass: chunk.TrackClass, Overlap: chunk.Overlap,
+			Object: renderObjectReferenceBody(chunk.Object),
+		})
+	}
+	return result
+}
+
 func applySignedObjectHeaders(request *http.Request, headers map[string][]string) error {
 	for name, values := range headers {
 		if strings.EqualFold(name, "Authorization") || strings.EqualFold(name, "Cookie") || strings.EqualFold(name, "Proxy-Authorization") || strings.EqualFold(name, "Host") || strings.EqualFold(name, "Content-Length") {
@@ -533,6 +573,31 @@ func decodeCommittedRenderObject(allocationID utilities.ID, response renderCommi
 		return recordingrender.CommittedObject{}, ProtocolError{Err: errors.New("recording render committed object response")}
 	}
 	return recordingrender.CommittedObject{ReservedObject: recordingrender.ReservedObject{AllocationID: responseID, ObjectKey: response.ObjectKey, Purpose: recordingrender.ObjectPurpose(response.Purpose), AllocationVersion: response.AllocationVersion}, Object: recordingrender.ObjectFacts{ObjectKey: response.ObjectKey, ObjectVersion: response.ObjectVersion, ObjectETag: response.ObjectETag, ContentType: response.ContentType, ByteSize: response.ByteSize, SHA256: checksum}, DurationMillis: response.DurationMillis, CommittedAt: committedAt}, nil
+}
+
+func decodeTranscriptionPreparationCommit(input recordingrender.TranscriptionPreparationInput, response renderTranscriptionCommitResponse) (*recordingrender.TranscriptionResult, error) {
+	if input.TranscriptionSource == nil {
+		if response.TranscriptionSourceID != nil || len(response.TranscriptionJobIDs) != 0 {
+			return nil, ProtocolError{Err: errors.New("unexpected recording transcription preparation response")}
+		}
+		return nil, nil
+	}
+	if response.TranscriptionSourceID == nil {
+		return nil, ProtocolError{Err: errors.New("missing recording transcription preparation response")}
+	}
+	sourceID, err := utilities.ParseID(*response.TranscriptionSourceID)
+	if err != nil || sourceID != input.Authority.RecordingID {
+		return nil, ProtocolError{Err: errors.New("invalid recording transcription preparation response")}
+	}
+	jobIDs := make([]utilities.ID, 0, len(response.TranscriptionJobIDs))
+	for _, value := range response.TranscriptionJobIDs {
+		jobID, parseErr := utilities.ParseID(value)
+		if parseErr != nil || jobID.IsZero() {
+			return nil, ProtocolError{Err: errors.New("invalid recording transcription preparation job response")}
+		}
+		jobIDs = append(jobIDs, jobID)
+	}
+	return &recordingrender.TranscriptionResult{SourceID: sourceID, JobIDs: jobIDs}, nil
 }
 
 func decodeRenderCommit(input recordingrender.CommitInput, response renderCommitResponse) (recordingrender.CommitResult, error) {

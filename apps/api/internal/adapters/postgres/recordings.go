@@ -23,6 +23,7 @@ type recordingQuerier interface {
 	MaterializeRecording(ctx context.Context, arg sqlc.MaterializeRecordingParams) (sqlc.Recording, error)
 	GetTenantRecording(ctx context.Context, arg sqlc.GetTenantRecordingParams) (sqlc.Recording, error)
 	ListTenantRecordings(ctx context.Context, arg sqlc.ListTenantRecordingsParams) ([]sqlc.Recording, error)
+	ListTenantSpaceRecordings(ctx context.Context, arg sqlc.ListTenantSpaceRecordingsParams) ([]sqlc.Recording, error)
 	UpdateTenantRecording(ctx context.Context, arg sqlc.UpdateTenantRecordingParams) (sqlc.Recording, error)
 }
 
@@ -87,8 +88,14 @@ func (r RecordingRepository) Get(ctx context.Context, tenantID utilities.ID, rec
 	return mapRecording(recording), nil
 }
 
-func (r RecordingRepository) List(ctx context.Context, tenantID utilities.ID, episodeID utilities.ID, page pagination.PageRequest) (recordings.RecordingList, error) {
-	rows, err := r.queries.ListTenantRecordings(ctx, listTenantRecordingsParams(tenantID, episodeID, page))
+func (r RecordingRepository) List(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID, episodeID utilities.ID, page pagination.PageRequest) (recordings.RecordingList, error) {
+	var rows []sqlc.Recording
+	var err error
+	if spaceID.IsZero() {
+		rows, err = r.queries.ListTenantRecordings(ctx, listTenantRecordingsParams(tenantID, spaceID, episodeID, page))
+	} else {
+		rows, err = r.queries.ListTenantSpaceRecordings(ctx, listTenantSpaceRecordingsParams(tenantID, spaceID, episodeID, page))
+	}
 	if err != nil {
 		return recordings.RecordingList{}, fmt.Errorf("list recordings: %w", err)
 	}
@@ -137,10 +144,29 @@ func (r RecordingRepository) Update(ctx context.Context, tenantID utilities.ID, 
 	return mapRecording(recording), nil
 }
 
-func listTenantRecordingsParams(tenantID utilities.ID, episodeID utilities.ID, page pagination.PageRequest) sqlc.ListTenantRecordingsParams {
+func listTenantRecordingsParams(tenantID utilities.ID, spaceID utilities.ID, episodeID utilities.ID, page pagination.PageRequest) sqlc.ListTenantRecordingsParams {
 	cursor := page.Cursor()
 	params := sqlc.ListTenantRecordingsParams{
 		TenantID:  uuid(tenantID),
+		SpaceID:   uuid(spaceID),
+		EpisodeID: uuid(episodeID),
+		PageSize:  int32(page.Size() + 1),
+	}
+	if cursor == nil {
+		return params
+	}
+
+	params.CursorSet = true
+	params.CursorCreatedAt = pgtype.Timestamptz{Time: cursor.CreatedAt, Valid: true}
+	params.CursorID = uuid(cursor.ID)
+	return params
+}
+
+func listTenantSpaceRecordingsParams(tenantID utilities.ID, spaceID utilities.ID, episodeID utilities.ID, page pagination.PageRequest) sqlc.ListTenantSpaceRecordingsParams {
+	cursor := page.Cursor()
+	params := sqlc.ListTenantSpaceRecordingsParams{
+		TenantID:  uuid(tenantID),
+		SpaceID:   uuid(spaceID),
 		EpisodeID: uuid(episodeID),
 		PageSize:  int32(page.Size() + 1),
 	}

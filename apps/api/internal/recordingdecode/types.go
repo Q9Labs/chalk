@@ -54,7 +54,10 @@ type Request struct {
 	Presentation      recordingpresentation.Timeline
 	Bundles           []BundleFile
 	DataKeys          []DataKey
-	Runner            CommandRunner
+	// IncludedSourceKinds limits decoded source media. Nil preserves the
+	// complete decoded-media output used by recording rendering.
+	IncludedSourceKinds []recordingpresentation.MediaKind
+	Runner              CommandRunner
 }
 
 type Result struct {

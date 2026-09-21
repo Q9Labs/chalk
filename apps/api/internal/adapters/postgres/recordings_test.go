@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -61,10 +62,35 @@ func TestRecordingRepositoryMaterializeMapsIdentityConflicts(t *testing.T) {
 	}
 }
 
+func TestRecordingRepositoryListUsesSpaceQuery(t *testing.T) {
+	tenantID := recordingRepositoryID(t, "11111111-1111-4111-8111-111111111111")
+	spaceID := recordingRepositoryID(t, "22222222-2222-4222-8222-222222222222")
+	episodeID := recordingRepositoryID(t, "33333333-3333-4333-8333-333333333333")
+	page, err := pagination.NewPageRequest(25, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	queries := &recordingQueriesStub{}
+	repository := postgres.NewRecordingRepository(queries)
+	if _, err := repository.List(context.Background(), tenantID, spaceID, episodeID, page); err != nil {
+		t.Fatalf("list recordings: %v", err)
+	}
+
+	params := queries.listSpaceArg
+	if params.TenantID.Bytes != tenantID.Bytes() || params.SpaceID.Bytes != spaceID.Bytes() || params.EpisodeID.Bytes != episodeID.Bytes() {
+		t.Fatalf("space list params = %#v", params)
+	}
+	if params.PageSize != 26 {
+		t.Fatalf("page size = %d, want 26", params.PageSize)
+	}
+}
+
 type recordingQueriesStub struct {
 	materializeArg sqlc.MaterializeRecordingParams
 	materialize    sqlc.Recording
 	materializeErr error
+	listSpaceArg   sqlc.ListTenantSpaceRecordingsParams
 }
 
 func (q *recordingQueriesStub) CreateRecording(context.Context, sqlc.CreateRecordingParams) (sqlc.Recording, error) {
@@ -82,6 +108,11 @@ func (q *recordingQueriesStub) GetTenantRecording(context.Context, sqlc.GetTenan
 
 func (q *recordingQueriesStub) ListTenantRecordings(context.Context, sqlc.ListTenantRecordingsParams) ([]sqlc.Recording, error) {
 	return nil, errors.New("unexpected list")
+}
+
+func (q *recordingQueriesStub) ListTenantSpaceRecordings(_ context.Context, arg sqlc.ListTenantSpaceRecordingsParams) ([]sqlc.Recording, error) {
+	q.listSpaceArg = arg
+	return nil, nil
 }
 
 func (q *recordingQueriesStub) UpdateTenantRecording(context.Context, sqlc.UpdateTenantRecordingParams) (sqlc.Recording, error) {

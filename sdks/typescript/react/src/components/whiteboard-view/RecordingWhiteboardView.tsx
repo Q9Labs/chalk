@@ -35,6 +35,7 @@ export function RecordingWhiteboardView({ state: stateValue, files, expectedScen
   const elements = useMemo(() => state.elements.map(fromWireElement), [state.elements]);
   const resolvedTheme = theme ?? "light";
   const [ready, setReady] = useState<ReadyWhiteboard | null>(null);
+  const [presentedState, setPresentedState] = useState<RecordingWhiteboardStateV1 | null>(null);
   const handleReady = useCallback((api: ExcalidrawImperativeAPI) => setReady(Object.freeze({ api, defaultViewBackgroundColor: api.getAppState().viewBackgroundColor })), []);
   const requiredFileIds = recordingWhiteboardFileIds(state);
 
@@ -46,21 +47,31 @@ export function RecordingWhiteboardView({ state: stateValue, files, expectedScen
 
   useEffect(() => {
     if (!ready) return;
-    if (files) ready.api.addFiles(Object.values(files));
-    ready.api.updateScene({ elements, appState: recordingWhiteboardSceneAppState(state, ready.defaultViewBackgroundColor) });
+    setPresentedState(null);
+    const installScene = (): void => {
+      if (files) ready.api.addFiles(Object.values(files));
+      ready.api.updateScene({ elements, appState: recordingWhiteboardSceneAppState(state, ready.defaultViewBackgroundColor), captureUpdate: "NEVER" });
+    };
+    installScene();
 
     const visibleElements = elements.filter((element) => !element.isDeleted);
     let presentedFrameRef: number | undefined;
-    const fitFrame = requestAnimationFrame(() => {
+    const reconcileFrame = requestAnimationFrame(() => {
+      installScene();
       if (visibleElements.length > 0) ready.api.scrollToContent(visibleElements, { fitToContent: true, animate: false, viewportZoomFactor: 0.9 });
-      const presentedFrame = requestAnimationFrame(() => onPresented?.(state));
+      const presentedFrame = requestAnimationFrame(() => setPresentedState(state));
       presentedFrameRef = presentedFrame;
     });
     return () => {
-      cancelAnimationFrame(fitFrame);
+      cancelAnimationFrame(reconcileFrame);
       if (presentedFrameRef !== undefined) cancelAnimationFrame(presentedFrameRef);
     };
-  }, [elements, files, onPresented, ready, state]);
+  }, [elements, files, ready, state]);
+
+  useEffect(() => {
+    if (presentedState !== state || onPresented === undefined) return;
+    onPresented(state);
+  }, [onPresented, presentedState, state]);
 
   return <WhiteboardView canDraw={false} className={cn("h-full w-full !min-h-0 !border-0", className)} excalidrawCssPath={excalidrawCssPath} onExcalidrawApiReady={handleReady} onLoadError={onLoadError} theme={resolvedTheme} />;
 }

@@ -4,8 +4,9 @@ import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type BrowserContext, type CDPSession, type Page, type Route } from "playwright";
 import { loadVerifiedRenderInputs } from "./node/inputs.js";
 import { parseFrameRenderRequestV1, type FrameRenderRequestV1 } from "./node/request.js";
+import type { RecordingRendererFrameProfile } from "./runtime-api.js";
 import { startRenderServer } from "./node/server.js";
-import { verifyClientBuild } from "./node/ui-build.js";
+import { resolveVerifiedClientBuild } from "./node/ui-build-registry.js";
 
 const FRAME_RESULT_VERSION = "recording-frame-render-result.v1";
 const MAXIMUM_REQUEST_BYTES = 64 << 10;
@@ -16,6 +17,7 @@ const FRAME_PREPARATION_DEADLINE_MS = 30_000;
 interface Arguments {
   readonly requestPath: string;
   readonly resultPath: string;
+  readonly profilePath?: string;
   readonly inspectionDirectory?: string;
   readonly concurrency: number;
 }
@@ -49,6 +51,20 @@ interface FrameTiming {
   readonly outputWallMs: number;
 }
 
+interface ProfileBatch {
+  readonly startWallMs: number;
+  readonly firstIndex: number;
+  readonly frameCount: number;
+  readonly preparationWallMs: number;
+  readonly captureWallMs: number;
+  readonly outputWallMs: number;
+  readonly framePreparationWallMs: readonly number[];
+  readonly frameCaptureWallMs: readonly number[];
+  readonly frameOutputWallMs: readonly number[];
+  readonly pngBytes: readonly number[];
+  readonly rendererFrameProfiles: readonly (RecordingRendererFrameProfile | undefined)[];
+}
+
 type VerifiedRenderInputs = Awaited<ReturnType<typeof loadVerifiedRenderInputs>>;
 
 interface BrowserPool {
@@ -61,8 +77,7 @@ async function main(): Promise<void> {
   const request = await readRequest(args.requestPath);
   await validateOutputPaths(args, request.workspaceDirectory);
   const inputs = await loadVerifiedRenderInputs(request);
-  const clientDirectory = fileURLToPath(new URL("../client/", import.meta.url));
-  await verifyClientBuild(clientDirectory, request.uiBuildSha256);
+  const clientDirectory = await resolveVerifiedClientBuild(fileURLToPath(new URL("../", import.meta.url)), request.uiBuildSha256);
   const server = await startRenderServer(inputs, clientDirectory);
   const pool: BrowserPool = { browsers: [], contexts: [] };
   const started = process.hrtime.bigint();
@@ -78,23 +93,33 @@ async function main(): Promise<void> {
 
 async function validateOutputPaths(args: Arguments, workspaceDirectory: string): Promise<void> {
   await validateResultPath(args.resultPath, workspaceDirectory);
+  if (args.profilePath !== undefined) await validateResultPath(args.profilePath, workspaceDirectory);
   if (args.inspectionDirectory !== undefined) await validateInspectionDirectory(args.inspectionDirectory, workspaceDirectory);
 }
 
 async function executeRender(args: Arguments, request: FrameRenderRequestV1, inputs: VerifiedRenderInputs, origin: string, pool: BrowserPool, started: bigint): Promise<void> {
-  const pages = await initializeRenderPages(args.concurrency, pool, request, inputs, origin);
+  const { profilePath } = args;
+  const profileBatches: ProfileBatch[] | undefined = profilePath === undefined ? undefined : [];
+  const pages = await initializeRenderPages(args.concurrency, pool, request, inputs, origin, profileBatches !== undefined);
   const startupWallMs = elapsedMilliseconds(started);
-  const timing = await writeFrames(pages, request, args.inspectionDirectory);
+  const timing = await writeFrames(pages, request, args.inspectionDirectory, profileBatches, started);
   const inspectionStarted = process.hrtime.bigint();
   await writeReplayInspectionIfRequested(pages, request, args.inspectionDirectory);
   const inspectionWallMs = elapsedMilliseconds(inspectionStarted);
   await Promise.all(pages.map(({ cdp }) => cdp.detach()));
   const wallDurationMs = Number((process.hrtime.bigint() - started) / 1_000_000n);
   await writeResult(args.resultPath, request, timing, startupWallMs, inspectionWallMs, wallDurationMs);
+  if (profilePath !== undefined && profileBatches !== undefined) {
+    await writeFile(
+      profilePath,
+      `${JSON.stringify({ schemaVersion: "recording-render-profile.v1", concurrency: args.concurrency, frameCount: timing.frameCount, startupWallMs, wallDurationMs, resourceUsage: process.resourceUsage(), peakNodeRssBytes: process.memoryUsage.rss(), batches: profileBatches })}\n`,
+      { flag: "wx", mode: 0o600 },
+    );
+  }
 }
 
-async function initializeRenderPages(concurrency: number, pool: BrowserPool, request: FrameRenderRequestV1, inputs: VerifiedRenderInputs, origin: string): Promise<RenderPage[]> {
-  const initialized = await Promise.allSettled(Array.from({ length: concurrency }, () => openRenderPage(pool, request, inputs, origin)));
+async function initializeRenderPages(concurrency: number, pool: BrowserPool, request: FrameRenderRequestV1, inputs: VerifiedRenderInputs, origin: string, profilingEnabled: boolean): Promise<RenderPage[]> {
+  const initialized = await Promise.allSettled(Array.from({ length: concurrency }, () => openRenderPage(pool, request, inputs, origin, profilingEnabled)));
   const pages: RenderPage[] = [];
   const errors: unknown[] = [];
   for (const result of initialized) {
@@ -105,7 +130,7 @@ async function initializeRenderPages(concurrency: number, pool: BrowserPool, req
   return pages;
 }
 
-async function openRenderPage(pool: BrowserPool, request: FrameRenderRequestV1, inputs: VerifiedRenderInputs, origin: string): Promise<RenderPage> {
+async function openRenderPage(pool: BrowserPool, request: FrameRenderRequestV1, inputs: VerifiedRenderInputs, origin: string, profilingEnabled: boolean): Promise<RenderPage> {
   const browser = await chromium.launch({
     headless: true,
     args: ["--disable-background-networking", "--disable-component-update", "--disable-default-apps", "--disable-sync", "--metrics-recording-only", "--no-first-run"],
@@ -122,7 +147,7 @@ async function openRenderPage(pool: BrowserPool, request: FrameRenderRequestV1, 
   });
   pool.contexts.push(context);
   await constrainNetwork(context, origin);
-  return prepareRenderPage(context, origin);
+  return prepareRenderPage(context, origin, profilingEnabled);
 }
 
 async function writeReplayInspectionIfRequested(pages: readonly RenderPage[], request: FrameRenderRequestV1, directory: string | undefined): Promise<void> {
@@ -158,56 +183,76 @@ interface RenderPage {
   readonly cdp: CDPSession;
 }
 
-async function prepareRenderPage(context: BrowserContext, origin: string): Promise<RenderPage> {
+interface PreparedFrame {
+  readonly preparationWallMs: number;
+  readonly rendererFrameProfile: RecordingRendererFrameProfile | undefined;
+}
+
+interface CapturedFrame {
+  readonly image: Uint8Array;
+  readonly captureWallMs: number;
+}
+
+interface WrittenFrames {
+  readonly lastElapsedMs: number;
+  readonly outputWallMs: readonly number[];
+}
+
+async function prepareRenderPage(context: BrowserContext, origin: string, profilingEnabled: boolean): Promise<RenderPage> {
   const page = await context.newPage();
   const pageFailure = new Promise<never>((_resolve, reject) => {
     page.once("pageerror", (error) => reject(new Error(`recording renderer page failed: ${error.message}`)));
   });
   await page.clock.install({ time: 0 });
-  await page.goto(origin, { waitUntil: "load" });
+  const url = profilingEnabled ? `${origin}/?recording_profile=1` : origin;
+  await page.goto(url, { waitUntil: "load" });
   await Promise.race([page.waitForFunction(() => window.chalkRecordingRenderer?.ready === true), pageFailure]);
   return { page, cdp: await context.newCDPSession(page) };
 }
 
-async function writeFrames(pages: readonly RenderPage[], request: FrameRenderRequestV1, inspectionDirectory: string | undefined): Promise<FrameTiming> {
+async function writeFrames(pages: readonly RenderPage[], request: FrameRenderRequestV1, inspectionDirectory: string | undefined, profileBatches: ProfileBatch[] | undefined, renderStarted: bigint): Promise<FrameTiming> {
   const frameCount = Math.ceil((request.durationMs * request.fps) / 1_000);
+  const profilingEnabled = profileBatches !== undefined;
   let lastElapsedMs = 0;
   let preparationNanoseconds = 0n;
   let captureNanoseconds = 0n;
   let outputNanoseconds = 0n;
   for (let firstIndex = 0; firstIndex < frameCount; firstIndex += pages.length) {
+    const batchStartWallMs = profilingEnabled ? elapsedMilliseconds(renderStarted) : 0;
     const batch = pages.slice(0, Math.min(pages.length, frameCount - firstIndex));
     const preparationStarted = process.hrtime.bigint();
-    const lastIndex = firstIndex + batch.length - 1;
-    await withFramePreparationDeadline(
-      Promise.all(
-        batch.map(({ page }, offset) => {
-          const index = firstIndex + offset;
-          const elapsedMs = Math.floor((index * 1_000) / request.fps);
-          return page.evaluate(
-            async ({ frameMs, frameToken }) => {
-              await window.chalkRecordingRenderer.renderFrame(frameMs, frameToken);
-            },
-            { frameMs: elapsedMs, frameToken: `${index}:${elapsedMs}` },
-          );
-        }),
-      ),
-      firstIndex,
-      lastIndex,
-    );
-    preparationNanoseconds += process.hrtime.bigint() - preparationStarted;
+    const preparedFrames = await prepareFrames(batch, firstIndex, request.fps, profilingEnabled);
+    const preparationElapsed = process.hrtime.bigint() - preparationStarted;
+    preparationNanoseconds += preparationElapsed;
     const captureStarted = process.hrtime.bigint();
-    const frames = await Promise.all(batch.map(({ cdp }) => captureFrame(cdp)));
-    captureNanoseconds += process.hrtime.bigint() - captureStarted;
+    const capturedFrames = await captureFrames(batch, profilingEnabled);
+    const captureElapsed = process.hrtime.bigint() - captureStarted;
+    captureNanoseconds += captureElapsed;
     const outputStarted = process.hrtime.bigint();
-    for (const [offset, frame] of frames.entries()) {
-      const index = firstIndex + offset;
-      const elapsedMs = Math.floor((index * 1_000) / request.fps);
-      await writeStandardOutput(frame);
-      if (inspectionDirectory !== undefined) await writeFile(join(inspectionDirectory, `frame-${String(index).padStart(6, "0")}-${String(elapsedMs).padStart(10, "0")}.png`), frame, { flag: "wx", mode: 0o600 });
-      lastElapsedMs = elapsedMs;
-    }
-    outputNanoseconds += process.hrtime.bigint() - outputStarted;
+    const writtenFrames = await writeFrameOutput(
+      capturedFrames.map((frame) => frame.image),
+      firstIndex,
+      request.fps,
+      inspectionDirectory,
+      profilingEnabled,
+    );
+    const outputElapsed = process.hrtime.bigint() - outputStarted;
+    outputNanoseconds += outputElapsed;
+    lastElapsedMs = writtenFrames.lastElapsedMs;
+    if (profilingEnabled)
+      profileBatches.push({
+        startWallMs: batchStartWallMs,
+        firstIndex,
+        frameCount: batch.length,
+        preparationWallMs: nanosecondsToMilliseconds(preparationElapsed),
+        captureWallMs: nanosecondsToMilliseconds(captureElapsed),
+        outputWallMs: nanosecondsToMilliseconds(outputElapsed),
+        framePreparationWallMs: preparedFrames.map((frame) => frame.preparationWallMs),
+        frameCaptureWallMs: capturedFrames.map((frame) => frame.captureWallMs),
+        frameOutputWallMs: writtenFrames.outputWallMs,
+        pngBytes: capturedFrames.map((frame) => frame.image.byteLength),
+        rendererFrameProfiles: preparedFrames.map((frame) => frame.rendererFrameProfile),
+      });
   }
   return {
     frameCount,
@@ -216,6 +261,49 @@ async function writeFrames(pages: readonly RenderPage[], request: FrameRenderReq
     captureWallMs: nanosecondsToMilliseconds(captureNanoseconds),
     outputWallMs: nanosecondsToMilliseconds(outputNanoseconds),
   };
+}
+
+async function prepareFrames(pages: readonly RenderPage[], firstIndex: number, fps: number, profilingEnabled: boolean): Promise<readonly PreparedFrame[]> {
+  const lastIndex = firstIndex + pages.length - 1;
+  return await withFramePreparationDeadline(Promise.all(pages.map(({ page }, offset) => prepareFrame(page, firstIndex + offset, fps, profilingEnabled))), firstIndex, lastIndex);
+}
+
+async function prepareFrame(page: Page, index: number, fps: number, profilingEnabled: boolean): Promise<PreparedFrame> {
+  const elapsedMs = Math.floor((index * 1_000) / fps);
+  const frameStarted = process.hrtime.bigint();
+  const rendererFrameProfile = await page.evaluate(
+    async ({ frameMs, frameToken, profile }) => {
+      await window.chalkRecordingRenderer.renderFrame(frameMs, frameToken);
+      return profile ? window.chalkRecordingRenderer.readLastFrameProfile() : undefined;
+    },
+    { frameMs: elapsedMs, frameToken: `${index}:${elapsedMs}`, profile: profilingEnabled },
+  );
+  return { preparationWallMs: profilingEnabled ? elapsedMilliseconds(frameStarted) : 0, rendererFrameProfile };
+}
+
+async function captureFrames(pages: readonly RenderPage[], profilingEnabled: boolean): Promise<readonly CapturedFrame[]> {
+  return await Promise.all(
+    pages.map(async ({ cdp }) => {
+      const frameStarted = process.hrtime.bigint();
+      const image = await captureFrame(cdp);
+      return { image, captureWallMs: profilingEnabled ? elapsedMilliseconds(frameStarted) : 0 };
+    }),
+  );
+}
+
+async function writeFrameOutput(frames: readonly Uint8Array[], firstIndex: number, fps: number, inspectionDirectory: string | undefined, profilingEnabled: boolean): Promise<WrittenFrames> {
+  const outputWallMs: number[] = [];
+  let lastElapsedMs = 0;
+  for (const [offset, frame] of frames.entries()) {
+    const index = firstIndex + offset;
+    const elapsedMs = Math.floor((index * 1_000) / fps);
+    const frameStarted = process.hrtime.bigint();
+    await writeStandardOutput(frame);
+    if (inspectionDirectory !== undefined) await writeFile(join(inspectionDirectory, `frame-${String(index).padStart(6, "0")}-${String(elapsedMs).padStart(10, "0")}.png`), frame, { flag: "wx", mode: 0o600 });
+    if (profilingEnabled) outputWallMs[offset] = elapsedMilliseconds(frameStarted);
+    lastElapsedMs = elapsedMs;
+  }
+  return { lastElapsedMs, outputWallMs };
 }
 
 async function withFramePreparationDeadline<T>(operation: Promise<T>, firstIndex: number, lastIndex: number): Promise<T> {
@@ -370,8 +458,8 @@ function readRequiredRendererOption(values: readonly string[], index: number, ex
   return value;
 }
 
-function parseOptionalArguments(values: readonly string[]): Pick<Arguments, "inspectionDirectory" | "concurrency"> {
-  let options: Pick<Arguments, "inspectionDirectory" | "concurrency"> = { concurrency: 1 };
+function parseOptionalArguments(values: readonly string[]): Pick<Arguments, "profilePath" | "inspectionDirectory" | "concurrency"> {
+  let options: Pick<Arguments, "profilePath" | "inspectionDirectory" | "concurrency"> = { concurrency: 1 };
   const seen = new Set<string>();
   for (let index = 0; index < values.length; index += 2) {
     const option = readRendererOption(values, index, seen);
@@ -390,10 +478,16 @@ function readRendererOption(values: readonly string[], index: number, seen: Set<
   return { name, value };
 }
 
-function applyRendererOption(options: Pick<Arguments, "inspectionDirectory" | "concurrency">, name: string, value: string): Pick<Arguments, "inspectionDirectory" | "concurrency"> {
+function applyRendererOption(options: Pick<Arguments, "profilePath" | "inspectionDirectory" | "concurrency">, name: string, value: string): Pick<Arguments, "profilePath" | "inspectionDirectory" | "concurrency"> {
+  if (name === "--profile-output") return { ...options, profilePath: parseProfilePath(value) };
   if (name === "--inspection-dir") return { ...options, inspectionDirectory: parseInspectionDirectory(value) };
   if (name === "--concurrency") return { ...options, concurrency: parseConcurrency(value) };
   throw new TypeError("recording renderer option is unsupported or invalid");
+}
+
+function parseProfilePath(value: string): string {
+  if (!isAbsolute(value)) throw new TypeError("recording renderer option is unsupported or invalid");
+  return value;
 }
 
 function parseInspectionDirectory(value: string): string {
@@ -407,7 +501,7 @@ function parseConcurrency(value: string): number {
 }
 
 function throwRendererUsage(): never {
-  throw new TypeError("usage: recording-renderer --request <absolute-path> --result <absolute-path> [--inspection-dir <absolute-path>] [--concurrency <1-8>]");
+  throw new TypeError("usage: recording-renderer --request <absolute-path> --result <absolute-path> [--profile-output <absolute-path>] [--inspection-dir <absolute-path>] [--concurrency <1-8>]");
 }
 
 main().catch((error: unknown) => {

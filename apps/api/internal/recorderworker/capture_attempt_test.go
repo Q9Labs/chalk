@@ -2148,26 +2148,83 @@ var _ CaptureKeyPort = (*captureTestStorage)(nil)
 var _ CaptureObjectPort = (*captureTestStorage)(nil)
 var _ CaptureBundleSink = (*captureTestStorage)(nil)
 
-func TestCaptureBundleWriterBoundsRotationWithPersistentTrackClockSkew(t *testing.T) {
+func TestCaptureBundleWriterPersistsTracksWithPersistentClockSkew(t *testing.T) {
 	origin := time.UnixMilli(1000).UTC()
 	writer, storage := newCaptureTestWriter(t, origin)
+	key := append([]byte(nil), storage.key...)
 	audio := &captureTestTrack{capture: captureplane.PulledCaptureTrack{CaptureTrack: captureplane.CaptureTrack{TrackReference: "audio", OwnerReference: "owner", Kind: captureplane.TrackKindAudio, RequestedLayer: captureplane.TrackLayerAuto}, MID: "0"}, codec: "opus"}
 	video := &captureTestTrack{capture: captureplane.PulledCaptureTrack{CaptureTrack: captureplane.CaptureTrack{TrackReference: "video", OwnerReference: "owner", Kind: captureplane.TrackKindVideo, RequestedLayer: captureplane.TrackLayerAuto}, MID: "1"}, codec: "vp8"}
 	activateCaptureTestTrack(writer, audio, origin, 2)
 	activateCaptureTestTrack(writer, video, origin, 2)
-	for index, timestamp := range []uint32{0, 3_000_000} {
-		packet := &rtp.Packet{Header: rtp.Header{SequenceNumber: uint16(index), Timestamp: timestamp}, Payload: []byte{1}}
-		if err := writer.addPacket(context.Background(), audio, packet, origin.Add(time.Duration(index)*time.Second)); err != nil {
-			t.Fatalf("add leading audio packet: %v", err)
+	const (
+		finalSecond             = 600
+		slowAudioTicksPerSecond = 46_400
+	)
+	for second := range finalSecond + 1 {
+		at := origin.Add(time.Duration(second) * time.Second)
+		videoPacket := &rtp.Packet{Header: rtp.Header{SequenceNumber: uint16(second), Timestamp: uint32(second * 90_000)}, Payload: []byte{1}}
+		if err := writer.addPacket(context.Background(), video, videoPacket, at); err != nil {
+			t.Fatalf("add video packet at second %d: %v", second, err)
+		}
+		audioSequence := second
+		if second == 1 {
+			audioSequence = 2
+		} else if second == 2 {
+			audioSequence = 1
+		}
+		audioPacket := &rtp.Packet{Header: rtp.Header{SequenceNumber: uint16(audioSequence), Timestamp: uint32(audioSequence * slowAudioTicksPerSecond)}, Payload: []byte{2}}
+		if err := writer.addPacket(context.Background(), audio, audioPacket, at); err != nil {
+			t.Fatalf("add audio packet at second %d: %v", second, err)
 		}
 	}
-	reserves, uploads := storage.reserves, storage.uploads
-	err := writer.addPacket(context.Background(), video, &rtp.Packet{Payload: []byte{1}}, origin.Add(time.Second))
-	if !errors.Is(err, recordingbundle.ErrDurationLimit) {
-		t.Fatalf("persistently skewed packet error = %v, want duration limit", err)
+	if err := writer.close(recordingbundle.CloseReasonFinalStop, origin.Add((finalSecond+1)*time.Second)); err != nil {
+		t.Fatalf("close skewed capture: %v", err)
 	}
-	if storage.reserves-reserves != 1 || storage.uploads-uploads != 1 {
-		t.Fatalf("unbounded rotation: reserves %d -> %d, uploads %d -> %d", reserves, storage.reserves, uploads, storage.uploads)
+	if storage.commits > finalSecond/10+5 {
+		t.Fatalf("clock skew caused %d bundles for %d seconds of capture", storage.commits, finalSecond+1)
+	}
+	packetCounts := map[string]int{}
+	timestamps := map[string]map[uint16]uint32{"audio": {}, "video": {}}
+	for index, upload := range storage.uploadHistory {
+		bundle, err := recordingbundle.Decrypt(key, upload.Body)
+		if err != nil {
+			t.Fatalf("decrypt bundle %d: %v", index, err)
+		}
+		if duration := bundle.Manifest.MonotonicRange.EndMilliseconds - bundle.Manifest.MonotonicRange.StartMilliseconds; duration > recordingbundle.MaxBundleDurationMilliseconds {
+			t.Fatalf("bundle %d monotonic duration = %d", index, duration)
+		}
+		if duration := bundle.Manifest.MediaRange.EndMilliseconds - bundle.Manifest.MediaRange.StartMilliseconds; duration > recordingbundle.MaxBundleDurationMilliseconds {
+			t.Fatalf("bundle %d media duration = %d", index, duration)
+		}
+		if index > 0 {
+			previous, err := recordingbundle.Decrypt(key, storage.uploadHistory[index-1].Body)
+			if err != nil {
+				t.Fatalf("decrypt previous bundle %d: %v", index-1, err)
+			}
+			if err := recordingbundle.ValidateSequence(previous, bundle); err != nil {
+				t.Fatalf("bundle %d sequence: %v", index, err)
+			}
+		}
+		for _, fragment := range bundle.Fragments {
+			packetCounts[fragment.Track.TrackID] += len(fragment.Packets)
+			for _, packet := range fragment.Packets {
+				timestamps[fragment.Track.TrackID][packet.SequenceNumber] = packet.Timestamp
+			}
+		}
+	}
+	for _, trackID := range []string{"audio", "video"} {
+		if packetCounts[trackID] != finalSecond+1 {
+			t.Fatalf("%s packets = %d, want %d", trackID, packetCounts[trackID], finalSecond+1)
+		}
+	}
+	if got := timestamps["audio"][finalSecond]; got != finalSecond*slowAudioTicksPerSecond {
+		t.Fatalf("final audio timestamp = %d, want sender clock %d", got, finalSecond*slowAudioTicksPerSecond)
+	}
+	if got := timestamps["video"][finalSecond]; got != finalSecond*90_000 {
+		t.Fatalf("final video timestamp = %d, want sender clock %d", got, finalSecond*90_000)
+	}
+	if got := timestamps["audio"][1]; got != slowAudioTicksPerSecond {
+		t.Fatalf("reordered audio timestamp = %d, want %d", got, slowAudioTicksPerSecond)
 	}
 }
 

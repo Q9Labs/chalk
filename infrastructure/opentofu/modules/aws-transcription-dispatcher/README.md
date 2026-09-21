@@ -41,6 +41,11 @@ parameter ARNs and, when needed, decrypt only the caller's listed SSM KMS keys.
 It contains no
 database, reusable R2, or infrastructure-mutation permission.
 
+Disabled provider parameter ARNs and unset optional DeepInfra execution/model
+pins are omitted from the Lambda environment, rather than represented by empty
+values. A corpus digest is still required whenever a provider is enabled; it
+must identify a genuine passing qualification corpus, not a synthetic smoke.
+
 `CONTROL_API_AUDIENCE` is a separate non-secret release input. The dispatcher
 passes it, along with `CHALK_ENVIRONMENT` and `CHALK_RELEASE_ID`, into the
 replay-resistant workload HMAC signer; it is never treated as a credential.
@@ -52,6 +57,13 @@ target has an independent retry policy and DLQ. Lambda invoke permissions are
 constrained to Scheduler and the optional caller-supplied control-plane
 principal/source ARN. CloudWatch logs, Lambda/SQS/Scheduler failure metrics,
 and alarms are provisioned without assuming a notification provider.
+
+`scheduler_state` is required and has no default. Use `DISABLED` while the
+transcript-first API release, shared workload secret, and the API runtime's
+least-privilege invoke policy are being prepared. Switch it to `ENABLED` only
+in the coordinated activation. The module outputs
+`control_api_invoke_policy_json` for attachment to the existing API runtime
+role; it does not guess or mutate that separately owned role.
 
 The control-plane wake is only a bounded hint: async Lambda acceptance is a
 202, payloads are limited to 1 MiB, and AWS may duplicate or drop a wake. The

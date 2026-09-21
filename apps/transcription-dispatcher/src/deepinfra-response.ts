@@ -35,7 +35,8 @@ export function observedDeepInfraCost(body: unknown): number | undefined {
   const status = body.inference_status;
   if (typeof status !== "object" || !("cost" in status) || status.cost == null) return undefined;
   if (typeof status.cost !== "number" || !Number.isFinite(status.cost) || status.cost < 0 || status.cost > 1_000) throw new ProviderError("DeepInfra reported cost was invalid", "schema");
-  return status.cost;
+  // The native inference API reports US cents; transcript metadata stores USD.
+  return status.cost / 100;
 }
 
 function observedText(candidates: unknown[], label: string): string | undefined {

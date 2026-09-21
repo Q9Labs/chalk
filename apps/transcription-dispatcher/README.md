@@ -6,9 +6,12 @@ URLs, invokes one provider at a time, and conditionally writes one normalized
 `transcript.v1` JSON document.
 
 The package fails closed unless the environment explicitly supplies provider
-policy bounds, the privacy gate, the qualified Cloudflare slug/adapter contract
-and corpus digest, and (when enabled) a pinned DeepInfra execution identity and
-model version. DeepInfra is omitted entirely when `DEEPINFRA_ENABLED=false`.
+policy bounds, the privacy gate, and qualification evidence for each enabled
+provider. DeepInfra requires the native adapter contract and corpus digest when
+enabled; execution-identity and model-version pins are optional assertions only
+when the provider actually returns stable observed values. Cloudflare requires
+its own slug, adapter contract, and corpus digest when enabled. DeepInfra is
+omitted entirely when `DEEPINFRA_ENABLED=false`.
 Provider responses, audio, display names, URLs, object keys, and tokens are
 never logged or persisted by this package.
 
@@ -16,10 +19,11 @@ never logged or persisted by this package.
 
 The exported Lambda handler creates the pinned SSM client during cold start.
 Tests and local harnesses can call `buildHandlerFromSsm` with an injected AWS
-SSM client. The three parameter ARNs are passed explicitly through:
+SSM client. The control credential ARN is always passed; provider credential
+ARNs are passed only for enabled providers:
 
 - `DEEPINFRA_TOKEN_PARAMETER_ARN` (only when DeepInfra is enabled)
-- `CLOUDFLARE_AI_TOKEN_PARAMETER_ARN`
+- `CLOUDFLARE_AI_TOKEN_PARAMETER_ARN` (only when Cloudflare is enabled)
 - `CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN`
 
 The loader requests exactly those ARNs with decryption and returns values only

@@ -453,6 +453,16 @@ variable "scheduler_group_name" {
   default     = "default"
 }
 
+variable "scheduler_state" {
+  description = "Explicit EventBridge Scheduler activation state. Keep DISABLED until the API signed-control and invoke-role prerequisites are live."
+  type        = string
+
+  validation {
+    condition     = contains(["DISABLED", "ENABLED"], var.scheduler_state)
+    error_message = "scheduler_state must be DISABLED or ENABLED."
+  }
+}
+
 variable "scheduler_input_json" {
   description = "Bounded JSON wake-up hint delivered by EventBridge Scheduler. It never carries job state."
   type        = string

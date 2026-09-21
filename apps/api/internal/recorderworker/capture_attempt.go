@@ -1457,14 +1457,12 @@ func (w *captureBundleWriter) addPacket(ctx context.Context, track CaptureMediaT
 		w.clocks[clockKey] = clock
 	}
 	arrivalMono := w.relative(at)
-	media, normalizedTimestamp := clock.normalize(packet, identity.Kind, arrivalMono)
+	trackMedia, normalizedTimestamp := clock.normalize(packet, identity.Kind, arrivalMono)
 	mono := max(arrivalMono, w.lastMono)
-	if mono > w.lastMono {
-		w.lastMono = mono
-	}
-	if media > w.lastMedia {
-		w.lastMedia = media
-	}
+	// Bundle ranges share one non-regressing recording clock. Per-track sender
+	// timing remains independently preserved in the normalized RTP timestamp.
+	media := max(trackMedia, w.lastMedia)
+	w.advanceClocks(mono, media)
 	input := recordingbundle.MediaPacket{Track: bundleTrack, Packet: recordingbundle.RTPPacket{SequenceNumber: packet.SequenceNumber, ExtendedSequenceNumber: clock.sequence.Extend(packet.SequenceNumber), Timestamp: normalizedTimestamp, SSRC: packet.SSRC, PayloadType: packet.PayloadType, Marker: packet.Marker, Payload: packet.Payload}, MonotonicMilliseconds: mono, MediaMilliseconds: media}
 	var err error
 	for attempt := range 2 {

@@ -1,22 +1,27 @@
 import { useRef, useState } from "react";
-import { createSpace, type Space } from "../../lib/dashboard-api";
+import { createSpace, type RecordingPolicy, type Space, type TranscriptionPolicy } from "../../lib/dashboard-api";
 import { runSpaceMutation, slugifySpaceName, SpaceDialogActions, SpaceDialogError, SpaceDialogFrame, SpaceDialogHeading, useModalDialog } from "./SpaceDialogPrimitives";
+import { SpaceArtifactPolicyFields, transcriptionNeedsCapture } from "./SpaceArtifactPolicyFields";
 
 type NewSpaceDialogProps = {
   open: boolean;
   onClose: () => void;
   tenantID?: string;
+  transcriptionCeiling?: string | null;
   onCreated?: (space: Space) => void;
 };
 
-export function NewSpaceDialog({ open, onClose, tenantID, onCreated }: NewSpaceDialogProps) {
+export function NewSpaceDialog({ open, onClose, tenantID, transcriptionCeiling, onCreated }: NewSpaceDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
   const [admission, setAdmission] = useState<"open" | "knock">("open");
+  const [recordingPolicy, setRecordingPolicy] = useState<RecordingPolicy>("disabled");
+  const [transcriptionPolicy, setTranscriptionPolicy] = useState<TranscriptionPolicy>("disabled");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const missingCapture = transcriptionNeedsCapture(recordingPolicy, transcriptionPolicy);
 
   useModalDialog(dialogRef, open);
 
@@ -37,6 +42,8 @@ export function NewSpaceDialog({ open, onClose, tenantID, onCreated }: NewSpaceD
           slug: slug.trim(),
           metadata: trimmedDescription ? { description: trimmedDescription } : undefined,
           admission_policy: { mode: admission },
+          recording_policy: recordingPolicy,
+          transcription_policy: transcriptionPolicy,
         }),
       onSuccess: (space) => {
         onCreated?.(space);
@@ -44,6 +51,8 @@ export function NewSpaceDialog({ open, onClose, tenantID, onCreated }: NewSpaceD
         setSlug("");
         setDescription("");
         setAdmission("open");
+        setRecordingPolicy("disabled");
+        setTranscriptionPolicy("disabled");
         onClose();
       },
       setBusy: setSaving,
@@ -85,7 +94,9 @@ export function NewSpaceDialog({ open, onClose, tenantID, onCreated }: NewSpaceD
         </label>
       </fieldset>
 
-      <SpaceDialogActions onClose={onClose} disabled={!tenantID || !name.trim() || !slug.trim() || saving} busyLabel={saving ? "Creating…" : undefined} submitLabel="Create Space" />
+      <SpaceArtifactPolicyFields prefix="new-space" recordingPolicy={recordingPolicy} transcriptionPolicy={transcriptionPolicy} transcriptionCeiling={transcriptionCeiling} onRecordingPolicyChange={setRecordingPolicy} onTranscriptionPolicyChange={setTranscriptionPolicy} />
+
+      <SpaceDialogActions onClose={onClose} disabled={!tenantID || !name.trim() || !slug.trim() || missingCapture || saving} busyLabel={saving ? "Creating…" : undefined} submitLabel="Create Space" />
       <SpaceDialogError message={error} />
       {!tenantID ? <p className="fixture-note">Choose a Tenant before creating a Space.</p> : null}
     </SpaceDialogFrame>

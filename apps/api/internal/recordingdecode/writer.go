@@ -201,6 +201,16 @@ func validateRequest(ctx context.Context, request Request) error {
 	if err := request.Presentation.Validate(); err != nil {
 		return fmt.Errorf("%w: presentation: %v", ErrInvalidRequest, err)
 	}
+	included := make(map[recordingpresentation.MediaKind]struct{}, len(request.IncludedSourceKinds))
+	for _, kind := range request.IncludedSourceKinds {
+		if kind != recordingpresentation.MediaKindMicrophone && kind != recordingpresentation.MediaKindCamera && kind != recordingpresentation.MediaKindScreenShare {
+			return fmt.Errorf("%w: included source kind", ErrInvalidRequest)
+		}
+		if _, exists := included[kind]; exists {
+			return fmt.Errorf("%w: duplicate included source kind", ErrInvalidRequest)
+		}
+		included[kind] = struct{}{}
+	}
 	clock := request.Presentation.Clock
 	if request.Presentation.RecordingID != request.RecordingID || request.Presentation.EpisodeID != request.EpisodeID ||
 		clock.Origin != "capture_ready" || clock.Timebase != "recording_relative_ms" ||
@@ -209,6 +219,18 @@ func validateRequest(ctx context.Context, request Request) error {
 		return fmt.Errorf("%w: presentation authority mismatch", ErrInvalidRequest)
 	}
 	return nil
+}
+
+func (request Request) includesSource(kind recordingpresentation.MediaKind) bool {
+	if len(request.IncludedSourceKinds) == 0 {
+		return true
+	}
+	for _, included := range request.IncludedSourceKinds {
+		if included == kind {
+			return true
+		}
+	}
+	return false
 }
 
 func presentationCatalog(timeline recordingpresentation.Timeline) (map[sourceIdentity]recordingpresentation.MediaSource, error) {
@@ -312,6 +334,9 @@ func ingestBundles(ctx context.Context, request Request, catalog map[sourceIdent
 			if err := validateTrackKind(source.Kind, fragment.Track.Codec); err != nil {
 				clearBundle(&bundle)
 				return nil, nil, err
+			}
+			if !request.includesSource(source.Kind) {
+				continue
 			}
 			state := states[source.SourceID]
 			if state == nil {

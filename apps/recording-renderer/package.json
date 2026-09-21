@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "pnpm run build:client && pnpm run build:node && pnpm run build:ui-manifest",
+    "build": "pnpm run build:client && pnpm run build:node && pnpm run build:ui-manifest && pnpm run build:ui-registry",
     "build:client": "vite build",
     "build:node": "vite build --config vite.node.config.ts",
     "build:ui-manifest": "node ./dist/node/ui-build-cli.js \"$PWD/dist/client\"",
+    "build:ui-registry": "node ./dist/node/ui-build-registry-cli.js write \"$PWD/dist\"",
     "fixture": "node ./dist/node/fixture.js",
     "check-types": "tsc -p tsconfig.browser.json && tsc -p tsconfig.node.json --noEmit",
     "test": "vitest run",

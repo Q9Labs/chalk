@@ -8,5 +8,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["src/cli.ts", "src/fixture.ts", "src/ui-build-cli.ts", "src/node/**/*.ts", "src/decoded-media.ts", "src/runtime-api.ts"]
+  "include": ["src/cli.ts", "src/fixture.ts", "src/ui-build-cli.ts", "src/ui-build-registry-cli.ts", "src/node/**/*.ts", "src/decoded-media.ts", "src/runtime-api.ts"]
 }

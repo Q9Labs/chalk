@@ -57,7 +57,7 @@ type Repository interface {
 	Create(ctx context.Context, input CreateInput) (Recording, error)
 	Materialize(ctx context.Context, input CreateInput) (Recording, error)
 	Get(ctx context.Context, tenantID utilities.ID, recordingID utilities.ID) (Recording, error)
-	List(ctx context.Context, tenantID utilities.ID, episodeID utilities.ID, page pagination.PageRequest) (RecordingList, error)
+	List(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID, episodeID utilities.ID, page pagination.PageRequest) (RecordingList, error)
 	Update(ctx context.Context, tenantID utilities.ID, recordingID utilities.ID, input UpdateInput) (Recording, error)
 }
 
@@ -133,12 +133,12 @@ func (s Service) Get(ctx context.Context, tenantID utilities.ID, recordingID uti
 	return s.repository.Get(ctx, tenantID, recordingID)
 }
 
-func (s Service) List(ctx context.Context, tenantID utilities.ID, episodeID utilities.ID, page pagination.PageRequest) (RecordingList, error) {
+func (s Service) List(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID, episodeID utilities.ID, page pagination.PageRequest) (RecordingList, error) {
 	if tenantID.IsZero() {
 		return RecordingList{}, ErrInvalidTenantID
 	}
 
-	return s.repository.List(ctx, tenantID, episodeID, page)
+	return s.repository.List(ctx, tenantID, spaceID, episodeID, page)
 }
 
 func (s Service) Update(ctx context.Context, tenantID utilities.ID, recordingID utilities.ID, input UpdateInput) (Recording, error) {

@@ -14,7 +14,18 @@ export type { StageItem, StageLayout } from "./stage/stage-items";
 export { RecordingSpaceView } from "./space-view/RecordingSpaceView";
 export type { RecordingMediaRenderContext, RecordingSpaceViewProps } from "./space-view/RecordingSpaceView";
 export { RecordingHistoryPanel } from "./recording-history/RecordingHistoryPanel";
-export type { RecordingHistoryItem, RecordingHistoryPanelProps, RecordingHistoryStatus } from "./recording-history/RecordingHistoryPanel";
+export type {
+  RecordingExportStatus,
+  RecordingHistoryAction,
+  RecordingHistoryExport,
+  RecordingHistoryItem,
+  RecordingHistoryPanelProps,
+  RecordingHistorySource,
+  RecordingHistoryStatus,
+  RecordingHistoryTranscript,
+  RecordingSourceStatus,
+  RecordingTranscriptStatus,
+} from "./recording-history/RecordingHistoryPanel";
 export { RecordingWhiteboardView, loadRecordingWhiteboardFiles, parseRecordingWhiteboardStateV1, recordingWhiteboardBinaryFile, recordingWhiteboardFileAssetId, recordingWhiteboardFileIds } from "./whiteboard-view/RecordingWhiteboardView";
 export type { RecordingWhiteboardBinaryFileInput, RecordingWhiteboardFileReference, RecordingWhiteboardFileResolver, RecordingWhiteboardStateV1, RecordingWhiteboardViewProps } from "./whiteboard-view/RecordingWhiteboardView";
 export { ChatPanel } from "./composite/ChatPanel";

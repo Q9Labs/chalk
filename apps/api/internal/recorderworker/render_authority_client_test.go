@@ -161,6 +161,35 @@ func TestDecodeRenderCommitAcceptsOnDemandSourceWithoutJobs(t *testing.T) {
 	}
 }
 
+func TestDecodeTranscriptionPreparationCommitAcceptsSourceAndNoSource(t *testing.T) {
+	now := time.Now().UTC()
+	authority, err := renderAuthorityFromClaim(productionRenderClaimForTest(t, now), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := recordingrender.TranscriptionPreparationInput{Authority: authority, TranscriptionSource: &recordingrender.TranscriptionSource{}}
+	sourceID := authority.RecordingID.String()
+	response := renderTranscriptionCommitResponse{TranscriptionSourceID: &sourceID}
+	result, err := decodeTranscriptionPreparationCommit(input, response)
+	if err != nil {
+		t.Fatalf("decode transcription preparation: %v", err)
+	}
+	if result == nil || result.SourceID != authority.RecordingID || len(result.JobIDs) != 0 {
+		t.Fatalf("decoded transcription preparation = %#v", result)
+	}
+
+	input.TranscriptionSource = nil
+	result, err = decodeTranscriptionPreparationCommit(input, renderTranscriptionCommitResponse{})
+	if err != nil || result != nil {
+		t.Fatalf("decode empty transcription preparation = %#v, %v", result, err)
+	}
+
+	response.TranscriptionSourceID = &sourceID
+	if _, err := decodeTranscriptionPreparationCommit(input, response); err == nil {
+		t.Fatal("empty transcription preparation accepted a source")
+	}
+}
+
 func TestDecodeFinalizedRenderObjectUsesEarlierGrantDeadline(t *testing.T) {
 	id, err := utilities.ParseID("00000000-0000-4000-8000-000000000001")
 	if err != nil {

@@ -1,22 +1,27 @@
 import { useEffect, useRef, useState } from "react";
-import { updateSpace, type Space } from "../../lib/dashboard-api";
+import { updateSpace, type RecordingPolicy, type Space, type TranscriptionPolicy } from "../../lib/dashboard-api";
 import { runSpaceMutation, slugifySpaceName, SpaceDialogActions, SpaceDialogError, SpaceDialogFrame, SpaceDialogHeading, useModalDialog } from "./SpaceDialogPrimitives";
+import { readRecordingPolicy, SpaceArtifactPolicyFields, transcriptionNeedsCapture, transcriptionPolicyOrDisabled } from "./SpaceArtifactPolicyFields";
 
 type EditSpaceDialogProps = {
   open: boolean;
   tenantID?: string;
+  transcriptionCeiling?: string | null;
   space: Space | null;
   onClose: () => void;
   onSaved?: (space: Space) => void;
 };
 
-export function EditSpaceDialog({ open, tenantID, space, onClose, onSaved }: EditSpaceDialogProps) {
+export function EditSpaceDialog({ open, tenantID, transcriptionCeiling, space, onClose, onSaved }: EditSpaceDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [admission, setAdmission] = useState<"open" | "knock" | "members_only">("open");
+  const [recordingPolicy, setRecordingPolicy] = useState<RecordingPolicy>("disabled");
+  const [transcriptionPolicy, setTranscriptionPolicy] = useState<TranscriptionPolicy>("disabled");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const missingCapture = transcriptionNeedsCapture(recordingPolicy, transcriptionPolicy);
 
   useModalDialog(dialogRef, open);
 
@@ -25,6 +30,8 @@ export function EditSpaceDialog({ open, tenantID, space, onClose, onSaved }: Edi
     setName(space.name);
     setSlug(space.slug);
     setAdmission(readAdmissionMode(space.admission_policy));
+    setRecordingPolicy(readRecordingPolicy(space.recording_policy));
+    setTranscriptionPolicy(transcriptionPolicyOrDisabled(space.transcription_policy));
     setError(null);
   }, [space]);
 
@@ -32,7 +39,7 @@ export function EditSpaceDialog({ open, tenantID, space, onClose, onSaved }: Edi
     event.preventDefault();
     if (!tenantID || !space || !name.trim() || !slug.trim() || saving) return;
     await runSpaceMutation({
-      request: () => updateSpace({ tenantID, spaceID: space.id, name: name.trim(), slug: slug.trim(), admission_policy: { mode: admission } }),
+      request: () => updateSpace({ tenantID, spaceID: space.id, name: name.trim(), slug: slug.trim(), admission_policy: { mode: admission }, recording_policy: recordingPolicy, transcription_policy: transcriptionPolicy }),
       onSuccess: (updated) => {
         onSaved?.(updated);
         onClose();
@@ -70,13 +77,15 @@ export function EditSpaceDialog({ open, tenantID, space, onClose, onSaved }: Edi
         </label>
       </fieldset>
 
+      <SpaceArtifactPolicyFields prefix="edit-space" recordingPolicy={recordingPolicy} transcriptionPolicy={transcriptionPolicy} transcriptionCeiling={transcriptionCeiling} onRecordingPolicyChange={setRecordingPolicy} onTranscriptionPolicyChange={setTranscriptionPolicy} />
+
       {admission === "members_only" ? (
         <p className="fixture-note" role="status">
           This Space uses a members-only policy, but Space membership enforcement is not available yet. Choose Open or Ask to join before saving.
         </p>
       ) : null}
 
-      <SpaceDialogActions onClose={onClose} disabled={!tenantID || !space || !name.trim() || !slug.trim() || admission === "members_only" || saving} busyLabel={saving ? "Saving…" : undefined} submitLabel="Save changes" />
+      <SpaceDialogActions onClose={onClose} disabled={!tenantID || !space || !name.trim() || !slug.trim() || admission === "members_only" || missingCapture || saving} busyLabel={saving ? "Saving…" : undefined} submitLabel="Save changes" />
       <SpaceDialogError message={error} />
     </SpaceDialogFrame>
   );

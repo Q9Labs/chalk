@@ -45,22 +45,24 @@ type RenderAuthorityPort interface {
 	UploadRenderObject(context.Context, objectstorage.SignedURL, io.Reader, int64) error
 	CommitRenderObject(context.Context, recordingrender.CommitObjectInput) (recordingrender.CommittedObject, error)
 	CommitRender(context.Context, recordingrender.CommitInput) (recordingrender.CommitResult, error)
+	CommitTranscriptionPreparation(context.Context, recordingrender.TranscriptionPreparationInput) (*recordingrender.TranscriptionResult, error)
 }
 
 type RecordingDecodeWriter func(context.Context, recordingdecode.Request) (recordingdecode.Result, error)
 
 type ProductionRenderAttemptConfig struct {
-	Control       RenderAuthorityPort
-	WorkRoot      string
-	Environment   string
-	UIBuildSHA256 string
-	FFmpegPath    string
-	Encoder       VideoEncoder
-	Frames        FrameProducer
-	Commands      CommandRunner
-	Streaming     StreamingCommandRunner
-	Decode        RecordingDecodeWriter
-	Now           func() time.Time
+	Control         RenderAuthorityPort
+	WorkRoot        string
+	Environment     string
+	UIBuildRegistry UIBuildRegistry
+	FFmpegPath      string
+	Encoder         VideoEncoder
+	Frames          FrameProducer
+	Commands        CommandRunner
+	Streaming       StreamingCommandRunner
+	Decode          RecordingDecodeWriter
+	Observer        RenderAttemptObserver
+	Now             func() time.Time
 }
 
 type ProductionRenderAttemptFactory struct {
@@ -70,7 +72,6 @@ type ProductionRenderAttemptFactory struct {
 func NewProductionRenderAttemptFactory(config ProductionRenderAttemptConfig) (*ProductionRenderAttemptFactory, error) {
 	config.WorkRoot = filepath.Clean(config.WorkRoot)
 	config.Environment = strings.TrimSpace(config.Environment)
-	config.UIBuildSHA256 = strings.TrimSpace(config.UIBuildSHA256)
 	config.FFmpegPath = strings.TrimSpace(config.FFmpegPath)
 	if config.Decode == nil {
 		config.Decode = recordingdecode.Write
@@ -78,7 +79,7 @@ func NewProductionRenderAttemptFactory(config ProductionRenderAttemptConfig) (*P
 	if config.Now == nil {
 		config.Now = func() time.Time { return time.Now().UTC() }
 	}
-	if config.Control == nil || config.Frames == nil || config.Commands == nil || config.Streaming == nil || !filepath.IsAbs(config.WorkRoot) || config.Environment == "" || !isLowerSHA256(config.UIBuildSHA256) {
+	if config.Control == nil || config.Frames == nil || config.Commands == nil || config.Streaming == nil || !filepath.IsAbs(config.WorkRoot) || config.Environment == "" || !config.UIBuildRegistry.valid() {
 		return nil, ErrInvalidProductionRenderAttempt
 	}
 	if _, _, err := recordingEncoderArgs(config.Encoder); err != nil {
@@ -166,7 +167,9 @@ func (attempt *ProductionRenderAttempt) Close() error {
 	attempt.closed = true
 	workspace := attempt.workspace
 	attempt.mu.Unlock()
-	return os.RemoveAll(workspace)
+	return attempt.measure(RenderAttemptStageCleanup, func() error {
+		return os.RemoveAll(workspace)
+	})
 }
 
 func (attempt *ProductionRenderAttempt) Run(ctx context.Context) error {
@@ -187,9 +190,20 @@ func (attempt *ProductionRenderAttempt) Run(ctx context.Context) error {
 	}
 	ctx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
+	if isTranscriptionRenderJob(attempt.claim.Envelope.Kind) {
+		return attempt.runTranscription(ctx)
+	}
+	if attempt.claim.Envelope.Kind != recordingpipeline.JobKindRender {
+		return ErrInvalidProductionRenderAttempt
+	}
 
-	resolved, err := withRenderAuthority(attempt, func(authority recordingrender.Authority) (recordingrender.ResolvedInput, error) {
-		return attempt.config.Control.ResolveRenderInput(ctx, authority)
+	var resolved recordingrender.ResolvedInput
+	err = attempt.measure(RenderAttemptStageResolveInput, func() error {
+		var resolveErr error
+		resolved, resolveErr = withRenderAuthority(attempt, func(authority recordingrender.Authority) (recordingrender.ResolvedInput, error) {
+			return attempt.config.Control.ResolveRenderInput(ctx, authority)
+		})
+		return resolveErr
 	})
 	if err != nil {
 		return fmt.Errorf("resolve recording render input: %w", err)
@@ -213,10 +227,14 @@ func (attempt *ProductionRenderAttempt) Run(ctx context.Context) error {
 	if err := os.Mkdir(assetDirectory, 0o700); err != nil {
 		return fmt.Errorf("create recording asset directory: %w", err)
 	}
-	if err := downloads.download(ctx, resolved.Presentation, presentationPath); err != nil {
+	if err := attempt.measure(RenderAttemptStageDownloadPresentation, func() error {
+		return downloads.download(ctx, resolved.Presentation, presentationPath)
+	}); err != nil {
 		return fmt.Errorf("download recording presentation: %w", err)
 	}
-	if err := downloads.download(ctx, resolved.AssetManifest, assetManifestPath); err != nil {
+	if err := attempt.measure(RenderAttemptStageDownloadAssetManifest, func() error {
+		return downloads.download(ctx, resolved.AssetManifest, assetManifestPath)
+	}); err != nil {
 		return fmt.Errorf("download recording asset manifest: %w", err)
 	}
 	presentationBytes, err := os.ReadFile(presentationPath)
@@ -230,25 +248,43 @@ func (attempt *ProductionRenderAttempt) Run(ctx context.Context) error {
 	if err := attempt.validateTimeline(resolved, timeline); err != nil {
 		return err
 	}
-	if err := attempt.stageAssets(ctx, downloads, resolved, timeline, assetManifestPath, assetDirectory); err != nil {
+	if err := attempt.measure(RenderAttemptStageStageAssets, func() error {
+		return attempt.stageAssets(ctx, downloads, resolved, timeline, assetManifestPath, assetDirectory)
+	}); err != nil {
 		return err
 	}
-	bundles, inputBytes, err := attempt.downloadCapture(ctx, downloads, resolved, bundleDirectory)
+	var bundles []recordingdecode.BundleFile
+	var inputBytes int64
+	err = attempt.measure(RenderAttemptStageDownloadCapture, func() error {
+		var downloadErr error
+		bundles, inputBytes, downloadErr = attempt.downloadCapture(ctx, downloads, resolved, bundleDirectory)
+		return downloadErr
+	})
 	if err != nil {
 		return err
 	}
 
-	dataKeys, err := attempt.accessCaptureKeys(ctx, resolved.Capture)
+	var dataKeys []recordingdecode.DataKey
+	err = attempt.measure(RenderAttemptStageAccessCaptureKeys, func() error {
+		var accessErr error
+		dataKeys, accessErr = attempt.accessCaptureKeys(ctx, resolved.Capture)
+		return accessErr
+	})
 	if err != nil {
 		return err
 	}
 	defer clearDecodeDataKeys(dataKeys)
 	decodedDirectory := filepath.Join(attempt.workspace, "decoded")
-	decoded, err := attempt.config.Decode(ctx, recordingdecode.Request{
-		RecordingID: timeline.RecordingID, EpisodeID: timeline.EpisodeID, TenantID: resolved.TenantID.String(),
-		Environment: attempt.config.Environment, OriginAuthorityID: timeline.Clock.OriginAuthorityID,
-		CaptureEpoch: resolved.CaptureEpoch, DurationMS: resolved.DurationMillis, OutputDirectory: decodedDirectory,
-		FFmpegPath: attempt.config.FFmpegPath, Presentation: timeline, Bundles: bundles, DataKeys: dataKeys,
+	var decoded recordingdecode.Result
+	err = attempt.measure(RenderAttemptStageSourcePreparation, func() error {
+		var decodeErr error
+		decoded, decodeErr = attempt.config.Decode(ctx, recordingdecode.Request{
+			RecordingID: timeline.RecordingID, EpisodeID: timeline.EpisodeID, TenantID: resolved.TenantID.String(),
+			Environment: attempt.config.Environment, OriginAuthorityID: timeline.Clock.OriginAuthorityID,
+			CaptureEpoch: resolved.CaptureEpoch, DurationMS: resolved.DurationMillis, OutputDirectory: decodedDirectory,
+			FFmpegPath: attempt.config.FFmpegPath, Presentation: timeline, Bundles: bundles, DataKeys: dataKeys,
+		})
+		return decodeErr
 	})
 	clearDecodeDataKeys(dataKeys)
 	if err != nil {
@@ -259,7 +295,7 @@ func (attempt *ProductionRenderAttempt) Run(ctx context.Context) error {
 	frameRequest := FrameRenderRequest{
 		SchemaVersion: FrameRenderRequestVersion, RecordingID: resolved.RecordingID.String(), EpisodeID: resolved.EpisodeID.String(),
 		WorkspaceDirectory: attempt.workspace, PresentationPath: presentationPath, PresentationSHA256: hex.EncodeToString(resolved.PresentationSHA256),
-		UIBuildSHA256: attempt.config.UIBuildSHA256, AssetDirectory: assetDirectory, DecodedMediaPath: decoded.IndexPath,
+		UIBuildSHA256: timeline.Initial.Profile.UIBuildSHA256, AssetDirectory: assetDirectory, DecodedMediaPath: decoded.IndexPath,
 		DecodedMediaSHA256: decoded.IndexSHA256, Width: timeline.Initial.Profile.Viewport.Width, Height: timeline.Initial.Profile.Viewport.Height,
 		FPS: defaultRenderFPS, DurationMs: resolved.DurationMillis,
 	}
@@ -270,55 +306,200 @@ func (attempt *ProductionRenderAttempt) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("build recording encode plan: %w", err)
 	}
-	rendered, err := RenderFrameStream(ctx, attempt.config.Frames, attempt.config.Streaming, frameRequest, encodePlan)
+	var rendered FrameEncodeResult
+	err = attempt.measure(RenderAttemptStageCompositionEncoding, func() error {
+		var renderErr error
+		rendered, renderErr = RenderFrameStream(ctx, attempt.config.Frames, attempt.config.Streaming, frameRequest, encodePlan)
+		return renderErr
+	})
+	attempt.observeFrameEncoding(rendered, err == nil)
 	if err != nil {
 		return fmt.Errorf("render recording frame stream: %w", err)
 	}
-	mediaFacts, err := VerifyRecordingMedia(ctx, attempt.config.Commands, videoPath, RecordingMediaExpectation{
-		Width: encodePlan.Width, Height: encodePlan.Height, FPS: encodePlan.FPS, FrameCount: encodePlan.FrameCount, DurationMs: encodePlan.OutputDuration,
+	var mediaFacts MediaFacts
+	err = attempt.measure(RenderAttemptStageProbe, func() error {
+		var probeErr error
+		mediaFacts, probeErr = VerifyRecordingMedia(ctx, attempt.config.Commands, videoPath, RecordingMediaExpectation{
+			Width: encodePlan.Width, Height: encodePlan.Height, FPS: encodePlan.FPS, FrameCount: encodePlan.FrameCount, DurationMs: encodePlan.OutputDuration,
+		})
+		return probeErr
 	})
 	if err != nil {
 		return fmt.Errorf("verify encoded recording: %w", err)
 	}
-	_ = rendered
 	factsBytes, err := json.Marshal(mediaFacts)
 	if err != nil {
 		return fmt.Errorf("encode recording media facts: %w", err)
 	}
 	factsDigest := sha256.Sum256(factsBytes)
 	videoDuration := resolved.DurationMillis
-	video, err := attempt.persistFile(ctx, recordingrender.PurposeRecordingVideo, "video", videoPath, &videoDuration)
+	var video recordingrender.CommitObjectReference
+	err = attempt.measure(RenderAttemptStagePersistVideo, func() error {
+		var persistErr error
+		video, persistErr = attempt.persistFile(ctx, recordingrender.PurposeRecordingVideo, "video", videoPath, &videoDuration)
+		return persistErr
+	})
 	if err != nil {
 		return err
 	}
 
-	transcription, err := attempt.persistTranscription(ctx, resolved, timeline, decodedDirectory, decoded.Index)
-	if err != nil {
-		return err
-	}
 	commit := recordingrender.CommitInput{
 		PresentationSHA256: append([]byte(nil), resolved.PresentationSHA256...),
-		DurationMillis:     resolved.DurationMillis, Video: video, FFprobeFactsDigest: append([]byte(nil), factsDigest[:]...), TranscriptionSource: transcription,
+		DurationMillis:     resolved.DurationMillis, Video: video, FFprobeFactsDigest: append([]byte(nil), factsDigest[:]...),
 	}
-	if _, err := withRenderAuthority(attempt, func(authority recordingrender.Authority) (recordingrender.CommitResult, error) {
-		commit.Authority = authority
-		digest, digestErr := recordingrender.CommitDigest(commit)
-		if digestErr != nil {
-			return recordingrender.CommitResult{}, fmt.Errorf("digest recording render commit: %w", digestErr)
-		}
-		commit.CommitDigest = digest
-		result, commitErr := attempt.config.Control.CommitRender(ctx, commit)
-		if commitErr == nil {
-			attempt.mu.Lock()
-			attempt.committed = true
-			attempt.mu.Unlock()
-		}
-		return result, commitErr
+	if err := attempt.measure(RenderAttemptStageCommit, func() error {
+		_, commitErr := withRenderAuthority(attempt, func(authority recordingrender.Authority) (recordingrender.CommitResult, error) {
+			commit.Authority = authority
+			digest, digestErr := recordingrender.CommitDigest(commit)
+			if digestErr != nil {
+				return recordingrender.CommitResult{}, fmt.Errorf("digest recording render commit: %w", digestErr)
+			}
+			commit.CommitDigest = digest
+			result, innerCommitErr := attempt.config.Control.CommitRender(ctx, commit)
+			if innerCommitErr == nil {
+				attempt.mu.Lock()
+				attempt.committed = true
+				attempt.mu.Unlock()
+			}
+			return result, innerCommitErr
+		})
+		return commitErr
 	}); err != nil {
 		return fmt.Errorf("commit recording Artifact: %w", err)
 	}
 	_ = inputBytes
 	return nil
+}
+
+func (attempt *ProductionRenderAttempt) runTranscription(ctx context.Context) error {
+	var resolved recordingrender.ResolvedInput
+	err := attempt.measure(RenderAttemptStageResolveInput, func() error {
+		var resolveErr error
+		resolved, resolveErr = withRenderAuthority(attempt, func(authority recordingrender.Authority) (recordingrender.ResolvedInput, error) {
+			return attempt.config.Control.ResolveRenderInput(ctx, authority)
+		})
+		return resolveErr
+	})
+	if err != nil {
+		return fmt.Errorf("resolve recording transcription input: %w", err)
+	}
+	if err := attempt.validateResolvedInput(resolved); err != nil {
+		return err
+	}
+	if resolved.TranscriptionMode != artifactpolicy.TranscriptionAutomatic && resolved.TranscriptionMode != artifactpolicy.TranscriptionOnDemand {
+		return fmt.Errorf("%w: transcription preparation requires an enabled policy", ErrInvalidProductionRenderAttempt)
+	}
+
+	downloads, err := newRenderInputDownloader(attempt, resolved)
+	if err != nil {
+		return err
+	}
+	presentationPath := filepath.Join(attempt.workspace, "presentation.json")
+	bundleDirectory := filepath.Join(attempt.workspace, "bundles")
+	if err := os.Mkdir(bundleDirectory, 0o700); err != nil {
+		return fmt.Errorf("create recording transcription bundle directory: %w", err)
+	}
+	if err := attempt.measure(RenderAttemptStageDownloadPresentation, func() error {
+		return downloads.download(ctx, resolved.Presentation, presentationPath)
+	}); err != nil {
+		return fmt.Errorf("download recording transcription presentation: %w", err)
+	}
+	presentationBytes, err := os.ReadFile(presentationPath)
+	if err != nil {
+		return fmt.Errorf("read recording transcription presentation: %w", err)
+	}
+	timeline, err := recordingpresentation.Decode(presentationBytes)
+	if err != nil {
+		return fmt.Errorf("decode recording transcription presentation: %w", err)
+	}
+	if err := attempt.validateTranscriptionTimeline(resolved, timeline); err != nil {
+		return err
+	}
+	var bundles []recordingdecode.BundleFile
+	err = attempt.measure(RenderAttemptStageDownloadCapture, func() error {
+		var downloadErr error
+		bundles, _, downloadErr = attempt.downloadCapture(ctx, downloads, resolved, bundleDirectory)
+		return downloadErr
+	})
+	if err != nil {
+		return err
+	}
+	var dataKeys []recordingdecode.DataKey
+	err = attempt.measure(RenderAttemptStageAccessCaptureKeys, func() error {
+		var accessErr error
+		dataKeys, accessErr = attempt.accessCaptureKeys(ctx, resolved.Capture)
+		return accessErr
+	})
+	if err != nil {
+		return err
+	}
+	defer clearDecodeDataKeys(dataKeys)
+	decodedDirectory := filepath.Join(attempt.workspace, "decoded")
+	var decoded recordingdecode.Result
+	err = attempt.measure(RenderAttemptStageSourcePreparation, func() error {
+		var decodeErr error
+		decoded, decodeErr = attempt.config.Decode(ctx, recordingdecode.Request{
+			RecordingID: timeline.RecordingID, EpisodeID: timeline.EpisodeID, TenantID: resolved.TenantID.String(),
+			Environment: attempt.config.Environment, OriginAuthorityID: timeline.Clock.OriginAuthorityID,
+			CaptureEpoch: resolved.CaptureEpoch, DurationMS: resolved.DurationMillis, OutputDirectory: decodedDirectory,
+			FFmpegPath: attempt.config.FFmpegPath, Presentation: timeline, Bundles: bundles, DataKeys: dataKeys,
+			IncludedSourceKinds: []recordingpresentation.MediaKind{recordingpresentation.MediaKindMicrophone},
+		})
+		return decodeErr
+	})
+	clearDecodeDataKeys(dataKeys)
+	if err != nil {
+		return fmt.Errorf("decode authenticated recording microphone media: %w", err)
+	}
+	var source *recordingrender.TranscriptionSource
+	err = attempt.measure(RenderAttemptStagePersistTranscription, func() error {
+		var persistErr error
+		source, persistErr = attempt.persistTranscription(ctx, resolved, timeline, decodedDirectory, decoded.Index)
+		return persistErr
+	})
+	if err != nil {
+		return err
+	}
+	err = attempt.measure(RenderAttemptStageCommit, func() error {
+		_, commitErr := withRenderAuthority(attempt, func(authority recordingrender.Authority) (*recordingrender.TranscriptionResult, error) {
+			input := recordingrender.TranscriptionPreparationInput{
+				Authority: authority, PresentationSHA256: append([]byte(nil), resolved.PresentationSHA256...),
+				DurationMillis: resolved.DurationMillis, TranscriptionSource: source,
+			}
+			digest, digestErr := recordingrender.TranscriptionPreparationDigest(input)
+			if digestErr != nil {
+				return nil, fmt.Errorf("digest recording transcription preparation: %w", digestErr)
+			}
+			input.CommitDigest = digest
+			result, innerCommitErr := attempt.config.Control.CommitTranscriptionPreparation(ctx, input)
+			if innerCommitErr == nil {
+				attempt.mu.Lock()
+				attempt.committed = true
+				attempt.mu.Unlock()
+			}
+			return result, innerCommitErr
+		})
+		return commitErr
+	})
+	if err != nil {
+		return fmt.Errorf("commit recording transcription preparation: %w", err)
+	}
+	return nil
+}
+
+func (attempt *ProductionRenderAttempt) measure(stage RenderAttemptStage, action func() error) error {
+	started := time.Now()
+	err := action()
+	if attempt.config.Observer != nil {
+		attempt.config.Observer.ObserveRenderAttemptStage(RenderAttemptStageMeasurement{Stage: stage, WallDuration: time.Since(started), Succeeded: err == nil})
+	}
+	return err
+}
+
+func (attempt *ProductionRenderAttempt) observeFrameEncoding(result FrameEncodeResult, succeeded bool) {
+	if attempt.config.Observer != nil {
+		attempt.config.Observer.ObserveRenderFrameEncoding(RenderFrameEncodingMeasurement{Result: result, Succeeded: succeeded})
+	}
 }
 
 func (attempt *ProductionRenderAttempt) currentAuthority() recordingrender.Authority {
@@ -357,8 +538,16 @@ func (attempt *ProductionRenderAttempt) validateTimeline(input recordingrender.R
 	validViewport := (viewport.Width == 1280 && viewport.Height == 720) || (viewport.Width == 1920 && viewport.Height == 1080)
 	if timeline.SchemaVersion != input.PresentationSchemaVersion || timeline.RecordingID != input.RecordingID.String() || timeline.EpisodeID != input.EpisodeID.String() ||
 		timeline.Clock.CaptureEpoch != input.CaptureEpoch || timeline.Clock.DurationMillis != input.DurationMillis || timeline.Clock.Origin != "capture_ready" || timeline.Clock.Timebase != "recording_relative_ms" ||
-		timeline.Initial.Profile.Version != input.PresentationProfileVersion || timeline.Initial.Profile.UIBuildSHA256 != attempt.config.UIBuildSHA256 || !validViewport || viewport.DeviceScaleFactor != 1 {
+		timeline.Initial.Profile.Version != input.PresentationProfileVersion || !attempt.config.UIBuildRegistry.Supports(timeline.Initial.Profile.UIBuildSHA256) || !validViewport || viewport.DeviceScaleFactor != 1 {
 		return fmt.Errorf("%w: recording presentation does not match render authority or profile", ErrInvalidProductionRenderAttempt)
+	}
+	return nil
+}
+
+func (attempt *ProductionRenderAttempt) validateTranscriptionTimeline(input recordingrender.ResolvedInput, timeline recordingpresentation.Timeline) error {
+	if timeline.SchemaVersion != input.PresentationSchemaVersion || timeline.RecordingID != input.RecordingID.String() || timeline.EpisodeID != input.EpisodeID.String() ||
+		timeline.Clock.CaptureEpoch != input.CaptureEpoch || timeline.Clock.DurationMillis != input.DurationMillis || timeline.Clock.Origin != "capture_ready" || timeline.Clock.Timebase != "recording_relative_ms" {
+		return fmt.Errorf("%w: recording presentation does not match transcription authority", ErrInvalidProductionRenderAttempt)
 	}
 	return nil
 }
@@ -469,9 +658,6 @@ func clearDecodeDataKeys(keys []recordingdecode.DataKey) {
 }
 
 func (attempt *ProductionRenderAttempt) persistTranscription(ctx context.Context, input recordingrender.ResolvedInput, timeline recordingpresentation.Timeline, decodedRoot string, index recordingdecode.Index) (*recordingrender.TranscriptionSource, error) {
-	if input.TranscriptionMode == artifactpolicy.TranscriptionDisabled {
-		return nil, nil
-	}
 	authority := attempt.currentAuthority()
 	sources := make([]recordingdecode.Source, 0)
 	for _, source := range index.Sources {
@@ -631,7 +817,7 @@ func renderAuthorityFromClaim(claim ClaimResult, now time.Time) (recordingrender
 		_, e11 = time.Parse(time.RFC3339Nano, *envelope.CaptureReadyAt)
 	}
 	deadline, e12 := time.Parse(time.RFC3339Nano, envelope.HardDeadline)
-	if !deadline.After(now.UTC()) || errors.Join(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12) != nil || len(presentationSHA) != sha256.Size || envelope.PresentationSHA256 != strings.ToLower(envelope.PresentationSHA256) || envelope.Kind != recordingpipeline.JobKindRender || claim.ClaimRequestID.IsZero() || len(claim.EnvelopeDigest) != sha256.Size || strings.TrimSpace(claim.LeaseToken) == "" || strings.TrimSpace(claim.LeaseOwner) == "" || !claim.LeaseExpiresAt.After(now.UTC()) {
+	if !deadline.After(now.UTC()) || errors.Join(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12) != nil || len(presentationSHA) != sha256.Size || envelope.PresentationSHA256 != strings.ToLower(envelope.PresentationSHA256) || !isRenderWorkerJobKind(envelope.Kind) || claim.ClaimRequestID.IsZero() || len(claim.EnvelopeDigest) != sha256.Size || strings.TrimSpace(claim.LeaseToken) == "" || strings.TrimSpace(claim.LeaseOwner) == "" || !claim.LeaseExpiresAt.After(now.UTC()) {
 		return recordingrender.Authority{}, ErrInvalidProductionRenderAttempt
 	}
 	authority := recordingrender.Authority{
@@ -644,6 +830,14 @@ func renderAuthorityFromClaim(claim ClaimResult, now time.Time) (recordingrender
 		return recordingrender.Authority{}, ErrInvalidProductionRenderAttempt
 	}
 	return authority, nil
+}
+
+func isRenderWorkerJobKind(kind recordingpipeline.JobKind) bool {
+	return kind == recordingpipeline.JobKindRender || kind == recordingpipeline.JobKindTranscription
+}
+
+func isTranscriptionRenderJob(kind recordingpipeline.JobKind) bool {
+	return kind == recordingpipeline.JobKindTranscription
 }
 
 func equalRenderDuration(left, right *int64) bool {

@@ -57,6 +57,7 @@ var (
 	ErrInvalidPolicySnapshotVersion = errors.New("invalid Recording policy snapshot version")
 	ErrClaimConflict                = errors.New("recording claim request conflict")
 	ErrInvalidEnvelope              = errors.New("invalid recorder job envelope")
+	ErrExportUnavailable            = errors.New("recording export source is unavailable")
 )
 
 const (
@@ -88,8 +89,48 @@ type JobKind string
 
 const (
 	JobKindCapture JobKind = "capture"
-	JobKindRender  JobKind = "render"
+	// JobKindTranscription prepares the durable audio source consumed by the
+	// transcription dispatcher. It deliberately does not produce an MP4.
+	JobKindTranscription JobKind = "transcription"
+	JobKindRender        JobKind = "render"
 )
+
+// SourceStatus describes whether capture-completion-frozen recording inputs
+// may still be used. It is independent from the transcript and MP4 states.
+type SourceStatus string
+
+const (
+	SourceStatusPending   SourceStatus = "pending"
+	SourceStatusAvailable SourceStatus = "available"
+	SourceStatusFailed    SourceStatus = "failed"
+	SourceStatusExpired   SourceStatus = "expired"
+)
+
+type ExportStatus string
+
+const (
+	ExportStatusNone        ExportStatus = "none"
+	ExportStatusPending     ExportStatus = "pending"
+	ExportStatusReady       ExportStatus = "ready"
+	ExportStatusFailed      ExportStatus = "failed"
+	ExportStatusUnavailable ExportStatus = "unavailable"
+)
+
+// ArtifactState backs the stable recording-artifact read model. Its source
+// expiry is anchored at capture completion and never renewed by export reads.
+type ArtifactState struct {
+	SourceStatus    SourceStatus
+	SourceExpiresAt *time.Time
+	// TranscriptionPolicy is sealed in the Episode snapshot and defaults to
+	// disabled for legacy or invalid snapshots. It never reflects mutable Space
+	// policy.
+	TranscriptionPolicy artifactpolicy.TranscriptionMode
+	ExportJobID         *utilities.ID
+	ExportStatus        ExportStatus
+	Retryable           bool
+	FailureCode         string
+	FailureMessage      string
+}
 
 type JobState string
 
@@ -270,6 +311,15 @@ type ClaimInput struct {
 	LeaseFor       time.Duration
 }
 
+// ExportInput identifies the immutable Recording whose one canonical MP4
+// export is requested. It intentionally carries no user-controlled output
+// options: presentation, format, and source lifetime are frozen by the
+// Episode policy and capture completion.
+type ExportInput struct {
+	TenantID    utilities.ID
+	RecordingID utilities.ID
+}
+
 type LeaseInput struct {
 	JobID             utilities.ID
 	AttemptCount      int
@@ -358,6 +408,8 @@ type Repository interface {
 	ExtendReservation(ctx context.Context, tenantID, reservationID utilities.ID, duration time.Duration, endsAt time.Time) (Reservation, error)
 	ExpireReservations(ctx context.Context, now time.Time) ([]Reservation, error)
 	GetPipeline(ctx context.Context, tenantID, recordingID utilities.ID) (Pipeline, error)
+	GetArtifactState(ctx context.Context, tenantID, recordingID utilities.ID) (ArtifactState, error)
+	RequestExport(ctx context.Context, input ExportInput, renderJobID utilities.ID) (Job, error)
 	RequestStop(ctx context.Context, tenantID, episodeID, recordingID, operationID utilities.ID) (Pipeline, error)
 	Claim(ctx context.Context, input ClaimInput) (Job, error)
 	Heartbeat(ctx context.Context, input LeaseInput) (Job, error)

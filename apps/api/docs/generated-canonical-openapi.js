@@ -5858,6 +5858,14 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           },
           {
             in: "query",
+            name: "space_id",
+            required: false,
+            schema: {
+              $ref: "#/components/schemas/SpaceId",
+            },
+          },
+          {
+            in: "query",
             name: "episode_id",
             required: false,
             schema: {
@@ -5901,7 +5909,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Bad Request",
-            "x-chalk-error-codes": ["episode.invalid_id", "pagination.invalid_cursor", "pagination.invalid_page_size", "tenant.invalid_id"],
+            "x-chalk-error-codes": ["episode.invalid_id", "pagination.invalid_cursor", "pagination.invalid_page_size", "space.invalid_id", "tenant.invalid_id"],
           },
           401: {
             content: {
@@ -6220,6 +6228,171 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           },
         ],
         summary: "Create recording download u r l",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
+      },
+    },
+    "/v1/tenants/{tenant_id}/recordings/{recording_id}/export": {
+      post: {
+        operationId: "requestRecordingExport",
+        parameters: [
+          {
+            in: "path",
+            name: "tenant_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/TenantId",
+            },
+          },
+          {
+            in: "path",
+            name: "recording_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/RecordingId",
+            },
+          },
+        ],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/RequestRecordingExportRequest",
+              },
+            },
+          },
+          required: true,
+        },
+        responses: {
+          202: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/RecordingExportRequestAcceptedResponse",
+                },
+              },
+            },
+            description: "Accepted",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["recording.invalid_id", "recording.not_ready", "tenant.invalid_id"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"],
+          },
+          403: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["recording.not_found"],
+          },
+          413: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Request Entity Too Large",
+            "x-chalk-error-codes": ["request.payload_too_large"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [
+          {
+            sessionOrBearer: [],
+          },
+        ],
+        summary: "Request recording export",
         "x-chalk-max-body-bytes": 1048576,
         "x-chalk-rate-limit": {
           limit: 60,
@@ -11872,6 +12045,124 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         summary: "Get transcript",
       },
     },
+    "/v1/tenants/{tenant_id}/transcripts/{transcript_id}/document": {
+      get: {
+        operationId: "getTranscriptDocument",
+        parameters: [
+          {
+            in: "path",
+            name: "tenant_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/TenantId",
+            },
+          },
+          {
+            in: "path",
+            name: "transcript_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/TranscriptId",
+            },
+          },
+        ],
+        responses: {
+          200: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/TranscriptDocument",
+                },
+              },
+            },
+            description: "OK",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["tenant.invalid_id", "transcript.invalid_id"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"],
+          },
+          403: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["recording_artifact.not_found", "transcript.not_found"],
+          },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["transcript.not_ready"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [
+          {
+            sessionOrBearer: [],
+          },
+        ],
+        summary: "Get transcript document",
+      },
+    },
     "/v1/tenants/{tenant_id}/transcripts/{transcript_id}/download-url": {
       post: {
         operationId: "createTranscriptDownloadURL",
@@ -15727,6 +16018,9 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
       CreateRecordingDownloadURLRequest: {
         additionalProperties: false,
         properties: {
+          download: {
+            type: "boolean",
+          },
           expires_in_seconds: {
             type: "integer",
           },
@@ -17506,6 +17800,9 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           episode_id: {
             $ref: "#/components/schemas/EpisodeId",
           },
+          export: {
+            $ref: "#/components/schemas/RecordingExport",
+          },
           id: {
             $ref: "#/components/schemas/RecordingId",
           },
@@ -17513,6 +17810,9 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             additionalProperties: true,
             items: {},
             type: ["object", "array", "string", "number", "boolean", "null"],
+          },
+          source: {
+            $ref: "#/components/schemas/RecordingSource",
           },
           space_id: {
             $ref: "#/components/schemas/SpaceId",
@@ -17531,11 +17831,14 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           tenant_id: {
             $ref: "#/components/schemas/TenantId",
           },
+          transcription_policy: {
+            type: "string",
+          },
           updated_at: {
             $ref: "#/components/schemas/DateTimeString",
           },
         },
-        required: ["created_at", "episode_id", "id", "metadata", "space_id", "status", "storage_key", "storage_provider", "tenant_id", "updated_at"],
+        required: ["created_at", "episode_id", "export", "id", "metadata", "source", "space_id", "status", "storage_key", "storage_provider", "tenant_id", "transcription_policy", "updated_at"],
         type: "object",
       },
       RecordingDownloadURL: {
@@ -17564,6 +17867,53 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           },
         },
         required: ["expires_at", "method", "signed_at", "signed_headers", "url"],
+        type: "object",
+      },
+      RecordingExport: {
+        additionalProperties: false,
+        properties: {
+          failure_code: {
+            type: ["string", "null"],
+          },
+          failure_message: {
+            type: ["string", "null"],
+          },
+          job_id: {
+            format: "uuid",
+            type: "string",
+          },
+          retryable: {
+            type: "boolean",
+          },
+          source_expires_at: {
+            anyOf: [
+              {
+                $ref: "#/components/schemas/DateTimeString",
+              },
+              {
+                type: "null",
+              },
+            ],
+          },
+          status: {
+            enum: ["none", "pending", "ready", "failed", "unavailable"],
+            type: "string",
+          },
+        },
+        required: ["status", "retryable"],
+        type: "object",
+      },
+      RecordingExportRequestAcceptedResponse: {
+        additionalProperties: false,
+        properties: {
+          export: {
+            $ref: "#/components/schemas/RecordingExport",
+          },
+          recording: {
+            $ref: "#/components/schemas/Recording",
+          },
+        },
+        required: ["export", "recording"],
         type: "object",
       },
       RecordingId: {
@@ -17621,6 +17971,27 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           },
         },
         required: ["capacity_available", "expires_at", "prepares_at", "ready", "revision", "space_id", "starts_at", "state", "updated_at"],
+        type: "object",
+      },
+      RecordingSource: {
+        additionalProperties: false,
+        properties: {
+          expires_at: {
+            anyOf: [
+              {
+                $ref: "#/components/schemas/DateTimeString",
+              },
+              {
+                type: "null",
+              },
+            ],
+          },
+          status: {
+            enum: ["pending", "available", "failed", "expired"],
+            type: "string",
+          },
+        },
+        required: ["status"],
         type: "object",
       },
       RefreshSpacePublicInviteAccessRequest: {
@@ -17681,6 +18052,11 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
       RemoveEpisodeParticipantRequest: {
         $ref: "#/components/schemas/LeaveDashboardSpaceSelfRequest",
       },
+      RequestRecordingExportRequest: {
+        additionalProperties: false,
+        properties: {},
+        type: "object",
+      },
       RequestTranscriptRequest: {
         additionalProperties: false,
         properties: {
@@ -17689,7 +18065,6 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             type: "string",
           },
           language: {
-            minLength: 1,
             type: "string",
           },
           languages: {
@@ -17697,11 +18072,10 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               minLength: 1,
               type: "string",
             },
-            minItems: 1,
             type: "array",
           },
         },
-        required: ["idempotency_key", "language", "languages"],
+        required: ["idempotency_key"],
         type: "object",
       },
       RotateAPIKeyRequest: {
@@ -18384,6 +18758,69 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         required: ["created_at", "episode_id", "generation", "id", "languages", "recording_id", "space_id", "status", "tenant_id", "updated_at"],
         type: "object",
       },
+      TranscriptDocument: {
+        additionalProperties: false,
+        properties: {
+          cues: {
+            items: {
+              additionalProperties: false,
+              properties: {
+                end_ms: {
+                  type: "integer",
+                },
+                identity: {
+                  additionalProperties: false,
+                  properties: {
+                    display_name: {
+                      type: ["string", "null"],
+                    },
+                    participant_generation: {
+                      type: "integer",
+                    },
+                    participant_ref: {
+                      type: "string",
+                    },
+                    track_epoch: {
+                      type: "string",
+                    },
+                    track_id: {
+                      type: "string",
+                    },
+                  },
+                  required: ["participant_generation", "participant_ref", "track_epoch", "track_id"],
+                  type: ["object", "null"],
+                },
+                overlap: {
+                  type: "boolean",
+                },
+                start_ms: {
+                  type: "integer",
+                },
+                text: {
+                  type: "string",
+                },
+              },
+              required: ["end_ms", "overlap", "start_ms", "text"],
+              type: "object",
+            },
+            type: "array",
+          },
+          episode_id: {
+            $ref: "#/components/schemas/EpisodeId",
+          },
+          recording_id: {
+            $ref: "#/components/schemas/RecordingId",
+          },
+          schema_version: {
+            type: "string",
+          },
+          transcript_id: {
+            $ref: "#/components/schemas/TranscriptId",
+          },
+        },
+        required: ["cues", "episode_id", "recording_id", "schema_version", "transcript_id"],
+        type: "object",
+      },
       TranscriptDownloadURL: {
         additionalProperties: false,
         properties: {
@@ -18647,7 +19084,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             type: "string",
           },
           transcription_source_window_seconds: {
-            maximum: 86400,
+            maximum: 2592000,
             minimum: 0,
             type: ["integer", "null"],
           },

@@ -175,6 +175,38 @@ func TestPersistFileRejectsNonRegularOrEmptyInput(t *testing.T) {
 	}
 }
 
+func TestValidateTimelineRequiresInstalledFrozenUIBuild(t *testing.T) {
+	installed := strings.Repeat("a", 64)
+	input := recordingrender.ResolvedInput{
+		PresentationSchemaVersion:  recordingrender.PresentationSchemaVersion,
+		PresentationProfileVersion: "composite_720p_v1",
+		RecordingID:                mustRenderAttemptID(t, "55555555-5555-4555-8555-555555555555"),
+		EpisodeID:                  mustRenderAttemptID(t, "44444444-4444-4444-8444-444444444444"),
+		CaptureEpoch:               4,
+		DurationMillis:             1_000,
+	}
+	timeline := recordingpresentation.Timeline{
+		SchemaVersion: recordingpresentation.SchemaVersion,
+		RecordingID:   input.RecordingID.String(),
+		EpisodeID:     input.EpisodeID.String(),
+		Clock: recordingpresentation.Clock{
+			Origin: "capture_ready", Timebase: "recording_relative_ms", CaptureEpoch: input.CaptureEpoch, DurationMillis: input.DurationMillis,
+		},
+		Initial: recordingpresentation.Snapshot{Profile: recordingpresentation.Profile{
+			Version: input.PresentationProfileVersion, UIBuildSHA256: installed,
+			Viewport: recordingpresentation.Viewport{Width: 1280, Height: 720, DeviceScaleFactor: 1},
+		}},
+	}
+	attempt := &ProductionRenderAttempt{config: ProductionRenderAttemptConfig{UIBuildRegistry: UIBuildRegistry{builds: map[string]struct{}{installed: {}}}}}
+	if err := attempt.validateTimeline(input, timeline); err != nil {
+		t.Fatalf("installed frozen UI build rejected: %v", err)
+	}
+	timeline.Initial.Profile.UIBuildSHA256 = strings.Repeat("b", 64)
+	if err := attempt.validateTimeline(input, timeline); !errors.Is(err, ErrInvalidProductionRenderAttempt) {
+		t.Fatalf("uninstalled frozen UI build error = %v", err)
+	}
+}
+
 func writeEmptyRenderFile(t *testing.T) string {
 	t.Helper()
 	path := t.TempDir() + "/empty.mp4"

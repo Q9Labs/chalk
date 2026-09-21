@@ -1273,9 +1273,29 @@ const recordingsGroup = HttpApiGroup.make("recordings")
         S.EpisodeInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.PaginationInvalidCursorErrorSchema.pipe(HttpApiSchema.status(400)),
         S.PaginationInvalidPageSizeErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("requestRecordingExport", "/v1/tenants/:tenant_id/recordings/:recording_id/export", {
+      params: S.RequestRecordingExportPathParamsSchema,
+      payload: S.RequestRecordingExportRequestBodySchema,
+      success: S.RequestRecordingExportResponseSchema.pipe(HttpApiSchema.status(202)),
+      error: [
+        S.RecordingInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RecordingNotReadyErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RecordingNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
@@ -1904,6 +1924,23 @@ const transcriptsGroup = HttpApiGroup.make("transcripts")
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.TranscriptNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("getTranscriptDocument", "/v1/tenants/:tenant_id/transcripts/:transcript_id/document", {
+      params: S.GetTranscriptDocumentPathParamsSchema,
+      success: S.GetTranscriptDocumentResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TranscriptInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RecordingArtifactNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.TranscriptNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.TranscriptNotReadyErrorSchema.pipe(HttpApiSchema.status(409)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],

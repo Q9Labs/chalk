@@ -12,7 +12,12 @@ import (
 )
 
 const authorizeRecordingRenderInput = `-- name: AuthorizeRecordingRenderInput :one
-select inputs.render_input_handle, inputs.tenant_id, inputs.space_id, inputs.episode_id, inputs.recording_id, inputs.render_job_id, inputs.attempt_count, inputs.fencing_generation, inputs.capture_epoch, inputs.envelope_digest, inputs.key_handle, inputs.object_handle, inputs.presentation_handle, inputs.presentation_schema_version, inputs.presentation_profile_version, inputs.presentation_sha256, inputs.presentation_duration_millis, inputs.capture_ready_at, inputs.created_at
+select inputs.render_input_handle, inputs.tenant_id, inputs.space_id, inputs.episode_id, inputs.recording_id, inputs.render_job_id, inputs.attempt_count, inputs.fencing_generation, inputs.capture_epoch, inputs.envelope_digest, inputs.key_handle, inputs.object_handle, inputs.presentation_handle, inputs.presentation_schema_version, inputs.presentation_profile_version, inputs.presentation_sha256, inputs.presentation_duration_millis, inputs.capture_ready_at, inputs.created_at,
+    (pipelines.capture_completed_at +
+        ((case when jobs.kind = 'transcription'
+            then recording_transcription_source_window_seconds(episodes.config_snapshot)
+            else recording_deferred_retention_seconds(episodes.config_snapshot)
+        end) * interval '1 second'))::timestamptz as source_expires_at
 from recording_render_inputs inputs
 join recording_jobs jobs on jobs.id = inputs.render_job_id
 join recording_job_attempt_authorities authority
@@ -20,6 +25,7 @@ join recording_job_attempt_authorities authority
  and authority.attempt_count = inputs.attempt_count
  and authority.fencing_generation = inputs.fencing_generation
 join recording_pipelines pipelines on pipelines.recording_id = inputs.recording_id
+join episodes on episodes.id = inputs.episode_id
 where inputs.render_input_handle = $1
   and inputs.tenant_id = $2
   and inputs.space_id = $3
@@ -32,7 +38,7 @@ where inputs.render_input_handle = $1
   and inputs.envelope_digest = $10
   and inputs.key_handle = $11
   and inputs.object_handle = $12
-  and jobs.kind = 'render'
+  and jobs.kind in ('render', 'transcription')
   and jobs.state = 'leased'
   and jobs.lease_token = $13
   and jobs.lease_owner = $14
@@ -42,8 +48,14 @@ where inputs.render_input_handle = $1
   and authority.envelope_digest = inputs.envelope_digest
   and authority.lease_token = $13
   and authority.lease_owner = $14
-  and pipelines.state = 'rendering'
+  and ((jobs.kind = 'render' and pipelines.state = 'rendering')
+    or (jobs.kind = 'transcription' and pipelines.state = 'capture_complete'))
 	and pipelines.capture_completed_at is not null
+  and pipelines.capture_completed_at +
+      ((case when jobs.kind = 'transcription'
+          then recording_transcription_source_window_seconds(episodes.config_snapshot)
+          else recording_deferred_retention_seconds(episodes.config_snapshot)
+      end) * interval '1 second') > clock_timestamp()
 for share of jobs
 `
 
@@ -65,7 +77,30 @@ type AuthorizeRecordingRenderInputParams struct {
 	LeaseExpiresAt    pgtype.Timestamptz `json:"lease_expires_at"`
 }
 
-func (q *Queries) AuthorizeRecordingRenderInput(ctx context.Context, arg AuthorizeRecordingRenderInputParams) (RecordingRenderInput, error) {
+type AuthorizeRecordingRenderInputRow struct {
+	RenderInputHandle          pgtype.UUID        `json:"render_input_handle"`
+	TenantID                   pgtype.UUID        `json:"tenant_id"`
+	SpaceID                    pgtype.UUID        `json:"space_id"`
+	EpisodeID                  pgtype.UUID        `json:"episode_id"`
+	RecordingID                pgtype.UUID        `json:"recording_id"`
+	RenderJobID                pgtype.UUID        `json:"render_job_id"`
+	AttemptCount               int32              `json:"attempt_count"`
+	FencingGeneration          int64              `json:"fencing_generation"`
+	CaptureEpoch               int64              `json:"capture_epoch"`
+	EnvelopeDigest             []byte             `json:"envelope_digest"`
+	KeyHandle                  pgtype.UUID        `json:"key_handle"`
+	ObjectHandle               pgtype.UUID        `json:"object_handle"`
+	PresentationHandle         pgtype.UUID        `json:"presentation_handle"`
+	PresentationSchemaVersion  string             `json:"presentation_schema_version"`
+	PresentationProfileVersion string             `json:"presentation_profile_version"`
+	PresentationSha256         []byte             `json:"presentation_sha256"`
+	PresentationDurationMillis int64              `json:"presentation_duration_millis"`
+	CaptureReadyAt             pgtype.Timestamptz `json:"capture_ready_at"`
+	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
+	SourceExpiresAt            pgtype.Timestamptz `json:"source_expires_at"`
+}
+
+func (q *Queries) AuthorizeRecordingRenderInput(ctx context.Context, arg AuthorizeRecordingRenderInputParams) (AuthorizeRecordingRenderInputRow, error) {
 	row := q.db.QueryRow(ctx, authorizeRecordingRenderInput,
 		arg.RenderInputHandle,
 		arg.TenantID,
@@ -83,7 +118,7 @@ func (q *Queries) AuthorizeRecordingRenderInput(ctx context.Context, arg Authori
 		arg.LeaseOwner,
 		arg.LeaseExpiresAt,
 	)
-	var i RecordingRenderInput
+	var i AuthorizeRecordingRenderInputRow
 	err := row.Scan(
 		&i.RenderInputHandle,
 		&i.TenantID,
@@ -104,6 +139,7 @@ func (q *Queries) AuthorizeRecordingRenderInput(ctx context.Context, arg Authori
 		&i.PresentationDurationMillis,
 		&i.CaptureReadyAt,
 		&i.CreatedAt,
+		&i.SourceExpiresAt,
 	)
 	return i, err
 }
@@ -120,7 +156,7 @@ where allocations.id = $7
   and allocations.state = 'allocated'
   and allocations.attempt_count = jobs.attempt_count
   and allocations.fencing_generation = jobs.fencing_generation
-  and jobs.kind = 'render'
+  and jobs.kind in ('render', 'transcription')
   and jobs.state = 'leased'
   and jobs.lease_token = $8
   and jobs.lease_owner = $9
@@ -226,14 +262,32 @@ with render_commit as (
 ), artifact as (
     insert into recording_artifacts (
         recording_id, tenant_id, render_job_id, object_key, content_type,
-        byte_size, checksum, duration_millis, committed_at, created_at
+        byte_size, checksum, duration_millis, committed_at, expires_at, created_at
     )
     select render_commit.recording_id, render_commit.tenant_id, render_commit.render_job_id,
         video.object_key, video.object_content_type, video.object_byte_size,
         video.object_sha256, render_commit.duration_millis,
-        render_commit.committed_at, render_commit.committed_at
-    from render_commit join video on true
-    returning recording_id, tenant_id, render_job_id, object_key, content_type, byte_size, checksum, duration_millis, committed_at, created_at
+        render_commit.committed_at,
+        pipelines.capture_completed_at +
+            (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second'),
+        render_commit.committed_at
+    from render_commit
+    join video on true
+    join recording_pipelines pipelines on pipelines.recording_id = render_commit.recording_id
+    join recordings on recordings.id = render_commit.recording_id
+    join episodes on episodes.id = recordings.episode_id
+    returning recording_id, tenant_id, render_job_id, object_key, content_type, byte_size, checksum, duration_millis, committed_at, expires_at, created_at
+), artifact_cleanup as (
+    insert into transcription_cleanup_jobs (
+        id, tenant_id, recording_id, transcript_id, object_key, object_kind, due_at
+    )
+    select gen_random_uuid(), artifact.tenant_id, artifact.recording_id, null,
+        artifact.object_key, 'recording_source', artifact.expires_at
+    from artifact
+    on conflict (recording_id, object_key) do update set
+        due_at = least(transcription_cleanup_jobs.due_at, excluded.due_at),
+        updated_at = now()
+    returning id
 ), completed_job as (
     update recording_jobs jobs
     set state = 'succeeded', lease_token = null, lease_owner = null,
@@ -262,8 +316,10 @@ with render_commit as (
     where pipelines.recording_id = render_commit.recording_id and pipelines.state = 'rendering'
     returning pipelines.recording_id
 )
-select artifact.recording_id, artifact.tenant_id, artifact.render_job_id, artifact.object_key, artifact.content_type, artifact.byte_size, artifact.checksum, artifact.duration_millis, artifact.committed_at, artifact.created_at
-from artifact join completed_pipeline on completed_pipeline.recording_id = artifact.recording_id
+select artifact.recording_id, artifact.tenant_id, artifact.render_job_id, artifact.object_key, artifact.content_type, artifact.byte_size, artifact.checksum, artifact.duration_millis, artifact.committed_at, artifact.expires_at, artifact.created_at
+from artifact
+join completed_pipeline on completed_pipeline.recording_id = artifact.recording_id
+cross join (select count(*) from artifact_cleanup) cleanup
 `
 
 type CompleteRecordingRenderParams struct {
@@ -294,6 +350,7 @@ type CompleteRecordingRenderRow struct {
 	Checksum       []byte             `json:"checksum"`
 	DurationMillis int64              `json:"duration_millis"`
 	CommittedAt    pgtype.Timestamptz `json:"committed_at"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -326,9 +383,86 @@ func (q *Queries) CompleteRecordingRender(ctx context.Context, arg CompleteRecor
 		&i.Checksum,
 		&i.DurationMillis,
 		&i.CommittedAt,
+		&i.ExpiresAt,
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const completeRecordingTranscriptionPreparation = `-- name: CompleteRecordingTranscriptionPreparation :one
+with preparation_commit as (
+    insert into recording_transcription_preparation_commits (
+        transcription_job_id, tenant_id, recording_id, attempt_count,
+        fencing_generation, capture_epoch, render_input_handle, commit_digest,
+        presentation_sha256, duration_millis, transcription_source_id, committed_at
+    ) values (
+        $1, $2, $3,
+        $4, $5, $6,
+        $7, $8, $9,
+        $10, $11, $12
+    )
+    returning transcription_job_id, tenant_id, recording_id, attempt_count, fencing_generation, capture_epoch, render_input_handle, commit_digest, presentation_sha256, duration_millis, transcription_source_id, committed_at
+), completed_job as (
+    update recording_jobs jobs
+    set state = 'succeeded', lease_token = null, lease_owner = null,
+        lease_expires_at = null, terminal_at = preparation_commit.committed_at,
+        updated_at = preparation_commit.committed_at
+    from preparation_commit
+    where jobs.id = preparation_commit.transcription_job_id
+      and jobs.kind = 'transcription'
+      and jobs.state = 'leased'
+      and jobs.attempt_count = preparation_commit.attempt_count
+      and jobs.fencing_generation = preparation_commit.fencing_generation
+      and jobs.lease_token = $13
+      and jobs.lease_owner = $14
+      and jobs.lease_expires_at = $15
+      and jobs.lease_expires_at > clock_timestamp()
+    returning jobs.id
+)
+select preparation_commit.transcription_source_id
+from preparation_commit
+join completed_job on completed_job.id = preparation_commit.transcription_job_id
+`
+
+type CompleteRecordingTranscriptionPreparationParams struct {
+	TranscriptionJobID    pgtype.UUID        `json:"transcription_job_id"`
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	RecordingID           pgtype.UUID        `json:"recording_id"`
+	AttemptCount          int32              `json:"attempt_count"`
+	FencingGeneration     int64              `json:"fencing_generation"`
+	CaptureEpoch          int64              `json:"capture_epoch"`
+	RenderInputHandle     pgtype.UUID        `json:"render_input_handle"`
+	CommitDigest          []byte             `json:"commit_digest"`
+	PresentationSha256    []byte             `json:"presentation_sha256"`
+	DurationMillis        int64              `json:"duration_millis"`
+	TranscriptionSourceID pgtype.UUID        `json:"transcription_source_id"`
+	CommittedAt           pgtype.Timestamptz `json:"committed_at"`
+	LeaseToken            pgtype.Text        `json:"lease_token"`
+	LeaseOwner            pgtype.Text        `json:"lease_owner"`
+	LeaseExpiresAt        pgtype.Timestamptz `json:"lease_expires_at"`
+}
+
+func (q *Queries) CompleteRecordingTranscriptionPreparation(ctx context.Context, arg CompleteRecordingTranscriptionPreparationParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, completeRecordingTranscriptionPreparation,
+		arg.TranscriptionJobID,
+		arg.TenantID,
+		arg.RecordingID,
+		arg.AttemptCount,
+		arg.FencingGeneration,
+		arg.CaptureEpoch,
+		arg.RenderInputHandle,
+		arg.CommitDigest,
+		arg.PresentationSha256,
+		arg.DurationMillis,
+		arg.TranscriptionSourceID,
+		arg.CommittedAt,
+		arg.LeaseToken,
+		arg.LeaseOwner,
+		arg.LeaseExpiresAt,
+	)
+	var transcription_source_id pgtype.UUID
+	err := row.Scan(&transcription_source_id)
+	return transcription_source_id, err
 }
 
 const finalizeRecordingRenderObject = `-- name: FinalizeRecordingRenderObject :one
@@ -355,7 +489,7 @@ where allocations.id = $7
   )
   and allocations.attempt_count = jobs.attempt_count
   and allocations.fencing_generation = jobs.fencing_generation
-  and jobs.kind = 'render'
+  and jobs.kind in ('render', 'transcription')
   and jobs.state = 'leased'
   and jobs.lease_token = $8
   and jobs.lease_owner = $9
@@ -433,6 +567,8 @@ select data_keys.recording_id, data_keys.capture_epoch, data_keys.tenant_id,
     data_keys.created_at
 from recording_render_inputs inputs
 join recording_jobs render_jobs on render_jobs.id = inputs.render_job_id
+join recording_pipelines pipelines on pipelines.recording_id = inputs.recording_id
+join episodes on episodes.id = inputs.episode_id
 join recording_data_keys data_keys
   on data_keys.recording_id = inputs.recording_id
  and data_keys.capture_epoch = $1
@@ -448,12 +584,17 @@ where inputs.render_input_handle = $2
   and inputs.envelope_digest = $11
   and inputs.key_handle = $12
   and inputs.object_handle = $13
-  and render_jobs.kind = 'render'
+  and render_jobs.kind in ('render', 'transcription')
   and render_jobs.state = 'leased'
   and render_jobs.lease_token = $14
   and render_jobs.lease_owner = $15
   and render_jobs.lease_expires_at = $16
   and render_jobs.lease_expires_at > clock_timestamp()
+  and pipelines.capture_completed_at +
+      ((case when render_jobs.kind = 'transcription'
+          then recording_transcription_source_window_seconds(episodes.config_snapshot)
+          else recording_deferred_retention_seconds(episodes.config_snapshot)
+      end) * interval '1 second') > clock_timestamp()
   and exists (
       select 1
       from recording_bundle_allocations allocations
@@ -702,7 +843,7 @@ where allocations.id = $1
   and inputs.fencing_generation = $11
   and inputs.capture_epoch = $12
   and inputs.envelope_digest = $13
-  and jobs.kind = 'render'
+  and jobs.kind in ('render', 'transcription')
   and jobs.state = 'leased'
   and jobs.lease_token = $14
   and jobs.lease_owner = $15
@@ -850,7 +991,7 @@ where allocations.upload_token_hash = $1
   and inputs.fencing_generation = $11
   and inputs.capture_epoch = $12
   and inputs.envelope_digest = $13
-  and jobs.kind = 'render'
+  and jobs.kind in ('render', 'transcription')
   and jobs.state = 'leased'
   and jobs.lease_token = $14
   and jobs.lease_owner = $15
@@ -931,6 +1072,67 @@ func (q *Queries) GetRecordingRenderObjectByTokenHash(ctx context.Context, arg G
 	return i, err
 }
 
+const getRecordingTranscriptionPreparationCommit = `-- name: GetRecordingTranscriptionPreparationCommit :one
+select commits.transcription_source_id
+from recording_transcription_preparation_commits commits
+join recording_render_inputs inputs on inputs.render_input_handle = commits.render_input_handle
+join recording_jobs jobs on jobs.id = commits.transcription_job_id
+where commits.transcription_job_id = $1
+  and commits.tenant_id = $2
+  and commits.recording_id = $3
+  and commits.attempt_count = $4
+  and commits.fencing_generation = $5
+  and commits.capture_epoch = $6
+  and commits.render_input_handle = $7
+  and commits.commit_digest = $8
+  and commits.presentation_sha256 = $9
+  and commits.duration_millis = $10
+  and inputs.space_id = $11
+  and inputs.envelope_digest = $12
+  and inputs.key_handle = $13
+  and inputs.object_handle = $14
+  and jobs.kind = 'transcription'
+`
+
+type GetRecordingTranscriptionPreparationCommitParams struct {
+	TranscriptionJobID pgtype.UUID `json:"transcription_job_id"`
+	TenantID           pgtype.UUID `json:"tenant_id"`
+	RecordingID        pgtype.UUID `json:"recording_id"`
+	AttemptCount       int32       `json:"attempt_count"`
+	FencingGeneration  int64       `json:"fencing_generation"`
+	CaptureEpoch       int64       `json:"capture_epoch"`
+	RenderInputHandle  pgtype.UUID `json:"render_input_handle"`
+	CommitDigest       []byte      `json:"commit_digest"`
+	PresentationSha256 []byte      `json:"presentation_sha256"`
+	DurationMillis     int64       `json:"duration_millis"`
+	SpaceID            pgtype.UUID `json:"space_id"`
+	EnvelopeDigest     []byte      `json:"envelope_digest"`
+	KeyHandle          pgtype.UUID `json:"key_handle"`
+	ObjectHandle       pgtype.UUID `json:"object_handle"`
+}
+
+func (q *Queries) GetRecordingTranscriptionPreparationCommit(ctx context.Context, arg GetRecordingTranscriptionPreparationCommitParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getRecordingTranscriptionPreparationCommit,
+		arg.TranscriptionJobID,
+		arg.TenantID,
+		arg.RecordingID,
+		arg.AttemptCount,
+		arg.FencingGeneration,
+		arg.CaptureEpoch,
+		arg.RenderInputHandle,
+		arg.CommitDigest,
+		arg.PresentationSha256,
+		arg.DurationMillis,
+		arg.SpaceID,
+		arg.EnvelopeDigest,
+		arg.KeyHandle,
+		arg.ObjectHandle,
+	)
+	var transcription_source_id pgtype.UUID
+	err := row.Scan(&transcription_source_id)
+	return transcription_source_id, err
+}
+
 const insertRecordingRenderInput = `-- name: InsertRecordingRenderInput :one
 with authorized as (
     select jobs.id
@@ -948,7 +1150,7 @@ with authorized as (
       and jobs.tenant_id = $2
       and jobs.episode_id = $4
       and jobs.recording_id = $5
-      and jobs.kind = 'render'
+      and jobs.kind in ('render', 'transcription')
       and jobs.state = 'leased'
       and jobs.attempt_count = $6
       and jobs.fencing_generation = $7
@@ -960,7 +1162,8 @@ with authorized as (
       and authority.envelope_digest = $9
       and authority.lease_token = $19
       and authority.lease_owner = $20
-      and pipelines.state = 'rendering'
+      and ((jobs.kind = 'render' and pipelines.state = 'rendering')
+        or (jobs.kind = 'transcription' and pipelines.state = 'capture_complete'))
       and pipelines.capture_completed_at is not null
       and reservations.space_id = $3
       and reservations.episode_id = $4
@@ -1176,6 +1379,7 @@ from recording_render_inputs inputs
 join recording_jobs jobs on jobs.id = inputs.render_job_id
 join recording_pipelines pipelines on pipelines.recording_id = inputs.recording_id
 join recordings on recordings.id = inputs.recording_id
+join episodes on episodes.id = inputs.episode_id
 where inputs.render_input_handle = $1
   and inputs.tenant_id = $2
   and inputs.space_id = $3
@@ -1195,6 +1399,8 @@ where inputs.render_input_handle = $1
   and jobs.lease_expires_at = $15
   and jobs.lease_expires_at > clock_timestamp()
   and pipelines.state = 'rendering'
+  and pipelines.capture_completed_at +
+      (recording_deferred_retention_seconds(episodes.config_snapshot) * interval '1 second') > clock_timestamp()
   and recordings.status in ('pending', 'processing')
 for update of jobs, recordings
 `
@@ -1256,11 +1462,104 @@ func (q *Queries) LockRecordingRenderCommitAuthority(ctx context.Context, arg Lo
 	return i, err
 }
 
+const lockRecordingTranscriptionPreparationAuthority = `-- name: LockRecordingTranscriptionPreparationAuthority :one
+select inputs.presentation_sha256, inputs.presentation_duration_millis,
+    inputs.presentation_handle, inputs.presentation_schema_version,
+    inputs.presentation_profile_version, inputs.capture_ready_at
+from recording_render_inputs inputs
+join recording_jobs jobs on jobs.id = inputs.render_job_id
+join recording_pipelines pipelines on pipelines.recording_id = inputs.recording_id
+join recordings on recordings.id = inputs.recording_id
+join episodes on episodes.id = inputs.episode_id
+where inputs.render_input_handle = $1
+  and inputs.tenant_id = $2
+  and inputs.space_id = $3
+  and inputs.episode_id = $4
+  and inputs.recording_id = $5
+  and inputs.render_job_id = $6
+  and inputs.attempt_count = $7
+  and inputs.fencing_generation = $8
+  and inputs.capture_epoch = $9
+  and inputs.envelope_digest = $10
+  and inputs.key_handle = $11
+  and inputs.object_handle = $12
+  and jobs.kind = 'transcription'
+  and jobs.state = 'leased'
+  and jobs.lease_token = $13
+  and jobs.lease_owner = $14
+  and jobs.lease_expires_at = $15
+  and jobs.lease_expires_at > clock_timestamp()
+  and pipelines.state = 'capture_complete'
+  and pipelines.capture_completed_at +
+      (recording_transcription_source_window_seconds(episodes.config_snapshot) * interval '1 second') > clock_timestamp()
+  and recordings.status in ('pending', 'processing')
+for update of jobs, recordings
+`
+
+type LockRecordingTranscriptionPreparationAuthorityParams struct {
+	RenderInputHandle pgtype.UUID        `json:"render_input_handle"`
+	TenantID          pgtype.UUID        `json:"tenant_id"`
+	SpaceID           pgtype.UUID        `json:"space_id"`
+	EpisodeID         pgtype.UUID        `json:"episode_id"`
+	RecordingID       pgtype.UUID        `json:"recording_id"`
+	RenderJobID       pgtype.UUID        `json:"render_job_id"`
+	AttemptCount      int32              `json:"attempt_count"`
+	FencingGeneration int64              `json:"fencing_generation"`
+	CaptureEpoch      int64              `json:"capture_epoch"`
+	EnvelopeDigest    []byte             `json:"envelope_digest"`
+	KeyHandle         pgtype.UUID        `json:"key_handle"`
+	ObjectHandle      pgtype.UUID        `json:"object_handle"`
+	LeaseToken        pgtype.Text        `json:"lease_token"`
+	LeaseOwner        pgtype.Text        `json:"lease_owner"`
+	LeaseExpiresAt    pgtype.Timestamptz `json:"lease_expires_at"`
+}
+
+type LockRecordingTranscriptionPreparationAuthorityRow struct {
+	PresentationSha256         []byte             `json:"presentation_sha256"`
+	PresentationDurationMillis int64              `json:"presentation_duration_millis"`
+	PresentationHandle         pgtype.UUID        `json:"presentation_handle"`
+	PresentationSchemaVersion  string             `json:"presentation_schema_version"`
+	PresentationProfileVersion string             `json:"presentation_profile_version"`
+	CaptureReadyAt             pgtype.Timestamptz `json:"capture_ready_at"`
+}
+
+func (q *Queries) LockRecordingTranscriptionPreparationAuthority(ctx context.Context, arg LockRecordingTranscriptionPreparationAuthorityParams) (LockRecordingTranscriptionPreparationAuthorityRow, error) {
+	row := q.db.QueryRow(ctx, lockRecordingTranscriptionPreparationAuthority,
+		arg.RenderInputHandle,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.RecordingID,
+		arg.RenderJobID,
+		arg.AttemptCount,
+		arg.FencingGeneration,
+		arg.CaptureEpoch,
+		arg.EnvelopeDigest,
+		arg.KeyHandle,
+		arg.ObjectHandle,
+		arg.LeaseToken,
+		arg.LeaseOwner,
+		arg.LeaseExpiresAt,
+	)
+	var i LockRecordingTranscriptionPreparationAuthorityRow
+	err := row.Scan(
+		&i.PresentationSha256,
+		&i.PresentationDurationMillis,
+		&i.PresentationHandle,
+		&i.PresentationSchemaVersion,
+		&i.PresentationProfileVersion,
+		&i.CaptureReadyAt,
+	)
+	return i, err
+}
+
 const reserveRecordingRenderObject = `-- name: ReserveRecordingRenderObject :one
 with authorized as (
     select inputs.render_job_id
     from recording_render_inputs inputs
     join recording_jobs jobs on jobs.id = inputs.render_job_id
+    join recording_pipelines pipelines on pipelines.recording_id = inputs.recording_id
+    join episodes on episodes.id = inputs.episode_id
     where inputs.render_input_handle = $6
       and inputs.tenant_id = $3
       and inputs.space_id = $14
@@ -1273,12 +1572,17 @@ with authorized as (
       and inputs.capture_epoch = $10
       and inputs.envelope_digest = $11
       and inputs.key_handle = $16
-      and jobs.kind = 'render'
+      and jobs.kind in ('render', 'transcription')
       and jobs.state = 'leased'
       and jobs.lease_token = $17
       and jobs.lease_owner = $18
       and jobs.lease_expires_at = $19
       and jobs.lease_expires_at > clock_timestamp()
+      and pipelines.capture_completed_at +
+          ((case when jobs.kind = 'transcription'
+              then recording_transcription_source_window_seconds(episodes.config_snapshot)
+              else recording_deferred_retention_seconds(episodes.config_snapshot)
+          end) * interval '1 second') > clock_timestamp()
     for update of jobs
 ), next_version as (
     select coalesce(max(allocation_version), 0) + 1 as value

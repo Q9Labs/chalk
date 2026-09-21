@@ -42,6 +42,7 @@ variables {
   control_api_audience            = "chalk-transcription-test"
   privacy_gate_accepted           = true
   deepinfra_enabled               = true
+  scheduler_state                 = "DISABLED"
   deepinfra_corpus_digest         = "0000000000000000000000000000000000000000000000000000000000000000"
   deepinfra_token_parameter_arn   = "arn:aws:ssm:us-east-1:123456789012:parameter/test/deepinfra"
   api_workload_auth_parameter_arn = "arn:aws:ssm:us-east-1:123456789012:parameter/test/control"
@@ -69,6 +70,11 @@ run "deepinfra_without_customer_vpc" {
   assert {
     condition     = contains(output.required_egress_destinations, "api.deepinfra.com") && !contains(output.required_egress_destinations, "api.cloudflare.com")
     error_message = "The outbound inventory must reflect only enabled providers."
+  }
+
+  assert {
+    condition     = !contains(keys(aws_lambda_function.dispatcher.environment[0].variables), "CLOUDFLARE_AI_TOKEN_PARAMETER_ARN") && !contains(keys(aws_lambda_function.dispatcher.environment[0].variables), "DEEPINFRA_EXECUTION_IDENTITY_PIN") && !contains(keys(aws_lambda_function.dispatcher.environment[0].variables), "DEEPINFRA_MODEL_VERSION_PIN")
+    error_message = "Disabled-provider credentials and unobserved optional DeepInfra pins must not be placed in the Lambda environment."
   }
 }
 

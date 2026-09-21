@@ -18,7 +18,10 @@ job_demand as (
         count(*) filter (where state = 'leased' and lease_expires_at > sqlc.arg(observed_at)::timestamptz)::integer as leased_jobs,
         max(updated_at) as job_revision
     from recording_jobs
-    where kind = sqlc.arg(role)
+    where (
+        kind = sqlc.arg(role)
+        or (sqlc.arg(role)::text = 'render' and kind = 'transcription')
+    )
       and state in ('pending', 'retryable_failure', 'leased')
       and (
           sqlc.arg(role)::text <> 'capture'

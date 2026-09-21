@@ -8,9 +8,12 @@ import (
 )
 
 const (
-	SnapshotSchemaVersion         = "episode_config.v2"
-	RecordingProfile              = "composite_720p_v1"
-	MaximumSourceWindow           = 24 * time.Hour
+	SnapshotSchemaVersion = "episode_config.v2"
+	RecordingProfile      = "composite_720p_v1"
+	// MaximumSourceWindow bounds the sealed capture inputs used by both
+	// automatic transcription and the deferred MP4 export. It is anchored at
+	// capture completion; neither playback nor download requests renew it.
+	MaximumSourceWindow           = 30 * 24 * time.Hour
 	MaximumRetentionSeconds int64 = math.MaxInt64 / int64(time.Second)
 )
 

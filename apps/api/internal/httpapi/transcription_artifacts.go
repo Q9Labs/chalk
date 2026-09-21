@@ -58,21 +58,22 @@ type requestTranscriptResponse struct {
 
 type requestTranscriptBody struct {
 	IdempotencyKey string   `json:"idempotency_key"`
-	Language       string   `json:"language"`
-	Languages      []string `json:"languages"`
+	Language       string   `json:"language,omitempty"`
+	Languages      []string `json:"languages,omitempty"`
 }
 
-func mountTranscriptArtifactRoutes(r chi.Router, service TranscriptArtifactService, downloads RecordingDownloadService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	for _, endpoint := range transcriptArtifactEndpoints(service, downloads, authorizer) {
+func mountTranscriptArtifactRoutes(r chi.Router, service TranscriptArtifactService, objects RecordingObjectService, downloads RecordingDownloadService, authorizer TenantAuthorizer, limits RateLimitOptions) {
+	for _, endpoint := range transcriptArtifactEndpoints(service, objects, downloads, authorizer) {
 		endpoint.Mount(r, limits)
 	}
 }
 
-func transcriptArtifactEndpoints(service TranscriptArtifactService, downloads RecordingDownloadService, authorizer TenantAuthorizer) []RouteEndpoint {
+func transcriptArtifactEndpoints(service TranscriptArtifactService, objects RecordingObjectService, downloads RecordingDownloadService, authorizer TenantAuthorizer) []RouteEndpoint {
 	return []RouteEndpoint{
 		requestTranscriptEndpoint(service, authorizer),
 		listTranscriptArtifactEndpoint(service, authorizer),
 		getTranscriptArtifactEndpoint(service, authorizer),
+		transcriptDocumentEndpoint(service, objects, authorizer),
 		deleteTranscriptArtifactEndpoint(service, authorizer),
 		transcriptArtifactDownloadEndpoint(service, downloads, authorizer),
 	}

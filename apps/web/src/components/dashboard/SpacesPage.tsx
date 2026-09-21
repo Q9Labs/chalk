@@ -6,7 +6,7 @@ import { NewSpaceDialog } from "./NewSpaceDialog";
 import { SpaceLifecycleDialog } from "./SpaceLifecycleDialog";
 import { dashboardSpaceHref, defaultSpaceHrefBuilder, type SpaceHrefBuilder } from "./space-links";
 
-type SpacesPageProps = { tenantID?: string; spaceHrefBuilder?: SpaceHrefBuilder };
+type SpacesPageProps = { tenantID?: string; transcriptionCeiling?: string | null; spaceHrefBuilder?: SpaceHrefBuilder };
 export type SpaceFilter = "all" | "active" | "archived";
 
 function matchesSpaceFilter(space: Space, filter: SpaceFilter): boolean {
@@ -23,7 +23,7 @@ export function reconcileSpaceItems(current: Space[], next: Space, filter: Space
   return updated;
 }
 
-export function SpacesPage({ tenantID, spaceHrefBuilder = defaultSpaceHrefBuilder }: SpacesPageProps) {
+export function SpacesPage({ tenantID, transcriptionCeiling, spaceHrefBuilder = defaultSpaceHrefBuilder }: SpacesPageProps) {
   const [spaceItems, setSpaceItems] = useState<Space[]>([]);
   const [filter, setFilter] = useState<SpaceFilter>("all");
   const [query, setQuery] = useState("");
@@ -174,13 +174,14 @@ export function SpacesPage({ tenantID, spaceHrefBuilder = defaultSpaceHrefBuilde
       <NewSpaceDialog
         open={createOpen}
         tenantID={tenantID}
+        transcriptionCeiling={transcriptionCeiling}
         onClose={() => setCreateOpen(false)}
         onCreated={(space) => {
           addSpace(space);
           setCreatedSpace(space);
         }}
       />
-      <EditSpaceDialog open={editSpace !== null} tenantID={tenantID} space={editSpace} onClose={() => setEditSpace(null)} onSaved={replaceSpace} />
+      <EditSpaceDialog open={editSpace !== null} tenantID={tenantID} transcriptionCeiling={transcriptionCeiling} space={editSpace} onClose={() => setEditSpace(null)} onSaved={replaceSpace} />
       <SpaceLifecycleDialog open={lifecycle !== null} tenantID={tenantID} space={lifecycle?.space ?? null} action={lifecycle?.action ?? "archive"} onClose={() => setLifecycle(null)} onChanged={replaceSpace} />
     </div>
   );

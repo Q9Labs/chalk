@@ -153,7 +153,8 @@ launch both `c-2` capture and `c-8` render nodes:
 sudo infrastructure/recorder/images/cpu/build-release.sh \
   --source /absolute/path/to/chalk \
   --release-id <release-id> \
-  --output /absolute/path/chalk-recorder-cpu.tar.gz
+  --output /absolute/path/chalk-recorder-cpu.tar.gz \
+  --retained-ui-client-archive /absolute/path/retained-ui-<sha256>.tar.gz
 
 sudo infrastructure/recorder/images/cpu/install.sh \
   --bundle /absolute/path/chalk-recorder-cpu.tar.gz \
@@ -214,6 +215,51 @@ recomputes the directory digest, and requires both values to equal the
 must therefore be copied from the manifest produced by the exact client tree
 shipped in the render image, not recomputed over a different directory or
 release.
+
+### Deferred Export UI compatibility
+
+An MP4 Export replays the immutable `uiBuildSha256` frozen in the Recording
+presentation. A new recorder image therefore carries the current `dist/client`
+tree and every exact client tree still needed by a source-eligible Recording.
+The image-local `recording-ui-builds.json` registry contains only `client` and
+`retained-clients/<sha256>` paths. The Go worker rejects a frozen hash absent
+from that bounded registry; the Node renderer then resolves only that local
+path and recomputes the selected tree before serving it. There is no URL,
+arbitrary-path, or fallback-build selection.
+
+Retained browser bundles continue to use the renderer's local, read-only
+runtime surface (`/runtime/input`, `/runtime/assets/<id>`, and
+`/runtime/media/<id>`). Recorder releases must preserve that v1 surface while a
+retained client can be selected. A deliberate incompatible renderer-runtime
+change needs separately version-routed whole images; it cannot be hidden by
+rewriting a frozen presentation or substituting a UI digest.
+
+Pass each prior static client tree as
+`--retained-ui-client-archive /absolute/path/<archive>.tar.gz`. The archive
+must contain exactly one top-level `client/` tree from a prior immutable
+recorder release, including its `recording-ui-build.json`; symlinks, special
+files, extra top-level paths, traversal, duplicate builds, and a duplicate of
+the current digest are rejected. The builder verifies the archived manifest by
+recomputing its domain-separated digest, copies it under
+`retained-clients/<sha256>`, and regenerates the registry. The installer
+re-verifies every registered tree before it creates the immutable snapshot.
+Create that input archive from the verified prior release tree, for example:
+
+```sh
+tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner \
+  -C /absolute/path/to/prior-release/renderer/dist \
+  -czf /absolute/path/retained-ui-<sha256>.tar.gz client
+```
+
+Before a UI cutover, produce a private inventory of every frozen
+`uiBuildSha256` whose capture source remains within the 30-day
+capture-completion retention window, plus hashes used by active render jobs and
+currently active captures whose frozen presentation can still complete. Each
+must be current or supplied in an archive. Keep a release artifact archive for
+each such static tree. Do not remove a retained tree from a later image until
+its source window and active-capture margin have elapsed and no job using it can
+resume. This is an inventory proof for the release operator, not eager rendering
+of any Recording.
 
 Capture bundles are private R2 objects under
 `temporary/recordings/<recording>/capture/<epoch>/bundles/...`. The fixed

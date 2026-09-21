@@ -81,6 +81,17 @@ func TestPresentationCatalogAllowsVisibilityChangeButRejectsIdentityChange(t *te
 	}
 }
 
+func TestRequestIncludesSourceUsesExplicitKindsOrAllSources(t *testing.T) {
+	t.Parallel()
+	microphoneOnly := Request{IncludedSourceKinds: []recordingpresentation.MediaKind{recordingpresentation.MediaKindMicrophone}}
+	if !microphoneOnly.includesSource(recordingpresentation.MediaKindMicrophone) || microphoneOnly.includesSource(recordingpresentation.MediaKindCamera) {
+		t.Fatalf("microphone source filter = %#v", microphoneOnly.IncludedSourceKinds)
+	}
+	if !(Request{}).includesSource(recordingpresentation.MediaKindCamera) {
+		t.Fatal("empty source filter did not preserve all-source decoding")
+	}
+}
+
 func TestIngestBundlesUsesExactKeyAndAuthorityForEachCaptureEpoch(t *testing.T) {
 	t.Parallel()
 	const (
@@ -181,17 +192,7 @@ func TestWriteDecodesSeekableVP8OnRecordingClock(t *testing.T) {
 	}
 
 	root := t.TempDir()
-	inputIVF := filepath.Join(root, "input.ivf")
-	command := exec.Command("ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
-		"-f", "lavfi", "-i", "color=c=red:s=16x16:r=30:d=0.1", "-frames:v", "3",
-		"-c:v", "libvpx", "-g", "30", "-f", "ivf", inputIVF)
-	if output, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("generate VP8 fixture: %v: %s", err, output)
-	}
-	frames := readIVFFrames(t, inputIVF)
-	if len(frames) != 3 {
-		t.Fatalf("fixture frames = %d, want 3", len(frames))
-	}
+	frames := generateVP8Frames(t, root)
 
 	presentation := decodePresentationFixture(t)
 	participantID := presentation.Initial.Participants[0].ID
@@ -266,6 +267,23 @@ func TestWriteDecodesSeekableVP8OnRecordingClock(t *testing.T) {
 	if source.Codec != "vp8" || source.Container != "webm" || source.StartMS != 100 || source.EndMS != 200 {
 		t.Fatalf("source = %#v", source)
 	}
+	filtered, err := Write(context.Background(), Request{
+		RecordingID: presentation.RecordingID, EpisodeID: presentation.EpisodeID,
+		TenantID: "00000000-0000-4000-8000-000000000009", Environment: "test",
+		OriginAuthorityID: presentation.Clock.OriginAuthorityID,
+		CaptureEpoch:      1, DurationMS: presentation.Clock.DurationMillis,
+		OutputDirectory: filepath.Join(root, "decoded-microphone-only"), Presentation: presentation,
+		Bundles:             []BundleFile{{Path: bundlePath, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encrypted), Sequence: 0, CaptureEpoch: 1, CaptureJobID: "00000000-0000-4000-8000-000000000008", RecorderEnvelopeDigest: strings.Repeat("42", 32)}},
+		DataKeys:            []DataKey{{CaptureEpoch: 1, Plaintext: append([]byte(nil), key...)}},
+		IncludedSourceKinds: []recordingpresentation.MediaKind{recordingpresentation.MediaKindMicrophone},
+		Runner:              rejectDecodeRunner{},
+	})
+	if err != nil {
+		t.Fatalf("write microphone-only decoded media: %v", err)
+	}
+	if len(filtered.Index.Sources) != 0 {
+		t.Fatalf("microphone-only decode reconstructed camera sources: %#v", filtered.Index.Sources)
+	}
 	probe := exec.Command("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", filepath.Join(result.IndexPath, "..", filepath.FromSlash(source.Path)))
 	probeOutput, err := probe.Output()
 	if err != nil {
@@ -275,6 +293,157 @@ func TestWriteDecodesSeekableVP8OnRecordingClock(t *testing.T) {
 	if err != nil || durationSeconds < 0.09 || durationSeconds > 0.11 {
 		t.Fatalf("VP8 duration = %q, want 0.1 seconds", probeOutput)
 	}
+}
+
+func TestWritePreservesSourceTimingWhenBundleClockLeadsLaggingTrack(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+
+	root := t.TempDir()
+	frames := generateVP8Frames(t, root)
+	presentation := decodePresentationFixture(t)
+	participantID := presentation.Initial.Participants[0].ID
+	audioSourceID, err := recordingpresentation.SourceID(recordingpresentation.MediaSourceIdentity{
+		RecordingID: presentation.RecordingID, ParticipantID: participantID, ParticipantGeneration: 1,
+		Kind: recordingpresentation.MediaKindMicrophone, TrackID: "audio-track", Epoch: 1,
+	})
+	if err != nil {
+		t.Fatalf("derive audio source id: %v", err)
+	}
+	videoSourceID, err := recordingpresentation.SourceID(recordingpresentation.MediaSourceIdentity{
+		RecordingID: presentation.RecordingID, ParticipantID: participantID, ParticipantGeneration: 1,
+		Kind: recordingpresentation.MediaKindCamera, TrackID: "video-track", Epoch: 1,
+	})
+	if err != nil {
+		t.Fatalf("derive video source id: %v", err)
+	}
+	presentation.Initial.Media = []recordingpresentation.MediaSource{
+		{
+			SourceID: audioSourceID, ParticipantID: participantID, ParticipantGeneration: 1,
+			Kind: recordingpresentation.MediaKindMicrophone, TrackID: "audio-track", Epoch: 1,
+		},
+		{
+			SourceID: videoSourceID, ParticipantID: participantID, ParticipantGeneration: 1,
+			Kind: recordingpresentation.MediaKindCamera, TrackID: "video-track", Epoch: 1, Visible: true,
+		},
+	}
+
+	videoPackets := make([]recordingbundle.RTPPacket, 0, len(frames))
+	payloader := codecs.VP8Payloader{}
+	videoSequence := uint16(100)
+	for frameIndex, frame := range frames {
+		payloads := payloader.Payload(1_200, frame)
+		for payloadIndex, payload := range payloads {
+			videoPackets = append(videoPackets, recordingbundle.RTPPacket{
+				SequenceNumber: videoSequence, ExtendedSequenceNumber: uint64(videoSequence),
+				Timestamp: uint32(90_000 + frameIndex*3_000), SSRC: 84, PayloadType: 96,
+				Marker: payloadIndex == len(payloads)-1, Payload: payload,
+			})
+			videoSequence++
+		}
+	}
+	audioTrack := recordingbundle.TrackIdentity{TrackID: "audio-track", Epoch: 1, MID: "0", Codec: "opus", Layer: "primary"}
+	videoTrack := recordingbundle.TrackIdentity{TrackID: "video-track", Epoch: 1, MID: "1", Codec: "vp8", Layer: "high"}
+	bundle := recordingbundle.Bundle{
+		Version: recordingbundle.Version,
+		Manifest: recordingbundle.Manifest{
+			Version: recordingbundle.Version, RecordingID: presentation.RecordingID,
+			CaptureEpoch: 1, Sequence: 0,
+			RecorderEnvelopeDigest: strings.Repeat("42", 32),
+			MonotonicRange:         recordingbundle.TimeRange{StartMilliseconds: 3_000, EndMilliseconds: 4_000},
+			MediaRange:             recordingbundle.TimeRange{StartMilliseconds: 3_000, EndMilliseconds: 4_000},
+			CloseReason:            recordingbundle.CloseReasonFinalStop, AllocationVersion: 1,
+			Encryption: recordingbundle.EncryptionContext{
+				Environment: "test", TenantID: "00000000-0000-4000-8000-000000000009",
+				EpisodeID: presentation.EpisodeID, RecordingID: presentation.RecordingID,
+				JobID: "00000000-0000-4000-8000-000000000008", BundleSchema: recordingbundle.Version,
+			},
+		},
+		Fragments: []recordingbundle.RTPFragment{
+			{Track: audioTrack, Packets: []recordingbundle.RTPPacket{
+				{SequenceNumber: 1, ExtendedSequenceNumber: 1, Timestamp: 24_000, SSRC: 42, PayloadType: 111, Payload: []byte{0xf8, 0xff, 0xfe}},
+				{SequenceNumber: 3, ExtendedSequenceNumber: 3, Timestamp: 25_920, SSRC: 42, PayloadType: 111, Payload: []byte{0xf8, 0xff, 0xfe}},
+				{SequenceNumber: 4, ExtendedSequenceNumber: 4, Timestamp: 26_880, SSRC: 42, PayloadType: 111, Payload: []byte{0xf8, 0xff, 0xfe}},
+			}},
+			{Track: videoTrack, Packets: videoPackets},
+		},
+		TrackTimeline: []recordingbundle.TrackTimelineEvent{}, LayoutTimeline: []recordingbundle.LayoutTimelineEvent{}, Gaps: []recordingbundle.Gap{},
+	}
+	key := bytes.Repeat([]byte{0x2a}, 32)
+	encrypted, err := recordingbundle.Encrypt(key, bundle)
+	if err != nil {
+		t.Fatalf("encrypt bundle: %v", err)
+	}
+	bundlePath := filepath.Join(root, "0.bundle")
+	if err := os.WriteFile(bundlePath, encrypted, 0o600); err != nil {
+		t.Fatalf("write bundle: %v", err)
+	}
+	result, err := Write(context.Background(), Request{
+		RecordingID: presentation.RecordingID, EpisodeID: presentation.EpisodeID,
+		TenantID: "00000000-0000-4000-8000-000000000009", Environment: "test",
+		OriginAuthorityID: presentation.Clock.OriginAuthorityID,
+		CaptureEpoch:      1, DurationMS: presentation.Clock.DurationMillis,
+		OutputDirectory: filepath.Join(root, "decoded"), Presentation: presentation,
+		Bundles:  []BundleFile{{Path: bundlePath, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encrypted), Sequence: 0, CaptureEpoch: 1, CaptureJobID: "00000000-0000-4000-8000-000000000008", RecorderEnvelopeDigest: strings.Repeat("42", 32)}},
+		DataKeys: []DataKey{{CaptureEpoch: 1, Plaintext: key}},
+	})
+	if err != nil {
+		t.Fatalf("write decoded media: %v", err)
+	}
+	if result.Index.Clock.DurationMS != presentation.Clock.DurationMillis || result.Index.Mix.StartMS != 0 || result.Index.Mix.EndMS != presentation.Clock.DurationMillis {
+		t.Fatalf("replay clock = %#v, mix = %#v", result.Index.Clock, result.Index.Mix)
+	}
+	if len(result.Index.Sources) != 2 {
+		t.Fatalf("sources = %#v", result.Index.Sources)
+	}
+	sources := make(map[string]Source, len(result.Index.Sources))
+	for _, source := range result.Index.Sources {
+		sources[source.SourceID] = source
+	}
+	audioSource, audioExists := sources[audioSourceID]
+	videoSource, videoExists := sources[videoSourceID]
+	if !audioExists || !videoExists {
+		t.Fatalf("source availability = audio %t video %t", audioExists, videoExists)
+	}
+	if audioSource.StartMS != 500 || audioSource.EndMS != 580 {
+		t.Fatalf("audio source interval = %d-%d, want 500-580", audioSource.StartMS, audioSource.EndMS)
+	}
+	if videoSource.StartMS != 1_000 || videoSource.EndMS != 1_100 {
+		t.Fatalf("video source interval = %d-%d, want 1000-1100", videoSource.StartMS, videoSource.EndMS)
+	}
+	if videoSource.StartMS-audioSource.StartMS != 500 {
+		t.Fatalf("A/V start offset = %d, want 500", videoSource.StartMS-audioSource.StartMS)
+	}
+	if len(result.Index.Discontinuities) != 1 {
+		t.Fatalf("discontinuities = %#v", result.Index.Discontinuities)
+	}
+	discontinuity := result.Index.Discontinuities[0]
+	if discontinuity.SourceID != audioSourceID || discontinuity.Reason != "packet_loss" || discontinuity.StartMS != 520 || discontinuity.EndMS != 540 {
+		t.Fatalf("audio discontinuity = %#v", discontinuity)
+	}
+}
+
+func generateVP8Frames(t *testing.T, root string) [][]byte {
+	t.Helper()
+	inputIVF := filepath.Join(root, "input.ivf")
+	command := exec.Command("ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
+		"-f", "lavfi", "-i", "color=c=red:s=16x16:r=30:d=0.1", "-frames:v", "3",
+		"-c:v", "libvpx", "-g", "30", "-f", "ivf", inputIVF)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("generate VP8 fixture: %v: %s", err, output)
+	}
+	frames := readIVFFrames(t, inputIVF)
+	if len(frames) != 3 {
+		t.Fatalf("fixture frames = %d, want 3", len(frames))
+	}
+	return frames
+}
+
+type rejectDecodeRunner struct{}
+
+func (rejectDecodeRunner) Run(context.Context, string, ...string) ([]byte, error) {
+	return nil, os.ErrInvalid
 }
 
 func readIVFFrames(t *testing.T, path string) [][]byte {

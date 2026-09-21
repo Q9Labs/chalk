@@ -166,6 +166,8 @@ function resolveTenantResourceRoute(method: string, pathname: string): BoundaryR
   const resource = segments[3];
   if (resource === "spaces") return resolveSpaceRoute(method, segments, tenantID);
   if (resource === "api-keys") return resolveAPIKeyRoute(method, segments, tenantID);
+  if (resource === "recordings") return resolveRecordingRoute(method, segments, tenantID);
+  if (resource === "transcripts") return resolveTranscriptRoute(method, segments, tenantID);
   if (resource === "feedback-reports" && segments.length === 4 && method === "POST") {
     return { upstreamPath: `/v1/tenants/${tenantID}/feedback-reports`, authenticated: true, mutation: true, maxBodyBytes: MAX_FEEDBACK_BODY_BYTES };
   }
@@ -248,6 +250,30 @@ function resolveAPIKeyRoute(method: string, segments: string[], tenantID: string
   const apiKeyPath = `${base}/${apiKeyID}`;
   if (segments.length === 5 && method === "DELETE") return { upstreamPath: apiKeyPath, authenticated: true, mutation: true, preserveAuthOnUnauthorized: true };
   if (segments.length === 6 && segments[5] === "rotate" && method === "POST") return { upstreamPath: `${apiKeyPath}/rotate`, authenticated: true, mutation: true, preserveAuthOnUnauthorized: true };
+  return undefined;
+}
+
+function resolveRecordingRoute(method: string, segments: string[], tenantID: string): BoundaryRoute | undefined {
+  const base = `/v1/tenants/${tenantID}/recordings`;
+  if (segments.length === 4) return method === "GET" ? { upstreamPath: base, authenticated: true, queryParameters: ["cursor", "page_size", "space_id"] } : undefined;
+
+  const recordingID = segments[4];
+  if (!recordingID || !UUID_PATTERN.test(recordingID)) return undefined;
+  const recordingPath = `${base}/${recordingID}`;
+  if (segments.length === 5) return method === "GET" ? { upstreamPath: recordingPath, authenticated: true } : undefined;
+  if (segments.length === 6 && segments[5] === "export" && method === "POST") return { upstreamPath: `${recordingPath}/export`, authenticated: true, mutation: true };
+  if (segments.length === 6 && segments[5] === "download-url" && method === "POST") return { upstreamPath: `${recordingPath}/download-url`, authenticated: true, mutation: true };
+  if (segments.length === 6 && segments[5] === "transcripts" && method === "POST") return { upstreamPath: `${recordingPath}/transcripts`, authenticated: true, mutation: true };
+  return undefined;
+}
+
+function resolveTranscriptRoute(method: string, segments: string[], tenantID: string): BoundaryRoute | undefined {
+  const base = `/v1/tenants/${tenantID}/transcripts`;
+  if (segments.length === 4) return method === "GET" ? { upstreamPath: base, authenticated: true, queryParameters: ["cursor", "page_size", "recording_id"] } : undefined;
+
+  const transcriptID = segments[4];
+  if (!transcriptID || !UUID_PATTERN.test(transcriptID)) return undefined;
+  if (segments.length === 6 && segments[5] === "document" && method === "GET") return { upstreamPath: `${base}/${transcriptID}/document`, authenticated: true };
   return undefined;
 }
 

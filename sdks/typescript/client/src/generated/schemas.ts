@@ -427,6 +427,7 @@ export const CreatePublicSpaceRequestSchema = Schema.Struct({
 export type CreatePublicSpaceRequest = typeof CreatePublicSpaceRequestSchema.Type;
 
 export const CreateRecordingDownloadURLRequestSchema = Schema.Struct({
+  download: Schema.optional(Schema.Boolean),
   expires_in_seconds: Schema.Number,
 });
 export type CreateRecordingDownloadURLRequest = typeof CreateRecordingDownloadURLRequestSchema.Type;
@@ -992,19 +993,38 @@ export const RecentAuthRequestSchema = Schema.Struct({
 });
 export type RecentAuthRequest = typeof RecentAuthRequestSchema.Type;
 
+export const RecordingExportSchema = Schema.Struct({
+  failure_code: Schema.optional(Schema.NullOr(Schema.String)),
+  failure_message: Schema.optional(Schema.NullOr(Schema.String)),
+  job_id: Schema.optional(Schema.String.check(Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i))),
+  retryable: Schema.Boolean,
+  source_expires_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+  status: Schema.Literals(["none", "pending", "ready", "failed", "unavailable"]),
+});
+export type RecordingExport = typeof RecordingExportSchema.Type;
+
 export const RecordingIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("RecordingId"));
 export type RecordingId = typeof RecordingIdSchema.Type;
+
+export const RecordingSourceSchema = Schema.Struct({
+  expires_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+  status: Schema.Literals(["pending", "available", "failed", "expired"]),
+});
+export type RecordingSource = typeof RecordingSourceSchema.Type;
 
 export const RecordingSchema = Schema.Struct({
   created_at: DateTimeStringSchema,
   episode_id: EpisodeIdSchema,
+  export: RecordingExportSchema,
   id: RecordingIdSchema,
   metadata: Schema.Unknown,
+  source: RecordingSourceSchema,
   space_id: SpaceIdSchema,
   status: Schema.Literals(["pending", "processing", "completed", "failed"]),
   storage_key: Schema.NullOr(Schema.String),
   storage_provider: Schema.Literal("r2"),
   tenant_id: TenantIdSchema,
+  transcription_policy: Schema.String,
   updated_at: DateTimeStringSchema,
 });
 export type Recording = typeof RecordingSchema.Type;
@@ -1017,6 +1037,12 @@ export const RecordingDownloadURLSchema = Schema.Struct({
   url: Schema.String,
 });
 export type RecordingDownloadURL = typeof RecordingDownloadURLSchema.Type;
+
+export const RecordingExportRequestAcceptedResponseSchema = Schema.Struct({
+  export: RecordingExportSchema,
+  recording: RecordingSchema,
+});
+export type RecordingExportRequestAcceptedResponse = typeof RecordingExportRequestAcceptedResponseSchema.Type;
 
 export const RecordingListSchema = Schema.Struct({
   pagination: PaginationSchema,
@@ -1063,10 +1089,13 @@ export type RegisterRequest = typeof RegisterRequestSchema.Type;
 export const RemoveEpisodeParticipantRequestSchema = LeaveDashboardSpaceSelfRequestSchema;
 export type RemoveEpisodeParticipantRequest = typeof RemoveEpisodeParticipantRequestSchema.Type;
 
+export const RequestRecordingExportRequestSchema = Schema.Struct({});
+export type RequestRecordingExportRequest = typeof RequestRecordingExportRequestSchema.Type;
+
 export const RequestTranscriptRequestSchema = Schema.Struct({
   idempotency_key: Schema.String.check(Schema.isMinLength(1)),
-  language: Schema.String.check(Schema.isMinLength(1)),
-  languages: Schema.Array(Schema.String.check(Schema.isMinLength(1))).check(Schema.isMinLength(1)),
+  language: Schema.optional(Schema.String),
+  languages: Schema.optional(Schema.Array(Schema.String.check(Schema.isMinLength(1)))),
 });
 export type RequestTranscriptRequest = typeof RequestTranscriptRequestSchema.Type;
 
@@ -1226,6 +1255,33 @@ export const TranscriptSchema = Schema.Struct({
   updated_at: DateTimeStringSchema,
 });
 export type Transcript = typeof TranscriptSchema.Type;
+
+export const TranscriptDocumentSchema = Schema.Struct({
+  cues: Schema.Array(
+    Schema.Struct({
+      end_ms: Schema.Number,
+      identity: Schema.optional(
+        Schema.NullOr(
+          Schema.Struct({
+            display_name: Schema.optional(Schema.NullOr(Schema.String)),
+            participant_generation: Schema.Number,
+            participant_ref: Schema.String,
+            track_epoch: Schema.String,
+            track_id: Schema.String,
+          }),
+        ),
+      ),
+      overlap: Schema.Boolean,
+      start_ms: Schema.Number,
+      text: Schema.String,
+    }),
+  ),
+  episode_id: EpisodeIdSchema,
+  recording_id: RecordingIdSchema,
+  schema_version: Schema.String,
+  transcript_id: TranscriptIdSchema,
+});
+export type TranscriptDocument = typeof TranscriptDocumentSchema.Type;
 
 export const TranscriptDownloadURLSchema = Schema.Struct({
   expires_at: DateTimeStringSchema,
@@ -2140,6 +2196,15 @@ export type GetTranscriptPathParams = typeof GetTranscriptPathParamsSchema.Type;
 export const GetTranscriptResponseSchema = TranscriptSchema;
 export type GetTranscriptResponse = typeof GetTranscriptResponseSchema.Type;
 
+export const GetTranscriptDocumentPathParamsSchema = Schema.Struct({
+  tenant_id: TenantIdSchema,
+  transcript_id: TranscriptIdSchema,
+});
+export type GetTranscriptDocumentPathParams = typeof GetTranscriptDocumentPathParamsSchema.Type;
+
+export const GetTranscriptDocumentResponseSchema = TranscriptDocumentSchema;
+export type GetTranscriptDocumentResponse = typeof GetTranscriptDocumentResponseSchema.Type;
+
 export const GetUserPathParamsSchema = Schema.Struct({
   user_id: UserIdSchema,
 });
@@ -2480,6 +2545,7 @@ export const ListRecordingsQueryParamsSchema = Schema.Struct({
   cursor: Schema.optional(Schema.String),
   episode_id: Schema.optional(EpisodeIdSchema),
   page_size: Schema.optional(Schema.NumberFromString),
+  space_id: Schema.optional(SpaceIdSchema),
 });
 export type ListRecordingsQueryParams = typeof ListRecordingsQueryParamsSchema.Type;
 
@@ -2810,6 +2876,25 @@ export const RenegotiateCloudflareSFU429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type RenegotiateCloudflareSFU429ResponseHeaders = typeof RenegotiateCloudflareSFU429ResponseHeadersSchema.Type;
+
+export const RequestRecordingExportPathParamsSchema = Schema.Struct({
+  recording_id: RecordingIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type RequestRecordingExportPathParams = typeof RequestRecordingExportPathParamsSchema.Type;
+
+export const RequestRecordingExportRequestBodySchema = RequestRecordingExportRequestSchema;
+export type RequestRecordingExportRequestBody = typeof RequestRecordingExportRequestBodySchema.Type;
+
+export const RequestRecordingExportResponseSchema = RecordingExportRequestAcceptedResponseSchema;
+export type RequestRecordingExportResponse = typeof RequestRecordingExportResponseSchema.Type;
+
+export const RequestRecordingExport429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type RequestRecordingExport429ResponseHeaders = typeof RequestRecordingExport429ResponseHeadersSchema.Type;
 
 export const RequestTranscriptPathParamsSchema = Schema.Struct({
   recording_id: RecordingIdSchema,
@@ -6324,6 +6409,19 @@ export type GetSpaceRecordingPreparationError = typeof GetSpaceRecordingPreparat
 export const GetTenantErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema, TenantNotFoundErrorSchema]);
 export type GetTenantError = typeof GetTenantErrorSchema.Type;
 
+export const GetTranscriptDocumentErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RecordingArtifactNotFoundErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  TenantInvalidIdErrorSchema,
+  TranscriptInvalidIdErrorSchema,
+  TranscriptNotFoundErrorSchema,
+  TranscriptNotReadyErrorSchema,
+]);
+export type GetTranscriptDocumentError = typeof GetTranscriptDocumentErrorSchema.Type;
+
 export const GetTranscriptErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema, TranscriptInvalidIdErrorSchema, TranscriptNotFoundErrorSchema]);
 export type GetTranscriptError = typeof GetTranscriptErrorSchema.Type;
 
@@ -6585,6 +6683,7 @@ export const ListRecordingsErrorSchema = Schema.Union([
   PaginationInvalidPageSizeErrorSchema,
   ServiceInternalErrorSchema,
   ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
   TenantInvalidIdErrorSchema,
 ]);
 export type ListRecordingsError = typeof ListRecordingsErrorSchema.Type;
@@ -6849,6 +6948,20 @@ export const RenegotiateCloudflareSFUErrorSchema = Schema.Union([
   TenantInvalidIdErrorSchema,
 ]);
 export type RenegotiateCloudflareSFUError = typeof RenegotiateCloudflareSFUErrorSchema.Type;
+
+export const RequestRecordingExportErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RecordingInvalidIdErrorSchema,
+  RecordingNotFoundErrorSchema,
+  RecordingNotReadyErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type RequestRecordingExportError = typeof RequestRecordingExportErrorSchema.Type;
 
 export const RequestTranscriptErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -7181,6 +7294,7 @@ export const ChalkOperationPolicies = {
   register: { maxBodyBytes: 1048576, rateLimit: { limit: 5, policy: "auth.register", windowSeconds: 60 } },
   removeEpisodeParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   renegotiateCloudflareSFU: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  requestRecordingExport: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   requestTranscript: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   restoreSpace: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   revokeAPIKey: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

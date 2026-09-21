@@ -22,6 +22,9 @@ export type ChalkServerClientOptions = {
 
 export type ChalkIdempotencyOptions = { readonly idempotencyKey?: string };
 
+export type RecordingPolicy = "disabled" | "manual" | "automatic";
+export type TranscriptionPolicy = "disabled" | "on_demand" | "automatic";
+
 export type CreateSpaceInput = {
   readonly admissionPolicy?: unknown;
   readonly defaultEpisodeDurationSeconds: number;
@@ -30,8 +33,15 @@ export type CreateSpaceInput = {
   readonly mediaPlane: string;
   readonly metadata?: unknown;
   readonly name: string;
+  readonly recordingPolicy?: RecordingPolicy;
   readonly recurringPolicy?: unknown;
   readonly slug: string;
+  readonly transcriptionPolicy?: TranscriptionPolicy;
+};
+
+export type UpdateSpaceInput = {
+  readonly recordingPolicy?: RecordingPolicy;
+  readonly transcriptionPolicy?: TranscriptionPolicy;
 };
 
 export type Space = {
@@ -47,6 +57,7 @@ export type Space = {
   readonly media_plane: string;
   readonly metadata: unknown;
   readonly name: string;
+  readonly recording_policy: RecordingPolicy;
   readonly recurring_policy: unknown;
   readonly roles: readonly {
     readonly capabilities: readonly string[];
@@ -55,15 +66,24 @@ export type Space = {
   }[];
   readonly slug: string;
   readonly tenant_id: string;
+  readonly transcription_policy: TranscriptionPolicy;
   readonly updated_at: string;
 };
 
 export type SpaceList = {
   readonly spaces: readonly Space[];
-  readonly pagination: { readonly has_more: boolean; readonly next_cursor: string | null; readonly page_size: number };
+  readonly pagination: {
+    readonly has_more: boolean;
+    readonly next_cursor: string | null;
+    readonly page_size: number;
+  };
 };
 
-export type ListSpacesInput = { readonly archived?: boolean; readonly cursor?: string; readonly pageSize?: number };
+export type ListSpacesInput = {
+  readonly archived?: boolean;
+  readonly cursor?: string;
+  readonly pageSize?: number;
+};
 
 export type CreateEpisodeInput = {
   readonly metadata?: unknown;
@@ -125,7 +145,11 @@ type Participant = {
 
 export type ParticipantLifecycle = {
   readonly access?: AccessGrant | null;
-  readonly admission_request?: { readonly expires_at: string; readonly id: string; readonly status: string } | null;
+  readonly admission_request?: {
+    readonly expires_at: string;
+    readonly id: string;
+    readonly status: string;
+  } | null;
   readonly expires_at?: string;
   readonly lifecycle_intent: {
     readonly created_at: string;
@@ -136,7 +160,10 @@ export type ParticipantLifecycle = {
     readonly request_key: string;
     readonly status: string;
   };
-  readonly media_plane?: { readonly client_payload: Readonly<Record<string, unknown>>; readonly provider: string } | null;
+  readonly media_plane?: {
+    readonly client_payload: Readonly<Record<string, unknown>>;
+    readonly provider: string;
+  } | null;
   readonly participant: Participant;
   readonly sync_token?: string;
 };
@@ -176,11 +203,19 @@ export type APIKey = {
 
 export type APIKeyList = {
   readonly api_keys: readonly APIKey[];
-  readonly pagination: { readonly has_more: boolean; readonly next_cursor: string | null; readonly page_size: number };
+  readonly pagination: {
+    readonly has_more: boolean;
+    readonly next_cursor: string | null;
+    readonly page_size: number;
+  };
 };
 
 export type APIKeyWithSecret = { readonly api_key: APIKey; readonly secret: string };
-export type CreateAPIKeyInput = { readonly expiresAt: string; readonly name: string; readonly scopes: readonly string[] };
+export type CreateAPIKeyInput = {
+  readonly expiresAt: string;
+  readonly name: string;
+  readonly scopes: readonly string[];
+};
 export type ListAPIKeysInput = { readonly cursor?: string; readonly pageSize?: number };
 export type RotateAPIKeyInput = { readonly expiresAt?: string | null };
 
@@ -214,11 +249,31 @@ export type PublicAdmissionRequestPage = {
 export type UpdateSpacePublicInviteInput = { readonly enabled: boolean };
 export type ListPublicAdmissionRequestsInput = { readonly state?: "pending" };
 
+export type RecordingSourceStatus = "pending" | "available" | "failed" | "expired";
+
+export type RecordingSource = {
+  readonly expires_at?: string | null;
+  readonly status: RecordingSourceStatus;
+};
+
+export type RecordingExportStatus = "none" | "pending" | "ready" | "failed" | "unavailable";
+
+export type RecordingExport = {
+  readonly failure_code?: string | null;
+  readonly failure_message?: string | null;
+  readonly job_id?: string | null;
+  readonly retryable: boolean;
+  readonly source_expires_at?: string | null;
+  readonly status: RecordingExportStatus;
+};
+
 export type Recording = {
   readonly created_at: string;
   readonly episode_id: string;
+  readonly export: RecordingExport;
   readonly id: string;
   readonly metadata: unknown;
+  readonly source: RecordingSource;
   readonly space_id: string;
   readonly status: "pending" | "processing" | "completed" | "failed";
   readonly storage_key: string | null;
@@ -235,13 +290,30 @@ export type RecordingDownloadURL = {
   readonly url: string;
 };
 
+export type RecordingExportRequestAcceptedResponse = {
+  readonly export: RecordingExport;
+  readonly recording: Recording;
+};
+
 export type RecordingList = {
-  readonly pagination: { readonly has_more: boolean; readonly next_cursor: string | null; readonly page_size: number };
+  readonly pagination: {
+    readonly has_more: boolean;
+    readonly next_cursor: string | null;
+    readonly page_size: number;
+  };
   readonly recordings: readonly Recording[];
 };
 
-export type ListRecordingsInput = { readonly cursor?: string; readonly episodeId?: string; readonly pageSize?: number };
-export type CreateRecordingDownloadURLInput = { readonly expiresInSeconds: number };
+export type ListRecordingsInput = {
+  readonly cursor?: string;
+  readonly episodeId?: string;
+  readonly pageSize?: number;
+  readonly spaceId?: string;
+};
+export type CreateRecordingDownloadURLInput = {
+  readonly expiresInSeconds: number;
+  readonly download?: boolean;
+};
 
 export type ChalkServerClient = {
   readonly spaces: {
@@ -250,6 +322,7 @@ export type ChalkServerClient = {
     get(spaceId: string): Promise<Space>;
     list(input?: ListSpacesInput): Promise<SpaceList>;
     restore(spaceId: string): Promise<Space>;
+    update(spaceId: string, input: UpdateSpaceInput): Promise<Space>;
   };
   readonly episodes: {
     create(spaceId: string, input: CreateEpisodeInput, options?: ChalkIdempotencyOptions): Promise<Episode>;
@@ -269,6 +342,7 @@ export type ChalkServerClient = {
   readonly recordings: {
     list(input?: ListRecordingsInput): Promise<RecordingList>;
     get(recordingId: string): Promise<Recording>;
+    requestExport(recordingId: string): Promise<RecordingExportRequestAcceptedResponse>;
     createDownloadURL(recordingId: string, input: CreateRecordingDownloadURLInput): Promise<RecordingDownloadURL>;
   };
   readonly publicInvites: {

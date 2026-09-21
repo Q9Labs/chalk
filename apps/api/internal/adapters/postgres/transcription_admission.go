@@ -39,6 +39,12 @@ func commitRecordingTranscriptionAdmission(ctx context.Context, queries sqlc.Que
 	if policy.TranscriptionMode != "on_demand" && policy.TranscriptionMode != "automatic" {
 		return transcripts.RenderAdmissionResult{}, transcripts.ErrTranscriptionDisabled
 	}
+	// Presentation MP4 rendering and audio preparation are deliberately
+	// independent. A render-only commit is valid while its separately fenced
+	// transcription-preparation job is pending, failed, or not yet claimed.
+	if input.Manifest == nil && len(input.Chunks) == 0 {
+		return result, nil
+	}
 	window := time.Duration(policy.SourceWindowSeconds) * time.Second
 	if window <= 0 || window > transcripts.MaximumSourceWindow {
 		return transcripts.RenderAdmissionResult{}, transcripts.ErrInvalidManifest
@@ -46,7 +52,10 @@ func commitRecordingTranscriptionAdmission(ctx context.Context, queries sqlc.Que
 	if err := transcripts.PrepareRenderAdmissionInput(&input); err != nil {
 		return transcripts.RenderAdmissionResult{}, err
 	}
-	expiresAt := input.CommittedAt.Add(window)
+	expiresAt := timestamp(policy.SourceExpiresAt)
+	if expiresAt.IsZero() || !expiresAt.After(input.CommittedAt) {
+		return transcripts.RenderAdmissionResult{}, transcripts.ErrSourceExpired
+	}
 	source, chunks, err := persistRecordingTranscriptionSource(ctx, queries, input, expiresAt)
 	if err != nil {
 		return transcripts.RenderAdmissionResult{}, err

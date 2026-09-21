@@ -100,6 +100,62 @@ func (s Service) GetPipeline(ctx context.Context, tenantID, recordingID utilitie
 	return s.repository.GetPipeline(ctx, tenantID, recordingID)
 }
 
+// RequestExport creates the canonical deferred render job once capture is
+// sealed. Repeated calls reuse the same job or completed Artifact.
+func (s Service) RequestExport(ctx context.Context, input ExportInput) (Job, error) {
+	if input.TenantID.IsZero() {
+		return Job{}, ErrInvalidTenantID
+	}
+	if input.RecordingID.IsZero() {
+		return Job{}, ErrInvalidRecordingID
+	}
+	renderJobID, err := utilities.NewID()
+	if err != nil {
+		return Job{}, err
+	}
+	return s.repository.RequestExport(ctx, input, renderJobID)
+}
+
+func (s Service) GetArtifactState(ctx context.Context, tenantID, recordingID utilities.ID) (ArtifactState, error) {
+	if tenantID.IsZero() {
+		return ArtifactState{}, ErrInvalidTenantID
+	}
+	if recordingID.IsZero() {
+		return ArtifactState{}, ErrInvalidRecordingID
+	}
+	return s.repository.GetArtifactState(ctx, tenantID, recordingID)
+}
+
+type artifactStateBatchRepository interface {
+	GetArtifactStates(context.Context, utilities.ID, []utilities.ID) (map[utilities.ID]ArtifactState, error)
+}
+
+// GetArtifactStates resolves a page of recording read models with one
+// repository operation when it supports batching. Older repositories retain
+// the same single-record semantics as a compatibility fallback.
+func (s Service) GetArtifactStates(ctx context.Context, tenantID utilities.ID, recordingIDs []utilities.ID) (map[utilities.ID]ArtifactState, error) {
+	if tenantID.IsZero() {
+		return nil, ErrInvalidTenantID
+	}
+	for _, recordingID := range recordingIDs {
+		if recordingID.IsZero() {
+			return nil, ErrInvalidRecordingID
+		}
+	}
+	if repository, ok := s.repository.(artifactStateBatchRepository); ok {
+		return repository.GetArtifactStates(ctx, tenantID, recordingIDs)
+	}
+	states := make(map[utilities.ID]ArtifactState, len(recordingIDs))
+	for _, recordingID := range recordingIDs {
+		state, err := s.repository.GetArtifactState(ctx, tenantID, recordingID)
+		if err != nil {
+			return nil, err
+		}
+		states[recordingID] = state
+	}
+	return states, nil
+}
+
 func (s Service) RequestStop(ctx context.Context, tenantID, episodeID, recordingID, operationID utilities.ID) (Pipeline, error) {
 	if tenantID.IsZero() {
 		return Pipeline{}, ErrInvalidTenantID

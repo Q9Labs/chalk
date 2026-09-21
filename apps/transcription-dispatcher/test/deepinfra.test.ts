@@ -30,7 +30,7 @@ const nativeResponse = {
   duration: 1,
   input_length_ms: 1000,
   request_id: null,
-  inference_status: { status: "succeeded", cost: 0.00001 },
+  inference_status: { status: "succeeded", cost: 0.000333 },
 };
 
 describe("direct DeepInfra contract", () => {
@@ -73,7 +73,16 @@ describe("direct DeepInfra contract", () => {
     expect(result.versionContract).toBe("deepinfra-native-whisper-turbo.v1");
     expect(result.providerIdentity).toBeUndefined();
     expect(result.executionIdentity).toBeUndefined();
-    expect(result.providerReportedCostUsd).toBe(0.00001);
+    expect(result.providerReportedCostUsd).toBeCloseTo(0.00000333, 12);
+  });
+
+  it.each([
+    [0, 0],
+    [0.01998, 0.0001998],
+    [1_000, 10],
+  ])("converts native cost %s cents to %s USD", async (cost, expectedUsd) => {
+    const provider = new DeepInfraWhisperProvider({ policy, token: "test-token", fetch: async () => Response.json({ ...nativeResponse, inference_status: { status: "succeeded", cost } }) });
+    expect((await provider.transcribe(request)).providerReportedCostUsd).toBeCloseTo(expectedUsd, 12);
   });
 
   it("keeps observed metadata separate from the adapter contract", async () => {

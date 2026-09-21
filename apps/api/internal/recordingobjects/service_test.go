@@ -34,7 +34,7 @@ func TestAllocateGeneratesServerOwnedObjectAndOpaqueToken(t *testing.T) {
 	if result.UploadToken == "" || len(repository.allocation.TokenHash) != 32 || strings.Contains(string(repository.allocation.TokenHash), result.UploadToken) {
 		t.Fatalf("token persistence leaked raw token: result=%q hash=%x", result.UploadToken, repository.allocation.TokenHash)
 	}
-	expectedKey := "temporary/recordings/00000000-0000-4000-8000-000000000003/capture/3/bundles/7/" + allocationID + ".bundle"
+	expectedKey := "tenants/00000000-0000-4000-8000-000000000001/recordings/00000000-0000-4000-8000-000000000003/capture/3/bundles/7/" + allocationID + ".bundle"
 	if store.uploadInput.Key != expectedKey || repository.allocation.ObjectKey != expectedKey {
 		t.Fatalf("server object key = %q, upload = %#v", store.uploadInput.Key, result.UploadURL)
 	}

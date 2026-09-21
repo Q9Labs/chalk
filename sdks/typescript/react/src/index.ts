@@ -6,7 +6,18 @@ export type { ChalkFeatures, ChalkProps, SpaceLayout } from "./components/chalk/
 export { RecordingSpaceView } from "./components/space-view/RecordingSpaceView";
 export type { RecordingMediaRenderContext, RecordingSpaceViewProps } from "./components/space-view/RecordingSpaceView";
 export { RecordingHistoryPanel } from "./components/recording-history/RecordingHistoryPanel";
-export type { RecordingHistoryItem, RecordingHistoryPanelProps, RecordingHistoryStatus } from "./components/recording-history/RecordingHistoryPanel";
+export type {
+  RecordingExportStatus,
+  RecordingHistoryAction,
+  RecordingHistoryExport,
+  RecordingHistoryItem,
+  RecordingHistoryPanelProps,
+  RecordingHistorySource,
+  RecordingHistoryStatus,
+  RecordingHistoryTranscript,
+  RecordingSourceStatus,
+  RecordingTranscriptStatus,
+} from "./components/recording-history/RecordingHistoryPanel";
 export { RecordingWhiteboardView, loadRecordingWhiteboardFiles, parseRecordingWhiteboardStateV1, recordingWhiteboardBinaryFile, recordingWhiteboardFileAssetId, recordingWhiteboardFileIds } from "./components/whiteboard-view/RecordingWhiteboardView";
 export type { RecordingWhiteboardBinaryFileInput, RecordingWhiteboardFileReference, RecordingWhiteboardFileResolver, RecordingWhiteboardStateV1, RecordingWhiteboardViewProps } from "./components/whiteboard-view/RecordingWhiteboardView";
 export { FeedbackDialog } from "./components/feedback/FeedbackDialog";

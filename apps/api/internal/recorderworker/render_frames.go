@@ -153,9 +153,10 @@ func RenderFrameStream(ctx context.Context, producer FrameProducer, encoder Stre
 }
 
 type NodeFrameProducer struct {
-	NodePath    string
-	ScriptPath  string
-	Concurrency int
+	NodePath      string
+	ScriptPath    string
+	Concurrency   int
+	ProfileOutput string
 }
 
 func (producer NodeFrameProducer) Start(ctx context.Context, request FrameRenderRequest) (FrameProcess, error) {
@@ -167,6 +168,13 @@ func (producer NodeFrameProducer) Start(ctx context.Context, request FrameRender
 	}
 	if !filepath.IsAbs(producer.NodePath) || !filepath.IsAbs(producer.ScriptPath) {
 		return nil, errors.New("node executable and recording renderer script paths must be absolute")
+	}
+	profilePath := ""
+	if producer.ProfileOutput != "" {
+		if filepath.IsAbs(producer.ProfileOutput) || filepath.Base(producer.ProfileOutput) != producer.ProfileOutput {
+			return nil, errors.New("recording renderer profile output must be a file name")
+		}
+		profilePath = filepath.Join(request.WorkspaceDirectory, producer.ProfileOutput)
 	}
 	requestFile, err := os.CreateTemp(request.WorkspaceDirectory, "frame-render-request-*.json")
 	if err != nil {
@@ -201,8 +209,12 @@ func (producer NodeFrameProducer) Start(ctx context.Context, request FrameRender
 		return nil, fmt.Errorf("prepare frame render result path: %w", err)
 	}
 
+	args := []string{producer.ScriptPath, "--request", requestPath, "--result", resultPath, "--concurrency", strconv.Itoa(max(1, producer.Concurrency))}
+	if profilePath != "" {
+		args = append(args, "--profile-output", profilePath)
+	}
 	commandContext, cancel := context.WithCancel(ctx)
-	command := exec.CommandContext(commandContext, producer.NodePath, producer.ScriptPath, "--request", requestPath, "--result", resultPath, "--concurrency", strconv.Itoa(max(1, producer.Concurrency)))
+	command := exec.CommandContext(commandContext, producer.NodePath, args...)
 	stdout, err := command.StdoutPipe()
 	if err != nil {
 		cancel()

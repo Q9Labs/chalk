@@ -180,7 +180,18 @@ case "$(env_value "${api_env}" CHALK_RECORDING_ENABLED)" in
 esac
 case "$(env_value "${api_env}" CHALK_TRANSCRIPTION_ENABLED)" in
   false) ;;
-  true) fail "CHALK_TRANSCRIPTION_ENABLED must remain false for this release" ;;
+  true)
+    for name in CHALK_TRANSCRIPTION_WORKLOAD_AUTH_SECRET CHALK_TRANSCRIPTION_CONTROL_AUDIENCE CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME; do
+      require_env "${api_env}" "${name}"
+    done
+    transcription_workload_auth_secret="$(env_value "${api_env}" CHALK_TRANSCRIPTION_WORKLOAD_AUTH_SECRET)"
+    transcription_workload_auth_secret_bytes="$(LC_ALL=C printf '%s' "${transcription_workload_auth_secret}" | LC_ALL=C wc -c | tr -d '[:space:]')"
+    (( transcription_workload_auth_secret_bytes >= 32 )) || fail "CHALK_TRANSCRIPTION_WORKLOAD_AUTH_SECRET must contain at least 32 bytes"
+    transcription_control_audience="$(env_value "${api_env}" CHALK_TRANSCRIPTION_CONTROL_AUDIENCE)"
+    [[ "${transcription_control_audience}" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$ ]] || fail "CHALK_TRANSCRIPTION_CONTROL_AUDIENCE must be a bounded non-secret audience identifier"
+    transcription_dispatcher_function_name="$(env_value "${api_env}" CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME)"
+    [[ "${transcription_dispatcher_function_name}" =~ ^[a-zA-Z0-9_-]{1,64}$ ]] || fail "CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME must be a valid Lambda function name"
+    ;;
   *) fail "CHALK_TRANSCRIPTION_ENABLED must be true or false" ;;
 esac
 case "$(env_value "${api_env}" CHALK_WHITEBOARD_FILES_ENABLED)" in

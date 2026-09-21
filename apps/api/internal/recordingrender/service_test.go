@@ -354,6 +354,7 @@ type renderRepositoryForTest struct {
 	stored         StoredInput
 	allocation     Allocation
 	commitResult   CommitResult
+	preparation    *TranscriptionResult
 	encryptedKey   EncryptedKey
 	accessKeyInput AccessKeyInput
 }
@@ -382,6 +383,9 @@ func (*renderRepositoryForTest) CommitObject(context.Context, Allocation, object
 }
 func (r *renderRepositoryForTest) Commit(context.Context, CommitInput, time.Time) (CommitResult, error) {
 	return r.commitResult, nil
+}
+func (r *renderRepositoryForTest) CommitTranscriptionPreparation(context.Context, TranscriptionPreparationInput, time.Time) (*TranscriptionResult, error) {
+	return r.preparation, nil
 }
 
 type renderKMSForTest struct{}

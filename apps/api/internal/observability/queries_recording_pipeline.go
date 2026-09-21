@@ -343,3 +343,17 @@ func (q operationQuerier) SetRecordingCaptureConnectionActiveCommand(ctx context
 	LogOperation(ctx, q.logger, "db.query", "SetRecordingCaptureConnectionActiveCommand", startedAt, err)
 	return rows, err
 }
+
+func (q operationQuerier) ListRecordingDeferredArtifactStates(ctx context.Context, arg sqlc.ListRecordingDeferredArtifactStatesParams) ([]sqlc.ListRecordingDeferredArtifactStatesRow, error) {
+	startedAt := time.Now()
+	states, err := q.next.ListRecordingDeferredArtifactStates(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "ListRecordingDeferredArtifactStates", startedAt, err)
+	return states, err
+}
+
+func (q operationQuerier) RequestDeferredRecordingRender(ctx context.Context, arg sqlc.RequestDeferredRecordingRenderParams) (sqlc.RequestDeferredRecordingRenderRow, error) {
+	startedAt := time.Now()
+	job, err := q.next.RequestDeferredRecordingRender(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "RequestDeferredRecordingRender", startedAt, err)
+	return job, err
+}

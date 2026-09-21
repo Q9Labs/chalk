@@ -2,18 +2,20 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: build-release.sh --source <chalk-checkout> --release-id <id> --output <absolute-tar-path>" >&2
+  echo "usage: build-release.sh --source <chalk-checkout> --release-id <id> --output <absolute-tar-path> [--retained-ui-client-archive <absolute-tar-path> ...]" >&2
   exit 2
 }
 
 source_root=""
 release_id=""
 output_path=""
+retained_ui_client_archives=()
 while (($# > 0)); do
   case "$1" in
     --source) source_root="${2:-}"; shift 2 ;;
     --release-id) release_id="${2:-}"; shift 2 ;;
     --output) output_path="${2:-}"; shift 2 ;;
+    --retained-ui-client-archive) retained_ui_client_archives+=("${2:-}"); shift 2 ;;
     *) usage ;;
   esac
 done
@@ -22,6 +24,9 @@ done
 [[ "$source_root" == /* && -f "$source_root/package.json" && -f "$source_root/apps/api/go.mod" ]] || usage
 [[ "$output_path" == /* && ! -e "$output_path" ]] || usage
 [[ "$release_id" =~ ^[a-z0-9][a-z0-9._-]{0,127}$ ]] || usage
+for archive in "${retained_ui_client_archives[@]}"; do
+  [[ "$archive" == /* && -f "$archive" ]] || usage
+done
 if find "$source_root/apps/recording-renderer" -maxdepth 1 -type f -name '.env*' -print -quit | grep -q .; then
   echo "recording renderer source contains an environment file; refusing a public release build" >&2
   exit 1
@@ -60,10 +65,32 @@ install -d -m 0755 "$release_root/bin" "$release_root/renderer"
 node "$script_root/relocate-renderer.mjs" "$release_root/renderer" "$source_root/apps/recording-renderer"
 install -d "$release_root/renderer/dist"
 cp -a "$source_root/apps/recording-renderer/dist/." "$release_root/renderer/dist/"
+rm -rf -- "$release_root/renderer/dist/retained-clients"
+ui_build_sha256="$(node "$release_root/renderer/dist/node/ui-build-cli.js" verify "$release_root/renderer/dist/client")"
+for archive in "${retained_ui_client_archives[@]}"; do
+  archive_root="$(mktemp -d "$stage_root/retained-ui-client.XXXXXX")"
+  while IFS= read -r entry; do
+    entry="${entry%/}"
+    [[ "$entry" == "client" || "$entry" == client/* ]] || { echo "retained UI client archive contains an out-of-root path" >&2; exit 1; }
+    [[ "$entry" != *"/../"* && "$entry" != ../* && "$entry" != */.. ]] || { echo "retained UI client archive contains path traversal" >&2; exit 1; }
+  done < <(tar -tzf "$archive")
+  tar -xzf "$archive" --no-same-owner --no-same-permissions -C "$archive_root"
+  [[ -d "$archive_root/client" ]] || { echo "retained UI client archive is missing client/" >&2; exit 1; }
+  if find "$archive_root/client" \( -type l -o ! -type f -a ! -type d \) -print -quit | grep -q .; then
+    echo "retained UI client archive contains an unsupported filesystem entry" >&2
+    exit 1
+  fi
+  retained_ui_build_sha256="$(node "$release_root/renderer/dist/node/ui-build-cli.js" verify "$archive_root/client")"
+  [[ "$retained_ui_build_sha256" != "$ui_build_sha256" ]] || { echo "retained UI client archive duplicates the current UI build" >&2; exit 1; }
+  retained_ui_directory="$release_root/renderer/dist/retained-clients/$retained_ui_build_sha256"
+  [[ ! -e "$retained_ui_directory" ]] || { echo "retained UI client archive duplicates a supplied UI build" >&2; exit 1; }
+  install -d -m 0755 "$retained_ui_directory"
+  cp -a "$archive_root/client/." "$retained_ui_directory/"
+done
+node "$release_root/renderer/dist/node/ui-build-registry-cli.js" write "$release_root/renderer/dist" >/dev/null
 
 export PLAYWRIGHT_BROWSERS_PATH="$release_root/ms-playwright"
 "$release_root/renderer/node_modules/.bin/playwright" install chromium
-ui_build_sha256="$(jq -er '.sha256 | select(test("^[0-9a-f]{64}$"))' "$release_root/renderer/dist/client/recording-ui-build.json")"
 jq -cS -n \
   --arg release_id "$release_id" \
   --arg source_commit "$source_commit" \

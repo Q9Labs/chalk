@@ -26,7 +26,7 @@ func main() {
 	workRoot := flag.String("work-root", os.Getenv("CHALK_RECORDING_RENDER_WORK_ROOT"), "absolute parent directory for ephemeral render attempts")
 	nodePath := flag.String("node", os.Getenv("CHALK_RECORDING_NODE_PATH"), "absolute Node.js executable path")
 	rendererScript := flag.String("renderer-script", os.Getenv("CHALK_RECORDING_RENDERER_SCRIPT"), "absolute recording renderer CLI path")
-	uiBuildSHA256 := flag.String("ui-build-sha256", os.Getenv("CHALK_RECORDING_UI_BUILD_SHA256"), "deployed recording UI tree SHA-256")
+	uiBuildRegistry := flag.String("ui-build-registry", os.Getenv("CHALK_RECORDING_UI_BUILD_REGISTRY"), "absolute installed recording UI build registry path")
 	ffmpegPath := flag.String("ffmpeg", os.Getenv("CHALK_RECORDING_FFMPEG_PATH"), "absolute FFmpeg executable path")
 	ffprobePath := flag.String("ffprobe", os.Getenv("CHALK_RECORDING_FFPROBE_PATH"), "absolute FFprobe executable path")
 	encoder := flag.String("encoder", os.Getenv("CHALK_RECORDING_VIDEO_ENCODER"), "explicit video encoder: libx264, h264_videotoolbox, or h264_nvenc")
@@ -40,7 +40,7 @@ func main() {
 		if err := runWorker(renderWorkerConfig{
 			Environment: *environment, ControlPlaneURL: *controlPlaneURL, WorkerCertificate: *workerCertificate, WorkerKey: *workerKey,
 			ServerCA: *serverCA, ServerName: *serverName, WorkRoot: *workRoot, NodePath: *nodePath, RendererScript: *rendererScript,
-			UIBuildSHA256: *uiBuildSHA256, FFmpegPath: *ffmpegPath, FFprobePath: *ffprobePath, Encoder: *encoder, FrameConcurrency: *frameConcurrency,
+			UIBuildRegistry: *uiBuildRegistry, FFmpegPath: *ffmpegPath, FFprobePath: *ffprobePath, Encoder: *encoder, FrameConcurrency: *frameConcurrency,
 		}); err != nil {
 			if !errors.Is(err, recorderworker.ErrReadinessFailure) && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 				return

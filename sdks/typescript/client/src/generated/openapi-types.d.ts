@@ -692,6 +692,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/tenants/{tenant_id}/recordings/{recording_id}/export": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Request recording export */
+    post: operations["requestRecordingExport"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}/recordings/{recording_id}/transcripts": {
     parameters: {
       query?: never;
@@ -1170,6 +1187,23 @@ export interface paths {
     post?: never;
     /** Delete transcript */
     delete: operations["deleteTranscript"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/tenants/{tenant_id}/transcripts/{transcript_id}/document": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get transcript document */
+    get: operations["getTranscriptDocument"];
+    put?: never;
+    post?: never;
+    delete?: never;
     options?: never;
     head?: never;
     patch?: never;
@@ -1710,6 +1744,7 @@ export interface components {
       display_name: string;
     };
     CreateRecordingDownloadURLRequest: {
+      download?: boolean;
       expires_in_seconds: number;
     };
     CreateSpaceRequest: {
@@ -2263,6 +2298,7 @@ export interface components {
     Recording: {
       created_at: components["schemas"]["DateTimeString"];
       episode_id: components["schemas"]["EpisodeId"];
+      export: components["schemas"]["RecordingExport"];
       id: components["schemas"]["RecordingId"];
       metadata:
         | {
@@ -2273,6 +2309,7 @@ export interface components {
         | number
         | boolean
         | null;
+      source: components["schemas"]["RecordingSource"];
       space_id: components["schemas"]["SpaceId"];
       /** @enum {string} */
       status: "pending" | "processing" | "completed" | "failed";
@@ -2280,6 +2317,7 @@ export interface components {
       /** @enum {string} */
       storage_provider: "r2";
       tenant_id: components["schemas"]["TenantId"];
+      transcription_policy: string;
       updated_at: components["schemas"]["DateTimeString"];
     };
     RecordingDownloadURL: {
@@ -2290,6 +2328,20 @@ export interface components {
         [key: string]: string[];
       };
       url: string;
+    };
+    RecordingExport: {
+      failure_code?: string | null;
+      failure_message?: string | null;
+      /** Format: uuid */
+      job_id?: string;
+      retryable: boolean;
+      source_expires_at?: components["schemas"]["DateTimeString"] | null;
+      /** @enum {string} */
+      status: "none" | "pending" | "ready" | "failed" | "unavailable";
+    };
+    RecordingExportRequestAcceptedResponse: {
+      export: components["schemas"]["RecordingExport"];
+      recording: components["schemas"]["Recording"];
     };
     /** Format: uuid */
     RecordingId: string;
@@ -2308,6 +2360,11 @@ export interface components {
       state: string;
       updated_at: components["schemas"]["DateTimeString"];
     };
+    RecordingSource: {
+      expires_at?: components["schemas"]["DateTimeString"] | null;
+      /** @enum {string} */
+      status: "pending" | "available" | "failed" | "expired";
+    };
     RefreshSpacePublicInviteAccessRequest: {
       media_proof: string;
       replace_media_connection: boolean;
@@ -2324,10 +2381,11 @@ export interface components {
       password: string;
     };
     RemoveEpisodeParticipantRequest: components["schemas"]["LeaveDashboardSpaceSelfRequest"];
+    RequestRecordingExportRequest: Record<string, never>;
     RequestTranscriptRequest: {
       idempotency_key: string;
-      language: string;
-      languages: string[];
+      language?: string;
+      languages?: string[];
     };
     RotateAPIKeyRequest: {
       expires_at?: components["schemas"]["DateTimeString"] | null;
@@ -2531,6 +2589,25 @@ export interface components {
       status: "pending" | "processing" | "completed" | "failed";
       tenant_id: components["schemas"]["TenantId"];
       updated_at: components["schemas"]["DateTimeString"];
+    };
+    TranscriptDocument: {
+      cues: {
+        end_ms: number;
+        identity?: {
+          display_name?: string | null;
+          participant_generation: number;
+          participant_ref: string;
+          track_epoch: string;
+          track_id: string;
+        } | null;
+        overlap: boolean;
+        start_ms: number;
+        text: string;
+      }[];
+      episode_id: components["schemas"]["EpisodeId"];
+      recording_id: components["schemas"]["RecordingId"];
+      schema_version: string;
+      transcript_id: components["schemas"]["TranscriptId"];
     };
     TranscriptDownloadURL: {
       expires_at: components["schemas"]["DateTimeString"];
@@ -6576,6 +6653,7 @@ export interface operations {
   listRecordings: {
     parameters: {
       query?: {
+        space_id?: components["schemas"]["SpaceId"];
         episode_id?: components["schemas"]["EpisodeId"];
         page_size?: number;
         cursor?: string;
@@ -6744,6 +6822,108 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["RecordingDownloadURL"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  requestRecordingExport: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        recording_id: components["schemas"]["RecordingId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RequestRecordingExportRequest"];
+      };
+    };
+    responses: {
+      /** @description Accepted */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RecordingExportRequestAcceptedResponse"];
         };
       };
       /** @description Bad Request */
@@ -10252,6 +10432,92 @@ export interface operations {
           "Retry-After": number;
           "X-RateLimit-Limit": number;
           "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getTranscriptDocument: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        transcript_id: components["schemas"]["TranscriptId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TranscriptDocument"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
           [name: string]: unknown;
         };
         content: {
