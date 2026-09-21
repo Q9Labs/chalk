@@ -76,6 +76,11 @@ run "deepinfra_without_customer_vpc" {
     condition     = !contains(keys(aws_lambda_function.dispatcher.environment[0].variables), "CLOUDFLARE_AI_TOKEN_PARAMETER_ARN") && !contains(keys(aws_lambda_function.dispatcher.environment[0].variables), "DEEPINFRA_EXECUTION_IDENTITY_PIN") && !contains(keys(aws_lambda_function.dispatcher.environment[0].variables), "DEEPINFRA_MODEL_VERSION_PIN")
     error_message = "Disabled-provider credentials and unobserved optional DeepInfra pins must not be placed in the Lambda environment."
   }
+
+  assert {
+    condition     = lookup(aws_cloudwatch_metric_alarm.scheduler_target_errors.dimensions, "ScheduleGroup", "") == aws_scheduler_schedule.reconcile.group_name && !contains(keys(aws_cloudwatch_metric_alarm.scheduler_target_errors.dimensions), "ScheduleName")
+    error_message = "EventBridge Scheduler target errors must use the documented ScheduleGroup metric dimension."
+  }
 }
 
 run "reject_no_provider" {

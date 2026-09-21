@@ -466,7 +466,7 @@ resource "aws_cloudwatch_metric_alarm" "scheduler_target_errors" {
   alarm_description   = "EventBridge Scheduler could not invoke the transcription dispatcher."
   namespace           = "AWS/Scheduler"
   metric_name         = "TargetErrorCount"
-  dimensions          = { ScheduleName = aws_scheduler_schedule.reconcile.name }
+  dimensions          = { ScheduleGroup = aws_scheduler_schedule.reconcile.group_name }
   statistic           = "Sum"
   period              = 300
   evaluation_periods  = 1
