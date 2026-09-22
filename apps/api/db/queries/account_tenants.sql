@@ -58,6 +58,12 @@ select
     tenants.cors_allowed_origins,
     tenants.logo_key,
     tenants.website,
+    coalesce(tenant_artifact_policies.transcription_ceiling, 'disabled') as transcription_ceiling,
+    coalesce(tenant_artifact_policies.transcription_default_mode, 'disabled') as transcription_default_mode,
+    coalesce(tenant_artifact_policies.provider_policy_version, '') as provider_policy_version,
+    coalesce(tenant_artifact_policies.recording_retention_seconds, 0) as recording_retention_seconds,
+    coalesce(tenant_artifact_policies.transcript_retention_seconds, 0) as transcript_retention_seconds,
+    coalesce(tenant_artifact_policies.source_window_seconds, 0) as source_window_seconds,
     tenants.updated_at,
     tenants.created_at,
     memberships.id as tenant_access_id,
@@ -67,6 +73,7 @@ select
     memberships.created_at as access_created_at
 from memberships
 join tenants on tenants.id = memberships.tenant_id
+left join tenant_artifact_policies on tenant_artifact_policies.tenant_id = tenants.id
 where memberships.user_id = sqlc.arg(account_id)
   and (
       not sqlc.arg(cursor_set)::boolean

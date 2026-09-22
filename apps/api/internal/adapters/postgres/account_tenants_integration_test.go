@@ -6,9 +6,11 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
@@ -123,6 +125,61 @@ func TestConcurrentTenantOnboardingConvergesOnOneTenant(t *testing.T) {
 	}
 	if results[0].AccountTenant.Tenant.ID != results[1].AccountTenant.Tenant.ID || results[0].Replayed == results[1].Replayed {
 		t.Fatalf("concurrent results = %#v", results)
+	}
+}
+
+func TestListAccountTenantsProjectsArtifactPolicy(t *testing.T) {
+	pool := accountTenantIntegrationPool(t)
+	ctx := context.Background()
+	accountID := accountTenantIntegrationID(t)
+	if _, err := pool.Exec(ctx, `insert into users(id,name,email) values($1,'Policy projection owner',$2)`, uuid(accountID), accountID.String()+"@account.test"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		pool.Exec(ctx, `delete from tenant_onboarding_requests where account_id=$1`, uuid(accountID))
+		pool.Exec(ctx, `delete from memberships where user_id=$1`, uuid(accountID))
+		pool.Exec(ctx, `delete from tenants where name='Policy projection studio'`)
+		pool.Exec(ctx, `delete from users where id=$1`, uuid(accountID))
+	})
+
+	service := tenants.NewAccountService(NewAccountTenantRepository(sqlc.New(pool), pool, nil))
+	created, err := service.OnboardTenant(ctx, tenants.OnboardTenantInput{AccountID: accountID, RequestKey: "tenant-policy-projection-0001", Name: "Policy projection studio"})
+	if err != nil {
+		t.Fatalf("onboard tenant: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		update tenant_artifact_policies
+		set transcription_ceiling='automatic', transcription_default_mode='disabled', provider_policy_version='policy-projection-v1',
+			recording_retention_seconds=2592000, transcript_retention_seconds=2592000, source_window_seconds=2592000
+		where tenant_id=$1
+	`, uuid(created.AccountTenant.Tenant.ID)); err != nil {
+		t.Fatalf("set tenant Artifact Policy: %v", err)
+	}
+
+	page, err := pagination.NewPageRequest(25, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed, err := service.ListAccountTenants(ctx, accountID, page)
+	if err != nil || len(listed.Tenants) != 1 {
+		t.Fatalf("list account Tenants = %#v, err = %v", listed, err)
+	}
+	wantWindow := 30 * 24 * time.Hour
+	policy := listed.Tenants[0].Tenant.ArtifactPolicy
+	if policy.TranscriptionCeiling != artifactpolicy.TranscriptionAutomatic || policy.TranscriptionDefault != artifactpolicy.TranscriptionDisabled || policy.ProviderPolicyVersion != "policy-projection-v1" || policy.RecordingRetention != wantWindow || policy.TranscriptRetention != wantWindow || policy.TranscriptionSourceWindow != wantWindow {
+		t.Fatalf("listed Tenant Artifact Policy = %#v", policy)
+	}
+
+	if _, err := pool.Exec(ctx, `delete from tenant_artifact_policies where tenant_id=$1`, uuid(created.AccountTenant.Tenant.ID)); err != nil {
+		t.Fatalf("delete legacy Tenant Artifact Policy: %v", err)
+	}
+	listed, err = service.ListAccountTenants(ctx, accountID, page)
+	if err != nil || len(listed.Tenants) != 1 {
+		t.Fatalf("list legacy account Tenants = %#v, err = %v", listed, err)
+	}
+	policy = listed.Tenants[0].Tenant.ArtifactPolicy
+	if policy.TranscriptionCeiling != artifactpolicy.TranscriptionDisabled || policy.TranscriptionDefault != artifactpolicy.TranscriptionDisabled || policy.ProviderPolicyVersion != "" || policy.RecordingRetention != 0 || policy.TranscriptRetention != 0 || policy.TranscriptionSourceWindow != 0 {
+		t.Fatalf("legacy listed Tenant Artifact Policy = %#v", policy)
 	}
 }
 
