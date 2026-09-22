@@ -7,7 +7,7 @@ export interface SsmParameterClient {
       WithDecryption: true;
     };
   }): Promise<{
-    Parameters?: Array<{ Name?: string; Value?: string }>;
+    Parameters?: Array<{ ARN?: string; Name?: string; Value?: string }>;
     InvalidParameters?: string[];
   }>;
 }
@@ -35,8 +35,14 @@ export async function loadDispatcherSecrets(client: SsmParameterClient, names: S
   if (new Set(requested).size !== requested.length) throw new ConfigError("SSM parameter names must be distinct");
   const response = await client.send({ input: { Names: requested, WithDecryption: true } });
   if (response.InvalidParameters?.length) throw new ConfigError("required transcription SSM parameter is unavailable");
-  const values = new Map((response.Parameters ?? []).flatMap((parameter) => (parameter.Name && parameter.Value ? [[parameter.Name, parameter.Value] as const] : [])));
-  if ([...values.keys()].some((name) => !requested.includes(name))) throw new ConfigError("SSM returned an unexpected parameter");
+  const values = new Map<string, string>();
+  for (const parameter of response.Parameters ?? []) {
+    if (!parameter.Value || (!parameter.Name && !parameter.ARN)) throw new ConfigError("SSM returned an invalid parameter");
+    const requestedName = [parameter.ARN, parameter.Name].find((identity) => identity !== undefined && requested.includes(identity));
+    if (!requestedName) throw new ConfigError("SSM returned an unexpected parameter");
+    if (values.has(requestedName)) throw new ConfigError("SSM returned a duplicate parameter");
+    values.set(requestedName, parameter.Value);
+  }
   const cloudflareAiToken = names.cloudflareAiToken ? values.get(names.cloudflareAiToken) : undefined;
   const workloadAuth = values.get(names.workloadAuth);
   if (!workloadAuth || (names.cloudflareAiToken && !cloudflareAiToken)) throw new ConfigError("required transcription secret is unavailable");
