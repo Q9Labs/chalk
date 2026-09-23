@@ -17834,11 +17834,14 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           transcription_policy: {
             type: "string",
           },
+          transcription_preparation: {
+            $ref: "#/components/schemas/RecordingTranscriptionPreparation",
+          },
           updated_at: {
             $ref: "#/components/schemas/DateTimeString",
           },
         },
-        required: ["created_at", "episode_id", "export", "id", "metadata", "source", "space_id", "status", "storage_key", "storage_provider", "tenant_id", "transcription_policy", "updated_at"],
+        required: ["created_at", "episode_id", "export", "id", "metadata", "source", "space_id", "status", "storage_key", "storage_provider", "tenant_id", "transcription_policy", "transcription_preparation", "updated_at"],
         type: "object",
       },
       RecordingDownloadURL: {
@@ -17988,6 +17991,17 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           },
           status: {
             enum: ["pending", "available", "failed", "expired"],
+            type: "string",
+          },
+        },
+        required: ["status"],
+        type: "object",
+      },
+      RecordingTranscriptionPreparation: {
+        additionalProperties: false,
+        properties: {
+          status: {
+            enum: ["none", "pending", "ready", "failed", "expired"],
             type: "string",
           },
         },

@@ -1012,6 +1012,11 @@ export const RecordingSourceSchema = Schema.Struct({
 });
 export type RecordingSource = typeof RecordingSourceSchema.Type;
 
+export const RecordingTranscriptionPreparationSchema = Schema.Struct({
+  status: Schema.Literals(["none", "pending", "ready", "failed", "expired"]),
+});
+export type RecordingTranscriptionPreparation = typeof RecordingTranscriptionPreparationSchema.Type;
+
 export const RecordingSchema = Schema.Struct({
   created_at: DateTimeStringSchema,
   episode_id: EpisodeIdSchema,
@@ -1025,6 +1030,7 @@ export const RecordingSchema = Schema.Struct({
   storage_provider: Schema.Literal("r2"),
   tenant_id: TenantIdSchema,
   transcription_policy: Schema.String,
+  transcription_preparation: RecordingTranscriptionPreparationSchema,
   updated_at: DateTimeStringSchema,
 });
 export type Recording = typeof RecordingSchema.Type;

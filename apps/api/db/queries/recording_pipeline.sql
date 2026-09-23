@@ -534,10 +534,15 @@ with selected as (
     where recordings.id = any(sqlc.arg(recording_ids)::uuid[])
       and recordings.tenant_id = sqlc.arg(tenant_id)
 ), export_job as (
-    select jobs.id, jobs.state, jobs.error_code
+    select jobs.recording_id, jobs.id, jobs.state, jobs.error_code
     from recording_jobs jobs
     join selected on selected.id = jobs.recording_id
     where jobs.kind = 'render'
+), transcription_job as (
+    select jobs.recording_id, jobs.state
+    from recording_jobs jobs
+    join selected on selected.id = jobs.recording_id
+    where jobs.kind = 'transcription'
 )
 select selected.id as recording_id,
     case
@@ -549,6 +554,18 @@ select selected.id as recording_id,
 	end as source_status,
 	selected.source_expires_at,
 	selected.transcription_policy,
+	case
+		when selected.transcription_policy = 'disabled' then 'none'
+		when transcription_source.status = 'ready' and transcription_source.expires_at > clock_timestamp() then 'ready'
+		when transcription_source.expires_at <= clock_timestamp() or transcription_source.status in ('cleanup_pending', 'deleting', 'deleted') then 'expired'
+		when selected.capture_completed_at is null and (selected.pipeline_state = 'terminal_failure' or selected.recording_status = 'failed') then 'failed'
+		when selected.capture_completed_at is null and selected.recording_status = 'completed' then 'expired'
+		when selected.capture_completed_at is null then 'pending'
+		when selected.source_expires_at <= clock_timestamp() then 'expired'
+		when transcription_job.state = 'terminal_failure' then 'failed'
+		when transcription_job.state in ('pending', 'leased', 'retryable_failure') then 'pending'
+		else 'none'
+	end::text as transcription_preparation_status,
 	export_job.id as export_job_id,
     case
         -- New deferred artifacts carry the capture-anchored expiry; imported
@@ -575,7 +592,10 @@ select selected.id as recording_id,
         else ''
     end::text as failure_message
 from selected
-left join export_job on true;
+left join export_job on export_job.recording_id = selected.id
+left join transcription_job on transcription_job.recording_id = selected.id
+left join recording_transcription_sources transcription_source on transcription_source.recording_id = selected.id
+    and transcription_source.tenant_id = sqlc.arg(tenant_id);
 
 -- name: GetCompletedCaptureRecordingJob :one
 select jobs.*

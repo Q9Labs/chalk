@@ -17,7 +17,7 @@ type transcriptQuerier interface {
 	CreateTranscription(context.Context, sqlc.CreateTranscriptionParams) (sqlc.Transcription, error)
 	GetTenantTranscription(context.Context, sqlc.GetTenantTranscriptionParams) (sqlc.Transcription, error)
 	GetTenantTranscriptionByRecording(context.Context, sqlc.GetTenantTranscriptionByRecordingParams) (sqlc.Transcription, error)
-	GetCompletedRecordingTranscriptionMode(context.Context, sqlc.GetCompletedRecordingTranscriptionModeParams) (string, error)
+	GetRecordingTranscriptionMode(context.Context, sqlc.GetRecordingTranscriptionModeParams) (string, error)
 	GetTranscriptionChunkJob(context.Context, pgtype.UUID) (sqlc.ArtifactJob, error)
 	ListTenantTranscriptions(context.Context, sqlc.ListTenantTranscriptionsParams) ([]sqlc.Transcription, error)
 	UpdateTenantTranscription(context.Context, sqlc.UpdateTenantTranscriptionParams) (sqlc.Transcription, error)
@@ -172,7 +172,7 @@ func (r TranscriptRepository) Request(ctx context.Context, input transcripts.Req
 	} else if !errors.Is(getErr, pgx.ErrNoRows) {
 		return transcripts.Transcript{}, transcripts.Job{}, getErr
 	}
-	mode, err := r.queries.GetCompletedRecordingTranscriptionMode(ctx, sqlc.GetCompletedRecordingTranscriptionModeParams{TenantID: uuid(input.TenantID), RecordingID: uuid(input.RecordingID)})
+	mode, err := r.queries.GetRecordingTranscriptionMode(ctx, sqlc.GetRecordingTranscriptionModeParams{TenantID: uuid(input.TenantID), RecordingID: uuid(input.RecordingID)})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return transcripts.Transcript{}, transcripts.Job{}, transcripts.ErrRecordingNotFound
 	}

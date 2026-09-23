@@ -106,7 +106,7 @@ func (*transcriptionPolicyQueries) GetTenantTranscriptionByRecording(context.Con
 	return sqlc.Transcription{}, pgx.ErrNoRows
 }
 
-func (q *transcriptionPolicyQueries) GetCompletedRecordingTranscriptionMode(context.Context, sqlc.GetCompletedRecordingTranscriptionModeParams) (string, error) {
+func (q *transcriptionPolicyQueries) GetRecordingTranscriptionMode(context.Context, sqlc.GetRecordingTranscriptionModeParams) (string, error) {
 	q.policyReads++
 	return q.mode, nil
 }

@@ -104,8 +104,9 @@ func mapDeferredRecordingArtifactState(row sqlc.ListRecordingDeferredArtifactSta
 	state := recordingpipeline.ArtifactState{
 		SourceStatus: recordingpipeline.SourceStatus(row.SourceStatus), ExportStatus: recordingpipeline.ExportStatus(row.ExportStatus),
 		SourceExpiresAt: nullableTimestamp(row.SourceExpiresAt), Retryable: row.Retryable,
-		TranscriptionPolicy: artifactpolicy.TranscriptionMode(row.TranscriptionPolicy),
-		FailureCode:         row.FailureCode, FailureMessage: row.FailureMessage,
+		TranscriptionPolicy:            artifactpolicy.TranscriptionMode(row.TranscriptionPolicy),
+		TranscriptionPreparationStatus: recordingpipeline.TranscriptionPreparationStatus(row.TranscriptionPreparationStatus),
+		FailureCode:                    row.FailureCode, FailureMessage: row.FailureMessage,
 	}
 	if row.ExportJobID.Valid {
 		jobID := utilities.IDFromBytes(row.ExportJobID.Bytes)

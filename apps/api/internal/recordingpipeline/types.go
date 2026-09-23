@@ -116,6 +116,18 @@ const (
 	ExportStatusUnavailable ExportStatus = "unavailable"
 )
 
+// TranscriptionPreparationStatus describes audio preparation independently of
+// Capture, Video Export, and the Transcript artifact itself.
+type TranscriptionPreparationStatus string
+
+const (
+	TranscriptionPreparationNone    TranscriptionPreparationStatus = "none"
+	TranscriptionPreparationPending TranscriptionPreparationStatus = "pending"
+	TranscriptionPreparationReady   TranscriptionPreparationStatus = "ready"
+	TranscriptionPreparationFailed  TranscriptionPreparationStatus = "failed"
+	TranscriptionPreparationExpired TranscriptionPreparationStatus = "expired"
+)
+
 // ArtifactState backs the stable recording-artifact read model. Its source
 // expiry is anchored at capture completion and never renewed by export reads.
 type ArtifactState struct {
@@ -124,12 +136,13 @@ type ArtifactState struct {
 	// TranscriptionPolicy is sealed in the Episode snapshot and defaults to
 	// disabled for legacy or invalid snapshots. It never reflects mutable Space
 	// policy.
-	TranscriptionPolicy artifactpolicy.TranscriptionMode
-	ExportJobID         *utilities.ID
-	ExportStatus        ExportStatus
-	Retryable           bool
-	FailureCode         string
-	FailureMessage      string
+	TranscriptionPolicy            artifactpolicy.TranscriptionMode
+	TranscriptionPreparationStatus TranscriptionPreparationStatus
+	ExportJobID                    *utilities.ID
+	ExportStatus                   ExportStatus
+	Retryable                      bool
+	FailureCode                    string
+	FailureMessage                 string
 }
 
 type JobState string

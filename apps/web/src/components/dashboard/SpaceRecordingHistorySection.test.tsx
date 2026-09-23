@@ -41,8 +41,9 @@ vi.mock("@q9labsai/chalk-react", () => ({
           <div key={recording.id}>
             <span>{recording.id}</span>
             <span>{recording.export?.status}</span>
+            <span>{`Transcript ${recording.id.slice(0, 8)}: ${recording.transcript?.status}`}</span>
             {recording.transcript?.status === "completed" && recording.transcript.text === undefined ? <button onClick={() => onReadTranscript?.(recording)}>Read transcript {recording.id.slice(0, 8)}</button> : null}
-            {recording.transcript?.status === "none" && recording.transcript.requestable ? <button onClick={() => onRequestTranscript?.(recording)}>Request transcript {recording.id.slice(0, 8)}</button> : null}
+            {recording.transcript?.status === "requestable" && recording.transcript.requestable ? <button onClick={() => onRequestTranscript?.(recording)}>Request transcript {recording.id.slice(0, 8)}</button> : null}
             {recording.transcript?.text === undefined ? null : <p>{recording.transcript.text}</p>}
             {recording.export?.status === "pending" ? <button onClick={() => onRefreshExport?.(recording)}>Check video status {recording.id.slice(0, 8)}</button> : null}
             {recording.export?.status === "ready" ? (
@@ -83,6 +84,7 @@ const recording = {
   storage_provider: "r2",
   tenant_id: tenantID,
   transcription_policy: "on_demand",
+  transcription_preparation: { status: "ready" },
   updated_at: "2026-09-22T09:00:00Z",
 };
 
@@ -193,7 +195,7 @@ describe("SpaceRecordingHistorySection", () => {
   });
 
   it("requests an eligible transcript and refreshes a long-pending video without creating another export", async () => {
-    const pendingRecording = { ...recording, export: { retryable: false, status: "pending" } };
+    const pendingRecording = { ...recording, export: { retryable: false, status: "pending" }, status: "pending" };
     const acceptedTranscript = { ...completedTranscript, status: "pending" };
     const client: SpaceRecordingHistoryClient = {
       createRecordingDownloadURL: vi.fn(),
@@ -225,21 +227,24 @@ describe("SpaceRecordingHistorySection", () => {
     expect(client.requestRecordingExport).not.toHaveBeenCalled();
   });
 
-  it("uses each Recording's frozen transcription policy for transcript recovery", async () => {
+  it("uses frozen policy and audio preparation state for transcript recovery", async () => {
     const onDemandRecording = {
       ...recording,
       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+      status: "pending",
       transcription_policy: "on_demand",
     };
     const automaticRecording = {
       ...recording,
       id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+      status: "pending",
       transcription_policy: "automatic",
     };
     const disabledRecording = {
       ...recording,
       id: "cccccccc-cccc-4ccc-8ccc-ccccccccccc1",
       transcription_policy: "disabled",
+      transcription_preparation: { status: "none" },
     };
     const failedAutomaticRecording = {
       ...recording,
@@ -252,6 +257,27 @@ describe("SpaceRecordingHistorySection", () => {
       recording_id: failedAutomaticRecording.id,
       status: "failed",
     };
+    const preparingAutomaticRecording = {
+      ...automaticRecording,
+      id: "ffffffff-ffff-4fff-8fff-fffffffffff1",
+      transcription_preparation: { status: "pending" },
+    };
+    const failedPreparationRecording = {
+      ...automaticRecording,
+      id: "11111111-1111-4111-8111-111111111112",
+      transcription_preparation: { status: "failed" },
+    };
+    const expiredOnDemandRecording = {
+      ...onDemandRecording,
+      id: "22222222-2222-4222-8222-222222222223",
+      source: { ...onDemandRecording.source, status: "expired" },
+      transcription_preparation: { status: "expired" },
+    };
+    const unavailableOnDemandRecording = {
+      ...onDemandRecording,
+      id: "33333333-3333-4333-8333-333333333334",
+      transcription_preparation: { status: "none" },
+    };
     const client: SpaceRecordingHistoryClient = {
       createRecordingDownloadURL: vi.fn(),
       getRecording: vi.fn(),
@@ -260,7 +286,7 @@ describe("SpaceRecordingHistorySection", () => {
         pagination: { has_more: false, next_cursor: null, page_size: 2 },
         transcripts: input.recordingID === failedAutomaticRecording.id ? [failedAutomaticTranscript] : [],
       })),
-      listSpaceRecordings: vi.fn(async () => historyPage([onDemandRecording, automaticRecording, disabledRecording, failedAutomaticRecording])),
+      listSpaceRecordings: vi.fn(async () => historyPage([onDemandRecording, automaticRecording, disabledRecording, failedAutomaticRecording, preparingAutomaticRecording, failedPreparationRecording, expiredOnDemandRecording, unavailableOnDemandRecording])),
       requestRecordingExport: vi.fn(),
       requestRecordingTranscript: vi.fn(),
     };
@@ -269,8 +295,19 @@ describe("SpaceRecordingHistorySection", () => {
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Request transcript aaaaaaaa" })).toBeTruthy());
     expect(screen.getByRole("button", { name: "Request transcript bbbbbbbb" })).toBeTruthy();
+    expect(screen.getByText("Transcript aaaaaaaa: requestable")).toBeTruthy();
+    expect(screen.getByText("Transcript bbbbbbbb: requestable")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Request transcript cccccccc" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Request transcript dddddddd" })).toBeNull();
+    expect(screen.getByText("Transcript cccccccc: none")).toBeTruthy();
+    expect(screen.getByText("Transcript dddddddd: failed")).toBeTruthy();
+    expect(screen.getByText("Transcript ffffffff: pending")).toBeTruthy();
+    expect(screen.getByText("Transcript 11111111: failed")).toBeTruthy();
+    expect(screen.getByText("Transcript 22222222: unavailable")).toBeTruthy();
+    expect(screen.getByText("Transcript 33333333: unavailable")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Request transcript ffffffff" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Request transcript 22222222" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Request transcript 33333333" })).toBeNull();
     expect(client.requestRecordingTranscript).not.toHaveBeenCalled();
   });
 

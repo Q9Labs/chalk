@@ -362,10 +362,7 @@ function recordingHistoryItem(entry: RecordingHistoryEntry, text: string | undef
     status: recordingStatus(entry.recording.status),
     transcript:
       entry.transcript === undefined
-        ? {
-            requestable: canRequestTranscript(entry.recording),
-            status: "none",
-          }
+        ? missingTranscript(entry.recording)
         : {
             source_expires_at: entry.transcript.source_expires_at,
             status: transcriptStatus(entry.transcript.status),
@@ -375,8 +372,12 @@ function recordingHistoryItem(entry: RecordingHistoryEntry, text: string | undef
   };
 }
 
-function canRequestTranscript(recording: DashboardRecording): boolean {
-  return (recording.transcription_policy === "on_demand" || recording.transcription_policy === "automatic") && recording.status === "completed" && recording.source.status === "available";
+function missingTranscript(recording: DashboardRecording): NonNullable<RecordingHistoryItem["transcript"]> {
+  if (recording.transcription_policy === "disabled") return { status: "none" };
+  if (recording.transcription_preparation.status === "ready") return { requestable: true, status: "requestable" };
+  if (recording.transcription_preparation.status === "pending") return { status: "pending" };
+  if (recording.transcription_preparation.status === "failed" || recording.source.status === "failed") return { status: "failed" };
+  return { status: "unavailable" };
 }
 
 function recordingStatus(status: string): RecordingHistoryItem["status"] {

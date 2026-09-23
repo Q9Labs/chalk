@@ -488,6 +488,9 @@ func (g *generator) fieldSchema(schemaName string, fieldName string, field refle
 	if schemaName == "Recording" && fieldName == "source" {
 		return schemaReference("RecordingSource")
 	}
+	if schemaName == "Recording" && fieldName == "transcription_preparation" {
+		return schemaReference("RecordingTranscriptionPreparation")
+	}
 	if (schemaName == "Recording" || schemaName == "RecordingExportRequestAcceptedResponse") && fieldName == "export" {
 		return schemaReference("RecordingExport")
 	}
@@ -573,6 +576,14 @@ func recordingArtifactSchemas() map[string]map[string]any {
 				"source_expires_at": nullableSchema(timestampSchema()),
 				"failure_code":      nullableSchema(stringSchema()),
 				"failure_message":   nullableSchema(stringSchema()),
+			},
+		},
+		"RecordingTranscriptionPreparation": {
+			"type":                 "object",
+			"additionalProperties": false,
+			"required":             []string{"status"},
+			"properties": map[string]any{
+				"status": map[string]any{"type": "string", "enum": []string{"none", "pending", "ready", "failed", "expired"}},
 			},
 		},
 	}

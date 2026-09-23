@@ -177,10 +177,37 @@ describe("RecordingHistoryPanel", () => {
       const checkStatus = container.querySelector('button[aria-label="Check video status recordin"]');
       const requestTranscript = container.querySelector('button[aria-label="Request transcript recordin"]');
       if (!(checkStatus instanceof HTMLButtonElement) || !(requestTranscript instanceof HTMLButtonElement)) throw new Error("Pending video and transcript actions are missing");
+      expect(container.textContent).toContain("Can request");
+      expect(container.textContent).not.toContain("Not enabled");
       await act(async () => checkStatus.click());
       await act(async () => requestTranscript.click());
       expect(onRefreshExport).toHaveBeenCalledWith(recording);
       expect(onRequestTranscript).toHaveBeenCalledWith(recording);
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
+  it("distinguishes automatic preparation, expired Capture, and disabled transcription", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const base: RecordingHistoryItem = {
+      created_at: "2026-09-21T12:00:00Z",
+      episode_id: "episode-one",
+      export: { retryable: false, status: "none" },
+      id: "preparing",
+      source: { status: "available" },
+      status: "pending",
+      transcript: { status: "pending" },
+      updated_at: "2026-09-21T12:00:00Z",
+    };
+    try {
+      await act(async () => root.render(<RecordingHistoryPanel recordings={[base, { ...base, id: "expired", source: { status: "expired" }, transcript: { status: "unavailable" } }, { ...base, id: "disabled", transcript: { status: "none" } }]} />));
+      expect(container.textContent).toContain("Transcript is waiting to be prepared.");
+      expect(container.textContent).toContain("Transcript cannot be requested from this Capture.");
+      expect(container.textContent).toContain("Transcript was not enabled for this Episode.");
     } finally {
       await act(async () => root.unmount());
       container.remove();

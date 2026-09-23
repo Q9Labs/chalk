@@ -12,6 +12,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/config"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -59,6 +60,9 @@ func TestTranscriptRequestEnforcesFrozenEpisodeTranscriptionPolicy(t *testing.T)
 
 	for _, mode := range []string{"on_demand", "automatic"} {
 		recordingID := insertTranscriptPolicyFixture(t, ctx, connection, tenantID, mode, false)
+		if _, err := connection.Exec(ctx, `update recordings set status = 'pending', completed_at = null where id = $1`, recordingID.Bytes()); err != nil {
+			t.Fatalf("mark %s recording pending without MP4: %v", mode, err)
+		}
 		insertTranscriptSourceFixture(t, ctx, connection, tenantID, recordingID)
 		input := transcriptPolicyRequestInput(t, tenantID, recordingID, "allowed-"+mode)
 		if mode == "automatic" {
@@ -78,6 +82,19 @@ func TestTranscriptRequestEnforcesFrozenEpisodeTranscriptionPolicy(t *testing.T)
 		}
 		assertTranscriptArtifactCounts(t, ctx, connection, recordingID, 1, 1)
 	}
+
+	expiredRecording := insertTranscriptPolicyFixture(t, ctx, connection, tenantID, "on_demand", false)
+	insertTranscriptSourceFixture(t, ctx, connection, tenantID, expiredRecording)
+	if _, err := connection.Exec(ctx, `update recordings set status = 'pending', completed_at = null where id = $1`, expiredRecording.Bytes()); err != nil {
+		t.Fatalf("mark expired-source recording pending: %v", err)
+	}
+	if _, err := connection.Exec(ctx, `update recording_transcription_sources set committed_at = now() - interval '2 hours', expires_at = now() - interval '1 minute' where recording_id = $1`, expiredRecording.Bytes()); err != nil {
+		t.Fatalf("expire transcription source: %v", err)
+	}
+	if _, _, err := repository.Request(ctx, transcriptPolicyRequestInput(t, tenantID, expiredRecording, "expired-no-mp4")); !errors.Is(err, transcripts.ErrSourceExpired) {
+		t.Fatalf("expired no-MP4 request error = %v, want ErrSourceExpired", err)
+	}
+	assertTranscriptArtifactCounts(t, ctx, connection, expiredRecording, 0, 0)
 
 	replayRecording := insertTranscriptPolicyFixture(t, ctx, connection, tenantID, "disabled", false)
 	replayTranscriptID, err := utilities.NewID()
@@ -145,6 +162,29 @@ func TestRecordingArtifactStateUsesFrozenEpisodeTranscriptionPolicy(t *testing.T
 	onDemandRecording := insertTranscriptPolicyFixture(t, ctx, connection, tenantID, "on_demand", false)
 	disabledRecording := insertTranscriptPolicyFixture(t, ctx, connection, tenantID, "disabled", false)
 	legacyRecording := insertTranscriptPolicyFixture(t, ctx, connection, tenantID, "", true)
+	failedRecording := insertTranscriptPolicyFixture(t, ctx, connection, tenantID, "automatic", false)
+	readyRecording := insertTranscriptPolicyFixture(t, ctx, connection, tenantID, "on_demand", false)
+	expiredRecording := insertTranscriptPolicyFixture(t, ctx, connection, tenantID, "on_demand", false)
+	noneRecording := insertTranscriptPolicyFixture(t, ctx, connection, tenantID, "automatic", false)
+	emptyRecording := insertTranscriptPolicyFixture(t, ctx, connection, tenantID, "automatic", false)
+	for _, recordingID := range []utilities.ID{onDemandRecording, failedRecording, readyRecording, expiredRecording, noneRecording, emptyRecording} {
+		if _, err := connection.Exec(ctx, `update recordings set status = 'pending', completed_at = null where id = $1`, recordingID.Bytes()); err != nil {
+			t.Fatalf("mark recording %s pending: %v", recordingID, err)
+		}
+	}
+	for _, recordingID := range []utilities.ID{onDemandRecording, failedRecording, noneRecording, emptyRecording} {
+		insertTranscriptPolicyCaptureCompleteFixture(t, ctx, connection, tenantID, recordingID)
+	}
+	insertTranscriptPolicyPreparationJobFixture(t, ctx, connection, tenantID, onDemandRecording, "pending")
+	insertTranscriptPolicyPreparationJobFixture(t, ctx, connection, tenantID, failedRecording, "terminal_failure")
+	insertTranscriptPolicyPreparationJobFixture(t, ctx, connection, tenantID, emptyRecording, "succeeded")
+	exportJobID := insertTranscriptPolicyExportJobFixture(t, ctx, connection, tenantID, onDemandRecording)
+	insertTranscriptSourceFixture(t, ctx, connection, tenantID, readyRecording)
+	insertTranscriptPolicyPreparationJobFixture(t, ctx, connection, tenantID, readyRecording, "terminal_failure")
+	insertTranscriptSourceFixture(t, ctx, connection, tenantID, expiredRecording)
+	if _, err := connection.Exec(ctx, `update recording_transcription_sources set committed_at = now() - interval '2 hours', expires_at = now() - interval '1 minute' where recording_id = $1`, expiredRecording.Bytes()); err != nil {
+		t.Fatalf("expire prepared source: %v", err)
+	}
 	for _, change := range []struct {
 		recordingID utilities.ID
 		currentMode string
@@ -160,7 +200,7 @@ where id = (select space_id from recordings where id = $2)`, change.currentMode,
 		}
 	}
 
-	states, err := NewRecordingPipelineRepositoryWithPool(pool).GetArtifactStates(ctx, tenantID, []utilities.ID{onDemandRecording, disabledRecording, legacyRecording})
+	states, err := NewRecordingPipelineRepositoryWithPool(pool).GetArtifactStates(ctx, tenantID, []utilities.ID{onDemandRecording, disabledRecording, legacyRecording, failedRecording, readyRecording, expiredRecording, noneRecording, emptyRecording})
 	if err != nil {
 		t.Fatalf("get batched recording artifact states: %v", err)
 	}
@@ -173,6 +213,42 @@ where id = (select space_id from recordings where id = $2)`, change.currentMode,
 		if !ok || state.TranscriptionPolicy != want {
 			t.Fatalf("recording %s frozen transcription policy=%q present=%t, want %q", recordingID, state.TranscriptionPolicy, ok, want)
 		}
+	}
+	for recordingID, want := range map[utilities.ID]recordingpipeline.TranscriptionPreparationStatus{
+		onDemandRecording: recordingpipeline.TranscriptionPreparationPending,
+		failedRecording:   recordingpipeline.TranscriptionPreparationFailed,
+		readyRecording:    recordingpipeline.TranscriptionPreparationReady,
+		expiredRecording:  recordingpipeline.TranscriptionPreparationExpired,
+		noneRecording:     recordingpipeline.TranscriptionPreparationNone,
+		emptyRecording:    recordingpipeline.TranscriptionPreparationNone,
+		disabledRecording: recordingpipeline.TranscriptionPreparationNone,
+	} {
+		state := states[recordingID]
+		if state.TranscriptionPreparationStatus != want {
+			t.Fatalf("recording %s preparation status = %q, want %q", recordingID, state.TranscriptionPreparationStatus, want)
+		}
+		if recordingID == failedRecording && (state.SourceStatus != recordingpipeline.SourceStatusAvailable || state.ExportStatus != recordingpipeline.ExportStatusNone) {
+			t.Fatalf("failed audio preparation changed Capture or Video Export state: %+v", state)
+		}
+	}
+	if exportState := states[onDemandRecording]; exportState.ExportStatus != recordingpipeline.ExportStatusPending || exportState.ExportJobID == nil || *exportState.ExportJobID != exportJobID {
+		t.Fatalf("recording with on-request Export job = %+v, want pending with its own job ID", exportState)
+	}
+	if noExportState := states[noneRecording]; noExportState.ExportStatus != recordingpipeline.ExportStatusNone || noExportState.ExportJobID != nil {
+		t.Fatalf("recording without Export job inherited another recording's state: %+v", noExportState)
+	}
+	if _, err := connection.Exec(ctx, `update recording_jobs set state = 'terminal_failure', error_code = 'render_failure_probe' where id = $1`, exportJobID.Bytes()); err != nil {
+		t.Fatalf("mark on-request Export failed: %v", err)
+	}
+	exportStates, err := NewRecordingPipelineRepositoryWithPool(pool).GetArtifactStates(ctx, tenantID, []utilities.ID{onDemandRecording, noneRecording})
+	if err != nil {
+		t.Fatalf("get two-recording Export states: %v", err)
+	}
+	if failedExport := exportStates[onDemandRecording]; failedExport.ExportStatus != recordingpipeline.ExportStatusFailed || failedExport.FailureCode != "render_failure_probe" {
+		t.Fatalf("failed on-request Export state = %+v", failedExport)
+	}
+	if noExport := exportStates[noneRecording]; noExport.ExportStatus != recordingpipeline.ExportStatusNone || noExport.ExportJobID != nil || noExport.FailureCode != "" {
+		t.Fatalf("recording without Export job inherited failed Export: %+v", noExport)
 	}
 }
 
@@ -235,7 +311,7 @@ func transcriptPolicyRequestInput(t *testing.T, tenantID, recordingID utilities.
 	t.Helper()
 	return transcripts.RequestInput{
 		TenantID: tenantID, RecordingID: recordingID, IdempotencyKey: key,
-		Languages: []string{"en"}, AttemptLimit: 4,
+		Languages: []string{"en"}, AttemptLimit: 4, Now: time.Now(),
 	}
 }
 
@@ -265,6 +341,56 @@ insert into recording_transcription_source_chunks (
 	}
 }
 
+func insertTranscriptPolicyCaptureCompleteFixture(t *testing.T, ctx context.Context, connection *pgxpool.Conn, tenantID, recordingID utilities.ID) {
+	t.Helper()
+	reservationID := mustTenantPolicyTestID(t)
+	if _, err := connection.Exec(ctx, `
+insert into recording_reservations (
+    id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
+    request_fingerprint, policy_snapshot_version, participant_count,
+    max_duration_seconds, input_bitrate_bps, state, ends_at
+)
+select $1, tenant_id, space_id, episode_id, id, $2, $3,
+    'episode_config.v2', 1, 60, 100000, 'released', now()
+from recordings where id = $4`, reservationID.Bytes(), "preparation-"+recordingID.String(), make([]byte, 32), recordingID.Bytes()); err != nil {
+		t.Fatalf("insert capture reservation: %v", err)
+	}
+	if _, err := connection.Exec(ctx, `
+insert into recording_pipelines (recording_id, tenant_id, reservation_id, state, capture_completed_at)
+values ($1, $2, $3, 'capture_complete', now())`, recordingID.Bytes(), tenantID.Bytes(), reservationID.Bytes()); err != nil {
+		t.Fatalf("insert completed Capture: %v", err)
+	}
+}
+
+func insertTranscriptPolicyPreparationJobFixture(t *testing.T, ctx context.Context, connection *pgxpool.Conn, tenantID, recordingID utilities.ID, state string) {
+	t.Helper()
+	jobID := mustTenantPolicyTestID(t)
+	if _, err := connection.Exec(ctx, `
+insert into recording_jobs (
+    id, tenant_id, episode_id, recording_id, kind, idempotency_key,
+    payload_schema_version, state, available_at, attempt_limit
+)
+select $1, $2, episode_id, id, 'transcription', $3, 1, $4, now(), 4
+from recordings where id = $5`, jobID.Bytes(), tenantID.Bytes(), "transcription:"+recordingID.String(), state, recordingID.Bytes()); err != nil {
+		t.Fatalf("insert audio preparation job: %v", err)
+	}
+}
+
+func insertTranscriptPolicyExportJobFixture(t *testing.T, ctx context.Context, connection *pgxpool.Conn, tenantID, recordingID utilities.ID) utilities.ID {
+	t.Helper()
+	jobID := mustTenantPolicyTestID(t)
+	if _, err := connection.Exec(ctx, `
+insert into recording_jobs (
+    id, tenant_id, episode_id, recording_id, kind, idempotency_key,
+    payload_schema_version, state, available_at, attempt_limit
+)
+select $1, $2, episode_id, id, 'render', $3, 1, 'pending', now(), 4
+from recordings where id = $4`, jobID.Bytes(), tenantID.Bytes(), "render:"+recordingID.String(), recordingID.Bytes()); err != nil {
+		t.Fatalf("insert on-request Export job: %v", err)
+	}
+	return jobID
+}
+
 func assertTranscriptArtifactCounts(t *testing.T, ctx context.Context, connection *pgxpool.Conn, recordingID utilities.ID, transcriptsCount, jobsCount int) {
 	t.Helper()
 	var actualTranscripts, actualJobs int
@@ -283,10 +409,14 @@ func cleanupTranscriptPolicyFixture(t *testing.T, ctx context.Context, connectio
 	t.Helper()
 	for _, statement := range []string{
 		`delete from artifact_jobs where tenant_id = $1`,
+		`delete from transcription_cleanup_jobs where tenant_id = $1`,
 		`delete from transcript_chunks where tenant_id = $1`,
 		`delete from recording_transcription_source_chunks where tenant_id = $1`,
 		`delete from recording_transcription_sources where tenant_id = $1`,
 		`delete from transcriptions where tenant_id = $1`,
+		`delete from recording_jobs where tenant_id = $1`,
+		`delete from recording_pipelines where tenant_id = $1`,
+		`delete from recording_reservations where tenant_id = $1`,
 		`delete from recordings where tenant_id = $1`,
 		`delete from episodes where tenant_id = $1`,
 		`delete from spaces where tenant_id = $1`,

@@ -173,7 +173,6 @@ insert into transcriptions (
 from recordings
 where recordings.tenant_id = $11
   and recordings.id = $12
-  and recordings.status = 'completed'
 on conflict (recording_id) do nothing
 returning id, tenant_id, recording_id, space_id, episode_id, status, provider, model, languages, metadata, artifact_key, artifact_sha256, artifact_size, artifact_content_type, source_manifest_key, source_manifest_sha256, source_manifest_size, source_manifest_content_type, generation, completed_at, deleted_at, updated_at, created_at, source_expires_at
 `
@@ -671,7 +670,7 @@ func (q *Queries) FinishTranscriptionAttempt(ctx context.Context, arg FinishTran
 	return i, err
 }
 
-const getCompletedRecordingTranscriptionMode = `-- name: GetCompletedRecordingTranscriptionMode :one
+const getRecordingTranscriptionMode = `-- name: GetRecordingTranscriptionMode :one
 select case
     when episodes.config_snapshot #>> '{artifact_policy,transcription,mode}' in ('on_demand', 'automatic')
         then episodes.config_snapshot #>> '{artifact_policy,transcription,mode}'
@@ -682,16 +681,15 @@ join episodes on episodes.tenant_id = recordings.tenant_id
     and episodes.id = recordings.episode_id
 where recordings.tenant_id = $1
   and recordings.id = $2
-  and recordings.status = 'completed'
 `
 
-type GetCompletedRecordingTranscriptionModeParams struct {
+type GetRecordingTranscriptionModeParams struct {
 	TenantID    pgtype.UUID `json:"tenant_id"`
 	RecordingID pgtype.UUID `json:"recording_id"`
 }
 
-func (q *Queries) GetCompletedRecordingTranscriptionMode(ctx context.Context, arg GetCompletedRecordingTranscriptionModeParams) (string, error) {
-	row := q.db.QueryRow(ctx, getCompletedRecordingTranscriptionMode, arg.TenantID, arg.RecordingID)
+func (q *Queries) GetRecordingTranscriptionMode(ctx context.Context, arg GetRecordingTranscriptionModeParams) (string, error) {
+	row := q.db.QueryRow(ctx, getRecordingTranscriptionMode, arg.TenantID, arg.RecordingID)
 	var transcription_mode string
 	err := row.Scan(&transcription_mode)
 	return transcription_mode, err

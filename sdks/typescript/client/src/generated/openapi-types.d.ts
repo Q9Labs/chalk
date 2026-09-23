@@ -2318,6 +2318,7 @@ export interface components {
       storage_provider: "r2";
       tenant_id: components["schemas"]["TenantId"];
       transcription_policy: string;
+      transcription_preparation: components["schemas"]["RecordingTranscriptionPreparation"];
       updated_at: components["schemas"]["DateTimeString"];
     };
     RecordingDownloadURL: {
@@ -2364,6 +2365,10 @@ export interface components {
       expires_at?: components["schemas"]["DateTimeString"] | null;
       /** @enum {string} */
       status: "pending" | "available" | "failed" | "expired";
+    };
+    RecordingTranscriptionPreparation: {
+      /** @enum {string} */
+      status: "none" | "pending" | "ready" | "failed" | "expired";
     };
     RefreshSpacePublicInviteAccessRequest: {
       media_proof: string;

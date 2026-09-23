@@ -50,19 +50,20 @@ type recordingArtifactStateBatchService interface {
 }
 
 type recordingResponse struct {
-	ID                  string                           `json:"id"`
-	TenantID            string                           `json:"tenant_id"`
-	SpaceID             string                           `json:"space_id"`
-	EpisodeID           string                           `json:"episode_id"`
-	Status              string                           `json:"status"`
-	StorageProvider     string                           `json:"storage_provider"`
-	StorageKey          *string                          `json:"storage_key"`
-	Metadata            any                              `json:"metadata"`
-	Source              recordingSourceResponse          `json:"source"`
-	Export              recordingExportResponse          `json:"export"`
-	TranscriptionPolicy artifactpolicy.TranscriptionMode `json:"transcription_policy"`
-	UpdatedAt           string                           `json:"updated_at"`
-	CreatedAt           string                           `json:"created_at"`
+	ID                       string                                    `json:"id"`
+	TenantID                 string                                    `json:"tenant_id"`
+	SpaceID                  string                                    `json:"space_id"`
+	EpisodeID                string                                    `json:"episode_id"`
+	Status                   string                                    `json:"status"`
+	StorageProvider          string                                    `json:"storage_provider"`
+	StorageKey               *string                                   `json:"storage_key"`
+	Metadata                 any                                       `json:"metadata"`
+	Source                   recordingSourceResponse                   `json:"source"`
+	Export                   recordingExportResponse                   `json:"export"`
+	TranscriptionPolicy      artifactpolicy.TranscriptionMode          `json:"transcription_policy"`
+	TranscriptionPreparation recordingTranscriptionPreparationResponse `json:"transcription_preparation"`
+	UpdatedAt                string                                    `json:"updated_at"`
+	CreatedAt                string                                    `json:"created_at"`
 }
 
 type recordingListResponse struct {
@@ -90,6 +91,10 @@ type recordingExportResponse struct {
 type recordingSourceResponse struct {
 	Status    string  `json:"status"`
 	ExpiresAt *string `json:"expires_at,omitempty"`
+}
+
+type recordingTranscriptionPreparationResponse struct {
+	Status recordingpipeline.TranscriptionPreparationStatus `json:"status"`
 }
 
 type requestRecordingExportResponse struct {
@@ -461,19 +466,20 @@ func newRecordingListResponse(ctx context.Context, list recordings.RecordingList
 
 func newRecordingResponse(recording recordings.Recording, state recordingpipeline.ArtifactState) recordingResponse {
 	return recordingResponse{
-		ID:                  recording.ID.String(),
-		TenantID:            recording.TenantID.String(),
-		SpaceID:             recording.SpaceID.String(),
-		EpisodeID:           recording.EpisodeID.String(),
-		Status:              recording.Status,
-		StorageProvider:     recording.StorageProvider,
-		StorageKey:          recording.StorageKey,
-		Metadata:            rawJSONValue(recording.Metadata),
-		Source:              newRecordingSourceResponse(state),
-		Export:              newRecordingExportResponse(state),
-		TranscriptionPolicy: state.TranscriptionPolicy,
-		UpdatedAt:           utilities.FormatTimestamp(recording.UpdatedAt),
-		CreatedAt:           utilities.FormatTimestamp(recording.CreatedAt),
+		ID:                       recording.ID.String(),
+		TenantID:                 recording.TenantID.String(),
+		SpaceID:                  recording.SpaceID.String(),
+		EpisodeID:                recording.EpisodeID.String(),
+		Status:                   recording.Status,
+		StorageProvider:          recording.StorageProvider,
+		StorageKey:               recording.StorageKey,
+		Metadata:                 rawJSONValue(recording.Metadata),
+		Source:                   newRecordingSourceResponse(state),
+		Export:                   newRecordingExportResponse(state),
+		TranscriptionPolicy:      state.TranscriptionPolicy,
+		TranscriptionPreparation: recordingTranscriptionPreparationResponse{Status: state.TranscriptionPreparationStatus},
+		UpdatedAt:                utilities.FormatTimestamp(recording.UpdatedAt),
+		CreatedAt:                utilities.FormatTimestamp(recording.CreatedAt),
 	}
 }
 

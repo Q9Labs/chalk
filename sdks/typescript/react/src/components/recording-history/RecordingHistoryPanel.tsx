@@ -9,7 +9,7 @@ import { ChalkBadge, ChalkButton, ChalkEmptyState, ChalkPanel, type ChalkTone } 
 export type RecordingHistoryStatus = "pending" | "processing" | "completed" | "failed";
 export type RecordingSourceStatus = "pending" | "available" | "failed" | "expired";
 export type RecordingExportStatus = "none" | "pending" | "ready" | "failed" | "unavailable";
-export type RecordingTranscriptStatus = "none" | "pending" | "processing" | "completed" | "failed";
+export type RecordingTranscriptStatus = "none" | "requestable" | "unavailable" | "pending" | "processing" | "completed" | "failed";
 export type RecordingHistoryAction = "watch" | "download";
 
 export interface RecordingHistorySource {
@@ -26,7 +26,7 @@ export interface RecordingHistoryExport {
 }
 
 export interface RecordingHistoryTranscript {
-  /** The caller has confirmed this capture can start an on-demand transcript. */
+  /** The caller has confirmed this Capture can start a Transcript request. */
   readonly requestable?: boolean;
   readonly source_expires_at?: string | null;
   readonly status: RecordingTranscriptStatus;
@@ -218,12 +218,11 @@ interface RecordingArtifactStatusProps {
 function RecordingArtifactStatus({ downloading, onDownload, onReadTranscript, onRefreshExport, onRequestExport, onRequestTranscript, onWatch, readingTranscript, recording, refreshingExport, requestingExport, requestingTranscript }: RecordingArtifactStatusProps): React.JSX.Element {
   const video = recording.export;
   if (!video) throw new Error("Recording export is required when rendering artifact status");
+  const transcriptStatus = recording.transcript?.status === "none" && recording.transcript.requestable ? "requestable" : recording.transcript?.status;
   return (
     <div className="mt-3 grid gap-2 border-t border-[var(--chalk-app-line)] pt-3">
       {recording.source ? <ArtifactStatus icon={<Video01Icon className="size-4" />} label="Capture" detail={sourceDetail(recording.source)} status={sourceLabel(recording.source.status)} tone={sourceTone(recording.source.status)} seed={`capture-${recording.id}`} /> : null}
-      {recording.transcript ? (
-        <ArtifactStatus icon={<FileTextIcon className="size-4" />} label="Transcript" detail={transcriptDetail(recording.transcript.status)} status={transcriptLabel(recording.transcript.status)} tone={transcriptTone(recording.transcript.status)} seed={`transcript-${recording.id}`} />
-      ) : null}
+      {transcriptStatus ? <ArtifactStatus icon={<FileTextIcon className="size-4" />} label="Transcript" detail={transcriptDetail(transcriptStatus)} status={transcriptLabel(transcriptStatus)} tone={transcriptTone(transcriptStatus)} seed={`transcript-${recording.id}`} /> : null}
       {recording.transcript ? <TranscriptContent onReadTranscript={onReadTranscript} onRequestTranscript={onRequestTranscript} reading={readingTranscript} recording={recording} requestingTranscript={requestingTranscript} /> : null}
       <ArtifactStatus icon={<Video01Icon className="size-4" />} label="Video" detail={exportDetail(video)} status={exportLabel(video.status)} tone={exportTone(video.status)} seed={`video-${recording.id}`} />
       {video.status === "ready" ? <ReadyVideoActions downloading={downloading} onDownload={onDownload} onWatch={onWatch} recording={recording} /> : null}
@@ -244,7 +243,7 @@ interface TranscriptContentProps {
 function TranscriptContent({ onReadTranscript, onRequestTranscript, reading, recording, requestingTranscript }: TranscriptContentProps): React.JSX.Element | null {
   const transcript = recording.transcript;
   if (!transcript) return null;
-  if (transcript.status === "none" && transcript.requestable && onRequestTranscript) {
+  if ((transcript.status === "none" || transcript.status === "requestable") && transcript.requestable && onRequestTranscript) {
     return (
       <div className="pt-1">
         <ChalkButton aria-label={`Request transcript ${shortId(recording.id)}`} disabled={requestingTranscript} loading={requestingTranscript} onClick={() => onRequestTranscript(recording)} variant="ghost" className="shrink-0 px-3">
@@ -427,6 +426,8 @@ function sourceDetail(source: RecordingHistorySource): string {
 
 function transcriptDetail(status: RecordingTranscriptStatus): string {
   if (status === "none") return "Transcript was not enabled for this Episode.";
+  if (status === "requestable") return "Transcript can be requested from this Capture.";
+  if (status === "unavailable") return "Transcript cannot be requested from this Capture.";
   if (status === "pending") return "Transcript is waiting to be prepared.";
   if (status === "processing") return "Transcript is being prepared.";
   if (status === "completed") return "Transcript is ready.";
@@ -455,7 +456,8 @@ function sourceLabel(status: RecordingSourceStatus): string {
 }
 
 function transcriptTone(status: RecordingTranscriptStatus): ChalkTone {
-  if (status === "none") return "neutral";
+  if (status === "none" || status === "requestable") return "neutral";
+  if (status === "unavailable") return "danger";
   if (status === "completed") return "success";
   if (status === "failed") return "danger";
   return "accent";
@@ -463,6 +465,8 @@ function transcriptTone(status: RecordingTranscriptStatus): ChalkTone {
 
 function transcriptLabel(status: RecordingTranscriptStatus): string {
   if (status === "none") return "Not enabled";
+  if (status === "requestable") return "Can request";
+  if (status === "unavailable") return "Unavailable";
   if (status === "pending") return "Waiting";
   if (status === "processing") return "Preparing";
   if (status === "completed") return "Ready";

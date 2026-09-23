@@ -2110,13 +2110,18 @@ with selected as (
     left join recording_pipelines pipelines on pipelines.recording_id = recordings.id
     join episodes on episodes.id = recordings.episode_id
     left join recording_artifacts artifacts on artifacts.recording_id = recordings.id
-    where recordings.id = any($1::uuid[])
-      and recordings.tenant_id = $2
+    where recordings.id = any($2::uuid[])
+      and recordings.tenant_id = $1
 ), export_job as (
-    select jobs.id, jobs.state, jobs.error_code
+    select jobs.recording_id, jobs.id, jobs.state, jobs.error_code
     from recording_jobs jobs
     join selected on selected.id = jobs.recording_id
     where jobs.kind = 'render'
+), transcription_job as (
+    select jobs.recording_id, jobs.state
+    from recording_jobs jobs
+    join selected on selected.id = jobs.recording_id
+    where jobs.kind = 'transcription'
 )
 select selected.id as recording_id,
     case
@@ -2128,6 +2133,18 @@ select selected.id as recording_id,
 	end as source_status,
 	selected.source_expires_at,
 	selected.transcription_policy,
+	case
+		when selected.transcription_policy = 'disabled' then 'none'
+		when transcription_source.status = 'ready' and transcription_source.expires_at > clock_timestamp() then 'ready'
+		when transcription_source.expires_at <= clock_timestamp() or transcription_source.status in ('cleanup_pending', 'deleting', 'deleted') then 'expired'
+		when selected.capture_completed_at is null and (selected.pipeline_state = 'terminal_failure' or selected.recording_status = 'failed') then 'failed'
+		when selected.capture_completed_at is null and selected.recording_status = 'completed' then 'expired'
+		when selected.capture_completed_at is null then 'pending'
+		when selected.source_expires_at <= clock_timestamp() then 'expired'
+		when transcription_job.state = 'terminal_failure' then 'failed'
+		when transcription_job.state in ('pending', 'leased', 'retryable_failure') then 'pending'
+		else 'none'
+	end::text as transcription_preparation_status,
 	export_job.id as export_job_id,
     case
         -- New deferred artifacts carry the capture-anchored expiry; imported
@@ -2154,28 +2171,32 @@ select selected.id as recording_id,
         else ''
     end::text as failure_message
 from selected
-left join export_job on true
+left join export_job on export_job.recording_id = selected.id
+left join transcription_job on transcription_job.recording_id = selected.id
+left join recording_transcription_sources transcription_source on transcription_source.recording_id = selected.id
+    and transcription_source.tenant_id = $1
 `
 
 type ListRecordingDeferredArtifactStatesParams struct {
-	RecordingIds []pgtype.UUID `json:"recording_ids"`
 	TenantID     pgtype.UUID   `json:"tenant_id"`
+	RecordingIds []pgtype.UUID `json:"recording_ids"`
 }
 
 type ListRecordingDeferredArtifactStatesRow struct {
-	RecordingID         pgtype.UUID        `json:"recording_id"`
-	SourceStatus        string             `json:"source_status"`
-	SourceExpiresAt     pgtype.Timestamptz `json:"source_expires_at"`
-	TranscriptionPolicy string             `json:"transcription_policy"`
-	ExportJobID         pgtype.UUID        `json:"export_job_id"`
-	ExportStatus        string             `json:"export_status"`
-	Retryable           bool               `json:"retryable"`
-	FailureCode         string             `json:"failure_code"`
-	FailureMessage      string             `json:"failure_message"`
+	RecordingID                    pgtype.UUID        `json:"recording_id"`
+	SourceStatus                   string             `json:"source_status"`
+	SourceExpiresAt                pgtype.Timestamptz `json:"source_expires_at"`
+	TranscriptionPolicy            string             `json:"transcription_policy"`
+	TranscriptionPreparationStatus string             `json:"transcription_preparation_status"`
+	ExportJobID                    pgtype.UUID        `json:"export_job_id"`
+	ExportStatus                   string             `json:"export_status"`
+	Retryable                      bool               `json:"retryable"`
+	FailureCode                    string             `json:"failure_code"`
+	FailureMessage                 string             `json:"failure_message"`
 }
 
 func (q *Queries) ListRecordingDeferredArtifactStates(ctx context.Context, arg ListRecordingDeferredArtifactStatesParams) ([]ListRecordingDeferredArtifactStatesRow, error) {
-	rows, err := q.db.Query(ctx, listRecordingDeferredArtifactStates, arg.RecordingIds, arg.TenantID)
+	rows, err := q.db.Query(ctx, listRecordingDeferredArtifactStates, arg.TenantID, arg.RecordingIds)
 	if err != nil {
 		return nil, err
 	}
@@ -2188,6 +2209,7 @@ func (q *Queries) ListRecordingDeferredArtifactStates(ctx context.Context, arg L
 			&i.SourceStatus,
 			&i.SourceExpiresAt,
 			&i.TranscriptionPolicy,
+			&i.TranscriptionPreparationStatus,
 			&i.ExportJobID,
 			&i.ExportStatus,
 			&i.Retryable,

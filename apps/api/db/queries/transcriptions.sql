@@ -31,7 +31,6 @@ insert into transcriptions (
 from recordings
 where recordings.tenant_id = sqlc.arg(tenant_id)
   and recordings.id = sqlc.arg(recording_id)
-  and recordings.status = 'completed'
 on conflict (recording_id) do nothing
 returning *;
 
@@ -60,7 +59,7 @@ where tenant_id = sqlc.arg(tenant_id) and id = sqlc.arg(id);
 select * from transcriptions
 where tenant_id = sqlc.arg(tenant_id) and recording_id = sqlc.arg(recording_id);
 
--- name: GetCompletedRecordingTranscriptionMode :one
+-- name: GetRecordingTranscriptionMode :one
 select case
     when episodes.config_snapshot #>> '{artifact_policy,transcription,mode}' in ('on_demand', 'automatic')
         then episodes.config_snapshot #>> '{artifact_policy,transcription,mode}'
@@ -70,8 +69,7 @@ from recordings
 join episodes on episodes.tenant_id = recordings.tenant_id
     and episodes.id = recordings.episode_id
 where recordings.tenant_id = sqlc.arg(tenant_id)
-  and recordings.id = sqlc.arg(recording_id)
-  and recordings.status = 'completed';
+  and recordings.id = sqlc.arg(recording_id);
 
 -- name: LockTenantTranscriptionForUpdate :one
 select * from transcriptions

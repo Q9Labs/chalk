@@ -137,11 +137,13 @@ func TestListRecordingsFiltersBySpaceAndBatchesArtifactStates(t *testing.T) {
 	exports := &recordingListExportHTTPStub{states: map[utilities.ID]recordingpipeline.ArtifactState{
 		firstRecordingID: {
 			SourceStatus: recordingpipeline.SourceStatusAvailable, ExportStatus: recordingpipeline.ExportStatusNone,
-			TranscriptionPolicy: artifactpolicy.TranscriptionOnDemand,
+			TranscriptionPolicy:            artifactpolicy.TranscriptionOnDemand,
+			TranscriptionPreparationStatus: recordingpipeline.TranscriptionPreparationReady,
 		},
 		secondRecordingID: {
 			SourceStatus: recordingpipeline.SourceStatusAvailable, ExportStatus: recordingpipeline.ExportStatusReady,
-			TranscriptionPolicy: artifactpolicy.TranscriptionDisabled,
+			TranscriptionPolicy:            artifactpolicy.TranscriptionDisabled,
+			TranscriptionPreparationStatus: recordingpipeline.TranscriptionPreparationNone,
 		},
 	}}
 	authorizer := &preparationAuthorizer{}
@@ -171,6 +173,9 @@ func TestListRecordingsFiltersBySpaceAndBatchesArtifactStates(t *testing.T) {
 	}
 	if len(body.Recordings) != 2 || body.Recordings[0].TranscriptionPolicy != artifactpolicy.TranscriptionOnDemand || body.Recordings[1].TranscriptionPolicy != artifactpolicy.TranscriptionDisabled {
 		t.Fatalf("frozen transcription policies=%+v", body.Recordings)
+	}
+	if body.Recordings[0].TranscriptionPreparation.Status != recordingpipeline.TranscriptionPreparationReady || body.Recordings[1].TranscriptionPreparation.Status != recordingpipeline.TranscriptionPreparationNone {
+		t.Fatalf("transcription preparation statuses=%+v", body.Recordings)
 	}
 }
 
