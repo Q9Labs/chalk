@@ -379,9 +379,9 @@ variable "render_node_size" {
 }
 
 variable "render_region" {
-  description = "DigitalOcean renderer region. NYC1 is the measured CPU renderer region."
+  description = "DigitalOcean renderer region. BLR1 supports the default c-8 CPU renderer profile."
   type        = string
-  default     = "nyc1"
+  default     = "blr1"
 
   validation {
     condition     = can(regex("^[a-z][a-z0-9-]{1,31}$", var.render_region))

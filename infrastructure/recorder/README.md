@@ -27,7 +27,7 @@ forty Mbps of aggregate input. Render-phase pipelines do not occupy capture
 admission. The capture pool supports at most ten concurrent captures with zero
 spare, independently of ten render nodes. A smaller capture or render maximum lowers the supported
 concurrency; operators must reduce the admission ceiling with it before launch.
-The default render target is the measured NYC1 CPU-Optimized eight-vCPU
+The default render target uses BLR1 and the measured CPU-Optimized eight-vCPU
 `c-8`/`libx264` profile with eight browser-frame producers and a deadline-aware
 scaler capped at ten nodes. Both pools default to zero desired nodes. A GPU pool
 remains configurable by setting `render_gpu = true` together with an independently
