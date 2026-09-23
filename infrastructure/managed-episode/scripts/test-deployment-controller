@@ -38,6 +38,14 @@ group_enabled() {
   esac
 }
 
+planner="${managed_root}/scripts/plan-release-components"
+for recorder_worker_path in \
+  apps/api/internal/recordernodebootstrap/attestation.go \
+  apps/api/internal/recordernodebootstrap/attestation_test.go; do
+  "$planner" "$recorder_worker_path" | jq -e '.classification == "none" and .build_set == [] and .affected_components == []' >/dev/null || fail "recorder worker-only source was incorrectly planned as an API image release: $recorder_worker_path"
+done
+"$planner" apps/api/internal/recorderfleet/reconciler.go | jq -e '.classification == "api" and .build_set == ["api"]' >/dev/null || fail "managed API source no longer plans an API image release"
+
 tmp_root="${TMPDIR:-/tmp}"
 if [[ "$(uname -s)" == Darwin ]]; then
   tmp_root="$(cd "${tmp_root}" && pwd -P)"
@@ -260,6 +268,17 @@ make_manifest() {
     --arg api_digest "$(printf 'a%.0s' {1..64})" \
     --arg sync_digest "$(printf 'b%.0s' {1..64})" \
     '{schema_version:1,release_id:$release_id,source_revision:$source_revision,generated_at:"2026-08-18T00:00:00Z",source_tree_state:"clean",architectures:$architectures,images:{api:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/chalk-api@sha256:"+$api_digest),sync:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/chalk-sync@sha256:"+$sync_digest),redis:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/redis@sha256:"+$api_digest),cloudflared:("123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/cloudflared@sha256:"+$api_digest)},database_compatibility:{engine:"postgresql",major:18,minimum_migration:20260819130000,maximum_migration:null},protocol_compatibility:{sync:1},runtime_artifacts:{"controller/chalk-deployment-controller":$artifact_digest}}'
+}
+
+make_runtime_only_manifest() {
+  local release_id="$1"
+  local stable_manifest="$2"
+  jq -n \
+    --arg release_id "$release_id" \
+    --arg source_revision "$source_revision" \
+    --arg generated_at "2026-08-18T00:01:00Z" \
+    --slurpfile stable "$stable_manifest" \
+    '{schema_version:2,release_id:$release_id,source_revision:$source_revision,generated_at:$generated_at,source_tree_state:"clean",architectures:$stable[0].architectures,affected_components:[],images:$stable[0].images,component_releases:{api:($stable[0].component_releases.api // {release_id:$stable[0].release_id,source_revision:$stable[0].source_revision}),sync:($stable[0].component_releases.sync // {release_id:$stable[0].release_id,source_revision:$stable[0].source_revision})},database_compatibility:$stable[0].database_compatibility,protocol_compatibility:$stable[0].protocol_compatibility,runtime_artifacts:$stable[0].runtime_artifacts}'
 }
 
 make_request() {
@@ -514,6 +533,79 @@ grep -Fq 'podman login --username AWS --password-stdin 123456789012.dkr.ecr.ap-s
 if grep -Eq 'test-only-secret-bytes|test-only-registry-password' "${fixture_root}/commands.log"; then
   fail "secret bytes were written to the command log"
 fi
+
+runtime_only_state="${fixture_root}/runtime-only-state"
+mkdir -p "$runtime_only_state"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed"
+make_request runtime-base "${fixture_root}/runtime-base-request.json"
+make_manifest runtime-base >"${fixture_root}/runtime-base-manifest.json"
+"${managed_root}/scripts/generate-release-manifest" \
+  --stable-manifest "${fixture_root}/runtime-base-manifest.json" \
+  --affected-components none \
+  --source-revision "$source_revision" \
+  --release-id "managed-episode-20260818T000001Z-${source_revision:0:8}-00000001" \
+  --allow-dirty \
+  --output "${fixture_root}/generated-runtime-only-manifest.json" >/dev/null
+jq -e --slurpfile stable "${fixture_root}/runtime-base-manifest.json" '
+  .schema_version == 2 and .affected_components == [] and
+  .component_releases == ($stable[0].component_releases // {
+    api:{release_id:$stable[0].release_id,source_revision:$stable[0].source_revision},
+    sync:{release_id:$stable[0].release_id,source_revision:$stable[0].source_revision}
+  }) and
+  .images == $stable[0].images
+' "${fixture_root}/generated-runtime-only-manifest.json" >/dev/null || fail "manifest generator did not preserve application identities for a runtime-only release"
+run_controller "$runtime_only_state" "${fixture_root}/runtime-base-request.json" "${fixture_root}/runtime-base-manifest.json" ok >/dev/null
+runtime_base_api_version="$(awk -F= '$1 == "CHALK_API_VERSION" { print $2 }' "${fixture_root}/run/env/api.env")"
+make_runtime_only_manifest runtime-only "${fixture_root}/runtime-base-manifest.json" >"${fixture_root}/runtime-only-manifest.json"
+make_request runtime-only "${fixture_root}/runtime-only-request.json"
+run_controller "$runtime_only_state" "${fixture_root}/runtime-only-request.json" "${fixture_root}/runtime-only-manifest.json" ok >/dev/null
+[[ "$(awk -F= '$1 == "CHALK_API_VERSION" { print $2 }' "${fixture_root}/run/env/api.env")" == "$runtime_base_api_version" ]] || fail "runtime-only release changed the API component identity"
+jq -e --slurpfile stable "${fixture_root}/runtime-base-manifest.json" --arg api_release "$runtime_base_api_version" '
+  .release_id == "runtime-only" and .affected_components == [] and
+  .component_releases == ($stable[0].component_releases // {
+    api:{release_id:$stable[0].release_id,source_revision:$stable[0].source_revision},
+    sync:{release_id:$stable[0].release_id,source_revision:$stable[0].source_revision}
+  }) and
+  .component_releases.api.release_id == $api_release and
+  .images == $stable[0].images
+' "${runtime_only_state}/releases/runtime-only/release-manifest.json" >/dev/null || fail "runtime-only release did not preserve application component identities and images"
+runtime_only_sync_release="$(jq -er 'if .schema_version == 2 then .component_releases.sync.release_id else .release_id end' "${fixture_root}/runtime-base-manifest.json")"
+runtime_only_sync_source="$(jq -er 'if .schema_version == 2 then .component_releases.sync.source_revision else .source_revision end' "${fixture_root}/runtime-base-manifest.json")"
+grep -Fxq "CHALK_SYNC_RELEASE_ID=${runtime_only_sync_release}" "${fixture_root}/run/env/sync.env" || fail "runtime-only release did not load the preserved Sync release identity"
+grep -Fxq "CHALK_SYNC_SOURCE_COMMIT=${runtime_only_sync_source}" "${fixture_root}/run/env/sync.env" || fail "runtime-only release did not load the preserved Sync source identity"
+
+runtime_rollback_state="${fixture_root}/runtime-only-rollback-state"
+mkdir -p "$runtime_rollback_state"
+printf '0' >"${fixture_root}/health-index"
+make_request runtime-rollback-base "${fixture_root}/runtime-rollback-base-request.json"
+make_manifest runtime-rollback-base >"${fixture_root}/runtime-rollback-base-manifest.json"
+run_controller "$runtime_rollback_state" "${fixture_root}/runtime-rollback-base-request.json" "${fixture_root}/runtime-rollback-base-manifest.json" ok >/dev/null
+cp "${runtime_rollback_state}/active-release.json" "${fixture_root}/runtime-rollback-base-pointer.json"
+runtime_rollback_base_api_release="$(jq -er 'if .schema_version == 2 then .component_releases.api.release_id else .release_id end' "${fixture_root}/runtime-rollback-base-manifest.json")"
+runtime_rollback_base_api_source="$(jq -er 'if .schema_version == 2 then .component_releases.api.source_revision else .source_revision end' "${fixture_root}/runtime-rollback-base-manifest.json")"
+runtime_rollback_base_sync_release="$(jq -er 'if .schema_version == 2 then .component_releases.sync.release_id else .release_id end' "${fixture_root}/runtime-rollback-base-manifest.json")"
+runtime_rollback_base_sync_source="$(jq -er 'if .schema_version == 2 then .component_releases.sync.source_revision else .source_revision end' "${fixture_root}/runtime-rollback-base-manifest.json")"
+make_runtime_only_manifest runtime-only-rollback-candidate "${fixture_root}/runtime-rollback-base-manifest.json" >"${fixture_root}/runtime-only-rollback-candidate-manifest.json"
+make_request runtime-only-rollback-candidate "${fixture_root}/runtime-only-rollback-candidate-request.json"
+printf '0' >"${fixture_root}/health-index"
+if run_controller "$runtime_rollback_state" "${fixture_root}/runtime-only-rollback-candidate-request.json" "${fixture_root}/runtime-only-rollback-candidate-manifest.json" 'fail,ok' >"${fixture_root}/runtime-only-rollback.log" 2>&1; then
+  fail "unhealthy runtime-only candidate was accepted"
+fi
+grep -Fq '"status":"rolled_back"' "${fixture_root}/runtime-only-rollback.log" || fail "runtime-only candidate did not report automatic rollback"
+cmp -s "${runtime_rollback_state}/active-release.json" "${fixture_root}/runtime-rollback-base-pointer.json" || fail "runtime-only rollback changed the stable release pointer or pinned input versions"
+jq -e --arg api_release "$runtime_rollback_base_api_release" --arg api_source "$runtime_rollback_base_api_source" --arg sync_release "$runtime_rollback_base_sync_release" --arg sync_source "$runtime_rollback_base_sync_source" '
+  .release_id == "runtime-rollback-base" and
+  (if .schema_version == 2 then .component_releases.api.release_id else .release_id end) == $api_release and
+  (if .schema_version == 2 then .component_releases.api.source_revision else .source_revision end) == $api_source and
+  (if .schema_version == 2 then .component_releases.sync.release_id else .release_id end) == $sync_release and
+  (if .schema_version == 2 then .component_releases.sync.source_revision else .source_revision end) == $sync_source
+' "${runtime_rollback_state}/releases/runtime-rollback-base/release-manifest.json" >/dev/null || fail "runtime-only rollback lost the stable API or Sync component identities"
+grep -Fxq "CHALK_API_VERSION=${runtime_rollback_base_api_release}" "${fixture_root}/run/env/api.env" || fail "runtime-only rollback did not restore the stable loaded API identity"
+grep -Fxq "CHALK_SYNC_RELEASE_ID=${runtime_rollback_base_sync_release}" "${fixture_root}/run/env/sync.env" || fail "runtime-only rollback did not restore the stable loaded Sync release identity"
+grep -Fxq "CHALK_SYNC_SOURCE_COMMIT=${runtime_rollback_base_sync_source}" "${fixture_root}/run/env/sync.env" || fail "runtime-only rollback did not restore the stable loaded Sync source identity"
+[[ ! -e "${runtime_rollback_state}/releases/runtime-only-rollback-candidate" ]] || fail "failed runtime-only candidate left a durable release artifact"
+
 make_manifest invalid-migration-unit >"${fixture_root}/invalid-migration-unit-manifest.json"
 make_request invalid-migration-unit "${fixture_root}/invalid-migration-unit-request.json"
 if FAKE_MIGRATION_EXTRA='--unexpected value' run_controller "$stable_state" "${fixture_root}/invalid-migration-unit-request.json" "${fixture_root}/invalid-migration-unit-manifest.json" ok >"${fixture_root}/invalid-migration-extra.log" 2>&1; then

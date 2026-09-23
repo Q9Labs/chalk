@@ -14,13 +14,18 @@ fail() {
 command -v jq >/dev/null || fail "jq is required"
 
 explicit_components=()
+explicit_components_present=false
 paths=()
+paths_present=false
 runtime_dependency=false
 while (($# > 0)); do
   case "$1" in
     --component)
       case "${2:-}" in
-        api|sync|both|shared|redis|none) explicit_components+=("$2") ;;
+        api|sync|both|shared|redis|none)
+          explicit_components+=("$2")
+          explicit_components_present=true
+          ;;
         *) fail "unknown component: ${2:-}" ;;
       esac
       shift 2
@@ -31,7 +36,10 @@ while (($# > 0)); do
       ;;
     --)
       shift
-      paths+=("$@")
+      if (($# > 0)); then
+        paths+=("$@")
+        paths_present=true
+      fi
       break
       ;;
     -h|--help)
@@ -43,72 +51,93 @@ while (($# > 0)); do
       ;;
     *)
       paths+=("$1")
+      paths_present=true
       shift
       ;;
   esac
 done
 
-if ((${#paths[@]} == 0)) && [[ ! -t 0 ]]; then
+if [[ "${paths_present}" == false ]] && [[ ! -t 0 ]]; then
   while IFS= read -r path; do
-    [[ -n "${path}" ]] && paths+=("${path}")
+    if [[ -n "${path}" ]]; then
+      paths+=("${path}")
+      paths_present=true
+    fi
   done
 fi
 
 classifications=()
-runtime_paths=()
+classification_count=0
+runtime_path_changed=false
+add_classification() {
+  classifications+=("$1")
+  classification_count=$((classification_count + 1))
+}
 classify_path() {
   local path="$1"
   case "${path}" in
+    apps/api/internal/recordernodebootstrap/attestation.go|apps/api/internal/recordernodebootstrap/attestation_test.go)
+      # These files are compiled into the recorder-node-bootstrap binary in the
+      # CPU worker image; they are not imported by the managed API service.
+      add_classification none
+      ;;
     apps/api|apps/api/*|infrastructure/managed-episode/images/api.Dockerfile)
-      classifications+=(api)
+      add_classification api
       ;;
     apps/sync|apps/sync/*|infrastructure/managed-episode/images/sync.Dockerfile)
-      classifications+=(sync)
+      add_classification sync
       ;;
     infrastructure/managed-episode/quadlet/chalk-redis.container.in)
-      classifications+=(shared)
-      runtime_paths+=("${path}")
+      add_classification shared
+      runtime_path_changed=true
       ;;
     infrastructure/managed-episode/env/api.env.example|infrastructure/managed-episode/scripts/validate-api-runtime|infrastructure/managed-episode/scripts/test-api-config)
-      classifications+=(api)
+      add_classification api
       ;;
     infrastructure/managed-episode/env/sync.env.example|infrastructure/managed-episode/scripts/validate-sync-runtime)
-      classifications+=(sync)
+      add_classification sync
       ;;
     infrastructure/managed-episode/scripts/plan-release-components|infrastructure/managed-episode/scripts/validate-runtime)
-      classifications+=(none)
+      add_classification none
+      ;;
+    infrastructure/managed-episode/README.md|infrastructure/managed-episode/scripts/generate-release-manifest|infrastructure/managed-episode/contracts/release-manifest.schema.json|infrastructure/managed-episode/controller/chalk-deployment-controller|infrastructure/managed-episode/scripts/test-deployment-controller|infrastructure/recorder/README.md|infrastructure/recorder/images/cpu/*)
+      add_classification none
       ;;
     infrastructure/managed-episode/*)
-      classifications+=(shared)
+      add_classification shared
       ;;
-    CHANGELOG.md|GLOSSARY.md|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|product.yaml|contract|contract/*|packages|packages/*|sdks|sdks/*|apps/web|apps/web/*|apps/docs|apps/docs/*|apps/mobile|apps/mobile/*|scripts/dev|scripts/dev/*)
-      classifications+=(none)
+    .github/workflows/ci.yml|CHANGELOG.md|GLOSSARY.md|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|product.yaml|contract|contract/*|packages|packages/*|sdks|sdks/*|apps/web|apps/web/*|apps/docs|apps/docs/*|apps/mobile|apps/mobile/*|scripts/dev|scripts/dev/*)
+      add_classification none
       ;;
     *)
-      classifications+=(unknown)
+      add_classification unknown
       ;;
   esac
 }
 
-for component in "${explicit_components[@]}"; do
-  case "${component}" in
-    api) classifications+=(api) ;;
-    sync) classifications+=(sync) ;;
-    both|shared) classifications+=(shared) ;;
-    redis)
-      classifications+=(shared)
-      runtime_dependency=true
-      ;;
-    none) classifications+=(none) ;;
-  esac
-done
-for path in "${paths[@]}"; do
-  classify_path "${path}"
-done
-if ((${#classifications[@]} == 0)) && [[ "${runtime_dependency}" == true ]]; then
-  classifications+=(shared)
+if [[ "${explicit_components_present}" == true ]]; then
+  for component in "${explicit_components[@]}"; do
+    case "${component}" in
+      api) add_classification api ;;
+      sync) add_classification sync ;;
+      both|shared) add_classification shared ;;
+      redis)
+        add_classification shared
+        runtime_dependency=true
+        ;;
+      none) add_classification none ;;
+    esac
+  done
 fi
-((${#classifications[@]} > 0)) || fail "at least one component or changed path is required"
+if [[ "${paths_present}" == true ]]; then
+  for path in "${paths[@]}"; do
+    classify_path "${path}"
+  done
+fi
+if ((classification_count == 0)) && [[ "${runtime_dependency}" == true ]]; then
+  add_classification shared
+fi
+((classification_count > 0)) || fail "at least one component or changed path is required"
 
 has_api=false
 has_sync=false
@@ -126,7 +155,7 @@ for classification in "${classifications[@]}"; do
     *) fail "cannot classify component: ${classification}" ;;
   esac
 done
-if [[ "${runtime_dependency}" == true || ${#runtime_paths[@]} -gt 0 ]]; then
+if [[ "${runtime_dependency}" == true || "${runtime_path_changed}" == true ]]; then
   has_redis=true
 fi
 if [[ "${has_unknown}" == true ]]; then

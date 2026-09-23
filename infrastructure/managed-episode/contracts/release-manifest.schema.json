@@ -107,7 +107,7 @@
           "properties": {
             "schema_version": { "const": 2 },
             "affected_components": {
-              "oneOf": [{ "const": ["api"] }, { "const": ["sync"] }, { "const": ["api", "sync"] }]
+              "oneOf": [{ "const": [] }, { "const": ["api"] }, { "const": ["sync"] }, { "const": ["api", "sync"] }]
             },
             "component_releases": { "$ref": "#/$defs/component_releases" }
           }

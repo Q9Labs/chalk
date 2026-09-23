@@ -102,7 +102,7 @@ jq -cS -s \
   --arg release_id "$release_id" \
   --arg source_commit "$source_commit" \
   --arg source_tree_sha256 "$source_tree_sha256" \
-  '{schema_version:"chalk_recorder_cpu_image.v1",release_id:$release_id,source_commit:$source_commit,source_tree_sha256:$source_tree_sha256,profile:"cpu-libx264-frame8",files:.}' \
+  '{schema_version:"chalk_recorder_cpu_image.v1",release_id:$release_id,source_commit:$source_commit,source_tree_sha256:$source_tree_sha256,profile:"cpu-libx264-frame2",files:.}' \
   "$file_entries" >"$image_root/opt/chalk-recorder/image-manifest.json"
 image_digest="sha256:$(sha256sum "$image_root/opt/chalk-recorder/image-manifest.json" | cut -d' ' -f1)"
 

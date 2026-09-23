@@ -107,6 +107,13 @@ closed: API requires Redis, Sync requires API, and the Tunnel requires both.
 The host cuts over that dependency closure as one bounded transaction so health
 and rollback cannot leave a mixed runtime. Unknown paths fail closed.
 
+For an explicitly requested runtime-input/controller refresh with no application
+component changes, classify the plan as `none` and deploy with a stable
+manifest. The release generator supports `--affected-components none` only in
+that stable-manifest mode: it creates a new managed release identity while
+preserving the existing API/Sync component identities and images. This does not
+replace application image releases or make unknown source paths safe to skip.
+
 ## SSM deployment controller
 
 The release workflow can carry a manifest from CI to one managed host without

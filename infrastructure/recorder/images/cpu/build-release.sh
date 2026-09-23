@@ -96,7 +96,7 @@ jq -cS -n \
   --arg source_commit "$source_commit" \
   --arg source_tree_sha256 "$source_tree_sha256" \
   --arg ui_build_sha256 "$ui_build_sha256" \
-  '{schema_version:"chalk_recorder_cpu_build.v1",release_id:$release_id,source_commit:$source_commit,source_tree_sha256:$source_tree_sha256,go_version:"1.25.13",node_version:"22.23.2",pnpm_version:"10.26.2",ui_build_sha256:$ui_build_sha256,encoder:"libx264",render_frame_concurrency:8}' \
+  '{schema_version:"chalk_recorder_cpu_build.v1",release_id:$release_id,source_commit:$source_commit,source_tree_sha256:$source_tree_sha256,go_version:"1.25.13",node_version:"22.23.2",pnpm_version:"10.26.2",ui_build_sha256:$ui_build_sha256,encoder:"libx264",render_frame_concurrency:2}' \
   >"$release_root/build-info.json"
 
 install -d "$(dirname -- "$output_path")"

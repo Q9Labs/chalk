@@ -24,7 +24,7 @@ source_revision="$(git -C "${repo_root}" rev-parse HEAD)"
 release_id_override=""
 
 usage() {
-  echo "usage: generate-release-manifest --output <file> [--api-image <digest-ref>] [--sync-image <digest-ref>] [--stable-manifest <file>] [--affected-components api|sync|api,sync] [--architectures linux/arm64|linux/amd64,linux/arm64] [--source-revision <sha>] [--release-id <managed-episode-...>] [--allow-dirty]" >&2
+  echo "usage: generate-release-manifest --output <file> [--api-image <digest-ref>] [--sync-image <digest-ref>] [--stable-manifest <file>] [--affected-components api|sync|api,sync|none] [--architectures linux/arm64|linux/amd64,linux/arm64] [--source-revision <sha>] [--release-id <managed-episode-...>] [--allow-dirty]" >&2
 }
 
 fail() {
@@ -150,7 +150,7 @@ validate_stable_manifest() {
         (.source_tree_state == "clean" or .source_tree_state == "dirty") and
         (.architectures == ["linux/arm64"] or .architectures == ["linux/amd64", "linux/arm64"]) and
         (.images | type == "object" and (["api", "sync", "redis", "cloudflared"] - keys | length == 0)) and
-        (.affected_components | type == "array" and length >= 1 and length <= 2 and unique == . and (length == 1 or . == ["api", "sync"]) and all(.[]; . == "api" or . == "sync")) and
+        (.affected_components | type == "array" and unique == . and (. == [] or length == 1 or . == ["api", "sync"]) and all(.[]; . == "api" or . == "sync")) and
         (.component_releases | type == "object" and (keys | sort) == ["api", "sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id", "source_revision"] and (.release_id | type == "string" and length > 0) and (.source_revision | test("^[0-9a-f]{40}$")))) and
         (.database_compatibility.engine == "postgresql" and .database_compatibility.major == 18 and (.database_compatibility.minimum_migration | type == "number" and . >= 20260713130000) and .database_compatibility.maximum_migration == null) and
         (.protocol_compatibility == {sync:1}) and
@@ -169,6 +169,10 @@ validate_stable_manifest() {
 parse_affected_components() {
   local value="$1"
   local -a components
+  if [[ "${value}" == none ]]; then
+    affected_components_arg="none"
+    return
+  fi
   IFS=',' read -r -a components <<<"${value}"
   ((${#components[@]} >= 1 && ${#components[@]} <= 2)) || fail "affected components must contain api, sync, or api,sync"
   for component in "${components[@]}"; do
@@ -203,7 +207,9 @@ if [[ -z "${stable_manifest}" ]]; then
   [[ "${affected_components_arg}" == api,sync ]] || fail "an initial release must affect both api and sync"
   [[ "${api_image_set}" == true && "${sync_image_set}" == true ]] || fail "initial release requires both --api-image and --sync-image"
 else
-  if [[ "${affected_components_arg}" == api ]]; then
+  if [[ "${affected_components_arg}" == none ]]; then
+    [[ "${api_image_set}" == false && "${sync_image_set}" == false ]] || fail "runtime-only release cannot replace application images"
+  elif [[ "${affected_components_arg}" == api ]]; then
     [[ "${api_image_set}" == true ]] || fail "api is affected but --api-image is missing"
     [[ "${sync_image_set}" == false ]] || fail "sync image supplied although sync is not affected"
   elif [[ "${affected_components_arg}" == sync ]]; then
@@ -218,7 +224,9 @@ if [[ -n "${stable_manifest}" ]]; then
   api_image="${api_image:-$(jq -er '.images.api' "${stable_manifest}")}"
   sync_image="${sync_image:-$(jq -er '.images.sync' "${stable_manifest}")}"
   stable_recorder_control_image="$(jq -r '.images.recorder_control // empty' "${stable_manifest}")"
-  if [[ "$api_image_set" == false ]]; then
+  if [[ "${affected_components_arg}" == none ]]; then
+    recorder_control_image="$stable_recorder_control_image"
+  elif [[ "$api_image_set" == false ]]; then
     [[ -z "$recorder_control_image" ]] || fail "recorder control image changes require an API component release"
     recorder_control_image="$stable_recorder_control_image"
   elif [[ -n "$stable_recorder_control_image" && -z "$recorder_control_image" ]]; then
@@ -302,7 +310,11 @@ component_releases_json="$({
     jq -cn --arg release_id "${stable_sync_release_id}" --arg source_revision "${stable_sync_source_revision}" '{release_id:$release_id,source_revision:$source_revision}'
   fi
 } | jq -s '{api:.[0],sync:.[1]}')"
-affected_components_json="$(jq -cn --arg value "${affected_components_arg}" '$value | split(",")')"
+if [[ "${affected_components_arg}" == none ]]; then
+  affected_components_json='[]'
+else
+  affected_components_json="$(jq -cn --arg value "${affected_components_arg}" '$value | split(",")')"
+fi
 
 database_compatibility_json="{ \"engine\": \"postgresql\", \"major\": 18, \"minimum_migration\": ${current_migration_version}, \"maximum_migration\": null }"
 protocol_compatibility_json='{ "sync": 1 }'

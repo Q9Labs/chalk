@@ -29,7 +29,9 @@ spare, independently of ten render nodes. A smaller capture or render maximum lo
 concurrency; operators must reduce the admission ceiling with it before launch.
 The default render target uses BLR1 and the measured CPU-Optimized eight-vCPU
 `c-8`/`libx264` profile with eight browser-frame producers and a deadline-aware
-scaler capped at ten nodes. Both pools default to zero desired nodes. A GPU pool
+scaler capped at ten nodes. The requested two-page `c-2` successor image uses
+two browser-frame producers; each sealed image attests its own frame profile,
+and prior frame-eight images remain valid for rollback. Both pools default to zero desired nodes. A GPU pool
 remains configurable by setting `render_gpu = true` together with an independently
 qualified GPU image, region, and size; CPU and GPU artifacts are never mixed.
 
@@ -182,7 +184,8 @@ printed manifest digest. The first boot regenerates host/machine identity; the
 external reconciler's cloud-init runs the one-time bootstrap and starts only the
 role named by the fenced pool release.
 
-The render service always launches `libx264` with frame concurrency eight. The
+Each sealed render image launches `libx264` with its attested frame concurrency
+(two for the requested c-2 successor; eight for the existing c-8 image). The
 capture service uses the same credential delivery path. A renewal timer derives
 its lead time as one third of each issued certificate lifetime, atomically
 replaces the leaf, and both workers swap to a fresh HTTP connection pool on the

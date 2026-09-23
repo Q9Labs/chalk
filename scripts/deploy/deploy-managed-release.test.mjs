@@ -77,6 +77,7 @@ test("passes only the operator-controlled deployment flags through CI", async ()
   assert.match(workflow, /args\+=\(--exclude-secret "\$secret_id"\)/);
   assert.match(workflow, /--parameter-prefix "\$CHALK_MANAGED_PARAMETER_PREFIX"/);
   assert.match(workflow, /group: deploy-managed-\$\{\{ inputs\.managed_environment \}\}/);
+  assert.match(workflow, /if: needs\.plan-managed\.outputs\.should_publish == 'true' && needs\.plan-managed\.outputs\.build_set != '\[\]'/);
   assert.doesNotMatch(workflow, /AWS-RunShellScript/);
 });
 

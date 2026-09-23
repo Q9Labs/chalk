@@ -312,14 +312,14 @@ validate_manifest() {
     (.database_compatibility.engine == "postgresql" and .database_compatibility.major == 18 and (.database_compatibility.minimum_migration | type == "number" and . >= 20260713130000) and .database_compatibility.maximum_migration == null) and
     (.protocol_compatibility == {sync:1}) and
     (if .schema_version == 2 then
-      ((.affected_components == ["api"] or .affected_components == ["sync"] or .affected_components == ["api","sync"]) and
+      ((.affected_components == [] or .affected_components == ["api"] or .affected_components == ["sync"] or .affected_components == ["api","sync"]) and
        (.component_releases | type == "object" and (keys | sort) == ["api","sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id","source_revision"] and (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and (.source_revision | type == "string" and test("^[0-9a-f]{40}$")))) and
        (. as $manifest | all(.affected_components[]; . as $component | $manifest.component_releases[$component] == {release_id:$manifest.release_id,source_revision:$manifest.source_revision})))
     else true end) and
     (.runtime_artifacts | type == "object" and length > 0 and all(.[]; type == "string" and test("^[0-9a-f]{64}$"))) and
     (.images | type == "object" and ((keys | sort) == ["api","cloudflared","redis","sync"] or (keys | sort) == ["api","cloudflared","recorder_control","redis","sync"]) and all(.[]; type == "string" and test("^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$"))) and
     (if .schema_version == 2 then
-      ((.affected_components | type == "array" and (length == 1 or . == ["api","sync"]) and all(.[]; . == "api" or . == "sync"))) and
+      ((.affected_components | type == "array" and (length == 0 or length == 1 or . == ["api","sync"]) and all(.[]; . == "api" or . == "sync"))) and
        (.component_releases | type == "object" and (keys | sort) == ["api","sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id","source_revision"] and (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and (.source_revision | type == "string" and test("^[0-9a-f]{40}$"))))
     else true end)
   ' "$manifest_path" >/dev/null || fail "release manifest is invalid"
@@ -1004,7 +1004,7 @@ validate_live_release_manifest() {
     (.runtime_artifacts | type == "object" and length > 0 and all(.[]; type == "string" and test("^[0-9a-f]{64}$"))) and
     (.images | type == "object" and (keys | sort) == ["api","cloudflared","redis","sync"] and all(.[]; type == "string" and test("^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$"))) and
     (if .schema_version == 2 then
-      ((.affected_components | type == "array" and (length == 1 or . == ["api","sync"]) and all(.[]; . == "api" or . == "sync"))) and
+      ((.affected_components | type == "array" and (length == 0 or length == 1 or . == ["api","sync"]) and all(.[]; . == "api" or . == "sync"))) and
        (.component_releases | type == "object" and (keys | sort) == ["api","sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id","source_revision"] and (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and (.source_revision | type == "string" and test("^[0-9a-f]{40}$"))))
     else true end)
   ' "$live_manifest" >/dev/null || fail "live release manifest is invalid"

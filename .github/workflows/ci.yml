@@ -154,10 +154,19 @@ jobs:
             infrastructure/managed-episode/scripts/plan-release-components --component both > "$PLAN_ROOT/plan.json"
           fi
           jq -e '.build_set == [] or .build_set == ["api"] or .build_set == ["sync"] or .build_set == ["api", "sync"]' "$PLAN_ROOT/plan.json" >/dev/null
+          classification="$(jq -r '.classification' "$PLAN_ROOT/plan.json")"
           build_set="$(jq -c '.build_set' "$PLAN_ROOT/plan.json")"
-          should_publish="$(jq -r 'if (.build_set | length) > 0 then "true" else "false" end' "$PLAN_ROOT/plan.json")"
+          if [[ "$classification" == none && "$build_set" != '[]' ]]; then
+            echo "runtime-only classification must not request application images" >&2
+            exit 1
+          fi
+          if [[ "$DEPLOY_MANAGED" == "true" && "$classification" == none ]]; then
+            should_publish=true
+          else
+            should_publish="$(jq -r 'if (.build_set | length) > 0 then "true" else "false" end' "$PLAN_ROOT/plan.json")"
+          fi
           if [[ "$DEPLOY_MANAGED" == "true" && "$should_publish" != "true" ]]; then
-            echo "deploy_managed requires at least one changed managed component" >&2
+            echo "deploy_managed requires an application component or runtime-only change" >&2
             exit 1
           fi
           release_id="managed-episode-$(date -u +%Y%m%dT%H%M%SZ)-${TARGET_SHA:0:8}-$(openssl rand -hex 4)"
@@ -191,7 +200,7 @@ jobs:
   build-managed-images:
     name: Build ${{ matrix.component }} image
     needs: plan-managed
-    if: needs.plan-managed.outputs.should_publish == 'true'
+    if: needs.plan-managed.outputs.should_publish == 'true' && needs.plan-managed.outputs.build_set != '[]'
     strategy:
       fail-fast: false
       matrix:
@@ -323,7 +332,10 @@ jobs:
   publish-managed-manifest:
     name: Publish managed release manifest
     needs: [plan-managed, build-managed-images]
-    if: needs.plan-managed.outputs.should_publish == 'true' && needs.build-managed-images.result == 'success'
+    if: >-
+      always() &&
+      needs.plan-managed.outputs.should_publish == 'true' &&
+      (needs.build-managed-images.result == 'success' || (needs.build-managed-images.result == 'skipped' && needs.plan-managed.outputs.build_set == '[]'))
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout exact release
@@ -339,6 +351,7 @@ jobs:
           merge-multiple: true
 
       - name: Download built image references
+        if: needs.plan-managed.outputs.build_set != '[]'
         uses: actions/download-artifact@v4
         with:
           pattern: managed-image-*-${{ needs.plan-managed.outputs.release_id }}
@@ -350,10 +363,17 @@ jobs:
           RELEASE_ID: ${{ needs.plan-managed.outputs.release_id }}
           PLAN_ROOT: ${{ runner.temp }}/managed-release-plan
           IMAGE_ROOT: ${{ runner.temp }}/managed-images
+          BUILD_JOB_RESULT: ${{ needs.build-managed-images.result }}
+          BUILD_SET: ${{ needs.plan-managed.outputs.build_set }}
         run: |
           set -euo pipefail
+          mkdir -p "$IMAGE_ROOT"
+          if [[ "$BUILD_JOB_RESULT" == skipped && "$BUILD_SET" != '[]' ]]; then
+            echo "skipped managed image build cannot publish a nonempty build set" >&2
+            exit 1
+          fi
           plan="$PLAN_ROOT/plan.json"
-          affected="$(jq -r '.affected_components | join(",")' "$plan")"
+          affected="$(jq -r 'if (.affected_components | length) == 0 then "none" else (.affected_components | join(",")) end' "$plan")"
           output="infrastructure/managed-episode/generated/${RELEASE_ID}.json"
           args=(
             --affected-components "$affected"
