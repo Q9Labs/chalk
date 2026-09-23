@@ -45,6 +45,7 @@ for recorder_worker_path in \
   "$planner" "$recorder_worker_path" | jq -e '.classification == "none" and .build_set == [] and .affected_components == []' >/dev/null || fail "recorder worker-only source was incorrectly planned as an API image release: $recorder_worker_path"
 done
 "$planner" apps/api/internal/recorderfleet/reconciler.go | jq -e '.classification == "api" and .build_set == ["api"]' >/dev/null || fail "managed API source no longer plans an API image release"
+"$planner" scripts/deploy/deploy-managed-release.test.mjs | jq -e '.classification == "none" and .build_set == [] and .affected_components == []' >/dev/null || fail "managed release contract tests were incorrectly planned as application image changes"
 
 tmp_root="${TMPDIR:-/tmp}"
 if [[ "$(uname -s)" == Darwin ]]; then
