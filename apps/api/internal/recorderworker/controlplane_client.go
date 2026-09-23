@@ -769,7 +769,7 @@ func decodeJob(response recorderWorkerJobResponse) (recordingpipeline.Job, error
 	if err != nil {
 		return recordingpipeline.Job{}, ProtocolError{Err: errors.New("job response recording")}
 	}
-	if response.Kind != string(recordingpipeline.JobKindCapture) && response.Kind != string(recordingpipeline.JobKindRender) {
+	if response.Kind != string(recordingpipeline.JobKindCapture) && !isRenderWorkerJobKind(recordingpipeline.JobKind(response.Kind)) {
 		return recordingpipeline.Job{}, ProtocolError{Err: errors.New("job response kind")}
 	}
 	switch recordingpipeline.JobState(response.State) {

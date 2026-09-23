@@ -174,6 +174,39 @@ func TestControlPlaneClientRejectsStrictResponseAndLargeRequest(t *testing.T) {
 	}
 }
 
+func TestControlPlaneClientHeartbeatJobKinds(t *testing.T) {
+	for _, kind := range []string{"capture", "render", "transcription", "unknown"} {
+		t.Run(kind, func(t *testing.T) {
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/internal/v1/recorder/jobs/heartbeat" {
+					t.Errorf("heartbeat path = %q", r.URL.Path)
+				}
+				job := testJobResponse()
+				job["kind"] = kind
+				writeJSONTest(w, http.StatusOK, job)
+			}))
+			defer server.Close()
+			client, err := NewControlPlaneClient(server.URL, server.Client())
+			if err != nil {
+				t.Fatalf("new client: %v", err)
+			}
+			job, err := client.Heartbeat(context.Background(), testLeaseInput(t))
+			if kind == "unknown" {
+				if !errors.Is(err, ErrControlPlaneProtocol) {
+					t.Fatalf("unknown job kind error = %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("heartbeat: %v", err)
+			}
+			if string(job.Kind) != kind {
+				t.Fatalf("heartbeat kind = %q, want %q", job.Kind, kind)
+			}
+		})
+	}
+}
+
 func TestControlPlaneClientBindsJobResponsesToLeaseAuthority(t *testing.T) {
 	tests := []struct {
 		name string
