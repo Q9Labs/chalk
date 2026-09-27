@@ -8,29 +8,28 @@ export const states = {
   planned: "Planned",
   in_progress: "In progress",
   blocked: "Blocked",
-  working: "Working",
 };
 export const areas = {
-  product_delivery: "Product Delivery",
-  episode_core: "Episode Core",
-  identity_and_tenancy: "Identity And Tenancy",
+  episode_core: "Spaces and Episodes",
+  identity_and_tenancy: "Identity and Tenants",
   media: "Media",
-  realtime_sync: "Realtime Sync",
+  realtime_sync: "Sync",
   collaboration: "Collaboration",
   recording: "Recording",
   transcription: "Transcription",
-  sdk_and_embedding: "Sdk And Embedding",
-  integrations_and_webhooks: "Integrations And Webhooks",
-  observability_and_operations: "Observability And Operations",
-  security_and_compliance: "Security And Compliance",
-  deferred_product_surface: "Deferred Product Surface",
+  security_and_compliance: "Security and compliance",
+  sdk_and_embedding: "SDK and embedding",
+  integrations_and_webhooks: "Integrations and webhooks",
+  observability_and_operations: "Operations",
+  product_delivery: "Other products",
 };
 const priorities = {
   P0: "First",
   P1: "Next",
   P2: "Later",
+  P3: "Someday",
 };
-export const sizes = ["S", "M", "L", "Unknown"];
+const sizes = ["S", "M", "L", "XL", "Unknown"];
 
 const fail = (label, message) => {
   throw new Error(`${label}: ${message}`);
@@ -62,21 +61,8 @@ const strings = (value, label, required = true) => {
   });
   assertUniqueList(value, label);
 };
-const date = (value, label) => {
-  string(value, label);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) fail(label, "expected YYYY-MM-DD");
-  const parsed = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
-    fail(label, "invalid calendar date");
-  }
-};
-
 const trackerFields = ["schema_version", "principle", "sizing", "outcomes"];
-const outcomeFields = ["id", "title", "area", "state", "summary", "priority", "size", "size_reason", "remaining", "uncertainty", "blocked_by", "theory", "code", "evidence"];
-const evidenceFields = ["kind", "scope", "detail", "from", "artifact", "revision", "environment", "date", "result"];
-const evidenceKinds = ["prior_assessment", "source_review", "check", "observation"];
-const executionFields = ["artifact", "revision", "environment", "date", "result"];
-
+const outcomeFields = ["id", "title", "area", "state", "summary", "priority", "size", "remaining", "uncertainty", "blocked_by", "theory", "code"];
 const validateIdentifier = (item, ids) => {
   string(item.id, "outcome.id");
   if (!/^[a-z][a-z0-9_.-]+$/.test(item.id)) fail(item.id, "invalid ID");
@@ -85,43 +71,21 @@ const validateIdentifier = (item, ids) => {
 };
 
 const validatePriority = (item) => {
-  if (item.priority === undefined) {
-    if (item.state !== "working") fail(item.id, "priority required");
-    return;
-  }
-  if (!Object.hasOwn(priorities, item.priority)) fail(item.id, "priority must be P0, P1 or P2");
+  if (item.priority === undefined) return;
+  if (!Object.hasOwn(priorities, item.priority)) fail(item.id, "priority must be P0, P1, P2 or P3");
 };
 
-const validateWorkingSize = (item) => {
-  if (item.size !== undefined || item.size_reason !== undefined) {
-    fail(item.id, "working entries have no remaining work to size");
-  }
-};
-const validateUnfinishedSize = (item) => {
-  if (!sizes.includes(item.size)) fail(item.id, "size must be S, M, L or Unknown");
-  string(item.size_reason, `${item.id}.size_reason`);
-};
 const validateSize = (item) => {
-  if (item.state === "working") {
-    validateWorkingSize(item);
-    return;
-  }
-  validateUnfinishedSize(item);
+  if (!sizes.includes(item.size)) fail(item.id, "size must be S, M, L, XL or Unknown");
 };
 
 const hasRequiredRemaining = ({ state }) => ["planned", "in_progress", "blocked"].includes(state);
 const validateOptionalRemaining = (item) => {
   if (item.remaining !== undefined) strings(item.remaining, `${item.id}.remaining`);
 };
-const validateWorkingResolution = (item) => {
-  if (item.remaining !== undefined || item.uncertainty !== undefined) {
-    fail(item.id, "working scope cannot have unresolved work or uncertainty");
-  }
-};
 const validateRemaining = (item) => {
   validateOptionalRemaining(item);
   if (hasRequiredRemaining(item)) strings(item.remaining, `${item.id}.remaining`);
-  if (item.state === "working") validateWorkingResolution(item);
 };
 
 const validateOptionalString = (value, label) => {
@@ -142,45 +106,6 @@ const validateUncertaintyAndBlocker = (item) => {
   validateBlockerState(item);
 };
 
-const validateEvidenceMetadata = (evidence, label) => {
-  for (const field of ["scope", "detail"]) {
-    if (evidence[field] !== undefined) string(evidence[field], `${label}.${field}`);
-  }
-};
-
-const validatePriorAssessment = (evidence, label) => {
-  strings(evidence.from, `${label}.from`);
-  for (const field of executionFields) {
-    if (evidence[field] !== undefined) fail(label, "do not invent execution metadata for a prior assessment");
-  }
-};
-
-const validateExecutionEvidence = (evidence, label) => {
-  string(evidence.scope, `${label}.scope`);
-  string(evidence.detail, `${label}.detail`);
-  if (evidence.from !== undefined) fail(label, "from is only for prior assessments");
-  for (const field of ["artifact", "revision", "environment"]) string(evidence[field], `${label}.${field}`);
-  date(evidence.date, `${label}.date`);
-  if (!["pass", "fail", "blocked"].includes(evidence.result)) fail(label, "result must be pass, fail or blocked");
-};
-
-const validateEvidenceEntry = (item, evidence) => {
-  const label = `${item.id}.evidence`;
-  object(evidence, label, evidenceFields);
-  if (!evidenceKinds.includes(evidence.kind)) fail(label, "unknown evidence kind");
-  validateEvidenceMetadata(evidence, label);
-  if (evidence.kind === "prior_assessment") validatePriorAssessment(evidence, label);
-  else validateExecutionEvidence(evidence, label);
-};
-const validateEvidenceList = (item) => {
-  if (!Array.isArray(item.evidence)) fail(item.id, "evidence must be a non-empty list");
-  if (item.evidence.length === 0) fail(item.id, "evidence must be a non-empty list");
-  item.evidence.forEach((evidence) => validateEvidenceEntry(item, evidence));
-};
-const validateEvidence = (item) => {
-  if (item.evidence !== undefined) validateEvidenceList(item);
-};
-
 const validateOutcomeCore = (item) => {
   for (const field of ["title", "summary"]) string(item[field], `${item.id}.${field}`);
   if (!Object.hasOwn(areas, item.area)) fail(item.id, "unknown area");
@@ -196,7 +121,6 @@ const validateOutcome = (item, ids) => {
   validateUncertaintyAndBlocker(item);
   validateOptionalString(item.theory, `${item.id}.theory`);
   strings(item.code, `${item.id}.code`, false);
-  validateEvidence(item);
 };
 
 export const validateTracker = (tracker) => {
@@ -260,7 +184,7 @@ export const checkReference = async (root, reference) => {
   await checkAnchor(absolute, file, anchor, reference);
 };
 
-const outcomeReferences = (item) => [item.theory, ...item.code, ...(item.evidence ?? []).map((evidence) => evidence.artifact)].filter(Boolean);
+const outcomeReferences = (item) => [item.theory, ...item.code].filter(Boolean);
 
 export const readTracker = async (root = repoRoot) => {
   await checkReference(root, "tracker.yaml");
@@ -271,33 +195,7 @@ export const readTracker = async (root = repoRoot) => {
   return tracker;
 };
 
-const outcomePriority = (item) => item.priority ?? "P3";
-const compareAreaAndTitle = (a, b) => {
-  const area = a.area.localeCompare(b.area);
-  if (area !== 0) return area;
-  return a.title.localeCompare(b.title);
-};
-const compareOutcomes = (a, b) => {
-  const priority = outcomePriority(a).localeCompare(outcomePriority(b));
-  if (priority !== 0) return priority;
-  return compareAreaAndTitle(a, b);
-};
-const sortOutcomes = (items) => items.toSorted(compareOutcomes);
-
-export const groupOutcomes = ({ outcomes }) => {
-  return [
-    {
-      title: "First",
-      items: sortOutcomes(outcomes.filter((x) => x.priority === "P0" && x.state !== "working")),
-    },
-    {
-      title: "Next and later",
-      items: sortOutcomes(outcomes.filter((x) => x.priority !== "P0" && x.state !== "working" && x.state !== "unknown")),
-    },
-    {
-      title: "Uncertain behavior",
-      items: sortOutcomes(outcomes.filter((x) => x.state === "unknown" && x.priority !== "P0")),
-    },
-    { title: "Working", items: sortOutcomes(outcomes.filter((x) => x.state === "working")) },
-  ];
-};
+export const groupOutcomes = ({ outcomes }) =>
+  Object.entries(areas)
+    .map(([area, title]) => ({ area, title, items: outcomes.filter((item) => item.area === area) }))
+    .filter((group) => group.items.length);

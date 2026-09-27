@@ -28,7 +28,6 @@ const outcome = (patch = {}) => ({
   state: "in_progress",
   priority: "P0",
   size: "M",
-  size_reason: "Connect upload completion and message retry.",
   summary: "Message sending exists; attachment retry is not connected.",
   remaining: ["Connect attachment retry to the message intent."],
   code: [],
@@ -40,31 +39,19 @@ const tracker = (...outcomes) => ({
   sizing: "Size the remaining work, not the whole feature.",
   outcomes,
 });
-const working = () =>
-  outcome({
-    state: "working",
-    size: undefined,
-    size_reason: undefined,
-    remaining: undefined,
-    evidence: [
-      {
-        kind: "prior_assessment",
-        scope: "Message sending only",
-        detail: "Previously recorded complete; not rerun.",
-        from: ["conversation.free_registration"],
-      },
-    ],
-  });
+const another = (id) => outcome({ id, priority: undefined });
 
-it("requires a size and reason for remaining work, without sizing working entries", () => {
-  for (const size of [undefined, "XS", "XL", "2 days", null]) {
+it("requires a size, allows an empty owner priority, and rejects finished work", () => {
+  for (const size of [undefined, "XS", "XXL", "2 days", null]) {
     assert.throws(() => validateTracker(tracker(outcome({ size }))), /size must/);
   }
-  assert.throws(() => validateTracker(tracker(outcome({ size_reason: " " }))), /size_reason/);
-  for (const size of ["S", "M", "L", "Unknown"]) {
+  for (const size of ["S", "M", "L", "XL", "Unknown"]) {
     assert.equal(validateTracker(tracker(outcome({ size }))).outcomes[0].size, size);
   }
-  assert.throws(() => validateTracker(tracker({ ...working(), size: "S" })), /no remaining work to size/);
+  assert.throws(() => validateTracker(tracker(outcome({ state: "working" }))), /unknown state/);
+  assert.equal(validateTracker(tracker(outcome({ priority: "P3" }))).outcomes[0].priority, "P3");
+  assert.throws(() => validateTracker(tracker(outcome({ priority: "P4" }))), /priority must/);
+  assert.equal(validateTracker(tracker(outcome({ priority: undefined }))).outcomes[0].priority, undefined);
   assert.equal(validateTracker(tracker(outcome({ state: "blocked", blocked_by: "Account credentials", size: "S" }))).outcomes[0].size, "S");
 });
 
@@ -74,72 +61,25 @@ it("requires a real uncertainty or blocker rather than an empty state label", ()
   assert.throws(() => validateTracker(tracker(outcome({ state: "planned", remaining: [] }))), /remaining/);
 });
 
-it("records working behavior without demanding a fresh check or hiding known gaps", () => {
-  const item = outcome({
-    state: "working",
-    size: undefined,
-    size_reason: undefined,
-    remaining: undefined,
-    code: ["source.ts"],
-  });
-  assert.equal(validateTracker(tracker(item)).outcomes.length, 1);
-  item.remaining = ["Attachment retry still fails"];
-  assert.throws(() => validateTracker(tracker(item)), /unresolved/);
-  const text = renderMarkdown(tracker(item));
-  assert.ok(text.includes("Track concrete behavior and remaining work."));
+it("puts the tracker principle at the top of the reading view", () => {
+  assert.ok(renderMarkdown(tracker(outcome())).includes("Track concrete behavior and remaining work."));
 });
 
-it("keeps inherited assessments distinct from new execution claims", () => {
-  const item = working();
-  assert.equal(validateTracker(tracker(item)).outcomes.length, 1);
-  assert.ok(renderMarkdown(tracker(item)).includes("## Working"));
-  item.evidence[0].date = "2026-09-07";
-  assert.throws(() => validateTracker(tracker(item)), /do not invent/);
-});
-
-it("rejects duplicate IDs, unknown fields and invalid dates", () => {
+it("rejects duplicate IDs and unknown fields, including evidence logs", () => {
   assert.throws(() => validateTracker(tracker(outcome(), outcome())), /duplicate outcome/);
   assert.throws(() => validateTracker(tracker(outcome({ status: "complete" }))), /unknown fields/);
-  const item = working();
-  item.evidence = [
-    {
-      kind: "observation",
-      scope: "Message retry",
-      detail: "Observed",
-      artifact: "result.md",
-      revision: "abc123",
-      environment: "local",
-      date: "2026-02-30",
-      result: "pass",
-    },
-  ];
-  assert.throws(() => validateTracker(tracker(item)), /calendar date/);
+  assert.throws(() => validateTracker(tracker(outcome({ evidence: [] }))), /unknown fields/);
 });
-
-it("shows every outcome once, with first-priority work ahead of uncertainty", () => {
-  const data = tracker(
-    outcome(),
-    outcome({
-      id: "conversation.uncertain",
-      priority: "P1",
-      state: "unknown",
-      uncertainty: "Live callback behavior is unclear.",
-      remaining: undefined,
-    }),
-    working(),
-  );
-  data.outcomes[2].id = "conversation.done";
+it("shows every outcome once, grouped by area and numbered the same in both views", () => {
+  const data = tracker(outcome(), outcome({ id: "media.join", area: "media" }), another("conversation.second"));
   const groups = groupOutcomes(data);
+  assert.deepEqual(
+    groups.map((group) => group.area),
+    ["media", "product_delivery"],
+  );
   assert.equal(groups.flatMap((group) => group.items).length, 3);
-  assert.deepEqual(
-    groups[0].items.map((item) => item.id),
-    ["conversation.registration"],
-  );
-  assert.deepEqual(
-    groups[2].items.map((item) => item.id),
-    ["conversation.uncertain"],
-  );
-  assert.ok(!renderMarkdown(data).includes("% complete"));
+  assert.ok(renderMarkdown(data).includes("1. **People can retry a message**"));
+  assert.ok(renderHtml(data).includes('<span class="number">1</span>'));
 });
 it("retains next steps beside uncertainty in the human reading view", () => {
   const source = renderMarkdown(
@@ -151,33 +91,29 @@ it("retains next steps beside uncertainty in the human reading view", () => {
       }),
     ),
   );
-  assert.ok(source.includes("**Unclear**: The existing archive migration"));
-  assert.ok(source.includes("**Left**: Inspect existing archive cohorts"));
+  assert.ok(source.includes("Open question: The existing archive migration"));
+  assert.ok(source.includes("- Inspect existing archive cohorts"));
 });
 
-it("shows size reasons and counts only remaining work, escaping HTML in reasons", () => {
-  const data = tracker(outcome({ size: "S", size_reason: "Add <contact> fields." }), outcome({ id: "conversation.unsized", size: "Unknown", priority: "P1" }), { ...working(), id: "conversation.working" });
+it("shows state, size and an owner-set priority, escaping HTML", () => {
+  const data = tracker(outcome({ size: "S", summary: "Add <contact> fields." }), outcome({ id: "conversation.unsized", size: "Unknown", priority: undefined }));
   const markdown = renderMarkdown(data);
-  assert.ok(markdown.includes("1 item — S: 1 · M: 0 · L: 0 · Unknown: 0"));
-  assert.ok(markdown.includes("1 item — S: 0 · M: 0 · L: 0 · Unknown: 1"));
-  assert.ok(markdown.includes("**Size**: S — Add ‹contact› fields."));
-  assert.equal(markdown.match(/\*\*Size\*\*/g).length, 2);
+  assert.ok(markdown.includes("(Partly working · size S · P0)"));
+  assert.ok(markdown.includes("(Partly working · size Unknown)"));
+  assert.ok(markdown.includes("Add ‹contact› fields."));
   const page = renderHtml(data);
-  assert.ok(page.includes("<strong>Size:</strong> S — Add &lt;contact&gt; fields."));
-  assert.ok(page.includes("P1 — S: 0 · M: 0 · L: 0 · Unknown: 1"));
-  assert.ok(page.includes("size unknown"));
+  assert.ok(page.includes("Add &lt;contact&gt; fields."));
   assert.ok(!page.includes("<contact>"));
 });
-
 it("keeps the human tracker readable without HTML or implementation metadata", () => {
   const item = outcome({
     code: ["packages/core/private-path.ts"],
     theory: "theory.md#trust",
   });
-  const source = renderMarkdown(tracker(item, { ...working(), id: "conversation.done" }));
-  assert.ok(source.includes("## First (P0)"));
-  assert.ok(source.includes("[Partly working]"));
-  assert.ok(source.includes("**Left**: Connect attachment retry"));
+  const source = renderMarkdown(tracker(item, another("conversation.second")));
+  assert.ok(source.includes("## Other products"));
+  assert.ok(source.includes("Partly working"));
+  assert.ok(source.includes("- Connect attachment retry"));
   assert.ok(!/<[^>]+>/.test(source));
   assert.ok(!source.includes(item.id));
   assert.ok(!source.includes("private-path.ts"));

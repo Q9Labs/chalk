@@ -69,6 +69,7 @@
     "@base-ui/react",
     "@excalidraw/excalidraw",
     "@q9labsai/chalk-whiteboard",
+    "@q9labsai/chalk-ui",
     "@tanstack/react-devtools",
     "@tanstack/react-query",
     "@cloudflare/vite-plugin",

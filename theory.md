@@ -44,14 +44,14 @@ The clean model carries these behaviors forward:
 - **Capabilities.** Chalk checks capabilities. Roles are customer-defined bundles, with `owner`, `collaborator`, and `observer` as the neutral defaults. UI reads capability state instead of guessing from role names.
 - **Live sync.** Presence, active speaker, media signals, hand raise, reactions, chat, whiteboard updates, snapshots, recovery, and Episode-end signals travel through the SyncEngine.
 - **Media.** The Cloudflare SFU adapter is first, while provider references remain opaque and the MediaPlane exposes usage and cost signals.
-- **Artifacts.** Recording and Transcript jobs retain provider reconciliation, retries, retention, download links, and immutable Episode attachment.
+- **Artifacts.** Recording and Transcript jobs retain provider reconciliation, retries, retention, download links, and immutable Episode attachment. Processing is transcript-first: a Recording prepares audio for its Transcript without rendering video, and an MP4 Export renders only when someone requests it. A finished Export is reused, so a second download does not repeat the work.
 - **Identity and tenancy.** Chalk mints its own IDs but mirrors the customer's `external_id`. A Tenant owns Spaces and tenant-level policy. Each Space owns its configuration and Members.
 - **Webhooks.** Customer-facing events use versioned schemas, raw-body signature verification, retries, idempotency, delivery history, and auditability.
 - **Operations.** Health checks, diagnostics, journey telemetry, public status projection, maintenance, incident intake, and useful SDK export context ship with the behavior they explain.
 
 ## Constraints
 
-1. **Customer-operated app tier is a v1 requirement.** A customer can operate the API, SyncEngine, and standard Postgres while media continues through a configured MediaPlane adapter. Redis is optional acceleration only, never a source of authority, and the durable core uses no vendor-specific database features. A Cloudflare-free media adapter remains a separate qualification.
+1. **Customer-operated app tier is a v1 requirement.** A customer can operate the API, SyncEngine, and standard Postgres while media continues through a configured MediaPlane adapter. Redis holds only short-lived state such as rate limits, OAuth state, and replay nonces; it is never a source of durable authority, and the durable core uses no vendor-specific database features. A Cloudflare-free media adapter remains a separate qualification.
 2. **Both planes are ports.** `CloudflareMediaPlaneAdapter` and `SyncEngine` are implementations behind stable contracts. Provider specifics stay at adapter boundaries.
 3. **Core data stays provider-neutral.** Space, Episode, and Participant records hold opaque provider references and provider metadata, never provider-specific identity in the domain model.
 4. **Durable facts live in Postgres.** Ordered control state, receipts, lifecycle intent, and Episode artifacts are durable. Presence, active-speaker hints, cursors, and track telemetry remain coordination signals.
@@ -62,8 +62,7 @@ The clean model carries these behaviors forward:
 9. **Capabilities travel with access.** `SpaceSnapshot` exposes the current capability set; commands use `useCan` or the corresponding `SpaceClient` controller. Client assertions never grant authority.
 10. **Clean break.** The public model has one vocabulary and one set of routes. Compatibility aliases and legacy names are not part of the product.
 11. **Retention is tenant-configurable.** A Tenant sets retention per Recording, Transcript, and chat stream. A hard-delete request overrides retention and purges the artifact.
-12. **Tenants sign identity assertions.** Keys are per-Tenant and rotatable, with overlap during rotation. Chalk accepts an identity only when the assertion is valid.
-13. **Media egress is measurable.** The MediaPlane exposes egress and Participant-minute usage so cost can be measured per Tenant and Episode and bounded by policy.
+12. **Media egress is measurable.** The MediaPlane exposes egress and Participant-minute usage so cost can be measured per Tenant and Episode and bounded by policy.
 
 ## Identity and membership
 
@@ -80,7 +79,7 @@ export function SpaceSurface({ getAccess }: { getAccess: GetAccess }) {
 }
 ```
 
-For custom UI, create a `SpaceClient`, pass it to `ChalkProvider`, and read the closed hook set: `useSpaceClient`, `useConnection`, `useSelf`, `useParticipants`, `useMedia`, `useChat`, `useReactions`, `useWhiteboard`, and `useCan`.
+For custom UI, create a `SpaceClient`, pass it to `ChalkProvider`, and read the closed hook set: `useSpaceClient`, `useConnection`, `useSelf`, `useParticipants`, `useMedia`, `useChat`, `useReactions`, `useRecording`, `useWhiteboard`, and `useCan`.
 
 An embedding customer can reuse one API key across several products, so the SDK carries an optional **app name**: a static label for the calling application. It is one top-level `appName` string with the same name on `createChalkEffectClient`, `createSpaceClient`, and `<Chalk />`, and an optional `app` on an AccessGrant request so the Episode and Participant inherit it. It is deliberately not telemetry configuration: telemetry options cover per-request correlation and exporter setup, while the app name is client identity that must travel even when telemetry is off. The transport sends it beside the journey ID, and the API stamps it on request spans and logs. Because it becomes a metric and log dimension, the server bounds its cardinality: trimmed, normalized to `[a-z0-9._-]`, capped near 64 characters, and dropped when empty.
 
@@ -110,17 +109,10 @@ Postgres is the durable authority. A transaction locks one Tenant-scoped Episode
 - **Webinar broadcasting.** Viewer-only roles and cascade tiers are outside the v1 surface. Existing publish and subscribe capabilities remain the extension seam.
 - **Enterprise identity federation.** SSO, SAML, and OIDC remain outside the current native auth proof.
 - **Legal hold.** Compliance retention that blocks deletion is outside the current retention contract.
-
-### Other excluded inventory entries
-
-- SSO, SAML, or OIDC (previous inventory ID `product.yaml:identity_and_tenancy:6`): not selected as current v1 delivery work.
-- End-to-end encryption (previous inventory ID `product.yaml:security_and_compliance:4`): not selected as current v1 delivery work.
-- Legal hold (previous inventory ID `product.yaml:security_and_compliance:5`): not selected as current v1 delivery work.
-- Webinar and observer roles (previous inventory ID `product.yaml:deferred_product_surface:1`): not selected as current v1 delivery work.
-- Enterprise SSO (previous inventory ID `product.yaml:security_and_compliance:6`): the same excluded enterprise identity scope, not a separate v1 work item.
+- **Tenant-signed identity assertions.** Per-Tenant, rotatable signing keys for identity assertions come after v1. Until then, one deployment-wide key signs access tokens.
 
 ## Tracker maintenance
 
-Track Participant-visible collaboration, delivery and recovery outcomes, not a permanent ledger of completed API endpoints, UI components or documentation pages. Consolidate related SDK, media, recording and transcription work without dropping unfinished scope. Local mocks, source implementation and real-provider/device/deployment qualification are different kinds of evidence.
+tracker.yaml owns current status. Each entry is one Participant-visible or operational outcome with a plain title, a one- or two-sentence summary of what exists and what's missing, and the concrete steps left. Entries are deliberately unplanned: scoping and design happen when someone picks the work up. Evidence, test runs and verification logs live in docs or scratch notes, not in the tracker. The owner sets priority.
 
-Only tracker.yaml owns current status. Retire basic completed entries when they no longer guide decisions; retain meaningful invariants and unresolved scope. Each surviving claim needs dated, scoped source or execution evidence. An audit date is not a release certification.
+Split an entry when its steps can ship separately, and merge entries that duplicate work. Put a step in the entry that must finish first. Delete an entry when its work is done: the code is the record of what works.

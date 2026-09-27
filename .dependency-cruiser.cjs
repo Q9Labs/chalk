@@ -5,7 +5,7 @@ const PACKAGE_ALIAS_DEPENDENCY_TYPES = ["aliased", "aliased-workspace"];
 const canonicalConfiguration = makeHexagonalRules({
   core: [],
   edges: [],
-  exclude: ["(?:^|/)scripts/gates/fixtures/package-boundaries/"],
+  exclude: ["(?:^|/)scripts/gates/fixtures/package-boundaries/", "^scratchpad/"],
 });
 const canonicalPackageSourceRule = canonicalConfiguration.forbidden.find((rule) => rule.name === "no-cross-package-src-imports");
 
