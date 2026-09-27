@@ -8,22 +8,27 @@ q9gate concurrency 1. `gate.report.json` records every selected/skipped lane.
 
 `pnpm gate:explain <path>` asks q9gate why a path selects lanes. Local hooks
 classify staged files. For branch/CI scope use `pnpm gate -- --base <ref>`;
-q9gate compares `<ref>...HEAD`. Gate-definition or unknown files fail closed
-to the full plan. The Chalk custom lanes reuse the legacy affected-workspace
+q9gate compares `<ref>...HEAD`. Use `pnpm gate -- --files <path>` (repeatable)
+or `GATE_FILES` (comma/newline-separated) for an explicit changed-file list.
+Those worktree files are scanned for secrets in addition to the staged diff.
+Gate-definition or unknown files fail closed to the full plan. The Chalk custom lanes reuse the affected-workspace
 and reverse-dependent planner, including Go, Elixir, Postgres, contracts,
 recorder, publication, static checks, and resource-limited shell scripts.
 
-q9gate 0.3 skips custom lanes on documentation-only changes before consulting
-their triggers. Chalk conservatively classifies documentation as gate-defining,
-so those diffs run the full safety net rather than dropping always-on checks.
-The toolkit issue is recorded in q9stack's v0.3 toolkit-issues ledger.
+Documentation-only changes run the four always-on Chalk lanes: routing
+self-test, language ratchet, hygiene, and diff-scoped secrets. They do not
+force unrelated service or workspace checks. The package-boundary check still
+runs its own test and q9gate's built-in Dependency Cruiser lane with Chalk's
+`.dependency-cruiser.cjs` configuration and a TypeScript analysis guard.
 
-The old `--target`, `GATE_FILES`, and `GATE_HEAD_REF` interfaces are not in the
-q9gate CLI. Use `--base` for a branch diff and `--lane <id>` for a focused
-check. `GATE_TARGET=web|mobile` still reaches Chalk's legacy workspace planner
-for staged or branch diffs, but q9gate does not provide the old CLI target
-validation or explicit-file input. Do not infer a shipment target from branch,
-release mode, or directory.
+Use `pnpm gate -- --target web|mobile` for a shipment-scoped gate; the
+`GATE_TARGET` environment form remains supported. q9gate validates the native
+target name, while Chalk's planner retains dependency-aware workspace
+exclusions and rejects incompatible mixed-platform changes. Target roots cover
+the full input diff so incompatible paths remain visible instead of being
+silently filtered out. `GATE_HEAD_REF` is not supported by q9gate; `--base`
+compares against `HEAD`. Use `--lane <id>` for a focused check. Do not infer a
+shipment target from branch, release mode, or directory.
 
 ## Selection Rules
 

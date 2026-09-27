@@ -82,7 +82,7 @@ importers:
         version: file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-cli-0.1.0.tgz
       '@q9labsai/config-depcruise':
         specifier: file:/tmp/q9-packs/v0.3-pre/q9labsai-config-depcruise-0.1.0.tgz
-        version: file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-config-depcruise-0.1.0.tgz
+        version: file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-config-depcruise-0.1.0.tgz(dependency-cruiser@18.2.0)
       '@q9labsai/diagnostics':
         specifier: file:/tmp/q9-packs/v0.3-pre/q9labsai-diagnostics-0.1.0.tgz
         version: file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-diagnostics-0.1.0.tgz
@@ -2906,23 +2906,25 @@ packages:
     engines: {node: '>=18'}
 
   '@q9labsai/cli@file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-cli-0.1.0.tgz':
-    resolution: {integrity: sha512-jrLotZFflZQdAoksSdH1/q075puJI4elB3FZQZP7VMpVDQrbnHfnpm1rpkRNB8hZ7q2YaRfB60bnMuyMkllzzQ==, tarball: file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-cli-0.1.0.tgz}
+    resolution: {integrity: sha512-EKDocHxMOduiAQ86hnPHbrWLCOuH2Kt2iFwh8WymXVl0Zbw3c6Te4CGJEksiNMWuoIT+z5iyRci6u8B/E8gSSg==, tarball: file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-cli-0.1.0.tgz}
     version: 0.1.0
     engines: {node: '>=24'}
     hasBin: true
 
   '@q9labsai/config-depcruise@file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-config-depcruise-0.1.0.tgz':
-    resolution: {integrity: sha512-uDephEoZBkVIf73A/xRM5oHbOMeSlKUFpLWLoP490c+BOVQ6Lk2BolZE5e+OfU9TgftaniydYv8Ti9xE0Ffq6w==, tarball: file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-config-depcruise-0.1.0.tgz}
+    resolution: {integrity: sha512-YoYF4AMz9xFe8ucv+bYNcPpPiYyEIw1rF70QT135q2/IB6hRCb43DNz/pvCBjynu3C6n4CNN9IbcR8wvTPvaSg==, tarball: file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-config-depcruise-0.1.0.tgz}
     version: 0.1.0
     engines: {node: '>=24'}
+    peerDependencies:
+      dependency-cruiser: ^18.2.0
 
   '@q9labsai/diagnostics@file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-diagnostics-0.1.0.tgz':
-    resolution: {integrity: sha512-OY8xz/uZAkRN3mOAccfZ5aNarsIFkjrTSTyerhscTajJMrs7hhNuZq3XujYs6lQ7YYds2veWrgSkmdIvniRnlQ==, tarball: file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-diagnostics-0.1.0.tgz}
+    resolution: {integrity: sha512-QIdz+cDJIyVRbHekldafkAsMiip1XsM7p5JKrcLth4BHKPmCHq/jinVL3RBAZ9r4CLf7a37S7gw8rgH9JvP/tw==, tarball: file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-diagnostics-0.1.0.tgz}
     version: 0.1.0
     engines: {node: '>=24'}
 
   '@q9labsai/gates@file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-gates-0.1.0.tgz':
-    resolution: {integrity: sha512-NyAwzoo3i4zU65D3+3Hips+eYDT5wsA9OmDUwiAIin3lHwSeoUFdh1GuToSbMfJt1ga5UuUIhue2kixS2JyAfQ==, tarball: file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-gates-0.1.0.tgz}
+    resolution: {integrity: sha512-Ygm1VfgISNYilf1k+abZAvnSJ44SDvVs6WsDXeYwPSDpy/7mSavQbgJMUZF7Gscc+mN3yLaCN73tBDygrHOTNQ==, tarball: file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-gates-0.1.0.tgz}
     version: 0.1.0
     engines: {node: '>=24'}
     hasBin: true
@@ -5429,11 +5431,6 @@ packages:
     engines: {node: ^22||^24||>=26}
     hasBin: true
 
-  dependency-cruiser@18.4.0:
-    resolution: {integrity: sha512-LLBYQ2XYmOCMG+liUWI2ReRYnnFXIbnzvCGHTohXAViSkawXr3T35fF/FV2cxpmB661pfkJ3ZXn95jhcEQ9GqA==}
-    engines: {node: ^22||^24||>=26}
-    hasBin: true
-
   dequal@2.0.3:
     resolution: {integrity: sha512-0je+qPKHEMohvfRTCEo3CrPG6cAzAYgmzKyxRiYSSDkS6eGJdyVJm7WaYA5ECaAD9wLB2T4EEeymA5aFVcYXCA==}
     engines: {node: '>=6'}
@@ -5513,10 +5510,6 @@ packages:
 
   enhanced-resolve@5.24.5:
     resolution: {integrity: sha512-L1l8TNvomm6UVW5B253AGxQagSQr+vGwhMlrrfRS2qmhx46AMpMVJKQYLvWYbysTMY8VoicOvzHzoHMbyzB+4A==}
-    engines: {node: '>=10.13.0'}
-
-  enhanced-resolve@5.25.1:
-    resolution: {integrity: sha512-nGXts5znJzmWPu+mIE9izCOzdg63oJca2mDzGWWTth7sr4aCToKcoyFVBQwN75Ij5Pf6p510EwkTqViTRzDV+w==}
     engines: {node: '>=10.13.0'}
 
   entities@4.5.0:
@@ -6101,10 +6094,6 @@ packages:
 
   ignore@7.0.6:
     resolution: {integrity: sha512-BAg6QkE8W+TuQLrrw0Ugr7HegXduRuuj8/ti2kSOc+jz1dmx8/WNcjr6XGnq5YpDWxFwwaavqD0+jIUOKelTsw==}
-    engines: {node: '>= 4'}
-
-  ignore@7.0.9:
-    resolution: {integrity: sha512-brTTsvFRt5C1gGHtPst/281UjPD5t9fBqbgoMPlVWy11ZLTPfu7HxK4ZYqO9H7o/yC9rSTCI85EaQ4OoY12qYw==}
     engines: {node: '>= 4'}
 
   image-blob-reduce@3.0.1:
@@ -7314,10 +7303,6 @@ packages:
 
   picomatch@4.0.5:
     resolution: {integrity: sha512-RvwwcruNjI1ncT5xRakeyS9Lf8lcItv34KD+aif+VH9kduAyfYBipGh12274xtenIPZ119/R9BdTBa8gAwSh0A==}
-    engines: {node: '>=12'}
-
-  picomatch@4.0.7:
-    resolution: {integrity: sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==}
     engines: {node: '>=12'}
 
   pirates@4.0.7:
@@ -11228,9 +11213,9 @@ snapshots:
       semver: 7.8.5
       zod: 4.6.5
 
-  '@q9labsai/config-depcruise@file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-config-depcruise-0.1.0.tgz':
+  '@q9labsai/config-depcruise@file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-config-depcruise-0.1.0.tgz(dependency-cruiser@18.2.0)':
     dependencies:
-      dependency-cruiser: 18.4.0
+      dependency-cruiser: 18.2.0
 
   '@q9labsai/diagnostics@file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-diagnostics-0.1.0.tgz':
     dependencies:
@@ -13807,27 +13792,6 @@ snapshots:
       tsconfig-paths-webpack-plugin: 4.2.0
       watskeburt: 6.0.0
 
-  dependency-cruiser@18.4.0:
-    dependencies:
-      acorn: 8.18.0
-      acorn-jsx: 5.3.2(acorn@8.18.0)
-      acorn-jsx-walk: 2.0.0
-      acorn-loose: 8.5.2
-      acorn-walk: 8.3.5
-      commander: 15.0.0
-      enhanced-resolve: 5.25.1
-      ignore: 7.0.9
-      interpret: 3.1.1
-      is-installed-globally: 1.0.0
-      json5: 2.2.3
-      picomatch: 4.0.7
-      prompts: 2.4.2
-      rechoir: 0.8.0
-      safe-regex: 2.1.1
-      semver: 7.8.5
-      tsconfig-paths-webpack-plugin: 4.2.0
-      watskeburt: 6.0.0
-
   dequal@2.0.3: {}
 
   destroy@1.2.0: {}
@@ -13905,11 +13869,6 @@ snapshots:
       tapable: 2.3.3
 
   enhanced-resolve@5.24.5:
-    dependencies:
-      graceful-fs: 4.2.11
-      tapable: 2.3.3
-
-  enhanced-resolve@5.25.1:
     dependencies:
       graceful-fs: 4.2.11
       tapable: 2.3.3
@@ -14612,8 +14571,6 @@ snapshots:
   ignore@5.3.2: {}
 
   ignore@7.0.6: {}
-
-  ignore@7.0.9: {}
 
   image-blob-reduce@3.0.1:
     dependencies:
@@ -16391,8 +16348,6 @@ snapshots:
   picomatch@2.3.2: {}
 
   picomatch@4.0.5: {}
-
-  picomatch@4.0.7: {}
 
   pirates@4.0.7: {}
 

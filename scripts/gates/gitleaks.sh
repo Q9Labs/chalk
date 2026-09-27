@@ -19,6 +19,20 @@ if [[ -z "${LOG_OPTS}" ]] && git rev-parse --is-inside-work-tree >/dev/null 2>&1
 fi
 
 run_gitleaks() {
+  if [[ -n "${GATE_EXPLICIT_FILES:-}" ]]; then
+    local file resolved root
+    root="$(pwd -P)"
+    while IFS= read -r file; do
+      [[ -z "${file}" || ! -e "${file}" ]] && continue
+      resolved="$(realpath "./${file}")"
+      if [[ ! -f "${file}" || -L "${file}" || "${resolved}" != "${root}/"* ]]; then
+        echo "Explicit gate file is not a regular in-repository file: ${file}" >&2
+        return 1
+      fi
+      "$@" dir --config "${CONFIG_PATH}" --redact --verbose -- "./${file}"
+    done <<< "${GATE_EXPLICIT_FILES}"
+  fi
+
   if [[ "${GATE_SCOPE:-}" == "staged" ]]; then
     "$@" protect --staged --config "${CONFIG_PATH}" --redact --verbose
     return
