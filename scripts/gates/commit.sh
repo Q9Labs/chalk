@@ -4,4 +4,7 @@ set -euo pipefail
 pnpm run check:tracker
 pnpm run test:tracker
 
-exec node scripts/gates/smart-gate.mjs "$@"
+if [[ "${1:-}" == "--" ]]; then
+  shift
+fi
+exec q9gate run "$@"

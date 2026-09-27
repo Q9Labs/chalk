@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -337,7 +337,7 @@ export function createGatePlan(files, options = {}) {
   const formatCommand = formattedFiles.length > 0 ? ["pnpm", "exec", "oxfmt", "--check", ...formattedFiles] : null;
   const semgrepCommand = explicitFull || (full && scope !== "staged") ? ["bash", "scripts/gates/semgrep.sh"] : sourceFiles.length > 0 ? ["bash", "scripts/gates/semgrep.sh", ...sourceFiles] : null;
   const tasks = [
-    task("self-test", "Gate routing and Sync reliability self-tests", true, "always required", ["node", "--test", "scripts/gates/smart-gate.test.mjs", "apps/sync/scripts/reliability_harness.test.mjs"]),
+    task("self-test", "Gate routing and Sync reliability self-tests", true, "always required", ["node", "--test", "scripts/gates/chalk-gate-plan.test.mjs", "apps/sync/scripts/reliability_harness.test.mjs"]),
     task("language-ratchet", "Language vocabulary ratchet", true, "always required", ["pnpm", "run", "language:ratchet"]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: scope, GITLEAKS_BASE_REF: base }),
@@ -392,169 +392,4 @@ export function createGatePlan(files, options = {}) {
     excludedWorkspaces,
     tasks,
   };
-}
-
-export function resolveChangedFiles(options = {}, diffFilter = "ACMR") {
-  const environment = options.environment ?? process.env;
-  const root = options.repositoryRoot ?? repositoryRoot;
-  if (Object.prototype.hasOwnProperty.call(environment, "GATE_FILES")) {
-    return {
-      files: normalizeFiles(environment.GATE_FILES.split(/[\n,]/)),
-      source: "explicit",
-      snapshot: { mode: "worktree" },
-    };
-  }
-  const targetSafetyPaths = Boolean(options.target) && diffFilter === "ACMR";
-  const resolvedDiffFilter = targetSafetyPaths ? "ACMRD" : diffFilter;
-  const renameArguments = targetSafetyPaths ? ["--no-renames"] : [];
-  if (environment.CI === "true") {
-    const base = environment.GATE_BASE_REF;
-    if (options.full && !base) return { files: [], source: "ci", snapshot: { mode: "worktree" } };
-    if (!base) throw new Error("GATE_BASE_REF is required in CI");
-    const head = environment.GATE_HEAD_REF ?? "HEAD";
-    return {
-      files: normalizeFiles(gitLines(["diff", "--name-only", ...renameArguments, `--diff-filter=${resolvedDiffFilter}`, `${base}...${head}`], root, environment)),
-      source: "ci",
-      snapshot: { mode: "ref", ref: head },
-    };
-  }
-  return {
-    files: normalizeFiles(gitLines(["diff", "--cached", "--name-only", ...renameArguments, `--diff-filter=${resolvedDiffFilter}`], root, environment)),
-    source: "staged",
-    snapshot: { mode: "index" },
-  };
-}
-
-export function changedFiles(options = {}, diffFilter = "ACMR") {
-  return resolveChangedFiles(options, diffFilter).files;
-}
-
-function displayCommand(command) {
-  return command.map((part) => (/^[A-Za-z0-9_./:@%+=,-]+$/.test(part) ? part : JSON.stringify(part))).join(" ");
-}
-
-function printPlan(plan) {
-  console.log(`Gate plan: mode=${plan.mode} target=${plan.target ?? "none"} source=${plan.source}`);
-  console.log(`Gate workspaces: selected=${plan.selectedWorkspaces.map((workspace) => workspace.name).join(",") || "none"}`);
-  console.log(`Gate exclusions: opposite-platform=${plan.excludedWorkspaces.map((workspace) => workspace.name).join(",") || "none"}`);
-  console.log(
-    `Gate checks: selected=${
-      plan.tasks
-        .filter((candidate) => candidate.selected)
-        .map((candidate) => candidate.label)
-        .join(",") || "none"
-    }`,
-  );
-  console.log(`Gate scope: ${plan.full ? `full (${plan.fullReason})` : plan.scope}`);
-  console.log(`Changed files: ${plan.files.length}`);
-  for (const file of plan.files) console.log(`  ${file}`);
-  console.log("\nSelected checks:");
-  for (const selected of plan.tasks.filter((candidate) => candidate.selected)) {
-    console.log(`  ✓ ${selected.label} — ${selected.reason}`);
-    console.log(`    ${displayCommand(selected.command)}`);
-  }
-  console.log("\nSkipped checks:");
-  for (const skipped of plan.tasks.filter((candidate) => !candidate.selected)) console.log(`  – ${skipped.label} — ${skipped.reason}`);
-}
-
-function run(plan) {
-  printPlan(plan);
-  for (const selected of plan.tasks.filter((candidate) => candidate.selected)) {
-    console.log(`\n==> ${selected.label}`);
-    const result = spawnSync(selected.command[0], selected.command.slice(1), {
-      cwd: repositoryRoot,
-      env: { ...process.env, ...selected.env },
-      stdio: "inherit",
-    });
-    if (result.error) throw result.error;
-    if (result.status !== 0) process.exit(result.status ?? 1);
-  }
-  console.log("\nSmart gate passed.");
-}
-
-export function parseArguments(argv, environment = process.env) {
-  const full = argv.includes("--full");
-  const cliTargets = [];
-  const unknown = [];
-  for (let index = 0; index < argv.length; index += 1) {
-    const argument = argv[index];
-    if (argument === "--" || argument === "--full") continue;
-    if (argument === "--target") {
-      const value = argv[index + 1];
-      if (!value || value === "--" || value === "--full" || value.startsWith("--")) {
-        throw new GatePlanningError("invalid-target", "--target requires a value", { suggestion: "pnpm run gate" });
-      }
-      cliTargets.push(value);
-      index += 1;
-      continue;
-    }
-    if (argument.startsWith("--target=")) {
-      cliTargets.push(argument.slice("--target=".length));
-      continue;
-    }
-    unknown.push(argument);
-  }
-  const hasEnvironmentTarget = Object.prototype.hasOwnProperty.call(environment, "GATE_TARGET");
-  if (unknown.length > 0) {
-    if (cliTargets.length > 0 || hasEnvironmentTarget) {
-      throw new GatePlanningError("invalid-target", `Unknown gate argument: ${unknown.join(", ")}`, {
-        target: cliTargets[0] ?? (hasEnvironmentTarget ? environment.GATE_TARGET : null),
-        details: unknown,
-        suggestion: "pnpm run gate",
-      });
-    }
-    throw new Error(`Unknown gate argument: ${unknown.join(", ")}`);
-  }
-  if (cliTargets.length > 1) {
-    throw new GatePlanningError("invalid-target", "Shipment target may be provided only once", {
-      target: cliTargets.at(-1) || null,
-      suggestion: "pnpm run gate",
-    });
-  }
-  const cliTarget = cliTargets[0];
-  const environmentTarget = hasEnvironmentTarget ? environment.GATE_TARGET : undefined;
-  if (hasEnvironmentTarget && (!environmentTarget || environmentTarget.startsWith("--"))) {
-    throw new GatePlanningError("invalid-target", "GATE_TARGET must be web or mobile", {
-      target: environmentTarget || null,
-      suggestion: "pnpm run gate",
-    });
-  }
-  if (cliTarget !== undefined && environmentTarget !== undefined && cliTarget !== environmentTarget) {
-    throw new GatePlanningError("target-conflict", "CLI and GATE_TARGET shipment targets differ", {
-      target: cliTarget,
-      details: [`CLI target: ${cliTarget}`, `GATE_TARGET: ${environmentTarget}`],
-      suggestion: "pnpm run gate",
-    });
-  }
-  const target = cliTarget ?? environmentTarget;
-  if (target !== undefined) normalizeTarget(target);
-  if (full && target !== undefined) {
-    throw new GatePlanningError("target-with-full", "A shipment target cannot be combined with --full", {
-      target,
-      suggestion: "pnpm run gate -- --full",
-    });
-  }
-  if (target === undefined) return { full };
-  return { full, target };
-}
-
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  let parsedOptions = { full: false };
-  try {
-    parsedOptions = parseArguments(process.argv.slice(2));
-    const options = parsedOptions;
-    const changeSet = resolveChangedFiles(options);
-    const scope = changeSet.source === "ci" ? "merge base to HEAD" : "staged";
-    run(createGatePlan(changeSet.files, { ...options, scope, source: changeSet.source, snapshot: changeSet.snapshot }));
-  } catch (error) {
-    if (error instanceof GatePlanningError) {
-      console.error(`Gate plan error: reason=${error.reason} target=${error.target ?? parsedOptions.target ?? "none"}`);
-      if (error.message) console.error(error.message);
-      for (const detail of error.details) console.error(`  ${detail}`);
-      console.error(`Run instead: ${error.suggestion}`);
-    } else {
-      console.error(`Gate setup failed: ${error instanceof Error ? error.message : error}`);
-    }
-    process.exit(2);
-  }
 }
