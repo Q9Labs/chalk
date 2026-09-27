@@ -3637,6 +3637,9 @@ create index diagnostic_operations_participant_idx
 create index diagnostic_operations_trace_idx
     on diagnostic_operations(tenant_id, trace_id, span_id)
     where trace_id is not null and span_id is not null;
+create index diagnostic_operations_plain_trace_idx
+    on diagnostic_operations(trace_id, tenant_id, diagnostic_id)
+    where trace_id is not null;
 
 create table diagnostic_checkpoints (
     tenant_id uuid not null,
@@ -3819,6 +3822,9 @@ create index diagnostic_events_operation_idx
 create index diagnostic_events_trace_idx
     on diagnostic_events(tenant_id, trace_id, span_id, cursor)
     where trace_id is not null and span_id is not null;
+create index diagnostic_events_plain_trace_idx
+    on diagnostic_events(trace_id, tenant_id, diagnostic_id)
+    where trace_id is not null;
 create index diagnostic_events_journey_idx
     on diagnostic_events(tenant_id, journey_id, cursor)
     where journey_id is not null;

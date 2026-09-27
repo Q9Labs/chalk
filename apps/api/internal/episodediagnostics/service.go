@@ -517,6 +517,11 @@ func (s Service) alternateLookup(idClass, value string) (string, string, error) 
 			return "", "", ErrInvalidReference
 		}
 		return TraceSpanReferenceValue(traceID, spanID), "", nil
+	case "w3c.trace-id":
+		if len(value) != 32 || value == strings.Repeat("0", 32) || value != strings.ToLower(value) || !ValidSafeIdentifierValue("w3c.trace", value) {
+			return "", "", ErrInvalidReference
+		}
+		return value, "", nil
 	case "provider":
 		if !ValidSafeIdentifierValue(idClass, value) {
 			return "", "", ErrInvalidReference

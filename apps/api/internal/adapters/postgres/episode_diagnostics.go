@@ -591,6 +591,32 @@ func (r *EpisodeDiagnosticsRepository) ResolveAlternate(ctx context.Context, idC
 	if r.queryPool == nil {
 		return episodediagnostics.DiagnosticReference{}, errDiagnosticsUnavailable
 	}
+	if idClass == "w3c.trace-id" {
+		var diagnosticID pgtype.UUID
+		var environment, state string
+		const query = `
+select d.id, d.environment, d.state
+from episode_diagnostics d
+join (
+    select tenant_id, diagnostic_id from diagnostic_events where trace_id = $1
+    union
+    select tenant_id, diagnostic_id from diagnostic_operations where trace_id = $1
+) evidence on evidence.tenant_id = d.tenant_id and evidence.diagnostic_id = d.id
+order by d.id
+limit 1`
+		err := r.queryPool.QueryRow(ctx, query, lookup).Scan(&diagnosticID, &environment, &state)
+		if errors.Is(err, pgx.ErrNoRows) || state == string(episodediagnostics.DiagnosticExpired) {
+			return episodediagnostics.DiagnosticReference{}, episodediagnostics.ErrNotFound
+		}
+		if err != nil {
+			return episodediagnostics.DiagnosticReference{}, fmt.Errorf("lookup diagnostic trace: %w", err)
+		}
+		return episodediagnostics.DiagnosticReference{
+			Version:      episodediagnostics.ContractVersion,
+			Environment:  episodediagnostics.Environment(environment),
+			DiagnosticID: utilities.IDFromBytes(diagnosticID.Bytes).String(),
+		}, nil
+	}
 	var rowTenant, rowDiagnostic, rowReference pgtype.UUID
 	var environment, state string
 	var rawValue, hmacVersion, valueHMAC pgtype.Text
