@@ -15,9 +15,10 @@ const (
 	MinimumEpisodeParticipants = 1
 	MaximumEpisodeParticipants = 10
 	MaximumRecordingDuration   = 2 * time.Hour
-	// CPU qualification renders 1080p at about 2.4 times the media duration.
-	// Keep an absolute budget across retries with time for staging and encoding.
-	MaximumRenderDuration          = 4 * MaximumRecordingDuration
+	// The c-2/two-page render profile took about 5.9 times media duration
+	// on the qualified fixture. Keep an absolute budget across retries,
+	// staging, and encoding for a maximum-length Recording.
+	MaximumRenderDuration          = 7 * MaximumRecordingDuration
 	MaximumInputBitrateBPS         = int64(4_000_000)
 	MaximumInputBitrateTotalBPS    = int64(MaximumEpisodes) * MaximumInputBitrateBPS
 	DefaultPayloadSchemaVersion    = 1

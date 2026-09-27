@@ -268,10 +268,10 @@ Capture bundles are private R2 objects under
 `temporary/recordings/<recording>/capture/<epoch>/bundles/...`. The fixed
 `temporary/` lifecycle rule makes them eligible for deletion after 24 hours;
 actual deletion may occur later. The API allows at most two hours of capture
-(`recordingpipeline.MaximumRecordingDuration`) and eight hours of rendering
+(`recordingpipeline.MaximumRecordingDuration`) and fourteen hours of rendering
 after capture completion (`recordingpipeline.MaximumRenderDuration`), so the
-earliest bundle remains available for at least fourteen hours after its maximum
-ten-hour capture-and-render window. Retained render/source objects under
+earliest bundle remains available for at least eight hours after its maximum
+sixteen-hour capture-and-render window. Retained render/source objects under
 `tenants/<tenant>/recordings/...` and transcripts under
 `tenants/<tenant>/transcripts/...` do not match the temporary prefix. Incomplete
 multipart uploads are eligible for abort after seven days. Previously issued
