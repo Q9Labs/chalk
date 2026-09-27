@@ -157,8 +157,12 @@ defmodule ChalkSync.Live.Episode do
   end
 
   defp refresh_media(state, options) do
-    with {:ok, observation} <- observed_media(state) do
-      apply_media_observation(state, observation, options)
+    with {:ok, pauses} <- Stateholder.media_pauses(state.episode),
+         {:ok, observation} <- observed_media(state) do
+      apply_media_observation(%{state | media_pauses: pauses}, observation, options)
+    else
+      {:retryable, _reason} -> {:error, :dependency_unavailable}
+      error -> error
     end
   end
 
@@ -326,30 +330,46 @@ defmodule ChalkSync.Live.Episode do
 
     if source in [:camera, :microphone] and result["outcome"] in ["confirmed", "satisfied"] do
       key = {authority.participant_id, Atom.to_string(source)}
-      {%{next | media_pauses: Map.delete(next.media_pauses, key)}, result}
+
+      case Stateholder.set_media_pause(identity, source, nil) do
+        :ok -> {%{next | media_pauses: Map.delete(next.media_pauses, key)}, result}
+        {:retryable, reason} -> {next, live_result(target, :retryable_failure, reason)}
+        {:error, reason} -> {next, live_result(target, :terminal_failure, reason)}
+      end
     else
       {next, result}
     end
   end
 
-  defp apply_live_target(state, _identity, authority, source, target)
+  defp apply_live_target(state, identity, authority, source, target)
        when source in [:camera, :microphone] do
     key = {authority.participant_id, Atom.to_string(source)}
 
-    pauses =
+    publication_id =
       case Enum.find(state.media_observed_items, fn item ->
              item["participant_id"] == authority.participant_id and
                item["source"] ==
                  Atom.to_string(source)
            end) do
-        %{"publication_id" => publication_id} when is_binary(publication_id) ->
-          Map.put(state.media_pauses, key, publication_id)
-
-        _ ->
-          state.media_pauses
+        %{"publication_id" => value} when is_binary(value) -> value
+        _ -> nil
       end
 
-    {%{state | media_pauses: pauses}, live_result(target, :confirmed)}
+    if is_binary(publication_id) do
+      case Stateholder.set_media_pause(identity, source, publication_id) do
+        :ok ->
+          pauses = Map.put(state.media_pauses, key, publication_id)
+          {%{state | media_pauses: pauses}, live_result(target, :confirmed)}
+
+        {:retryable, reason} ->
+          {state, live_result(target, :retryable_failure, reason)}
+
+        {:error, reason} ->
+          {state, live_result(target, :terminal_failure, reason)}
+      end
+    else
+      {state, live_result(target, :confirmed)}
+    end
   end
 
   defp apply_live_target(state, _identity, authority, source, target) do

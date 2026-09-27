@@ -17,6 +17,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Resumed camera and microphone media on the existing Cloudflare SFU publication after a Participant re-enables it, without exhausting media sections or leaving remote Participants without media.
 - Kept forced-muted publications unavailable to subscribers while preserving their Cloudflare SFU track for a later authorized re-enable.
 - Surfaced per-track Cloudflare SFU pull failures in SDK diagnostics and cooled down retries for empty tracks.
+- Preserved self-paused media state across Sync coordinator recovery and retried a retained remote track as soon as its media projection resumed.
 
 ### Added
 

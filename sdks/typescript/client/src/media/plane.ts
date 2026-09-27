@@ -48,4 +48,5 @@ export type ClientMediaPlane = {
   readonly setLocalPublicationTarget: (target: MediaPlaneTarget) => Promise<MediaPlaneResult>;
   readonly observeLocalPublications: (listener: (publications: readonly MediaPublication[]) => void) => () => void;
   readonly observeRemotePublications: (listener: (publications: readonly MediaPublication[]) => void) => () => void;
+  readonly remotePublicationResumed?: (publicationId: string) => void;
 };

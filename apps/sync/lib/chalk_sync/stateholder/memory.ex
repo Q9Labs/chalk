@@ -119,6 +119,14 @@ defmodule ChalkSync.Stateholder.Memory do
     do: {:retryable, :dependency_unavailable}
 
   @impl ChalkSync.Stateholder
+  def media_pauses(%EpisodeKey{} = episode),
+    do: GenServer.call(__MODULE__, {:media_pauses, episode})
+
+  @impl ChalkSync.Stateholder
+  def set_media_pause(%Identity{} = identity, source, publication_id),
+    do: GenServer.call(__MODULE__, {:set_media_pause, identity, source, publication_id})
+
+  @impl ChalkSync.Stateholder
   def begin_role_transition(identity, command, _publications),
     do: decide_command(identity, command)
 
@@ -146,6 +154,48 @@ defmodule ChalkSync.Stateholder.Memory do
   def handle_call(:reset, _from, s) do
     :ets.delete_all_objects(@episodes)
     {:reply, :ok, s}
+  end
+
+  def handle_call({:media_pauses, episode}, _from, server_state) do
+    key = EpisodeKey.authority_key(episode)
+
+    reply =
+      case :ets.lookup(@episodes, key) do
+        [{^key, state}] -> {:ok, state.media_pauses}
+        [] -> {:retryable, :dependency_unavailable}
+      end
+
+    {:reply, reply, server_state}
+  end
+
+  def handle_call({:set_media_pause, identity, source, publication_id}, _from, server_state) do
+    key = EpisodeKey.authority_key(identity.episode)
+
+    reply =
+      case :ets.lookup(@episodes, key) do
+        [{^key, state}] ->
+          case memory_participant_authority(
+                 state,
+                 identity.participant_id,
+                 identity.participant_generation
+               ) do
+            {:ok, _authority} ->
+              pause_key = {identity.participant_id, Atom.to_string(source)}
+
+              pauses = update_media_pauses(state.media_pauses, pause_key, publication_id)
+
+              :ets.insert(@episodes, {key, %{state | media_pauses: pauses}})
+              :ok
+
+            error ->
+              error
+          end
+
+        [] ->
+          {:retryable, :dependency_unavailable}
+      end
+
+    {:reply, reply, server_state}
   end
 
   def handle_call({:seed_episode, episode, participants}, _from, server_state) do
@@ -404,6 +454,11 @@ defmodule ChalkSync.Stateholder.Memory do
     {:reply, reply, server_state}
   end
 
+  defp update_media_pauses(pauses, key, publication_id) when is_binary(publication_id),
+    do: Map.put(pauses, key, publication_id)
+
+  defp update_media_pauses(pauses, key, nil), do: Map.delete(pauses, key)
+
   defp claim_memory_operations(server_state, limit, operation_filter) do
     operations =
       @episodes
@@ -448,6 +503,7 @@ defmodule ChalkSync.Stateholder.Memory do
       participants: %{},
       receipts: %{},
       operations: %{},
+      media_pauses: %{},
       recording_capture_epochs: %{},
       events: :queue.new()
     }

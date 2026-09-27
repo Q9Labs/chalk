@@ -521,8 +521,14 @@ export class V1SyncClient implements V1CollaborationClient {
   #replaceProjection(frame: Extract<SyncV1ServerFrame, { readonly type: "projection_snapshot" }>): void {
     if (this.#phase.phase !== "recovering" && this.#phase.phase !== "live") throw new V1ReplicaError("projection snapshot arrived in the wrong phase");
     if (frame.stream === "media") {
+      const previous = this.#media?.items ?? [];
       this.#media = { projectionId: frame.projection_id, sequence: 0, items: frame.items.map(mediaItem) };
       this.#mediaEventEvidence.clear();
+      for (const item of this.#media.items)
+        this.#notifyRemotePublicationResumed(
+          previous.find((candidate) => mediaKey(candidate) === mediaKey(item)),
+          item,
+        );
     } else {
       this.#presence = { projectionId: frame.projection_id, sequence: 0, items: frame.items.map(presenceItem) };
       this.#presenceEventEvidence.clear();
@@ -535,14 +541,23 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#requireLive();
     if (frame.stream === "media") {
       if (this.#acceptProjectionDuplicate(this.#media, this.#mediaEventEvidence, frame)) return;
-      this.#media = updateProjection(this.#media, frame.projection_id, frame.sequence, mediaItem(frame.item), mediaKey);
+      const item = mediaItem(frame.item);
+      const previous = this.#media?.items.find((candidate) => mediaKey(candidate) === mediaKey(item));
+      this.#media = updateProjection(this.#media, frame.projection_id, frame.sequence, item, mediaKey);
       rememberBoundedEvidence(this.#mediaEventEvidence, frame.sequence, frameSignature(frame), MAX_PROJECTION_EVENT_EVIDENCE);
+      this.#notifyRemotePublicationResumed(previous, item);
     } else {
       if (this.#acceptProjectionDuplicate(this.#presence, this.#presenceEventEvidence, frame)) return;
       this.#presence = updateProjection(this.#presence, frame.projection_id, frame.sequence, presenceItem(frame.item), (item) => item.participantId);
       rememberBoundedEvidence(this.#presenceEventEvidence, frame.sequence, frameSignature(frame), MAX_PROJECTION_EVENT_EVIDENCE);
     }
     this.#emit();
+  }
+
+  #notifyRemotePublicationResumed(previous: V1MediaPublication | undefined, current: V1MediaPublication): void {
+    if (previous?.enabled === false && current.enabled && current.publicationId && previous.publicationId === current.publicationId && current.participantId !== this.#participantId) {
+      this.#options.mediaPlane?.remotePublicationResumed?.(current.publicationId);
+    }
   }
 
   #requestResult(frame: V1DirectedRequestResult): void {

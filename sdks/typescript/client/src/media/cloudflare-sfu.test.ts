@@ -331,6 +331,22 @@ describe("Cloudflare SFU client", () => {
     harness.client.stop();
   });
 
+  it("retries an empty retained track immediately after its media projection resumes", async () => {
+    const harness = createHarness();
+    await harness.client.start(fakeStream());
+    const publicationId = "remote-connection|camera-a";
+    harness.transport.snapshot = publicationSnapshot(1, 1, publicationId);
+    harness.transport.failedRemoteTrackNames.set("camera-a", "empty_track_error");
+    await harness.client.refreshRemotePublications();
+    expect(remotePullCount(harness)).toBe(1);
+
+    harness.transport.failedRemoteTrackNames.delete("camera-a");
+    harness.client.remotePublicationResumed(publicationId);
+    await vi.waitFor(() => expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe(publicationId));
+    expect(remotePullCount(harness)).toBe(2);
+    harness.client.stop();
+  });
+
   it("drops a forced-muted publication and pulls the same Cloudflare SFU identity after re-enable", async () => {
     const publicationId = "remote-connection|microphone-a";
     const harness = await startedRemoteHarness(publicationId);
@@ -343,7 +359,8 @@ describe("Cloudflare SFU client", () => {
     expect(initialTrack?.readyState).toBe("ended");
 
     harness.transport.snapshot = publicationSnapshot(1, 3, publicationId);
-    await harness.client.refreshRemotePublications();
+    harness.client.remotePublicationResumed(publicationId);
+    await vi.waitFor(() => expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe(publicationId));
     expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe(publicationId);
     expect(harness.client.getSnapshot().remoteTracks[0]?.track).not.toBe(initialTrack);
     harness.client.stop();

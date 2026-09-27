@@ -75,6 +75,9 @@ defmodule ChalkSync.Live.SelfPauseProjectionTest do
     assert {:ok, persisted, []} = LiveEpisode.reconcile(paused)
     assert persisted.media_items == paused.media_items
 
+    assert {:ok, rebuilt, _frames} = LiveEpisode.reconcile(LiveEpisode.new(episode))
+    assert rebuilt.media_items == paused.media_items
+
     refute Enum.any?(MediaPlaneTestAdapter.calls(adapter), fn {effect, _, _} ->
              effect == :revoke_publication
            end)

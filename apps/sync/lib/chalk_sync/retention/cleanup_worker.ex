@@ -115,6 +115,8 @@ defmodule ChalkSync.Retention.CleanupWorker do
         grant_reservations =
           delete_measurement(transaction, SQL.delete_publication_grant_reservations(), candidate)
 
+        _media_pauses = delete_measurement(transaction, SQL.delete_media_pauses(), candidate)
+
         screen_share_leases =
           delete_measurement(transaction, SQL.delete_screen_share_leases(), candidate)
 

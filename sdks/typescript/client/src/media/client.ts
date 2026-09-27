@@ -108,6 +108,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     return subscribeSnapshot(this.#snapshotListeners, listener);
   }
 
+  remotePublicationResumed(publicationId: string): void {
+    this.#remotePullRetryAfter.delete(publicationId);
+    this.#clearPoll();
+    this.#schedulePoll(0);
+  }
+
   prepareLocalTrack(source: MediaSource, track: MediaStreamTrack): void {
     this.#requireActive();
     validateTrackSource(source, track);
@@ -211,6 +217,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const connectionEpoch = ++this.#connectionEpoch;
     this.#polling = false;
     this.#clearPoll();
+    this.#remotePullRetryAfter.clear();
     this.#disposeConnection(false);
     this.#reusableLocalTransceivers.clear();
     this.#clearRemoteTracks();
@@ -249,6 +256,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#generation++;
     this.#connectionEpoch++;
     this.#clearPoll();
+    this.#remotePullRetryAfter.clear();
     this.#polling = false;
     this.#disposeConnection(true);
     this.#reusableLocalTransceivers.clear();
@@ -435,7 +443,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (ordering === "stale" || (ordering === "same" && !this.#remotePullIncomplete)) return;
 
     const desired = this.#desiredRemotePublications(authoritative, cursor);
-    const toPull = [...desired].filter(([key, publication]) => this.#remoteTracks.get(key)?.publicationId !== publication.publicationId && (this.#remotePullRetryAfter.get(publication.publicationId) ?? 0) <= Date.now()).map(([, publication]) => publication);
+    const toPull = this.#pendingRemotePulls(desired);
     const pulled = await this.#pullWithRecovery(toPull, cursor, generation);
     if (pulled === null) return;
     this.#requireGeneration(generation);
@@ -448,6 +456,15 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     for (const publication of pulled) this.#invokeListener(() => this.#onRemoteTrack?.(publication));
     this.#publishSnapshot();
     this.#emitRemote();
+  }
+
+  #pendingRemotePulls(desired: ReadonlyMap<string, CloudflareSFUPublication>): CloudflareSFUPublication[] {
+    const desiredIds = new Set([...desired.values()].map((publication) => publication.publicationId));
+    for (const publicationId of this.#remotePullRetryAfter.keys()) {
+      if (!desiredIds.has(publicationId)) this.#remotePullRetryAfter.delete(publicationId);
+    }
+    const now = Date.now();
+    return [...desired].filter(([key, publication]) => this.#remoteTracks.get(key)?.publicationId !== publication.publicationId && (this.#remotePullRetryAfter.get(publication.publicationId) ?? 0) <= now).map(([, publication]) => publication);
   }
 
   #validatedRemotePublicationCursor(authoritative: CloudflareSFUPublicationSnapshot): PublicationCursor | null {
