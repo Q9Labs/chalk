@@ -15858,6 +15858,25 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             required: ["sdp", "type"],
             type: ["object", "null"],
           },
+          trackErrors: {
+            items: {
+              additionalProperties: false,
+              properties: {
+                code: {
+                  type: "string",
+                },
+                connectionId: {
+                  type: "string",
+                },
+                trackName: {
+                  type: "string",
+                },
+              },
+              required: ["code", "connectionId", "trackName"],
+              type: "object",
+            },
+            type: "array",
+          },
           tracks: {
             items: {
               additionalProperties: false,

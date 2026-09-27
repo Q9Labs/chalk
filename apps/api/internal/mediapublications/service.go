@@ -65,6 +65,15 @@ type CloseInput struct {
 	PublicationID         string
 }
 
+type AvailabilityInput struct {
+	TenantID      utilities.ID
+	EpisodeID     utilities.ID
+	ParticipantID utilities.ID
+	Source        string
+	PublicationID string
+	Enabled       bool
+}
+
 type CloseDecision struct {
 	ProviderCloseRequired bool
 }
@@ -77,9 +86,56 @@ type Snapshot struct {
 
 type Registry interface {
 	RecordPublishedTracks(context.Context, RecordInput) ([]PublishedReference, error)
+	RecordPublicationAvailability(context.Context, AvailabilityInput) error
 	PrepareClose(context.Context, CloseInput) (CloseDecision, error)
 	RecordClosedPublication(context.Context, CloseInput) error
 	Latest(context.Context, utilities.ID, utilities.ID) (Snapshot, error)
+}
+
+// RecordPublicationAvailability changes Chalk visibility without ending the
+// Cloudflare SFU track or replacing its publication identity.
+func (s Service) RecordPublicationAvailability(ctx context.Context, input AvailabilityInput) error {
+	if s.repository == nil {
+		return ErrUnavailable
+	}
+	if input.TenantID.IsZero() || input.EpisodeID.IsZero() || input.ParticipantID.IsZero() ||
+		input.PublicationID == "" || (input.Source != "camera" && input.Source != "microphone" && input.Source != "screen") {
+		return ErrInvalidPublication
+	}
+	for attempt := 0; attempt < maxAppendAttempts; attempt++ {
+		latest, err := s.latest(ctx, input.TenantID, input.EpisodeID)
+		if err != nil {
+			return err
+		}
+		if latest == nil {
+			return nil
+		}
+		publications := make([]provideroperations.Publication, len(latest.Publications))
+		copy(publications, latest.Publications)
+		found := false
+		for index := range publications {
+			publication := &publications[index]
+			if publication.ParticipantID != input.ParticipantID || publication.Source != input.Source || publication.PublicationID != input.PublicationID {
+				continue
+			}
+			if publication.Enabled == input.Enabled {
+				return nil
+			}
+			publication.Enabled = input.Enabled
+			found = true
+			break
+		}
+		if !found {
+			return nil
+		}
+		next := provideroperations.ObservationInput{TenantID: input.TenantID, EpisodeID: input.EpisodeID, Incarnation: latest.Incarnation, Sequence: latest.Sequence + 1, Publications: publications}
+		if _, err := s.repository.AppendObservation(ctx, next); err == nil {
+			return nil
+		} else if !errors.Is(err, provideroperations.ErrObservationConflict) && !errors.Is(err, provideroperations.ErrObservationStale) {
+			return fmt.Errorf("append media publication availability: %w", err)
+		}
+	}
+	return fmt.Errorf("append media publication availability: %w", provideroperations.ErrObservationConflict)
 }
 
 type RemoteTrackObserver interface {
@@ -274,7 +330,7 @@ func publicationCloseState(latest *provideroperations.Observation, input CloseIn
 		if publication.ParticipantID != input.ParticipantID || publication.Source != input.Source {
 			continue
 		}
-		if !publication.Enabled || publication.PublicationID == "" {
+		if publication.PublicationID == "" {
 			return closeStateSatisfied
 		}
 		if publication.PublicationID != input.PublicationID {

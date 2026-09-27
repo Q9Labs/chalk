@@ -809,7 +809,7 @@ function validMediaPublication(publication: V1MediaPublication): boolean {
     (publication.source === "microphone" || publication.source === "camera" || publication.source === "screen") &&
     typeof publication.enabled === "boolean" &&
     (publication.publicationId === null || typeof publication.publicationId === "string") &&
-    publication.enabled === (publication.publicationId !== null)
+    (!publication.enabled || publication.publicationId !== null)
   );
 }
 

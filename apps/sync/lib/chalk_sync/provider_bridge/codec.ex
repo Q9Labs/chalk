@@ -245,7 +245,7 @@ defmodule ChalkSync.ProviderBridge.Codec do
          true <- valid_identifier?(participant),
          true <- is_boolean(enabled),
          true <- valid_publication_id?(publication_id),
-         true <- enabled == not is_nil(publication_id),
+         true <- not enabled or not is_nil(publication_id),
          {:ok, decoded_source} <- decode_source(source) do
       {:ok,
        %{

@@ -728,6 +728,8 @@ describe("V1SyncClient", () => {
       mediaPlane: { local: [{ publicationId: "local-microphone" }], remote: [{ publicationId: "remote-camera" }] },
     });
     expect("setRemotePublicationTarget" in mediaPlane).toBe(false);
+    mediaPlane.emitLocal([{ participantId: ownerId, source: "microphone", enabled: false, publicationId: "local-microphone" }]);
+    expect(client.getSnapshot()).toMatchObject({ localMedia: { microphone: "disabled" }, mediaPlane: { local: [{ publicationId: "local-microphone", enabled: false }] } });
     client.stop();
     mediaPlane.emitLocal([]);
     expect(client.getSnapshot().mediaPlane.local).toEqual([]);

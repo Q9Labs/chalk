@@ -17,6 +17,27 @@ describe("Participant microphone projections", () => {
     const tiles = toVideoParticipants([remote], [], "local", "Local", { microphone: { source: "microphone", state: "disabled", track: null }, camera: { source: "camera", state: "disabled", track: null }, screen: { source: "screen", state: "disabled", track: null } });
     expect(tiles.find((participant) => participant.id === "remote")?.isMuted).toBe(false);
   });
+  it("hides a paused remote camera while retaining its pulled track for resume", () => {
+    const remote: Participant = {
+      participantId: "remote",
+      displayName: "Remote",
+      role: "collaborator",
+      eligibleRoles: [],
+      capabilities: [],
+      handRaised: false,
+      media: { microphone: "inactive", camera: "inactive", screen: "inactive" },
+      presence: { state: "connected", speaking: false, activeSpeaker: false },
+    };
+    const track = {} as MediaStreamTrack;
+    const localMedia = { microphone: { source: "microphone" as const, state: "disabled" as const, track: null }, camera: { source: "camera" as const, state: "disabled" as const, track: null }, screen: { source: "screen" as const, state: "disabled" as const, track: null } };
+    const pulled = [{ participantId: "remote", source: "camera" as const, publicationId: "publication-1", track }];
+
+    const paused = toVideoParticipants([remote], pulled, "local", "Local", localMedia).find((participant) => participant.id === "remote");
+    expect(paused).toMatchObject({ isVideoEnabled: false, videoTrack: track });
+
+    const resumed = toVideoParticipants([{ ...remote, media: { ...remote.media, camera: "active" } }], pulled, "local", "Local", localMedia).find((participant) => participant.id === "remote");
+    expect(resumed).toMatchObject({ isVideoEnabled: true, videoTrack: track });
+  });
   it("keeps the local row on the same publication state as the local controls while the roster catches up", () => {
     expect(toListParticipants([{ id: "local", displayName: "Local", isLocal: true, isMuted: true, isVideoEnabled: false }], { local: { microphone: "active", camera: "active", screen: "inactive" } })[0]).toMatchObject({ isMuted: true, isVideoEnabled: false });
   });

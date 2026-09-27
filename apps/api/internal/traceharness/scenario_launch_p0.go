@@ -320,6 +320,10 @@ func (*tracedMediaPublicationRegistry) RecordClosedPublication(context.Context, 
 	return errors.New("unexpected publication close")
 }
 
+func (*tracedMediaPublicationRegistry) RecordPublicationAvailability(context.Context, mediapublications.AvailabilityInput) error {
+	return errors.New("unexpected publication availability change")
+}
+
 func (*tracedMediaPublicationRegistry) Latest(context.Context, utilities.ID, utilities.ID) (mediapublications.Snapshot, error) {
 	return mediapublications.Snapshot{}, errors.New("unexpected publication lookup")
 }

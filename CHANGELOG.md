@@ -12,6 +12,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed
+
+- Resumed camera and microphone media on the existing Cloudflare SFU publication after a Participant re-enables it, without exhausting media sections or leaving remote Participants without media.
+- Kept forced-muted publications unavailable to subscribers while preserving their Cloudflare SFU track for a later authorized re-enable.
+- Surfaced per-track Cloudflare SFU pull failures in SDK diagnostics and cooled down retries for empty tracks.
+
 ### Added
 
 - Added the managed Cloudflare SFU recording capture runtime with fenced worker leases, Pion RTP capture, KMS envelope encryption, server-owned R2 bundle allocation and verification, durable Sync ready/stopped callbacks, and inspectable journey and trace signals.

@@ -43,6 +43,18 @@ func TestBuildRecordingCapturePlanStopsAtHardDeadlineAndIgnoresDisabledDepartedP
 	}
 }
 
+func TestBuildRecordingCapturePlanIgnoresPausedPublicationWithCloudflareIdentity(t *testing.T) {
+	source, input, deadline := capturePlanSourceFixture(t)
+	source.ProviderPublications = []byte(`[{"participant_id":"77777777-7777-4777-8777-777777777777","source":"microphone","enabled":false,"publication_id":"publisher-connection|microphone-track"}]`)
+	plan, err := buildRecordingCapturePlan(source, input, 1, deadline.Add(-time.Minute))
+	if err != nil {
+		t.Fatalf("build paused publication capture plan: %v", err)
+	}
+	if len(plan.Tracks()) != 0 {
+		t.Fatalf("paused publication became capture track: %#v", plan.Tracks())
+	}
+}
+
 func TestBuildRecordingCapturePlanRejectsEnvelopeAuthorityMismatch(t *testing.T) {
 	source, input, deadline := capturePlanSourceFixture(t)
 	input.PlanHandle = captureplan.PlanHandle("88888888-8888-4888-8888-888888888888")

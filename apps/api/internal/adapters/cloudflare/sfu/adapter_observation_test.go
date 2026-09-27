@@ -60,6 +60,23 @@ func TestAddTracksPreservesSuccessfulSubsetOfPartialRemoteResponse(t *testing.T)
 	if len(response.Tracks) != 1 || response.Tracks[0].Location != "remote" || response.Tracks[0].TrackName != "screen" {
 		t.Fatalf("tracks = %#v, want successful screen track", response.Tracks)
 	}
+	if len(response.TrackErrors) != 1 || response.TrackErrors[0].TrackName != "camera" || response.TrackErrors[0].Code != "provider_rejected" {
+		t.Fatalf("track errors = %#v, want failed camera code", response.TrackErrors)
+	}
+}
+
+func TestAddTracksPreservesEmptyTrackProviderCode(t *testing.T) {
+	adapter := remoteTrackTestAdapter(t, `{"tracks":[{"sessionId":"remote-session-1","trackName":"camera","errorCode":"empty_track_error"}]}`)
+	response, err := adapter.AddTracks(context.Background(), mediaplane.TracksRequest{
+		ConnectionID: "receiver-connection",
+		Tracks:       []mediaplane.Track{{Location: "remote", SessionID: "remote-session-1", TrackName: "camera"}},
+	})
+	if err == nil || !mediaplane.IsPartialRemoteTrackResponse(err) {
+		t.Fatalf("error = %v, want partial remote response", err)
+	}
+	if len(response.TrackErrors) != 1 || response.TrackErrors[0].Code != "empty_track_error" {
+		t.Fatalf("track errors = %#v, want Cloudflare SFU code", response.TrackErrors)
+	}
 }
 
 type remoteTrackHTTPClient struct {

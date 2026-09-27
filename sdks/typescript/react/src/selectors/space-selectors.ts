@@ -42,7 +42,7 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
       isMuted: participant.media.microphone !== "active",
       isSpeaking: participant.presence.speaking,
       isActiveSpeaker: participant.presence.activeSpeaker,
-      isVideoEnabled: Boolean(media?.camera),
+      isVideoEnabled: participant.media.camera === "active" && Boolean(media?.camera),
       isScreenSharing: Boolean(media?.screen),
       isHandRaised: participant.handRaised,
       videoTrack: media?.camera,

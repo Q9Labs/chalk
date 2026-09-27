@@ -173,6 +173,7 @@ defmodule ChalkSync.Live.Projection do
 
   defp valid_publication(true, value), do: is_binary(value) and byte_size(value) in 1..256
   defp valid_publication(false, nil), do: true
+  defp valid_publication(false, value), do: is_binary(value) and byte_size(value) in 1..256
   defp valid_publication(_enabled, _value), do: false
 
   defp changes(projection, desired) do

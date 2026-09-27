@@ -364,6 +364,15 @@ export const CloudflareSFUTracksAPIResponseSchema = Schema.Struct({
       }),
     ),
   ),
+  trackErrors: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        code: Schema.String,
+        connectionId: Schema.String,
+        trackName: Schema.String,
+      }),
+    ),
+  ),
   tracks: Schema.optional(
     Schema.Array(
       Schema.Struct({

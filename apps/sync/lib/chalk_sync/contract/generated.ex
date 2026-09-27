@@ -1531,7 +1531,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
          exact_keys?(item, ["participant_id", "source", "enabled", "publication_id"]) and
            valid_uuid?(id) and source in @media_sources and is_boolean(enabled) and
            (is_nil(publication_id) or bounded_string?(publication_id, 1, 256)) and
-           enabled == not is_nil(publication_id)
+           (not enabled or not is_nil(publication_id))
 
   defp valid_projection_item?(
          "presence",
