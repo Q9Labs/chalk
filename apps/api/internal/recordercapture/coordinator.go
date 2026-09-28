@@ -122,8 +122,8 @@ func NewCoordinator(authority AttemptAuthority, signaling SignalingPort, peer Pe
 	}, nil
 }
 
-// Bootstrap creates the provider connection, pulls the plan tracks, registers
-// returned MIDs, and settles all provider negotiation before returning.
+// Bootstrap registers the initial track set and, when nonempty, creates the
+// provider connection, pulls its tracks, and settles negotiation.
 func (c *Coordinator) Bootstrap(ctx context.Context, plan captureplan.Plan) (Snapshot, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -149,16 +149,6 @@ func (c *Coordinator) Bootstrap(ctx context.Context, plan captureplan.Plan) (Sna
 		return Snapshot{}, fmt.Errorf("%w: bootstrap revision %d", ErrStalePlan, plan.Revision())
 	}
 
-	metadata := c.authority.metadata(plan.Revision(), captureplane.OperationCreateCaptureConnection, stableIdempotencyKey(c.authority.CaptureEpoch, plan.Revision(), captureplane.OperationCreateCaptureConnection, "connection"))
-	create, err := c.executeCreate(ctx, metadata)
-	if err != nil {
-		return Snapshot{}, err
-	}
-	if err := create.Connection.ValidateAgainst(metadata, captureplane.OperationCreateCaptureConnection); err != nil {
-		return Snapshot{}, fmt.Errorf("%w: create connection fence: %w", ErrProtocol, err)
-	}
-	c.connection = create.Connection
-
 	requested, err := tracksForPlan(plan)
 	if err != nil {
 		return Snapshot{}, err
@@ -167,12 +157,15 @@ func (c *Coordinator) Bootstrap(ctx context.Context, plan captureplan.Plan) (Sna
 		if err := c.peer.RegisterTracks(nil); err != nil {
 			return Snapshot{}, fmt.Errorf("register empty initial capture track set: %w", err)
 		}
-		if err := c.settleNegotiation(ctx, plan.Revision(), c.connection.ConnectionReference, create.Negotiation, "create"); err != nil {
-			return Snapshot{}, err
-		}
+		// Do not leave a provider connection idle while waiting for
+		// the first publisher. Cloudflare can expire it before tracks/new.
 		c.plan = plan
 		c.bootstrapped = true
 		return c.snapshotLocked(), nil
+	}
+	createNegotiation, err := c.createConnection(ctx, plan)
+	if err != nil {
+		return Snapshot{}, err
 	}
 	pullMetadata := c.authority.metadata(plan.Revision(), captureplane.OperationPullCaptureTracks, stableIdempotencyKey(c.authority.CaptureEpoch, plan.Revision(), captureplane.OperationPullCaptureTracks, "initial"))
 	pull, err := c.executePull(ctx, pullMetadata, c.connection.ConnectionReference, requested, nil)
@@ -185,7 +178,7 @@ func (c *Coordinator) Bootstrap(ctx context.Context, plan captureplan.Plan) (Sna
 	if err := c.peer.RegisterTracks(pull.Tracks); err != nil {
 		return Snapshot{}, fmt.Errorf("register initial capture tracks: %w", err)
 	}
-	if err := c.settleNegotiation(ctx, plan.Revision(), c.connection.ConnectionReference, create.Negotiation, "create"); err != nil {
+	if err := c.settleNegotiation(ctx, plan.Revision(), c.connection.ConnectionReference, createNegotiation, "create"); err != nil {
 		return Snapshot{}, err
 	}
 	if err := c.settleNegotiation(ctx, plan.Revision(), c.connection.ConnectionReference, pull.Negotiation, "pull"); err != nil {
@@ -273,6 +266,10 @@ func (c *Coordinator) Close(ctx context.Context, force bool) error {
 	}
 	if !c.bootstrapped {
 		return ErrNotBootstrapped
+	}
+	if c.connection.ConnectionReference.IsZero() {
+		c.closed = true
+		return nil
 	}
 	if err := c.checkDeadlineLocked(); err != nil {
 		return err
@@ -380,6 +377,14 @@ func (c *Coordinator) reconcileLocked(ctx context.Context, plan captureplan.Plan
 			delete(c.tracks, trackKey(track.CaptureTrack))
 		}
 	}
+	var createNegotiation *captureplane.Negotiation
+	if len(additions) > 0 && c.connection.ConnectionReference.IsZero() {
+		negotiation, err := c.createConnection(ctx, plan)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		createNegotiation = &negotiation
+	}
 	if len(additions) > 0 {
 		metadata := c.authority.metadata(plan.Revision(), captureplane.OperationPullCaptureTracks, stableIdempotencyKey(c.authority.CaptureEpoch, plan.Revision(), captureplane.OperationPullCaptureTracks, "additions"))
 		pulled, err := c.executePull(ctx, metadata, c.connection.ConnectionReference, additions, nil)
@@ -394,6 +399,11 @@ func (c *Coordinator) reconcileLocked(ctx context.Context, plan captureplan.Plan
 		if err := c.peer.RegisterTracks(active); err != nil {
 			return Snapshot{}, fmt.Errorf("register complete capture track set: %w", err)
 		}
+		if createNegotiation != nil {
+			if err := c.settleNegotiation(ctx, plan.Revision(), c.connection.ConnectionReference, *createNegotiation, "create"); err != nil {
+				return Snapshot{}, err
+			}
+		}
 		if err := c.settleNegotiation(ctx, plan.Revision(), c.connection.ConnectionReference, pulled.Negotiation, "additions"); err != nil {
 			return Snapshot{}, err
 		}
@@ -402,6 +412,19 @@ func (c *Coordinator) reconcileLocked(ctx context.Context, plan captureplan.Plan
 	c.connection.PlanRevision = plan.Revision()
 	c.plan = plan
 	return c.snapshotLocked(), nil
+}
+
+func (c *Coordinator) createConnection(ctx context.Context, plan captureplan.Plan) (captureplane.Negotiation, error) {
+	metadata := c.authority.metadata(plan.Revision(), captureplane.OperationCreateCaptureConnection, stableIdempotencyKey(c.authority.CaptureEpoch, plan.Revision(), captureplane.OperationCreateCaptureConnection, "connection"))
+	create, err := c.executeCreate(ctx, metadata)
+	if err != nil {
+		return captureplane.Negotiation{}, err
+	}
+	if err := create.Connection.ValidateAgainst(metadata, captureplane.OperationCreateCaptureConnection); err != nil {
+		return captureplane.Negotiation{}, fmt.Errorf("%w: create connection fence: %w", ErrProtocol, err)
+	}
+	c.connection = create.Connection
+	return create.Negotiation, nil
 }
 
 func (c *Coordinator) executeCreate(ctx context.Context, metadata captureplane.OperationMetadata) (captureplane.CreateCaptureConnectionResult, error) {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -193,6 +194,86 @@ func TestCoordinatorClosesExactCaptureEpochOnce(t *testing.T) {
 	}
 }
 
+func TestCoordinatorCreatesConnectionForFirstTracksAfterEmptyBootstrap(t *testing.T) {
+	attempt := newAttempt(t)
+	signaling := &fakeSignaling{pullNegotiation: answerNeeded("first-pull")}
+	peer := &fakePeer{answer: captureplane.Description{Type: "answer", SDP: "v=0\r\n"}}
+	coordinator := newCoordinator(t, attempt, signaling, peer, Config{})
+	empty := newPlan(t, attempt, 1, nil)
+	initial, err := coordinator.Bootstrap(context.Background(), empty)
+	if err != nil {
+		t.Fatalf("empty bootstrap: %v", err)
+	}
+	if !initial.Connection.ConnectionReference.IsZero() || len(initial.Tracks) != 0 || len(signaling.operations) != 0 {
+		t.Fatalf("empty bootstrap opened a connection: snapshot=%#v operations=%#v", initial, signaling.operations)
+	}
+	if _, err := coordinator.Reconcile(context.Background(), newPlan(t, attempt, 2, nil)); err != nil {
+		t.Fatalf("later empty revision: %v", err)
+	}
+	firstTracks := newPlan(t, attempt, 3, []planTrack{{name: "one"}})
+	got, err := coordinator.Reconcile(context.Background(), firstTracks)
+	if err != nil {
+		t.Fatalf("first tracks: %v", err)
+	}
+	want := []captureplane.OperationKind{
+		captureplane.OperationCreateCaptureConnection,
+		captureplane.OperationPullCaptureTracks,
+		captureplane.OperationRenegotiateCaptureConnection,
+	}
+	if !reflect.DeepEqual(signaling.operations, want) {
+		t.Fatalf("operation order = %#v, want %#v", signaling.operations, want)
+	}
+	if got.PlanRevision != 3 || got.Connection.PlanRevision != 3 || len(got.Tracks) != 1 {
+		t.Fatalf("first-track snapshot = %#v", got)
+	}
+	if !reflect.DeepEqual(registrationSizes(peer.registrations), []int{0, 1}) {
+		t.Fatalf("track registrations = %v", registrationSizes(peer.registrations))
+	}
+}
+
+func TestCoordinatorClosesWithoutProviderConnection(t *testing.T) {
+	attempt := newAttempt(t)
+	signaling := &fakeSignaling{}
+	coordinator := newCoordinator(t, attempt, signaling, &fakePeer{}, Config{})
+	if _, err := coordinator.Bootstrap(context.Background(), newPlan(t, attempt, 1, nil)); err != nil {
+		t.Fatalf("empty bootstrap: %v", err)
+	}
+	if err := coordinator.Close(context.Background(), false); err != nil {
+		t.Fatalf("close without provider connection: %v", err)
+	}
+	if err := coordinator.Close(context.Background(), false); err != nil {
+		t.Fatalf("close replay: %v", err)
+	}
+	if len(signaling.operations) != 0 {
+		t.Fatalf("provider operations = %#v, want none", signaling.operations)
+	}
+	if _, err := coordinator.Snapshot(); !errors.Is(err, ErrCaptureClosed) {
+		t.Fatalf("snapshot after close error = %v", err)
+	}
+}
+
+func TestCoordinatorEmptyPlanRevisionsNeverRemoveWithoutConnection(t *testing.T) {
+	attempt := newAttempt(t)
+	signaling := &fakeSignaling{}
+	peer := &fakePeer{}
+	coordinator := newCoordinator(t, attempt, signaling, peer, Config{})
+	if _, err := coordinator.Bootstrap(context.Background(), newPlan(t, attempt, 1, nil)); err != nil {
+		t.Fatalf("empty bootstrap: %v", err)
+	}
+	for revision := captureplane.PlanRevision(2); revision <= 3; revision++ {
+		got, err := coordinator.Reconcile(context.Background(), newPlan(t, attempt, revision, nil))
+		if err != nil {
+			t.Fatalf("empty revision %d: %v", revision, err)
+		}
+		if got.PlanRevision != revision || !got.Connection.ConnectionReference.IsZero() || len(got.Tracks) != 0 {
+			t.Fatalf("empty revision %d snapshot = %#v", revision, got)
+		}
+	}
+	if len(signaling.operations) != 0 || !reflect.DeepEqual(registrationSizes(peer.registrations), []int{0}) {
+		t.Fatalf("empty revisions touched provider: operations=%#v registrations=%v", signaling.operations, registrationSizes(peer.registrations))
+	}
+}
+
 func TestCoordinatorCloseNegotiationSettlesBeforePull(t *testing.T) {
 	cases := []struct {
 		name             string
@@ -276,7 +357,7 @@ func TestCoordinatorRejectsExpiredDeadlineAndWrongExecutionKey(t *testing.T) {
 
 	attempt = newAttempt(t)
 	coordinator := newCoordinator(t, attempt, &fakeSignaling{wrongKey: true}, &fakePeer{}, Config{})
-	if _, err := coordinator.Bootstrap(context.Background(), newPlan(t, attempt, 1, nil)); !errors.Is(err, ErrProtocol) {
+	if _, err := coordinator.Bootstrap(context.Background(), newPlan(t, attempt, 1, []planTrack{{name: "one"}})); !errors.Is(err, ErrProtocol) {
 		t.Fatalf("wrong execution key error = %v", err)
 	}
 }

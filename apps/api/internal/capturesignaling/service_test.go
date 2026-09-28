@@ -269,6 +269,38 @@ func TestValidatePreparedCommandFencesCurrentProjection(t *testing.T) {
 	}
 }
 
+func TestFirstConnectionAtLaterPlanRevisionPassesSignalingFences(t *testing.T) {
+	create := commandFor(captureplane.OperationCreateCaptureConnection, time.Now().Add(time.Minute))
+	create.Identity.PlanRevision = 3
+	if err := ValidatePreparedCommand(preparedFor(create), nil); err != nil {
+		t.Fatalf("first create at revision 3: %v", err)
+	}
+	connection := captureplane.CaptureConnection{ConnectionReference: "connection-1", CaptureEpoch: create.Authority.CaptureEpoch, PlanRevision: 3}
+	projection, err := ProjectResult(create.SignalingHandle, create.Authority, captureplane.OperationCreateCaptureConnection, CommandResult{
+		CreateCaptureConnection: &captureplane.CreateCaptureConnectionResult{Connection: connection, Negotiation: captureplane.Negotiation{Requirement: captureplane.NegotiationNotRequired}},
+	}, nil)
+	if err != nil {
+		t.Fatalf("project late create: %v", err)
+	}
+	pull := commandFor(captureplane.OperationPullCaptureTracks, time.Now().Add(time.Minute))
+	pull.Identity.PlanRevision = 3
+	if err := ValidatePreparedCommand(preparedFor(pull), projection); err != nil {
+		t.Fatalf("pull after late create: %v", err)
+	}
+	projection.NegotiationID = "neg-1"
+	projection.NegotiationRequirement = captureplane.NegotiationAnswerNeeded
+	renegotiate := commandFor(captureplane.OperationRenegotiateCaptureConnection, time.Now().Add(time.Minute))
+	renegotiate.Identity.PlanRevision = 3
+	if err := ValidatePreparedCommand(preparedFor(renegotiate), projection); err != nil {
+		t.Fatalf("renegotiate after late create: %v", err)
+	}
+	metadata := captureplane.OperationMetadata{CaptureEpoch: create.Authority.CaptureEpoch, PlanRevision: 3}
+	key := CommandKey{Operation: captureplane.OperationRenegotiateCaptureConnection}
+	if err := (&Service{}).checkRenegotiation(renegotiate, key, metadata, projection); err != nil {
+		t.Fatalf("check renegotiation after late create: %v", err)
+	}
+}
+
 func TestCompletedReplaySurvivesAdvancedProjection(t *testing.T) {
 	provider := &fakePlane{}
 	store := newMemoryPort()

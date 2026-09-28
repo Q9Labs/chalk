@@ -79,6 +79,12 @@ jobs:
           ref: ${{ inputs.target_sha }}
           fetch-depth: 0
 
+      - name: Set up Go for recorder dependency planning
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+
       - name: Verify exact release SHA
         env:
           DEPLOY_MANAGED: ${{ inputs.deploy_managed }}
@@ -194,6 +200,7 @@ jobs:
             echo "- source: \`$TARGET_SHA\`"
             echo "- classification: \`$(jq -r '.classification' "$PLAN_FILE")\`"
             echo "- build: \`$(jq -c '.build_set' "$PLAN_FILE")\`"
+            echo "- recorder CPU image affected: \`$(jq -r '.recorder_image_affected' "$PLAN_FILE")\`"
             echo "- restart closure: \`$(jq -c '.restart_closure' "$PLAN_FILE")\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
