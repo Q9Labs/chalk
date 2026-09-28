@@ -72,7 +72,7 @@ recorder_image_affected=false
 for path in "${paths[@]}"; do
   if [[ "${path}" == apps/api/* ]]; then
     command -v go >/dev/null || fail "go is required to plan recorder image dependencies"
-    package_dirs="$(cd "${repo_root}/apps/api" && go list -deps -f '{{.Dir}}' ./cmd/recorder-capture ./cmd/recorder-render)" || fail "cannot resolve recorder image dependencies"
+    package_dirs="$(cd "${repo_root}/apps/api" && go list -deps -f '{{.Dir}}' ./cmd/recorder-capture ./cmd/recorder-render ./cmd/recorder-node-bootstrap)" || fail "cannot resolve recorder image dependencies"
     while IFS= read -r directory; do
       if [[ "${directory}" == "${repo_root}/apps/api/"* ]]; then
         recorder_package_dirs+=("${directory#"${repo_root}/"}")
@@ -148,7 +148,9 @@ fi
 if [[ "${paths_present}" == true ]]; then
   for path in "${paths[@]}"; do
     classify_path "${path}"
-    if [[ "${path}" == apps/api/go.mod || "${path}" == apps/api/go.sum ]]; then
+    if [[ "${path}" == *_test.go || "${path}" == *.test.ts || "${path}" == *.test.tsx || "${path}" == *.spec.ts || "${path}" == *.spec.tsx ]]; then
+      continue
+    elif [[ "${path}" == apps/api/go.mod || "${path}" == apps/api/go.sum || "${path}" == package.json || "${path}" == pnpm-lock.yaml || "${path}" == pnpm-workspace.yaml || "${path}" == apps/recording-renderer/* || "${path}" == infrastructure/recorder/images/cpu/* || "${path}" == packages/* || "${path}" == sdks/typescript/* ]]; then
       recorder_image_affected=true
     else
       for directory in "${recorder_package_dirs[@]}"; do
