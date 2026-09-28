@@ -27,6 +27,9 @@ func (r TranscriptRepository) ClaimFinalizer(ctx context.Context, input transcri
 	}
 	job, err := q.ClaimTranscriptionFinalizerJob(ctx, sqlc.ClaimTranscriptionFinalizerJobParams{LeaseTokenHash: leaseHash(token), LeaseOwner: text(&input.Owner), LeaseExpiresAt: pgtype.Timestamptz{Time: input.Now.Add(input.LeaseDuration), Valid: true}, Now: pgtype.Timestamptz{Time: input.Now, Valid: true}})
 	if errors.Is(err, pgx.ErrNoRows) {
+		if err := tx.Commit(ctx); err != nil {
+			return transcripts.FinalizerAssignment{}, err
+		}
 		return transcripts.FinalizerAssignment{}, transcripts.ErrNoClaimableJob
 	}
 	if err != nil {
@@ -38,7 +41,12 @@ func (r TranscriptRepository) ClaimFinalizer(ctx context.Context, input transcri
 	}
 	transcript, err = q.MarkTranscriptionVerifying(ctx, sqlc.MarkTranscriptionVerifyingParams{TenantID: job.TenantID, ID: job.TranscriptID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		_, _ = q.CancelArtifactJob(ctx, sqlc.CancelArtifactJobParams{ID: job.ID, Attempt: job.AttemptCount, LeaseOwner: text(&input.Owner), LeaseTokenHash: leaseHash(token), ErrorCode: text(stringPtr("transcript_not_claimable")), ErrorDetail: text(stringPtr("transcript is deleted or terminal")), Now: pgtype.Timestamptz{Time: input.Now, Valid: true}})
+		if _, err := q.CancelArtifactJob(ctx, sqlc.CancelArtifactJobParams{ID: job.ID, Attempt: job.AttemptCount, LeaseOwner: text(&input.Owner), LeaseTokenHash: leaseHash(token), ErrorCode: text(stringPtr("transcript_not_claimable")), ErrorDetail: text(stringPtr("transcript is deleted or terminal")), Now: pgtype.Timestamptz{Time: input.Now, Valid: true}}); err != nil {
+			return transcripts.FinalizerAssignment{}, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return transcripts.FinalizerAssignment{}, err
+		}
 		return transcripts.FinalizerAssignment{}, transcripts.ErrStaleLease
 	}
 	if err != nil {

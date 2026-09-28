@@ -71,6 +71,9 @@ func (r TranscriptRepository) ClaimCleanup(ctx context.Context, input transcript
 	}
 	row, err := q.ClaimTranscriptionCleanupJob(ctx, sqlc.ClaimTranscriptionCleanupJobParams{LeaseTokenHash: leaseHash(token), LeaseOwner: text(&input.Owner), LeaseExpiresAt: pgtype.Timestamptz{Time: input.Now.Add(input.LeaseDuration), Valid: true}, Now: pgtype.Timestamptz{Time: input.Now, Valid: true}})
 	if errors.Is(err, pgx.ErrNoRows) {
+		if err := tx.Commit(ctx); err != nil {
+			return transcripts.CleanupJob{}, "", err
+		}
 		return transcripts.CleanupJob{}, "", transcripts.ErrNoClaimableJob
 	}
 	if err != nil {
