@@ -91,7 +91,10 @@ export function segmentFilter(placements: readonly VideoPlacement[], output: Com
     chains.push(`[base${index}][video${index}]overlay=${x}:${y}:eof_action=repeat[base${index + 1}]`);
   }
   const overlayInput = placements.length;
-  chains.push(`[${overlayInput}:v]fps=${fps},format=yuva420p[ui]`);
+  // No fps filter on the UI: each image covers a whole span, and fps would hold
+  // it until the next one arrives while overlay queues every base frame (>1 GB).
+  // Overlay already repeats the latest UI image for each base frame.
+  chains.push(`[${overlayInput}:v]format=yuva420p[ui]`);
   chains.push(`[base${placements.length}][ui]overlay=0:0:format=yuv420:eof_action=repeat[out]`);
   return chains.join(";");
 }

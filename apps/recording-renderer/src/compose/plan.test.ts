@@ -41,6 +41,8 @@ describe("FFmpeg plan", () => {
     expect(filter).toContain("force_original_aspect_ratio=increase:force_divisible_by=2,crop=320:240");
     expect(filter).toContain("force_original_aspect_ratio=decrease:force_divisible_by=2,pad=640:360:(ow-iw)/2:(oh-ih)/2:black");
     expect(filter).toContain("[base2][ui]overlay=0:0:format=yuv420:eof_action=repeat[out]");
+    // An fps filter on the sparse UI stream makes overlay queue every base frame.
+    expect(filter).toContain("[2:v]format=yuva420p[ui]");
   });
 
   it("copies video and produces padded, trimmed stereo AAC", () => {
