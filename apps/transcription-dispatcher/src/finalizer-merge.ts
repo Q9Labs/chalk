@@ -203,12 +203,16 @@ function validateChunkDocument(value: NormalizedTranscriptDocument, chunk: Final
   if (value.providerReportedCostUsd !== undefined && (!Number.isFinite(value.providerReportedCostUsd) || value.providerReportedCostUsd < 0 || value.providerReportedCostUsd > 1_000)) throw new AssignmentError("finalize reported cost is invalid");
   if (value.language !== undefined) boundedText(value.language, "finalize language", 64);
   if (!Array.isArray(value.cues) || value.cues.length > maxCues) throw new AssignmentError("finalize cues are invalid");
-  for (const cue of value.cues) {
+  const cues = value.cues.filter((cue) => {
+    if (!cue || typeof cue !== "object" || Array.isArray(cue)) return true;
+    return typeof cue.text !== "string" || cue.text.trim().length > 0;
+  });
+  for (const cue of cues) {
     validateCue(cue, chunk, maxTextChars);
     if (cue.provider !== value.provider || cue.model !== value.model || cue.versionContract !== value.versionContract) throw new AssignmentError("finalize cue metadata conflicts");
   }
   if (value.quality !== undefined) validateQuality(value.quality);
-  return value;
+  return cues.length === value.cues.length ? value : { ...value, cues };
 }
 
 function validateCue(cue: NormalizedCue, chunk: FinalizeChunkAssignment, maxTextChars: number): void {

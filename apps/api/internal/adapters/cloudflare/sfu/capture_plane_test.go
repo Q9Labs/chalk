@@ -545,6 +545,82 @@ func TestCapturePlaneRejectsChangedPayloadForSameIdempotencyKey(t *testing.T) {
 	}
 }
 
+func TestCapturePullRetriesOnlyFullyUnavailableTrackBatch(t *testing.T) {
+	requested := []captureplane.CaptureTrack{
+		captureTrack("owner-1", "camera-1", 6, captureplane.TrackSourceCamera, captureplane.TrackKindVideo, captureplane.TrackLayerMedium),
+		captureTrack("owner-1", "microphone-1", 6, captureplane.TrackSourceMicrophone, captureplane.TrackKindAudio, captureplane.TrackLayerAuto),
+	}
+	failed := func(track captureplane.CaptureTrack, code string) captureTrackResult {
+		return captureTrackResult{
+			providerConnectionEnvelope: providerConnectionEnvelope{ConnectionReference: track.OwnerReference.String()},
+			Location:                   "remote",
+			TrackName:                  track.TrackReference.String(),
+			ErrorCode:                  code,
+		}
+	}
+	describedFailure := func(track captureplane.CaptureTrack) captureTrackResult {
+		result := failed(track, "UNKNOWN")
+		result.ErrorDescription = "track not found"
+		return result
+	}
+	succeeded := func(track captureplane.CaptureTrack) captureTrackResult {
+		return captureTrackResult{
+			providerConnectionEnvelope: providerConnectionEnvelope{ConnectionReference: track.OwnerReference.String()},
+			Location:                   "remote",
+			TrackName:                  track.TrackReference.String(),
+			Mid:                        "1",
+		}
+	}
+	for _, test := range []struct {
+		name          string
+		results       []captureTrackResult
+		description   *providerDescription
+		renegotiation bool
+		wantRetryable bool
+		wantClass     captureplane.ProviderFailureClass
+		wantCode      string
+	}{
+		{name: "all publications not found", results: []captureTrackResult{failed(requested[0], "not_found_track_error"), failed(requested[1], "not_found_track_error")}, wantRetryable: true, wantClass: captureplane.ProviderFailureNotFound, wantCode: "not_found_track_error"},
+		{name: "all subscriptions empty", results: []captureTrackResult{failed(requested[0], "empty_track_error"), failed(requested[1], "empty_track_error")}, wantRetryable: true, wantClass: captureplane.ProviderFailureNotFound, wantCode: "empty_track_error"},
+		{name: "mixed documented absence codes", results: []captureTrackResult{failed(requested[0], "not_found_track_error"), failed(requested[1], "empty_track_error")}, wantRetryable: true, wantClass: captureplane.ProviderFailureNotFound, wantCode: "not_found_track_error"},
+		{name: "unknown code with absence description", results: []captureTrackResult{describedFailure(requested[0]), describedFailure(requested[1])}, wantClass: captureplane.ProviderFailureProtocol, wantCode: "provider_track_200"},
+		{name: "partial success", results: []captureTrackResult{succeeded(requested[0]), failed(requested[1], "not_found_track_error")}, wantClass: captureplane.ProviderFailureProtocol, wantCode: "not_found_track_error"},
+		{name: "missing requested result", results: []captureTrackResult{failed(requested[0], "not_found_track_error")}, wantClass: captureplane.ProviderFailureProtocol, wantCode: "not_found_track_error"},
+		{name: "other provider error", results: []captureTrackResult{failed(requested[0], "invalid_params"), failed(requested[1], "invalid_params")}, wantClass: captureplane.ProviderFailureProtocol, wantCode: "invalid_params"},
+		{name: "future provider code preserved", results: []captureTrackResult{failed(requested[0], "future_track_error"), failed(requested[1], "future_track_error")}, wantClass: captureplane.ProviderFailureProtocol, wantCode: "future_track_error"},
+		{name: "legacy track not found is not retried", results: []captureTrackResult{failed(requested[0], "track_not_found"), failed(requested[1], "track_not_found")}, wantClass: captureplane.ProviderFailureNotFound, wantCode: "track_not_found"},
+		{name: "rate limited item is not replayed", results: []captureTrackResult{failed(requested[0], "rate_limited"), failed(requested[1], "rate_limited")}, wantClass: captureplane.ProviderFailureRateLimited, wantCode: "rate_limited"},
+		{name: "payload-shaped code discarded", results: []captureTrackResult{failed(requested[0], "https://provider.test/private"), failed(requested[1], "https://provider.test/private")}, wantClass: captureplane.ProviderFailureProtocol, wantCode: "provider_track_200"},
+		{name: "oversized code discarded", results: []captureTrackResult{failed(requested[0], "future_"+strings.Repeat("a", 64)), failed(requested[1], "future_"+strings.Repeat("a", 64))}, wantClass: captureplane.ProviderFailureProtocol, wantCode: "provider_track_200"},
+		{name: "negotiation description pending", results: []captureTrackResult{failed(requested[0], "not_found_track_error"), failed(requested[1], "not_found_track_error")}, description: &providerDescription{Type: "offer", SDP: "v=0\r\n"}, wantClass: captureplane.ProviderFailureProtocol, wantCode: "not_found_track_error"},
+		{name: "immediate renegotiation pending", results: []captureTrackResult{failed(requested[0], "empty_track_error"), failed(requested[1], "empty_track_error")}, renegotiation: true, wantClass: captureplane.ProviderFailureProtocol, wantCode: "empty_track_error"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			client := &captureSequenceClient{responses: []captureHTTPResponse{{
+				status: http.StatusOK,
+				body:   mustCaptureJSON(t, captureTracksResponse{providerDescriptionEnvelope: providerDescriptionEnvelope{Description: test.description}, Tracks: test.results, RequiresImmediateRenegotiation: test.renegotiation}),
+			}}}
+			adapter := newCaptureTestAdapter(t, client)
+			_, err := adapter.PullCaptureTracks(context.Background(), captureplane.PullCaptureTracksInput{
+				Metadata: captureMetadata("track-availability"), Connection: "capture-connection", Tracks: requested,
+			})
+			var providerErr captureplane.ProviderError
+			if !errors.As(err, &providerErr) {
+				t.Fatalf("pull error = %v, want provider failure", err)
+			}
+			if providerErr.Retryable != test.wantRetryable {
+				t.Fatalf("provider error = %+v, retryable = %v, want %v", providerErr, providerErr.Retryable, test.wantRetryable)
+			}
+			if providerErr.Class != test.wantClass || providerErr.Code != test.wantCode {
+				t.Fatalf("provider error = %+v, want class %q and bounded code %q", providerErr, test.wantClass, test.wantCode)
+			}
+			if len(client.requests) != 1 {
+				t.Fatalf("provider requests = %d, want one attempt before durable signaling retry", len(client.requests))
+			}
+		})
+	}
+}
+
 func TestCaptureProviderErrorRetainsUnknownFailureBoundary(t *testing.T) {
 	for _, test := range []struct {
 		stage  providerFailureStage

@@ -88,10 +88,28 @@ func (r *captureTracksResponse) providerError(operation string) error {
 	}
 	for _, track := range r.Tracks {
 		if strings.TrimSpace(track.ErrorCode) != "" || strings.TrimSpace(track.ErrorDescription) != "" {
-			return newProviderResponseFailure(operation, failureStageTrack, http.StatusOK, track.ErrorCode, track.ErrorDescription, len(r.Tracks), captureTrackFailureCount(r.Tracks))
+			failure := newProviderResponseFailure(operation, failureStageTrack, http.StatusOK, track.ErrorCode, track.ErrorDescription, len(r.Tracks), captureTrackFailureCount(r.Tracks))
+			failure.trackCode = boundedCaptureTrackCode(track.ErrorCode)
+			return failure
 		}
 	}
 	return nil
+}
+
+func boundedCaptureTrackCode(raw string) string {
+	code := strings.ToLower(strings.TrimSpace(raw))
+	if len(code) == 0 || len(code) > 64 || !strings.Contains(code, "_") {
+		return ""
+	}
+	for _, char := range code {
+		if char != '_' && (char < 'a' || char > 'z') && (char < '0' || char > '9') {
+			return ""
+		}
+	}
+	if code[0] < 'a' || code[0] > 'z' {
+		return ""
+	}
+	return code
 }
 
 type captureRenegotiateRequest struct {
@@ -290,6 +308,57 @@ func captureDescriptionValue(value *providerDescription) (*captureplane.Descript
 	return description, nil
 }
 
+func retryableCaptureTrackAvailability(err error, response captureTracksResponse, requested []captureplane.CaptureTrack) error {
+	var failure providerFailure
+	if !errors.As(err, &failure) || failure.operation != "add_tracks" ||
+		failure.stage != failureStageTrack || failure.statusCode != http.StatusOK ||
+		!allCaptureTracksTemporarilyUnavailable(response, requested) {
+		return err
+	}
+	failure.retryableTrackAvailability = true
+	return failure
+}
+
+func allCaptureTracksTemporarilyUnavailable(response captureTracksResponse, requested []captureplane.CaptureTrack) bool {
+	if strings.TrimSpace(response.ErrorCode) != "" || strings.TrimSpace(response.ErrorDescription) != "" ||
+		len(requested) == 0 || len(response.Tracks) != len(requested) ||
+		response.Description != nil || response.RequiresImmediateRenegotiation {
+		return false
+	}
+	wanted := make(map[captureTrackKey]struct{}, len(requested))
+	for _, track := range requested {
+		key := captureTrackKey{owner: track.OwnerReference.String(), track: track.TrackReference.String()}
+		if _, duplicate := wanted[key]; duplicate {
+			return false
+		}
+		wanted[key] = struct{}{}
+	}
+	seen := make(map[captureTrackKey]struct{}, len(response.Tracks))
+	for _, result := range response.Tracks {
+		key := captureTrackKey{owner: result.ConnectionReference, track: result.TrackName}
+		if result.Location != "" && result.Location != "remote" {
+			return false
+		}
+		if _, ok := wanted[key]; !ok {
+			return false
+		}
+		if _, duplicate := seen[key]; duplicate || !captureTrackTemporarilyUnavailable(result) {
+			return false
+		}
+		seen[key] = struct{}{}
+	}
+	return len(seen) == len(wanted)
+}
+
+func captureTrackTemporarilyUnavailable(result captureTrackResult) bool {
+	switch strings.ToLower(strings.TrimSpace(result.ErrorCode)) {
+	case "not_found_track_error", "empty_track_error":
+		return true
+	default:
+		return false
+	}
+}
+
 func captureProviderError(err error) error {
 	if err == nil {
 		return nil
@@ -301,6 +370,9 @@ func captureProviderError(err error) error {
 	class := captureplane.ProviderFailureProtocol
 	retryable := false
 	switch {
+	case failure.retryableTrackAvailability && failure.operation == "add_tracks" && failure.stage == failureStageTrack && failure.statusCode == http.StatusOK:
+		class = captureplane.ProviderFailureNotFound
+		retryable = true
 	case failure.statusCode == http.StatusUnauthorized,
 		failure.statusCode == http.StatusForbidden,
 		failure.providerCode == "unauthorized":
@@ -326,7 +398,15 @@ func captureProviderError(err error) error {
 		class = captureplane.ProviderFailureUnavailable
 		retryable = true
 	}
+	if failure.operation == "add_tracks" && failure.stage == failureStageTrack && failure.statusCode == http.StatusOK && !failure.retryableTrackAvailability {
+		// A successful HTTP request can have a mixed or unrelated per-track
+		// failure. Replaying it could duplicate subscriptions or negotiation.
+		retryable = false
+	}
 	code := strings.TrimSpace(failure.providerCode)
+	if failure.stage == failureStageTrack && failure.trackCode != "" {
+		code = failure.trackCode
+	}
 	if code == "" || code == "unknown" {
 		// Persist a bounded stage/status fingerprint when the provider supplies
 		// an unrecognized code. It distinguishes an HTTP rejection from a
@@ -462,6 +542,7 @@ func (a Adapter) PullCaptureTracks(ctx context.Context, input captureplane.PullC
 	var response captureTracksResponse
 	path := fmt.Sprintf(providerConnectionsPath+"/%s/tracks/new", url.PathEscape(input.Connection.String()))
 	if err := a.request(ctx, http.MethodPost, path, request, &response, "add_tracks"); err != nil {
+		err = retryableCaptureTrackAvailability(err, response, tracks)
 		return captureplane.PullCaptureTracksResult{}, captureProviderError(err)
 	}
 	if err := validateCapturePullResponse(response, tracks); err != nil {

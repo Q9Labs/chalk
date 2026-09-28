@@ -114,12 +114,15 @@ async function processFinalizeAssignment(assignment: FinalizeAssignment, journey
     return "completed";
   } catch (error) {
     if (error instanceof ControlApiError && error.status === 409) {
+      logger.warn("finalize_failed", { error: safeErrorCode(error), attempt: assignment.attempt, terminal: false });
       logger.warn("finalize_late_or_duplicate_completion_rejected");
       return "failed";
     }
     const kind = providerFailureKind(error);
     const terminal = kind === "nonretryable" || kind === "schema";
-    await safeFinalizeRetry(dependencies.control.retryFinalize, assignment, journey, safeErrorCode(error), terminal, logger);
+    const errorCode = safeErrorCode(error);
+    logger.warn("finalize_failed", { error: errorCode, attempt: assignment.attempt, terminal });
+    await safeFinalizeRetry(dependencies.control.retryFinalize, assignment, journey, errorCode, terminal, logger);
     return "failed";
   }
 }

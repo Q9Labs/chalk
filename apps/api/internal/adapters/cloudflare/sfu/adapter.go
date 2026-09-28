@@ -50,15 +50,17 @@ var (
 type providerFailureStage string
 
 type providerFailure struct {
-	operation           string
-	stage               providerFailureStage
-	statusCode          int
-	statusClass         string
-	providerCode        string
-	details             providerFailureDetails
-	missingRemoteTracks []mediaplane.RemoteTrackIdentity
-	exactRemoteAbsence  bool
-	partialRemoteTracks bool
+	operation                  string
+	stage                      providerFailureStage
+	statusCode                 int
+	statusClass                string
+	providerCode               string
+	trackCode                  string
+	details                    providerFailureDetails
+	missingRemoteTracks        []mediaplane.RemoteTrackIdentity
+	exactRemoteAbsence         bool
+	partialRemoteTracks        bool
+	retryableTrackAvailability bool
 }
 
 func (e providerFailure) Error() string {

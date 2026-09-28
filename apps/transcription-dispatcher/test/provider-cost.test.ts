@@ -19,6 +19,29 @@ function chunk(index: number, cost?: number): ChunkDocument {
   };
 }
 
+function chunkWithCueTexts(index: number, texts: readonly string[]): ChunkDocument {
+  const result = chunk(index);
+  return {
+    ...result,
+    document: {
+      ...result.document,
+      cues: texts.map((text, cueIndex) => ({
+        startMs: cueIndex * 10,
+        endMs: cueIndex * 10 + 5,
+        identity: { kind: "participant" as const, participantRef: "participant-1", participantGeneration: 1, trackId: "track-1", trackEpoch: "1" },
+        trackClass: "microphone" as const,
+        displayNameSnapshot: "Speaker",
+        text,
+        overlap: false,
+        provider: "deepinfra" as const,
+        model: "openai/whisper-large-v3-turbo",
+        versionContract: "deepinfra-native-whisper-turbo.v1",
+        attempt: 1,
+      })),
+    },
+  };
+}
+
 describe("reported provider charges", () => {
   it("sums observed successful-request charges only when every chunk reports a charge", () => {
     const result = mergeTranscriptDocuments({ jobId: "finalize-1", episodeId: "episode-1", attempt: 1, chunks: [chunk(1, 0.00001), chunk(2, 0.00002)] });
@@ -32,5 +55,13 @@ describe("reported provider charges", () => {
     for (const cost of [-1, Number.POSITIVE_INFINITY, Number.NaN, 1001]) {
       expect(() => mergeTranscriptDocuments({ jobId: "finalize-1", episodeId: "episode-1", attempt: 1, chunks: [chunk(1, cost)] })).toThrow(/reported cost/);
     }
+  });
+
+  it("drops empty and whitespace-only cues while preserving spoken cues", () => {
+    const result = mergeTranscriptDocuments({
+      jobId: "finalize-1", episodeId: "episode-1", attempt: 1,
+      chunks: [chunkWithCueTexts(1, ["", " \t ", "spoken words"])],
+    });
+    expect(result.cues.map((cue) => cue.text)).toEqual(["spoken words"]);
   });
 });

@@ -57,6 +57,10 @@ export function buildHandler(env: NodeJS.ProcessEnv = process.env, secrets?: Dis
     ...(primary === undefined ? {} : { primary }),
     ...(fallback ? { fallback } : {}),
     fetch: fetchImpl,
+    logger: {
+      info: (event, fields) => console.info(event, fields ?? {}),
+      warn: (event, fields) => console.warn(event, fields ?? {}),
+    },
   });
 }
 
