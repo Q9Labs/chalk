@@ -5,10 +5,10 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@q9labsai/cli': file:/tmp/q9-packs/v0.3-pre/q9labsai-cli-0.1.0.tgz
-  '@q9labsai/config-depcruise': file:/tmp/q9-packs/v0.3-pre/q9labsai-config-depcruise-0.1.0.tgz
-  '@q9labsai/diagnostics': file:/tmp/q9-packs/v0.3-pre/q9labsai-diagnostics-0.1.0.tgz
-  '@q9labsai/gates': file:/tmp/q9-packs/v0.3-pre/q9labsai-gates-0.1.0.tgz
+  '@q9labsai/cli': https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-cli-0.3.0.tgz
+  '@q9labsai/config-depcruise': https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz
+  '@q9labsai/diagnostics': https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz
+  '@q9labsai/gates': https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz
   '@babel/core': ^7.29.7
   '@tanstack/start-server-core': 1.169.16
   '@vitest/browser': ^4.1.11
@@ -78,17 +78,17 @@ importers:
         specifier: ^0.18.3
         version: 0.18.3
       '@q9labsai/cli':
-        specifier: file:/tmp/q9-packs/v0.3-pre/q9labsai-cli-0.1.0.tgz
-        version: file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-cli-0.1.0.tgz
+        specifier: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-cli-0.3.0.tgz
+        version: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-cli-0.3.0.tgz
       '@q9labsai/config-depcruise':
-        specifier: file:/tmp/q9-packs/v0.3-pre/q9labsai-config-depcruise-0.1.0.tgz
-        version: file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-config-depcruise-0.1.0.tgz(dependency-cruiser@18.2.0)
+        specifier: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz
+        version: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz(dependency-cruiser@18.2.0)
       '@q9labsai/diagnostics':
-        specifier: file:/tmp/q9-packs/v0.3-pre/q9labsai-diagnostics-0.1.0.tgz
-        version: file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-diagnostics-0.1.0.tgz
+        specifier: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz
+        version: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz
       '@q9labsai/gates':
-        specifier: file:/tmp/q9-packs/v0.3-pre/q9labsai-gates-0.1.0.tgz
-        version: file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-gates-0.1.0.tgz
+        specifier: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz
+        version: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz
       '@types/node':
         specifier: ^24.10.1
         version: 24.12.0
@@ -692,8 +692,8 @@ importers:
   tools/episode-diagnostics:
     dependencies:
       '@q9labsai/diagnostics':
-        specifier: file:/tmp/q9-packs/v0.3-pre/q9labsai-diagnostics-0.1.0.tgz
-        version: file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-diagnostics-0.1.0.tgz
+        specifier: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz
+        version: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz
       '@q9labsai/diagnostics-contracts':
         specifier: workspace:^0.1.1
         version: link:../../packages/diagnostics-contracts
@@ -2905,27 +2905,27 @@ packages:
     resolution: {integrity: sha512-HDVTWq3H0uTXiU0eeSQntcVUTPP3GamzeXI41+x7uU9J65JgWQh3qWZHblR1i0npXfFtF+mxBiU2nJH8znxWnQ==}
     engines: {node: '>=18'}
 
-  '@q9labsai/cli@file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-cli-0.1.0.tgz':
-    resolution: {integrity: sha512-EKDocHxMOduiAQ86hnPHbrWLCOuH2Kt2iFwh8WymXVl0Zbw3c6Te4CGJEksiNMWuoIT+z5iyRci6u8B/E8gSSg==, tarball: file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-cli-0.1.0.tgz}
-    version: 0.1.0
+  '@q9labsai/cli@https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-cli-0.3.0.tgz':
+    resolution: {tarball: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-cli-0.3.0.tgz}
+    version: 0.3.0
     engines: {node: '>=24'}
     hasBin: true
 
-  '@q9labsai/config-depcruise@file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-config-depcruise-0.1.0.tgz':
-    resolution: {integrity: sha512-YoYF4AMz9xFe8ucv+bYNcPpPiYyEIw1rF70QT135q2/IB6hRCb43DNz/pvCBjynu3C6n4CNN9IbcR8wvTPvaSg==, tarball: file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-config-depcruise-0.1.0.tgz}
-    version: 0.1.0
+  '@q9labsai/config-depcruise@https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz':
+    resolution: {tarball: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz}
+    version: 0.3.0
     engines: {node: '>=24'}
     peerDependencies:
       dependency-cruiser: ^18.2.0
 
-  '@q9labsai/diagnostics@file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-diagnostics-0.1.0.tgz':
-    resolution: {integrity: sha512-QIdz+cDJIyVRbHekldafkAsMiip1XsM7p5JKrcLth4BHKPmCHq/jinVL3RBAZ9r4CLf7a37S7gw8rgH9JvP/tw==, tarball: file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-diagnostics-0.1.0.tgz}
-    version: 0.1.0
+  '@q9labsai/diagnostics@https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz':
+    resolution: {tarball: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz}
+    version: 0.3.0
     engines: {node: '>=24'}
 
-  '@q9labsai/gates@file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-gates-0.1.0.tgz':
-    resolution: {integrity: sha512-Ygm1VfgISNYilf1k+abZAvnSJ44SDvVs6WsDXeYwPSDpy/7mSavQbgJMUZF7Gscc+mN3yLaCN73tBDygrHOTNQ==, tarball: file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-gates-0.1.0.tgz}
-    version: 0.1.0
+  '@q9labsai/gates@https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz':
+    resolution: {tarball: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz}
+    version: 0.3.0
     engines: {node: '>=24'}
     hasBin: true
 
@@ -11205,23 +11205,23 @@ snapshots:
 
   '@publint/pack@0.1.4': {}
 
-  '@q9labsai/cli@file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-cli-0.1.0.tgz':
+  '@q9labsai/cli@https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-cli-0.3.0.tgz':
     dependencies:
-      '@q9labsai/diagnostics': file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-diagnostics-0.1.0.tgz
+      '@q9labsai/diagnostics': https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz
       cac: 7.0.0
       js-yaml: 4.3.2
       semver: 7.8.5
       zod: 4.6.5
 
-  '@q9labsai/config-depcruise@file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-config-depcruise-0.1.0.tgz(dependency-cruiser@18.2.0)':
+  '@q9labsai/config-depcruise@https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz(dependency-cruiser@18.2.0)':
     dependencies:
       dependency-cruiser: 18.2.0
 
-  '@q9labsai/diagnostics@file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-diagnostics-0.1.0.tgz':
+  '@q9labsai/diagnostics@https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz':
     dependencies:
       zod: 4.6.5
 
-  '@q9labsai/gates@file:../../../../../../tmp/q9-packs/v0.3-pre/q9labsai-gates-0.1.0.tgz':
+  '@q9labsai/gates@https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz':
     dependencies:
       cac: 7.0.0
       execa: 10.0.1
@@ -12247,7 +12247,7 @@ snapshots:
       jiti: 2.7.0
       magic-string: 0.30.21
       prettier: 3.8.1
-      zod: 4.4.3
+      zod: 4.6.5
     transitivePeerDependencies:
       - supports-color
 
@@ -12318,7 +12318,7 @@ snapshots:
       ufo: 1.6.3
       vitefu: 1.1.2(vite@8.1.3(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
       xmlbuilder2: 4.0.3
-      zod: 4.4.3
+      zod: 4.6.5
     optionalDependencies:
       vite: 8.1.3(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
     transitivePeerDependencies:

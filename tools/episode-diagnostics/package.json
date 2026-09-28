@@ -24,7 +24,7 @@
     "check-types": "node --check src/cli.mjs"
   },
   "dependencies": {
-    "@q9labsai/diagnostics": "file:/tmp/q9-packs/v0.3-pre/q9labsai-diagnostics-0.1.0.tgz",
+    "@q9labsai/diagnostics": "^0.3.0",
     "@q9labsai/diagnostics-contracts": "workspace:^0.1.1"
   },
   "devDependencies": {
