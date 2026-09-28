@@ -25,8 +25,9 @@ Use `pnpm gate -- --target web|mobile` for a shipment-scoped gate; the
 `GATE_TARGET` environment form remains supported. q9gate validates the native
 target name, while Chalk's planner retains dependency-aware workspace
 exclusions and rejects incompatible mixed-platform changes. Target roots cover
-the full input diff so incompatible paths remain visible instead of being
-silently filtered out. `GATE_HEAD_REF` is not supported by q9gate; `--base`
+the selected app and shared code; Chalk validates q9gate's unfiltered
+`allChangedFiles` so an incompatible path cannot disappear during target
+filtering. `GATE_HEAD_REF` is not supported by q9gate; `--base`
 compares against `HEAD`. Use `--lane <id>` for a focused check. Do not infer a
 shipment target from branch, release mode, or directory.
 
