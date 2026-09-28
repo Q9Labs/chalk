@@ -214,9 +214,26 @@ fi
 case "${1:-}" in
   is-enabled) [[ -e "${FAKE_RESTORE_ENABLED_STATE:?}" ]] ;;
   enable) : >"${FAKE_RESTORE_ENABLED_STATE:?}" ;;
-  disable) find "${FAKE_RESTORE_ENABLED_STATE:?}" -delete 2>/dev/null || true ;;
+  disable) [[ "$*" != *chalk-runtime-restore.service* ]] || find "${FAKE_RESTORE_ENABLED_STATE:?}" -delete 2>/dev/null || true ;;
+  start)
+    if [[ "${2:-}" == user@*.service ]]; then
+      runtime_uid="${2#user@}"
+      runtime_uid="${runtime_uid%.service}"
+      # A reboot with the legacy drop-in left the user manager down.
+      [[ ! -e "${CHALK_CONTROLLER_SYSTEMD_ROOT:?}/user@${runtime_uid}.service.d/chalk-runtime.conf" ]] || exit 1
+      mkdir -p "${CHALK_RUNTIME_DIR_ROOT:?}/${runtime_uid}"
+      : >"${CHALK_RUNTIME_DIR_ROOT}/${runtime_uid}/bus"
+    fi
+    ;;
 esac
 SYSTEMCTL
+
+cat >"${fixture_root}/bin/loginctl" <<'LOGINCTL'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'loginctl %s\n' "$*" >>"${FAKE_COMMAND_LOG:?}"
+LOGINCTL
+chmod 0755 "${fixture_root}/bin/loginctl"
 
 cat >"${fixture_root}/health" <<'HEALTH'
 #!/usr/bin/env bash
@@ -310,6 +327,7 @@ run_controller() {
   CHALK_CONTROLLER_STATE_ROOT="$state" CHALK_CONTROLLER_RUN_ROOT="${fixture_root}/run" CHALK_CONTROLLER_LOCK_FILE="${state}/lock" CHALK_ACTIVE_RELEASE_POINTER="${state}/active-release.json" CHALK_DEPLOYMENT_LEDGER="${state}/ledger.jsonl" \
   CHALK_CONTROLLER_SYSTEMD_ROOT="${fixture_root}/systemd" CHALK_CONTROLLER_INSTALL_DIR="${fixture_root}/install" CHALK_RUNTIME_QUADLET_DIR="${fixture_root}/user-quadlet" CHALK_RUNTIME_SYSTEMD_DIR="${fixture_root}/user-systemd" \
   CHALK_AWS_BIN="${fixture_root}/bin/aws" CHALK_PODMAN_BIN="${fixture_root}/bin/podman" CHALK_SYSTEMCTL_BIN="${fixture_root}/bin/systemctl" CHALK_HEALTH_ATTEMPTS=1 CHALK_HEALTH_INTERVAL_SECONDS=1 CHALK_CONTROLLER_DIRECT_USER_COMMANDS=true \
+  CHALK_LOGINCTL_BIN="${fixture_root}/bin/loginctl" CHALK_RUNTIME_DIR_ROOT="${fixture_root}/runtime-dirs" CHALK_RUNTIME_USER="$(id -un)" CHALK_USER_MANAGER_ATTEMPTS=1 \
   "$controller" deploy --request "$request" --manifest "$manifest" --source-root "${fixture_root}/source"
 }
 
@@ -320,6 +338,7 @@ run_restore() {
   CHALK_CONTROLLER_STATE_ROOT="$state" CHALK_CONTROLLER_RUN_ROOT="${fixture_root}/run" CHALK_CONTROLLER_LOCK_FILE="${state}/lock" CHALK_ACTIVE_RELEASE_POINTER="${state}/active-release.json" CHALK_DEPLOYMENT_LEDGER="${state}/ledger.jsonl" \
   CHALK_CONTROLLER_SYSTEMD_ROOT="${fixture_root}/systemd" CHALK_CONTROLLER_INSTALL_DIR="${fixture_root}/install" CHALK_RUNTIME_QUADLET_DIR="${fixture_root}/user-quadlet" CHALK_RUNTIME_SYSTEMD_DIR="${fixture_root}/user-systemd" \
   CHALK_AWS_BIN="${fixture_root}/bin/aws" CHALK_PODMAN_BIN="${fixture_root}/bin/podman" CHALK_SYSTEMCTL_BIN="${fixture_root}/bin/systemctl" CHALK_HEALTH_ATTEMPTS=1 CHALK_HEALTH_INTERVAL_SECONDS=1 CHALK_CONTROLLER_DIRECT_USER_COMMANDS=true \
+  CHALK_LOGINCTL_BIN="${fixture_root}/bin/loginctl" CHALK_RUNTIME_DIR_ROOT="${fixture_root}/runtime-dirs" CHALK_RUNTIME_USER="$(id -un)" CHALK_USER_MANAGER_ATTEMPTS=1 \
   "$controller" restore
 }
 
@@ -696,11 +715,29 @@ if grep -Fq 'test-only-secret-bytes' "${stable_state}/ledger.jsonl"; then
   fail "secret bytes were persisted in the deployment ledger"
 fi
 
+cp -p "${stable_state}/releases/stable/runtime/systemd/chalk-runtime.target" "${fixture_root}/untampered-runtime.target"
 printf '\n# tampered after promotion\n' >>"${stable_state}/releases/stable/runtime/systemd/chalk-runtime.target"
 if run_restore "$stable_state" ok >"${fixture_root}/tampered-runtime.log" 2>&1; then
   fail "tampered durable runtime was restored after reboot"
 fi
 grep -Fq 'active rendered runtime hashes do not match pointer' "${fixture_root}/tampered-runtime.log" || fail "durable runtime tampering was not reported"
+cp -p "${fixture_root}/untampered-runtime.target" "${stable_state}/releases/stable/runtime/systemd/chalk-runtime.target"
+
+runtime_uid="$(id -u)"
+legacy_dropin="${fixture_root}/systemd/user@${runtime_uid}.service.d/chalk-runtime.conf"
+mkdir -p "$(dirname "$legacy_dropin")"
+printf '[Unit]\nRequires=chalk-runtime-bootstrap.service\n' >"$legacy_dropin"
+printf '[Service]\nExecStart=/usr/local/sbin/chalk-runtime-bootstrap\n' >"${fixture_root}/systemd/chalk-runtime-bootstrap.service"
+find "${fixture_root}/runtime-dirs" -mindepth 1 -depth -delete 2>/dev/null || true
+: >"${fixture_root}/commands.log"
+printf '0' >"${fixture_root}/health-index"
+run_restore "$stable_state" ok >/dev/null || fail "reboot restore did not recover from the legacy bootstrap drop-in"
+[[ ! -e "$legacy_dropin" ]] || fail "reboot restore left the legacy bootstrap drop-in"
+cmp -s <(printf '[Unit]\nRequires=chalk-runtime-bootstrap.service\n') "${stable_state}/legacy-bootstrap/user@${runtime_uid}.service.d-chalk-runtime.conf" || fail "legacy bootstrap drop-in was not preserved"
+grep -Fxq 'systemctl disable chalk-runtime-bootstrap.service' "${fixture_root}/commands.log" || fail "legacy bootstrap unit was not disabled"
+grep -Fxq "loginctl enable-linger $(id -un)" "${fixture_root}/commands.log" || fail "restore did not enable runtime user linger"
+grep -Fxq "systemctl start user@${runtime_uid}.service" "${fixture_root}/commands.log" || fail "restore did not start the runtime user manager"
+[[ -e "${fixture_root}/restore-unit-enabled" ]] || fail "retiring the legacy bootstrap disabled reboot restoration"
 fi
 
 if group_enabled recording; then

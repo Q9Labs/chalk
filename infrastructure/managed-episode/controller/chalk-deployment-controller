@@ -19,6 +19,9 @@ run_root="${CHALK_CONTROLLER_RUN_ROOT:-/run/chalk}"
 runtime_user="${CHALK_RUNTIME_USER:-chalk}"
 systemd_root="${CHALK_CONTROLLER_SYSTEMD_ROOT:-/etc/systemd/system}"
 systemctl_bin="${CHALK_SYSTEMCTL_BIN:-systemctl}"
+loginctl_bin="${CHALK_LOGINCTL_BIN:-loginctl}"
+runtime_dir_root="${CHALK_RUNTIME_DIR_ROOT:-/run/user}"
+user_manager_attempts="${CHALK_USER_MANAGER_ATTEMPTS:-30}"
 podman_bin="${CHALK_PODMAN_BIN:-podman}"
 quadlet_generator_bin="${CHALK_QUADLET_GENERATOR_BIN:-/usr/lib/systemd/system-generators/podman-system-generator}"
 aws_bin="${CHALK_AWS_BIN:-aws}"
@@ -120,6 +123,7 @@ require_host_commands() {
   require_command "$aws_bin"
   require_command "$podman_bin"
   require_command "$systemctl_bin"
+  require_command "$loginctl_bin"
   require_command bash
   require_command cmp
   require_command curl
@@ -1246,8 +1250,46 @@ restore_inputs_from_pointer() {
   done < <(jq -r '.inputs[] | [.id, .name, (.version // 0), .missing, .destination, .kind, .suffix] | @tsv' "$pointer_file")
 }
 
+# The July bootstrap made user@UID require a legacy unit that fails once this
+# controller owns releases, so the rootless user manager never started after a
+# reboot. Keep a copy of the drop-in in durable state before removing it.
+retire_legacy_bootstrap() {
+  local runtime_uid="$1"
+  local dropin="${systemd_root}/user@${runtime_uid}.service.d/chalk-runtime.conf"
+  local legacy_unit="${systemd_root}/chalk-runtime-bootstrap.service"
+  [[ -e "$dropin" || -L "$dropin" || -e "$legacy_unit" || -L "$legacy_unit" ]] || return 0
+  if [[ -e "$dropin" || -L "$dropin" ]]; then
+    require_regular_file "$dropin"
+    local backup_root="${state_root}/legacy-bootstrap"
+    mkdir -p "$backup_root"
+    chmod 700 "$backup_root"
+    cp -p "$dropin" "${backup_root}/user@${runtime_uid}.service.d-chalk-runtime.conf" || fail "legacy bootstrap drop-in could not be preserved"
+    rm -- "$dropin" || fail "legacy bootstrap drop-in could not be removed"
+  fi
+  if [[ -e "$legacy_unit" || -L "$legacy_unit" ]]; then
+    "$systemctl_bin" disable chalk-runtime-bootstrap.service >/dev/null 2>"${stage_root}/legacy-bootstrap-disable.log" || fail "legacy bootstrap unit could not be disabled"
+  fi
+  "$systemctl_bin" daemon-reload >/dev/null 2>"${stage_root}/systemd-error.log" || fail "root systemd daemon reload failed"
+}
+
+ensure_runtime_user_manager() {
+  local runtime_uid
+  runtime_uid="$(id -u "$runtime_user" 2>/dev/null || true)"
+  [[ "$runtime_uid" =~ ^[0-9]+$ ]] || fail "runtime user does not exist"
+  retire_legacy_bootstrap "$runtime_uid"
+  "$loginctl_bin" enable-linger "$runtime_user" >/dev/null 2>"${stage_root}/linger-error.log" || fail "runtime user linger could not be enabled"
+  "$systemctl_bin" start "user@${runtime_uid}.service" >/dev/null 2>"${stage_root}/user-manager-error.log" || fail "runtime user manager could not start"
+  local attempt
+  for ((attempt = 1; attempt <= user_manager_attempts; attempt++)); do
+    [[ -e "${runtime_dir_root}/${runtime_uid}/bus" ]] && return 0
+    sleep 1
+  done
+  fail "runtime user manager bus did not appear"
+}
+
 run_candidate() {
   local runtime_source="$1"
+  ensure_runtime_user_manager
   inject_runtime_identity
   install_runtime_files "$runtime_source"
   stop_runtime || fail "runtime services could not be stopped for cutover"

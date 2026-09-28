@@ -198,7 +198,13 @@ The root
 `chalk-runtime-restore.service` retries transient boot failures. After a reboot
 clears `/run`, it reads the active pointer, fetches the recorded SSM versions,
 rebuilds the env and release identity, reconciles the rootless Podman secrets,
-and starts the same health-checked release. Plaintext inputs stay under `/run`
+and starts the same health-checked release. Before it touches the runtime, every
+deploy, rollback, and restore makes sure the `chalk` user manager is running: it
+enables linger, starts `user@UID.service`, and waits for the user bus. It also
+retires the pre-controller `chalk-runtime-bootstrap.service`. It disables that
+unit and removes its `user@UID.service.d/chalk-runtime.conf` requirement, but
+first copies the drop-in to `legacy-bootstrap/` under the controller state. The
+restore unit may write only `/etc/systemd/system` for this. Plaintext inputs stay under `/run`
 only. Promoted env files remain there for the services; transient secret source
 files are removed with the controller's private staging directory.
 
@@ -213,6 +219,11 @@ user manager, rootless Podman with instance-role ECR authentication, the SSM
 agent, AWS CLI, `curl`, `jq`, OpenSSL, and standard Linux archive and systemd
 tools. The controller checks these paths through its preparation work and fails
 before promotion when a prerequisite is missing.
+
+The host keeps a fixed Elastic IP, so a stop and start doesn't change the
+address that `recording-control` DNS and the recorder worker firewalls allow.
+The Amazon CloudWatch agent reports memory and root disk use in the `CWAgent`
+namespace. Its config is an SSM parameter that the agent reads at start.
 
 For a single-architecture Graviton release, build both application images for
 `linux/arm64` and pass `--architectures linux/arm64`. The manifest must describe
