@@ -175,16 +175,35 @@ const retainedFloorSequence = (messages: RecordingPresentationSnapshotV1["chat"]
 const resolvesToVisibleScreenShare = (snapshot: RecordingPresentationSnapshotV1, sharedContent: Extract<RecordingSharedContentV1, { readonly kind: "screen_share" }>): boolean =>
   snapshot.media.some((source) => source.sourceId === sharedContent.sourceId && source.participantId === sharedContent.participantId && source.kind === "screen_share" && source.visible);
 
-export const projectRecordingPresentation = (timeline: RecordingPresentationTimelineV1, elapsedMs: number): RecordingPresentationSnapshotV1 => {
-  if (!isRecordingPresentationTimelineV1(timeline)) throw new TypeError("invalid recording_presentation.v1 timeline");
-  if (!Number.isSafeInteger(elapsedMs) || elapsedMs < 0 || elapsedMs > timeline.clock.durationMs) throw new RangeError("recording presentation elapsedMs is outside the timeline");
+export interface RecordingPresentationCursor {
+  /** Projects the frame at `elapsedMs`. Calls must not go backwards in time. */
+  readonly at: (elapsedMs: number) => RecordingPresentationSnapshotV1;
+}
 
+/**
+ * Projects many frames of one timeline in time order. The timeline is
+ * validated once and each event is applied once, so a full-length pass costs
+ * O(events + frames) instead of O(events × frames).
+ */
+export const createRecordingPresentationCursor = (timeline: RecordingPresentationTimelineV1): RecordingPresentationCursor => {
+  if (!isRecordingPresentationTimelineV1(timeline)) throw new TypeError("invalid recording_presentation.v1 timeline");
   let snapshot = cloneSnapshot(timeline.initial);
-  for (const event of timeline.events) {
-    if (event.atMs > elapsedMs) break;
-    snapshot = applyEvent(snapshot, event);
-  }
-  const reactions = snapshot.reactions.filter((reaction) => reaction.occurredAtMs <= elapsedMs && elapsedMs < reaction.expiresAtMs);
-  const sharedContent = snapshot.sharedContent;
-  return { ...snapshot, elapsedMs, view: viewFor(sharedContent), reactions };
+  let nextEvent = 0;
+  let lastElapsedMs = 0;
+  return {
+    at(elapsedMs) {
+      if (!Number.isSafeInteger(elapsedMs) || elapsedMs < 0 || elapsedMs > timeline.clock.durationMs) throw new RangeError("recording presentation elapsedMs is outside the timeline");
+      if (elapsedMs < lastElapsedMs) throw new RangeError("recording presentation cursor cannot move backwards");
+      lastElapsedMs = elapsedMs;
+      for (; nextEvent < timeline.events.length; nextEvent += 1) {
+        const event = timeline.events[nextEvent]!;
+        if (event.atMs > elapsedMs) break;
+        snapshot = applyEvent(snapshot, event);
+      }
+      const reactions = snapshot.reactions.filter((reaction) => reaction.occurredAtMs <= elapsedMs && elapsedMs < reaction.expiresAtMs);
+      return { ...snapshot, elapsedMs, view: viewFor(snapshot.sharedContent), reactions };
+    },
+  };
 };
+
+export const projectRecordingPresentation = (timeline: RecordingPresentationTimelineV1, elapsedMs: number): RecordingPresentationSnapshotV1 => createRecordingPresentationCursor(timeline).at(elapsedMs);

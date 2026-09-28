@@ -10,13 +10,17 @@
     "build:ui-manifest": "node ./dist/node/ui-build-cli.js \"$PWD/dist/client\"",
     "build:ui-registry": "node ./dist/node/ui-build-registry-cli.js write \"$PWD/dist\"",
     "fixture": "node ./dist/node/fixture.js",
-    "check-types": "tsc -p tsconfig.browser.json && tsc -p tsconfig.node.json --noEmit",
-    "test": "vitest run",
+    "check-types": "tsc -p tsconfig.browser.json && tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.compose.json",
+    "test": "vitest run --config vite.node.config.ts",
     "lint": "pnpm exec oxfmt --check . && pnpm run check-types"
   },
   "dependencies": {
+    "@excalidraw/excalidraw": "0.18.1",
+    "@hugeicons/core-free-icons": "^4.2.3",
+    "@napi-rs/canvas": "1.0.9",
     "@q9labsai/chalk-react": "workspace:^4.1.15",
     "@q9labsai/recording-presentation": "workspace:^0.1.0",
+    "happy-dom": "^20.11.2",
     "playwright": "^1.62.1",
     "react": "19.2.7",
     "react-dom": "19.2.7"

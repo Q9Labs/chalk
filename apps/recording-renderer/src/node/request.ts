@@ -1,8 +1,11 @@
-import { isAbsolute } from "node:path";
+import { readFile, realpath, stat } from "node:fs/promises";
+import { dirname, isAbsolute, relative, sep } from "node:path";
 
 import { exactKeys, integerField as validatedIntegerField, literalField, objectValue, patternedStringField as validatedPatternedStringField, stringField as validatedStringField } from "../validation.js";
 
 const FRAME_RENDER_REQUEST_VERSION = "recording-frame-render-request.v1";
+
+const MAXIMUM_REQUEST_BYTES = 64 << 10;
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
@@ -63,3 +66,17 @@ function absolutePathField(value: object, key: string): string {
 const requestStringField = (value: object, key: string): string => validatedStringField(value, key, "frame render", 4_096);
 const requestPatternedStringField = (value: object, key: string, pattern: RegExp): string => validatedPatternedStringField(value, key, pattern, "frame render", 4_096);
 const requestIntegerField = (value: object, key: string, minimum: number, maximum: number): number => validatedIntegerField(value, key, minimum, maximum, "frame render");
+
+export async function readFrameRenderRequest(path: string): Promise<FrameRenderRequestV1> {
+  const facts = await stat(path);
+  if (!facts.isFile() || facts.size < 1 || facts.size > MAXIMUM_REQUEST_BYTES) throw new TypeError("frame render request exceeds its byte bound");
+  const value: unknown = JSON.parse(await readFile(path, "utf8"));
+  return parseFrameRenderRequestV1(value);
+}
+
+export async function validateResultPath(path: string, workspace: string): Promise<void> {
+  if (!isAbsolute(path)) throw new TypeError("frame render result path must be absolute");
+  const [workspaceRoot, resultParent] = await Promise.all([realpath(workspace), realpath(dirname(path))]);
+  const pathFromWorkspace = relative(workspaceRoot, resultParent);
+  if (pathFromWorkspace === ".." || pathFromWorkspace.startsWith(`..${sep}`)) throw new TypeError("frame render result path escapes the attempt workspace");
+}

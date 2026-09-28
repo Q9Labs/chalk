@@ -1,15 +1,14 @@
-import { mkdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type BrowserContext, type CDPSession, type Page, type Route } from "playwright";
 import { loadVerifiedRenderInputs } from "./node/inputs.js";
-import { parseFrameRenderRequestV1, type FrameRenderRequestV1 } from "./node/request.js";
+import { readFrameRenderRequest, validateResultPath, type FrameRenderRequestV1 } from "./node/request.js";
 import type { RecordingRendererFrameProfile } from "./runtime-api.js";
 import { startRenderServer } from "./node/server.js";
 import { resolveVerifiedClientBuild } from "./node/ui-build-registry.js";
 
 const FRAME_RESULT_VERSION = "recording-frame-render-result.v1";
-const MAXIMUM_REQUEST_BYTES = 64 << 10;
 // page.clock replaces in-page timers, including requestAnimationFrame. Keep
 // the stall deadline here so it measures wall time instead of synthetic ticks.
 const FRAME_PREPARATION_DEADLINE_MS = 30_000;
@@ -74,7 +73,7 @@ interface BrowserPool {
 
 async function main(): Promise<void> {
   const args = parseArguments(process.argv.slice(2));
-  const request = await readRequest(args.requestPath);
+  const request = await readFrameRenderRequest(args.requestPath);
   await validateOutputPaths(args, request.workspaceDirectory);
   const inputs = await loadVerifiedRenderInputs(request);
   const clientDirectory = await resolveVerifiedClientBuild(fileURLToPath(new URL("../", import.meta.url)), request.uiBuildSha256);
@@ -350,20 +349,6 @@ async function constrainNetwork(context: BrowserContext, origin: string): Promis
     if (url.origin === origin || url.protocol === "data:" || url.protocol === "blob:") await route.continue();
     else await route.abort("blockedbyclient");
   });
-}
-
-async function readRequest(path: string): Promise<FrameRenderRequestV1> {
-  const facts = await stat(path);
-  if (!facts.isFile() || facts.size < 1 || facts.size > MAXIMUM_REQUEST_BYTES) throw new TypeError("frame render request exceeds its byte bound");
-  const value: unknown = JSON.parse(await readFile(path, "utf8"));
-  return parseFrameRenderRequestV1(value);
-}
-
-async function validateResultPath(path: string, workspace: string): Promise<void> {
-  if (!isAbsolute(path)) throw new TypeError("frame render result path must be absolute");
-  const [workspaceRoot, resultParent] = await Promise.all([realpath(workspace), realpath(dirname(path))]);
-  const pathFromWorkspace = relative(workspaceRoot, resultParent);
-  if (pathFromWorkspace === ".." || pathFromWorkspace.startsWith(`..${sep}`)) throw new TypeError("frame render result path escapes the attempt workspace");
 }
 
 async function validateInspectionDirectory(path: string, workspace: string): Promise<void> {
