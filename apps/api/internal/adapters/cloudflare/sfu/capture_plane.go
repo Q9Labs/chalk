@@ -310,6 +310,9 @@ func captureProviderError(err error) error {
 		failure.providerCode == "connection_not_found",
 		failure.providerCode == "track_not_found":
 		class = captureplane.ProviderFailureNotFound
+		// A newly published track may not be pullable yet. Only the whole
+		// request's 404 is safe to replay; per-track failures are not.
+		retryable = failure.operation == "add_tracks" && failure.stage == failureStageHTTPStatus && failure.statusCode == http.StatusNotFound
 	case failure.statusCode == http.StatusTooManyRequests || failure.providerCode == "rate_limited":
 		class = captureplane.ProviderFailureRateLimited
 		retryable = true
@@ -325,7 +328,10 @@ func captureProviderError(err error) error {
 	}
 	code := strings.TrimSpace(failure.providerCode)
 	if code == "" || code == "unknown" {
-		code = "provider_failure"
+		// Persist a bounded stage/status fingerprint when the provider supplies
+		// an unrecognized code. It distinguishes an HTTP rejection from a
+		// top-level or per-track response without retaining provider payloads.
+		code = fmt.Sprintf("provider_%s_%d", failure.stage, failure.statusCode)
 	}
 	return captureplane.ProviderError{Class: class, Code: code, Retryable: retryable}
 }

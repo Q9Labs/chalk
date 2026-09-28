@@ -681,6 +681,9 @@ type captureTrackBindResult struct {
 }
 
 func (a *PionCaptureAttempt) bindTracksWhileWatchingPlans(ctx context.Context, writer *captureBundleWriter, plan captureplan.Plan, snapshot recordercapture.Snapshot, planEvents <-chan capturePlanEvent, runtimeEvents <-chan captureRuntimeEvent, currentReaders map[string]CaptureMediaTrack) (map[string]CaptureMediaTrack, captureplan.Plan, bool, error) {
+	if err := writer.observePlan(plan); err != nil {
+		return nil, captureplan.Plan{}, false, err
+	}
 bindPlan:
 	for {
 		bindCtx, cancelBind := context.WithTimeout(ctx, a.config.InitialPlanWait)
@@ -734,6 +737,9 @@ bindPlan:
 				}
 				latest, err := a.coordinator.Reconcile(ctx, event.plan)
 				if err != nil {
+					return nil, captureplan.Plan{}, false, err
+				}
+				if err := writer.observePlan(event.plan); err != nil {
 					return nil, captureplan.Plan{}, false, err
 				}
 				plan = event.plan
@@ -1174,6 +1180,11 @@ func captureClockRate(kind captureplane.TrackKind) int64 {
 
 // captureBundleWriter is the runtime's bounded handoff from RTP to the
 // canonical assembler, encryption, upload, and API commit ports.
+type plannedTrackEpoch struct {
+	binding captureplane.CaptureTrack
+	epoch   uint64
+}
+
 type captureBundleWriter struct {
 	attempt        *PionCaptureAttempt
 	key            []byte
@@ -1186,6 +1197,7 @@ type captureBundleWriter struct {
 	pendingGaps    []recordingbundle.Gap
 	active         map[string]recordingbundle.TrackIdentity
 	bindings       map[string]captureplane.PulledCaptureTrack
+	plannedEpochs  map[string]plannedTrackEpoch
 	layout         recordingbundle.LayoutTimelineEvent
 	hasLayout      bool
 	clocks         map[string]*captureTrackClock
@@ -1491,9 +1503,37 @@ func (w *captureBundleWriter) addPacket(ctx context.Context, track CaptureMediaT
 	return fmt.Errorf("packet could not fit after bundle rotation: %w", err)
 }
 
+// observePlan retains the first revision of each unchanged publication, even
+// when a newer plan arrives before its RTP track finishes binding.
+func (w *captureBundleWriter) observePlan(plan captureplan.Plan) error {
+	epoch, err := recordingbundle.ComposeTrackEpoch(uint64(plan.Authority().CaptureEpoch), uint64(plan.Revision()))
+	if err != nil {
+		return fmt.Errorf("%w: compose track epoch: %v", ErrInvalidCaptureAttempt, err)
+	}
+	next := make(map[string]plannedTrackEpoch, len(plan.Tracks()))
+	for _, track := range plan.Tracks() {
+		key := track.ParticipantID.String() + "\x00" + string(track.Source)
+		binding := captureplane.CaptureTrack{
+			OwnerReference: track.OwnerReference, TrackReference: track.TrackReference,
+			ParticipantID: track.ParticipantID, ParticipantGeneration: track.ParticipantGeneration,
+			Source: track.Source, Kind: track.Kind, RequestedLayer: track.RequestedLayer,
+		}
+		first := plannedTrackEpoch{binding: binding, epoch: epoch}
+		if prior, exists := w.plannedEpochs[key]; exists && prior.binding == binding {
+			first = prior
+		}
+		next[key] = first
+	}
+	w.plannedEpochs = next
+	return nil
+}
+
 func (w *captureBundleWriter) reconcileTracks(ctx context.Context, plan captureplan.Plan, tracks map[string]CaptureMediaTrack, now time.Time) error {
 	if plan.Authority().CaptureEpoch != w.attempt.authority.CaptureEpoch {
 		return fmt.Errorf("%w: capture plan epoch mismatch", ErrInvalidCaptureAttempt)
+	}
+	if err := w.observePlan(plan); err != nil {
+		return err
 	}
 	previousActive := w.active
 	next := make(map[string]recordingbundle.TrackIdentity, len(tracks))
@@ -1505,6 +1545,10 @@ func (w *captureBundleWriter) reconcileTracks(ctx context.Context, plan capturep
 	for mid, mediaTrack := range tracks {
 		track := mediaTrack.CaptureTrack()
 		epoch := planEpoch
+		key := track.ParticipantID.String() + "\x00" + string(track.Source)
+		if first, ok := w.plannedEpochs[key]; ok && first.binding == track.CaptureTrack {
+			epoch = first.epoch
+		}
 		if existingBinding, ok := w.bindings[mid]; ok && existingBinding == track {
 			if existing, active := w.active[mid]; active && existing.Codec == mediaTrack.Codec() {
 				epoch = existing.Epoch

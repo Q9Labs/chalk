@@ -80,7 +80,6 @@ function parseSegments(value: unknown, max: number, maxTextChars: number): Provi
       startSeconds,
       endSeconds,
       text: string(row.text, `segment ${index} text`, maxTextChars),
-      ...(row.avg_logprob !== undefined ? {} : {}),
       ...(row.confidence !== undefined ? { confidence: confidence(row.confidence, `segment ${index} confidence`) } : {}),
     };
   });
@@ -145,7 +144,7 @@ export function parseProviderResult(
     quality: {
       ...(confidenceValues.length === 0 ? {} : { meanConfidence: confidenceValues.reduce((a, b) => a + b, 0) / confidenceValues.length }),
       segmentCount: segments.length,
-      wordCount: words?.length ?? 0,
+      wordCount: words?.length || segments.reduce((count, segment) => count + (segment.text.trim().match(/\S+/gu)?.length ?? 0), 0),
     },
   };
 }

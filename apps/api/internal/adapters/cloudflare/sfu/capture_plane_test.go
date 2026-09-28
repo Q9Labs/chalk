@@ -1,6 +1,7 @@
 package sfu
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -197,6 +198,45 @@ func TestCapturePlanePullsRemoteTracksWithExplicitIdentityHints(t *testing.T) {
 	}
 	if byName["microphone-1"].Simulcast != nil {
 		t.Fatal("audio request unexpectedly included simulcast")
+	}
+}
+
+func TestCapturePlaneRetriesOnlyWholeRequestPull404(t *testing.T) {
+	client := &captureSequenceClient{responses: []captureHTTPResponse{
+		{status: http.StatusNotFound, body: `{"errors":[{"code":"track_not_found"}]}`},
+		{status: http.StatusOK, body: capturePulledTracksProviderBody(t)},
+	}}
+	adapter := newCaptureTestAdapter(t, client)
+	input := captureplane.PullCaptureTracksInput{
+		Metadata: captureMetadata("late-publisher"), Connection: "capture-connection-1",
+		Tracks: []captureplane.CaptureTrack{
+			captureTrack("owner-1", "camera-1", 5, captureplane.TrackSourceCamera, captureplane.TrackKindVideo, captureplane.TrackLayerHigh),
+			captureTrack("owner-1", "microphone-1", 5, captureplane.TrackSourceMicrophone, captureplane.TrackKindAudio, captureplane.TrackLayerAuto),
+		},
+	}
+	if _, err := adapter.PullCaptureTracks(context.Background(), input); err == nil {
+		t.Fatal("first pull unexpectedly succeeded")
+	} else {
+		var failure captureplane.ProviderError
+		if !errors.As(err, &failure) || failure.Class != captureplane.ProviderFailureNotFound || !failure.Retryable {
+			t.Fatalf("first pull failure = %v, want retryable not_found", err)
+		}
+	}
+	if _, err := adapter.PullCaptureTracks(context.Background(), input); err != nil {
+		t.Fatalf("pull after publisher becomes available: %v", err)
+	}
+	if len(client.requests) != 2 || client.requests[0].path != client.requests[1].path || !bytes.Equal(client.requests[0].body, client.requests[1].body) {
+		t.Fatal("retry changed the provider pull request")
+	}
+	for _, failure := range []providerFailure{
+		newProviderFailure("add_tracks", failureStageHTTPStatus, http.StatusGone, "track_not_found"),
+		newProviderFailure("add_tracks", failureStageTrack, http.StatusNotFound, "track_not_found"),
+		newProviderFailure("close_tracks", failureStageHTTPStatus, http.StatusNotFound, "track_not_found"),
+	} {
+		var mapped captureplane.ProviderError
+		if !errors.As(captureProviderError(failure), &mapped) || mapped.Retryable {
+			t.Fatalf("failure %#v was retryable", failure)
+		}
 	}
 }
 
@@ -502,5 +542,24 @@ func TestCapturePlaneRejectsChangedPayloadForSameIdempotencyKey(t *testing.T) {
 	}
 	if len(client.requests) != 2 {
 		t.Fatalf("provider requests = %d, want 2", len(client.requests))
+	}
+}
+
+func TestCaptureProviderErrorRetainsUnknownFailureBoundary(t *testing.T) {
+	for _, test := range []struct {
+		stage  providerFailureStage
+		status int
+		class  captureplane.ProviderFailureClass
+		code   string
+	}{
+		{failureStageHTTPStatus, http.StatusNotFound, captureplane.ProviderFailureNotFound, "provider_http_status_404"},
+		{failureStageTopLevel, http.StatusOK, captureplane.ProviderFailureProtocol, "provider_top_level_200"},
+		{failureStageTrack, http.StatusOK, captureplane.ProviderFailureProtocol, "provider_track_200"},
+	} {
+		failure := newProviderFailure("add_tracks", test.stage, test.status, "UNRECOGNIZED_PROVIDER_CODE")
+		var mapped captureplane.ProviderError
+		if !errors.As(captureProviderError(failure), &mapped) || mapped.Class != test.class || mapped.Code != test.code {
+			t.Fatalf("stage %s status %d mapped to %+v, want %s/%s", test.stage, test.status, mapped, test.class, test.code)
+		}
 	}
 }

@@ -2096,6 +2096,29 @@ func captureTestPlanAtEpoch(t *testing.T, epoch captureplane.CaptureEpoch, revis
 	return plan
 }
 
+func TestCaptureBundleWriterKeepsFirstPlanEpochWhenTrackBindsAfterNewPlan(t *testing.T) {
+	origin := time.UnixMilli(1000).UTC()
+	writer, _ := newCaptureTestWriter(t, origin)
+	binding := capturePlanWatchPulledTrack(t, "0", "late-binding")
+	track := &captureTestTrack{capture: binding, codec: "opus"}
+	authority := captureTestPlanAtEpoch(t, 2, 1, origin).Authority()
+	first := capturePlanWatchPlan(t, authority, 1, origin, captureplan.StopStateRunning, binding)
+	later := capturePlanWatchPlan(t, authority, 2, origin.Add(time.Second), captureplan.StopStateRunning, binding)
+	if err := writer.reconcileTracks(context.Background(), first, nil, origin); err != nil {
+		t.Fatalf("observe plan before binding: %v", err)
+	}
+	if err := writer.reconcileTracks(context.Background(), later, map[string]CaptureMediaTrack{"0": track}, origin.Add(time.Second)); err != nil {
+		t.Fatalf("bind after next plan: %v", err)
+	}
+	want, err := recordingbundle.ComposeTrackEpoch(2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := writer.active["0"].Epoch; got != want {
+		t.Fatalf("late-bound track epoch = %d, want first plan epoch %d", got, want)
+	}
+}
+
 func TestCaptureBundleWriterUsesCaptureEpochNamespaceForTrackEpoch(t *testing.T) {
 	origin := time.UnixMilli(1000).UTC()
 	writer, _ := newCaptureTestWriter(t, origin)

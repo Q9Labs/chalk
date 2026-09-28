@@ -137,6 +137,10 @@ func (s *Service) Execute(ctx context.Context, request ExecuteRequest) (Executio
 			if err := s.port.FailCommand(ctx, Failure{Key: key, Authority: command.Authority, Lease: command.Lease, ClaimToken: claim.ClaimToken, ProviderError: failure}); err != nil {
 				return Execution{}, ErrAmbiguousOutcome
 			}
+			if failure.Retryable && key.Operation == captureplane.OperationPullCaptureTracks && failure.Class == captureplane.ProviderFailureNotFound {
+				// Reclaim the same fenced pull after the port's durable backoff.
+				continue
+			}
 			return Execution{}, ProviderFailureError{Failure: failure}
 		}
 		resultBytes, err := MarshalResult(result, metadata, key.Operation)

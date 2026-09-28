@@ -49,6 +49,28 @@ func TestServiceDispatchesAllCapturePlaneOperations(t *testing.T) {
 	}
 }
 
+func TestServiceReclaimsLatePublisherPullWithinWaitWindow(t *testing.T) {
+	command := commandFor(captureplane.OperationPullCaptureTracks, time.Now().Add(time.Minute))
+	store := newMemoryPort()
+	store.projection = projectionFor(command, "")
+	provider := &fakePlane{pullNotFoundOnce: true}
+	service, err := NewService(store, provider, Options{MaxWait: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Execute(context.Background(), ExecuteRequest{Command: command}); err != nil {
+		t.Fatalf("late publisher pull: %v", err)
+	}
+	if provider.calls(captureplane.OperationPullCaptureTracks) != 2 || store.claims < 2 || store.failure.ProviderError.Class != captureplane.ProviderFailureNotFound {
+		t.Fatalf("pull calls=%d claims=%d first failure=%#v, want two attempts of same fenced pull", provider.calls(captureplane.OperationPullCaptureTracks), store.claims, store.failure.ProviderError)
+	}
+	for _, claim := range store.claim {
+		if claim.Key != store.claim[0].Key {
+			t.Fatal("late publisher retry changed the command key")
+		}
+	}
+}
+
 func TestServiceReplaysExactCompletedResultWithoutProviderCall(t *testing.T) {
 	provider := &fakePlane{}
 	store := newMemoryPort()
@@ -640,6 +662,7 @@ type fakePlane struct {
 	resolveErr       error
 	badResult        bool
 	closeDenied      bool
+	pullNotFoundOnce bool
 }
 
 func (p *fakePlane) Resolve(_ context.Context, identity captureplane.CaptureIdentity) (captureplane.CapturePlane, error) {
@@ -695,6 +718,9 @@ func (p *fakePlane) CreateCaptureConnection(context.Context, captureplane.Create
 
 func (p *fakePlane) PullCaptureTracks(context.Context, captureplane.PullCaptureTracksInput) (captureplane.PullCaptureTracksResult, error) {
 	p.count(captureplane.OperationPullCaptureTracks)
+	if p.pullNotFoundOnce && p.calls(captureplane.OperationPullCaptureTracks) == 1 {
+		return captureplane.PullCaptureTracksResult{}, captureplane.ProviderError{Class: captureplane.ProviderFailureNotFound, Code: "track_not_found", Retryable: true}
+	}
 	return captureplane.PullCaptureTracksResult{Connection: p.connection(), Tracks: []captureplane.PulledCaptureTrack{{CaptureTrack: validTrack(6), MID: "mid-1"}}, Negotiation: captureplane.Negotiation{Requirement: captureplane.NegotiationNotRequired}}, nil
 }
 
@@ -723,6 +749,7 @@ type memoryCommand struct {
 	outcome     StoredOutcome
 	inflight    bool
 	claimToken  string
+	retryAt     time.Time
 }
 
 type memoryPort struct {
@@ -775,6 +802,9 @@ func (p *memoryPort) ClaimCommand(_ context.Context, request ClaimRequest) (Clai
 	}
 	if len(command.outcome.ResultBytes) > 0 || command.outcome.ProviderFailure != nil {
 		return ClaimResult{Outcome: command.outcome, CurrentProjection: projection}, nil
+	}
+	if command.retryAt.After(time.Now()) {
+		return ClaimResult{NotBefore: command.retryAt, CurrentProjection: projection}, nil
 	}
 	if p.ambiguous {
 		return ClaimResult{Ambiguous: true}, nil
@@ -830,7 +860,11 @@ func (p *memoryPort) FailCommand(_ context.Context, failure Failure) error {
 	defer p.mu.Unlock()
 	command := p.commands[failure.Key]
 	command.inflight = false
-	command.outcome = StoredOutcome{ProviderFailure: &failure.ProviderError}
+	if failure.ProviderError.Retryable {
+		command.retryAt = time.Now().Add(10 * time.Millisecond)
+	} else {
+		command.outcome = StoredOutcome{ProviderFailure: &failure.ProviderError}
+	}
 	p.failure = failure
 	return nil
 }

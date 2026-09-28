@@ -76,6 +76,24 @@ describe("direct DeepInfra contract", () => {
     expect(result.providerReportedCostUsd).toBeCloseTo(0.00000333, 12);
   });
 
+  it("counts segment text when DeepInfra returns no word timings", async () => {
+    const provider = new DeepInfraWhisperProvider({
+      policy,
+      token: "test-token",
+      fetch: async () =>
+        Response.json({
+          ...nativeResponse,
+          text: "Orange cedar. Silver orchard.",
+          segments: [
+            { start: 0, end: 1, text: " Orange cedar. " },
+            { start: 2, end: 3, text: " Silver orchard. " },
+          ],
+          words: undefined,
+        }),
+    });
+    expect((await provider.transcribe(request)).quality).toMatchObject({ segmentCount: 2, wordCount: 4 });
+  });
+
   it.each([
     [0, 0],
     [0.01998, 0.0001998],
