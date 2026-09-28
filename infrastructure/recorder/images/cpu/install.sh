@@ -73,6 +73,7 @@ for unit in chalk-recorder-capture.service chalk-recorder-render.service chalk-r
   install -m 0644 "$script_root/systemd/$unit" "$image_root/etc/systemd/system/$unit"
 done
 
+# Native Export needs fonts-noto-color-emoji installed explicitly once Chromium is removed.
 cat >"$image_root/etc/chalk-recorder/render.env" <<EOF
 CHALK_RECORDING_RENDER_WORK_ROOT=/var/lib/chalk-recorder/render
 CHALK_RECORDING_NODE_PATH=/opt/chalk-recorder/toolchains/node-22.23.2/bin/node

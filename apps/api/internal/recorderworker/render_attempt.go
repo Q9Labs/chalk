@@ -28,6 +28,7 @@ import (
 
 const (
 	defaultRenderFPS = 30
+	nativeRenderFPS  = 15
 	renderVideoName  = "recording.mp4"
 )
 
@@ -58,6 +59,7 @@ type ProductionRenderAttemptConfig struct {
 	FFmpegPath      string
 	Encoder         VideoEncoder
 	Frames          FrameProducer
+	Compose         ComposeProducer
 	Commands        CommandRunner
 	Streaming       StreamingCommandRunner
 	Decode          RecordingDecodeWriter
@@ -79,7 +81,7 @@ func NewProductionRenderAttemptFactory(config ProductionRenderAttemptConfig) (*P
 	if config.Now == nil {
 		config.Now = func() time.Time { return time.Now().UTC() }
 	}
-	if config.Control == nil || config.Frames == nil || config.Commands == nil || config.Streaming == nil || !filepath.IsAbs(config.WorkRoot) || config.Environment == "" || !config.UIBuildRegistry.valid() {
+	if config.Control == nil || (config.Frames == nil && config.Compose == nil) || config.Commands == nil || config.Streaming == nil || !filepath.IsAbs(config.WorkRoot) || config.Environment == "" || !config.UIBuildRegistry.valid() {
 		return nil, ErrInvalidProductionRenderAttempt
 	}
 	if _, _, err := recordingEncoderArgs(config.Encoder); err != nil {
@@ -300,28 +302,14 @@ func (attempt *ProductionRenderAttempt) Run(ctx context.Context) error {
 		FPS: defaultRenderFPS, DurationMs: resolved.DurationMillis,
 	}
 	mixPath := filepath.Join(decodedDirectory, filepath.FromSlash(decoded.Index.Mix.Path))
-	encodePlan, err := BuildRecordingEncodePlan(mixPath, videoPath, RecordingEncodeConfig{
-		Width: frameRequest.Width, Height: frameRequest.Height, FPS: frameRequest.FPS, DurationMs: frameRequest.DurationMs, Encoder: attempt.config.Encoder,
-	})
+	expected, err := attempt.renderVideo(ctx, frameRequest, mixPath, videoPath)
 	if err != nil {
-		return fmt.Errorf("build recording encode plan: %w", err)
-	}
-	var rendered FrameEncodeResult
-	err = attempt.measure(RenderAttemptStageCompositionEncoding, func() error {
-		var renderErr error
-		rendered, renderErr = RenderFrameStream(ctx, attempt.config.Frames, attempt.config.Streaming, frameRequest, encodePlan)
-		return renderErr
-	})
-	attempt.observeFrameEncoding(rendered, err == nil)
-	if err != nil {
-		return fmt.Errorf("render recording frame stream: %w", err)
+		return err
 	}
 	var mediaFacts MediaFacts
 	err = attempt.measure(RenderAttemptStageProbe, func() error {
 		var probeErr error
-		mediaFacts, probeErr = VerifyRecordingMedia(ctx, attempt.config.Commands, videoPath, RecordingMediaExpectation{
-			Width: encodePlan.Width, Height: encodePlan.Height, FPS: encodePlan.FPS, FrameCount: encodePlan.FrameCount, DurationMs: encodePlan.OutputDuration,
-		})
+		mediaFacts, probeErr = VerifyRecordingMedia(ctx, attempt.config.Commands, videoPath, expected)
 		return probeErr
 	})
 	if err != nil {
@@ -369,6 +357,43 @@ func (attempt *ProductionRenderAttempt) Run(ctx context.Context) error {
 	}
 	_ = inputBytes
 	return nil
+}
+
+func (attempt *ProductionRenderAttempt) renderVideo(ctx context.Context, frameRequest FrameRenderRequest, mixPath, videoPath string) (RecordingMediaExpectation, error) {
+	if attempt.config.Compose != nil {
+		frameRequest.FPS = nativeRenderFPS
+	}
+	// The native compositor writes the final MP4 itself; the plan still defines what the output must be.
+	encodePlan, err := BuildRecordingEncodePlan(mixPath, videoPath, RecordingEncodeConfig{
+		Width: frameRequest.Width, Height: frameRequest.Height, FPS: frameRequest.FPS, DurationMs: frameRequest.DurationMs, Encoder: attempt.config.Encoder,
+	})
+	if err != nil {
+		return RecordingMediaExpectation{}, fmt.Errorf("build recording encode plan: %w", err)
+	}
+	expected := RecordingMediaExpectation{
+		Width: encodePlan.Width, Height: encodePlan.Height, FPS: encodePlan.FPS, FrameCount: encodePlan.FrameCount, DurationMs: encodePlan.OutputDuration,
+	}
+	if attempt.config.Compose != nil {
+		err = attempt.measure(RenderAttemptStageCompositionEncoding, func() error {
+			_, composeErr := attempt.config.Compose.Compose(ctx, frameRequest, videoPath)
+			return composeErr
+		})
+		if err != nil {
+			return RecordingMediaExpectation{}, fmt.Errorf("compose recording video: %w", err)
+		}
+		return expected, nil
+	}
+	var rendered FrameEncodeResult
+	err = attempt.measure(RenderAttemptStageCompositionEncoding, func() error {
+		var renderErr error
+		rendered, renderErr = RenderFrameStream(ctx, attempt.config.Frames, attempt.config.Streaming, frameRequest, encodePlan)
+		return renderErr
+	})
+	attempt.observeFrameEncoding(rendered, err == nil)
+	if err != nil {
+		return RecordingMediaExpectation{}, fmt.Errorf("render recording frame stream: %w", err)
+	}
+	return expected, nil
 }
 
 func (attempt *ProductionRenderAttempt) runTranscription(ctx context.Context) error {

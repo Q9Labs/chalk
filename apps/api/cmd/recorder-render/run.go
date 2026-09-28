@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -34,9 +35,15 @@ type renderWorkerConfig struct {
 	FFprobePath       string
 	Encoder           string
 	FrameConcurrency  int
+	ExportRenderer    string
+	ComposeThreads    string
 }
 
 func runWorker(config renderWorkerConfig) error {
+	renderer, threads, err := parseExportRenderer(config.ExportRenderer, config.ComposeThreads)
+	if err != nil {
+		return err
+	}
 	if config.FrameConcurrency < 1 || config.FrameConcurrency > 8 {
 		return errors.New("--frame-concurrency must be between 1 and 8")
 	}
@@ -77,6 +84,20 @@ func runWorker(config renderWorkerConfig) error {
 		return err
 	}
 	encoder := recorderworker.VideoEncoder(strings.TrimSpace(config.Encoder))
+	var frames recorderworker.FrameProducer
+	var compose recorderworker.ComposeProducer
+	if renderer == "native" {
+		if encoder != recorderworker.EncoderLibX264 && encoder != recorderworker.EncoderVideoToolbox {
+			return errors.New("native Export renderer requires libx264 or h264_videotoolbox")
+		}
+		composeScript, err := existingRenderFile(filepath.Join(filepath.Dir(rendererScript), "compose.js"), "recording compositor script")
+		if err != nil {
+			return err
+		}
+		compose = recorderworker.NodeComposeProducer{NodePath: nodePath, ScriptPath: composeScript, FFmpegPath: ffmpegPath, Encoder: encoder, Threads: threads}
+	} else {
+		frames = recorderworker.NodeFrameProducer{NodePath: nodePath, ScriptPath: rendererScript, Concurrency: config.FrameConcurrency}
+	}
 
 	controlHTTP := &http.Client{Transport: controlTransport, Timeout: 30 * time.Second}
 	objectHTTP := &http.Client{Transport: &http.Transport{
@@ -95,7 +116,7 @@ func runWorker(config renderWorkerConfig) error {
 	}
 	factory, err := recorderworker.NewProductionRenderAttemptFactory(recorderworker.ProductionRenderAttemptConfig{
 		Control: control, WorkRoot: workRoot, Environment: config.Environment, UIBuildRegistry: uiBuildRegistry,
-		FFmpegPath: ffmpegPath, Encoder: encoder, Frames: recorderworker.NodeFrameProducer{NodePath: nodePath, ScriptPath: rendererScript, Concurrency: config.FrameConcurrency},
+		FFmpegPath: ffmpegPath, Encoder: encoder, Frames: frames, Compose: compose,
 		Commands: commands, Streaming: commands,
 	})
 	if err != nil {
@@ -110,6 +131,28 @@ func runWorker(config renderWorkerConfig) error {
 		return fmt.Errorf("create recorder render readiness reporter: %w", err)
 	}
 	return reporter.Run(ctx, daemon)
+}
+
+func parseExportRenderer(rawRenderer, rawThreads string) (string, int, error) {
+	renderer := strings.TrimSpace(rawRenderer)
+	if renderer == "" {
+		renderer = "browser"
+	}
+	if renderer != "browser" && renderer != "native" {
+		return "", 0, errors.New("CHALK_RECORDER_EXPORT_RENDERER must be browser or native")
+	}
+	threads := 2
+	if strings.TrimSpace(rawThreads) != "" {
+		var err error
+		threads, err = strconv.Atoi(strings.TrimSpace(rawThreads))
+		if err != nil {
+			return "", 0, fmt.Errorf("CHALK_RECORDING_COMPOSE_THREADS: %w", err)
+		}
+	}
+	if threads < 1 || threads > 64 {
+		return "", 0, errors.New("CHALK_RECORDING_COMPOSE_THREADS must be between 1 and 64")
+	}
+	return renderer, threads, nil
 }
 
 type renderMediaCommands struct {
