@@ -18,6 +18,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Updated the Sync HTTP transport and workspace HTTP dependencies to patched releases.
 - Bounded browser Cloudflare SFU signaling and negotiation so stalled media work releases controls and reports a recoverable timeout, with nested provider and client deadlines.
 - Bounded browser Cloudflare SFU signaling and negotiation so stalled media work releases controls and reports a recoverable timeout, with nested provider and client deadlines; preserved the timeout message when another media control succeeds.
+- Bounded browser Cloudflare SFU signaling, negotiation, and credential refresh so stalled media work releases controls and reports a recoverable timeout, with nested provider and client deadlines; preserved the timeout message when another media control succeeds.
 - Resumed camera and microphone media on the existing Cloudflare SFU publication after a Participant re-enables it, without exhausting media sections or leaving remote Participants without media.
 - Kept forced-muted publications unavailable to subscribers while preserving their Cloudflare SFU track for a later authorized re-enable.
 - Surfaced per-track Cloudflare SFU pull failures in SDK diagnostics and cooled down retries for empty tracks.
