@@ -687,6 +687,15 @@ describe("V1SyncClient", () => {
     expect(mediaPlane.targets).toHaveLength(1);
   });
 
+  it("preserves a signaling timeout as an actionable media error", async () => {
+    const mediaPlane = new TestMediaPlane();
+    mediaPlane.results.push({ outcome: "ambiguous", errorCode: "signaling_timeout" });
+    const { client, socket } = await liveClient({ mediaPlane });
+    const result = client.setMicrophoneEnabled(true, { requestId: commandIds[0] });
+    socket.receive({ type: "live_target_result", operation_id: commandIds[0], name: "set_microphone_enabled", outcome: "confirmed", error_code: null });
+    await expect(result).rejects.toMatchObject({ code: "signaling_timeout", message: "Media did not respond in time. Try again." });
+  });
+
   it("rejects local terminal failure and bounds server live-target retries before touching the adapter", async () => {
     const terminalMediaPlane = new TestMediaPlane();
     terminalMediaPlane.results.push({ outcome: "terminal_failure", errorCode: "permission_denied" });

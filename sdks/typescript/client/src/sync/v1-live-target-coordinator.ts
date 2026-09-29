@@ -203,6 +203,10 @@ export class V1LiveTargetCoordinator {
 
   #settleLocal(operationId: string, deferred: LiveDeferred, result: MediaPlaneResult): void {
     if (!isSuccessfulMediaPlaneResult(result)) {
+      if (result.errorCode === "signaling_timeout" || result.errorCode === "negotiation_timeout") {
+        this.#fail(operationId, deferred, new V1SyncError("Media did not respond in time. Try again.", result.errorCode));
+        return;
+      }
       this.#fail(operationId, deferred, new V1SyncError(result.errorCode ?? result.outcome, result.outcome));
       return;
     }
