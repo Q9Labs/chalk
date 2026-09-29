@@ -36,6 +36,9 @@ func TestRecorderFleetEnsureCreatesFencedNodeAndAttachesFirewall(t *testing.T) {
 			if body.Name != request.Name || body.Image != request.Release.ImageID || body.Region != request.Release.Region || body.Size != request.Release.Size || !slices.Equal(body.Tags, request.RequiredTags) || !slices.Equal(body.SSHKeys, []int64{17}) {
 				t.Errorf("create body = %+v", body)
 			}
+			if body.Monitoring || body.WithDropletAgent {
+				t.Errorf("recorder agents must be disabled: %+v", body)
+			}
 			if strings.Contains(body.UserData, secret) || strings.Contains(body.UserData, "CHALK_RECORDER_BOOTSTRAP_ASSERTION=") {
 				t.Errorf("cloud-init contains reusable secret or assertion: %q", body.UserData)
 			}
