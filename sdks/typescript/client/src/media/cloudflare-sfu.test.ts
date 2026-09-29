@@ -764,7 +764,16 @@ async function startScreenPublication(harness: ReturnType<typeof createHarness>,
   expect(harness.client.getSnapshot().localTracks.find((publication) => publication.source === "screen")).toMatchObject({ enabled: true });
 }
 
-function createHarness(options: { readonly autoConnect?: boolean; readonly onError?: (error: unknown) => void; readonly onRtcSummary?: CloudflareSFUClientOptions["onRtcSummary"]; readonly onScreenEnded?: () => void; readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>; readonly pollIntervalMs?: number } = {}) {
+function createHarness(
+  options: {
+    readonly autoConnect?: boolean;
+    readonly onError?: (error: unknown) => void;
+    readonly onRtcSummary?: CloudflareSFUClientOptions["onRtcSummary"];
+    readonly onScreenEnded?: () => void;
+    readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
+    readonly pollIntervalMs?: number;
+  } = {},
+) {
   const peers: FakePeerConnection[] = [];
   const transport = new FakeTransport(() => peers.at(-1));
   const client = new CloudflareSFUClient({
