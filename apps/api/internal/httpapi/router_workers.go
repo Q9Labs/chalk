@@ -26,6 +26,7 @@ func NewPrivateWorkerRouter(providerBridge http.Handler, options Options) http.H
 			CapturePlans: options.RecorderCapturePlans, CaptureSignaling: options.RecorderCaptureSignaling,
 			RecordingKeys: options.RecorderRecordingKeys, RecordingObjects: options.RecorderRecordingObjects, RecordingLifecycle: options.RecorderRecordingLifecycle,
 			RenderAuthority: options.RecorderRenderAuthority, FleetAuthority: options.RecorderFleetWorker,
+			Logger: options.RecorderWorkerLogger,
 		}))
 	}
 	return mux

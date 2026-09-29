@@ -10,6 +10,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/q9labs/chalk/apps/api/internal/workerresources"
 )
 
 // StartProcessResourceLogs reports bounded host/process measurements until stop.
@@ -38,41 +40,50 @@ func StartProcessResourceLogs(ctx context.Context, role string) func() {
 }
 
 func logProcessResources(role string) {
-	var usage syscall.Rusage
-	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &usage); err != nil {
+	sample, err := sampleProcessResources()
+	if err != nil {
 		slog.Warn("recorder resource sample failed", "role", role, "error", err)
 		return
+	}
+	slog.Info("recorder process resources", "role", role,
+		"cpu_seconds", sample.CPUUserSeconds+sample.CPUSystemSeconds,
+		"cpu_user_seconds", sample.CPUUserSeconds, "cpu_system_seconds", sample.CPUSystemSeconds,
+		"rss_bytes", sample.RSSBytes, "peak_rss_bytes", sample.PeakRSSBytes,
+		"host_memory_total_bytes", sample.HostMemoryTotalBytes, "host_memory_available_bytes", sample.HostMemoryAvailableBytes, "host_load_1m", sample.Load1)
+}
+
+func sampleProcessResources() (workerresources.Sample, error) {
+	var usage syscall.Rusage
+	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &usage); err != nil {
+		return workerresources.Sample{}, err
 	}
 	statm, statErr := os.ReadFile("/proc/self/statm")
 	meminfo, memErr := os.ReadFile("/proc/meminfo")
 	loadavg, loadErr := os.ReadFile("/proc/loadavg")
 	if statErr != nil || memErr != nil || loadErr != nil {
-		slog.Warn("recorder resource sample failed", "role", role, "statm_error", statErr, "meminfo_error", memErr, "load_error", loadErr)
-		return
+		return workerresources.Sample{}, fmt.Errorf("read proc resources: %v, %v, %v", statErr, memErr, loadErr)
 	}
 	statFields := strings.Fields(string(statm))
 	loadFields := strings.Fields(string(loadavg))
 	if len(statFields) < 2 || len(loadFields) < 1 {
-		slog.Warn("recorder resource sample failed", "role", role, "error", "invalid proc fields")
-		return
+		return workerresources.Sample{}, fmt.Errorf("invalid proc fields")
 	}
 	residentPages, pageErr := strconv.ParseInt(statFields[1], 10, 64)
 	load, loadParseErr := strconv.ParseFloat(loadFields[0], 64)
 	total, totalErr := memoryInfoBytes(meminfo, "MemTotal:")
 	available, availableErr := memoryInfoBytes(meminfo, "MemAvailable:")
 	if err := firstResourceError(pageErr, loadParseErr, totalErr, availableErr); err != nil {
-		slog.Warn("recorder resource sample failed", "role", role, "error", err)
-		return
+		return workerresources.Sample{}, err
 	}
 	peakRSS := usage.Maxrss * 1024 // Linux getrusage reports KiB.
 	if runtime.GOOS == "darwin" {
 		peakRSS = usage.Maxrss
 	}
-	slog.Info("recorder process resources", "role", role,
-		"cpu_seconds", timevalSeconds(usage.Utime)+timevalSeconds(usage.Stime),
-		"cpu_user_seconds", timevalSeconds(usage.Utime), "cpu_system_seconds", timevalSeconds(usage.Stime),
-		"rss_bytes", residentPages*int64(os.Getpagesize()), "peak_rss_bytes", peakRSS,
-		"host_memory_total_bytes", total, "host_memory_available_bytes", available, "host_load_1m", load)
+	return workerresources.Sample{
+		CPUUserSeconds: timevalSeconds(usage.Utime), CPUSystemSeconds: timevalSeconds(usage.Stime),
+		RSSBytes: residentPages * int64(os.Getpagesize()), PeakRSSBytes: peakRSS,
+		HostMemoryTotalBytes: total, HostMemoryAvailableBytes: available, Load1: load, SampledAt: time.Now().UTC(),
+	}, nil
 }
 
 func timevalSeconds(value syscall.Timeval) float64 {

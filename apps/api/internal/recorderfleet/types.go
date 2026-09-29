@@ -164,6 +164,8 @@ func (identity NodeIdentity) Validate(key PoolKey, node Node) error {
 
 type NodeObservation struct {
 	Identity      NodeIdentity `json:"identity"`
+	NodeName      string       `json:"-"`
+	CurrentJobID  string       `json:"-"`
 	Ready         bool         `json:"ready"`
 	AdmissionOpen bool         `json:"admission_open"`
 	ReadyCapacity int          `json:"ready_capacity"`

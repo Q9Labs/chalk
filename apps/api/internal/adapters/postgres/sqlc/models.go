@@ -807,6 +807,8 @@ type RecordingFleetNode struct {
 	AdmissionOpen   bool               `json:"admission_open"`
 	ReadyCapacity   int32              `json:"ready_capacity"`
 	ObservedAt      pgtype.Timestamptz `json:"observed_at"`
+	ResourcesLatest []byte             `json:"resources_latest"`
+	PeakRssBytes    int64              `json:"peak_rss_bytes"`
 	RevokedAt       pgtype.Timestamptz `json:"revoked_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`

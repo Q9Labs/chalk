@@ -2451,6 +2451,8 @@ create index recording_jobs_claim_idx
 create index recording_jobs_lease_recovery_idx
     on recording_jobs(lease_expires_at, id)
     where state = 'leased';
+create index recording_jobs_active_lease_owner_idx
+    on recording_jobs(lease_owner) where state = 'leased';
 create index recording_jobs_dead_letter_idx
     on recording_jobs(tenant_id, terminal_at desc, id)
     where state = 'terminal_failure';
@@ -4886,6 +4888,8 @@ create table recording_fleet_nodes (
     admission_open boolean not null default false,
     ready_capacity integer not null default 0 check (ready_capacity >= 0),
     observed_at timestamptz,
+    resources_latest jsonb,
+    peak_rss_bytes bigint not null default 0 check (peak_rss_bytes >= 0),
     revoked_at timestamptz,
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now(),

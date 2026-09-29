@@ -182,6 +182,8 @@ update recording_fleet_nodes
 set ready = case when state = 'active' then sqlc.arg(ready) else false end,
     admission_open = case when state = 'active' then sqlc.arg(admission_open) else false end,
     ready_capacity = case when state = 'active' then sqlc.arg(ready_capacity) else 0 end,
+    resources_latest = coalesce(sqlc.narg(resources_latest)::jsonb, resources_latest),
+    peak_rss_bytes = greatest(peak_rss_bytes, coalesce(sqlc.narg(peak_rss_bytes)::bigint, 0)),
     -- The database receipt time is authoritative for claim liveness. Worker
     -- wall-clock skew must not make a fresh report look stale or future-dated.
     observed_at = clock_timestamp(), updated_at = now()
@@ -190,7 +192,8 @@ where environment = sqlc.arg(environment)
   and worker_id = sqlc.arg(worker_id)
   and state in ('active', 'draining')
 returning provider_id, worker_id, role, boot_generation, ready, admission_open,
-    ready_capacity, observed_at;
+    ready_capacity, observed_at, node_name,
+    (select id from recording_jobs where lease_owner = recording_fleet_nodes.worker_id::text and state = 'leased' and lease_expires_at > now() limit 1) as current_job_id;
 
 -- name: AuthorizeRecordingFleetWorker :one
 select exists (

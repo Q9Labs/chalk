@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -218,8 +219,19 @@ func (r RecordingFleetAuthorityRepository) RecordWorkerObservation(ctx context.C
 	if observation.ReadyCapacity > math.MaxInt32 {
 		return recorderfleet.NodeObservation{}, recorderfleet.ErrInventoryDrift
 	}
+	var resources []byte
+	var peakRSS pgtype.Int8
+	if observation.Resources != nil {
+		var err error
+		resources, err = json.Marshal(observation.Resources)
+		if err != nil {
+			return recorderfleet.NodeObservation{}, fmt.Errorf("encode worker resources: %w", err)
+		}
+		peakRSS = pgtype.Int8{Int64: observation.Resources.PeakRSSBytes, Valid: true}
+	}
 	row, err := r.queries.RecordRecordingFleetWorkerObservation(ctx, sqlc.RecordRecordingFleetWorkerObservationParams{
 		Ready: observation.Ready, AdmissionOpen: observation.AdmissionOpen, ReadyCapacity: int32(observation.ReadyCapacity),
+		ResourcesLatest: resources, PeakRssBytes: peakRSS,
 		Environment: environment, Role: string(observation.Identity.Role), WorkerID: uuid(observation.Identity.WorkerID),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -233,7 +245,7 @@ func (r RecordingFleetAuthorityRepository) RecordWorkerObservation(ctx context.C
 		return recorderfleet.NodeObservation{}, recorderfleet.ErrInventoryDrift
 	}
 	return recorderfleet.NodeObservation{
-		Identity: identity, Ready: row.Ready, AdmissionOpen: row.AdmissionOpen,
+		Identity: identity, NodeName: row.NodeName, CurrentJobID: idString(row.CurrentJobID), Ready: row.Ready, AdmissionOpen: row.AdmissionOpen,
 		ReadyCapacity: int(row.ReadyCapacity), ObservedAt: row.ObservedAt.Time,
 	}, nil
 }
