@@ -100,15 +100,16 @@ func (v recorderFleetControllerVerifierStub) Verify(*http.Request) (recorderflee
 }
 
 type recorderFleetControllerServiceStub struct {
-	demand      recorderfleet.Demand
-	nodes       []recorderfleet.NodeObservation
-	identity    recorderfleet.NodeIdentity
-	bootstrap   recorderfleet.BootstrapRequest
-	abandoned   recorderfleet.BootstrapRequest
-	closed      recorderfleet.NodeIdentity
-	revoked     recorderfleet.NodeIdentity
-	projection  recorderfleet.PoolProjection
-	demandCalls int
+	demand         recorderfleet.Demand
+	nodes          []recorderfleet.NodeObservation
+	identity       recorderfleet.NodeIdentity
+	bootstrap      recorderfleet.BootstrapRequest
+	abandoned      recorderfleet.BootstrapRequest
+	closed         recorderfleet.NodeIdentity
+	revoked        recorderfleet.NodeIdentity
+	projection     recorderfleet.PoolProjection
+	demandCalls    int
+	demandSequence []recorderfleet.Demand
 }
 
 func (s *recorderFleetControllerServiceStub) AbandonBootstrap(_ context.Context, request recorderfleet.BootstrapRequest) error {
@@ -118,7 +119,35 @@ func (s *recorderFleetControllerServiceStub) AbandonBootstrap(_ context.Context,
 
 func (s *recorderFleetControllerServiceStub) GetDemand(context.Context, recorderfleet.PoolKey) (recorderfleet.Demand, error) {
 	s.demandCalls++
+	if len(s.demandSequence) > 0 {
+		index := min(s.demandCalls-1, len(s.demandSequence)-1)
+		return s.demandSequence[index], nil
+	}
 	return s.demand, nil
+}
+
+func TestWaitForRecorderFleetDemandReturnsWhenCaptureDemandAppears(t *testing.T) {
+	key := recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}
+	empty := recorderfleet.Demand{Revision: "empty", ObservedAt: time.Now()}
+	ready := recorderfleet.Demand{Revision: "ready", DesiredNodes: 1, ObservedAt: time.Now()}
+	service := &recorderFleetControllerServiceStub{demandSequence: []recorderfleet.Demand{empty, ready}}
+	got, err := waitForRecorderFleetDemand(t.Context(), service, key, empty, time.Second, time.Millisecond)
+	if err != nil || got != ready {
+		t.Fatalf("demand/error = %+v/%v", got, err)
+	}
+	if service.demandCalls > 2 {
+		t.Fatalf("demand calls = %d", service.demandCalls)
+	}
+}
+
+func TestWaitForRecorderFleetDemandTimesOutWithLatestSnapshot(t *testing.T) {
+	key := recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}
+	empty := recorderfleet.Demand{Revision: "empty", ObservedAt: time.Now()}
+	service := &recorderFleetControllerServiceStub{demand: empty}
+	got, err := waitForRecorderFleetDemand(t.Context(), service, key, empty, 5*time.Millisecond, time.Millisecond)
+	if err != nil || got != empty || service.demandCalls == 0 {
+		t.Fatalf("demand/error/calls = %+v/%v/%d", got, err, service.demandCalls)
+	}
 }
 
 func (s *recorderFleetControllerServiceStub) ObserveNodes(context.Context, recorderfleet.PoolKey) ([]recorderfleet.NodeObservation, error) {

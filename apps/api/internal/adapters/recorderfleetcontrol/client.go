@@ -43,10 +43,21 @@ func New(config Config) (*Client, error) {
 }
 
 func (c *Client) GetDemand(ctx context.Context, key recorderfleet.PoolKey) (recorderfleet.Demand, error) {
+	return c.getDemand(ctx, key, false)
+}
+
+func (c *Client) WaitForDemand(ctx context.Context, key recorderfleet.PoolKey) (recorderfleet.Demand, error) {
+	return c.getDemand(ctx, key, true)
+}
+
+func (c *Client) getDemand(ctx context.Context, key recorderfleet.PoolKey, wait bool) (recorderfleet.Demand, error) {
 	if err := c.validateKey(key); err != nil {
 		return recorderfleet.Demand{}, err
 	}
 	query := url.Values{"role": {string(key.Role)}}
+	if wait {
+		query.Set("wait", "25")
+	}
 	var response demandResponse
 	if err := c.doJSON(ctx, http.MethodGet, fleetPath+"/demand", query, nil, &response, http.StatusOK); err != nil {
 		return recorderfleet.Demand{}, err

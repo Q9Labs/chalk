@@ -149,6 +149,22 @@ func TestClientErrorsDoNotIncludeResponseBodies(t *testing.T) {
 	}
 }
 
+func TestClientWaitForDemandUsesBoundedWait(t *testing.T) {
+	key := recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}
+	client, err := New(Config{BaseURL: "https://control.example", Key: key, HTTPClient: &http.Client{
+		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			assertRequest(t, request, http.MethodGet, "/internal/v1/recorder/fleet/demand", "role=capture&wait=25", false)
+			return jsonResponse(http.StatusOK, `{"schema_version":"recorder_fleet_demand.v1","environment":"staging","role":"capture","revision":"ready","desired_nodes":1,"scheduled_prewarms":0,"held_starts":1,"queued_jobs":0,"observed_at":"2026-09-06T12:00:00Z"}`), nil
+		}),
+	}})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	if demand, err := client.WaitForDemand(t.Context(), key); err != nil || demand.DesiredNodes != 1 {
+		t.Fatalf("demand/error = %+v/%v", demand, err)
+	}
+}
+
 func TestNewAndDurationRejectInvalidConfiguration(t *testing.T) {
 	t.Parallel()
 	key := recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}
