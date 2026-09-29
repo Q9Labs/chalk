@@ -376,29 +376,6 @@ defmodule ChalkSync.Live.Episode do
     end
   end
 
-  defp apply_live_target(state, _identity, authority, source, target) do
-    case media_plane(authority) do
-      nil ->
-        {state, live_result(target, :retryable_failure, :dependency_unavailable)}
-
-      {module, adapter} ->
-        outcome =
-          MediaPlaneCall.invoke(fn ->
-            module.revoke_publication(
-              adapter,
-              target.operation_id,
-              state.episode,
-              authority.participant_id,
-              source
-            )
-          end)
-          |> provider_outcome()
-
-        state = maybe_release_screen_lease(state, authority, source, false, outcome)
-        {state, live_result(target, outcome)}
-    end
-  end
-
   defp enable_publication(state, identity, authority, source, target) do
     with {module, adapter} <- media_plane(authority) || {:error, :dependency_unavailable},
          {:ok, reservation} <-
