@@ -14,7 +14,7 @@ describe("ConnectionAccessService", () => {
       const service = yield* ConnectionAccessService;
       const stalled = yield* Effect.forkChild(service.initialize(), { startImmediately: true });
       yield* Effect.yieldNow;
-      yield* TestClock.adjust("10 seconds");
+      yield* TestClock.adjust("7 seconds");
       const failure = yield* Fiber.join(stalled).pipe(Effect.flip);
       const next = yield* service.initialize();
       return { failure, next };

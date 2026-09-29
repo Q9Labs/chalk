@@ -3,7 +3,7 @@ import type { ParsedAccessGrant, ParticipantMediaCredential, ParticipantSyncCred
 import type { ConnectionAccessReason, ConnectionAccessRequest } from "../connection/dependencies";
 
 const DEFAULT_REFRESH_WINDOW_MS = 60_000;
-const ACCESS_PROVIDER_TIMEOUT_MS = 10_000;
+const ACCESS_PROVIDER_TIMEOUT_MS = 7_000;
 
 export class ConnectionAccessFailure extends Data.TaggedError("ConnectionAccessFailure")<{
   readonly code: "access.invalid" | "access.unavailable";
