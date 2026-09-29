@@ -11,7 +11,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-func TestForcedMutePreservesCloudflareTrackUntilParticipantRemoval(t *testing.T) {
+func TestForcedMuteClosesCloudflareTrack(t *testing.T) {
 	ctx := context.Background()
 	tenantID := testExecutorID(t, "11111111-1111-4111-8111-111111111111")
 	episodeID := testExecutorID(t, "22222222-2222-4222-8222-222222222222")
@@ -19,33 +19,37 @@ func TestForcedMutePreservesCloudflareTrackUntilParticipantRemoval(t *testing.T)
 	publicationID := "chalk_pub_v1." + base64.RawURLEncoding.EncodeToString([]byte(`{"c":"publisher-connection","m":"0","t":"microphone-track","g":1}`))
 	registry := &executorPublicationRegistry{publication: provideroperations.Publication{ParticipantID: participantID, Source: "microphone", Enabled: true, PublicationID: publicationID}}
 	closer := &executorTrackCloser{}
-	executor := NewSFUExecutor(registry, nil)
+	executor := NewSFUExecutor(registry, closer)
 	operation := provideroperations.OperationInput{Effect: provideroperations.EffectRevokePublication, TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 1, PublicationSource: "microphone"}
 
 	if result := executor.Dispatch(ctx, operation); result.Outcome != provideroperations.OutcomeConfirmed {
 		t.Fatalf("forced mute outcome = %+v", result)
 	}
-	if registry.publication.Enabled || registry.publication.PublicationID != publicationID || closer.calls != 0 {
-		t.Fatalf("forced mute closed Cloudflare SFU track: publication=%+v closes=%d", registry.publication, closer.calls)
+	if registry.publication.Enabled || registry.publication.PublicationID != "" || closer.calls != 1 || !closer.force {
+		t.Fatalf("forced mute did not close Cloudflare SFU track: publication=%+v closes=%d", registry.publication, closer.calls)
 	}
-	executor = NewSFUExecutor(registry, closer)
 
 	operation.Effect = provideroperations.EffectGrantPublication
 	if result := executor.Dispatch(ctx, operation); result.Outcome != provideroperations.OutcomeConfirmed {
 		t.Fatalf("re-enable outcome = %+v", result)
 	}
-	if !registry.publication.Enabled || registry.publication.PublicationID != publicationID || closer.calls != 0 {
-		t.Fatalf("re-enable replaced Cloudflare SFU identity: publication=%+v closes=%d", registry.publication, closer.calls)
+	if registry.publication.PublicationID != "" || closer.calls != 1 {
+		t.Fatalf("re-enable restored a closed Cloudflare SFU track: publication=%+v closes=%d", registry.publication, closer.calls)
 	}
 
 	operation.Effect = provideroperations.EffectRevokePublication
 	_ = executor.Dispatch(ctx, operation)
 	operation.Effect = provideroperations.EffectRemoveParticipant
-	if result := executor.Dispatch(ctx, operation); result.Outcome != provideroperations.OutcomeConfirmed {
+	if result := executor.Dispatch(ctx, operation); result.Outcome != provideroperations.OutcomeSatisfied {
 		t.Fatalf("removal outcome = %+v", result)
 	}
 	if closer.calls != 1 || registry.publication.PublicationID != "" {
-		t.Fatalf("removal did not close paused track: publication=%+v closes=%d", registry.publication, closer.calls)
+		t.Fatalf("closed track was closed again: publication=%+v closes=%d", registry.publication, closer.calls)
+	}
+	registry.publication.PublicationID = publicationID
+	operation.Effect = provideroperations.EffectRevokePublication
+	if result := executor.Dispatch(ctx, operation); result.Outcome != provideroperations.OutcomeConfirmed || closer.calls != 2 {
+		t.Fatalf("paused track was not force-closed: outcome=%+v closes=%d", result, closer.calls)
 	}
 }
 
@@ -78,10 +82,14 @@ func (r *executorPublicationRegistry) Latest(context.Context, utilities.ID, util
 	return mediapublications.Snapshot{Publications: []provideroperations.Publication{r.publication}}, nil
 }
 
-type executorTrackCloser struct{ calls int }
+type executorTrackCloser struct {
+	calls int
+	force bool
+}
 
-func (c *executorTrackCloser) CloseTracks(context.Context, mediaplane.CloseTracksRequest) (mediaplane.CloseTracksResponse, error) {
+func (c *executorTrackCloser) CloseTracks(_ context.Context, input mediaplane.CloseTracksRequest) (mediaplane.CloseTracksResponse, error) {
 	c.calls++
+	c.force = input.Force
 	return mediaplane.CloseTracksResponse{}, nil
 }
 
