@@ -26,6 +26,8 @@ type V1CollaborationStateOptions = {
   readonly request: V1SyncClientOptions["collaboration"];
   readonly requestIds: V1SyncClientOptions["requestIds"];
   readonly maxPendingRequests: number | undefined;
+  readonly commandTimeoutMs: number | undefined;
+  readonly clock: () => NonNullable<V1SyncClientOptions["clock"]>;
   readonly isLive: () => boolean;
   readonly send: (frame: SyncV1ClientFrame) => void;
   readonly stateChanged: () => void;
@@ -245,9 +247,23 @@ export class V1CollaborationState {
 
   #sendTrackedRequest<Result>(requestId: string, frame: SyncV1ClientFrame, pending: Map<string, V1Deferred<Result>>): Promise<Result> {
     encodeV1ClientFrame(frame);
-    const promise = new Promise<Result>((resolve, reject) => pending.set(requestId, { resolve, reject, settled: false }));
-    this.#options.send(frame);
-    return promise;
+    let timer: unknown;
+    const promise = new Promise<Result>((resolve, reject) => {
+      const deferred = { resolve, reject, settled: false };
+      pending.set(requestId, deferred);
+      timer = this.#options.clock().setTimeout(() => {
+        if (pending.get(requestId) !== deferred) return;
+        pending.delete(requestId);
+        rejectV1Deferred(deferred, new V1SyncError("The action was not confirmed in time. Reconnect and try again.", "command_timeout"));
+      }, this.#options.commandTimeoutMs ?? 10_000);
+      try {
+        this.#options.send(frame);
+      } catch (error) {
+        pending.delete(requestId);
+        rejectV1Deferred(deferred, error instanceof Error ? error : new V1SyncError("Transport could not send the action", "transport_error"));
+      }
+    });
+    return promise.finally(() => this.#options.clock().clearTimeout(timer));
   }
 
   #observeChatMessage(frame: Extract<SyncV1ServerFrame, { readonly type: "chat_message" }>): void {

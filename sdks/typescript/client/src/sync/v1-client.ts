@@ -39,7 +39,8 @@ const MAX_REPLAY_BYTES = SyncProtocolLimits.completeReplayEncodedBytes;
 const MAX_PROJECTION_EVENT_EVIDENCE = 256;
 const CLIENT_RESTART_CLOSE_CODE = 4000;
 const DEFAULT_RECONNECT_DELAY_MS = 250;
-const MAX_RECONNECT_DELAY_MS = 5_000;
+const MAX_RECONNECT_DELAY_MS = 1_000;
+const HEARTBEAT_INTERVAL_MS = 1_000;
 
 type RequestDeferred = Deferred<V1DirectedRequestResult> & { readonly frame: SyncV1ClientFrame };
 type Recovery = { readonly id: string; readonly head: { readonly revision: number; readonly state_schema_version: number; readonly state_digest: string }; replayEvents: number; replayBytes: number; controlComplete: boolean };
@@ -87,6 +88,7 @@ export class V1SyncClient implements V1CollaborationClient {
 
   constructor(options: V1SyncClientOptions) {
     assertV1Url(options.url);
+    if (options.commandTimeoutMs !== undefined && (!Number.isSafeInteger(options.commandTimeoutMs) || options.commandTimeoutMs < 1 || options.commandTimeoutMs > 60_000)) throw new TypeError("Command timeout must be an integer between 1 and 60000 milliseconds");
     this.#options = options;
     this.#commandScheduler = new V1CommandScheduler({
       store: options.pendingStore ?? new InMemoryV1PendingTargetStore(),
@@ -95,6 +97,7 @@ export class V1SyncClient implements V1CollaborationClient {
       maxPendingBytes: options.maxPendingBytes,
       maxPendingAgeMs: options.maxPendingAgeMs,
       maxOperationPendingAgeMs: options.maxOperationPendingAgeMs,
+      commandTimeoutMs: options.commandTimeoutMs,
       retryDelayMs: options.retryDelayMs,
       clock: () => this.#clock(),
       isStarted: () => this.#started,
@@ -118,6 +121,8 @@ export class V1SyncClient implements V1CollaborationClient {
       request: options.collaboration,
       requestIds: options.requestIds,
       maxPendingRequests: options.maxPendingCollaborationRequests,
+      commandTimeoutMs: options.commandTimeoutMs,
+      clock: () => this.#clock(),
       isLive: () => this.#phase.phase === "live",
       send: (frame) => this.#send(frame),
       stateChanged: () => this.#emit(),
@@ -380,6 +385,7 @@ export class V1SyncClient implements V1CollaborationClient {
     try {
       if (typeof data !== "string" || encoder.encode(data).byteLength > SyncProtocolLimits.snapshotEncodedBytes) throw new V1ReplicaError("invalid inbound frame size");
       await this.#handleFrame(decodeV1ServerFrame(data));
+      if (socket === this.#socket) this.#missedHeartbeats = 0;
     } catch {
       this.#recover("invalid_frame");
     }
@@ -634,7 +640,8 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#emit();
     this.#clearReconnect();
     const configuredDelay = this.#options.reconnectDelayMs;
-    const delay = configuredDelay === 0 ? 0 : Math.min(MAX_RECONNECT_DELAY_MS, (configuredDelay ?? DEFAULT_RECONNECT_DELAY_MS) * 2 ** Math.min(this.#reconnectAttempt, 5));
+    const ceiling = Math.min(MAX_RECONNECT_DELAY_MS, (configuredDelay ?? DEFAULT_RECONNECT_DELAY_MS) * 2 ** Math.min(this.#reconnectAttempt, 5));
+    const delay = ceiling * (0.5 + Math.random() * 0.5);
     this.#reconnectAttempt += 1;
     this.#reconnectTimer = this.#clock().setTimeout(() => {
       this.#reconnectTimer = undefined;
@@ -759,12 +766,12 @@ export class V1SyncClient implements V1CollaborationClient {
       if (this.#phase.phase !== "live") return;
       this.#missedHeartbeats += 1;
       if (this.#missedHeartbeats > 2) {
-        this.#socket?.close(CLIENT_RESTART_CLOSE_CODE, "heartbeat timeout");
+        this.#recover("heartbeat timeout");
         return;
       }
       this.#send({ type: "ping" });
       this.#startHeartbeat();
-    }, 20_000);
+    }, HEARTBEAT_INTERVAL_MS);
   }
 
   #clearHeartbeat(): void {

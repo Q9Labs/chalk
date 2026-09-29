@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { SnapshotSchema } from "../generated/sync";
 import { decodeV1ClientFrame, decodeV1ServerFrame, encodeV1ClientFrame } from "./v1-codec";
 import { V1SyncClient, V1SyncError } from "./v1-client";
@@ -17,6 +17,34 @@ const projectionId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c24";
 const commandIds = Array.from({ length: 20 }, (_, index) => `018f2f65-2a77-7a44-8e9a-${(0x5b0b6f8d4d00 + index).toString(16)}`);
 
 describe("V1SyncClient", () => {
+  it("bounds a caller's durable action during disconnect while retaining its ID for receipt recovery", async () => {
+    const clock = new TestClock();
+    const store = new InMemoryV1PendingTargetStore();
+    const { client, socket } = await liveClient({ clock, pendingStore: store, commandTimeoutMs: 500 });
+    const target = client.setHandRaised(true, { commandId: commandIds[0] });
+    const rejected = expect(target).rejects.toMatchObject({ code: "command_timeout" });
+    await settle();
+    socket.close();
+    clock.advance(0);
+    await settle();
+    clock.advance(500);
+    await rejected;
+    expect(await store.load()).toMatchObject([{ commandId: commandIds[0] }]);
+    client.stop();
+  });
+
+  it("rejects an unacknowledged chat operation on transport loss instead of replaying it", async () => {
+    const clock = new TestClock();
+    const { client, socket } = await liveCollaborationClient({ clock });
+    const chat = client.sendChatMessage({ text: "not queued", clientMessageId: commandIds[1] });
+    const rejected = expect(chat).rejects.toMatchObject({ code: "disconnected_before_delivery" });
+    socket.close();
+    clock.advance(0);
+    await settle();
+    await rejected;
+    expect(socket.frames().filter((frame) => frame.type === "chat_send")).toHaveLength(1);
+    client.stop();
+  });
   it("round-trips approved frames and rejects aliases or unknown fields", () => {
     const command = {
       type: "command",
@@ -203,12 +231,15 @@ describe("V1SyncClient", () => {
     expect(lifecycleSocket.closeCalls).toContainEqual({ code: 4000, reason: "lifecycle unavailable" });
   });
 
-  it("uses capped exponential reconnect backoff until a connection becomes live", async () => {
+  it("jitters exponential reconnects and caps the background delay", async () => {
     const clock = new TestClock();
     const sockets: TestSocket[] = [];
+    const random = vi.spyOn(Math, "random").mockReturnValue(0).mockReturnValueOnce(0).mockReturnValueOnce(0.8);
     const client = new V1SyncClient({
       url: "ws://sync.test/v1/sync",
       token: async () => "token",
+      clock,
+      reconnectDelayMs: 100,
       webSocket: {
         connect: () => {
           const socket = new TestSocket();
@@ -216,27 +247,23 @@ describe("V1SyncClient", () => {
           return socket;
         },
       },
-      clock,
-      reconnectDelayMs: 100,
     });
-
-    await client.start();
-    sockets[0]?.close(1012);
-    clock.advance(0);
-    await settle();
-    clock.advance(99);
-    expect(sockets).toHaveLength(1);
-    clock.advance(1);
-    expect(sockets).toHaveLength(2);
-    sockets[1]?.close(1012);
-    clock.advance(0);
-    await settle();
-    clock.advance(199);
-    expect(sockets).toHaveLength(2);
-    clock.advance(1);
-    expect(sockets).toHaveLength(3);
-
-    client.stop();
+    try {
+      await client.start();
+      for (const [index, delay] of [50, 180, 200, 400, 500, 500].entries()) {
+        sockets[index]?.close(1012);
+        clock.advance(0);
+        await settle();
+        clock.advance(delay - 1);
+        expect(sockets).toHaveLength(index + 1);
+        clock.advance(1);
+        expect(sockets).toHaveLength(index + 2);
+      }
+      expect(random).toHaveBeenCalledTimes(6);
+    } finally {
+      client.stop();
+      random.mockRestore();
+    }
   });
 
   it("gates live traffic on control, media, and presence recovery and declares all four streams", async () => {
@@ -734,7 +761,7 @@ describe("V1SyncClient", () => {
     const clock = new TestClock();
     const { client, mediaPlane } = await liveClient({ clock });
     const result = client.setCameraEnabled(false, { requestId: commandIds[0] });
-    const rejected = expect(result).rejects.toMatchObject({ code: "retry_exhausted" });
+    const rejected = expect(result).rejects.toMatchObject({ code: "disconnected_before_delivery" });
 
     clock.advance(15_000);
 
@@ -747,12 +774,12 @@ describe("V1SyncClient", () => {
     const mediaPlane = new BlockingMediaPlane();
     const { client, socket } = await liveClient({ clock, mediaPlane });
     const result = client.setCameraEnabled(false, { requestId: commandIds[0] });
-    clock.advance(14_999);
+    await advanceConnectedClock(clock, socket, 14_999);
     socket.receive({ type: "live_target_result", operation_id: commandIds[0], name: "set_camera_enabled", outcome: "confirmed", error_code: null });
     await settle();
     expect(mediaPlane.targets).toHaveLength(1);
 
-    clock.advance(44_999);
+    await advanceConnectedClock(clock, socket, 44_999);
     expect(client.getSnapshot().localMedia.camera).toBe("requesting");
     const rejected = expect(result).rejects.toMatchObject({ code: "media_timeout" });
     clock.advance(1);
@@ -1019,7 +1046,7 @@ describe("V1SyncClient", () => {
     expect(operationFrames(socket, commandIds[0])).toHaveLength(3);
     clock.advance(1);
     await rejected;
-    clock.advance(10_000);
+    await advanceConnectedClock(clock, socket, 10_000);
     expect(operationFrames(socket, commandIds[0])).toHaveLength(3);
     void client.leave({ commandId: commandIds[1] }).catch(() => undefined);
     expect(operationFrames(socket, commandIds[1])).toHaveLength(1);
@@ -1134,6 +1161,16 @@ describe("V1SyncClient", () => {
 });
 
 describe("V1SyncClient collaboration_v1", () => {
+  it("bounds chat confirmation even while the transport still appears live without queueing a retry", async () => {
+    const clock = new TestClock();
+    const { client, socket } = await liveCollaborationClient({ clock, commandTimeoutMs: 500 });
+    const chat = client.sendChatMessage({ text: "uncertain delivery", clientMessageId: commandIds[1] });
+    const rejected = expect(chat).rejects.toMatchObject({ code: "command_timeout" });
+    clock.advance(500);
+    await rejected;
+    expect(socket.frames().filter((frame) => frame.type === "chat_send")).toHaveLength(1);
+    client.stop();
+  });
   it("negotiates the extension and maps reactions, attachments, reads, and pages", async () => {
     const { client, socket } = await liveCollaborationClient();
     expect(socket.frames()[0]).toMatchObject({
@@ -1959,4 +1996,13 @@ function snapshotWhen(client: V1SyncClient, predicate: (snapshot: V1EpisodeSnaps
 
 function operationFrames(socket: TestSocket, commandId: string): Record<string, unknown>[] {
   return socket.frames().filter((frame) => (frame.type === "operation" || frame.type === "command") && frame.command_id === commandId);
+}
+
+async function advanceConnectedClock(clock: TestClock, socket: TestSocket, milliseconds: number): Promise<void> {
+  for (let remaining = milliseconds; remaining > 0; remaining -= Math.min(500, remaining)) {
+    socket.receive({ type: "pong" });
+    await settle();
+    clock.advance(Math.min(500, remaining));
+    await settle();
+  }
 }

@@ -10,6 +10,7 @@ const MAX_IN_FLIGHT = 256;
 const MAX_PENDING_BYTES = 1024 * 1024;
 const MAX_PENDING_AGE_MS = 24 * 60 * 60 * 1000;
 const MAX_RETRIES = 3;
+const COMMAND_TIMEOUT_MS = 10_000;
 const OPERATION_PENDING_POLL_INTERVAL_MS = 1_000;
 
 type CommandDeferred = V1Deferred<V1CommandResult> & {
@@ -30,6 +31,7 @@ type V1CommandSchedulerOptions = {
   readonly maxPendingBytes: number | undefined;
   readonly maxPendingAgeMs: number | undefined;
   readonly maxOperationPendingAgeMs: number | undefined;
+  readonly commandTimeoutMs: number | undefined;
   readonly retryDelayMs: number | undefined;
   readonly clock: () => NonNullable<V1SyncClientOptions["clock"]>;
   readonly isStarted: () => boolean;
@@ -46,6 +48,7 @@ export class V1CommandScheduler {
   readonly #acknowledgements = new Map<string, Extract<V1CommandResult, { readonly outcome: "committed" | "satisfied" }>>();
   readonly #pendingRemovals = new Map<string, V1PendingTarget>();
   readonly #commandRetryTimers = new Map<string, unknown>();
+  readonly #commandDeadlineTimers = new Map<string, unknown>();
   readonly #pendingRemovalRetryTimers = new Map<string, unknown>();
   #stopGeneration = 0;
 
@@ -95,6 +98,8 @@ export class V1CommandScheduler {
   stop(code: string): void {
     this.#stopGeneration += 1;
     this.#clearCommandRetryTimers();
+    for (const timer of this.#commandDeadlineTimers.values()) this.#options.clock().clearTimeout(timer);
+    this.#commandDeadlineTimers.clear();
     this.#clearPendingRemovalRetryTimers();
     for (const deferred of this.#commands.values()) rejectV1Deferred(deferred, new V1SyncError(code, code));
     this.#commands.clear();
@@ -242,7 +247,23 @@ export class V1CommandScheduler {
 
   #registerCommand(commandId: string, frame: SyncV1ClientFrame, durableTarget: boolean, createdAt: number): Promise<V1CommandResult> {
     if (this.#commands.has(commandId)) throw new V1SyncError("command ID is already pending", "command_id_conflict");
-    return new Promise((resolve, reject) => this.#commands.set(commandId, { resolve, reject, settled: false, frame, retries: 0, durableTarget, createdAt }));
+    return new Promise((resolve, reject) => {
+      const deferred = { resolve, reject, settled: false, frame, retries: 0, durableTarget, createdAt };
+      this.#commands.set(commandId, deferred);
+      const timer = this.#options.clock().setTimeout(() => {
+        this.#commandDeadlineTimers.delete(commandId);
+        if (this.#commands.get(commandId) !== deferred || deferred.settled) return;
+        // Keep durable targets and their IDs until a receipt resolves uncertain delivery.
+        if (!durableTarget) {
+          this.#commands.delete(commandId);
+          this.#acknowledgements.delete(commandId);
+          this.#clearCommandRetryTimer(commandId);
+        }
+        rejectV1Deferred(deferred, new V1SyncError("The action was not confirmed in time. Reconnect and try again.", "command_timeout"));
+        this.#options.stateChanged();
+      }, this.#options.commandTimeoutMs ?? COMMAND_TIMEOUT_MS);
+      this.#commandDeadlineTimers.set(commandId, timer);
+    });
   }
 
   #pollPendingOperation(commandId: string, deferred: CommandDeferred): void {
@@ -269,6 +290,7 @@ export class V1CommandScheduler {
   #expirePendingOperation(commandId: string, deferred: CommandDeferred): void {
     if (this.#commands.get(commandId) !== deferred) return;
     this.#commands.delete(commandId);
+    this.#clearCommandDeadline(commandId);
     this.#acknowledgements.delete(commandId);
     this.#clearCommandRetryTimer(commandId);
     let pending: V1PendingTarget | undefined;
@@ -286,6 +308,7 @@ export class V1CommandScheduler {
     const deferred = this.#commands.get(commandId);
     if (!deferred) return;
     this.#commands.delete(commandId);
+    this.#clearCommandDeadline(commandId);
     this.#clearCommandRetryTimer(commandId);
     this.#acknowledgements.delete(commandId);
     let pending: V1PendingTarget | undefined;
@@ -375,6 +398,13 @@ export class V1CommandScheduler {
     if (timer === undefined) return;
     this.#options.clock().clearTimeout(timer);
     this.#commandRetryTimers.delete(commandId);
+  }
+
+  #clearCommandDeadline(commandId: string): void {
+    const timer = this.#commandDeadlineTimers.get(commandId);
+    if (timer === undefined) return;
+    this.#options.clock().clearTimeout(timer);
+    this.#commandDeadlineTimers.delete(commandId);
   }
 }
 
