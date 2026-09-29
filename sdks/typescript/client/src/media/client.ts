@@ -70,6 +70,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #negotiatedGeneration: number | null = null;
   #replacementAttemptedGeneration: number | null = null;
   #polling = false;
+  #pollAfterCurrent = false;
   #pollTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   #sdpTail: Promise<void> = Promise.resolve();
   #snapshot: CloudflareSFUSnapshot;
@@ -82,7 +83,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#participantId = options.participantId;
     this.#bootstrap = options.bootstrap;
     this.#transport = options.transport;
-    this.#pollIntervalMs = options.pollIntervalMs ?? 1_000;
+    this.#pollIntervalMs = options.pollIntervalMs ?? 15_000;
     this.#replaceMediaConnection = options.replaceMediaConnection;
     this.#onError = options.onError;
     this.#onRemoteTrack = options.onRemoteTrack;
@@ -110,6 +111,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
 
   remotePublicationResumed(publicationId: string): void {
     this.#remotePullRetryAfter.delete(publicationId);
+    this.remotePublicationsChanged();
+  }
+
+  remotePublicationsChanged(): void {
+    if (this.#polling) {
+      this.#pollAfterCurrent = true;
+      return;
+    }
     this.#clearPoll();
     this.#schedulePoll(0);
   }
@@ -179,7 +188,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       if (generation === this.#generation && !this.#stopped) this.#reportError(error);
       throw error;
     } finally {
-      if (generation === this.#generation) this.#polling = false;
+      if (generation === this.#generation) {
+        this.#polling = false;
+        if (this.#pollAfterCurrent) {
+          this.#pollAfterCurrent = false;
+          this.#clearPoll();
+          this.#schedulePoll(0);
+        }
+      }
     }
   }
 
@@ -216,6 +232,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const generation = ++this.#generation;
     const connectionEpoch = ++this.#connectionEpoch;
     this.#polling = false;
+    this.#pollAfterCurrent = false;
     this.#clearPoll();
     this.#remotePullRetryAfter.clear();
     this.#disposeConnection(false);
@@ -258,6 +275,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#clearPoll();
     this.#remotePullRetryAfter.clear();
     this.#polling = false;
+    this.#pollAfterCurrent = false;
     this.#disposeConnection(true);
     this.#reusableLocalTransceivers.clear();
     this.#clearRemoteTracks();
