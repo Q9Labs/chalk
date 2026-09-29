@@ -87,20 +87,19 @@ outcomes:
   - id: realtime_sync.failover_qualification
     title: Sync survives node and database failure
     area: realtime_sync
-    state: unknown
+    state: in_progress
     summary: >-
-      The durability design is implemented but has never been tested by killing a Sync node or
-      interrupting Postgres.
+      A local fault soak kills Sync right after an acknowledgement, restarts and stops Postgres, and
+      slows a client. It has not been run on a production-like topology, and production runs a
+      single database node with no standby.
     priority: P1
     size: M
     remaining:
       - >-
-        Kill a Sync node after an acknowledged command and check that reconnecting clients see the
-        same state, receipts and chat.
-      - >-
-        Interrupt Postgres and add a slow consumer; check that no acknowledged update is lost or
-        duplicated.
-    uncertainty: Needs a named topology and a recorded fault run.
+        Run the fault soak against a named production-like topology, including the original
+        database coming back after an outage.
+      - Decide whether production needs a database standby once there are users.
+    uncertainty: The soak has only run on one machine with a local Postgres.
     theory: theory.md#sync-correctness
     code:
       - apps/sync/lib/chalk_sync/stateholder/postgres.ex
@@ -543,26 +542,83 @@ outcomes:
       - infrastructure/managed-episode/scripts/validate-runtime
       - apps/sync/README.md
   - id: observability_and_operations.performance_budget
-    title: Meet the latency budget
+    title: Join an Episode faster
     area: observability_and_operations
-    state: unknown
+    state: planned
     summary: >-
-      theory.md sets join, Sync, media and API latency targets, but none is measured. Media toggles
-      take over a second in production.
+      Seeing the other Participant takes about 4 seconds after clicking join. About 2 seconds of
+      that is Cloudflare SFU track setup and the browser handshake, which Chalk's code can't
+      shorten; only starting them earlier can.
     priority: P1
     size: M
     remaining:
-      - Split the timing phases so each stage is measured on its own.
+      - Start the arrival request when the visitor shows intent to join, before the click.
       - >-
-        Measure p50 and p95 for each target with a named region, topology, client build and sample
-        size.
-      - Fix the slowest stage of the media toggle path.
-    uncertainty: No percentile measurement exists for any target.
+        Decide whether to open the Cloudflare SFU connection before the click, given consent and
+        connection lifetime.
+      - Time the API's Cloudflare SFU calls as their own spans so each join stage is visible.
+      - Consider pushing chat message bodies over Sync instead of a head signal plus a fetch.
+    uncertainty: No change has been tried, so the real saving is unknown.
     theory: theory.md#performance-budget
     code:
+      - sdks/typescript/client/src/connection/lifecycle.ts
       - sdks/typescript/client/src/media/client.ts
-      - sdks/typescript/react-native/src/space-client/create-native-space-client.ts
-      - apps/sync/lib
+      - apps/api/internal/mediaplane/signaling.go
+  - id: realtime_sync.reconnect_self_healing
+    title: Reconnect heals on rocky networks
+    area: realtime_sync
+    state: planned
+    summary: >-
+      Clients reconnect after Sync restarts and short drops, but reconnection hasn't been designed
+      as one self-healing path across Sync, media and the page.
+    size: M
+    remaining:
+      - >-
+        Agree a target for recovery time after a drop, a flapping network, a Sync or API restart, and
+        a page reload.
+      - Close the gaps between today's behavior and that target.
+      - Make a page reload during an Episode rejoin it without a second click, if the owner wants that.
+    theory: theory.md#sync-correctness
+    code:
+      - sdks/typescript/client/src/sync/v1-client.ts
+      - sdks/typescript/client/src/connection/lifecycle.ts
+      - sdks/typescript/client/src/media/client.ts
+  - id: observability_and_operations.test_value
+    title: Tests and gate catch real bugs
+    area: observability_and_operations
+    state: planned
+    summary: >-
+      The gate passed while real media and reconnect bugs shipped, because tests fake Cloudflare
+      SFU and the gate skips server checks for SDK-only changes. Many tests kill no mutation.
+    size: M
+    remaining:
+      - Run a broad mutation pass across the suite, then delete the tests that catch nothing.
+      - Run a real Cloudflare SFU contract check on a schedule, covering disable and re-enable.
+      - Stop SDK-only changes from skipping the server checks.
+      - >-
+        Keep the Sync, media and privacy soak harnesses runnable as scheduled checks rather than
+        one-off scripts.
+    theory: theory.md#product-memory
+    code:
+      - gate.config.ts
+      - scripts/gates/chalk-gate-plan.mjs
+      - sdks/typescript/client/src/media/cloudflare-sfu.test.ts
+  - id: product_delivery.parallel_dev_stacks
+    title: Run several local stacks at once
+    area: product_delivery
+    state: planned
+    summary: >-
+      The local stack allows one runtime per machine, fixes its container and database names, and
+      its stop command fails its own ownership check, so parallel agents collide.
+    size: S
+    remaining:
+      - Let the database, container names and owner lock vary per checkout.
+      - Make stopping the stack work after a rebase or a supervisor restart.
+      - Stop the local unused-code check from failing on untracked scratchpad scripts.
+    code:
+      - scripts/dev/config.mjs
+      - scripts/dev/chalk.mjs
+      - scripts/dev/ownership.mjs
   - id: product_delivery.desktop_application
     title: Desktop app
     area: product_delivery
