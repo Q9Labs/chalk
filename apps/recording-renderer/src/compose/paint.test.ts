@@ -1,4 +1,4 @@
-import { createCanvas } from "@napi-rs/canvas";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { describe, expect, it } from "vitest";
 import { createPainter, initials } from "./paint.js";
 import type { Scene } from "./scene.js";
@@ -34,5 +34,29 @@ describe("native painter", () => {
     expect(png.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
     expect(png.readUInt32BE(16)).toBe(320);
     expect(png.readUInt32BE(20)).toBe(180);
+  });
+
+  it("paints a screen share gap as the unavailable card, not a black box", async () => {
+    const painter = createPainter({
+      width: 320,
+      height: 180,
+      fontFamilies: "Arial, sans-serif",
+      loadAsset: async () => {
+        throw new Error("unexpected asset");
+      },
+      renderWhiteboard: async () => createCanvas(1, 1),
+    });
+    const scene: Scene = {
+      spaceName: "Review",
+      colorScheme: "light",
+      generatedAvatars: true,
+      tiles: [{ kind: "screen_share", rect: { x: 8, y: 24, width: 300, height: 140 }, participant: { id: "m", displayName: "Morgan", microphoneMuted: false, handRaised: false, speaking: false } }],
+      reactions: [],
+    };
+    const image = await loadImage(await painter.paint(scene));
+    const canvas = createCanvas(320, 180);
+    const context = canvas.getContext("2d");
+    context.drawImage(image, 0, 0);
+    expect([...context.getImageData(20, 36, 1, 1).data]).toEqual([255, 255, 255, 255]);
   });
 });

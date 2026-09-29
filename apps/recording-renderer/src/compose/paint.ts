@@ -10,12 +10,11 @@ interface Theme {
   readonly ink2: string;
   readonly line: string;
   readonly washes: readonly string[];
-  readonly screenBackground: string;
 }
 
 const THEMES: Readonly<Record<Scene["colorScheme"], Theme>> = {
-  light: { paper: "#F7F6F2", surface: "#FFFFFF", ink: "#0C0E12", ink2: "#555B65", line: "#DEDDD7", washes: ["#EDF6EB", "#FFF8E5", "#EAF7FB", "#FDF0F0"], screenBackground: "#0C0E12" },
-  dark: { paper: "#0C0E12", surface: "#16191F", ink: "#F2F1ED", ink2: "#A3A8B0", line: "#2A2E35", washes: ["#1B2419", "#262214", "#16232A", "#2A1B1B"], screenBackground: "#000000" },
+  light: { paper: "#F7F6F2", surface: "#FFFFFF", ink: "#0C0E12", ink2: "#555B65", line: "#DEDDD7", washes: ["#EDF6EB", "#FFF8E5", "#EAF7FB", "#FDF0F0"] },
+  dark: { paper: "#0C0E12", surface: "#16191F", ink: "#F2F1ED", ink2: "#A3A8B0", line: "#2A2E35", washes: ["#1B2419", "#262214", "#16232A", "#2A1B1B"] },
 };
 
 const IDENTITY_COLORS = ["#315F72", "#5C6650", "#6B5B4F", "#64576B", "#49645D", "#665D42", "#4D5D73", "#6D5158"] as const;
@@ -124,9 +123,7 @@ export function createPainter(options: PainterOptions): Painter {
       context.clearRect(tile.rect.x, tile.rect.y, tile.rect.width, tile.rect.height);
       context.restore();
     } else if (tile.kind === "screen_share") {
-      context.fillStyle = theme.screenBackground;
-      roundedPath(context, tile.rect, radius);
-      context.fill();
+      paintUnavailableScreen(tile, theme);
     } else {
       context.fillStyle = theme.washes[hash(tile.participant.id) % theme.washes.length]!;
       roundedPath(context, tile.rect, radius);
@@ -135,6 +132,27 @@ export function createPainter(options: PainterOptions): Painter {
     }
 
     paintPersonTileDetails(tile);
+  }
+
+  // Matches the live ScreenShareView empty state, for gaps in the shared screen.
+  function paintUnavailableScreen(tile: Extract<SceneTile, { kind: "screen_share" }>, theme: Theme): void {
+    const { rect } = tile;
+    context.fillStyle = theme.surface;
+    roundedPath(context, rect, px(TILE_RADIUS));
+    context.fill();
+    strokeTile(rect, theme.line, px(1));
+    const centerX = rect.x + rect.width / 2;
+    const centerY = rect.y + rect.height / 2;
+    const iconSize = px(20);
+    drawIcon(ComputerScreenShareIcon, centerX - iconSize / 2, centerY - px(40), iconSize, theme.ink2);
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.font = font(600, 14);
+    context.fillStyle = theme.ink;
+    context.fillText(ellipsize(context, "Screen share unavailable", rect.width - px(32)), centerX, centerY);
+    context.font = font(400, 13);
+    context.fillStyle = theme.ink2;
+    context.fillText(ellipsize(context, `${tile.participant.displayName}’s screen isn’t available at this moment.`, rect.width - px(32)), centerX, centerY + px(22));
   }
 
   function paintPersonTileDetails(tile: Exclude<SceneTile, { kind: "whiteboard" }>): void {

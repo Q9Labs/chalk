@@ -4,7 +4,7 @@ import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadImage, type Image } from "@napi-rs/canvas";
 import { overlayListFor, muxArgs, segmentArgs, segmentListFor, type ComposeEncoder, type ComposeOutput, type PlannedSource } from "./compose/plan.js";
-import { registerSubsetFamily } from "./compose/fonts.js";
+import { registerSubsetFamily, registerTextFallback } from "./compose/fonts.js";
 import { createPainter } from "./compose/paint.js";
 import { buildSceneSpans, frameCountFor, groupVideoSegments } from "./compose/scene.js";
 import { createWhiteboardRenderer } from "./compose/whiteboard.js";
@@ -111,6 +111,7 @@ async function main(): Promise<void> {
 }
 
 async function paintOverlays(spans: ReturnType<typeof buildSceneSpans>, inputs: VerifiedRenderInputs, output: ComposeOutput, workDirectory: string): Promise<ReadonlyMap<string, string>> {
+  await registerTextFallback(join(FONTS_DIRECTORY, "excalidraw", "Liberation"));
   const fontFamilies = await registerSubsetFamily("Figtree", join(FONTS_DIRECTORY, "Figtree"));
   const images = new Map<string, Promise<Image>>();
   const assetPath = (assetId: string): string => {
