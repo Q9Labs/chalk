@@ -100,7 +100,7 @@ export type CloudflareSFURestartOptions = {
   readonly transport?: CloudflareSFUSignalingTransport;
 };
 
-export type CloudflareSFUCredentialProvider = () => string | Promise<string>;
+export type CloudflareSFUCredentialProvider = (signal?: AbortSignal) => string | Promise<string>;
 
 export type CloudflareSFUHTTPTransportOptions = {
   readonly apiBaseURL: string;
