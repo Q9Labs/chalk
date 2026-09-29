@@ -27,7 +27,7 @@ func main() {
 	nodePath := flag.String("node", os.Getenv("CHALK_RECORDING_NODE_PATH"), "absolute Node.js executable path")
 	rendererScript := flag.String("renderer-script", os.Getenv("CHALK_RECORDING_RENDERER_SCRIPT"), "absolute recording renderer CLI path")
 	exportRenderer := flag.String("export-renderer", os.Getenv("CHALK_RECORDER_EXPORT_RENDERER"), "Export renderer: browser or native (default browser)")
-	composeThreads := flag.String("compose-threads", os.Getenv("CHALK_RECORDING_COMPOSE_THREADS"), "native compositor threads (default 2)")
+	composeThreads := flag.String("compose-threads", os.Getenv("CHALK_RECORDING_COMPOSE_THREADS"), "native compositor threads (default: vCPUs, at most 4)")
 	uiBuildRegistry := flag.String("ui-build-registry", os.Getenv("CHALK_RECORDING_UI_BUILD_REGISTRY"), "absolute installed recording UI build registry path")
 	ffmpegPath := flag.String("ffmpeg", os.Getenv("CHALK_RECORDING_FFMPEG_PATH"), "absolute FFmpeg executable path")
 	ffprobePath := flag.String("ffprobe", os.Getenv("CHALK_RECORDING_FFPROBE_PATH"), "absolute FFprobe executable path")

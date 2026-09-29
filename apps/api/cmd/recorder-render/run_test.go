@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"runtime"
+	"testing"
+)
 
 func TestParseExportRenderer(t *testing.T) {
 	for _, test := range []struct {
@@ -10,7 +13,7 @@ func TestParseExportRenderer(t *testing.T) {
 		wantN    int
 		wantErr  bool
 	}{
-		{"", "", "browser", 2, false},
+		{"", "", "browser", min(runtime.NumCPU(), 4), false},
 		{"native", "8", "native", 8, false},
 		{"browser", "64", "browser", 64, false},
 		{"other", "", "", 0, true},

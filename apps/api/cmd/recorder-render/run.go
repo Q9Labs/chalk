@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -141,7 +142,8 @@ func parseExportRenderer(rawRenderer, rawThreads string) (string, int, error) {
 	if renderer != "browser" && renderer != "native" {
 		return "", 0, errors.New("CHALK_RECORDER_EXPORT_RENDERER must be browser or native")
 	}
-	threads := 2
+	// One x264 thread per vCPU; more adds CPU without saving wall time.
+	threads := min(runtime.NumCPU(), 4)
 	if strings.TrimSpace(rawThreads) != "" {
 		var err error
 		threads, err = strconv.Atoi(strings.TrimSpace(rawThreads))
