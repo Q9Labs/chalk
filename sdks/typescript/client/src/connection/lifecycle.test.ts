@@ -34,7 +34,16 @@ describe("ConnectionLifecycle Episode snapshot", () => {
         await platform.sync.start();
       },
     };
-    const layer = makeConnectionLifecycleLayer({ access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)), apiBaseURL: "https://api.chalk.test", syncURL: "wss://sync.chalk.test/v1/sync", dependencies: { ...platform.dependencies, createSyncClient: () => sync } });
+    let grants = 0;
+    const layer = makeConnectionLifecycleLayer({
+      access: async () => {
+        const grant = opaqueAccessGrant(1);
+        return parseParsedAccessGrant({ ...grant, media: { ...grant.media, client_payload: { connectionId: `replacement-${++grants}`, stunServer: "stun:test" } } });
+      },
+      apiBaseURL: "https://api.chalk.test",
+      syncURL: "wss://sync.chalk.test/v1/sync",
+      dependencies: { ...platform.dependencies, createSyncClient: () => sync },
+    });
     await Effect.runPromise(
       Effect.gen(function* () {
         const lifecycle = yield* joinedLifecycle();
