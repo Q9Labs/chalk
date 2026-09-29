@@ -57,6 +57,7 @@ export type PublicRefreshAccessInput = {
   readonly guestCredential?: string;
   readonly mediaProof: string;
   readonly replaceMediaConnection?: boolean;
+  readonly signal?: AbortSignal;
 };
 
 export type PublicLeaveOptions = {

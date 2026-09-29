@@ -62,7 +62,7 @@ export type CloudflareSFULocalTrack = Pick<MediaPublication, "source" | "enabled
   readonly track: MediaStreamTrack;
 };
 
-export type CloudflareSFUErrorCode = "invalid_bootstrap" | "invalid_publication" | "invalid_target" | "signaling_failed" | "media_failed" | "peer_connection_failed" | "ice_connection_failed" | "stale_generation";
+export type CloudflareSFUErrorCode = "invalid_bootstrap" | "invalid_publication" | "invalid_target" | "signaling_failed" | "signaling_timeout" | "negotiation_timeout" | "media_failed" | "peer_connection_failed" | "ice_connection_failed" | "stale_generation";
 
 export type CloudflareSFUFailureCode = CloudflareSFUErrorCode;
 
@@ -100,7 +100,7 @@ export type CloudflareSFURestartOptions = {
   readonly transport?: CloudflareSFUSignalingTransport;
 };
 
-export type CloudflareSFUCredentialProvider = () => string | Promise<string>;
+export type CloudflareSFUCredentialProvider = (signal?: AbortSignal) => string | Promise<string>;
 
 export type CloudflareSFUHTTPTransportOptions = {
   readonly apiBaseURL: string;
@@ -113,6 +113,7 @@ export type CloudflareSFUHTTPTransportOptions = {
   readonly episodeId: string;
   readonly participantId: string;
   readonly fetch?: typeof globalThis.fetch;
+  readonly requestTimeoutMs?: number;
 };
 
 export class CloudflareSFUError extends Error {

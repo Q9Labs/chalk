@@ -82,6 +82,86 @@ describe("Cloudflare SFU HTTP signaling", () => {
       options: { status: 410, retryableConnection: true },
     });
   });
+
+  it("aborts stalled signaling and permits the next request", async () => {
+    vi.useFakeTimers();
+    try {
+      let aborted = false;
+      let requests = 0;
+      const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (_input, init) => {
+        requests += 1;
+        if (requests === 1) {
+          return new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              aborted = true;
+              reject(new DOMException("aborted", "AbortError"));
+            });
+          });
+        }
+        return new Response(JSON.stringify({ incarnation: 0, sequence: 0, publications: [] }), { status: 200 });
+      });
+      const transport = createCloudflareSFUHTTPTransport({ apiBaseURL: "http://localhost", bearerToken: "media-token", tenantId: "t", spaceId: "s", episodeId: "e", participantId: "p", fetch, requestTimeoutMs: 10 });
+      const stalled = transport.listPublications();
+      const rejected = expect(stalled).rejects.toMatchObject({ code: "signaling_timeout" });
+      await vi.advanceTimersByTimeAsync(10);
+      await rejected;
+      expect(aborted).toBe(true);
+      await expect(transport.listPublications()).resolves.toMatchObject({ publications: [] });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives signaling its full deadline after a slow credential refresh", async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveCredential: (token: string) => void = () => {};
+      const credential = () =>
+        new Promise<string>((resolve) => {
+          resolveCredential = resolve;
+        });
+      const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => {
+        await new Promise((resolve) => globalThis.setTimeout(resolve, 5));
+        return new Response(JSON.stringify({ incarnation: 0, sequence: 0, publications: [] }), { status: 200 });
+      });
+      const transport = createCloudflareSFUHTTPTransport({ apiBaseURL: "http://localhost", credential, tenantId: "t", spaceId: "s", episodeId: "e", participantId: "p", fetch, requestTimeoutMs: 10 });
+      const result = transport.listPublications();
+      await vi.advanceTimersByTimeAsync(9);
+      resolveCredential("media-token");
+      await vi.advanceTimersByTimeAsync(5);
+      await expect(result).resolves.toMatchObject({ publications: [] });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("aborts a stalled credential refresh and permits the next request", async () => {
+    vi.useFakeTimers();
+    try {
+      let attempts = 0;
+      let aborted = false;
+      const credential = (signal?: AbortSignal) => {
+        attempts += 1;
+        if (attempts > 1) return Promise.resolve("media-token");
+        return new Promise<string>((_resolve, reject) => {
+          signal?.addEventListener("abort", () => {
+            aborted = true;
+            reject(new DOMException("aborted", "AbortError"));
+          });
+        });
+      };
+      const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(JSON.stringify({ incarnation: 0, sequence: 0, publications: [] }), { status: 200 }));
+      const transport = createCloudflareSFUHTTPTransport({ apiBaseURL: "http://localhost", credential, tenantId: "t", spaceId: "s", episodeId: "e", participantId: "p", fetch });
+      const stalled = transport.listPublications();
+      const rejected = expect(stalled).rejects.toMatchObject({ code: "signaling_timeout" });
+      await vi.advanceTimersByTimeAsync(7_000);
+      await rejected;
+      expect(aborted).toBe(true);
+      await expect(transport.listPublications()).resolves.toMatchObject({ publications: [] });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("Cloudflare SFU client", () => {

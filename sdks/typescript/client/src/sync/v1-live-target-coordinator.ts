@@ -10,6 +10,7 @@ import type { V1LiveTargetResult, V1MediaPublication, V1MediaSource, V1SelfMedia
 const MAX_RETRIES = 3;
 const MAX_LIVE_SERVER_RETRIES = 16;
 const LIVE_TARGET_RETRY_BUDGET_MS = 15_000;
+const LOCAL_MEDIA_TIMEOUT_MS = 45_000;
 const MAX_LIVE_TARGET_RETRY_DELAY_MS = 1_000;
 
 type LiveTargetClientFrame = Extract<SyncV1ClientFrame, { readonly type: "live_target" }>;
@@ -131,6 +132,11 @@ export class V1LiveTargetCoordinator {
     deferred.serverResultSignature = frameSignature(frame);
     this.#clearRetryTimer(frame.operation_id);
     this.#clearDeadlineTimer(frame.operation_id);
+    const localDeadline = this.#options.clock().setTimeout(() => {
+      this.#deadlineTimers.delete(frame.operation_id);
+      if (this.#targets.get(frame.operation_id) === deferred) this.#fail(frame.operation_id, deferred, new V1SyncError("Media did not respond in time. Try again.", "media_timeout"));
+    }, LOCAL_MEDIA_TIMEOUT_MS);
+    this.#deadlineTimers.set(frame.operation_id, localDeadline);
     this.#executeLocal(frame.operation_id, deferred);
   }
 
@@ -197,6 +203,10 @@ export class V1LiveTargetCoordinator {
 
   #settleLocal(operationId: string, deferred: LiveDeferred, result: MediaPlaneResult): void {
     if (!isSuccessfulMediaPlaneResult(result)) {
+      if (result.errorCode === "signaling_timeout" || result.errorCode === "negotiation_timeout") {
+        this.#fail(operationId, deferred, new V1SyncError("Media did not respond in time. Try again.", result.errorCode));
+        return;
+      }
       this.#fail(operationId, deferred, new V1SyncError(result.errorCode ?? result.outcome, result.outcome));
       return;
     }

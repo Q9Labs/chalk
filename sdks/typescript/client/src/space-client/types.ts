@@ -18,6 +18,7 @@ export type AccessReason = "join" | "refresh" | "retry";
 export type AccessContext = {
   readonly space: string;
   readonly reason: AccessReason;
+  readonly signal?: AbortSignal;
 };
 
 /**
@@ -78,6 +79,7 @@ export type ErrorCode =
   | "media.device_constraint_invalid"
   | "media.capture_failed"
   | "media.request_invalid"
+  | "media.timeout"
   | "participant.invalid"
   | "reaction.invalid"
   | "whiteboard.unavailable";

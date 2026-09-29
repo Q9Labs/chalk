@@ -260,10 +260,10 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
 
   const run = useCallback(
     async (command: () => Promise<unknown>) => {
+      setCommandError(null);
+      props.onCommandError?.(null);
       try {
         await command();
-        setCommandError(null);
-        props.onCommandError?.(null);
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : "This command could not be completed.";
         if (!props.onCommandError) setCommandError(message);

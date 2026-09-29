@@ -170,7 +170,7 @@ const (
 	DefaultLogFormat                             = "json"
 	DefaultLogLevel                              = "info"
 	DefaultOAuthStateTTLMS                       = int64(10 * 60 * 1000)
-	DefaultCloudflareRealtimeRequestTimeoutMS    = int64(10000)
+	DefaultCloudflareRealtimeRequestTimeoutMS    = int64(6000)
 	DefaultComposioBaseURL                       = "https://backend.composio.dev/api/v3.1"
 	DefaultComposioTimeoutMS                     = int64(10000)
 	DefaultCloudflareRTKPresetContributor        = "contributor"

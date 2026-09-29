@@ -1,5 +1,6 @@
 import { Data } from "effect";
 import type { ConnectionError } from "../connection/types";
+import { V1SyncError } from "../sync/v1-error";
 import type { ClientFailure, ErrorCode } from "./types";
 
 export class SpaceClientError extends Data.TaggedError("SpaceClientError")<ClientFailure> {}
@@ -45,6 +46,9 @@ export function normalizeClientError(cause: unknown, fallback: ErrorCode = "clie
       recoverable: cause.recoverable,
       message: cause.message,
     });
+  }
+  if (cause instanceof V1SyncError && ["signaling_timeout", "negotiation_timeout", "media_timeout"].includes(cause.code)) {
+    return new SpaceClientError({ code: "media.timeout", recoverable: true, message: "Media did not respond in time. Try again." });
   }
   if (isAccessInvalid(cause)) {
     return new SpaceClientError({ code: "access.invalid", recoverable: true, message: "The access grant was rejected" });

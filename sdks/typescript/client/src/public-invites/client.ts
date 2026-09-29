@@ -73,7 +73,7 @@ export function createChalkPublicClient(options: ChalkPublicClientOptions): Chal
 
   const refreshSpacePublicInviteAccess = async (input: PublicRefreshAccessInput | string, arrival?: PublicArrivalOptions): Promise<AccessGrant> => {
     const normalized = refreshInput(input, arrival);
-    const client = await Effect.runPromise(createClient(normalized.guestCredential ?? options.guestCredential));
+    const client = await Effect.runPromise(createClient(normalized.guestCredential ?? options.guestCredential, normalized.signal ? { signal: normalized.signal } : undefined));
     const response = await Effect.runPromise(
       client.spaces.refreshSpacePublicInviteAccess({
         headers: { "X-Chalk-Arrival-Handle": normalized.arrivalHandle },
@@ -138,7 +138,7 @@ function refreshInput(input: PublicRefreshAccessInput | string, arrival: PublicA
   const values =
     typeof input === "string"
       ? { arrivalHandle: arrival?.arrivalHandle, guestCredential: arrival?.guestCredential, mediaProof: input }
-      : { arrivalHandle: input.arrivalHandle ?? arrival?.arrivalHandle, guestCredential: input.guestCredential ?? arrival?.guestCredential, mediaProof: input.mediaProof, replaceMediaConnection: input.replaceMediaConnection };
+      : { arrivalHandle: input.arrivalHandle ?? arrival?.arrivalHandle, guestCredential: input.guestCredential ?? arrival?.guestCredential, mediaProof: input.mediaProof, replaceMediaConnection: input.replaceMediaConnection, signal: input.signal };
   return {
     ...values,
     arrivalHandle: required(values.arrivalHandle ?? "", "arrivalHandle"),

@@ -12,6 +12,7 @@ export type ConnectionAccessReason = "join" | "scheduled_refresh" | "sync_recove
 export type ConnectionAccessRequest = {
   readonly reason: ConnectionAccessReason;
   readonly replaceMediaConnection: boolean;
+  readonly signal?: AbortSignal;
   readonly currentMediaToken?: ParticipantMediaCredential;
   readonly expectedParticipantGeneration?: number;
 };
