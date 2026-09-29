@@ -16,6 +16,7 @@
     "./local-browser-proof": "./src/local-browser-proof.mjs"
   },
   "scripts": {
+    "test": "node --test src/*.test.mjs",
     "trace:inspect": "node src/cli.mjs",
     "feedback": "node src/feedback-cli.mjs",
     "browser-proof:local": "node src/local-browser-proof.mjs",
@@ -23,6 +24,7 @@
     "check-types": "node --check src/cli.mjs"
   },
   "dependencies": {
+    "@q9labsai/diagnostics": "^0.3.0",
     "@q9labsai/diagnostics-contracts": "workspace:^0.1.1"
   },
   "devDependencies": {

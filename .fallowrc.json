@@ -43,7 +43,7 @@
     "scratchpad/perf-harness/run.mjs",
     "scripts/codegen/generate-effect-http-api.mjs",
     "scripts/codegen/generate-effect-schemas.mjs",
-    "scripts/gates/smart-gate.mjs",
+    "scripts/gates/chalk-gate-plan.mjs",
     "scripts/recorder/analyze-media.mjs",
     "scripts/recorder/compare-frames.mjs",
     "scripts/recorder/measure-command.mjs",

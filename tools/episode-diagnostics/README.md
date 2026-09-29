@@ -4,6 +4,12 @@ This private package owns the bounded `trace:inspect` resolver, deterministic
 local fixture server, and desktop visual proof harness for Chalk Episode
 Diagnostics. It does not mount an API route or enable any production worker.
 
+For a plain W3C trace ID, run `pnpm diag trace <32-hex-trace-id>` for a bounded
+`DiagnosticTraceBrief/v1` (or add `--json`). Use `pnpm trace:inspect` with a
+`chalkdiag:v1` reference when investigating full retained Episode evidence,
+including cursor pages and debugger views. Both commands use the same
+operator-authorized API configuration; a trace ID alone never grants access.
+
 ```sh
 pnpm --dir tools/episode-diagnostics trace:inspect \
   'chalkdiag:v1:localhost:fixture-stalled' --format agent

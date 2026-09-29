@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createGatePlan, GatePlanningError } from "./smart-gate.mjs";
+import { createGatePlan, GatePlanningError } from "./chalk-gate-plan.mjs";
 
 function boundaryTask(files, options = {}) {
   return createGatePlan(files, options).tasks.find((task) => task.id === "boundaries");

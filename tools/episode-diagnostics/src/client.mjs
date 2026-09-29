@@ -40,9 +40,12 @@ export async function createDiagnosticClient(options = {}) {
   const config = await resolveClientConfig(options);
   const fetchImpl = fetchImplementation(options, config);
   const baseUrl = normalizeBaseUrl(config.baseUrl);
-  const headers = requestHeaders(config.credential);
+  const headers = requestHeaders(config.credential, baseUrl, config.environment);
   return {
     config: { ...config, fetchImpl: undefined },
+    async resolveTrace(traceId) {
+      return request(fetchImpl, headers, `${baseUrl}/_internal/episode-diagnostics/resolve/w3c.trace-id/${encodeURIComponent(traceId)}`);
+    },
     async snapshot(reference) {
       return requestFirst(fetchImpl, headers, baseUrl, [`${pathFor(reference)}`, `${pathFor(reference)}/snapshot`], { parseBody: parseDiagnosticRootResponse });
     },
@@ -82,9 +85,14 @@ function normalizeBaseUrl(baseUrl) {
   return baseUrl.replace(/\/$/u, "");
 }
 
-/** @param {string | undefined} credential */
-function requestHeaders(credential) {
-  return { Accept: "application/json", ...(credential ? { Authorization: `Bearer ${credential}` } : {}) };
+/** @param {string | undefined} credential @param {string} baseUrl @param {string} environment */
+function requestHeaders(credential, baseUrl, environment) {
+  // Node fetch sends Fetch Metadata; localhost reads require an explicit loopback Origin.
+  return {
+    Accept: "application/json",
+    ...(credential ? { Authorization: `Bearer ${credential}` } : {}),
+    ...(environment === "localhost" ? { Origin: new URL(baseUrl).origin } : {}),
+  };
 }
 
 /**
@@ -295,6 +303,7 @@ function queryEntries(query) {
     ["limit", query.limit],
     ["page_size", query.pageSize],
     ["latest", query.latest === true ? "true" : undefined],
+    ["filters", query.filters],
   ];
 }
 

@@ -2,6 +2,11 @@
   "$schema": "https://raw.githubusercontent.com/JamieMason/syncpack/main/schema.json",
   "versionGroups": [
     {
+      "label": "Ignore release-archive overrides until npm publication (Q9Labs/q9stack#4); remove this group then.",
+      "isIgnored": true,
+      "dependencies": ["@q9labsai/cli", "@q9labsai/config-depcruise", "@q9labsai/diagnostics", "@q9labsai/gates"]
+    },
+    {
       "label": "Private apps and publishable packages intentionally pin runtime and peer ranges independently.",
       "isIgnored": true,
       "dependencyTypes": ["local", "peer"]

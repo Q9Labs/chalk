@@ -17,6 +17,20 @@ func draftFixture() DiagnosticEventDraft {
 	}
 }
 
+func TestPlainTraceAlternateLookupValidation(t *testing.T) {
+	service := Service{}
+	valid := "0123456789abcdef0123456789abcdef"
+	lookup, version, err := service.alternateLookup("w3c.trace-id", valid)
+	if err != nil || lookup != valid || version != "" {
+		t.Fatalf("plain trace lookup = %q, %q, %v", lookup, version, err)
+	}
+	for _, invalid := range []string{"", "00000000000000000000000000000000", "0123456789ABCDEF0123456789ABCDEF", valid + "_0123456789abcdef"} {
+		if _, _, err := service.alternateLookup("w3c.trace-id", invalid); !errors.Is(err, ErrInvalidReference) {
+			t.Errorf("accepted invalid plain trace %q: %v", invalid, err)
+		}
+	}
+}
+
 func TestReconcileDiagnosticLifecycleCompletesAndStartsRetention(t *testing.T) {
 	started := time.Date(2026, 8, 4, 0, 0, 0, 0, time.UTC)
 	ended := started.Add(time.Hour)
