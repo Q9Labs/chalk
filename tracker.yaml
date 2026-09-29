@@ -215,6 +215,9 @@ outcomes:
       - >-
         Experiment: record a lower simulcast layer of each camera (for example 360p) and compare
         the Export and the SFU traffic to the recorder.
+      - >-
+        Experiment: if Cloudflare's SFU accepts a TCP receiver, have the recorder receive over TCP
+        and compare gaps and loss-driven keyframes against UDP.
     uncertainty: >-
       Whether a smaller image shortens DigitalOcean's roughly 30-second create step is not
       measured.

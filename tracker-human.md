@@ -119,6 +119,8 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Move Capture to the smallest Droplet size its measured CPU and memory allow.
     - Experiment: record a lower simulcast layer of each camera (for example 360p) and
       compare the Export and the SFU traffic to the recorder.
+    - Experiment: if Cloudflare's SFU accepts a TCP receiver, have the recorder receive
+      over TCP and compare gaps and loss-driven keyframes against UDP.
 
 13. **Scheduled Recordings in a real integration** (Partly working · size M · P1)
     Scheduled preparation works in production: the 2026-09-20 canary started from a
