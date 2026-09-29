@@ -69,6 +69,7 @@ defmodule ChalkSync.Database do
                  name: via(index),
                  queue_target: 50,
                  queue_interval: 2_000,
+                 backoff_max: 5_000,
                  timeout: 2_000
                ]},
             id: {:postgrex, index}

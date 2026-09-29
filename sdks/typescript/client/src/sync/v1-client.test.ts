@@ -1512,6 +1512,8 @@ async function liveCollaborationClient(overrides: Partial<ConstructorParameters<
 }
 
 async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1ControlState, snapshot: Snapshot, mode: "snapshot" | "up_to_date"): Promise<void> {
+  const recoveryAcks = () => socket.frames().filter((frame) => frame.type === "recovery_ack").length;
+  const acksBefore = recoveryAcks();
   socket.receive({
     type: "welcome",
     protocol: 1,
@@ -1527,6 +1529,8 @@ async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1
   socket.receive({ type: "recovery_complete", recovery_id: recoveryId, head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest } });
   for (let attempt = 0; attempt < 50 && client.getSnapshot().connection.phase !== "live"; attempt += 1) await settle();
   expect(client.getSnapshot().connection.phase).toBe("live");
+  // Sync reserves a recovery acknowledgement only for snapshots and closes the socket on an unexpected one.
+  expect(recoveryAcks() - acksBefore).toBe(mode === "snapshot" ? 1 : 0);
 }
 
 function eventBase<Name extends "admission_denied" | "admission_expired" | "participant_microphone_stopped" | "deadline_changed" | "recording_status_changed">(name: Name, baseRevision = 1, revision = 2) {
