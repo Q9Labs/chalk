@@ -84,6 +84,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   readonly #tracks = new Map<MediaSource, MediaStreamTrack>();
   readonly #observedPublicationIds = new Map<MediaSource, string>();
   readonly #intentRevisions = new Map<MediaSource, number>();
+  readonly #pendingEnables = new Map<MediaSource, number>();
   readonly #pendingSources = new Set<MediaSource>();
   readonly #requestGenerations = new Map<string, number>();
   #intent = { microphone: true, camera: true };
@@ -226,6 +227,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       intentRevision = (this.#intentRevisions.get(source) ?? 0) + 1;
       this.#intentRevisions.set(source, intentRevision);
       this.#intent[source] = enabled;
+      if (enabled) this.#pendingEnables.set(source, intentRevision);
       this.#ports?.media.setLocalSourceIntent?.(source, enabled);
       return enabled || !this.#ports ? Effect.void : this.#localTarget(this.#ports, source, false);
     });
@@ -321,13 +323,21 @@ class MediaControllerRuntime implements MediaControllerEffects {
       .pipe(
         Effect.mapError(normalizeClientError),
         Effect.tapError(() => Effect.sync(() => operation?.fail("media_failed"))),
+        Effect.ensuring(
+          Effect.sync(() => {
+            if (this.#pendingEnables.get(source) === intentRevision) this.#pendingEnables.delete(source);
+          }),
+        ),
       );
   }
 
   #startScreen(): ClientEffect<void> {
     const operation = this.#diagnostics?.startOperation("screen.start");
+    let intentRevision = 0;
     return Effect.sync(() => {
-      this.#intentRevisions.set("screen", (this.#intentRevisions.get("screen") ?? 0) + 1);
+      intentRevision = (this.#intentRevisions.get("screen") ?? 0) + 1;
+      this.#intentRevisions.set("screen", intentRevision);
+      this.#pendingEnables.set("screen", intentRevision);
       this.#ports?.media.setLocalSourceIntent?.("screen", true);
     })
       .pipe(
@@ -383,6 +393,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
       .pipe(
         Effect.mapError(normalizeClientError),
         Effect.tapError(() => Effect.sync(() => operation?.fail("screen_start_failed"))),
+        Effect.ensuring(
+          Effect.sync(() => {
+            if (this.#pendingEnables.get("screen") === intentRevision) this.#pendingEnables.delete("screen");
+          }),
+        ),
       );
   }
 
@@ -568,18 +583,29 @@ class MediaControllerRuntime implements MediaControllerEffects {
         this.#observedPublicationIds.set(source, projected.publicationId);
         continue;
       }
+      const previousPublicationId = this.#observedPublicationIds.get(source);
       if (!this.#observedPublicationIds.delete(source)) continue;
+      const local = ports.media.getSnapshot().localTracks.find((publication) => publication.source === source);
+      if (local && local.publicationId !== previousPublicationId) continue;
       this.#pauseForcedSource(ports, source);
     }
   }
   #pauseForcedSource(ports: ConnectionPorts, source: MediaSource): void {
-    this.#intentRevisions.set(source, (this.#intentRevisions.get(source) ?? 0) + 1);
-    if (source !== "screen") this.#intent[source] = false;
+    const pendingEnable = this.#hasPendingEnable(source);
+    if (!pendingEnable) {
+      this.#intentRevisions.set(source, (this.#intentRevisions.get(source) ?? 0) + 1);
+      if (source !== "screen") this.#intent[source] = false;
+    }
     const track = this.#tracks.get(source);
     if (track) track.enabled = false;
     ports.media.setLocalSourceIntent?.(source, false);
     if (ports.media.closeForcedLocalPublication) void ports.media.closeForcedLocalPublication(source).catch(() => undefined);
+    if (pendingEnable) ports.media.setLocalSourceIntent?.(source, true);
     this.#publish();
+  }
+  #hasPendingEnable(source: MediaSource): boolean {
+    const revision = this.#pendingEnables.get(source);
+    return revision !== undefined && revision === this.#intentRevisions.get(source);
   }
   #request(request: V1DirectedRequest): void {
     if (request.expires_at_ms <= this.#now()) return;

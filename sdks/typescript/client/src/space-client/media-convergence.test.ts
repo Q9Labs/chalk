@@ -35,7 +35,7 @@ describe("SpaceClient media convergence", () => {
     }
   });
 
-  it("stops the target sender when a forced off projection arrives", async () => {
+  it.each([false, true])("applies forced off only to the old publication (fresh publication: %s)", async (fresh) => {
     const platform = createCoreTestPlatform();
     const track = mediaTrack();
     const close = vi.fn(async () => {
@@ -45,13 +45,13 @@ describe("SpaceClient media convergence", () => {
     const client = capturedClient(platform, track, { media: { closeForcedLocalPublication: close } });
     try {
       await client.join({ microphone: true, camera: false });
-      const active = { participantId: "participant-1", source: "microphone" as const, enabled: true, publicationId: "publication-1" };
+      const active = { participantId: "participant-1", source: "microphone" as const, enabled: true, publicationId: "old-publication" };
       platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "media-1", sequence: 1, items: [active] } });
-      platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ source: "microphone", enabled: true, publicationId: "publication-1", track }] });
+      platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ source: "microphone", enabled: true, publicationId: fresh ? "fresh-publication" : active.publicationId, track }] });
       platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "media-1", sequence: 2, items: [{ ...active, enabled: false, publicationId: null }] } });
-      await vi.waitFor(() => expect(close).toHaveBeenCalledWith("microphone"));
-      expect(track.enabled).toBe(false);
-      expect(client.getSnapshot().media.local.microphone.state).toBe("disabled");
+      expect(close).toHaveBeenCalledTimes(fresh ? 0 : 1);
+      expect(track.enabled).toBe(fresh);
+      expect(client.getSnapshot().media.local.microphone.state).toBe(fresh ? "enabled" : "disabled");
     } finally {
       client.dispose();
     }

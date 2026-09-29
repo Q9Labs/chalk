@@ -225,6 +225,20 @@ describe("Cloudflare SFU client", () => {
     harness.client.stop();
   });
 
+  it("retires a provider-closed track before satisfying an on target even before its forced projection arrives", async () => {
+    const harness = createHarness();
+    await harness.client.start(fakeStream(new FakeTrack("microphone-track", "audio")));
+    const oldPublication = harness.client.getSnapshot().localTracks[0]?.publicationId;
+    const oldMID = harness.transport.addInputs[0]?.tracks[0]?.mid;
+    harness.transport.localPublications.clear();
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "reenable-before-projection", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toMatchObject({ outcome: "confirmed" });
+    expect(harness.transport.closeInputs[0]).toMatchObject({ force: false, tracks: [{ mid: oldMID }] });
+    expect(harness.transport.addInputs[1]?.tracks[0]?.mid).not.toBe(oldMID);
+    expect(harness.client.getSnapshot().localTracks[0]?.publicationId).not.toBe(oldPublication);
+    expect(harness.client.getSnapshot().localTracks[0]?.enabled).toBe(true);
+    harness.client.stop();
+  });
+
   it("keeps an off intent muted when an earlier publication finishes and rejects stale on targets", async () => {
     const harness = createHarness();
     const microphone = new FakeTrack("microphone-track", "audio");
@@ -253,7 +267,18 @@ describe("Cloudflare SFU client", () => {
       await expect(harness.client.setLocalPublicationTarget({ operationId: `reenable-${index}`, participantId: "participant-1", source: "camera", enabled: true })).resolves.toMatchObject({ outcome: "confirmed" });
       expect(harness.client.getSnapshot().localTracks.every((track) => track.enabled)).toBe(true);
     }
-    expect(sequence).toBe(3);
+    // Two forced retirements plus two independent capacity failures rebuild.
+    expect(sequence).toBe(5);
+    harness.client.stop();
+  });
+
+  it("does not resurrect another forced-off source while rebuilding for an authorized enable", async () => {
+    const harness = createHarness({ replaceMediaConnection: async () => bootstrap("connection-2") });
+    await harness.client.start(fakeStream(new FakeTrack("microphone-track", "audio"), new FakeTrack("camera-track", "video")));
+    harness.transport.localPublications.clear();
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "microphone-only", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toMatchObject({ outcome: "confirmed" });
+    expect(harness.transport.addInputs.at(-1)?.tracks.map((track) => track.source)).toEqual(["microphone"]);
+    expect(harness.client.getSnapshot().localTracks.find((track) => track.source === "camera")).toMatchObject({ enabled: false });
     harness.client.stop();
   });
 
@@ -934,6 +959,7 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
     readonly force: boolean;
   }[] = [];
   blockPublicationList = false;
+  readonly localPublications = new Map<string, CloudflareSFUPublicationSnapshot["publications"][number]>();
   failNextLocalPublish = false;
   failNextStaleLocalPublish = false;
   failNextRemotePull = false;
@@ -995,14 +1021,19 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
     const nextLocalMids = new Set([...this.#localMids, ...localMids]);
     if (this.maxLocalMids !== null && nextLocalMids.size > this.maxLocalMids) throw new CloudflareSFUError("local media-section budget exceeded", "signaling_failed");
     for (const mid of localMids) this.#localMids.add(mid);
+    const tracks = input.tracks.map((track) => ({ ...track, publicationId: versionedPublicationID(input.connectionId, track.mid ?? "", track.trackName) }));
+    for (const track of tracks) {
+      if (track.source) this.localPublications.set(track.publicationId, { participantId: "participant-1", source: track.source, publicationId: track.publicationId });
+    }
     return {
       sessionDescription: { type: "answer", sdp: `answer:${input.connectionId}` },
-      tracks: input.tracks.map((track) => ({ ...track, publicationId: versionedPublicationID(input.connectionId, track.mid ?? "", track.trackName) })),
+      tracks,
     };
   }
 
   async closeTracks(input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUCloseTrackRequest[]; readonly force: boolean }): Promise<CloudflareSFUTracksResponse> {
     this.closeInputs.push(input);
+    for (const track of input.tracks) this.localPublications.delete(track.publicationId);
     return input.sessionDescription ? { sessionDescription: { type: "answer", sdp: "close-answer" } } : {};
   }
 
@@ -1013,7 +1044,7 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
   async listPublications(): Promise<CloudflareSFUPublicationSnapshot> {
     this.listPublicationCalls++;
     if (this.blockPublicationList) await new Promise<void>((resolve) => this.#publicationListResolvers.push(resolve));
-    return this.snapshot;
+    return { ...this.snapshot, publications: [...this.snapshot.publications, ...this.localPublications.values()] };
   }
 
   blockConnection(connectionId: string): void {

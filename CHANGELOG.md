@@ -23,7 +23,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Updated the locked undici dependency to 7.29.1 to address GHSA-3wwx-pv8p-q78v.
 - Resumed camera and microphone media on the existing Cloudflare SFU publication after a Participant re-enables it, without exhausting media sections or leaving remote Participants without media.
 - Paused microphone, camera, and screen senders before sending a self-disable command to Sync, and restored them if Sync rejects the command.
-- Closed forced-muted Cloudflare SFU tracks, reflected the off state in the affected Participant's controls, and required a fresh publication on re-enable.
+- Closed forced-muted Cloudflare SFU tracks, reflected the off state in the affected Participant's controls, and required a fresh publication on re-enable; rebuilt retired bundled connections without restoring other forced-off sources.
 - Stopped receiver audio and video playback as soon as the projected Participant media state is off.
 - Dropped Capture RTP packets when the latest fenced Episode plan no longer authorizes their source, including while provider reconciliation is pending.
 - Surfaced per-track Cloudflare SFU pull failures in SDK diagnostics and cooled down retries for empty tracks.
