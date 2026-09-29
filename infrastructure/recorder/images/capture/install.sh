@@ -39,7 +39,7 @@ done < <(tar -tzf "$bundle_path")
 tar -xzf "$bundle_path" --no-same-owner --no-same-permissions -C "$stage_root"
 release_root="$stage_root/release"
 for binary in recorder-capture chalk-recorder-bootstrap; do
-  [[ -f "$release_root/bin/$binary" && ! -L "$release_root/bin/$binary" ]] || { echo "missing capture binary" >&2; exit 1; }
+  [[ -x "$release_root/bin/$binary" && ! -L "$release_root/bin/$binary" ]] || { echo "missing executable capture binary" >&2; exit 1; }
 done
 if find "$release_root" \( -type l -o ! -type f -a ! -type d \) -print -quit | grep -q .; then
   echo "unsupported bundle entry" >&2; exit 1
@@ -56,6 +56,9 @@ assert re.fullmatch(r'[0-9a-f]{64}', data['source_tree_sha256'])
 print(data['release_id'], data['source_commit'], data['source_tree_sha256'])
 PY
 )
+[[ ! -e "/opt/chalk-recorder/releases/$release_id" && ! -e /opt/chalk-recorder/image-manifest.json ]] || {
+  echo "a recorder image is already installed" >&2; exit 1
+}
 image_root="$stage_root/image"
 install -d -m 0755 "$image_root/etc/chalk-recorder" "$image_root/etc/systemd/system" \
   "$image_root/opt/chalk-recorder/releases" "$image_root/usr/local/sbin"
