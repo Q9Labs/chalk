@@ -492,7 +492,7 @@ export class V1SyncClient implements V1CollaborationClient {
     if (frame.mode === "up_to_date" && !sameHead(this.#control, frame.head)) throw new V1ReplicaError("up-to-date head mismatch");
     if (frame.mode === "snapshot" && !sameHead(this.#control, frame.head)) throw new V1ReplicaError("snapshot head mismatch");
     this.#recovery = { id: frame.recovery_id, head: frame.head, replayEvents: 0, replayBytes: 0, controlComplete: false };
-    if (frame.mode !== "replay") this.#ackRecovery();
+    if (frame.mode === "snapshot") this.#ackRecovery();
     this.#emit();
   }
 
