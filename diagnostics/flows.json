@@ -1,0 +1,12 @@
+[
+  {
+    "id": "recording.provider.callback",
+    "version": 1,
+    "steps": [
+      { "id": "authorized_branch", "within": "2s", "oneOf": ["succeeded", "failed"] },
+      { "id": "attempt", "after": ["authorized_branch"], "within": "1s" },
+      { "id": "provider_result", "after": ["attempt"], "within": "1s", "oneOf": ["succeeded", "failed"] },
+      { "id": "artifact_state", "after": ["provider_result"], "within": "1s" }
+    ]
+  }
+]
