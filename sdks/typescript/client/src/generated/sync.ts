@@ -1245,7 +1245,7 @@ export const RejectedAckFrameSchema = Schema.Struct({ type: Schema.Literal("ack"
 export const CommandIdConflictAckFrameSchema = Schema.Struct({ type: Schema.Literal("ack"), command_id: CommandIdSchema, delivery: AckDeliverySchema, outcome: Schema.Literal("command_id_conflict"), reason: Schema.Literal("command_id_conflict"), ...ServerCorrelationFields });
 
 export const MediaProjectionItemSchema = Schema.Struct({ participant_id: UuidSchema, source: Schema.Union([Schema.Literal("microphone"), Schema.Literal("camera"), Schema.Literal("screen")]), enabled: Schema.Boolean, publication_id: Schema.NullOr(boundedUtf8String(256, 1)) }).check(
-  Schema.makeFilter((item) => (item.enabled === (item.publication_id !== null) ? undefined : { path: [], issue: "enabled must equal whether publication_id is non-null" })),
+  Schema.makeFilter((item) => (!item.enabled || item.publication_id !== null ? undefined : { path: [], issue: "enabled requires a publication_id" })),
 );
 export const PresenceProjectionItemSchema = Schema.Struct({ participant_id: UuidSchema, state: Schema.Union([Schema.Literal("connected"), Schema.Literal("disconnected")]), speaking: Schema.Boolean, active_speaker: Schema.Boolean }).check(
   Schema.makeFilter((item) => (item.state !== "disconnected" || (!item.speaking && !item.active_speaker) ? undefined : { path: [], issue: "disconnected presence cannot be speaking or active speaker" })),

@@ -417,7 +417,7 @@ func CanonicalizeObservation(input ObservationInput) (ObservationInput, [32]byte
 			return ObservationInput{}, [32]byte{}, nil, ErrInvalidPublicationSource
 		}
 		publication.PublicationID = strings.TrimSpace(publication.PublicationID)
-		if len(publication.PublicationID) > 256 || publication.Enabled != (publication.PublicationID != "") {
+		if len(publication.PublicationID) > 256 || (publication.Enabled && publication.PublicationID == "") {
 			return ObservationInput{}, [32]byte{}, nil, ErrInvalidPublicationID
 		}
 		key := publication.ParticipantID.String() + "\x00" + publication.Source

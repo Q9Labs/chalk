@@ -434,6 +434,17 @@ describe("V1SyncClient", () => {
     expect(client.getSnapshot().connection.phase).toBe("connecting");
   });
 
+  it("retries a retained remote publication when its paused projection resumes", async () => {
+    const { client, socket, mediaPlane } = await liveClient();
+    const item = { participant_id: peerId, source: "camera", enabled: false, publication_id: "remote-connection|camera" } as const;
+    socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item });
+    await snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 1);
+    socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 2, item: { ...item, enabled: true } });
+    await snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 2);
+    expect(mediaPlane.resumed).toEqual([item.publication_id]);
+    client.stop();
+  });
+
   it("holds an ACK-before-event target until the named control head is proven", async () => {
     const { client, socket, state } = await liveClient();
     const next = { ...state, revision: 2, stateDigest: "0".repeat(64), participants: state.participants.map((participant) => ({ ...participant, handRaised: true })) };
@@ -728,6 +739,8 @@ describe("V1SyncClient", () => {
       mediaPlane: { local: [{ publicationId: "local-microphone" }], remote: [{ publicationId: "remote-camera" }] },
     });
     expect("setRemotePublicationTarget" in mediaPlane).toBe(false);
+    mediaPlane.emitLocal([{ participantId: ownerId, source: "microphone", enabled: false, publicationId: "local-microphone" }]);
+    expect(client.getSnapshot()).toMatchObject({ localMedia: { microphone: "disabled" }, mediaPlane: { local: [{ publicationId: "local-microphone", enabled: false }] } });
     client.stop();
     mediaPlane.emitLocal([]);
     expect(client.getSnapshot().mediaPlane.local).toEqual([]);
@@ -1784,12 +1797,17 @@ class AlwaysFailRemoveStore extends InMemoryV1PendingTargetStore {
 class TestMediaPlane implements V1ClientMediaPlane {
   readonly targets: V1MediaPlaneTarget[] = [];
   readonly results: V1MediaPlaneResult[] = [];
+  readonly resumed: string[] = [];
   #localListener: ((publications: readonly V1MediaPublication[]) => void) | undefined;
   #remoteListener: ((publications: readonly V1MediaPublication[]) => void) | undefined;
 
   async setLocalPublicationTarget(target: V1MediaPlaneTarget): Promise<V1MediaPlaneResult> {
     this.targets.push({ ...target });
     return this.results.shift() ?? { outcome: "confirmed", errorCode: null };
+  }
+
+  remotePublicationResumed(publicationId: string): void {
+    this.resumed.push(publicationId);
   }
 
   observeLocalPublications(listener: (publications: readonly V1MediaPublication[]) => void): () => void {

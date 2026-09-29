@@ -318,7 +318,7 @@ function renderElixir(contract) {
     '  defp projection_item_limit("media"), do: 1_500',
     '  defp projection_item_limit("presence"), do: 500',
     "  defp projection_item_limit(_stream), do: -1",
-    '  defp valid_projection_item?("media", %{"participant_id" => id, "source" => source, "enabled" => enabled, "publication_id" => publication_id} = item), do: exact_keys?(item, ["participant_id", "source", "enabled", "publication_id"]) and valid_uuid?(id) and source in @media_sources and is_boolean(enabled) and (is_nil(publication_id) or bounded_string?(publication_id, 1, 256)) and enabled == not is_nil(publication_id)',
+    '  defp valid_projection_item?("media", %{"participant_id" => id, "source" => source, "enabled" => enabled, "publication_id" => publication_id} = item), do: exact_keys?(item, ["participant_id", "source", "enabled", "publication_id"]) and valid_uuid?(id) and source in @media_sources and is_boolean(enabled) and (is_nil(publication_id) or bounded_string?(publication_id, 1, 256)) and (not enabled or not is_nil(publication_id))',
     '  defp valid_projection_item?("presence", %{"participant_id" => id, "state" => state, "speaking" => speaking, "active_speaker" => active} = item), do: exact_keys?(item, ["participant_id", "state", "speaking", "active_speaker"]) and valid_uuid?(id) and state in @presence_states and is_boolean(speaking) and is_boolean(active) and (state != "disconnected" or (not speaking and not active))',
     "  defp valid_projection_item?(_stream, _item), do: false",
     "",

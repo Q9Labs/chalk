@@ -391,7 +391,7 @@ function renderTypeScript(contract) {
   lines.push(
     "export const MediaProjectionItemSchema = Schema.Struct({ participant_id: UuidSchema, source: " +
       renderLiteralUnion(contract.projectionFrames.mediaSnapshot.items.source) +
-      ", enabled: Schema.Boolean, publication_id: Schema.NullOr(boundedUtf8String(256, 1)) }).check(Schema.makeFilter((item) => item.enabled === (item.publication_id !== null) ? undefined : { path: [], issue: 'enabled must equal whether publication_id is non-null' }));",
+      ", enabled: Schema.Boolean, publication_id: Schema.NullOr(boundedUtf8String(256, 1)) }).check(Schema.makeFilter((item) => !item.enabled || item.publication_id !== null ? undefined : { path: [], issue: 'enabled requires a publication_id' }));",
   );
   lines.push(
     "export const PresenceProjectionItemSchema = Schema.Struct({ participant_id: UuidSchema, state: " +

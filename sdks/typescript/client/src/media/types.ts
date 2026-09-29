@@ -31,6 +31,7 @@ export type CloudflareSFUCloseTrackRequest = {
 export type CloudflareSFUTracksResponse = {
   readonly sessionDescription?: CloudflareSFUSessionDescription;
   readonly tracks?: readonly CloudflareSFUTrackRequest[];
+  readonly trackErrors?: readonly { readonly connectionId: string; readonly trackName: string; readonly code: string }[];
   readonly requiresImmediateRenegotiation?: boolean;
 };
 
@@ -118,7 +119,7 @@ export class CloudflareSFUError extends Error {
   constructor(
     message: string,
     readonly code: CloudflareSFUFailureCode,
-    readonly options: { readonly status?: number; readonly retryableConnection?: boolean } = {},
+    readonly options: { readonly status?: number; readonly retryableConnection?: boolean; readonly providerCode?: string } = {},
   ) {
     super(message);
     this.name = "CloudflareSFUError";

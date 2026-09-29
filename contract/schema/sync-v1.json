@@ -1066,7 +1066,7 @@
           "maxBytes": 256,
           "nullable": true
         },
-        "invariant": "enabled_iff_publication_id_non_null"
+        "invariant": "enabled_requires_publication_id_non_null"
       }
     },
     "mediaEvent": {

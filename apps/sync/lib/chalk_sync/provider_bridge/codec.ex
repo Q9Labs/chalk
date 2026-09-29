@@ -3,7 +3,6 @@ defmodule ChalkSync.ProviderBridge.Codec do
 
   @max_identifier_bytes 256
   @max_reason_bytes 64
-  @sources ~w(microphone camera screen)
   @reason_atoms %{
     "conflict" => :conflict,
     "executor_unavailable" => :executor_unavailable,
@@ -245,7 +244,7 @@ defmodule ChalkSync.ProviderBridge.Codec do
          true <- valid_identifier?(participant),
          true <- is_boolean(enabled),
          true <- valid_publication_id?(publication_id),
-         true <- enabled == not is_nil(publication_id),
+         true <- not enabled or not is_nil(publication_id),
          {:ok, decoded_source} <- decode_source(source) do
       {:ok,
        %{
@@ -276,8 +275,9 @@ defmodule ChalkSync.ProviderBridge.Codec do
   defp valid_publication_id?(nil), do: true
   defp valid_publication_id?(value), do: valid_identifier?(value)
 
-  defp decode_source(source) when source in @sources,
-    do: {:ok, String.to_existing_atom(source)}
+  defp decode_source("microphone"), do: {:ok, :microphone}
+  defp decode_source("camera"), do: {:ok, :camera}
+  defp decode_source("screen"), do: {:ok, :screen}
 
   defp decode_source(source) when is_binary(source), do: {:error, :invalid_source}
   defp decode_source(_source), do: {:error, :malformed_response}

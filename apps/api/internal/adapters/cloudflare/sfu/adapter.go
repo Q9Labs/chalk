@@ -523,7 +523,7 @@ func (r addTracksResponse) partialRemoteTrackResponse(tracks []addTrackResult) b
 
 func transientRemoteTrackFailure(track addTrackResult) bool {
 	switch normalizedProviderCode(providerRejectionCode(track.ErrorCode, track.ErrorDescription)) {
-	case "track_not_found", "provider_internal", "timeout", "unknown":
+	case "track_not_found", "empty_track_error", "provider_internal", "timeout", "unknown":
 		return true
 	case "provider_rejected":
 		return strings.Contains(strings.ToLower(track.ErrorDescription), "internal")
@@ -535,8 +535,11 @@ func transientRemoteTrackFailure(track addTrackResult) bool {
 func (r addTracksResponse) toMediaPlane() mediaplane.TracksResponse {
 	providerTracks := r.normalizedTracks()
 	tracks := make([]mediaplane.Track, 0, len(providerTracks))
+	trackErrors := make([]mediaplane.TrackError, 0)
 	for _, track := range providerTracks {
 		if addTrackResultFailed(track) {
+			code := normalizedProviderCode(providerRejectionCode(track.ErrorCode, track.ErrorDescription))
+			trackErrors = append(trackErrors, mediaplane.TrackError{ConnectionID: track.SessionID, TrackName: track.TrackName, Code: code})
 			continue
 		}
 		tracks = append(tracks, mediaplane.Track{
@@ -550,6 +553,7 @@ func (r addTracksResponse) toMediaPlane() mediaplane.TracksResponse {
 	return mediaplane.TracksResponse{
 		SessionDescription:             r.SessionDescription,
 		Tracks:                         tracks,
+		TrackErrors:                    trackErrors,
 		RequiresImmediateRenegotiation: r.RequiresImmediateRenegotiation,
 	}
 }
@@ -716,6 +720,8 @@ func normalizedProviderCode(code string) string {
 		return "connection_not_connected"
 	case "track_not_found":
 		return "track_not_found"
+	case "empty_track_error":
+		return "empty_track_error"
 	case "track_already_closed":
 		return "track_already_closed"
 	case "unauthorized", "forbidden":

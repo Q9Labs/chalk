@@ -17,6 +17,8 @@ defmodule ChalkSync.Live.Episode do
     :connections,
     :requests,
     :screen_leases,
+    :media_observed_items,
+    :media_pauses,
     :media_items,
     :media_observation_cursor,
     :media_projection,
@@ -27,6 +29,8 @@ defmodule ChalkSync.Live.Episode do
     :connections,
     :requests,
     :screen_leases,
+    :media_observed_items,
+    :media_pauses,
     :media_items,
     :media_observation_cursor,
     :media_projection,
@@ -42,6 +46,8 @@ defmodule ChalkSync.Live.Episode do
       connections: %{},
       requests: DirectedRequests.new(),
       screen_leases: %{},
+      media_observed_items: [],
+      media_pauses: %{},
       media_items: [],
       media_observation_cursor: nil,
       media_projection: nil,
@@ -151,8 +157,12 @@ defmodule ChalkSync.Live.Episode do
   end
 
   defp refresh_media(state, options) do
-    with {:ok, observation} <- observed_media(state) do
-      apply_media_observation(state, observation, options)
+    with {:ok, pauses} <- Stateholder.media_pauses(state.episode),
+         {:ok, observation} <- observed_media(state) do
+      apply_media_observation(%{state | media_pauses: pauses}, observation, options)
+    else
+      {:retryable, _reason} -> {:error, :dependency_unavailable}
+      error -> error
     end
   end
 
@@ -172,27 +182,59 @@ defmodule ChalkSync.Live.Episode do
   end
 
   defp apply_equal_media_observation(state, publications) do
-    media_items = normalize_media_items(publications)
+    observed_items = normalize_media_items(publications)
 
-    if media_items == state.media_items,
-      do: {:ok, state, []},
-      else: {:error, :dependency_unavailable}
+    if observed_items == state.media_observed_items do
+      reconcile_observed_media(state, observed_items)
+    else
+      {:error, :dependency_unavailable}
+    end
   end
 
   defp apply_newer_media_observation(state, cursor, publications, options) do
-    media_items = normalize_media_items(publications)
+    observed_items = normalize_media_items(publications)
 
-    with {:ok, next} <- reconcile_screen_leases(state, media_items, options) do
-      next = %{next | media_items: media_items, media_observation_cursor: cursor}
-
-      case reconcile_projection(:media, state.media_projection, media_items) do
-        {:ok, projection, frames} ->
-          {:ok, %{next | media_projection: projection}, frames}
-
-        {:error, reason} ->
-          {:error, reason}
-      end
+    with {:ok, next} <- reconcile_screen_leases(state, observed_items, options) do
+      next = %{next | media_observed_items: observed_items, media_observation_cursor: cursor}
+      reconcile_observed_media(next, observed_items)
     end
+  end
+
+  defp reconcile_observed_media(state, observed_items) do
+    {pauses, media_items} = apply_media_pauses(observed_items, state.media_pauses)
+
+    case reconcile_projection(:media, state.media_projection, media_items) do
+      {:ok, projection, frames} ->
+        {:ok,
+         %{state | media_pauses: pauses, media_items: media_items, media_projection: projection},
+         frames}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp apply_media_pauses(observed_items, pauses) do
+    retained =
+      Enum.reduce(observed_items, %{}, fn item, retained ->
+        key = {item["participant_id"], item["source"]}
+        publication_id = item["publication_id"]
+
+        if is_binary(publication_id) and Map.get(pauses, key) == publication_id,
+          do: Map.put(retained, key, publication_id),
+          else: retained
+      end)
+
+    projected =
+      Enum.map(observed_items, fn item ->
+        key = {item["participant_id"], item["source"]}
+
+        if item["enabled"] and Map.has_key?(retained, key),
+          do: %{item | "enabled" => false},
+          else: item
+      end)
+
+    {retained, projected}
   end
 
   defp replace_live_projections(state) do
@@ -284,7 +326,50 @@ defmodule ChalkSync.Live.Episode do
   end
 
   defp apply_live_target(state, identity, authority, source, %{enabled: true} = target) do
-    enable_publication(state, identity, authority, source, target)
+    {next, result} = enable_publication(state, identity, authority, source, target)
+
+    if source in [:camera, :microphone] and result["outcome"] in ["confirmed", "satisfied"] do
+      key = {authority.participant_id, Atom.to_string(source)}
+
+      case Stateholder.set_media_pause(identity, source, nil) do
+        :ok -> {%{next | media_pauses: Map.delete(next.media_pauses, key)}, result}
+        {:retryable, reason} -> {next, live_result(target, :retryable_failure, reason)}
+        {:error, reason} -> {next, live_result(target, :terminal_failure, reason)}
+      end
+    else
+      {next, result}
+    end
+  end
+
+  defp apply_live_target(state, identity, authority, source, target)
+       when source in [:camera, :microphone] do
+    key = {authority.participant_id, Atom.to_string(source)}
+
+    publication_id =
+      case Enum.find(state.media_observed_items, fn item ->
+             item["participant_id"] == authority.participant_id and
+               item["source"] ==
+                 Atom.to_string(source)
+           end) do
+        %{"publication_id" => value} when is_binary(value) -> value
+        _ -> nil
+      end
+
+    if is_binary(publication_id) do
+      case Stateholder.set_media_pause(identity, source, publication_id) do
+        :ok ->
+          pauses = Map.put(state.media_pauses, key, publication_id)
+          {%{state | media_pauses: pauses}, live_result(target, :confirmed)}
+
+        {:retryable, reason} ->
+          {state, live_result(target, :retryable_failure, reason)}
+
+        {:error, reason} ->
+          {state, live_result(target, :terminal_failure, reason)}
+      end
+    else
+      {state, live_result(target, :confirmed)}
+    end
   end
 
   defp apply_live_target(state, _identity, authority, source, target) do

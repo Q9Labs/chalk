@@ -31,7 +31,14 @@ type TracksRequest struct {
 type TracksResponse struct {
 	SessionDescription             *SessionDescription `json:"sessionDescription,omitempty"`
 	Tracks                         []Track             `json:"tracks,omitempty"`
+	TrackErrors                    []TrackError        `json:"trackErrors,omitempty"`
 	RequiresImmediateRenegotiation bool                `json:"requiresImmediateRenegotiation,omitempty"`
+}
+
+type TrackError struct {
+	ConnectionID string `json:"connectionId"`
+	TrackName    string `json:"trackName"`
+	Code         string `json:"code"`
 }
 
 type RenegotiateRequest struct {

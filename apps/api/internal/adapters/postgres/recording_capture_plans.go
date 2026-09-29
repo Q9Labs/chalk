@@ -288,7 +288,7 @@ func capturePlanParticipants(folded []foldedCapturePlanParticipant, persisted []
 func capturePlanTracks(publications []persistedCapturePlanPublication, participantGenerations map[utilities.ID]int64) ([]captureplan.TrackSnapshot, error) {
 	tracks := make([]captureplan.TrackSnapshot, 0, len(publications))
 	for _, publication := range publications {
-		if publication.Enabled != (publication.PublicationID != nil) {
+		if publication.Enabled && publication.PublicationID == nil {
 			return nil, fmt.Errorf("invalid capture publication identity: %w", captureplan.ErrInvalidTrack)
 		}
 		if !publication.Enabled {

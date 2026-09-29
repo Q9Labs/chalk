@@ -25,10 +25,13 @@ defmodule ChalkSync.Stateholder.Postgres do
   alias ChalkSync.Stateholder.Postgres.ExternalOperationPlanner
   alias ChalkSync.Stateholder.Postgres.FaultHooks
   alias ChalkSync.Stateholder.Postgres.Lifecycle
+  alias ChalkSync.Stateholder.Postgres.MediaPauses
   alias ChalkSync.Stateholder.Postgres.ParticipantAuthority
   alias ChalkSync.Stateholder.Postgres.PublicationGrants
   alias ChalkSync.Stateholder.Postgres.RecoveryReader
   alias ChalkSync.Stateholder.Postgres.RoleTransitionPlanner
+  alias ChalkSync.Stateholder.Postgres.Scope
+  alias ChalkSync.Stateholder.Postgres.SQL.MediaPauses, as: MediaPausesSQL
   alias ChalkSync.Stateholder.Postgres.Transaction
   alias ChalkSync.Stateholder.Postgres.WebhookObservation
   alias ChalkSync.Stateholder.Recovery
@@ -180,6 +183,43 @@ defmodule ChalkSync.Stateholder.Postgres do
              (is_nil(expected_generation) or
                 (is_integer(expected_generation) and expected_generation > 0)),
       do: ParticipantAuthority.participant_authority(episode, participant_id, expected_generation)
+
+  @impl ChalkSync.Stateholder
+  def media_pauses(%EpisodeKey{} = episode) do
+    case Postgrex.query(
+           Database.connection(episode),
+           MediaPausesSQL.list(),
+           Scope.episode(episode),
+           timeout: 1_000
+         ) do
+      {:ok, %{rows: rows}} -> MediaPauses.decode_rows(rows)
+      {:error, _reason} -> {:retryable, :dependency_unavailable}
+    end
+  rescue
+    _exception -> {:retryable, :dependency_unavailable}
+  catch
+    :exit, _reason -> {:retryable, :dependency_unavailable}
+  end
+
+  @impl ChalkSync.Stateholder
+  def set_media_pause(%Identity{} = identity, source, publication_id)
+      when source in [:microphone, :camera] do
+    case Postgrex.transaction(
+           Database.connection(identity.episode),
+           &MediaPauses.set_transaction(&1, identity, source, publication_id),
+           timeout: @transaction_timeout_ms,
+           commit_comment: "chalk sync media pause"
+         ) do
+      {:ok, :ok} -> :ok
+      {:error, {:error, reason}} -> {:error, reason}
+      {:error, {:retryable, reason}} -> {:retryable, reason}
+      {:error, _reason} -> {:retryable, :dependency_unavailable}
+    end
+  rescue
+    _exception -> {:retryable, :dependency_unavailable}
+  catch
+    :exit, _reason -> {:retryable, :dependency_unavailable}
+  end
 
   @impl ChalkSync.Stateholder
   def reserve_publication_grant(%Identity{} = identity, operation_id, source)

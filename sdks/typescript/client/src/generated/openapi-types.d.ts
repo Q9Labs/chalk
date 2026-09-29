@@ -1694,6 +1694,11 @@ export interface components {
         sdp: string;
         type: string;
       } | null;
+      trackErrors?: {
+        code: string;
+        connectionId: string;
+        trackName: string;
+      }[];
       tracks?: {
         location: string;
         mid?: string;
