@@ -203,7 +203,7 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   @impl ChalkSync.Stateholder
   def set_media_pause(%Identity{} = identity, source, publication_id)
-      when source in [:microphone, :camera] do
+      when source in [:microphone, :camera, :screen] do
     case Postgrex.transaction(
            Database.connection(identity.episode),
            &MediaPauses.set_transaction(&1, identity, source, publication_id),

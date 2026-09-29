@@ -46,5 +46,13 @@ defmodule ChalkSync.Stateholder.PostgresMediaPausesTest do
     assert :ok = Postgres.set_media_pause(identity, :camera, nil)
     assert {:ok, pauses} = Postgres.media_pauses(fixture.episode)
     refute Map.has_key?(pauses, key)
+
+    screen_publication = "publisher-connection|screen-track"
+    screen_key = {identity.participant_id, "screen"}
+    assert :ok = Postgres.set_media_pause(identity, :screen, screen_publication)
+    assert {:ok, %{^screen_key => ^screen_publication}} = Postgres.media_pauses(fixture.episode)
+    assert :ok = Postgres.set_media_pause(identity, :screen, nil)
+    assert {:ok, pauses} = Postgres.media_pauses(fixture.episode)
+    refute Map.has_key?(pauses, screen_key)
   end
 end

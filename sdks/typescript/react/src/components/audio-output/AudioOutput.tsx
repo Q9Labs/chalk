@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMedia } from "../../bindings/hooks";
+import { useMedia, useParticipants } from "../../bindings/hooks";
 import { toAudioParticipants } from "../../selectors/space-selectors";
 import { useParticipantVolumeContext } from "../participants-panel/participant-volume-context";
 
@@ -41,9 +41,20 @@ type SinkAwareAudioElement = HTMLAudioElement & {
 
 export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, getParticipantVolume }: AudioOutputProps) {
   const media = useMedia();
+  const participantState = useParticipants();
   const volumeContext = useParticipantVolumeContext();
   const contextParticipants = useMemo(() => toAudioParticipants(media.remote), [media.remote]);
-  const effectiveParticipants = participants ?? contextParticipants;
+  const effectiveParticipants = useMemo(() => {
+    const stateById = new Map(participantState.roster.map((participant) => [participant.participantId, participant.media]));
+    return (participants ?? contextParticipants).map((participant) => {
+      const state = stateById.get(participant.id);
+      return {
+        ...participant,
+        audioTrack: state?.microphone === "active" ? participant.audioTrack : null,
+        screenShareAudioTrack: state?.screenShare === "active" ? participant.screenShareAudioTrack : null,
+      };
+    });
+  }, [participants, contextParticipants, participantState.roster]);
   const effectiveAudioOutputDeviceId = audioOutputDeviceId ?? media.selection.speaker ?? undefined;
   const effectiveGetParticipantVolume = getParticipantVolume ?? ((participantId: string) => (volumeContext?.volumes.get(participantId) ?? 100) / 100);
   // Map of participant ID -> audio element (mic audio)

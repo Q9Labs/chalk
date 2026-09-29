@@ -206,6 +206,58 @@ describe("Cloudflare SFU client", () => {
     harness.client.stop();
   });
 
+  it("retires a forced-closed slot through negotiation and enables on a fresh MID", async () => {
+    const harness = createHarness();
+    const microphone = new FakeTrack("microphone-track", "audio");
+    await harness.client.start(fakeStream(microphone));
+    const oldPublication = harness.client.getSnapshot().localTracks[0]?.publicationId;
+    const oldMID = harness.transport.addInputs[0]?.tracks[0]?.mid;
+    const closing = harness.client.closeForcedLocalPublication("microphone");
+    expect(microphone.enabled).toBe(false);
+    expect(harness.client.getSnapshot().localTracks[0]).toMatchObject({ enabled: false, publicationId: null });
+    await closing;
+    expect(harness.transport.closeInputs[0]).toMatchObject({ force: false, sessionDescription: { type: "offer" }, tracks: [{ mid: oldMID }] });
+    expect(harness.peers[0]?.activeTransceiverCount()).toBe(0);
+    harness.client.setLocalSourceIntent("microphone", true);
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "reenable", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toMatchObject({ outcome: "confirmed" });
+    expect(harness.transport.addInputs[1]?.tracks[0]?.mid).not.toBe(oldMID);
+    expect(harness.client.getSnapshot().localTracks[0]?.publicationId).not.toBe(oldPublication);
+    expect(microphone.enabled).toBe(true);
+    harness.client.stop();
+  });
+
+  it("keeps an off intent muted when an earlier publication finishes and rejects stale on targets", async () => {
+    const harness = createHarness();
+    const microphone = new FakeTrack("microphone-track", "audio");
+    harness.transport.blockConnection("connection-1");
+    const starting = harness.client.start(fakeStream(microphone));
+    await vi.waitFor(() => expect(harness.transport.addInputs).toHaveLength(1));
+    harness.client.setLocalSourceIntent("microphone", false);
+    expect(microphone.enabled).toBe(false);
+    harness.transport.releaseConnection("connection-1");
+    await starting;
+    expect(microphone.enabled).toBe(false);
+    expect(harness.client.getSnapshot().localTracks[0]?.enabled).toBe(false);
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "stale-on", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toEqual({ outcome: "terminal_failure", errorCode: "local_source_paused" });
+    expect(harness.peers[0]?.getSenders()[0]?.track).toBeNull();
+    harness.client.stop();
+  });
+
+  it("rebuilds again after independent HTTP 410 capacity failures and restores other active sources", async () => {
+    let sequence = 1;
+    const harness = createHarness({ replaceMediaConnection: async () => bootstrap(`connection-${++sequence}`) });
+    await harness.client.start(fakeStream(new FakeTrack("microphone-track", "audio"), new FakeTrack("camera-track", "video")));
+    for (let index = 0; index < 2; index++) {
+      await harness.client.closeForcedLocalPublication("camera");
+      harness.client.setLocalSourceIntent("camera", true);
+      harness.transport.failNextStaleLocalPublish = true;
+      await expect(harness.client.setLocalPublicationTarget({ operationId: `reenable-${index}`, participantId: "participant-1", source: "camera", enabled: true })).resolves.toMatchObject({ outcome: "confirmed" });
+      expect(harness.client.getSnapshot().localTracks.every((track) => track.enabled)).toBe(true);
+    }
+    expect(sequence).toBe(3);
+    harness.client.stop();
+  });
+
   it("publishes camera and microphone, validates V1 targets, and retains provider identity while disabled", async () => {
     const harness = createHarness();
     const microphone = new FakeTrack("microphone-track", "audio");
@@ -626,7 +678,7 @@ describe("Cloudflare SFU client", () => {
     expect(onScreenEnded).toHaveBeenCalledOnce();
     await expect(setScreenTarget(harness.client, "screen-ended", false)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
     expect(harness.transport.closeInputs).toHaveLength(0);
-    expect(harness.client.getSnapshot().localTracks.find((publication) => publication.source === "screen")).toMatchObject({ enabled: false, publicationId: null });
+    expect(harness.client.getSnapshot().localTracks.find((publication) => publication.source === "screen")).toMatchObject({ enabled: false, publicationId: expect.any(String) });
     await harness.client.clearPreparedLocalTrack("screen");
     expect(harness.client.getSnapshot().localTracks.some((publication) => publication.source === "screen")).toBe(false);
     expect(screen.readyState).toBe("ended");
@@ -650,7 +702,7 @@ describe("Cloudflare SFU client", () => {
     expect(peer.getTransceivers()[1]).toBe(screenTransceiver);
     expect(screenTransceiver?.sender.track?.id).toBe("screen-track-2");
     expect(harness.transport.addInputs.at(-1)?.tracks[0]).toMatchObject({ source: "screen", mid: "1" });
-    expect(harness.transport.addInputs.at(-1)?.tracks[0]?.trackName).not.toBe(harness.transport.addInputs.at(-2)?.tracks[0]?.trackName);
+    expect(harness.transport.addInputs).toHaveLength(2);
     harness.client.stop();
   });
 
@@ -686,7 +738,7 @@ describe("Cloudflare SFU client", () => {
       outcome: "confirmed",
       errorCode: null,
     });
-    expect(harness.transport.addInputs.at(-1)?.tracks[0]?.trackName).not.toBe(failedTrackName);
+    expect(harness.transport.addInputs.at(-1)?.tracks[0]?.trackName).toBe(failedTrackName);
     harness.client.stop();
   });
 
@@ -952,7 +1004,7 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
 
   async closeTracks(input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUCloseTrackRequest[]; readonly force: boolean }): Promise<CloudflareSFUTracksResponse> {
     this.closeInputs.push(input);
-    return {};
+    return input.sessionDescription ? { sessionDescription: { type: "answer", sdp: "close-answer" } } : {};
   }
 
   async renegotiate(): Promise<void> {
