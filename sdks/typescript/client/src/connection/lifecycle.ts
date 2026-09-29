@@ -441,6 +441,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                   model.syncSnapshot = model.sync?.getSnapshot() ?? null;
                   model.mediaSnapshot = model.media?.getSnapshot() ?? null;
                   yield* transition("live");
+                  if (model.mediaSnapshot?.connection.phase !== "live") yield* recover("media");
                   yield* emitPorts();
                   yield* scheduleRefresh();
                   span.end({ state: model.state, epoch: model.epoch, outcome: "succeeded" });
@@ -767,7 +768,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               ),
             ),
           ),
-        runPortCommand: (operation) => boundCommand(withFreshAccess(operation)),
+        runPortCommand: (operation) => withFreshAccess(operation),
         nowUnsafe: () => clock.currentTimeMillisUnsafe(),
         scheduleUnsafe: (callback, milliseconds) => platform.clock.setTimeout(callback, milliseconds),
         cancelScheduleUnsafe: (handle) => platform.clock.clearTimeout(handle),

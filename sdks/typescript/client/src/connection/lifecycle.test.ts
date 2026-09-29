@@ -7,6 +7,44 @@ import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.
 import { ConnectionLifecycleService, makeConnectionLifecycleLayer } from "./lifecycle";
 
 describe("ConnectionLifecycle Episode snapshot", () => {
+  it("does not apply the receipt recovery deadline to a healthy long-running port operation", async () => {
+    const platform = createCoreTestPlatform();
+    const layer = makeConnectionLifecycleLayer({ access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)), apiBaseURL: "https://api.chalk.test", syncURL: "wss://sync.chalk.test/v1/sync", dependencies: platform.dependencies, recovery: { budgetMs: 10 } });
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const lifecycle = yield* joinedLifecycle();
+        const result = yield* lifecycle.runPortCommand(() => Effect.sleep(30).pipe(Effect.as("finalized")));
+        expect(result).toBe("finalized");
+      }).pipe(Effect.provide(layer)),
+    );
+  });
+
+  it("reconciles media that failed while Sync Join was still pending", async () => {
+    const platform = createCoreTestPlatform();
+    const media = platform.dependencies.createMediaClient({ access: parseParsedAccessGrant(opaqueAccessGrant(1)), credential: async () => "unused", onFailure: () => undefined, onScreenEnded: () => undefined });
+    const restart = vi.spyOn(media, "restart").mockImplementation(async () => {
+      platform.media.emit({ ...platform.media.getSnapshot(), failure: null, connection: { ...platform.media.getSnapshot().connection, phase: "live" } });
+    });
+    const sync = {
+      ...platform.sync,
+      start: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        platform.media.emit({ ...platform.media.getSnapshot(), failure: { code: "media_failed", recoverable: true }, connection: { ...platform.media.getSnapshot().connection, phase: "failed" } });
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        await platform.sync.start();
+      },
+    };
+    const layer = makeConnectionLifecycleLayer({ access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)), apiBaseURL: "https://api.chalk.test", syncURL: "wss://sync.chalk.test/v1/sync", dependencies: { ...platform.dependencies, createSyncClient: () => sync } });
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const lifecycle = yield* joinedLifecycle();
+        yield* Effect.sleep(350);
+        expect(restart).toHaveBeenCalledTimes(1);
+        expect(lifecycle.getSnapshot()).toMatchObject({ state: "live", connection: { media: "healthy" } });
+      }).pipe(Effect.provide(layer)),
+    );
+  });
+
   it("stops recovery when the access provider explicitly revokes Participant access", async () => {
     const platform = createCoreTestPlatform();
     const initial = opaqueAccessGrant(1);
@@ -24,8 +62,7 @@ describe("ConnectionLifecycle Episode snapshot", () => {
     });
     await Effect.runPromise(
       Effect.gen(function* () {
-        const lifecycle = yield* Effect.service(ConnectionLifecycleService);
-        yield* lifecycle.join();
+        const lifecycle = yield* joinedLifecycle();
         yield* Effect.sleep(200);
         expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "invalid_access", recoverable: false } });
       }).pipe(Effect.provide(layer)),
@@ -44,8 +81,7 @@ describe("ConnectionLifecycle Episode snapshot", () => {
     });
     await Effect.runPromise(
       Effect.gen(function* () {
-        const lifecycle = yield* Effect.service(ConnectionLifecycleService);
-        yield* lifecycle.join();
+        const lifecycle = yield* joinedLifecycle();
         const receipt = yield* Deferred.make<void>();
         yield* Effect.forkScoped(lifecycle.runCommand(() => Deferred.await(receipt)));
         yield* Effect.sleep(10);
@@ -67,8 +103,7 @@ describe("ConnectionLifecycle Episode snapshot", () => {
     const layer = makeConnectionLifecycleLayer({ access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)), apiBaseURL: "https://api.chalk.test", syncURL: "wss://sync.chalk.test/v1/sync", dependencies: platform.dependencies });
     await Effect.runPromise(
       Effect.gen(function* () {
-        const lifecycle = yield* Effect.service(ConnectionLifecycleService);
-        yield* lifecycle.join();
+        const lifecycle = yield* joinedLifecycle();
         const states: string[] = [];
         const unsubscribe = lifecycle.subscribe(() => states.push(lifecycle.getSnapshot().state));
         platform.sync.emit({ ...platform.sync.getSnapshot(), connection: { phase: "connecting" } });
@@ -87,8 +122,7 @@ describe("ConnectionLifecycle Episode snapshot", () => {
     const layer = makeConnectionLifecycleLayer({ access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)), apiBaseURL: "https://api.chalk.test", syncURL: "wss://sync.chalk.test/v1/sync", dependencies: platform.dependencies });
     await Effect.runPromise(
       Effect.gen(function* () {
-        const lifecycle = yield* Effect.service(ConnectionLifecycleService);
-        yield* lifecycle.join();
+        const lifecycle = yield* joinedLifecycle();
         platform.sync.emit({ ...platform.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "participant_inactive" } });
         yield* Effect.sleep(50);
         expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "invalid_access", recoverable: false } });
@@ -111,8 +145,7 @@ describe("ConnectionLifecycle Episode snapshot", () => {
     });
     const snapshot = await Effect.runPromise(
       Effect.gen(function* () {
-        const lifecycle = yield* Effect.service(ConnectionLifecycleService);
-        yield* lifecycle.join();
+        const lifecycle = yield* joinedLifecycle();
         return lifecycle.getSnapshot();
       }).pipe(Effect.provide(layer)),
     );
@@ -125,4 +158,12 @@ describe("ConnectionLifecycle Episode snapshot", () => {
 function credential(audience: "chalk-sync" | "chalk-media"): string {
   const encode = (value: unknown) => btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
   return `${encode({ alg: "EdDSA" })}.${encode({ aud: audience })}.signature`;
+}
+
+function joinedLifecycle() {
+  return Effect.gen(function* () {
+    const lifecycle = yield* Effect.service(ConnectionLifecycleService);
+    yield* lifecycle.join();
+    return lifecycle;
+  });
 }

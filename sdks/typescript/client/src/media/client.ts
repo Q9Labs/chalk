@@ -971,7 +971,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
 
   #scheduleFlowWatch(): void {
-    if (this.#stopped || !this.#started || this.#flowTimer !== undefined) return;
+    if (this.#stopped || !this.#started || this.#snapshot.connection.phase === "failed" || this.#flowTimer !== undefined) return;
     this.#flowTimer = globalThis.setTimeout(async () => {
       this.#flowTimer = undefined;
       const generation = this.#generation;
@@ -981,28 +981,36 @@ export class CloudflareSFUClient implements ClientMediaPlane {
           this.#flowWatchdog.clear();
           return;
         }
-        const sources = [
-          ...[...this.#localTracks.values()].filter((state) => state.source !== "screen" && state.enabled && state.desiredEnabled && state.track.enabled).map((state) => ({ key: `publish:${state.source}`, direction: "publish" as const, track: state.track, kind: state.track.kind })),
-          ...[...this.#expectedRemotePublications]
-            .filter(([, publication]) => publication.source !== "screen")
-            .map(([key, publication]) => ({ key: `subscribe:${publication.publicationId}`, direction: "subscribe" as const, track: this.#remoteTracks.get(key)?.track ?? null, kind: publication.source === "microphone" ? "audio" : "video" })),
-        ];
-        this.#flowWatchdog.retain(new Set(sources.map((source) => source.key)));
-        for (const source of sources) {
-          const kind = source.kind;
-          const report = source.track ? await this.#connection.getStats(source.track) : null;
-          if (this.#stopped || generation !== this.#generation) return;
-          if (this.#flowWatchdog.observe(source.key, report ? mediaFlowProgress(report, source.direction, kind) : 0, Date.now())) {
-            this.#setFailure(new CloudflareSFUError(`Media ${source.direction} ${kind} stopped flowing`, "media_failed"), "media_failed");
-            return;
-          }
-        }
+        await this.#checkMediaFlow(generation);
       } catch (error) {
         if (!this.#stopped && generation === this.#generation) this.#setFailure(error, "media_failed");
       } finally {
         if (generation === this.#generation) this.#scheduleFlowWatch();
       }
     }, 1_000);
+  }
+
+  #flowSources() {
+    return [
+      ...[...this.#localTracks.values()].filter((state) => state.source !== "screen" && state.enabled && state.desiredEnabled && state.track.enabled).map((state) => ({ key: `publish:${state.source}`, direction: "publish" as const, track: state.track, kind: state.track.kind })),
+      ...[...this.#expectedRemotePublications]
+        .filter(([, publication]) => publication.source !== "screen")
+        .map(([key, publication]) => ({ key: `subscribe:${publication.publicationId}`, direction: "subscribe" as const, track: this.#remoteTracks.get(key)?.track ?? null, kind: publication.source === "microphone" ? "audio" : "video" })),
+    ];
+  }
+
+  async #checkMediaFlow(generation: number): Promise<void> {
+    const sources = this.#flowSources();
+    this.#flowWatchdog.retain(new Set(sources.map((source) => source.key)));
+    for (const source of sources) {
+      const kind = source.kind;
+      const report = source.track ? await this.#connection.getStats(source.track) : null;
+      if (this.#stopped || generation !== this.#generation) return;
+      if (this.#flowWatchdog.observe(source.key, report ? mediaFlowProgress(report, source.direction, kind) : 0, Date.now())) {
+        this.#setFailure(new CloudflareSFUError(`Media ${source.direction} ${kind} stopped flowing`, "media_failed"), "media_failed");
+        return;
+      }
+    }
   }
 
   #clearFlowWatch(): void {
