@@ -131,6 +131,8 @@ func runWorker(config renderWorkerConfig) error {
 	if err != nil {
 		return fmt.Errorf("create recorder render readiness reporter: %w", err)
 	}
+	stopResources := recorderworker.StartProcessResourceLogs(ctx, "render")
+	defer stopResources()
 	return reporter.Run(ctx, daemon)
 }
 

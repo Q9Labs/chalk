@@ -93,7 +93,7 @@ func loadConfig(bootstrapEnvironmentFile, imageEnvironmentFile string, verifyAtt
 		return Config{}, fmt.Errorf("%w: bootstrap authority", ErrInvalidConfig)
 	}
 	if verifyAttestation {
-		if err := VerifyImageManifest(config.ImageManifest, config.ReleaseID, config.ImageDigest); err != nil {
+		if err := VerifyImageManifest(config.ImageManifest, config.ReleaseID, config.ImageDigest, config.Role); err != nil {
 			return Config{}, err
 		}
 	}

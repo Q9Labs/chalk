@@ -174,7 +174,7 @@ func (a *RecorderFleet) EnsureNode(ctx context.Context, request recorderfleet.En
 	}
 	payload := createDropletRequest{
 		Name: request.Name, Region: request.Release.Region, Size: request.Release.Size,
-		Image: request.Release.ImageID, Monitoring: true, Tags: append([]string(nil), request.RequiredTags...),
+		Image: request.Release.ImageID, Monitoring: false, WithDropletAgent: false, Tags: append([]string(nil), request.RequiredTags...),
 		UserData: userData, VPCUUID: a.vpcUUID, SSHKeys: append([]int64(nil), a.sshKeyIDs...),
 	}
 	var response createDropletResponse
@@ -482,15 +482,16 @@ type listDropletsResponse struct {
 }
 
 type createDropletRequest struct {
-	Name       string   `json:"name"`
-	Region     string   `json:"region"`
-	Size       string   `json:"size"`
-	Image      int64    `json:"image"`
-	Monitoring bool     `json:"monitoring"`
-	Tags       []string `json:"tags"`
-	UserData   string   `json:"user_data"`
-	VPCUUID    string   `json:"vpc_uuid,omitempty"`
-	SSHKeys    []int64  `json:"ssh_keys,omitempty"`
+	Name             string   `json:"name"`
+	Region           string   `json:"region"`
+	Size             string   `json:"size"`
+	Image            int64    `json:"image"`
+	Monitoring       bool     `json:"monitoring"`
+	WithDropletAgent bool     `json:"with_droplet_agent"`
+	Tags             []string `json:"tags"`
+	UserData         string   `json:"user_data"`
+	VPCUUID          string   `json:"vpc_uuid,omitempty"`
+	SSHKeys          []int64  `json:"ssh_keys,omitempty"`
 }
 
 type createDropletResponse struct {

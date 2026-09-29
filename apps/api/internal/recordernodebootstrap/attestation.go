@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
 
 const imageManifestSchemaVersion = "chalk_recorder_cpu_image.v1"
@@ -29,7 +31,7 @@ type imageManifestFile struct {
 	SHA256 string `json:"sha256"`
 }
 
-func VerifyImageManifest(path, releaseID, expectedDigest string) error {
+func VerifyImageManifest(path, releaseID, expectedDigest string, role workeridentity.Role) error {
 	data, err := os.ReadFile(path)
 	if err != nil || len(data) == 0 || len(data) > 32<<20 {
 		return fmt.Errorf("%w: read image manifest", ErrInvalidConfig)
@@ -41,7 +43,7 @@ func VerifyImageManifest(path, releaseID, expectedDigest string) error {
 	var manifest imageManifest
 	decoder := json.NewDecoder(strings.NewReader(string(data)))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&manifest) != nil || manifest.SchemaVersion != imageManifestSchemaVersion || manifest.ReleaseID != releaseID || !validClaim(manifest.SourceCommit, 128) || !validHexSHA256(manifest.SourceTreeSHA256) || !validImageProfile(manifest.Profile) || len(manifest.Files) == 0 || !slices.IsSortedFunc(manifest.Files, func(left, right imageManifestFile) int { return strings.Compare(left.Path, right.Path) }) {
+	if decoder.Decode(&manifest) != nil || manifest.SchemaVersion != imageManifestSchemaVersion || manifest.ReleaseID != releaseID || !validClaim(manifest.SourceCommit, 128) || !validHexSHA256(manifest.SourceTreeSHA256) || !validImageProfile(manifest.Profile, role) || len(manifest.Files) == 0 || !slices.IsSortedFunc(manifest.Files, func(left, right imageManifestFile) int { return strings.Compare(left.Path, right.Path) }) {
 		return fmt.Errorf("%w: invalid image manifest", ErrInvalidConfig)
 	}
 	previous := ""
@@ -58,8 +60,8 @@ func VerifyImageManifest(path, releaseID, expectedDigest string) error {
 	return nil
 }
 
-func validImageProfile(profile string) bool {
-	return profile == "cpu-libx264-frame2" || profile == "cpu-libx264-frame8"
+func validImageProfile(profile string, role workeridentity.Role) bool {
+	return profile == "cpu-libx264-frame2" || profile == "cpu-libx264-frame8" || profile == "capture-minimal-v1" && role == workeridentity.RoleCapture
 }
 
 func installedPathSHA256(path, pathType string) (string, error) {

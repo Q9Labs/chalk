@@ -19,6 +19,10 @@ type Reconciler struct {
 	runtime   RuntimeControl
 }
 
+type waitingDemandSource interface {
+	WaitForDemand(context.Context, PoolKey) (Demand, error)
+}
+
 func NewReconciler(config Config, demand DemandSource, journal JournalStore, provider Provider, bootstrap BootstrapAuthority, runtime RuntimeControl) (*Reconciler, error) {
 	if config.Now == nil {
 		config.Now = time.Now
@@ -40,10 +44,16 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	demand, err := r.demand.GetDemand(ctx, r.config.Key)
+	var demand Demand
+	if waiter, ok := r.demand.(waitingDemandSource); ok && r.config.Key.Role == workeridentity.RoleCapture && len(state.Nodes) == 0 && state.PendingCreate == nil {
+		demand, err = waiter.WaitForDemand(ctx, r.config.Key)
+	} else {
+		demand, err = r.demand.GetDemand(ctx, r.config.Key)
+	}
 	if err != nil {
 		return r.failClosed(ctx, state, "", now, fmt.Errorf("read recorder fleet demand: %w", err))
 	}
+	now = r.config.Now().UTC()
 	if err := demand.Validate(); err != nil {
 		return r.failClosed(ctx, state, demand.Revision, now, err)
 	}

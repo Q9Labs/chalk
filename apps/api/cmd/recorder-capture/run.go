@@ -68,6 +68,8 @@ func runWorker(environment, controlPlaneURL, workerCertificate, workerKey, serve
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	stopResources := recorderworker.StartProcessResourceLogs(ctx, "capture")
+	defer stopResources()
 	return reporter.Run(ctx, daemon)
 }
 

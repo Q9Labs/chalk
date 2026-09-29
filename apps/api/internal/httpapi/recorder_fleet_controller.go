@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
@@ -78,7 +79,7 @@ func requireRecorderFleetController(verifier RecorderFleetControllerVerifier, ne
 
 func recorderFleetDemandHandler(service RecorderFleetControllerService, environment string) http.HandlerFunc {
 	return func(w http.ResponseWriter, request *http.Request) {
-		key, ok := recorderFleetRequestKey(w, request, environment)
+		key, ok := recorderFleetRequestKey(w, request, environment, true)
 		if !ok {
 			return
 		}
@@ -87,6 +88,15 @@ func recorderFleetDemandHandler(service RecorderFleetControllerService, environm
 			writeRecorderFleetError(w, err)
 			return
 		}
+		if request.URL.Query().Get("wait") == "25" && demand.DesiredNodes == 0 {
+			demand, err = waitForRecorderFleetDemand(request.Context(), service, key, demand, 25*time.Second, 500*time.Millisecond)
+			if err != nil {
+				if request.Context().Err() == nil {
+					writeRecorderFleetError(w, err)
+				}
+				return
+			}
+		}
 		writeJSON(w, http.StatusOK, recorderFleetDemandResponse{
 			SchemaVersion: recorderfleet.DemandSchemaVersion, Environment: environment,
 			Role: key.Role, Demand: demand,
@@ -94,9 +104,32 @@ func recorderFleetDemandHandler(service RecorderFleetControllerService, environm
 	}
 }
 
+// Rechecking the authoritative query also catches scheduled starts becoming
+// due, and works across API replicas without process-local notification state.
+func waitForRecorderFleetDemand(ctx context.Context, service RecorderFleetControllerService, key recorderfleet.PoolKey, demand recorderfleet.Demand, timeout, interval time.Duration) (recorderfleet.Demand, error) {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return recorderfleet.Demand{}, ctx.Err()
+		case <-timer.C:
+			return demand, nil
+		case <-ticker.C:
+			var err error
+			demand, err = service.GetDemand(ctx, key)
+			if err != nil || demand.DesiredNodes > 0 {
+				return demand, err
+			}
+		}
+	}
+}
+
 func recorderFleetNodesHandler(service RecorderFleetControllerService, environment string) http.HandlerFunc {
 	return func(w http.ResponseWriter, request *http.Request) {
-		key, ok := recorderFleetRequestKey(w, request, environment)
+		key, ok := recorderFleetRequestKey(w, request, environment, false)
 		if !ok {
 			return
 		}
@@ -180,10 +213,10 @@ func recorderFleetPoolHandler(service RecorderFleetControllerService, environmen
 	}
 }
 
-func recorderFleetRequestKey(w http.ResponseWriter, request *http.Request, environment string) (recorderfleet.PoolKey, bool) {
+func recorderFleetRequestKey(w http.ResponseWriter, request *http.Request, environment string, allowWait bool) (recorderfleet.PoolKey, bool) {
 	query := request.URL.Query()
 	roles, exists := query["role"]
-	if !exists || len(query) != 1 || len(roles) != 1 {
+	if !exists || len(roles) != 1 || len(query) != 1 && (!allowWait || len(query) != 2 || len(query["wait"]) != 1 || query.Get("wait") != "25") {
 		writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recorder fleet role")
 		return recorderfleet.PoolKey{}, false
 	}
