@@ -78,6 +78,7 @@ export type ErrorCode =
   | "media.device_constraint_invalid"
   | "media.capture_failed"
   | "media.request_invalid"
+  | "media.timeout"
   | "participant.invalid"
   | "reaction.invalid"
   | "whiteboard.unavailable";

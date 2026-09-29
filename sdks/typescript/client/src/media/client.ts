@@ -44,6 +44,8 @@ const EMPTY_LOCAL: readonly CloudflareSFULocalTrack[] = Object.freeze([]);
 const EMPTY_REMOTE: readonly CloudflareSFURemoteTrack[] = Object.freeze([]);
 const INVALID_PUBLICATION_SIGNATURE = "\u0000invalid";
 const CONNECTION_TIMEOUT_MS = 8_000;
+const NEGOTIATION_TIMEOUT_MS = 35_000;
+const PEER_OPERATION_TIMEOUT_MS = 8_000;
 
 export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #localListeners = new Set<(publications: readonly MediaPublication[]) => void>();
@@ -209,7 +211,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return { outcome: "confirmed", errorCode: null };
     } catch (error) {
       if (!this.#stopped) this.#reportError(error);
-      return { outcome: "retryable_failure", errorCode: error instanceof CloudflareSFUError ? error.code : "media_failed" };
+      const code = error instanceof CloudflareSFUError ? error.code : "media_failed";
+      return { outcome: code === "signaling_timeout" || code === "negotiation_timeout" ? "ambiguous" : "retryable_failure", errorCode: code };
     }
   }
 
@@ -302,7 +305,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       state.desiredEnabled = true;
       state.track.enabled = true;
       try {
-        await state.transceiver.sender.replaceTrack(state.track);
+        await this.#boundPeerOperation(state.transceiver.sender.replaceTrack(state.track));
       } catch (error) {
         state.desiredEnabled = false;
         state.track.enabled = false;
@@ -319,8 +322,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     state.desiredEnabled = true;
     state.track.enabled = true;
+    const generation = this.#generation;
     try {
-      await this.#publishPreparedTracks([state], this.#generation);
+      await this.#publishPreparedTracks([state], generation);
     } catch (error) {
       state.desiredEnabled = false;
       state.enabled = false;
@@ -334,7 +338,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     state.desiredEnabled = false;
     state.track.enabled = false;
     try {
-      if (transceiver) await transceiver.sender.replaceTrack(null);
+      if (transceiver) await this.#boundPeerOperation(transceiver.sender.replaceTrack(null));
     } catch (error) {
       state.desiredEnabled = true;
       state.track.enabled = true;
@@ -374,7 +378,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const wasLive = connectionIsLive(connection);
     const publications: PendingLocalPublication[] = [];
     try {
-      for (const state of pendingStates) publications.push(await this.#prepareLocalPublication(connection, state));
+      for (const state of pendingStates) publications.push(await this.#prepareLocalPublication(connection, state, generation));
       const response = await this.#negotiateLocalPublications(connection, connectionId, publications, generation);
       if (!wasLive) await this.#waitForConnection(connection, generation);
       this.#requireGeneration(generation);
@@ -383,16 +387,19 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#publishSnapshot();
       this.#emitLocal();
     } catch (error) {
-      await this.#rollbackLocalOffer(connection);
-      await this.#discardLocalPublications(publications);
+      if (generation === this.#generation) {
+        await this.#rollbackLocalOffer(connection);
+        await this.#discardLocalPublications(publications);
+      }
       throw error;
     }
   }
 
-  async #prepareLocalPublication(connection: RTCPeerConnection, state: LocalTrackState): Promise<PendingLocalPublication> {
+  async #prepareLocalPublication(connection: RTCPeerConnection, state: LocalTrackState, generation: number): Promise<PendingLocalPublication> {
     const reusedTransceiver = state.transceiver !== null;
     const transceiver = state.transceiver ?? connection.addTransceiver(state.track, { direction: "sendonly" });
-    if (reusedTransceiver) await transceiver.sender.replaceTrack(state.track);
+    if (reusedTransceiver) await this.#boundPeerOperation(transceiver.sender.replaceTrack(state.track));
+    this.#requireGeneration(generation);
     state.transceiver = transceiver;
     return { state, transceiver, trackName: state.pendingTrackName ?? `${state.source}-${globalThis.crypto.randomUUID()}`, reusedTransceiver };
   }
@@ -605,12 +612,56 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
 
   #serializeSDP<T>(operation: () => Promise<T>): Promise<T> {
-    const result = this.#sdpTail.then(operation, operation);
+    const generation = this.#generation;
+    let expired = false;
+    let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+    const timeout = new CloudflareSFUError("Cloudflare SFU negotiation timed out. Try again.", "negotiation_timeout");
+    const deadline = new Promise<never>((_resolve, reject) => {
+      timer = globalThis.setTimeout(() => {
+        expired = true;
+        if (generation === this.#generation && !this.#stopped) this.#expireNegotiation(timeout);
+        reject(timeout);
+      }, NEGOTIATION_TIMEOUT_MS);
+    });
+    const run = () => {
+      if (expired || generation !== this.#generation) throw timeout;
+      return operation();
+    };
+    const pending = this.#sdpTail.then(run, run);
+    const result = Promise.race([pending, deadline]).finally(() => {
+      if (timer !== undefined) globalThis.clearTimeout(timer);
+    });
     this.#sdpTail = result.then(
       () => undefined,
       () => undefined,
     );
     return result;
+  }
+
+  async #boundPeerOperation(operation: Promise<void>): Promise<void> {
+    const generation = this.#generation;
+    let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+    const timeout = new CloudflareSFUError("The browser media operation timed out. Try again.", "negotiation_timeout");
+    const deadline = new Promise<never>((_resolve, reject) => {
+      timer = globalThis.setTimeout(() => {
+        if (generation === this.#generation && !this.#stopped) this.#expireNegotiation(timeout);
+        reject(timeout);
+      }, PEER_OPERATION_TIMEOUT_MS);
+    });
+    try {
+      await Promise.race([operation, deadline]);
+    } finally {
+      if (timer !== undefined) globalThis.clearTimeout(timer);
+    }
+  }
+
+  #expireNegotiation(error: CloudflareSFUError): void {
+    this.#generation++;
+    this.#connectionEpoch++;
+    this.#clearPoll();
+    this.#polling = false;
+    this.#disposeConnection(false);
+    this.#setFailure(error, "media_failed");
   }
 
   #waitForConnection(connection: RTCPeerConnection, generation: number): Promise<void> {

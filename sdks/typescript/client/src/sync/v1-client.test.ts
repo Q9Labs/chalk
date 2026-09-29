@@ -733,7 +733,7 @@ describe("V1SyncClient", () => {
     expect(mediaPlane.targets).toEqual([]);
   });
 
-  it("does not apply the server-confirmation deadline to authorized local media work", async () => {
+  it("bounds authorized local media work and accepts a later target", async () => {
     const clock = new TestClock();
     const mediaPlane = new BlockingMediaPlane();
     const { client, socket } = await liveClient({ clock, mediaPlane });
@@ -743,10 +743,21 @@ describe("V1SyncClient", () => {
     await settle();
     expect(mediaPlane.targets).toHaveLength(1);
 
+    clock.advance(44_999);
+    expect(client.getSnapshot().localMedia.camera).toBe("requesting");
+    const rejected = expect(result).rejects.toMatchObject({ code: "media_timeout" });
     clock.advance(1);
+    await rejected;
+    expect(client.getSnapshot().localMedia.camera).toBe("failed");
     mediaPlane.complete({ outcome: "confirmed", errorCode: null });
+    await settle();
+    expect(client.getSnapshot().localMedia.camera).toBe("failed");
 
-    await expect(result).resolves.toMatchObject({ serverOutcome: "confirmed", mediaPlaneOutcome: "confirmed" });
+    const next = client.setCameraEnabled(true, { requestId: commandIds[1] });
+    socket.receive({ type: "live_target_result", operation_id: commandIds[1], name: "set_camera_enabled", outcome: "confirmed", error_code: null });
+    await settle();
+    mediaPlane.complete({ outcome: "confirmed", errorCode: null });
+    await expect(next).resolves.toMatchObject({ mediaPlaneOutcome: "confirmed" });
   });
 
   it("projects bounded local and remote MediaPlane observations without a remote control surface", async () => {

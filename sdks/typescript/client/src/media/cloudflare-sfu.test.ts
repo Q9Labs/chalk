@@ -82,6 +82,35 @@ describe("Cloudflare SFU HTTP signaling", () => {
       options: { status: 410, retryableConnection: true },
     });
   });
+
+  it("aborts stalled signaling and permits the next request", async () => {
+    vi.useFakeTimers();
+    try {
+      let aborted = false;
+      let requests = 0;
+      const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (_input, init) => {
+        requests += 1;
+        if (requests === 1) {
+          return new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              aborted = true;
+              reject(new DOMException("aborted", "AbortError"));
+            });
+          });
+        }
+        return new Response(JSON.stringify({ incarnation: 0, sequence: 0, publications: [] }), { status: 200 });
+      });
+      const transport = createCloudflareSFUHTTPTransport({ apiBaseURL: "http://localhost", bearerToken: "media-token", tenantId: "t", spaceId: "s", episodeId: "e", participantId: "p", fetch, requestTimeoutMs: 10 });
+      const stalled = transport.listPublications();
+      const rejected = expect(stalled).rejects.toMatchObject({ code: "signaling_timeout" });
+      await vi.advanceTimersByTimeAsync(10);
+      await rejected;
+      expect(aborted).toBe(true);
+      await expect(transport.listPublications()).resolves.toMatchObject({ publications: [] });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("Cloudflare SFU client", () => {
