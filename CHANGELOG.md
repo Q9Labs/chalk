@@ -14,6 +14,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Kept transient SDK reconnection recoverable after the foreground retry budget, preserving desired media and durable action receipts; added jittered Sync retries and a reconnecting grace period.
+- Bounded unconfirmed action outcomes, explicitly rejected disconnected chat without queueing it, and checked microphone and camera flow independently during media recovery.
 - Refreshed remote Cloudflare SFU publications when Sync pushes a media projection change, with slower periodic discovery and reconciliation as recovery backstops.
 - Updated the Sync HTTP transport and workspace HTTP dependencies to patched releases.
 - Bounded browser Cloudflare SFU signaling and negotiation so stalled media work releases controls and reports a recoverable timeout, with nested provider and client deadlines.

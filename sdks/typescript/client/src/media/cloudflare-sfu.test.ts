@@ -164,6 +164,29 @@ describe("Cloudflare SFU HTTP signaling", () => {
 });
 
 describe("Cloudflare SFU client", () => {
+  it("detects a stalled receive direction while publishing still progresses and preserves desired camera on rebuild", async () => {
+    vi.useFakeTimers();
+    const onError = vi.fn();
+    const harness = createHarness({ onError });
+    try {
+      await harness.client.start(fakeStream(new FakeTrack("camera", "video")));
+      harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
+      await harness.client.refreshRemotePublications();
+      await vi.advanceTimersByTimeAsync(1_000);
+      const remote = harness.client.getSnapshot().remoteTracks[0];
+      if (!remote) throw new Error("Expected a remote camera");
+      harness.peers[0]?.stalledTrackIds.add(remote.track.id);
+      await vi.advanceTimersByTimeAsync(4_000);
+      expect(harness.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "media_failed", recoverable: true } });
+      expect(onError.mock.calls.some(([error]) => error instanceof Error && error.message === "Media subscribe video stopped flowing")).toBe(true);
+      await harness.client.restart(bootstrap("connection-2"));
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(harness.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, localTracks: [{ source: "camera", enabled: true }] });
+    } finally {
+      harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
   it("starts without local tracks so receive-only connections do not need getUserMedia", async () => {
     const harness = createHarness();
     await harness.client.start(fakeStream());
@@ -1118,6 +1141,7 @@ class FakePeerConnection extends EventTarget {
   closed = false;
   rollbackCalls = 0;
   throwOnCleanup = false;
+  readonly stalledTrackIds = new Set<string>();
   readonly #activeTransceivers = new Set<RTCRtpTransceiver>();
   readonly #autoConnect: boolean;
   readonly #transceivers: RTCRtpTransceiver[] = [];
@@ -1164,7 +1188,14 @@ class FakePeerConnection extends EventTarget {
     return { type: "answer", sdp: "browser-answer" };
   }
 
-  getStats(): Promise<RTCStatsReport> {
+  getStats(selector?: MediaStreamTrack): Promise<RTCStatsReport> {
+    if (selector) {
+      const outbound = this.getSenders().some((sender) => sender.track === selector);
+      const stat: RTCStats = { id: selector.id, timestamp: Date.now(), type: outbound ? "outbound-rtp" : "inbound-rtp" };
+      const progress = this.stalledTrackIds.has(selector.id) ? 1 : Date.now() + 1;
+      Object.assign(stat, { packetsSent: progress, packetsReceived: progress, framesDecoded: progress });
+      return Promise.resolve(new Map([[stat.id, stat]]));
+    }
     const stat: RTCStats = { id: "candidate-pair", timestamp: 0, type: "candidate-pair" };
     Object.assign(stat, { selected: true, state: "succeeded" });
     const stats = new Map<string, RTCStats>([["candidate-pair", stat]]);
