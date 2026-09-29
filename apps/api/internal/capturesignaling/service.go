@@ -144,12 +144,27 @@ func (s *Service) Execute(ctx context.Context, request ExecuteRequest) (Executio
 			return Execution{}, ProviderFailureError{Failure: failure}
 		}
 		resultBytes, err := MarshalResult(result, metadata, key.Operation)
+		if err == nil && key.Operation == captureplane.OperationPullCaptureTracks {
+			err = validatePullResultAgainstInput(*result.PullCaptureTracks, *command.Input.PullCaptureTracks)
+		}
 		if err != nil {
 			failure := captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_result", Retryable: false}
 			if failErr := s.port.FailCommand(ctx, Failure{Key: key, Authority: command.Authority, Lease: command.Lease, ClaimToken: claim.ClaimToken, ProviderError: failure}); failErr != nil {
 				return Execution{}, ErrAmbiguousOutcome
 			}
 			return Execution{}, ProviderFailureError{Failure: failure}
+		}
+		if key.Operation == captureplane.OperationPullCaptureTracks && result.PullCaptureTracks != nil && len(result.PullCaptureTracks.Gone) > 0 {
+			if s.options.Retirer == nil {
+				return Execution{}, ErrAmbiguousOutcome
+			}
+			retired, err := s.options.Retirer.RetireGone(ctx, command, result.PullCaptureTracks.Gone)
+			if err != nil {
+				return Execution{}, fmt.Errorf("%w: retire gone capture publications: %v", ErrAmbiguousOutcome, err)
+			}
+			if retired > 0 && s.options.OnRetired != nil {
+				s.options.OnRetired(ctx, command, retired)
+			}
 		}
 		if err := s.optionsNowBeforeLease(command.Lease); err != nil {
 			return Execution{}, ErrAmbiguousOutcome
@@ -164,6 +179,47 @@ func (s *Service) Execute(ctx context.Context, request ExecuteRequest) (Executio
 		}
 		return Execution{Key: key, Result: result, ResultBytes: resultBytes}, nil
 	}
+}
+
+func validatePullResultAgainstInput(result captureplane.PullCaptureTracksResult, input captureplane.PullCaptureTracksInput) error {
+	if result.Connection.ConnectionReference != input.Connection {
+		return ErrCorruptStoredResult
+	}
+	type trackKey struct {
+		owner, track captureplane.ProviderReference
+	}
+	remaining := make(map[trackKey]captureplane.CaptureTrack, len(input.Tracks))
+	for _, track := range input.Tracks {
+		remaining[trackKey{track.OwnerReference, track.TrackReference}] = track
+	}
+	consume := func(track captureplane.CaptureTrack) error {
+		key := trackKey{track.OwnerReference, track.TrackReference}
+		requested, ok := remaining[key]
+		if !ok || requested != track {
+			return ErrCorruptStoredResult
+		}
+		delete(remaining, key)
+		return nil
+	}
+	for _, track := range result.Tracks {
+		if err := consume(track.CaptureTrack); err != nil {
+			return err
+		}
+	}
+	for _, track := range result.Gone {
+		if err := consume(track); err != nil {
+			return err
+		}
+	}
+	for _, track := range result.Unavailable {
+		if err := consume(track); err != nil {
+			return err
+		}
+	}
+	if len(remaining) != 0 {
+		return ErrCorruptStoredResult
+	}
+	return nil
 }
 
 func (s *Service) releaseBeforeDispatch(ctx context.Context, command Command, key CommandKey, claim ClaimResult, cause error) error {

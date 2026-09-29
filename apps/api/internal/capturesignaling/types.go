@@ -214,11 +214,19 @@ type Execution struct {
 type Clock func() time.Time
 type WaitFunc func(context.Context, time.Duration) error
 
+// PublicationRetirer persists per-track absence before a pull result is
+// acknowledged. It must append a newer Capture plan when it changes the source.
+type PublicationRetirer interface {
+	RetireGone(context.Context, Command, []captureplane.CaptureTrack) (int, error)
+}
+
 type Options struct {
 	Now          Clock
 	Wait         WaitFunc
 	PollInterval time.Duration
 	MaxWait      time.Duration
+	Retirer      PublicationRetirer
+	OnRetired    func(context.Context, Command, int)
 }
 
 func (o Options) withDefaults() Options {

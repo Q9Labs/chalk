@@ -526,7 +526,7 @@ func (c *Coordinator) validatePulledTracks(result captureplane.PullCaptureTracks
 	if result.Connection.ConnectionReference != c.connection.ConnectionReference {
 		return fmt.Errorf("%w: pulled tracks connection", ErrProtocol)
 	}
-	if len(result.Tracks) != len(requested) {
+	if len(result.Tracks)+len(result.Gone)+len(result.Unavailable) != len(requested) {
 		return fmt.Errorf("%w: pulled track count", ErrProtocol)
 	}
 	requestedByProvider := make(map[string]captureplane.CaptureTrack, len(requested))
@@ -538,6 +538,23 @@ func (c *Coordinator) validatePulledTracks(result captureplane.PullCaptureTracks
 		if !ok || requestedTrack.ParticipantID != pulled.ParticipantID || requestedTrack.ParticipantGeneration != pulled.ParticipantGeneration || requestedTrack.Source != pulled.Source || requestedTrack.Kind != pulled.Kind || requestedTrack.RequestedLayer != pulled.RequestedLayer {
 			return fmt.Errorf("%w: pulled track identity", ErrProtocol)
 		}
+		delete(requestedByProvider, providerKey(pulled.OwnerReference, pulled.TrackReference))
+	}
+	for _, gone := range result.Gone {
+		key := providerKey(gone.OwnerReference, gone.TrackReference)
+		requestedTrack, ok := requestedByProvider[key]
+		if !ok || requestedTrack != gone {
+			return fmt.Errorf("%w: gone track identity", ErrProtocol)
+		}
+		delete(requestedByProvider, key)
+	}
+	for _, unavailable := range result.Unavailable {
+		key := providerKey(unavailable.OwnerReference, unavailable.TrackReference)
+		requestedTrack, ok := requestedByProvider[key]
+		if !ok || requestedTrack != unavailable {
+			return fmt.Errorf("%w: unavailable track identity", ErrProtocol)
+		}
+		delete(requestedByProvider, key)
 	}
 	c.connection = result.Connection
 	return nil

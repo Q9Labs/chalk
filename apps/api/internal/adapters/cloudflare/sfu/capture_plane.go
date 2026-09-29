@@ -542,6 +542,15 @@ func (a Adapter) PullCaptureTracks(ctx context.Context, input captureplane.PullC
 	var response captureTracksResponse
 	path := fmt.Sprintf(providerConnectionsPath+"/%s/tracks/new", url.PathEscape(input.Connection.String()))
 	if err := a.request(ctx, http.MethodPost, path, request, &response, "add_tracks"); err != nil {
+		if result, gone, goneErr := captureGonePullResult(err, response, input); gone {
+			if goneErr != nil {
+				return captureplane.PullCaptureTracksResult{}, goneErr
+			}
+			if err := captureReplayStore(a, input.Metadata, captureplane.OperationPullCaptureTracks, input, result); err != nil {
+				return captureplane.PullCaptureTracksResult{}, err
+			}
+			return result, nil
+		}
 		err = retryableCaptureTrackAvailability(err, response, tracks)
 		return captureplane.PullCaptureTracksResult{}, captureProviderError(err)
 	}
@@ -571,6 +580,65 @@ func (a Adapter) PullCaptureTracks(ctx context.Context, input captureplane.PullC
 		return captureplane.PullCaptureTracksResult{}, err
 	}
 	return result, nil
+}
+
+// captureGonePullResult accepts only a complete, identity-matched response
+// whose failed entries are per-track publication-not-found answers. A mixed
+// response keeps the successful pulls; unrelated failures retain their usual
+// classification and retry behavior.
+func captureGonePullResult(requestErr error, response captureTracksResponse, input captureplane.PullCaptureTracksInput) (captureplane.PullCaptureTracksResult, bool, error) {
+	var failure providerFailure
+	if !errors.As(requestErr, &failure) || failure.operation != "add_tracks" || failure.stage != failureStageTrack || failure.statusCode != http.StatusOK {
+		return captureplane.PullCaptureTracksResult{}, false, nil
+	}
+	if response.ErrorCode != "" || response.ErrorDescription != "" || len(response.Tracks) != len(input.Tracks) {
+		return captureplane.PullCaptureTracksResult{}, false, nil
+	}
+	byIdentity := make(map[captureTrackKey]captureTrackResult, len(response.Tracks))
+	for _, result := range response.Tracks {
+		key := captureTrackKey{owner: result.ConnectionReference, track: result.TrackName}
+		if _, exists := byIdentity[key]; exists || (result.Location != "" && result.Location != "remote") {
+			return captureplane.PullCaptureTracksResult{}, false, nil
+		}
+		byIdentity[key] = result
+	}
+	pulled := make([]captureplane.PulledCaptureTrack, 0, len(input.Tracks))
+	gone := make([]captureplane.CaptureTrack, 0)
+	unavailable := make([]captureplane.CaptureTrack, 0)
+	for _, track := range input.Tracks {
+		result, exists := byIdentity[captureTrackKey{owner: track.OwnerReference.String(), track: track.TrackReference.String()}]
+		if !exists {
+			return captureplane.PullCaptureTracksResult{}, false, nil
+		}
+		if strings.EqualFold(strings.TrimSpace(result.ErrorCode), "not_found_track_error") {
+			gone = append(gone, track)
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(result.ErrorCode), "empty_track_error") {
+			unavailable = append(unavailable, track)
+			continue
+		}
+		if result.ErrorCode != "" || result.ErrorDescription != "" {
+			return captureplane.PullCaptureTracksResult{}, false, nil
+		}
+		mid, err := captureplane.NewProviderReference(strings.TrimSpace(result.Mid))
+		if err != nil || result.Mid != strings.TrimSpace(result.Mid) {
+			return captureplane.PullCaptureTracksResult{}, false, nil
+		}
+		pulled = append(pulled, captureplane.PulledCaptureTrack{CaptureTrack: track, MID: mid})
+	}
+	if len(gone) == 0 || (len(pulled) == 0 && (response.Description != nil || response.RequiresImmediateRenegotiation)) {
+		return captureplane.PullCaptureTracksResult{}, false, nil
+	}
+	negotiation, err := captureNegotiation(input.Metadata, input.Connection, captureplane.OperationPullCaptureTracks, response.Description, response.RequiresImmediateRenegotiation)
+	if err != nil {
+		return captureplane.PullCaptureTracksResult{}, true, err
+	}
+	result := captureplane.PullCaptureTracksResult{Connection: captureConnection(input.Metadata, input.Connection.String()), Tracks: pulled, Gone: gone, Unavailable: unavailable, Negotiation: negotiation}
+	if err := result.ValidateAgainst(input.Metadata); err != nil {
+		return captureplane.PullCaptureTracksResult{}, true, captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_contract", Retryable: false}
+	}
+	return result, true, nil
 }
 
 func validateCapturePullResponse(response captureTracksResponse, tracks []captureplane.CaptureTrack) error {

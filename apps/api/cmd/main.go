@@ -305,7 +305,15 @@ func run() error {
 			return fmt.Errorf("configure recording provider registry: %w", err)
 		}
 		captureSignalingRepository := postgres.NewRecordingCaptureSignalingRepositoryWithTransactor(pool, diagnostics.Queries)
-		captureSignalingService, err := capturesignaling.NewService(captureSignalingRepository, captureProviderRegistry, capturesignaling.Options{})
+		captureSignalingService, err := capturesignaling.NewService(captureSignalingRepository, captureProviderRegistry, capturesignaling.Options{
+			Retirer: recordingCapturePlanRepository,
+			OnRetired: func(ctx context.Context, command capturesignaling.Command, count int) {
+				logger.InfoContext(ctx, "capture publications retired", "event", "recording.capture_publications_retired", "tenant_id", command.Authority.TenantID.String(),
+					"episode_id", command.Authority.EpisodeID.String(), "recording_id", command.Authority.RecordingID.String(),
+					"capture_epoch", command.Authority.CaptureEpoch, "plan_revision", command.Identity.PlanRevision,
+					"publication_count", count)
+			},
+		})
 		if err != nil {
 			return fmt.Errorf("configure recorder capture signaling: %w", err)
 		}

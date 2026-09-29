@@ -24,7 +24,16 @@ select
     coalesce(participant_snapshot.participants, '[]'::jsonb) as episode_participants,
     coalesce(observation.incarnation, 0)::bigint as provider_incarnation,
     coalesce(observation.sequence, 0)::bigint as provider_sequence,
-    coalesce(observation.publications, '[]'::jsonb) as provider_publications
+    coalesce((
+        select jsonb_agg(publication.value order by publication.ordinality)
+        from jsonb_array_elements(coalesce(observation.publications, '[]'::jsonb)) with ordinality as publication(value, ordinality)
+        where not exists (
+            select 1 from recording_capture_retired_publications retired
+            where retired.tenant_id = jobs.tenant_id
+              and retired.episode_id = jobs.episode_id
+              and retired.publication_id = publication.value->>'publication_id'
+        )
+    ), '[]'::jsonb) as provider_publications
 from recording_job_attempt_authorities authority
 join recording_jobs jobs on jobs.id = authority.job_id
 join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id
@@ -80,6 +89,25 @@ from recording_capture_plans
 where plan_handle = sqlc.arg(plan_handle)
 order by revision desc
 limit 1;
+
+-- name: GetRecordingCapturePlanForCommand :one
+select plan_handle, revision, job_id, attempt_count, fencing_generation,
+    capture_epoch, envelope_digest, tenant_id, space_id, episode_id,
+    recording_id, episode_control_revision, provider_incarnation,
+    provider_sequence, plan_schema_version, plan_bytes, plan_fingerprint,
+    effective_deadline_at, created_at
+from recording_capture_plans
+where job_id = sqlc.arg(job_id)
+  and attempt_count = sqlc.arg(attempt_count)
+  and fencing_generation = sqlc.arg(fencing_generation)
+  and capture_epoch = sqlc.arg(capture_epoch)
+  and revision = sqlc.arg(revision)
+  and envelope_digest = sqlc.arg(envelope_digest);
+
+-- name: RetireRecordingCapturePublication :execrows
+insert into recording_capture_retired_publications (tenant_id, episode_id, publication_id)
+values (sqlc.arg(tenant_id), sqlc.arg(episode_id), sqlc.arg(publication_id))
+on conflict do nothing;
 
 -- name: InsertRecordingCapturePlan :one
 insert into recording_capture_plans (

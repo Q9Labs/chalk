@@ -768,6 +768,13 @@ type RecordingCaptureProviderRateBudget struct {
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }
 
+type RecordingCaptureRetiredPublication struct {
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	EpisodeID     pgtype.UUID        `json:"episode_id"`
+	PublicationID string             `json:"publication_id"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
 type RecordingDataKey struct {
 	RecordingID             pgtype.UUID        `json:"recording_id"`
 	CaptureEpoch            int64              `json:"capture_epoch"`

@@ -71,6 +71,73 @@ func TestServiceReclaimsLatePublisherPullWithinWaitWindow(t *testing.T) {
 	}
 }
 
+type testPublicationRetirer struct {
+	calls int
+	gone  []captureplane.CaptureTrack
+	err   error
+}
+
+func (r *testPublicationRetirer) RetireGone(_ context.Context, _ Command, gone []captureplane.CaptureTrack) (int, error) {
+	r.calls++
+	r.gone = append([]captureplane.CaptureTrack(nil), gone...)
+	if r.err != nil {
+		return 0, r.err
+	}
+	return len(gone), nil
+}
+
+func TestServiceRetiresGonePublicationBeforeCompletingPull(t *testing.T) {
+	command := commandFor(captureplane.OperationPullCaptureTracks, time.Now().Add(time.Minute))
+	store := newMemoryPort()
+	store.projection = projectionFor(command, "")
+	provider := &fakePlane{pullGone: true}
+	retirer := &testPublicationRetirer{}
+	service, err := NewService(store, provider, Options{Retirer: retirer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := service.Execute(context.Background(), ExecuteRequest{Command: command})
+	if err != nil || first.Result.PullCaptureTracks == nil || len(first.Result.PullCaptureTracks.Gone) != 1 {
+		t.Fatalf("first pull = %#v, %v", first, err)
+	}
+	second, err := service.Execute(context.Background(), ExecuteRequest{Command: command})
+	if err != nil || !second.Replayed || retirer.calls != 1 || len(retirer.gone) != 1 || provider.calls(captureplane.OperationPullCaptureTracks) != 1 {
+		t.Fatalf("replay = %#v, error=%v, retire calls=%d, provider calls=%d", second, err, retirer.calls, provider.calls(captureplane.OperationPullCaptureTracks))
+	}
+}
+
+func TestServiceRejectsUnrequestedGoneTrackWithoutRetirement(t *testing.T) {
+	command := commandFor(captureplane.OperationPullCaptureTracks, time.Now().Add(time.Minute))
+	store := newMemoryPort()
+	store.projection = projectionFor(command, "")
+	retirer := &testPublicationRetirer{}
+	service, err := NewService(store, &fakePlane{pullGoneWrong: true}, Options{Retirer: retirer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = service.Execute(context.Background(), ExecuteRequest{Command: command})
+	var failure ProviderFailureError
+	if !errors.As(err, &failure) || failure.Failure.Code != "invalid_result" || retirer.calls != 0 {
+		t.Fatalf("unrequested gone track: error=%v, retirement calls=%d", err, retirer.calls)
+	}
+}
+
+func TestServiceTreatsFailedRetirementAsAmbiguousPull(t *testing.T) {
+	command := commandFor(captureplane.OperationPullCaptureTracks, time.Now().Add(time.Minute))
+	store := newMemoryPort()
+	store.projection = projectionFor(command, "")
+	service, err := NewService(store, &fakePlane{pullGone: true}, Options{Retirer: &testPublicationRetirer{err: errors.New("store unavailable")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Execute(context.Background(), ExecuteRequest{Command: command}); !errors.Is(err, ErrAmbiguousOutcome) {
+		t.Fatalf("retirement failure = %v, want ambiguous outcome", err)
+	}
+	if len(store.completion.ResultBytes) != 0 {
+		t.Fatalf("retirement failure persisted an acknowledged result: %#v", store.completion)
+	}
+}
+
 func TestServiceReplaysExactCompletedResultWithoutProviderCall(t *testing.T) {
 	provider := &fakePlane{}
 	store := newMemoryPort()
@@ -695,6 +762,8 @@ type fakePlane struct {
 	badResult        bool
 	closeDenied      bool
 	pullNotFoundOnce bool
+	pullGone         bool
+	pullGoneWrong    bool
 }
 
 func (p *fakePlane) Resolve(_ context.Context, identity captureplane.CaptureIdentity) (captureplane.CapturePlane, error) {
@@ -750,6 +819,14 @@ func (p *fakePlane) CreateCaptureConnection(context.Context, captureplane.Create
 
 func (p *fakePlane) PullCaptureTracks(context.Context, captureplane.PullCaptureTracksInput) (captureplane.PullCaptureTracksResult, error) {
 	p.count(captureplane.OperationPullCaptureTracks)
+	if p.pullGone {
+		return captureplane.PullCaptureTracksResult{Connection: p.connection(), Gone: []captureplane.CaptureTrack{validTrack(6)}, Negotiation: captureplane.Negotiation{Requirement: captureplane.NegotiationNotRequired}}, nil
+	}
+	if p.pullGoneWrong {
+		wrong := validTrack(6)
+		wrong.TrackReference = "different-track"
+		return captureplane.PullCaptureTracksResult{Connection: p.connection(), Gone: []captureplane.CaptureTrack{wrong}, Negotiation: captureplane.Negotiation{Requirement: captureplane.NegotiationNotRequired}}, nil
+	}
 	if p.pullNotFoundOnce && p.calls(captureplane.OperationPullCaptureTracks) == 1 {
 		return captureplane.PullCaptureTracksResult{}, captureplane.ProviderError{Class: captureplane.ProviderFailureNotFound, Code: "track_not_found", Retryable: true}
 	}

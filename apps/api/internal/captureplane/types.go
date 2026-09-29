@@ -186,6 +186,8 @@ type PullCaptureTracksInput struct {
 type PullCaptureTracksResult struct {
 	Connection  CaptureConnection    `json:"connection"`
 	Tracks      []PulledCaptureTrack `json:"tracks"`
+	Gone        []CaptureTrack       `json:"gone,omitempty"`
+	Unavailable []CaptureTrack       `json:"unavailable,omitempty"`
 	Negotiation Negotiation          `json:"negotiation"`
 }
 
