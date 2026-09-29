@@ -57,6 +57,7 @@ export PLAYWRIGHT_BROWSERS_PATH="$bundle_root/ms-playwright"
 (
   cd "$bundle_root/renderer"
   /opt/chalk-recorder/toolchains/node-22.23.2/bin/node --input-type=module -e 'import { chromium } from "playwright"; const browser = await chromium.launch({headless:true}); await browser.close();'
+  /opt/chalk-recorder/toolchains/node-22.23.2/bin/node --input-type=module -e 'import { createCanvas } from "@napi-rs/canvas"; createCanvas(1, 1).toBuffer("image/png");'
 )
 ffmpeg_encoders="$(ffmpeg -hide_banner -encoders 2>/dev/null)"
 grep -Fq 'libx264 ' <<<"$ffmpeg_encoders" || { echo "installed FFmpeg does not expose libx264" >&2; exit 1; }
