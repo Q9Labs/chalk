@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -439,6 +440,66 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	if _, err := pool.Exec(ctx, `insert into sync_external_operations(tenant_id, space_id, episode_id, external_operation_id, request_key, request_fingerprint, operation_name, recording_id, payload) values($1, $2, $3, $4, 'recording_pipeline_start', $5, 'start_recording', $6, '{}'::jsonb)`, tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), startOperationID.Bytes(), startFingerprint[:], reservation.RecordingID.Bytes()); err != nil {
 		t.Fatalf("seed recording start operation: %v", err)
 	}
+	t.Run("capture privacy precedes provider observation", func(t *testing.T) {
+		for index := 0; index < 30; index++ {
+			started := time.Now()
+			if _, err := capturePlanService.Wait(ctx, capturePlanInput); err != nil {
+				t.Fatal(err)
+			}
+			t.Logf("privacy-plan-probe index=%d reconcile_ms=%.6f", index, float64(time.Since(started).Nanoseconds())/1e6)
+		}
+		transaction, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer transaction.Rollback(ctx)
+		queries := sqlc.New(transaction)
+		input := sqlc.GetRecordingCapturePlanSourceParams{
+			JobID: pgtype.UUID{Bytes: job.ID.Bytes(), Valid: true}, AttemptCount: int32(job.AttemptCount), FencingGeneration: job.FencingGeneration,
+			CaptureEpoch: int64(job.CaptureEpoch), EnvelopeDigest: job.Authority.EnvelopeDigest, LeaseToken: "lease-capture", LeaseOwner: "capture-test",
+		}
+		source, err := queries.GetRecordingCapturePlanSource(ctx, input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var publications []struct {
+			PublicationID string `json:"publication_id"`
+		}
+		if err := json.Unmarshal(source.ProviderPublications, &publications); err != nil || len(publications) != 1 {
+			t.Fatalf("initial capture publications: count %d error %v", len(publications), err)
+		}
+		for _, kind := range []string{"self-pause", "forced-fence"} {
+			for index := 0; index < 30; index++ {
+				if kind == "self-pause" {
+					_, err = transaction.Exec(ctx, `insert into sync_media_pauses(tenant_id, space_id, episode_id, participant_id, participant_generation, source, publication_id) values($1,$2,$3,$4,7,'camera',$5)`, tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), participantID.Bytes(), publications[0].PublicationID)
+				} else {
+					_, err = transaction.Exec(ctx, `insert into sync_publication_fences(tenant_id, space_id, episode_id, participant_id, participant_generation, source, external_operation_id, expires_at) values($1,$2,$3,$4,7,'camera',$5,now()+interval '1 minute')`, tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), participantID.Bytes(), startOperationID.Bytes())
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				started := time.Now()
+				source, err = queries.GetRecordingCapturePlanSource(ctx, input)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var remaining []json.RawMessage
+				if err := json.Unmarshal(source.ProviderPublications, &remaining); err != nil {
+					t.Fatal(err)
+				}
+				t.Logf("privacy-source-probe kind=%s index=%d remaining=%d query_ms=%.6f", kind, index, len(remaining), float64(time.Since(started).Nanoseconds())/1e6)
+				if len(remaining) != 0 {
+					t.Errorf("%s still authorizes %d publications", kind, len(remaining))
+				}
+				if _, err := transaction.Exec(ctx, `delete from sync_media_pauses where tenant_id=$1 and episode_id=$2;`, tenantID.Bytes(), episodeID.Bytes()); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := transaction.Exec(ctx, `delete from sync_publication_fences where tenant_id=$1 and episode_id=$2;`, tenantID.Bytes(), episodeID.Bytes()); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+	})
 	if _, err := pool.Exec(ctx, `insert into sync_recordings(tenant_id, space_id, episode_id, recording_id, status, generation, start_external_operation_id) values($1, $2, $3, $4, 'starting', 1, $5)`, tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), reservation.RecordingID.Bytes(), startOperationID.Bytes()); err != nil {
 		t.Fatalf("seed Sync recording: %v", err)
 	}

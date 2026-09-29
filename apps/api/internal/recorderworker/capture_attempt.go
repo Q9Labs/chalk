@@ -530,7 +530,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 				cancel()
 				return a.finishFailure(event.err, writer)
 			}
-			if err := a.consumePacket(runCtx, writer, event); err != nil {
+			if err := a.consumeQueuedPackets(runCtx, writer, event, events, func(next captureRuntimeEvent) bool { return captureRuntimeEventMatchesReaders(next, readers) }); err != nil {
 				cancel()
 				return a.finishFailure(err, writer)
 			}
@@ -718,7 +718,9 @@ bindPlan:
 					}
 					return nil, captureplan.Plan{}, false, event.err
 				}
-				if err := a.consumePacket(ctx, writer, event); err != nil {
+				if err := a.consumeQueuedPackets(ctx, writer, event, runtimeEvents, func(next captureRuntimeEvent) bool {
+					return captureRuntimeEventMatchesPlannedReaders(next, currentReaders, snapshot.Tracks)
+				}); err != nil {
 					cancelBind()
 					<-result
 					return nil, captureplan.Plan{}, false, err
@@ -803,6 +805,57 @@ func (a *PionCaptureAttempt) consumePacket(ctx context.Context, writer *captureB
 	if event.packet == nil || event.track == nil {
 		return fmt.Errorf("%w: empty RTP event", ErrInvalidCaptureAttempt)
 	}
+	plan, err := a.packetAuthority(ctx)
+	if err != nil {
+		return err
+	}
+	return a.consumeAuthorizedPacket(ctx, writer, event, plan)
+}
+
+// Read authority only after collecting the batch. Reusing an earlier "on"
+// decision for packets that arrive later would store media after a mute.
+func (a *PionCaptureAttempt) consumeQueuedPackets(ctx context.Context, writer *captureBundleWriter, first captureRuntimeEvent, events <-chan captureRuntimeEvent, matches func(captureRuntimeEvent) bool) error {
+	batch := []captureRuntimeEvent{first}
+	timer := time.NewTimer(20 * time.Millisecond)
+	defer timer.Stop()
+collect:
+	for len(batch) < 256 {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+			break collect
+		case event, ok := <-events:
+			if !ok {
+				break collect
+			}
+			if matches(event) {
+				batch = append(batch, event)
+			}
+		}
+	}
+	plan, err := a.packetAuthority(ctx)
+	if err != nil {
+		return err
+	}
+	for _, event := range batch {
+		if event.err != nil {
+			return errors.Join(event.err, writer.addTerminalGap(a.config.Now()))
+		}
+		if err := a.consumeAuthorizedPacket(ctx, writer, event, plan); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (a *PionCaptureAttempt) consumeAuthorizedPacket(ctx context.Context, writer *captureBundleWriter, event captureRuntimeEvent, plan captureplan.Plan) error {
+	if event.packet == nil || event.track == nil {
+		return fmt.Errorf("%w: empty RTP event", ErrInvalidCaptureAttempt)
+	}
+	if !capturePacketAllowed(plan, event.track.CaptureTrack()) {
+		return nil
+	}
 	if !a.ready {
 		if err := a.emitReadyAt(ctx, false, event.at); err != nil {
 			return err
@@ -810,6 +863,36 @@ func (a *PionCaptureAttempt) consumePacket(ctx context.Context, writer *captureB
 		writer.setOrigin(event.at)
 	}
 	return writer.addPacket(ctx, event.track, event.packet, event.at)
+}
+
+func (a *PionCaptureAttempt) packetAuthority(ctx context.Context) (captureplan.Plan, error) {
+	lease := a.currentLease()
+	authority := captureplan.PlanAuthority{
+		PlanHandle: a.authority.PlanHandle, TenantID: a.authority.TenantID, SpaceID: a.authority.SpaceID,
+		EpisodeID: a.authority.EpisodeID, RecordingID: a.authority.RecordingID, JobID: a.authority.JobID,
+		AttemptCount: a.authority.AttemptCount, FencingGeneration: a.authority.FencingGeneration,
+		CaptureEpoch: a.authority.CaptureEpoch, EnvelopeDigest: a.authority.EnvelopeDigest,
+	}
+	input := captureplan.NewWaitInput(authority, captureplan.WorkerLease{Owner: lease.Owner, Token: lease.Token, ExpiresAt: lease.ExpiresAt}, 0, captureplan.MinimumWait)
+	plan, err := a.plans.WaitForPlan(ctx, input)
+	if err != nil {
+		return captureplan.Plan{}, fmt.Errorf("authorize capture packets: %w", err)
+	}
+	return plan, nil
+}
+
+func capturePacketAllowed(plan captureplan.Plan, track captureplane.PulledCaptureTrack) bool {
+	if plan.StopState() != captureplan.StopStateRunning {
+		return false
+	}
+	for _, desired := range plan.Tracks() {
+		if desired.OwnerReference == track.OwnerReference && desired.TrackReference == track.TrackReference &&
+			desired.ParticipantID == track.ParticipantID && desired.ParticipantGeneration == track.ParticipantGeneration &&
+			desired.Source == track.Source && desired.Kind == track.Kind {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *PionCaptureAttempt) emitReady(ctx context.Context, noPublisher bool) error {
