@@ -21,7 +21,7 @@ defmodule ChalkSync.Episodes.Coordinator do
 
   @repair_interval_ms 5_000
   @queue_check_interval_ms 1_000
-  @live_reconcile_interval_ms 2_000
+  @live_reconcile_interval_ms 15_000
   @diagnostic_record_limit 1_024
 
   def start_link(%EpisodeKey{} = episode) do

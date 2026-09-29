@@ -436,12 +436,31 @@ describe("V1SyncClient", () => {
 
   it("retries a retained remote publication when its paused projection resumes", async () => {
     const { client, socket, mediaPlane } = await liveClient();
+    const before = mediaPlane.changed;
     const item = { participant_id: peerId, source: "camera", enabled: false, publication_id: "remote-connection|camera" } as const;
     socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item });
     await snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 1);
     socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 2, item: { ...item, enabled: true } });
     await snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 2);
     expect(mediaPlane.resumed).toEqual([item.publication_id]);
+    expect(mediaPlane.changed).toBe(before + 2);
+    client.stop();
+  });
+
+  it("announces new and removed remote publications once per projection event", async () => {
+    const { client, socket, mediaPlane } = await liveClient();
+    const before = mediaPlane.changed;
+    const item = { participant_id: peerId, source: "camera", enabled: true, publication_id: "remote-connection|camera" } as const;
+    const added = { type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item } as const;
+    socket.receive(added);
+    await snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 1);
+    expect(mediaPlane.changed).toBe(before + 1);
+    socket.receive(added);
+    await settle();
+    expect(mediaPlane.changed).toBe(before + 1);
+    socket.receive({ ...added, sequence: 2, item: { ...item, enabled: false, publication_id: null } });
+    await snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 2);
+    expect(mediaPlane.changed).toBe(before + 2);
     client.stop();
   });
 
@@ -1798,6 +1817,7 @@ class TestMediaPlane implements V1ClientMediaPlane {
   readonly targets: V1MediaPlaneTarget[] = [];
   readonly results: V1MediaPlaneResult[] = [];
   readonly resumed: string[] = [];
+  changed = 0;
   #localListener: ((publications: readonly V1MediaPublication[]) => void) | undefined;
   #remoteListener: ((publications: readonly V1MediaPublication[]) => void) | undefined;
 
@@ -1808,6 +1828,10 @@ class TestMediaPlane implements V1ClientMediaPlane {
 
   remotePublicationResumed(publicationId: string): void {
     this.resumed.push(publicationId);
+  }
+
+  remotePublicationsChanged(): void {
+    this.changed++;
   }
 
   observeLocalPublications(listener: (publications: readonly V1MediaPublication[]) => void): () => void {

@@ -347,6 +347,44 @@ describe("Cloudflare SFU client", () => {
     harness.client.stop();
   });
 
+  it("discovers a pushed publication without waiting for the periodic listing", async () => {
+    const harness = createHarness();
+    await harness.client.start(fakeStream());
+    await vi.waitFor(() => expect(harness.transport.listPublicationCalls).toBeGreaterThan(0));
+    const before = harness.transport.listPublicationCalls;
+    const publicationId = "remote-connection|camera-a";
+    harness.transport.snapshot = publicationSnapshot(1, 1, publicationId);
+    harness.client.remotePublicationsChanged();
+    await vi.waitFor(() => expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe(publicationId));
+    expect(harness.transport.listPublicationCalls).toBe(before + 1);
+    harness.client.stop();
+  });
+
+  it("rechecks after a push received while a publication listing is in flight", async () => {
+    const harness = createHarness();
+    await harness.client.start(fakeStream());
+    await vi.waitFor(() => expect(harness.transport.listPublicationCalls).toBeGreaterThan(0));
+    harness.transport.blockPublicationList = true;
+    const before = harness.transport.listPublicationCalls;
+    harness.client.remotePublicationsChanged();
+    await vi.waitFor(() => expect(harness.transport.listPublicationCalls).toBe(before + 1));
+    harness.client.remotePublicationsChanged();
+    harness.transport.blockPublicationList = false;
+    harness.transport.releasePublicationList();
+    await vi.waitFor(() => expect(harness.transport.listPublicationCalls).toBe(before + 2));
+    harness.client.stop();
+  });
+
+  it("discovers a publication through the periodic backstop when a push is missed", async () => {
+    const harness = createHarness({ pollIntervalMs: 20 });
+    await harness.client.start(fakeStream());
+    await vi.waitFor(() => expect(harness.transport.listPublicationCalls).toBeGreaterThan(0));
+    const publicationId = "remote-connection|camera-a";
+    harness.transport.snapshot = publicationSnapshot(1, 1, publicationId);
+    await vi.waitFor(() => expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe(publicationId));
+    harness.client.stop();
+  });
+
   it("drops a forced-muted publication and pulls the same Cloudflare SFU identity after re-enable", async () => {
     const publicationId = "remote-connection|microphone-a";
     const harness = await startedRemoteHarness(publicationId);
@@ -726,7 +764,16 @@ async function startScreenPublication(harness: ReturnType<typeof createHarness>,
   expect(harness.client.getSnapshot().localTracks.find((publication) => publication.source === "screen")).toMatchObject({ enabled: true });
 }
 
-function createHarness(options: { readonly autoConnect?: boolean; readonly onError?: (error: unknown) => void; readonly onRtcSummary?: CloudflareSFUClientOptions["onRtcSummary"]; readonly onScreenEnded?: () => void; readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap> } = {}) {
+function createHarness(
+  options: {
+    readonly autoConnect?: boolean;
+    readonly onError?: (error: unknown) => void;
+    readonly onRtcSummary?: CloudflareSFUClientOptions["onRtcSummary"];
+    readonly onScreenEnded?: () => void;
+    readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
+    readonly pollIntervalMs?: number;
+  } = {},
+) {
   const peers: FakePeerConnection[] = [];
   const transport = new FakeTransport(() => peers.at(-1));
   const client = new CloudflareSFUClient({
@@ -735,7 +782,7 @@ function createHarness(options: { readonly autoConnect?: boolean; readonly onErr
     transport,
     replaceMediaConnection: options.replaceMediaConnection,
     onRtcSummary: options.onRtcSummary,
-    pollIntervalMs: 60_000,
+    pollIntervalMs: options.pollIntervalMs ?? 60_000,
     onError: options.onError,
     onScreenEnded: options.onScreenEnded,
     peerConnectionFactory: () => {
