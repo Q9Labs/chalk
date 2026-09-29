@@ -84,6 +84,12 @@ CHALK_RECORDING_FFMPEG_PATH=/usr/bin/ffmpeg
 CHALK_RECORDING_FFPROBE_PATH=/usr/bin/ffprobe
 CHALK_RECORDING_VIDEO_ENCODER=libx264
 PLAYWRIGHT_BROWSERS_PATH=/opt/chalk-recorder/current/ms-playwright
+CHALK_RECORDER_EXPORT_RENDERER=native
+EOF
+
+# Periodic keyframes keep native Export seeks short; see recorder-capture --keyframe-interval.
+cat >"$image_root/etc/chalk-recorder/capture.env" <<EOF
+CHALK_RECORDER_KEYFRAME_INTERVAL=10s
 EOF
 
 file_entries="$stage_root/file-entries.ndjson"

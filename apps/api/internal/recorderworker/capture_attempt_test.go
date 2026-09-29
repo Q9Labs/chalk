@@ -127,7 +127,7 @@ func TestCaptureReaderPropagatesTerminalPeerError(t *testing.T) {
 	peer := &captureTestPeer{err: errors.New("peer failed")}
 	track := &captureTestTrack{capture: captureplane.PulledCaptureTrack{MID: "0"}, readErr: captureTimeoutError{}}
 	events := make(chan captureRuntimeEvent, 1)
-	cancel, err := startCaptureReader(context.Background(), peer, "0", track, time.Millisecond, events)
+	cancel, err := startCaptureReader(context.Background(), peer, "0", track, time.Millisecond, 0, events)
 	if err != nil {
 		t.Fatalf("start reader: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestCaptureReaderPropagatesTerminalPeerError(t *testing.T) {
 
 func TestCaptureReaderStopWaitsForReadLoopToSettle(t *testing.T) {
 	track := &captureBlockingTestTrack{started: make(chan struct{}), release: make(chan struct{})}
-	stop, err := startCaptureReader(context.Background(), &captureTestPeer{}, "0", track, time.Second, make(chan captureRuntimeEvent, 1))
+	stop, err := startCaptureReader(context.Background(), &captureTestPeer{}, "0", track, time.Second, 0, make(chan captureRuntimeEvent, 1))
 	if err != nil {
 		t.Fatalf("start reader: %v", err)
 	}
@@ -198,7 +198,7 @@ func TestCaptureReaderPropagatesLossKeyFrameRequestError(t *testing.T) {
 	sequence := append([]uint16{100}, captureTestSequence(102, 118)...)
 	track := capturePacketTestTrack(captureplane.TrackKindVideo, sequence)
 	events := make(chan captureRuntimeEvent, len(sequence)+1)
-	cancel, err := startCaptureReader(context.Background(), peer, "0", track, time.Second, events)
+	cancel, err := startCaptureReader(context.Background(), peer, "0", track, time.Second, 0, events)
 	if err != nil {
 		t.Fatalf("start reader: %v", err)
 	}
@@ -216,6 +216,29 @@ func TestCaptureReaderPropagatesLossKeyFrameRequestError(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatal("reader did not report keyframe request error")
 		}
+	}
+}
+
+func TestCaptureVideoLossFeedbackRequestsKeyFramesOnInterval(t *testing.T) {
+	feedback := captureVideoLossFeedback{interval: 10 * time.Second}
+	started := time.Unix(1_000, 0)
+	if feedback.Observe(7, 100, started) {
+		t.Fatal("binding packet requested a keyframe")
+	}
+	if feedback.Observe(7, 101, started.Add(9*time.Second)) {
+		t.Fatal("keyframe requested before the interval")
+	}
+	if !feedback.Observe(7, 102, started.Add(10*time.Second)) {
+		t.Fatal("no keyframe requested once the interval passed")
+	}
+	if feedback.Observe(7, 103, started.Add(11*time.Second)) {
+		t.Fatal("interval restarted late")
+	}
+	if !feedback.Observe(7, 104, started.Add(20*time.Second)) {
+		t.Fatal("no keyframe requested on the next interval")
+	}
+	if feedback.Observe(9, 1, started.Add(21*time.Second)) || feedback.interval != 10*time.Second {
+		t.Fatal("a new sender lost the interval or requested at once")
 	}
 }
 
@@ -270,7 +293,7 @@ func capturePacketTestTrack(kind captureplane.TrackKind, sequence []uint16) *cap
 func captureTestReadPackets(t *testing.T, peer *captureTestPeer, track *captureTestTrack, packetCount int) {
 	t.Helper()
 	events := make(chan captureRuntimeEvent, packetCount+1)
-	cancel, err := startCaptureReader(context.Background(), peer, "0", track, time.Second, events)
+	cancel, err := startCaptureReader(context.Background(), peer, "0", track, time.Second, 0, events)
 	if err != nil {
 		t.Fatalf("start reader: %v", err)
 	}

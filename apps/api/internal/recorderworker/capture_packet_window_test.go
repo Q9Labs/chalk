@@ -81,7 +81,7 @@ func TestCaptureReaderRetransmissionsDoNotStretchLaterBundles(t *testing.T) {
 func readCapturePackets(t *testing.T, track *captureTestTrack, consume func(captureRuntimeEvent)) {
 	t.Helper()
 	events := make(chan captureRuntimeEvent, 1)
-	stop, err := startCaptureReader(context.Background(), &captureTestPeer{}, "0", track, time.Second, events)
+	stop, err := startCaptureReader(context.Background(), &captureTestPeer{}, "0", track, time.Second, 0, events)
 	if err != nil {
 		t.Fatal(err)
 	}

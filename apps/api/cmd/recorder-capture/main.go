@@ -23,13 +23,14 @@ func main() {
 	workerKey := flag.String("worker-key", os.Getenv("CHALK_RECORDER_WORKER_KEY"), "worker mTLS private key")
 	serverCA := flag.String("server-ca", os.Getenv("CHALK_RECORDER_SERVER_CA"), "control-plane server CA")
 	serverName := flag.String("server-name", os.Getenv("CHALK_RECORDER_SERVER_NAME"), "control-plane TLS server name")
+	keyFrameInterval := flag.String("keyframe-interval", os.Getenv("CHALK_RECORDER_KEYFRAME_INTERVAL"), "request a video keyframe at least this often, e.g. 10s; empty or 0 turns it off")
 	flag.Parse()
 	if *fixture && *runMode {
 		fmt.Fprintln(os.Stderr, "recorder-capture: --fixture and --run cannot be combined")
 		os.Exit(2)
 	}
 	if !*fixture {
-		if err := runWorker(*environment, *controlPlaneURL, *workerCertificate, *workerKey, *serverCA, *serverName); err != nil {
+		if err := runWorker(*environment, *controlPlaneURL, *workerCertificate, *workerKey, *serverCA, *serverName, *keyFrameInterval); err != nil {
 			if errors.Is(err, recorderworker.ErrReadinessFailure) {
 				fmt.Fprintln(os.Stderr, "recorder-capture:", err)
 				os.Exit(1)

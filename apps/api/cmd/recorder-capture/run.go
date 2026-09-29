@@ -21,12 +21,16 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordingobjects"
 )
 
-func runWorker(environment, controlPlaneURL, workerCertificate, workerKey, serverCA, serverName string) error {
+func runWorker(environment, controlPlaneURL, workerCertificate, workerKey, serverCA, serverName, keyFrameInterval string) error {
 	if strings.TrimSpace(environment) == "" {
 		return errors.New("--environment or CHALK_RECORDER_ENVIRONMENT is required")
 	}
 	if strings.TrimSpace(controlPlaneURL) == "" {
 		return errors.New("--control-plane-url or CHALK_RECORDER_CONTROL_PLANE_URL is required")
+	}
+	interval, err := parseKeyFrameInterval(keyFrameInterval)
+	if err != nil {
+		return err
 	}
 	controlTransport, err := mtls.NewReloadingClientTransport(workerCertificate, workerKey, serverCA, serverName)
 	if err != nil {
@@ -49,7 +53,7 @@ func runWorker(environment, controlPlaneURL, workerCertificate, workerKey, serve
 		Objects:   ports,
 		Bundles:   ports,
 		Lifecycle: ports,
-		Attempt:   recorderworker.CaptureAttemptConfig{Environment: environment},
+		Attempt:   recorderworker.CaptureAttemptConfig{Environment: environment, KeyFrameInterval: interval},
 	})
 	if err != nil {
 		return fmt.Errorf("create recorder capture factory: %w", err)
@@ -206,3 +210,18 @@ var _ recorderworker.CaptureKeyPort = (*httpRecorderPorts)(nil)
 var _ recorderworker.CaptureObjectPort = (*httpRecorderPorts)(nil)
 var _ recorderworker.CaptureBundleSink = (*httpRecorderPorts)(nil)
 var _ recorderworker.CaptureLifecyclePort = (*httpRecorderPorts)(nil)
+
+// parseKeyFrameInterval reads the periodic keyframe request interval. Empty or
+// zero turns it off; anything shorter than two seconds would mostly add
+// sender bandwidth, so it is rejected.
+func parseKeyFrameInterval(value string) (time.Duration, error) {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "0" {
+		return 0, nil
+	}
+	interval, err := time.ParseDuration(value)
+	if err != nil || interval < 2*time.Second || interval > 10*time.Minute {
+		return 0, fmt.Errorf("--keyframe-interval or CHALK_RECORDER_KEYFRAME_INTERVAL must be 0 or a duration from 2s to 10m, got %q", value)
+	}
+	return interval, nil
+}
