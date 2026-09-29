@@ -14,6 +14,9 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 type presentationObjectStore interface {
@@ -34,7 +37,21 @@ func NewFreezer(sources CompletionSourceReader, objects presentationObjectStore)
 	return Freezer{sources: sources, objects: objects, now: time.Now}, nil
 }
 
-func (freezer Freezer) Prepare(ctx context.Context, authority CompletionAuthority) (PreparedPresentation, error) {
+func (freezer Freezer) Prepare(ctx context.Context, authority CompletionAuthority) (prepared PreparedPresentation, completionErr error) {
+	ctx, span := otel.Tracer("chalk/recordingpresentation").Start(ctx, "recording.capture.complete.presentation")
+	stage := "source_load"
+	span.SetAttributes(attribute.String("chalk.capture.job_id", authority.JobID.String()),
+		attribute.String("chalk.capture.worker_id", authority.LeaseOwner))
+	defer func() {
+		span.SetAttributes(attribute.String("chalk.capture.completion.stage", stage))
+		if completionErr != nil {
+			span.SetAttributes(attribute.String("chalk.capture.completion.outcome", "error"))
+			span.SetStatus(codes.Error, stage+" failed")
+		} else {
+			span.SetAttributes(attribute.String("chalk.capture.completion.outcome", "ok"))
+		}
+		span.End()
+	}()
 	if err := authority.Validate(); err != nil {
 		return PreparedPresentation{}, err
 	}
@@ -48,10 +65,15 @@ func (freezer Freezer) Prepare(ctx context.Context, authority CompletionAuthorit
 	if source.CaptureEpoch != authority.CaptureEpoch {
 		return PreparedPresentation{}, ErrInvalidCompletionSource
 	}
+	span.SetAttributes(attribute.String("chalk.capture.recording_id", source.RecordingID.String()))
+	span.AddEvent("source_loaded")
+	stage = "presentation_build"
 	built, err := buildPresentation(source)
 	if err != nil {
 		return PreparedPresentation{}, err
 	}
+	span.AddEvent("presentation_built")
+	stage = "object_io"
 
 	assets := make([]PreparedAsset, 0, len(built.Assets))
 	for ordinal, material := range built.Assets {
@@ -104,6 +126,7 @@ func (freezer Freezer) Prepare(ctx context.Context, authority CompletionAuthorit
 		return PreparedPresentation{}, fmt.Errorf("store recording presentation asset manifest: %w", err)
 	}
 
+	span.AddEvent("objects_stored")
 	return PreparedPresentation{
 		PresentationHandle: source.PresentationHandle,
 		TenantID:           source.TenantID, SpaceID: source.SpaceID, EpisodeID: source.EpisodeID,

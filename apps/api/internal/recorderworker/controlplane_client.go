@@ -179,8 +179,9 @@ type ProgressResult struct {
 }
 
 type recorderWorkerClaimRequest struct {
-	ClaimRequestID  string `json:"claim_request_id"`
-	LeaseForSeconds int    `json:"lease_for_seconds"`
+	ClaimRequestID         string `json:"claim_request_id"`
+	LeaseForSeconds        int    `json:"lease_for_seconds"`
+	SupportsCompletionOnly bool   `json:"supports_completion_only,omitempty"`
 }
 
 type recorderWorkerLeaseRequest struct {
@@ -319,8 +320,15 @@ func (c *ControlPlaneClient) Claim(ctx context.Context, input recordingpipeline.
 	if err != nil || input.ClaimRequestID.IsZero() {
 		return ClaimResult{}, fmt.Errorf("%w: claim input", ErrInvalidControlPlaneRequest)
 	}
-	payload := recorderWorkerClaimRequest{ClaimRequestID: input.ClaimRequestID.String(), LeaseForSeconds: leaseSeconds}
+	payload := recorderWorkerClaimRequest{ClaimRequestID: input.ClaimRequestID.String(), LeaseForSeconds: leaseSeconds, SupportsCompletionOnly: true}
 	body, status, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/jobs/claim", payload, ControlPlaneResponseLimit)
+	var httpErr HTTPError
+	if errors.As(err, &httpErr) && httpErr.Status == http.StatusBadRequest {
+		// Older APIs reject the new field; the same claim may still take
+		// ordinary Capture work, but cannot receive completion-only work.
+		payload.SupportsCompletionOnly = false
+		body, status, err = c.do(ctx, http.MethodPost, "/internal/v1/recorder/jobs/claim", payload, ControlPlaneResponseLimit)
+	}
 	if err != nil {
 		return ClaimResult{}, err
 	}

@@ -198,6 +198,7 @@ type Querier interface {
 	GetRecordingBundleAllocationByTokenHash(ctx context.Context, uploadTokenHash []byte) (RecordingBundleAllocation, error)
 	GetRecordingCaptureBinding(ctx context.Context, arg GetRecordingCaptureBindingParams) ([]byte, error)
 	GetRecordingCaptureCommand(ctx context.Context, arg GetRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
+	GetRecordingCaptureCompletionIdentity(ctx context.Context, jobID pgtype.UUID) (pgtype.UUID, error)
 	GetRecordingCaptureConnection(ctx context.Context, arg GetRecordingCaptureConnectionParams) (RecordingCaptureConnection, error)
 	GetRecordingCapturePlanSource(ctx context.Context, arg GetRecordingCapturePlanSourceParams) (GetRecordingCapturePlanSourceRow, error)
 	GetRecordingCaptureSignalingAuthority(ctx context.Context, arg GetRecordingCaptureSignalingAuthorityParams) (GetRecordingCaptureSignalingAuthorityRow, error)

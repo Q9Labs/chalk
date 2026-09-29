@@ -108,9 +108,9 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
 
 12. **Capture starts fast and costs little** (Partly working · size L)
     A Capture worker takes about 140 seconds from record to ready and runs on a c-2 with
-    a 1.6 GB image shared with Render. At 2,000 meeting-hours a month, Capture costs
-    about $230, of which about $131 is Droplets and about $90 is SFU traffic to the
-    recorder.
+    a 1.6 GB image shared with Render. At 2,000 recorded Episode-hours a month, Capture
+    costs about $230, of which about $131 is Droplets and about $90 is SFU traffic to
+    the recorder.
     Open question: Whether a smaller image shortens DigitalOcean's roughly 30-second
     create step is not measured.
     - Turn off DigitalOcean's monitoring and console agents at create, push Capture

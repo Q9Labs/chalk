@@ -34,6 +34,9 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
 	"github.com/q9labs/chalk/apps/api/internal/recordingrender"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
@@ -1386,6 +1389,139 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	}
 	if recovered, err := repository.RecoverExpired(ctx); err != nil || len(recovered) != 0 {
 		t.Fatalf("stopped capture release must be idempotent: %+v, %v", recovered, err)
+	}
+
+	// An applied worker stop is stronger than a stop request: the worker has
+	// already committed its final bundle before publishing this operation.
+	seedStoppedCapture := func(startValue, stopValue, recordingValue, jobValue, claimValue string, mediaFailures int) (recordingpipeline.Job, recordingpipeline.LeaseInput) {
+		t.Helper()
+		startID, stopID := mustID(t, startValue), mustID(t, stopValue)
+		recordingID := mustID(t, recordingValue)
+		fingerprint := sha256.Sum256([]byte(recordingValue))
+		for _, operation := range []struct {
+			id   utilities.ID
+			name string
+			key  string
+		}{
+			{startID, "start_recording", "completion_retry_start_" + recordingValue[len(recordingValue)-3:]},
+			{stopID, "recording_capture_stopped", "completion_retry_stop_" + recordingValue[len(recordingValue)-3:]},
+		} {
+			if _, err := pool.Exec(ctx, `insert into sync_external_operations(tenant_id, space_id, episode_id, external_operation_id, request_key, request_fingerprint, operation_name, recording_id, payload, status, completed_at) values($1, $2, $3, $4, $5, $6, $7, $8, jsonb_build_object('recordingId', $8::uuid::text), 'applied', now())`, tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), operation.id.Bytes(), operation.key, fingerprint[:], operation.name, recordingID.Bytes()); err != nil {
+				t.Fatalf("seed applied %s: %v", operation.name, err)
+			}
+		}
+		if _, err := pool.Exec(ctx, `insert into sync_recordings(tenant_id, space_id, episode_id, recording_id, status, generation, start_external_operation_id, stop_external_operation_id, completed_at) values($1, $2, $3, $4, 'stopped', 1, $5, $6, now())`, tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), recordingID.Bytes(), startID.Bytes(), stopID.Bytes()); err != nil {
+			t.Fatalf("seed stopped Sync recording: %v", err)
+		}
+		_, err := repository.Reserve(ctx, recordingpipeline.ReservationInput{
+			TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, RecordingID: recordingID,
+			IdempotencyKey: startID.String(), ParticipantCount: 1, PolicySnapshotVersion: recordingpipeline.SupportedPolicySnapshotVersion,
+			MaxDuration: time.Hour, InputBitrateBPS: 1_000_000,
+		}, mustID(t, jobValue))
+		if err != nil {
+			t.Fatalf("reserve stopped capture: %v", err)
+		}
+		claimed, err := repository.Claim(ctx, recordingpipeline.ClaimInput{ClaimRequestID: mustID(t, claimValue), Kind: recordingpipeline.JobKindCapture, Owner: "completion-original", LeaseToken: "completion-original-token", LeaseFor: time.Minute})
+		if err != nil || claimed.RecordingID != recordingID {
+			t.Fatalf("claim original capture: %+v, %v", claimed, err)
+		}
+		for attempt := 0; attempt < mediaFailures; attempt++ {
+			_, err := repository.Fail(ctx, recordingpipeline.FailureInput{
+				LeaseInput: recordingpipeline.LeaseInput{JobID: claimed.ID, AttemptCount: claimed.AttemptCount, FencingGeneration: claimed.FencingGeneration,
+					LeaseToken: claimed.Authority.LeaseToken, LeaseOwner: claimed.Authority.LeaseOwner, CaptureEpoch: claimed.CaptureEpoch, EnvelopeDigest: claimed.Authority.EnvelopeDigest},
+				AvailableAt: time.Now(), ErrorCode: "capture_attempt_failed", ErrorDetail: "test media attempt",
+			})
+			if err != nil {
+				t.Fatalf("fail earlier media attempt: %v", err)
+			}
+			requestID, err := utilities.NewID()
+			if err != nil {
+				t.Fatalf("new media claim id: %v", err)
+			}
+			claimed, err = repository.Claim(ctx, recordingpipeline.ClaimInput{ClaimRequestID: requestID, Kind: recordingpipeline.JobKindCapture,
+				Owner: "completion-original", LeaseToken: requestID.String(), LeaseFor: time.Minute})
+			if err != nil || claimed.RecordingID != recordingID {
+				t.Fatalf("reclaim media attempt: %+v, %v", claimed, err)
+			}
+		}
+		if _, err := pool.Exec(ctx, `update recording_pipelines set capture_ready_at = now() where recording_id = $1`, recordingID.Bytes()); err != nil {
+			t.Fatalf("seed ready capture: %v", err)
+		}
+		if _, err := repository.RequestStop(ctx, tenantID, episodeID, recordingID, stopID); err != nil {
+			t.Fatalf("request stopped capture: %v", err)
+		}
+		if _, err := pool.Exec(ctx, `update recording_jobs set lease_expires_at = now() - interval '1 second' where id = $1`, claimed.ID.Bytes()); err != nil {
+			t.Fatalf("expire stopped capture: %v", err)
+		}
+		recovered, err := repository.RecoverExpired(ctx)
+		if err != nil || len(recovered) != 1 || recovered[0].ID != claimed.ID || recovered[0].State != recordingpipeline.JobStatePending || recovered[0].ErrorDetail == nil {
+			t.Fatalf("first stopped completion expiry = %+v, %v", recovered, err)
+		}
+		return claimed, recordingpipeline.LeaseInput{JobID: claimed.ID, AttemptCount: claimed.AttemptCount, FencingGeneration: claimed.FencingGeneration, LeaseToken: claimed.Authority.LeaseToken, LeaseOwner: claimed.Authority.LeaseOwner, CaptureEpoch: claimed.CaptureEpoch, EnvelopeDigest: claimed.Authority.EnvelopeDigest}
+	}
+	claimCompletion := func(requestValue string) (recordingpipeline.Job, recordingpipeline.LeaseInput) {
+		t.Helper()
+		job, err := repository.Claim(ctx, recordingpipeline.ClaimInput{ClaimRequestID: mustID(t, requestValue), Kind: recordingpipeline.JobKindCapture, SupportsCompletionOnly: true, Owner: "completion-retry", LeaseToken: requestValue, LeaseFor: time.Minute})
+		if err != nil || job.Authority == nil || !job.Authority.Envelope.CompletionOnly {
+			t.Fatalf("claim completion-only retry: %+v, %v", job, err)
+		}
+		return job, recordingpipeline.LeaseInput{JobID: job.ID, AttemptCount: job.AttemptCount, FencingGeneration: job.FencingGeneration, LeaseToken: job.Authority.LeaseToken, LeaseOwner: job.Authority.LeaseOwner, CaptureEpoch: job.CaptureEpoch, EnvelopeDigest: job.Authority.EnvelopeDigest}
+	}
+	firstStopped, oldLease := seedStoppedCapture("6a9b6a12-7457-4fe9-a58b-8b234d0be050", "6a9b6a12-7457-4fe9-a58b-8b234d0be051", "6a9b6a12-7457-4fe9-a58b-8b234d0be052", "6a9b6a12-7457-4fe9-a58b-8b234d0be053", "6a9b6a12-7457-4fe9-a58b-8b234d0be054", 0)
+	if _, err := repository.Claim(ctx, recordingpipeline.ClaimInput{ClaimRequestID: mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be058"), Kind: recordingpipeline.JobKindCapture, Owner: "older-capture", LeaseToken: "older-capture-token", LeaseFor: time.Minute}); !errors.Is(err, recordingpipeline.ErrJobNotFound) {
+		t.Fatalf("older Capture claimed completion-only work: %v", err)
+	}
+	retry, retryLease := claimCompletion("6a9b6a12-7457-4fe9-a58b-8b234d0be055")
+	if retry.CaptureEpoch != firstStopped.CaptureEpoch || retry.FencingGeneration <= firstStopped.FencingGeneration {
+		t.Fatalf("completion retry authority changed media epoch: first=%+v retry=%+v", firstStopped, retry)
+	}
+	if _, err := postgres.NewRecordingPipelineRepositoryWithPool(pool).CompleteCapture(ctx, oldLease, mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be056")); !errors.Is(err, recordingpipeline.ErrJobNotFound) {
+		t.Fatalf("stale completion fence = %v", err)
+	}
+	completionSpans := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(completionSpans))
+	previousProvider := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	completed, err := postgres.NewRecordingPipelineRepositoryWithPool(pool).CompleteCapture(ctx, retryLease, mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be057"))
+	otel.SetTracerProvider(previousProvider)
+	_ = provider.Shutdown(ctx)
+	if err != nil || completed.State != recordingpipeline.JobStateSucceeded {
+		t.Fatalf("complete stopped capture under new fence: %+v, %v", completed, err)
+	}
+	foundCommitSpan := false
+	for _, span := range completionSpans.Ended() {
+		if span.Name() != "recording.capture.complete.db_commit" {
+			continue
+		}
+		fields := make(map[string]string)
+		for _, field := range span.Attributes() {
+			fields[string(field.Key)] = field.Value.AsString()
+		}
+		if fields["chalk.capture.job_id"] != retry.ID.String() || fields["chalk.capture.recording_id"] != retry.RecordingID.String() || fields["chalk.capture.worker_id"] != "completion-retry" || fields["chalk.capture.completion.stage"] != "db_commit" || fields["chalk.capture.completion.outcome"] != "ok" {
+			t.Fatalf("capture DB completion telemetry = %v", fields)
+		}
+		foundCommitSpan = true
+	}
+	if !foundCommitSpan {
+		t.Fatal("capture DB completion span was missing")
+	}
+
+	priorMediaJob, _ := seedStoppedCapture("6a9b6a12-7457-4fe9-a58b-8b234d0be060", "6a9b6a12-7457-4fe9-a58b-8b234d0be061", "6a9b6a12-7457-4fe9-a58b-8b234d0be062", "6a9b6a12-7457-4fe9-a58b-8b234d0be063", "6a9b6a12-7457-4fe9-a58b-8b234d0be064", 4)
+	if priorMediaJob.AttemptCount != priorMediaJob.AttemptLimit {
+		t.Fatalf("stopped Capture did not exhaust media budget: %+v", priorMediaJob)
+	}
+	for _, requestValue := range []string{"6a9b6a12-7457-4fe9-a58b-8b234d0be065", "6a9b6a12-7457-4fe9-a58b-8b234d0be066", "6a9b6a12-7457-4fe9-a58b-8b234d0be067"} {
+		job, lease := claimCompletion(requestValue)
+		failed, err := repository.Fail(ctx, recordingpipeline.FailureInput{LeaseInput: lease, AvailableAt: time.Now(), ErrorCode: "capture_completion_failed", ErrorDetail: "stage=api_complete outcome=returned error_class=http http_status=503"})
+		if err != nil {
+			t.Fatalf("fail completion attempt %d: %v", job.AttemptCount, err)
+		}
+		if job.AttemptCount < priorMediaJob.AttemptCount+3 && failed.State != recordingpipeline.JobStatePending || job.AttemptCount == priorMediaJob.AttemptCount+3 && failed.State != recordingpipeline.JobStateTerminalFailure {
+			t.Fatalf("completion attempt %d state = %s", job.AttemptCount, failed.State)
+		}
+		if job.AttemptCount == priorMediaJob.AttemptCount+3 && (failed.ErrorDetail == nil || *failed.ErrorDetail != "stage=api_complete outcome=returned error_class=http http_status=503") {
+			t.Fatalf("terminal completion detail = %v", failed.ErrorDetail)
+		}
 	}
 
 	handoffInput := recordingpipeline.ReservationInput{
