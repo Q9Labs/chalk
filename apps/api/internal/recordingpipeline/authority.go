@@ -17,6 +17,7 @@ type ClaimFacts struct {
 	PolicySnapshotVersion      string
 	HardDeadline               time.Time
 	CaptureEpoch               int64
+	CompletionOnly             bool
 	CaptureReadyAt             *time.Time
 	CaptureKeyHandle           utilities.ID
 	PresentationHandle         utilities.ID
@@ -91,6 +92,7 @@ func NewRecorderJobAuthority(job Job, facts ClaimFacts, claimRequestID utilities
 		AttemptCount:               job.AttemptCount,
 		FencingGeneration:          job.FencingGeneration,
 		CaptureEpoch:               facts.CaptureEpoch,
+		CompletionOnly:             facts.CompletionOnly,
 		PolicySnapshotVersion:      facts.PolicySnapshotVersion,
 		HardDeadline:               facts.HardDeadline.UTC().Format(time.RFC3339Nano),
 		CaptureReadyAt:             captureReadyAt,
@@ -142,6 +144,9 @@ func DecodeRecorderJobEnvelope(envelopeBytes, envelopeDigest []byte) (RecorderJo
 		return RecorderJobEnvelope{}, ErrInvalidEnvelope
 	}
 	if envelope.SchemaVersion == LegacyRecorderJobSchemaVersion && envelope.CaptureReadyAt != nil {
+		return RecorderJobEnvelope{}, ErrInvalidEnvelope
+	}
+	if envelope.CompletionOnly && (envelope.Kind != JobKindCapture || envelope.CaptureReadyAt == nil) {
 		return RecorderJobEnvelope{}, ErrInvalidEnvelope
 	}
 	if envelope.CaptureReadyAt != nil {

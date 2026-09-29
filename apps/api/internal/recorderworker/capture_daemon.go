@@ -26,7 +26,9 @@ const (
 	DefaultClaimRetryWait     = time.Second
 	DefaultAttemptRetryDelay  = 5 * time.Second
 	DefaultCaptureCompletion  = 5 * time.Minute
+	DefaultCompletionRetry    = 2 * time.Minute
 	defaultCaptureFailureCode = "capture_attempt_failed"
+	completionFailureCode     = "capture_completion_failed"
 )
 
 var (
@@ -164,6 +166,12 @@ func (d *CaptureDaemon) runClaim(ctx context.Context, claim ClaimResult) error {
 	if err != nil {
 		return err
 	}
+	if claim.Envelope.CompletionOnly {
+		if err := d.completeCapture(ctx, lease, claim.LeaseExpiresAt.UTC(), true); err != nil {
+			return d.reportCompletionFailure(ctx, lease, err)
+		}
+		return nil
+	}
 	attempt, err := d.factory.NewCaptureAttempt(ctx, claim)
 	if err != nil {
 		return d.reportAttemptFailure(ctx, lease, err)
@@ -220,7 +228,10 @@ func (d *CaptureDaemon) finishCaptureAttempt(ctx context.Context, attempt Captur
 	if attemptErr != nil {
 		return d.reportAttemptFailure(ctx, lease, attemptErr)
 	}
-	return d.completeCapture(ctx, lease, leaseExpiresAt)
+	if err := d.completeCapture(ctx, lease, leaseExpiresAt, false); err != nil {
+		return d.reportCompletionFailure(ctx, lease, err)
+	}
+	return nil
 }
 
 func (d *CaptureDaemon) interruptCaptureAttempt(ctx context.Context, attempt CaptureAttempt, cancelAttempt context.CancelFunc, result <-chan error, lease recordingpipeline.LeaseInput, leaseExpiresAt time.Time, stopErr error) error {
@@ -262,8 +273,12 @@ func (d *CaptureDaemon) relinquishCapture(ctx context.Context, lease recordingpi
 	}
 }
 
-func (d *CaptureDaemon) completeCapture(ctx context.Context, lease recordingpipeline.LeaseInput, expiresAt time.Time) error {
-	ctx, cancel := context.WithTimeout(ctx, d.config.CompletionTimeout)
+func (d *CaptureDaemon) completeCapture(ctx context.Context, lease recordingpipeline.LeaseInput, expiresAt time.Time, retry bool) error {
+	timeout := d.config.CompletionTimeout
+	if retry && timeout > DefaultCompletionRetry {
+		timeout = DefaultCompletionRetry
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	result := make(chan error, 1)
 	// Freezing the presentation performs object I/O; preserve the same capture
@@ -285,18 +300,21 @@ func (d *CaptureDaemon) completeCapture(ctx context.Context, lease recordingpipe
 		select {
 		case err := <-result:
 			if err != nil {
-				return fmt.Errorf("complete recorder capture job: %w", err)
+				if ctx.Err() != nil {
+					return completionStageError{stage: "api_complete", outcome: "timed_out", cause: ctx.Err()}
+				}
+				return completionStageError{stage: "api_complete", outcome: "returned", cause: err}
 			}
 			return nil
 		case <-ctx.Done():
-			return fmt.Errorf("complete recorder capture job: %w", ctx.Err())
+			return completionStageError{stage: "api_complete", outcome: "timed_out", cause: ctx.Err()}
 		case <-d.config.After(d.config.HeartbeatInterval):
 			job, err := d.heartbeat(ctx, lease, expiresAt)
 			if err != nil {
-				return fmt.Errorf("renew completing capture lease: %w", err)
+				return completionStageError{stage: "lease_renewal", outcome: "returned", cause: err}
 			}
 			if _, err := renewedCaptureLease(lease, job, d.config.Lease, d.config.Now().UTC()); err != nil {
-				return err
+				return completionStageError{stage: "lease_renewal", outcome: "returned", cause: err}
 			}
 			expiresAt = job.LeaseExpiresAt.UTC()
 		}
@@ -383,6 +401,54 @@ func (d *CaptureDaemon) reportAttemptFailure(ctx context.Context, lease recordin
 	})
 	if reportErr != nil {
 		return fmt.Errorf("report recorder capture failure: %w", errors.Join(cause, reportErr))
+	}
+	return nil
+}
+
+type completionStageError struct {
+	stage   string
+	outcome string
+	cause   error
+}
+
+func (e completionStageError) Error() string {
+	return "capture completion " + e.stage + " " + e.outcome
+}
+func (e completionStageError) Unwrap() error { return e.cause }
+
+func completionFailureDetail(err error) string {
+	stage, outcome, class, status := "api_complete", "returned", "unknown", 0
+	var stageErr completionStageError
+	if errors.As(err, &stageErr) {
+		stage, outcome = stageErr.stage, stageErr.outcome
+	}
+	var httpErr HTTPError
+	var transportErr TransportError
+	var protocolErr ProtocolError
+	switch {
+	case errors.As(err, &httpErr):
+		class, status = "http", httpErr.Status
+	case errors.Is(err, context.DeadlineExceeded):
+		class = "deadline"
+	case errors.As(err, &transportErr):
+		class = "transport"
+	case errors.As(err, &protocolErr):
+		class = "protocol"
+	case errors.Is(err, ErrControlPlaneFenced):
+		class = "fenced"
+	}
+	return fmt.Sprintf("stage=%s outcome=%s error_class=%s http_status=%d", stage, outcome, class, status)
+}
+
+func (d *CaptureDaemon) reportCompletionFailure(ctx context.Context, lease recordingpipeline.LeaseInput, cause error) error {
+	reportCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), d.config.RelinquishTimeout)
+	defer cancel()
+	_, reportErr := d.control.Fail(reportCtx, recordingpipeline.FailureInput{
+		LeaseInput: lease, AvailableAt: d.config.Now().UTC().Add(d.config.AttemptRetryDelay),
+		ErrorCode: completionFailureCode, ErrorDetail: completionFailureDetail(cause),
+	})
+	if reportErr != nil {
+		return fmt.Errorf("report capture completion failure (%s): %w", completionFailureDetail(cause), reportErr)
 	}
 	return nil
 }

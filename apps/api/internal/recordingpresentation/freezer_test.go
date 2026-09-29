@@ -13,10 +13,17 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 func TestPrepareFreezesReferencedAssetsBeforePublishingTimeline(t *testing.T) {
-	t.Parallel()
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() { otel.SetTracerProvider(previous); _ = provider.Shutdown(context.Background()) })
 
 	body := []byte("attachment needed by the recording")
 	digest := sha256.Sum256(body)
@@ -77,6 +84,20 @@ func TestPrepareFreezesReferencedAssetsBeforePublishingTimeline(t *testing.T) {
 	prepared, err := freezer.Prepare(context.Background(), authority)
 	if err != nil {
 		t.Fatalf("prepare presentation: %v", err)
+	}
+	spans := recorder.Ended()
+	if len(spans) != 1 {
+		t.Fatalf("completion spans = %d, want 1", len(spans))
+	}
+	fields := make(map[string]string)
+	for _, field := range spans[0].Attributes() {
+		fields[string(field.Key)] = field.Value.AsString()
+	}
+	if fields["chalk.capture.job_id"] != authority.JobID.String() || fields["chalk.capture.recording_id"] != source.RecordingID.String() || fields["chalk.capture.worker_id"] != authority.LeaseOwner || fields["chalk.capture.completion.stage"] != "object_io" || fields["chalk.capture.completion.outcome"] != "ok" {
+		t.Fatalf("completion telemetry fields = %v", fields)
+	}
+	if len(spans[0].Events()) != 3 {
+		t.Fatalf("completion stage events = %v", spans[0].Events())
 	}
 	if len(prepared.Assets) != 1 {
 		t.Fatalf("prepared asset count = %d, want 1", len(prepared.Assets))

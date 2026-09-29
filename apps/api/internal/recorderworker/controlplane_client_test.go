@@ -86,7 +86,7 @@ func TestControlPlaneClientClaimExactBodyAndNoWork(t *testing.T) {
 	if path != "/private/internal/v1/recorder/jobs/claim" {
 		t.Fatalf("claim path = %q", path)
 	}
-	if body["claim_request_id"] != claimID.String() || body["lease_for_seconds"] != float64(30) {
+	if body["claim_request_id"] != claimID.String() || body["lease_for_seconds"] != float64(30) || body["supports_completion_only"] != true {
 		t.Fatalf("claim body = %#v", body)
 	}
 }
@@ -117,6 +117,37 @@ func TestControlPlaneClientClaimDecodesAndVerifiesEnvelope(t *testing.T) {
 	}
 	if result.ClaimRequestID != claimID || result.Envelope.JobID != envelope.JobID || hex.EncodeToString(result.EnvelopeDigest) != hex.EncodeToString(digest[:]) {
 		t.Fatalf("claim result = %#v", result)
+	}
+}
+
+func TestControlPlaneClientClaimFallsBackForOlderAPI(t *testing.T) {
+	claimID := testID(t, "11111111-1111-4111-8111-111111111111")
+	calls := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body["claim_request_id"] != claimID.String() {
+			t.Fatalf("claim request %d = %v, %v", calls, body, err)
+		}
+		if calls == 1 {
+			if body["supports_completion_only"] != true {
+				t.Fatalf("new claim capability missing: %v", body)
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if _, present := body["supports_completion_only"]; present {
+			t.Fatalf("older API fallback retained unknown field: %v", body)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	client, err := NewControlPlaneClient(server.URL, server.Client())
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	if _, err := client.Claim(context.Background(), recordingpipeline.ClaimInput{ClaimRequestID: claimID}); !errors.Is(err, ErrNoWork) || calls != 2 {
+		t.Fatalf("older API fallback: calls=%d err=%v", calls, err)
 	}
 }
 

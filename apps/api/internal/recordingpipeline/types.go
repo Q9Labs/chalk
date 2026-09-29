@@ -229,6 +229,7 @@ type Job struct {
 	LeaseExpiresAt       *time.Time
 	FencingGeneration    int64
 	CaptureEpoch         int64
+	CompletionOnly       bool
 	ErrorCode            *string
 	ErrorDetail          *string
 	TerminalAt           *time.Time
@@ -251,6 +252,7 @@ type RecorderJobEnvelope struct {
 	AttemptCount               int      `json:"attempt_count"`
 	FencingGeneration          int64    `json:"fencing_generation"`
 	CaptureEpoch               int64    `json:"capture_epoch"`
+	CompletionOnly             bool     `json:"completion_only,omitempty"`
 	PolicySnapshotVersion      string   `json:"policy_snapshot_version"`
 	HardDeadline               string   `json:"hard_deadline"`
 	CaptureReadyAt             *string  `json:"capture_ready_at"`
@@ -318,11 +320,12 @@ type Artifact struct {
 }
 
 type ClaimInput struct {
-	ClaimRequestID utilities.ID
-	Kind           JobKind
-	Owner          string
-	LeaseToken     string
-	LeaseFor       time.Duration
+	ClaimRequestID         utilities.ID
+	Kind                   JobKind
+	SupportsCompletionOnly bool
+	Owner                  string
+	LeaseToken             string
+	LeaseFor               time.Duration
 }
 
 // ExportInput identifies the immutable Recording whose one canonical MP4

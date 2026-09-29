@@ -359,12 +359,15 @@ func TestRecorderWorkerRoutesFailClosedAndBoundBodies(t *testing.T) {
 }
 
 func TestNewRecorderWorkerRouterIsPrivateAndVerifierBound(t *testing.T) {
-	service := recorderWorkerServiceStub{claim: func(context.Context, recordingpipeline.ClaimInput) (recordingpipeline.Job, error) {
+	service := recorderWorkerServiceStub{claim: func(_ context.Context, input recordingpipeline.ClaimInput) (recordingpipeline.Job, error) {
+		if !input.SupportsCompletionOnly {
+			t.Fatal("completion-only claim capability was not forwarded")
+		}
 		return recorderWorkerJobFixture(t, recordingpipeline.JobKindCapture), nil
 	}}
 	workerID := mustRecorderWorkerID(t, workerTestID)
 	router := NewRecorderWorkerRouter(service, recorderWorkerRouteVerifierStub{identity: workeridentity.Identity{WorkerID: workerID, Role: workeridentity.RoleCapture}})
-	request := recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/jobs/claim", `{"claim_request_id":"`+workerTestClaim+`"}`)
+	request := recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/jobs/claim", `{"claim_request_id":"`+workerTestClaim+`","supports_completion_only":true}`)
 	request.Header.Set("Origin", "https://untrusted.invalid")
 	request.Header.Set("X-Chalk-System-Token", "would-be-public-token")
 	response := httptest.NewRecorder()

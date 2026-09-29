@@ -15,9 +15,13 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 type recordingPipelineQuerier interface {
+	GetRecordingCaptureCompletionIdentity(context.Context, pgtype.UUID) (pgtype.UUID, error)
 	ClaimRecordingJob(context.Context, sqlc.ClaimRecordingJobParams) (sqlc.ClaimRecordingJobRow, error)
 	LockRecordingJobClaimRequest(context.Context, string) error
 	GetRecordingJobAttemptAuthorityByClaimRequest(context.Context, pgtype.UUID) (sqlc.GetRecordingJobAttemptAuthorityByClaimRequestRow, error)
@@ -420,12 +424,13 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 			return err
 		}
 		row, err := queries.ClaimRecordingJob(ctx, sqlc.ClaimRecordingJobParams{
-			TranscriptionEnabled: r.transcriptionEnabled,
-			MaximumRenderSeconds: int32(recordingpipeline.MaximumRenderDuration / time.Second),
-			LeaseToken:           requiredTextValue(input.LeaseToken),
-			LeaseOwner:           requiredTextValue(input.Owner),
-			LeaseExpiresAt:       timestamptzValue(leaseExpiresAt),
-			Kind:                 string(input.Kind),
+			TranscriptionEnabled:   r.transcriptionEnabled,
+			SupportsCompletionOnly: input.SupportsCompletionOnly,
+			MaximumRenderSeconds:   int32(recordingpipeline.MaximumRenderDuration / time.Second),
+			LeaseToken:             requiredTextValue(input.LeaseToken),
+			LeaseOwner:             requiredTextValue(input.Owner),
+			LeaseExpiresAt:         timestamptzValue(leaseExpiresAt),
+			Kind:                   string(input.Kind),
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return recordingpipeline.ErrJobNotFound
@@ -436,13 +441,14 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 		claimed = mapClaimJob(row)
 		leaseExpiresAt = timestamp(row.LeaseExpiresAt)
 		claimed.CaptureEpoch = row.CaptureEpoch
+		claimed.CompletionOnly = row.CompletionOnly
 		hardDeadline, err := recordingJobDeadline(claimed.Kind, row.EndsAt, row.CreatedAt)
 		if err != nil {
 			return err
 		}
 		claimFacts := recordingpipeline.ClaimFacts{
 			SpaceID: utilities.IDFromBytes(row.SpaceID.Bytes), PolicySnapshotVersion: row.PolicySnapshotVersion,
-			HardDeadline: hardDeadline, CaptureEpoch: row.CaptureEpoch, CaptureReadyAt: nullableTimestamp(row.CaptureReadyAt),
+			HardDeadline: hardDeadline, CaptureEpoch: row.CaptureEpoch, CaptureReadyAt: nullableTimestamp(row.CaptureReadyAt), CompletionOnly: row.CompletionOnly,
 		}
 		if claimed.Kind == recordingpipeline.JobKindRender || claimed.Kind == recordingpipeline.JobKindTranscription {
 			claimFacts.CaptureKeyHandle = utilities.IDFromBytes(row.CaptureKeyHandle.Bytes)
@@ -560,16 +566,55 @@ func (r RecordingPipelineRepository) Complete(ctx context.Context, input recordi
 }
 
 func (r RecordingPipelineRepository) CompleteCapture(ctx context.Context, input recordingpipeline.LeaseInput, renderJobID utilities.ID) (recordingpipeline.Job, error) {
+	ctx, span := otel.Tracer("chalk/recordingpipeline").Start(ctx, "recording.capture.complete")
+	span.SetAttributes(attribute.String("chalk.capture.job_id", input.JobID.String()),
+		attribute.String("chalk.capture.worker_id", input.LeaseOwner),
+		attribute.Int("chalk.capture.attempt_count", input.AttemptCount))
+	defer span.End()
+	var recordingID pgtype.UUID
+	readIdentity := func(queries recordingPipelineQuerier) error {
+		var err error
+		recordingID, err = queries.GetRecordingCaptureCompletionIdentity(ctx, uuid(input.JobID))
+		return err
+	}
+	var identityErr error
+	if r.queries != nil {
+		identityErr = readIdentity(r.queries)
+	} else {
+		identityErr = r.transaction(ctx, readIdentity)
+	}
+	if errors.Is(identityErr, pgx.ErrNoRows) {
+		span.SetStatus(codes.Error, "capture job not found")
+		return recordingpipeline.Job{}, recordingpipeline.ErrJobNotFound
+	}
+	if identityErr != nil {
+		span.SetStatus(codes.Error, "capture identity lookup failed")
+		return recordingpipeline.Job{}, fmt.Errorf("read capture completion identity: %w", identityErr)
+	}
+	span.SetAttributes(attribute.String("chalk.capture.recording_id", utilities.IDFromBytes(recordingID.Bytes).String()))
 	if completed, err := r.completedCaptureReplay(ctx, input); !errors.Is(err, pgx.ErrNoRows) {
+		if err == nil {
+			span.SetAttributes(attribute.String("chalk.capture.recording_id", completed.RecordingID.String()),
+				attribute.String("chalk.capture.completion.stage", "replay"),
+				attribute.String("chalk.capture.completion.outcome", "ok"))
+		} else {
+			span.SetStatus(codes.Error, "replay failed")
+		}
 		return completed, err
 	}
 	completed, err := r.completeCapture(ctx, input, renderJobID)
 	if err == nil {
+		span.SetAttributes(attribute.String("chalk.capture.recording_id", completed.RecordingID.String()),
+			attribute.String("chalk.capture.completion.outcome", "ok"))
 		return completed, nil
 	}
+	span.SetStatus(codes.Error, "completion failed")
 	// Another request may have committed while this request was preparing
 	// presentation objects. A replay must not refreeze or requeue that capture.
 	if replay, replayErr := r.completedCaptureReplay(ctx, input); replayErr == nil {
+		span.SetAttributes(attribute.String("chalk.capture.completion.stage", "replay"),
+			attribute.String("chalk.capture.completion.outcome", "ok"))
+		span.SetStatus(codes.Unset, "")
 		return replay, nil
 	} else if !errors.Is(replayErr, pgx.ErrNoRows) {
 		return recordingpipeline.Job{}, errors.Join(err, replayErr)
@@ -617,6 +662,11 @@ func (r RecordingPipelineRepository) completeCapture(ctx context.Context, input 
 		if err != nil {
 			return recordingpipeline.Job{}, fmt.Errorf("prepare recording presentation: %w", err)
 		}
+		ctx, commitSpan := otel.Tracer("chalk/recordingpipeline").Start(ctx, "recording.capture.complete.db_commit")
+		commitSpan.SetAttributes(attribute.String("chalk.capture.job_id", input.JobID.String()),
+			attribute.String("chalk.capture.recording_id", prepared.RecordingID.String()),
+			attribute.String("chalk.capture.worker_id", input.LeaseOwner),
+			attribute.String("chalk.capture.completion.stage", "db_commit"))
 		var completed recordingpipeline.Job
 		err = r.transaction(ctx, func(queries recordingPipelineQuerier) error {
 			if err := insertPreparedRecordingPresentation(ctx, queries, prepared); err != nil {
@@ -633,9 +683,21 @@ func (r RecordingPipelineRepository) completeCapture(ctx context.Context, input 
 			completed.CaptureEpoch = input.CaptureEpoch
 			return nil
 		})
+		if err != nil {
+			commitSpan.SetAttributes(attribute.String("chalk.capture.completion.outcome", "error"))
+			commitSpan.SetStatus(codes.Error, "database commit failed")
+		} else {
+			commitSpan.SetAttributes(attribute.String("chalk.capture.completion.outcome", "ok"))
+		}
+		commitSpan.End()
 		return completed, err
 	}
 
+	ctx, commitSpan := otel.Tracer("chalk/recordingpipeline").Start(ctx, "recording.capture.complete.db_commit")
+	commitSpan.SetAttributes(attribute.String("chalk.capture.job_id", input.JobID.String()),
+		attribute.String("chalk.capture.worker_id", input.LeaseOwner),
+		attribute.String("chalk.capture.completion.stage", "db_commit"))
+	defer commitSpan.End()
 	row, err := r.queries.CompleteCaptureRecordingJob(ctx, sqlc.CompleteCaptureRecordingJobParams{
 		ID:                   uuid(input.JobID),
 		AttemptCount:         int32(input.AttemptCount),
@@ -651,13 +713,19 @@ func (r RecordingPipelineRepository) completeCapture(ctx context.Context, input 
 		TranscriptionEnabled: r.transcriptionEnabled,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
+		commitSpan.SetAttributes(attribute.String("chalk.capture.completion.outcome", "error"))
+		commitSpan.SetStatus(codes.Error, "database commit failed")
 		return recordingpipeline.Job{}, recordingpipeline.ErrJobNotFound
 	}
 	if err != nil {
+		commitSpan.SetAttributes(attribute.String("chalk.capture.completion.outcome", "error"))
+		commitSpan.SetStatus(codes.Error, "database commit failed")
 		return recordingpipeline.Job{}, fmt.Errorf("complete capture recording job: %w", err)
 	}
 	job := mapRecordingJob(sqlc.RecordingJob(row))
 	job.CaptureEpoch = input.CaptureEpoch
+	commitSpan.SetAttributes(attribute.String("chalk.capture.recording_id", job.RecordingID.String()),
+		attribute.String("chalk.capture.completion.outcome", "ok"))
 	return job, nil
 }
 
@@ -1101,6 +1169,7 @@ func mapClaimJob(row sqlc.ClaimRecordingJobRow) recordingpipeline.Job {
 		LeaseExpiresAt:       nullableTimestamp(row.LeaseExpiresAt),
 		FencingGeneration:    row.FencingGeneration,
 		CaptureEpoch:         row.CaptureEpoch,
+		CompletionOnly:       row.CompletionOnly,
 		ErrorCode:            nullableTextPointer(row.ErrorCode),
 		ErrorDetail:          nullableTextPointer(row.ErrorDetail),
 		TerminalAt:           nullableTimestamp(row.TerminalAt),
@@ -1141,6 +1210,7 @@ func mapAuthorityJob(row sqlc.GetRecordingJobAttemptAuthorityByClaimRequestRow) 
 	if err != nil {
 		return recordingpipeline.Job{}, err
 	}
+	job.CompletionOnly = envelope.CompletionOnly
 	hardDeadline, err := recordingJobDeadline(job.Kind, row.EndsAt, row.CreatedAt)
 	if err != nil {
 		return recordingpipeline.Job{}, err

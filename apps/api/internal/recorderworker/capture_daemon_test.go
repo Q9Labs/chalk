@@ -143,11 +143,30 @@ func TestCaptureCompletionDoesNotRetryTerminalFailure(t *testing.T) {
 	daemon := captureDaemonForTest(t, control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
 		return &captureAttemptStub{run: func(context.Context) error { return nil }}, nil
 	}), nil)
-	if err := daemon.runClaim(context.Background(), captureDaemonClaim(t, 7)); !errors.Is(err, ErrControlPlaneFenced) {
-		t.Fatalf("terminal completion: %v", err)
+	if err := daemon.runClaim(context.Background(), captureDaemonClaim(t, 7)); err != nil {
+		t.Fatalf("reported completion failure: %v", err)
 	}
-	if control.completeCalls != 1 {
-		t.Fatalf("retried terminal completion %d times", control.completeCalls)
+	if control.completeCalls != 1 || control.failCalls != 1 || control.failed.ErrorCode != completionFailureCode || control.failed.ErrorDetail != "stage=api_complete outcome=returned error_class=fenced http_status=0" {
+		t.Fatalf("completion calls=%d failures=%d detail=%q", control.completeCalls, control.failCalls, control.failed.ErrorDetail)
+	}
+}
+
+func TestCaptureCompletionOnlyClaimSkipsMediaAndReportsOutcome(t *testing.T) {
+	claim := captureDaemonClaim(t, 7)
+	claim.Envelope.CompletionOnly = true
+	control := &captureControlStub{}
+	daemon := captureDaemonForTest(t, control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
+		t.Fatal("completion retry started a media attempt")
+		return nil, nil
+	}), nil)
+	if err := daemon.runClaim(context.Background(), claim); err != nil {
+		t.Fatalf("complete stopped capture: %v", err)
+	}
+	if control.completeCalls != 1 || control.failCalls != 0 || control.completed.CaptureEpoch != claim.Envelope.CaptureEpoch {
+		t.Fatalf("completion calls=%d failures=%d epoch=%d", control.completeCalls, control.failCalls, control.completed.CaptureEpoch)
+	}
+	if detail := completionFailureDetail(completionStageError{stage: "api_complete", outcome: "returned", cause: HTTPError{Status: 503}}); detail != "stage=api_complete outcome=returned error_class=http http_status=503" {
+		t.Fatalf("HTTP outcome detail = %q", detail)
 	}
 }
 
@@ -175,8 +194,12 @@ func TestCaptureCompletionCancelsWhenBoundExpiresOrLeaseIsLost(t *testing.T) {
 			if leaseLost {
 				want = ErrControlPlaneFenced
 			}
-			if !errors.Is(err, want) {
-				t.Fatalf("completion cancellation = %v, want %v", err, want)
+			wantDetail := "stage=api_complete outcome=timed_out error_class=deadline http_status=0"
+			if leaseLost {
+				wantDetail = "stage=lease_renewal outcome=returned error_class=fenced http_status=0"
+			}
+			if err != nil || control.failCalls != 1 || control.failed.ErrorDetail != wantDetail {
+				t.Fatalf("completion report = %v, failures=%d detail=%q, cause=%v", err, control.failCalls, control.failed.ErrorDetail, want)
 			}
 			select {
 			case <-finished:

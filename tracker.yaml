@@ -203,7 +203,7 @@ outcomes:
     state: in_progress
     summary: >-
       A Capture worker takes about 140 seconds from record to ready and runs on a c-2 with a 1.6 GB
-      image shared with Render. At 2,000 meeting-hours a month, Capture costs about $230, of which
+      image shared with Render. At 2,000 recorded Episode-hours a month, Capture costs about $230, of which
       about $131 is Droplets and about $90 is SFU traffic to the recorder.
     size: L
     remaining:

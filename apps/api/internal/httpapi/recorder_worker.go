@@ -113,8 +113,9 @@ func mountRecorderWorkerRoutesWithControls(r chi.Router, service RecorderWorkerS
 }
 
 type recorderWorkerClaimBody struct {
-	ClaimRequestID  string `json:"claim_request_id"`
-	LeaseForSeconds int    `json:"lease_for_seconds"`
+	ClaimRequestID         string `json:"claim_request_id"`
+	LeaseForSeconds        int    `json:"lease_for_seconds"`
+	SupportsCompletionOnly bool   `json:"supports_completion_only"`
 }
 
 type recorderWorkerCapturePlanWaitBody struct {
@@ -269,11 +270,12 @@ func recorderWorkerClaimHandler(service RecorderWorkerService) http.HandlerFunc 
 			return
 		}
 		job, err := service.Claim(request.Context(), recordingpipeline.ClaimInput{
-			ClaimRequestID: claimRequestID,
-			Kind:           recorderWorkerJobKind(identity.Role),
-			Owner:          recorderWorkerLeaseOwner(identity),
-			LeaseToken:     leaseToken.String(),
-			LeaseFor:       leaseFor,
+			ClaimRequestID:         claimRequestID,
+			Kind:                   recorderWorkerJobKind(identity.Role),
+			SupportsCompletionOnly: body.SupportsCompletionOnly,
+			Owner:                  recorderWorkerLeaseOwner(identity),
+			LeaseToken:             leaseToken.String(),
+			LeaseFor:               leaseFor,
 		})
 		if err != nil {
 			if errors.Is(err, recordingpipeline.ErrJobNotFound) {
