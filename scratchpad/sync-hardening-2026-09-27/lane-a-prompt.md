@@ -11,6 +11,7 @@ The owner does not trust Sync correctness, durability, or speed. In the producti
 Trace what happens, in order, from the moment a web user presses the microphone button until the UI shows the new state, for both enable and disable, and for camera too. Start at `sdks/typescript/client/src/space-client/media-controller.ts` (`#set`, around line 216) and follow the call through `sdks/typescript/client/src/sync/v1-client.ts` (`setMicrophoneEnabled`, `#sendLiveTarget`), over the WebSocket into `apps/sync` (Elixir), through the Episode coordinator and `Stateholder.Postgres`, and into any external operation or `ChalkSync.ProviderBridge` call to the Go API (`apps/api`) and on to Cloudflare Realtime SFU. Also trace the client-side WebRTC publish/unpublish (`ports.media`) and whether the local track is stopped on disable (forcing a new getUserMedia on re-enable).
 
 For every step, record:
+
 - file:line references;
 - whether the UI waits for it (serial, on the critical path) or it happens in the background;
 - every network round trip it adds (browser→Sync, Sync→Postgres, Sync→API bridge, API→Cloudflare, browser→Cloudflare), and every Postgres transaction, lock, or synchronous-standby wait;
@@ -26,6 +27,7 @@ Summarize, in plain language for someone who has not seen this code in months: t
 ## Task 3: audit the existing reliability and performance tools
 
 The owner believes these tools are out of date and not robust. Audit each honestly:
+
 - `apps/sync/docs/reliability-harness.md` and whatever it points to;
 - `apps/sync/docs/sync-breaker-v1.md`;
 - `apps/sync/docs/release-topology-failure-scheduler.md`;

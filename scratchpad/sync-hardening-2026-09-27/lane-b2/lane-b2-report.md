@@ -10,74 +10,74 @@ Each cell below is **p50 / p95 / max milliseconds (n)**, nearest-rank percentile
 
 ### Microphone enable — 30 successful attempts
 
-| Stage | p50 / p95 / max ms (n) |
-| --- | ---: |
-| Press → Sync command frame sent | 44.9 / 137.4 / 177.6 (30) |
-| Sync command frame → reply | 30.6 / 335.6 / 518.0 (30) |
-| Sync→API provider operation, server | 9.2 / 56.0 / 116.3 (30) |
-| A sender `replaceTrack` | 0.1 / 1.0 / 4.4 (30) |
-| A `setLocalDescription` / `setRemoteDescription` | 2.4 / 7.5 / 7.7 (30) / 1.5 / 4.7 / 24.5 (30) |
-| A `media/sfu/tracks`, browser / API server | 272 / 653 / 712 (30) / 270.8 / 653 / 710.5 (30) |
-| Cloudflare local publication | 253.8 / 641.7 / 695.9 (30) |
-| Press → A UI | 381.6 / 949.3 / 1116.6 (30) |
-| Press → A outbound RTP increase | 133.5 / 484.4 / 711.8 (30) |
-| Press → B matching Sync frame | 1778.5 / 1918.1 / 2173.3 (29) |
-| B matching Sync frame → B UI | 22.3 / 66.3 / 127.8 (29) |
-| Press → B UI | 1813.7 / 1932.9 / 2195.6 (29) |
-| B first `media/sfu/tracks`, browser / API server | 8262 / 8445 / 8691 (30) / 8260.5 / 8445.7 / 8688.7 (30) |
-| Cloudflare first remote pull | 8247.9 / 8437.8 / 8686.3 (30) |
-| Press → B inbound RTP increase / full media total | — (0; **30/30 never** within 15 s) |
-| Press → both UIs (state-signal total) | 1813.7 / 1932.9 / 2195.6 (29) |
+| Stage                                             |                                  p50 / p95 / max ms (n) |
+| ------------------------------------------------- | ------------------------------------------------------: |
+| Press → Sync command frame sent                   |                               44.9 / 137.4 / 177.6 (30) |
+| Sync command frame → reply                        |                               30.6 / 335.6 / 518.0 (30) |
+| Sync→API provider operation, server               |                                 9.2 / 56.0 / 116.3 (30) |
+| A sender `replaceTrack`                           |                                    0.1 / 1.0 / 4.4 (30) |
+| A `setLocalDescription` / `setRemoteDescription`  |            2.4 / 7.5 / 7.7 (30) / 1.5 / 4.7 / 24.5 (30) |
+| A `media/sfu/tracks`, browser / API server        |         272 / 653 / 712 (30) / 270.8 / 653 / 710.5 (30) |
+| Cloudflare local publication                      |                              253.8 / 641.7 / 695.9 (30) |
+| Press → A UI                                      |                             381.6 / 949.3 / 1116.6 (30) |
+| Press → A outbound RTP increase                   |                              133.5 / 484.4 / 711.8 (30) |
+| Press → B matching Sync frame                     |                           1778.5 / 1918.1 / 2173.3 (29) |
+| B matching Sync frame → B UI                      |                                22.3 / 66.3 / 127.8 (29) |
+| Press → B UI                                      |                           1813.7 / 1932.9 / 2195.6 (29) |
+| B first `media/sfu/tracks`, browser / API server  | 8262 / 8445 / 8691 (30) / 8260.5 / 8445.7 / 8688.7 (30) |
+| Cloudflare first remote pull                      |                           8247.9 / 8437.8 / 8686.3 (30) |
+| Press → B inbound RTP increase / full media total |                      — (0; **30/30 never** within 15 s) |
+| Press → both UIs (state-signal total)             |                           1813.7 / 1932.9 / 2195.6 (29) |
 
 ### Microphone disable — 30 successful attempts, 5 additional failed attempts
 
-| Stage | p50 / p95 / max ms (n) |
-| --- | ---: |
-| Press → Sync command frame sent | 47.4 / 97.5 / 160.5 (30) |
-| Sync command frame → reply | 285 / 667.8 / 3527.3 (30) |
-| Sync→API provider operation, server | 273.7 / 650.8 / 3315.8 (30) |
-| Cloudflare forced track close | 246.5 / 550.1 / 619.3 (30) |
-| A sender `replaceTrack(null)` | 19.6 / 91.1 / 91.7 (30) |
-| A SDP methods | — (0; no renegotiation on disable) |
-| Press → A UI | 394.1 / 838 / 3849.9 (30) |
-| Press → B matching Sync frame | 340.4 / 662.6 / 662.6 (16) |
-| B matching Sync frame → B UI | 22.9 / 105.8 / 105.8 (16) |
-| Press → B UI | 375.4 / 768.4 / 3788.9 (30) |
-| Press → both UIs (state-signal total) | 394.1 / 838 / 3849.9 (30) |
+| Stage                                 |             p50 / p95 / max ms (n) |
+| ------------------------------------- | ---------------------------------: |
+| Press → Sync command frame sent       |           47.4 / 97.5 / 160.5 (30) |
+| Sync command frame → reply            |          285 / 667.8 / 3527.3 (30) |
+| Sync→API provider operation, server   |        273.7 / 650.8 / 3315.8 (30) |
+| Cloudflare forced track close         |         246.5 / 550.1 / 619.3 (30) |
+| A sender `replaceTrack(null)`         |            19.6 / 91.1 / 91.7 (30) |
+| A SDP methods                         | — (0; no renegotiation on disable) |
+| Press → A UI                          |          394.1 / 838 / 3849.9 (30) |
+| Press → B matching Sync frame         |         340.4 / 662.6 / 662.6 (16) |
+| B matching Sync frame → B UI          |          22.9 / 105.8 / 105.8 (16) |
+| Press → B UI                          |        375.4 / 768.4 / 3788.9 (30) |
+| Press → both UIs (state-signal total) |          394.1 / 838 / 3849.9 (30) |
 
 ### Camera enable — 30 successful attempts, 1 additional failed attempt
 
-| Stage | p50 / p95 / max ms (n) |
-| --- | ---: |
-| Press → Sync command frame sent | 84.7 / 251.6 / 265.8 (30) |
-| Sync command frame → reply | 136.1 / 1267.4 / 1646.8 (30) |
-| Sync→API provider operation, server | 16.3 / 483.9 / 532.4 (30) |
-| A sender `replaceTrack` | 0.4 / 2.5 / 4.3 (30) |
-| A `setLocalDescription` / `setRemoteDescription` | 4.4 / 11.2 / 11.5 (30) / 2.9 / 5.8 / 13.6 (30) |
-| A `media/sfu/tracks`, browser / API server | 262 / 734 / 1030 (30) / 252.2 / 732.6 / 1070.2 (30) |
-| Cloudflare local publication | 215.5 / 381.4 / 678.4 (30) |
-| Press → A UI | 593.9 / 1902.7 / 2926.5 (30) |
-| Press → A outbound RTP increase | 90.7 / 431.5 / 537.5 (30) |
-| Press → B matching Sync frame | 1540 / 3740.4 / 3805.8 (28) |
-| Press → B video UI | — (0; **30/30 never** within 30 s) |
-| B first `media/sfu/tracks`, browser / API server | 8324 / 8735 / 9472 (30) / 8310.2 / 8666.1 / 9440.3 (30) |
-| Cloudflare first remote pull | 8297.6 / 8547.4 / 9431.6 (30) |
-| Press → B inbound RTP increase / full media total | — (0; **30/30 never** within 30 s) |
+| Stage                                             |                                  p50 / p95 / max ms (n) |
+| ------------------------------------------------- | ------------------------------------------------------: |
+| Press → Sync command frame sent                   |                               84.7 / 251.6 / 265.8 (30) |
+| Sync command frame → reply                        |                            136.1 / 1267.4 / 1646.8 (30) |
+| Sync→API provider operation, server               |                               16.3 / 483.9 / 532.4 (30) |
+| A sender `replaceTrack`                           |                                    0.4 / 2.5 / 4.3 (30) |
+| A `setLocalDescription` / `setRemoteDescription`  |          4.4 / 11.2 / 11.5 (30) / 2.9 / 5.8 / 13.6 (30) |
+| A `media/sfu/tracks`, browser / API server        |     262 / 734 / 1030 (30) / 252.2 / 732.6 / 1070.2 (30) |
+| Cloudflare local publication                      |                              215.5 / 381.4 / 678.4 (30) |
+| Press → A UI                                      |                            593.9 / 1902.7 / 2926.5 (30) |
+| Press → A outbound RTP increase                   |                               90.7 / 431.5 / 537.5 (30) |
+| Press → B matching Sync frame                     |                             1540 / 3740.4 / 3805.8 (28) |
+| Press → B video UI                                |                      — (0; **30/30 never** within 30 s) |
+| B first `media/sfu/tracks`, browser / API server  | 8324 / 8735 / 9472 (30) / 8310.2 / 8666.1 / 9440.3 (30) |
+| Cloudflare first remote pull                      |                           8297.6 / 8547.4 / 9431.6 (30) |
+| Press → B inbound RTP increase / full media total |                      — (0; **30/30 never** within 30 s) |
 
 ### Camera disable — 31 successful attempts
 
-| Stage | p50 / p95 / max ms (n) |
-| --- | ---: |
-| Press → Sync command frame sent | 110.8 / 323.3 / 356.9 (31) |
-| Sync command frame → reply | 439.6 / 2010.5 / 3200.9 (31) |
-| Sync→API provider operation, server | 330.7 / 1445.9 / 1629 (31) |
-| Cloudflare forced track close | 206.8 / 389.5 / 562 (31) |
-| A sender `replaceTrack(null)` | 46.9 / 92.1 / 198.2 (31) |
-| A SDP methods | — (0; no renegotiation on disable) |
-| Press → A UI (meaningful local total) | 669.4 / 3596.9 / 3671.3 (31) |
-| Press → B matching Sync frame | 788.6 / 3453.4 / 3453.4 (3) |
-| Press → B UI **off condition observed** | 410.9 / 921.9 / 10575.4 (31) † |
-| Press → both UI conditions observed | 804.8 / 3671.3 / 10575.4 (31) † |
+| Stage                                   |             p50 / p95 / max ms (n) |
+| --------------------------------------- | ---------------------------------: |
+| Press → Sync command frame sent         |         110.8 / 323.3 / 356.9 (31) |
+| Sync command frame → reply              |       439.6 / 2010.5 / 3200.9 (31) |
+| Sync→API provider operation, server     |         330.7 / 1445.9 / 1629 (31) |
+| Cloudflare forced track close           |           206.8 / 389.5 / 562 (31) |
+| A sender `replaceTrack(null)`           |           46.9 / 92.1 / 198.2 (31) |
+| A SDP methods                           | — (0; no renegotiation on disable) |
+| Press → A UI (meaningful local total)   |       669.4 / 3596.9 / 3671.3 (31) |
+| Press → B matching Sync frame           |        788.6 / 3453.4 / 3453.4 (3) |
+| Press → B UI **off condition observed** |     410.9 / 921.9 / 10575.4 (31) † |
+| Press → both UI conditions observed     |    804.8 / 3671.3 / 10575.4 (31) † |
 
 † After the first camera disable, B never reacquired A's video, so later B-off UI observations were often an **already-true condition**, not a fresh state transition. These numbers are retained as observation timings but **must not be used as camera-disable propagation latency**. The B Sync-frame matcher found only 16/30 microphone-off and 3/31 camera-off frames; B UI observation is not proof of a matching frame and missing matches are not proof no frame arrived. No browser or Cloudflare local-publish call occurred on disable. The successful provider operation had one API attempt per toggle; the failed microphone-disable attempts had repeated operation-ID retries and are excluded from the percentiles.
 

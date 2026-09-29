@@ -28,10 +28,10 @@ Both commits end with `Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@ant
 
 Final-source M4 test mirror of this worktree, using the exact required commands:
 
-| Gate | Result |
-| --- | --- |
-| `pnpm run gate` | Exit 0 — Smart gate passed |
-| `apps/api/scripts/gate.sh` | Exit 0 — Go API gate passed |
+| Gate                                                               | Result                                                                     |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| `pnpm run gate`                                                    | Exit 0 — Smart gate passed                                                 |
+| `apps/api/scripts/gate.sh`                                         | Exit 0 — Go API gate passed                                                |
 | `apps/sync/scripts/gate.sh` (via `scripts/gates/with-postgres.sh`) | Exit 0 — Sync server gate passed; 82 tests passed, 2 configured exclusions |
 
 The local worktree dev stack was started with `CHALK_DEV_API_PORT=28080 CHALK_DEV_OBSERVABILITY=disabled pnpm dev` after the other lane's stack cleared. Web, API, and Sync readiness currently return HTTP 200. The stack remains running for manual inspection.

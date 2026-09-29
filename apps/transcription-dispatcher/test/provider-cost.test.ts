@@ -59,7 +59,9 @@ describe("reported provider charges", () => {
 
   it("drops empty and whitespace-only cues while preserving spoken cues", () => {
     const result = mergeTranscriptDocuments({
-      jobId: "finalize-1", episodeId: "episode-1", attempt: 1,
+      jobId: "finalize-1",
+      episodeId: "episode-1",
+      attempt: 1,
       chunks: [chunkWithCueTexts(1, ["", " \t ", "spoken words"])],
     });
     expect(result.cues.map((cue) => cue.text)).toEqual(["spoken words"]);

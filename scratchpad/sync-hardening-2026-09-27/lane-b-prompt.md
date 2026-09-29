@@ -26,7 +26,7 @@ The owner considers the existing performance tooling (`scripts/performance/space
    - the UI showing the new state on A's screen;
    - the new state visible on B's screen, both in the UI and in B's Sync frames;
    - on enable, when B's remote track first receives media (inbound-rtp bytes or frames start increasing).
-   Also capture Sync and API server-side timing from logs or OTLP if it is cheap to get; skip it if not.
+     Also capture Sync and API server-side timing from logs or OTLP if it is cheap to get; skip it if not.
 4. Report p50, p95, and max for each stage and for the total, separately for microphone enable, microphone disable, camera enable, and camera disable. Say which stage dominates.
 
 ## Constraints

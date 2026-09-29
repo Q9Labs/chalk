@@ -40,16 +40,18 @@ describe("transcription finalizer failures", () => {
       attempt: 2,
       leaseToken: "lease",
       leaseExpiresAt: "2030-01-01T00:00:00Z",
-      chunks: [{
-        chunkId: "chunk-1",
-        inputUrl: "https://objects.example.test/chunk",
-        inputUrlExpiresAt: "2030-01-01T00:00:00Z",
-        inputContentType: "application/json" as const,
-        inputSizeBytes: 1,
-        inputSha256: "a".repeat(64),
-        episodeStartMs: 0,
-        episodeEndMs: 1_000,
-      }],
+      chunks: [
+        {
+          chunkId: "chunk-1",
+          inputUrl: "https://objects.example.test/chunk",
+          inputUrlExpiresAt: "2030-01-01T00:00:00Z",
+          inputContentType: "application/json" as const,
+          inputSizeBytes: 1,
+          inputSha256: "a".repeat(64),
+          episodeStartMs: 0,
+          episodeEndMs: 1_000,
+        },
+      ],
       outputPutUrl: "https://objects.example.test/output",
       outputPutUrlExpiresAt: "2030-01-01T00:00:00Z",
       outputContentType: "application/json" as const,
@@ -64,12 +66,18 @@ describe("transcription finalizer failures", () => {
         claimFinalize: async () => ({ assignments: [assignment] }),
         heartbeatFinalize: async () => undefined,
         completeFinalize: async () => undefined,
-        retryFinalize: async () => { throw new Error("retry unavailable"); },
+        retryFinalize: async () => {
+          throw new Error("retry unavailable");
+        },
       },
-      fetch: async () => { throw new TypeError("request failed"); },
+      fetch: async () => {
+        throw new TypeError("request failed");
+      },
       logger: {
         info: () => undefined,
-        warn: (event, fields) => { warnings.push({ event, ...(fields === undefined ? {} : { fields }) }); },
+        warn: (event, fields) => {
+          warnings.push({ event, ...(fields === undefined ? {} : { fields }) });
+        },
       },
     };
 

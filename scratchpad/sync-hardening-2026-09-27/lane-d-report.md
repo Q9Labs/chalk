@@ -26,42 +26,42 @@ The slow part in this sample is **new-session/subscriber startup as experienced 
 
 All durations are **p50 / p95 / p99 / max, milliseconds**, for `totalMs`. `TTFB p95` is shown separately. Create-session responses were HTTP 201; other API operations were HTTP 200. Every row had zero HTTP/transport errors and zero per-track error responses.
 
-| API operation | n | HTTP status | Total p50 / p95 / p99 / max (ms) | TTFB p95 (ms) | HTTP/transport errors; per-track errors |
-|---|---:|---|---:|---:|---:|
-| `POST /sessions/new` — A and B | 200 | 201 × 200 | 255.9 / 547.5 / 1,381.1 / 2,471.4 | 547.1 | 0/200; 0 |
-| `POST /tracks/new` — A publishes initial audio + video | 100 | 200 × 100 | 601.7 / 816.8 / 1,255.1 / 1,337.7 | 816.8 | 0/100; 0 |
-| `POST /tracks/new` — B pulls initial audio + video | 100 | 200 × 100 | 769.4 / 923.8 / 1,258.7 / 1,417.5 | 922.5 | 0/100; 0 |
-| `PUT /renegotiate` — initial B pull | 100 | 200 × 100 | 245.6 / 465.8 / 771.3 / 1,353.5 | 465.7 | 0/100; 0 |
-| `PUT /tracks/close` — A closes camera | 100 | 200 × 100 | 250.4 / 386.4 / 809.4 / 2,973.8 | 372.1 | 0/100; 0 |
-| `POST /tracks/new` — A republishes camera | 100 | 200 × 100 | 257.5 / 390.3 / 893.1 / 1,073.8 | 390.2 | 0/100; 0 |
-| `POST /tracks/new` — B pulls republished camera | 100 | 200 × 100 | 242.3 / 327.2 / 434.5 / 532.0 | 327.1 | 0/100; 0 |
-| `PUT /renegotiate` — B's republished pull | 100 | 200 × 100 | 240.4 / 387.8 / 498.7 / 530.3 | 387.8 | 0/100; 0 |
-| `PUT /tracks/close` — publisher cleanup | 100 | 200 × 100 | 239.4 / 323.4 / 554.4 / 701.5 | 323.2 | 0/100; 0 |
-| `PUT /tracks/close` — subscriber cleanup | 100 | 200 × 100 | 236.1 / 316.5 / 694.1 / 855.7 | 315.9 | 0/100; 0 |
+| API operation                                          |   n | HTTP status |  Total p50 / p95 / p99 / max (ms) | TTFB p95 (ms) | HTTP/transport errors; per-track errors |
+| ------------------------------------------------------ | --: | ----------- | --------------------------------: | ------------: | --------------------------------------: |
+| `POST /sessions/new` — A and B                         | 200 | 201 × 200   | 255.9 / 547.5 / 1,381.1 / 2,471.4 |         547.1 |                                0/200; 0 |
+| `POST /tracks/new` — A publishes initial audio + video | 100 | 200 × 100   | 601.7 / 816.8 / 1,255.1 / 1,337.7 |         816.8 |                                0/100; 0 |
+| `POST /tracks/new` — B pulls initial audio + video     | 100 | 200 × 100   | 769.4 / 923.8 / 1,258.7 / 1,417.5 |         922.5 |                                0/100; 0 |
+| `PUT /renegotiate` — initial B pull                    | 100 | 200 × 100   |   245.6 / 465.8 / 771.3 / 1,353.5 |         465.7 |                                0/100; 0 |
+| `PUT /tracks/close` — A closes camera                  | 100 | 200 × 100   |   250.4 / 386.4 / 809.4 / 2,973.8 |         372.1 |                                0/100; 0 |
+| `POST /tracks/new` — A republishes camera              | 100 | 200 × 100   |   257.5 / 390.3 / 893.1 / 1,073.8 |         390.2 |                                0/100; 0 |
+| `POST /tracks/new` — B pulls republished camera        | 100 | 200 × 100   |     242.3 / 327.2 / 434.5 / 532.0 |         327.1 |                                0/100; 0 |
+| `PUT /renegotiate` — B's republished pull              | 100 | 200 × 100   |     240.4 / 387.8 / 498.7 / 530.3 |         387.8 |                                0/100; 0 |
+| `PUT /tracks/close` — publisher cleanup                | 100 | 200 × 100   |     239.4 / 323.4 / 554.4 / 701.5 |         323.2 |                                0/100; 0 |
+| `PUT /tracks/close` — subscriber cleanup               | 100 | 200 × 100   |     236.1 / 316.5 / 694.1 / 855.7 |         315.9 |                                0/100; 0 |
 
 Across all 1,100 SFU calls, TTFB was 253.4/783.7/1,083.5/2,973.6 ms and total was 253.7/783.7/1,084.1/2,973.8 ms. **1,098 calls reused a keep-alive connection**; only two established a new API socket. For those two new sockets, DNS took 4.9–20.0 ms, TCP connect 23.8–104.7 ms, and TLS handshake 29.5–142.9 ms. The zero setup timings on reused rows mean no new DNS/connect/TLS work was done for that call; they do not mean a fresh connection took zero time.
 
 ## HTTPS baseline, Cloudflare colo, and media
 
-| Request | n/status | Total p50 / p95 / p99 / max (ms) | TTFB p50 / p95 / p99 / max (ms) |
-|---|---:|---:|---:|
+| Request                                                  |        n/status |  Total p50 / p95 / p99 / max (ms) |  TTFB p50 / p95 / p99 / max (ms) |
+| -------------------------------------------------------- | --------------: | --------------------------------: | -------------------------------: |
 | Static Cloudflare-hosted Realtime API documentation page | 100 / 200 × 100 | 120.5 / 419.3 / 1,335.1 / 1,762.1 | 58.6 / 344.2 / 1,242.2 / 1,743.5 |
-| `www.cloudflare.com/cdn-cgi/trace` | 100 / 200 × 100 | 32.5 / 180.6 / 504.2 / 755.6 | — |
+| `www.cloudflare.com/cdn-cgi/trace`                       | 100 / 200 × 100 |      32.5 / 180.6 / 504.2 / 755.6 |                                — |
 
 All 100 trace responses reported colo **`LHE`**. That identifies the trace request's Cloudflare HTTPS edge observation, not necessarily the selected WebRTC media node; I do not infer the SFU node's physical location from it.
 
-| WebRTC stats stage | RTT p50 / p95 / p99 / max (ms) | Selected remote candidate |
-|---|---:|---|
-| A publisher, initial | 9 / 212 / 536 / 855 | `141.101.90.0`, `host` |
-| B subscriber, initial | 34 / 236 / 401 / 801 | `141.101.90.0`, `host` |
-| A publisher, after republish | 11 / 229 / 336 / 536 | `141.101.90.0`, `host` |
-| B subscriber, after republish | 34 / 212 / 239 / 260 | `141.101.90.0`, `host` |
+| WebRTC stats stage            | RTT p50 / p95 / p99 / max (ms) | Selected remote candidate |
+| ----------------------------- | -----------------------------: | ------------------------- |
+| A publisher, initial          |            9 / 212 / 536 / 855 | `141.101.90.0`, `host`    |
+| B subscriber, initial         |           34 / 236 / 401 / 801 | `141.101.90.0`, `host`    |
+| A publisher, after republish  |           11 / 229 / 336 / 536 | `141.101.90.0`, `host`    |
+| B subscriber, after republish |           34 / 212 / 239 / 260 | `141.101.90.0`, `host`    |
 
-| B first decoded frame | n | p50 / p95 / p99 / max (ms) | Timeouts |
-|---|---:|---:|---:|
-| Initial A audio/video pull | 100 | 4,444 / 7,208 / 8,413 / 9,292 | 0 |
-| Pull after A closes and republishes video | 100 | 572 / 861 / 1,161 / 1,287 | 0 |
-| A close-request start → B decoded republished frame | 100 | 1,118 / 1,728 / 2,173 / 5,042 | 0 |
+| B first decoded frame                               |   n |    p50 / p95 / p99 / max (ms) | Timeouts |
+| --------------------------------------------------- | --: | ----------------------------: | -------: |
+| Initial A audio/video pull                          | 100 | 4,444 / 7,208 / 8,413 / 9,292 |        0 |
+| Pull after A closes and republishes video           | 100 |     572 / 861 / 1,161 / 1,287 |        0 |
+| A close-request start → B decoded republished frame | 100 | 1,118 / 1,728 / 2,173 / 5,042 |        0 |
 
 The largest close-to-frame observation was 5.042 s; that cycle's close call itself took 2.974 s. The close API p95 was 386 ms, and the republish, B pull, and renegotiation API p95s were 390, 327, and 388 ms respectively. This isolates a rare close-call tail rather than a consistently slow republish sequence.
 

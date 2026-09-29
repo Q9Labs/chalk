@@ -27,21 +27,21 @@ The runner defaults to camera then microphone and 30 enable/disable pairs for ea
 
 All values are milliseconds, shown as **p50 / p95 / max (n)**. Percentiles are nearest-rank. Toggle-stage summaries use successful A-UI transitions only. `—` means no usable sample; “not observed” means a measurement was attempted but its event did not arrive within the stated timeout.
 
-| Measured stage | Camera enable | Camera disable | Microphone enable | Microphone disable |
-|---|---:|---:|---:|---:|
-| Button press → Sync command frame sent | 67.6 / 174.1 / 261.1 (22) | 76.6 / 201.2 / 254.0 (22) | — (0) | — (0) |
-| `getUserMedia` start → resolve | — (0; no toggle-time capture observed) | — (0; no toggle-time capture observed) | — (0) | — (0) |
-| Sync command frame → reply frame | 91.7 / 2496.4 / 3280.6 (22) | 717.3 / 2417.3 / 8356.8 (22) | — (0) | — (0) |
-| Sync reply → A UI state | 450.6 / 3758.8 / 22935.6 (22) | 76.8 / 224.2 / 281.9 (22) | — (0) | — (0) |
-| Button press → A UI state | 597.8 / 4212.4 / 23247.4 (22) | 805.2 / 2647.8 / 8610.5 (22) | — (0) | — (0) |
-| Sync reply → B Sync state frame | 1951.2 / 5676.3 / 24785.2 (22) | 0.4 / 0.5 / 0.5 (3) | — (0) | — (0) |
-| Button press → B Sync state frame | 2113.8 / 6129.9 / 25097.0 (22) | 488.1 / 1008.5 / 1008.5 (3) | — (0) | — (0) |
-| Button press → B UI state | not observed (0/22) | 434.5 / 919.6 / 1961.3 (22) | — (0) | — (0) |
-| A `replaceTrack` sender-change span | 0.6 / 3.6 / 4.6 (22) | 34.9 / 147.1 / 171.1 (22) | — (0) | — (0) |
-| A RTCPeerConnection `setLocalDescription` span | 4.0 / 17.8 / 245.2 (22) | 2.8 / 2.8 / 2.8 (1) | — (0) | — (0) |
-| A RTCPeerConnection `setRemoteDescription` span | 3.4 / 8.2 / 9.9 (22) | 8.7 / 8.7 / 8.7 (1) | — (0) | — (0) |
-| Button press → B inbound RTP byte increase | not observed (0/22 within 3 s) | not applicable | — (0) | — (0) |
-| Total: press → both UI states; enable additionally requires inbound media | not observed (0/22) | 919.6 / 2647.8 / 8610.5 (22) | — (0) | — (0) |
+| Measured stage                                                            |                          Camera enable |                         Camera disable | Microphone enable | Microphone disable |
+| ------------------------------------------------------------------------- | -------------------------------------: | -------------------------------------: | ----------------: | -----------------: |
+| Button press → Sync command frame sent                                    |              67.6 / 174.1 / 261.1 (22) |              76.6 / 201.2 / 254.0 (22) |             — (0) |              — (0) |
+| `getUserMedia` start → resolve                                            | — (0; no toggle-time capture observed) | — (0; no toggle-time capture observed) |             — (0) |              — (0) |
+| Sync command frame → reply frame                                          |            91.7 / 2496.4 / 3280.6 (22) |           717.3 / 2417.3 / 8356.8 (22) |             — (0) |              — (0) |
+| Sync reply → A UI state                                                   |          450.6 / 3758.8 / 22935.6 (22) |              76.8 / 224.2 / 281.9 (22) |             — (0) |              — (0) |
+| Button press → A UI state                                                 |          597.8 / 4212.4 / 23247.4 (22) |           805.2 / 2647.8 / 8610.5 (22) |             — (0) |              — (0) |
+| Sync reply → B Sync state frame                                           |         1951.2 / 5676.3 / 24785.2 (22) |                    0.4 / 0.5 / 0.5 (3) |             — (0) |              — (0) |
+| Button press → B Sync state frame                                         |         2113.8 / 6129.9 / 25097.0 (22) |            488.1 / 1008.5 / 1008.5 (3) |             — (0) |              — (0) |
+| Button press → B UI state                                                 |                    not observed (0/22) |            434.5 / 919.6 / 1961.3 (22) |             — (0) |              — (0) |
+| A `replaceTrack` sender-change span                                       |                   0.6 / 3.6 / 4.6 (22) |              34.9 / 147.1 / 171.1 (22) |             — (0) |              — (0) |
+| A RTCPeerConnection `setLocalDescription` span                            |                4.0 / 17.8 / 245.2 (22) |                    2.8 / 2.8 / 2.8 (1) |             — (0) |              — (0) |
+| A RTCPeerConnection `setRemoteDescription` span                           |                   3.4 / 8.2 / 9.9 (22) |                    8.7 / 8.7 / 8.7 (1) |             — (0) |              — (0) |
+| Button press → B inbound RTP byte increase                                |         not observed (0/22 within 3 s) |                         not applicable |             — (0) |              — (0) |
+| Total: press → both UI states; enable additionally requires inbound media |                    not observed (0/22) |           919.6 / 2647.8 / 8610.5 (22) |             — (0) |              — (0) |
 
 For the first run, camera enable had 22 successful A transitions; all 22 exposed the corresponding B Sync state frame, but none exposed the expected B video UI state or an inbound video-byte increase within 3 seconds. For camera disable, 22 A and B UI transitions were observed; only three matching B Sync state frames were captured by the current frame predicate. Two other camera-disable attempts did not reach A’s requested UI state. The experiment never advanced to microphone toggles.
 
