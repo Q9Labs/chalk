@@ -1,0 +1,11 @@
+# Lane D: is Cloudflare Realtime SFU consistently slow from Karachi?
+
+The owner is in Karachi, Pakistan; target users are in Pakistan and the Middle East (UAE, Oman, Saudi Arabia). Chalk's local API logs show Cloudflare Realtime calls at p50 1.7s, p95 9.5s, 6% HTTP 503, and 10s timeouts on `create_connection`. Establish with direct measurements, independent of Chalk's code, whether Cloudflare Realtime is slow from here and which part is slow.
+
+Credentials: the local dev stack resolves the development Cloudflare Realtime app ID and secret through 1Password; see scripts/dev/chalk.mjs and scripts/dev/chalk-bootstrap.mjs for where. Use the same app. Do not start the Chalk dev stack (another lane uses it).
+
+Build a small Node + Playwright (installed Chrome, `channel: "chrome"`, fake media devices) probe that talks to the Cloudflare Realtime SFU HTTPS API directly (https://developers.cloudflare.com/realtime/sfu/https-api/): browser A creates a session and publishes an audio and a video track; browser B creates a session and pulls A's tracks; then A closes its video track and publishes a new one; B pulls again. Repeat at least 100 cycles, spread across at least 30 minutes, and include the exact pattern "close track, then republish" that breaks in Chalk. For every API call record DNS/connect/TLS/time-to-first-byte/total, HTTP status, and per-track errors in the body (redact SDP). Also record, from WebRTC getStats, the ICE candidate-pair current RTT to Cloudflare's media node, the selected candidate's address, and the time from B's pull to first decoded frame. Record Cloudflare's colo (`/cdn-cgi/trace`) and which of Cloudflare's API responses are slow.
+
+Report p50/p95/p99/max per API call type, error rates, media RTT, time to first frame, and whether the slowness is in the control API, in media, or both. Compare against a plain HTTPS baseline to a Cloudflare-hosted static page from the same machine. Look up Cloudflare status/incident history and community reports (2025–2026) for Realtime SFU latency or regional issues in South Asia and the Middle East, and cite sources. Do not over-claim: one machine in one city is one vantage point; say so.
+
+Done: write lane-d-report.md in the lane folder, raw data under lane-d/. Close all Cloudflare sessions you open.
