@@ -197,6 +197,33 @@ outcomes:
     code:
       - apps/api/internal/recorderworker
       - infrastructure/recorder
+  - id: recording.capture_cost
+    title: Capture starts fast and costs little
+    area: recording
+    state: in_progress
+    summary: >-
+      A Capture worker takes about 140 seconds from record to ready and runs on a c-2 with a 1.6 GB
+      image shared with Render. At 2,000 meeting-hours a month, Capture costs about $230, of which
+      about $131 is Droplets and about $90 is SFU traffic to the recorder.
+    size: L
+    remaining:
+      - >-
+        Turn off DigitalOcean's monitoring and console agents at create, push Capture demand to the
+        fleet controller, and have the worker log its own CPU and memory.
+      - Build separate lean Capture and Render images on a minimal OS base.
+      - Move Capture to the smallest Droplet size its measured CPU and memory allow.
+      - >-
+        Experiment: record a lower simulcast layer of each camera (for example 360p) and compare
+        the Export and the SFU traffic to the recorder.
+    uncertainty: >-
+      Whether a smaller image shortens DigitalOcean's roughly 30-second create step is not
+      measured.
+    theory: theory.md#product-memory
+    code:
+      - apps/api/internal/adapters/digitalocean/recorder_fleet.go
+      - apps/api/internal/recorderfleet
+      - apps/api/internal/recorderworker
+      - infrastructure/recorder/images
   - id: recording.scheduled_preparation
     title: Scheduled Recordings in a real integration
     area: recording
