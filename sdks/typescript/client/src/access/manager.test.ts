@@ -9,7 +9,7 @@ import { accessGrant } from "./grant.test.helpers";
 describe("ConnectionAccessService", () => {
   it("releases a stalled access refresh so a later request can proceed", async () => {
     let requests = 0;
-    const provider = () => requests++ === 0 ? Effect.never : Effect.succeed(accessGrant(30_000, "replacement", "connection-2"));
+    const provider = () => (requests++ === 0 ? Effect.never : Effect.succeed(accessGrant(30_000, "replacement", "connection-2")));
     const program = Effect.gen(function* () {
       const service = yield* ConnectionAccessService;
       const stalled = yield* Effect.forkChild(service.initialize(), { startImmediately: true });

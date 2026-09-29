@@ -63,8 +63,7 @@ export function createPublicInviteClient(journey?: JourneyOptions): PublicInvite
     createPublicSpace: (displayName) => client.createPublicSpace({ displayName }, { idempotencyKey: requestKey() }),
     arriveBySpacePublicInvite: (spaceInviteToken, displayName, options) => client.arriveBySpacePublicInvite({ spaceInviteToken, displayName }, { idempotencyKey: requestKey(), ...(options?.arrivalHandle === undefined ? {} : { arrivalHandle: options.arrivalHandle }) }),
     getSpacePublicInviteArrival: (arrivalHandle) => client.getSpacePublicInviteArrival({ arrivalHandle }),
-    refreshSpacePublicInviteAccess: (arrivalHandle, mediaProof, options) =>
-      client.refreshSpacePublicInviteAccess({ mediaProof, arrivalHandle, replaceMediaConnection: options?.replaceMediaConnection, signal: options?.signal }),
+    refreshSpacePublicInviteAccess: (arrivalHandle, mediaProof, options) => client.refreshSpacePublicInviteAccess({ mediaProof, arrivalHandle, replaceMediaConnection: options?.replaceMediaConnection, signal: options?.signal }),
     leaveSpacePublicInviteArrival: (arrivalHandle, options) => client.leaveSpacePublicInviteArrival(arrivalHandle, options),
   };
 }

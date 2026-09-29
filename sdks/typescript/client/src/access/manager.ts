@@ -98,7 +98,7 @@ function fetchAccessGrant(provider: ConnectionAccessEffectProvider, input: Fetch
     const shouldReplaceMediaConnection = input.replaceMediaConnection || mediaExpired;
     const next = yield* provider(connectionAccessRequest(input, shouldReplaceMediaConnection)).pipe(
       Effect.timeout(ACCESS_PROVIDER_TIMEOUT_MS),
-      Effect.mapError((cause) => cause instanceof ConnectionAccessFailure ? cause : new ConnectionAccessFailure({ code: "access.unavailable", cause })),
+      Effect.mapError((cause) => (cause instanceof ConnectionAccessFailure ? cause : new ConnectionAccessFailure({ code: "access.unavailable", cause }))),
     );
     yield* Effect.try({
       try: () => validateFetchedAccess(currentAccess, next, now, shouldReplaceMediaConnection),
