@@ -90,6 +90,12 @@ class ChatControllerRuntime implements ChatControllerEffects {
     const operation = this.#diagnostics?.startOperation("chat.send");
     return Effect.try({ try: () => validate(input), catch: normalizeClientError }).pipe(
       Effect.tap(() => Effect.sync(() => operation?.observe("observed", "validation"))),
+      Effect.tap(() =>
+        Effect.suspend(() => {
+          const snapshot = this.#connection.getSnapshot();
+          return snapshot.state === "live" && snapshot.connection.sync === "healthy" ? Effect.void : Effect.fail(new SpaceClientError({ code: "connection.invalid_state", recoverable: true, message: "You're disconnected. This message wasn't sent. Try again when reconnected." }));
+        }),
+      ),
       Effect.map((attachments) => ({ clientMessageId: this.#connection.createId(), attachments })),
       Effect.flatMap(({ clientMessageId, attachments }) => {
         this.#upsertPending(clientMessageId, input.text, attachments, "sending", null);

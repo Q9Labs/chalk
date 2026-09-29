@@ -88,6 +88,7 @@ export type ConnectionSyncFactoryInput = {
   readonly access: ParsedAccessGrant;
   readonly token: () => Promise<string>;
   readonly media: ConnectionMediaClient;
+  readonly commandTimeoutMs?: number;
   readonly telemetry?: JourneyTelemetryContext;
 };
 

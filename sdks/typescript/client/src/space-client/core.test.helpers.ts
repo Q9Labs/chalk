@@ -8,7 +8,7 @@ export type CoreTestPlatform = SpaceClientPlatform & {
     readonly getSnapshot: () => CoreTestMediaSnapshot;
     readonly emit: (snapshot: CoreTestMediaSnapshot) => void;
   };
-  readonly sync: ConnectionSyncClient;
+  readonly sync: ConnectionSyncClient & { readonly emit: (snapshot: ReturnType<ConnectionSyncClient["getSnapshot"]>) => void };
   readonly emitSync: (snapshot: ReturnType<ConnectionSyncClient["getSnapshot"]>) => void;
 };
 
@@ -85,10 +85,16 @@ export function createCoreTestPlatform(): CoreTestPlatform {
         for (const listener of mediaListeners) listener();
       },
     },
-    sync,
+    sync: {
+      ...sync,
+      emit: (snapshot) => {
+        syncSnapshot = snapshot;
+        for (const listener of syncListeners) listener(snapshot);
+      },
+    },
     emitSync: (snapshot) => {
       syncSnapshot = snapshot;
-      for (const listener of syncListeners) listener(syncSnapshot);
+      for (const listener of syncListeners) listener(snapshot);
     },
   };
 }
