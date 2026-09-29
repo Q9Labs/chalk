@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, it } from "vitest";
 import type { ConnectionAccessRequest } from "../connection/dependencies";
@@ -7,6 +7,26 @@ import { ConnectionAccessService, makeConnectionAccessLayer } from "./manager";
 import { accessGrant } from "./grant.test.helpers";
 
 describe("ConnectionAccessService", () => {
+  it("releases a stalled access refresh so a later request can proceed", async () => {
+    let requests = 0;
+    const provider = () => requests++ === 0 ? Effect.never : Effect.succeed(accessGrant(30_000, "replacement", "connection-2"));
+    const program = Effect.gen(function* () {
+      const service = yield* ConnectionAccessService;
+      const stalled = yield* Effect.forkChild(service.initialize(), { startImmediately: true });
+      yield* Effect.yieldNow;
+      yield* TestClock.adjust("10 seconds");
+      const failure = yield* Fiber.join(stalled).pipe(Effect.flip);
+      const next = yield* service.initialize();
+      return { failure, next };
+    });
+
+    const result = await Effect.runPromise(program.pipe(Effect.provide(makeConnectionAccessLayer(provider)), Effect.provide(TestClock.layer())));
+
+    expect(result.failure.code).toBe("access.unavailable");
+    expect(result.next.media.clientPayload.connectionId).toBe("connection-2");
+    expect(requests).toBe(2);
+  });
+
   it("serializes one replacement when the current media access has expired", async () => {
     const requests: ConnectionAccessRequest[] = [];
     const automaticReplacements: ParsedAccessGrant[] = [];

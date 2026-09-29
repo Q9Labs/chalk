@@ -95,7 +95,7 @@ export const makeConnectionLifecycleLayer = (options: ConnectionOptions) => {
   const access = makeConnectionAccessLayer(
     (request) =>
       Effect.tryPromise({
-        try: () => Promise.resolve(options.access(request)),
+        try: (signal) => Promise.resolve(options.access(request ? { ...request, signal } : undefined)),
         catch: (cause) => new ConnectionAccessFailure({ code: "access.unavailable", cause }),
       }),
     options.accessRefreshWindowMs,

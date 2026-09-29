@@ -18,6 +18,7 @@ export type AccessReason = "join" | "refresh" | "retry";
 export type AccessContext = {
   readonly space: string;
   readonly reason: AccessReason;
+  readonly signal?: AbortSignal;
 };
 
 /**

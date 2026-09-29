@@ -3,6 +3,7 @@ import type { ParsedAccessGrant, ParticipantMediaCredential, ParticipantSyncCred
 import type { ConnectionAccessReason, ConnectionAccessRequest } from "../connection/dependencies";
 
 const DEFAULT_REFRESH_WINDOW_MS = 60_000;
+const ACCESS_PROVIDER_TIMEOUT_MS = 10_000;
 
 export class ConnectionAccessFailure extends Data.TaggedError("ConnectionAccessFailure")<{
   readonly code: "access.invalid" | "access.unavailable";
@@ -95,7 +96,10 @@ function fetchAccessGrant(provider: ConnectionAccessEffectProvider, input: Fetch
     }
     const mediaExpired = currentAccess !== null && expiresAt(currentAccess.media.expiresAt) <= now;
     const shouldReplaceMediaConnection = input.replaceMediaConnection || mediaExpired;
-    const next = yield* provider(connectionAccessRequest(input, shouldReplaceMediaConnection));
+    const next = yield* provider(connectionAccessRequest(input, shouldReplaceMediaConnection)).pipe(
+      Effect.timeout(ACCESS_PROVIDER_TIMEOUT_MS),
+      Effect.mapError((cause) => cause instanceof ConnectionAccessFailure ? cause : new ConnectionAccessFailure({ code: "access.unavailable", cause })),
+    );
     yield* Effect.try({
       try: () => validateFetchedAccess(currentAccess, next, now, shouldReplaceMediaConnection),
       catch: (cause) => new ConnectionAccessFailure({ code: "access.invalid", cause }),
