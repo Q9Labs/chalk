@@ -628,9 +628,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return operation();
     };
     const pending = this.#sdpTail.then(run, run);
-    const result = Promise.race([pending, deadline]).finally(() => {
-      if (timer !== undefined) globalThis.clearTimeout(timer);
-    });
+    const result = Promise.race([pending, deadline])
+      .catch((error: unknown) => {
+        if (error instanceof CloudflareSFUError && error.code === "signaling_timeout" && generation === this.#generation && !this.#stopped) this.#expireNegotiation(error);
+        throw error;
+      })
+      .finally(() => {
+        if (timer !== undefined) globalThis.clearTimeout(timer);
+      });
     this.#sdpTail = result.then(
       () => undefined,
       () => undefined,
