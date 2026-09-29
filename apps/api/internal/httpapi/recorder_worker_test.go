@@ -1,9 +1,11 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,6 +20,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
+	"github.com/q9labs/chalk/apps/api/internal/workerresources"
 )
 
 const (
@@ -415,8 +418,10 @@ func TestPrivateWorkerRouterPersistsFleetNodeObservation(t *testing.T) {
 	observedAt := time.Date(2026, time.September, 6, 20, 0, 0, 0, time.UTC)
 	var recorded recorderfleetauthority.WorkerObservation
 	legacyCalled := false
+	var logs bytes.Buffer
 	handler := NewPrivateWorkerRouter(nil, Options{
-		Capabilities: CapabilityStatus{Recording: true},
+		RecorderWorkerLogger: slog.New(slog.NewJSONHandler(&logs, nil)),
+		Capabilities:         CapabilityStatus{Recording: true},
 		RecorderWorker: recorderWorkerServiceStub{health: func(_ context.Context, input recordingpipeline.PoolHealth) (recordingpipeline.PoolHealth, error) {
 			legacyCalled = true
 			return input, nil
@@ -428,6 +433,7 @@ func TestPrivateWorkerRouterPersistsFleetNodeObservation(t *testing.T) {
 					ProviderID: "provider-7", WorkerID: observation.Identity.WorkerID.String(),
 					Role: observation.Identity.Role, BootGeneration: 7,
 				},
+				NodeName: "capture-node", CurrentJobID: workerTestJob,
 				Ready: observation.Ready, AdmissionOpen: observation.AdmissionOpen,
 				ReadyCapacity: observation.ReadyCapacity, ObservedAt: observation.ObservedAt,
 			}, nil
@@ -438,12 +444,31 @@ func TestPrivateWorkerRouterPersistsFleetNodeObservation(t *testing.T) {
 	})
 
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/pool-health", `{"admission_open":true,"ready_capacity":4,"reason":"ready","observed_at":"2026-09-06T20:00:00Z"}`))
+	sampledAt := time.Now().UTC()
+	sample := workerresources.Sample{CPUUserSeconds: 2.5, CPUSystemSeconds: 1.25, RSSBytes: 1024, PeakRSSBytes: 2048,
+		HostMemoryTotalBytes: 8192, HostMemoryAvailableBytes: 4096, Load1: 0.5, SampledAt: sampledAt}
+	resources, err := json.Marshal(sample)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/pool-health", `{"admission_open":true,"ready_capacity":4,"reason":"ready","observed_at":"2026-09-06T20:00:00Z","resources":`+string(resources)+`}`))
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
-	if legacyCalled || recorded.Identity.WorkerID != workerID || recorded.Identity.Role != workeridentity.RoleCapture || !recorded.Ready || !recorded.AdmissionOpen || recorded.ReadyCapacity != 4 || !recorded.ObservedAt.Equal(observedAt) {
+	if legacyCalled || recorded.Identity.WorkerID != workerID || recorded.Identity.Role != workeridentity.RoleCapture || !recorded.Ready || !recorded.AdmissionOpen || recorded.ReadyCapacity != 4 || !recorded.ObservedAt.Equal(observedAt) || recorded.Resources == nil || *recorded.Resources != sample {
 		t.Fatalf("legacy=%t observation=%#v", legacyCalled, recorded)
+	}
+	var logged map[string]any
+	if err := json.Unmarshal(logs.Bytes(), &logged); err != nil || logged["node"] != "capture-node" || logged["worker"] != workerTestID || logged["job_id"] != workerTestJob || logged["rss_bytes"] != float64(sample.RSSBytes) {
+		t.Fatalf("resource log = %#v, error = %v", logged, err)
+	}
+	invalid := sample
+	invalid.Load1 = -1
+	resources, _ = json.Marshal(invalid)
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/pool-health", `{"admission_open":true,"ready_capacity":4,"reason":"ready","resources":`+string(resources)+`}`))
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("invalid resources status = %d", response.Code)
 	}
 }
 

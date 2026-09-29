@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -38,6 +39,7 @@ type CapabilityStatus struct {
 }
 
 type Options struct {
+	RecorderWorkerLogger       *slog.Logger
 	Capabilities               CapabilityStatus
 	CORS                       CORSOptions
 	LocalSystemToken           string

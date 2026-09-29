@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
+	"github.com/q9labs/chalk/apps/api/internal/workerresources"
 )
 
 const (
@@ -59,6 +61,7 @@ func NewRecorderWorkerRouter(service RecorderWorkerService, verifier RecorderWor
 }
 
 type RecorderWorkerControlServices struct {
+	Logger             *slog.Logger
 	CapturePlans       RecorderCapturePlanService
 	CaptureSignaling   RecorderCaptureSignalingService
 	RecordingKeys      RecorderRecordingKeyService
@@ -101,7 +104,7 @@ func mountRecorderWorkerRoutesWithControls(r chi.Router, service RecorderWorkerS
 		r.Post("/jobs/fail", recorderWorkerFailHandler(service))
 		r.Post("/jobs/capture/relinquish", recorderWorkerRelinquishCaptureHandler(service))
 		r.Post("/jobs/complete", recorderWorkerCompleteHandler(service))
-		r.Post("/pool-health", recorderWorkerPoolHealthHandler(service, controls.FleetAuthority))
+		r.Post("/pool-health", recorderWorkerPoolHealthHandler(service, controls.FleetAuthority, controls.Logger))
 		if controls.CapturePlans != nil {
 			r.Post("/plans/wait", recorderWorkerCapturePlanWaitHandler(controls.CapturePlans))
 		}
@@ -166,10 +169,11 @@ type recorderWorkerCompleteBody struct {
 }
 
 type recorderWorkerPoolHealthBody struct {
-	AdmissionOpen bool   `json:"admission_open"`
-	ReadyCapacity int    `json:"ready_capacity"`
-	Reason        string `json:"reason"`
-	ObservedAt    string `json:"observed_at"`
+	AdmissionOpen bool                    `json:"admission_open"`
+	ReadyCapacity int                     `json:"ready_capacity"`
+	Reason        string                  `json:"reason"`
+	ObservedAt    string                  `json:"observed_at"`
+	Resources     *workerresources.Sample `json:"resources,omitempty"`
 }
 
 type recorderWorkerJobResponse struct {
@@ -503,7 +507,10 @@ func recorderWorkerCompleteHandler(service RecorderWorkerService) http.HandlerFu
 	}
 }
 
-func recorderWorkerPoolHealthHandler(service RecorderWorkerService, fleet RecorderFleetWorkerService) http.HandlerFunc {
+func recorderWorkerPoolHealthHandler(service RecorderWorkerService, fleet RecorderFleetWorkerService, logger *slog.Logger) http.HandlerFunc {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return func(w http.ResponseWriter, request *http.Request) {
 		identity, ok := recorderWorkerRequestIdentity(w, request)
 		if !ok {
@@ -513,7 +520,7 @@ func recorderWorkerPoolHealthHandler(service RecorderWorkerService, fleet Record
 		if !ok {
 			return
 		}
-		if body.ReadyCapacity < 0 || len(body.Reason) > 256 {
+		if body.ReadyCapacity < 0 || len(body.Reason) > 256 || body.Resources != nil && !body.Resources.Valid(time.Now().UTC()) {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recorder pool health")
 			return
 		}
@@ -530,11 +537,13 @@ func recorderWorkerPoolHealthHandler(service RecorderWorkerService, fleet Record
 			observation, err := fleet.RecordWorkerObservation(request.Context(), recorderfleetauthority.WorkerObservation{
 				Identity: identity, Ready: body.ReadyCapacity > 0, AdmissionOpen: body.AdmissionOpen,
 				ReadyCapacity: body.ReadyCapacity, ObservedAt: observedAt,
+				Resources: body.Resources,
 			})
 			if err != nil {
 				writeRecorderFleetError(w, err)
 				return
 			}
+			logRecorderWorkerResources(request.Context(), logger, identity, observation.NodeName, observation.CurrentJobID, body.Resources)
 			writeJSON(w, http.StatusOK, recorderWorkerPoolHealthResponse{
 				Role: string(identity.Role), AdmissionOpen: observation.AdmissionOpen,
 				ReadyCapacity: observation.ReadyCapacity, Reason: strings.TrimSpace(body.Reason),
@@ -551,8 +560,20 @@ func recorderWorkerPoolHealthHandler(service RecorderWorkerService, fleet Record
 			writeRecorderWorkerError(w, err)
 			return
 		}
+		logRecorderWorkerResources(request.Context(), logger, identity, "", "", body.Resources)
 		writeJSON(w, http.StatusOK, recorderWorkerPoolHealthResponseValue(health))
 	}
+}
+
+func logRecorderWorkerResources(ctx context.Context, logger *slog.Logger, identity workeridentity.Identity, nodeName, jobID string, sample *workerresources.Sample) {
+	if sample == nil {
+		return
+	}
+	logger.InfoContext(ctx, "recorder worker resources", "node", nodeName, "worker", identity.WorkerID.String(), "role", identity.Role,
+		"job_id", jobID, "cpu_user_seconds", sample.CPUUserSeconds, "cpu_system_seconds", sample.CPUSystemSeconds,
+		"rss_bytes", sample.RSSBytes, "peak_rss_bytes", sample.PeakRSSBytes,
+		"host_memory_total_bytes", sample.HostMemoryTotalBytes, "host_memory_available_bytes", sample.HostMemoryAvailableBytes,
+		"load1", sample.Load1, "sampled_at", sample.SampledAt)
 }
 
 func recorderWorkerRequestIdentity(w http.ResponseWriter, request *http.Request) (workeridentity.Identity, bool) {

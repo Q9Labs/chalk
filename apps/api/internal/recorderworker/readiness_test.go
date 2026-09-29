@@ -2,6 +2,7 @@ package recorderworker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -9,7 +10,48 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/q9labs/chalk/apps/api/internal/workerresources"
 )
+
+func TestControlPlaneClientReportsResourcesToOlderAPI(t *testing.T) {
+	sample := &workerresources.Sample{CPUUserSeconds: 2.5, CPUSystemSeconds: 1.25, RSSBytes: 1024, PeakRSSBytes: 2048,
+		HostMemoryTotalBytes: 8192, HostMemoryAvailableBytes: 4096, Load1: 0.5, SampledAt: time.Now().UTC()}
+	requests := 0
+	client, err := NewControlPlaneClient("https://control.example", &http.Client{Transport: readinessRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requests++
+		defer request.Body.Close()
+		var body struct {
+			Resources *workerresources.Sample `json:"resources"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if requests == 1 {
+			if body.Resources == nil || *body.Resources != *sample {
+				t.Fatalf("first resources = %#v", body.Resources)
+			}
+			return readinessHTTPResponse(http.StatusBadRequest, `{}`), nil
+		}
+		if body.Resources != nil {
+			t.Fatalf("fallback still included resources: %#v", body.Resources)
+		}
+		return readinessHTTPResponse(http.StatusOK, `{"role":"capture","admission_open":true,"ready_capacity":1,"reason":"worker_ready","observed_at":"2026-09-06T20:00:00Z","updated_at":"2026-09-06T20:00:00Z"}`), nil
+	})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.ReportReadiness(t.Context(), WorkerReadiness{AdmissionOpen: true, ReadyCapacity: 1, Reason: ReadinessReasonReady, Resources: sample}); err != nil {
+		t.Fatal(err)
+	}
+	if requests != 2 {
+		t.Fatalf("requests = %d", requests)
+	}
+	sample.HostMemoryAvailableBytes = sample.HostMemoryTotalBytes + 1
+	if _, err := client.ReportReadiness(t.Context(), WorkerReadiness{AdmissionOpen: true, ReadyCapacity: 1, Reason: ReadinessReasonReady, Resources: sample}); !errors.Is(err, ErrInvalidWorkerReadiness) {
+		t.Fatalf("invalid resources error = %v", err)
+	}
+}
 
 func TestControlPlaneClientReportsReadinessWithoutWorkerTimestamp(t *testing.T) {
 	t.Parallel()

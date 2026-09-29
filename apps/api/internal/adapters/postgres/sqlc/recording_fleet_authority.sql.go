@@ -79,7 +79,7 @@ where environment = $2
   and boot_generation = $9
   and inventory_digest = $10
   and (state = 'requested' or (state = 'active' and worker_id = $1))
-returning environment, role, provider_id, node_name, region, release_id, image_digest, boot_generation, inventory_digest, worker_id, state, ready, admission_open, ready_capacity, observed_at, revoked_at, updated_at, created_at
+returning environment, role, provider_id, node_name, region, release_id, image_digest, boot_generation, inventory_digest, worker_id, state, ready, admission_open, ready_capacity, observed_at, resources_latest, peak_rss_bytes, revoked_at, updated_at, created_at
 `
 
 type ActivateRecordingFleetBootstrapParams struct {
@@ -125,6 +125,8 @@ func (q *Queries) ActivateRecordingFleetBootstrap(ctx context.Context, arg Activ
 		&i.AdmissionOpen,
 		&i.ReadyCapacity,
 		&i.ObservedAt,
+		&i.ResourcesLatest,
+		&i.PeakRssBytes,
 		&i.RevokedAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
@@ -437,24 +439,29 @@ update recording_fleet_nodes
 set ready = case when state = 'active' then $1 else false end,
     admission_open = case when state = 'active' then $2 else false end,
     ready_capacity = case when state = 'active' then $3 else 0 end,
+    resources_latest = coalesce($4::jsonb, resources_latest),
+    peak_rss_bytes = greatest(peak_rss_bytes, coalesce($5::bigint, 0)),
     -- The database receipt time is authoritative for claim liveness. Worker
     -- wall-clock skew must not make a fresh report look stale or future-dated.
     observed_at = clock_timestamp(), updated_at = now()
-where environment = $4
-  and role = $5
-  and worker_id = $6
+where environment = $6
+  and role = $7
+  and worker_id = $8
   and state in ('active', 'draining')
 returning provider_id, worker_id, role, boot_generation, ready, admission_open,
-    ready_capacity, observed_at
+    ready_capacity, observed_at, node_name,
+    (select id from recording_jobs where lease_owner = recording_fleet_nodes.worker_id::text and state = 'leased' and lease_expires_at > now() limit 1) as current_job_id
 `
 
 type RecordRecordingFleetWorkerObservationParams struct {
-	Ready         bool        `json:"ready"`
-	AdmissionOpen bool        `json:"admission_open"`
-	ReadyCapacity int32       `json:"ready_capacity"`
-	Environment   string      `json:"environment"`
-	Role          string      `json:"role"`
-	WorkerID      pgtype.UUID `json:"worker_id"`
+	Ready           bool        `json:"ready"`
+	AdmissionOpen   bool        `json:"admission_open"`
+	ReadyCapacity   int32       `json:"ready_capacity"`
+	ResourcesLatest []byte      `json:"resources_latest"`
+	PeakRssBytes    pgtype.Int8 `json:"peak_rss_bytes"`
+	Environment     string      `json:"environment"`
+	Role            string      `json:"role"`
+	WorkerID        pgtype.UUID `json:"worker_id"`
 }
 
 type RecordRecordingFleetWorkerObservationRow struct {
@@ -466,6 +473,8 @@ type RecordRecordingFleetWorkerObservationRow struct {
 	AdmissionOpen  bool               `json:"admission_open"`
 	ReadyCapacity  int32              `json:"ready_capacity"`
 	ObservedAt     pgtype.Timestamptz `json:"observed_at"`
+	NodeName       string             `json:"node_name"`
+	CurrentJobID   pgtype.UUID        `json:"current_job_id"`
 }
 
 func (q *Queries) RecordRecordingFleetWorkerObservation(ctx context.Context, arg RecordRecordingFleetWorkerObservationParams) (RecordRecordingFleetWorkerObservationRow, error) {
@@ -473,6 +482,8 @@ func (q *Queries) RecordRecordingFleetWorkerObservation(ctx context.Context, arg
 		arg.Ready,
 		arg.AdmissionOpen,
 		arg.ReadyCapacity,
+		arg.ResourcesLatest,
+		arg.PeakRssBytes,
 		arg.Environment,
 		arg.Role,
 		arg.WorkerID,
@@ -487,6 +498,8 @@ func (q *Queries) RecordRecordingFleetWorkerObservation(ctx context.Context, arg
 		&i.AdmissionOpen,
 		&i.ReadyCapacity,
 		&i.ObservedAt,
+		&i.NodeName,
+		&i.CurrentJobID,
 	)
 	return i, err
 }
@@ -509,7 +522,7 @@ where recording_fleet_nodes.node_name = excluded.node_name
   and recording_fleet_nodes.boot_generation = excluded.boot_generation
   and recording_fleet_nodes.inventory_digest = excluded.inventory_digest
   and recording_fleet_nodes.state <> 'revoked'
-returning environment, role, provider_id, node_name, region, release_id, image_digest, boot_generation, inventory_digest, worker_id, state, ready, admission_open, ready_capacity, observed_at, revoked_at, updated_at, created_at
+returning environment, role, provider_id, node_name, region, release_id, image_digest, boot_generation, inventory_digest, worker_id, state, ready, admission_open, ready_capacity, observed_at, resources_latest, peak_rss_bytes, revoked_at, updated_at, created_at
 `
 
 type ReserveRecordingFleetBootstrapParams struct {
@@ -553,6 +566,8 @@ func (q *Queries) ReserveRecordingFleetBootstrap(ctx context.Context, arg Reserv
 		&i.AdmissionOpen,
 		&i.ReadyCapacity,
 		&i.ObservedAt,
+		&i.ResourcesLatest,
+		&i.PeakRssBytes,
 		&i.RevokedAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,

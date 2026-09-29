@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
+	"github.com/q9labs/chalk/apps/api/internal/workerresources"
 )
 
 const (
@@ -35,6 +36,7 @@ type WorkerReadiness struct {
 	AdmissionOpen bool
 	ReadyCapacity int
 	Reason        string
+	Resources     *workerresources.Sample
 }
 
 type WorkerReadinessReceipt struct {
@@ -45,9 +47,10 @@ type WorkerReadinessReceipt struct {
 }
 
 type readinessRequest struct {
-	AdmissionOpen bool   `json:"admission_open"`
-	ReadyCapacity int    `json:"ready_capacity"`
-	Reason        string `json:"reason"`
+	AdmissionOpen bool                    `json:"admission_open"`
+	ReadyCapacity int                     `json:"ready_capacity"`
+	Reason        string                  `json:"reason"`
+	Resources     *workerresources.Sample `json:"resources,omitempty"`
 }
 
 type readinessResponse struct {
@@ -66,7 +69,12 @@ func (c *ControlPlaneClient) ReportReadiness(ctx context.Context, readiness Work
 	if err := validateWorkerReadiness(readiness); err != nil {
 		return WorkerReadinessReceipt{}, err
 	}
-	body, _, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/pool-health", readinessRequest(readiness), ControlPlaneResponseLimit)
+	body, status, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/pool-health", readinessRequest(readiness), ControlPlaneResponseLimit)
+	if err != nil && status == http.StatusBadRequest && readiness.Resources != nil {
+		// Older control planes reject unknown JSON fields rather than ignoring them.
+		readiness.Resources = nil
+		body, _, err = c.do(ctx, http.MethodPost, "/internal/v1/recorder/pool-health", readinessRequest(readiness), ControlPlaneResponseLimit)
+	}
 	if err != nil {
 		return WorkerReadinessReceipt{}, err
 	}
@@ -100,7 +108,8 @@ func (c *ControlPlaneClient) ReportReadiness(ctx context.Context, readiness Work
 func validateWorkerReadiness(readiness WorkerReadiness) error {
 	if readiness.Reason == "" || strings.TrimSpace(readiness.Reason) != readiness.Reason || len(readiness.Reason) > maximumReadinessReasonSize ||
 		readiness.AdmissionOpen && readiness.ReadyCapacity != SerialWorkerReadyCapacity ||
-		!readiness.AdmissionOpen && readiness.ReadyCapacity != 0 {
+		!readiness.AdmissionOpen && readiness.ReadyCapacity != 0 ||
+		readiness.Resources != nil && !readiness.Resources.Valid(time.Now().UTC()) {
 		return ErrInvalidWorkerReadiness
 	}
 	return nil
@@ -263,6 +272,9 @@ func (r *ReadinessReporter) publish(ctx context.Context, ready bool) (WorkerRead
 		readiness = WorkerReadiness{
 			AdmissionOpen: true, ReadyCapacity: SerialWorkerReadyCapacity, Reason: ReadinessReasonReady,
 		}
+	}
+	if sample, err := sampleProcessResources(); err == nil && sample.Valid(time.Now().UTC()) {
+		readiness.Resources = &sample
 	}
 	return r.control.ReportReadiness(requestCtx, readiness)
 }

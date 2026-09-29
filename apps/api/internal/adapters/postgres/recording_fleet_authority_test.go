@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -11,9 +12,43 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
+	"github.com/q9labs/chalk/apps/api/internal/recorderfleetauthority"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
+	"github.com/q9labs/chalk/apps/api/internal/workerresources"
 )
+
+func TestRecordingFleetAuthorityRepositoryStoresWorkerResources(t *testing.T) {
+	t.Parallel()
+	workerID, _ := utilities.ParseID("55555555-5555-4555-8555-555555555555")
+	jobID := postgresFleetUUID(t, "66666666-6666-4666-8666-666666666666")
+	sample := &workerresources.Sample{CPUUserSeconds: 2, CPUSystemSeconds: 1, RSSBytes: 1024, PeakRSSBytes: 2048,
+		HostMemoryTotalBytes: 8192, HostMemoryAvailableBytes: 4096, Load1: 0.5, SampledAt: time.Now().UTC()}
+	queries := &recordingFleetAuthorityQueriesStub{observationRow: sqlc.RecordRecordingFleetWorkerObservationRow{
+		ProviderID: "provider-7", WorkerID: uuid(workerID), Role: "capture", BootGeneration: 7,
+		NodeName: "capture-7", CurrentJobID: jobID, ObservedAt: timestamptzValue(time.Now().UTC()),
+	}}
+	repository := NewRecordingFleetAuthorityRepository(queries)
+	observation, err := repository.RecordWorkerObservation(t.Context(), "staging", recorderfleetauthority.WorkerObservation{
+		Identity: workeridentity.Identity{WorkerID: workerID, Role: workeridentity.RoleCapture}, Resources: sample,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored workerresources.Sample
+	if err := json.Unmarshal(queries.observationArg.ResourcesLatest, &stored); err != nil || stored != *sample || !queries.observationArg.PeakRssBytes.Valid || queries.observationArg.PeakRssBytes.Int64 != sample.PeakRSSBytes {
+		t.Fatalf("stored resources = %#v, params = %#v, error = %v", stored, queries.observationArg, err)
+	}
+	if observation.NodeName != "capture-7" || observation.CurrentJobID != "66666666-6666-4666-8666-666666666666" {
+		t.Fatalf("observation = %#v", observation)
+	}
+	_, err = repository.RecordWorkerObservation(t.Context(), "staging", recorderfleetauthority.WorkerObservation{
+		Identity: workeridentity.Identity{WorkerID: workerID, Role: workeridentity.RoleCapture},
+	})
+	if err != nil || queries.observationArg.ResourcesLatest != nil || queries.observationArg.PeakRssBytes.Valid {
+		t.Fatalf("older worker params = %#v, error = %v", queries.observationArg, err)
+	}
+}
 
 func TestRecordingFleetAuthorityRepositoryPreservesBootstrapBinding(t *testing.T) {
 	t.Parallel()
@@ -100,6 +135,8 @@ func TestRecordingFleetAuthorityRepositorySeparatesDrainFromClaimAuthorization(t
 }
 
 type recordingFleetAuthorityQueriesStub struct {
+	observationArg    sqlc.RecordRecordingFleetWorkerObservationParams
+	observationRow    sqlc.RecordRecordingFleetWorkerObservationRow
 	abandonArg        sqlc.AbandonRecordingFleetBootstrapParams
 	abandonProviderID string
 	abandonErr        error
@@ -144,8 +181,9 @@ func (s *recordingFleetAuthorityQueriesStub) PublishRecordingFleetPool(context.C
 	return "", errors.New("unexpected publish")
 }
 
-func (s *recordingFleetAuthorityQueriesStub) RecordRecordingFleetWorkerObservation(context.Context, sqlc.RecordRecordingFleetWorkerObservationParams) (sqlc.RecordRecordingFleetWorkerObservationRow, error) {
-	return sqlc.RecordRecordingFleetWorkerObservationRow{}, errors.New("unexpected worker observation")
+func (s *recordingFleetAuthorityQueriesStub) RecordRecordingFleetWorkerObservation(_ context.Context, arg sqlc.RecordRecordingFleetWorkerObservationParams) (sqlc.RecordRecordingFleetWorkerObservationRow, error) {
+	s.observationArg = arg
+	return s.observationRow, nil
 }
 
 func (s *recordingFleetAuthorityQueriesStub) ReserveRecordingFleetBootstrap(_ context.Context, arg sqlc.ReserveRecordingFleetBootstrapParams) (sqlc.RecordingFleetNode, error) {

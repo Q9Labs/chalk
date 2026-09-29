@@ -11,6 +11,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
+	"github.com/q9labs/chalk/apps/api/internal/workerresources"
 )
 
 type BootstrapRecord struct {
@@ -24,6 +25,7 @@ type WorkerObservation struct {
 	AdmissionOpen bool
 	ReadyCapacity int
 	ObservedAt    time.Time
+	Resources     *workerresources.Sample
 }
 
 type Repository interface {
@@ -144,7 +146,7 @@ func (s Service) PublishPool(ctx context.Context, projection recorderfleet.PoolP
 }
 
 func (s Service) RecordWorkerObservation(ctx context.Context, observation WorkerObservation) (recorderfleet.NodeObservation, error) {
-	if observation.Identity.WorkerID.IsZero() || !validRole(observation.Identity.Role) || observation.ReadyCapacity < 0 || observation.ObservedAt.IsZero() || !observation.Ready && observation.AdmissionOpen {
+	if observation.Identity.WorkerID.IsZero() || !validRole(observation.Identity.Role) || observation.ReadyCapacity < 0 || observation.ObservedAt.IsZero() || !observation.Ready && observation.AdmissionOpen || observation.Resources != nil && !observation.Resources.Valid(s.now().UTC()) {
 		return recorderfleet.NodeObservation{}, recorderfleet.ErrRoleFence
 	}
 	return s.repository.RecordWorkerObservation(ctx, s.environment, observation)

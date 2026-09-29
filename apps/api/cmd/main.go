@@ -602,6 +602,7 @@ func run() error {
 		publicInviteLifecycleScheduler = publicinvites.NewLifecycleScheduler(lifecycleWorker, publicInviteConfig.SchedulerInterval, logger)
 	}
 	routerOptions := httpapi.Options{
+		RecorderWorkerLogger: logger,
 		Capabilities: httpapi.CapabilityStatus{
 			Integrations:  cfg.Capabilities.Integrations,
 			Recording:     cfg.Capabilities.Recording,
