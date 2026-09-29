@@ -1,6 +1,15 @@
 {
   "diag": {
-    "adapter": "command",
-    "command": ["node", "tools/episode-diagnostics/src/trace-brief.mjs"]
+    "sources": [
+      { "adapter": "command", "command": ["node", "tools/episode-diagnostics/src/trace-brief.mjs"] },
+      {
+        "adapter": "axiom",
+        "org": "q9labs-kqeo",
+        "traces": "chalk-prod-traces",
+        "logs": "chalk-api-prod",
+        "tokenEnv": "AXIOM_QUERY_TOKEN",
+        "window": "14d"
+      }
+    ]
   }
 }
