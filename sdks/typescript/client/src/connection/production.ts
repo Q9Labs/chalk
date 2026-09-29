@@ -108,13 +108,15 @@ function createSFUConnectionMediaClient(client: CloudflareSFUClient): Connection
   });
 }
 
-type BoundMediaClient = Pick<ConnectionMediaClient, "setLocalPublicationTarget" | "observeLocalPublications" | "observeRemotePublications" | "start" | "stop" | "prepareLocalTrack" | "clearPreparedLocalTrack" | "getSnapshot" | "subscribe">;
+type BoundMediaClient = Pick<ConnectionMediaClient, "setLocalPublicationTarget" | "observeLocalPublications" | "observeRemotePublications" | "remotePublicationsChanged" | "remotePublicationResumed" | "start" | "stop" | "prepareLocalTrack" | "clearPreparedLocalTrack" | "getSnapshot" | "subscribe">;
 
-function bindConnectionMediaClient(client: BoundMediaClient, restart: ConnectionMediaClient["restart"]): ConnectionMediaClient {
+export function bindConnectionMediaClient(client: BoundMediaClient, restart: ConnectionMediaClient["restart"]): ConnectionMediaClient {
   return {
     setLocalPublicationTarget: client.setLocalPublicationTarget.bind(client),
     observeLocalPublications: client.observeLocalPublications.bind(client),
     observeRemotePublications: client.observeRemotePublications.bind(client),
+    ...(client.remotePublicationsChanged ? { remotePublicationsChanged: client.remotePublicationsChanged.bind(client) } : {}),
+    ...(client.remotePublicationResumed ? { remotePublicationResumed: client.remotePublicationResumed.bind(client) } : {}),
     start: client.start.bind(client),
     stop: client.stop.bind(client),
     restart,
