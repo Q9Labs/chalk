@@ -231,6 +231,41 @@ func TestCoordinatorCreatesConnectionForFirstTracksAfterEmptyBootstrap(t *testin
 	}
 }
 
+func TestCoordinatorContinuesAfterOnlyPublicationGoneAndClosesOnStop(t *testing.T) {
+	attempt := newAttempt(t)
+	signaling := &fakeSignaling{pullGone: true}
+	peer := &fakePeer{}
+	coordinator := newCoordinator(t, attempt, signaling, peer, Config{})
+	initial := newPlan(t, attempt, 1, []planTrack{{name: "only"}})
+	snapshot, err := coordinator.Bootstrap(context.Background(), initial)
+	if err != nil || len(snapshot.Tracks) != 0 {
+		t.Fatalf("bootstrap after publication disappearance: snapshot=%#v error=%v", snapshot, err)
+	}
+	withoutPublisher := newPlan(t, attempt, 2, nil)
+	snapshot, err = coordinator.Reconcile(context.Background(), withoutPublisher)
+	if err != nil || snapshot.PlanRevision != 2 || len(snapshot.Tracks) != 0 {
+		t.Fatalf("reconcile zero-track revision: snapshot=%#v error=%v", snapshot, err)
+	}
+	stopped, err := captureplan.NewPlan(captureplan.PlanInput{
+		Authority: withoutPublisher.Authority(), Revision: 3, Cursors: captureplan.PlanCursors{EpisodeControlRevision: 3, ProviderIncarnation: 1, ProviderSequence: 3},
+		LayoutProfile: captureplan.LayoutProfileComposite720PV1, ParticipantLimit: 10, InputBitrateBPS: 4_000_000,
+		EffectiveDeadline: coordinatorNow.Add(time.Hour), StopState: captureplan.StopStateRequested,
+		StopRequestedAt: coordinatorNow.Add(5 * time.Minute), Participants: withoutPublisher.Participants(),
+	})
+	if err != nil {
+		t.Fatalf("create stop plan: %v", err)
+	}
+	if snapshot, err = coordinator.Reconcile(context.Background(), stopped); err != nil || snapshot.PlanRevision != 3 || len(snapshot.Tracks) != 0 {
+		t.Fatalf("reconcile stopped zero-track plan: snapshot=%#v error=%v", snapshot, err)
+	}
+	if err := coordinator.Close(context.Background(), true); err != nil {
+		t.Fatalf("close stopped Capture: %v", err)
+	}
+	if signaling.pullCount != 1 || countOperation(signaling.operations, captureplane.OperationCloseCaptureConnection) != 1 {
+		t.Fatalf("provider operations = %#v, want one pull and one close", signaling.operations)
+	}
+}
+
 func TestCoordinatorClosesWithoutProviderConnection(t *testing.T) {
 	attempt := newAttempt(t)
 	signaling := &fakeSignaling{}
@@ -413,6 +448,7 @@ type fakeSignaling struct {
 	renegotiation    []captureplane.Negotiation
 	repeatOffer      bool
 	pullCount        int
+	pullGone         bool
 	leases           []time.Time
 	wrongKey         bool
 }
@@ -434,6 +470,12 @@ func (s *fakeSignaling) Execute(_ context.Context, request capturesignaling.Exec
 	case captureplane.OperationPullCaptureTracks:
 		s.pullCount++
 		input := command.Input.PullCaptureTracks
+		if s.pullGone {
+			return capturesignaling.Execution{Key: key, Result: capturesignaling.CommandResult{PullCaptureTracks: &captureplane.PullCaptureTracksResult{
+				Connection: connection, Gone: append([]captureplane.CaptureTrack(nil), input.Tracks...),
+				Negotiation: captureplane.Negotiation{Requirement: captureplane.NegotiationNotRequired},
+			}}}, nil
+		}
 		pulled := make([]captureplane.PulledCaptureTrack, len(input.Tracks))
 		for i, track := range input.Tracks {
 			pulled[i] = captureplane.PulledCaptureTrack{CaptureTrack: track, MID: captureplane.ProviderReference(fmt.Sprintf("mid-%s", track.TrackReference))}

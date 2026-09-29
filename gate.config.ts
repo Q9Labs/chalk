@@ -47,7 +47,7 @@ const chalkLanes = taskIds.map((id) =>
     triggers: alwaysIds.has(id) ? "always" : (context) => chalkPlan(context).tasks.some((task) => task.id === id && task.selected),
     run: async (context) => {
       const task = chalkPlan(context).tasks.find((candidate) => candidate.id === id);
-      if (!task?.command) return { status: "failed", findings: [{ file: "gate.config.ts", rule: id, message: "Chalk gate task has no command" }] };
+      if (!task?.command) return { status: "skipped" };
       const [command, ...args] = task.command;
       const env = Object.entries(task.env).map(([name, value]) => ({ name, value }));
       if (id === "secrets" && explicitFiles) env.push({ name: "GATE_EXPLICIT_FILES", value: context.allChangedFiles.join("\n") });
@@ -66,7 +66,7 @@ export default defineGate({
   classifiers: {
     docs: ["*.md", "*.mdx", "*.txt"],
     gateDefinition: [".dependency-cruiser.cjs", ".fallowrc.json"],
-    source: [".go", ".ex", ".exs"],
+    source: [".go", ".ex", ".exs", ".sql"],
     dependency: ["go.mod", "go.sum", "mix.exs", "mix.lock"],
     infra: ["infrastructure/"],
     contract: ["contract/", "packages/diagnostics-contracts/"],

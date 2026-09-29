@@ -264,11 +264,21 @@ func (r PullCaptureTracksResult) Validate() error {
 	if err := r.Connection.Validate(); err != nil {
 		return err
 	}
-	if len(r.Tracks) > MaxCaptureTracks {
+	if len(r.Tracks)+len(r.Gone)+len(r.Unavailable) > MaxCaptureTracks {
 		return fmt.Errorf("%w: too many pulled tracks", ErrInvalidTrack)
 	}
 	if err := validatePulledTracks(r.Tracks); err != nil {
 		return err
+	}
+	if len(r.Gone) > 0 {
+		if err := validateTracks(r.Gone); err != nil {
+			return err
+		}
+	}
+	if len(r.Unavailable) > 0 {
+		if err := validateTracks(r.Unavailable); err != nil {
+			return err
+		}
 	}
 	return r.Negotiation.Validate()
 }

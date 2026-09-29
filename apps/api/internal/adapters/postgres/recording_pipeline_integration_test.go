@@ -59,6 +59,9 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	if err := resetRecordingCapturePlans(ctx, pool); err != nil {
 		t.Fatalf("reset capture plans: %v", err)
 	}
+	if _, err := pool.Exec(ctx, `delete from recording_capture_retired_publications where tenant_id = '6a9b6a12-7457-4fe9-a58b-8b234d0be001'`); err != nil {
+		t.Fatalf("reset retired capture publications: %v", err)
+	}
 	if err := resetRecordingJobAuthorities(ctx, pool); err != nil {
 		t.Fatalf("reset recorder authorities: %v", err)
 	}
@@ -120,6 +123,7 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 		if err := resetRecordingCapturePlans(ctx, pool); err != nil {
 			t.Errorf("clean capture plans: %v", err)
 		}
+		_, _ = pool.Exec(ctx, `delete from recording_capture_retired_publications where tenant_id = $1`, tenantID.Bytes())
 		if err := resetRecordingJobAuthorities(ctx, pool); err != nil {
 			t.Errorf("clean recorder authorities: %v", err)
 		}
@@ -481,6 +485,40 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	capturePlanInput.MaxWait = 5 * time.Millisecond
 	if _, err := capturePlanService.Wait(ctx, capturePlanInput); !errors.Is(err, captureplan.ErrWaitTimeout) {
 		t.Fatalf("unchanged capture plan wait error = %v, want %v", err, captureplan.ErrWaitTimeout)
+	}
+	issuedTrack := secondPlan.Tracks()[0]
+	goneTrack := captureplane.CaptureTrack{
+		ParticipantID: issuedTrack.ParticipantID, ParticipantGeneration: issuedTrack.ParticipantGeneration,
+		Source: issuedTrack.Source, Kind: issuedTrack.Kind, OwnerReference: issuedTrack.OwnerReference,
+		TrackReference: issuedTrack.TrackReference, RequestedLayer: issuedTrack.RequestedLayer,
+	}
+	retirementCommand := capturesignaling.Command{
+		Authority: capturesignaling.CommandAuthority{
+			TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, RecordingID: reservation.RecordingID,
+			JobID: job.ID, AttemptCount: job.AttemptCount, FencingGeneration: job.FencingGeneration,
+			CaptureEpoch: captureplane.CaptureEpoch(job.Authority.Envelope.CaptureEpoch), EnvelopeDigest: job.Authority.EnvelopeDigest,
+		},
+		Lease:    capturesignaling.WorkerLease{Owner: "capture-test", Token: "lease-capture", ExpiresAt: *renewedJob.LeaseExpiresAt},
+		Identity: capturesignaling.CommandIdentity{Operation: captureplane.OperationPullCaptureTracks, PlanRevision: secondPlan.Revision()},
+	}
+	planRepository := postgres.NewRecordingCapturePlanRepositoryWithPool(pool)
+	wrongTrack := goneTrack
+	wrongTrack.TrackReference = "another-publication"
+	if _, err := planRepository.RetireGone(ctx, retirementCommand, []captureplane.CaptureTrack{wrongTrack}); !errors.Is(err, captureplan.ErrInvalidTrack) {
+		t.Fatalf("retire unrelated publication error = %v, want invalid track", err)
+	}
+	retired, err := planRepository.RetireGone(ctx, retirementCommand, []captureplane.CaptureTrack{goneTrack})
+	if err != nil || retired != 1 {
+		t.Fatalf("retire missing publication: count=%d error=%v", retired, err)
+	}
+	capturePlanInput.AfterRevision = secondPlan.Revision()
+	capturePlanInput.MaxWait = 100 * time.Millisecond
+	withoutPublisher, err := capturePlanService.Wait(ctx, capturePlanInput)
+	if err != nil || withoutPublisher.Revision() != 3 || len(withoutPublisher.Tracks()) != 0 {
+		t.Fatalf("retired capture plan: revision=%d tracks=%#v error=%v", withoutPublisher.Revision(), withoutPublisher.Tracks(), err)
+	}
+	if replayed, err := planRepository.RetireGone(ctx, retirementCommand, []captureplane.CaptureTrack{goneTrack}); err != nil || replayed != 0 {
+		t.Fatalf("retirement replay: count=%d error=%v", replayed, err)
 	}
 	if _, err := pool.Exec(ctx, `update recording_capture_plans set revision = revision + 1 where plan_handle = $1`, job.Authority.Envelope.PlanHandle); err == nil {
 		t.Fatal("append-only capture plan update unexpectedly succeeded")

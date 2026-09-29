@@ -17,6 +17,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
+	"github.com/q9labs/chalk/apps/api/internal/capturesignaling"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -27,6 +28,8 @@ type recordingCapturePlanQuerier interface {
 	GetRecordingCapturePlanSource(context.Context, sqlc.GetRecordingCapturePlanSourceParams) (sqlc.GetRecordingCapturePlanSourceRow, error)
 	InsertRecordingCapturePlan(context.Context, sqlc.InsertRecordingCapturePlanParams) (sqlc.RecordingCapturePlan, error)
 	LockRecordingCapturePlanHandle(context.Context, string) error
+	GetRecordingCapturePlanForCommand(context.Context, sqlc.GetRecordingCapturePlanForCommandParams) (sqlc.RecordingCapturePlan, error)
+	RetireRecordingCapturePublication(context.Context, sqlc.RetireRecordingCapturePublicationParams) (int64, error)
 }
 
 type RecordingCapturePlanRepository struct {
@@ -68,6 +71,89 @@ func (r RecordingCapturePlanRepository) Reconcile(ctx context.Context, input cap
 		return captureplan.Plan{}, fmt.Errorf("commit capture plan reconciliation: %w", err)
 	}
 	return plan, nil
+}
+
+// RetireGone fences the observed pull to its immutable plan, records only the
+// matching publication references, and appends the replacement plan in one
+// transaction. The retirement is Episode-scoped so later Capture epochs cannot
+// rebuild the stale pull from an old provider observation.
+func (r RecordingCapturePlanRepository) RetireGone(ctx context.Context, command capturesignaling.Command, gone []captureplane.CaptureTrack) (int, error) {
+	if r.transactor == nil {
+		return 0, captureplan.ErrRepositoryUnavailable
+	}
+	if len(gone) == 0 {
+		return 0, nil
+	}
+	transaction, err := r.transactor.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return 0, fmt.Errorf("begin capture publication retirement: %w", err)
+	}
+	defer transaction.Rollback(ctx)
+	queries := sqlc.Querier(sqlc.New(transaction))
+	if r.decorate != nil {
+		queries = r.decorate(queries)
+	}
+	issued, err := queries.GetRecordingCapturePlanForCommand(ctx, sqlc.GetRecordingCapturePlanForCommandParams{
+		JobID: uuid(command.Authority.JobID), AttemptCount: int32(command.Authority.AttemptCount),
+		FencingGeneration: command.Authority.FencingGeneration, CaptureEpoch: int64(command.Authority.CaptureEpoch),
+		Revision: int64(command.Identity.PlanRevision), EnvelopeDigest: command.Authority.EnvelopeDigest,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, captureplan.ErrPlanAuthorityMismatch
+	}
+	if err != nil {
+		return 0, fmt.Errorf("read issued capture plan: %w", err)
+	}
+	handle := utilities.IDFromBytes(issued.PlanHandle.Bytes).String()
+	if err := queries.LockRecordingCapturePlanHandle(ctx, handle); err != nil {
+		return 0, fmt.Errorf("lock capture plan handle: %w", err)
+	}
+	input := captureplan.NewWaitInput(captureplan.PlanAuthority{
+		PlanHandle: captureplan.PlanHandle(handle), TenantID: command.Authority.TenantID,
+		SpaceID: command.Authority.SpaceID, EpisodeID: command.Authority.EpisodeID,
+		RecordingID: command.Authority.RecordingID, JobID: command.Authority.JobID,
+		AttemptCount: command.Authority.AttemptCount, FencingGeneration: command.Authority.FencingGeneration,
+		CaptureEpoch: command.Authority.CaptureEpoch, EnvelopeDigest: command.Authority.EnvelopeDigest,
+	}, captureplan.WorkerLease{Owner: command.Lease.Owner, Token: command.Lease.Token, ExpiresAt: command.Lease.ExpiresAt}, 0, captureplan.MinimumWait)
+	if err := validateStoredCapturePlan(issued, input); err != nil {
+		return 0, err
+	}
+	plan, err := captureplan.DecodePlan(issued.PlanBytes, fmt.Sprintf("%x", issued.PlanFingerprint))
+	if err != nil {
+		return 0, err
+	}
+	issuedTracks := plan.Tracks()
+	retired := 0
+	for _, missing := range gone {
+		var publication captureplan.PublicationReference
+		for _, track := range issuedTracks {
+			if track.ParticipantID == missing.ParticipantID && track.ParticipantGeneration == missing.ParticipantGeneration &&
+				track.Source == missing.Source && track.Kind == missing.Kind && track.OwnerReference == missing.OwnerReference &&
+				track.TrackReference == missing.TrackReference && track.RequestedLayer == missing.RequestedLayer {
+				publication = track.PublicationReference
+				break
+			}
+		}
+		if publication == "" {
+			return 0, captureplan.ErrInvalidTrack
+		}
+		count, err := queries.RetireRecordingCapturePublication(ctx, sqlc.RetireRecordingCapturePublicationParams{
+			TenantID: uuid(input.TenantID), EpisodeID: uuid(input.EpisodeID), PublicationID: string(publication),
+		})
+		if err != nil {
+			return 0, fmt.Errorf("retire capture publication: %w", err)
+		}
+		retired += int(count)
+	}
+	if retired > 0 {
+		if _, err := r.reconcile(ctx, queries, input); err != nil && !errors.Is(err, captureplan.ErrNoChange) {
+			return 0, err
+		}
+	}
+	if err := transaction.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("commit capture publication retirement: %w", err)
+	}
+	return retired, nil
 }
 
 func (r RecordingCapturePlanRepository) reconcile(ctx context.Context, queries recordingCapturePlanQuerier, input captureplan.WaitInput) (captureplan.Plan, error) {
@@ -197,7 +283,14 @@ func buildRecordingCapturePlan(source sqlc.GetRecordingCapturePlanSourceRow, inp
 		return captureplan.Plan{}, err
 	}
 	var publications []persistedCapturePlanPublication
-	if err := strictCapturePlanJSON(source.ProviderPublications, &publications); err != nil {
+	publicationJSON, ok := source.ProviderPublications.([]byte)
+	if !ok {
+		publicationJSON, err = json.Marshal(source.ProviderPublications)
+		if err != nil {
+			return captureplan.Plan{}, fmt.Errorf("encode capture plan publications: %w", captureplan.ErrInvalidPlan)
+		}
+	}
+	if err := strictCapturePlanJSON(publicationJSON, &publications); err != nil {
 		return captureplan.Plan{}, fmt.Errorf("decode capture plan publications: %w", captureplan.ErrInvalidPlan)
 	}
 	tracks, err := capturePlanTracks(publications, participantGenerations)

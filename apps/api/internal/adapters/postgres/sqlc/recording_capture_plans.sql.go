@@ -50,6 +50,64 @@ func (q *Queries) GetLatestRecordingCapturePlan(ctx context.Context, planHandle 
 	return i, err
 }
 
+const getRecordingCapturePlanForCommand = `-- name: GetRecordingCapturePlanForCommand :one
+select plan_handle, revision, job_id, attempt_count, fencing_generation,
+    capture_epoch, envelope_digest, tenant_id, space_id, episode_id,
+    recording_id, episode_control_revision, provider_incarnation,
+    provider_sequence, plan_schema_version, plan_bytes, plan_fingerprint,
+    effective_deadline_at, created_at
+from recording_capture_plans
+where job_id = $1
+  and attempt_count = $2
+  and fencing_generation = $3
+  and capture_epoch = $4
+  and revision = $5
+  and envelope_digest = $6
+`
+
+type GetRecordingCapturePlanForCommandParams struct {
+	JobID             pgtype.UUID `json:"job_id"`
+	AttemptCount      int32       `json:"attempt_count"`
+	FencingGeneration int64       `json:"fencing_generation"`
+	CaptureEpoch      int64       `json:"capture_epoch"`
+	Revision          int64       `json:"revision"`
+	EnvelopeDigest    []byte      `json:"envelope_digest"`
+}
+
+func (q *Queries) GetRecordingCapturePlanForCommand(ctx context.Context, arg GetRecordingCapturePlanForCommandParams) (RecordingCapturePlan, error) {
+	row := q.db.QueryRow(ctx, getRecordingCapturePlanForCommand,
+		arg.JobID,
+		arg.AttemptCount,
+		arg.FencingGeneration,
+		arg.CaptureEpoch,
+		arg.Revision,
+		arg.EnvelopeDigest,
+	)
+	var i RecordingCapturePlan
+	err := row.Scan(
+		&i.PlanHandle,
+		&i.Revision,
+		&i.JobID,
+		&i.AttemptCount,
+		&i.FencingGeneration,
+		&i.CaptureEpoch,
+		&i.EnvelopeDigest,
+		&i.TenantID,
+		&i.SpaceID,
+		&i.EpisodeID,
+		&i.RecordingID,
+		&i.EpisodeControlRevision,
+		&i.ProviderIncarnation,
+		&i.ProviderSequence,
+		&i.PlanSchemaVersion,
+		&i.PlanBytes,
+		&i.PlanFingerprint,
+		&i.EffectiveDeadlineAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getRecordingCapturePlanSource = `-- name: GetRecordingCapturePlanSource :one
 select
     authority.envelope_bytes,
@@ -73,7 +131,16 @@ select
     coalesce(participant_snapshot.participants, '[]'::jsonb) as episode_participants,
     coalesce(observation.incarnation, 0)::bigint as provider_incarnation,
     coalesce(observation.sequence, 0)::bigint as provider_sequence,
-    coalesce(observation.publications, '[]'::jsonb) as provider_publications
+    coalesce((
+        select jsonb_agg(publication.value order by publication.ordinality)
+        from jsonb_array_elements(coalesce(observation.publications, '[]'::jsonb)) with ordinality as publication(value, ordinality)
+        where not exists (
+            select 1 from recording_capture_retired_publications retired
+            where retired.tenant_id = jobs.tenant_id
+              and retired.episode_id = jobs.episode_id
+              and retired.publication_id = publication.value->>'publication_id'
+        )
+    ), '[]'::jsonb) as provider_publications
 from recording_job_attempt_authorities authority
 join recording_jobs jobs on jobs.id = authority.job_id
 join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id
@@ -152,7 +219,7 @@ type GetRecordingCapturePlanSourceRow struct {
 	EpisodeParticipants    []byte             `json:"episode_participants"`
 	ProviderIncarnation    int64              `json:"provider_incarnation"`
 	ProviderSequence       int64              `json:"provider_sequence"`
-	ProviderPublications   []byte             `json:"provider_publications"`
+	ProviderPublications   interface{}        `json:"provider_publications"`
 }
 
 func (q *Queries) GetRecordingCapturePlanSource(ctx context.Context, arg GetRecordingCapturePlanSourceParams) (GetRecordingCapturePlanSourceRow, error) {
@@ -292,4 +359,24 @@ select pg_advisory_xact_lock(hashtextextended($1::text, 2))
 func (q *Queries) LockRecordingCapturePlanHandle(ctx context.Context, planHandle string) error {
 	_, err := q.db.Exec(ctx, lockRecordingCapturePlanHandle, planHandle)
 	return err
+}
+
+const retireRecordingCapturePublication = `-- name: RetireRecordingCapturePublication :execrows
+insert into recording_capture_retired_publications (tenant_id, episode_id, publication_id)
+values ($1, $2, $3)
+on conflict do nothing
+`
+
+type RetireRecordingCapturePublicationParams struct {
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	EpisodeID     pgtype.UUID `json:"episode_id"`
+	PublicationID string      `json:"publication_id"`
+}
+
+func (q *Queries) RetireRecordingCapturePublication(ctx context.Context, arg RetireRecordingCapturePublicationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, retireRecordingCapturePublication, arg.TenantID, arg.EpisodeID, arg.PublicationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
