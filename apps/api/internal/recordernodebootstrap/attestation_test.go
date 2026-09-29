@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
 
 func TestVerifyImageManifestDetectsInstalledFileTamper(t *testing.T) {
@@ -36,14 +38,14 @@ func TestVerifyImageManifestDetectsInstalledFileTamper(t *testing.T) {
 	}
 	manifestDigest := sha256.Sum256(manifestData)
 	expectedDigest := "sha256:" + hex.EncodeToString(manifestDigest[:])
-	if err := VerifyImageManifest(manifestPath, manifest.ReleaseID, expectedDigest); err != nil {
+	if err := VerifyImageManifest(manifestPath, manifest.ReleaseID, expectedDigest, workeridentity.RoleRender); err != nil {
 		t.Fatalf("verify image manifest: %v", err)
 	}
 
 	if err := os.WriteFile(installedPath, []byte("tampered"), 0o755); err != nil {
 		t.Fatalf("tamper installed file: %v", err)
 	}
-	if err := VerifyImageManifest(manifestPath, manifest.ReleaseID, expectedDigest); !errors.Is(err, ErrInvalidConfig) {
+	if err := VerifyImageManifest(manifestPath, manifest.ReleaseID, expectedDigest, workeridentity.RoleRender); !errors.Is(err, ErrInvalidConfig) {
 		t.Fatalf("tampered image error = %v, want invalid config", err)
 	}
 }
@@ -56,7 +58,7 @@ func TestVerifyImageManifestAcceptsCurrentAndRollbackProfiles(t *testing.T) {
 	}
 	installedDigest := sha256.Sum256([]byte("release-binary"))
 
-	for _, profile := range []string{"cpu-libx264-frame2", "cpu-libx264-frame8"} {
+	for _, profile := range []string{"cpu-libx264-frame2", "cpu-libx264-frame8", "capture-minimal-v1"} {
 		t.Run(profile, func(t *testing.T) {
 			manifest := imageManifest{
 				SchemaVersion:    imageManifestSchemaVersion,
@@ -67,8 +69,17 @@ func TestVerifyImageManifestAcceptsCurrentAndRollbackProfiles(t *testing.T) {
 				Files:            []imageManifestFile{{Path: installedPath, Type: "file", SHA256: hex.EncodeToString(installedDigest[:])}},
 			}
 			manifestPath, expectedDigest := writeSignedManifest(t, directory, manifest)
-			if err := VerifyImageManifest(manifestPath, manifest.ReleaseID, expectedDigest); err != nil {
+			role := workeridentity.RoleRender
+			if profile == "capture-minimal-v1" {
+				role = workeridentity.RoleCapture
+			}
+			if err := VerifyImageManifest(manifestPath, manifest.ReleaseID, expectedDigest, role); err != nil {
 				t.Fatalf("verify supported image profile: %v", err)
+			}
+			if profile == "capture-minimal-v1" {
+				if err := VerifyImageManifest(manifestPath, manifest.ReleaseID, expectedDigest, workeridentity.RoleRender); !errors.Is(err, ErrInvalidConfig) {
+					t.Fatalf("render accepted capture-only profile: %v", err)
+				}
 			}
 		})
 	}
@@ -90,7 +101,7 @@ func TestVerifyImageManifestRejectsUnknownProfile(t *testing.T) {
 		Files:            []imageManifestFile{{Path: installedPath, Type: "file", SHA256: hex.EncodeToString(installedDigest[:])}},
 	}
 	manifestPath, expectedDigest := writeSignedManifest(t, directory, manifest)
-	if err := VerifyImageManifest(manifestPath, manifest.ReleaseID, expectedDigest); !errors.Is(err, ErrInvalidConfig) {
+	if err := VerifyImageManifest(manifestPath, manifest.ReleaseID, expectedDigest, workeridentity.RoleRender); !errors.Is(err, ErrInvalidConfig) {
 		t.Fatalf("unknown image profile error = %v, want invalid config", err)
 	}
 }

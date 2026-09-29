@@ -143,7 +143,49 @@ This release does not gate Episode media on capture-worker attachment, so an
 immediate Recording can begin before cold capacity arrives. Production must keep
 enough warm capture capacity for its startup objective and monitor that gap.
 
-## Shared CPU worker image
+## Recorder images
+
+### Minimal Capture image
+
+`images/capture` builds only `recorder-capture` and
+`chalk-recorder-bootstrap`. Build the release on a Linux AMD64 host with Go,
+`jq`, `tar`, and `sha256sum`; the build records the source commit and a
+deterministic source-tree digest. Create the image builder in BLR1 from the
+Debian 13 genericcloud custom image `247595332` on
+`s-1vcpu-512mb-10gb` (or `s-1vcpu-1gb` with the same 10 GB disk). Do not
+resize its disk: the snapshot must fit `s-1vcpu-512mb-10gb`.
+
+```sh
+infrastructure/recorder/images/capture/build-release.sh \
+  --source /absolute/path/to/chalk --release-id <release-id> \
+  --output /absolute/path/chalk-recorder-capture.tar.gz
+
+sudo infrastructure/recorder/images/capture/install.sh \
+  --bundle /absolute/path/chalk-recorder-capture.tar.gz \
+  --bundle-sha256 <bundle-sha256> \
+  --bootstrap-ca /absolute/path/issuer-server-ca.pem \
+  --bootstrap-server-name <issuer-server-name>
+
+sudo infrastructure/recorder/images/cpu/seal.sh
+```
+
+Run the installer and seal on that clean Debian builder, then shut it down and
+snapshot it. The installer places only the two binaries, Capture and renewal
+units, `capture.env` (10-second keyframes), bootstrap CA, and image metadata.
+There is no Node, Chromium, FFmpeg, or boot-time package installation. Its
+`capture-minimal-v1` manifest hashes only these installed recorder files; the
+same digest pin, file rehash, one-time assertion, inventory match, and seal
+checks apply. Bootstrap accepts that profile only for the Capture role.
+
+Publish the printed `image_manifest_digest` and new snapshot ID to the
+**Capture** image pin only; leave the Render image pin unchanged. The
+infrastructure root has separate `capture_image_id`/`capture_image_digest` and
+`render_image_id`/`render_image_digest` inputs, and each controller loads its
+own role-fenced release. Set the Capture controller's image ID and digest
+together after the API and issuer support for the new release is deployed.
+Validate the exact snapshot and size in a staging Capture boot before promotion.
+
+### Shared Capture/Render image
 
 `images/cpu` builds one Ubuntu 24.04 AMD64 release containing both real worker
 daemons, the renderer UI, Playwright Chromium, and the node bootstrap/renewal
