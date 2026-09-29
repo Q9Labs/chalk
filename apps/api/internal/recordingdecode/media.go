@@ -14,14 +14,14 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
 )
 
-func decodeSource(ctx context.Context, runner CommandRunner, ffmpegPath, workspace, mediaDirectory string, state *sourceState, durationMS int64) (Source, []Discontinuity, error) {
+func decodeSource(ctx context.Context, runner CommandRunner, ffmpegPath, workspace, mediaDirectory string, state *sourceState, durationMS int64, videoPassthrough bool) (Source, []Discontinuity, error) {
 	switch strings.ToLower(state.track.Codec) {
 	case "opus":
 		return decodeOpusSource(ctx, runner, ffmpegPath, workspace, mediaDirectory, state, durationMS)
 	case "vp8":
-		return decodeVP8Source(ctx, runner, ffmpegPath, workspace, mediaDirectory, state, durationMS)
+		return decodeVP8Source(ctx, runner, ffmpegPath, workspace, mediaDirectory, state, durationMS, videoPassthrough)
 	case "h264":
-		return decodeH264Source(ctx, runner, ffmpegPath, workspace, mediaDirectory, state, durationMS)
+		return decodeH264Source(ctx, runner, ffmpegPath, workspace, mediaDirectory, state, durationMS, videoPassthrough)
 	default:
 		return Source{}, nil, fmt.Errorf("%w: unsupported codec %q", ErrDecode, state.track.Codec)
 	}

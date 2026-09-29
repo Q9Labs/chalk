@@ -10,6 +10,7 @@ User=chalk-recorder
 Group=chalk-recorder
 Environment=HOME=/var/lib/chalk-recorder
 EnvironmentFile=/etc/chalk-recorder/worker.env
+EnvironmentFile=/etc/chalk-recorder/capture.env
 RuntimeDirectory=chalk-recorder
 RuntimeDirectoryMode=0700
 ExecStart=/opt/chalk-recorder/current/bin/recorder-capture --run

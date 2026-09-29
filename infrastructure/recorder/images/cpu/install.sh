@@ -57,6 +57,7 @@ export PLAYWRIGHT_BROWSERS_PATH="$bundle_root/ms-playwright"
 (
   cd "$bundle_root/renderer"
   /opt/chalk-recorder/toolchains/node-22.23.2/bin/node --input-type=module -e 'import { chromium } from "playwright"; const browser = await chromium.launch({headless:true}); await browser.close();'
+  /opt/chalk-recorder/toolchains/node-22.23.2/bin/node --input-type=module -e 'import { createCanvas } from "@napi-rs/canvas"; createCanvas(1, 1).toBuffer("image/png");'
 )
 ffmpeg_encoders="$(ffmpeg -hide_banner -encoders 2>/dev/null)"
 grep -Fq 'libx264 ' <<<"$ffmpeg_encoders" || { echo "installed FFmpeg does not expose libx264" >&2; exit 1; }
@@ -73,6 +74,7 @@ for unit in chalk-recorder-capture.service chalk-recorder-render.service chalk-r
   install -m 0644 "$script_root/systemd/$unit" "$image_root/etc/systemd/system/$unit"
 done
 
+# Native Export needs fonts-noto-color-emoji installed explicitly once Chromium is removed.
 cat >"$image_root/etc/chalk-recorder/render.env" <<EOF
 CHALK_RECORDING_RENDER_WORK_ROOT=/var/lib/chalk-recorder/render
 CHALK_RECORDING_NODE_PATH=/opt/chalk-recorder/toolchains/node-22.23.2/bin/node
@@ -82,6 +84,12 @@ CHALK_RECORDING_FFMPEG_PATH=/usr/bin/ffmpeg
 CHALK_RECORDING_FFPROBE_PATH=/usr/bin/ffprobe
 CHALK_RECORDING_VIDEO_ENCODER=libx264
 PLAYWRIGHT_BROWSERS_PATH=/opt/chalk-recorder/current/ms-playwright
+CHALK_RECORDER_EXPORT_RENDERER=native
+EOF
+
+# Periodic keyframes keep native Export seeks short; see recorder-capture --keyframe-interval.
+cat >"$image_root/etc/chalk-recorder/capture.env" <<EOF
+CHALK_RECORDER_KEYFRAME_INTERVAL=10s
 EOF
 
 file_entries="$stage_root/file-entries.ndjson"

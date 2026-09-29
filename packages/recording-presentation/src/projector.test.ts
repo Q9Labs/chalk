@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { deriveRecordingMediaSourceId, isRecordingPresentationTimelineV1, parseRecordingPresentationTimelineV1, projectRecordingPresentation } from "./index.js";
+import { createRecordingPresentationCursor, deriveRecordingMediaSourceId, isRecordingPresentationTimelineV1, parseRecordingPresentationTimelineV1, projectRecordingPresentation } from "./index.js";
 
 const fixture = (name: string): unknown => JSON.parse(readFileSync(new URL(`../../../contract/schema/fixtures/recording-presentation-v1/${name}`, import.meta.url), "utf8"));
 
@@ -39,5 +39,14 @@ describe("recording_presentation.v1", () => {
     const timeline = parseRecordingPresentationTimelineV1(fixture("minimal-valid.json"));
     expect(() => projectRecordingPresentation(timeline, -1)).toThrow(RangeError);
     expect(() => projectRecordingPresentation(timeline, 5001)).toThrow(RangeError);
+  });
+
+  it("steps a cursor forward with the same frames as one-shot projection", () => {
+    const timeline = parseRecordingPresentationTimelineV1(fixture("minimal-valid.json"));
+    const cursor = createRecordingPresentationCursor(timeline);
+    for (const elapsedMs of [0, 999, 1000, 1000, 1999, 2000, 5000]) {
+      expect(cursor.at(elapsedMs)).toEqual(projectRecordingPresentation(timeline, elapsedMs));
+    }
+    expect(() => cursor.at(4999)).toThrow(RangeError);
   });
 });

@@ -115,7 +115,7 @@ func Write(ctx context.Context, request Request) (result Result, resultErr error
 		if err := ctx.Err(); err != nil {
 			return Result{}, err
 		}
-		source, sourceDiscontinuities, err := decodeSource(ctx, runner, ffmpegPath, temporaryDirectory, mediaDirectory, state, request.DurationMS)
+		source, sourceDiscontinuities, err := decodeSource(ctx, runner, ffmpegPath, temporaryDirectory, mediaDirectory, state, request.DurationMS, request.VideoPassthrough)
 		if err != nil {
 			return Result{}, err
 		}

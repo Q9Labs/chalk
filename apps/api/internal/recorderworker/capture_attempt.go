@@ -232,7 +232,10 @@ type CaptureAttemptConfig struct {
 	PlanWait        time.Duration
 	RTPReadDeadline time.Duration
 	CloseTimeout    time.Duration
-	Now             func() time.Time
+	// KeyFrameInterval asks each video sender for a keyframe at least this
+	// often, so native Exports can seek retained video cheaply. Zero turns it off.
+	KeyFrameInterval time.Duration
+	Now              func() time.Time
 }
 
 func (c CaptureAttemptConfig) normalized() CaptureAttemptConfig {
@@ -506,7 +509,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 	}
 
 	events := make(chan captureRuntimeEvent, 256)
-	readerCancels, readerCancel, startErr := startCaptureReaders(runCtx, a.peer, readers, a.config.RTPReadDeadline, events)
+	readerCancels, readerCancel, startErr := startCaptureReaders(runCtx, a.peer, readers, a.config.RTPReadDeadline, a.config.KeyFrameInterval, events)
 	if startErr != nil {
 		return a.finishFailure(startErr, writer)
 	}
@@ -787,7 +790,7 @@ func (a *PionCaptureAttempt) applyBoundTracks(ctx context.Context, writer *captu
 		if previousTrack, ok := previous[mid]; ok && sameCaptureBinding(previousTrack, track) {
 			continue
 		}
-		cancel, err := startCaptureReader(ctx, a.peer, mid, track, a.config.RTPReadDeadline, events)
+		cancel, err := startCaptureReader(ctx, a.peer, mid, track, a.config.RTPReadDeadline, a.config.KeyFrameInterval, events)
 		if err != nil {
 			return err
 		}
@@ -959,14 +962,14 @@ type captureRuntimeEvent struct {
 	err    error
 }
 
-func startCaptureReaders(ctx context.Context, peer CapturePeer, tracks map[string]CaptureMediaTrack, deadline time.Duration, events chan<- captureRuntimeEvent) (map[string]func(), func(), error) {
+func startCaptureReaders(ctx context.Context, peer CapturePeer, tracks map[string]CaptureMediaTrack, deadline, keyFrameInterval time.Duration, events chan<- captureRuntimeEvent) (map[string]func(), func(), error) {
 	if len(tracks) == 0 {
 		return make(map[string]func()), func() {}, nil
 	}
 	readerCtx, cancel := context.WithCancel(ctx)
 	cancels := make(map[string]func(), len(tracks))
 	for mid, track := range tracks {
-		readerCancel, err := startCaptureReader(readerCtx, peer, mid, track, deadline, events)
+		readerCancel, err := startCaptureReader(readerCtx, peer, mid, track, deadline, keyFrameInterval, events)
 		if err != nil {
 			cancel()
 			for _, stop := range cancels {
@@ -984,7 +987,7 @@ func startCaptureReaders(ctx context.Context, peer CapturePeer, tracks map[strin
 	}, nil
 }
 
-func startCaptureReader(ctx context.Context, peer CapturePeer, mid string, track CaptureMediaTrack, deadline time.Duration, events chan<- captureRuntimeEvent) (func(), error) {
+func startCaptureReader(ctx context.Context, peer CapturePeer, mid string, track CaptureMediaTrack, deadline, keyFrameInterval time.Duration, events chan<- captureRuntimeEvent) (func(), error) {
 	if peer == nil || track == nil || strings.TrimSpace(mid) == "" || deadline <= 0 {
 		return nil, ErrInvalidCaptureAttempt
 	}
@@ -994,7 +997,7 @@ func startCaptureReader(ctx context.Context, peer CapturePeer, mid string, track
 	go func() {
 		defer close(done)
 		defer cancel()
-		var lossFeedback captureVideoLossFeedback
+		lossFeedback := captureVideoLossFeedback{interval: keyFrameInterval}
 		var packetWindow capturePacketWindow
 		for {
 			if err := readerCtx.Err(); err != nil {
@@ -1050,11 +1053,18 @@ type captureVideoLossFeedback struct {
 	received         map[uint64]struct{}
 	lastKeyFrameTime time.Time
 	pending          bool
+	// interval, when set, also asks for a keyframe once this long has passed
+	// since the last request, loss or not.
+	interval time.Duration
 }
 
 func (f *captureVideoLossFeedback) Observe(ssrc uint32, sequence uint16, now time.Time) bool {
 	if !f.initialized || f.ssrc != ssrc {
-		*f = captureVideoLossFeedback{ssrc: ssrc, initialized: true}
+		*f = captureVideoLossFeedback{ssrc: ssrc, initialized: true, interval: f.interval}
+		if f.interval > 0 {
+			// Binding a sender already requested a keyframe; the interval counts from here.
+			f.lastKeyFrameTime = now
+		}
 		extended := f.sequence.Extend(sequence)
 		f.next = extended + 1
 		f.highest = extended
@@ -1079,6 +1089,9 @@ func (f *captureVideoLossFeedback) Observe(ssrc uint32, sequence uint16, now tim
 	if f.next <= f.highest && f.highest-f.next >= captureVideoReorderWindow {
 		f.next = f.highest + 1
 		clear(f.received)
+		f.pending = true
+	}
+	if f.interval > 0 && !now.Before(f.lastKeyFrameTime.Add(f.interval)) {
 		f.pending = true
 	}
 	if !f.pending || (!f.lastKeyFrameTime.IsZero() && now.Before(f.lastKeyFrameTime.Add(captureKeyFrameRequestSpacing))) {

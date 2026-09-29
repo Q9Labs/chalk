@@ -57,7 +57,10 @@ type Request struct {
 	// IncludedSourceKinds limits decoded source media. Nil preserves the
 	// complete decoded-media output used by recording rendering.
 	IncludedSourceKinds []recordingpresentation.MediaKind
-	Runner              CommandRunner
+	// VideoPassthrough keeps video as recorded instead of re-encoding it for
+	// browser seeking. The native compositor decodes each source itself.
+	VideoPassthrough bool
+	Runner           CommandRunner
 }
 
 type Result struct {
