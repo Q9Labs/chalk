@@ -249,14 +249,15 @@ func TestWriteDecodesSeekableVP8OnRecordingClock(t *testing.T) {
 	if err := os.WriteFile(bundlePath, encrypted, 0o600); err != nil {
 		t.Fatalf("write bundle: %v", err)
 	}
-	result, err := Write(context.Background(), Request{
+	request := Request{
 		RecordingID: presentation.RecordingID, EpisodeID: presentation.EpisodeID,
 		TenantID: "00000000-0000-4000-8000-000000000009", Environment: "test",
 		OriginAuthorityID: presentation.Clock.OriginAuthorityID,
 		CaptureEpoch:      1, DurationMS: presentation.Clock.DurationMillis,
 		OutputDirectory: filepath.Join(root, "decoded"), Presentation: presentation,
 		Bundles: []BundleFile{{Path: bundlePath, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encrypted), Sequence: 0, CaptureEpoch: 1, CaptureJobID: "00000000-0000-4000-8000-000000000008", RecorderEnvelopeDigest: strings.Repeat("42", 32)}}, DataKeys: []DataKey{{CaptureEpoch: 1, Plaintext: key}},
-	})
+	}
+	result, err := Write(context.Background(), request)
 	if err != nil {
 		t.Fatalf("write decoded media: %v", err)
 	}
@@ -293,6 +294,7 @@ func TestWriteDecodesSeekableVP8OnRecordingClock(t *testing.T) {
 	if err != nil || durationSeconds < 0.09 || durationSeconds > 0.11 {
 		t.Fatalf("VP8 duration = %q, want 0.1 seconds", probeOutput)
 	}
+	assertPassthroughFrameTimes(t, request, filepath.Join(root, "decoded-passthrough"), "vp8")
 }
 
 func TestWritePreservesSourceTimingWhenBundleClockLeadsLaggingTrack(t *testing.T) {
@@ -551,14 +553,15 @@ func TestWriteDecodesSeekableH264OnRecordingClock(t *testing.T) {
 	if err := os.WriteFile(bundlePath, encrypted, 0o600); err != nil {
 		t.Fatalf("write bundle: %v", err)
 	}
-	result, err := Write(context.Background(), Request{
+	request := Request{
 		RecordingID: presentation.RecordingID, EpisodeID: presentation.EpisodeID,
 		TenantID: "00000000-0000-4000-8000-000000000009", Environment: "test",
 		OriginAuthorityID: presentation.Clock.OriginAuthorityID,
 		CaptureEpoch:      1, DurationMS: presentation.Clock.DurationMillis,
 		OutputDirectory: filepath.Join(root, "decoded"), Presentation: presentation,
 		Bundles: []BundleFile{{Path: bundlePath, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encrypted), Sequence: 1, CaptureEpoch: 1, CaptureJobID: "00000000-0000-4000-8000-000000000008", RecorderEnvelopeDigest: strings.Repeat("42", 32)}}, DataKeys: []DataKey{{CaptureEpoch: 1, Plaintext: key}},
-	})
+	}
+	result, err := Write(context.Background(), request)
 	if err != nil {
 		t.Fatalf("write decoded media: %v", err)
 	}
@@ -578,6 +581,7 @@ func TestWriteDecodesSeekableH264OnRecordingClock(t *testing.T) {
 	if err != nil || durationSeconds < 0.09 || durationSeconds > 0.11 {
 		t.Fatalf("H264 duration = %q, want 0.1 seconds", probeOutput)
 	}
+	assertPassthroughFrameTimes(t, request, filepath.Join(root, "decoded-passthrough"), "h264")
 }
 
 func readAnnexBAccessUnits(t *testing.T, path string) [][]byte {
@@ -713,4 +717,41 @@ func decodePresentationFixture(t *testing.T) recordingpresentation.Timeline {
 		t.Fatalf("decode presentation fixture: %v", err)
 	}
 	return timeline
+}
+
+// assertPassthroughFrameTimes decodes the same request without re-encoding
+// and checks the recorded frames keep their RTP spacing from time zero.
+func assertPassthroughFrameTimes(t *testing.T, request Request, outputDirectory, codec string) {
+	t.Helper()
+	request.OutputDirectory = outputDirectory
+	request.VideoPassthrough = true
+	for index := range request.DataKeys {
+		request.DataKeys[index].Plaintext = bytes.Repeat([]byte{0x2a}, 32)
+	}
+	result, err := Write(context.Background(), request)
+	if err != nil {
+		t.Fatalf("write passthrough media: %v", err)
+	}
+	source := result.Index.Sources[0]
+	if source.Codec != codec || source.StartMS != 100 || source.EndMS != 200 {
+		t.Fatalf("passthrough source = %#v", source)
+	}
+	probe := exec.Command("ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "packet=pts_time", "-of", "csv=p=0", filepath.Join(result.IndexPath, "..", filepath.FromSlash(source.Path)))
+	output, err := probe.Output()
+	if err != nil {
+		t.Fatalf("probe passthrough output: %v", err)
+	}
+	if got := strings.Fields(string(output)); strings.Join(got, " ") != "0.000000 0.033000 0.067000" && strings.Join(got, " ") != "0.000000 0.033333 0.066667" {
+		t.Fatalf("passthrough frame times = %q", got)
+	}
+}
+
+func TestH264SetTSEscapesAdjustmentsForTheFilterList(t *testing.T) {
+	got, err := h264SetTS([]uint64{9_000, 12_000, 16_500, 19_500}, 9_000, 3_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `N*3000+if(gte(N\,2)\,1500\,0)`; got != want {
+		t.Fatalf("h264SetTS = %q, want %q", got, want)
+	}
 }

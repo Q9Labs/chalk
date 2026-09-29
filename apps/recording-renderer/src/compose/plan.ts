@@ -40,6 +40,42 @@ function seconds(value: number): string {
   return value.toFixed(6);
 }
 
+/**
+ * Seconds of video decoded only to reach segment starts: each segment's input
+ * seek decodes forward from the nearest earlier keyframe. Keyframes are sorted.
+ */
+export function seekDecodeSeconds(keyframes: readonly number[], starts: readonly number[]): number {
+  let total = 0;
+  for (const start of starts) {
+    let previous = 0;
+    for (const keyframe of keyframes) {
+      if (keyframe > start) break;
+      previous = keyframe;
+    }
+    total += start - previous;
+  }
+  return total;
+}
+
+/**
+ * Re-encoding a track costs about four decodes of it (camera minute: x264
+ * ultrafast 3.5 CPU-s against 0.9 CPU-s to decode), so it pays once the
+ * segments' seeks would decode more than that.
+ */
+export function needsDenseKeyframes(keyframes: readonly number[], starts: readonly number[], durationSeconds: number): boolean {
+  return seekDecodeSeconds(keyframes, starts) > 4 * durationSeconds;
+}
+
+/** ffprobe arguments that print one line per keyframe time; only keyframes are decoded. */
+export function keyframeProbeArgs(path: string): readonly string[] {
+  return ["-v", "error", "-select_streams", "v:0", "-skip_frame", "nokey", "-show_entries", "frame=pts_time", "-of", "csv=p=0", path];
+}
+
+/** Re-encodes a track with a keyframe every 30 frames, keeping its timestamps, so each segment seek decodes at most about a second. */
+export function denseKeyframeArgs(inputPath: string, outputPath: string, output: ComposeOutput): readonly string[] {
+  return [...COMMON_ARGS, ...inputThreadArgs(output), "-i", inputPath, "-map", "0:v:0", "-an", ...outputThreadArgs(output), "-fps_mode", "passthrough", "-c:v", "libx264", "-preset", "ultrafast", "-g", "30", "-pix_fmt", "yuv420p", "-f", "matroska", outputPath];
+}
+
 /** An ffconcat list that shows each UI image for its span; the concat demuxer ignores the last duration unless the last file repeats. */
 export function overlayListFor(segment: VideoSegment, overlayPath: (sceneKey: string) => string, fps: number): string {
   const lines = ["ffconcat version 1.0"];

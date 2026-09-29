@@ -285,6 +285,7 @@ func (attempt *ProductionRenderAttempt) Run(ctx context.Context) error {
 			Environment: attempt.config.Environment, OriginAuthorityID: timeline.Clock.OriginAuthorityID,
 			CaptureEpoch: resolved.CaptureEpoch, DurationMS: resolved.DurationMillis, OutputDirectory: decodedDirectory,
 			FFmpegPath: attempt.config.FFmpegPath, Presentation: timeline, Bundles: bundles, DataKeys: dataKeys,
+			VideoPassthrough: attempt.config.Compose != nil,
 		})
 		return decodeErr
 	})

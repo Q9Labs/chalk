@@ -1,12 +1,12 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadImage, type Image } from "@napi-rs/canvas";
-import { overlayListFor, muxArgs, segmentArgs, segmentListFor, type ComposeEncoder, type ComposeOutput, type PlannedSource } from "./compose/plan.js";
+import { denseKeyframeArgs, keyframeProbeArgs, muxArgs, needsDenseKeyframes, overlayListFor, segmentArgs, segmentListFor, type ComposeEncoder, type ComposeOutput, type PlannedSource } from "./compose/plan.js";
 import { registerSubsetFamily, registerTextFallback } from "./compose/fonts.js";
 import { createPainter } from "./compose/paint.js";
-import { buildSceneSpans, frameCountFor, groupVideoSegments } from "./compose/scene.js";
+import { buildSceneSpans, frameCountFor, groupVideoSegments, type VideoSegment } from "./compose/scene.js";
 import { createWhiteboardRenderer } from "./compose/whiteboard.js";
 import { loadVerifiedRenderInputs, type VerifiedRenderInputs } from "./node/inputs.js";
 import { readFrameRenderRequest, validateResultPath } from "./node/request.js";
@@ -35,6 +35,7 @@ interface ComposeResultV1 {
   readonly frame_count: number;
   readonly overlay_count: number;
   readonly segment_count: number;
+  readonly dense_keyframe_source_count: number;
   readonly plan_wall_ms: number;
   readonly paint_wall_ms: number;
   readonly composite_wall_ms: number;
@@ -65,7 +66,7 @@ async function main(): Promise<void> {
     const paintWallMs = performance.now() - paintStarted;
 
     const compositeStarted = performance.now();
-    const sources = plannedSources(inputs);
+    const { sources, denseCount } = await seekableSources(args.ffmpegPath, inputs, segments, output, workDirectory);
     const segmentPaths: string[] = [];
     for (const [index, segment] of segments.entries()) {
       const listPath = join(workDirectory, `overlays-${index}.ffconcat`);
@@ -98,6 +99,7 @@ async function main(): Promise<void> {
       frame_count: frameCount,
       overlay_count: overlays.size,
       segment_count: segments.length,
+      dense_keyframe_source_count: denseCount,
       plan_wall_ms: Math.round(planWallMs),
       paint_wall_ms: Math.round(paintWallMs),
       composite_wall_ms: Math.round(compositeWallMs),
@@ -146,19 +148,53 @@ async function paintOverlays(spans: ReturnType<typeof buildSceneSpans>, inputs: 
   return overlays;
 }
 
-function plannedSources(inputs: VerifiedRenderInputs): ReadonlyMap<string, PlannedSource> {
+/**
+ * Video sources as recorded, except tracks whose sparse keyframes would make
+ * the segments' seeks decode more than a one-off re-encode costs.
+ */
+async function seekableSources(ffmpegPath: string, inputs: VerifiedRenderInputs, segments: readonly VideoSegment[], output: ComposeOutput, workDirectory: string): Promise<{ readonly sources: ReadonlyMap<string, PlannedSource>; readonly denseCount: number }> {
   const sources = new Map<string, PlannedSource>();
+  let denseCount = 0;
   for (const source of inputs.media.sources) {
     const file = inputs.mediaFiles.get(source.sourceId);
-    if (source.kind !== "microphone" && file !== undefined) sources.set(source.sourceId, { path: file.path, startMs: source.startMs });
+    if (source.kind === "microphone" || file === undefined) continue;
+    const starts = segments.filter((segment) => segment.placements.some((placement) => placement.sourceId === source.sourceId)).map((segment) => Math.max(0, segment.startFrame / output.fps - source.startMs / 1_000));
+    let path = file.path;
+    if (starts.length > 0) {
+      const keyframes = (await runProbe(ffprobePathFor(ffmpegPath), keyframeProbeArgs(path))).split("\n").map(Number.parseFloat).filter(Number.isFinite);
+      if (needsDenseKeyframes(keyframes, starts, (source.endMs - source.startMs) / 1_000)) {
+        path = join(workDirectory, `dense-${denseCount}.mkv`);
+        await runFFmpeg(ffmpegPath, denseKeyframeArgs(file.path, path, output), `dense keyframes ${source.sourceId}`);
+        denseCount++;
+      }
+    }
+    sources.set(source.sourceId, { path, startMs: source.startMs });
   }
-  return sources;
+  return { sources, denseCount };
+}
+
+function ffprobePathFor(ffmpegPath: string): string {
+  return basename(ffmpegPath) === ffmpegPath ? "ffprobe" : join(dirname(ffmpegPath), "ffprobe");
 }
 
 async function runFFmpeg(ffmpegPath: string, args: readonly string[], label: string): Promise<void> {
-  const child = spawn(ffmpegPath, args, { stdio: ["ignore", "ignore", "pipe"] });
+  await runTool(ffmpegPath, args, `ffmpeg ${label}`);
+}
+
+async function runProbe(ffprobePath: string, args: readonly string[]): Promise<string> {
+  return runTool(ffprobePath, args, "ffprobe");
+}
+
+/** Runs a media tool, tracked so a stopped compositor kills it, and returns its stdout. */
+async function runTool(path: string, args: readonly string[], label: string): Promise<string> {
+  const child = spawn(path, args, { stdio: ["ignore", "pipe", "pipe"] });
   running.add(child);
+  let stdout = "";
   let stderr = "";
+  child.stdout.setEncoding("utf8");
+  child.stdout.on("data", (chunk: string) => {
+    stdout += chunk;
+  });
   child.stderr.setEncoding("utf8");
   child.stderr.on("data", (chunk: string) => {
     if (stderr.length < 16_384) stderr += chunk;
@@ -168,7 +204,8 @@ async function runFFmpeg(ffmpegPath: string, args: readonly string[], label: str
       child.once("error", reject);
       child.once("close", resolve);
     });
-    if (code !== 0) throw new Error(`ffmpeg ${label} exited with ${code}: ${stderr.trim()}`);
+    if (code !== 0) throw new Error(`${label} exited with ${code}: ${stderr.trim()}`);
+    return stdout;
   } finally {
     running.delete(child);
   }
