@@ -19,19 +19,7 @@ describe("SpaceClient media convergence", () => {
       return { outcome: "confirmed" as const, errorCode: null };
     });
     const command = vi.fn(() => pending);
-    const originalMedia = platform.dependencies.createMediaClient;
-    const client = createSpaceClientForPlatform(
-      { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
-      {
-        ...platform,
-        dependencies: {
-          ...platform.dependencies,
-          mediaDevices: { getUserMedia: async () => mediaStream(track) },
-          createMediaClient: (input) => ({ ...originalMedia(input), setLocalPublicationTarget: target }),
-          createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: command }),
-        },
-      },
-    );
+    const client = capturedClient(platform, track, { media: { setLocalPublicationTarget: target }, sync: { setMicrophoneEnabled: command } });
     try {
       await client.join({ microphone: true, camera: false });
       platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ source: "microphone", enabled: true, publicationId: "publication-1", track }] });
@@ -54,18 +42,7 @@ describe("SpaceClient media convergence", () => {
       track.enabled = false;
       platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ source: "microphone", enabled: false, publicationId: null, track }] });
     });
-    const originalMedia = platform.dependencies.createMediaClient;
-    const client = createSpaceClientForPlatform(
-      { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
-      {
-        ...platform,
-        dependencies: {
-          ...platform.dependencies,
-          mediaDevices: { getUserMedia: async () => mediaStream(track) },
-          createMediaClient: (input) => ({ ...originalMedia(input), closeForcedLocalPublication: close }),
-        },
-      },
-    );
+    const client = capturedClient(platform, track, { media: { closeForcedLocalPublication: close } });
     try {
       await client.join({ microphone: true, camera: false });
       const active = { participantId: "participant-1", source: "microphone" as const, enabled: true, publicationId: "publication-1" };
@@ -173,13 +150,7 @@ describe("SpaceClient media convergence", () => {
   it("shows a disabled provider publication as muted after moderation", async () => {
     const platform = createCoreTestPlatform();
     const track = mediaTrack();
-    const client = createSpaceClientForPlatform(
-      { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
-      {
-        ...platform,
-        dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia: async () => mediaStream(track) } },
-      },
-    );
+    const client = capturedClient(platform, track);
     try {
       await client.join({ microphone: true, camera: false });
       platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ source: "microphone", enabled: true, publicationId: "publication-1", track }] });
@@ -242,6 +213,25 @@ function mediaTrack(): MediaStreamTrack {
     getSettings: () => ({}),
     stop: () => undefined,
   });
+}
+
+function capturedClient(
+  platform: ReturnType<typeof createCoreTestPlatform>,
+  track: MediaStreamTrack,
+  overrides: { readonly media?: Partial<ReturnType<typeof platform.dependencies.createMediaClient>>; readonly sync?: Partial<ConnectionSyncClient> } = {},
+): ReturnType<typeof createSpaceClientForPlatform> {
+  return createSpaceClientForPlatform(
+    { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+    {
+      ...platform,
+      dependencies: {
+        ...platform.dependencies,
+        mediaDevices: { getUserMedia: async () => mediaStream(track) },
+        createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), ...overrides.media }),
+        createSyncClient: () => ({ ...platform.sync, ...overrides.sync }),
+      },
+    },
+  );
 }
 
 function mediaStream(track: MediaStreamTrack): MediaStream {

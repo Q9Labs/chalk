@@ -216,8 +216,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return { outcome: "confirmed", errorCode: null };
     } catch (error) {
       if (!this.#stopped) this.#reportError(error);
-      const code = error instanceof CloudflareSFUError ? error.code : "media_failed";
-      return { outcome: code === "signaling_timeout" || code === "negotiation_timeout" ? "ambiguous" : "retryable_failure", errorCode: code };
+      return mediaTargetFailure(error);
     }
   }
 
@@ -261,11 +260,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       try {
         const response = await this.#requireTransport().closeTracks({
           connectionId: this.#bootstrap.connectionId,
-          sessionDescription: requireDescription(offer),
+          ...providerDescription(requireDescription(offer)),
           tracks: [{ mid, source, publicationId }],
           force: false,
         });
-        await connection.setRemoteDescription(requireSFUDescription(response.sessionDescription));
+        await this.#applyProviderDescription(response, connection);
       } catch (error) {
         await this.#rollbackLocalOffer(connection);
         if (!this.#stopped) this.#reportError(error);
@@ -480,9 +479,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         source: state.source,
       }),
     );
-    const response = await this.#requireTransport().addTracks({ connectionId, sessionDescription: requireDescription(offer), tracks });
+    const response = await this.#requireTransport().addTracks({ connectionId, ...providerDescription(requireDescription(offer)), tracks });
     this.#requireGeneration(generation);
-    await connection.setRemoteDescription(requireSFUDescription(response.sessionDescription));
+    await this.#applyProviderDescription(response, connection);
     return response;
   }
 
@@ -671,12 +670,15 @@ export class CloudflareSFUClient implements ClientMediaPlane {
 
   async #completeRenegotiation(response: CloudflareSFUTracksResponse, connection: RTCPeerConnection, connectionId: string, generation: number): Promise<void> {
     if (!response.requiresImmediateRenegotiation) return;
-    if (!response.sessionDescription) throw new CloudflareSFUError("Cloudflare did not return a remote-track offer", "signaling_failed");
-    await connection.setRemoteDescription(response.sessionDescription);
+    await this.#applyProviderDescription(response, connection);
     const answer = await connection.createAnswer();
     await connection.setLocalDescription(answer);
-    await this.#requireTransport().renegotiate({ connectionId, sessionDescription: requireDescription(answer) });
+    await this.#requireTransport().renegotiate({ connectionId, ...providerDescription(requireDescription(answer)) });
     this.#requireGeneration(generation);
+  }
+
+  async #applyProviderDescription(response: CloudflareSFUTracksResponse, connection = this.#connection): Promise<void> {
+    await connection.setRemoteDescription(requireSFUDescription(response.sessionDescription));
   }
 
   #serializeSDP<T>(operation: () => Promise<T>): Promise<T> {
@@ -1176,4 +1178,14 @@ function publicationEqual(left: CloudflareSFULocalTrack, right: CloudflareSFULoc
 
 function remotePublicationEqual(left: CloudflareSFURemoteTrack, right: CloudflareSFURemoteTrack | undefined): boolean {
   return right !== undefined && left.participantId === right.participantId && left.source === right.source && left.publicationId === right.publicationId && left.track === right.track;
+}
+
+function providerDescription(description: ReturnType<typeof requireDescription>): { readonly sessionDescription: ReturnType<typeof requireDescription> } {
+  return { sessionDescription: description };
+}
+
+function mediaTargetFailure(error: unknown): MediaPlaneResult {
+  const code = error instanceof CloudflareSFUError ? error.code : "media_failed";
+  const ambiguous = code === "signaling_timeout" || code === "negotiation_timeout";
+  return { outcome: ambiguous ? "ambiguous" : "retryable_failure", errorCode: code };
 }

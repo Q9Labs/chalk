@@ -3,6 +3,15 @@ import { describe, expect, it, vi } from "vitest";
 import { CloudflareSFUClient, CloudflareSFUError, createCloudflareSFUHTTPTransport, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
 import type { CloudflareSFUBootstrap, CloudflareSFUClientOptions, CloudflareSFUCloseTrackRequest, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
 
+async function expectStalledRequestRecovers(transport: CloudflareSFUSignalingTransport, timeoutMs: number, wasAborted: () => boolean): Promise<void> {
+  const stalled = transport.listPublications();
+  const rejected = expect(stalled).rejects.toMatchObject({ code: "signaling_timeout" });
+  await vi.advanceTimersByTimeAsync(timeoutMs);
+  await rejected;
+  expect(wasAborted()).toBe(true);
+  await expect(transport.listPublications()).resolves.toMatchObject({ publications: [] });
+}
+
 describe("Cloudflare SFU HTTP signaling", () => {
   it("reads a fresh media credential before every signaling request", async () => {
     const authoritativePublicationId = versionedPublicationID("connection-1", "0", "camera-track");
@@ -101,12 +110,7 @@ describe("Cloudflare SFU HTTP signaling", () => {
         return new Response(JSON.stringify({ incarnation: 0, sequence: 0, publications: [] }), { status: 200 });
       });
       const transport = createCloudflareSFUHTTPTransport({ apiBaseURL: "http://localhost", bearerToken: "media-token", tenantId: "t", spaceId: "s", episodeId: "e", participantId: "p", fetch, requestTimeoutMs: 10 });
-      const stalled = transport.listPublications();
-      const rejected = expect(stalled).rejects.toMatchObject({ code: "signaling_timeout" });
-      await vi.advanceTimersByTimeAsync(10);
-      await rejected;
-      expect(aborted).toBe(true);
-      await expect(transport.listPublications()).resolves.toMatchObject({ publications: [] });
+      await expectStalledRequestRecovers(transport, 10, () => aborted);
     } finally {
       vi.useRealTimers();
     }
@@ -152,12 +156,7 @@ describe("Cloudflare SFU HTTP signaling", () => {
       };
       const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(JSON.stringify({ incarnation: 0, sequence: 0, publications: [] }), { status: 200 }));
       const transport = createCloudflareSFUHTTPTransport({ apiBaseURL: "http://localhost", credential, tenantId: "t", spaceId: "s", episodeId: "e", participantId: "p", fetch });
-      const stalled = transport.listPublications();
-      const rejected = expect(stalled).rejects.toMatchObject({ code: "signaling_timeout" });
-      await vi.advanceTimersByTimeAsync(7_000);
-      await rejected;
-      expect(aborted).toBe(true);
-      await expect(transport.listPublications()).resolves.toMatchObject({ publications: [] });
+      await expectStalledRequestRecovers(transport, 7_000, () => aborted);
     } finally {
       vi.useRealTimers();
     }
@@ -216,7 +215,7 @@ describe("Cloudflare SFU client", () => {
     expect(microphone.enabled).toBe(false);
     expect(harness.client.getSnapshot().localTracks[0]).toMatchObject({ enabled: false, publicationId: null });
     await closing;
-    expect(harness.transport.closeInputs[0]).toMatchObject({ force: false, sessionDescription: { type: "offer" }, tracks: [{ mid: oldMID }] });
+    expect(harness.transport.closeInputs[0]).toMatchObject({ force: false, tracks: [{ mid: oldMID }] });
     expect(harness.peers[0]?.activeTransceiverCount()).toBe(0);
     harness.client.setLocalSourceIntent("microphone", true);
     await expect(harness.client.setLocalPublicationTarget({ operationId: "reenable", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toMatchObject({ outcome: "confirmed" });
@@ -714,7 +713,7 @@ describe("Cloudflare SFU client", () => {
     harness.client.prepareLocalTrack("screen", screen as unknown as MediaStreamTrack);
     harness.transport.failNextLocalPublish = true;
 
-    await expect(harness.client.setLocalPublicationTarget({ operationId: "screen-start", participantId: "participant-1", source: "screen", enabled: true })).resolves.toEqual({
+    await expect(setScreenTarget(harness.client, "screen-start", true)).resolves.toEqual({
       outcome: "retryable_failure",
       errorCode: "signaling_failed",
     });
@@ -734,7 +733,7 @@ describe("Cloudflare SFU client", () => {
 
     await harness.client.clearPreparedLocalTrack("screen");
     harness.client.prepareLocalTrack("screen", new FakeTrack("replacement-screen", "video") as unknown as MediaStreamTrack);
-    await expect(harness.client.setLocalPublicationTarget({ operationId: "replacement-screen-start", participantId: "participant-1", source: "screen", enabled: true })).resolves.toEqual({
+    await expect(setScreenTarget(harness.client, "replacement-screen-start", true)).resolves.toEqual({
       outcome: "confirmed",
       errorCode: null,
     });

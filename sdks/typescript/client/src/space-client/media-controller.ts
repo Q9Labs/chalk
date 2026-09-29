@@ -569,14 +569,17 @@ class MediaControllerRuntime implements MediaControllerEffects {
         continue;
       }
       if (!this.#observedPublicationIds.delete(source)) continue;
-      this.#intentRevisions.set(source, (this.#intentRevisions.get(source) ?? 0) + 1);
-      if (source !== "screen") this.#intent[source] = false;
-      const track = this.#tracks.get(source);
-      if (track) track.enabled = false;
-      ports.media.setLocalSourceIntent?.(source, false);
-      if (ports.media.closeForcedLocalPublication) void ports.media.closeForcedLocalPublication(source).catch(() => undefined);
-      this.#publish();
+      this.#pauseForcedSource(ports, source);
     }
+  }
+  #pauseForcedSource(ports: ConnectionPorts, source: MediaSource): void {
+    this.#intentRevisions.set(source, (this.#intentRevisions.get(source) ?? 0) + 1);
+    if (source !== "screen") this.#intent[source] = false;
+    const track = this.#tracks.get(source);
+    if (track) track.enabled = false;
+    ports.media.setLocalSourceIntent?.(source, false);
+    if (ports.media.closeForcedLocalPublication) void ports.media.closeForcedLocalPublication(source).catch(() => undefined);
+    this.#publish();
   }
   #request(request: V1DirectedRequest): void {
     if (request.expires_at_ms <= this.#now()) return;
@@ -692,11 +695,14 @@ function initialTrackEntries(microphone: MediaStreamTrack | undefined, camera: M
 function localMedia(source: MediaSource, tracks: ReadonlyMap<MediaSource, MediaStreamTrack>, snapshot: ConnectionMediaSnapshot | undefined, intended: boolean, connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"], pending: boolean) {
   const track = tracks.get(source) ?? null;
   const publication = snapshot?.localTracks.find((candidate) => candidate.source === source);
-  if (!intended && track?.enabled === false && publication?.enabled === false) return Object.freeze({ source, state: "disabled" as const, track });
+  if (locallyMuted(intended, track, publication)) return Object.freeze({ source, state: "disabled" as const, track });
   if (pending) return Object.freeze({ source, state: "requesting" as const, track });
   if (publication?.enabled) return Object.freeze({ source, state: "enabled" as const, track });
   if (publication && connectionState === "live") return Object.freeze({ source, state: "disabled" as const, track });
   return Object.freeze({ source, state: localMediaState(source, track, intended, connectionState), track });
+}
+function locallyMuted(intended: boolean, track: MediaStreamTrack | null, publication: ConnectionMediaSnapshot["localTracks"][number] | undefined): boolean {
+  return !intended && track?.enabled === false && publication?.enabled === false;
 }
 function localMediaState(source: MediaSource, track: MediaStreamTrack | null, intended: boolean, connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"]): MediaSlice["local"][MediaSource]["state"] {
   if (!mediaIsDesired(source, track, intended)) return inactiveLocalMediaState(connectionState, track);
