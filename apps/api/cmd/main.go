@@ -260,6 +260,7 @@ func run() error {
 		}
 	}
 	recordingCapturePlanRepository := postgres.NewRecordingCapturePlanRepositoryWithTransactor(pool, diagnostics.Queries)
+	recordingCapturePlanRepository = recordingCapturePlanRepository.WithLowCameraLayerEnabled(cfg.RecordingLowCameraLayerEnabled)
 	recordingCapturePlanService := captureplan.NewService(recordingCapturePlanRepository)
 	var managedSFU sfuadapter.Adapter
 	if cfg.DefaultMediaPlane == spaces.MediaPlaneProviderCloudflareSFU || cfg.ProviderBridge.Enabled {
