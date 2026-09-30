@@ -4,7 +4,7 @@ import type { ConnectionLifecycleSnapshot } from "../connection";
 import { SpaceStore } from "./store";
 
 describe("SpaceStore connection notice", () => {
-  it("shows reconnecting while live Sync reconnects and clears it when Sync returns", () => {
+  it("shows reconnecting for a silent live connection and clears it when Sync responds", () => {
     const store = new SpaceStore();
     const live: ConnectionLifecycleSnapshot = {
       state: "live",
@@ -20,7 +20,7 @@ describe("SpaceStore connection notice", () => {
     expect(store.getSnapshot().connection.status).toBe("reconnecting");
 
     store.updateConnection({ ...live, connection: { sync: "connecting", media: "healthy" } });
-    expect(store.getSnapshot().connection.status).toBe("reconnecting");
+    expect(store.getSnapshot().connection.status).toBe("live");
 
     store.updateConnection(live);
     expect(store.getSnapshot().connection.status).toBe("live");
