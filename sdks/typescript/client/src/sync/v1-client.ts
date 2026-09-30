@@ -40,7 +40,7 @@ const MAX_PROJECTION_EVENT_EVIDENCE = 256;
 const CLIENT_RESTART_CLOSE_CODE = 4000;
 const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5_000;
-const NOTICE_PROBE_INTERVAL_MS = 250;
+const NOTICE_PROBE_INTERVAL_MS = 500;
 const NOTICE_SILENCE_MS = 750;
 
 type RequestDeferred = Deferred<V1DirectedRequestResult> & { readonly frame: SyncV1ClientFrame };
@@ -78,6 +78,7 @@ export class V1SyncClient implements V1CollaborationClient {
   #heartbeatTimer: unknown;
   #missedHeartbeats = 0;
   #noticeTimer: unknown;
+  #noticeProbeTimer: unknown;
   #noticeLastInboundAt = 0;
   #noticeUnresponsive = false;
   #unsubscribeLifecycle: (() => void) | undefined;
@@ -386,10 +387,13 @@ export class V1SyncClient implements V1CollaborationClient {
     try {
       if (typeof data !== "string" || encoder.encode(data).byteLength > SyncProtocolLimits.snapshotEncodedBytes) throw new V1ReplicaError("invalid inbound frame size");
       const frame = decodeV1ServerFrame(data);
-      this.#noticeLastInboundAt = this.#now();
-      if (this.#noticeUnresponsive) {
-        this.#noticeUnresponsive = false;
-        this.#emit();
+      if (this.#phase.phase === "live") {
+        this.#noticeLastInboundAt = this.#now();
+        this.#scheduleNoticeCheck();
+        if (this.#noticeUnresponsive) {
+          this.#noticeUnresponsive = false;
+          this.#emit();
+        }
       }
       await this.#handleFrame(frame);
     } catch {
@@ -790,22 +794,33 @@ export class V1SyncClient implements V1CollaborationClient {
   #startNoticeProbe(): void {
     this.#clearNoticeProbe();
     this.#noticeLastInboundAt = this.#now();
+    this.#scheduleNoticeCheck();
     const tick = () => {
-      this.#noticeTimer = undefined;
+      this.#noticeProbeTimer = undefined;
       if (this.#phase.phase !== "live") return;
-      if (!this.#noticeUnresponsive && this.#now() - this.#noticeLastInboundAt >= NOTICE_SILENCE_MS) {
-        this.#noticeUnresponsive = true;
-        this.#emit();
-      }
       this.#send({ type: "ping" });
-      this.#noticeTimer = this.#clock().setTimeout(tick, NOTICE_PROBE_INTERVAL_MS);
+      this.#noticeProbeTimer = this.#clock().setTimeout(tick, NOTICE_PROBE_INTERVAL_MS);
     };
-    this.#noticeTimer = this.#clock().setTimeout(tick, NOTICE_PROBE_INTERVAL_MS);
+    this.#noticeProbeTimer = this.#clock().setTimeout(tick, NOTICE_PROBE_INTERVAL_MS);
+  }
+
+  #scheduleNoticeCheck(): void {
+    if (this.#noticeTimer !== undefined) this.#clock().clearTimeout(this.#noticeTimer);
+    const remaining = Math.max(0, NOTICE_SILENCE_MS - (this.#now() - this.#noticeLastInboundAt));
+    this.#noticeTimer = this.#clock().setTimeout(() => {
+      this.#noticeTimer = undefined;
+      if (this.#phase.phase !== "live" || this.#noticeUnresponsive) return;
+      if (this.#now() - this.#noticeLastInboundAt < NOTICE_SILENCE_MS) return this.#scheduleNoticeCheck();
+      this.#noticeUnresponsive = true;
+      this.#emit();
+    }, remaining);
   }
 
   #clearNoticeProbe(): void {
     if (this.#noticeTimer !== undefined) this.#clock().clearTimeout(this.#noticeTimer);
+    if (this.#noticeProbeTimer !== undefined) this.#clock().clearTimeout(this.#noticeProbeTimer);
     this.#noticeTimer = undefined;
+    this.#noticeProbeTimer = undefined;
     this.#noticeUnresponsive = false;
   }
 

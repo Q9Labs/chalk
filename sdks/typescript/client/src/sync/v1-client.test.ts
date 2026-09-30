@@ -206,9 +206,11 @@ describe("V1SyncClient", () => {
   it("signals a silent live socket for presentation without restarting it or changing its phase", async () => {
     const clock = new TestClock();
     const { client, socket } = await liveClient({ clock });
-    clock.advance(1_000);
+    clock.advance(750);
     expect(client.getSnapshot().connection).toMatchObject({ phase: "live", noticeUnresponsive: true });
     expect(socket.closeCalls).toEqual([]);
+    clock.advance(250);
+    expect(socket.frames().filter((frame) => frame.type === "ping")).toHaveLength(2);
     socket.receive({ type: "pong" });
     await settle();
     expect(client.getSnapshot().connection).toMatchObject({ phase: "live", noticeUnresponsive: false });
