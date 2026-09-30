@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -193,6 +194,15 @@ func (s Service) Finalize(ctx context.Context, input FinalizeInput) (AllocationR
 			return AllocationResult{}, ErrAuthorityMismatch
 		}
 		return AllocationResult{}, fmt.Errorf("authorize recording object finalization: %w", err)
+	}
+	schema, err := s.repository.BundleSchema(ctx, input.Authority)
+	if err != nil {
+		return AllocationResult{}, fmt.Errorf("load recording object bundle schema: %w", err)
+	}
+	if (schema == recordingpipeline.LegacyRecordingBundleSchema && input.ContentType != "application/vnd.chalk.recording-bundle+json") ||
+		(schema == recordingpipeline.RecordingBundleSchema && input.ContentType != "application/vnd.chalk.recording-bundle") ||
+		(schema != recordingpipeline.LegacyRecordingBundleSchema && schema != recordingpipeline.RecordingBundleSchema) {
+		return AllocationResult{}, ErrAuthorityMismatch
 	}
 	allocation, err := s.repository.GetAllocation(ctx, input.AllocationID)
 	if errors.Is(err, ErrAllocationNotFound) {

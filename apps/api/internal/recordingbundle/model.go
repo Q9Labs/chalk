@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	// Version is frozen. A change to the wire contract requires a new version.
-	Version = "recording_bundle.v1"
+	LegacyVersion = "recording_bundle.v1"
+	Version       = "recording_bundle.v2"
 
 	TargetBundleDurationMilliseconds int64 = 10_000
 	MaxBundleDurationMilliseconds    int64 = 15_000
@@ -99,6 +99,7 @@ type EncryptionContext struct {
 	RecordingID  string `json:"recording_id"`
 	JobID        string `json:"job_id"`
 	BundleSchema string `json:"bundle_schema"`
+	KeyHandle    string `json:"key_handle,omitempty"`
 }
 
 // Manifest authenticates the identity and range of one sealed bundle.
@@ -206,9 +207,8 @@ type Gap struct {
 	Terminal                   bool   `json:"terminal"`
 }
 
-// Bundle is the decoded, immutable logical representation of one
-// recording_bundle.v1 envelope. Digest fields are populated by Encode and
-// verified by Decode.
+// Bundle is the decoded, immutable logical representation of either stored
+// bundle version. Digest fields are populated by Encode and verified by Decode.
 type Bundle struct {
 	Version        string                `json:"version"`
 	Manifest       Manifest              `json:"manifest"`
@@ -256,8 +256,11 @@ func (c EncryptionContext) validate() error {
 			return err
 		}
 	}
-	if c.BundleSchema != Version {
+	if c.BundleSchema != Version && c.BundleSchema != LegacyVersion {
 		return fmt.Errorf("%w: encryption bundle schema %q", ErrUnknownBundleVersion, c.BundleSchema)
+	}
+	if err := validateIdentifier("key_handle", c.KeyHandle, false); err != nil {
+		return err
 	}
 	return nil
 }
@@ -280,7 +283,7 @@ func (t TrackIdentity) validate() error {
 }
 
 func (m Manifest) validate() error {
-	if m.Version != Version {
+	if m.Version != Version && m.Version != LegacyVersion {
 		return fmt.Errorf("%w: manifest version %q", ErrUnknownBundleVersion, m.Version)
 	}
 	if err := validateIdentifier("recording_id", m.RecordingID, true); err != nil {
@@ -309,6 +312,12 @@ func (m Manifest) validate() error {
 	}
 	if err := m.Encryption.validate(); err != nil {
 		return err
+	}
+	if m.Encryption.BundleSchema != m.Version {
+		return fmt.Errorf("%w: encryption schema does not match manifest", ErrInvalidBundle)
+	}
+	if m.Version == LegacyVersion && m.Encryption.KeyHandle != "" {
+		return fmt.Errorf("%w: legacy manifest has a key handle", ErrInvalidBundle)
 	}
 	if m.Encryption.RecordingID != m.RecordingID {
 		return fmt.Errorf("%w: encryption recording does not match manifest", ErrInvalidBundle)

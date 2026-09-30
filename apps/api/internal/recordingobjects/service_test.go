@@ -25,7 +25,7 @@ func TestAllocateGeneratesServerOwnedObjectAndOpaqueToken(t *testing.T) {
 	result, err := service.Allocate(context.Background(), recordingobjects.AllocateInput{
 		Authority: testAuthority(), AllocationID: allocationID, SequenceNumber: 7, ExpectedByteSize: 128,
 		Codec: "opus", MonotonicEndMillis: 10, MediaEndMillis: 10,
-		ExpectedChecksumSHA256: checksum, ContentType: "application/octet-stream",
+		ExpectedChecksumSHA256: checksum, ContentType: "application/vnd.chalk.recording-bundle+json",
 		EncryptionContextDigest: bytesOf(32, 4), ExpiresAt: now.Add(5 * time.Minute),
 	})
 	if err != nil {
@@ -48,13 +48,13 @@ func TestCommitRereadsAndPersistsAuthoritativeFacts(t *testing.T) {
 		t.Run("version="+version, func(t *testing.T) {
 			now := time.Unix(100, 0).UTC()
 			checksum := bytesOf(32, 3)
-			store := &storeStub{uploadURL: objectstorage.SignedURL{Method: "PUT", URL: "https://storage.test/upload"}, facts: objectstorage.ObjectFacts{Object: objectstorage.Object{ETag: "etag", VersionID: version, ContentType: "application/octet-stream", Size: 128, ChecksumSHA256: base64.StdEncoding.EncodeToString(checksum)}}}
+			store := &storeStub{uploadURL: objectstorage.SignedURL{Method: "PUT", URL: "https://storage.test/upload"}, facts: objectstorage.ObjectFacts{Object: objectstorage.Object{ETag: "etag", VersionID: version, ContentType: "application/vnd.chalk.recording-bundle+json", Size: 128, ChecksumSHA256: base64.StdEncoding.EncodeToString(checksum)}}}
 			repository := &repositoryStub{}
 			service, err := recordingobjects.NewService(objectstorage.NewService(store), repository, recordingobjects.Config{Now: func() time.Time { return now }})
 			if err != nil {
 				t.Fatalf("new service: %v", err)
 			}
-			allocation, err := service.Allocate(context.Background(), recordingobjects.AllocateInput{Authority: testAuthority(), SequenceNumber: 1, Codec: "opus", MonotonicEndMillis: 10, MediaEndMillis: 10, ExpectedByteSize: 128, ExpectedChecksumSHA256: checksum, ContentType: "application/octet-stream", EncryptionContextDigest: bytesOf(32, 4), ExpiresAt: now.Add(5 * time.Minute)})
+			allocation, err := service.Allocate(context.Background(), recordingobjects.AllocateInput{Authority: testAuthority(), SequenceNumber: 1, Codec: "opus", MonotonicEndMillis: 10, MediaEndMillis: 10, ExpectedByteSize: 128, ExpectedChecksumSHA256: checksum, ContentType: "application/vnd.chalk.recording-bundle+json", EncryptionContextDigest: bytesOf(32, 4), ExpiresAt: now.Add(5 * time.Minute)})
 			if err != nil {
 				t.Fatalf("allocate: %v", err)
 			}
@@ -72,13 +72,13 @@ func TestCommitRereadsAndPersistsAuthoritativeFacts(t *testing.T) {
 func TestCommitRejectsStaleAuthorityAndFactMismatch(t *testing.T) {
 	now := time.Unix(100, 0).UTC()
 	checksum := bytesOf(32, 3)
-	store := &storeStub{uploadURL: objectstorage.SignedURL{Method: "PUT", URL: "https://storage.test/upload"}, facts: objectstorage.ObjectFacts{Object: objectstorage.Object{ETag: "etag", VersionID: "version", ContentType: "application/octet-stream", Size: 128, ChecksumSHA256: base64.StdEncoding.EncodeToString(bytesOf(32, 9))}}}
+	store := &storeStub{uploadURL: objectstorage.SignedURL{Method: "PUT", URL: "https://storage.test/upload"}, facts: objectstorage.ObjectFacts{Object: objectstorage.Object{ETag: "etag", VersionID: "version", ContentType: "application/vnd.chalk.recording-bundle+json", Size: 128, ChecksumSHA256: base64.StdEncoding.EncodeToString(bytesOf(32, 9))}}}
 	repository := &repositoryStub{}
 	service, err := recordingobjects.NewService(objectstorage.NewService(store), repository, recordingobjects.Config{Now: func() time.Time { return now }})
 	if err != nil {
 		t.Fatalf("new service: %v", err)
 	}
-	allocation, err := service.Allocate(context.Background(), recordingobjects.AllocateInput{Authority: testAuthority(), SequenceNumber: 1, Codec: "opus", MonotonicEndMillis: 10, MediaEndMillis: 10, ExpectedByteSize: 128, ExpectedChecksumSHA256: checksum, ContentType: "application/octet-stream", EncryptionContextDigest: bytesOf(32, 4), ExpiresAt: now.Add(5 * time.Minute)})
+	allocation, err := service.Allocate(context.Background(), recordingobjects.AllocateInput{Authority: testAuthority(), SequenceNumber: 1, Codec: "opus", MonotonicEndMillis: 10, MediaEndMillis: 10, ExpectedByteSize: 128, ExpectedChecksumSHA256: checksum, ContentType: "application/vnd.chalk.recording-bundle+json", EncryptionContextDigest: bytesOf(32, 4), ExpiresAt: now.Add(5 * time.Minute)})
 	if err != nil {
 		t.Fatalf("allocate: %v", err)
 	}
@@ -116,14 +116,14 @@ func TestReserveAssignsSequenceAndFinalizeBindsFacts(t *testing.T) {
 	if reserved.SequenceNumber != 4 || reserved.AllocationVersion != 1 || replayed.ID != reserved.ID {
 		t.Fatalf("reservation = %#v replay = %#v", reserved, replayed)
 	}
-	result, err := service.Finalize(context.Background(), recordingobjects.FinalizeInput{Authority: testAuthority(), AllocationID: reserved.ID, ExpectedByteSize: 128, ExpectedChecksumSHA256: checksum, ContentType: "application/octet-stream", ExpiresAt: now.Add(5 * time.Minute), Codec: "opus", MonotonicEndMillis: 10, MediaEndMillis: 10})
+	result, err := service.Finalize(context.Background(), recordingobjects.FinalizeInput{Authority: testAuthority(), AllocationID: reserved.ID, ExpectedByteSize: 128, ExpectedChecksumSHA256: checksum, ContentType: "application/vnd.chalk.recording-bundle+json", ExpiresAt: now.Add(5 * time.Minute), Codec: "opus", MonotonicEndMillis: 10, MediaEndMillis: 10})
 	if err != nil {
 		t.Fatalf("finalize: %v", err)
 	}
 	if result.UploadToken == "" || repository.allocation.State != "allocated" || len(repository.allocation.TokenHash) != 32 || store.uploadInput.ContentLength != 128 {
 		t.Fatalf("finalized allocation = %#v upload = %#v", repository.allocation, store.uploadInput)
 	}
-	if _, err := service.Finalize(context.Background(), recordingobjects.FinalizeInput{Authority: testAuthority(), AllocationID: reserved.ID, ExpectedByteSize: 128, ExpectedChecksumSHA256: checksum, ContentType: "application/octet-stream", ExpiresAt: now.Add(5 * time.Minute), Codec: "opus", MonotonicEndMillis: 10, MediaEndMillis: 10}); err != nil {
+	if _, err := service.Finalize(context.Background(), recordingobjects.FinalizeInput{Authority: testAuthority(), AllocationID: reserved.ID, ExpectedByteSize: 128, ExpectedChecksumSHA256: checksum, ContentType: "application/vnd.chalk.recording-bundle+json", ExpiresAt: now.Add(5 * time.Minute), Codec: "opus", MonotonicEndMillis: 10, MediaEndMillis: 10}); err != nil {
 		t.Fatalf("replay finalize: %v", err)
 	}
 }
@@ -156,7 +156,7 @@ func TestReserveReplaysLegacyCanonicalObjectKeyThroughFinalize(t *testing.T) {
 	if err != nil || reserved.ObjectKey != legacyKey {
 		t.Fatalf("replay legacy reservation: allocation=%#v error=%v", reserved, err)
 	}
-	if _, err := service.Finalize(context.Background(), recordingobjects.FinalizeInput{Authority: testAuthority(), AllocationID: reserved.ID, ExpectedByteSize: 128, ExpectedChecksumSHA256: checksum, ContentType: "application/octet-stream", ExpiresAt: now.Add(5 * time.Minute), Codec: "opus", MonotonicEndMillis: 10, MediaEndMillis: 10}); err != nil {
+	if _, err := service.Finalize(context.Background(), recordingobjects.FinalizeInput{Authority: testAuthority(), AllocationID: reserved.ID, ExpectedByteSize: 128, ExpectedChecksumSHA256: checksum, ContentType: "application/vnd.chalk.recording-bundle+json", ExpiresAt: now.Add(5 * time.Minute), Codec: "opus", MonotonicEndMillis: 10, MediaEndMillis: 10}); err != nil {
 		t.Fatalf("finalize legacy reservation: %v", err)
 	}
 	if store.uploadInput.Key != legacyKey || repository.allocation.ObjectKey != legacyKey {
@@ -218,8 +218,16 @@ func (s *storeStub) CreateDeleteURL(context.Context, objectstorage.CreateDeleteU
 }
 
 type repositoryStub struct {
-	allocation  recordingobjects.Allocation
-	commitCalls int
+	allocation   recordingobjects.Allocation
+	commitCalls  int
+	bundleSchema string
+}
+
+func (r *repositoryStub) BundleSchema(context.Context, recordingobjects.Authority) (string, error) {
+	if r.bundleSchema != "" {
+		return r.bundleSchema, nil
+	}
+	return "recording_bundle.v1", nil
 }
 
 func (r *repositoryStub) Authorize(context.Context, recordingobjects.Authority) error { return nil }
@@ -269,4 +277,32 @@ func bytesOf(length int, value byte) []byte {
 		bytes[index] = value
 	}
 	return bytes
+}
+
+func TestFinalizeRejectsContentTypeThatDiffersFromSignedBundleSchema(t *testing.T) {
+	now := time.Unix(100, 0).UTC()
+	cases := []struct{ schema, contentType string }{
+		{"recording_bundle.v1", "application/vnd.chalk.recording-bundle"},
+		{"recording_bundle.v2", "application/vnd.chalk.recording-bundle+json"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.schema, func(t *testing.T) {
+			repository := &repositoryStub{bundleSchema: testCase.schema}
+			service, err := recordingobjects.NewService(objectstorage.NewService(&storeStub{}), repository, recordingobjects.Config{Now: func() time.Time { return now }})
+			if err != nil {
+				t.Fatal(err)
+			}
+			reserved, err := service.Reserve(context.Background(), recordingobjects.ReserveInput{Authority: testAuthority(), ReservationRequestID: "00000000-0000-4000-8000-000000000007", EncryptionContextDigest: bytesOf(32, 4)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = service.Finalize(context.Background(), recordingobjects.FinalizeInput{Authority: testAuthority(), AllocationID: reserved.ID, ExpectedByteSize: 128, ExpectedChecksumSHA256: bytesOf(32, 3), ContentType: testCase.contentType, ExpiresAt: now.Add(5 * time.Minute), Codec: "opus", MonotonicEndMillis: 10, MediaEndMillis: 10})
+			if !errors.Is(err, recordingobjects.ErrAuthorityMismatch) {
+				t.Fatalf("content type mismatch error = %v", err)
+			}
+			if repository.allocation.State != "reserved" {
+				t.Fatalf("allocation state after rejection = %q", repository.allocation.State)
+			}
+		})
+	}
 }

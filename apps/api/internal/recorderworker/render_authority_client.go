@@ -67,6 +67,7 @@ type renderCaptureResponse struct {
 	CaptureJobID         string  `json:"capture_job_id"`
 	KeyHandle            string  `json:"key_handle"`
 	EnvelopeDigest       string  `json:"envelope_digest"`
+	BundleSchema         string  `json:"bundle_schema"`
 	SequenceNumber       int64   `json:"sequence"`
 	MonotonicStartMillis int64   `json:"monotonic_start_ms"`
 	MonotonicEndMillis   int64   `json:"monotonic_end_ms"`
@@ -526,7 +527,7 @@ func decodeResolvedRenderInput(authority recordingrender.Authority, response ren
 		if jobErr != nil || keyErr != nil || digestErr != nil || capture.CaptureEpoch <= 0 || capture.CaptureEpoch > response.CaptureEpoch {
 			return recordingrender.ResolvedInput{}, ProtocolError{Err: errors.New("recording render capture authority mismatch")}
 		}
-		result.Capture = append(result.Capture, recordingrender.DownloadableCaptureObject{CaptureObject: recordingrender.CaptureObject{ObjectFacts: object.ObjectFacts, CaptureEpoch: capture.CaptureEpoch, CaptureJobID: captureJobID, KeyHandle: keyHandle, EnvelopeDigest: envelopeDigest, SequenceNumber: capture.SequenceNumber, MonotonicStartMillis: capture.MonotonicStartMillis, MonotonicEndMillis: capture.MonotonicEndMillis, MediaStartMillis: capture.MediaStartMillis, MediaEndMillis: capture.MediaEndMillis, Codec: capture.Codec, Layer: capture.Layer}, Download: object.Download})
+		result.Capture = append(result.Capture, recordingrender.DownloadableCaptureObject{CaptureObject: recordingrender.CaptureObject{ObjectFacts: object.ObjectFacts, CaptureEpoch: capture.CaptureEpoch, CaptureJobID: captureJobID, KeyHandle: keyHandle, EnvelopeDigest: envelopeDigest, BundleSchema: capture.BundleSchema, SequenceNumber: capture.SequenceNumber, MonotonicStartMillis: capture.MonotonicStartMillis, MonotonicEndMillis: capture.MonotonicEndMillis, MediaStartMillis: capture.MediaStartMillis, MediaEndMillis: capture.MediaEndMillis, Codec: capture.Codec, Layer: capture.Layer}, Download: object.Download})
 	}
 	for _, asset := range response.Assets {
 		object, err := decodeDownloadableRenderObject(asset)

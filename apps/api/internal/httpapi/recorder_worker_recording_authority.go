@@ -18,7 +18,10 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
 
-const recordingBundleContentType = "application/vnd.chalk.recording-bundle+json"
+const (
+	recordingBundleContentType       = "application/vnd.chalk.recording-bundle"
+	legacyRecordingBundleContentType = "application/vnd.chalk.recording-bundle+json"
+)
 
 type RecorderRecordingKeyService interface {
 	GetOrCreate(context.Context, recordingkeys.Authority) (recordingkeys.DataKey, error)
@@ -204,7 +207,7 @@ func recorderRecordingObjectFinalizeHandler(service RecorderRecordingObjectServi
 		}
 		authority, valid := recordingObjectAuthority(identity, body.recorderRecordingObjectAuthorityBody)
 		checksum, checksumErr := decodeSHA256Hex(body.ChecksumSHA256)
-		if !valid || checksumErr != nil || strings.TrimSpace(body.ContentType) != recordingBundleContentType {
+		if !valid || checksumErr != nil || (strings.TrimSpace(body.ContentType) != recordingBundleContentType && strings.TrimSpace(body.ContentType) != legacyRecordingBundleContentType) {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recording object finalization")
 			return
 		}

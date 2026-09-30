@@ -1480,6 +1480,30 @@ func (q *Queries) GetRecordingArtifact(ctx context.Context, arg GetRecordingArti
 	return i, err
 }
 
+const getRecordingCaptureAttemptEnvelope = `-- name: GetRecordingCaptureAttemptEnvelope :one
+select envelope_bytes, envelope_digest
+from recording_job_attempt_authorities
+where job_id = $1 and kind = 'capture' and envelope_digest = $2
+limit 1
+`
+
+type GetRecordingCaptureAttemptEnvelopeParams struct {
+	JobID          pgtype.UUID `json:"job_id"`
+	EnvelopeDigest []byte      `json:"envelope_digest"`
+}
+
+type GetRecordingCaptureAttemptEnvelopeRow struct {
+	EnvelopeBytes  []byte `json:"envelope_bytes"`
+	EnvelopeDigest []byte `json:"envelope_digest"`
+}
+
+func (q *Queries) GetRecordingCaptureAttemptEnvelope(ctx context.Context, arg GetRecordingCaptureAttemptEnvelopeParams) (GetRecordingCaptureAttemptEnvelopeRow, error) {
+	row := q.db.QueryRow(ctx, getRecordingCaptureAttemptEnvelope, arg.JobID, arg.EnvelopeDigest)
+	var i GetRecordingCaptureAttemptEnvelopeRow
+	err := row.Scan(&i.EnvelopeBytes, &i.EnvelopeDigest)
+	return i, err
+}
+
 const getRecordingCaptureCompletionIdentity = `-- name: GetRecordingCaptureCompletionIdentity :one
 select recording_id from recording_jobs where id = $1 and kind = 'capture'
 `
@@ -1489,6 +1513,26 @@ func (q *Queries) GetRecordingCaptureCompletionIdentity(ctx context.Context, job
 	var recording_id pgtype.UUID
 	err := row.Scan(&recording_id)
 	return recording_id, err
+}
+
+const getRecordingCaptureJobEnvelope = `-- name: GetRecordingCaptureJobEnvelope :one
+select envelope_bytes, envelope_digest
+from recording_job_attempt_authorities
+where job_id = $1 and kind = 'capture'
+order by attempt_count, fencing_generation
+limit 1
+`
+
+type GetRecordingCaptureJobEnvelopeRow struct {
+	EnvelopeBytes  []byte `json:"envelope_bytes"`
+	EnvelopeDigest []byte `json:"envelope_digest"`
+}
+
+func (q *Queries) GetRecordingCaptureJobEnvelope(ctx context.Context, jobID pgtype.UUID) (GetRecordingCaptureJobEnvelopeRow, error) {
+	row := q.db.QueryRow(ctx, getRecordingCaptureJobEnvelope, jobID)
+	var i GetRecordingCaptureJobEnvelopeRow
+	err := row.Scan(&i.EnvelopeBytes, &i.EnvelopeDigest)
+	return i, err
 }
 
 const getRecordingJobAttemptAuthorityByClaimRequest = `-- name: GetRecordingJobAttemptAuthorityByClaimRequest :one

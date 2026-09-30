@@ -25,14 +25,15 @@ import (
 )
 
 const (
-	defaultCaptureInitialPlanWait = 10 * time.Second
-	defaultCapturePlanWait        = 2 * time.Second
-	defaultCaptureRTPDeadline     = 250 * time.Millisecond
-	defaultCaptureCloseTimeout    = 15 * time.Second
-	defaultCaptureLifecycleRetry  = 100 * time.Millisecond
-	captureVideoReorderWindow     = uint64(16)
-	captureKeyFrameRequestSpacing = time.Second
-	captureBundleContentType      = "application/vnd.chalk.recording-bundle+json"
+	defaultCaptureInitialPlanWait  = 10 * time.Second
+	defaultCapturePlanWait         = 2 * time.Second
+	defaultCaptureRTPDeadline      = 250 * time.Millisecond
+	defaultCaptureCloseTimeout     = 15 * time.Second
+	defaultCaptureLifecycleRetry   = 100 * time.Millisecond
+	captureVideoReorderWindow      = uint64(16)
+	captureKeyFrameRequestSpacing  = time.Second
+	captureBundleContentType       = "application/vnd.chalk.recording-bundle"
+	legacyCaptureBundleContentType = "application/vnd.chalk.recording-bundle+json"
 )
 
 var (
@@ -1510,7 +1511,10 @@ func (w *captureBundleWriter) ensureAssembler(ctx context.Context) error {
 	}
 	w.reservation = reservation
 	w.reserveOrdinal++
-	encryption := recordingbundle.EncryptionContext{Environment: w.attempt.config.Environment, TenantID: w.attempt.authority.TenantID.String(), EpisodeID: w.attempt.authority.EpisodeID.String(), RecordingID: w.attempt.authority.RecordingID.String(), JobID: w.attempt.authority.JobID.String(), BundleSchema: recordingbundle.Version}
+	encryption := recordingbundle.EncryptionContext{Environment: w.attempt.config.Environment, TenantID: w.attempt.authority.TenantID.String(), EpisodeID: w.attempt.authority.EpisodeID.String(), RecordingID: w.attempt.authority.RecordingID.String(), JobID: w.attempt.authority.JobID.String(), BundleSchema: w.attempt.authority.Envelope.BundleSchemaVersion}
+	if encryption.BundleSchema == recordingbundle.Version {
+		encryption.KeyHandle = w.attempt.authority.Envelope.KeyHandle
+	}
 	assembler, err := recordingbundle.NewAssembler(recordingbundle.AssemblerConfig{RecordingID: w.attempt.authority.RecordingID.String(), CaptureEpoch: uint64(w.attempt.authority.CaptureEpoch), Sequence: reservation.Sequence, RecorderEnvelopeDigest: hex.EncodeToString(w.attempt.authority.EnvelopeDigest), Encryption: encryption, AllocationVersion: reservation.AllocationVersion})
 	if err != nil {
 		return err
@@ -1853,6 +1857,9 @@ func (w *captureBundleWriter) persist(ctx context.Context) error {
 	encoded := w.pendingObject.body
 	checksum := w.pendingObject.checksum
 	contentType := captureBundleContentType
+	if bundle.Version == recordingbundle.LegacyVersion {
+		contentType = legacyCaptureBundleContentType
+	}
 	codec, layer := captureBundleCodecAndLayer(bundle)
 	authority := w.bundleAuthority()
 	if !w.pendingObject.finalized {

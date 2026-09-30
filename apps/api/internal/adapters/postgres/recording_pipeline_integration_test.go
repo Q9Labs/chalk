@@ -337,13 +337,35 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("persist capture data key: %v", err)
 	}
-	historicalEnvelopeDigest := bytes.Repeat([]byte{0x31}, sha256.Size)
 	unreferencedEnvelopeDigest := bytes.Repeat([]byte{0x32}, sha256.Size)
 	historicalKeyHandle := mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be031")
 	unreferencedKeyHandle := mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be032")
+	historicalEnvelope := job.Authority.Envelope
+	historicalEnvelope.AttemptCount = job.AttemptCount + 1
+	historicalEnvelope.CaptureEpoch = 1
+	historicalEnvelope.KeyHandle = historicalKeyHandle.String()
+	historicalEnvelopeBytes, err := json.Marshal(historicalEnvelope)
+	if err != nil {
+		t.Fatalf("encode historical capture authority: %v", err)
+	}
+	historicalDigest := sha256.Sum256(historicalEnvelopeBytes)
+	historicalEnvelopeDigest := historicalDigest[:]
+	if _, err := pool.Exec(ctx, `
+		insert into recording_job_attempt_authorities (
+			job_id, attempt_count, fencing_generation, capture_epoch, claim_request_id,
+			kind, lease_owner, lease_token, lease_expires_at, envelope_bytes, envelope_digest
+		) values ($1, $2, $3, 1, $4, 'capture', $5, $6, $7, $8, $9)`,
+		job.ID.Bytes(), historicalEnvelope.AttemptCount, job.FencingGeneration,
+		mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be039").Bytes(),
+		job.Authority.LeaseOwner, job.Authority.LeaseToken, job.Authority.LeaseExpiresAt,
+		historicalEnvelopeBytes, historicalEnvelopeDigest,
+	); err != nil {
+		t.Fatalf("persist historical capture authority: %v", err)
+	}
 	historicalKeyAuthority := keyAuthority
 	historicalKeyAuthority.KeyHandle = historicalKeyHandle.String()
 	historicalKeyAuthority.CaptureEpoch = 1
+	historicalKeyAuthority.AttemptCount = historicalEnvelope.AttemptCount
 	historicalKeyAuthority.EnvelopeDigest = historicalEnvelopeDigest
 	historicalKeyContext := historicalKeyAuthority.Context("integration")
 	unreferencedKeyAuthority := keyAuthority
@@ -365,8 +387,8 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 				fencing_generation, key_handle, environment, envelope_digest,
 				encryption_context_digest, ciphertext_blob
 			) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-			reservation.RecordingID.Bytes(), key.authority.CaptureEpoch, tenantID.Bytes(), episodeID.Bytes(), job.ID.Bytes(), job.AttemptCount,
-			job.FencingGeneration, mustID(t, key.authority.KeyHandle).Bytes(), key.context.Environment, key.authority.EnvelopeDigest, key.context.Digest(), []byte(key.blob),
+			reservation.RecordingID.Bytes(), key.authority.CaptureEpoch, tenantID.Bytes(), episodeID.Bytes(), job.ID.Bytes(), key.authority.AttemptCount,
+			key.authority.FencingGeneration, mustID(t, key.authority.KeyHandle).Bytes(), key.context.Environment, key.authority.EnvelopeDigest, key.context.Digest(), []byte(key.blob),
 		); err != nil {
 			t.Fatalf("persist capture epoch %d fixture key: %v", key.authority.CaptureEpoch, err)
 		}
@@ -929,6 +951,10 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 		checksum := bytes.Repeat([]byte{byte(sequence + 0x41)}, sha256.Size)
 		startMillis := sequence * 300
 		endMillis := startMillis + 400
+		attemptCount := job.AttemptCount
+		if epoch == 1 {
+			attemptCount = historicalEnvelope.AttemptCount
+		}
 		if _, err := pool.Exec(ctx, `
 			insert into recording_bundle_allocations (
 				id, tenant_id, episode_id, recording_id, job_id, object_handle,
@@ -945,7 +971,7 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 				$20, $21, $17, $22, clock_timestamp()
 			)`,
 			mustID(t, allocationID).Bytes(), tenantID.Bytes(), episodeID.Bytes(), reservation.RecordingID.Bytes(), job.ID.Bytes(), mustID(t, job.Authority.Envelope.ObjectHandle).Bytes(),
-			mustID(t, reservationRequestID).Bytes(), job.AttemptCount, job.FencingGeneration, epoch, envelopeDigest, sequence,
+			mustID(t, reservationRequestID).Bytes(), attemptCount, job.FencingGeneration, epoch, envelopeDigest, sequence,
 			startMillis, endMillis, objectKey, bytes.Repeat([]byte{byte(sequence + 0x51)}, sha256.Size), checksum,
 			job.Authority.LeaseExpiresAt, encryptionContextDigest, fmt.Sprintf("capture-v%d", epoch), fmt.Sprintf("capture-etag-%d", epoch), bytes.Repeat([]byte{byte(sequence + 0x61)}, sha256.Size),
 		); err != nil {

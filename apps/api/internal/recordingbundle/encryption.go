@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	EncryptedObjectVersion = "recording_bundle_envelope.v1"
-	EncryptionAlgorithm    = "AES-256-GCM"
-	maxEncryptedObjectSize = maxCanonicalBytes*2 + 4096
+	LegacyEncryptedObjectVersion = "recording_bundle_envelope.v1"
+	EncryptedObjectVersion       = "recording_bundle_envelope.v2"
+	EncryptionAlgorithm          = "AES-256-GCM"
+	maxEncryptedObjectSize       = maxCanonicalBytes*2 + 4096
 )
 
 var (
@@ -46,13 +47,23 @@ type encryptedObject struct {
 	Ciphertext string        `json:"ciphertext"`
 }
 
-// Encrypt seals canonical recording_bundle.v1 bytes with a fresh random
+// Encrypt seals canonical bundle bytes with a fresh random
 // nonce. The caller remains responsible for clearing its plaintext key.
 func Encrypt(key []byte, bundle Bundle) ([]byte, error) {
 	return encryptWithRandom(key, bundle, rand.Reader)
 }
 
 func encryptWithRandom(key []byte, bundle Bundle, random io.Reader) ([]byte, error) {
+	if bundle.Version == Version {
+		return encryptBinary(key, bundle, random)
+	}
+	return encryptLegacy(key, bundle, random)
+}
+
+func encryptLegacy(key []byte, bundle Bundle, random io.Reader) ([]byte, error) {
+	if bundle.Version != LegacyVersion {
+		return nil, ErrInvalidBundle
+	}
 	if len(key) != 32 || random == nil {
 		return nil, ErrInvalidEncryptionKey
 	}
@@ -75,7 +86,7 @@ func encryptWithRandom(key []byte, bundle Bundle, random io.Reader) ([]byte, err
 		return nil, fmt.Errorf("create recording bundle nonce: %w", err)
 	}
 	envelope := encryptedObject{
-		Version:    EncryptedObjectVersion,
+		Version:    LegacyEncryptedObjectVersion,
 		Algorithm:  EncryptionAlgorithm,
 		Nonce:      base64.RawStdEncoding.EncodeToString(nonce),
 		AAD:        aad,
@@ -95,6 +106,13 @@ func encryptWithRandom(key []byte, bundle Bundle, random io.Reader) ([]byte, err
 // bundle. Unknown versions, fields, altered context, and altered ciphertext
 // fail closed.
 func Decrypt(key []byte, encoded []byte) (Bundle, error) {
+	if bytes.HasPrefix(encoded, []byte(binaryEnvelopeMagic)) {
+		return decryptBinary(key, encoded)
+	}
+	return decryptLegacy(key, encoded)
+}
+
+func decryptLegacy(key []byte, encoded []byte) (Bundle, error) {
 	if len(key) != 32 {
 		return Bundle{}, ErrInvalidEncryptionKey
 	}
@@ -114,7 +132,7 @@ func Decrypt(key []byte, encoded []byte) (Bundle, error) {
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
 		return Bundle{}, fmt.Errorf("%w: trailing data", ErrInvalidEncryptedData)
 	}
-	if envelope.Version != EncryptedObjectVersion || envelope.Algorithm != EncryptionAlgorithm {
+	if envelope.Version != LegacyEncryptedObjectVersion || envelope.Algorithm != EncryptionAlgorithm {
 		return Bundle{}, ErrInvalidEncryptedData
 	}
 	nonce, err := base64.RawStdEncoding.Strict().DecodeString(envelope.Nonce)
@@ -145,7 +163,7 @@ func Decrypt(key []byte, encoded []byte) (Bundle, error) {
 	if err != nil {
 		return Bundle{}, errors.Join(ErrInvalidEncryptedData, err)
 	}
-	if envelope.AAD != encryptionAAD(decrypted) {
+	if decrypted.Version != LegacyVersion || envelope.AAD.Version != LegacyEncryptedObjectVersion || envelope.AAD != encryptionAAD(decrypted) {
 		return Bundle{}, ErrInvalidEncryptedData
 	}
 	return decrypted, nil
@@ -178,8 +196,12 @@ func canonicalBundle(bundle Bundle) ([]byte, Bundle, error) {
 }
 
 func encryptionAAD(bundle Bundle) EncryptionAAD {
+	version := EncryptedObjectVersion
+	if bundle.Version == LegacyVersion {
+		version = LegacyEncryptedObjectVersion
+	}
 	return EncryptionAAD{
-		Version:                EncryptedObjectVersion,
+		Version:                version,
 		RecordingID:            bundle.Manifest.RecordingID,
 		CaptureEpoch:           bundle.Manifest.CaptureEpoch,
 		Sequence:               bundle.Manifest.Sequence,

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"testing"
 )
@@ -133,6 +134,14 @@ func fixtureBundle() Bundle {
 	}
 }
 
+func legacyFixtureBundle() Bundle {
+	bundle := fixtureBundle()
+	bundle.Version = LegacyVersion
+	bundle.Manifest.Version = LegacyVersion
+	bundle.Manifest.Encryption.BundleSchema = LegacyVersion
+	return bundle
+}
+
 func TestCanonicalEncodingIsDeterministicAndRoundTrips(t *testing.T) {
 	first := fixtureBundle()
 	second := fixtureBundle()
@@ -166,7 +175,7 @@ func TestCanonicalEncodingIsDeterministicAndRoundTrips(t *testing.T) {
 }
 
 func TestDecodeRejectsUnknownFieldsVersionsAndTampering(t *testing.T) {
-	encoded, err := Encode(fixtureBundle())
+	encoded, err := Encode(legacyFixtureBundle())
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
@@ -389,7 +398,7 @@ func TestAssemblerConcurrentInputIsRaceSafe(t *testing.T) {
 }
 
 func TestDecodeRejectsDuplicateFields(t *testing.T) {
-	encoded, err := Encode(fixtureBundle())
+	encoded, err := Encode(legacyFixtureBundle())
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
@@ -466,13 +475,135 @@ func TestEncryptedObjectAuthenticatesBundleAndContext(t *testing.T) {
 
 func TestEncryptedObjectRejectsUnknownEnvelopeFields(t *testing.T) {
 	key := bytes.Repeat([]byte{0x24}, 32)
-	encrypted, err := encryptWithRandom(key, fixtureBundle(), bytes.NewReader(bytes.Repeat([]byte{0x42}, 64)))
+	encrypted, err := encryptWithRandom(key, legacyFixtureBundle(), bytes.NewReader(bytes.Repeat([]byte{0x42}, 64)))
 	if err != nil {
 		t.Fatalf("encrypt: %v", err)
 	}
 	unknown := append(append([]byte(nil), encrypted[:len(encrypted)-1]...), []byte(`,"unknown":true}`)...)
 	if _, err := Decrypt(key, unknown); !errors.Is(err, ErrInvalidEncryptedData) {
 		t.Fatalf("unknown encrypted field error = %v", err)
+	}
+}
+
+func TestStoredBundleVersionsRoundTripAndLegacyFixture(t *testing.T) {
+	key := bytes.Repeat([]byte{0x24}, 32)
+	for _, bundle := range []Bundle{legacyFixtureBundle(), fixtureBundle()} {
+		encrypted, err := encryptWithRandom(key, bundle, bytes.NewReader(bytes.Repeat([]byte{0x42}, 64)))
+		if err != nil {
+			t.Fatalf("encrypt %s: %v", bundle.Version, err)
+		}
+		decoded, err := Decrypt(key, encrypted)
+		if err != nil || decoded.Version != bundle.Version || decoded.Manifest.Version != bundle.Version || decoded.BundleDigest == "" {
+			t.Fatalf("decrypt %s: version=%s error=%v", bundle.Version, decoded.Version, err)
+		}
+	}
+	fixture, err := os.ReadFile("testdata/bundle-v1.encrypted.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := Decrypt(key, fixture)
+	if err != nil || decoded.Version != LegacyVersion || len(decoded.Fragments) != 2 || decoded.Manifest.Sequence != 7 {
+		t.Fatalf("stored v1 fixture: version=%s error=%v", decoded.Version, err)
+	}
+}
+
+func TestAssemblerKeepsSignedLegacyJobSchema(t *testing.T) {
+	config := testConfig(7)
+	config.Encryption.BundleSchema = LegacyVersion
+	assembler, err := NewAssembler(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := assembler.AddPacket(testPacket(testTrack("track-a", 1, "0"), 0, 0, 1, 1)); err != nil {
+		t.Fatal(err)
+	}
+	if err := assembler.CloseNow(CloseReasonExplicit); err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := assembler.Snapshot()
+	if err != nil || sealed.Bundle.Version != LegacyVersion || sealed.Bundle.Manifest.Version != LegacyVersion || sealed.Bytes[0] != '{' {
+		t.Fatalf("legacy job bundle: version=%s error=%v", sealed.Bundle.Version, err)
+	}
+}
+
+func TestBinaryBundleDigestsAndEnvelopeTampering(t *testing.T) {
+	bundle := fixtureBundle()
+	bundle.Manifest.Encryption.KeyHandle = "capture-key-1"
+	encoded, err := Encode(bundle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tampered := append([]byte(nil), encoded...)
+	tampered[len(tampered)-1] ^= 1
+	if _, err := Decode(tampered); !errors.Is(err, ErrDigestMismatch) {
+		t.Fatalf("packet digest error = %v", err)
+	}
+	tampered = append([]byte(nil), encoded...)
+	index := bytes.Index(tampered, []byte(`"manifest_digest":"`)) + len(`"manifest_digest":"`)
+	if index < len(`"manifest_digest":"`) {
+		t.Fatal("manifest digest not found")
+	}
+	tampered[index] ^= 1
+	if _, err := Decode(tampered); !errors.Is(err, ErrDigestMismatch) {
+		t.Fatalf("manifest digest error = %v", err)
+	}
+	key := bytes.Repeat([]byte{0x24}, 32)
+	encrypted, err := Encrypt(key, bundle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, offset := range []int{20, binaryEnvelopeFixed, len(encrypted) - 1} {
+		altered := append([]byte(nil), encrypted...)
+		altered[offset] ^= 1
+		if _, err := Decrypt(key, altered); !errors.Is(err, ErrInvalidEncryptedData) {
+			t.Fatalf("envelope tamper at %d: %v", offset, err)
+		}
+	}
+}
+
+func TestBinaryBundleSizeForSixtySecondTwoTrackStream(t *testing.T) {
+	key := bytes.Repeat([]byte{0x24}, 32)
+	tracks := []TrackIdentity{testTrack("audio", 1, "0"), {TrackID: "video", Epoch: 1, MID: "1", Codec: "vp8", Layer: "primary"}}
+	var rawBytes, oldBytes, newBytes int
+	for segment := range 6 {
+		bundle := fixtureBundle()
+		bundle.Manifest.Sequence = uint64(segment)
+		bundle.Manifest.MonotonicRange = TimeRange{StartMilliseconds: int64(segment * 10_000), EndMilliseconds: int64((segment + 1) * 10_000)}
+		bundle.Manifest.MediaRange = bundle.Manifest.MonotonicRange
+		bundle.Fragments = nil
+		bundle.TrackTimeline = nil
+		bundle.LayoutTimeline = nil
+		bundle.Gaps = nil
+		for trackIndex, track := range tracks {
+			fragment := RTPFragment{Track: track, Packets: make([]RTPPacket, 0, 7_500)}
+			for packetIndex := range 7_500 {
+				payload := bytes.Repeat([]byte{byte(packetIndex)}, 100)
+				fragment.Packets = append(fragment.Packets, RTPPacket{
+					SequenceNumber: uint16(segment*7_500 + packetIndex), ExtendedSequenceNumber: uint64(segment*7_500 + packetIndex),
+					Timestamp: uint32(segment*900_000 + packetIndex*120), SSRC: uint32(trackIndex + 1),
+					PayloadType: uint8(96 + trackIndex), Payload: payload,
+				})
+				rawBytes += len(payload)
+			}
+			bundle.Fragments = append(bundle.Fragments, fragment)
+		}
+		newObject, err := Encrypt(key, bundle)
+		if err != nil {
+			t.Fatal(err)
+		}
+		newBytes += len(newObject)
+		bundle.Version = LegacyVersion
+		bundle.Manifest.Version = LegacyVersion
+		bundle.Manifest.Encryption.BundleSchema = LegacyVersion
+		oldObject, err := Encrypt(key, bundle)
+		if err != nil {
+			t.Fatal(err)
+		}
+		oldBytes += len(oldObject)
+	}
+	t.Logf("60 s, 2 tracks: raw=%d old=%d new=%d new/raw=%.3f", rawBytes, oldBytes, newBytes, float64(newBytes)/float64(rawBytes))
+	if float64(newBytes) > 1.3*float64(rawBytes) {
+		t.Fatalf("binary stored bytes exceed 1.3x raw RTP payload")
 	}
 }
 

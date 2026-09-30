@@ -64,7 +64,8 @@ var (
 const (
 	RecorderJobSchemaVersion             = "recorder_job.v2"
 	LegacyRecorderJobSchemaVersion       = "recorder_job.v1"
-	RecordingBundleSchema                = "recording_bundle.v1"
+	RecordingBundleSchema                = "recording_bundle.v2"
+	LegacyRecordingBundleSchema          = "recording_bundle.v1"
 	RecordingLayoutProfile               = "composite_720p_v1"
 	RecorderInitialPlanRevision    int64 = 1
 )

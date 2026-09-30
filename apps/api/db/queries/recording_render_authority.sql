@@ -107,7 +107,7 @@ for share of jobs;
 
 -- name: ListRecordingRenderCaptureObjects :many
 select allocations.capture_epoch, allocations.job_id as capture_job_id,
-    allocations.envelope_digest, data_keys.key_handle,
+    allocations.envelope_digest, data_keys.key_handle, capture_authorities.envelope_bytes,
     allocations.sequence_number, allocations.object_key,
     allocations.object_version, allocations.object_etag, allocations.content_type,
     allocations.expected_byte_size as byte_size, allocations.object_checksum as sha256,
@@ -125,6 +125,13 @@ join recording_bundle_allocations allocations
  and allocations.recording_id = inputs.recording_id
  and allocations.capture_epoch <= inputs.capture_epoch
  and allocations.state = 'committed'
+join recording_job_attempt_authorities capture_authorities
+  on capture_authorities.job_id = allocations.job_id
+ and capture_authorities.attempt_count = allocations.attempt_count
+ and capture_authorities.fencing_generation = allocations.fencing_generation
+ and capture_authorities.capture_epoch = allocations.capture_epoch
+ and capture_authorities.envelope_digest = allocations.envelope_digest
+ and capture_authorities.kind = 'capture'
 left join recording_data_keys data_keys
   on data_keys.recording_id = allocations.recording_id
  and data_keys.capture_epoch = allocations.capture_epoch

@@ -91,8 +91,8 @@ func runServiceRecordingCaptureLifecycle(ctx context.Context) (ScenarioResult, e
 	}, nil)
 
 	recorder.Add("worker", "recording.bundle.encrypt", "encrypt the canonical bundle before leaving worker memory", map[string]any{
-		"schema":       "recording_bundle.v1",
-		"content_type": "application/vnd.chalk.recording-bundle+json",
+		"schema":       "recording_bundle.v2",
+		"content_type": "application/vnd.chalk.recording-bundle",
 		"plaintext":    "cleared_after_encryption",
 	})
 
@@ -104,7 +104,7 @@ func runServiceRecordingCaptureLifecycle(ctx context.Context) (ScenarioResult, e
 	finalize.End("recording bundle upload authorized", map[string]any{
 		"upload":       "scoped_signed_url",
 		"worker_mtls":  "not_sent_to_object_storage",
-		"content_type": "application/vnd.chalk.recording-bundle+json",
+		"content_type": "application/vnd.chalk.recording-bundle",
 	}, nil)
 
 	upload := recorder.Start("object-storage", "PUT R2 recording bundle", "upload encrypted bytes with the scoped object token", map[string]any{

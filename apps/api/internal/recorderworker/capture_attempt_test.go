@@ -319,7 +319,7 @@ func TestCaptureBundleWriterEncryptsAndCommitsMediaAndTail(t *testing.T) {
 	attempt := &PionCaptureAttempt{
 		authority: recordercapture.AttemptAuthority{
 			TenantID: captureTestID(t, "22222222-2222-4222-8222-222222222222"), EpisodeID: captureTestID(t, "44444444-4444-4444-8444-444444444444"), RecordingID: captureTestID(t, "55555555-5555-4555-8555-555555555555"), JobID: captureTestID(t, "66666666-6666-4666-8666-666666666666"), CaptureEpoch: 1, AttemptCount: 1, FencingGeneration: 1,
-			Envelope:       recordingpipeline.RecorderJobEnvelope{KeyHandle: "key-handle"},
+			Envelope:       recordingpipeline.RecorderJobEnvelope{BundleSchemaVersion: recordingpipeline.RecordingBundleSchema, KeyHandle: "key-handle"},
 			EnvelopeDigest: bytesOf(0x42),
 		},
 		lease: capturesignaling.WorkerLease{Token: "lease"},
@@ -343,12 +343,35 @@ func TestCaptureBundleWriterEncryptsAndCommitsMediaAndTail(t *testing.T) {
 	}
 }
 
+func TestCaptureBundleWriterFinishesLegacySignedJobInLegacyFormat(t *testing.T) {
+	origin := time.UnixMilli(1_000).UTC()
+	writer, storage := newCaptureTestWriter(t, origin)
+	writer.attempt.authority.Envelope.BundleSchemaVersion = recordingbundle.LegacyVersion
+	track := &captureTestTrack{capture: captureplane.PulledCaptureTrack{CaptureTrack: captureplane.CaptureTrack{TrackReference: "track", OwnerReference: "owner", Kind: captureplane.TrackKindAudio, RequestedLayer: captureplane.TrackLayerAuto}, MID: "0"}, codec: "opus"}
+	activateCaptureTestTrack(writer, track, origin, 1)
+	if err := writer.addPacket(context.Background(), track, &rtp.Packet{Header: rtp.Header{SequenceNumber: 1, Timestamp: 100}, Payload: []byte{1, 2, 3}}, origin.Add(time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.close(recordingbundle.CloseReasonFinalStop, origin.Add(2*time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	if len(storage.uploadHistory) == 0 {
+		t.Fatal("legacy job did not upload a bundle")
+	}
+	for _, uploaded := range storage.uploadHistory {
+		decoded, err := recordingbundle.Decrypt(storage.key, uploaded.Body)
+		if err != nil || decoded.Version != recordingbundle.LegacyVersion || uploaded.ContentType != legacyCaptureBundleContentType {
+			t.Fatalf("legacy upload: version=%s content_type=%s error=%v", decoded.Version, uploaded.ContentType, err)
+		}
+	}
+}
+
 func TestCaptureBundleWriterCloseBoundsStoragePersistence(t *testing.T) {
 	storage := &captureTestStorage{key: bytesOf(0x41)}
 	attempt := &PionCaptureAttempt{
 		authority: recordercapture.AttemptAuthority{
 			TenantID: captureTestID(t, "22222222-2222-4222-8222-222222222222"), EpisodeID: captureTestID(t, "44444444-4444-4444-8444-444444444444"), RecordingID: captureTestID(t, "55555555-5555-4555-8555-555555555555"), JobID: captureTestID(t, "66666666-6666-4666-8666-666666666666"), CaptureEpoch: 1, AttemptCount: 1, FencingGeneration: 1,
-			Envelope: recordingpipeline.RecorderJobEnvelope{KeyHandle: "key-handle"}, EnvelopeDigest: bytesOf(0x42),
+			Envelope: recordingpipeline.RecorderJobEnvelope{BundleSchemaVersion: recordingpipeline.RecordingBundleSchema, KeyHandle: "key-handle"}, EnvelopeDigest: bytesOf(0x42),
 		},
 		lease: capturesignaling.WorkerLease{Owner: "worker", Token: "lease", ExpiresAt: time.Now().Add(time.Minute)},
 		keys:  storage, objects: storage, bundles: storage,
@@ -464,7 +487,7 @@ func newCaptureFinalizeReplayWriter(t *testing.T, now time.Time, storage *captur
 	attempt := &PionCaptureAttempt{
 		authority: recordercapture.AttemptAuthority{
 			TenantID: captureTestID(t, "22222222-2222-4222-8222-222222222222"), EpisodeID: captureTestID(t, "44444444-4444-4444-8444-444444444444"), RecordingID: captureTestID(t, "55555555-5555-4555-8555-555555555555"), JobID: captureTestID(t, "66666666-6666-4666-8666-666666666666"), CaptureEpoch: 1, AttemptCount: 1, FencingGeneration: 1,
-			Envelope: recordingpipeline.RecorderJobEnvelope{KeyHandle: "key-handle", ObjectHandle: "77777777-7777-4777-8777-777777777777"}, EnvelopeDigest: bytesOf(0x42),
+			Envelope: recordingpipeline.RecorderJobEnvelope{BundleSchemaVersion: recordingpipeline.RecordingBundleSchema, KeyHandle: "key-handle", ObjectHandle: "77777777-7777-4777-8777-777777777777"}, EnvelopeDigest: bytesOf(0x42),
 		},
 		lease: capturesignaling.WorkerLease{Owner: "worker", Token: "lease", ExpiresAt: now.Add(time.Minute)},
 		keys:  storage, objects: storage, bundles: storage,
@@ -487,7 +510,7 @@ func TestCaptureBundleWriterPersistsTerminalGapAfterFinalBundle(t *testing.T) {
 	storage := &captureTestStorage{key: key}
 	attempt := &PionCaptureAttempt{
 		authority: recordercapture.AttemptAuthority{
-			TenantID: captureTestID(t, "22222222-2222-4222-8222-222222222222"), EpisodeID: captureTestID(t, "44444444-4444-4444-8444-444444444444"), RecordingID: captureTestID(t, "55555555-5555-4555-8555-555555555555"), JobID: captureTestID(t, "66666666-6666-4666-8666-666666666666"), CaptureEpoch: 1, AttemptCount: 1, FencingGeneration: 1, EnvelopeDigest: bytesOf(0x42),
+			TenantID: captureTestID(t, "22222222-2222-4222-8222-222222222222"), EpisodeID: captureTestID(t, "44444444-4444-4444-8444-444444444444"), RecordingID: captureTestID(t, "55555555-5555-4555-8555-555555555555"), JobID: captureTestID(t, "66666666-6666-4666-8666-666666666666"), CaptureEpoch: 1, AttemptCount: 1, FencingGeneration: 1, Envelope: recordingpipeline.RecorderJobEnvelope{BundleSchemaVersion: recordingpipeline.RecordingBundleSchema}, EnvelopeDigest: bytesOf(0x42),
 		},
 		lease: capturesignaling.WorkerLease{Token: "lease"}, keys: storage, objects: storage, bundles: storage,
 		config: CaptureAttemptConfig{Now: func() time.Time { return time.UnixMilli(1000).UTC() }}.normalized(),
@@ -519,7 +542,7 @@ func TestCaptureBundleWriterPersistsPositiveNoPublisherDuration(t *testing.T) {
 	storage := &captureTestStorage{key: key}
 	attempt := &PionCaptureAttempt{
 		authority: recordercapture.AttemptAuthority{
-			TenantID: captureTestID(t, "22222222-2222-4222-8222-222222222222"), EpisodeID: captureTestID(t, "44444444-4444-4444-8444-444444444444"), RecordingID: captureTestID(t, "55555555-5555-4555-8555-555555555555"), JobID: captureTestID(t, "66666666-6666-4666-8666-666666666666"), CaptureEpoch: 1, AttemptCount: 1, FencingGeneration: 1, EnvelopeDigest: bytesOf(0x42),
+			TenantID: captureTestID(t, "22222222-2222-4222-8222-222222222222"), EpisodeID: captureTestID(t, "44444444-4444-4444-8444-444444444444"), RecordingID: captureTestID(t, "55555555-5555-4555-8555-555555555555"), JobID: captureTestID(t, "66666666-6666-4666-8666-666666666666"), CaptureEpoch: 1, AttemptCount: 1, FencingGeneration: 1, Envelope: recordingpipeline.RecorderJobEnvelope{BundleSchemaVersion: recordingpipeline.RecordingBundleSchema}, EnvelopeDigest: bytesOf(0x42),
 		},
 		lease: capturesignaling.WorkerLease{Token: "lease"}, keys: storage, objects: storage, bundles: storage,
 		config: CaptureAttemptConfig{Now: func() time.Time { return time.UnixMilli(1000).UTC() }}.normalized(),
@@ -636,7 +659,7 @@ func TestCaptureAttemptStopClosesProviderBeforePeerAndStoppedCallback(t *testing
 	now := time.UnixMilli(1000).UTC()
 	digest := bytesOf(0x42)
 	authority := recordercapture.AttemptAuthority{
-		Envelope: recordingpipeline.RecorderJobEnvelope{KeyHandle: "key"}, EnvelopeDigest: digest,
+		Envelope: recordingpipeline.RecorderJobEnvelope{BundleSchemaVersion: recordingpipeline.RecordingBundleSchema, KeyHandle: "key"}, EnvelopeDigest: digest,
 		TenantID: captureTestID(t, "22222222-2222-4222-8222-222222222222"), SpaceID: captureTestID(t, "33333333-3333-4333-8333-333333333333"), EpisodeID: captureTestID(t, "44444444-4444-4444-8444-444444444444"), RecordingID: captureTestID(t, "55555555-5555-4555-8555-555555555555"), JobID: captureTestID(t, "66666666-6666-4666-8666-666666666666"),
 		PlanHandle: "11111111-1111-4111-8111-111111111111", CaptureEpoch: 4, AttemptCount: 2, FencingGeneration: 3,
 	}
@@ -1230,7 +1253,7 @@ func TestCaptureAttemptCheckpointsLongNoPublisherGapBeforeStop(t *testing.T) {
 	}
 	lifecycle := &captureTestLifecycle{}
 	authority := recordercapture.AttemptAuthority{
-		Envelope: recordingpipeline.RecorderJobEnvelope{KeyHandle: "key-handle"}, EnvelopeDigest: bytesOf(0x42),
+		Envelope: recordingpipeline.RecorderJobEnvelope{BundleSchemaVersion: recordingpipeline.RecordingBundleSchema, KeyHandle: "key-handle"}, EnvelopeDigest: bytesOf(0x42),
 		TenantID: captureTestID(t, "22222222-2222-4222-8222-222222222222"), SpaceID: captureTestID(t, "33333333-3333-4333-8333-333333333333"),
 		EpisodeID: captureTestID(t, "44444444-4444-4444-8444-444444444444"), RecordingID: captureTestID(t, "55555555-5555-4555-8555-555555555555"), JobID: captureTestID(t, "66666666-6666-4666-8666-666666666666"),
 		PlanHandle: "11111111-1111-4111-8111-111111111111", CaptureEpoch: 2, AttemptCount: 1, FencingGeneration: 1,
@@ -1569,7 +1592,7 @@ func capturePlanWatchAttempt(t *testing.T, planAuthority captureplan.PlanAuthori
 		ready = &value
 	}
 	authority := recordercapture.AttemptAuthority{
-		Envelope: recordingpipeline.RecorderJobEnvelope{KeyHandle: "key-handle"}, EnvelopeDigest: append([]byte(nil), planAuthority.EnvelopeDigest...),
+		Envelope: recordingpipeline.RecorderJobEnvelope{BundleSchemaVersion: recordingpipeline.RecordingBundleSchema, KeyHandle: "key-handle"}, EnvelopeDigest: append([]byte(nil), planAuthority.EnvelopeDigest...),
 		TenantID: planAuthority.TenantID, SpaceID: planAuthority.SpaceID, EpisodeID: planAuthority.EpisodeID, RecordingID: planAuthority.RecordingID, JobID: planAuthority.JobID,
 		PlanHandle: planAuthority.PlanHandle, AttemptCount: planAuthority.AttemptCount, FencingGeneration: planAuthority.FencingGeneration,
 		CaptureEpoch: planAuthority.CaptureEpoch, HardDeadline: now().Add(time.Hour), CaptureReadyAt: ready,
@@ -1953,6 +1976,10 @@ func (*captureFinalizeReplayRepository) Authorize(context.Context, recordingobje
 	return nil
 }
 
+func (*captureFinalizeReplayRepository) BundleSchema(context.Context, recordingobjects.Authority) (string, error) {
+	return recordingbundle.Version, nil
+}
+
 func (*captureFinalizeReplayRepository) ReserveAllocation(context.Context, recordingobjects.ReserveInput) (recordingobjects.Allocation, error) {
 	return recordingobjects.Allocation{}, recordingobjects.ErrRepositoryUnavailable
 }
@@ -2181,7 +2208,7 @@ func newCaptureTestWriter(t *testing.T, origin time.Time) (*captureBundleWriter,
 		authority: recordercapture.AttemptAuthority{
 			TenantID: captureTestID(t, "22222222-2222-4222-8222-222222222222"), SpaceID: captureTestID(t, "33333333-3333-4333-8333-333333333333"),
 			EpisodeID: captureTestID(t, "44444444-4444-4444-8444-444444444444"), RecordingID: captureTestID(t, "55555555-5555-4555-8555-555555555555"), JobID: captureTestID(t, "66666666-6666-4666-8666-666666666666"),
-			CaptureEpoch: 2, AttemptCount: 2, FencingGeneration: 2, Envelope: recordingpipeline.RecorderJobEnvelope{KeyHandle: "key-handle"}, EnvelopeDigest: bytesOf(0x42), CaptureReadyAt: &origin,
+			CaptureEpoch: 2, AttemptCount: 2, FencingGeneration: 2, Envelope: recordingpipeline.RecorderJobEnvelope{BundleSchemaVersion: recordingpipeline.RecordingBundleSchema, KeyHandle: "key-handle"}, EnvelopeDigest: bytesOf(0x42), CaptureReadyAt: &origin,
 		},
 		lease: capturesignaling.WorkerLease{Owner: "worker", Token: "lease", ExpiresAt: time.Now().Add(time.Minute)},
 		keys:  storage, objects: storage, bundles: storage,

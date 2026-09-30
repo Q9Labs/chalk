@@ -140,6 +140,7 @@ type recorderRenderCaptureObjectResponse struct {
 	CaptureJobID         string  `json:"capture_job_id"`
 	KeyHandle            string  `json:"key_handle"`
 	EnvelopeDigest       string  `json:"envelope_digest"`
+	BundleSchema         string  `json:"bundle_schema"`
 	SequenceNumber       int64   `json:"sequence"`
 	MonotonicStartMillis int64   `json:"monotonic_start_ms"`
 	MonotonicEndMillis   int64   `json:"monotonic_end_ms"`
@@ -537,7 +538,7 @@ func recorderRenderInputResponseValue(input recordingrender.ResolvedInput) recor
 	for _, captureObject := range input.Capture {
 		response.Capture = append(response.Capture, recorderRenderCaptureObjectResponse{
 			recorderRenderObjectFactsResponse: recorderRenderObjectFactsResponseValue(recordingrender.DownloadableObject{ObjectFacts: captureObject.ObjectFacts, Download: captureObject.Download}),
-			CaptureEpoch:                      captureObject.CaptureEpoch, CaptureJobID: captureObject.CaptureJobID.String(), KeyHandle: captureObject.KeyHandle.String(), EnvelopeDigest: hex.EncodeToString(captureObject.EnvelopeDigest),
+			CaptureEpoch:                      captureObject.CaptureEpoch, CaptureJobID: captureObject.CaptureJobID.String(), KeyHandle: captureObject.KeyHandle.String(), EnvelopeDigest: hex.EncodeToString(captureObject.EnvelopeDigest), BundleSchema: captureObject.BundleSchema,
 			SequenceNumber: captureObject.SequenceNumber, MonotonicStartMillis: captureObject.MonotonicStartMillis,
 			MonotonicEndMillis: captureObject.MonotonicEndMillis, MediaStartMillis: captureObject.MediaStartMillis,
 			MediaEndMillis: captureObject.MediaEndMillis, Codec: captureObject.Codec, Layer: captureObject.Layer,

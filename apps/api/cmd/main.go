@@ -248,6 +248,7 @@ func run() error {
 	recordingService := recordings.NewService(recordingRepository)
 	recordingPipelineRepository := postgres.NewRecordingPipelineRepositoryWithQueriesAndTransactor(operationQueries, pool, diagnostics.Queries)
 	recordingPipelineRepository = recordingPipelineRepository.WithTranscriptionEnabled(cfg.Capabilities.Transcription)
+	recordingPipelineRepository = recordingPipelineRepository.WithRecordingBundleV2Enabled(cfg.RecordingBundleV2Enabled)
 	if cfg.Capabilities.Recording {
 		profile, err := recordingpresentation.NewComposite720PProfile(cfg.RecordingUIBuildSHA256)
 		if err != nil {

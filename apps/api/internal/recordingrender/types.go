@@ -87,6 +87,7 @@ type CaptureObject struct {
 	CaptureJobID         utilities.ID
 	KeyHandle            utilities.ID
 	EnvelopeDigest       []byte
+	BundleSchema         string
 	SequenceNumber       int64
 	MonotonicStartMillis int64
 	MonotonicEndMillis   int64
