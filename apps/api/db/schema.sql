@@ -1,3 +1,4 @@
+-- Schema snapshot through migration 20260930160000.
 create table tenants (
     id uuid primary key,
     name text not null,

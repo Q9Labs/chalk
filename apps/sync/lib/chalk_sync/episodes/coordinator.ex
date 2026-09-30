@@ -206,7 +206,7 @@ defmodule ChalkSync.Episodes.Coordinator do
   def publication_observed(%EpisodeKey{} = episode) do
     case whereis(episode) do
       nil -> :ok
-      coordinator -> GenServer.cast(coordinator, :publication_observed)
+      coordinator -> GenServer.cast(coordinator, {:publication_observed, episode.space_id})
     end
   end
 
@@ -473,6 +473,12 @@ defmodule ChalkSync.Episodes.Coordinator do
 
   @impl GenServer
   def handle_cast({:unsubscribe, socket}, state), do: stop_if_empty(remove_socket(state, socket))
+
+  def handle_cast({:publication_observed, space_id}, state) do
+    if String.downcase(space_id) == String.downcase(state.episode.space_id),
+      do: handle_cast(:publication_observed, state),
+      else: {:noreply, state}
+  end
 
   def handle_cast(:publication_observed, %{live_reconcile_task: task} = state)
       when not is_nil(task),

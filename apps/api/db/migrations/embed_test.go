@@ -11,6 +11,7 @@ func TestLatestVersionMatchesEmbeddedMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	versions := make(map[int64]string)
 	var latest int64
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
@@ -21,6 +22,10 @@ func TestLatestVersionMatchesEmbeddedMigrations(t *testing.T) {
 		if err != nil {
 			t.Fatalf("invalid embedded migration %q: %v", entry.Name(), err)
 		}
+		if previous, exists := versions[version]; exists {
+			t.Fatalf("duplicate migration version %d: %s and %s", version, previous, entry.Name())
+		}
+		versions[version] = entry.Name()
 		latest = max(latest, version)
 	}
 	if LatestVersion != latest {

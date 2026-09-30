@@ -1,4 +1,5 @@
 -- +goose Up
+SET LOCAL lock_timeout = '5s';
 -- +goose StatementBegin
 create function notify_provider_publication_observation() returns trigger
 language plpgsql as $$
@@ -25,5 +26,6 @@ after insert on provider_operation_observations
 for each row execute function notify_provider_publication_observation();
 
 -- +goose Down
+SET LOCAL lock_timeout = '5s';
 drop trigger provider_publication_observation_notify on provider_operation_observations;
 drop function notify_provider_publication_observation();
