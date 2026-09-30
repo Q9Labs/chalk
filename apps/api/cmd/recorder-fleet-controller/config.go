@@ -15,16 +15,17 @@ import (
 )
 
 type commandConfig struct {
-	Fleet             recorderfleet.Config
-	Provider          digitalocean.RecorderFleetConfig
-	ControlPlaneURL   string
-	ControllerCert    string
-	ControllerKey     string
-	ServerCA          string
-	ServerName        string
-	SPIFFETrustDomain string
-	JournalPath       string
-	ReconcileInterval time.Duration
+	Fleet                 recorderfleet.Config
+	Provider              digitalocean.RecorderFleetConfig
+	ControlPlaneURL       string
+	ControllerCert        string
+	ControllerKey         string
+	ServerCA              string
+	ServerName            string
+	SPIFFETrustDomain     string
+	JournalPath           string
+	ReconcileInterval     time.Duration
+	BootstrapNameVerified bool
 }
 
 type rawCommandConfig struct {
@@ -218,12 +219,18 @@ func (raw rawCommandConfig) build() (commandConfig, error) {
 	if err := fleetConfig.Validate(); err != nil {
 		return commandConfig{}, err
 	}
-	if trim(raw.bakedServerName) == "" || trim(raw.nameImageDigest) != fleetConfig.Release.ImageDigest {
-		return commandConfig{}, fmt.Errorf("%w: missing or stale baked bootstrap server name claim", recorderfleet.ErrInvalidConfig)
-	}
-	endpoint, err := url.Parse(fleetConfig.Release.BootstrapEndpoint)
-	if err != nil || !strings.EqualFold(trim(raw.bakedServerName), endpoint.Hostname()) {
-		return commandConfig{}, fmt.Errorf("%w: baked bootstrap server name %q differs from endpoint host %q", recorderfleet.ErrInvalidConfig, trim(raw.bakedServerName), endpoint.Hostname())
+	claimsPresent := trim(raw.bakedServerName) != "" || trim(raw.nameImageDigest) != ""
+	if claimsPresent {
+		if trim(raw.bakedServerName) == "" || trim(raw.nameImageDigest) != fleetConfig.Release.ImageDigest {
+			return commandConfig{}, fmt.Errorf("%w: incomplete or stale baked bootstrap server name claim", recorderfleet.ErrInvalidConfig)
+		}
+		endpoint, err := url.Parse(fleetConfig.Release.BootstrapEndpoint)
+		if err != nil {
+			return commandConfig{}, fmt.Errorf("%w: bootstrap endpoint: %v", recorderfleet.ErrInvalidConfig, err)
+		}
+		if !strings.EqualFold(trim(raw.bakedServerName), endpoint.Hostname()) {
+			return commandConfig{}, fmt.Errorf("%w: baked bootstrap server name %q differs from endpoint host %q", recorderfleet.ErrInvalidConfig, trim(raw.bakedServerName), endpoint.Hostname())
+		}
 	}
 	providerConfig := digitalocean.RecorderFleetConfig{
 		Token: trim(raw.digitalOceanToken), BaseURL: trim(raw.digitalOceanURL), Environment: key.Environment,
@@ -235,7 +242,7 @@ func (raw rawCommandConfig) build() (commandConfig, error) {
 		ControllerCert: trim(raw.controllerCert), ControllerKey: trim(raw.controllerKey),
 		ServerCA: trim(raw.serverCA), ServerName: trim(raw.serverName),
 		SPIFFETrustDomain: trim(raw.spiffeTrustDomain), JournalPath: trim(raw.journalPath),
-		ReconcileInterval: reconcileInterval,
+		ReconcileInterval: reconcileInterval, BootstrapNameVerified: claimsPresent,
 	}, nil
 }
 

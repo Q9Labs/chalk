@@ -231,9 +231,12 @@ images/verify-bootstrap-name.py \
 It fails on a digest or endpoint-host mismatch and prints two bounded
 `CHALK_RECORDER_FLEET_*` assignments. Put those assignments in that pool's
 existing `recorder/capture.env` or `recorder/render.env` runtime input, with
-the same digest in `CHALK_RECORDER_FLEET_IMAGE_DIGEST`. Controller startup
-rejects missing or stale claims and refuses to create workers when the baked
-name differs from the endpoint host. The worker independently compares its
+the same digest in `CHALK_RECORDER_FLEET_IMAGE_DIGEST`. Nothing is required
+from the publisher for the next release: when both claim inputs are absent,
+controller startup logs one warning and continues. Adding
+both assignments enables strict validation: incomplete or stale claims, or a
+baked name differing from the endpoint host, reject startup before
+reconciliation. The worker independently compares its
 actual baked name and CA with the attested manifest before contacting the
 issuer. No new runtime mount or SSM parameter is needed.
 

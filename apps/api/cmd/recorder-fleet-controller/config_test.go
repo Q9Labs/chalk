@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -90,6 +92,32 @@ func TestLoadCommandConfigRejectsBakedBootstrapNameMismatch(t *testing.T) {
 	delete(environment, "CHALK_RECORDER_FLEET_BOOTSTRAP_SERVER_NAME")
 	if _, err := loadCommandConfig(nil, func(key string) string { return environment[key] }); !errors.Is(err, recorderfleet.ErrInvalidConfig) {
 		t.Fatalf("missing bootstrap name claim error = %v", err)
+	}
+}
+
+func TestBootstrapNameClaimsStartupWarning(t *testing.T) {
+	t.Parallel()
+	for _, present := range []bool{false, true} {
+		environment := validCommandEnvironment()
+		if !present {
+			delete(environment, "CHALK_RECORDER_FLEET_BOOTSTRAP_SERVER_NAME")
+			delete(environment, "CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST")
+		}
+		config, err := loadCommandConfig(nil, func(key string) string { return environment[key] })
+		if err != nil {
+			t.Fatalf("claims present=%t: %v", present, err)
+		}
+		if config.BootstrapNameVerified != present {
+			t.Fatalf("claims present=%t: verified=%t", present, config.BootstrapNameVerified)
+		}
+		var output bytes.Buffer
+		logStartupWarnings(config, slog.New(slog.NewJSONHandler(&output, nil)))
+		if present && output.Len() != 0 {
+			t.Fatalf("matching claims logged warning: %s", output.String())
+		}
+		if !present && (strings.Count(output.String(), "\n") != 1 || !strings.Contains(output.String(), "claims absent; continuing")) {
+			t.Fatalf("absent claims must log one clear startup warning: %s", output.String())
+		}
 	}
 }
 
