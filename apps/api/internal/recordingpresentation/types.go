@@ -57,8 +57,9 @@ type Snapshot struct {
 }
 
 type Profile struct {
-	Name          string   `json:"name"`
-	Version       string   `json:"version"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	// Kept only for rollback compatibility; can go in the next release.
 	UIBuildSHA256 string   `json:"uiBuildSha256,omitempty"`
 	Viewport      Viewport `json:"viewport"`
 	Locale        string   `json:"locale"`

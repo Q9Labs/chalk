@@ -235,19 +235,20 @@ active attempt.
 
 The database constrains both presentation baselines and finalized presentations
 to `recording_presentation.v1`. The native compositor reads that version for
-all stored Recordings. Older v1 profiles retain `uiBuildSha256`; new profiles
-omit it. The digest remains accepted on read but no longer chooses an installed
-UI build. No database column or old presentation is rewritten in this release.
+all stored Recordings. For one compatibility release, the API continues writing
+its configured `uiBuildSha256` into new baselines and finalized presentations.
+The new Render ignores the digest; it does not select or install a UI build.
+Keep `CHALK_RECORDING_UI_BUILD_SHA256` and its existing release-publisher value
+for this release. No database column or old presentation is rewritten.
 
-Roll out the new Render image first. Its worker accepts old and new v1 profiles.
-Drain or replace every old browser Render worker before deploying the new API:
-old workers require a UI digest and cannot export a new digest-free Recording.
-An old API can continue creating digest-bearing Recordings while new Render
-workers are running. At the API cutover, remove
-`CHALK_RECORDING_UI_BUILD_SHA256` from the release publisher's API environment;
-the API no longer consumes it. If rollback is needed after that cutover, roll
-back the API before rolling back the Render image. Remove any obsolete profile
-storage only in a later migration after the compatibility window.
+API and Render may be upgraded or rolled back in either order during this
+compatibility release. Old API validation can finalize new baselines, and old
+native Render workers can claim or retry new presentations because the digest
+is retained. Do not remove the publisher value or digest-writing API config
+until the next release, after the rollback window for the old API and native
+workers has closed. Rolling back to the browser image still requires that old
+image's retained UI build; this PR does not restore browser artifacts to the new
+image. Remove any obsolete profile storage only in a later migration.
 
 Capture bundles are private R2 objects under
 `tenants/<tenant>/recordings/<recording>/capture/...`. They are deleted by the

@@ -169,7 +169,7 @@ func seedCaptureRestartPresentation(t *testing.T, ctx context.Context, transacti
 		}
 	}
 
-	profile, err := recordingpresentation.NewComposite720PProfile()
+	profile, err := recordingpresentation.NewComposite720PProfile("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	if err != nil {
 		t.Fatalf("build presentation profile: %v", err)
 	}

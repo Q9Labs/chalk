@@ -171,9 +171,11 @@ case "$(env_value "${api_env}" CHALK_RECORDING_ENABLED)" in
   false) ;;
   true)
     jq -e '.images.recorder_control | type == "string" and length > 0' "$manifest" >/dev/null || fail "Recording requires the recorder control image"
-    for name in CHALK_RECORDING_KMS_KEY_ID CHALK_RECORDING_KMS_REGION; do
+    # The digest is kept only for rollback compatibility; it can go in the next release.
+    for name in CHALK_RECORDING_KMS_KEY_ID CHALK_RECORDING_KMS_REGION CHALK_RECORDING_UI_BUILD_SHA256; do
       require_env "$api_env" "$name"
     done
+    [[ "$(env_value "$api_env" CHALK_RECORDING_UI_BUILD_SHA256)" =~ ^[0-9a-f]{64}$ ]] || fail "Recording rollback compatibility digest is invalid"
     ;;
   *) fail "CHALK_RECORDING_ENABLED must be true or false" ;;
 esac

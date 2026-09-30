@@ -23,7 +23,7 @@ func newParticipantBuilderFixture(t *testing.T) participantBuilderFixture {
 	ready := time.Date(2026, time.September, 8, 0, 0, 0, 0, time.UTC)
 	first := testPresentationID(t, "00000000-0000-4000-8000-000000000001")
 	second := testPresentationID(t, "00000000-0000-4000-8000-000000000002")
-	profile, err := NewComposite720PProfile()
+	profile, err := NewComposite720PProfile("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	if err != nil {
 		t.Fatal(err)
 	}
