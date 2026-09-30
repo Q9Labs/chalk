@@ -94,11 +94,11 @@ func TestRecorderRecordingObjectReserveFinalizeCommit(t *testing.T) {
 			return recordingobjects.Allocation{ID: workerTestAllocationID, ObjectKey: objectKey, SequenceNumber: 12, AllocationVersion: 13}, nil
 		},
 		finalize: func(_ context.Context, input recordingobjects.FinalizeInput) (recordingobjects.AllocationResult, error) {
-			if input.AllocationID != workerTestAllocationID || input.ExpectedByteSize != 1234 || len(input.ExpectedChecksumSHA256) != 32 || input.MonotonicEndMillis != 10_000 || input.ContentType != recordingBundleContentType {
+			if input.AllocationID != workerTestAllocationID || input.ExpectedByteSize != 1234 || len(input.ExpectedChecksumSHA256) != 32 || input.MonotonicEndMillis != 10_000 || (input.ContentType != recordingBundleContentType && input.ContentType != legacyRecordingBundleContentType) {
 				t.Fatalf("finalize input = %+v", input)
 			}
 			expiresAt := time.Date(2099, 1, 1, 0, 10, 0, 0, time.UTC)
-			return recordingobjects.AllocationResult{AllocationID: input.AllocationID, UploadToken: "opaque-upload-token", ExpiresAt: expiresAt, UploadURL: objectstorage.SignedURL{Method: http.MethodPut, URL: "https://objects.example/upload", ExpiresAt: expiresAt, SignedHeader: map[string][]string{"Content-Type": {recordingBundleContentType}}}}, nil
+			return recordingobjects.AllocationResult{AllocationID: input.AllocationID, UploadToken: "opaque-upload-token", ExpiresAt: expiresAt, UploadURL: objectstorage.SignedURL{Method: http.MethodPut, URL: "https://objects.example/upload", ExpiresAt: expiresAt, SignedHeader: map[string][]string{"Content-Type": {input.ContentType}}}}, nil
 		},
 		commit: func(_ context.Context, input recordingobjects.CommitInput) (recordingobjects.Bundle, error) {
 			if input.UploadToken != "opaque-upload-token" || input.AllocationID != workerTestAllocationID || len(input.ManifestDigest) != 32 || input.MediaEndMillis != 10_000 {
@@ -117,11 +117,13 @@ func TestRecorderRecordingObjectReserveFinalizeCommit(t *testing.T) {
 	}
 
 	checksum := strings.Repeat("ab", 32)
-	response = httptest.NewRecorder()
-	finalize := recordingObjectAuthorityJSON() + `,"allocation_id":"` + workerTestAllocationID + `","byte_size":1234,"checksum_sha256":"` + checksum + `","content_type":"` + recordingBundleContentType + `","codec":"opus","monotonic_start_millis":0,"monotonic_end_millis":10000,"media_start_millis":0,"media_end_millis":10000}`
-	router.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/bundles/finalize", finalize))
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"upload_token":"opaque-upload-token"`) || !strings.Contains(response.Body.String(), `"method":"PUT"`) {
-		t.Fatalf("finalize status=%d body=%s", response.Code, response.Body.String())
+	for _, contentType := range []string{recordingBundleContentType, legacyRecordingBundleContentType} {
+		response = httptest.NewRecorder()
+		finalize := recordingObjectAuthorityJSON() + `,"allocation_id":"` + workerTestAllocationID + `","byte_size":1234,"checksum_sha256":"` + checksum + `","content_type":"` + contentType + `","codec":"opus","monotonic_start_millis":0,"monotonic_end_millis":10000,"media_start_millis":0,"media_end_millis":10000}`
+		router.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/bundles/finalize", finalize))
+		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"upload_token":"opaque-upload-token"`) || !strings.Contains(response.Body.String(), `"method":"PUT"`) {
+			t.Fatalf("finalize %s status=%d body=%s", contentType, response.Code, response.Body.String())
+		}
 	}
 
 	response = httptest.NewRecorder()

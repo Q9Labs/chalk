@@ -1413,3 +1413,15 @@ where (state = 'leased' and lease_expires_at <= now())
    or (state = 'terminal_failure' and terminal_at < sqlc.arg(terminal_before))
 order by updated_at, id
 limit sqlc.arg(limit_count)::integer;
+-- name: GetRecordingCaptureJobEnvelope :one
+select envelope_bytes, envelope_digest
+from recording_job_attempt_authorities
+where job_id = sqlc.arg(job_id) and kind = 'capture'
+order by attempt_count, fencing_generation
+limit 1;
+
+-- name: GetRecordingCaptureAttemptEnvelope :one
+select envelope_bytes, envelope_digest
+from recording_job_attempt_authorities
+where job_id = sqlc.arg(job_id) and kind = 'capture' and envelope_digest = sqlc.arg(envelope_digest)
+limit 1;

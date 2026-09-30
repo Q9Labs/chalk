@@ -465,9 +465,9 @@ func (a *Assembler) closeLocked(reason CloseReason, monotonicMilliseconds, media
 	}
 	a.endMono, a.endMedia = monotonicMilliseconds, mediaMilliseconds
 	bundle := Bundle{
-		Version: Version,
+		Version: a.cfg.Encryption.BundleSchema,
 		Manifest: Manifest{
-			Version:                Version,
+			Version:                a.cfg.Encryption.BundleSchema,
 			RecordingID:            a.cfg.RecordingID,
 			CaptureEpoch:           a.cfg.CaptureEpoch,
 			Sequence:               a.cfg.Sequence,

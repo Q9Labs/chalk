@@ -41,9 +41,16 @@ type wireBundle struct {
 	BundleDigest   string                `json:"bundle_digest"`
 }
 
-// Encode returns canonical JSON bytes. Arrays are normalized into a stable
-// order and every digest is recomputed from the normalized logical content.
+// Encode returns canonical bytes for the bundle's schema version.
 func Encode(bundle Bundle) ([]byte, error) {
+	if bundle.Version == Version {
+		return encodeBinary(bundle)
+	}
+	return encodeLegacy(bundle)
+}
+
+// encodeLegacy retains the original canonical JSON contract for stored v1 objects.
+func encodeLegacy(bundle Bundle) ([]byte, error) {
 	normalized, err := normalizeBundle(bundle)
 	if err != nil {
 		return nil, err
@@ -98,9 +105,16 @@ func Encode(bundle Bundle) ([]byte, error) {
 	return encoded, nil
 }
 
-// Decode strictly validates one canonical envelope. Whitespace is accepted at
-// the JSON boundary, but unknown and duplicate object fields are rejected.
+// Decode accepts both canonical bundle versions.
 func Decode(encoded []byte) (Bundle, error) {
+	if bytes.HasPrefix(encoded, []byte(binaryBundleMagic)) {
+		return decodeBinary(encoded)
+	}
+	return decodeLegacy(encoded)
+}
+
+// decodeLegacy strictly validates the original JSON envelope.
+func decodeLegacy(encoded []byte) (Bundle, error) {
 	if len(encoded) == 0 || len(encoded) > maxCanonicalBytes {
 		return Bundle{}, fmt.Errorf("%w: encoded size is invalid", ErrInvalidBundle)
 	}
@@ -123,7 +137,7 @@ func Decode(encoded []byte) (Bundle, error) {
 		}
 		return Bundle{}, fmt.Errorf("%w: trailing data: %v", ErrInvalidBundle, err)
 	}
-	if wire.Version != Version || wire.Manifest.Version != Version {
+	if wire.Version != LegacyVersion || wire.Manifest.Version != LegacyVersion {
 		return Bundle{}, fmt.Errorf("%w: version=%q manifest=%q", ErrUnknownBundleVersion, wire.Version, wire.Manifest.Version)
 	}
 	bundle := Bundle(wire)
@@ -196,8 +210,11 @@ func digestHex(value []byte) string {
 
 func normalizeBundle(input Bundle) (Bundle, error) {
 	bundle := cloneBundle(input)
-	if bundle.Version != Version {
+	if bundle.Version != Version && bundle.Version != LegacyVersion {
 		return Bundle{}, fmt.Errorf("%w: bundle version %q", ErrUnknownBundleVersion, bundle.Version)
+	}
+	if bundle.Manifest.Version != bundle.Version {
+		return Bundle{}, fmt.Errorf("%w: bundle and manifest versions differ", ErrInvalidBundle)
 	}
 	if err := bundle.Manifest.validate(); err != nil {
 		return Bundle{}, err

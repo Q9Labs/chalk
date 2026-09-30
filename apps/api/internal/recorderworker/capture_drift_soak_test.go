@@ -114,6 +114,7 @@ func (s *soakStorage) Upload(_ context.Context, input CaptureObjectUpload) error
 		Path: path, ExpectedSHA256: recordingbundle.ObjectChecksumHex(input.Body), Sequence: sequence,
 		CaptureEpoch: 2, CaptureJobID: "66666666-6666-4666-8666-666666666666",
 		RecorderEnvelopeDigest: s.envelopeDigest,
+		BundleSchema:           recordingbundle.Version,
 	})
 	bundle.Fragments = nil
 	s.previous = &bundle

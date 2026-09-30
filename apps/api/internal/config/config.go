@@ -133,6 +133,7 @@ const (
 	TranscriptionControlAudience    = "CHALK_TRANSCRIPTION_CONTROL_AUDIENCE"
 	TranscriptionDispatcherFunction = "CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME"
 	RecordingEnabled                = "CHALK_RECORDING_ENABLED"
+	RecordingBundleV2Enabled        = "CHALK_RECORDING_BUNDLE_V2_ENABLED"
 	RecordingUIBuildSHA256          = "CHALK_RECORDING_UI_BUILD_SHA256"
 	RecordingKMSKeyID               = "CHALK_RECORDING_KMS_KEY_ID"
 	RecordingKMSRegion              = "CHALK_RECORDING_KMS_REGION"
@@ -370,28 +371,29 @@ type EpisodeDiagnosticsServiceTokenConfig struct {
 }
 
 type Config struct {
-	API                    APIConfig
-	Auth                   AuthConfig
-	Capabilities           CapabilityConfig
-	CloudflareRealtime     CloudflareRealtimeConfig
-	DefaultMediaPlane      spaces.MediaPlaneProvider
-	Composio               ComposioConfig
-	Database               DatabaseConfig
-	DeadlineScheduler      DeadlineSchedulerConfig
-	EpisodeDiagnostics     EpisodeDiagnosticsConfig
-	GoogleOAuth            GoogleOAuthConfig
-	Observability          ObservabilityConfig
-	PublicInvite           PublicInviteConfig
-	ProviderBridge         ProviderBridgeConfig
-	R2                     R2Config
-	RecordingKMS           RecordingKMSConfig
-	RecordingUIBuildSHA256 string
-	RecorderFleetIssuer    RecorderFleetIssuerConfig
-	Redis                  RedisConfig
-	Resend                 ResendConfig
-	SyncToken              SyncTokenConfig
-	Transcription          TranscriptionConfig
-	Webhooks               WebhookConfig
+	API                      APIConfig
+	Auth                     AuthConfig
+	Capabilities             CapabilityConfig
+	CloudflareRealtime       CloudflareRealtimeConfig
+	DefaultMediaPlane        spaces.MediaPlaneProvider
+	Composio                 ComposioConfig
+	Database                 DatabaseConfig
+	DeadlineScheduler        DeadlineSchedulerConfig
+	EpisodeDiagnostics       EpisodeDiagnosticsConfig
+	GoogleOAuth              GoogleOAuthConfig
+	Observability            ObservabilityConfig
+	PublicInvite             PublicInviteConfig
+	ProviderBridge           ProviderBridgeConfig
+	R2                       R2Config
+	RecordingKMS             RecordingKMSConfig
+	RecordingBundleV2Enabled bool
+	RecordingUIBuildSHA256   string
+	RecorderFleetIssuer      RecorderFleetIssuerConfig
+	Redis                    RedisConfig
+	Resend                   ResendConfig
+	SyncToken                SyncTokenConfig
+	Transcription            TranscriptionConfig
+	Webhooks                 WebhookConfig
 }
 
 func Load() (Config, error) {
@@ -681,12 +683,13 @@ func Load() (Config, error) {
 			SlowRequestThreshold: slowRequestThreshold,
 			Version:              envOrDefault(APIVersion, DefaultVersion),
 		},
-		PublicInvite:           publicInvite,
-		ProviderBridge:         providerBridge,
-		R2:                     r2Config,
-		RecordingKMS:           recordingKMS,
-		RecordingUIBuildSHA256: strings.TrimSpace(envOrDefault(RecordingUIBuildSHA256, "")),
-		RecorderFleetIssuer:    recorderFleetIssuer,
+		PublicInvite:             publicInvite,
+		ProviderBridge:           providerBridge,
+		R2:                       r2Config,
+		RecordingKMS:             recordingKMS,
+		RecordingBundleV2Enabled: envBool(RecordingBundleV2Enabled),
+		RecordingUIBuildSHA256:   strings.TrimSpace(envOrDefault(RecordingUIBuildSHA256, "")),
+		RecorderFleetIssuer:      recorderFleetIssuer,
 		Redis: RedisConfig{
 			URL: envOrDefault(RedisURL, DefaultRedisURL),
 		},

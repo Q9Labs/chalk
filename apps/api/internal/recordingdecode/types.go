@@ -30,6 +30,8 @@ type BundleFile struct {
 	CaptureEpoch           int64
 	CaptureJobID           string
 	RecorderEnvelopeDigest string
+	BundleSchema           string
+	KeyHandle              string
 }
 
 type DataKey struct {

@@ -25,6 +25,7 @@ type ClaimFacts struct {
 	PresentationProfileVersion string
 	PresentationSHA256         []byte
 	PresentationDurationMillis int64
+	BundleSchemaVersion        string
 }
 
 func NewRecorderJobAuthority(job Job, facts ClaimFacts, claimRequestID utilities.ID, issuedAt time.Time) (JobAuthority, error) {
@@ -81,6 +82,13 @@ func NewRecorderJobAuthority(job Job, facts ClaimFacts, claimRequestID utilities
 			return JobAuthority{}, fmt.Errorf("generate render input handle: %w", err)
 		}
 	}
+	bundleSchemaVersion := LegacyRecordingBundleSchema
+	if job.Kind == JobKindCapture && facts.BundleSchemaVersion != "" {
+		bundleSchemaVersion = facts.BundleSchemaVersion
+	}
+	if bundleSchemaVersion != LegacyRecordingBundleSchema && bundleSchemaVersion != RecordingBundleSchema {
+		return JobAuthority{}, ErrInvalidEnvelope
+	}
 	envelope := RecorderJobEnvelope{
 		SchemaVersion:              RecorderJobSchemaVersion,
 		TenantID:                   job.TenantID.String(),
@@ -103,7 +111,7 @@ func NewRecorderJobAuthority(job Job, facts ClaimFacts, claimRequestID utilities
 		PresentationSHA256:         hex.EncodeToString(facts.PresentationSHA256),
 		PresentationDurationMillis: facts.PresentationDurationMillis,
 		InitialPlanRevision:        RecorderInitialPlanRevision,
-		BundleSchemaVersion:        RecordingBundleSchema,
+		BundleSchemaVersion:        bundleSchemaVersion,
 		LayoutProfile:              RecordingLayoutProfile,
 		ParticipantLimit:           MaximumEpisodeParticipants,
 		InputBitrateBPS:            MaximumInputBitrateBPS,
@@ -176,7 +184,7 @@ func DecodeRecorderJobEnvelope(envelopeBytes, envelopeDigest []byte) (RecorderJo
 	} else {
 		return RecorderJobEnvelope{}, ErrInvalidEnvelope
 	}
-	if envelope.BundleSchemaVersion != RecordingBundleSchema || envelope.LayoutProfile != RecordingLayoutProfile || envelope.InitialPlanRevision != RecorderInitialPlanRevision || envelope.ParticipantLimit != MaximumEpisodeParticipants || envelope.InputBitrateBPS != MaximumInputBitrateBPS || envelope.AudioCodec != "opus" || len(envelope.VideoCodecs) != 2 || envelope.VideoCodecs[0] != "vp8" || envelope.VideoCodecs[1] != "h264" {
+	if (envelope.BundleSchemaVersion != RecordingBundleSchema && envelope.BundleSchemaVersion != LegacyRecordingBundleSchema) || envelope.LayoutProfile != RecordingLayoutProfile || envelope.InitialPlanRevision != RecorderInitialPlanRevision || envelope.ParticipantLimit != MaximumEpisodeParticipants || envelope.InputBitrateBPS != MaximumInputBitrateBPS || envelope.AudioCodec != "opus" || len(envelope.VideoCodecs) != 2 || envelope.VideoCodecs[0] != "vp8" || envelope.VideoCodecs[1] != "h264" {
 		return RecorderJobEnvelope{}, ErrInvalidEnvelope
 	}
 	return envelope, nil

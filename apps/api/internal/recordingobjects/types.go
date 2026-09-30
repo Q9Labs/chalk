@@ -28,7 +28,7 @@ var (
 const (
 	DefaultAllocationTTL = 15 * time.Minute
 	MaximumAllocationTTL = 30 * time.Minute
-	BundleSchemaVersion  = "recording_bundle.v1"
+	BundleSchemaVersion  = "recording_bundle.v2"
 )
 
 // Authority is copied from the immutable recorder job envelope. Every
@@ -145,6 +145,7 @@ type Bundle struct {
 
 type Repository interface {
 	Authorize(ctx context.Context, authority Authority) error
+	BundleSchema(ctx context.Context, authority Authority) (string, error)
 	ReserveAllocation(ctx context.Context, input ReserveInput) (Allocation, error)
 	GetAllocationByReservationRequest(ctx context.Context, requestID string) (Allocation, error)
 	FinalizeAllocation(ctx context.Context, allocation Allocation) error

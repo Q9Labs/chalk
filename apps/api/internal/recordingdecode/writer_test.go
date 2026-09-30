@@ -125,7 +125,11 @@ func TestIngestBundlesUsesExactKeyAndAuthorityForEachCaptureEpoch(t *testing.T) 
 			TrackTimeline: []recordingbundle.TrackTimelineEvent{}, LayoutTimeline: []recordingbundle.LayoutTimelineEvent{}, Gaps: []recordingbundle.Gap{},
 		}
 	}
-	encoded1, err := recordingbundle.Encrypt(key1, bundle(1, 0, trackEpoch1, "track-at-revision-3", job1, envelope1, 0, 100))
+	legacy := bundle(1, 0, trackEpoch1, "track-at-revision-3", job1, envelope1, 0, 100)
+	legacy.Version = recordingbundle.LegacyVersion
+	legacy.Manifest.Version = recordingbundle.LegacyVersion
+	legacy.Manifest.Encryption.BundleSchema = recordingbundle.LegacyVersion
+	encoded1, err := recordingbundle.Encrypt(key1, legacy)
 	if err != nil {
 		t.Fatalf("encrypt epoch 1: %v", err)
 	}
@@ -144,8 +148,8 @@ func TestIngestBundlesUsesExactKeyAndAuthorityForEachCaptureEpoch(t *testing.T) 
 	request := Request{
 		RecordingID: recordingID, EpisodeID: episodeID, TenantID: tenantID, Environment: "test", CaptureEpoch: 2, DurationMS: 250,
 		Bundles: []BundleFile{
-			{Path: path1, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encoded1), Sequence: 0, CaptureEpoch: 1, CaptureJobID: job1, RecorderEnvelopeDigest: envelope1},
-			{Path: path2, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encoded2), Sequence: 2, CaptureEpoch: 2, CaptureJobID: job2, RecorderEnvelopeDigest: envelope2},
+			{Path: path1, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encoded1), Sequence: 0, CaptureEpoch: 1, CaptureJobID: job1, RecorderEnvelopeDigest: envelope1, BundleSchema: recordingbundle.LegacyVersion},
+			{Path: path2, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encoded2), Sequence: 2, CaptureEpoch: 2, CaptureJobID: job2, RecorderEnvelopeDigest: envelope2, BundleSchema: recordingbundle.Version},
 		},
 		DataKeys: []DataKey{{CaptureEpoch: 1, Plaintext: key1}, {CaptureEpoch: 2, Plaintext: key2}},
 	}
@@ -255,7 +259,7 @@ func TestWriteDecodesSeekableVP8OnRecordingClock(t *testing.T) {
 		OriginAuthorityID: presentation.Clock.OriginAuthorityID,
 		CaptureEpoch:      1, DurationMS: presentation.Clock.DurationMillis,
 		OutputDirectory: filepath.Join(root, "decoded"), Presentation: presentation,
-		Bundles: []BundleFile{{Path: bundlePath, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encrypted), Sequence: 0, CaptureEpoch: 1, CaptureJobID: "00000000-0000-4000-8000-000000000008", RecorderEnvelopeDigest: strings.Repeat("42", 32)}}, DataKeys: []DataKey{{CaptureEpoch: 1, Plaintext: key}},
+		Bundles: []BundleFile{{Path: bundlePath, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encrypted), Sequence: 0, CaptureEpoch: 1, CaptureJobID: "00000000-0000-4000-8000-000000000008", RecorderEnvelopeDigest: strings.Repeat("42", 32), BundleSchema: recordingbundle.Version}}, DataKeys: []DataKey{{CaptureEpoch: 1, Plaintext: key}},
 	}
 	result, err := Write(context.Background(), request)
 	if err != nil {
@@ -274,7 +278,7 @@ func TestWriteDecodesSeekableVP8OnRecordingClock(t *testing.T) {
 		OriginAuthorityID: presentation.Clock.OriginAuthorityID,
 		CaptureEpoch:      1, DurationMS: presentation.Clock.DurationMillis,
 		OutputDirectory: filepath.Join(root, "decoded-microphone-only"), Presentation: presentation,
-		Bundles:             []BundleFile{{Path: bundlePath, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encrypted), Sequence: 0, CaptureEpoch: 1, CaptureJobID: "00000000-0000-4000-8000-000000000008", RecorderEnvelopeDigest: strings.Repeat("42", 32)}},
+		Bundles:             []BundleFile{{Path: bundlePath, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encrypted), Sequence: 0, CaptureEpoch: 1, CaptureJobID: "00000000-0000-4000-8000-000000000008", RecorderEnvelopeDigest: strings.Repeat("42", 32), BundleSchema: recordingbundle.Version}},
 		DataKeys:            []DataKey{{CaptureEpoch: 1, Plaintext: append([]byte(nil), key...)}},
 		IncludedSourceKinds: []recordingpresentation.MediaKind{recordingpresentation.MediaKindMicrophone},
 		Runner:              rejectDecodeRunner{},
@@ -387,7 +391,7 @@ func TestWritePreservesSourceTimingWhenBundleClockLeadsLaggingTrack(t *testing.T
 		OriginAuthorityID: presentation.Clock.OriginAuthorityID,
 		CaptureEpoch:      1, DurationMS: presentation.Clock.DurationMillis,
 		OutputDirectory: filepath.Join(root, "decoded"), Presentation: presentation,
-		Bundles:  []BundleFile{{Path: bundlePath, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encrypted), Sequence: 0, CaptureEpoch: 1, CaptureJobID: "00000000-0000-4000-8000-000000000008", RecorderEnvelopeDigest: strings.Repeat("42", 32)}},
+		Bundles:  []BundleFile{{Path: bundlePath, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encrypted), Sequence: 0, CaptureEpoch: 1, CaptureJobID: "00000000-0000-4000-8000-000000000008", RecorderEnvelopeDigest: strings.Repeat("42", 32), BundleSchema: recordingbundle.Version}},
 		DataKeys: []DataKey{{CaptureEpoch: 1, Plaintext: key}},
 	})
 	if err != nil {
@@ -559,7 +563,7 @@ func TestWriteDecodesSeekableH264OnRecordingClock(t *testing.T) {
 		OriginAuthorityID: presentation.Clock.OriginAuthorityID,
 		CaptureEpoch:      1, DurationMS: presentation.Clock.DurationMillis,
 		OutputDirectory: filepath.Join(root, "decoded"), Presentation: presentation,
-		Bundles: []BundleFile{{Path: bundlePath, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encrypted), Sequence: 1, CaptureEpoch: 1, CaptureJobID: "00000000-0000-4000-8000-000000000008", RecorderEnvelopeDigest: strings.Repeat("42", 32)}}, DataKeys: []DataKey{{CaptureEpoch: 1, Plaintext: key}},
+		Bundles: []BundleFile{{Path: bundlePath, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encrypted), Sequence: 1, CaptureEpoch: 1, CaptureJobID: "00000000-0000-4000-8000-000000000008", RecorderEnvelopeDigest: strings.Repeat("42", 32), BundleSchema: recordingbundle.Version}}, DataKeys: []DataKey{{CaptureEpoch: 1, Plaintext: key}},
 	}
 	result, err := Write(context.Background(), request)
 	if err != nil {
@@ -683,7 +687,7 @@ func TestWriteDecryptsAndDecodesOpusOnRecordingClock(t *testing.T) {
 		OriginAuthorityID: presentation.Clock.OriginAuthorityID,
 		CaptureEpoch:      1, DurationMS: presentation.Clock.DurationMillis,
 		OutputDirectory: output, Presentation: presentation,
-		Bundles: []BundleFile{{Path: bundlePath, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encrypted), Sequence: 1, CaptureEpoch: 1, CaptureJobID: "00000000-0000-4000-8000-000000000008", RecorderEnvelopeDigest: strings.Repeat("42", 32)}}, DataKeys: []DataKey{{CaptureEpoch: 1, Plaintext: key}},
+		Bundles: []BundleFile{{Path: bundlePath, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encrypted), Sequence: 1, CaptureEpoch: 1, CaptureJobID: "00000000-0000-4000-8000-000000000008", RecorderEnvelopeDigest: strings.Repeat("42", 32), BundleSchema: recordingbundle.Version}}, DataKeys: []DataKey{{CaptureEpoch: 1, Plaintext: key}},
 	})
 	if err != nil {
 		t.Fatalf("write decoded media: %v", err)

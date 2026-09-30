@@ -630,6 +630,7 @@ func (attempt *ProductionRenderAttempt) downloadCapture(ctx context.Context, dow
 		bundles = append(bundles, recordingdecode.BundleFile{
 			Path: path, ExpectedSHA256: hex.EncodeToString(object.SHA256), Sequence: uint64(object.SequenceNumber),
 			CaptureEpoch: object.CaptureEpoch, CaptureJobID: object.CaptureJobID.String(), RecorderEnvelopeDigest: hex.EncodeToString(object.EnvelopeDigest),
+			BundleSchema: object.BundleSchema, KeyHandle: object.KeyHandle.String(),
 		})
 	}
 	return bundles, total, nil

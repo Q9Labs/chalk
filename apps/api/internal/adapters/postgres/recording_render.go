@@ -478,9 +478,17 @@ func mapRenderCaptureObjects(rows []sqlc.ListRecordingRenderCaptureObjectsRow) (
 		if !row.CaptureJobID.Valid || !row.KeyHandle.Valid {
 			return nil, recordingrender.ErrInputIncomplete
 		}
+		envelope, err := recordingpipeline.DecodeRecorderJobEnvelope(row.EnvelopeBytes, row.EnvelopeDigest)
+		if err != nil {
+			return nil, fmt.Errorf("%w: decode signed capture envelope: %v", recordingrender.ErrInputIncomplete, err)
+		}
+		if envelope.Kind != recordingpipeline.JobKindCapture || envelope.JobID != id(row.CaptureJobID).String() ||
+			envelope.KeyHandle != id(row.KeyHandle).String() || envelope.CaptureEpoch != row.CaptureEpoch {
+			return nil, fmt.Errorf("%w: capture envelope does not match stored object authority", recordingrender.ErrInputIncomplete)
+		}
 		objects = append(objects, recordingrender.CaptureObject{
 			ObjectFacts:  recordingrender.ObjectFacts{ObjectKey: row.ObjectKey, ObjectVersion: row.ObjectVersion.String, ObjectETag: row.ObjectEtag.String, ContentType: row.ContentType, ByteSize: row.ByteSize, SHA256: append([]byte(nil), row.Sha256...)},
-			CaptureEpoch: row.CaptureEpoch, CaptureJobID: id(row.CaptureJobID), KeyHandle: id(row.KeyHandle), EnvelopeDigest: append([]byte(nil), row.EnvelopeDigest...),
+			CaptureEpoch: row.CaptureEpoch, CaptureJobID: id(row.CaptureJobID), KeyHandle: id(row.KeyHandle), EnvelopeDigest: append([]byte(nil), row.EnvelopeDigest...), BundleSchema: envelope.BundleSchemaVersion,
 			SequenceNumber: row.SequenceNumber, MonotonicStartMillis: row.MonotonicStartMillis, MonotonicEndMillis: row.MonotonicEndMillis,
 			MediaStartMillis: row.MediaStartMillis, MediaEndMillis: row.MediaEndMillis, Codec: row.Codec, Layer: nullableTextPointer(row.Layer),
 		})

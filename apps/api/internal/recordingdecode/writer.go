@@ -39,7 +39,7 @@ type observedGap struct {
 	reason  string
 }
 
-// Write verifies and decrypts recording_bundle.v1 objects, decodes their RTP
+// Write verifies and decrypts stored bundle objects, decodes their RTP
 // into browser-seekable per-source media, and atomically publishes one
 // decoded_media.v1 directory. It never infers source identity from an object
 // path: every bundle track must join the authenticated presentation timeline
@@ -376,7 +376,8 @@ func validateBundleAuthority(request Request, file BundleFile, bundle recordingb
 		manifest.RecorderEnvelopeDigest != file.RecorderEnvelopeDigest || manifest.MediaRange.EndMilliseconds > request.DurationMS ||
 		context.Environment != request.Environment || context.TenantID != request.TenantID ||
 		context.EpisodeID != request.EpisodeID || context.RecordingID != request.RecordingID ||
-		context.JobID != file.CaptureJobID || context.BundleSchema != recordingbundle.Version {
+		context.JobID != file.CaptureJobID || context.BundleSchema != file.BundleSchema || bundle.Version != file.BundleSchema ||
+		(file.BundleSchema == recordingbundle.Version && manifest.Encryption.KeyHandle != file.KeyHandle) {
 		return fmt.Errorf("%w: sequence %d authority mismatch", ErrInvalidBundle, file.Sequence)
 	}
 	return nil

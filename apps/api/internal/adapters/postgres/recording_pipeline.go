@@ -25,6 +25,7 @@ type recordingPipelineQuerier interface {
 	ClaimRecordingJob(context.Context, sqlc.ClaimRecordingJobParams) (sqlc.ClaimRecordingJobRow, error)
 	LockRecordingJobClaimRequest(context.Context, string) error
 	GetRecordingJobAttemptAuthorityByClaimRequest(context.Context, pgtype.UUID) (sqlc.GetRecordingJobAttemptAuthorityByClaimRequestRow, error)
+	GetRecordingCaptureJobEnvelope(context.Context, pgtype.UUID) (sqlc.GetRecordingCaptureJobEnvelopeRow, error)
 	InsertRecordingJobAttemptAuthority(context.Context, sqlc.InsertRecordingJobAttemptAuthorityParams) (sqlc.RecordingJobAttemptAuthority, error)
 	InsertRecordingRenderInput(context.Context, sqlc.InsertRecordingRenderInputParams) (sqlc.RecordingRenderInput, error)
 	RequestDeferredRecordingRender(context.Context, sqlc.RequestDeferredRecordingRenderParams) (sqlc.RequestDeferredRecordingRenderRow, error)
@@ -124,13 +125,14 @@ type recordingPipelineTransactor interface {
 }
 
 type RecordingPipelineRepository struct {
-	queries              recordingPipelineQuerier
-	transactor           recordingPipelineTransactor
-	decorate             func(sqlc.Querier) sqlc.Querier
-	now                  func() time.Time
-	presentationProfile  *recordingpresentation.Profile
-	presentationFreezer  *recordingpresentation.Freezer
-	transcriptionEnabled bool
+	queries                  recordingPipelineQuerier
+	transactor               recordingPipelineTransactor
+	decorate                 func(sqlc.Querier) sqlc.Querier
+	now                      func() time.Time
+	presentationProfile      *recordingpresentation.Profile
+	presentationFreezer      *recordingpresentation.Freezer
+	transcriptionEnabled     bool
+	recordingBundleV2Enabled bool
 }
 
 func NewRecordingPipelineRepository(queries recordingPipelineQuerier) RecordingPipelineRepository {
@@ -171,6 +173,11 @@ func (r RecordingPipelineRepository) WithRecordingPresentationFreezer(freezer re
 // as the rollout gate for automatic audio-preparation jobs.
 func (r RecordingPipelineRepository) WithTranscriptionEnabled(enabled bool) RecordingPipelineRepository {
 	r.transcriptionEnabled = enabled
+	return r
+}
+
+func (r RecordingPipelineRepository) WithRecordingBundleV2Enabled(enabled bool) RecordingPipelineRepository {
+	r.recordingBundleV2Enabled = enabled
 	return r
 }
 
@@ -449,6 +456,19 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 		claimFacts := recordingpipeline.ClaimFacts{
 			SpaceID: utilities.IDFromBytes(row.SpaceID.Bytes), PolicySnapshotVersion: row.PolicySnapshotVersion,
 			HardDeadline: hardDeadline, CaptureEpoch: row.CaptureEpoch, CaptureReadyAt: nullableTimestamp(row.CaptureReadyAt), CompletionOnly: row.CompletionOnly,
+		}
+		if claimed.Kind == recordingpipeline.JobKindCapture {
+			claimFacts.BundleSchemaVersion = captureBundleSchemaVersion(r.recordingBundleV2Enabled, nil)
+			previous, previousErr := queries.GetRecordingCaptureJobEnvelope(ctx, uuid(claimed.ID))
+			if previousErr == nil {
+				previousEnvelope, decodeErr := recordingpipeline.DecodeRecorderJobEnvelope(previous.EnvelopeBytes, previous.EnvelopeDigest)
+				if decodeErr != nil || previousEnvelope.Kind != recordingpipeline.JobKindCapture || previousEnvelope.JobID != claimed.ID.String() {
+					return recordingpipeline.ErrInvalidEnvelope
+				}
+				claimFacts.BundleSchemaVersion = captureBundleSchemaVersion(r.recordingBundleV2Enabled, &previousEnvelope)
+			} else if !errors.Is(previousErr, pgx.ErrNoRows) {
+				return fmt.Errorf("load original capture bundle schema: %w", previousErr)
+			}
 		}
 		if claimed.Kind == recordingpipeline.JobKindRender || claimed.Kind == recordingpipeline.JobKindTranscription {
 			claimFacts.CaptureKeyHandle = utilities.IDFromBytes(row.CaptureKeyHandle.Bytes)
@@ -1407,3 +1427,14 @@ func timestamptzValue(value time.Time) pgtype.Timestamptz {
 }
 
 var _ recordingpipeline.Repository = RecordingPipelineRepository{}
+
+// A Capture retry keeps its first signed bundle schema across input reloads.
+func captureBundleSchemaVersion(enabled bool, previous *recordingpipeline.RecorderJobEnvelope) string {
+	if previous != nil {
+		return previous.BundleSchemaVersion
+	}
+	if enabled {
+		return recordingpipeline.RecordingBundleSchema
+	}
+	return recordingpipeline.LegacyRecordingBundleSchema
+}

@@ -12,11 +12,13 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/recordingobjects"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 type recordingObjectAuthorityQuerier interface {
 	AuthorizeRecordingJobLease(context.Context, sqlc.AuthorizeRecordingJobLeaseParams) (pgtype.UUID, error)
+	GetRecordingCaptureAttemptEnvelope(context.Context, sqlc.GetRecordingCaptureAttemptEnvelopeParams) (sqlc.GetRecordingCaptureAttemptEnvelopeRow, error)
 	GetRecordingBundleAllocation(context.Context, pgtype.UUID) (sqlc.RecordingBundleAllocation, error)
 	GetRecordingBundleAllocationByReservationRequest(context.Context, pgtype.UUID) (sqlc.RecordingBundleAllocation, error)
 	GetRecordingBundleAllocationByTokenHash(context.Context, []byte) (sqlc.RecordingBundleAllocation, error)
@@ -24,6 +26,27 @@ type recordingObjectAuthorityQuerier interface {
 	InsertRecordingBundleAllocation(context.Context, sqlc.InsertRecordingBundleAllocationParams) (sqlc.RecordingBundleAllocation, error)
 	FinalizeRecordingBundleAllocation(context.Context, sqlc.FinalizeRecordingBundleAllocationParams) (sqlc.RecordingBundleAllocation, error)
 	CommitRecordingBundleAllocation(context.Context, sqlc.CommitRecordingBundleAllocationParams) (sqlc.CommitRecordingBundleAllocationRow, error)
+}
+
+func (r RecordingObjectRepository) BundleSchema(ctx context.Context, authority recordingobjects.Authority) (string, error) {
+	_, _, _, jobID, _, err := authorityIDs(authority)
+	if err != nil {
+		return "", err
+	}
+	row, err := r.queries.GetRecordingCaptureAttemptEnvelope(ctx, sqlc.GetRecordingCaptureAttemptEnvelopeParams{
+		JobID: uuid(jobID), EnvelopeDigest: authority.EnvelopeDigest,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", recordingobjects.ErrAuthorityMismatch
+	}
+	if err != nil {
+		return "", fmt.Errorf("load capture attempt envelope: %w", err)
+	}
+	envelope, err := recordingpipeline.DecodeRecorderJobEnvelope(row.EnvelopeBytes, row.EnvelopeDigest)
+	if err != nil || envelope.JobID != authority.JobID || envelope.CaptureEpoch != authority.CaptureEpoch || envelope.ObjectHandle != authority.ObjectHandle {
+		return "", recordingobjects.ErrAuthorityMismatch
+	}
+	return envelope.BundleSchemaVersion, nil
 }
 
 type RecordingObjectRepository struct {

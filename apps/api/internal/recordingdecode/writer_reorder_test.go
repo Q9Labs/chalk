@@ -51,7 +51,7 @@ func TestIngestBundlesMergesLateCrossBundlePacketsAndExactRepeats(t *testing.T) 
 		}
 		files = append(files, BundleFile{
 			Path: path, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encoded), Sequence: uint64(index),
-			CaptureEpoch: 1, CaptureJobID: jobID, RecorderEnvelopeDigest: envelope,
+			CaptureEpoch: 1, CaptureJobID: jobID, RecorderEnvelopeDigest: envelope, BundleSchema: recordingbundle.Version,
 		})
 	}
 	request := Request{
@@ -117,7 +117,7 @@ func TestIngestBundlesResetsSourceAfterRecoveryBoundaryWhereSourceWasAbsent(t *t
 		}
 		files = append(files, BundleFile{
 			Path: path, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encoded), Sequence: uint64(index),
-			CaptureEpoch: 1, CaptureJobID: jobID, RecorderEnvelopeDigest: bundle.Manifest.RecorderEnvelopeDigest,
+			CaptureEpoch: 1, CaptureJobID: jobID, RecorderEnvelopeDigest: bundle.Manifest.RecorderEnvelopeDigest, BundleSchema: recordingbundle.Version,
 		})
 	}
 	request := Request{

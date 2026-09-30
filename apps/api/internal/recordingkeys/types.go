@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+// The KMS context is frozen per capture epoch. Changing the stored object
+// format must not change the key derivation or break replay of an existing key.
 const BundleSchemaVersion = "recording_bundle.v1"
 
 var (
