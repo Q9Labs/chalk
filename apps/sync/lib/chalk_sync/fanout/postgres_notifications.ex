@@ -19,6 +19,7 @@ defmodule ChalkSync.Fanout.PostgresNotifications do
   alias ChalkSync.UUID
 
   @channel "chalk_sync_heads"
+  @publication_channel "chalk_media_publications"
   @collaboration_channels [
     "chalk_collaboration_heads",
     "chalk_collaboration_transient"
@@ -46,6 +47,7 @@ defmodule ChalkSync.Fanout.PostgresNotifications do
       Postgrex.Notifications.start_link(Keyword.put(connection_options, :auto_reconnect, true))
 
     {:ok, listen_ref} = Postgrex.Notifications.listen(notifications, @channel)
+    {:ok, publication_ref} = Postgrex.Notifications.listen(notifications, @publication_channel)
 
     collaboration_refs =
       Map.new(@collaboration_channels, fn channel ->
@@ -57,6 +59,7 @@ defmodule ChalkSync.Fanout.PostgresNotifications do
      %{
        notifications: notifications,
        listen_ref: listen_ref,
+       publication_ref: publication_ref,
        collaboration_refs: collaboration_refs,
        received_count: 0,
        malformed_count: 0,
@@ -70,6 +73,29 @@ defmodule ChalkSync.Fanout.PostgresNotifications do
   end
 
   @impl GenServer
+  def handle_info(
+        {:notification, notifications, publication_ref, @publication_channel, payload},
+        %{notifications: notifications, publication_ref: publication_ref} = state
+      ) do
+    case parse_publication_payload(payload) do
+      {:ok, episode} ->
+        Coordinator.publication_observed(episode)
+        Telemetry.execute([:fanout, :notification], %{}, %{outcome: :valid})
+
+        {:noreply,
+         %{
+           state
+           | received_count: state.received_count + 1,
+             last_received_at_ms: System.monotonic_time(:millisecond)
+         }}
+
+      :error ->
+        Telemetry.execute([:fanout, :notification], %{}, %{outcome: :malformed})
+        Logger.warning("discarded malformed media publication notification")
+        {:noreply, %{state | malformed_count: state.malformed_count + 1}}
+    end
+  end
+
   def handle_info(
         {:notification, notifications, listen_ref, @channel, payload},
         %{notifications: notifications, listen_ref: listen_ref} = state
@@ -126,6 +152,22 @@ defmodule ChalkSync.Fanout.PostgresNotifications do
          space_id: String.downcase(space_id),
          episode_id: String.downcase(episode_id)
        }, revision}
+    else
+      _ -> :error
+    end
+  end
+
+  defp parse_publication_payload(payload) do
+    with [tenant_id, space_id, episode_id] <- String.split(payload, ":"),
+         {:ok, _tenant} <- UUID.dump(tenant_id),
+         {:ok, _space} <- UUID.dump(space_id),
+         {:ok, _episode} <- UUID.dump(episode_id) do
+      {:ok,
+       %EpisodeKey{
+         tenant_id: String.downcase(tenant_id),
+         space_id: String.downcase(space_id),
+         episode_id: String.downcase(episode_id)
+       }}
     else
       _ -> :error
     end

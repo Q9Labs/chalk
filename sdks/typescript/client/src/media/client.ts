@@ -242,6 +242,20 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async closeForcedLocalPublication(source: MediaSource): Promise<void> {
     this.setLocalSourceIntent(source, false);
     await this.#retireLocalPublication(source);
+    if (!this.#replaceMediaConnection) return;
+    const generation = this.#generation;
+    await this.#serializeSDP(async () => {
+      const existing = new Set([...this.#localTracks.values()].filter((state) => state.source !== source && state.providerPublicationId !== null));
+      const states = await this.#prepareConnectionForPublication([], generation);
+      await this.#publishPreparedTracksSerialized(
+        states.filter((state) => existing.has(state)),
+        generation,
+        this.#connection,
+        this.#bootstrap.connectionId,
+      );
+      this.#requireGeneration(generation);
+      this.#setPhase("live", null);
+    });
   }
 
   async #retireUnavailableLocalPublication(state: LocalTrackState): Promise<void> {
@@ -624,7 +638,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     } catch (error) {
       if (generation !== this.#generation || this.#stopped) throw error;
       if (!this.#canReplaceConnectionAfterRemotePull(error, generation)) {
-        this.#observeRemotePublicationCursor(cursor);
+        this.#observeRemotePublicationCursor(cursor, retryableRemotePull(error));
         throw error;
       }
       return this.#retryRemotePullOnReplacement(publications, cursor, generation);
@@ -646,7 +660,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return await this.#pull(publications, generation);
     } catch (error) {
       if (generation !== this.#generation || this.#stopped) throw error;
-      this.#observeRemotePublicationCursor(cursor);
+      this.#observeRemotePublicationCursor(cursor, retryableRemotePull(error));
       throw error;
     }
   }
@@ -703,7 +717,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     for (const failure of failures) {
       const publication = requested.get(`${failure.connectionId}\u0000${failure.trackName}`);
       if (!publication) throw new CloudflareSFUError("Cloudflare SFU returned an unrequested remote track error", "invalid_publication");
-      this.#remotePullRetryAfter.set(publication.publicationId, Date.now() + (failure.code === "empty_track_error" ? 15_000 : 5_000));
+      this.#remotePullRetryAfter.set(publication.publicationId, Date.now() + 750);
       this.#reportError(new CloudflareSFUError(`Cloudflare SFU remote track failed: ${failure.code}`, "media_failed", { providerCode: failure.code }));
     }
   }
@@ -873,9 +887,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     await this.#publishPreparedTracks(enabled, generation);
   }
 
-  #observeRemotePublicationCursor(cursor: PublicationCursor): void {
+  #observeRemotePublicationCursor(cursor: PublicationCursor, pullIncomplete = false): void {
     this.#cursor = cursor;
-    this.#remotePullIncomplete = false;
+    this.#remotePullIncomplete = pullIncomplete;
     this.#publishSnapshot();
   }
 
@@ -947,7 +961,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       } catch {
         // Remote discovery reports its own operation-scoped error and retries on the next poll.
       } finally {
-        this.#schedulePoll();
+        this.#schedulePoll(this.#remotePullIncomplete ? 750 : this.#pollIntervalMs);
       }
     }, delayMs);
   }
@@ -1224,6 +1238,10 @@ function remotePublicationEqual(left: CloudflareSFURemoteTrack, right: Cloudflar
 
 function providerDescription(description: ReturnType<typeof requireDescription>): { readonly sessionDescription: ReturnType<typeof requireDescription> } {
   return { sessionDescription: description };
+}
+
+function retryableRemotePull(error: unknown): boolean {
+  return error instanceof CloudflareSFUError && ["signaling_failed", "signaling_timeout", "media_failed", "negotiation_timeout"].includes(error.code);
 }
 
 function mediaTargetFailure(error: unknown): MediaPlaneResult {
