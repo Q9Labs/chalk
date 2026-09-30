@@ -2,9 +2,9 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { deriveRecordingMediaSourceId, parseRecordingPresentationTimelineV1, type RecordingMediaSourceV1, type RecordingPresentationAssetV1, type RecordingPresentationEventV1, type RecordingPresentationParticipantV1, type RecordingPresentationReactionV1 } from "@q9labsai/recording-presentation";
 import { parseDecodedMediaIndexV1 } from "./decoded-media.js";
+import { isMainModule } from "./node/main-module.js";
 
 // A heavy Episode for the native compositor: three cameras, speaker changes,
 // a screen share with a gap, two whiteboard revisions, reactions, a raised
@@ -330,7 +330,7 @@ export function parseArguments(values: readonly string[]): FixtureArguments {
   };
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (isMainModule(import.meta.url)) {
   main().catch((error: unknown) => {
     process.stderr.write(`compose-fixture: ${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;
