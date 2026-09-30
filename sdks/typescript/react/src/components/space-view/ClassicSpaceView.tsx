@@ -19,6 +19,7 @@ import { InviteDialog } from "../invite-dialog/InviteDialog";
 import { LeaveDialog } from "../leave-dialog/LeaveDialog";
 import { ParticipantsPanel } from "../participants-panel/ParticipantsPanel";
 import { ParticipantVolumeProvider } from "../participants-panel/participant-volume-context";
+import { OfflineActions } from "../offline-actions/OfflineActions";
 import { ReconnectingOverlay } from "../reconnecting-overlay/ReconnectingOverlay";
 import { SpaceInfoDialog } from "../space-info-dialog/SpaceInfoDialog";
 import { TranscriptPanel } from "../transcript-panel/TranscriptPanel";
@@ -273,6 +274,7 @@ export function ClassicSpaceView({
             {overlay}
             <ToastStack toasts={commandToasts} onDismiss={dismissCommandError} position="bottom-right" palette={palette} texture={texture} />
             {reconnecting ? <ReconnectingOverlay {...reconnecting} /> : null}
+            <OfflineActions />
           </>
         }
         dialogs={

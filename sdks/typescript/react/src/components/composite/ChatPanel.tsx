@@ -294,7 +294,7 @@ export const ChatPanelSurface = React.memo(
               ))
             )}
             {pendingMessages.map((pending) => (
-              <div key={pending.clientMessageId} className="my-2">
+              <div key={pending.clientMessageId} className={pending.status === "queued" ? "my-2 opacity-70" : "my-2"}>
                 <MessageBubble
                   content={pending.text}
                   seed={pending.clientMessageId}
@@ -307,6 +307,7 @@ export const ChatPanelSurface = React.memo(
                   generatedAvatars={generatedAvatars}
                   onResolveAttachmentUrl={onResolveAttachmentUrl}
                 />
+                {pending.status === "queued" ? <p className="mr-14 text-right text-xs text-[var(--chalk-app-text-muted)]">Waiting to send</p> : null}
                 {pending.status === "failed" ? (
                   <div className="mr-14 flex items-center justify-end gap-2 text-xs text-[var(--chalk-app-text-muted)]">
                     <span>{pending.error?.message || "Not sent"}</span>

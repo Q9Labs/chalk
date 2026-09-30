@@ -1,6 +1,6 @@
 export { ChalkProvider } from "./bindings/context";
 export type { ChalkProviderProps } from "./bindings/context";
-export { useCan, useChat, useConnection, useMedia, useParticipants, useReactions, useRecording, useSelf, useSpaceClient, useWhiteboard } from "./bindings/hooks";
+export { useCan, useChat, useConnection, useMedia, useOffline, useParticipants, useReactions, useRecording, useSelf, useSpaceClient, useWhiteboard } from "./bindings/hooks";
 export { Chalk } from "./components/chalk/Chalk";
 export type { ChalkFeatures, ChalkProps, SpaceLayout } from "./components/chalk/Chalk";
 export { RecordingSpaceView } from "./components/space-view/RecordingSpaceView";

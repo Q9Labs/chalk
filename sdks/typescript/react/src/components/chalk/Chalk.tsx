@@ -221,10 +221,10 @@ function SpaceExperience(props: ChalkProps & { readonly feedbackRootRef: React.R
         retryError={joinError}
       />
     );
-  return <SpaceSurface {...props} spaceName={spaceName} reconnecting={connection.status === "reconnecting"} />;
+  return <SpaceSurface {...props} spaceName={spaceName} />;
 }
 
-function SpaceSurface(props: ChalkProps & { readonly feedbackRootRef: React.RefObject<HTMLElement | null>; readonly resolvedColorScheme: Exclude<ChalkColorScheme, "system">; readonly spaceName: string; readonly reconnecting: boolean }): React.JSX.Element {
+function SpaceSurface(props: ChalkProps & { readonly feedbackRootRef: React.RefObject<HTMLElement | null>; readonly resolvedColorScheme: Exclude<ChalkColorScheme, "system">; readonly spaceName: string }): React.JSX.Element {
   const client = useSpaceClient();
   const self = useSelf();
   const media = useMedia();
@@ -403,7 +403,6 @@ function SpaceSurface(props: ChalkProps & { readonly feedbackRootRef: React.RefO
           />
         ) : undefined
       }
-      reconnecting={props.reconnecting ? { isVisible: true, status: "reconnecting", onLeft: () => runCommand(() => client.leave()) } : undefined}
       onLeft={() => runCommand(() => client.leave())}
       onEndEpisode={canEndEpisode ? () => runCommand(() => client.endEpisode()) : undefined}
       overlay={

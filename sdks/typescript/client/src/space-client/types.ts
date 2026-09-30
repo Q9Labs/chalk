@@ -6,6 +6,7 @@ import type { AccessGrant } from "../access/grant";
 import type { V1Capability } from "../sync/v1-types";
 import type { ChatControllerEffects } from "./chat-controller";
 import type { MediaControllerEffects } from "./media-controller";
+import type { OfflineActionsControllerEffects } from "./offline-actions";
 import type { ParticipantsControllerEffects } from "./participants-controller";
 import type { ReactionsControllerEffects } from "./reactions-controller";
 import type { RecordingControllerEffects } from "./recording-controller";
@@ -80,6 +81,7 @@ export type ErrorCode =
   | "media.capture_failed"
   | "media.request_invalid"
   | "media.timeout"
+  | "offline.discarded"
   | "participant.invalid"
   | "reaction.invalid"
   | "whiteboard.unavailable";
@@ -167,11 +169,17 @@ export type MediaSlice = {
 export type ChatAttachment = ChalkChatAttachment;
 export type ChatMessage = ChalkChatMessage;
 export type ChatReadReceipt = ChalkChatReadReceipt;
+export type OfflineActionKind = "chat_message" | "hand_raise" | "hand_lower";
+export type OfflineActionsPolicy = "ask" | "send" | "discard";
+export type OfflineAction = { readonly id: string; readonly kind: OfflineActionKind; readonly text: string | null; readonly queuedAt: number };
+/** Actions taken while reconnecting. `decisionNeeded` is true once the connection is live and the policy is `ask`. */
+export type OfflineSlice = { readonly pending: readonly OfflineAction[]; readonly decisionNeeded: boolean; readonly policy: OfflineActionsPolicy };
+
 export type PendingChatSend = {
   readonly clientMessageId: string;
   readonly text: string;
   readonly attachments: readonly ChatAttachment[];
-  readonly status: "sending" | "failed";
+  readonly status: "queued" | "sending" | "failed";
   readonly error: ClientFailure | null;
 };
 
@@ -221,6 +229,7 @@ export type SpaceSnapshot = {
   readonly reactions: ReactionsSlice;
   readonly recording: RecordingSlice;
   readonly whiteboard: WhiteboardSlice;
+  readonly offline: OfflineSlice;
 };
 
 export type ChatSendInput = { readonly text: string; readonly attachments?: readonly ChatAttachment[] };
@@ -230,6 +239,7 @@ export type ChatUploadFile = { readonly name: string; readonly type: string; rea
 export type MediaController = PromiseController<Omit<MediaControllerEffects, "configure" | "dispose">>;
 export type ChatFilesController = PromiseController<Pick<ChatControllerEffects, "upload" | "url" | "resolveUrl">>;
 export type ChatController = PromiseController<Omit<ChatControllerEffects, "upload" | "url" | "resolveUrl" | "dispose">> & { readonly files: ChatFilesController };
+export type OfflineController = PromiseController<Omit<OfflineActionsControllerEffects, "dispose">>;
 export type ParticipantsController = PromiseController<Omit<ParticipantsControllerEffects, "dispose">>;
 export type ReactionsController = PromiseController<Omit<ReactionsControllerEffects, "dispose">>;
 export type RecordingController = PromiseController<Omit<RecordingControllerEffects, "dispose">>;
@@ -255,6 +265,7 @@ export type SpaceClient = {
   readonly reactions: ReactionsController;
   readonly recording: RecordingController;
   readonly whiteboard: WhiteboardController;
+  readonly offline: OfflineController;
   readonly join: (options?: JoinOptions) => Promise<void>;
   readonly leave: () => Promise<void>;
   readonly dispose: () => void;

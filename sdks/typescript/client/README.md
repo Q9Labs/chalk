@@ -137,6 +137,12 @@ await client.participants.raiseHand();
 await client.participants.lowerHand();
 await client.participants.renameSelf("Ari");
 
+// Chat messages and hand raises made while the connection recovers are held.
+// The default policy sends them once live again. With "ask", read
+// `client.getSnapshot().offline` and let the user decide.
+await client.offline.setPolicy("ask"); // "ask" | "send" | "discard"
+await client.offline.send(); // or client.offline.discard()
+
 await client.reactions.send("🎉");
 const transport = client.whiteboard.transport();
 ```

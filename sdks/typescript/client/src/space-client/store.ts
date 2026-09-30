@@ -1,6 +1,6 @@
 import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
 import type { ConnectionLifecycleSnapshot } from "../connection";
-import type { ChatSlice, ConnectionSlice, MediaSlice, ParticipantsSlice, ReactionsSlice, RecordingSlice, SelfSlice, SpaceSnapshot, WhiteboardSlice } from "./types";
+import type { ChatSlice, ConnectionSlice, MediaSlice, ParticipantsSlice, ReactionsSlice, RecordingSlice, OfflineSlice, SelfSlice, SpaceSnapshot, WhiteboardSlice } from "./types";
 
 const empty = <T>(value: T): T => Object.freeze(value);
 const EMPTY = empty({
@@ -18,6 +18,7 @@ const EMPTY = empty({
   chat: empty({ status: "idle", messages: empty([]), pendingSends: empty([]), readReceipts: empty([]), unreadCount: 0, pagination: empty({ cursor: null, hasOlder: false, historyTruncated: false }), lastError: null }),
   reactions: empty({ active: empty([]) }),
   recording: empty({ current: null }),
+  offline: empty({ pending: empty([]), decisionNeeded: false, policy: "send" }),
   whiteboard: empty({ open: false, engine: empty({ status: "unsubscribed", sceneId: null, revision: null, presenting: false, error: null }) }),
 }) satisfies SpaceSnapshot;
 
@@ -66,6 +67,9 @@ export class SpaceStore {
   }
   updateRecording(value: RecordingSlice): void {
     this.#replace("recording", value);
+  }
+  updateOffline(value: OfflineSlice): void {
+    this.#replace("offline", value);
   }
   updateWhiteboard(value: WhiteboardSlice): void {
     this.#replace("whiteboard", value);
