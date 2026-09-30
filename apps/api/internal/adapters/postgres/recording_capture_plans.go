@@ -283,14 +283,7 @@ func buildRecordingCapturePlan(source sqlc.GetRecordingCapturePlanSourceRow, inp
 		return captureplan.Plan{}, err
 	}
 	var publications []persistedCapturePlanPublication
-	publicationJSON, ok := source.ProviderPublications.([]byte)
-	if !ok {
-		publicationJSON, err = json.Marshal(source.ProviderPublications)
-		if err != nil {
-			return captureplan.Plan{}, fmt.Errorf("encode capture plan publications: %w", captureplan.ErrInvalidPlan)
-		}
-	}
-	if err := strictCapturePlanJSON(publicationJSON, &publications); err != nil {
+	if err := strictCapturePlanJSON(source.ProviderPublications, &publications); err != nil {
 		return captureplan.Plan{}, fmt.Errorf("decode capture plan publications: %w", captureplan.ErrInvalidPlan)
 	}
 	tracks, err := capturePlanTracks(publications, participantGenerations)
