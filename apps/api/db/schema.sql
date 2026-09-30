@@ -3302,6 +3302,7 @@ create table provider_operation_receipts (
     state text not null default 'prepared',
     outcome text,
     reason text,
+    last_error_code text,
     created_at timestamptz not null default now(),
     dispatching_at timestamptz,
     completed_at timestamptz,
@@ -3320,6 +3321,7 @@ create table provider_operation_receipts (
     constraint provider_operation_receipts_outcome_check check (outcome is null or outcome in (
         'confirmed', 'satisfied', 'retryable_failure', 'terminal_failure', 'ambiguous'
     )),
+    constraint provider_operation_receipts_error_code_check check (last_error_code is null or octet_length(last_error_code) between 1 and 256),
     constraint provider_operation_receipts_reason_check check (reason is null or octet_length(reason) between 1 and 256),
     constraint provider_operation_receipts_participant_check check (
         (participant_id is not null or participant_generation is null)

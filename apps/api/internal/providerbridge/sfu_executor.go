@@ -3,6 +3,7 @@ package providerbridge
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"sort"
 
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
@@ -110,30 +111,39 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 		connectionIDs = append(connectionIDs, connectionID)
 	}
 	sort.Strings(connectionIDs)
+	allAlreadyClosed := true
 	for _, connectionID := range connectionIDs {
 		connectionTargets := connections[connectionID]
 		tracks := make([]mediaplane.CloseTrack, 0, len(connectionTargets))
 		for _, target := range connectionTargets {
 			tracks = append(tracks, mediaplane.CloseTrack{Mid: target.reference.MID, Source: target.publication.Source, PublicationID: target.publication.PublicationID})
 		}
-		_, err := e.tracks.CloseTracks(ctx, mediaplane.CloseTracksRequest{
+		closed, err := e.tracks.CloseTracks(ctx, mediaplane.CloseTracksRequest{
 			Provider: mediaplane.ProviderCloudflareSFU, ConnectionID: connectionID, Tracks: tracks, Force: true,
 		})
 		if errors.Is(err, mediaplane.ErrConnectionNotFound) {
+			closed.AlreadyClosed = true
 			err = nil
 		}
 		if err != nil {
-			return providerExecutionFailure(err)
+			result := providerExecutionFailure(err)
+			slog.WarnContext(ctx, "Provider media cleanup failed", "operation_id", input.OperationID, "effect", input.Effect, "stage", "close_tracks", "error_code", result.Reason)
+			return result
 		}
+		allAlreadyClosed = allAlreadyClosed && closed.AlreadyClosed
 		for _, target := range connectionTargets {
 			if err := e.publications.RecordClosedPublication(ctx, mediapublications.CloseInput{
 				TenantID: input.TenantID, EpisodeID: input.EpisodeID, ParticipantID: target.publication.ParticipantID,
 				ParticipantGeneration: target.reference.ParticipantGeneration, ConnectionID: connectionID,
 				MID: target.reference.MID, Source: target.publication.Source, PublicationID: target.publication.PublicationID,
 			}); err != nil {
+				slog.WarnContext(ctx, "Provider media cleanup observation failed", "operation_id", input.OperationID, "effect", input.Effect, "stage", "record_closed_publication", "error_code", "observation_update_failed")
 				return ExecutionResult{Outcome: provideroperations.OutcomeAmbiguous, Reason: "observation_update_failed"}
 			}
 		}
+	}
+	if allAlreadyClosed {
+		return ExecutionResult{Outcome: provideroperations.OutcomeSatisfied}
 	}
 	return ExecutionResult{Outcome: provideroperations.OutcomeConfirmed}
 }
@@ -190,7 +200,12 @@ func providerExecutionFailure(err error) ExecutionResult {
 	case errors.Is(err, mediaplane.ErrUnsupportedOperation):
 		return ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "unsupported_effect"}
 	case errors.Is(err, mediaplane.ErrProviderFailed):
-		return ExecutionResult{Outcome: provideroperations.OutcomeAmbiguous, Reason: "provider_result_ambiguous"}
+		reason := "provider_result_ambiguous"
+		var failure interface{ ProviderFailureCode() string }
+		if errors.As(err, &failure) {
+			reason = "provider_" + failure.ProviderFailureCode()
+		}
+		return ExecutionResult{Outcome: provideroperations.OutcomeAmbiguous, Reason: reason}
 	case errors.Is(err, mediaplane.ErrProviderUnauthorized):
 		return ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "provider_unauthorized"}
 	case errors.Is(err, mediaplane.ErrProviderRateLimited):
