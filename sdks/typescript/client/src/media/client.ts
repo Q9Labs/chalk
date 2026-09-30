@@ -422,20 +422,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const transceiver = state.transceiver;
     state.desiredEnabled = false;
     state.track.enabled = false;
-    try {
-      if (transceiver) await this.#boundPeerOperation(transceiver.sender.replaceTrack(null));
-    } catch (error) {
-      // Keep the capture track disabled even if the browser cannot detach it.
-      state.enabled = false;
-      this.#publishSnapshot();
-      this.#emitLocal();
-      throw error;
-    }
+    // Queue the detach before notifying consumers, but never wait to expose off.
+    const detach = transceiver ? this.#boundPeerOperation(transceiver.sender.replaceTrack(null)) : Promise.resolve();
     state.enabled = false;
     state.pendingOperationId = null;
     state.pendingTrackName = null;
     this.#publishSnapshot();
     this.#emitLocal();
+    await detach;
   }
 
   async #publishPreparedTracks(states: readonly LocalTrackState[], generation: number): Promise<void> {

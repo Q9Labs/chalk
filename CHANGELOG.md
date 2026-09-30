@@ -22,7 +22,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Bounded browser Cloudflare SFU signaling, negotiation, and credential refresh so stalled media work releases controls and reports a recoverable timeout, with nested provider and client deadlines; reserved the full signaling deadline after credential refresh and preserved the timeout message when another media control succeeds.
 - Updated the locked undici dependency to 7.29.1 to address GHSA-3wwx-pv8p-q78v.
 - Resumed camera and microphone media on the existing Cloudflare SFU publication after a Participant re-enables it, without exhausting media sections or leaving remote Participants without media.
-- Paused microphone, camera, and screen senders before sending a self-disable command to Sync, and restored them if Sync rejects the command.
+- Paused microphone, camera, and screen senders and exposed their off state before waiting for sender detachment or Sync, preserved rapid off/on command ordering, and restored them if Sync rejects the command.
 - Closed forced-muted Cloudflare SFU tracks, reflected the off state in the affected Participant's controls, and required a fresh publication on re-enable; rebuilt retired bundled connections without restoring other forced-off sources.
 - Reconciled authoritative media publications every two seconds so fresh publications after forced mute do not wait for the slower discovery backstop.
 - Stopped receiver audio and video playback as soon as the projected Participant media state is off.

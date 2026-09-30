@@ -222,6 +222,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     operation?.observe("observed", "intent");
     let previousIntent = this.#intent[source];
     let intentRevision = 0;
+    let earlyPause: Promise<void> | null = null;
     const localPause = Effect.suspend(() => {
       previousIntent = this.#intent[source];
       intentRevision = (this.#intentRevisions.get(source) ?? 0) + 1;
@@ -229,7 +230,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
       this.#intent[source] = enabled;
       if (enabled) this.#pendingEnables.set(source, intentRevision);
       this.#ports?.media.setLocalSourceIntent?.(source, enabled);
-      return enabled || !this.#ports ? Effect.void : this.#localTarget(this.#ports, source, false);
+      if (!enabled && this.#ports) earlyPause = this.#beginLocalPause(this.#ports, source);
+      return Effect.void;
     });
     return localPause
       .pipe(
@@ -243,7 +245,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
               return Effect.suspend(() => {
                 if (!enabled) {
                   let paused = false;
-                  return this.#localTarget(ports, source, false).pipe(
+                  return (earlyPause ? foreign(() => earlyPause!) : this.#localTarget(ports, source, false)).pipe(
                     Effect.tap(() =>
                       Effect.sync(() => {
                         paused = true;
@@ -404,11 +406,13 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #stopScreen(): ClientEffect<void> {
     const operation = this.#diagnostics?.startOperation("screen.stop");
     let intentRevision = 0;
+    let earlyPause: Promise<void> | null = null;
     const localPause = Effect.suspend(() => {
       intentRevision = (this.#intentRevisions.get("screen") ?? 0) + 1;
       this.#intentRevisions.set("screen", intentRevision);
       this.#ports?.media.setLocalSourceIntent?.("screen", false);
-      return this.#ports ? this.#localTarget(this.#ports, "screen", false) : Effect.void;
+      if (this.#ports) earlyPause = this.#beginLocalPause(this.#ports, "screen");
+      return Effect.void;
     });
     return localPause
       .pipe(
@@ -419,7 +423,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
               Effect.suspend(() => {
                 const track = this.#tracks.get("screen");
                 let paused = false;
-                return this.#localTarget(ports, "screen", false).pipe(
+                return (earlyPause ? foreign(() => earlyPause!) : this.#localTarget(ports, "screen", false)).pipe(
                   Effect.tap(() =>
                     Effect.sync(() => {
                       paused = true;
@@ -459,6 +463,13 @@ class MediaControllerRuntime implements MediaControllerEffects {
         Effect.mapError(normalizeClientError),
         Effect.tapError(() => Effect.sync(() => operation?.fail("screen_stop_failed"))),
       );
+  }
+
+  #beginLocalPause(ports: ConnectionPorts, source: MediaSource): Promise<void> {
+    const pause = Effect.runPromise(this.#localTarget(ports, source, false));
+    // The command gate awaits and propagates this error; observe it meanwhile.
+    void pause.catch(() => undefined);
+    return pause;
   }
 
   #serialize<A>(source: MediaSource, effect: Effect.Effect<A, unknown>): Effect.Effect<A, unknown> {

@@ -353,6 +353,29 @@ describe("Cloudflare SFU client", () => {
     harness.client.stop();
   });
 
+  it("publishes the off state before a delayed sender detach settles", async () => {
+    const { harness, transceiver } = await startedCameraHarness();
+    const publication = harness.client.getSnapshot().localTracks[0]?.publicationId;
+    let detach: () => void = () => undefined;
+    const pending = new Promise<void>((resolve) => {
+      detach = resolve;
+    });
+    const replace = vi.spyOn(transceiver!.sender, "replaceTrack").mockReturnValueOnce(pending);
+    const changes = vi.fn();
+    harness.client.subscribe(changes);
+    const disabling = harness.client.setLocalPublicationTarget({ operationId: "disable", participantId: "participant-1", source: "camera", enabled: false });
+    try {
+      await vi.waitFor(() => expect(replace).toHaveBeenCalledWith(null));
+      expect(harness.client.getSnapshot().localTracks[0]).toMatchObject({ enabled: false, publicationId: publication });
+      expect(transceiver?.sender.track?.enabled).toBe(false);
+      expect(changes).toHaveBeenCalled();
+    } finally {
+      detach();
+      await disabling;
+      harness.client.stop();
+    }
+  });
+
   it("keeps a paused publication disabled after sender replacement fails and retries without republishing", async () => {
     const { harness, peer, transceiver } = await startedCameraHarness();
     await expect(harness.client.setLocalPublicationTarget({ operationId: "disable", participantId: "participant-1", source: "camera", enabled: false })).resolves.toEqual({ outcome: "confirmed", errorCode: null });

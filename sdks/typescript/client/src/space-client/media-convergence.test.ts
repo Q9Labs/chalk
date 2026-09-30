@@ -6,6 +6,39 @@ import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
 
 describe("SpaceClient media convergence", () => {
+  it("keeps durable off/on intents ordered while the early local pause is pending", async () => {
+    const platform = createCoreTestPlatform();
+    const track = mediaTrack();
+    let finishPause: () => void = () => undefined;
+    const pending = new Promise<void>((resolve) => {
+      finishPause = resolve;
+    });
+    const target = vi.fn(async (input: { readonly enabled: boolean }) => {
+      track.enabled = input.enabled;
+      if (!input.enabled) await pending;
+      return { outcome: "confirmed" as const, errorCode: null };
+    });
+    const command = vi.fn<ConnectionSyncClient["setMicrophoneEnabled"]>().mockResolvedValue({ operationId: "toggle", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" });
+    const client = capturedClient(platform, track, { media: { setLocalPublicationTarget: target }, sync: { setMicrophoneEnabled: command } });
+    try {
+      await client.join({ microphone: true, camera: false });
+      command.mockClear();
+      const off = client.media.setMicrophoneEnabled(false);
+      await vi.waitFor(() => expect(target).toHaveBeenCalledWith(expect.objectContaining({ enabled: false })));
+      const on = client.media.setMicrophoneEnabled(true);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const commandsBeforePause = command.mock.calls.length;
+      finishPause();
+      await Promise.all([off, on]);
+      expect(commandsBeforePause).toBe(0);
+      expect(command.mock.calls.map(([enabled]) => enabled)).toEqual([false, true]);
+      expect(target.mock.calls.filter(([input]) => !input.enabled)).toHaveLength(1);
+    } finally {
+      finishPause();
+      client.dispose();
+    }
+  });
+
   it("pauses a local microphone before Sync confirms and restores it when Sync rejects", async () => {
     const platform = createCoreTestPlatform();
     const track = mediaTrack();
