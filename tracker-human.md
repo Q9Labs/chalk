@@ -27,9 +27,11 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Run a two-party call with audio, video, screen share, admission changes and
       reconnect on supported browsers and on iOS and Android release builds.
     - Cover permission denial, background return and media-route replacement.
-    - Find why re-enabling after a moderator mute sometimes doesn't reach one receiver,
-      and whether audio can play for a few tens of milliseconds after a muted badge when
-      Sync restarts.
+    - Make an unmute after a moderator mute reach every receiver in under two seconds.
+      In production it took about six seconds, and one receiver sometimes never hears
+      it.
+    - Find whether audio can play for a few tens of milliseconds after a muted badge
+      when Sync restarts.
 
 3. **Measure media usage per Tenant and Episode** (Not started · size M · P2)
     The Usage type has egress and Participant-minute fields, but both Cloudflare
@@ -114,22 +116,23 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     recorder is not known.
     - Handle sender clock divergence and pass a one-hour Recording.
     - Prove recorder restart continuity and TLS peer rejection on the managed hosts.
+    - Make a release fail when a new recorder image can't bootstrap with the issuer. A
+      wrong baked issuer name passed the verifier and stopped every worker.
 
 12. **Capture starts fast and costs little** (Partly working · size L)
-    A Capture worker takes about 140 seconds from record to ready and runs on a c-2 with
-    a 1.6 GB image shared with Render. At 2,000 recorded Episode-hours a month, Capture
-    costs about $230, of which about $131 is Droplets and about $90 is SFU traffic to
-    the recorder.
-    Open question: Whether a smaller image shortens DigitalOcean's roughly 30-second
-    create step is not measured.
-    - Turn off DigitalOcean's monitoring and console agents at create, push Capture
-      demand to the fleet controller, and have the worker log its own CPU and memory.
-    - Build separate lean Capture and Render images on a minimal OS base.
-    - Move Capture to the smallest Droplet size its measured CPU and memory allow.
-    - Experiment: record a lower simulcast layer of each camera (for example 360p) and
-      compare the Export and the SFU traffic to the recorder.
-    - Experiment: if Cloudflare's SFU accepts a TCP receiver, have the recorder receive
-      over TCP and compare gaps and loss-driven keyframes against UDP.
+    A Capture worker takes about 70 seconds from record to ready and runs on a c-2 from
+    the shared image. At 2,000 recorded Episode-hours a month, Capture costs about $230,
+    of which about $131 is Droplets and about $90 is SFU traffic to the recorder.
+    Open question: Whether the lean image's faster boot holds across DigitalOcean's
+    variable create step is measured on only two samples.
+    - Ship the lean Capture image and move Capture to s-1vcpu-1gb, then measure record
+      to ready on a real Recording.
+    - Decide whether to start the Capture worker when the Episode starts, the only way
+      found to get under 30 seconds to ready.
+    - Experiment: publish camera simulcast from the web SDK, have Capture record the low
+      layer, and compare the Export and the SFU traffic to the recorder.
+    - Experiment, only if UDP loss damages Recordings: compare Capture over TURN on TCP
+      with UDP in one Recording. Cloudflare's SFU has no direct TCP receiver.
 
 13. **Scheduled Recordings in a real integration** (Partly working · size M · P1)
     Scheduled preparation works in production: the 2026-09-20 canary started from a

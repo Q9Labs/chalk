@@ -50,7 +50,8 @@ done
 [[ -f "$bundle_root/renderer/dist/node/compose.js" ]] || { echo "release bundle is missing compositor runtime artifacts" >&2; exit 1; }
 (
   cd "$bundle_root/renderer"
-  /opt/chalk-recorder/toolchains/node-22.23.2/bin/node --input-type=module -e 'import { createCanvas } from "@napi-rs/canvas"; createCanvas(1, 1).toBuffer("image/png");'
+  timeout --kill-after=10 60 /opt/chalk-recorder/toolchains/node-22.23.2/bin/node --input-type=module -e 'import { createCanvas } from "@napi-rs/canvas"; createCanvas(1, 1).toBuffer("image/png");' ||
+    { echo "canvas smoke test failed or timed out" >&2; exit 1; }
 )
 ffmpeg_encoders="$(ffmpeg -hide_banner -encoders 2>/dev/null)"
 grep -Fq 'libx264 ' <<<"$ffmpeg_encoders" || { echo "installed FFmpeg does not expose libx264" >&2; exit 1; }
