@@ -362,6 +362,41 @@ func TestReconcilerDrainsNodeThatMissedBootstrapDeadline(t *testing.T) {
 	}
 }
 
+func TestReconcilerDrainsNodeStuckInProviderCreate(t *testing.T) {
+	fixture := newFleetFixture(t)
+	fixture.config.MaxNodes = 1
+	fixture.config.StartupTimeout = 10 * time.Minute
+	request := fixture.ensureRequest(7)
+	node := fixture.provider.nodeFor(request, "7007")
+	node.Status = "new"
+	node.CreatedAt = fixture.now.Add(-provisionStallTimeout - time.Second)
+	fixture.provider.nodes[node.ProviderID] = node
+	reconciler := fixture.reconciler(t)
+
+	if result := fixture.step(t, reconciler); result.Action != ActionMissingNodeReconciled {
+		t.Fatalf("adoption result = %+v", result)
+	}
+	result := fixture.step(t, reconciler)
+	if result.Action != ActionAdmissionClosed || fixture.bootstrap.ensureCalls != 0 {
+		t.Fatalf("stuck create result = %+v, bootstrap calls %d", result, fixture.bootstrap.ensureCalls)
+	}
+}
+
+func TestReconcilerFailClosedReusesLastDemandRevision(t *testing.T) {
+	fixture := newFleetFixture(t)
+	state := NewJournal()
+	state.Revision = 1
+	state.LastProjection = &PoolProjection{Key: fixture.config.Key, DemandRevision: "demand-last", Reason: "no_demand", ObservedAt: fixture.now}
+	fixture.journal.state, fixture.journal.found = state, true
+	fixture.demand.err = ErrProviderUnavailable
+	reconciler := fixture.reconciler(t)
+
+	result, err := reconciler.Reconcile(context.Background())
+	if !errors.Is(err, ErrProviderUnavailable) || result.Projection.DemandRevision != "demand-last" {
+		t.Fatalf("result/error = %+v/%v", result, err)
+	}
+}
+
 type fleetFixture struct {
 	bootstrap *fakeBootstrap
 	config    Config

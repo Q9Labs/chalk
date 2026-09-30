@@ -431,6 +431,9 @@ func (r *Reconciler) finish(ctx context.Context, state Journal, nodes map[string
 }
 
 func (r *Reconciler) failClosed(ctx context.Context, state Journal, demandRevision string, now time.Time, cause error) (Result, error) {
+	if demandRevision == "" && state.LastProjection != nil {
+		demandRevision = state.LastProjection.DemandRevision
+	}
 	projection := PoolProjection{Key: r.config.Key, DemandRevision: demandRevision, AdmissionOpen: false, ReadyCapacity: 0, Reason: failureReason(cause), ObservedAt: now}
 	result := Result{Action: ActionCapacityPublished, Projection: projection}
 	if err := r.runtime.PublishPool(ctx, projection); err != nil {
@@ -466,6 +469,8 @@ func (r *Reconciler) projection(state Journal, nodes map[string]Node, observed m
 	return projection
 }
 
+const provisionStallTimeout = 2 * time.Minute
+
 func (r *Reconciler) partitionNodes(nodes map[string]Node, state Journal, observed map[string]NodeObservation, now time.Time) ([]ManagedNode, []ManagedNode) {
 	current := make([]ManagedNode, 0, len(nodes))
 	stale := make([]ManagedNode, 0)
@@ -477,8 +482,10 @@ func (r *Reconciler) partitionNodes(nodes map[string]Node, state Journal, observ
 		}
 		node := nodes[providerID]
 		startupExpired := (managed.Phase == PhaseAwaitingBootstrap || managed.Phase == PhaseBootstrapping) && now.Sub(node.CreatedAt) > r.config.StartupTimeout
+		// DigitalOcean normally finishes a create in about 30 s; a Droplet still "new" long after that is stuck.
+		provisionStalled := managed.Phase == PhaseAwaitingBootstrap && node.Status == "new" && now.Sub(node.CreatedAt) > provisionStallTimeout
 		readyObservationExpired := managed.Phase == PhaseReady && observed[providerID].ObservedAt.IsZero() && managed.LastReadyAt != nil && now.Sub(*managed.LastReadyAt) > r.config.ObservationMaxAge
-		if r.nodeMatchesCurrentRelease(node) && node.Status != "off" && node.Status != "archive" && !startupExpired && !readyObservationExpired {
+		if r.nodeMatchesCurrentRelease(node) && node.Status != "off" && node.Status != "archive" && !startupExpired && !provisionStalled && !readyObservationExpired {
 			current = append(current, managed)
 		} else {
 			stale = append(stale, managed)

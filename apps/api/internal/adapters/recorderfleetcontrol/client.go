@@ -56,7 +56,7 @@ func (c *Client) getDemand(ctx context.Context, key recorderfleet.PoolKey, wait 
 	}
 	query := url.Values{"role": {string(key.Role)}}
 	if wait {
-		query.Set("wait", "25")
+		query.Set("wait", "8")
 	}
 	var response demandResponse
 	if err := c.doJSON(ctx, http.MethodGet, fleetPath+"/demand", query, nil, &response, http.StatusOK); err != nil {
