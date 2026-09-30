@@ -63,6 +63,10 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Close the gaps between today's behavior and that target.
     - Make a page reload during an Episode rejoin it without a second click, if the
       owner wants that.
+    - Re-record a self-mute that a Sync restart interrupted, so other Participants don't
+      see the muted Participant as unmuted.
+    - Have the API push fresh media publications to Sync, then return Sync's media
+      recheck from every 2 seconds to a slow backstop.
 
 ## Collaboration
 
