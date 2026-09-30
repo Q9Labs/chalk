@@ -624,7 +624,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     } catch (error) {
       if (generation !== this.#generation || this.#stopped) throw error;
       if (!this.#canReplaceConnectionAfterRemotePull(error, generation)) {
-        this.#observeRemotePublicationCursor(cursor);
+        this.#observeRemotePublicationCursor(cursor, true);
         throw error;
       }
       return this.#retryRemotePullOnReplacement(publications, cursor, generation);
@@ -646,7 +646,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return await this.#pull(publications, generation);
     } catch (error) {
       if (generation !== this.#generation || this.#stopped) throw error;
-      this.#observeRemotePublicationCursor(cursor);
+      this.#observeRemotePublicationCursor(cursor, true);
       throw error;
     }
   }
@@ -703,7 +703,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     for (const failure of failures) {
       const publication = requested.get(`${failure.connectionId}\u0000${failure.trackName}`);
       if (!publication) throw new CloudflareSFUError("Cloudflare SFU returned an unrequested remote track error", "invalid_publication");
-      this.#remotePullRetryAfter.set(publication.publicationId, Date.now() + (failure.code === "empty_track_error" ? 15_000 : 5_000));
+      this.#remotePullRetryAfter.set(publication.publicationId, Date.now() + 750);
       this.#reportError(new CloudflareSFUError(`Cloudflare SFU remote track failed: ${failure.code}`, "media_failed", { providerCode: failure.code }));
     }
   }
@@ -873,9 +873,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     await this.#publishPreparedTracks(enabled, generation);
   }
 
-  #observeRemotePublicationCursor(cursor: PublicationCursor): void {
+  #observeRemotePublicationCursor(cursor: PublicationCursor, pullIncomplete = false): void {
     this.#cursor = cursor;
-    this.#remotePullIncomplete = false;
+    this.#remotePullIncomplete = pullIncomplete;
     this.#publishSnapshot();
   }
 
@@ -947,7 +947,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       } catch {
         // Remote discovery reports its own operation-scoped error and retries on the next poll.
       } finally {
-        this.#schedulePoll();
+        this.#schedulePoll(this.#remotePullIncomplete ? 750 : this.#pollIntervalMs);
       }
     }, delayMs);
   }

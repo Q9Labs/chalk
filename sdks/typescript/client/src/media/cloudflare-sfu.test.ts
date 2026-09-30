@@ -485,7 +485,7 @@ describe("Cloudflare SFU client", () => {
     harness.client.stop();
   });
 
-  it("surfaces Cloudflare SFU per-track errors and cools down empty tracks", async () => {
+  it("retries a not-yet-ready Cloudflare SFU track without a new publication cursor", async () => {
     const onError = vi.fn();
     const harness = createHarness({ onError });
     await harness.client.start(fakeStream());
@@ -503,9 +503,15 @@ describe("Cloudflare SFU client", () => {
 
     await harness.client.refreshRemotePublications();
     expect(remotePullCount(harness)).toBe(1);
-    harness.transport.snapshot = publicationSnapshot(1, 2, "remote-connection|camera-b");
+    harness.transport.failedRemoteTrackNames.delete("camera-a");
+    await new Promise((resolve) => setTimeout(resolve, 760));
     await harness.client.refreshRemotePublications();
     expect(remotePullCount(harness)).toBe(2);
+    expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe("remote-connection|camera-a");
+
+    harness.transport.snapshot = publicationSnapshot(1, 2, "remote-connection|camera-b");
+    await harness.client.refreshRemotePublications();
+    expect(remotePullCount(harness)).toBe(3);
     expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe("remote-connection|camera-b");
     harness.client.stop();
   });
@@ -621,7 +627,7 @@ describe("Cloudflare SFU client", () => {
     harness.client.stop();
   });
 
-  it("quarantines a failed remote pull at its publication cursor", async () => {
+  it("retries a failed remote pull at the same publication cursor", async () => {
     const harness = await startedRemoteHarness("remote-connection|camera-a");
     harness.transport.failNextRemotePull = true;
     await expect(harness.client.refreshRemotePublications()).rejects.toMatchObject({ code: "signaling_failed" });
@@ -629,7 +635,8 @@ describe("Cloudflare SFU client", () => {
     expect(harness.client.getSnapshot().cursor).toEqual({ incarnation: 1, sequence: 1 });
     expect(harness.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, failure: null });
 
-    await expectNoAdditionalRemotePull(harness);
+    await harness.client.refreshRemotePublications();
+    expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe("remote-connection|camera-a");
 
     harness.transport.snapshot = publicationSnapshot(1, 2, "remote-connection|camera-b");
     await harness.client.refreshRemotePublications();
@@ -637,7 +644,7 @@ describe("Cloudflare SFU client", () => {
     harness.client.stop();
   });
 
-  it("quarantines a failed remote pull without replacing healthy remote tracks", async () => {
+  it("retries a failed remote pull without replacing healthy remote tracks", async () => {
     const { harness, onError, replaceMediaConnection } = await startedReplaceableHarness();
     harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
     await harness.client.refreshRemotePublications();
@@ -653,7 +660,8 @@ describe("Cloudflare SFU client", () => {
     expect(harness.client.getSnapshot().remoteTracks).toEqual([healthy]);
     expect(harness.client.getSnapshot().cursor).toEqual({ incarnation: 1, sequence: 2 });
 
-    await expectNoAdditionalRemotePull(harness);
+    await expect(harness.client.refreshRemotePublications()).resolves.toBeUndefined();
+    expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe("remote-connection|camera-b");
     expect(replaceMediaConnection).not.toHaveBeenCalled();
     harness.client.stop();
   });

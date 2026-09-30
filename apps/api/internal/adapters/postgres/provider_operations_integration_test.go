@@ -5,7 +5,9 @@ import (
 	"errors"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
@@ -110,8 +112,26 @@ func TestProviderOperationRepositoryPersistsReceiptsAndMonotonicObservations(t *
 	}
 
 	observationInput := provideroperations.ObservationInput{TenantID: tenantID, EpisodeID: episodeID, Incarnation: 1, Sequence: 1, Publications: []provideroperations.Publication{{ParticipantID: input.ParticipantID, Source: "camera", Enabled: true, PublicationID: "episode-1|camera-track"}}}
+	listener, err := pgx.Connect(ctx, url)
+	if err != nil {
+		t.Fatalf("connect publication listener: %v", err)
+	}
+	defer listener.Close(ctx)
+	if _, err := listener.Exec(ctx, `listen chalk_media_publications`); err != nil {
+		t.Fatalf("listen for publications: %v", err)
+	}
 	if _, err := repository.AppendObservation(ctx, observationInput); err != nil {
 		t.Fatalf("append observation: %v", err)
+	}
+	notificationCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	notification, err := listener.WaitForNotification(notificationCtx)
+	if err != nil {
+		t.Fatalf("publication notification: %v", err)
+	}
+	wantPayload := tenantID.String() + ":" + spaceID.String() + ":" + episodeID.String()
+	if notification.Payload != wantPayload {
+		t.Fatalf("publication notification payload = %q, want %q", notification.Payload, wantPayload)
 	}
 	if _, err := repository.AppendObservation(ctx, observationInput); err != nil {
 		t.Fatalf("replay observation: %v", err)
