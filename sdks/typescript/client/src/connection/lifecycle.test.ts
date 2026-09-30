@@ -6,6 +6,54 @@ import { createCoreTestPlatform } from "../space-client/core.test.helpers";
 import { ConnectionLifecycleService, makeConnectionLifecycleLayer } from "./lifecycle";
 
 describe("ConnectionLifecycle Episode snapshot", () => {
+  it("leaves Sync recovery and command eligibility unchanged during a brief transport loss", async () => {
+    const platform = createCoreTestPlatform();
+    const access = parseParsedAccessGrant({
+      subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: "participant-1", participant_generation: 1 },
+      sync: { token: credential("chalk-sync"), expires_at: "2030-08-25T10:05:00.000Z" },
+      media: { token: credential("chalk-media"), expires_at: "2030-08-25T10:05:00.000Z", provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:test" } },
+    });
+    let syncCreations = 0;
+    let mediaRestarts = 0;
+    const layer = makeConnectionLifecycleLayer({
+      access: async () => access,
+      apiBaseURL: "https://api.chalk.test",
+      syncURL: "wss://sync.chalk.test/v1/sync",
+      dependencies: {
+        ...platform.dependencies,
+        createSyncClient: () => {
+          syncCreations += 1;
+          return platform.sync;
+        },
+        createMediaClient: (input) => {
+          const media = platform.dependencies.createMediaClient(input);
+          return {
+            ...media,
+            restart: async () => {
+              mediaRestarts += 1;
+            },
+          };
+        },
+      },
+    });
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const lifecycle = yield* Effect.service(ConnectionLifecycleService);
+        yield* lifecycle.join();
+        const live = platform.sync.getSnapshot();
+        platform.emitSync({ ...live, connection: { phase: "connecting" } });
+        yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 20)));
+        expect(lifecycle.getSnapshot()).toMatchObject({ state: "live", connection: { sync: "connecting" } });
+        platform.emitSync({ ...live, connection: { phase: "live" } });
+        yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 20)));
+        expect(lifecycle.getSnapshot().state).toBe("live");
+        expect(syncCreations).toBe(1);
+        expect(mediaRestarts).toBe(0);
+      }).pipe(Effect.provide(layer)),
+    );
+  });
+
   it("carries the server Episode start time into the live snapshot", async () => {
     const platform = createCoreTestPlatform();
     const access = parseParsedAccessGrant({
