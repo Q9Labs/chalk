@@ -61,6 +61,8 @@ type CloseTrack struct {
 }
 
 type CloseTracksResponse struct {
+	// AlreadyClosed is internal cleanup evidence, not a signaling wire field.
+	AlreadyClosed                  bool                `json:"-"`
 	SessionDescription             *SessionDescription `json:"sessionDescription,omitempty"`
 	Tracks                         []CloseTrack        `json:"tracks,omitempty"`
 	RequiresImmediateRenegotiation bool                `json:"requiresImmediateRenegotiation,omitempty"`

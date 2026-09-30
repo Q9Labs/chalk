@@ -5,10 +5,9 @@ defmodule ChalkSync.ProviderBridge.Config do
   alias ChalkSync.ProviderBridge.MediaPlane
   alias ChalkSync.ProviderBridge.RecordingPlane
 
-  # Cloudflare Realtime may block a episode operation for up to five seconds
-  # while the PeerConnection becomes usable. Leave transport and mTLS overhead
-  # above that provider budget while remaining below the durable worker budget.
-  @request_timeout_ms 7_000
+  # Disconnected provider connections can take about twenty seconds to report
+  # absence. Leave overhead above the API teardown budget and below the worker.
+  @request_timeout_ms 30_000
   @certificate_types [:Certificate, :TrustedCertificate]
   @private_key_types [:PrivateKeyInfo, :RSAPrivateKey, :ECPrivateKey]
 

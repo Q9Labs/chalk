@@ -3,13 +3,15 @@ package postgres
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 )
 
 const providerOperationReceiptColumns = `
     operation_id, effect, tenant_id, episode_id, participant_id,
     participant_generation, publication_source, recording_id,
-    request_fingerprint, request_payload, state, outcome, reason,
+    request_fingerprint, request_payload, state, outcome, reason, last_error_code,
     created_at, dispatching_at, completed_at`
 
 type providerOperationIdentityParams struct {
@@ -92,8 +94,15 @@ func (q *providerOperationQueries) CompleteProviderOperation(ctx context.Context
 set state = 'completed',
     outcome = $1,
     reason = $2,
+    last_error_code = case when $1 = 'terminal_failure' then $2 else null end,
     completed_at = coalesce(completed_at, now())
 where operation_id = $3 and effect = $4 and state = 'dispatching'
 returning ` + providerOperationReceiptColumns
 	return scanProviderOperationReceipt(q.db.QueryRow(ctx, query, arg.Outcome, arg.Reason, arg.OperationID, arg.Effect))
+}
+
+func (q *providerOperationQueries) RecordProviderOperationFailure(ctx context.Context, operationID string, effect provideroperations.Effect, reason string) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, `update provider_operation_receipts
+set reason = $3, last_error_code = $3
+where operation_id = $1 and effect = $2 and state <> 'completed'`, operationID, string(effect), reason)
 }

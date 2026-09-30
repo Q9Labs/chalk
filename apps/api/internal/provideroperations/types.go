@@ -126,6 +126,7 @@ type Receipt struct {
 	State                 ReceiptState
 	Outcome               *Outcome
 	Reason                *string
+	LastErrorCode         *string
 	CreatedAt             time.Time
 	DispatchingAt         *time.Time
 	CompletedAt           *time.Time
@@ -175,6 +176,7 @@ type Repository interface {
 	Prepare(context.Context, OperationInput) (PrepareResult, error)
 	MarkDispatching(context.Context, string, Effect) (Receipt, error)
 	ResetForRetry(context.Context, string, Effect) (Receipt, error)
+	RecordFailure(context.Context, string, Effect, string) error
 	Complete(context.Context, string, Effect, Completion) (Receipt, error)
 	Get(context.Context, string, Effect) (Receipt, error)
 	AppendObservation(context.Context, ObservationInput) (Observation, error)
