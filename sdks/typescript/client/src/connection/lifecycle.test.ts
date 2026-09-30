@@ -42,6 +42,9 @@ describe("ConnectionLifecycle Episode snapshot", () => {
         const lifecycle = yield* Effect.service(ConnectionLifecycleService);
         yield* lifecycle.join();
         const live = platform.sync.getSnapshot();
+        platform.emitSync({ ...live, connection: { phase: "live", noticeUnresponsive: true } });
+        yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 20)));
+        expect(lifecycle.getSnapshot()).toMatchObject({ state: "live", connection: { sync: "unresponsive" } });
         platform.emitSync({ ...live, connection: { phase: "connecting" } });
         yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 20)));
         expect(lifecycle.getSnapshot()).toMatchObject({ state: "live", connection: { sync: "connecting" } });

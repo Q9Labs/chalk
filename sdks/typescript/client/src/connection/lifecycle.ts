@@ -689,7 +689,7 @@ function snapshotFor(model: Model, access: ParsedAccessGrant | null): Connection
     state: model.state,
     subject: subjectFor(access),
     episode: episodeFor(access, control),
-    connection: Object.freeze({ sync: syncPhase(model.syncSnapshot?.connection.phase), media: mediaPhase(model.mediaSnapshot?.connection.phase) }),
+    connection: Object.freeze({ sync: model.syncSnapshot?.connection.noticeUnresponsive ? "unresponsive" : syncPhase(model.syncSnapshot?.connection.phase), media: mediaPhase(model.mediaSnapshot?.connection.phase) }),
     failure: model.failure ? Object.freeze({ ...model.failure }) : null,
   });
 }
