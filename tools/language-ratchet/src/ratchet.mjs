@@ -41,7 +41,7 @@ function emptyTermCounts() {
   return Object.fromEntries(TERMS.map((term) => [term, 0]));
 }
 
-export function emptyCounts() {
+function emptyCounts() {
   return Object.fromEntries(SURFACES.map((surface) => [surface, emptyTermCounts()]));
 }
 
@@ -53,7 +53,9 @@ function termPattern(term) {
   const literal = [...term].map(escapeRegexCharacter).join("");
   const start = String.raw`(?:(?<![A-Za-z0-9])|(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z]))`;
   const end = String.raw`(?=$|[^A-Za-z0-9]|(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z]))`;
-  return new RegExp(`${start}${literal}${end}`, "g");
+  // Browser storage is a standard API, not Chalk's Episode vocabulary.
+  const standardAPI = `${term}Storage` === "sessionStorage" ? String.raw`(?!Storage\b)` : "";
+  return new RegExp(`${start}${literal}${standardAPI}${end}`, "g");
 }
 
 const TERM_PATTERNS = new Map(TERMS.map((term) => [term, termPattern(term)]));
@@ -220,7 +222,7 @@ function findSurface(relativePath, surfaces) {
   return null;
 }
 
-export function surfaceFor(relativePath) {
+function surfaceFor(relativePath) {
   return findSurface(relativePath, SURFACE_PREFIXES) ?? findSurface(relativePath, FALLBACK_SURFACES) ?? "root";
 }
 
@@ -306,7 +308,7 @@ function addChange(changes, current, baseline, surface, term) {
   if (change) changes[change.kind].push(change.value);
 }
 
-export function compareCounts(current, baseline) {
+function compareCounts(current, baseline) {
   validateCounts(current, "Current counts");
   validateCounts(baseline, "Baseline");
   const changes = { increases: [], decreases: [] };
