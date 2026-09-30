@@ -145,6 +145,7 @@ func (handler *HTTPHandler) revoke(response http.ResponseWriter, request *http.R
 func (handler *HTTPHandler) challenge(response http.ResponseWriter, request *http.Request) {
 	peerIP, err := directPeerIP(request)
 	if err != nil {
+		handler.logger.Warn("recorder fleet issuer challenge rejected", "remote_addr", request.RemoteAddr, "error", err.Error())
 		writeError(response, ErrUnauthorized)
 		return
 	}
@@ -155,6 +156,7 @@ func (handler *HTTPHandler) challenge(response http.ResponseWriter, request *htt
 	}
 	result, err := handler.service.Challenge(request.Context(), peerIP, input)
 	if err != nil {
+		handler.logger.Warn("recorder fleet issuer challenge rejected", "provider_id", input.ProviderID, "peer_ip", peerIP.String(), "error", err.Error())
 		writeError(response, err)
 		return
 	}
