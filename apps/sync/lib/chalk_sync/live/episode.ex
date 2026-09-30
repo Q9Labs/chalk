@@ -328,7 +328,8 @@ defmodule ChalkSync.Live.Episode do
   defp apply_live_target(state, identity, authority, source, %{enabled: true} = target) do
     {next, result} = enable_publication(state, identity, authority, source, target)
 
-    if source in [:camera, :microphone] and result["outcome"] in ["confirmed", "satisfied"] do
+    if source in [:camera, :microphone, :screen] and
+         result["outcome"] in ["confirmed", "satisfied"] do
       key = {authority.participant_id, Atom.to_string(source)}
 
       case Stateholder.set_media_pause(identity, source, nil) do
@@ -342,7 +343,7 @@ defmodule ChalkSync.Live.Episode do
   end
 
   defp apply_live_target(state, identity, authority, source, target)
-       when source in [:camera, :microphone] do
+       when source in [:camera, :microphone, :screen] do
     key = {authority.participant_id, Atom.to_string(source)}
 
     publication_id =
@@ -359,7 +360,9 @@ defmodule ChalkSync.Live.Episode do
       case Stateholder.set_media_pause(identity, source, publication_id) do
         :ok ->
           pauses = Map.put(state.media_pauses, key, publication_id)
-          {%{state | media_pauses: pauses}, live_result(target, :confirmed)}
+          next = %{state | media_pauses: pauses}
+          next = maybe_release_screen_lease(next, authority, source, false, :confirmed)
+          {next, live_result(target, :confirmed)}
 
         {:retryable, reason} ->
           {state, live_result(target, :retryable_failure, reason)}
@@ -368,30 +371,8 @@ defmodule ChalkSync.Live.Episode do
           {state, live_result(target, :terminal_failure, reason)}
       end
     else
-      {state, live_result(target, :confirmed)}
-    end
-  end
-
-  defp apply_live_target(state, _identity, authority, source, target) do
-    case media_plane(authority) do
-      nil ->
-        {state, live_result(target, :retryable_failure, :dependency_unavailable)}
-
-      {module, adapter} ->
-        outcome =
-          MediaPlaneCall.invoke(fn ->
-            module.revoke_publication(
-              adapter,
-              target.operation_id,
-              state.episode,
-              authority.participant_id,
-              source
-            )
-          end)
-          |> provider_outcome()
-
-        state = maybe_release_screen_lease(state, authority, source, false, outcome)
-        {state, live_result(target, outcome)}
+      next = maybe_release_screen_lease(state, authority, source, false, :confirmed)
+      {next, live_result(target, :confirmed)}
     end
   end
 

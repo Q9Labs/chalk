@@ -1887,6 +1887,27 @@ create table sync_screen_share_leases (
 create index sync_screen_share_leases_expiry_idx
     on sync_screen_share_leases(hard_expires_at, lease_id);
 
+create table sync_media_pauses (
+    tenant_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
+    participant_id uuid not null,
+    participant_generation bigint not null,
+    source text not null,
+    publication_id text not null,
+    created_at timestamptz not null default now(),
+    primary key (tenant_id, episode_id, participant_id, source),
+    foreign key (tenant_id, space_id, episode_id)
+        references sync_episode_control(tenant_id, space_id, episode_id)
+        on delete cascade,
+    foreign key (tenant_id, space_id, episode_id, participant_id, participant_generation)
+        references participants(tenant_id, space_id, episode_id, id, generation)
+        on delete cascade,
+    check (participant_generation > 0),
+    check (source in ('microphone', 'camera', 'screen')),
+    check (octet_length(publication_id) between 1 and 256)
+);
+
 create table sync_publication_fences (
     tenant_id uuid not null,
     space_id uuid not null,

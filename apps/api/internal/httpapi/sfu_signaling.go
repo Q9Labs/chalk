@@ -319,7 +319,9 @@ func sfuCloseTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, te
 				if err != nil {
 					return mediaplane.CloseTracksResponse{}, err
 				}
-				if decision.ProviderCloseRequired {
+				// A force-closed track still needs an offer/answer exchange to
+				// retire its browser media section before a fresh publication.
+				if decision.ProviderCloseRequired || (!request.Body.Force && request.Body.SessionDescription != nil) {
 					requiredTracks = append(requiredTracks, track)
 				}
 			}

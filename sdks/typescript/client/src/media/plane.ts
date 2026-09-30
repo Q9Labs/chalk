@@ -46,6 +46,8 @@ export type MediaPlaneResult = {
 
 export type ClientMediaPlane = {
   readonly setLocalPublicationTarget: (target: MediaPlaneTarget) => Promise<MediaPlaneResult>;
+  readonly setLocalSourceIntent?: (source: MediaSource, enabled: boolean) => void;
+  readonly closeForcedLocalPublication?: (source: MediaSource) => Promise<void>;
   readonly observeLocalPublications: (listener: (publications: readonly MediaPublication[]) => void) => () => void;
   readonly observeRemotePublications: (listener: (publications: readonly MediaPublication[]) => void) => () => void;
   readonly remotePublicationsChanged?: () => void;

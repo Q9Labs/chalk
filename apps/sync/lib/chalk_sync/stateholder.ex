@@ -62,7 +62,7 @@ defmodule ChalkSync.Stateholder do
               {:ok, map()} | {:error, atom()} | {:retryable, atom()}
   @callback media_pauses(EpisodeKey.t()) ::
               {:ok, %{{String.t(), String.t()} => String.t()}} | {:retryable, atom()}
-  @callback set_media_pause(Identity.t(), :microphone | :camera, String.t() | nil) ::
+  @callback set_media_pause(Identity.t(), :microphone | :camera | :screen, String.t() | nil) ::
               :ok | {:error, atom()} | {:retryable, atom()}
   @callback begin_role_transition(Identity.t(), Command.t(), [MediaPlane.publication()]) ::
               {:ok, Decision.t()} | {:retryable, atom()}
@@ -113,10 +113,10 @@ defmodule ChalkSync.Stateholder do
           {:ok, %{{String.t(), String.t()} => String.t()}} | {:retryable, atom()}
   def media_pauses(%EpisodeKey{} = episode), do: impl().media_pauses(episode)
 
-  @spec set_media_pause(Identity.t(), :microphone | :camera, String.t() | nil) ::
+  @spec set_media_pause(Identity.t(), :microphone | :camera | :screen, String.t() | nil) ::
           :ok | {:error, atom()} | {:retryable, atom()}
   def set_media_pause(%Identity{} = identity, source, publication_id)
-      when source in [:microphone, :camera] and
+      when source in [:microphone, :camera, :screen] and
              (is_nil(publication_id) or is_binary(publication_id)),
       do: impl().set_media_pause(identity, source, publication_id)
 

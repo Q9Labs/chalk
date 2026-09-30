@@ -1537,6 +1537,17 @@ type SyncLifecycleIntent struct {
 	ProducingSpanID       pgtype.Text        `json:"producing_span_id"`
 }
 
+type SyncMediaPause struct {
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	SpaceID               pgtype.UUID        `json:"space_id"`
+	EpisodeID             pgtype.UUID        `json:"episode_id"`
+	ParticipantID         pgtype.UUID        `json:"participant_id"`
+	ParticipantGeneration int64              `json:"participant_generation"`
+	Source                string             `json:"source"`
+	PublicationID         string             `json:"publication_id"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+}
+
 type SyncPublicationFence struct {
 	TenantID              pgtype.UUID        `json:"tenant_id"`
 	SpaceID               pgtype.UUID        `json:"space_id"`

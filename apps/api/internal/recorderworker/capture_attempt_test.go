@@ -1338,13 +1338,19 @@ func (c *capturePlanWatchClock) Set(now time.Time) {
 type capturePlanWatchStep func(context.Context) (captureplan.Plan, error)
 
 type capturePlanWatchSource struct {
-	mu    sync.Mutex
-	steps []capturePlanWatchStep
-	calls int
+	mu      sync.Mutex
+	steps   []capturePlanWatchStep
+	calls   int
+	current captureplan.Plan
 }
 
-func (s *capturePlanWatchSource) WaitForPlan(ctx context.Context, _ captureplan.WaitInput) (captureplan.Plan, error) {
+func (s *capturePlanWatchSource) WaitForPlan(ctx context.Context, input captureplan.WaitInput) (captureplan.Plan, error) {
 	s.mu.Lock()
+	if input.AfterRevision == 0 && input.MaxWait == captureplan.MinimumWait {
+		plan := s.current
+		s.mu.Unlock()
+		return plan, nil
+	}
 	index := s.calls
 	s.calls++
 	var step capturePlanWatchStep
@@ -1353,7 +1359,13 @@ func (s *capturePlanWatchSource) WaitForPlan(ctx context.Context, _ captureplan.
 	}
 	s.mu.Unlock()
 	if step != nil {
-		return step(ctx)
+		plan, err := step(ctx)
+		if err == nil {
+			s.mu.Lock()
+			s.current = plan
+			s.mu.Unlock()
+		}
+		return plan, err
 	}
 	<-ctx.Done()
 	return captureplan.Plan{}, ctx.Err()

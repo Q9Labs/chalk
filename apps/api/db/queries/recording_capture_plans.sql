@@ -33,7 +33,24 @@ select
               and retired.episode_id = jobs.episode_id
               and retired.publication_id = publication.value->>'publication_id'
         )
-    ), '[]'::jsonb) as provider_publications
+        and not exists (
+            select 1
+            from sync_publication_fences fence
+            where fence.tenant_id = jobs.tenant_id
+              and fence.episode_id = jobs.episode_id
+              and fence.participant_id::text = publication.value->>'participant_id'
+              and fence.source = publication.value->>'source'
+        )
+        and not exists (
+            select 1
+            from sync_media_pauses pause
+            where pause.tenant_id = jobs.tenant_id
+              and pause.episode_id = jobs.episode_id
+              and pause.participant_id::text = publication.value->>'participant_id'
+              and pause.source = publication.value->>'source'
+              and pause.publication_id = publication.value->>'publication_id'
+        )
+    ), '[]'::jsonb)::jsonb as provider_publications
 from recording_job_attempt_authorities authority
 join recording_jobs jobs on jobs.id = authority.job_id
 join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id

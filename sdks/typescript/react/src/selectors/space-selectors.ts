@@ -11,8 +11,11 @@ export function toActiveScreenShare(participants: readonly Participant[]): Parti
 
 export function toVideoParticipants(participants: readonly SpaceParticipant[], remoteMedia: readonly RemoteMedia[], localId: string, displayName: string, localMedia: Readonly<Record<MediaSource, LocalMedia>>): Participant[] {
   const remoteByParticipant = new Map<string, Partial<Record<"camera" | "screen", MediaStreamTrack>>>();
+  const stateByParticipant = new Map(participants.map((participant) => [participant.participantId, participant.media]));
   for (const publication of remoteMedia) {
     if (publication.source === "microphone") continue;
+    const state = stateByParticipant.get(publication.participantId);
+    if (!state || (publication.source === "camera" ? state.camera : state.screenShare) !== "active") continue;
     const media = remoteByParticipant.get(publication.participantId) ?? {};
     media[publication.source] = publication.track;
     remoteByParticipant.set(publication.participantId, media);
@@ -43,7 +46,7 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
       isSpeaking: participant.presence.speaking,
       isActiveSpeaker: participant.presence.activeSpeaker,
       isVideoEnabled: participant.media.camera === "active" && Boolean(media?.camera),
-      isScreenSharing: Boolean(media?.screen),
+      isScreenSharing: participant.media.screenShare === "active" && Boolean(media?.screen),
       isHandRaised: participant.handRaised,
       videoTrack: media?.camera,
       screenShareTrack: media?.screen,

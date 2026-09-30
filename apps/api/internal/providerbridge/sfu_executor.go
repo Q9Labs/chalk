@@ -97,17 +97,6 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 	if len(targets) == 0 {
 		return ExecutionResult{Outcome: provideroperations.OutcomeSatisfied}
 	}
-	if input.Effect == provideroperations.EffectRevokePublication && input.PublicationSource != "screen" {
-		for _, target := range targets {
-			if err := e.publications.RecordPublicationAvailability(ctx, mediapublications.AvailabilityInput{
-				TenantID: input.TenantID, EpisodeID: input.EpisodeID, ParticipantID: target.publication.ParticipantID,
-				Source: target.publication.Source, PublicationID: target.publication.PublicationID, Enabled: false,
-			}); err != nil {
-				return ExecutionResult{Outcome: provideroperations.OutcomeAmbiguous, Reason: "observation_update_failed"}
-			}
-		}
-		return ExecutionResult{Outcome: provideroperations.OutcomeConfirmed}
-	}
 	if e.tracks == nil {
 		return ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "executor_unavailable"}
 	}
@@ -150,29 +139,8 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 }
 
 func (e SFUExecutor) resumePublication(ctx context.Context, input provideroperations.OperationInput) ExecutionResult {
-	if e.publications == nil {
-		return ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "executor_unavailable"}
-	}
-	snapshot, err := e.publications.Latest(ctx, input.TenantID, input.EpisodeID)
-	if err != nil {
-		return ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "observation_unavailable"}
-	}
-	for _, publication := range snapshot.Publications {
-		if publication.ParticipantID != input.ParticipantID || publication.Source != input.PublicationSource || publication.PublicationID == "" || publication.Enabled {
-			continue
-		}
-		reference, err := mediapublications.ParseReference(publication.PublicationID)
-		if err != nil || !reference.HasParticipantGeneration || reference.ParticipantGeneration != input.ParticipantGeneration {
-			continue
-		}
-		if err := e.publications.RecordPublicationAvailability(ctx, mediapublications.AvailabilityInput{
-			TenantID: input.TenantID, EpisodeID: input.EpisodeID, ParticipantID: input.ParticipantID,
-			Source: input.PublicationSource, PublicationID: publication.PublicationID, Enabled: true,
-		}); err != nil {
-			return ExecutionResult{Outcome: provideroperations.OutcomeAmbiguous, Reason: "observation_update_failed"}
-		}
-		break
-	}
+	// The browser publishes on a fresh MID after a forced close. There is no
+	// previous Cloudflare SFU track to make available again.
 	return ExecutionResult{Outcome: provideroperations.OutcomeConfirmed}
 }
 
@@ -184,7 +152,7 @@ type publicationTarget struct {
 func operationTargets(publications []provideroperations.Publication, input provideroperations.OperationInput) ([]publicationTarget, *ExecutionResult) {
 	targets := make([]publicationTarget, 0, len(publications))
 	for _, publication := range publications {
-		if publication.PublicationID == "" || (input.Effect == provideroperations.EffectRevokePublication && !publication.Enabled) || !publicationMatchesOperation(publication, input) {
+		if publication.PublicationID == "" || !publicationMatchesOperation(publication, input) {
 			continue
 		}
 		reference, err := mediapublications.ParseReference(publication.PublicationID)
