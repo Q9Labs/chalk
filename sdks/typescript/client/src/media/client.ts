@@ -891,7 +891,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #sampleRecoveryTraffic(connection: RTCPeerConnection, generation: number, connectionEpoch: number): void {
     const traffic = new Map<string, RecoveryTraffic>();
     let dtlsState: string | undefined;
-    const current = () => generation === this.#generation && connectionEpoch === this.#connectionEpoch && !this.#stopped && connection.connectionState !== "closed";
+    const current = () => generation === this.#generation && connectionEpoch === this.#connectionEpoch && !this.#stopped && connection.connectionState !== "closed" && connection.connectionState !== "failed";
     const sample = async () => {
       if (!current()) return;
       try {
@@ -907,7 +907,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
           this.#observeRecoveryTraffic(entry, traffic, now);
         });
       } catch {
-        recordReconnect(this.#recordReconnect, "rtc_stats_unavailable");
+        if (current()) recordReconnect(this.#recordReconnect, "rtc_stats_unavailable");
       }
       if (current()) globalThis.setTimeout(() => void sample(), 250);
     };

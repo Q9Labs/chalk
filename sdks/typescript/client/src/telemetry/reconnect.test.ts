@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { recordReconnect, traceReconnect } from "./reconnect";
+import { recordInitialConnection, recordReconnect, traceReconnect } from "./reconnect";
 import type { DiagnosticObservation } from "./journey";
 
 describe("reconnect observations", () => {
+  it("keeps initial connection boundaries separate from recovery", () => {
+    const observations: DiagnosticObservation[] = [];
+    recordInitialConnection((event) => observations.push(event), "start_media", { boundary: "start" });
+    expect(observations).toEqual([{ category: "connection", code: "connection.initial.start_media", phase: "signaling", state: "observed", attributes: { boundary: "start" } }]);
+    expect(() =>
+      recordInitialConnection(() => {
+        throw new Error("export unavailable");
+      }, "start_media"),
+    ).not.toThrow();
+  });
+
   it("keeps successful work and original failures intact when the consumer throws", async () => {
     const brokenRecorder = () => {
       throw new Error("export unavailable");

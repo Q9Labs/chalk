@@ -1,4 +1,4 @@
-import { recordReconnect } from "../telemetry/reconnect";
+import { recordInitialConnection, recordReconnect } from "../telemetry/reconnect";
 import { Clock, Context, Data, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, SubscriptionRef } from "effect";
 import type { ConnectionMediaSnapshot } from "../media";
 import type { V1EpisodeSnapshot } from "../sync";
@@ -323,7 +323,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         );
       const trace = <A, E>(step: Exclude<ConnectionJoinTraceStep, "join">, effect: Effect.Effect<A, E>): Effect.Effect<A, E> => {
         const span = diagnostics.startSpan({ step, state: model.state, epoch: model.epoch });
-        return traceRecovery(step, effect).pipe(
+        return traceRecovery(step, effect, recordInitialConnection).pipe(
           Effect.tap(() => Effect.sync(() => span.end({ state: model.state, epoch: model.epoch, outcome: "succeeded" }))),
           Effect.tapError(() => Effect.sync(() => span.end({ state: model.state, epoch: model.epoch, outcome: "failed" }))),
         );
@@ -455,15 +455,15 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             }),
           );
         });
-      const traceRecovery = <A, E>(step: string, operation: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+      const traceRecovery = <A, E>(step: string, operation: Effect.Effect<A, E>, recordStep = recordReconnect): Effect.Effect<A, E> =>
         Effect.gen(function* () {
           const started = yield* Clock.currentTimeMillis;
-          recordReconnect(options.recordReconnect, step, { boundary: "start" });
+          recordStep(options.recordReconnect, step, { boundary: "start" });
           return yield* operation.pipe(
             Effect.onExit((exit) =>
               Clock.currentTimeMillis.pipe(
                 Effect.map((now) => {
-                  recordReconnect(options.recordReconnect, step, { boundary: "end", duration_ms: Math.max(0, now - started) }, exit._tag === "Success" ? "succeeded" : "failed");
+                  recordStep(options.recordReconnect, step, { boundary: "end", duration_ms: Math.max(0, now - started) }, exit._tag === "Success" ? "succeeded" : "failed");
                 }),
               ),
             ),

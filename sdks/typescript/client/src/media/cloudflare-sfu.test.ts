@@ -948,6 +948,28 @@ describe("Cloudflare SFU client", () => {
     }
   });
 
+  it("stops optional sampling when a standalone peer fails", async () => {
+    vi.useFakeTimers();
+    try {
+      const recordReconnect = vi.fn<NonNullable<CloudflareSFUClientOptions["recordReconnect"]>>();
+      const harness = createHarness({ recordReconnect });
+      const connection = harness.peers[0];
+      if (!connection) throw new Error("Missing test connection");
+      const getStats = vi.spyOn(connection, "getStats");
+      await vi.advanceTimersByTimeAsync(500);
+      connection.setStates("failed", "disconnected");
+      const observations = recordReconnect.mock.calls.length;
+      const samples = getStats.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(getStats).toHaveBeenCalledTimes(samples);
+      expect(recordReconnect).toHaveBeenCalledTimes(observations);
+      expect(vi.getTimerCount()).toBe(0);
+      harness.client.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("records RTC summaries only for the active connection", async () => {
     const onRtcSummary = vi.fn<NonNullable<CloudflareSFUClientOptions["onRtcSummary"]>>();
     const harness = createHarness({ onRtcSummary });
