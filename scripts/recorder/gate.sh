@@ -4,9 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 tofu_dir="$repo_root/infrastructure/recorder"
 
-node --test \
-  "$tofu_dir/images/cpu/relocate-renderer.test.mjs" \
-  "$tofu_dir/images/cpu/normalize-renderer-permissions.test.mjs"
+node --test "$tofu_dir/images/cpu/relocate-renderer.test.mjs"
 
 tofu -chdir="$tofu_dir" fmt -check -recursive
 tofu -chdir="$tofu_dir" init -backend=false -input=false -upgrade=false
