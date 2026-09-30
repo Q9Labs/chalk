@@ -149,7 +149,7 @@ func (client *Client) doJSON(ctx context.Context, path string, alternate *http.C
 	}
 	response, err := httpClient.Do(request)
 	if err != nil {
-		return fmt.Errorf("%w: request", ErrBootstrapUnavailable)
+		return fmt.Errorf("%w: request: %v", ErrBootstrapUnavailable, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {

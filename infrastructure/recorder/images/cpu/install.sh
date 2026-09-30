@@ -100,7 +100,9 @@ jq -cS -s \
   --arg release_id "$release_id" \
   --arg source_commit "$source_commit" \
   --arg source_tree_sha256 "$source_tree_sha256" \
-  '{schema_version:"chalk_recorder_cpu_image.v1",release_id:$release_id,source_commit:$source_commit,source_tree_sha256:$source_tree_sha256,profile:"cpu-libx264-frame2",files:.}' \
+  --arg bootstrap_server_name "$bootstrap_server_name" \
+  --arg bootstrap_ca_sha256 "$(sha256sum "$bootstrap_ca" | cut -d' ' -f1)" \
+  '{schema_version:"chalk_recorder_cpu_image.v1",release_id:$release_id,source_commit:$source_commit,source_tree_sha256:$source_tree_sha256,profile:"cpu-libx264-frame2",bootstrap_server_name:$bootstrap_server_name,bootstrap_ca_sha256:$bootstrap_ca_sha256,files:.}' \
   "$file_entries" >"$image_root/opt/chalk-recorder/image-manifest.json"
 image_digest="sha256:$(sha256sum "$image_root/opt/chalk-recorder/image-manifest.json" | cut -d' ' -f1)"
 
@@ -129,4 +131,4 @@ chmod 0755 "/opt/chalk-recorder/releases/$release_id/bin/recorder-capture" "/opt
 
 systemctl daemon-reload
 systemctl disable chalk-recorder-capture.service chalk-recorder-render.service chalk-recorder-renew.timer >/dev/null 2>&1 || true
-printf 'release_id=%s\nsource_commit=%s\nsource_tree_sha256=sha256:%s\nbundle_sha256=sha256:%s\nimage_manifest_digest=%s\n' "$release_id" "$source_commit" "$source_tree_sha256" "$bundle_sha256" "$image_digest"
+printf 'release_id=%s\nsource_commit=%s\nsource_tree_sha256=sha256:%s\nbundle_sha256=sha256:%s\nimage_manifest_digest=%s\nbootstrap_server_name=%s\n' "$release_id" "$source_commit" "$source_tree_sha256" "$bundle_sha256" "$image_digest" "$bootstrap_server_name"
