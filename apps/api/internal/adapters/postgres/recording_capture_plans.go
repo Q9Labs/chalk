@@ -33,9 +33,15 @@ type recordingCapturePlanQuerier interface {
 }
 
 type RecordingCapturePlanRepository struct {
-	transactor recordingPipelineTransactor
-	decorate   func(sqlc.Querier) sqlc.Querier
-	now        func() time.Time
+	transactor            recordingPipelineTransactor
+	decorate              func(sqlc.Querier) sqlc.Querier
+	now                   func() time.Time
+	lowCameraLayerEnabled bool
+}
+
+func (r RecordingCapturePlanRepository) WithLowCameraLayerEnabled(enabled bool) RecordingCapturePlanRepository {
+	r.lowCameraLayerEnabled = enabled
+	return r
 }
 
 func NewRecordingCapturePlanRepositoryWithTransactor(
@@ -191,7 +197,7 @@ func (r RecordingCapturePlanRepository) reconcile(ctx context.Context, queries r
 		revision = latest.Revision
 	}
 	now := r.now().UTC()
-	plan, err := buildRecordingCapturePlan(source, input, revision, now)
+	plan, err := buildRecordingCapturePlan(source, input, revision, now, r.lowCameraLayerEnabled)
 	if err != nil {
 		return captureplan.Plan{}, err
 	}
@@ -206,7 +212,7 @@ func (r RecordingCapturePlanRepository) reconcile(ctx context.Context, queries r
 			return captureplan.Plan{}, captureplan.ErrInvalidPlan
 		}
 		revision = latest.Revision + 1
-		plan, err = buildRecordingCapturePlan(source, input, revision, now)
+		plan, err = buildRecordingCapturePlan(source, input, revision, now, r.lowCameraLayerEnabled)
 		if err != nil {
 			return captureplan.Plan{}, err
 		}
@@ -257,7 +263,7 @@ type persistedCapturePlanPublication struct {
 	PublicationID *string `json:"publication_id"`
 }
 
-func buildRecordingCapturePlan(source sqlc.GetRecordingCapturePlanSourceRow, input captureplan.WaitInput, revision int64, now time.Time) (captureplan.Plan, error) {
+func buildRecordingCapturePlan(source sqlc.GetRecordingCapturePlanSourceRow, input captureplan.WaitInput, revision int64, now time.Time, lowCameraLayerEnabled bool) (captureplan.Plan, error) {
 	envelope, err := recordingpipeline.DecodeRecorderJobEnvelope(source.EnvelopeBytes, source.EnvelopeDigest)
 	if err != nil {
 		return captureplan.Plan{}, fmt.Errorf("decode capture plan authority: %w", err)
@@ -286,7 +292,7 @@ func buildRecordingCapturePlan(source sqlc.GetRecordingCapturePlanSourceRow, inp
 	if err := strictCapturePlanJSON(source.ProviderPublications, &publications); err != nil {
 		return captureplan.Plan{}, fmt.Errorf("decode capture plan publications: %w", captureplan.ErrInvalidPlan)
 	}
-	tracks, err := capturePlanTracks(publications, participantGenerations)
+	tracks, err := capturePlanTracks(publications, participantGenerations, lowCameraLayerEnabled)
 	if err != nil {
 		return captureplan.Plan{}, err
 	}
@@ -371,7 +377,7 @@ func capturePlanParticipants(folded []foldedCapturePlanParticipant, persisted []
 	return result, generations, nil
 }
 
-func capturePlanTracks(publications []persistedCapturePlanPublication, participantGenerations map[utilities.ID]int64) ([]captureplan.TrackSnapshot, error) {
+func capturePlanTracks(publications []persistedCapturePlanPublication, participantGenerations map[utilities.ID]int64, lowCameraLayerEnabled bool) ([]captureplan.TrackSnapshot, error) {
 	tracks := make([]captureplan.TrackSnapshot, 0, len(publications))
 	for _, publication := range publications {
 		if publication.Enabled && publication.PublicationID == nil {
@@ -396,12 +402,16 @@ func capturePlanTracks(publications []persistedCapturePlanPublication, participa
 		if ownerErr != nil || trackErr != nil || midErr != nil || kindErr != nil {
 			return nil, fmt.Errorf("invalid capture provider track: %w", captureplan.ErrInvalidTrack)
 		}
+		layer := captureplane.TrackLayerAuto
+		if lowCameraLayerEnabled && captureplane.TrackSource(publication.Source) == captureplane.TrackSourceCamera {
+			layer = captureplane.TrackLayerLow
+		}
 		tracks = append(tracks, captureplan.TrackSnapshot{
 			ParticipantID: participantID, ParticipantGeneration: generation,
 			Source: captureplane.TrackSource(publication.Source), Kind: kind,
 			OwnerReference: ownerReference, TrackReference: trackReference, OwnerMID: ownerMID,
 			PublicationReference: captureplan.PublicationReference(*publication.PublicationID),
-			RequestedLayer:       captureplane.TrackLayerAuto,
+			RequestedLayer:       layer,
 		})
 	}
 	return tracks, nil

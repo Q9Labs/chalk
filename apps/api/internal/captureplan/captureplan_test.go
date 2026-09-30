@@ -64,7 +64,12 @@ func TestNewPlanRejectsInvalidAndMismatchedFacts(t *testing.T) {
 		{name: "zero revision", edit: func(input *PlanInput) { input.Revision = 0 }, want: ErrInvalidPlan},
 		{name: "generation mismatch", edit: func(input *PlanInput) { input.Tracks[0].ParticipantGeneration++ }, want: ErrInvalidTrack},
 		{name: "unknown lifecycle", edit: func(input *PlanInput) { input.Participants[0].Lifecycle = "joining" }, want: ErrInvalidParticipant},
-		{name: "non-auto layer", edit: func(input *PlanInput) { input.Tracks[0].RequestedLayer = captureplane.TrackLayerHigh }, want: ErrInvalidTrack},
+		{name: "unknown layer", edit: func(input *PlanInput) { input.Tracks[0].RequestedLayer = "unknown" }, want: ErrInvalidTrack},
+		{name: "audio layer", edit: func(input *PlanInput) {
+			input.Tracks[0].Source = captureplane.TrackSourceMicrophone
+			input.Tracks[0].Kind = captureplane.TrackKindAudio
+			input.Tracks[0].RequestedLayer = captureplane.TrackLayerLow
+		}, want: ErrInvalidTrack},
 		{name: "over bitrate", edit: func(input *PlanInput) { input.InputBitrateBPS = MaximumInputBitrateBPS + 1 }, want: ErrInvalidPlan},
 		{name: "over participant limit", edit: func(input *PlanInput) { input.ParticipantLimit = MaximumParticipants + 1 }, want: ErrInvalidPlan},
 	}

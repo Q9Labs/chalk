@@ -111,7 +111,7 @@ type ParticipantSnapshot struct {
 }
 
 // TrackSnapshot binds a current publication to a participant generation and
-// provider-owned capture references. RequestedLayer is auto in capture_plan.v1.
+// provider-owned capture references. RequestedLayer selects the subscriber layer.
 type TrackSnapshot struct {
 	ParticipantID         utilities.ID
 	ParticipantGeneration int64

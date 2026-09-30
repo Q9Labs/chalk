@@ -1,7 +1,10 @@
 package postgres
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -13,9 +16,58 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
+func TestBuildRecordingCapturePlanSelectsCameraLayerOnlyWhenEnabled(t *testing.T) {
+	source, input, deadline := capturePlanSourceFixture(t)
+	publications := make([]persistedCapturePlanPublication, 0, 3)
+	for _, sourceName := range []string{"camera", "screen", "microphone"} {
+		payload := fmt.Sprintf(`{"c":"owner","m":"mid-%s","t":"track-%s","g":7}`, sourceName, sourceName)
+		reference := "chalk_pub_v1." + base64.RawURLEncoding.EncodeToString([]byte(payload))
+		publications = append(publications, persistedCapturePlanPublication{
+			ParticipantID: "77777777-7777-4777-8777-777777777777", Source: sourceName,
+			Enabled: true, PublicationID: &reference,
+		})
+	}
+	var err error
+	source.ProviderPublications, err = json.Marshal(publications)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name    string
+		enabled bool
+		want    map[captureplane.TrackSource]captureplane.TrackLayer
+	}{
+		{name: "off", want: map[captureplane.TrackSource]captureplane.TrackLayer{
+			captureplane.TrackSourceCamera:     captureplane.TrackLayerAuto,
+			captureplane.TrackSourceScreen:     captureplane.TrackLayerAuto,
+			captureplane.TrackSourceMicrophone: captureplane.TrackLayerAuto,
+		}},
+		{name: "on", enabled: true, want: map[captureplane.TrackSource]captureplane.TrackLayer{
+			captureplane.TrackSourceCamera:     captureplane.TrackLayerLow,
+			captureplane.TrackSourceScreen:     captureplane.TrackLayerAuto,
+			captureplane.TrackSourceMicrophone: captureplane.TrackLayerAuto,
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			plan, err := buildRecordingCapturePlan(source, input, 1, deadline.Add(-time.Minute), test.enabled)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(plan.Tracks()) != len(test.want) {
+				t.Fatalf("tracks = %d, want %d", len(plan.Tracks()), len(test.want))
+			}
+			for _, track := range plan.Tracks() {
+				if track.RequestedLayer != test.want[track.Source] {
+					t.Errorf("%s layer = %s, want %s", track.Source, track.RequestedLayer, test.want[track.Source])
+				}
+			}
+		})
+	}
+}
+
 func TestBuildRecordingCapturePlanUsesFoldedIdentityAndDurableGeneration(t *testing.T) {
 	source, input, deadline := capturePlanSourceFixture(t)
-	plan, err := buildRecordingCapturePlan(source, input, 1, deadline.Add(-time.Minute))
+	plan, err := buildRecordingCapturePlan(source, input, 1, deadline.Add(-time.Minute), false)
 	if err != nil {
 		t.Fatalf("build capture plan: %v", err)
 	}
@@ -34,7 +86,7 @@ func TestBuildRecordingCapturePlanUsesFoldedIdentityAndDurableGeneration(t *test
 func TestBuildRecordingCapturePlanStopsAtHardDeadlineAndIgnoresDisabledDepartedPublication(t *testing.T) {
 	source, input, deadline := capturePlanSourceFixture(t)
 	source.ProviderPublications = []byte(`[{"participant_id":"77777777-7777-4777-8777-777777777777","source":"camera","enabled":false,"publication_id":null}]`)
-	plan, err := buildRecordingCapturePlan(source, input, 1, deadline)
+	plan, err := buildRecordingCapturePlan(source, input, 1, deadline, false)
 	if err != nil {
 		t.Fatalf("build deadline capture plan: %v", err)
 	}
@@ -46,7 +98,7 @@ func TestBuildRecordingCapturePlanStopsAtHardDeadlineAndIgnoresDisabledDepartedP
 func TestBuildRecordingCapturePlanIgnoresPausedPublicationWithCloudflareIdentity(t *testing.T) {
 	source, input, deadline := capturePlanSourceFixture(t)
 	source.ProviderPublications = []byte(`[{"participant_id":"77777777-7777-4777-8777-777777777777","source":"microphone","enabled":false,"publication_id":"publisher-connection|microphone-track"}]`)
-	plan, err := buildRecordingCapturePlan(source, input, 1, deadline.Add(-time.Minute))
+	plan, err := buildRecordingCapturePlan(source, input, 1, deadline.Add(-time.Minute), false)
 	if err != nil {
 		t.Fatalf("build paused publication capture plan: %v", err)
 	}
@@ -58,7 +110,7 @@ func TestBuildRecordingCapturePlanIgnoresPausedPublicationWithCloudflareIdentity
 func TestBuildRecordingCapturePlanRejectsEnvelopeAuthorityMismatch(t *testing.T) {
 	source, input, deadline := capturePlanSourceFixture(t)
 	input.PlanHandle = captureplan.PlanHandle("88888888-8888-4888-8888-888888888888")
-	if _, err := buildRecordingCapturePlan(source, input, 1, deadline.Add(-time.Minute)); !errors.Is(err, captureplan.ErrPlanAuthorityMismatch) {
+	if _, err := buildRecordingCapturePlan(source, input, 1, deadline.Add(-time.Minute), false); !errors.Is(err, captureplan.ErrPlanAuthorityMismatch) {
 		t.Fatalf("authority mismatch error = %v, want %v", err, captureplan.ErrPlanAuthorityMismatch)
 	}
 }
@@ -116,11 +168,11 @@ func TestBuildRecordingCapturePlanDeliversStopAfterEpisodeEnded(t *testing.T) {
 	source, input, deadline := capturePlanSourceFixture(t)
 	source.EpisodeFoldedState = []byte(`{"control_revision":4,"status":"ended","participants":[]}`)
 	source.EpisodeParticipants = []byte(`[]`)
-	if _, err := buildRecordingCapturePlan(source, input, 1, deadline.Add(-time.Minute)); !errors.Is(err, captureplan.ErrInvalidPlan) {
+	if _, err := buildRecordingCapturePlan(source, input, 1, deadline.Add(-time.Minute), false); !errors.Is(err, captureplan.ErrInvalidPlan) {
 		t.Fatalf("ended Episode without stop authority: %v", err)
 	}
 	source.StopRequestedAt = pgtype.Timestamptz{Time: deadline.Add(-2 * time.Minute), Valid: true}
-	plan, err := buildRecordingCapturePlan(source, input, 1, deadline.Add(-time.Minute))
+	plan, err := buildRecordingCapturePlan(source, input, 1, deadline.Add(-time.Minute), false)
 	if err != nil {
 		t.Fatal(err)
 	}

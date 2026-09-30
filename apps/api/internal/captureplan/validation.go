@@ -149,8 +149,13 @@ func validateTrack(track TrackSnapshot) error {
 	if !validOpaque(string(track.PublicationReference), MaximumPublicationRef) {
 		return fmt.Errorf("%w: publication reference", ErrInvalidTrack)
 	}
-	if track.RequestedLayer != captureplane.TrackLayerAuto {
-		return fmt.Errorf("%w: requested layer must be auto in %s", ErrInvalidTrack, SchemaVersion)
+	switch track.RequestedLayer {
+	case captureplane.TrackLayerAuto, captureplane.TrackLayerHigh, captureplane.TrackLayerMedium, captureplane.TrackLayerLow:
+	default:
+		return fmt.Errorf("%w: unknown requested layer", ErrInvalidTrack)
+	}
+	if track.Kind == captureplane.TrackKindAudio && track.RequestedLayer != captureplane.TrackLayerAuto {
+		return fmt.Errorf("%w: audio tracks must use auto layer", ErrInvalidTrack)
 	}
 	return nil
 }

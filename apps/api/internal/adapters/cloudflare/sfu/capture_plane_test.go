@@ -141,6 +141,21 @@ func TestCapturePlaneKeepsProviderWireFieldNamesAtAdapterEdge(t *testing.T) {
 	}
 }
 
+func TestCaptureLayerRID(t *testing.T) {
+	for _, test := range []struct {
+		layer captureplane.TrackLayer
+		want  string
+	}{
+		{captureplane.TrackLayerAuto, ""},
+		{captureplane.TrackLayerHigh, "h"},
+		{captureplane.TrackLayerLow, "l"},
+	} {
+		if got := captureLayerRID(test.layer); got != test.want {
+			t.Errorf("layer %s RID = %q, want %q", test.layer, got, test.want)
+		}
+	}
+}
+
 func TestCapturePlanePullsRemoteTracksWithExplicitIdentityHints(t *testing.T) {
 	client := &captureSequenceClient{responses: []captureHTTPResponse{
 		{status: http.StatusOK, body: captureConnectionProviderBody(t, "capture-connection-1")},
@@ -154,7 +169,7 @@ func TestCapturePlanePullsRemoteTracksWithExplicitIdentityHints(t *testing.T) {
 		t.Fatalf("create capture connection: %v", err)
 	}
 	tracks := []captureplane.CaptureTrack{
-		captureTrack("owner-1", "camera-1", 5, captureplane.TrackSourceCamera, captureplane.TrackKindVideo, captureplane.TrackLayerHigh),
+		captureTrack("owner-1", "camera-1", 5, captureplane.TrackSourceCamera, captureplane.TrackKindVideo, captureplane.TrackLayerLow),
 		captureTrack("owner-1", "microphone-1", 5, captureplane.TrackSourceMicrophone, captureplane.TrackKindAudio, captureplane.TrackLayerAuto),
 	}
 	pullInput := captureplane.PullCaptureTracksInput{Metadata: metadata, Connection: created.Connection.ConnectionReference, Tracks: tracks}
@@ -193,8 +208,8 @@ func TestCapturePlanePullsRemoteTracksWithExplicitIdentityHints(t *testing.T) {
 			t.Fatalf("request track = %#v", track)
 		}
 	}
-	if got := byName["camera-1"].Simulcast.PreferredRID; got != "h" {
-		t.Fatalf("camera preferred RID = %q, want h", got)
+	if got := byName["camera-1"].Simulcast.PreferredRID; got != "l" {
+		t.Fatalf("camera preferred RID = %q, want l", got)
 	}
 	if byName["microphone-1"].Simulcast != nil {
 		t.Fatal("audio request unexpectedly included simulcast")
