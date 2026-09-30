@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { parseParsedAccessGrant } from "../access/grant";
@@ -42,9 +42,30 @@ describe("ConnectionLifecycle Episode snapshot", () => {
         const lifecycle = yield* Effect.service(ConnectionLifecycleService);
         yield* lifecycle.join();
         const live = platform.sync.getSnapshot();
+        let release = () => undefined;
+        let entered = () => undefined;
+        const enteredQueue = new Promise<void>((resolve) => {
+          entered = resolve;
+        });
+        const pendingAction = yield* Effect.forkChild(
+          lifecycle.runCommand(() =>
+            Effect.promise(
+              () =>
+                new Promise<void>((resolve) => {
+                  release = resolve;
+                  entered();
+                }),
+            ),
+          ),
+          { startImmediately: true },
+        );
+        yield* Effect.promise(() => enteredQueue);
         platform.emitSync({ ...live, connection: { phase: "live", noticeUnresponsive: true } });
         yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 20)));
-        expect(lifecycle.getSnapshot()).toMatchObject({ state: "live", connection: { sync: "unresponsive" } });
+        const noticeDuringAction = lifecycle.getSnapshot();
+        release();
+        yield* Fiber.join(pendingAction);
+        expect(noticeDuringAction).toMatchObject({ state: "live", connection: { sync: "unresponsive" } });
         platform.emitSync({ ...live, connection: { phase: "connecting" } });
         yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 20)));
         expect(lifecycle.getSnapshot()).toMatchObject({ state: "live", connection: { sync: "connecting" } });
