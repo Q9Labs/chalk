@@ -6,6 +6,9 @@ alter table provider_operation_receipts
     );
 
 -- Re-arm exhausted cleanup; the old finalizer reopened failed ends as active.
+-- Only recover abandoned Episodes: durable Participant activity after failure blocks recovery.
+-- Pending operations have no failure timestamp, so use their original request time.
+-- A renewed screen-share lease is conservatively treated as activity through its expiry.
 -- Keep the identity and fingerprint: the existing receipt is reconciled, not replaced.
 with rearmed as (
 update sync_external_operations operation
@@ -27,6 +30,32 @@ where operation.episode_id = episode.id
     and (
         (operation.status = 'failed' and operation.last_error_code = 'retry_exhausted')
         or (operation.status = 'pending' and operation.attempt_count >= 100)
+    )
+    and not exists (
+        select 1 from (
+            select greatest(created_at, joined_at, updated_at) as activity_at from participants where tenant_id = operation.tenant_id and space_id = operation.space_id and episode_id = operation.episode_id
+            union all
+            select created_at as activity_at from sync_control_events where tenant_id = operation.tenant_id and space_id = operation.space_id and episode_id = operation.episode_id
+            union all
+            select greatest(created_at, completed_at) as activity_at from sync_command_receipts where tenant_id = operation.tenant_id and episode_id = operation.episode_id
+            union all
+            select created_at as activity_at from sync_chat_messages where tenant_id = operation.tenant_id and space_id = operation.space_id and episode_id = operation.episode_id
+            union all
+            select greatest(created_at, updated_at) as activity_at from sync_chat_attachments where tenant_id = operation.tenant_id and space_id = operation.space_id and episode_id = operation.episode_id
+            union all
+            select updated_at as activity_at from sync_chat_read_receipts where tenant_id = operation.tenant_id and space_id = operation.space_id and episode_id = operation.episode_id
+            union all
+            select completed_at as activity_at from sync_whiteboard_operation_receipts where tenant_id = operation.tenant_id and space_id = operation.space_id and episode_id = operation.episode_id
+            union all
+            select greatest(created_at, updated_at) as activity_at from sync_whiteboard_files where tenant_id = operation.tenant_id and space_id = operation.space_id and episode_id = operation.episode_id
+            union all
+            select greatest(created_at, completed_at) as activity_at from sync_publication_grant_reservations where tenant_id = operation.tenant_id and space_id = operation.space_id and episode_id = operation.episode_id
+            union all
+            select requested_at as activity_at from sync_admission_requests where tenant_id = operation.tenant_id and space_id = operation.space_id and episode_id = operation.episode_id
+            union all
+            select renewed_until as activity_at from sync_screen_share_leases where tenant_id = operation.tenant_id and space_id = operation.space_id and episode_id = operation.episode_id
+        ) participant_activity
+        where participant_activity.activity_at > coalesce(operation.completed_at, operation.created_at)
     )
 returning operation.external_operation_id, operation.episode_id, operation.tenant_id
 ), restored as (
