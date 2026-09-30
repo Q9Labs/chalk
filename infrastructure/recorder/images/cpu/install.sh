@@ -56,8 +56,11 @@ export PLAYWRIGHT_BROWSERS_PATH="$bundle_root/ms-playwright"
 "$bundle_root/renderer/node_modules/.bin/playwright" install-deps chromium
 (
   cd "$bundle_root/renderer"
-  /opt/chalk-recorder/toolchains/node-22.23.2/bin/node --input-type=module -e 'import { chromium } from "playwright"; const browser = await chromium.launch({headless:true}); await browser.close();'
-  /opt/chalk-recorder/toolchains/node-22.23.2/bin/node --input-type=module -e 'import { createCanvas } from "@napi-rs/canvas"; createCanvas(1, 1).toBuffer("image/png");'
+  # A Chromium launch can hang instead of failing; bound both smoke tests so the build stops with a reason.
+  timeout --kill-after=10 120 /opt/chalk-recorder/toolchains/node-22.23.2/bin/node --input-type=module -e 'import { chromium } from "playwright"; const browser = await chromium.launch({headless:true, timeout:60000}); await browser.close();' ||
+    { echo "Chromium smoke test failed or timed out" >&2; ps -ef --forest | grep -i chrom >&2 || true; exit 1; }
+  timeout --kill-after=10 60 /opt/chalk-recorder/toolchains/node-22.23.2/bin/node --input-type=module -e 'import { createCanvas } from "@napi-rs/canvas"; createCanvas(1, 1).toBuffer("image/png");' ||
+    { echo "canvas smoke test failed or timed out" >&2; exit 1; }
 )
 ffmpeg_encoders="$(ffmpeg -hide_banner -encoders 2>/dev/null)"
 grep -Fq 'libx264 ' <<<"$ffmpeg_encoders" || { echo "installed FFmpeg does not expose libx264" >&2; exit 1; }
