@@ -1,3 +1,4 @@
+import { recordReconnect, traceReconnect } from "../telemetry/reconnect";
 import type { ClientMediaPlane, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaSource } from "./plane";
 import { subscribeSnapshot } from "./observers";
 import { resolveMediaTarget } from "./target";
@@ -33,6 +34,26 @@ type LocalTrackState = {
   endedListener: (() => void) | null;
 };
 
+type TrafficProgress = {
+  count: number;
+  lastProgress: number;
+  stalled: boolean;
+};
+
+type TrafficSample = {
+  count: number;
+  now: number;
+  direction: string;
+  kind: string;
+  unit: "packet" | "frame";
+  existed: boolean;
+};
+
+type RecoveryTraffic = {
+  packets: TrafficProgress;
+  frames: TrafficProgress;
+};
+
 type PendingLocalPublication = {
   readonly state: LocalTrackState;
   readonly transceiver: RTCRtpTransceiver;
@@ -51,6 +72,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #localListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #onError: ((error: unknown) => void) | undefined;
   readonly #onRemoteTrack: ((publication: CloudflareSFURemoteTrack) => void) | undefined;
+  readonly #recordReconnect: CloudflareSFUClientOptions["recordReconnect"];
   readonly #onRtcSummary: CloudflareSFUClientOptions["onRtcSummary"];
   readonly #onScreenEnded: (() => void) | undefined;
   readonly #participantId: string;
@@ -93,6 +115,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#onError = options.onError;
     this.#onRemoteTrack = options.onRemoteTrack;
     this.#onRtcSummary = options.onRtcSummary;
+    this.#recordReconnect = options.recordReconnect;
     this.#onScreenEnded = options.onScreenEnded;
     this.#peerConnectionFactory = options.peerConnectionFactory;
     this.#connection = this.#createPeerConnection(options.bootstrap);
@@ -120,6 +143,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
 
   remotePublicationsChanged(): void {
+    recordReconnect(this.#recordReconnect, "remote_publications_changed");
     if (this.#polling) {
       this.#pollAfterCurrent = true;
       return;
@@ -188,7 +212,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const generation = this.#generation;
     try {
       const transport = this.#requireTransport();
-      const authoritative = await transport.listPublications();
+      const authoritative = await traceReconnect(this.#recordReconnect, "list_publications", () => transport.listPublications());
       this.#requireGeneration(generation);
       await this.#reconcileRemotePublications(authoritative, generation);
     } catch (error) {
@@ -261,7 +285,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async #retireUnavailableLocalPublication(state: LocalTrackState): Promise<void> {
     const publicationId = state.providerPublicationId;
     if (!publicationId) return;
-    const authoritative = await this.#requireTransport().listPublications();
+    const authoritative = await traceReconnect(this.#recordReconnect, "list_publications", () => this.#requireTransport().listPublications());
     if (authoritative.publications.some((publication) => publication.publicationId === publicationId)) return;
     // An authorized on target can precede the old forced-off projection.
     // Never satisfy it from a browser slot whose provider track is gone.
@@ -292,8 +316,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       const mid = requireTransceiverMid(transceiver);
       await this.#boundPeerOperation(transceiver.sender.replaceTrack(null));
       transceiver.stop();
-      const offer = await connection.createOffer();
-      await connection.setLocalDescription(offer);
+      const offer = await traceReconnect(this.#recordReconnect, "create_offer", () => connection.createOffer());
+      await traceReconnect(this.#recordReconnect, "set_local_description", () => connection.setLocalDescription(offer));
       try {
         const response = await this.#requireTransport().closeTracks({
           connectionId,
@@ -326,6 +350,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#requireActive();
     const options: CloudflareSFURestartOptions = "connectionId" in input ? { bootstrap: input } : input;
     validateBootstrap(options.bootstrap);
+    recordReconnect(this.#recordReconnect, "media_rebuild_start");
     const generation = ++this.#generation;
     const connectionEpoch = ++this.#connectionEpoch;
     this.#polling = false;
@@ -473,7 +498,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     // Retiring the bundled sender can expire the Cloudflare SFU connection.
     // Rebuild before publishing, retaining only other provider-authorized sources.
-    const authoritative = await this.#requireTransport().listPublications();
+    const authoritative = await traceReconnect(this.#recordReconnect, "list_publications", () => this.#requireTransport().listPublications());
     this.#pauseUnavailableOtherSources(authoritative.publications, states);
     this.#replacementAttemptedGeneration = null;
     await this.#replaceMediaConnectionForRecovery(generation);
@@ -523,8 +548,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
 
   async #negotiateLocalPublications(connection: RTCPeerConnection, connectionId: string, publications: readonly PendingLocalPublication[], generation: number): Promise<CloudflareSFUTracksResponse> {
-    const offer = await connection.createOffer();
-    await connection.setLocalDescription(offer);
+    const offer = await traceReconnect(this.#recordReconnect, "create_offer", () => connection.createOffer());
+    await traceReconnect(this.#recordReconnect, "set_local_description", () => connection.setLocalDescription(offer));
     const tracks = publications.map(
       ({ state, transceiver, trackName }): CloudflareSFUTrackRequest => ({
         location: "local",
@@ -533,7 +558,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         source: state.source,
       }),
     );
-    const response = await this.#requireTransport().addTracks({ connectionId, ...providerDescription(requireDescription(offer)), tracks });
+    const response = await traceReconnect(this.#recordReconnect, "publish_tracks", () => this.#requireTransport().addTracks({ connectionId, ...providerDescription(requireDescription(offer)), tracks }));
     this.#requireGeneration(generation);
     await this.#applyProviderDescription(response, connection);
     return response;
@@ -610,7 +635,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       if (!desiredIds.has(publicationId)) this.#remotePullRetryAfter.delete(publicationId);
     }
     const now = Date.now();
-    return [...desired].filter(([key, publication]) => this.#remoteTracks.get(key)?.publicationId !== publication.publicationId && (this.#remotePullRetryAfter.get(publication.publicationId) ?? 0) <= now).map(([, publication]) => publication);
+    return [...desired]
+      .filter(([key, publication]) => {
+        if (this.#remoteTracks.get(key)?.publicationId === publication.publicationId) return false;
+        const remaining = (this.#remotePullRetryAfter.get(publication.publicationId) ?? 0) - now;
+        if (remaining > 0) recordReconnect(this.#recordReconnect, "remote_pull_deferred", { remaining_ms: remaining, source: publication.source });
+        return remaining <= 0;
+      })
+      .map(([, publication]) => publication);
   }
 
   #validatedRemotePublicationCursor(authoritative: CloudflareSFUPublicationSnapshot): PublicationCursor | null {
@@ -681,7 +713,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       connection.addEventListener("track", onTrack);
       try {
         this.#requireGeneration(generation);
-        const response = await this.#requireTransport().addTracks({ connectionId, tracks: requested, allowPartialRemoteTracks: true });
+        const response = await traceReconnect(this.#recordReconnect, "pull_tracks", () => this.#requireTransport().addTracks({ connectionId, tracks: requested, allowPartialRemoteTracks: true }));
         this.#requireGeneration(generation);
         this.#recordRemotePullErrors(publications, response.trackErrors ?? []);
         const responseTracks = response.tracks ?? [];
@@ -691,7 +723,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         if (matched.length === 0) return [];
         await this.#waitForConnection(connection, generation);
         this.#negotiatedGeneration = generation;
-        await waitFor(() => responseTracks.every((track) => track.mid !== undefined && received.has(track.mid)), 5_000);
+        await traceReconnect(this.#recordReconnect, "remote_track_arrival", () => waitFor(() => responseTracks.every((track) => track.mid !== undefined && received.has(track.mid)), 5_000));
         this.#requireGeneration(generation);
         return matched.map(({ publication, mid }) => {
           const track = received.get(mid);
@@ -717,7 +749,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     for (const failure of failures) {
       const publication = requested.get(`${failure.connectionId}\u0000${failure.trackName}`);
       if (!publication) throw new CloudflareSFUError("Cloudflare SFU returned an unrequested remote track error", "invalid_publication");
-      this.#remotePullRetryAfter.set(publication.publicationId, Date.now() + 750);
+      const delay = 750;
+      this.#remotePullRetryAfter.set(publication.publicationId, Date.now() + delay);
+      recordReconnect(this.#recordReconnect, "remote_pull_backoff", { delay_ms: delay, retry_kind: failure.code === "empty_track_error" ? "empty_track" : "provider_error", source: publication.source });
       this.#reportError(new CloudflareSFUError(`Cloudflare SFU remote track failed: ${failure.code}`, "media_failed", { providerCode: failure.code }));
     }
   }
@@ -725,18 +759,19 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async #completeRenegotiation(response: CloudflareSFUTracksResponse, connection: RTCPeerConnection, connectionId: string, generation: number): Promise<void> {
     if (!response.requiresImmediateRenegotiation) return;
     await this.#applyProviderDescription(response, connection);
-    const answer = await connection.createAnswer();
-    await connection.setLocalDescription(answer);
-    await this.#requireTransport().renegotiate({ connectionId, ...providerDescription(requireDescription(answer)) });
+    const answer = await traceReconnect(this.#recordReconnect, "create_answer", () => connection.createAnswer());
+    await traceReconnect(this.#recordReconnect, "set_local_answer", () => connection.setLocalDescription(answer));
+    await traceReconnect(this.#recordReconnect, "renegotiate", () => this.#requireTransport().renegotiate({ connectionId, ...providerDescription(requireDescription(answer)) }));
     this.#requireGeneration(generation);
   }
 
   async #applyProviderDescription(response: CloudflareSFUTracksResponse, connection = this.#connection): Promise<void> {
-    await connection.setRemoteDescription(requireSFUDescription(response.sessionDescription));
+    await traceReconnect(this.#recordReconnect, "set_remote_description", () => connection.setRemoteDescription(requireSFUDescription(response.sessionDescription)));
   }
 
   #serializeSDP<T>(operation: () => Promise<T>): Promise<T> {
     const generation = this.#generation;
+    const queuedAt = performance.now();
     let expired = false;
     let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
     const timeout = new CloudflareSFUError("Cloudflare SFU negotiation timed out. Try again.", "negotiation_timeout");
@@ -749,6 +784,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     });
     const run = () => {
       if (expired || generation !== this.#generation) throw timeout;
+      recordReconnect(this.#recordReconnect, "sdp_queue", { duration_ms: performance.now() - queuedAt });
       return operation();
     };
     const pending = this.#sdpTail.then(run, run);
@@ -794,13 +830,15 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
 
   #waitForConnection(connection: RTCPeerConnection, generation: number): Promise<void> {
-    return waitFor(
-      () => {
-        this.#requireGeneration(generation);
-        return connectionIsLive(connection);
-      },
-      CONNECTION_TIMEOUT_MS,
-      "Timed out waiting for the Cloudflare SFU peer connection",
+    return traceReconnect(this.#recordReconnect, "connection_ready", () =>
+      waitFor(
+        () => {
+          this.#requireGeneration(generation);
+          return connectionIsLive(connection);
+        },
+        CONNECTION_TIMEOUT_MS,
+        "Timed out waiting for the Cloudflare SFU peer connection",
+      ),
     );
   }
 
@@ -821,6 +859,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     };
     const capture = () => {
       if (disposed || generation !== this.#generation || connectionEpoch !== this.#connectionEpoch || this.#stopped) return;
+      recordReconnect(this.#recordReconnect, "rtc_state", { connection_state: connection.connectionState, ice_connection_state: connection.iceConnectionState, signaling_state: connection.signalingState });
       observe();
       const recorder = this.#onRtcSummary;
       if (recorder) {
@@ -839,10 +878,67 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       }
       if (connection.connectionState === "closed") dispose();
     };
+    if (this.#recordReconnect) this.#sampleRecoveryTraffic(connection, generation, connectionEpoch);
     connection.addEventListener("connectionstatechange", capture);
     connection.addEventListener("iceconnectionstatechange", capture);
     connection.addEventListener("signalingstatechange", capture);
     capture();
+  }
+
+  #sampleRecoveryTraffic(connection: RTCPeerConnection, generation: number, connectionEpoch: number): void {
+    const traffic = new Map<string, RecoveryTraffic>();
+    let dtlsState: string | undefined;
+    const current = () => generation === this.#generation && connectionEpoch === this.#connectionEpoch && !this.#stopped && connection.connectionState !== "closed";
+    const sample = async () => {
+      if (!current()) return;
+      try {
+        const report = await connection.getStats();
+        if (!current()) return;
+        const now = performance.now();
+        report.forEach((entry) => {
+          if (entry.type === "transport") {
+            const nextState = rtcString(entry, "dtlsState");
+            if (nextState !== dtlsState) recordReconnect(this.#recordReconnect, "dtls_state", { dtls_state: nextState ?? "unknown" });
+            dtlsState = nextState;
+          }
+          this.#observeRecoveryTraffic(entry, traffic, now);
+        });
+      } catch {
+        recordReconnect(this.#recordReconnect, "rtc_stats_unavailable");
+      }
+      if (current()) globalThis.setTimeout(() => void sample(), 250);
+    };
+    void sample();
+  }
+
+  #observeRecoveryTraffic(entry: RTCStats, traffic: Map<string, RecoveryTraffic>, now: number): void {
+    if (entry.type !== "inbound-rtp" && entry.type !== "outbound-rtp") return;
+    const direction = entry.type === "inbound-rtp" ? "inbound" : "outbound";
+    const kind = rtcString(entry, "kind") ?? "unknown";
+    const previous = traffic.get(entry.id);
+    const next = previous ?? {
+      packets: { count: 0, lastProgress: now, stalled: false },
+      frames: { count: 0, lastProgress: now, stalled: false },
+    };
+    const packets = recoveryTrafficCount(entry, direction, "packet");
+    const frames = recoveryTrafficCount(entry, direction, "frame");
+    this.#observeTrafficCounter(next.packets, { count: packets, now, direction, kind, unit: "packet", existed: previous !== undefined });
+    this.#observeTrafficCounter(next.frames, { count: frames, now, direction, kind, unit: "frame", existed: previous !== undefined });
+    traffic.set(entry.id, next);
+  }
+
+  #observeTrafficCounter(progress: TrafficProgress, sample: TrafficSample): void {
+    const attributes = { direction: sample.direction, kind: sample.kind };
+    if (sample.count > progress.count) {
+      if (progress.count === 0) recordReconnect(this.#recordReconnect, `first_${sample.unit}`, attributes);
+      else if (progress.stalled) recordReconnect(this.#recordReconnect, sample.unit === "packet" ? "rtp_resumed" : "frame_resumed", attributes);
+      progress.lastProgress = sample.now;
+      progress.stalled = false;
+    } else if (trafficStalled(progress, sample)) {
+      progress.stalled = true;
+      recordReconnect(this.#recordReconnect, sample.unit === "packet" ? "rtp_stall" : "frame_stall", attributes);
+    }
+    progress.count = sample.count;
   }
 
   async #replaceDormantConnectionBeforeNegotiation(generation: number): Promise<void> {
@@ -856,7 +952,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       throw new CloudflareSFUError("A fresh Cloudflare SFU connection is unavailable", "signaling_failed");
     }
     this.#replacementAttemptedGeneration = generation;
-    const bootstrap = await this.#replaceMediaConnection();
+    const replaceMediaConnection = this.#replaceMediaConnection;
+    const bootstrap = await traceReconnect(this.#recordReconnect, "replace_access", replaceMediaConnection);
     this.#requireGeneration(generation);
     validateBootstrap(bootstrap);
     if (bootstrap.connectionId === this.#bootstrap.connectionId) {
@@ -1248,4 +1345,13 @@ function mediaTargetFailure(error: unknown): MediaPlaneResult {
   const code = error instanceof CloudflareSFUError ? error.code : "media_failed";
   const ambiguous = code === "signaling_timeout" || code === "negotiation_timeout";
   return { outcome: ambiguous ? "ambiguous" : "retryable_failure", errorCode: code };
+}
+
+function recoveryTrafficCount(entry: RTCStats, direction: string, unit: "packet" | "frame"): number {
+  const property = unit === "packet" ? (direction === "inbound" ? "packetsReceived" : "packetsSent") : direction === "inbound" ? "framesDecoded" : "framesEncoded";
+  return rtcNumber(entry, property) ?? 0;
+}
+
+function trafficStalled(progress: TrafficProgress, sample: TrafficSample): boolean {
+  return sample.existed && !progress.stalled && sample.now - progress.lastProgress >= 1000 && (sample.unit === "packet" || progress.count > 0);
 }

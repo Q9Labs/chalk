@@ -1,3 +1,4 @@
+import type { ReconnectRecorder } from "../telemetry/reconnect";
 import type { ClientMediaPlane, CloudflareSFUBootstrap, CloudflareSFURtcSummaryRecorder, ConnectionMediaSnapshot } from "../media";
 import type { ChalkChatFileTransport } from "../chat-files";
 import type { V1AdmissionPolicy, V1AssignableRole, V1CommandResult, V1EpisodeSnapshot, V1SelfMediaTargetResult } from "../sync";
@@ -76,9 +77,11 @@ export type ConnectionMediaClient = ClientMediaPlane & {
 };
 
 export type ConnectionMediaFactoryInput = {
+  readonly telemetry?: JourneyTelemetryContext;
   readonly access: ParsedAccessGrant;
   readonly credential: () => Promise<string>;
   readonly replaceMediaConnection?: () => Promise<ParticipantMediaAccess>;
+  readonly recordReconnect?: ReconnectRecorder;
   readonly recordRtcSummary?: CloudflareSFURtcSummaryRecorder;
   readonly onFailure: (error: unknown) => void;
   readonly onScreenEnded: () => void;
@@ -88,6 +91,7 @@ export type ConnectionSyncFactoryInput = {
   readonly access: ParsedAccessGrant;
   readonly token: () => Promise<string>;
   readonly media: ConnectionMediaClient;
+  readonly recordReconnect?: ReconnectRecorder;
   readonly telemetry?: JourneyTelemetryContext;
 };
 

@@ -28,6 +28,7 @@ export function createLocalSpaceClient({ credential, getAccess, connectionAccess
       ...(syncURL ? { syncUrl: syncURL } : {}),
       ...(connectionAccess ? { connectionAccess } : {}),
       telemetry: journey.context,
+      ...(import.meta.env.VITE_CHALK_TELEMETRY_ENABLED === "true" && journey.context ? { recordReconnect: (observation) => journey.recordDiagnostic(observation) } : {}),
       ...(journey.recordRtcSummary ? { recordRtcSummary: (connection, stats) => journey.recordRtcSummary?.(connection, stats) } : {}),
     },
   );

@@ -901,6 +901,28 @@ describe("Cloudflare SFU client", () => {
     harness.client.stop();
   });
 
+  it("stops optional reconnect sampling when the client stops", async () => {
+    vi.useFakeTimers();
+    try {
+      const recordReconnect = vi.fn<NonNullable<CloudflareSFUClientOptions["recordReconnect"]>>();
+      const harness = createHarness({ recordReconnect });
+      const connection = harness.peers[0];
+      if (!connection) throw new Error("Missing test connection");
+      const getStats = vi.spyOn(connection, "getStats");
+      await vi.advanceTimersByTimeAsync(500);
+      expect(getStats).toHaveBeenCalled();
+      harness.client.stop();
+      const observations = recordReconnect.mock.calls.length;
+      const samples = getStats.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(getStats).toHaveBeenCalledTimes(samples);
+      expect(recordReconnect).toHaveBeenCalledTimes(observations);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("records RTC summaries only for the active connection", async () => {
     const onRtcSummary = vi.fn<NonNullable<CloudflareSFUClientOptions["onRtcSummary"]>>();
     const harness = createHarness({ onRtcSummary });
@@ -1017,6 +1039,7 @@ function createHarness(
     readonly autoConnect?: boolean;
     readonly onError?: (error: unknown) => void;
     readonly onRtcSummary?: CloudflareSFUClientOptions["onRtcSummary"];
+    readonly recordReconnect?: CloudflareSFUClientOptions["recordReconnect"];
     readonly onScreenEnded?: () => void;
     readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
     readonly pollIntervalMs?: number;
@@ -1030,6 +1053,7 @@ function createHarness(
     transport,
     replaceMediaConnection: options.replaceMediaConnection,
     onRtcSummary: options.onRtcSummary,
+    recordReconnect: options.recordReconnect,
     pollIntervalMs: options.pollIntervalMs ?? 60_000,
     onError: options.onError,
     onScreenEnded: options.onScreenEnded,
