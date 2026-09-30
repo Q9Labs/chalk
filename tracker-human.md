@@ -60,7 +60,9 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     designed as one self-healing path across Sync, media and the page.
     - Agree a target for recovery time after a drop, a flapping network, a Sync or API
       restart, and a page reload.
-    - Close the gaps between today's behavior and that target.
+    - Close the gaps between today's behavior and that target. A candidate branch,
+      fix/reconnect-heal-20260930, needs base and tip measured on the same machine
+      first.
     - Make a page reload during an Episode rejoin it without a second click, if the
       owner wants that.
     - Re-record a self-mute that a Sync restart interrupted, so other Participants don't
