@@ -65,8 +65,8 @@ func (producer NodeComposeProducer) Compose(ctx context.Context, request FrameRe
 	if !filepath.IsAbs(producer.NodePath) || !filepath.IsAbs(producer.ScriptPath) || !filepath.IsAbs(producer.FFmpegPath) {
 		return ComposeResult{}, errors.New("recording compose executable paths must be absolute")
 	}
-	if producer.Encoder != EncoderLibX264 && producer.Encoder != EncoderVideoToolbox {
-		return ComposeResult{}, errors.New("recording compose encoder must be libx264 or h264_videotoolbox")
+	if producer.Encoder != EncoderLibX264 && producer.Encoder != EncoderVideoToolbox && producer.Encoder != EncoderNVENC {
+		return ComposeResult{}, errors.New("recording compose encoder must be libx264, h264_videotoolbox, or h264_nvenc")
 	}
 	if producer.Threads < 1 || producer.Threads > 64 {
 		return ComposeResult{}, errors.New("recording compose threads must be between 1 and 64")

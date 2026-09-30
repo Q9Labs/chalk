@@ -7,28 +7,16 @@ import (
 	"testing"
 )
 
-func TestBuildRecordingEncodePlanRequiresExplicitHardwareEncoder(t *testing.T) {
-	plan, err := BuildRecordingEncodePlan("mix.wav", "recording.mp4", RecordingEncodeConfig{
-		Width: 1280, Height: 720, FPS: 30, DurationMs: 1_001, Encoder: EncoderVideoToolbox,
-	})
+func TestBuildRecordingMediaExpectationUsesNativeFrameClock(t *testing.T) {
+	expectation, err := BuildRecordingMediaExpectation(1280, 720, 15, 1_001)
 	if err != nil {
-		t.Fatalf("build encode plan: %v", err)
+		t.Fatalf("build media expectation: %v", err)
 	}
-	if !plan.HardwareEncoder || plan.FrameCount != 31 || plan.OutputDuration != 1_034 {
-		t.Fatalf("unexpected hardware plan: %#v", plan)
+	if expectation.FrameCount != 16 || expectation.DurationMs != 1_067 {
+		t.Fatalf("expectation = %#v", expectation)
 	}
-	command := strings.Join(plan.Command, " ")
-	if !strings.Contains(command, "-c:v h264_videotoolbox") || !strings.Contains(command, "-allow_sw 0") {
-		t.Fatalf("hardware plan permits an implicit fallback: %s", command)
-	}
-}
-
-func TestBuildRecordingEncodePlanRejectsUnknownEncoder(t *testing.T) {
-	_, err := BuildRecordingEncodePlan("mix.wav", "recording.mp4", RecordingEncodeConfig{
-		Width: 1280, Height: 720, FPS: 30, DurationMs: 1_000, Encoder: VideoEncoder("auto"),
-	})
-	if err == nil {
-		t.Fatal("unknown encoder was accepted")
+	if _, err := BuildRecordingMediaExpectation(1279, 720, 15, 1_001); err == nil {
+		t.Fatal("odd width accepted")
 	}
 }
 

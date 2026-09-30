@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -152,7 +151,7 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 		_, _ = pool.Exec(ctx, `update recording_capacity set reserved_episodes = 0, reserved_participants = 0, reserved_input_bitrate_bps = 0 where id = 1`)
 	}()
 
-	presentationProfile, err := recordingpresentation.NewComposite720PProfile(strings.Repeat("a", sha256.Size*2))
+	presentationProfile, err := recordingpresentation.NewComposite720PProfile("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	if err != nil {
 		t.Fatalf("build recording presentation profile: %v", err)
 	}
@@ -1554,7 +1553,7 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 			_, err := repository.Fail(ctx, recordingpipeline.FailureInput{
 				LeaseInput: recordingpipeline.LeaseInput{JobID: claimed.ID, AttemptCount: claimed.AttemptCount, FencingGeneration: claimed.FencingGeneration,
 					LeaseToken: claimed.Authority.LeaseToken, LeaseOwner: claimed.Authority.LeaseOwner, CaptureEpoch: claimed.CaptureEpoch, EnvelopeDigest: claimed.Authority.EnvelopeDigest},
-				AvailableAt: time.Now(), ErrorCode: "capture_attempt_failed", ErrorDetail: "test media attempt",
+				AvailableAt: time.Now().Add(-time.Second), ErrorCode: "capture_attempt_failed", ErrorDetail: "test media attempt",
 			})
 			if err != nil {
 				t.Fatalf("fail earlier media attempt: %v", err)

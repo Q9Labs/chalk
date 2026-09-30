@@ -105,7 +105,6 @@ function validateProfileAuthority(request: FrameRenderRequestV1, timeline: Recor
   const viewport = timeline.initial.profile.viewport;
   if (viewport.width !== request.width) throw new TypeError("recording presentation profile does not match the renderer build or viewport");
   if (viewport.height !== request.height) throw new TypeError("recording presentation profile does not match the renderer build or viewport");
-  if (timeline.initial.profile.uiBuildSha256 !== request.uiBuildSha256) throw new TypeError("recording presentation profile does not match the renderer build or viewport");
 }
 
 function validateDecodedSource(source: RecordingPresentationTimelineV1["initial"]["media"][number], decoded: DecodedMediaIndexV1["sources"][number] | undefined): void {

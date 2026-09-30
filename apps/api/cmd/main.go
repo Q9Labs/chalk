@@ -252,7 +252,7 @@ func run() error {
 	if cfg.Capabilities.Recording {
 		profile, err := recordingpresentation.NewComposite720PProfile(cfg.RecordingUIBuildSHA256)
 		if err != nil {
-			return fmt.Errorf("configure recording UI build: %w", err)
+			return fmt.Errorf("configure recording presentation profile: %w", err)
 		}
 		recordingPipelineRepository, err = recordingPipelineRepository.WithRecordingPresentationProfile(profile)
 		if err != nil {
