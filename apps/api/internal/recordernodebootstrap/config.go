@@ -2,6 +2,8 @@ package recordernodebootstrap
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/url"
@@ -96,6 +98,18 @@ func loadConfig(bootstrapEnvironmentFile, imageEnvironmentFile string, verifyAtt
 		if err := VerifyImageManifest(config.ImageManifest, config.ReleaseID, config.ImageDigest, config.Role); err != nil {
 			return Config{}, err
 		}
+		claims, err := VerifyImageManifestClaims(config.ImageManifest, config.ReleaseID, config.ImageDigest, config.Role)
+		if err != nil {
+			return Config{}, err
+		}
+		ca, err := os.ReadFile(config.BootstrapCAFile)
+		if err != nil {
+			return Config{}, fmt.Errorf("%w: read bootstrap CA", ErrInvalidConfig)
+		}
+		caDigest := sha256.Sum256(ca)
+		if claims.ServerName != config.BootstrapServerName || claims.CASHA256 != hex.EncodeToString(caDigest[:]) {
+			return Config{}, fmt.Errorf("%w: installed bootstrap TLS settings differ from image manifest", ErrInvalidConfig)
+		}
 	}
 	return config, nil
 }
@@ -111,6 +125,9 @@ func (config Config) Validate() error {
 	}
 	if !validServerName(config.BootstrapServerName) {
 		return fmt.Errorf("%w: bootstrap server name", ErrInvalidConfig)
+	}
+	if !strings.EqualFold(endpoint.Hostname(), config.BootstrapServerName) {
+		return fmt.Errorf("%w: baked bootstrap server name %q differs from endpoint host %q", ErrInvalidConfig, config.BootstrapServerName, endpoint.Hostname())
 	}
 	for label, path := range map[string]string{
 		"bootstrap ca": config.BootstrapCAFile, "identity directory": config.IdentityDirectory, "worker environment": config.WorkerEnvironment,

@@ -217,6 +217,26 @@ entire VM filesystem. Cloud-init supplies that exact value as
 manifest and every listed file before it generates a node key or contacts the
 issuer.
 
+The manifest also attests the baked bootstrap TLS server name and CA SHA-256.
+Copy `/opt/chalk-recorder/image-manifest.json` off the image builder alongside
+the printed digest. For each Capture and Render pool, run:
+
+```bash
+images/verify-bootstrap-name.py \
+  --manifest <local-manifest-path> \
+  --image-digest <printed-image-manifest-digest> \
+  --bootstrap-endpoint <fleet-bootstrap-endpoint>
+```
+
+It fails on a digest or endpoint-host mismatch and prints two bounded
+`CHALK_RECORDER_FLEET_*` assignments. Put those assignments in that pool's
+existing `recorder/capture.env` or `recorder/render.env` runtime input, with
+the same digest in `CHALK_RECORDER_FLEET_IMAGE_DIGEST`. Controller startup
+rejects missing or stale claims and refuses to create workers when the baked
+name differs from the endpoint host. The worker independently compares its
+actual baked name and CA with the attested manifest before contacting the
+issuer. No new runtime mount or SSM parameter is needed.
+
 Before snapshotting, stop any worker and run `sudo images/cpu/seal.sh` from this
 directory. It removes bootstrap/runtime identity files, operator authorized
 keys, SSH host keys, cloud-init state, machine identity, histories, journals,

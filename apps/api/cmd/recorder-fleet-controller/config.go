@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -52,6 +53,8 @@ type rawCommandConfig struct {
 	releaseID         string
 	imageID           string
 	imageDigest       string
+	bakedServerName   string
+	nameImageDigest   string
 	region            string
 	size              string
 	firewallID        string
@@ -90,6 +93,8 @@ func loadCommandConfig(args []string, getenv func(string) string) (commandConfig
 		releaseID:         getenv("CHALK_RECORDER_FLEET_RELEASE_ID"),
 		imageID:           getenv("CHALK_RECORDER_FLEET_IMAGE_ID"),
 		imageDigest:       getenv("CHALK_RECORDER_FLEET_IMAGE_DIGEST"),
+		bakedServerName:   getenv("CHALK_RECORDER_FLEET_BOOTSTRAP_SERVER_NAME"),
+		nameImageDigest:   getenv("CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST"),
 		region:            getenv("CHALK_RECORDER_FLEET_REGION"),
 		size:              getenv("CHALK_RECORDER_FLEET_SIZE"),
 		firewallID:        getenv("CHALK_RECORDER_FLEET_FIREWALL_ID"),
@@ -124,6 +129,8 @@ func loadCommandConfig(args []string, getenv func(string) string) (commandConfig
 	flags.StringVar(&raw.releaseID, "release-id", raw.releaseID, "immutable recorder release identifier")
 	flags.StringVar(&raw.imageID, "image-id", raw.imageID, "immutable DigitalOcean image ID")
 	flags.StringVar(&raw.imageDigest, "image-digest", raw.imageDigest, "attested sha256 image digest")
+	flags.StringVar(&raw.bakedServerName, "bootstrap-server-name", raw.bakedServerName, "baked bootstrap TLS server name from the image manifest")
+	flags.StringVar(&raw.nameImageDigest, "bootstrap-name-image-digest", raw.nameImageDigest, "image digest paired with the baked bootstrap server name")
 	flags.StringVar(&raw.region, "region", raw.region, "DigitalOcean region")
 	flags.StringVar(&raw.size, "size", raw.size, "DigitalOcean size slug")
 	flags.StringVar(&raw.firewallID, "firewall-id", raw.firewallID, "outbound-only firewall ID")
@@ -210,6 +217,13 @@ func (raw rawCommandConfig) build() (commandConfig, error) {
 	}
 	if err := fleetConfig.Validate(); err != nil {
 		return commandConfig{}, err
+	}
+	if trim(raw.bakedServerName) == "" || trim(raw.nameImageDigest) != fleetConfig.Release.ImageDigest {
+		return commandConfig{}, fmt.Errorf("%w: missing or stale baked bootstrap server name claim", recorderfleet.ErrInvalidConfig)
+	}
+	endpoint, err := url.Parse(fleetConfig.Release.BootstrapEndpoint)
+	if err != nil || !strings.EqualFold(trim(raw.bakedServerName), endpoint.Hostname()) {
+		return commandConfig{}, fmt.Errorf("%w: baked bootstrap server name %q differs from endpoint host %q", recorderfleet.ErrInvalidConfig, trim(raw.bakedServerName), endpoint.Hostname())
 	}
 	providerConfig := digitalocean.RecorderFleetConfig{
 		Token: trim(raw.digitalOceanToken), BaseURL: trim(raw.digitalOceanURL), Environment: key.Environment,

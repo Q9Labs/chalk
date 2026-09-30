@@ -75,27 +75,47 @@ func TestLoadCommandConfigBuildsCPURenderPool(t *testing.T) {
 	}
 }
 
+func TestLoadCommandConfigRejectsBakedBootstrapNameMismatch(t *testing.T) {
+	t.Parallel()
+	environment := validCommandEnvironment()
+	environment["CHALK_RECORDER_FLEET_BOOTSTRAP_ENDPOINT"] = "https://issuer.example:8444/internal/v1/recorder/bootstrap"
+	if _, err := loadCommandConfig(nil, func(key string) string { return environment[key] }); !errors.Is(err, recorderfleet.ErrInvalidConfig) || !strings.Contains(err.Error(), "baked bootstrap server name") {
+		t.Fatalf("mismatched issuer name error = %v", err)
+	}
+	environment["CHALK_RECORDER_FLEET_BOOTSTRAP_ENDPOINT"] = "https://control.example/internal/v1/recorder/bootstrap"
+	environment["CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST"] = "sha256:" + strings.Repeat("b", 64)
+	if _, err := loadCommandConfig(nil, func(key string) string { return environment[key] }); !errors.Is(err, recorderfleet.ErrInvalidConfig) || !strings.Contains(err.Error(), "stale") {
+		t.Fatalf("stale bootstrap claim error = %v", err)
+	}
+	delete(environment, "CHALK_RECORDER_FLEET_BOOTSTRAP_SERVER_NAME")
+	if _, err := loadCommandConfig(nil, func(key string) string { return environment[key] }); !errors.Is(err, recorderfleet.ErrInvalidConfig) {
+		t.Fatalf("missing bootstrap name claim error = %v", err)
+	}
+}
+
 func validCommandEnvironment() map[string]string {
 	return map[string]string{
-		"CHALK_RECORDER_FLEET_ENVIRONMENT":         "staging",
-		"CHALK_RECORDER_FLEET_ROLE":                "capture",
-		"CHALK_RECORDER_FLEET_CONTROL_PLANE_URL":   "https://control.example",
-		"CHALK_RECORDER_FLEET_CONTROLLER_CERT":     "/run/secrets/controller.pem",
-		"CHALK_RECORDER_FLEET_CONTROLLER_KEY":      "/run/secrets/controller-key.pem",
-		"CHALK_RECORDER_FLEET_SERVER_CA":           "/run/secrets/server-ca.pem",
-		"CHALK_RECORDER_FLEET_SERVER_NAME":         "control.example",
-		"CHALK_RECORDER_FLEET_SPIFFE_TRUST_DOMAIN": "workers.example.test",
-		"DIGITALOCEAN_TOKEN":                       "provider-secret",
-		"CHALK_RECORDER_FLEET_JOURNAL_PATH":        "/var/lib/chalk/recorder-fleet-capture.json",
-		"CHALK_RECORDER_FLEET_OWNER_TAG":           "chalk-recorder-owner",
-		"CHALK_RECORDER_FLEET_MAX_NODES":           "11",
-		"CHALK_RECORDER_FLEET_SLOTS_PER_NODE":      "1",
-		"CHALK_RECORDER_FLEET_RELEASE_ID":          "release-7",
-		"CHALK_RECORDER_FLEET_IMAGE_ID":            "123456",
-		"CHALK_RECORDER_FLEET_IMAGE_DIGEST":        "sha256:" + strings.Repeat("a", 64),
-		"CHALK_RECORDER_FLEET_REGION":              "sgp1",
-		"CHALK_RECORDER_FLEET_SIZE":                "c-2",
-		"CHALK_RECORDER_FLEET_FIREWALL_ID":         "firewall-7",
-		"CHALK_RECORDER_FLEET_BOOTSTRAP_ENDPOINT":  "https://control.example/internal/v1/recorder/bootstrap",
+		"CHALK_RECORDER_FLEET_ENVIRONMENT":                 "staging",
+		"CHALK_RECORDER_FLEET_ROLE":                        "capture",
+		"CHALK_RECORDER_FLEET_CONTROL_PLANE_URL":           "https://control.example",
+		"CHALK_RECORDER_FLEET_CONTROLLER_CERT":             "/run/secrets/controller.pem",
+		"CHALK_RECORDER_FLEET_CONTROLLER_KEY":              "/run/secrets/controller-key.pem",
+		"CHALK_RECORDER_FLEET_SERVER_CA":                   "/run/secrets/server-ca.pem",
+		"CHALK_RECORDER_FLEET_SERVER_NAME":                 "control.example",
+		"CHALK_RECORDER_FLEET_SPIFFE_TRUST_DOMAIN":         "workers.example.test",
+		"DIGITALOCEAN_TOKEN":                               "provider-secret",
+		"CHALK_RECORDER_FLEET_JOURNAL_PATH":                "/var/lib/chalk/recorder-fleet-capture.json",
+		"CHALK_RECORDER_FLEET_OWNER_TAG":                   "chalk-recorder-owner",
+		"CHALK_RECORDER_FLEET_MAX_NODES":                   "11",
+		"CHALK_RECORDER_FLEET_SLOTS_PER_NODE":              "1",
+		"CHALK_RECORDER_FLEET_RELEASE_ID":                  "release-7",
+		"CHALK_RECORDER_FLEET_IMAGE_ID":                    "123456",
+		"CHALK_RECORDER_FLEET_IMAGE_DIGEST":                "sha256:" + strings.Repeat("a", 64),
+		"CHALK_RECORDER_FLEET_BOOTSTRAP_SERVER_NAME":       "control.example",
+		"CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST": "sha256:" + strings.Repeat("a", 64),
+		"CHALK_RECORDER_FLEET_REGION":                      "sgp1",
+		"CHALK_RECORDER_FLEET_SIZE":                        "c-2",
+		"CHALK_RECORDER_FLEET_FIREWALL_ID":                 "firewall-7",
+		"CHALK_RECORDER_FLEET_BOOTSTRAP_ENDPOINT":          "https://control.example/internal/v1/recorder/bootstrap",
 	}
 }
