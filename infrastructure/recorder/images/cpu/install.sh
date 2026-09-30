@@ -127,6 +127,8 @@ chown root:chalk-recorder /etc/chalk-recorder /etc/chalk-recorder/image.env /etc
 chmod 0750 /etc/chalk-recorder
 chmod 0440 /etc/chalk-recorder/image.env /etc/chalk-recorder/render.env
 chown -R root:root "/opt/chalk-recorder/releases/$release_id" /opt/chalk-recorder/image-manifest.json
+chmod -R u=rwX,go=rX "/opt/chalk-recorder/releases/$release_id/renderer"
+setpriv --reuid chalk-recorder --regid chalk-recorder --clear-groups test -r "/opt/chalk-recorder/releases/$release_id/renderer/dist/node/compose.js" || { echo "compositor script is not readable by chalk-recorder" >&2; exit 1; }
 chmod 0755 "/opt/chalk-recorder/releases/$release_id/bin/recorder-capture" "/opt/chalk-recorder/releases/$release_id/bin/recorder-render" "/opt/chalk-recorder/releases/$release_id/bin/chalk-recorder-bootstrap"
 
 systemctl daemon-reload
