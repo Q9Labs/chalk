@@ -88,8 +88,9 @@ func recorderFleetDemandHandler(service RecorderFleetControllerService, environm
 			writeRecorderFleetError(w, err)
 			return
 		}
-		if request.URL.Query().Get("wait") == "25" && demand.DesiredNodes == 0 {
-			demand, err = waitForRecorderFleetDemand(request.Context(), service, key, demand, 25*time.Second, 500*time.Millisecond)
+		// The private listener's 10 s WriteTimeout bounds the whole response.
+		if request.URL.Query().Get("wait") == "8" && demand.DesiredNodes == 0 {
+			demand, err = waitForRecorderFleetDemand(request.Context(), service, key, demand, 8*time.Second, 500*time.Millisecond)
 			if err != nil {
 				if request.Context().Err() == nil {
 					writeRecorderFleetError(w, err)
@@ -216,7 +217,7 @@ func recorderFleetPoolHandler(service RecorderFleetControllerService, environmen
 func recorderFleetRequestKey(w http.ResponseWriter, request *http.Request, environment string, allowWait bool) (recorderfleet.PoolKey, bool) {
 	query := request.URL.Query()
 	roles, exists := query["role"]
-	if !exists || len(roles) != 1 || len(query) != 1 && (!allowWait || len(query) != 2 || len(query["wait"]) != 1 || query.Get("wait") != "25") {
+	if !exists || len(roles) != 1 || len(query) != 1 && (!allowWait || len(query) != 2 || len(query["wait"]) != 1 || query.Get("wait") != "8") {
 		writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recorder fleet role")
 		return recorderfleet.PoolKey{}, false
 	}
