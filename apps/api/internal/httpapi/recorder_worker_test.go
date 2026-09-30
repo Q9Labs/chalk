@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +19,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleetauthority"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 	"github.com/q9labs/chalk/apps/api/internal/workerresources"
@@ -150,6 +152,27 @@ func ptrTime(value time.Time) *time.Time { return &value }
 
 func recorderWorkerRequest(method, path, body string) *http.Request {
 	return httptest.NewRequest(method, "http://api"+path, strings.NewReader(body))
+}
+
+func TestRecorderWorkerCompletionLogsPresentationBuildError(t *testing.T) {
+	var logs bytes.Buffer
+	workerID := mustRecorderWorkerID(t, workerTestID)
+	handler := NewRecorderWorkerRouterWithControls(recorderWorkerServiceStub{
+		completeCapture: func(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+			return recordingpipeline.Job{}, fmt.Errorf("prepare recording presentation: %w: shared screen source does not resolve", recordingpresentation.ErrInvalidCompletionSource)
+		},
+	}, recorderWorkerRouteVerifierStub{identity: workeridentity.Identity{WorkerID: workerID, Role: workeridentity.RoleCapture}}, RecorderWorkerControlServices{
+		Logger: slog.New(slog.NewJSONHandler(&logs, nil)),
+	})
+	body := `{"job_id":"` + workerTestJob + `","attempt_count":1,"fencing_generation":2,"lease_token":"lease","lease_for_seconds":60,"capture_epoch":1,"envelope_digest":"` + workerTestDigest + `"}`
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/jobs/complete", body))
+	if response.Code != http.StatusInternalServerError {
+		t.Fatalf("completion status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(logs.String(), "shared screen source does not resolve") || strings.Contains(response.Body.String(), "shared screen") {
+		t.Fatalf("completion error log = %s, response = %s", logs.String(), response.Body.String())
+	}
 }
 
 func decodeRecorderWorkerJSON(t *testing.T, response *httptest.ResponseRecorder) map[string]any {

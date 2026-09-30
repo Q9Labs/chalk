@@ -270,9 +270,11 @@ with candidate as (
          and recording_pipelines.capture_ready_at is not null
          and sync_recordings.status = 'stopped' and exists (
              select 1 from sync_external_operations operation
-             where operation.external_operation_id = sync_recordings.stop_external_operation_id
-               and operation.tenant_id = recording_jobs.tenant_id
+             where operation.tenant_id = recording_jobs.tenant_id
                and operation.episode_id = recording_jobs.episode_id
+               and operation.recording_id = recording_jobs.recording_id
+               and operation.payload ->> 'stopOperationId' = sync_recordings.stop_external_operation_id::text
+               and operation.payload -> 'captureEpoch' = to_jsonb(recording_pipelines.capture_epoch)
                and operation.operation_name = 'recording_capture_stopped'
                and operation.status = 'applied'
          )), false)::boolean as completion_only,
@@ -316,18 +318,22 @@ with candidate as (
            recording_pipelines.stop_requested_at is not null and recording_pipelines.capture_ready_at is not null and
            sync_recordings.status = 'stopped' and exists (
                select 1 from sync_external_operations operation
-               where operation.external_operation_id = sync_recordings.stop_external_operation_id
-                 and operation.tenant_id = recording_jobs.tenant_id
+               where operation.tenant_id = recording_jobs.tenant_id
                  and operation.episode_id = recording_jobs.episode_id
+                 and operation.recording_id = recording_jobs.recording_id
+                 and operation.payload ->> 'stopOperationId' = sync_recordings.stop_external_operation_id::text
+                 and operation.payload -> 'captureEpoch' = to_jsonb(recording_pipelines.capture_epoch)
                  and operation.operation_name = 'recording_capture_stopped'
                  and operation.status = 'applied'
            )))
       and (recording_jobs.kind <> 'capture' or recording_pipelines.stop_operation_id is null or
           (completion.attempts < 3 and recording_pipelines.capture_ready_at is not null and sync_recordings.status = 'stopped' and exists (
               select 1 from sync_external_operations operation
-              where operation.external_operation_id = sync_recordings.stop_external_operation_id
-                and operation.tenant_id = recording_jobs.tenant_id
+              where operation.tenant_id = recording_jobs.tenant_id
                 and operation.episode_id = recording_jobs.episode_id
+                and operation.recording_id = recording_jobs.recording_id
+                and operation.payload ->> 'stopOperationId' = sync_recordings.stop_external_operation_id::text
+                and operation.payload -> 'captureEpoch' = to_jsonb(recording_pipelines.capture_epoch)
                 and operation.operation_name = 'recording_capture_stopped'
                 and operation.status = 'applied'
           )))
@@ -335,9 +341,11 @@ with candidate as (
           (recording_reservations.state = 'reserved' and recording_reservations.ends_at > now()) or
           (completion.attempts < 3 and recording_pipelines.capture_ready_at is not null and sync_recordings.status = 'stopped' and exists (
               select 1 from sync_external_operations operation
-              where operation.external_operation_id = sync_recordings.stop_external_operation_id
-                and operation.tenant_id = recording_jobs.tenant_id
+              where operation.tenant_id = recording_jobs.tenant_id
                 and operation.episode_id = recording_jobs.episode_id
+                and operation.recording_id = recording_jobs.recording_id
+                and operation.payload ->> 'stopOperationId' = sync_recordings.stop_external_operation_id::text
+                and operation.payload -> 'captureEpoch' = to_jsonb(recording_pipelines.capture_epoch)
                 and operation.operation_name = 'recording_capture_stopped'
                 and operation.status = 'applied'
           )))
@@ -986,9 +994,11 @@ with expired as (
          and pipelines.capture_ready_at is not null
          and sync_recordings.status = 'stopped' and exists (
              select 1 from sync_external_operations operation
-             where operation.external_operation_id = sync_recordings.stop_external_operation_id
-               and operation.tenant_id = jobs.tenant_id
+             where operation.tenant_id = jobs.tenant_id
                and operation.episode_id = jobs.episode_id
+               and operation.recording_id = jobs.recording_id
+               and operation.payload ->> 'stopOperationId' = sync_recordings.stop_external_operation_id::text
+               and operation.payload -> 'captureEpoch' = to_jsonb(pipelines.capture_epoch)
                and operation.operation_name = 'recording_capture_stopped'
                and operation.status = 'applied'
          )), false)::boolean as completion_only,

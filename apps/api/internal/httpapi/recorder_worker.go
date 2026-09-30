@@ -15,6 +15,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleetauthority"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 	"github.com/q9labs/chalk/apps/api/internal/workerresources"
@@ -103,7 +104,7 @@ func mountRecorderWorkerRoutesWithControls(r chi.Router, service RecorderWorkerS
 		r.Post("/jobs/progress", recorderWorkerProgressHandler(service))
 		r.Post("/jobs/fail", recorderWorkerFailHandler(service))
 		r.Post("/jobs/capture/relinquish", recorderWorkerRelinquishCaptureHandler(service))
-		r.Post("/jobs/complete", recorderWorkerCompleteHandler(service))
+		r.Post("/jobs/complete", recorderWorkerCompleteHandler(service, controls.Logger))
 		r.Post("/pool-health", recorderWorkerPoolHealthHandler(service, controls.FleetAuthority, controls.Logger))
 		if controls.CapturePlans != nil {
 			r.Post("/plans/wait", recorderWorkerCapturePlanWaitHandler(controls.CapturePlans))
@@ -467,7 +468,10 @@ func recorderWorkerRelinquishCaptureHandler(service RecorderWorkerService) http.
 	}
 }
 
-func recorderWorkerCompleteHandler(service RecorderWorkerService) http.HandlerFunc {
+func recorderWorkerCompleteHandler(service RecorderWorkerService, logger *slog.Logger) http.HandlerFunc {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return func(w http.ResponseWriter, request *http.Request) {
 		identity, ok := recorderWorkerRequestIdentity(w, request)
 		if !ok {
@@ -500,6 +504,13 @@ func recorderWorkerCompleteHandler(service RecorderWorkerService) http.HandlerFu
 			job, err = service.Complete(request.Context(), lease)
 		}
 		if err != nil {
+			if errors.Is(err, recordingpresentation.ErrInvalidCompletionSource) {
+				detail := err.Error()
+				if len(detail) > 256 {
+					detail = detail[:256]
+				}
+				logger.ErrorContext(request.Context(), "recording presentation build failed", "error", detail)
+			}
 			writeRecorderWorkerError(w, err)
 			return
 		}

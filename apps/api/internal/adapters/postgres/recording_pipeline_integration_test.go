@@ -1442,7 +1442,7 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 			key  string
 		}{
 			{startID, "start_recording", "completion_retry_start_" + recordingValue[len(recordingValue)-3:]},
-			{stopID, "recording_capture_stopped", "completion_retry_stop_" + recordingValue[len(recordingValue)-3:]},
+			{stopID, "stop_recording", "completion_retry_stop_" + recordingValue[len(recordingValue)-3:]},
 		} {
 			if _, err := pool.Exec(ctx, `insert into sync_external_operations(tenant_id, space_id, episode_id, external_operation_id, request_key, request_fingerprint, operation_name, recording_id, payload, status, completed_at) values($1, $2, $3, $4, $5, $6, $7, $8, jsonb_build_object('recordingId', $8::uuid::text), 'applied', now())`, tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), operation.id.Bytes(), operation.key, fingerprint[:], operation.name, recordingID.Bytes()); err != nil {
 				t.Fatalf("seed applied %s: %v", operation.name, err)
@@ -1487,6 +1487,13 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 		}
 		if _, err := repository.RequestStop(ctx, tenantID, episodeID, recordingID, stopID); err != nil {
 			t.Fatalf("request stopped capture: %v", err)
+		}
+		captureStoppedID, err := utilities.NewID()
+		if err != nil {
+			t.Fatalf("new capture-stopped operation id: %v", err)
+		}
+		if _, err := pool.Exec(ctx, `insert into sync_external_operations(tenant_id, space_id, episode_id, external_operation_id, request_key, request_fingerprint, operation_name, recording_id, payload, status, completed_at) values($1, $2, $3, $4, $5, $6, 'recording_capture_stopped', $7, jsonb_build_object('recordingId', $7::uuid::text, 'stopOperationId', $8::uuid::text, 'captureEpoch', $9::bigint), 'applied', now())`, tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), captureStoppedID.Bytes(), "completion_retry_capture_stopped_"+recordingValue[len(recordingValue)-3:], fingerprint[:], recordingID.Bytes(), stopID.Bytes(), claimed.CaptureEpoch); err != nil {
+			t.Fatalf("seed applied capture-stopped operation: %v", err)
 		}
 		if _, err := pool.Exec(ctx, `update recording_jobs set lease_expires_at = now() - interval '1 second' where id = $1`, claimed.ID.Bytes()); err != nil {
 			t.Fatalf("expire stopped capture: %v", err)

@@ -659,6 +659,23 @@ func schedulePlanTail(source CompletionSource, active map[string]activeTrack, or
 		if err != nil {
 			return nil, 0, err
 		}
+		priorShared := screenSharedContent(active)
+		nextShared := screenSharedContent(desired)
+		sharedChanged := !whiteboardPresentedAt(source, fact.CreatedAt) && priorShared != nextShared
+		clearedShared := false
+		if sharedChanged && priorShared.Kind == "screen_share" {
+			oldSourceVisible := false
+			for _, track := range desired {
+				if track.source.SourceID == priorShared.SourceID && track.source.Visible {
+					oldSourceVisible = true
+					break
+				}
+			}
+			if !oldSourceVisible {
+				appendEvent(at, 19, &SharedContentChangedEvent{Kind: "shared_content_changed", SharedContent: SharedContent{Kind: "none"}})
+				clearedShared = true
+			}
+		}
 		keys := unionTrackKeys(active, desired)
 		for _, key := range keys {
 			prior, hadPrior := active[key]
@@ -676,12 +693,8 @@ func schedulePlanTail(source CompletionSource, active map[string]activeTrack, or
 				appendParticipantMediaState(at, next.source.ParticipantID, next.source.Kind, true, appendEvent)
 			}
 		}
-		if !whiteboardPresentedAt(source, fact.CreatedAt) {
-			priorShared := screenSharedContent(active)
-			nextShared := screenSharedContent(desired)
-			if priorShared != nextShared {
-				appendEvent(at, 22, &SharedContentChangedEvent{Kind: "shared_content_changed", SharedContent: nextShared})
-			}
+		if sharedChanged && (!clearedShared || nextShared.Kind != "none") {
+			appendEvent(at, 22, &SharedContentChangedEvent{Kind: "shared_content_changed", SharedContent: nextShared})
 		}
 		active = desired
 		endRevision = fact.Revision
