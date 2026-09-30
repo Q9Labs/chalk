@@ -307,15 +307,14 @@ resume. This is an inventory proof for the release operator, not eager rendering
 of any Recording.
 
 Capture bundles are private R2 objects under
-`temporary/recordings/<recording>/capture/<epoch>/bundles/...`. The fixed
-`temporary/` lifecycle rule makes them eligible for deletion after 24 hours;
-actual deletion may occur later. The API allows at most two hours of capture
-(`recordingpipeline.MaximumRecordingDuration`) and fourteen hours of rendering
-after capture completion (`recordingpipeline.MaximumRenderDuration`), so the
-earliest bundle remains available for at least eight hours after its maximum
-sixteen-hour capture-and-render window. Retained render/source objects under
-`tenants/<tenant>/recordings/...` and transcripts under
-`tenants/<tenant>/transcripts/...` do not match the temporary prefix. Incomplete
+`tenants/<tenant>/recordings/<recording>/capture/...`. They are deleted by the
+Recording source cleanup queue after the Episode's Recording retention window
+(30 days by default), measured from Capture completion or terminal failure.
+Failed Captures and their presentation objects are cleaned up through the same
+queue, leaving that window for manual recovery. These objects, other retained
+Recording objects under `tenants/<tenant>/recordings/...`, and transcripts under
+`tenants/<tenant>/transcripts/...` do not match the `temporary/` lifecycle rule.
+Incomplete
 multipart uploads are eligible for abort after seven days. Previously issued
 allocation keys under `recordings/...` remain readable for replay compatibility,
 but are outside the `temporary/` lifecycle rule and require separate cleanup

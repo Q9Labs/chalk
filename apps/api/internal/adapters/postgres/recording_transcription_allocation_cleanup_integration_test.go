@@ -95,6 +95,10 @@ func (f transcriptionAllocationCleanupFixture) failureInput() sqlc.FailRecording
 }
 
 func newTranscriptionAllocationCleanupFixture(t *testing.T, expiredLease bool) (pgx.Tx, transcriptionAllocationCleanupFixture) {
+	return newAllocationCleanupFixture(t, expiredLease, "transcription")
+}
+
+func newAllocationCleanupFixture(t *testing.T, expiredLease bool, jobKind string) (pgx.Tx, transcriptionAllocationCleanupFixture) {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("postgres integration")
@@ -149,6 +153,10 @@ func newTranscriptionAllocationCleanupFixture(t *testing.T, expiredLease bool) (
 	}
 	leaseToken := "transcription-allocation-cleanup-lease"
 	leaseOwner := "transcription-allocation-cleanup-worker"
+	envelopeBytes := "fixture-envelope"
+	if jobKind == "capture" {
+		envelopeBytes = `{"completion_only":false}`
+	}
 
 	execCleanupFixture(t, transaction, `insert into tenants (id, name) values ($1, $2)`, tenantID.Bytes(), "transcription allocation cleanup")
 	execCleanupFixture(t, transaction, `insert into spaces (id, name, tenant_id, slug, media_plane) values ($1, $2, $3, $4, 'cf_sfu')`, spaceID.Bytes(), "transcription allocation cleanup", tenantID.Bytes(), "transcription-allocation-cleanup-"+spaceID.String()[:8])
@@ -174,14 +182,14 @@ func newTranscriptionAllocationCleanupFixture(t *testing.T, expiredLease bool) (
 			id, tenant_id, episode_id, recording_id, kind, idempotency_key,
 			payload_schema_version, state, available_at, attempt_count, attempt_limit,
 			lease_token, lease_owner, lease_expires_at, fencing_generation
-		) values ($1, $2, $3, $4, 'transcription', $5, 1, 'leased', now(), 1, 3, $6, $7, $8, 1)`,
-		jobID.Bytes(), tenantID.Bytes(), episodeID.Bytes(), recordingID.Bytes(), "transcription-allocation-cleanup-job-"+jobID.String(), leaseToken, leaseOwner, leaseExpiresAt)
+		) values ($1, $2, $3, $4, $9, $5, 1, 'leased', now(), 1, 3, $6, $7, $8, 1)`,
+		jobID.Bytes(), tenantID.Bytes(), episodeID.Bytes(), recordingID.Bytes(), "transcription-allocation-cleanup-job-"+jobID.String(), leaseToken, leaseOwner, leaseExpiresAt, jobKind)
 	execCleanupFixture(t, transaction, `
 		insert into recording_job_attempt_authorities (
 			job_id, attempt_count, fencing_generation, capture_epoch, claim_request_id, kind,
 			lease_owner, lease_token, lease_expires_at, envelope_bytes, envelope_digest
-		) values ($1, 1, 1, 1, $2, 'transcription', $3, $4, $5, 'fixture-envelope', $6)`,
-		jobID.Bytes(), claimID.Bytes(), leaseOwner, leaseToken, leaseExpiresAt, digest[:])
+		) values ($1, 1, 1, 1, $2, $7, $3, $4, $5, $8, $6)`,
+		jobID.Bytes(), claimID.Bytes(), leaseOwner, leaseToken, leaseExpiresAt, digest[:], jobKind, envelopeBytes)
 	execCleanupFixture(t, transaction, `
 		insert into recording_presentation_baselines (
 			presentation_handle, tenant_id, space_id, episode_id, recording_id,
