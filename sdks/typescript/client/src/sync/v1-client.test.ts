@@ -239,6 +239,41 @@ describe("V1SyncClient", () => {
     client.stop();
   });
 
+  it("bounds the default fast retry burst before backing off and cancels it on stop", async () => {
+    const clock = new TestClock();
+    const sockets: TestSocket[] = [];
+    const client = new V1SyncClient({
+      url: "ws://sync.test/v1/sync",
+      token: async () => "token",
+      webSocket: {
+        connect: () => {
+          const socket = new TestSocket();
+          sockets.push(socket);
+          return socket;
+        },
+      },
+      clock,
+    });
+    await client.start();
+    for (const delay of [250, 250, 250, 250, 250, 250, 250, 250, 500, 1000, 2000, 4000, 5000, 5000]) {
+      sockets.at(-1)?.close(1012);
+      clock.advance(0);
+      await settle();
+      const count = sockets.length;
+      clock.advance(delay - 1);
+      expect(sockets).toHaveLength(count);
+      clock.advance(1);
+      expect(sockets).toHaveLength(count + 1);
+    }
+    sockets.at(-1)?.close(1012);
+    clock.advance(0);
+    await settle();
+    client.stop();
+    const count = sockets.length;
+    clock.advance(10_000);
+    expect(sockets).toHaveLength(count);
+  });
+
   it("gates live traffic on control, media, and presence recovery and declares all four streams", async () => {
     const { socket } = await liveClient();
     const hello = socket.frames()[0];

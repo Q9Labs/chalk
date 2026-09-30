@@ -364,6 +364,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#cursor = null;
     this.#negotiatedGeneration = null;
     this.#replacementAttemptedGeneration = null;
+    // Fresh access already replaced the expired SFU connection. Replacing it
+    // again before its first offer adds a serial request and abandons that connection.
+    if (options.bootstrap.connectionId !== this.#bootstrap.connectionId) this.#started = false;
     this.#bootstrap = options.bootstrap;
     if (options.transport) this.#transport = options.transport;
     this.#connection = this.#createPeerConnection(options.bootstrap);

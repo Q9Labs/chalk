@@ -192,6 +192,31 @@ describe("Cloudflare SFU client", () => {
     harness.client.stop();
   });
 
+  it("publishes a fresh restart bootstrap without requesting another connection", async () => {
+    const replaceMediaConnection = vi.fn(async () => bootstrap("connection-3"));
+    const harness = createHarness({ replaceMediaConnection });
+    await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
+
+    await harness.client.restart(bootstrap("connection-2"));
+
+    expect(replaceMediaConnection).not.toHaveBeenCalled();
+    expect(harness.transport.addInputs.map((input) => input.connectionId)).toEqual(["connection-1", "connection-2"]);
+    expect(harness.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, localTracks: [{ enabled: true }] });
+    harness.client.stop();
+  });
+
+  it("still replaces a reused restart connection before its first offer", async () => {
+    const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
+    const harness = createHarness({ replaceMediaConnection });
+    await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
+
+    await harness.client.restart(bootstrap("connection-1"));
+
+    expect(replaceMediaConnection).toHaveBeenCalledOnce();
+    expect(harness.transport.addInputs.map((input) => input.connectionId)).toEqual(["connection-1", "connection-2"]);
+    harness.client.stop();
+  });
+
   it("replaces a dead connection once and republishes the pending local tracks", async () => {
     const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
     const harness = createHarness({ replaceMediaConnection });

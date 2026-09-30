@@ -41,6 +41,7 @@ const MAX_PROJECTION_EVENT_EVIDENCE = 256;
 const CLIENT_RESTART_CLOSE_CODE = 4000;
 const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5_000;
+const FAST_RECONNECT_ATTEMPTS = 8;
 
 type RequestDeferred = Deferred<V1DirectedRequestResult> & { readonly frame: SyncV1ClientFrame };
 type Recovery = { readonly id: string; readonly head: { readonly revision: number; readonly state_schema_version: number; readonly state_digest: string }; replayEvents: number; replayBytes: number; controlComplete: boolean };
@@ -642,7 +643,10 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#emit();
     this.#clearReconnect();
     const configuredDelay = this.#options.reconnectDelayMs;
-    const delay = configuredDelay === 0 ? 0 : Math.min(MAX_RECONNECT_DELAY_MS, (configuredDelay ?? DEFAULT_RECONNECT_DELAY_MS) * 2 ** Math.min(this.#reconnectAttempt, 5));
+    // Cover brief service restarts without a growing gap; sustained failures
+    // still back off, and explicitly configured retry policies are unchanged.
+    const exponentialAttempt = configuredDelay === undefined ? Math.max(0, this.#reconnectAttempt - FAST_RECONNECT_ATTEMPTS + 1) : this.#reconnectAttempt;
+    const delay = configuredDelay === 0 ? 0 : Math.min(MAX_RECONNECT_DELAY_MS, (configuredDelay ?? DEFAULT_RECONNECT_DELAY_MS) * 2 ** Math.min(exponentialAttempt, 5));
     recordReconnect(this.#options.recordReconnect, "sync_backoff", { boundary: "start", delay_ms: delay, attempt: this.#reconnectAttempt });
     this.#reconnectAttempt += 1;
     const backoffStartedAt = this.#now();
