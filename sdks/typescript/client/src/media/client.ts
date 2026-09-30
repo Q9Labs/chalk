@@ -242,6 +242,20 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async closeForcedLocalPublication(source: MediaSource): Promise<void> {
     this.setLocalSourceIntent(source, false);
     await this.#retireLocalPublication(source);
+    if (!this.#replaceMediaConnection) return;
+    const generation = this.#generation;
+    await this.#serializeSDP(async () => {
+      const existing = new Set([...this.#localTracks.values()].filter((state) => state.source !== source && state.providerPublicationId !== null));
+      const states = await this.#prepareConnectionForPublication([], generation);
+      await this.#publishPreparedTracksSerialized(
+        states.filter((state) => existing.has(state)),
+        generation,
+        this.#connection,
+        this.#bootstrap.connectionId,
+      );
+      this.#requireGeneration(generation);
+      this.#setPhase("live", null);
+    });
   }
 
   async #retireUnavailableLocalPublication(state: LocalTrackState): Promise<void> {
@@ -624,7 +638,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     } catch (error) {
       if (generation !== this.#generation || this.#stopped) throw error;
       if (!this.#canReplaceConnectionAfterRemotePull(error, generation)) {
-        this.#observeRemotePublicationCursor(cursor, true);
+        this.#observeRemotePublicationCursor(cursor, retryableRemotePull(error));
         throw error;
       }
       return this.#retryRemotePullOnReplacement(publications, cursor, generation);
@@ -646,7 +660,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return await this.#pull(publications, generation);
     } catch (error) {
       if (generation !== this.#generation || this.#stopped) throw error;
-      this.#observeRemotePublicationCursor(cursor, true);
+      this.#observeRemotePublicationCursor(cursor, retryableRemotePull(error));
       throw error;
     }
   }
@@ -1224,6 +1238,10 @@ function remotePublicationEqual(left: CloudflareSFURemoteTrack, right: Cloudflar
 
 function providerDescription(description: ReturnType<typeof requireDescription>): { readonly sessionDescription: ReturnType<typeof requireDescription> } {
   return { sessionDescription: description };
+}
+
+function retryableRemotePull(error: unknown): boolean {
+  return error instanceof CloudflareSFUError && ["signaling_failed", "signaling_timeout", "media_failed", "negotiation_timeout"].includes(error.code);
 }
 
 function mediaTargetFailure(error: unknown): MediaPlaneResult {
