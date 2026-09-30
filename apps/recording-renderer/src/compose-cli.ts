@@ -9,6 +9,7 @@ import { createPainter } from "./compose/paint.js";
 import { buildSceneSpans, frameCountFor, groupVideoSegments, type VideoSegment } from "./compose/scene.js";
 import { createWhiteboardRenderer } from "./compose/whiteboard.js";
 import { loadVerifiedRenderInputs, type VerifiedRenderInputs } from "./node/inputs.js";
+import { isMainModule } from "./node/main-module.js";
 import { readFrameRenderRequest, validateResultPath } from "./node/request.js";
 
 const COMPOSE_RESULT_VERSION = "recording-compose-result.v1";
@@ -257,7 +258,7 @@ export function parseArguments(values: readonly string[]): Arguments {
   };
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (isMainModule(import.meta.url)) {
   await main().catch((error: unknown) => {
     for (const child of running) child.kill("SIGKILL");
     process.stderr.write(`${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`);
