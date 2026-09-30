@@ -95,8 +95,15 @@ func newParticipantPlan(
 	captureEpoch, revision, controlCursor int64,
 	participants []captureplan.ParticipantSnapshot,
 	tracks []captureplan.TrackSnapshot,
+	stopAt ...time.Time,
 ) captureplan.Plan {
 	t.Helper()
+	stopState := captureplan.StopStateRunning
+	var stopRequestedAt time.Time
+	if len(stopAt) > 0 {
+		stopState = captureplan.StopStateRequested
+		stopRequestedAt = stopAt[0]
+	}
 	plan, err := captureplan.NewPlan(captureplan.PlanInput{
 		Authority: captureplan.PlanAuthority{
 			PlanHandle: captureplan.PlanHandle(source.PresentationHandle.String()),
@@ -115,7 +122,8 @@ func newParticipantPlan(
 		LayoutProfile:    captureplan.LayoutProfileComposite720PV1,
 		ParticipantLimit: 10, InputBitrateBPS: 1_000_000,
 		EffectiveDeadline: source.CaptureReadyAt.Add(time.Hour),
-		StopState:         captureplan.StopStateRunning,
+		StopState:         stopState,
+		StopRequestedAt:   stopRequestedAt,
 		Participants:      participants,
 		Tracks:            tracks,
 	})
