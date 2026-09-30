@@ -239,20 +239,31 @@ func TestRemoteOfferLocalAnswerAndMIDBinding(t *testing.T) {
 	setRemoteDescription(t, remote, webrtc.SDPTypeAnswer, answer.SDP)
 
 	packet := &rtp.Packet{Header: rtp.Header{Version: 2, PayloadType: 111, SequenceNumber: 1, Timestamp: 1, SSRC: 42}, Payload: []byte{1, 2, 3}}
+	// Keep sending until the packet is read: packets written before ICE and DTLS connect are
+	// dropped, and a loaded single-CPU run can take longer than any fixed burst.
+	stop := make(chan struct{})
 	sent := make(chan struct{})
 	go func() {
 		defer close(sent)
-		for sequence := uint16(1); sequence < 40; sequence++ {
+		ticker := time.NewTicker(20 * time.Millisecond)
+		defer ticker.Stop()
+		for sequence := uint16(1); ; sequence++ {
 			packet.SequenceNumber = sequence
 			_ = sender.WriteRTP(&rtp.Packet{Header: packet.Header, Payload: append([]byte(nil), packet.Payload...)})
-			time.Sleep(20 * time.Millisecond)
+			select {
+			case <-stop:
+				return
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
 		}
 	}()
+	defer func() { close(stop); <-sent }()
 	track, err := peer.WaitForTrack(ctx, "0")
 	if err != nil {
 		t.Fatalf("wait for track: %v", err)
 	}
-	<-sent
 	if track.CaptureTrack().ParticipantID.IsZero() || track.MID() != "0" || track.Codec() != "opus" {
 		t.Fatalf("bound track lost Chalk identity: %+v", track.CaptureTrack())
 	}
