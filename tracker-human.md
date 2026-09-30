@@ -27,6 +27,9 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Run a two-party call with audio, video, screen share, admission changes and
       reconnect on supported browsers and on iOS and Android release builds.
     - Cover permission denial, background return and media-route replacement.
+    - Find why re-enabling after a moderator mute sometimes doesn't reach one receiver,
+      and whether audio can play for a few tens of milliseconds after a muted badge when
+      Sync restarts.
 
 3. **Measure media usage per Tenant and Episode** (Not started · size M · P2)
     The Usage type has egress and Participant-minute fields, but both Cloudflare

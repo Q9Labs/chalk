@@ -40,6 +40,9 @@ outcomes:
         Run a two-party call with audio, video, screen share, admission changes and reconnect on
         supported browsers and on iOS and Android release builds.
       - Cover permission denial, background return and media-route replacement.
+      - >-
+        Find why re-enabling after a moderator mute sometimes doesn't reach one receiver, and whether
+        audio can play for a few tens of milliseconds after a muted badge when Sync restarts.
     uncertainty: No real-network or physical-device observation exists.
     theory: theory.md#product-goals
     code:
