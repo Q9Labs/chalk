@@ -280,6 +280,9 @@ func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes 
 		if managed.Phase == PhaseDraining || managed.Phase == PhaseIdentityRevoked || managed.Phase == PhaseDeleting || !r.nodeMatchesCurrentRelease(nodes[providerID]) {
 			continue
 		}
+		if readyObservationExpired(managed, observed[providerID], now, r.config.ObservationMaxAge) {
+			continue
+		}
 		needed[providerID] = struct{}{}
 	}
 	for _, providerID := range sortedManagedNodeIDs(state.Nodes) {
@@ -484,14 +487,17 @@ func (r *Reconciler) partitionNodes(nodes map[string]Node, state Journal, observ
 		startupExpired := (managed.Phase == PhaseAwaitingBootstrap || managed.Phase == PhaseBootstrapping) && now.Sub(node.CreatedAt) > r.config.StartupTimeout
 		// DigitalOcean normally finishes a create in about 30 s; a Droplet still "new" long after that is stuck.
 		provisionStalled := managed.Phase == PhaseAwaitingBootstrap && node.Status == "new" && now.Sub(node.CreatedAt) > provisionStallTimeout
-		readyObservationExpired := managed.Phase == PhaseReady && observed[providerID].ObservedAt.IsZero() && managed.LastReadyAt != nil && now.Sub(*managed.LastReadyAt) > r.config.ObservationMaxAge
-		if r.nodeMatchesCurrentRelease(node) && node.Status != "off" && node.Status != "archive" && !startupExpired && !provisionStalled && !readyObservationExpired {
+		if r.nodeMatchesCurrentRelease(node) && node.Status != "off" && node.Status != "archive" && !startupExpired && !provisionStalled && !readyObservationExpired(managed, observed[providerID], now, r.config.ObservationMaxAge) {
 			current = append(current, managed)
 		} else {
 			stale = append(stale, managed)
 		}
 	}
 	return current, stale
+}
+
+func readyObservationExpired(managed ManagedNode, observation NodeObservation, now time.Time, maxAge time.Duration) bool {
+	return managed.Phase == PhaseReady && observation.ObservedAt.IsZero() && managed.LastReadyAt != nil && now.Sub(*managed.LastReadyAt) > maxAge
 }
 
 func (r *Reconciler) drainCandidate(current, stale []ManagedNode, desired int, state Journal) *ManagedNode {

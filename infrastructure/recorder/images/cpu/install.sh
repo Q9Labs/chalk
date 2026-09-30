@@ -127,6 +127,7 @@ chown root:chalk-recorder /etc/chalk-recorder /etc/chalk-recorder/image.env /etc
 chmod 0750 /etc/chalk-recorder
 chmod 0440 /etc/chalk-recorder/image.env /etc/chalk-recorder/render.env
 chown -R root:root "/opt/chalk-recorder/releases/$release_id" /opt/chalk-recorder/image-manifest.json
+"/opt/chalk-recorder/toolchains/node-22.23.2/bin/node" "$script_root/normalize-renderer-permissions.mjs" "/opt/chalk-recorder/releases/$release_id/renderer"
 chmod 0755 "/opt/chalk-recorder/releases/$release_id/bin/recorder-capture" "/opt/chalk-recorder/releases/$release_id/bin/recorder-render" "/opt/chalk-recorder/releases/$release_id/bin/chalk-recorder-bootstrap"
 
 systemctl daemon-reload
