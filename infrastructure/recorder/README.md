@@ -28,10 +28,9 @@ admission. The capture pool supports at most ten concurrent captures with zero
 spare, independently of ten render nodes. A smaller capture or render maximum lowers the supported
 concurrency; operators must reduce the admission ceiling with it before launch.
 The default render target uses BLR1 and the measured CPU-Optimized eight-vCPU
-`c-8`/`libx264` profile with eight browser-frame producers and a deadline-aware
-scaler capped at ten nodes. The requested two-page `c-2` successor image uses
-two browser-frame producers; each sealed image attests its own frame profile,
-and prior frame-eight images remain valid for rollback. Both pools default to zero desired nodes. A GPU pool
+`c-8`/`libx264` profile with the native Node compositor and a deadline-aware
+scaler capped at ten nodes. The smaller `c-2` successor uses the same native
+compositor. Both pools default to zero desired nodes. A GPU pool
 remains configurable by setting `render_gpu = true` together with an independently
 qualified GPU image, region, and size; CPU and GPU artifacts are never mixed.
 
@@ -188,7 +187,7 @@ Validate the exact snapshot and size in a staging Capture boot before promotion.
 ### Shared Capture/Render image
 
 `images/cpu` builds one Ubuntu 24.04 AMD64 release containing both real worker
-daemons, the renderer UI, Playwright Chromium, and the node bootstrap/renewal
+daemons, the native Node compositor, and the node bootstrap/renewal
 agent. Build the public artifact on a machine with sufficient CPU, then install
 it on a clean 25-GiB `c-2` builder so the resulting DigitalOcean snapshot can
 launch both `c-2` capture and `c-8` render nodes:
@@ -197,8 +196,7 @@ launch both `c-2` capture and `c-8` render nodes:
 sudo infrastructure/recorder/images/cpu/build-release.sh \
   --source /absolute/path/to/chalk \
   --release-id <release-id> \
-  --output /absolute/path/chalk-recorder-cpu.tar.gz \
-  --retained-ui-client-archive /absolute/path/retained-ui-<sha256>.tar.gz
+  --output /absolute/path/chalk-recorder-cpu.tar.gz
 
 sudo infrastructure/recorder/images/cpu/install.sh \
   --bundle /absolute/path/chalk-recorder-cpu.tar.gz \
@@ -209,7 +207,7 @@ sudo infrastructure/recorder/images/cpu/install.sh \
 
 The build uses checksum-pinned Go 1.25.13 and Node.js 22.23.2 toolchains plus
 pnpm 10.26.2. It records the Git commit, a deterministic SHA-256 of the complete
-public source tree, the UI digest, and every installed recorder file. The
+public source tree and every installed recorder file. The
 installer prints `image_manifest_digest`; this is specifically the SHA-256 of
 `/opt/chalk-recorder/image-manifest.json`, not an OCI digest or a digest of the
 entire VM filesystem. Cloud-init supplies that exact value as
@@ -226,85 +224,30 @@ printed manifest digest. The first boot regenerates host/machine identity; the
 external reconciler's cloud-init runs the one-time bootstrap and starts only the
 role named by the fenced pool release.
 
-Each sealed render image launches `libx264` with its attested frame concurrency
-(two for the requested c-2 successor; eight for the existing c-8 image). The
-capture service uses the same credential delivery path. A renewal timer derives
-its lead time as one third of each issued certificate lifetime, atomically
-replaces the leaf, and both workers swap to a fresh HTTP connection pool on the
-next control request without stopping an active attempt.
+Each sealed render image composes the `recording_presentation.v1` timeline
+natively with Node and FFmpeg. The capture service uses the same credential
+delivery path. A renewal timer derives its lead time as one third of each issued
+certificate lifetime, atomically replaces the leaf, and both workers swap to a
+fresh HTTP connection pool on the next control request without stopping an
+active attempt.
 
-## Recording UI build identity
+### Deferred Export compatibility and release order
 
-When `CHALK_RECORDING_ENABLED=true`, the API also requires
-`CHALK_RECORDING_UI_BUILD_SHA256`. Set it to the lowercase SHA-256 in
-`apps/recording-renderer/dist/client/recording-ui-build.json` from the same
-immutable release. API startup validates the value while constructing the
-Recording presentation profile, and render workers independently recompute the
-client build digest before rendering. A missing, malformed, stale, or
-cross-release value must stop Recording startup rather than silently selecting
-another UI build.
+The database constrains both presentation baselines and finalized presentations
+to `recording_presentation.v1`. The native compositor reads that version for
+all stored Recordings. Older v1 profiles retain `uiBuildSha256`; new profiles
+omit it. The digest remains accepted on read but no longer chooses an installed
+UI build. No database column or old presentation is rewritten in this release.
 
-The renderer build writes the manifest during `pnpm run build` and accepts
-exactly this bounded, no-extra-fields shape:
-
-```json
-{ "schema_version": "recording-ui-build.v1", "sha256": "<64 lowercase hexadecimal characters>" }
-```
-
-The digest is domain-separated as `recording_ui_build.v1` and covers every
-regular file under `dist/client` in sorted relative-path order, including its
-framed path, byte length, and bytes; the manifest itself is excluded and
-symbolic links are rejected. At render startup, the worker reads the manifest,
-recomputes the directory digest, and requires both values to equal the
-`ui_build_sha256` in the server-authorized presentation request. The API setting
-must therefore be copied from the manifest produced by the exact client tree
-shipped in the render image, not recomputed over a different directory or
-release.
-
-### Deferred Export UI compatibility
-
-An MP4 Export replays the immutable `uiBuildSha256` frozen in the Recording
-presentation. A new recorder image therefore carries the current `dist/client`
-tree and every exact client tree still needed by a source-eligible Recording.
-The image-local `recording-ui-builds.json` registry contains only `client` and
-`retained-clients/<sha256>` paths. The Go worker rejects a frozen hash absent
-from that bounded registry; the Node renderer then resolves only that local
-path and recomputes the selected tree before serving it. There is no URL,
-arbitrary-path, or fallback-build selection.
-
-Retained browser bundles continue to use the renderer's local, read-only
-runtime surface (`/runtime/input`, `/runtime/assets/<id>`, and
-`/runtime/media/<id>`). Recorder releases must preserve that v1 surface while a
-retained client can be selected. A deliberate incompatible renderer-runtime
-change needs separately version-routed whole images; it cannot be hidden by
-rewriting a frozen presentation or substituting a UI digest.
-
-Pass each prior static client tree as
-`--retained-ui-client-archive /absolute/path/<archive>.tar.gz`. The archive
-must contain exactly one top-level `client/` tree from a prior immutable
-recorder release, including its `recording-ui-build.json`; symlinks, special
-files, extra top-level paths, traversal, duplicate builds, and a duplicate of
-the current digest are rejected. The builder verifies the archived manifest by
-recomputing its domain-separated digest, copies it under
-`retained-clients/<sha256>`, and regenerates the registry. The installer
-re-verifies every registered tree before it creates the immutable snapshot.
-Create that input archive from the verified prior release tree, for example:
-
-```sh
-tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner \
-  -C /absolute/path/to/prior-release/renderer/dist \
-  -czf /absolute/path/retained-ui-<sha256>.tar.gz client
-```
-
-Before a UI cutover, produce a private inventory of every frozen
-`uiBuildSha256` whose capture source remains within the 30-day
-capture-completion retention window, plus hashes used by active render jobs and
-currently active captures whose frozen presentation can still complete. Each
-must be current or supplied in an archive. Keep a release artifact archive for
-each such static tree. Do not remove a retained tree from a later image until
-its source window and active-capture margin have elapsed and no job using it can
-resume. This is an inventory proof for the release operator, not eager rendering
-of any Recording.
+Roll out the new Render image first. Its worker accepts old and new v1 profiles.
+Drain or replace every old browser Render worker before deploying the new API:
+old workers require a UI digest and cannot export a new digest-free Recording.
+An old API can continue creating digest-bearing Recordings while new Render
+workers are running. At the API cutover, remove
+`CHALK_RECORDING_UI_BUILD_SHA256` from the release publisher's API environment;
+the API no longer consumes it. If rollback is needed after that cutover, roll
+back the API before rolling back the Render image. Remove any obsolete profile
+storage only in a later migration after the compatibility window.
 
 Capture bundles are private R2 objects under
 `tenants/<tenant>/recordings/<recording>/capture/...`. They are deleted by the

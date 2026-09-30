@@ -2,13 +2,11 @@ package recordingpresentation
 
 const ProfileVersionComposite720PV1 = "composite_720p_v1"
 
-// NewComposite720PProfile binds the deterministic shared presentation shell
-// to the exact shipped recording UI build.
-func NewComposite720PProfile(uiBuildSHA256 string) (Profile, error) {
+// NewComposite720PProfile selects the deterministic shared presentation shell.
+func NewComposite720PProfile() (Profile, error) {
 	profile := Profile{
-		Name:          "recording-space",
-		Version:       ProfileVersionComposite720PV1,
-		UIBuildSHA256: uiBuildSHA256,
+		Name:    "recording-space",
+		Version: ProfileVersionComposite720PV1,
 		Viewport: Viewport{
 			Width:             1280,
 			Height:            720,

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"strings"
 	"testing"
 	"time"
 
@@ -81,7 +80,7 @@ func TestCaptureBundleEpochsMatchPresentationAcrossPlanChanges(t *testing.T) {
 		captureEpochParityPlan(t, authority, 5, origin, true, guest),
 		captureEpochParityPlan(t, authority, 6, origin, true, rebound, guest),
 	}
-	profile, err := recordingpresentation.NewComposite720PProfile(strings.Repeat("a", 64))
+	profile, err := recordingpresentation.NewComposite720PProfile()
 	if err != nil {
 		t.Fatal(err)
 	}

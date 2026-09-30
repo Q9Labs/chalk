@@ -5,11 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math"
-	"os/exec"
 	"strconv"
-	"time"
 )
 
 type VideoEncoder string
@@ -20,28 +17,6 @@ const (
 	EncoderNVENC        VideoEncoder = "h264_nvenc"
 )
 
-type RecordingEncodeConfig struct {
-	Width      int
-	Height     int
-	FPS        int
-	DurationMs int64
-	Encoder    VideoEncoder
-}
-
-type RecordingEncodePlan struct {
-	AudioInput      string       `json:"audio_input"`
-	Output          string       `json:"output"`
-	Width           int          `json:"width"`
-	Height          int          `json:"height"`
-	FPS             int          `json:"fps"`
-	FrameCount      int64        `json:"frame_count"`
-	SourceDuration  int64        `json:"source_duration_ms"`
-	OutputDuration  int64        `json:"output_duration_ms"`
-	Encoder         VideoEncoder `json:"encoder"`
-	HardwareEncoder bool         `json:"hardware_encoder"`
-	Command         []string     `json:"command"`
-}
-
 type RecordingMediaExpectation struct {
 	Width      int
 	Height     int
@@ -50,49 +25,18 @@ type RecordingMediaExpectation struct {
 	DurationMs int64
 }
 
-func BuildRecordingEncodePlan(audioInput, output string, config RecordingEncodeConfig) (RecordingEncodePlan, error) {
-	if audioInput == "" || output == "" || config.Width <= 0 || config.Height <= 0 || config.FPS <= 0 || config.DurationMs <= 0 {
-		return RecordingEncodePlan{}, errors.New("audio input, output, dimensions, frame rate, and duration are required")
+func BuildRecordingMediaExpectation(width, height, fps int, durationMs int64) (RecordingMediaExpectation, error) {
+	if width <= 0 || height <= 0 || width%2 != 0 || height%2 != 0 || width > 3840 || height > 2160 || fps <= 0 || fps > 60 || durationMs <= 0 {
+		return RecordingMediaExpectation{}, errors.New("recording dimensions, frame rate, or duration are invalid")
 	}
-	if config.Width%2 != 0 || config.Height%2 != 0 || config.Width > 3840 || config.Height > 2160 || config.FPS > 60 {
-		return RecordingEncodePlan{}, errors.New("recording dimensions and frame rate are unsupported")
+	if durationMs > (math.MaxInt64-999)/int64(fps) {
+		return RecordingMediaExpectation{}, errors.New("recording duration exceeds the supported frame count")
 	}
-	encoderArgs, hardware, err := recordingEncoderArgs(config.Encoder)
-	if err != nil {
-		return RecordingEncodePlan{}, err
-	}
-	if config.DurationMs > (math.MaxInt64-999)/int64(config.FPS) {
-		return RecordingEncodePlan{}, errors.New("recording duration exceeds the supported frame count")
-	}
-	frameCount := (config.DurationMs*int64(config.FPS) + 999) / 1000
+	frameCount := (durationMs*int64(fps) + 999) / 1000
 	if frameCount <= 0 || frameCount > math.MaxInt32 {
-		return RecordingEncodePlan{}, errors.New("recording frame count is unsupported")
+		return RecordingMediaExpectation{}, errors.New("recording frame count is unsupported")
 	}
-	outputSeconds := float64(frameCount) / float64(config.FPS)
-	outputDurationMs := int64(math.Ceil(outputSeconds * 1000))
-	videoFilter := fmt.Sprintf("setpts=N/(%d*TB),scale=%d:%d:flags=lanczos,format=yuv420p", config.FPS, config.Width, config.Height)
-	audioFilter := fmt.Sprintf("asetpts=PTS-STARTPTS,aresample=48000:async=1:first_pts=0,apad,atrim=end=%.6f", outputSeconds)
-	args := []string{
-		"ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
-		"-f", "image2pipe", "-framerate", strconv.Itoa(config.FPS), "-vcodec", "png", "-i", "pipe:0",
-		"-i", audioInput,
-		"-map", "0:v:0", "-map", "1:a:0",
-		"-vf", videoFilter, "-af", audioFilter,
-		// setpts can erase the filter output rate; CFR alone otherwise defaults to 25 fps.
-		"-frames:v", strconv.FormatInt(frameCount, 10), "-r", strconv.Itoa(config.FPS), "-fps_mode", "cfr",
-		"-c:v", string(config.Encoder),
-	}
-	args = append(args, encoderArgs...)
-	args = append(args,
-		"-b:v", "2M", "-maxrate", "3M", "-bufsize", "4M", "-pix_fmt", "yuv420p", "-tag:v", "avc1",
-		"-c:a", "aac", "-profile:a", "aac_low", "-b:a", "128k", "-ar", "48000", "-ac", "2",
-		"-movflags", "+faststart", output,
-	)
-	return RecordingEncodePlan{
-		AudioInput: audioInput, Output: output, Width: config.Width, Height: config.Height, FPS: config.FPS,
-		FrameCount: frameCount, SourceDuration: config.DurationMs, OutputDuration: outputDurationMs,
-		Encoder: config.Encoder, HardwareEncoder: hardware, Command: args,
-	}, nil
+	return RecordingMediaExpectation{Width: width, Height: height, FPS: fps, FrameCount: frameCount, DurationMs: (frameCount*1000 + int64(fps) - 1) / int64(fps)}, nil
 }
 
 func VerifyRecordingMedia(ctx context.Context, runner CommandRunner, path string, expected RecordingMediaExpectation) (MediaFacts, error) {
@@ -229,27 +173,4 @@ func recordingEncoderArgs(encoder VideoEncoder) ([]string, bool, error) {
 	default:
 		return nil, false, fmt.Errorf("unsupported recording encoder %q", encoder)
 	}
-}
-
-type StreamingCommandRunner interface {
-	RunStreaming(context.Context, io.Reader, string, ...string) ([]byte, error)
-}
-
-func (ExecCommandRunner) RunStreaming(ctx context.Context, input io.Reader, name string, args ...string) ([]byte, error) {
-	command := exec.CommandContext(ctx, name, args...)
-	command.Stdin = input
-	return command.CombinedOutput()
-}
-
-func EncodeRecordingFrames(ctx context.Context, runner StreamingCommandRunner, plan RecordingEncodePlan, frames io.Reader) (time.Duration, error) {
-	if runner == nil || frames == nil || len(plan.Command) < 2 {
-		return 0, errors.New("streaming encoder runner, frame source, and command are required")
-	}
-	started := time.Now()
-	output, err := runner.RunStreaming(ctx, frames, plan.Command[0], plan.Command[1:]...)
-	duration := time.Since(started)
-	if err != nil {
-		return duration, fmt.Errorf("encode recording frames with %s: %w: %s", plan.Encoder, err, string(output))
-	}
-	return duration, nil
 }

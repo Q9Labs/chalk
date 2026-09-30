@@ -226,7 +226,7 @@ function composeOptions(values: readonly string[]): ReadonlyMap<string, string> 
   while (index < values.length) {
     const key = values[index];
     const value = values[index + 1];
-    if (key === undefined || value === undefined || !key.startsWith("--") || options.has(key)) throw new TypeError("usage: compose --request <path> --result <path> --output <path> [--ffmpeg <path>] [--encoder libx264|h264_videotoolbox] [--threads <n>]");
+    if (key === undefined || value === undefined || !key.startsWith("--") || options.has(key)) throw new TypeError("usage: compose --request <path> --result <path> --output <path> [--ffmpeg <path>] [--encoder libx264|h264_videotoolbox|h264_nvenc] [--threads <n>]");
     options.set(key, value);
     index += 2;
   }
@@ -245,7 +245,7 @@ function absoluteOption(options: ReadonlyMap<string, string>, key: string): stri
 export function parseArguments(values: readonly string[]): Arguments {
   const options = composeOptions(values);
   const encoder = options.get("--encoder") ?? "libx264";
-  if (encoder !== "libx264" && encoder !== "h264_videotoolbox") throw new TypeError(`unsupported compose encoder ${encoder}`);
+  if (encoder !== "libx264" && encoder !== "h264_videotoolbox" && encoder !== "h264_nvenc") throw new TypeError(`unsupported compose encoder ${encoder}`);
   const threads = options.has("--threads") ? Number(options.get("--threads")) : undefined;
   if (threads !== undefined && (!Number.isSafeInteger(threads) || threads < 1 || threads > 64)) throw new TypeError("--threads must be between 1 and 64");
   return {

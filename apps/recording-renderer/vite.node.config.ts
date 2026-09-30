@@ -13,14 +13,10 @@ export default defineConfig({
     outDir: "dist/node",
     emptyOutDir: true,
     rollupOptions: {
-      external: ["playwright", "@napi-rs/canvas", "happy-dom"],
+      external: ["@napi-rs/canvas", "happy-dom"],
       input: {
-        cli: "src/cli.ts",
         compose: "src/compose-cli.ts",
         "compose-fixture": "src/compose-fixture.ts",
-        fixture: "src/fixture.ts",
-        "ui-build-cli": "src/ui-build-cli.ts",
-        "ui-build-registry-cli": "src/ui-build-registry-cli.ts",
       },
       output: {
         entryFileNames: "[name].js",
@@ -34,8 +30,8 @@ export default defineConfig({
       async closeBundle() {
         const fonts = source("dist/node/fonts");
         await mkdir(join(fonts, "Figtree"), { recursive: true });
-        for (const file of await readdir(source("src/browser/fonts"))) {
-          if (file.endsWith(".woff2")) await cp(join(source("src/browser/fonts"), file), join(fonts, "Figtree", file));
+        for (const file of await readdir(source("src/compose/font-assets"))) {
+          if (file.endsWith(".woff2")) await cp(join(source("src/compose/font-assets"), file), join(fonts, "Figtree", file));
         }
         for (const folder of ["Excalifont", "Virgil", "Cascadia", "Nunito", "Lilita", "ComicShanns", "Liberation", "Assistant"]) {
           await cp(join(excalidrawRoot, "fonts", folder), join(fonts, "excalidraw", folder), { recursive: true });

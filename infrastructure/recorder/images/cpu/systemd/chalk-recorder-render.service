@@ -13,12 +13,11 @@ EnvironmentFile=/etc/chalk-recorder/worker.env
 EnvironmentFile=/etc/chalk-recorder/render.env
 RuntimeDirectory=chalk-recorder
 RuntimeDirectoryMode=0700
-ExecStart=/opt/chalk-recorder/current/bin/recorder-render --run --frame-concurrency 2
+ExecStart=/opt/chalk-recorder/current/bin/recorder-render --run
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=5min
-# The worker drains its active render on SIGTERM. Keep FFmpeg and the frame
-# producer alive for that drain; systemd may kill the full cgroup at timeout.
+# The worker drains its active render on SIGTERM. Keep FFmpeg and the compositor alive for that drain; systemd may kill the full cgroup at timeout.
 KillMode=mixed
 NoNewPrivileges=true
 PrivateDevices=true

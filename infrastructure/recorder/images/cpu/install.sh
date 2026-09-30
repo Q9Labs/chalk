@@ -42,21 +42,14 @@ bundle_root="$stage_root/release"
 release_id="$(jq -er '.release_id | select(test("^[a-z0-9][a-z0-9._-]{0,127}$"))' "$bundle_root/build-info.json")"
 source_commit="$(jq -er '.source_commit | select(test("^[0-9a-f]{40}$"))' "$bundle_root/build-info.json")"
 source_tree_sha256="$(jq -er '.source_tree_sha256 | select(test("^[0-9a-f]{64}$"))' "$bundle_root/build-info.json")"
-ui_build_sha256="$(jq -er '.ui_build_sha256 | select(test("^[0-9a-f]{64}$"))' "$bundle_root/build-info.json")"
-[[ "$(jq -er '.schema_version' "$bundle_root/build-info.json")" == "chalk_recorder_cpu_build.v1" ]] || { echo "release bundle schema is unsupported" >&2; exit 1; }
+[[ "$(jq -er '.schema_version' "$bundle_root/build-info.json")" == "chalk_recorder_cpu_build.v1" && "$(jq -er '.export_renderer' "$bundle_root/build-info.json")" == "native" ]] || { echo "release bundle schema or renderer is unsupported" >&2; exit 1; }
 [[ ! -e "/opt/chalk-recorder/releases/$release_id" ]] || { echo "release $release_id is already installed" >&2; exit 1; }
 for binary in recorder-capture recorder-render chalk-recorder-bootstrap; do
   [[ -x "$bundle_root/bin/$binary" ]] || { echo "release bundle is missing $binary" >&2; exit 1; }
 done
-[[ -f "$bundle_root/renderer/dist/client/recording-ui-build.json" && -f "$bundle_root/renderer/dist/recording-ui-builds.json" && -f "$bundle_root/renderer/dist/node/ui-build-registry-cli.js" && -x "$bundle_root/renderer/node_modules/.bin/playwright" ]] || { echo "release bundle is missing renderer runtime artifacts" >&2; exit 1; }
-
-/opt/chalk-recorder/toolchains/node-22.23.2/bin/node "$bundle_root/renderer/dist/node/ui-build-registry-cli.js" verify "$bundle_root/renderer/dist" >/dev/null
-
-export PLAYWRIGHT_BROWSERS_PATH="$bundle_root/ms-playwright"
-"$bundle_root/renderer/node_modules/.bin/playwright" install-deps chromium
+[[ -f "$bundle_root/renderer/dist/node/compose.js" ]] || { echo "release bundle is missing compositor runtime artifacts" >&2; exit 1; }
 (
   cd "$bundle_root/renderer"
-  /opt/chalk-recorder/toolchains/node-22.23.2/bin/node --input-type=module -e 'import { chromium } from "playwright"; const browser = await chromium.launch({headless:true}); await browser.close();'
   /opt/chalk-recorder/toolchains/node-22.23.2/bin/node --input-type=module -e 'import { createCanvas } from "@napi-rs/canvas"; createCanvas(1, 1).toBuffer("image/png");'
 )
 ffmpeg_encoders="$(ffmpeg -hide_banner -encoders 2>/dev/null)"
@@ -74,17 +67,13 @@ for unit in chalk-recorder-capture.service chalk-recorder-render.service chalk-r
   install -m 0644 "$script_root/systemd/$unit" "$image_root/etc/systemd/system/$unit"
 done
 
-# Native Export needs fonts-noto-color-emoji installed explicitly once Chromium is removed.
 cat >"$image_root/etc/chalk-recorder/render.env" <<EOF
 CHALK_RECORDING_RENDER_WORK_ROOT=/var/lib/chalk-recorder/render
 CHALK_RECORDING_NODE_PATH=/opt/chalk-recorder/toolchains/node-22.23.2/bin/node
-CHALK_RECORDING_RENDERER_SCRIPT=/opt/chalk-recorder/current/renderer/dist/node/cli.js
-CHALK_RECORDING_UI_BUILD_REGISTRY=/opt/chalk-recorder/current/renderer/dist/recording-ui-builds.json
+CHALK_RECORDING_RENDERER_SCRIPT=/opt/chalk-recorder/current/renderer/dist/node/compose.js
 CHALK_RECORDING_FFMPEG_PATH=/usr/bin/ffmpeg
 CHALK_RECORDING_FFPROBE_PATH=/usr/bin/ffprobe
 CHALK_RECORDING_VIDEO_ENCODER=libx264
-PLAYWRIGHT_BROWSERS_PATH=/opt/chalk-recorder/current/ms-playwright
-CHALK_RECORDER_EXPORT_RENDERER=native
 EOF
 
 # Periodic keyframes keep native Export seeks short; see recorder-capture --keyframe-interval.
@@ -139,4 +128,4 @@ chmod 0755 "/opt/chalk-recorder/releases/$release_id/bin/recorder-capture" "/opt
 
 systemctl daemon-reload
 systemctl disable chalk-recorder-capture.service chalk-recorder-render.service chalk-recorder-renew.timer >/dev/null 2>&1 || true
-printf 'release_id=%s\nsource_commit=%s\nsource_tree_sha256=sha256:%s\nbundle_sha256=sha256:%s\nimage_manifest_digest=%s\nui_build_sha256=%s\n' "$release_id" "$source_commit" "$source_tree_sha256" "$bundle_sha256" "$image_digest" "$ui_build_sha256"
+printf 'release_id=%s\nsource_commit=%s\nsource_tree_sha256=sha256:%s\nbundle_sha256=sha256:%s\nimage_manifest_digest=%s\n' "$release_id" "$source_commit" "$source_tree_sha256" "$bundle_sha256" "$image_digest"

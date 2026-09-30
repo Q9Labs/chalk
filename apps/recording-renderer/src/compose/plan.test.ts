@@ -36,6 +36,20 @@ describe("FFmpeg plan", () => {
     expect(args.slice(-3)).toEqual(["-f", "mpegts", "segment.ts"]);
   });
 
+  it("keeps the qualified GPU encoder available for native segments", () => {
+    const args = segmentArgs(
+      segment,
+      new Map([
+        ["camera", { path: "cam.webm", startMs: 0 }],
+        ["screen", { path: "screen.webm", startMs: 500 }],
+      ]),
+      "overlay.ffcat",
+      "segment.ts",
+      { ...output, encoder: "h264_nvenc" },
+    );
+    expect(args.join(" ")).toContain("-c:v h264_nvenc -preset p4 -profile:v high");
+  });
+
   it("uses crop for cover and pad for contain", () => {
     const filter = segmentFilter(placements, output);
     expect(filter).toContain("force_original_aspect_ratio=increase:force_divisible_by=2,crop=320:240");

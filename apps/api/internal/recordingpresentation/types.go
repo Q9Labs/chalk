@@ -59,7 +59,7 @@ type Snapshot struct {
 type Profile struct {
 	Name          string   `json:"name"`
 	Version       string   `json:"version"`
-	UIBuildSHA256 string   `json:"uiBuildSha256"`
+	UIBuildSHA256 string   `json:"uiBuildSha256,omitempty"`
 	Viewport      Viewport `json:"viewport"`
 	Locale        string   `json:"locale"`
 	TimeZone      string   `json:"timeZone"`

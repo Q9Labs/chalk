@@ -16,7 +16,6 @@ export interface FrameRenderRequestV1 {
   readonly workspaceDirectory: string;
   readonly presentationPath: string;
   readonly presentationSha256: string;
-  readonly uiBuildSha256: string;
   readonly assetDirectory: string;
   readonly decodedMediaPath: string;
   readonly decodedMediaSha256: string;
@@ -28,7 +27,7 @@ export interface FrameRenderRequestV1 {
 
 export function parseFrameRenderRequestV1(value: unknown): FrameRenderRequestV1 {
   const request = objectValue(value, "frame render request");
-  exactKeys(request, ["schema_version", "recording_id", "episode_id", "workspace_directory", "presentation_path", "presentation_sha256", "ui_build_sha256", "asset_directory", "decoded_media_path", "decoded_media_sha256", "width", "height", "fps", "duration_ms"], "frame render request");
+  exactKeys(request, ["schema_version", "recording_id", "episode_id", "workspace_directory", "presentation_path", "presentation_sha256", "asset_directory", "decoded_media_path", "decoded_media_sha256", "width", "height", "fps", "duration_ms"], "frame render request");
   literalField(request, "schema_version", FRAME_RENDER_REQUEST_VERSION, "frame render schema_version is invalid");
   const workspaceDirectory = absolutePathField(request, "workspace_directory");
   const presentationPath = absolutePathField(request, "presentation_path");
@@ -46,7 +45,6 @@ export function parseFrameRenderRequestV1(value: unknown): FrameRenderRequestV1 
     workspaceDirectory,
     presentationPath,
     presentationSha256: requestPatternedStringField(request, "presentation_sha256", SHA256_PATTERN),
-    uiBuildSha256: requestPatternedStringField(request, "ui_build_sha256", SHA256_PATTERN),
     assetDirectory,
     decodedMediaPath,
     decodedMediaSha256: requestPatternedStringField(request, "decoded_media_sha256", SHA256_PATTERN),

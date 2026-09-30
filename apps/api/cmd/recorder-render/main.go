@@ -25,14 +25,11 @@ func main() {
 	serverName := flag.String("server-name", os.Getenv("CHALK_RECORDER_SERVER_NAME"), "control-plane TLS server name")
 	workRoot := flag.String("work-root", os.Getenv("CHALK_RECORDING_RENDER_WORK_ROOT"), "absolute parent directory for ephemeral render attempts")
 	nodePath := flag.String("node", os.Getenv("CHALK_RECORDING_NODE_PATH"), "absolute Node.js executable path")
-	rendererScript := flag.String("renderer-script", os.Getenv("CHALK_RECORDING_RENDERER_SCRIPT"), "absolute recording renderer CLI path")
-	exportRenderer := flag.String("export-renderer", os.Getenv("CHALK_RECORDER_EXPORT_RENDERER"), "Export renderer: browser or native (default browser)")
+	rendererScript := flag.String("renderer-script", os.Getenv("CHALK_RECORDING_RENDERER_SCRIPT"), "absolute recording compositor CLI path")
 	composeThreads := flag.String("compose-threads", os.Getenv("CHALK_RECORDING_COMPOSE_THREADS"), "native compositor threads (default: vCPUs, at most 4)")
-	uiBuildRegistry := flag.String("ui-build-registry", os.Getenv("CHALK_RECORDING_UI_BUILD_REGISTRY"), "absolute installed recording UI build registry path")
 	ffmpegPath := flag.String("ffmpeg", os.Getenv("CHALK_RECORDING_FFMPEG_PATH"), "absolute FFmpeg executable path")
 	ffprobePath := flag.String("ffprobe", os.Getenv("CHALK_RECORDING_FFPROBE_PATH"), "absolute FFprobe executable path")
 	encoder := flag.String("encoder", os.Getenv("CHALK_RECORDING_VIDEO_ENCODER"), "explicit video encoder: libx264, h264_videotoolbox, or h264_nvenc")
-	frameConcurrency := flag.Int("frame-concurrency", 1, "parallel browser pages per recording (1-8)")
 	flag.Parse()
 	if *fixture == *runMode {
 		fmt.Fprintln(os.Stderr, "recorder-render: exactly one of --fixture or --run is required")
@@ -42,8 +39,7 @@ func main() {
 		if err := runWorker(renderWorkerConfig{
 			Environment: *environment, ControlPlaneURL: *controlPlaneURL, WorkerCertificate: *workerCertificate, WorkerKey: *workerKey,
 			ServerCA: *serverCA, ServerName: *serverName, WorkRoot: *workRoot, NodePath: *nodePath, RendererScript: *rendererScript,
-			UIBuildRegistry: *uiBuildRegistry, FFmpegPath: *ffmpegPath, FFprobePath: *ffprobePath, Encoder: *encoder, FrameConcurrency: *frameConcurrency,
-			ExportRenderer: *exportRenderer, ComposeThreads: *composeThreads,
+			FFmpegPath: *ffmpegPath, FFprobePath: *ffprobePath, Encoder: *encoder, ComposeThreads: *composeThreads,
 		}); err != nil {
 			if !errors.Is(err, recorderworker.ErrReadinessFailure) && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 				return
