@@ -34,6 +34,7 @@ describe("FFmpeg plan", () => {
     expect(args).toContain("-filter_complex_threads");
     expect(args.slice(args.indexOf("-frames:v"), args.indexOf("-frames:v") + 4)).toEqual(["-frames:v", "30", "-r", "15"]);
     expect(args.slice(-3)).toEqual(["-f", "mpegts", "segment.ts"]);
+    expect(args.slice(args.indexOf("-bf"), args.indexOf("-bf") + 2)).toEqual(["-bf", "0"]);
   });
 
   it("keeps the qualified GPU encoder available for native segments", () => {
@@ -57,6 +58,30 @@ describe("FFmpeg plan", () => {
     expect(filter).toContain("[base2][ui]overlay=0:0:format=yuv420:eof_action=repeat[out]");
     // An fps filter on the sparse UI stream makes overlay queue every base frame.
     expect(filter).toContain("[2:v]format=yuva420p[ui]");
+  });
+
+  it("declares the composited rate when copying video into MP4", () => {
+    const args = muxArgs("segments.ffcat", "mix.wav", "export.mp4", 150, output);
+    expect(args.slice(args.indexOf("-r"), args.indexOf("-r") + 2)).toEqual(["-r", "15"]);
+    expect(args).toContain("setts=ts=N/(15*TB):duration=1/(15*TB)");
+  });
+
+  it("holds the first decoded frame backward without advancing playback", () => {
+    const early = { ...segment, startFrame: 0, endFrame: 45 };
+    const args = segmentArgs(
+      early,
+      new Map([
+        ["camera", { path: "cam.webm", startMs: 1000 }],
+        ["screen", { path: "screen.webm", startMs: 500 }],
+      ]),
+      "overlay.ffcat",
+      "segment.ts",
+      output,
+    );
+    const filter = args[args.indexOf("-filter_complex") + 1];
+    expect(filter).toContain("setpts=PTS-STARTPTS,tpad=start_mode=clone:start_duration=1.000000,fps=15");
+    expect(filter).toContain("setpts=PTS-STARTPTS,tpad=start_mode=clone:start_duration=0.500000,fps=15");
+    expect(args.slice(args.indexOf("-frames:v"), args.indexOf("-frames:v") + 2)).toEqual(["-frames:v", "45"]);
   });
 
   it("copies video and produces padded, trimmed stereo AAC", () => {

@@ -93,6 +93,35 @@ describe("scene spans", () => {
     expect(spans.map((span) => span.scene.tiles.some((tile) => tile.kind !== "whiteboard" && tile.video !== undefined))).toEqual([false, false, false, false, true, false, true, false]);
   });
 
+  it.each(["camera", "screen_share"] as const)("uses %s media at frame zero when its first decoded frame arrives within two seconds", (kind) => {
+    const base = timeline();
+    const initial = {
+      ...base.initial,
+      view: { layout: kind === "screen_share" ? ("presentation" as const) : ("grid" as const), sidebar: "chat" as const },
+      participants: [{ ...participant, screenShareEnabled: kind === "screen_share" }],
+      media: [{ ...base.initial.media[0]!, kind }],
+      sharedContent: kind === "screen_share" ? { kind: "screen_share" as const, participantId: "avery", sourceId } : base.initial.sharedContent,
+    };
+    const decoded = { ...media(), sources: [{ ...source, kind, startMs: 2000 }] };
+    const spans = buildSceneSpans({ ...base, initial }, decoded, 15, { width: 1280, height: 720 });
+    expect(spans[0]?.startFrame).toBe(0);
+    expect(spans[0]?.scene.tiles.some((tile) => tile.kind !== "whiteboard" && tile.video?.sourceId === sourceId)).toBe(true);
+    expect(spans.at(-1)?.endFrame).toBe(120);
+    // Later gaps and the source end still show placeholders.
+    expect(spans.find((span) => span.startFrame === 90)?.scene.tiles.every((tile) => tile.kind === "whiteboard" || tile.video === undefined)).toBe(true);
+    expect(spans.at(-1)?.scene.tiles.every((tile) => tile.kind === "whiteboard" || tile.video === undefined)).toBe(true);
+  });
+
+  it.each([2001, 5000])("keeps the placeholder when the first decoded frame arrives at %i ms", (startMs) => {
+    const spans = buildSceneSpans(timeline(), { ...media(), sources: [{ ...source, startMs }] }, 15, { width: 1280, height: 720 });
+    expect(spans[0]?.scene.tiles.every((tile) => tile.kind === "whiteboard" || tile.video === undefined)).toBe(true);
+  });
+
+  it("keeps the placeholder for a track with no decoded media", () => {
+    const spans = buildSceneSpans(timeline(), { ...media(), sources: [], discontinuities: [] }, 15, { width: 1280, height: 720 });
+    expect(spans[0]?.scene.tiles.every((tile) => tile.kind === "whiteboard" || tile.video === undefined)).toBe(true);
+  });
+
   it("groups neighboring scenes only while their video placements match", () => {
     const spans = buildSceneSpans(timeline(), media(), 10, { width: 1280, height: 720 });
     const split: readonly SceneSpan[] = spans.flatMap((span) =>

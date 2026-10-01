@@ -109,13 +109,15 @@ export function segmentArgs(segment: VideoSegment, sources: ReadonlyMap<string, 
     args.push(...inputThreadArgs(output), "-ss", seconds(offset), "-t", seconds(inputSeconds), "-i", source.path);
   }
   args.push("-f", "concat", "-safe", "0", "-i", overlayListPath);
-  args.push(...outputThreadArgs(output), "-filter_complex", segmentFilter(segment.placements, output), "-map", "[out]");
+  const firstFrameHolds = new Map(segment.placements.map((placement) => [placement.sourceId, Math.max(0, sources.get(placement.sourceId)!.startMs / 1_000 - startSeconds)]));
+  args.push(...outputThreadArgs(output), "-filter_complex", segmentFilter(segment.placements, output, firstFrameHolds), "-map", "[out]");
   args.push("-frames:v", String(frames), "-r", String(output.fps), "-fps_mode", "cfr");
-  args.push(...encoderArgs(output.encoder), "-b:v", "2M", "-maxrate", "3M", "-bufsize", "4M", "-pix_fmt", "yuv420p", "-an", "-f", "mpegts", outputPath);
+  // The final mux writes one timestamp per composed frame in packet order.
+  args.push(...encoderArgs(output.encoder), "-bf", "0", "-b:v", "2M", "-maxrate", "3M", "-bufsize", "4M", "-pix_fmt", "yuv420p", "-an", "-f", "mpegts", outputPath);
   return args;
 }
 
-export function segmentFilter(placements: readonly VideoPlacement[], output: ComposeOutput): string {
+export function segmentFilter(placements: readonly VideoPlacement[], output: ComposeOutput, firstFrameHolds: ReadonlyMap<string, number> = new Map()): string {
   const { width, height, fps } = output;
   const chains = [`color=c=black:s=${width}x${height}:r=${fps},format=yuv420p[base0]`];
   for (const [index, placement] of placements.entries()) {
@@ -124,7 +126,9 @@ export function segmentFilter(placements: readonly VideoPlacement[], output: Com
       placement.fit === "cover"
         ? `scale=${tileWidth}:${tileHeight}:force_original_aspect_ratio=increase:force_divisible_by=2,crop=${tileWidth}:${tileHeight}`
         : `scale=${tileWidth}:${tileHeight}:force_original_aspect_ratio=decrease:force_divisible_by=2,pad=${tileWidth}:${tileHeight}:(ow-iw)/2:(oh-ih)/2:black`;
-    chains.push(`[${index}:v]setpts=PTS-STARTPTS,fps=${fps},${fit},setsar=1,format=yuv420p[video${index}]`);
+    const holdSeconds = firstFrameHolds.get(placement.sourceId) ?? 0;
+    const hold = holdSeconds > 0 ? `,tpad=start_mode=clone:start_duration=${seconds(holdSeconds)}` : "";
+    chains.push(`[${index}:v]setpts=PTS-STARTPTS${hold},fps=${fps},${fit},setsar=1,format=yuv420p[video${index}]`);
     chains.push(`[base${index}][video${index}]overlay=${x}:${y}:eof_action=repeat[base${index + 1}]`);
   }
   const overlayInput = placements.length;
@@ -155,6 +159,12 @@ export function muxArgs(segmentListPath: string, audioPath: string, outputPath: 
     ...outputThreadArgs(output),
     "-c:v",
     "copy",
+    "-r",
+    String(output.fps),
+    // MPEG-TS concat can introduce sub-frame timestamp gaps at segment edges.
+    // Restore the composed cadence without adding, dropping, or encoding frames.
+    "-bsf:v",
+    `setts=ts=N/(${output.fps}*TB):duration=1/(${output.fps}*TB)`,
     "-af",
     `asetpts=PTS-STARTPTS,aresample=48000:async=1:first_pts=0,apad,atrim=end=${seconds(outputSeconds)}`,
     "-c:a",
