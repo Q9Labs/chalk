@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -25,13 +26,21 @@ type Waker struct {
 	logger       *slog.Logger
 }
 
-func New(ctx context.Context, functionName string, logger *slog.Logger) (Waker, error) {
+func New(ctx context.Context, functionName, region string, logger *slog.Logger) (Waker, error) {
 	if functionName == "" {
 		return Waker{}, errors.New("missing transcription dispatcher function name")
 	}
-	config, err := awsconfig.LoadDefaultConfig(ctx)
+	region = strings.TrimSpace(region)
+	var options []func(*awsconfig.LoadOptions) error
+	if region != "" {
+		options = append(options, awsconfig.WithRegion(region))
+	}
+	config, err := awsconfig.LoadDefaultConfig(ctx, options...)
 	if err != nil {
 		return Waker{}, err
+	}
+	if strings.TrimSpace(config.Region) == "" {
+		return Waker{}, errors.New("missing transcription dispatcher AWS region: set CHALK_RECORDING_KMS_REGION or configure an AWS SDK region")
 	}
 	return newWaker(lambda.NewFromConfig(config), functionName, logger), nil
 }

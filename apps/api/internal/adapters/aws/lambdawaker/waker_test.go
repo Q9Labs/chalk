@@ -3,6 +3,7 @@ package lambdawaker
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
@@ -10,6 +11,49 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
+
+func TestNewRejectsMissingRegion(t *testing.T) {
+	t.Setenv("AWS_REGION", "")
+	t.Setenv("AWS_DEFAULT_REGION", "")
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+	t.Setenv("AWS_CONFIG_FILE", t.TempDir()+"/config")
+	for _, region := range []string{"", " \t "} {
+		_, err := New(context.Background(), "dispatcher", region, nil)
+		if err == nil || !strings.Contains(err.Error(), "region") {
+			t.Fatalf("New error = %v, want missing region at startup", err)
+		}
+	}
+}
+
+func TestNewUsesConfiguredRegionInsteadOfAWSDefaults(t *testing.T) {
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+	t.Setenv("AWS_CONFIG_FILE", t.TempDir()+"/config")
+	for _, defaultRegion := range []string{"", "us-east-1"} {
+		t.Setenv("AWS_REGION", defaultRegion)
+		t.Setenv("AWS_DEFAULT_REGION", defaultRegion)
+		waker, err := New(context.Background(), "dispatcher", " us-west-2 ", nil)
+		if err != nil {
+			t.Fatalf("New with configured region: %v", err)
+		}
+		client, ok := waker.client.(*lambda.Client)
+		if !ok || client.Options().Region != "us-west-2" {
+			t.Fatal("Lambda client did not use configured region")
+		}
+	}
+}
+
+func TestNewPreservesAWSRegionForTranscriptionOnlyConfig(t *testing.T) {
+	t.Setenv("AWS_REGION", "us-east-1")
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+	waker, err := New(context.Background(), "dispatcher", "", nil)
+	if err != nil {
+		t.Fatalf("New with AWS region: %v", err)
+	}
+	client, ok := waker.client.(*lambda.Client)
+	if !ok || client.Options().Region != "us-east-1" {
+		t.Fatal("Lambda client did not preserve AWS region fallback")
+	}
+}
 
 type captureInvokeClient struct {
 	payload []byte
