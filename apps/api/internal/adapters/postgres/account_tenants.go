@@ -20,7 +20,7 @@ import (
 )
 
 type accountTenantQuerier interface {
-	CreateMembership(context.Context, sqlc.CreateMembershipParams) (sqlc.Membership, error)
+	CreateMembership(context.Context, sqlc.CreateMembershipParams) (sqlc.CreateMembershipRow, error)
 	CreateTenant(context.Context, sqlc.CreateTenantParams) (sqlc.CreateTenantRow, error)
 	GetAccountTenantByOnboarding(context.Context, sqlc.GetAccountTenantByOnboardingParams) (sqlc.GetAccountTenantByOnboardingRow, error)
 	GetTenantOnboarding(context.Context, sqlc.GetTenantOnboardingParams) (sqlc.TenantOnboardingRequest, error)

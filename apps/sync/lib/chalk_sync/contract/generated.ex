@@ -913,7 +913,8 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   def valid_server_frame?(%{"type" => "ack"} = frame), do: valid_ack?(frame)
 
   def valid_server_frame?(%{"type" => type} = frame)
-      when type in ["projection_snapshot", "projection_event"], do: valid_projection?(frame)
+      when type in ["projection_snapshot", "projection_event"],
+      do: valid_projection?(frame)
 
   def valid_server_frame?(%{"type" => "live_target_result"} = frame),
     do: valid_live_target_result?(frame)

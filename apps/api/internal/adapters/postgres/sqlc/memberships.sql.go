@@ -12,6 +12,7 @@ import (
 )
 
 const createMembership = `-- name: CreateMembership :one
+with created_membership as (
 insert into memberships (
     id,
     tenant_id,
@@ -30,6 +31,18 @@ returning
     role,
     updated_at,
     created_at
+)
+select
+    created_membership.id,
+    created_membership.tenant_id,
+    created_membership.user_id,
+    created_membership.role,
+    created_membership.updated_at,
+    created_membership.created_at,
+    users.name as user_name,
+    users.email as user_email
+from created_membership
+join users on users.id = created_membership.user_id
 `
 
 type CreateMembershipParams struct {
@@ -39,14 +52,25 @@ type CreateMembershipParams struct {
 	Role     string      `json:"role"`
 }
 
-func (q *Queries) CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error) {
+type CreateMembershipRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Role      string             `json:"role"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UserName  string             `json:"user_name"`
+	UserEmail string             `json:"user_email"`
+}
+
+func (q *Queries) CreateMembership(ctx context.Context, arg CreateMembershipParams) (CreateMembershipRow, error) {
 	row := q.db.QueryRow(ctx, createMembership,
 		arg.ID,
 		arg.TenantID,
 		arg.UserID,
 		arg.Role,
 	)
-	var i Membership
+	var i CreateMembershipRow
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
@@ -54,6 +78,8 @@ func (q *Queries) CreateMembership(ctx context.Context, arg CreateMembershipPara
 		&i.Role,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.UserName,
+		&i.UserEmail,
 	)
 	return i, err
 }
@@ -93,23 +119,26 @@ func (q *Queries) GetTenantMembershipForUser(ctx context.Context, arg GetTenantM
 
 const listTenantMemberships = `-- name: ListTenantMemberships :many
 select
-    id,
-    tenant_id,
-    user_id,
-    role,
-    updated_at,
-    created_at
+    memberships.id,
+    memberships.tenant_id,
+    memberships.user_id,
+    memberships.role,
+    memberships.updated_at,
+    memberships.created_at,
+    users.name as user_name,
+    users.email as user_email
 from memberships
+join users on users.id = memberships.user_id
 where
-    tenant_id = $1
+    memberships.tenant_id = $1
     and (
         not $2::boolean
-        or (created_at, id) < (
+        or (memberships.created_at, memberships.id) < (
             $3::timestamptz,
             $4::uuid
         )
     )
-order by created_at desc, id desc
+order by memberships.created_at desc, memberships.id desc
 limit $5::integer
 `
 
@@ -121,7 +150,18 @@ type ListTenantMembershipsParams struct {
 	PageSize        int32              `json:"page_size"`
 }
 
-func (q *Queries) ListTenantMemberships(ctx context.Context, arg ListTenantMembershipsParams) ([]Membership, error) {
+type ListTenantMembershipsRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Role      string             `json:"role"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UserName  string             `json:"user_name"`
+	UserEmail string             `json:"user_email"`
+}
+
+func (q *Queries) ListTenantMemberships(ctx context.Context, arg ListTenantMembershipsParams) ([]ListTenantMembershipsRow, error) {
 	rows, err := q.db.Query(ctx, listTenantMemberships,
 		arg.TenantID,
 		arg.CursorSet,
@@ -133,9 +173,9 @@ func (q *Queries) ListTenantMemberships(ctx context.Context, arg ListTenantMembe
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Membership
+	var items []ListTenantMembershipsRow
 	for rows.Next() {
-		var i Membership
+		var i ListTenantMembershipsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.TenantID,
@@ -143,6 +183,8 @@ func (q *Queries) ListTenantMemberships(ctx context.Context, arg ListTenantMembe
 			&i.Role,
 			&i.UpdatedAt,
 			&i.CreatedAt,
+			&i.UserName,
+			&i.UserEmail,
 		); err != nil {
 			return nil, err
 		}
@@ -155,20 +197,33 @@ func (q *Queries) ListTenantMemberships(ctx context.Context, arg ListTenantMembe
 }
 
 const updateTenantMembership = `-- name: UpdateTenantMembership :one
+with updated_membership as (
 update memberships
 set
     role = $1,
     updated_at = now()
 where
-    tenant_id = $2
-    and id = $3
+    memberships.tenant_id = $2
+    and memberships.id = $3
 returning
-    id,
-    tenant_id,
-    user_id,
-    role,
-    updated_at,
-    created_at
+    memberships.id,
+    memberships.tenant_id,
+    memberships.user_id,
+    memberships.role,
+    memberships.updated_at,
+    memberships.created_at
+)
+select
+    updated_membership.id,
+    updated_membership.tenant_id,
+    updated_membership.user_id,
+    updated_membership.role,
+    updated_membership.updated_at,
+    updated_membership.created_at,
+    users.name as user_name,
+    users.email as user_email
+from updated_membership
+join users on users.id = updated_membership.user_id
 `
 
 type UpdateTenantMembershipParams struct {
@@ -177,9 +232,20 @@ type UpdateTenantMembershipParams struct {
 	ID       pgtype.UUID `json:"id"`
 }
 
-func (q *Queries) UpdateTenantMembership(ctx context.Context, arg UpdateTenantMembershipParams) (Membership, error) {
+type UpdateTenantMembershipRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Role      string             `json:"role"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UserName  string             `json:"user_name"`
+	UserEmail string             `json:"user_email"`
+}
+
+func (q *Queries) UpdateTenantMembership(ctx context.Context, arg UpdateTenantMembershipParams) (UpdateTenantMembershipRow, error) {
 	row := q.db.QueryRow(ctx, updateTenantMembership, arg.Role, arg.TenantID, arg.ID)
-	var i Membership
+	var i UpdateTenantMembershipRow
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
@@ -187,6 +253,8 @@ func (q *Queries) UpdateTenantMembership(ctx context.Context, arg UpdateTenantMe
 		&i.Role,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.UserName,
+		&i.UserEmail,
 	)
 	return i, err
 }

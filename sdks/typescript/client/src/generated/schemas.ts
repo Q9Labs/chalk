@@ -83,6 +83,16 @@ export const AcceptTenantInvitationRequestSchema = Schema.Struct({
 });
 export type AcceptTenantInvitationRequest = typeof AcceptTenantInvitationRequestSchema.Type;
 
+export const AcceptedTenantInvitationSchema = Schema.Struct({
+  created_at: DateTimeStringSchema,
+  id: UUIDSchema,
+  role: Schema.String,
+  tenant_id: TenantIdSchema,
+  updated_at: DateTimeStringSchema,
+  user_id: UserIdSchema,
+});
+export type AcceptedTenantInvitation = typeof AcceptedTenantInvitationSchema.Type;
+
 export const EpisodeIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("EpisodeId"));
 export type EpisodeId = typeof EpisodeIdSchema.Type;
 
@@ -893,7 +903,9 @@ export const MembershipSchema = Schema.Struct({
   role: Schema.Literals(["owner", "collaborator", "observer"]),
   tenant_id: TenantIdSchema,
   updated_at: DateTimeStringSchema,
+  user_email: Schema.String,
   user_id: UserIdSchema,
+  user_name: Schema.String,
 });
 export type Membership = typeof MembershipSchema.Type;
 
@@ -1683,7 +1695,7 @@ export type RetryAfterHeader = typeof RetryAfterHeaderSchema.Type;
 export const AcceptTenantInvitationRequestBodySchema = AcceptTenantInvitationRequestSchema;
 export type AcceptTenantInvitationRequestBody = typeof AcceptTenantInvitationRequestBodySchema.Type;
 
-export const AcceptTenantInvitationResponseSchema = MembershipSchema;
+export const AcceptTenantInvitationResponseSchema = AcceptedTenantInvitationSchema;
 export type AcceptTenantInvitationResponse = typeof AcceptTenantInvitationResponseSchema.Type;
 
 export const AcceptTenantInvitation429ResponseHeadersSchema = Schema.Struct({

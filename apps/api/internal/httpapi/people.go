@@ -41,6 +41,14 @@ type issuedInvitationResponse struct {
 type invitationListResponse struct {
 	Invitations []invitationResponse `json:"invitations"`
 }
+type acceptedTenantInvitationResponse struct {
+	ID        string `json:"id"`
+	TenantID  string `json:"tenant_id"`
+	UserID    string `json:"user_id"`
+	Role      string `json:"role"`
+	UpdatedAt string `json:"updated_at"`
+	CreatedAt string `json:"created_at"`
+}
 type peopleMutationResponse struct {
 	Success bool `json:"success"`
 }
@@ -75,6 +83,12 @@ func peopleAPIError(err error) (APIError, bool) {
 }
 func newInvitationResponse(value memberships.Invitation) invitationResponse {
 	return invitationResponse{ID: value.ID.String(), TenantID: value.TenantID.String(), Email: value.Email, Role: string(value.Role), ExpiresAt: utilities.FormatTimestamp(value.ExpiresAt), CreatedAt: utilities.FormatTimestamp(value.CreatedAt)}
+}
+func newAcceptedTenantInvitationResponse(value memberships.Membership) acceptedTenantInvitationResponse {
+	return acceptedTenantInvitationResponse{
+		ID: value.ID.String(), TenantID: value.TenantID.String(), UserID: value.UserID.String(), Role: string(value.Role),
+		UpdatedAt: utilities.FormatTimestamp(value.UpdatedAt), CreatedAt: utilities.FormatTimestamp(value.CreatedAt),
+	}
 }
 func decodePeopleRequest(operation string) EndpointDecoder[peopleRequest] {
 	return func(r *http.Request) (peopleRequest, error) {
@@ -142,16 +156,16 @@ func peopleEndpoints(service PeopleService, authorizer TenantAuthorizer) []Route
 		}
 		return result, nil
 	}), tenantIDParameter()).Responds(200, "TenantInvitationList", invitationListResponse{})
-	accept := peopleEndpoint(Post("/v1/invitations/accept", "/invitations/accept", "acceptTenantInvitation", decodePeopleRequest("acceptTenantInvitation"), func(ctx context.Context, r peopleRequest) (membershipResponse, error) {
+	accept := peopleEndpoint(Post("/v1/invitations/accept", "/invitations/accept", "acceptTenantInvitation", decodePeopleRequest("acceptTenantInvitation"), func(ctx context.Context, r peopleRequest) (acceptedTenantInvitationResponse, error) {
 		if service == nil {
-			return membershipResponse{}, apiErrorServiceUnavailable
+			return acceptedTenantInvitationResponse{}, apiErrorServiceUnavailable
 		}
 		value, err := service.AcceptInvitation(ctx, r.Accept.Token, r.AccountID)
 		if err != nil {
-			return membershipResponse{}, err
+			return acceptedTenantInvitationResponse{}, err
 		}
-		return newMembershipResponse(value), nil
-	})).RequestBody("AcceptTenantInvitationRequest", acceptInvitationRequest{}).Responds(200, "Membership", membershipResponse{})
+		return newAcceptedTenantInvitationResponse(value), nil
+	})).RequestBody("AcceptTenantInvitationRequest", acceptInvitationRequest{}).Responds(200, "AcceptedTenantInvitation", acceptedTenantInvitationResponse{})
 	revoke := peopleMutationEndpoint(service, authorizer, "revokeTenantInvitation", "/tenants/{tenant_id}/invitations/{invitation_id}", tenantIDParameter(), APIParameterContract{Name: "invitation_id", In: "path", Required: true, Type: "string"})
 	remove := peopleMutationEndpoint(service, authorizer, "removeMembership", "/tenants/{tenant_id}/memberships/{membership_id}", tenantIDParameter(), membershipIDParameter())
 	leave := peopleMutationEndpoint(service, authorizer, "leaveTenant", "/tenants/{tenant_id}/membership", tenantIDParameter())

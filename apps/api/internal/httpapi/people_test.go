@@ -72,3 +72,14 @@ func TestPeopleActionableErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestMembershipResponseIncludesUserIdentity(t *testing.T) {
+	response := newMembershipResponse(memberships.Membership{
+		UserName:  "Alex Smith",
+		UserEmail: "alex@example.test",
+	})
+
+	if response.UserName != "Alex Smith" || response.UserEmail != "alex@example.test" {
+		t.Fatalf("response identity = %q, %q", response.UserName, response.UserEmail)
+	}
+}
