@@ -14,6 +14,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Escalated the React reconnect notice to a blocking dialog after ten seconds of continuous disconnection, independent of browser online status, and cleared both surfaces on recovery.
 - Refreshed remote Cloudflare SFU publications when Sync pushes a media projection change, with slower periodic discovery and reconciliation as recovery backstops.
 - Updated the Sync HTTP transport and workspace HTTP dependencies to patched releases.
 - Bounded browser Cloudflare SFU signaling and negotiation so stalled media work releases controls and reports a recoverable timeout, with nested provider and client deadlines.
