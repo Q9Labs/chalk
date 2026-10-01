@@ -21,6 +21,19 @@ func (r TranscriptRepository) ClaimFinalizer(ctx context.Context, input transcri
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := sqlc.New(tx)
+	_, recoveryMetrics, err := recoverTranscriptJobsTx(ctx, tx, input.Now, input.Now)
+	if err != nil {
+		return transcripts.FinalizerAssignment{}, err
+	}
+	committed := false
+	defer func() {
+		if committed {
+			for _, metric := range recoveryMetrics {
+				metric.Record(ctx)
+			}
+		}
+	}()
+
 	token, err := leaseToken()
 	if err != nil {
 		return transcripts.FinalizerAssignment{}, err
@@ -30,6 +43,7 @@ func (r TranscriptRepository) ClaimFinalizer(ctx context.Context, input transcri
 		if err := tx.Commit(ctx); err != nil {
 			return transcripts.FinalizerAssignment{}, err
 		}
+		committed = true
 		return transcripts.FinalizerAssignment{}, transcripts.ErrNoClaimableJob
 	}
 	if err != nil {
@@ -47,6 +61,7 @@ func (r TranscriptRepository) ClaimFinalizer(ctx context.Context, input transcri
 		if err := tx.Commit(ctx); err != nil {
 			return transcripts.FinalizerAssignment{}, err
 		}
+		committed = true
 		return transcripts.FinalizerAssignment{}, transcripts.ErrStaleLease
 	}
 	if err != nil {
@@ -67,6 +82,7 @@ func (r TranscriptRepository) ClaimFinalizer(ctx context.Context, input transcri
 	if err := tx.Commit(ctx); err != nil {
 		return transcripts.FinalizerAssignment{}, err
 	}
+	committed = true
 	return assignment, nil
 }
 
@@ -127,9 +143,14 @@ func (r TranscriptRepository) CompleteFinalizer(ctx context.Context, input trans
 			return transcripts.Transcript{}, err
 		}
 	}
+	metric, err := produceTranscriptWebhook(ctx, tx, row, "completed", timestamp(row.UpdatedAt), "")
+	if err != nil {
+		return transcripts.Transcript{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return transcripts.Transcript{}, err
 	}
+	metric.Record(ctx)
 	return mapTranscript(row), nil
 }
 

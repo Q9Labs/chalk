@@ -1,3 +1,4 @@
+export { getAccessRefreshState, type AccessRefreshState } from "./access-refresh.js";
 export { createChalkServerClient } from "./client.js";
 export { ChalkAPIError, ChalkServerOnlyError } from "./errors.js";
 export type {

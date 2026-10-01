@@ -16,6 +16,7 @@
   "scripts": {
     "build": "GOMAXPROCS=1 turbo build",
     "dev": "node scripts/dev/cli.mjs start",
+    "integration:smoke": "node scripts/integration-smoke/run.mjs",
     "dev:status": "node scripts/dev/cli.mjs status",
     "dev:logs": "node scripts/dev/cli.mjs logs",
     "dev:stop": "node scripts/dev/cli.mjs stop",

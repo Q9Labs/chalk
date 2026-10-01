@@ -17,7 +17,7 @@ pnpm add @q9labsai/chalk-client
 
 ## Create and join a Space
 
-Your backend mints an `AccessGrant` with the server SDK. See the [web quickstart](../../../docs/sdk-web-quickstart.md) for Tenant setup, `createChalkServerClient`, Space creation, Participant admission, and the access-refresh boundary. Pass it through to the
+Your backend mints an `AccessGrant` with the server SDK. See the [web quickstart](../../../docs/sdk-web-quickstart.md) for Tenant setup, `createChalkServerClient`, Space creation, Participant admission, and server-only `getAccessRefreshState` for normal access refresh. Pass it through to the
 client unchanged: it is an opaque signed envelope, so application code does
 not construct or inspect it. `getAccess` may resolve with the fetch `Response`
 that carries the grant or with its decoded JSON; the client validates it and
@@ -104,6 +104,12 @@ The transport uses the short-lived Diagnostic Participant credential already
 carried by the AccessGrant. That credential is never exposed through the public
 Feedback API. Custom screenshot adapters may be passed to `prepare`; a typed
 unavailable result is valid and never blocks a text report.
+
+## Recording and artifact Events
+
+Use `client.recording.start()` and `client.recording.stop()` inside an Episode, or set the Space's Automatic Recording policy. There is no REST Recording start/stop operation.
+
+The server SDK requests Exports and creates download URLs. Subscribe to `recording.completed` for verified MP4 readiness and `transcript.completed` for document readiness; both also emit `started` and `failed`. See the [webhook guide](docs/webhooks.md).
 
 ## Feature controllers
 

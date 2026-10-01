@@ -23,6 +23,19 @@ func (r TranscriptRepository) Claim(ctx context.Context, input transcripts.Claim
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := sqlc.New(tx)
+	_, recoveryMetrics, err := recoverTranscriptJobsTx(ctx, tx, input.Now, input.Now)
+	if err != nil {
+		return transcripts.Assignment{}, err
+	}
+	committed := false
+	defer func() {
+		if committed {
+			for _, metric := range recoveryMetrics {
+				metric.Record(ctx)
+			}
+		}
+	}()
+
 	token, err := leaseToken()
 	if err != nil {
 		return transcripts.Assignment{}, err
@@ -34,6 +47,7 @@ func (r TranscriptRepository) Claim(ctx context.Context, input transcripts.Claim
 		if err := tx.Commit(ctx); err != nil {
 			return transcripts.Assignment{}, err
 		}
+		committed = true
 		return transcripts.Assignment{}, transcripts.ErrNoClaimableJob
 	}
 	if err != nil {
@@ -55,14 +69,21 @@ func (r TranscriptRepository) Claim(ctx context.Context, input transcripts.Claim
 		if err := tx.Commit(ctx); err != nil {
 			return transcripts.Assignment{}, err
 		}
+		committed = true
 		return transcripts.Assignment{}, transcripts.ErrStaleLease
 	}
 	if err != nil {
 		return transcripts.Assignment{}, fmt.Errorf("mark transcript transcribing: %w", err)
 	}
+	metric, err := produceTranscriptWebhook(ctx, tx, transcript, "started", now, "")
+	if err != nil {
+		return transcripts.Assignment{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return transcripts.Assignment{}, err
 	}
+	committed = true
+	metric.Record(ctx)
 	chunkInput := mapSourceChunk(sourceChunk)
 	chunkInput.ResultKey = chunkResultKey(
 		utilities.IDFromBytes(job.TenantID.Bytes),
@@ -82,9 +103,35 @@ func (r TranscriptRepository) Heartbeat(ctx context.Context, input transcripts.L
 }
 
 func (r TranscriptRepository) Retry(ctx context.Context, input transcripts.RetryInput) (transcripts.Job, error) {
-	return r.mutateLease(ctx, input.LeaseInput, func(q transcriptArtifactQuerier, hash []byte) (sqlc.ArtifactJob, error) {
+	if r.transactor == nil {
+		return transcripts.Job{}, transcripts.ErrArtifactRepository
+	}
+	tx, err := r.transactor.Begin(ctx)
+	if err != nil {
+		return transcripts.Job{}, err
+	}
+	defer tx.Rollback(ctx)
+	q := sqlc.New(tx)
+	transactionRepository := NewTranscriptRepository(q)
+	_, err = transactionRepository.mutateLease(ctx, input.LeaseInput, func(q transcriptArtifactQuerier, hash []byte) (sqlc.ArtifactJob, error) {
 		return q.RetryArtifactJob(ctx, sqlc.RetryArtifactJobParams{ID: uuid(input.JobID), Attempt: int32(input.Attempt), LeaseOwner: text(&input.LeaseOwner), LeaseTokenHash: hash, AvailableAt: pgtype.Timestamptz{Time: input.AvailableAt, Valid: true}, ErrorCode: text(&input.ErrorCode), ErrorDetail: text(&input.ErrorDetail), Terminal: input.Terminal, Now: pgtype.Timestamptz{Time: input.Now, Valid: true}})
 	})
+	if err != nil {
+		return transcripts.Job{}, err
+	}
+	row, err := q.GetArtifactJob(ctx, uuid(input.JobID))
+	if err != nil {
+		return transcripts.Job{}, err
+	}
+	metric, err := produceFailedTranscriptJobWebhook(ctx, tx, row)
+	if err != nil {
+		return transcripts.Job{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return transcripts.Job{}, err
+	}
+	metric.Record(ctx)
+	return mapJob(row), nil
 }
 
 func (r TranscriptRepository) Complete(ctx context.Context, input transcripts.LeaseInput) (transcripts.Job, error) {
@@ -111,13 +158,27 @@ func (r TranscriptRepository) Requeue(ctx context.Context, jobID utilities.ID, a
 }
 
 func (r TranscriptRepository) RecoverExpired(ctx context.Context, now, availableAt time.Time) ([]transcripts.Job, error) {
-	rows, err := r.artifactQueries().RecoverExpiredArtifactJobs(ctx, sqlc.RecoverExpiredArtifactJobsParams{Now: pgtype.Timestamptz{Time: now, Valid: true}, AvailableAt: pgtype.Timestamptz{Time: availableAt, Valid: true}})
+	if r.transactor == nil {
+		return nil, transcripts.ErrArtifactRepository
+	}
+	tx, err := r.transactor.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+	rows, metrics, err := recoverTranscriptJobsTx(ctx, tx, now, availableAt)
 	if err != nil {
 		return nil, err
 	}
 	jobs := make([]transcripts.Job, 0, len(rows))
 	for _, row := range rows {
 		jobs = append(jobs, mapJob(row))
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	for _, metric := range metrics {
+		metric.Record(ctx)
 	}
 	return jobs, nil
 }

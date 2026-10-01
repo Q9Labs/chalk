@@ -34,6 +34,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
 	"github.com/q9labs/chalk/apps/api/internal/recordingrender"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/apps/api/internal/webhooks"
 	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -1295,6 +1296,13 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 		LeaseToken: "lease-render", LeaseOwner: "render-test",
 		CaptureEpoch: render.Authority.Envelope.CaptureEpoch, EnvelopeDigest: render.Authority.EnvelopeDigest,
 	}
+	protector, err := webhooks.NewAESGCMProtector(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := postgres.NewWebhookRepository(pool, protector).Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Export readiness", URL: "https://example.test/webhook", Enabled: true, APIVersion: 1, EventTypes: []string{"recording.completed"}, IdempotencyKey: "export-ready-webhook-0001"}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := pool.Exec(ctx, `update recordings set tenant_id = $1 where id = $2`, mismatchedTenantID.Bytes(), reservation.RecordingID.Bytes()); err != nil {
 		t.Fatalf("create mismatched public recording fixture: %v", err)
 	}
@@ -1321,6 +1329,10 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	}
 	if _, err := repository.CommitArtifact(ctx, artifactInput); err != nil {
 		t.Fatalf("artifact replay: %v", err)
+	}
+	var completedWebhookCount int
+	if err := pool.QueryRow(ctx, `select count(*) from webhook_events where tenant_id=$1 and resource_id=$2 and event_name='recording.completed'`, tenantID.Bytes(), reservation.RecordingID.Bytes()).Scan(&completedWebhookCount); err != nil || completedWebhookCount != 1 {
+		t.Fatalf("recording.completed count=%d error=%v", completedWebhookCount, err)
 	}
 	artifactInput.ByteSize++
 	if _, err := repository.CommitArtifact(ctx, artifactInput); !errors.Is(err, recordingpipeline.ErrArtifactConflict) {

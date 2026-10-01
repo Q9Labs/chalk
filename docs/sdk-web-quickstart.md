@@ -12,9 +12,9 @@ The server entry point requires Node.js 22 or later. Never import `@q9labsai/cha
 
 ## Prepare your Tenant and API key
 
-Sign in to the hosted dashboard and select a Tenant you already have owner access to. Copy its ID from Tenant settings. Create a key on the Developer page, complete the recent-authentication prompt, and save the one-time secret on your backend. Grant `spaces:read`, `spaces:write`, `episodes:read`, and `episodes:write` for the setup below; add artifact and webhook scopes only when needed.
+Sign in to the hosted dashboard and create a Tenant or select one where you have Owner access. Copy its ID from Tenant settings. Create a key on the Developer page, complete the recent-authentication prompt, and save the one-time secret on your backend. Grant `spaces:read`, `spaces:write`, `episodes:read`, and `episodes:write` for the setup below; add artifact and webhook scopes only when needed.
 
-`POST /v1/tenants` in the public contract creates a Tenant record; it does **not** assign its creator Tenant access. It is not a self-service onboarding shortcut. A successful `201` alone does not mean your Account can manage that Tenant.
+The raw provisioning routes are system-only; use the dashboard for Tenant setup.
 
 For a local frontend, add its exact origin (for example `http://localhost:5173`) in Tenant settings before joining. Keep the key, Tenant ID, and Space/Participant mappings on your backend.
 
@@ -53,7 +53,18 @@ if (!admission.access) throw new Error("Participant admission did not return acc
 
 The media plane must be configured for your Tenant. `cf_rtk` selects Chalk's RealtimeKit adapter; use your deployment's configured media plane when self-hosting. Create a second Participant for a second application user. Reuse the existing Space and live Episode rather than creating them on every HTTP request.
 
-For recovery and renewal, use `chalk.participants.issueAccess` with the stored Space, Episode, Participant ID, and current Participant generation. Its normal refresh input also requires `currentMediaToken`, retained server-side from the API's media access response; the opaque SDK grant does not expose that token. Do not admit a new Participant on every `refresh` or `retry`. `replaceMediaConnection: true` is an explicit media-connection replacement, not a substitute for routine refresh. Consult the access-grant operation in the [public OpenAPI contract](../contract/generated/openapi.json) when implementing this backend boundary.
+Retain the Space, Episode, and Participant IDs on your backend. After admission and every refresh, store the typed refresh state under that authenticated application user's Participant:
+
+```ts
+import { getAccessRefreshState } from "@q9labsai/chalk-client/server";
+
+let refreshState = getAccessRefreshState(admission.access);
+const renewed = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, refreshState);
+refreshState = getAccessRefreshState(renewed);
+// Persist refreshState server-side, then return renewed unchanged to the browser.
+```
+
+The state contains the current media credential and Participant generation. Keep it in server-side storage, never logs or browser responses. A normal refresh keeps the same Participant and media connection; it does not admit another Participant. `replaceMediaConnection: true` explicitly replaces the media connection and is not routine refresh.
 
 ## Expose an access endpoint
 
@@ -184,8 +195,8 @@ Use `useCan(capability)` for capability checks. Feature availability belongs in 
 
 ## Artifact and webhook boundaries
 
-The public HTTP contract supports requesting an Export or Transcript from an existing Recording, and creating download URLs. It does not expose Recording start/stop operations. Do not invent REST paths for those controls or assume an API key can use Participant Sync commands.
+Recording is controlled inside the Episode with `client.recording.start()` / `client.recording.stop()`, or by the Space's `recordingPolicy: "automatic"`. There is no REST Recording start/stop operation.
 
-Webhook subscriptions currently support Episode and Participant Events. `recording.*` and `transcript.*` names are reserved in the schema and unavailable for subscription; there is no Export-ready Event in the version 1 contract. Poll the artifact status operations rather than waiting for a ready webhook. See the [receiver guide](../sdks/typescript/client/docs/webhooks.md) for raw-byte signature verification, retries, and endpoint management.
+The HTTP API supports requesting an Export or Transcript from an existing Recording and creating a Recording download URL. Capture completion makes the source available; request an Export to produce its downloadable MP4.
 
-This guide covers managed web Spaces. It does not establish recording, transcription, or React Native readiness.
+Subscribe to `recording.started`, `recording.completed`, `recording.failed`, `transcript.started`, `transcript.completed`, and `transcript.failed`, as well as Space, Episode, and Participant Events. `recording.completed` means the Export MP4 is ready: use the Event's Tenant and Recording IDs with `chalk.recordings.createDownloadURL`. `transcript.completed` means the Transcript document is ready. Events are delivered at least once; verify signatures and deduplicate by Event ID. See the [receiver guide](../sdks/typescript/client/docs/webhooks.md) for endpoint management and retries.

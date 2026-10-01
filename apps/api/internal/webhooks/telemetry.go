@@ -251,6 +251,5 @@ func knownMetricEventName(name string) bool {
 			return true
 		}
 	}
-	_, ok := reservedEventTypes[name]
-	return ok
+	return false
 }

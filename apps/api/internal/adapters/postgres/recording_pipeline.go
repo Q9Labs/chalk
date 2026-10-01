@@ -263,7 +263,7 @@ func (r RecordingPipelineRepository) Reserve(ctx context.Context, input recordin
 	}
 	var row sqlc.CreateRecordingReservationRow
 	capacityUnavailable := false
-	err := r.transaction(ctx, func(queries recordingPipelineQuerier) error {
+	err := r.transaction(ctx, func(tx pgx.Tx, queries recordingPipelineQuerier) error {
 		if _, err := queries.LockRecordingCapacity(ctx); err != nil {
 			return fmt.Errorf("lock recording capacity: %w", err)
 		}
@@ -335,13 +335,32 @@ func (r RecordingPipelineRepository) ExtendReservation(ctx context.Context, tena
 }
 
 func (r RecordingPipelineRepository) ExpireReservations(ctx context.Context, now time.Time) ([]recordingpipeline.Reservation, error) {
-	rows, err := r.queries.ExpireRecordingReservations(ctx, timestamptzValue(now))
+	var rows []sqlc.ExpireRecordingReservationsRow
+	var metrics []webhookCommitMetric
+	err := r.transaction(ctx, func(tx pgx.Tx, queries recordingPipelineQuerier) error {
+		var err error
+		rows, err = queries.ExpireRecordingReservations(ctx, timestamptzValue(now))
+		if err != nil {
+			return err
+		}
+		for _, row := range rows {
+			metric, err := produceRecordingWebhook(ctx, tx, id(row.TenantID), id(row.RecordingID), "failed", timestamp(row.UpdatedAt), "capture_reservation_expired")
+			if err != nil {
+				return err
+			}
+			metrics = append(metrics, metric)
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, fmt.Errorf("expire recording reservations: %w", err)
 	}
 	reservations := make([]recordingpipeline.Reservation, 0, len(rows))
 	for _, row := range rows {
 		reservations = append(reservations, mapExpiredReservation(row))
+	}
+	for _, metric := range metrics {
+		metric.Record(ctx)
 	}
 	return reservations, nil
 }
@@ -422,7 +441,7 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 	var claimed recordingpipeline.Job
 	issuedAt := r.now().UTC()
 	leaseExpiresAt := issuedAt.Add(input.LeaseFor)
-	err := r.transaction(ctx, func(queries recordingPipelineQuerier) error {
+	err := r.transaction(ctx, func(tx pgx.Tx, queries recordingPipelineQuerier) error {
 		if err := queries.LockRecordingJobClaimRequest(ctx, input.ClaimRequestID.String()); err != nil {
 			return fmt.Errorf("lock recording claim request: %w", err)
 		}
@@ -594,14 +613,14 @@ func (r RecordingPipelineRepository) CompleteCapture(ctx context.Context, input 
 		attribute.Int("chalk.capture.attempt_count", input.AttemptCount))
 	defer span.End()
 	var recordingID pgtype.UUID
-	readIdentity := func(queries recordingPipelineQuerier) error {
+	readIdentity := func(tx pgx.Tx, queries recordingPipelineQuerier) error {
 		var err error
 		recordingID, err = queries.GetRecordingCaptureCompletionIdentity(ctx, uuid(input.JobID))
 		return err
 	}
 	var identityErr error
 	if r.queries != nil {
-		identityErr = readIdentity(r.queries)
+		identityErr = readIdentity(nil, r.queries)
 	} else {
 		identityErr = r.transaction(ctx, readIdentity)
 	}
@@ -652,14 +671,14 @@ func (r RecordingPipelineRepository) completedCaptureReplay(ctx context.Context,
 		LeaseToken:     input.LeaseToken, LeaseOwner: input.LeaseOwner,
 	}
 	var row sqlc.RecordingJob
-	read := func(queries recordingPipelineQuerier) error {
+	read := func(tx pgx.Tx, queries recordingPipelineQuerier) error {
 		var err error
 		row, err = queries.GetCompletedCaptureRecordingJob(ctx, params)
 		return err
 	}
 	var err error
 	if r.queries != nil {
-		err = read(r.queries)
+		err = read(nil, r.queries)
 	} else {
 		err = r.transaction(ctx, read)
 	}
@@ -690,7 +709,7 @@ func (r RecordingPipelineRepository) completeCapture(ctx context.Context, input 
 			attribute.String("chalk.capture.worker_id", input.LeaseOwner),
 			attribute.String("chalk.capture.completion.stage", "db_commit"))
 		var completed recordingpipeline.Job
-		err = r.transaction(ctx, func(queries recordingPipelineQuerier) error {
+		err = r.transaction(ctx, func(tx pgx.Tx, queries recordingPipelineQuerier) error {
 			if err := insertPreparedRecordingPresentation(ctx, queries, prepared); err != nil {
 				return err
 			}
@@ -763,17 +782,29 @@ func completeCaptureParams(input recordingpipeline.LeaseInput, renderJobID utili
 }
 
 func (r RecordingPipelineRepository) Fail(ctx context.Context, input recordingpipeline.FailureInput) (recordingpipeline.Job, error) {
-	row, err := r.queries.FailRecordingJob(ctx, sqlc.FailRecordingJobParams{
-		AvailableAt:       timestamptzValue(input.AvailableAt),
-		ErrorCode:         requiredTextValue(input.ErrorCode),
-		ErrorDetail:       requiredTextValue(input.ErrorDetail),
-		ID:                uuid(input.JobID),
-		AttemptCount:      int32(input.AttemptCount),
-		FencingGeneration: input.FencingGeneration,
-		LeaseToken:        requiredTextValue(input.LeaseToken),
-		LeaseOwner:        requiredTextValue(input.LeaseOwner),
-		CaptureEpoch:      input.CaptureEpoch,
-		EnvelopeDigest:    input.EnvelopeDigest,
+	var row sqlc.FailRecordingJobRow
+	var metric webhookCommitMetric
+	err := r.transaction(ctx, func(tx pgx.Tx, queries recordingPipelineQuerier) error {
+		var err error
+		row, err = queries.FailRecordingJob(ctx, sqlc.FailRecordingJobParams{
+			AvailableAt:       timestamptzValue(input.AvailableAt),
+			ErrorCode:         requiredTextValue(input.ErrorCode),
+			ErrorDetail:       requiredTextValue(input.ErrorDetail),
+			ID:                uuid(input.JobID),
+			AttemptCount:      int32(input.AttemptCount),
+			FencingGeneration: input.FencingGeneration,
+			LeaseToken:        requiredTextValue(input.LeaseToken),
+			LeaseOwner:        requiredTextValue(input.LeaseOwner),
+			CaptureEpoch:      input.CaptureEpoch,
+			EnvelopeDigest:    input.EnvelopeDigest,
+		})
+		if err != nil {
+			return err
+		}
+		if row.State == "terminal_failure" && row.Kind != "transcription" {
+			metric, err = produceRecordingWebhook(ctx, tx, id(row.TenantID), id(row.RecordingID), "failed", timestamp(row.UpdatedAt), row.ErrorCode.String)
+		}
+		return err
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return recordingpipeline.Job{}, recordingpipeline.ErrJobNotFound
@@ -781,6 +812,7 @@ func (r RecordingPipelineRepository) Fail(ctx context.Context, input recordingpi
 	if err != nil {
 		return recordingpipeline.Job{}, fmt.Errorf("fail recording job: %w", err)
 	}
+	metric.Record(ctx)
 	job := mapFailJob(row)
 	job.CaptureEpoch = input.CaptureEpoch
 	return job, nil
@@ -808,13 +840,35 @@ func (r RecordingPipelineRepository) RelinquishCapture(ctx context.Context, inpu
 }
 
 func (r RecordingPipelineRepository) RecoverExpired(ctx context.Context) ([]recordingpipeline.Job, error) {
-	rows, err := r.queries.RecoverExpiredRecordingJobs(ctx, int32(recordingpipeline.MaximumRenderDuration/time.Second))
+	var rows []sqlc.RecoverExpiredRecordingJobsRow
+	var metrics []webhookCommitMetric
+	err := r.transaction(ctx, func(tx pgx.Tx, queries recordingPipelineQuerier) error {
+		var err error
+		rows, err = queries.RecoverExpiredRecordingJobs(ctx, int32(recordingpipeline.MaximumRenderDuration/time.Second))
+		if err != nil {
+			return err
+		}
+		for _, row := range rows {
+			if row.State != "terminal_failure" || row.Kind == "transcription" {
+				continue
+			}
+			metric, err := produceRecordingWebhook(ctx, tx, id(row.TenantID), id(row.RecordingID), "failed", timestamp(row.UpdatedAt), row.ErrorCode.String)
+			if err != nil {
+				return err
+			}
+			metrics = append(metrics, metric)
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, fmt.Errorf("recover expired recording jobs: %w", err)
 	}
 	jobs := make([]recordingpipeline.Job, 0, len(rows))
 	for _, row := range rows {
 		jobs = append(jobs, mapRecoveredJob(row))
+	}
+	for _, metric := range metrics {
+		metric.Record(ctx)
 	}
 	return jobs, nil
 }
@@ -890,21 +944,31 @@ func (r RecordingPipelineRepository) CommitArtifact(ctx context.Context, input r
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return recordingpipeline.Artifact{}, fmt.Errorf("check recording artifact replay: %w", err)
 	}
-	row, err := r.queries.CommitRecordingArtifact(ctx, sqlc.CommitRecordingArtifactParams{
-		RecordingID:       uuid(input.RecordingID),
-		TenantID:          uuid(input.TenantID),
-		RenderJobID:       uuid(input.RenderJobID),
-		AttemptCount:      int32(input.AttemptCount),
-		FencingGeneration: input.FencingGeneration,
-		LeaseToken:        requiredTextValue(input.LeaseToken),
-		LeaseOwner:        requiredTextValue(input.LeaseOwner),
-		CaptureEpoch:      input.CaptureEpoch,
-		EnvelopeDigest:    input.EnvelopeDigest,
-		ObjectKey:         input.ObjectKey,
-		ContentType:       input.ContentType,
-		ByteSize:          input.ByteSize,
-		Checksum:          input.Checksum,
-		DurationMillis:    input.Duration.Milliseconds(),
+	var row sqlc.CommitRecordingArtifactRow
+	var metric webhookCommitMetric
+	err := r.transaction(ctx, func(tx pgx.Tx, queries recordingPipelineQuerier) error {
+		var err error
+		row, err = queries.CommitRecordingArtifact(ctx, sqlc.CommitRecordingArtifactParams{
+			RecordingID:       uuid(input.RecordingID),
+			TenantID:          uuid(input.TenantID),
+			RenderJobID:       uuid(input.RenderJobID),
+			AttemptCount:      int32(input.AttemptCount),
+			FencingGeneration: input.FencingGeneration,
+			LeaseToken:        requiredTextValue(input.LeaseToken),
+			LeaseOwner:        requiredTextValue(input.LeaseOwner),
+			CaptureEpoch:      input.CaptureEpoch,
+			EnvelopeDigest:    input.EnvelopeDigest,
+			ObjectKey:         input.ObjectKey,
+			ContentType:       input.ContentType,
+			ByteSize:          input.ByteSize,
+			Checksum:          input.Checksum,
+			DurationMillis:    input.Duration.Milliseconds(),
+		})
+		if err != nil {
+			return err
+		}
+		metric, err = produceRecordingWebhook(ctx, tx, input.TenantID, input.RecordingID, "completed", timestamp(row.CommittedAt), "")
+		return err
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return r.replayArtifactAfterAmbiguousCommit(ctx, input)
@@ -915,6 +979,7 @@ func (r RecordingPipelineRepository) CommitArtifact(ctx context.Context, input r
 		}
 		return recordingpipeline.Artifact{}, fmt.Errorf("commit recording artifact: %w", err)
 	}
+	metric.Record(ctx)
 	return mapArtifact(row), nil
 }
 
@@ -959,7 +1024,10 @@ func compareArtifactReplay(row sqlc.RecordingArtifact, input recordingpipeline.A
 	return mapArtifactRecord(row), nil
 }
 
-func (r RecordingPipelineRepository) transaction(ctx context.Context, work func(recordingPipelineQuerier) error) error {
+func (r RecordingPipelineRepository) transaction(ctx context.Context, work func(pgx.Tx, recordingPipelineQuerier) error) error {
+	if r.transactor == nil {
+		return errors.New("recording pipeline transaction is unavailable")
+	}
 	tx, err := r.transactor.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return fmt.Errorf("begin recording pipeline transaction: %w", err)
@@ -969,7 +1037,7 @@ func (r RecordingPipelineRepository) transaction(ctx context.Context, work func(
 	if r.decorate != nil {
 		queries = r.decorate(queries)
 	}
-	if err := work(queries); err != nil {
+	if err := work(tx, queries); err != nil {
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {

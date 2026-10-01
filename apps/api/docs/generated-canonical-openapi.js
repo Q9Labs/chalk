@@ -17559,6 +17559,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           },
           event_types: {
             items: {
+              enum: ["episode.ended", "episode.started", "participant.joined", "participant.left", "recording.started", "recording.completed", "recording.failed", "transcript.started", "transcript.completed", "transcript.failed", "space.archived", "space.created", "space.restored", "space.updated"],
               type: "string",
             },
             type: "array",
@@ -20616,6 +20617,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           },
           event_types: {
             items: {
+              enum: ["episode.ended", "episode.started", "participant.joined", "participant.left", "recording.started", "recording.completed", "recording.failed", "transcript.started", "transcript.completed", "transcript.failed", "space.archived", "space.created", "space.restored", "space.updated"],
               type: "string",
             },
             type: "array",
@@ -20886,6 +20888,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           },
           event_types: {
             items: {
+              enum: ["episode.ended", "episode.started", "participant.joined", "participant.left", "recording.started", "recording.completed", "recording.failed", "transcript.started", "transcript.completed", "transcript.failed", "space.archived", "space.created", "space.restored", "space.updated"],
               type: "string",
             },
             type: "array",
@@ -20949,6 +20952,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           },
           event_types: {
             items: {
+              enum: ["episode.ended", "episode.started", "participant.joined", "participant.left", "recording.started", "recording.completed", "recording.failed", "transcript.started", "transcript.completed", "transcript.failed", "space.archived", "space.created", "space.restored", "space.updated"],
               type: "string",
             },
             type: "array",
