@@ -3,10 +3,12 @@ package postgres
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -107,4 +109,72 @@ func TestExpiredFinalizerPublishesFailureEvenWithoutNextJob(t *testing.T) {
 		}
 	}
 	assertTranscriptWebhookCount(t, ctx, tx, transcriptID, "transcript.failed", 1)
+}
+
+// A recovered failure must not take the Tenant lock before a claim's SQL can
+// lock another Transcript. Two chunk jobs can otherwise invert those locks.
+func TestRecoveryWebhookLocksTenantAfterClaimMutations(t *testing.T) {
+	for _, finalizer := range []bool{false, true} {
+		name := "chunk"
+		if finalizer {
+			name = "finalizer"
+		}
+		t.Run(name, func(t *testing.T) {
+			ctx, tx, _, transcriptID, _ := newTranscriptClaimFixture(t, "transcription_finalize", "verifying", true)
+			var tenantID string
+			if err := tx.QueryRow(ctx, `select tenant_id::text from transcriptions where id=$1`, uuid(transcriptID)).Scan(&tenantID); err != nil {
+				t.Fatal(err)
+			}
+			subscribeArtifactWebhooksTx(t, ctx, tx, idFromString(t, tenantID))
+			order := &transcriptClaimLockOrder{}
+			repository := NewTranscriptRepositoryWithPool(sqlc.New(tx), transcriptClaimOrderTx{Tx: tx, order: order})
+			var err error
+			if finalizer {
+				_, err = repository.ClaimFinalizer(ctx, transcripts.FinalizerClaimInput{Owner: "lock-order-test", LeaseDuration: time.Minute, Now: time.Now()})
+			} else {
+				_, err = repository.Claim(ctx, transcripts.ClaimInput{Owner: "lock-order-test", LeaseDuration: time.Minute, Now: time.Now()})
+			}
+			if !errors.Is(err, transcripts.ErrNoClaimableJob) {
+				t.Fatalf("claim error=%v", err)
+			}
+			if !order.claimAttempted || !order.tenantLocked || order.tenantLockedBeforeClaim {
+				t.Fatalf("unsafe recovery lock order: %+v", order)
+			}
+			assertTranscriptWebhookCount(t, ctx, tx, transcriptID, "transcript.failed", 1)
+		})
+	}
+}
+
+type transcriptClaimLockOrder struct {
+	claimAttempted          bool
+	tenantLocked            bool
+	tenantLockedBeforeClaim bool
+}
+
+type transcriptClaimOrderTx struct {
+	pgx.Tx
+	order *transcriptClaimLockOrder
+}
+
+func (tx transcriptClaimOrderTx) Begin(ctx context.Context) (pgx.Tx, error) {
+	nested, err := tx.Tx.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return transcriptClaimOrderTx{Tx: nested, order: tx.order}, nil
+}
+
+func (tx transcriptClaimOrderTx) QueryRow(ctx context.Context, query string, args ...any) pgx.Row {
+	if strings.Contains(query, "-- name: ClaimArtifactJob") || strings.Contains(query, "-- name: ClaimTranscriptionFinalizerJob") {
+		tx.order.claimAttempted = true
+	}
+	return tx.Tx.QueryRow(ctx, query, args...)
+}
+
+func (tx transcriptClaimOrderTx) Exec(ctx context.Context, query string, args ...any) (pgconn.CommandTag, error) {
+	if strings.Contains(query, "-- name: LockWebhookTenantState") {
+		tx.order.tenantLocked = true
+		tx.order.tenantLockedBeforeClaim = !tx.order.claimAttempted
+	}
+	return tx.Tx.Exec(ctx, query, args...)
 }

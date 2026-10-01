@@ -60,20 +60,32 @@ func produceFailedTranscriptJobWebhook(ctx context.Context, tx pgx.Tx, job sqlc.
 }
 
 // Recovery precedes claims too: expired terminal jobs must publish even when there is no next job to lease.
-func recoverTranscriptJobsTx(ctx context.Context, tx pgx.Tx, now, availableAt time.Time) ([]sqlc.ArtifactJob, []webhookCommitMetric, error) {
+func recoverTranscriptJobsTx(ctx context.Context, tx pgx.Tx, now, availableAt time.Time) ([]sqlc.ArtifactJob, error) {
 	rows, err := sqlc.New(tx).RecoverExpiredArtifactJobs(ctx, sqlc.RecoverExpiredArtifactJobsParams{Now: pgtype.Timestamptz{Time: now, Valid: true}, AvailableAt: pgtype.Timestamptz{Time: availableAt, Valid: true}})
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
+	return rows, nil
+}
+
+// Finish all claim mutations before taking webhook Tenant locks. Otherwise a
+// concurrent claim can hold a Transcript row while waiting for our Tenant lock.
+func commitRecoveredTranscriptJobsTx(ctx context.Context, tx pgx.Tx, rows []sqlc.ArtifactJob) error {
 	metrics := make([]webhookCommitMetric, 0, len(rows))
 	for _, row := range rows {
 		metric, err := produceFailedTranscriptJobWebhook(ctx, tx, row)
 		if err != nil {
-			return nil, nil, err
+			return err
 		}
 		metrics = append(metrics, metric)
 	}
-	return rows, metrics, nil
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	for _, metric := range metrics {
+		metric.Record(ctx)
+	}
+	return nil
 }
 
 func produceTranscriptWebhook(ctx context.Context, tx pgx.Tx, row sqlc.Transcription, status string, occurredAt time.Time, failureCode string) (webhookCommitMetric, error) {

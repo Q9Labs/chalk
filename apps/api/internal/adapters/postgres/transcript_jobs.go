@@ -23,18 +23,10 @@ func (r TranscriptRepository) Claim(ctx context.Context, input transcripts.Claim
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := sqlc.New(tx)
-	_, recoveryMetrics, err := recoverTranscriptJobsTx(ctx, tx, input.Now, input.Now)
+	recoveredJobs, err := recoverTranscriptJobsTx(ctx, tx, input.Now, input.Now)
 	if err != nil {
 		return transcripts.Assignment{}, err
 	}
-	committed := false
-	defer func() {
-		if committed {
-			for _, metric := range recoveryMetrics {
-				metric.Record(ctx)
-			}
-		}
-	}()
 
 	token, err := leaseToken()
 	if err != nil {
@@ -44,10 +36,9 @@ func (r TranscriptRepository) Claim(ctx context.Context, input transcripts.Claim
 	expiry := now.Add(input.LeaseDuration)
 	job, err := q.ClaimArtifactJob(ctx, sqlc.ClaimArtifactJobParams{LeaseTokenHash: leaseHash(token), LeaseOwner: text(&input.Owner), LeaseExpiresAt: pgtype.Timestamptz{Time: expiry, Valid: true}, Now: pgtype.Timestamptz{Time: now, Valid: true}})
 	if errors.Is(err, pgx.ErrNoRows) {
-		if err := tx.Commit(ctx); err != nil {
+		if err := commitRecoveredTranscriptJobsTx(ctx, tx, recoveredJobs); err != nil {
 			return transcripts.Assignment{}, err
 		}
-		committed = true
 		return transcripts.Assignment{}, transcripts.ErrNoClaimableJob
 	}
 	if err != nil {
@@ -66,10 +57,9 @@ func (r TranscriptRepository) Claim(ctx context.Context, input transcripts.Claim
 		if _, err := q.CancelArtifactJob(ctx, sqlc.CancelArtifactJobParams{ID: job.ID, Attempt: job.AttemptCount, LeaseOwner: text(&input.Owner), LeaseTokenHash: leaseHash(token), ErrorCode: text(stringPtr("transcript_not_claimable")), ErrorDetail: text(stringPtr("transcript is deleted or terminal")), Now: pgtype.Timestamptz{Time: now, Valid: true}}); err != nil {
 			return transcripts.Assignment{}, fmt.Errorf("cancel unclaimable artifact job: %w", err)
 		}
-		if err := tx.Commit(ctx); err != nil {
+		if err := commitRecoveredTranscriptJobsTx(ctx, tx, recoveredJobs); err != nil {
 			return transcripts.Assignment{}, err
 		}
-		committed = true
 		return transcripts.Assignment{}, transcripts.ErrStaleLease
 	}
 	if err != nil {
@@ -79,10 +69,9 @@ func (r TranscriptRepository) Claim(ctx context.Context, input transcripts.Claim
 	if err != nil {
 		return transcripts.Assignment{}, err
 	}
-	if err := tx.Commit(ctx); err != nil {
+	if err := commitRecoveredTranscriptJobsTx(ctx, tx, recoveredJobs); err != nil {
 		return transcripts.Assignment{}, err
 	}
-	committed = true
 	metric.Record(ctx)
 	chunkInput := mapSourceChunk(sourceChunk)
 	chunkInput.ResultKey = chunkResultKey(
@@ -166,7 +155,7 @@ func (r TranscriptRepository) RecoverExpired(ctx context.Context, now, available
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
-	rows, metrics, err := recoverTranscriptJobsTx(ctx, tx, now, availableAt)
+	rows, err := recoverTranscriptJobsTx(ctx, tx, now, availableAt)
 	if err != nil {
 		return nil, err
 	}
@@ -174,11 +163,8 @@ func (r TranscriptRepository) RecoverExpired(ctx context.Context, now, available
 	for _, row := range rows {
 		jobs = append(jobs, mapJob(row))
 	}
-	if err := tx.Commit(ctx); err != nil {
+	if err := commitRecoveredTranscriptJobsTx(ctx, tx, rows); err != nil {
 		return nil, err
-	}
-	for _, metric := range metrics {
-		metric.Record(ctx)
 	}
 	return jobs, nil
 }

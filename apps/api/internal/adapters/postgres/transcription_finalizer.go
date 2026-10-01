@@ -21,18 +21,10 @@ func (r TranscriptRepository) ClaimFinalizer(ctx context.Context, input transcri
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := sqlc.New(tx)
-	_, recoveryMetrics, err := recoverTranscriptJobsTx(ctx, tx, input.Now, input.Now)
+	recoveredJobs, err := recoverTranscriptJobsTx(ctx, tx, input.Now, input.Now)
 	if err != nil {
 		return transcripts.FinalizerAssignment{}, err
 	}
-	committed := false
-	defer func() {
-		if committed {
-			for _, metric := range recoveryMetrics {
-				metric.Record(ctx)
-			}
-		}
-	}()
 
 	token, err := leaseToken()
 	if err != nil {
@@ -40,10 +32,9 @@ func (r TranscriptRepository) ClaimFinalizer(ctx context.Context, input transcri
 	}
 	job, err := q.ClaimTranscriptionFinalizerJob(ctx, sqlc.ClaimTranscriptionFinalizerJobParams{LeaseTokenHash: leaseHash(token), LeaseOwner: text(&input.Owner), LeaseExpiresAt: pgtype.Timestamptz{Time: input.Now.Add(input.LeaseDuration), Valid: true}, Now: pgtype.Timestamptz{Time: input.Now, Valid: true}})
 	if errors.Is(err, pgx.ErrNoRows) {
-		if err := tx.Commit(ctx); err != nil {
+		if err := commitRecoveredTranscriptJobsTx(ctx, tx, recoveredJobs); err != nil {
 			return transcripts.FinalizerAssignment{}, err
 		}
-		committed = true
 		return transcripts.FinalizerAssignment{}, transcripts.ErrNoClaimableJob
 	}
 	if err != nil {
@@ -58,10 +49,9 @@ func (r TranscriptRepository) ClaimFinalizer(ctx context.Context, input transcri
 		if _, err := q.CancelArtifactJob(ctx, sqlc.CancelArtifactJobParams{ID: job.ID, Attempt: job.AttemptCount, LeaseOwner: text(&input.Owner), LeaseTokenHash: leaseHash(token), ErrorCode: text(stringPtr("transcript_not_claimable")), ErrorDetail: text(stringPtr("transcript is deleted or terminal")), Now: pgtype.Timestamptz{Time: input.Now, Valid: true}}); err != nil {
 			return transcripts.FinalizerAssignment{}, err
 		}
-		if err := tx.Commit(ctx); err != nil {
+		if err := commitRecoveredTranscriptJobsTx(ctx, tx, recoveredJobs); err != nil {
 			return transcripts.FinalizerAssignment{}, err
 		}
-		committed = true
 		return transcripts.FinalizerAssignment{}, transcripts.ErrStaleLease
 	}
 	if err != nil {
@@ -79,10 +69,9 @@ func (r TranscriptRepository) ClaimFinalizer(ctx context.Context, input transcri
 		}
 		assignment.Chunks = append(assignment.Chunks, transcripts.FinalizerChunk{ID: utilities.IDFromBytes(chunk.ID.Bytes), Generation: chunk.Generation, StartMS: chunk.StartMs, EndMS: chunk.EndMs, ResultKey: result.ResultKey, ResultSHA256: result.ResultSha256, ResultSize: result.ResultSize, ResultContentType: result.ResultContentType})
 	}
-	if err := tx.Commit(ctx); err != nil {
+	if err := commitRecoveredTranscriptJobsTx(ctx, tx, recoveredJobs); err != nil {
 		return transcripts.FinalizerAssignment{}, err
 	}
-	committed = true
 	return assignment, nil
 }
 
