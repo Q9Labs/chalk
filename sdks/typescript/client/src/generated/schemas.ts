@@ -7156,6 +7156,7 @@ export const OnboardTenantErrorSchema = Schema.Union([
   ServiceUnavailableErrorSchema,
   TenantInvalidNameErrorSchema,
   TenantInvalidRegionErrorSchema,
+  TenantNotFoundErrorSchema,
 ]);
 export type OnboardTenantError = typeof OnboardTenantErrorSchema.Type;
 

@@ -2,19 +2,32 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"go.opentelemetry.io/otel/trace"
 )
 
-type PeopleRepository struct{ database accountTenantTransactor }
+type PeopleRepository struct {
+	database accountTenantTransactor
+	logger   *slog.Logger
+}
 
-func NewPeopleRepository(database accountTenantTransactor) PeopleRepository {
-	return PeopleRepository{database: database}
+func NewPeopleRepository(database accountTenantTransactor, loggers ...*slog.Logger) PeopleRepository {
+	repository := PeopleRepository{database: database}
+	if len(loggers) > 0 {
+		repository.logger = loggers[0]
+	}
+	return repository
 }
 
 func lockMembershipTenant(ctx context.Context, tx pgx.Tx, id utilities.ID) error {
@@ -32,7 +45,10 @@ func scanInvitation(row pgx.Row) (memberships.Invitation, error) {
 
 const invitationColumns = `id,tenant_id,email,role,expires_at,created_at`
 
-func (r PeopleRepository) IssueInvitation(ctx context.Context, input memberships.IssueInvitationInput) (memberships.Invitation, error) {
+func (r PeopleRepository) IssueInvitation(ctx context.Context, input memberships.IssueInvitationInput) (_ memberships.Invitation, operationErr error) {
+	defer func(started time.Time) {
+		observability.LogOperation(ctx, r.logger, "db.query", "IssueInvitation", started, operationErr)
+	}(time.Now())
 	tx, err := r.database.Begin(ctx)
 	if err != nil {
 		return memberships.Invitation{}, err
@@ -48,9 +64,12 @@ func (r PeopleRepository) IssueInvitation(ctx context.Context, input memberships
 	if err != nil {
 		return memberships.Invitation{}, err
 	}
-	return invitation, tx.Commit(ctx)
+	return invitation, commitPeopleMutation(ctx, tx, "tenant.invitation.issued", input.TenantID, input.ID)
 }
-func (r PeopleRepository) ListInvitations(ctx context.Context, tenant utilities.ID) ([]memberships.Invitation, error) {
+func (r PeopleRepository) ListInvitations(ctx context.Context, tenant utilities.ID) (_ []memberships.Invitation, operationErr error) {
+	defer func(started time.Time) {
+		observability.LogOperation(ctx, r.logger, "db.query", "ListInvitations", started, operationErr)
+	}(time.Now())
 	tx, err := r.database.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -75,7 +94,10 @@ func (r PeopleRepository) ListInvitations(ctx context.Context, tenant utilities.
 	}
 	return result, tx.Commit(ctx)
 }
-func (r PeopleRepository) RevokeInvitation(ctx context.Context, tenant, id utilities.ID) error {
+func (r PeopleRepository) RevokeInvitation(ctx context.Context, tenant, id utilities.ID) (operationErr error) {
+	defer func(started time.Time) {
+		observability.LogOperation(ctx, r.logger, "db.query", "RevokeInvitation", started, operationErr)
+	}(time.Now())
 	tx, err := r.database.Begin(ctx)
 	if err != nil {
 		return err
@@ -91,9 +113,12 @@ func (r PeopleRepository) RevokeInvitation(ctx context.Context, tenant, id utili
 	if tag.RowsAffected() == 0 {
 		return memberships.ErrInvitationUnavailable
 	}
-	return tx.Commit(ctx)
+	return commitPeopleMutation(ctx, tx, "tenant.invitation.revoked", tenant, id)
 }
-func (r PeopleRepository) AcceptInvitation(ctx context.Context, hash string, account utilities.ID) (memberships.Membership, error) {
+func (r PeopleRepository) AcceptInvitation(ctx context.Context, hash string, account utilities.ID) (_ memberships.Membership, operationErr error) {
+	defer func(started time.Time) {
+		observability.LogOperation(ctx, r.logger, "db.query", "AcceptInvitation", started, operationErr)
+	}(time.Now())
 	tx, err := r.database.Begin(ctx)
 	if err != nil {
 		return memberships.Membership{}, err
@@ -136,7 +161,7 @@ func (r PeopleRepository) AcceptInvitation(ctx context.Context, hash string, acc
 	if _, err = tx.Exec(ctx, `update tenant_invitations set consumed_at=clock_timestamp() where id=$1`, uuid(invitation.ID)); err != nil {
 		return memberships.Membership{}, err
 	}
-	return value, tx.Commit(ctx)
+	return value, commitPeopleMutation(ctx, tx, "tenant.invitation.accepted", invitation.TenantID, invitation.ID)
 }
 func scanPeopleMembership(row pgx.Row) (memberships.Membership, error) {
 	var value memberships.Membership
@@ -168,10 +193,16 @@ func protectLastOwner(ctx context.Context, tx pgx.Tx, tenant, id utilities.ID) e
 	}
 	return nil
 }
-func (r PeopleRepository) RemoveMembership(ctx context.Context, tenant, id utilities.ID) error {
+func (r PeopleRepository) RemoveMembership(ctx context.Context, tenant, id utilities.ID) (operationErr error) {
+	defer func(started time.Time) {
+		observability.LogOperation(ctx, r.logger, "db.query", "RemoveMembership", started, operationErr)
+	}(time.Now())
 	return r.remove(ctx, tenant, id, false)
 }
-func (r PeopleRepository) LeaveTenant(ctx context.Context, tenant, account utilities.ID) error {
+func (r PeopleRepository) LeaveTenant(ctx context.Context, tenant, account utilities.ID) (operationErr error) {
+	defer func(started time.Time) {
+		observability.LogOperation(ctx, r.logger, "db.query", "LeaveTenant", started, operationErr)
+	}(time.Now())
 	return r.remove(ctx, tenant, account, true)
 }
 func (r PeopleRepository) remove(ctx context.Context, tenant, id utilities.ID, byAccount bool) error {
@@ -199,6 +230,33 @@ func (r PeopleRepository) remove(ctx context.Context, tenant, id utilities.ID, b
 	}
 	if _, err = tx.Exec(ctx, `delete from memberships where tenant_id=$1 and id=$2`, uuid(tenant), uuid(id)); err != nil {
 		return fmt.Errorf("remove membership: %w", err)
+	}
+	name := "tenant.membership.removed"
+	if byAccount {
+		name = "tenant.membership.left"
+	}
+	return commitPeopleMutation(ctx, tx, name, tenant, id)
+}
+
+func commitPeopleMutation(ctx context.Context, tx pgx.Tx, name string, tenantID, resourceID utilities.ID) error {
+	journeyID, ok := observability.JourneyIDFromContext(ctx)
+	if ok {
+		eventID, err := utilities.NewID()
+		if err != nil {
+			return err
+		}
+		attributes, err := json.Marshal(map[string]string{"tenant_id": tenantID.String(), "resource_id": resourceID.String()})
+		if err != nil {
+			return err
+		}
+		event := sqlc.InsertJourneyEventParams{EventID: uuid(eventID), JourneyID: uuid(journeyID), Sequence: 1, OccurredAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}, Name: name, Phase: "terminal", State: "succeeded", OriginKind: "api", FirstObservedLayer: "api", UpstreamVisibility: "complete", Attributes: attributes}
+		if span := trace.SpanContextFromContext(ctx); span.IsValid() {
+			event.TraceID = pgtype.Text{String: span.TraceID().String(), Valid: true}
+			event.SpanID = pgtype.Text{String: span.SpanID().String(), Valid: true}
+		}
+		if _, err = sqlc.New(tx).InsertJourneyEvent(ctx, event); err != nil {
+			return fmt.Errorf("append Tenant people journey: %w", err)
+		}
 	}
 	return tx.Commit(ctx)
 }

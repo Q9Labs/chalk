@@ -1,14 +1,18 @@
 package postgres
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
+	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -16,6 +20,8 @@ func TestTenantInvitationLifecycleAndOwnerProtection(t *testing.T) {
 	pool := accountTenantIntegrationPool(t)
 	ctx := context.Background()
 	tenant, owner, account, other := accountTenantIntegrationID(t), accountTenantIntegrationID(t), accountTenantIntegrationID(t), accountTenantIntegrationID(t)
+	journeyID := accountTenantIntegrationID(t)
+	ctx = observability.ContextWithJourneyID(ctx, journeyID)
 	address := account.String() + "@invitation.test"
 	if _, err := pool.Exec(ctx, `insert into tenants(id,name) values($1,'Invitation test')`, uuid(tenant)); err != nil {
 		t.Fatal(err)
@@ -26,6 +32,7 @@ func TestTenantInvitationLifecycleAndOwnerProtection(t *testing.T) {
 		}
 	}
 	t.Cleanup(func() {
+		pool.Exec(ctx, `delete from observability_journey_events where journey_id=$1`, uuid(journeyID))
 		pool.Exec(ctx, `delete from tenant_invitations where tenant_id=$1`, uuid(tenant))
 		pool.Exec(ctx, `delete from memberships where tenant_id=$1`, uuid(tenant))
 		pool.Exec(ctx, `delete from tenants where id=$1`, uuid(tenant))
@@ -80,6 +87,14 @@ func TestTenantInvitationLifecycleAndOwnerProtection(t *testing.T) {
 		t.Fatalf("accepted=%v err=%v", accepted, err)
 	}
 	expectUnavailable(replacement)
+	var acceptedEvents int
+	var evidence string
+	if err = pool.QueryRow(ctx, `select count(*),coalesce(string_agg(attributes::text,''),'') from observability_journey_events where journey_id=$1 and name='tenant.invitation.accepted'`, uuid(journeyID)).Scan(&acceptedEvents, &evidence); err != nil || acceptedEvents != 1 {
+		t.Fatalf("accepted journey events=%d err=%v", acceptedEvents, err)
+	}
+	if strings.Contains(evidence, token(replacement)) {
+		t.Fatal("journey evidence leaked an invitation token")
+	}
 	pending, err = service.ListInvitations(ctx, tenant)
 	if err != nil || len(pending) != 0 {
 		t.Fatalf("consumed pending=%v err=%v", pending, err)
@@ -162,5 +177,86 @@ func TestTenantInvitationLifecycleAndOwnerProtection(t *testing.T) {
 	}
 	if err = service.LeaveTenant(ctx, tenant, other); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestOnboardedTenantCreatorCanLeaveOrBeRemoved(t *testing.T) {
+	for _, action := range []string{"leave", "remove"} {
+		t.Run(action, func(t *testing.T) {
+			pool := accountTenantIntegrationPool(t)
+			ctx := context.Background()
+			creator, secondOwner := accountTenantIntegrationID(t), accountTenantIntegrationID(t)
+			for _, id := range []utilities.ID{creator, secondOwner} {
+				if _, err := pool.Exec(ctx, `insert into users(id,name,email) values($1,'Onboarded creator',$2)`, uuid(id), id.String()+"@invitation.test"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			onboarding := tenants.NewAccountService(NewAccountTenantRepository(sqlc.New(pool), pool, nil))
+			input := tenants.OnboardTenantInput{AccountID: creator, RequestKey: "creator-removal-regression-0001", Name: "Creator removal test"}
+			onboarded, err := onboarding.OnboardTenant(ctx, input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tenant := onboarded.AccountTenant.Tenant.ID
+			t.Cleanup(func() {
+				pool.Exec(ctx, `delete from tenant_onboarding_requests where tenant_id=$1`, uuid(tenant))
+				pool.Exec(ctx, `delete from memberships where tenant_id=$1`, uuid(tenant))
+				pool.Exec(ctx, `delete from tenants where id=$1`, uuid(tenant))
+				pool.Exec(ctx, `delete from users where id in ($1,$2)`, uuid(creator), uuid(secondOwner))
+			})
+			var operationLog bytes.Buffer
+			decorate := func(queries sqlc.Querier) sqlc.Querier {
+				return observability.OperationQueries(queries, slog.New(slog.NewJSONHandler(&operationLog, nil)))
+			}
+			membershipService := memberships.NewService(NewMembershipRepository(sqlc.New(pool), pool, decorate))
+			if _, err = membershipService.CreateMembership(ctx, memberships.CreateMembershipInput{TenantID: tenant, UserID: secondOwner, Role: memberships.RoleOwner}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = membershipService.UpdateTenantMembership(ctx, tenant, onboarded.AccountTenant.Access.ID, memberships.UpdateMembershipInput{Role: memberships.RoleOwner}); err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(operationLog.String(), `"name":"UpdateTenantMembership"`) || !strings.Contains(operationLog.String(), `"outcome":"ok"`) {
+				t.Fatal("successful Role update lost query telemetry")
+			}
+			if _, err = membershipService.UpdateTenantMembership(ctx, tenant, accountTenantIntegrationID(t), memberships.UpdateMembershipInput{Role: memberships.RoleOwner}); !errors.Is(err, memberships.ErrMembershipNotFound) {
+				t.Fatalf("missing membership update=%v", err)
+			}
+			if !strings.Contains(operationLog.String(), `"outcome":"error"`) {
+				t.Fatal("failed Role update lost query telemetry")
+			}
+			people := memberships.NewPeopleService(NewPeopleRepository(pool), nil, "", "https://chalk.test")
+			if action == "leave" {
+				err = people.LeaveTenant(ctx, tenant, creator)
+			} else {
+				err = people.RemoveMembership(ctx, tenant, onboarded.AccountTenant.Access.ID)
+			}
+			if err != nil {
+				t.Fatalf("onboarded creator %s: %v", action, err)
+			}
+			var history int
+			if err = pool.QueryRow(ctx, `select count(*) from tenant_onboarding_requests where tenant_id=$1`, uuid(tenant)).Scan(&history); err != nil || history != 1 {
+				t.Fatalf("history=%d err=%v", history, err)
+			}
+			if _, err = onboarding.OnboardTenant(ctx, input); !errors.Is(err, tenants.ErrTenantNotFound) {
+				t.Fatalf("removed creator replay should not regain access: %v", err)
+			}
+			var count int
+			if err = pool.QueryRow(ctx, `select count(*) from memberships where tenant_id=$1`, uuid(tenant)).Scan(&count); err != nil || count != 1 {
+				t.Fatalf("membership count=%d err=%v", count, err)
+			}
+			invitation, err := people.IssueInvitation(ctx, tenant, creator.String()+"@invitation.test", memberships.RoleObserver)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, token, _ := strings.Cut(invitation.AcceptLink, "#token=")
+			if _, err = people.AcceptInvitation(ctx, token, creator); err != nil {
+				t.Fatal(err)
+			}
+			replay, err := onboarding.OnboardTenant(ctx, input)
+			if err != nil || !replay.Replayed || replay.AccountTenant.Access.Role != memberships.RoleObserver {
+				t.Fatalf("rejoined creator replay=%v err=%v", replay, err)
+			}
+
+		})
 	}
 }

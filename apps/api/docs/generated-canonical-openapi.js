@@ -1929,6 +1929,17 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             description: "Unauthorized",
             "x-chalk-error-codes": ["access.unauthenticated"],
           },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["tenant.not_found"],
+          },
           409: {
             content: {
               "application/json": {

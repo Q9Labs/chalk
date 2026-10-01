@@ -23,10 +23,15 @@ type membershipQuerier interface {
 type MembershipRepository struct {
 	queries    membershipQuerier
 	transactor accountTenantTransactor
+	decorate   func(sqlc.Querier) sqlc.Querier
 }
 
-func NewMembershipRepository(queries membershipQuerier, transactor accountTenantTransactor) MembershipRepository {
-	return MembershipRepository{queries: queries, transactor: transactor}
+func NewMembershipRepository(queries membershipQuerier, transactor accountTenantTransactor, decorators ...func(sqlc.Querier) sqlc.Querier) MembershipRepository {
+	repository := MembershipRepository{queries: queries, transactor: transactor}
+	if len(decorators) > 0 {
+		repository.decorate = decorators[0]
+	}
+	return repository
 }
 
 func (r MembershipRepository) CreateMembership(ctx context.Context, input memberships.CreateMembershipInput) (memberships.Membership, error) {
@@ -106,14 +111,18 @@ func (r MembershipRepository) UpdateTenantMembership(ctx context.Context, tenant
 			return memberships.Membership{}, err
 		}
 	}
-	value, err := scanPeopleMembership(tx.QueryRow(ctx, `update memberships set role=$3,updated_at=clock_timestamp() where tenant_id=$1 and id=$2 returning id,tenant_id,user_id,role,updated_at,created_at`, uuid(tenantID), uuid(membershipID), string(input.Role)))
+	var queries membershipQuerier = sqlc.New(tx)
+	if r.decorate != nil {
+		queries = r.decorate(sqlc.New(tx))
+	}
+	value, err := queries.UpdateTenantMembership(ctx, sqlc.UpdateTenantMembershipParams{TenantID: uuid(tenantID), ID: uuid(membershipID), Role: string(input.Role)})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return memberships.Membership{}, memberships.ErrMembershipNotFound
 	}
 	if err != nil {
 		return memberships.Membership{}, err
 	}
-	return value, tx.Commit(ctx)
+	return mapMembership(value), tx.Commit(ctx)
 }
 
 func listTenantMembershipsParams(tenantID utilities.ID, page pagination.PageRequest) sqlc.ListTenantMembershipsParams {

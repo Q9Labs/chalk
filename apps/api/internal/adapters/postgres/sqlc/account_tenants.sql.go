@@ -32,7 +32,7 @@ select
     memberships.created_at as access_created_at
 from tenant_onboarding_requests
 join tenants on tenants.id = tenant_onboarding_requests.tenant_id
-join memberships on memberships.id = tenant_onboarding_requests.tenant_access_id
+join memberships on memberships.tenant_id = tenants.id and memberships.user_id = tenant_onboarding_requests.account_id
 where tenant_onboarding_requests.account_id = $1
   and tenant_onboarding_requests.request_key = $2
 `

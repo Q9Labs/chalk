@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -194,7 +195,7 @@ func run() error {
 	accountTenantService := tenants.NewAccountService(accountTenantRepository)
 	userRepository := postgres.NewUserRepository(operationQueries)
 	userService := users.NewService(userRepository)
-	membershipRepository := postgres.NewMembershipRepository(operationQueries, pool)
+	membershipRepository := postgres.NewMembershipRepository(operationQueries, pool, diagnostics.Queries)
 	membershipService := memberships.NewService(membershipRepository)
 	var invitationSender email.Sender
 	if cfg.Resend.APIKey != "" {
@@ -204,7 +205,11 @@ func run() error {
 		}
 		invitationSender = email.NewService(sender)
 	}
-	peopleService := memberships.NewPeopleService(postgres.NewPeopleRepository(pool), invitationSender, cfg.InvitationFrom, cfg.InvitationWebOrigin)
+	var peopleLogger *slog.Logger
+	if cfg.Observability.OperationLogs {
+		peopleLogger = diagnostics.Logger()
+	}
+	peopleService := memberships.NewPeopleService(postgres.NewPeopleRepository(pool, peopleLogger), invitationSender, cfg.InvitationFrom, cfg.InvitationWebOrigin)
 	spaceRepository := postgres.NewSpaceRepository(operationQueries, pool)
 	spaceService := spaces.NewServiceWithDefaultProvider(spaceRepository, cfg.DefaultMediaPlane)
 	episodeMediaBindingResolver := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{ProcessConfig: cfg.CloudflareRealtime, DefaultProvider: cfg.DefaultMediaPlane})

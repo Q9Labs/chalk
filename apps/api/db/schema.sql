@@ -147,7 +147,7 @@ create table tenant_onboarding_requests (
     request_key text not null,
     request_fingerprint bytea not null,
     tenant_id uuid not null references tenants(id) deferrable initially deferred,
-    tenant_access_id uuid not null references memberships(id) deferrable initially deferred,
+    tenant_access_id uuid not null,
     created_at timestamptz not null default now(),
     primary key (account_id, request_key),
     unique (tenant_id),

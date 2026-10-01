@@ -580,6 +580,7 @@ type ProviderOperationReceipt struct {
 	State                 string             `json:"state"`
 	Outcome               pgtype.Text        `json:"outcome"`
 	Reason                pgtype.Text        `json:"reason"`
+	LastErrorCode         pgtype.Text        `json:"last_error_code"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 	DispatchingAt         pgtype.Timestamptz `json:"dispatching_at"`
 	CompletedAt           pgtype.Timestamptz `json:"completed_at"`

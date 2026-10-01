@@ -1,5 +1,7 @@
 -- +goose Up
 SET LOCAL lock_timeout = '5s';
+-- The onboarding access ID is historical, not a reference to current access.
+ALTER TABLE tenant_onboarding_requests DROP CONSTRAINT tenant_onboarding_requests_tenant_access_id_fkey;
 CREATE TABLE tenant_invitations (
  id uuid PRIMARY KEY,
  tenant_id uuid NOT NULL REFERENCES tenants(id),
@@ -15,3 +17,5 @@ CREATE UNIQUE INDEX tenant_invitations_pending_email ON tenant_invitations(tenan
 -- +goose Down
 SET LOCAL lock_timeout = '5s';
 DROP TABLE tenant_invitations;
+-- Rollback is rejected if removed memberships are retained in onboarding history.
+ALTER TABLE tenant_onboarding_requests ADD CONSTRAINT tenant_onboarding_requests_tenant_access_id_fkey FOREIGN KEY (tenant_access_id) REFERENCES memberships(id) DEFERRABLE INITIALLY DEFERRED;

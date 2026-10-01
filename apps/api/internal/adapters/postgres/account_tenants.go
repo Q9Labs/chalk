@@ -118,6 +118,9 @@ func (r AccountTenantRepository) OnboardTenant(ctx context.Context, input tenant
 	}
 
 	row, err := queries.GetAccountTenantByOnboarding(ctx, sqlc.GetAccountTenantByOnboardingParams{AccountID: uuid(input.AccountID), RequestKey: input.RequestKey})
+	if replayed && errors.Is(err, pgx.ErrNoRows) {
+		return tenants.OnboardTenantResult{}, tenants.ErrTenantNotFound
+	}
 	if err != nil {
 		return tenants.OnboardTenantResult{}, fmt.Errorf("get onboarded tenant: %w", err)
 	}

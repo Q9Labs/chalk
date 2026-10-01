@@ -1991,6 +1991,7 @@ const tenantsGroup = HttpApiGroup.make("tenants")
         S.TenantInvalidNameErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidRegionErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.TenantNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
