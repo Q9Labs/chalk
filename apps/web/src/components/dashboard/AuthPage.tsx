@@ -23,7 +23,11 @@ export function AuthPage({ mode }: { mode: "sign-in" | "sign-up" }) {
       const tenants = await listAllAccountTenants();
       await navigate({ to: tenants.length === 0 ? "/onboarding" : "/home", replace: true });
     } catch (cause) {
-      setError(cause instanceof DashboardAPIError ? cause.message : "Chalk could not complete sign-in");
+      if (cause instanceof DashboardAPIError && cause.code === "access.invalid_password") {
+        setError("Use at least 8 characters. If your password is long, try a shorter one.");
+      } else {
+        setError(cause instanceof DashboardAPIError ? cause.message : signingUp ? "Your Account could not be created. Try again." : "Chalk could not sign you in. Try again.");
+      }
     } finally {
       setBusy(false);
     }
@@ -65,10 +69,15 @@ export function AuthPage({ mode }: { mode: "sign-in" | "sign-up" }) {
           <label>
             Password
             <input name="password" type="password" autoComplete={signingUp ? "new-password" : "current-password"} required minLength={8} />
+            {signingUp ? <span>Use at least 8 characters.</span> : null}
           </label>
-          {error ? <p className="auth-error">{error}</p> : null}
+          {error ? (
+            <p className="auth-error" role="alert">
+              {error}
+            </p>
+          ) : null}
           <button className="dashboard-button primary" type="submit" disabled={busy}>
-            {busy ? "Working…" : signingUp ? "Create Account" : "Sign in"}
+            {busy ? (signingUp ? "Creating Account…" : "Signing in…") : signingUp ? "Create Account" : "Sign in"}
           </button>
           <p className="auth-switch">
             {signingUp ? "Already have an Account?" : "New to Chalk?"} <Link to={signingUp ? "/sign-in" : "/sign-up"}>{signingUp ? "Sign in" : "Create one"}</Link>
