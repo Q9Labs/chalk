@@ -154,6 +154,13 @@ await waitFor("Grafana alert rules", async () => {
     ["chalk-pipeline-trace-stale", "traces"],
     ["chalk-pipeline-log-stale", "logs"],
   ];
+  const expectedUserFacingRules = [
+    ["chalk-recording-failed", "chalk-journey-ledger", "recording_jobs"],
+    ["chalk-export-failed-or-stuck", "chalk-journey-ledger", "recording_jobs"],
+    ["chalk-transcript-failed-or-stuck", "chalk-journey-ledger", "transcriptions"],
+    ["chalk-api-5xx-rate", "prometheus", "http_server_request_duration_seconds_count"],
+    ["chalk-sync-connection-failures", "loki", "sync.websocket.closed"],
+  ];
   const expectedWebhookRules = [
     ["chalk-webhook-oldest-eligible", "chalk_webhook_delivery_oldest_eligible_age_seconds"],
     ["chalk-webhook-first-attempt-p99", "chalk_webhook_delivery_first_attempt_latency_seconds_bucket"],
@@ -172,6 +179,11 @@ await waitFor("Grafana alert rules", async () => {
     expectedWebhookRules.every(([uid, metric]) => {
       const rule = rulesByUid.get(uid);
       return rule?.data?.[0]?.datasourceUid === "prometheus" && rule.data[0].model?.expr?.includes(metric);
+    }) &&
+    expectedUserFacingRules.every(([uid, datasource, signal]) => {
+      const rule = rulesByUid.get(uid);
+      const query = rule?.data?.[0]?.model?.expr ?? rule?.data?.[0]?.model?.rawSql ?? "";
+      return rule?.data?.[0]?.datasourceUid === datasource && query.includes(signal) && rule.annotations?.summary?.includes("start with");
     })
   );
 });
@@ -213,6 +225,11 @@ console.log(
         "chalk-webhook-oldest-eligible",
         "chalk-webhook-first-attempt-p99",
         "chalk-webhook-exhausted",
+        "chalk-recording-failed",
+        "chalk-export-failed-or-stuck",
+        "chalk-transcript-failed-or-stuck",
+        "chalk-api-5xx-rate",
+        "chalk-sync-connection-failures",
         "chalk-webhook-lease-churn",
         "chalk-webhook-journey-branch-stuck",
         "chalk-webhook-cleanup-stale",
