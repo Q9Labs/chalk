@@ -358,6 +358,29 @@ func TestReconcilerDrainsStaleImageBeforeReplacementAtCap(t *testing.T) {
 	}
 }
 
+func TestReconcilerRevokesNeverReadyNodeWithoutWaitingForDrainTimeout(t *testing.T) {
+	fixture := newFleetFixture(t)
+	fixture.config.MaxNodes = 1
+	fixture.config.DrainTimeout = 14 * time.Hour
+	request := fixture.ensureRequest(4)
+	node := fixture.provider.nodeFor(request, "4004")
+	fixture.provider.nodes[node.ProviderID] = node
+	identity := fixture.bootstrap.identity(node)
+	drainStartedAt := fixture.now.Add(-time.Minute)
+	fixture.journal.found = true
+	fixture.journal.state = NewJournal()
+	fixture.journal.state.NextBootGeneration = 5
+	fixture.journal.state.Nodes[node.ProviderID] = ManagedNode{
+		ProviderID: node.ProviderID, Name: node.Name, Phase: PhaseDraining,
+		BootGeneration: node.BootGeneration, Identity: &identity, DrainStartedAt: &drainStartedAt,
+	}
+
+	result := fixture.step(t, fixture.reconciler(t))
+	if result.Action != ActionIdentityRevoked || fixture.bootstrap.revokeCalls != 1 {
+		t.Fatalf("never-ready drain result = %+v, revoke calls %d; want immediate revoke", result, fixture.bootstrap.revokeCalls)
+	}
+}
+
 func TestReconcilerNeverBootstrapsNodeWithoutDemand(t *testing.T) {
 	fixture := newFleetFixture(t)
 	fixture.demand.value = Demand{Revision: "demand-zero", DesiredNodes: 0, ObservedAt: fixture.now}

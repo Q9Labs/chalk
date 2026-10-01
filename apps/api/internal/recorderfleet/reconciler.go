@@ -363,7 +363,8 @@ func (r *Reconciler) advanceDrain(ctx context.Context, state Journal, managed Ma
 		return state, Result{Action: ActionNodeDeleted, ProviderNodeID: node.ProviderID}, err
 	case PhaseDraining:
 		deadline := managed.DrainStartedAt.Add(r.config.DrainTimeout)
-		if managed.Identity != nil && now.Before(deadline) {
+		// A node that never became ready never admitted a lease, so it has nothing to drain.
+		if managed.Identity != nil && managed.LastReadyAt != nil && now.Before(deadline) {
 			if observation.ObservedAt.IsZero() || observation.ActiveLeases > 0 {
 				return state, Result{Action: ActionDrainWaiting, ProviderNodeID: node.ProviderID}, nil
 			}
