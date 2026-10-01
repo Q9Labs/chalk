@@ -10,6 +10,13 @@ const MEMBER_PAGE_SIZE = 50;
 
 type Confirmation = { kind: "remove"; member: DashboardMembership } | { kind: "leave" } | null;
 
+function memberIdentity(member: DashboardMembership, isSelf: boolean) {
+  const name = member.user_name.trim();
+  const email = member.user_email.trim();
+  const label = name || email || member.user_id;
+  return { label: isSelf ? `${label} (you)` : label, sublabel: name && email ? email : null };
+}
+
 function messageFor(cause: unknown, fallback: string): string {
   return cause instanceof DashboardAPIError ? cause.message : fallback;
 }
@@ -147,20 +154,24 @@ export function PeoplePage() {
         ) : null}
         {members.length > 0 ? (
           <div className="space-list" aria-label="Members">
-            {members.map((member) => (
-              <MemberRow
-                key={member.id}
-                member={member}
-                label={member.user_id === account.id ? `${account.name} (you)` : member.user_id}
-                sublabel={member.user_id === account.id ? account.email : null}
-                isSelf={member.user_id === account.id}
-                canManage={isOwner}
-                busy={busyID === member.id}
-                onRoleChange={(role) => void changeRole(member, role)}
-                onRemove={() => setConfirmation({ kind: "remove", member })}
-                onLeave={() => setConfirmation({ kind: "leave" })}
-              />
-            ))}
+            {members.map((member) => {
+              const isSelf = member.user_id === account.id;
+              const identity = memberIdentity(member, isSelf);
+              return (
+                <MemberRow
+                  key={member.id}
+                  member={member}
+                  label={identity.label}
+                  sublabel={identity.sublabel}
+                  isSelf={isSelf}
+                  canManage={isOwner}
+                  busy={busyID === member.id}
+                  onRoleChange={(role) => void changeRole(member, role)}
+                  onRemove={() => setConfirmation({ kind: "remove", member })}
+                  onLeave={() => setConfirmation({ kind: "leave" })}
+                />
+              );
+            })}
           </div>
         ) : null}
         {pagination?.has_more && pagination.next_cursor ? (

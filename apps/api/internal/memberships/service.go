@@ -29,6 +29,8 @@ type Membership struct {
 	ID        utilities.ID
 	TenantID  utilities.ID
 	UserID    utilities.ID
+	UserName  string
+	UserEmail string
 	Role      Role
 	UpdatedAt time.Time
 	CreatedAt time.Time

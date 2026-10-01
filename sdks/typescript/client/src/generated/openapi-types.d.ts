@@ -1626,6 +1626,14 @@ export interface components {
     AcceptTenantInvitationRequest: {
       token: string;
     };
+    AcceptedTenantInvitation: {
+      created_at: components["schemas"]["DateTimeString"];
+      id: components["schemas"]["UUID"];
+      role: string;
+      tenant_id: components["schemas"]["TenantId"];
+      updated_at: components["schemas"]["DateTimeString"];
+      user_id: components["schemas"]["UserId"];
+    };
     AccessGrant: {
       diagnostics?: {
         expires_at: components["schemas"]["DateTimeString"];
@@ -2335,7 +2343,9 @@ export interface components {
       role: "owner" | "collaborator" | "observer";
       tenant_id: components["schemas"]["TenantId"];
       updated_at: components["schemas"]["DateTimeString"];
+      user_email: string;
       user_id: components["schemas"]["UserId"];
+      user_name: string;
     };
     /** Format: uuid */
     MembershipId: string;
@@ -4037,7 +4047,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["Membership"];
+          "application/json": components["schemas"]["AcceptedTenantInvitation"];
         };
       };
       /** @description Bad Request */

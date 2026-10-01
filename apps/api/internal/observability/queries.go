@@ -83,7 +83,7 @@ func (q operationQuerier) GetSyncTokenSubject(ctx context.Context, arg sqlc.GetS
 	return subject, err
 }
 
-func (q operationQuerier) CreateMembership(ctx context.Context, arg sqlc.CreateMembershipParams) (sqlc.Membership, error) {
+func (q operationQuerier) CreateMembership(ctx context.Context, arg sqlc.CreateMembershipParams) (sqlc.CreateMembershipRow, error) {
 	startedAt := time.Now()
 	membership, err := q.next.CreateMembership(ctx, arg)
 	LogOperation(ctx, q.logger, "db.query", "CreateMembership", startedAt, err)
@@ -272,7 +272,7 @@ func (q operationQuerier) GetUserByEmail(ctx context.Context, email string) (sql
 	return user, err
 }
 
-func (q operationQuerier) ListTenantMemberships(ctx context.Context, arg sqlc.ListTenantMembershipsParams) ([]sqlc.Membership, error) {
+func (q operationQuerier) ListTenantMemberships(ctx context.Context, arg sqlc.ListTenantMembershipsParams) ([]sqlc.ListTenantMembershipsRow, error) {
 	startedAt := time.Now()
 	memberships, err := q.next.ListTenantMemberships(ctx, arg)
 	LogOperation(ctx, q.logger, "db.query", "ListTenantMemberships", startedAt, err)
@@ -377,7 +377,7 @@ func (q operationQuerier) UpdateIntegrationConnection(ctx context.Context, arg s
 	return connection, err
 }
 
-func (q operationQuerier) UpdateTenantMembership(ctx context.Context, arg sqlc.UpdateTenantMembershipParams) (sqlc.Membership, error) {
+func (q operationQuerier) UpdateTenantMembership(ctx context.Context, arg sqlc.UpdateTenantMembershipParams) (sqlc.UpdateTenantMembershipRow, error) {
 	startedAt := time.Now()
 	membership, err := q.next.UpdateTenantMembership(ctx, arg)
 	LogOperation(ctx, q.logger, "db.query", "UpdateTenantMembership", startedAt, err)

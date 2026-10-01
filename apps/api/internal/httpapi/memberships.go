@@ -34,6 +34,8 @@ type membershipResponse struct {
 	ID        string `json:"id"`
 	TenantID  string `json:"tenant_id"`
 	UserID    string `json:"user_id"`
+	UserName  string `json:"user_name"`
+	UserEmail string `json:"user_email"`
 	Role      string `json:"role"`
 	UpdatedAt string `json:"updated_at"`
 	CreatedAt string `json:"created_at"`
@@ -277,6 +279,8 @@ func newMembershipResponse(membership memberships.Membership) membershipResponse
 		ID:        membership.ID.String(),
 		TenantID:  membership.TenantID.String(),
 		UserID:    membership.UserID.String(),
+		UserName:  membership.UserName,
+		UserEmail: membership.UserEmail,
 		Role:      string(membership.Role),
 		UpdatedAt: utilities.FormatTimestamp(membership.UpdatedAt),
 		CreatedAt: utilities.FormatTimestamp(membership.CreatedAt),

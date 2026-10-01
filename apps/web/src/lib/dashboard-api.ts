@@ -636,7 +636,7 @@ export async function revokeTenantInvitation(tenantIDValue: string, invitationID
   );
 }
 
-export function acceptTenantInvitation(token: string): Promise<DashboardMembership> {
+export function acceptTenantInvitation(token: string) {
   return generatedRequest((client) => client.tenants.acceptTenantInvitation({ payload: { token } }));
 }
 

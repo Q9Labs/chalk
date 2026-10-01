@@ -1407,7 +1407,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             content: {
               "application/json": {
                 schema: {
-                  $ref: "#/components/schemas/Membership",
+                  $ref: "#/components/schemas/AcceptedTenantInvitation",
                 },
               },
             },
@@ -16807,6 +16807,31 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         required: ["token"],
         type: "object",
       },
+      AcceptedTenantInvitation: {
+        additionalProperties: false,
+        properties: {
+          created_at: {
+            $ref: "#/components/schemas/DateTimeString",
+          },
+          id: {
+            $ref: "#/components/schemas/UUID",
+          },
+          role: {
+            type: "string",
+          },
+          tenant_id: {
+            $ref: "#/components/schemas/TenantId",
+          },
+          updated_at: {
+            $ref: "#/components/schemas/DateTimeString",
+          },
+          user_id: {
+            $ref: "#/components/schemas/UserId",
+          },
+        },
+        required: ["created_at", "id", "role", "tenant_id", "updated_at", "user_id"],
+        type: "object",
+      },
       AccessGrant: {
         additionalProperties: false,
         properties: {
@@ -18912,11 +18937,17 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           updated_at: {
             $ref: "#/components/schemas/DateTimeString",
           },
+          user_email: {
+            type: "string",
+          },
           user_id: {
             $ref: "#/components/schemas/UserId",
           },
+          user_name: {
+            type: "string",
+          },
         },
-        required: ["created_at", "id", "role", "tenant_id", "updated_at", "user_id"],
+        required: ["created_at", "id", "role", "tenant_id", "updated_at", "user_email", "user_id", "user_name"],
         type: "object",
       },
       MembershipId: {

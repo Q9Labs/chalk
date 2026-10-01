@@ -12,6 +12,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
+	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -45,6 +46,13 @@ func TestTenantInvitationLifecycleAndOwnerProtection(t *testing.T) {
 	ownerMembership, err := membershipService.CreateMembership(ctx, memberships.CreateMembershipInput{TenantID: tenant, UserID: owner, Role: memberships.RoleOwner})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if ownerMembership.UserName != "Invitation account" || ownerMembership.UserEmail != owner.String()+"@invitation.test" {
+		t.Fatalf("created membership identity=%q %q", ownerMembership.UserName, ownerMembership.UserEmail)
+	}
+	listed, err := membershipService.ListTenantMemberships(ctx, tenant, pagination.PageRequest{})
+	if err != nil || len(listed.Memberships) != 1 || listed.Memberships[0].UserName != "Invitation account" || listed.Memberships[0].UserEmail != owner.String()+"@invitation.test" {
+		t.Fatalf("listed membership=%v err=%v", listed.Memberships, err)
 	}
 	issue := func(role memberships.Role) memberships.InvitationResult {
 		t.Helper()
@@ -114,8 +122,12 @@ func TestTenantInvitationLifecycleAndOwnerProtection(t *testing.T) {
 		t.Fatalf("expired pending=%v err=%v", pending, err)
 	}
 	// Existing membership acceptance preserves the Role, including an Owner.
-	if _, err = membershipService.UpdateTenantMembership(ctx, tenant, accepted.ID, memberships.UpdateMembershipInput{Role: memberships.RoleOwner}); err != nil {
+	updated, err := membershipService.UpdateTenantMembership(ctx, tenant, accepted.ID, memberships.UpdateMembershipInput{Role: memberships.RoleOwner})
+	if err != nil {
 		t.Fatal(err)
+	}
+	if updated.UserName != "Invitation account" || updated.UserEmail != account.String()+"@invitation.test" {
+		t.Fatalf("updated membership identity=%q %q", updated.UserName, updated.UserEmail)
 	}
 	existing := issue(memberships.RoleObserver)
 	preserved, err := service.AcceptInvitation(ctx, token(existing), account)

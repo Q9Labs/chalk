@@ -14,10 +14,10 @@ import (
 )
 
 type membershipQuerier interface {
-	CreateMembership(ctx context.Context, arg sqlc.CreateMembershipParams) (sqlc.Membership, error)
+	CreateMembership(ctx context.Context, arg sqlc.CreateMembershipParams) (sqlc.CreateMembershipRow, error)
 	GetTenantMembershipForUser(ctx context.Context, arg sqlc.GetTenantMembershipForUserParams) (sqlc.Membership, error)
-	ListTenantMemberships(ctx context.Context, arg sqlc.ListTenantMembershipsParams) ([]sqlc.Membership, error)
-	UpdateTenantMembership(ctx context.Context, arg sqlc.UpdateTenantMembershipParams) (sqlc.Membership, error)
+	ListTenantMemberships(ctx context.Context, arg sqlc.ListTenantMembershipsParams) ([]sqlc.ListTenantMembershipsRow, error)
+	UpdateTenantMembership(ctx context.Context, arg sqlc.UpdateTenantMembershipParams) (sqlc.UpdateTenantMembershipRow, error)
 }
 
 type MembershipRepository struct {
@@ -45,7 +45,7 @@ func (r MembershipRepository) CreateMembership(ctx context.Context, input member
 		return memberships.Membership{}, fmt.Errorf("create membership: %w", err)
 	}
 
-	return mapMembership(membership), nil
+	return mapCreateMembership(membership), nil
 }
 
 func (r MembershipRepository) GetTenantMembershipForUser(ctx context.Context, tenantID utilities.ID, userID utilities.ID) (memberships.Membership, error) {
@@ -83,7 +83,7 @@ func (r MembershipRepository) ListTenantMemberships(ctx context.Context, tenantI
 		},
 	}
 	for _, row := range rows {
-		response.Memberships = append(response.Memberships, mapMembership(row))
+		response.Memberships = append(response.Memberships, mapListedMembership(row))
 	}
 
 	if hasMore && len(response.Memberships) > 0 {
@@ -122,7 +122,7 @@ func (r MembershipRepository) UpdateTenantMembership(ctx context.Context, tenant
 	if err != nil {
 		return memberships.Membership{}, err
 	}
-	return mapMembership(value), tx.Commit(ctx)
+	return mapUpdatedMembership(value), tx.Commit(ctx)
 }
 
 func listTenantMembershipsParams(tenantID utilities.ID, page pagination.PageRequest) sqlc.ListTenantMembershipsParams {
@@ -149,6 +149,31 @@ func mapMembership(membership sqlc.Membership) memberships.Membership {
 		Role:      memberships.Role(membership.Role),
 		UpdatedAt: timestamp(membership.UpdatedAt),
 		CreatedAt: timestamp(membership.CreatedAt),
+	}
+}
+
+func mapCreateMembership(membership sqlc.CreateMembershipRow) memberships.Membership {
+	return membershipWithUser(membership.ID, membership.TenantID, membership.UserID, membership.Role, membership.UserName, membership.UserEmail, membership.UpdatedAt, membership.CreatedAt)
+}
+
+func mapListedMembership(membership sqlc.ListTenantMembershipsRow) memberships.Membership {
+	return membershipWithUser(membership.ID, membership.TenantID, membership.UserID, membership.Role, membership.UserName, membership.UserEmail, membership.UpdatedAt, membership.CreatedAt)
+}
+
+func mapUpdatedMembership(membership sqlc.UpdateTenantMembershipRow) memberships.Membership {
+	return membershipWithUser(membership.ID, membership.TenantID, membership.UserID, membership.Role, membership.UserName, membership.UserEmail, membership.UpdatedAt, membership.CreatedAt)
+}
+
+func membershipWithUser(id, tenantID, userID pgtype.UUID, role, userName, userEmail string, updatedAt, createdAt pgtype.Timestamptz) memberships.Membership {
+	return memberships.Membership{
+		ID:        utilities.IDFromBytes(id.Bytes),
+		TenantID:  utilities.IDFromBytes(tenantID.Bytes),
+		UserID:    utilities.IDFromBytes(userID.Bytes),
+		UserName:  userName,
+		UserEmail: userEmail,
+		Role:      memberships.Role(role),
+		UpdatedAt: timestamp(updatedAt),
+		CreatedAt: timestamp(createdAt),
 	}
 }
 
