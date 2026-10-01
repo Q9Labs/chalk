@@ -1,3 +1,5 @@
+import type { JourneyTelemetryContext } from "../telemetry/types";
+import type { ReconnectRecorder } from "../telemetry/reconnect";
 import type { MediaPublication, MediaSource } from "./plane";
 import type { RtcConnectionStateSnapshot, RtcStatsLike } from "../telemetry/rtc";
 
@@ -87,6 +89,7 @@ export type CloudflareSFUClientOptions = {
   readonly participantId: string;
   readonly transport: CloudflareSFUSignalingTransport;
   readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
+  readonly recordReconnect?: ReconnectRecorder;
   readonly onRtcSummary?: CloudflareSFURtcSummaryRecorder;
   readonly pollIntervalMs?: number;
   readonly onError?: (error: unknown) => void;
@@ -103,6 +106,7 @@ export type CloudflareSFURestartOptions = {
 export type CloudflareSFUCredentialProvider = (signal?: AbortSignal) => string | Promise<string>;
 
 export type CloudflareSFUHTTPTransportOptions = {
+  readonly telemetry?: JourneyTelemetryContext;
   readonly apiBaseURL: string;
   readonly credential?: CloudflareSFUCredentialProvider;
   /** @deprecated Use credential so refreshed media access is read before every request. */

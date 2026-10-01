@@ -1,3 +1,4 @@
+import { recordReconnect } from "../telemetry/reconnect";
 import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame } from "../generated/sync";
 import type { ClientMediaPlane } from "../media/plane";
 import type { ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
@@ -40,6 +41,7 @@ const MAX_PROJECTION_EVENT_EVIDENCE = 256;
 const CLIENT_RESTART_CLOSE_CODE = 4000;
 const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5_000;
+const FAST_RECONNECT_ATTEMPTS = 8;
 const NOTICE_PROBE_INTERVAL_MS = 500;
 const NOTICE_SILENCE_MS = 750;
 
@@ -337,10 +339,14 @@ export class V1SyncClient implements V1CollaborationClient {
     if (!this.#started || !this.#transportAvailable || this.#socket) return;
     this.#phase = { phase: "connecting" };
     this.#emit();
+    recordReconnect(this.#options.recordReconnect, "sync_attempt", { attempt: this.#reconnectAttempt });
     const socket = this.#options.webSocket.connect(this.#options.url);
     const connectionGeneration = ++this.#connectionGeneration;
     this.#socket = socket;
-    socket.onopen = () => void this.#authenticate(socket);
+    socket.onopen = () => {
+      recordReconnect(this.#options.recordReconnect, "sync_socket_open");
+      void this.#authenticate(socket);
+    };
     socket.onmessage = (event) => {
       this.#inbound = this.#inbound.then(() => this.#receive(socket, event.data));
     };
@@ -507,6 +513,7 @@ export class V1SyncClient implements V1CollaborationClient {
     if (frame.mode === "replay" && (!this.#control || this.#control.revision >= frame.head.revision)) throw new V1ReplicaError("invalid replay welcome");
     if (frame.mode === "up_to_date" && !sameHead(this.#control, frame.head)) throw new V1ReplicaError("up-to-date head mismatch");
     if (frame.mode === "snapshot" && !sameHead(this.#control, frame.head)) throw new V1ReplicaError("snapshot head mismatch");
+    recordReconnect(this.#options.recordReconnect, "sync_reconnected");
     this.#recovery = { id: frame.recovery_id, head: frame.head, replayEvents: 0, replayBytes: 0, controlComplete: false };
     if (frame.mode === "snapshot") this.#ackRecovery();
     this.#emit();
@@ -597,6 +604,7 @@ export class V1SyncClient implements V1CollaborationClient {
 
   #enterLiveIfReady(): void {
     if (!this.#recovery?.controlComplete || !this.#media || !this.#presence) return;
+    recordReconnect(this.#options.recordReconnect, "state_resynced");
     this.#recovery = null;
     this.#phase = { phase: "live" };
     this.#reconnectAttempt = 0;
@@ -637,6 +645,7 @@ export class V1SyncClient implements V1CollaborationClient {
 
   #disconnected(socket: V1Socket): void {
     if (socket !== this.#socket) return;
+    recordReconnect(this.#options.recordReconnect, "sync_loss");
     this.#socket = null;
     this.#recovery = null;
     this.#clearHeartbeat();
@@ -652,10 +661,18 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#emit();
     this.#clearReconnect();
     const configuredDelay = this.#options.reconnectDelayMs;
-    const delay = configuredDelay === 0 ? 0 : Math.min(MAX_RECONNECT_DELAY_MS, (configuredDelay ?? DEFAULT_RECONNECT_DELAY_MS) * 2 ** Math.min(this.#reconnectAttempt, 5));
+    // Cover brief service restarts without a growing gap; sustained failures
+    // still back off, and explicitly configured retry policies are unchanged.
+    const exponentialAttempt = configuredDelay === undefined ? Math.max(0, this.#reconnectAttempt - FAST_RECONNECT_ATTEMPTS + 1) : this.#reconnectAttempt;
+    const baseDelay = configuredDelay === 0 ? 0 : Math.min(MAX_RECONNECT_DELAY_MS, (configuredDelay ?? DEFAULT_RECONNECT_DELAY_MS) * 2 ** Math.min(exponentialAttempt, 5));
+    // A Sync restart drops every client at once; ±20% jitter spreads the default retries apart.
+    const delay = configuredDelay === undefined ? Math.round(baseDelay * (0.8 + 0.4 * Math.random())) : baseDelay;
+    recordReconnect(this.#options.recordReconnect, "sync_backoff", { boundary: "start", delay_ms: delay, attempt: this.#reconnectAttempt });
     this.#reconnectAttempt += 1;
+    const backoffStartedAt = this.#now();
     this.#reconnectTimer = this.#clock().setTimeout(() => {
       this.#reconnectTimer = undefined;
+      recordReconnect(this.#options.recordReconnect, "sync_backoff", { boundary: "end", duration_ms: Math.max(0, this.#now() - backoffStartedAt) });
       this.#connect();
     }, delay);
   }
@@ -668,6 +685,7 @@ export class V1SyncClient implements V1CollaborationClient {
   }
 
   #handleLifecycle(event: "online" | "offline" | "active" | "inactive"): void {
+    recordReconnect(this.#options.recordReconnect, "network_change", { lifecycle: event });
     if (event === "online" || event === "offline") this.#online = event === "online";
     else this.#active = event === "active";
     this.#transportAvailable = this.#online && this.#active;
