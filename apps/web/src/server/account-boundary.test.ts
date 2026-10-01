@@ -176,6 +176,26 @@ describe("account boundary", () => {
     expect(fetcher).toHaveBeenCalledOnce();
   });
 
+  it("relays the dashboard Entrance preparation to the API", async () => {
+    const tenantID = "11111111-1111-4111-8111-111111111111";
+    const spaceID = "22222222-2222-4222-8222-222222222222";
+    const fetcher = vi.fn<typeof globalThis.fetch>(async () => Response.json({ prepared: true }));
+    const response = await handleAccountBoundary(
+      new Request(`${secureOrigin}/api/tenants/${tenantID}/spaces/${spaceID}/entrance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: "__Host-chalk_account=account-token; __Host-chalk_csrf=csrf-token", Origin: secureOrigin, "X-Chalk-CSRF": "csrf-token" },
+      }),
+      upstream,
+      fetcher,
+    );
+
+    expect(response.status).toBe(200);
+    const [url, init] = fetcher.mock.calls[0]!;
+    expect(String(url)).toBe(`${upstream.CHALK_API_ORIGIN}/v1/tenants/${tenantID}/spaces/${spaceID}/entrance`);
+    expect(init?.method).toBe("POST");
+    expect(new Headers(init?.headers).get("authorization")).toBe("Bearer account-token");
+  });
+
   it("relays only the dashboard recording and transcript routes through the tenant boundary", async () => {
     const tenantID = "11111111-1111-4111-8111-111111111111";
     const otherTenantID = "99999999-9999-4999-8999-999999999999";

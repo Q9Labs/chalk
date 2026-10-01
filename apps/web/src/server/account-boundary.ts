@@ -205,6 +205,7 @@ function resolveSpaceRoute(method: string, segments: string[], tenantID: string)
     return undefined;
   }
   if (segments[5] === "archive" && segments.length === 6 && method === "POST") return { upstreamPath: `${spacePath}/archive`, authenticated: true, mutation: true };
+  if (segments[5] === "entrance" && segments.length === 6 && method === "POST") return { upstreamPath: `${spacePath}/entrance`, authenticated: true, mutation: true };
   if (segments[5] === "restore" && segments.length === 6 && method === "POST") return { upstreamPath: `${spacePath}/restore`, authenticated: true, mutation: true };
   if (segments[5] === "public-invite") {
     const publicInvitePath = `${spacePath}/public-invite`;
