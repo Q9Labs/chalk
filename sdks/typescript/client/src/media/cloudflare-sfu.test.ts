@@ -332,6 +332,7 @@ describe("Cloudflare SFU client", () => {
     expect(replaceMediaConnection).toHaveBeenCalledOnce();
     expect(harness.peers[0]?.closed).toBe(true);
     expect(harness.transport.addInputs.map((input) => input.connectionId)).toEqual(["connection-2"]);
+    expectCameraEncodings(harness.peers.at(-1));
     harness.client.stop();
   });
 
@@ -345,6 +346,7 @@ describe("Cloudflare SFU client", () => {
     expect(replaceMediaConnection).not.toHaveBeenCalled();
     expect(harness.transport.addInputs.map((input) => input.connectionId)).toEqual(["connection-1", "connection-2"]);
     expect(harness.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, localTracks: [{ enabled: true }] });
+    expectCameraEncodings(harness.peers.at(-1));
     harness.client.stop();
   });
 
@@ -357,6 +359,7 @@ describe("Cloudflare SFU client", () => {
 
     expect(replaceMediaConnection).toHaveBeenCalledOnce();
     expect(harness.transport.addInputs.map((input) => input.connectionId)).toEqual(["connection-1", "connection-2"]);
+    expectCameraEncodings(harness.peers.at(-1));
     harness.client.stop();
   });
 
@@ -370,6 +373,7 @@ describe("Cloudflare SFU client", () => {
     expect(replaceMediaConnection).toHaveBeenCalledOnce();
     expect(harness.transport.addInputs.map((input) => input.connectionId)).toEqual(["connection-1", "connection-2"]);
     expect(harness.client.getSnapshot().localTracks).toMatchObject([{ source: "camera", enabled: true }]);
+    expectCameraEncodings(harness.peers.at(-1));
     harness.client.stop();
   });
 
@@ -386,6 +390,7 @@ describe("Cloudflare SFU client", () => {
     await expect(harness.client.setLocalPublicationTarget({ operationId: "reenable", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toMatchObject({ outcome: "confirmed" });
     expect(replaceMediaConnection).toHaveBeenCalledOnce();
     expect(harness.transport.addInputs.at(-1)?.tracks[0]?.mid).not.toBe(oldMID);
+    expectCameraEncodings(harness.peers.at(-1));
     harness.client.stop();
   });
 
@@ -1168,6 +1173,18 @@ async function startedRemoteHarness(publicationId: string): Promise<ReturnType<t
   await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));
   harness.transport.snapshot = publicationSnapshot(1, 1, publicationId);
   return harness;
+}
+
+function expectCameraEncodings(peer: FakePeerConnection | undefined): void {
+  expect(
+    peer
+      ?.getSenders()
+      .find((sender) => sender.track?.kind === "video")
+      ?.getParameters().encodings,
+  ).toEqual([
+    { rid: "h", scaleResolutionDownBy: 1, maxBitrate: 2_500_000, scalabilityMode: "L1T1" },
+    { rid: "l", scaleResolutionDownBy: 2, maxBitrate: 650_000, scalabilityMode: "L1T1" },
+  ]);
 }
 
 async function startedReplaceableHarness() {
