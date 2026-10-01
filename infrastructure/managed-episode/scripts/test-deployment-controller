@@ -44,8 +44,14 @@ planner="${managed_root}/scripts/plan-release-components"
 for recorder_worker_path in \
   apps/api/internal/recordercapture/coordinator.go \
   apps/api/internal/recorderworker/capture_attempt.go \
-  apps/api/internal/recorderfleet/reconciler.go; do
+  apps/api/internal/recorderfleet/reconciler.go \
+  apps/api/internal/mediaplane/service.go; do
   "$planner" "$recorder_worker_path" | jq -e '.classification == "api" and .build_set == ["api"] and .recorder_image_affected == true' >/dev/null || fail "Capture/Render binary dependency did not plan both API and recorder images: $recorder_worker_path"
+done
+for api_only_path in \
+  apps/api/internal/httpapi/router.go \
+  sdks/typescript/react-native/src/index.ts; do
+  "$planner" "$api_only_path" | jq -e '.recorder_image_affected == false' >/dev/null || fail "unrelated source incorrectly planned a recorder image: $api_only_path"
 done
 "$planner" apps/api/cmd/main.go | jq -e '.classification == "api" and .recorder_image_affected == false' >/dev/null || fail "API-only entrypoint incorrectly planned a recorder image"
 "$planner" apps/api/internal/recordercapture/coordinator_test.go | jq -e '.classification == "api" and .recorder_image_affected == false' >/dev/null || fail "test-only Capture change incorrectly planned a recorder image"
@@ -55,6 +61,7 @@ for recorder_image_path in \
   infrastructure/recorder/images/cpu/build-release.sh \
   packages/recording-presentation/src/index.ts \
   sdks/typescript/react/src/index.ts \
+  sdks/typescript/client/src/index.ts \
   pnpm-lock.yaml; do
   "$planner" "$recorder_image_path" | jq -e '.recorder_image_affected == true' >/dev/null || fail "shared recorder image input was not flagged: $recorder_image_path"
 done

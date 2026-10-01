@@ -4,11 +4,11 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
-	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 )
 
@@ -148,10 +148,14 @@ func (d Diagnostics) Queries(next sqlc.Querier) sqlc.Querier {
 	return OperationQueries(next, logger)
 }
 
-func (d Diagnostics) ApplyHTTP(options *httpapi.Options) {
-	if options == nil {
-		return
-	}
+type HTTPOptions struct {
+	Middleware     []func(http.Handler) http.Handler
+	JourneyMetrics JourneyMetrics
+	Profiler       http.Handler
+}
+
+func (d Diagnostics) HTTPOptions() HTTPOptions {
+	options := HTTPOptions{}
 	options.Middleware = append(options.Middleware, OTelHTTPMiddleware(), JourneyMiddleware)
 	options.JourneyMetrics = d.journeyMetrics
 	if d.config.RequestLogs != RequestLogOff {
@@ -164,6 +168,7 @@ func (d Diagnostics) ApplyHTTP(options *httpapi.Options) {
 	if d.config.Profiler && d.config.Environment == "local" {
 		options.Profiler = ProfilerHandler()
 	}
+	return options
 }
 
 func parseLogLevel(value string) slog.Level {

@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -57,8 +56,7 @@ func TestApplyHTTPMountsProfilerOnlyInLocal(t *testing.T) {
 		Environment: "local",
 		Profiler:    true,
 	}, nil)
-	localOptions := httpapi.Options{}
-	localDiagnostics.ApplyHTTP(&localOptions)
+	localOptions := localDiagnostics.HTTPOptions()
 	if localOptions.Profiler == nil {
 		t.Fatal("local profiler was nil")
 	}
@@ -67,8 +65,7 @@ func TestApplyHTTPMountsProfilerOnlyInLocal(t *testing.T) {
 		Environment: "staging",
 		Profiler:    true,
 	}, nil)
-	stagingOptions := httpapi.Options{}
-	stagingDiagnostics.ApplyHTTP(&stagingOptions)
+	stagingOptions := stagingDiagnostics.HTTPOptions()
 	if stagingOptions.Profiler != nil {
 		t.Fatal("staging profiler was mounted")
 	}
