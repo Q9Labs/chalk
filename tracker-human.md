@@ -32,6 +32,8 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
       it.
     - Find whether audio can play for a few tens of milliseconds after a muted badge
       when Sync restarts.
+    - Check camera simulcast on physical Safari and phones; Firefox publishes one camera
+      layer.
 
 3. **Measure media usage per Tenant and Episode** (Not started · size M · P2)
     The Usage type has egress and Participant-minute fields, but both Cloudflare
@@ -61,19 +63,17 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Decide whether production needs a database standby once there are users.
 
 6. **Reconnect heals on rocky networks** (Not started · size M)
-    Clients reconnect after Sync restarts and short drops, but reconnection hasn't been
-    designed as one self-healing path across Sync, media and the page.
-    - Agree a target for recovery time after a drop, a flapping network, a Sync or API
-      restart, and a page reload.
-    - Close the gaps between today's behavior and that target. A candidate branch,
-      fix/reconnect-heal-20260930, needs base and tip measured on the same machine
-      first.
-    - Make a page reload during an Episode rejoin it without a second click, if the
-      owner wants that.
+    Clients rejoin after a page reload, hold offline actions, show a non-blocking
+    reconnecting bar, and recover media in about 2.6 seconds after a 30-second cut. The
+    owner's target is recovery as fast as possible on every path.
+    - Confirm the reconnecting bar and its 10-second dialog with a real network cut in
+      production.
+    - Cut recovery further: restart ICE instead of rebuilding media, overlap SDP
+      readiness, and get keyframes sooner after a cut.
+    - Check with production reconnect telemetry whether Postgres restarts and flapping
+      networks recover more slowly in their worst cases.
     - Re-record a self-mute that a Sync restart interrupted, so other Participants don't
       see the muted Participant as unmuted.
-    - Have the API push fresh media publications to Sync, then return Sync's media
-      recheck from every 2 seconds to a slow backstop.
 
 ## Collaboration
 
@@ -103,11 +103,11 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
 ## Recording
 
 10. **Download a Recording as MP4** (Partly working · size S)
-    Managed production produced a verified MP4 on 2026-09-20, when video rendered after
-    every Recording. The code now renders an MP4 only on request, with a fourteen-hour
-    limit, and that flow is not deployed.
-    - Deploy on-request Export, request one Export end to end, and download it twice to
-      confirm the second download reuses the file.
+    Export renders an MP4 on request with the native compositor on an s-1vcpu-1gb worker
+    in production. The file declares 30 fps while it plays at 15, and its first frame
+    shows placeholders before the first video keyframes arrive.
+    - Ship the 15 fps label and the first-frame fix.
+    - Download one Export twice to confirm the second download reuses the file.
 
 11. **Long Recordings stay in sync** (Not started · size Unknown)
     Capture bundles now share one recording clock, which fixed the skew that failed a
@@ -116,21 +116,24 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     recorder is not known.
     - Handle sender clock divergence and pass a one-hour Recording.
     - Prove recorder restart continuity and TLS peer rejection on the managed hosts.
-    - Make a release fail when a new recorder image can't bootstrap with the issuer. A
-      wrong baked issuer name passed the verifier and stopped every worker.
+    - Make a release fail when a new recorder worker can't bootstrap with the issuer or
+      never becomes ready, instead of passing the verifier with zero ready workers.
 
-12. **Capture starts fast and costs little** (Partly working · size L)
-    A Capture worker takes about 70 seconds from record to ready and runs on a c-2 from
-    the shared image. At 2,000 recorded Episode-hours a month, Capture costs about $230,
-    of which about $131 is Droplets and about $90 is SFU traffic to the recorder.
-    Open question: Whether the lean image's faster boot holds across DigitalOcean's
-    variable create step is measured on only two samples.
-    - Ship the lean Capture image and move Capture to s-1vcpu-1gb, then measure record
-      to ready on a real Recording.
-    - Decide whether to start the Capture worker when the Episode starts, the only way
-      found to get under 30 seconds to ready.
-    - Experiment: publish camera simulcast from the web SDK, have Capture record the low
-      layer, and compare the Export and the SFU traffic to the recorder.
+12. **Capture starts fast and costs little** (Partly working · size M)
+    Capture runs on the lean Debian image on s-1vcpu-1gb. A cold worker is ready about
+    46 seconds after record, and anything said before it is ready is missing from the
+    Recording. Automatic Spaces pre-warm Capture when someone opens the Entrance. SFU
+    traffic to the recorder, about $90 a month at 2,000 hours, is now the largest
+    Capture cost.
+    Open question: Boot time is measured on few samples across DigitalOcean's variable
+    create step. The owner chose pre-warm for Automatic Spaces only; Manual Spaces may
+    want it later.
+    - Find and remove the transient registration 503s that can add about 15 seconds to a
+      worker's boot.
+    - Confirm in production that an Automatic Space pre-warms from the Entrance and that
+      its Recording uses the warm node.
+    - Experiment: with camera simulcast live, have Capture record the low camera layer
+      and compare the Export and the SFU traffic to the recorder.
     - Experiment, only if UDP loss damages Recordings: compare Capture over TURN on TCP
       with UDP in one Recording. Cloudflare's SFU has no direct TCP receiver.
 
@@ -188,6 +191,8 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
       attachments without breaking Sync recovery.
     - Check that hard delete overrides retention and purged messages never return
       through replay or snapshots.
+    - Clear unsent offline chat held in browser storage when the Participant leaves or
+      signs out, so it doesn't stay on a shared computer for up to 24 hours.
 
 ## SDK and embedding
 
