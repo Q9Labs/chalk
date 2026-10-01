@@ -9,6 +9,7 @@ import { BackgroundEffectsPicker } from "./BackgroundEffectsPicker";
 import { DeviceSelector } from "./DeviceSelector";
 import { NoiseSuppressionToggle } from "./NoiseSuppressionToggle";
 import { ChalkBackdrop, ChalkButton, ChalkDialogPanel, ChalkIconButton, ChalkInput, ChalkPanel, ChalkToggle } from "../chalk-ui";
+import { OfflineActionsSetting } from "../offline-actions/OfflineActionsSetting";
 import { SkinProvider } from "../skin-context";
 import { useSkin } from "../skin-context";
 import { ClassicSettingsDialog } from "./ClassicSettingsDialog";
@@ -327,6 +328,10 @@ const ChalkSettingsDialog = React.memo(
                 </div>
                 <ToggleRow title="Join muted" description="Start with your microphone off the next time you enter a space." checked={!settings.join.audioEnabled} onChange={(checked) => onUpdateJoin({ audioEnabled: !checked })} />
                 <ToggleRow title="Join with video off" description="Start with your camera off the next time you enter a space." checked={!settings.join.videoEnabled} onChange={(checked) => onUpdateJoin({ videoEnabled: !checked })} />
+              </SectionCard>
+
+              <SectionCard title="Offline actions" description="Messages and hand raises you make while offline wait to send. Choose what happens when you reconnect.">
+                <OfflineActionsSetting />
               </SectionCard>
 
               <SectionCard title="In-space defaults" description="Choose what opens by default the next time you enter a space.">

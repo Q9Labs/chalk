@@ -1,6 +1,6 @@
 "use client";
 
-import type { Capability, ChatSlice, ConnectionSlice, MediaSlice, ParticipantsSlice, ReactionsSlice, RecordingSlice, SelfSlice, SpaceClient, SpaceSnapshot, WhiteboardSlice } from "@q9labsai/chalk-client";
+import type { Capability, ChatSlice, ConnectionSlice, MediaSlice, OfflineSlice, ParticipantsSlice, ReactionsSlice, RecordingSlice, SelfSlice, SpaceClient, SpaceSnapshot, WhiteboardSlice } from "@q9labsai/chalk-client";
 import { useCallback, useContext, useSyncExternalStore } from "react";
 
 import { SpaceClientContext } from "./context";
@@ -18,6 +18,7 @@ const selectSelf = (snapshot: SpaceSnapshot): SelfSlice => snapshot.self;
 const selectParticipants = (snapshot: SpaceSnapshot): ParticipantsSlice => snapshot.participants;
 const selectMedia = (snapshot: SpaceSnapshot): MediaSlice => snapshot.media;
 const selectChat = (snapshot: SpaceSnapshot): ChatSlice => snapshot.chat;
+const selectOffline = (snapshot: SpaceSnapshot): OfflineSlice => snapshot.offline;
 const selectReactions = (snapshot: SpaceSnapshot): ReactionsSlice => snapshot.reactions;
 const selectRecording = (snapshot: SpaceSnapshot): RecordingSlice => snapshot.recording;
 const selectWhiteboard = (snapshot: SpaceSnapshot): WhiteboardSlice => snapshot.whiteboard;
@@ -50,6 +51,11 @@ export function useMedia(): MediaSlice {
 
 export function useChat(): ChatSlice {
   return useSnapshotSlice(selectChat);
+}
+
+/** Actions held while the connection recovers, and whether the user still has to decide about them. */
+export function useOffline(): OfflineSlice {
+  return useSnapshotSlice(selectOffline);
 }
 
 export function useReactions(): ReactionsSlice {

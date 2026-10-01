@@ -143,7 +143,7 @@ export function SpacePanel({ client }: { readonly client: SpaceClient }) {
 ```
 
 The public hook set is closed: `useSpaceClient`, `useConnection`, `useSelf`,
-`useParticipants`, `useMedia`, `useChat`, `useReactions`, `useWhiteboard`, and
+`useParticipants`, `useMedia`, `useChat`, `useOffline`, `useReactions`, `useWhiteboard`, and
 `useCan`. Each snapshot hook returns its stable `SpaceSnapshot` slice; use the
 client hook for commands.
 

@@ -20,6 +20,7 @@ export type EffectChatController = {
   readonly loadOlder: () => ClientEffect<ChalkChatPageResult>;
   readonly markRead: (messageId: string) => ClientEffect<ChatReadReceipt | null>;
 };
+export type EffectOfflineController = Omit<ControllerEffects["offline"], "dispose">;
 export type EffectParticipantsController = ControllerEffects["participants"];
 export type EffectReactionsController = ControllerEffects["reactions"];
 export type EffectWhiteboardController = { readonly transport: () => ChalkWhiteboardV1Transport | null };
@@ -29,6 +30,7 @@ export type EffectSpaceClient = {
   readonly media: EffectMediaController;
   readonly chat: EffectChatController;
   readonly participants: EffectParticipantsController;
+  readonly offline: EffectOfflineController;
   readonly reactions: EffectReactionsController;
   readonly whiteboard: EffectWhiteboardController;
   readonly join: (options?: JoinOptions) => ClientEffect<void>;
@@ -63,6 +65,7 @@ export function effectClientFromCore(core: SpaceClientCore, dispose: () => Effec
       files: { upload: core.controllers.chat.upload, url: core.controllers.chat.url, resolveUrl: core.controllers.chat.resolveUrl },
     },
     participants: core.controllers.participants,
+    offline: core.controllers.offline,
     reactions: core.controllers.reactions,
     whiteboard: core.controllers.whiteboard,
     join: (options) => core.join(options),

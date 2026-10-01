@@ -103,7 +103,24 @@ export function participantsForCount(count: PreviewSearch["participants"], searc
   }));
 }
 
+const OFFLINE_MESSAGE = "Running five minutes late, start without me";
+const isOfflineState = (search: PreviewSearch): boolean => search.state === "reconnecting" || search.state === "reconnected";
+
+function offlineActions(search: PreviewSearch): SpaceSnapshot["offline"] {
+  if (!isOfflineState(search)) return { pending: [], decisionNeeded: false, policy: "ask" };
+  const queuedAt = Date.now() - 40_000;
+  return {
+    pending: [
+      { id: "preview-offline-1", kind: "chat_message", text: OFFLINE_MESSAGE, queuedAt },
+      { id: "preview-offline-2", kind: "hand_raise", text: null, queuedAt },
+    ],
+    decisionNeeded: search.state === "reconnected",
+    policy: "ask",
+  };
+}
+
 export function chatPending(search: PreviewSearch): readonly GalleryPendingMessage[] {
+  if (isOfflineState(search)) return [{ clientMessageId: "preview-offline-1", text: OFFLINE_MESSAGE, attachments: [], status: "queued", error: null }];
   if (search.chat === "pending") return [{ clientMessageId: "preview-pending-1", text: "I’m sending the latest Space notes…", attachments: [], status: "sending", error: null }];
   if (search.chat === "failure") return [{ clientMessageId: "preview-failed-1", text: "Could not publish this update", attachments: [], status: "failed", error: { code: "client.internal_error", recoverable: true, message: "Chat is temporarily unavailable." } }];
   return [];
@@ -123,8 +140,6 @@ export function panelFor(search: PreviewSearch): GalleryPanel | null {
 
 export function statusOverlay(search: PreviewSearch, onRetry: () => void, onBack: () => void): (Omit<ReconnectingOverlayProps, "isVisible"> & { readonly isVisible: true }) | undefined {
   switch (search.state) {
-    case "reconnecting":
-      return { isVisible: true, status: "reconnecting", message: "The Space connection was interrupted. Reconnecting now…", onRetry, onLeft: onBack };
     case "retry":
       return { isVisible: true, status: "failed", message: "The Space connection needs another try.", supportCode: "space-retry-204", onRetry, onLeft: onBack };
     case "timeout":
@@ -209,13 +224,14 @@ function createPreviewSnapshot({ participants, search, displayName, episodeStart
     media: { ...base.media, remote, incomingRequests, local: { ...base.media.local, microphone, camera, screen }, screenShare: screen },
     chat: {
       ...base.chat,
-      status: search.chat === "loading" ? "loading" : search.chat === "failure" ? "failed" : search.chat === "ready" || search.chat === "pending" ? "ready" : "idle",
-      messages: search.chat === "ready" || search.chat === "pending" ? INITIAL_CHAT_MESSAGES : [],
+      status: search.chat === "loading" ? "loading" : search.chat === "failure" ? "failed" : search.chat === "ready" || search.chat === "pending" || isOfflineState(search) ? "ready" : "idle",
+      messages: search.chat === "ready" || search.chat === "pending" || isOfflineState(search) ? INITIAL_CHAT_MESSAGES : [],
       pendingSends: chatPending(search),
       unreadCount: search.chat === "ready" || search.chat === "pending" ? 3 : 0,
       lastError: chatFailure,
     },
     reactions: { active: REACTIONS },
+    offline: offlineActions(search),
     whiteboard: { ...base.whiteboard, open: search.features.whiteboard && search.stage === "whiteboard" },
   };
 }

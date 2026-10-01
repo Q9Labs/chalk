@@ -5,6 +5,7 @@ import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connecti
 import { chatDigest, chatMessageFor, chatReceiptFor, compareChatSequence, MAX_CHAT_PAGE_SIZE, MAX_LOADED_CHAT_MESSAGES, mergeChatMessage, validateChatMessage, validateChatUpload } from "./chat-controller-helpers";
 import type { EpisodeDiagnosticRuntime } from "./episode-diagnostic-runtime";
 import { failureFromError, normalizeClientError, SpaceClientError } from "./errors";
+import type { OfflineActionsHold } from "./offline-actions";
 import { SpaceStore } from "./store";
 import type { ChatAttachment, ChatMessage, ChatReadReceipt, ChatSendInput, ChatSlice, ChatUploadFile, PendingChatSend } from "./types";
 
@@ -30,6 +31,7 @@ export const makeChatController = (input: {
   readonly apiBaseUrl?: string;
   readonly fetch?: typeof globalThis.fetch;
   readonly episodeDiagnostics?: EpisodeDiagnosticRuntime;
+  readonly offline?: OfflineActionsHold;
 }): Effect.Effect<ChatControllerEffects, never, Scope.Scope> =>
   Effect.gen(function* () {
     const scope = yield* Effect.scope;
@@ -40,7 +42,7 @@ export const makeChatController = (input: {
     const controller = yield* Effect.sync(() => {
       let instance: ChatControllerRuntime | null = null;
       const transport = input.createTransport?.({ token: () => Effect.runPromiseWith(context)(input.connection.getSyncToken()) }) ?? null;
-      instance = new ChatControllerRuntime(input.connection, input.store, transport, input.apiBaseUrl ?? "https://api.chalkmeet.com", input.fetch ?? globalThis.fetch, fork, input.episodeDiagnostics);
+      instance = new ChatControllerRuntime(input.connection, input.store, transport, input.apiBaseUrl ?? "https://api.chalkmeet.com", input.fetch ?? globalThis.fetch, fork, input.episodeDiagnostics, input.offline);
       return instance;
     });
     yield* Effect.addFinalizer(() => Effect.sync(() => controller.dispose()));
@@ -57,6 +59,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
   readonly #fetch: typeof globalThis.fetch;
   readonly #fork: Fork;
   readonly #diagnostics: EpisodeDiagnosticRuntime | undefined;
+  readonly #offline: OfflineActionsHold | undefined;
   #catchUpRunning = false;
   #catchUpRequested = false;
   #hasOlder = false;
@@ -75,7 +78,8 @@ class ChatControllerRuntime implements ChatControllerEffects {
   #unsubscribeEvents: (() => void) | null = null;
   #unsubscribeSnapshot: (() => void) | null = null;
 
-  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, transport: ChalkChatFileTransport | null, apiBaseUrl: string, fetch: typeof globalThis.fetch, fork: Fork, diagnostics?: EpisodeDiagnosticRuntime) {
+  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, transport: ChalkChatFileTransport | null, apiBaseUrl: string, fetch: typeof globalThis.fetch, fork: Fork, diagnostics?: EpisodeDiagnosticRuntime, offline?: OfflineActionsHold) {
+    this.#offline = offline;
     this.#apiBaseUrl = apiBaseUrl.replace(/\/+$/u, "");
     this.#connection = connection;
     this.#store = store;
@@ -92,30 +96,31 @@ class ChatControllerRuntime implements ChatControllerEffects {
       Effect.tap(() => Effect.sync(() => operation?.observe("observed", "validation"))),
       Effect.map((attachments) => ({ clientMessageId: this.#connection.createId(), attachments })),
       Effect.flatMap(({ clientMessageId, attachments }) => {
-        this.#upsertPending(clientMessageId, input.text, attachments, "sending", null);
+        const command = this.#connection.runCommand(({ sync }) => foreign(() => sync.sendChatMessage({ text: input.text, attachments, clientMessageId })));
+        const sendNow = () => Effect.sync(() => this.#upsertPending(clientMessageId, input.text, attachments, "sending", null)).pipe(Effect.andThen(command));
+        const held = this.#offline?.hold({ kind: "chat_message", text: input.text, clientMessageId, attachments }, sendNow);
+        if (held) this.#upsertPending(clientMessageId, input.text, attachments, "queued", null);
         operation?.observe("observed", "authorization");
-        return this.#connection
-          .runCommand(({ sync }) => foreign(() => sync.sendChatMessage({ text: input.text, attachments, clientMessageId })))
-          .pipe(Effect.tap(() => Effect.sync(() => operation?.observe("observed", "durable_commit"))))
-          .pipe(
-            Effect.map(chatMessageFor),
-            Effect.tap(() => Effect.sync(() => this.#removePending(clientMessageId))),
-            Effect.map((message) => this.#observeMessage(message, false)),
-            Effect.tap(() =>
-              Effect.sync(() => {
-                operation?.observe("observed", "paging_visibility");
-                operation?.notObservable("recipient_projection", "recipient_projection_is_conditional");
-                operation?.succeed();
-              }),
-            ),
-            Effect.catch((cause) => {
-              const error = normalizeClientError(cause, "chat.payload_invalid");
-              return Effect.sync(() => {
-                this.#upsertPending(clientMessageId, input.text, attachments, "failed", failureFromError(error));
-                operation?.fail("send_failed");
-              }).pipe(Effect.andThen(Effect.fail(error)));
+        return (held ?? sendNow()).pipe(Effect.tap(() => Effect.sync(() => operation?.observe("observed", "durable_commit")))).pipe(
+          Effect.map(chatMessageFor),
+          Effect.tap(() => Effect.sync(() => this.#removePending(clientMessageId))),
+          Effect.map((message) => this.#observeMessage(message, false)),
+          Effect.tap(() =>
+            Effect.sync(() => {
+              operation?.observe("observed", "paging_visibility");
+              operation?.notObservable("recipient_projection", "recipient_projection_is_conditional");
+              operation?.succeed();
             }),
-          );
+          ),
+          Effect.catch((cause) => {
+            const error = normalizeClientError(cause, "chat.payload_invalid");
+            return Effect.sync(() => {
+              if (error.code === "offline.discarded") this.#removePending(clientMessageId);
+              else this.#upsertPending(clientMessageId, input.text, attachments, "failed", failureFromError(error));
+              operation?.fail("send_failed");
+            }).pipe(Effect.andThen(Effect.fail(error)));
+          }),
+        );
       }),
       Effect.mapError(normalizeClientError),
       Effect.tapError(() => Effect.sync(() => operation?.fail("send_failed"))),
