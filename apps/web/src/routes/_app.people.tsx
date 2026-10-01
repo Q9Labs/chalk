@@ -1,3 +1,3 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ContractPage } from "../components/dashboard/ContractPage";
-export const Route = createFileRoute("/_app/people")({ component: () => <ContractPage kind="people" /> });
+import { PeoplePage } from "../components/dashboard/PeoplePage";
+export const Route = createFileRoute("/_app/people")({ component: PeoplePage });
