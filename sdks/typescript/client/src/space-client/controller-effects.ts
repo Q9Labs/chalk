@@ -30,6 +30,8 @@ export class ControllerEffectsService extends Context.Service<ControllerEffectsS
 
 /** Native controller composition: no Promise controller wrapper remains. */
 export const makeControllerEffects = (input: {
+  readonly offlineActionsStorage?: import("./offline-actions-storage").OfflineActionsStorage;
+  readonly offlineActionsStorageKey?: string;
   readonly apiBaseUrl: string;
   readonly connection: ConnectionLifecycleCapability;
   readonly store: SpaceStore;
@@ -40,7 +42,7 @@ export const makeControllerEffects = (input: {
   readonly episodeDiagnostics?: EpisodeDiagnosticRuntime;
 }): Effect.Effect<ControllerEffects, never, import("effect").Clock.Clock | import("effect").Scope.Scope> =>
   Effect.gen(function* () {
-    const offlineActions = yield* makeOfflineActions({ connection: input.connection, store: input.store });
+    const offlineActions = yield* makeOfflineActions({ connection: input.connection, store: input.store, storage: input.offlineActionsStorage, storageKey: input.offlineActionsStorageKey });
     const media = yield* makeMediaController(input.connection, input.store, input.mediaDeviceSelection, input.episodeDiagnostics);
     const chat = yield* makeChatController({ connection: input.connection, store: input.store, createTransport: input.featureFactories?.createChatFileTransport, apiBaseUrl: input.apiBaseUrl, fetch: input.fetch, episodeDiagnostics: input.episodeDiagnostics, offline: offlineActions });
     const participants = yield* makeParticipantsController(input.connection, input.store, input.episodeDiagnostics, offlineActions);

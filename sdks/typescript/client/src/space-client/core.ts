@@ -111,7 +111,17 @@ export const makeSpaceClientCoreLayerFromServices = (options: SpaceClientOptions
       const selection = new MediaDeviceSelection(dependencies.mediaDevices);
       const episodeDiagnostics = episodeDiagnosticsForDependencies(dependencies);
       if (episodeDiagnostics) registerEpisodeDiagnosticConnection(lifecycle, episodeDiagnostics);
-      const controllers = yield* makeControllerEffects({ apiBaseUrl, connection: lifecycle, store, mediaDeviceSelection: selection, featureFactories: dependencies, fetch: platform.fetch, episodeDiagnostics });
+      const controllers = yield* makeControllerEffects({
+        offlineActionsStorage: options.offlineActionsStorage,
+        offlineActionsStorageKey: `chalk:offline-actions:${JSON.stringify([apiBaseUrl, space])}`,
+        apiBaseUrl,
+        connection: lifecycle,
+        store,
+        mediaDeviceSelection: selection,
+        featureFactories: dependencies,
+        fetch: platform.fetch,
+        episodeDiagnostics,
+      });
       return yield* Effect.acquireRelease(
         Effect.sync(
           () =>

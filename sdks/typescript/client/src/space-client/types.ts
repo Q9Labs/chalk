@@ -44,6 +44,8 @@ export type SpaceClientOptions = {
   readonly baseUrl?: string;
   readonly logger?: Logger;
   readonly telemetry?: TelemetryClientOptions;
+  /** Defaults to browser localStorage. Native consumers can supply a synchronous storage adapter. */
+  readonly offlineActionsStorage?: import("./offline-actions-storage").OfflineActionsStorage;
 };
 
 export type JoinOptions = {
@@ -173,7 +175,7 @@ export type OfflineActionKind = "chat_message" | "hand_raise" | "hand_lower";
 export type OfflineActionsPolicy = "ask" | "send" | "discard";
 export type OfflineAction = { readonly id: string; readonly kind: OfflineActionKind; readonly text: string | null; readonly queuedAt: number };
 /** Actions taken while reconnecting. `decisionNeeded` is true once the connection is live and the policy is `ask`. */
-export type OfflineSlice = { readonly pending: readonly OfflineAction[]; readonly decisionNeeded: boolean; readonly policy: OfflineActionsPolicy };
+export type OfflineSlice = { readonly pending: readonly OfflineAction[]; readonly decisionNeeded: boolean; readonly policy: OfflineActionsPolicy; readonly notice?: string };
 
 export type PendingChatSend = {
   readonly clientMessageId: string;

@@ -98,7 +98,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
       Effect.flatMap(({ clientMessageId, attachments }) => {
         const command = this.#connection.runCommand(({ sync }) => foreign(() => sync.sendChatMessage({ text: input.text, attachments, clientMessageId })));
         const sendNow = () => Effect.sync(() => this.#upsertPending(clientMessageId, input.text, attachments, "sending", null)).pipe(Effect.andThen(command));
-        const held = this.#offline?.hold({ kind: "chat_message", text: input.text }, sendNow);
+        const held = this.#offline?.hold({ kind: "chat_message", text: input.text, clientMessageId, attachments }, sendNow);
         if (held) this.#upsertPending(clientMessageId, input.text, attachments, "queued", null);
         operation?.observe("observed", "authorization");
         return (held ?? sendNow()).pipe(Effect.tap(() => Effect.sync(() => operation?.observe("observed", "durable_commit")))).pipe(

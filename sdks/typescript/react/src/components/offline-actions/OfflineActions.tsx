@@ -107,5 +107,11 @@ export function OfflineActions(): React.JSX.Element | null {
 
   if (connection.status === "reconnecting") return <OfflineNotice pendingCount={offline.pending.length} />;
   if (offline.decisionNeeded) return <OfflineDecisionDialog actions={offline.pending} now={Date.now()} onSend={(remember) => decide("send", remember)} onDiscard={(remember) => decide("discard", remember)} />;
+  if (offline.notice)
+    return (
+      <p role="status" className="absolute inset-x-0 top-3 z-40 mx-auto w-fit rounded-xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-3.5 py-2 text-sm text-[var(--chalk-app-text)]">
+        {offline.notice}
+      </p>
+    );
   return null;
 }

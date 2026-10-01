@@ -2,6 +2,8 @@
 
 import type { OfflineAction, SpaceSnapshot } from "@q9labsai/chalk-client";
 import { act } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { Chalk } from "../chalk/Chalk";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -81,4 +83,10 @@ describe("OfflineActions", () => {
     await act(async () => radios.find((radio) => radio.value === "ask")?.click());
     expect(window.localStorage.getItem("chalk:offline-actions-policy")).toBeNull();
   });
+});
+
+it.each(["left", "failed"] as const)("explains dropped offline actions on the %s screen", (status) => {
+  const snapshot = withOffline(status, { pending: [], notice: "Your offline actions were not sent because the Episode ended or the connection closed." });
+  const html = renderToStaticMarkup(<Chalk client={createPreviewClient(snapshot)} entrance={false} />);
+  expect(html).toContain("Your offline actions were not sent");
 });

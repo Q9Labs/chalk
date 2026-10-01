@@ -143,6 +143,16 @@ await client.participants.renameSelf("Ari");
 await client.offline.setPolicy("ask"); // "ask" | "send" | "discard"
 await client.offline.send(); // or client.offline.discard()
 
+// Held actions survive a browser reload for up to 24 hours. They are restored
+// only for the same tenant, Space, Episode, participant and generation.
+// Restored actions ask for a decision unless a policy has been set explicitly.
+// Expired or mismatched actions are dropped; snapshot.offline.notice explains why.
+// Native consumers can pass offlineActionsStorage in createSpaceClient options:
+// a synchronous getItem/setItem/removeItem adapter (for example, hydrated MMKV).
+// If browser storage is unavailable, actions stay in memory and a notice asks
+// the user to keep the page open. Stored actions are retired before dispatch;
+// a crash in that small interval can lose an action, but cannot replay it.
+
 await client.reactions.send("🎉");
 const transport = client.whiteboard.transport();
 ```

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 
 import { ChalkProvider } from "../../bindings/context";
-import { useCan, useConnection, useMedia, useParticipants, useSelf, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
+import { useCan, useConnection, useMedia, useOffline, useParticipants, useSelf, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
 import { chalkThemeStyle, type ChalkColorScheme, type ChalkTheme } from "../../theme";
 import { useWhiteboardSceneSubscription } from "../../internal/useWhiteboardSceneSubscription";
 import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../../whiteboard/wire-adapters";
@@ -122,6 +122,7 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
 function SpaceExperience(props: ChalkProps & { readonly feedbackRootRef: React.RefObject<HTMLElement | null>; readonly resolvedColorScheme: Exclude<ChalkColorScheme, "system"> }): React.JSX.Element {
   const client = useSpaceClient();
   const connection = useConnection();
+  const offline = useOffline();
   const participants = useParticipants();
   const previousStatus = useRef(connection.status);
   const hasObservedStatus = useRef(false);
@@ -203,15 +204,16 @@ function SpaceExperience(props: ChalkProps & { readonly feedbackRootRef: React.R
   if (connection.status === "joining")
     return entrance ? <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} joining error={joinError ?? undefined} theme={props.theme} onJoin={join} /> : <StatusSurface message={`Entering ${spaceName}…`} />;
   if (connection.status === "failed") {
-    if (!hasBeenLive.current && entrance) return <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} error={connection.lastError?.message ?? joinError ?? "Unable to enter this Space."} theme={props.theme} onJoin={join} />;
-    return <StatusSurface phase="failed" message={connection.lastError?.message ?? joinError ?? "This Space is unavailable."} onRetry={retryAutomaticJoin} retryPending={retryPending} retryError={joinError} />;
+    const failureMessage = [connection.lastError?.message ?? joinError ?? "Unable to enter this Space.", offline.notice].filter(Boolean).join(" ");
+    if (!hasBeenLive.current && entrance) return <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} error={failureMessage} theme={props.theme} onJoin={join} />;
+    return <StatusSurface phase="failed" message={failureMessage} onRetry={retryAutomaticJoin} retryPending={retryPending} retryError={joinError} />;
   }
   if (connection.status === "leaving") return <StatusSurface phase="leaving" message={`Leaving ${spaceName}…`} spaceName={spaceName} />;
   if (connection.status === "left")
     return (
       <StatusSurface
         phase={episodeEnded ? "episode-ended" : "left"}
-        message={episodeEnded ? "This Episode has ended for everyone." : "Your connection is closed. You can re-enter from here."}
+        message={[episodeEnded ? "This Episode has ended for everyone." : "Your connection is closed. You can re-enter from here.", offline.notice].filter(Boolean).join(" ")}
         spaceName={spaceName}
         episode={lastEpisode.current}
         endedAt={endedAt}

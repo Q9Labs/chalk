@@ -280,7 +280,7 @@ export const ClassicChatPanelSurface = React.memo(
                 senderName={localParticipantId ? (participantNames[localParticipantId] ?? "You") : "You"}
                 timestamp={new Date().toISOString()}
                 isLocal
-                status="pending"
+                status={pending.status === "queued" ? "queued" : "pending"}
                 attachments={pending.attachments}
                 generatedAvatars={generatedAvatars}
                 onResolveAttachmentUrl={onResolveAttachmentUrl}
