@@ -11,6 +11,7 @@ import { ChalkProvider } from "../../bindings/context";
 import { createPreviewClient, createSnapshot } from "../../test-support";
 import { OfflineActions, offlineNoticeText } from "./OfflineActions";
 import { OfflineActionsSetting } from "./OfflineActionsSetting";
+import { RECONNECTING_NOTICE_MS } from "../reconnecting-overlay/ReconnectingOverlay";
 
 const actions: readonly OfflineAction[] = [
   { id: "a", kind: "chat_message", text: "running late", queuedAt: Date.now() - 40_000 },
@@ -83,6 +84,31 @@ describe("OfflineActions", () => {
     await act(async () => radios.find((radio) => radio.value === "ask")?.click());
     expect(window.localStorage.getItem("chalk:offline-actions-policy")).toBeNull();
   });
+});
+
+it("escalates a continuous disconnection in Chalk and clears reconnect UI on recovery", async () => {
+  vi.useFakeTimers();
+  vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+  const client = createPreviewClient(withOffline("reconnecting", { pending: [] }));
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  cleanup = () => {
+    root.unmount();
+    container.remove();
+    vi.useRealTimers();
+  };
+
+  await act(async () => root.render(<Chalk client={client} entrance={false} />));
+  expect(container.querySelector("[role=status]")?.textContent).toBe("You're offline. Reconnecting…");
+  expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+
+  await act(async () => vi.advanceTimersByTime(RECONNECTING_NOTICE_MS));
+  expect(container.querySelector('[role="alertdialog"] #connection-status-title')?.textContent).toBe("Reconnecting");
+
+  await act(async () => client.updateSnapshot((snapshot) => ({ ...snapshot, connection: { ...snapshot.connection, status: "live" } })));
+  expect(container.querySelector("[role=status]")).toBeNull();
+  expect(container.querySelector('[role="alertdialog"]')).toBeNull();
 });
 
 it.each(["left", "failed"] as const)("explains dropped offline actions on the %s screen", (status) => {

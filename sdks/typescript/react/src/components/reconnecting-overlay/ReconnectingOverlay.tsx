@@ -17,6 +17,7 @@ export interface ReconnectingOverlayProps {
   message?: string;
   supportCode?: string;
   className?: string;
+  showNotice?: boolean;
 }
 
 const ChalkReconnectingOverlay = React.memo<ReconnectingOverlayProps>(({ isVisible, status, onRetry, onLeft, message, supportCode, className }) => {
@@ -94,7 +95,7 @@ export const ReconnectingOverlay = React.memo<ReconnectingOverlayProps>((props: 
     return () => clearTimeout(timer);
   }, [isReconnecting]);
 
-  if (isReconnecting && !escalated) return <ReconnectingNotice className={props.className} />;
+  if (isReconnecting && !escalated) return props.showNotice === false ? null : <ReconnectingNotice className={props.className} />;
   return skin === "classic" ? <ClassicReconnectingOverlay {...props} /> : <ChalkReconnectingOverlay {...props} />;
 });
 

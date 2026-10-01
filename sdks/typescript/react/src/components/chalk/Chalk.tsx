@@ -228,6 +228,7 @@ function SpaceExperience(props: ChalkProps & { readonly feedbackRootRef: React.R
 
 function SpaceSurface(props: ChalkProps & { readonly feedbackRootRef: React.RefObject<HTMLElement | null>; readonly resolvedColorScheme: Exclude<ChalkColorScheme, "system">; readonly spaceName: string }): React.JSX.Element {
   const client = useSpaceClient();
+  const connection = useConnection();
   const self = useSelf();
   const media = useMedia();
   const whiteboardState = useWhiteboard();
@@ -407,6 +408,7 @@ function SpaceSurface(props: ChalkProps & { readonly feedbackRootRef: React.RefO
       }
       onLeft={() => runCommand(() => client.leave())}
       onEndEpisode={canEndEpisode ? () => runCommand(() => client.endEpisode()) : undefined}
+      reconnecting={{ isVisible: connection.status === "reconnecting", status: "reconnecting", showNotice: false }}
       overlay={
         <>
           {media.incomingRequests[0] ? (
