@@ -4,36 +4,35 @@ Chalk delivers signed Events at least once and without ordering guarantees. A re
 
 ## Manage webhook endpoints
 
-The main client exposes typed management calls for endpoint creation, updates, rotation, tests, and delivery inspection. Run the client as an Effect and supply a fresh idempotency key for every mutating request:
+Use the public HTTP API from your backend to create, update, rotate, test, and inspect endpoints. The current `SpaceClient` package does not export a webhook-management client or `createChalkEffectClient`. The `@q9labsai/chalk-client/webhooks` entry below is the signature-verification and receiver SDK, not a management API.
+
+Create an endpoint with a Tenant-scoped API key carrying `webhooks:write`. Supply a fresh idempotency key for each new mutation and reuse it when retrying that same request:
 
 ```ts
-import { createChalkEffectClient } from "@q9labsai/chalk-client";
-import { Effect } from "effect";
-
-const createEndpoint = Effect.gen(function* () {
-  const chalk = yield* createChalkEffectClient({
-    baseUrl: "https://api.chalkmeet.com",
-    auth: { type: "bearer", token: process.env.CHALK_API_TOKEN! },
-  });
-
-  const endpoint = yield* chalk.default.createWebhookEndpoint({
-    params: { tenant_id: "6706bfe4-2015-466a-b197-8ccd3f9e0d9b" },
-    headers: { "Idempotency-Key": crypto.randomUUID() },
-    payload: {
+const response = await fetch(
+  `https://api.chalkmeet.com/v1/tenants/${process.env.CHALK_TENANT_ID}/webhook-endpoints`,
+  {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${process.env.CHALK_API_KEY}`,
+      "content-type": "application/json",
+      "Idempotency-Key": crypto.randomUUID(),
+    },
+    body: JSON.stringify({
       api_version: 1,
       enabled: true,
-      event_types: ["participant.joined"],
-      name: "Operations",
+      event_types: ["episode.started", "episode.ended", "participant.joined", "participant.left"],
+      name: "Application events",
       url: "https://hooks.example.com/chalk",
-    },
-  });
-
-  yield* storeSecret(endpoint.secret);
-  return endpoint;
-});
-
-await Effect.runPromise(createEndpoint);
+    }),
+  },
+);
+if (response.status !== 201) throw new Error(`Webhook creation failed: ${response.status}`);
+const endpoint = await response.json();
+await storeSecret(endpoint.secret);
 ```
+
+Use `webhooks:read` for endpoint and delivery inspection and `webhooks:delete` for deletion. The [public OpenAPI contract](../../../../contract/generated/openapi.json) defines the request and response shapes. Do not put an API key or signing secret in browser code.
 
 The `secret` field appears only in create and rotate-secret responses. Store it immediately; list, get, update, test, and delivery responses cannot recover it. Update and delete calls require the endpoint revision as a quoted `If-Match` value such as `"3"`. Delivery listing accepts `state`, `event_type`, `page_size`, and `cursor`; delivery detail includes every attempt's outcome, HTTP status, timing, latency, and stable error code.
 
