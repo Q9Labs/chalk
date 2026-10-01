@@ -10,4 +10,7 @@ func mountIdentityTenancyRoutes(r chi.Router, options Options) {
 	mountTenantRoutes(r, options.Tenants, options.TenantAuthz, options.RateLimit)
 	mountUserRoutes(r, options.Users, options.RateLimit)
 	mountMembershipRoutes(r, options.Memberships, options.TenantAuthz, options.RateLimit)
+	for _, endpoint := range peopleEndpoints(options.People, options.TenantAuthz) {
+		endpoint.Mount(r, options.RateLimit)
+	}
 }

@@ -580,6 +580,7 @@ type ProviderOperationReceipt struct {
 	State                 string             `json:"state"`
 	Outcome               pgtype.Text        `json:"outcome"`
 	Reason                pgtype.Text        `json:"reason"`
+	LastErrorCode         pgtype.Text        `json:"last_error_code"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 	DispatchingAt         pgtype.Timestamptz `json:"dispatching_at"`
 	CompletedAt           pgtype.Timestamptz `json:"completed_at"`
@@ -1716,6 +1717,18 @@ type TenantArtifactPolicy struct {
 	SourceWindowSeconds        int64              `json:"source_window_seconds"`
 	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
+}
+
+type TenantInvitation struct {
+	ID         pgtype.UUID        `json:"id"`
+	TenantID   pgtype.UUID        `json:"tenant_id"`
+	Email      string             `json:"email"`
+	Role       string             `json:"role"`
+	TokenHash  string             `json:"token_hash"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	ConsumedAt pgtype.Timestamptz `json:"consumed_at"`
+	RevokedAt  pgtype.Timestamptz `json:"revoked_at"`
 }
 
 type TenantOnboardingRequest struct {

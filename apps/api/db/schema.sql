@@ -1,4 +1,4 @@
--- Schema snapshot through migration 20260930160000.
+-- Schema snapshot through migration 20261001100000.
 create table tenants (
     id uuid primary key,
     name text not null,
@@ -147,7 +147,7 @@ create table tenant_onboarding_requests (
     request_key text not null,
     request_fingerprint bytea not null,
     tenant_id uuid not null references tenants(id) deferrable initially deferred,
-    tenant_access_id uuid not null references memberships(id) deferrable initially deferred,
+    tenant_access_id uuid not null,
     created_at timestamptz not null default now(),
     primary key (account_id, request_key),
     unique (tenant_id),
@@ -5049,3 +5049,16 @@ begin
     end loop;
 end;
 $$;
+
+CREATE TABLE tenant_invitations (
+ id uuid PRIMARY KEY,
+ tenant_id uuid NOT NULL REFERENCES tenants(id),
+ email text NOT NULL,
+ role text NOT NULL CHECK (role IN ('owner', 'collaborator', 'observer')),
+ token_hash text NOT NULL UNIQUE,
+ expires_at timestamptz NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ consumed_at timestamptz,
+ revoked_at timestamptz
+);
+CREATE UNIQUE INDEX tenant_invitations_pending_email ON tenant_invitations(tenant_id,email) WHERE consumed_at IS NULL AND revoked_at IS NULL;

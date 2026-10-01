@@ -101,7 +101,7 @@ func onboardTenantEndpoint(service AccountTenantService) Endpoint[onboardTenantR
 		Parameters(idempotencyKeyParameter()).
 		RequestBody("OnboardTenantRequest", onboardTenantRequest{}).
 		Responds(http.StatusCreated, "AccountTenantOnboardingResponse", onboardTenantResponse{}).
-		Errors(apiErrorUnauthenticated, apiErrorServiceUnavailable, apiErrorInvalidRequest, apiErrorInvalidRequestKey, apiErrorInvalidTenantName, apiErrorInvalidTenantRegion, apiErrorIdempotencyConflict, apiErrorRateLimited, apiErrorInternal).
+		Errors(apiErrorUnauthenticated, apiErrorServiceUnavailable, apiErrorInvalidRequest, apiErrorInvalidRequestKey, apiErrorInvalidTenantName, apiErrorInvalidTenantRegion, apiErrorIdempotencyConflict, apiErrorTenantNotFound, apiErrorRateLimited, apiErrorInternal).
 		MapErrors(accountTenantAPIError)
 }
 

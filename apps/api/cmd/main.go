@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -28,6 +29,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	postgressqlc "github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	redisadapter "github.com/q9labs/chalk/apps/api/internal/adapters/redis"
+	resendadapter "github.com/q9labs/chalk/apps/api/internal/adapters/resend"
 	"github.com/q9labs/chalk/apps/api/internal/apikeys"
 	"github.com/q9labs/chalk/apps/api/internal/auditlogs"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
@@ -37,6 +39,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/capturesignaling"
 	"github.com/q9labs/chalk/apps/api/internal/chatattachments"
 	"github.com/q9labs/chalk/apps/api/internal/config"
+	"github.com/q9labs/chalk/apps/api/internal/email"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/feedback"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
@@ -192,8 +195,21 @@ func run() error {
 	accountTenantService := tenants.NewAccountService(accountTenantRepository)
 	userRepository := postgres.NewUserRepository(operationQueries)
 	userService := users.NewService(userRepository)
-	membershipRepository := postgres.NewMembershipRepository(operationQueries)
+	membershipRepository := postgres.NewMembershipRepository(operationQueries, pool, diagnostics.Queries)
 	membershipService := memberships.NewService(membershipRepository)
+	var invitationSender email.Sender
+	if cfg.Resend.APIKey != "" {
+		sender, err := resendadapter.NewSender(cfg.Resend)
+		if err != nil {
+			return err
+		}
+		invitationSender = email.NewService(sender)
+	}
+	var peopleLogger *slog.Logger
+	if cfg.Observability.OperationLogs {
+		peopleLogger = diagnostics.Logger()
+	}
+	peopleService := memberships.NewPeopleService(postgres.NewPeopleRepository(pool, peopleLogger), invitationSender, cfg.InvitationFrom, cfg.InvitationWebOrigin)
 	spaceRepository := postgres.NewSpaceRepository(operationQueries, pool)
 	spaceService := spaces.NewServiceWithDefaultProvider(spaceRepository, cfg.DefaultMediaPlane)
 	episodeMediaBindingResolver := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{ProcessConfig: cfg.CloudflareRealtime, DefaultProvider: cfg.DefaultMediaPlane})
@@ -641,6 +657,7 @@ func run() error {
 		ParticipantMediaActive:     participantActiveAuthorizer,
 		ParticipantGeneration:      participantActiveAuthorizer,
 		Memberships:                membershipService,
+		People:                     peopleService,
 		AuditLogs:                  auditLogService,
 		RecordingDownloads:         recordingDownloads,
 		RecordingObjects:           recordingObjects,

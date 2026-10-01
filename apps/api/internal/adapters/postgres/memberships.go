@@ -21,11 +21,17 @@ type membershipQuerier interface {
 }
 
 type MembershipRepository struct {
-	queries membershipQuerier
+	queries    membershipQuerier
+	transactor accountTenantTransactor
+	decorate   func(sqlc.Querier) sqlc.Querier
 }
 
-func NewMembershipRepository(queries membershipQuerier) MembershipRepository {
-	return MembershipRepository{queries: queries}
+func NewMembershipRepository(queries membershipQuerier, transactor accountTenantTransactor, decorators ...func(sqlc.Querier) sqlc.Querier) MembershipRepository {
+	repository := MembershipRepository{queries: queries, transactor: transactor}
+	if len(decorators) > 0 {
+		repository.decorate = decorators[0]
+	}
+	return repository
 }
 
 func (r MembershipRepository) CreateMembership(ctx context.Context, input memberships.CreateMembershipInput) (memberships.Membership, error) {
@@ -92,19 +98,31 @@ func (r MembershipRepository) ListTenantMemberships(ctx context.Context, tenantI
 }
 
 func (r MembershipRepository) UpdateTenantMembership(ctx context.Context, tenantID utilities.ID, membershipID utilities.ID, input memberships.UpdateMembershipInput) (memberships.Membership, error) {
-	membership, err := r.queries.UpdateTenantMembership(ctx, sqlc.UpdateTenantMembershipParams{
-		Role:     string(input.Role),
-		TenantID: pgtype.UUID{Bytes: tenantID.Bytes(), Valid: true},
-		ID:       pgtype.UUID{Bytes: membershipID.Bytes(), Valid: true},
-	})
+	tx, err := r.transactor.Begin(ctx)
+	if err != nil {
+		return memberships.Membership{}, err
+	}
+	defer tx.Rollback(ctx)
+	if err = lockMembershipTenant(ctx, tx, tenantID); err != nil {
+		return memberships.Membership{}, err
+	}
+	if input.Role != memberships.RoleOwner {
+		if err = protectLastOwner(ctx, tx, tenantID, membershipID); err != nil {
+			return memberships.Membership{}, err
+		}
+	}
+	var queries membershipQuerier = sqlc.New(tx)
+	if r.decorate != nil {
+		queries = r.decorate(sqlc.New(tx))
+	}
+	value, err := queries.UpdateTenantMembership(ctx, sqlc.UpdateTenantMembershipParams{TenantID: uuid(tenantID), ID: uuid(membershipID), Role: string(input.Role)})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return memberships.Membership{}, memberships.ErrMembershipNotFound
 	}
 	if err != nil {
-		return memberships.Membership{}, fmt.Errorf("update tenant membership: %w", err)
+		return memberships.Membership{}, err
 	}
-
-	return mapMembership(membership), nil
+	return mapMembership(value), tx.Commit(ctx)
 }
 
 func listTenantMembershipsParams(tenantID utilities.ID, page pagination.PageRequest) sqlc.ListTenantMembershipsParams {

@@ -256,3 +256,34 @@ describe("account boundary", () => {
 function jsonRequest(path: string, body: unknown, headers: HeadersInit): Request {
   return new Request(`${secureOrigin}${path}`, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
 }
+
+describe("People account-boundary allowlist", () => {
+  const tenantID = "11111111-1111-4111-8111-111111111111";
+  const resourceID = "22222222-2222-4222-8222-222222222222";
+  it.each([
+    ["GET", `/api/tenants/${tenantID}/memberships`],
+    ["POST", `/api/tenants/${tenantID}/memberships`],
+    ["PATCH", `/api/tenants/${tenantID}/memberships/${resourceID}`],
+    ["DELETE", `/api/tenants/${tenantID}/memberships/${resourceID}`],
+    ["DELETE", `/api/tenants/${tenantID}/membership`],
+    ["GET", `/api/tenants/${tenantID}/invitations`],
+    ["POST", `/api/tenants/${tenantID}/invitations`],
+    ["DELETE", `/api/tenants/${tenantID}/invitations/${resourceID}`],
+    ["POST", "/api/invitations/accept"],
+  ])("forwards %s %s with account authentication", async (method, path) => {
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer account-token");
+      return Response.json({ success: true, accept_link: "https://chalk.test/invitations/accept#token=secret" });
+    });
+    const request = new Request(`${secureOrigin}${path}`, {
+      method,
+      headers: { Origin: secureOrigin, Cookie: "__Host-chalk_account=account-token; __Host-chalk_csrf=csrf-token", "X-Chalk-CSRF": "csrf-token", "Content-Type": "application/json" },
+      ...(method === "POST" || method === "PATCH" ? { body: JSON.stringify({ token: "secret" }) } : {}),
+    });
+    const response = await handleAccountBoundary(request, upstream, fetcher);
+    expect(response.status).toBe(200);
+    expect(fetcher.mock.calls[0]?.[0].toString()).toBe(`${upstream.CHALK_API_ORIGIN}${path.replace(/^\/api/, "/v1")}`);
+    expect(fetcher.mock.calls[0]?.[1]?.method).toBe(method);
+    await expect(response.json()).resolves.toMatchObject({ accept_link: "https://chalk.test/invitations/accept#token=secret" });
+  });
+});

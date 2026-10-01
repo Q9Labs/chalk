@@ -152,6 +152,7 @@ function resolveRoute(method: string, pathname: string): BoundaryRoute | undefin
     ["GET /api/me/recent-auth/google/callback", { upstreamPath: "/v1/me/recent-auth/google/callback", authenticated: true, browserCallback: true, preserveAuthOnUnauthorized: true, queryParameters: ["state", "code"] }],
     ["GET /api/me/tenants", { upstreamPath: "/v1/me/tenants", authenticated: true, queryParameters: ["cursor", "page_size"] }],
     ["POST /api/me/tenants", { upstreamPath: "/v1/me/tenants", authenticated: true, mutation: true }],
+    ["POST /api/invitations/accept", { upstreamPath: "/v1/invitations/accept", authenticated: true, mutation: true }],
     ["GET /api/regions", { upstreamPath: "/v1/regions", authenticated: true }],
   ]);
   return routes.get(`${method.toUpperCase()} ${pathname}`) ?? resolveTenantResourceRoute(method.toUpperCase(), pathname);
@@ -164,6 +165,14 @@ function resolveTenantResourceRoute(method: string, pathname: string): BoundaryR
   const tenantID = segments[2]!;
   if (segments.length === 3) return method === "PATCH" ? { upstreamPath: `/v1/tenants/${tenantID}`, authenticated: true, mutation: true } : undefined;
   const resource = segments[3];
+  if (resource === "membership" && segments.length === 4 && method === "DELETE") return { upstreamPath: `/v1/tenants/${tenantID}/membership`, authenticated: true, mutation: true };
+  if (resource === "memberships" || resource === "invitations") {
+    const path = `/v1/tenants/${tenantID}/${resource}`;
+    if (segments.length === 4 && method === "GET") return { upstreamPath: path, authenticated: true, queryParameters: resource === "memberships" ? ["cursor", "page_size"] : [] };
+    if (segments.length === 4 && method === "POST") return { upstreamPath: path, authenticated: true, mutation: true };
+    if (segments.length === 5 && UUID_PATTERN.test(segments[4] ?? "") && (method === "DELETE" || (resource === "memberships" && method === "PATCH"))) return { upstreamPath: `${path}/${segments[4]}`, authenticated: true, mutation: true };
+    return undefined;
+  }
   if (resource === "spaces") return resolveSpaceRoute(method, segments, tenantID);
   if (resource === "api-keys") return resolveAPIKeyRoute(method, segments, tenantID);
   if (resource === "recordings") return resolveRecordingRoute(method, segments, tenantID);

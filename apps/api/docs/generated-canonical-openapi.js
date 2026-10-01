@@ -1169,6 +1169,175 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         },
       },
     },
+    "/v1/invitations/accept": {
+      post: {
+        operationId: "acceptTenantInvitation",
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/AcceptTenantInvitationRequest",
+              },
+            },
+          },
+          required: true,
+        },
+        responses: {
+          200: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/Membership",
+                },
+              },
+            },
+            description: "OK",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["invitation.invalid_email", "membership.invalid_id", "membership.invalid_role", "request.invalid", "tenant.invalid_id"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"],
+          },
+          403: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden", "invitation.wrong_account"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["membership.not_found"],
+          },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["membership.last_owner"],
+          },
+          410: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Gone",
+            "x-chalk-error-codes": ["invitation.unavailable"],
+          },
+          413: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Request Entity Too Large",
+            "x-chalk-error-codes": ["request.payload_too_large"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [
+          {
+            sessionOrBearer: [],
+          },
+        ],
+        summary: "Accept tenant invitation",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
+      },
+    },
     "/v1/me": {
       get: {
         operationId: "getMe",
@@ -1759,6 +1928,17 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             },
             description: "Unauthorized",
             "x-chalk-error-codes": ["access.unauthenticated"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["tenant.not_found"],
           },
           409: {
             content: {
@@ -5552,6 +5732,662 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         summary: "List integration services",
       },
     },
+    "/v1/tenants/{tenant_id}/invitations": {
+      get: {
+        operationId: "listTenantInvitations",
+        parameters: [
+          {
+            in: "path",
+            name: "tenant_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/TenantId",
+            },
+          },
+        ],
+        responses: {
+          200: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/TenantInvitationList",
+                },
+              },
+            },
+            description: "OK",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["invitation.invalid_email", "membership.invalid_id", "membership.invalid_role", "request.invalid", "tenant.invalid_id"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"],
+          },
+          403: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden", "invitation.wrong_account"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["membership.not_found"],
+          },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["membership.last_owner"],
+          },
+          410: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Gone",
+            "x-chalk-error-codes": ["invitation.unavailable"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [
+          {
+            sessionOrBearer: [],
+          },
+        ],
+        summary: "List tenant invitations",
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
+      },
+      post: {
+        operationId: "issueTenantInvitation",
+        parameters: [
+          {
+            in: "path",
+            name: "tenant_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/TenantId",
+            },
+          },
+        ],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/IssueTenantInvitationRequest",
+              },
+            },
+          },
+          required: true,
+        },
+        responses: {
+          201: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/IssuedTenantInvitation",
+                },
+              },
+            },
+            description: "Created",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["invitation.invalid_email", "membership.invalid_id", "membership.invalid_role", "request.invalid", "tenant.invalid_id"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"],
+          },
+          403: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden", "invitation.wrong_account"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["membership.not_found"],
+          },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["membership.last_owner"],
+          },
+          410: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Gone",
+            "x-chalk-error-codes": ["invitation.unavailable"],
+          },
+          413: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Request Entity Too Large",
+            "x-chalk-error-codes": ["request.payload_too_large"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [
+          {
+            sessionOrBearer: [],
+          },
+        ],
+        summary: "Issue tenant invitation",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
+      },
+    },
+    "/v1/tenants/{tenant_id}/invitations/{invitation_id}": {
+      delete: {
+        operationId: "revokeTenantInvitation",
+        parameters: [
+          {
+            in: "path",
+            name: "tenant_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/TenantId",
+            },
+          },
+          {
+            in: "path",
+            name: "invitation_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/UUID",
+            },
+          },
+        ],
+        responses: {
+          200: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PeopleMutation",
+                },
+              },
+            },
+            description: "OK",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["invitation.invalid_email", "membership.invalid_id", "membership.invalid_role", "request.invalid", "tenant.invalid_id"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"],
+          },
+          403: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden", "invitation.wrong_account"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["membership.not_found"],
+          },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["membership.last_owner"],
+          },
+          410: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Gone",
+            "x-chalk-error-codes": ["invitation.unavailable"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [
+          {
+            sessionOrBearer: [],
+          },
+        ],
+        summary: "Revoke tenant invitation",
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
+      },
+    },
+    "/v1/tenants/{tenant_id}/membership": {
+      delete: {
+        operationId: "leaveTenant",
+        parameters: [
+          {
+            in: "path",
+            name: "tenant_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/TenantId",
+            },
+          },
+        ],
+        responses: {
+          200: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PeopleMutation",
+                },
+              },
+            },
+            description: "OK",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["invitation.invalid_email", "membership.invalid_id", "membership.invalid_role", "request.invalid", "tenant.invalid_id"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"],
+          },
+          403: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden", "invitation.wrong_account"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["membership.not_found"],
+          },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["membership.last_owner"],
+          },
+          410: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Gone",
+            "x-chalk-error-codes": ["invitation.unavailable"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [
+          {
+            sessionOrBearer: [],
+          },
+        ],
+        summary: "Leave tenant",
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
+      },
+    },
     "/v1/tenants/{tenant_id}/memberships": {
       get: {
         operationId: "listMemberships",
@@ -5801,6 +6637,169 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
       },
     },
     "/v1/tenants/{tenant_id}/memberships/{membership_id}": {
+      delete: {
+        operationId: "removeMembership",
+        parameters: [
+          {
+            in: "path",
+            name: "tenant_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/TenantId",
+            },
+          },
+          {
+            in: "path",
+            name: "membership_id",
+            required: true,
+            schema: {
+              $ref: "#/components/schemas/MembershipId",
+            },
+          },
+        ],
+        responses: {
+          200: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PeopleMutation",
+                },
+              },
+            },
+            description: "OK",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["invitation.invalid_email", "membership.invalid_id", "membership.invalid_role", "request.invalid", "tenant.invalid_id"],
+          },
+          401: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"],
+          },
+          403: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden", "invitation.wrong_account"],
+          },
+          404: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Not Found",
+            "x-chalk-error-codes": ["membership.not_found"],
+          },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["membership.last_owner"],
+          },
+          410: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Gone",
+            "x-chalk-error-codes": ["invitation.unavailable"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [
+          {
+            sessionOrBearer: [],
+          },
+        ],
+        summary: "Remove membership",
+        "x-chalk-rate-limit": {
+          limit: 60,
+          name: "v1.authenticated.write",
+          window_seconds: 60,
+        },
+      },
       patch: {
         operationId: "updateMembership",
         parameters: [
@@ -5885,6 +6884,17 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             },
             description: "Not Found",
             "x-chalk-error-codes": ["membership.not_found"],
+          },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["membership.last_owner"],
           },
           413: {
             content: {
@@ -15533,6 +16543,17 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         required: ["api_key", "replayed", "secret"],
         type: "object",
       },
+      AcceptTenantInvitationRequest: {
+        additionalProperties: false,
+        properties: {
+          token: {
+            minLength: 1,
+            type: "string",
+          },
+        },
+        required: ["token"],
+        type: "object",
+      },
       AccessGrant: {
         additionalProperties: false,
         properties: {
@@ -17411,6 +18432,58 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         required: ["participant_generation", "replace_media_connection"],
         type: "object",
       },
+      IssueTenantInvitationRequest: {
+        additionalProperties: false,
+        properties: {
+          email: {
+            $ref: "#/components/schemas/Email",
+          },
+          role: {
+            minLength: 1,
+            type: "string",
+          },
+        },
+        required: ["email", "role"],
+        type: "object",
+      },
+      IssuedTenantInvitation: {
+        additionalProperties: false,
+        properties: {
+          accept_link: {
+            type: "string",
+          },
+          email_delivered: {
+            type: "boolean",
+          },
+          invitation: {
+            additionalProperties: false,
+            properties: {
+              created_at: {
+                $ref: "#/components/schemas/DateTimeString",
+              },
+              email: {
+                $ref: "#/components/schemas/Email",
+              },
+              expires_at: {
+                $ref: "#/components/schemas/DateTimeString",
+              },
+              id: {
+                $ref: "#/components/schemas/UUID",
+              },
+              role: {
+                type: "string",
+              },
+              tenant_id: {
+                $ref: "#/components/schemas/TenantId",
+              },
+            },
+            required: ["created_at", "email", "expires_at", "id", "role", "tenant_id"],
+            type: "object",
+          },
+        },
+        required: ["accept_link", "email_delivered", "invitation"],
+        type: "object",
+      },
       JourneyEventBatch: {
         additionalProperties: false,
         properties: {
@@ -17876,6 +18949,16 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           },
         },
         required: ["external_operation", "participant"],
+        type: "object",
+      },
+      PeopleMutation: {
+        additionalProperties: false,
+        properties: {
+          success: {
+            type: "boolean",
+          },
+        },
+        required: ["success"],
         type: "object",
       },
       PrepareRecordingRequest: {
@@ -19009,6 +20092,41 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         minLength: 36,
         type: "string",
         "x-chalk-brand": "TenantId",
+      },
+      TenantInvitationList: {
+        additionalProperties: false,
+        properties: {
+          invitations: {
+            items: {
+              additionalProperties: false,
+              properties: {
+                created_at: {
+                  $ref: "#/components/schemas/DateTimeString",
+                },
+                email: {
+                  $ref: "#/components/schemas/Email",
+                },
+                expires_at: {
+                  $ref: "#/components/schemas/DateTimeString",
+                },
+                id: {
+                  $ref: "#/components/schemas/UUID",
+                },
+                role: {
+                  type: "string",
+                },
+                tenant_id: {
+                  $ref: "#/components/schemas/TenantId",
+                },
+              },
+              required: ["created_at", "email", "expires_at", "id", "role", "tenant_id"],
+              type: "object",
+            },
+            type: "array",
+          },
+        },
+        required: ["invitations"],
+        type: "object",
       },
       TenantList: {
         additionalProperties: false,
