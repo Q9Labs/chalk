@@ -1,0 +1,907 @@
+{
+  "machine": "same M4 Mac mini",
+  "baselineSha": "3a77a9fbb8d545f876d75f6a25e5d1021e45924c",
+  "tipSha": "a5448d5fa3313b98efd5b91ffe72ffa7777c3c27",
+  "metricDefinition": "milliseconds; p50 median, p95 nearest-rank; missing is censored, not zero",
+  "scenarios": {
+    "drop-5000": {
+      "a": {
+        "eligible": 10,
+        "attempts": 10,
+        "ineligible": 0,
+        "metrics": {
+          "sync": {
+            "n": 10,
+            "p50": 90.5,
+            "p95": 111,
+            "max": 111
+          },
+          "state": {
+            "n": 10,
+            "p50": 344.5,
+            "p95": 366,
+            "max": 366
+          },
+          "mediaAllFour": {
+            "n": 10,
+            "p50": 1106.0,
+            "p95": 1158,
+            "max": 1158
+          },
+          "actionsSettled": {
+            "n": 10,
+            "p50": 5203.5,
+            "p95": 5256,
+            "max": 5256
+          },
+          "noticeAfterDetection": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "noticeFromFault": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "postgresDown": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "flapCount": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "max": null
+          }
+        },
+        "directions": {
+          "aToB": {
+            "audioMs": {
+              "n": 10,
+              "p50": 62.0,
+              "p95": 301,
+              "max": 301
+            },
+            "videoMs": {
+              "n": 10,
+              "p50": 1106.0,
+              "p95": 1158,
+              "max": 1158
+            }
+          },
+          "bToA": {
+            "audioMs": {
+              "n": 10,
+              "p50": 51.5,
+              "p95": 75,
+              "max": 75
+            },
+            "videoMs": {
+              "n": 10,
+              "p50": 71.0,
+              "p95": 341,
+              "max": 341
+            }
+          }
+        },
+        "pending": 0,
+        "lost": 0,
+        "duplicated": 0,
+        "terminalFailed": 0,
+        "continuousFourWayMedia": 0,
+        "stateConverged": 10,
+        "actionOutcomes": {
+          "chat_resolved": 10,
+          "chat_rejected": 0,
+          "chat_pending": 0,
+          "hand_resolved": 10,
+          "hand_rejected": 0,
+          "hand_pending": 0
+        },
+        "networkQualification": {
+          "aRttMedianMs": {
+            "n": 10,
+            "p50": 32.0,
+            "p95": 275,
+            "max": 275
+          },
+          "bInboundPacketLossPct": {
+            "n": 10,
+            "p50": 0.0,
+            "p95": 0,
+            "max": 0
+          }
+        },
+        "hostLoadOneMinute": {
+          "n": 10,
+          "p50": 3.09423828125,
+          "p95": 4.11083984375,
+          "max": 4.11083984375
+        },
+        "failures": [],
+        "ineligibleReasons": [],
+        "target": "met",
+        "targetCriteria": {
+          "sync": true,
+          "state": true,
+          "media": true,
+          "reconnectingFromFault": true,
+          "acknowledgedActions": true,
+          "noFailures": true
+        }
+      },
+      "b": {
+        "eligible": 10,
+        "attempts": 11,
+        "ineligible": 1,
+        "metrics": {
+          "sync": {
+            "n": 10,
+            "p50": 123.0,
+            "p95": 132,
+            "max": 132
+          },
+          "state": {
+            "n": 10,
+            "p50": 349.5,
+            "p95": 382,
+            "max": 382
+          },
+          "mediaAllFour": {
+            "n": 10,
+            "p50": 1357.5,
+            "p95": 1374,
+            "max": 1374
+          },
+          "actionsSettled": {
+            "n": 10,
+            "p50": 5194.5,
+            "p95": 5214,
+            "max": 5214
+          },
+          "noticeAfterDetection": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "noticeFromFault": {
+            "n": 10,
+            "p50": 514.0,
+            "p95": 797,
+            "max": 797
+          },
+          "postgresDown": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "flapCount": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "max": null
+          }
+        },
+        "directions": {
+          "aToB": {
+            "audioMs": {
+              "n": 10,
+              "p50": 63.5,
+              "p95": 83,
+              "max": 83
+            },
+            "videoMs": {
+              "n": 10,
+              "p50": 1357.5,
+              "p95": 1374,
+              "max": 1374
+            }
+          },
+          "bToA": {
+            "audioMs": {
+              "n": 10,
+              "p50": 63.5,
+              "p95": 83,
+              "max": 83
+            },
+            "videoMs": {
+              "n": 10,
+              "p50": 63.5,
+              "p95": 83,
+              "max": 83
+            }
+          }
+        },
+        "pending": 0,
+        "lost": 0,
+        "duplicated": 0,
+        "terminalFailed": 0,
+        "continuousFourWayMedia": 0,
+        "stateConverged": 10,
+        "actionOutcomes": {
+          "chat_resolved": 10,
+          "chat_rejected": 0,
+          "chat_pending": 0,
+          "hand_resolved": 10,
+          "hand_rejected": 0,
+          "hand_pending": 0
+        },
+        "networkQualification": {
+          "aRttMedianMs": {
+            "n": 10,
+            "p50": 32.0,
+            "p95": 79,
+            "max": 79
+          },
+          "bInboundPacketLossPct": {
+            "n": 10,
+            "p50": 0.0,
+            "p95": 0,
+            "max": 0
+          }
+        },
+        "hostLoadOneMinute": {
+          "n": 10,
+          "p50": 3.33642578125,
+          "p95": 4.330078125,
+          "max": 4.330078125
+        },
+        "failures": [],
+        "ineligibleReasons": [
+          {
+            "run": 10,
+            "errors": ["Initial remote audio/video did not flow in both directions within 25000 ms", "Four-way media did not return within 20000 ms"],
+            "harnessErrors": []
+          }
+        ],
+        "target": "met",
+        "targetCriteria": {
+          "sync": true,
+          "state": true,
+          "media": true,
+          "reconnectingFromFault": true,
+          "acknowledgedActions": true,
+          "noFailures": true
+        }
+      }
+    },
+    "flapping": {
+      "a": {
+        "eligible": 10,
+        "attempts": 10,
+        "ineligible": 0,
+        "metrics": {
+          "sync": {
+            "n": 10,
+            "p50": 1278.5,
+            "p95": 3870,
+            "max": 3870
+          },
+          "state": {
+            "n": 10,
+            "p50": 1272.5,
+            "p95": 3868,
+            "max": 3868
+          },
+          "mediaAllFour": {
+            "n": 10,
+            "p50": 1062.5,
+            "p95": 2383,
+            "max": 2383
+          },
+          "actionsSettled": {
+            "n": 10,
+            "p50": 2388.5,
+            "p95": 3217,
+            "max": 3217
+          },
+          "noticeAfterDetection": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "noticeFromFault": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "postgresDown": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "flapCount": {
+            "n": 10,
+            "p50": 35.5,
+            "p95": 39,
+            "max": 39
+          }
+        },
+        "directions": {
+          "aToB": {
+            "audioMs": {
+              "n": 10,
+              "p50": 90.0,
+              "p95": 259,
+              "max": 259
+            },
+            "videoMs": {
+              "n": 10,
+              "p50": 1062.5,
+              "p95": 2383,
+              "max": 2383
+            }
+          },
+          "bToA": {
+            "audioMs": {
+              "n": 10,
+              "p50": 90.0,
+              "p95": 259,
+              "max": 259
+            },
+            "videoMs": {
+              "n": 10,
+              "p50": 90.0,
+              "p95": 259,
+              "max": 259
+            }
+          }
+        },
+        "pending": 0,
+        "lost": 0,
+        "duplicated": 0,
+        "terminalFailed": 0,
+        "continuousFourWayMedia": 0,
+        "stateConverged": 10,
+        "actionOutcomes": {
+          "chat_resolved": 10,
+          "chat_rejected": 0,
+          "chat_pending": 0,
+          "hand_resolved": 10,
+          "hand_rejected": 0,
+          "hand_pending": 0
+        },
+        "networkQualification": {
+          "aRttMedianMs": {
+            "n": 10,
+            "p50": 13.0,
+            "p95": 14,
+            "max": 14
+          },
+          "bInboundPacketLossPct": {
+            "n": 10,
+            "p50": 22.725318447357836,
+            "p95": 26.25340599455041,
+            "max": 26.25340599455041
+          }
+        },
+        "hostLoadOneMinute": {
+          "n": 10,
+          "p50": 2.109130859375,
+          "p95": 2.95849609375,
+          "max": 2.95849609375
+        },
+        "failures": [],
+        "ineligibleReasons": [],
+        "target": "met",
+        "targetCriteria": {
+          "sync": true,
+          "state": true,
+          "media": true,
+          "noTerminalFailed": true,
+          "actions": true,
+          "noFailures": true
+        }
+      },
+      "b": {
+        "eligible": 10,
+        "attempts": 10,
+        "ineligible": 0,
+        "metrics": {
+          "sync": {
+            "n": 10,
+            "p50": 915.0,
+            "p95": 3849,
+            "max": 3849
+          },
+          "state": {
+            "n": 10,
+            "p50": 912.5,
+            "p95": 3847,
+            "max": 3847
+          },
+          "mediaAllFour": {
+            "n": 10,
+            "p50": 1858.0,
+            "p95": 2863,
+            "max": 2863
+          },
+          "actionsSettled": {
+            "n": 10,
+            "p50": 1947.5,
+            "p95": 3258,
+            "max": 3258
+          },
+          "noticeAfterDetection": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "noticeFromFault": {
+            "n": 10,
+            "p50": 3642.0,
+            "p95": 5472,
+            "max": 5472
+          },
+          "postgresDown": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "flapCount": {
+            "n": 10,
+            "p50": 37.5,
+            "p95": 43,
+            "max": 43
+          }
+        },
+        "directions": {
+          "aToB": {
+            "audioMs": {
+              "n": 10,
+              "p50": 77.0,
+              "p95": 256,
+              "max": 256
+            },
+            "videoMs": {
+              "n": 10,
+              "p50": 1858.0,
+              "p95": 2863,
+              "max": 2863
+            }
+          },
+          "bToA": {
+            "audioMs": {
+              "n": 10,
+              "p50": 77.0,
+              "p95": 256,
+              "max": 256
+            },
+            "videoMs": {
+              "n": 10,
+              "p50": 77.0,
+              "p95": 256,
+              "max": 256
+            }
+          }
+        },
+        "pending": 0,
+        "lost": 0,
+        "duplicated": 0,
+        "terminalFailed": 0,
+        "continuousFourWayMedia": 0,
+        "stateConverged": 10,
+        "actionOutcomes": {
+          "chat_resolved": 10,
+          "chat_rejected": 0,
+          "chat_pending": 0,
+          "hand_resolved": 10,
+          "hand_rejected": 0,
+          "hand_pending": 0
+        },
+        "networkQualification": {
+          "aRttMedianMs": {
+            "n": 10,
+            "p50": 12.5,
+            "p95": 14,
+            "max": 14
+          },
+          "bInboundPacketLossPct": {
+            "n": 10,
+            "p50": 22.87715756021275,
+            "p95": 25.731395421371094,
+            "max": 25.731395421371094
+          }
+        },
+        "hostLoadOneMinute": {
+          "n": 10,
+          "p50": 2.0166015625,
+          "p95": 2.5224609375,
+          "max": 2.5224609375
+        },
+        "failures": [],
+        "ineligibleReasons": [],
+        "target": "met",
+        "targetCriteria": {
+          "sync": true,
+          "state": true,
+          "media": true,
+          "noTerminalFailed": true,
+          "actions": true,
+          "noFailures": true
+        }
+      }
+    },
+    "sync-restart": {
+      "a": {
+        "eligible": 5,
+        "attempts": 5,
+        "ineligible": 0,
+        "metrics": {
+          "sync": {
+            "n": 5,
+            "p50": 57.0,
+            "p95": 77,
+            "max": 77
+          },
+          "state": {
+            "n": 5,
+            "p50": 54.0,
+            "p95": 75,
+            "max": 75
+          },
+          "mediaAllFour": {
+            "n": 5,
+            "p50": 54.0,
+            "p95": 216,
+            "max": 216
+          },
+          "actionsSettled": {
+            "n": 5,
+            "p50": 974.0,
+            "p95": 1011,
+            "max": 1011
+          },
+          "noticeAfterDetection": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "noticeFromFault": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "postgresDown": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "flapCount": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "max": null
+          }
+        },
+        "directions": {
+          "aToB": {
+            "audioMs": {
+              "n": 5,
+              "p50": 54.0,
+              "p95": 216,
+              "max": 216
+            },
+            "videoMs": {
+              "n": 5,
+              "p50": 54.0,
+              "p95": 216,
+              "max": 216
+            }
+          },
+          "bToA": {
+            "audioMs": {
+              "n": 5,
+              "p50": 54.0,
+              "p95": 216,
+              "max": 216
+            },
+            "videoMs": {
+              "n": 5,
+              "p50": 54.0,
+              "p95": 216,
+              "max": 216
+            }
+          }
+        },
+        "pending": 0,
+        "lost": 0,
+        "duplicated": 0,
+        "terminalFailed": 0,
+        "continuousFourWayMedia": 1,
+        "stateConverged": 5,
+        "actionOutcomes": {
+          "chat_resolved": 0,
+          "chat_rejected": 5,
+          "chat_pending": 0,
+          "hand_resolved": 5,
+          "hand_rejected": 0,
+          "hand_pending": 0
+        },
+        "networkQualification": {
+          "aRttMedianMs": {
+            "n": 5,
+            "p50": 13.0,
+            "p95": 16,
+            "max": 16
+          },
+          "bInboundPacketLossPct": {
+            "n": 5,
+            "p50": 0.0,
+            "p95": 0.3189792663476874,
+            "max": 0.3189792663476874
+          }
+        },
+        "hostLoadOneMinute": {
+          "n": 5,
+          "p50": 3.4150390625,
+          "p95": 3.9970703125,
+          "max": 3.9970703125
+        },
+        "failures": [],
+        "ineligibleReasons": [],
+        "target": "met",
+        "targetCriteria": {
+          "sync": true,
+          "actions": true,
+          "noFailures": true
+        }
+      },
+      "b": {
+        "eligible": 5,
+        "attempts": 5,
+        "ineligible": 0,
+        "metrics": {
+          "sync": {
+            "n": 5,
+            "p50": 51.0,
+            "p95": 72,
+            "max": 72
+          },
+          "state": {
+            "n": 5,
+            "p50": 49.0,
+            "p95": 68,
+            "max": 68
+          },
+          "mediaAllFour": {
+            "n": 5,
+            "p50": 56.0,
+            "p95": 256,
+            "max": 256
+          },
+          "actionsSettled": {
+            "n": 5,
+            "p50": 978.0,
+            "p95": 1002,
+            "max": 1002
+          },
+          "noticeAfterDetection": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "noticeFromFault": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "postgresDown": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "max": null
+          },
+          "flapCount": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "max": null
+          }
+        },
+        "directions": {
+          "aToB": {
+            "audioMs": {
+              "n": 5,
+              "p50": 56.0,
+              "p95": 256,
+              "max": 256
+            },
+            "videoMs": {
+              "n": 5,
+              "p50": 56.0,
+              "p95": 256,
+              "max": 256
+            }
+          },
+          "bToA": {
+            "audioMs": {
+              "n": 5,
+              "p50": 56.0,
+              "p95": 256,
+              "max": 256
+            },
+            "videoMs": {
+              "n": 5,
+              "p50": 56.0,
+              "p95": 256,
+              "max": 256
+            }
+          }
+        },
+        "pending": 0,
+        "lost": 0,
+        "duplicated": 0,
+        "terminalFailed": 0,
+        "continuousFourWayMedia": 1,
+        "stateConverged": 5,
+        "actionOutcomes": {
+          "chat_resolved": 0,
+          "chat_rejected": 5,
+          "chat_pending": 0,
+          "hand_resolved": 5,
+          "hand_rejected": 0,
+          "hand_pending": 0
+        },
+        "networkQualification": {
+          "aRttMedianMs": {
+            "n": 5,
+            "p50": 11.0,
+            "p95": 31,
+            "max": 31
+          },
+          "bInboundPacketLossPct": {
+            "n": 5,
+            "p50": 0.0,
+            "p95": 0,
+            "max": 0
+          }
+        },
+        "hostLoadOneMinute": {
+          "n": 5,
+          "p50": 3.517578125,
+          "p95": 4.08056640625,
+          "max": 4.08056640625
+        },
+        "failures": [],
+        "ineligibleReasons": [],
+        "target": "met",
+        "targetCriteria": {
+          "sync": true,
+          "actions": true,
+          "noFailures": true
+        }
+      }
+    }
+  },
+  "parity": {
+    "drop-5000": {
+      "sync": {
+        "noiseMs": 500,
+        "deltaMs": {
+          "p95": 21,
+          "max": 21
+        },
+        "withinNoise": true
+      },
+      "state": {
+        "noiseMs": 500,
+        "deltaMs": {
+          "p95": 16,
+          "max": 16
+        },
+        "withinNoise": true
+      },
+      "mediaAllFour": {
+        "noiseMs": 1000,
+        "deltaMs": {
+          "p95": 216,
+          "max": 216
+        },
+        "withinNoise": true
+      },
+      "actionsSettled": {
+        "noiseMs": 500,
+        "deltaMs": {
+          "p95": -42,
+          "max": -42
+        },
+        "withinNoise": true
+      },
+      "sameActionOutcomes": true,
+      "noNewLossDuplicationOrFailure": true,
+      "recoveryParity": true
+    },
+    "flapping": {
+      "sync": {
+        "noiseMs": 500,
+        "deltaMs": {
+          "p95": -21,
+          "max": -21
+        },
+        "withinNoise": true
+      },
+      "state": {
+        "noiseMs": 500,
+        "deltaMs": {
+          "p95": -21,
+          "max": -21
+        },
+        "withinNoise": true
+      },
+      "mediaAllFour": {
+        "noiseMs": 1000,
+        "deltaMs": {
+          "p95": 480,
+          "max": 480
+        },
+        "withinNoise": true
+      },
+      "actionsSettled": {
+        "noiseMs": 500,
+        "deltaMs": {
+          "p95": 41,
+          "max": 41
+        },
+        "withinNoise": true
+      },
+      "sameActionOutcomes": true,
+      "noNewLossDuplicationOrFailure": true,
+      "recoveryParity": true
+    },
+    "sync-restart": {
+      "sync": {
+        "noiseMs": 500,
+        "deltaMs": {
+          "p95": -5,
+          "max": -5
+        },
+        "withinNoise": true
+      },
+      "state": {
+        "noiseMs": 500,
+        "deltaMs": {
+          "p95": -7,
+          "max": -7
+        },
+        "withinNoise": true
+      },
+      "mediaAllFour": {
+        "noiseMs": 1000,
+        "deltaMs": {
+          "p95": 40,
+          "max": 40
+        },
+        "withinNoise": true
+      },
+      "actionsSettled": {
+        "noiseMs": 500,
+        "deltaMs": {
+          "p95": -9,
+          "max": -9
+        },
+        "withinNoise": true
+      },
+      "sameActionOutcomes": true,
+      "noNewLossDuplicationOrFailure": true,
+      "recoveryParity": true
+    }
+  }
+}

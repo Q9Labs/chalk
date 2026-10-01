@@ -203,6 +203,20 @@ describe("V1SyncClient", () => {
     expect(lifecycleSocket.closeCalls).toContainEqual({ code: 4000, reason: "lifecycle unavailable" });
   });
 
+  it("signals a silent live socket for presentation without restarting it or changing its phase", async () => {
+    const clock = new TestClock();
+    const { client, socket } = await liveClient({ clock });
+    clock.advance(750);
+    expect(client.getSnapshot().connection).toMatchObject({ phase: "live", noticeUnresponsive: true });
+    expect(socket.closeCalls).toEqual([]);
+    clock.advance(250);
+    expect(socket.frames().filter((frame) => frame.type === "ping")).toHaveLength(2);
+    socket.receive({ type: "pong" });
+    await settle();
+    expect(client.getSnapshot().connection).toMatchObject({ phase: "live", noticeUnresponsive: false });
+    client.stop();
+  });
+
   it("uses capped exponential reconnect backoff until a connection becomes live", async () => {
     const clock = new TestClock();
     const sockets: TestSocket[] = [];

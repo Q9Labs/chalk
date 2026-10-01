@@ -38,7 +38,7 @@ describe("RecordingController", () => {
       runCommand: <A, E>(operation: (ports: ConnectionPorts) => Effect.Effect<A, E>) => operation(ports),
     } as unknown as ConnectionLifecycleCapability;
     const store = new SpaceStore();
-    store.updateConnection({ state: "live", episode: { id: "episode-1", startedAt: null, deadline: null }, failure: null } as ConnectionLifecycleSnapshot);
+    store.updateConnection({ state: "live", episode: { id: "episode-1", startedAt: null, deadline: null }, connection: { sync: "healthy", media: "healthy" }, failure: null } as ConnectionLifecycleSnapshot);
 
     await Effect.runPromise(
       Effect.scoped(

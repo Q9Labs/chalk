@@ -47,8 +47,9 @@ export class SpaceStore {
   updateConnection(snapshot: ConnectionLifecycleSnapshot): void {
     const current = this.getSnapshot().connection;
     const error = snapshot.failure ? empty({ code: mapCode(snapshot.failure.code), recoverable: snapshot.failure.recoverable, message: snapshot.failure.message }) : null;
-    if (current.status === snapshot.state && sameEpisode(current.episode, snapshot.episode) && sameError(current.lastError, error)) return;
-    this.#replace("connection", empty({ status: snapshot.state, episode: snapshot.episode, lastError: error }));
+    const status = snapshot.state === "live" && snapshot.connection.sync === "unresponsive" ? "reconnecting" : snapshot.state;
+    if (current.status === status && sameEpisode(current.episode, snapshot.episode) && sameError(current.lastError, error)) return;
+    this.#replace("connection", empty({ status, episode: snapshot.episode, lastError: error }));
   }
   updateSelf(value: SelfSlice): void {
     this.#replace("self", value);
