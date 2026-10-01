@@ -136,3 +136,16 @@ pnpm run observability:reset
 `stop` preserves the named observability volume. `reset` removes it. This stack
 is for local development, automated proof, and demos. Managed deployment
 configuration must use external credentials and production-grade backends.
+
+## User-facing failure alerts
+
+Grafana evaluates Recording, Export, and Transcript terminal or stale states
+against the authoritative API database. The bounded stale thresholds are 14
+hours for Export (the maximum Render budget) and 30 minutes for Transcript.
+API server errors use the existing OpenTelemetry HTTP request metric; Sync
+connection failures use the existing structured WebSocket close and rejected
+upgrade logs. Webhook exhaustion uses the existing terminal Delivery counter.
+
+This repository does not provision a Grafana contact point or notification
+policy. These rules therefore leave notification routing unchanged for the
+operator to connect to the deployment's existing contact point.

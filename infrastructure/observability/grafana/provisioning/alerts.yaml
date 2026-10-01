@@ -367,7 +367,7 @@ groups:
         for: 1m
         annotations:
           description: One or more webhook Deliveries exhausted their retry window in the last 15 minutes. Receiver availability is a customer dependency, so correlate by Event and Delivery IDs before assigning cause.
-          summary: Webhook delivery exhaustion changed from its expected zero baseline.
+          summary: A customer did not receive a webhook after Chalk exhausted retries; start with `pnpm diag trace <32-hex-trace-id>` from the Delivery Attempt.
         labels:
           service: chalk-api
           severity: warning
@@ -548,4 +548,219 @@ groups:
           summary: The end-to-end signed webhook path has no fresh success proof.
         labels:
           service: chalk-webhook-canary
+          severity: critical
+
+  - orgId: 1
+    name: Chalk user-facing failures
+    folder: Chalk
+    interval: 1m
+    rules:
+      - uid: chalk-recording-failed
+        title: Chalk Recording Capture or Render failed
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: chalk-journey-ledger
+            model:
+              datasource:
+                type: postgres
+                uid: chalk-journey-ledger
+              editorMode: code
+              format: time_series
+              rawQuery: true
+              rawSql: SELECT now() AS time, count(*)::double precision AS value FROM recording_jobs WHERE kind IN ('capture', 'render') AND state = 'terminal_failure' AND terminal_at >= now() - interval '15 minutes';
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: $A > 0
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        noDataState: OK
+        execErrState: Alerting
+        for: 1m
+        annotations:
+          description: A user saw a Recording fail during Capture or Render.
+          summary: A user saw a Recording fail during Capture or Render; start with `pnpm diag trace <32-hex-trace-id>` using the job journey ID.
+        labels:
+          service: chalk-api
+          severity: critical
+      - uid: chalk-export-failed-or-stuck
+        title: Chalk Recording Export failed or is stuck
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: chalk-journey-ledger
+            model:
+              datasource:
+                type: postgres
+                uid: chalk-journey-ledger
+              editorMode: code
+              format: time_series
+              rawQuery: true
+              rawSql: SELECT now() AS time, count(*)::double precision AS value FROM recording_jobs WHERE kind = 'render' AND ((state = 'terminal_failure' AND terminal_at >= now() - interval '15 minutes') OR (state IN ('pending', 'leased', 'retryable_failure') AND created_at < now() - interval '14 hours'));
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: $A > 0
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        noDataState: OK
+        execErrState: Alerting
+        for: 1m
+        annotations:
+          description: A user saw an Export fail or remain unavailable past the 14-hour Render budget.
+          summary: A user saw an Export fail or remain unavailable past the 14-hour Render budget; start with `pnpm diag trace <32-hex-trace-id>` using the render job journey ID.
+        labels:
+          service: chalk-api
+          severity: critical
+      - uid: chalk-transcript-failed-or-stuck
+        title: Chalk Transcript failed or is stuck
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: chalk-journey-ledger
+            model:
+              datasource:
+                type: postgres
+                uid: chalk-journey-ledger
+              editorMode: code
+              format: time_series
+              rawQuery: true
+              rawSql: SELECT now() AS time, count(*)::double precision AS value FROM transcriptions WHERE (status = 'terminal_failure' AND updated_at >= now() - interval '15 minutes') OR (status IN ('preparing', 'transcribing', 'verifying', 'retryable_failure') AND created_at < now() - interval '30 minutes');
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: $A > 0
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        noDataState: OK
+        execErrState: Alerting
+        for: 1m
+        annotations:
+          description: A user saw a Transcript fail or remain unavailable past 30 minutes.
+          summary: A user saw a Transcript fail or remain unavailable past 30 minutes; start with `pnpm diag trace <32-hex-trace-id>` using the Transcript journey ID.
+        labels:
+          service: chalk-api
+          severity: critical
+      - uid: chalk-api-5xx-rate
+        title: Chalk API 5xx rate is elevated
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: sum(rate(http_server_request_duration_seconds_count{service_name="chalk-api",http_response_status_code=~"5.."}[5m]))
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: $A > 0.05
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          description: The API has returned more than 0.05 server errors per second for five minutes.
+          summary: Users are seeing API requests fail; start with `pnpm diag trace <32-hex-trace-id>` from a failing response.
+        labels:
+          service: chalk-api
+          severity: critical
+      - uid: chalk-sync-connection-failures
+        title: Chalk Sync connections are failing or reconnecting repeatedly
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              datasource:
+                type: loki
+                uid: loki
+              editorMode: code
+              expr: sum(count_over_time({service_name="chalk-sync"} | json | observability_event=~"sync.http.upgrade_rejected|sync.websocket.closed" [5m]))
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              queryType: instant
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: $A > 10
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          description: More than ten Sync upgrade rejections or WebSocket closures occurred in five minutes for five consecutive minutes.
+          summary: Users are failing to connect or repeatedly reconnecting to a Space; start with `pnpm diag trace <32-hex-trace-id>` from an affected connection.
+        labels:
+          service: chalk-sync
           severity: critical
