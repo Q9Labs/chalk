@@ -28,6 +28,7 @@ export type SpaceAccessCleanupOptions = {
 };
 
 export type PublicInviteClient = {
+  readonly prepareSpaceEntrance: (spaceInviteToken: string) => Promise<void>;
   readonly createPublicSpace: (displayName: string) => Promise<PublicSpaceCreated>;
   readonly arriveBySpacePublicInvite: (spaceInviteToken: string, displayName: string, options?: Pick<PublicArrivalOptions, "arrivalHandle">) => Promise<PublicSpaceArrival>;
   readonly getSpacePublicInviteArrival: (arrivalHandle: string) => Promise<PublicSpaceArrival>;
@@ -62,12 +63,17 @@ export function createPublicInviteClient(journey?: JourneyOptions): PublicInvite
   });
 
   return {
+    prepareSpaceEntrance: (spaceInviteToken) => client.prepareSpaceEntrance(spaceInviteToken),
     createPublicSpace: (displayName) => client.createPublicSpace({ displayName }, { idempotencyKey: requestKey() }),
     arriveBySpacePublicInvite: (spaceInviteToken, displayName, options) => client.arriveBySpacePublicInvite({ spaceInviteToken, displayName }, { idempotencyKey: requestKey(), ...(options?.arrivalHandle === undefined ? {} : { arrivalHandle: options.arrivalHandle }) }),
     getSpacePublicInviteArrival: (arrivalHandle) => client.getSpacePublicInviteArrival({ arrivalHandle }),
     refreshSpacePublicInviteAccess: (arrivalHandle, mediaProof, options) => client.refreshSpacePublicInviteAccess({ mediaProof, arrivalHandle, replaceMediaConnection: options?.replaceMediaConnection, signal: options?.signal }),
     leaveSpacePublicInviteArrival: (arrivalHandle, options) => client.leaveSpacePublicInviteArrival(arrivalHandle, options),
   };
+}
+
+export async function prepareDashboardEntrance(tenantID: string, spaceID: string, journey?: JourneyOptions): Promise<void> {
+  await dashboardRequest(`/api/tenants/${encodeURIComponent(tenantID)}/spaces/${encodeURIComponent(spaceID)}/entrance`, "POST", undefined, journey);
 }
 
 export async function joinDashboardSpace(tenantID: string, spaceSlug: string, displayName: string, journey?: JourneyOptions, reload?: ReloadRejoinMarker): Promise<AccountSpaceAccess> {

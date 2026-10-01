@@ -3,7 +3,7 @@ import { Chalk, Entrance, type EntranceSettings } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { useEpisodeDiagnosticsAvailability } from "../../features/episode-debugger/EpisodeDiagnosticsDeveloperLink";
-import { createPreparedPublicSpace, createPublicInviteClient, joinDashboardSpace, resumePublicSpace, type AccountSpaceCredential, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
+import { createPreparedPublicSpace, createPublicInviteClient, prepareDashboardEntrance, joinDashboardSpace, resumePublicSpace, type AccountSpaceCredential, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
 import { listAllAccountTenants, listSpaces } from "../../lib/dashboard-api";
 import { canonicalSpaceInviteLink, clearDashboardSpaceEntry, dashboardSpaceEntryUsesDevicesOff, hasDashboardSpaceEntry, spaceInviteToken, verifiedSpaceInviteLink } from "../../lib/named-space-route";
 import { createLocalSpaceClient, createLocalSpaceRelease } from "../../lib/local-space-client";
@@ -44,6 +44,27 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
       if (arrival?.arrival.arrival_handle) void client.leaveSpacePublicInviteArrival(arrival.arrival.arrival_handle).catch(() => undefined);
     };
   }, [client]);
+
+  const prepareEntrance = useCallback(async () => {
+    const token = spaceInviteToken();
+    if (token) {
+      await client.prepareSpaceEntrance(token);
+      return;
+    }
+    if (!slug || !hasDashboardSpaceEntry()) return;
+    const tenantID = await resolveTenantID();
+    if (!tenantID) return;
+    let cursor: string | undefined;
+    do {
+      const page = await listSpaces({ tenantID, cursor, pageSize: 100 });
+      const space = page.spaces.find((candidate) => candidate.slug === slug);
+      if (space) {
+        await prepareDashboardEntrance(tenantID, space.id, journey);
+        return;
+      }
+      cursor = page.pagination.has_more ? (page.pagination.next_cursor ?? undefined) : undefined;
+    } while (cursor);
+  }, [client, journey, slug]);
 
   const complete = useCallback(
     (prepared: SpaceEntryAccess, inviteLink: string | undefined, spaceName: string) => {
@@ -238,6 +259,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
         joining={preparing}
         error={error ?? undefined}
         onJoin={start}
+        onPrepare={prepareEntrance}
       />
     </main>
   );

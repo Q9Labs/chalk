@@ -101,6 +101,7 @@ with existing as (
       and preparation.state = 'scheduled' and reservation.starts_at is null
       and preparation.starts_at <= now() + interval '5 minutes'
       and preparation.starts_at > now() - interval '5 minutes'
+    returning preparation.consumed_recording_id
 ), pipeline as (
     insert into recording_pipelines (recording_id, tenant_id, reservation_id, state)
     select recording_id, tenant_id, id, 'reserved'
@@ -125,13 +126,15 @@ with existing as (
 select reservation.id, reservation.tenant_id, reservation.space_id, reservation.episode_id,
     reservation.recording_id, reservation.idempotency_key, reservation.policy_snapshot_version, reservation.participant_count,
     reservation.max_duration_seconds, reservation.input_bitrate_bps, reservation.state,
-    reservation.starts_at, reservation.ends_at, reservation.updated_at, reservation.created_at
+    reservation.starts_at, reservation.ends_at, reservation.updated_at, reservation.created_at,
+    exists (select 1 from consumed_preparation)::boolean as preparation_consumed
 from reservation
 union all
 select replay.id, replay.tenant_id, replay.space_id, replay.episode_id,
     replay.recording_id, replay.idempotency_key, replay.policy_snapshot_version, replay.participant_count,
     replay.max_duration_seconds, replay.input_bitrate_bps, replay.state,
-    replay.starts_at, replay.ends_at, replay.updated_at, replay.created_at
+    replay.starts_at, replay.ends_at, replay.updated_at, replay.created_at,
+    exists (select 1 from recording_preparations where consumed_recording_id = replay.recording_id)::boolean as preparation_consumed
 from replay;
 
 -- name: GetRecordingReservation :one
