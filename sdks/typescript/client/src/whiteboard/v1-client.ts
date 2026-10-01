@@ -191,7 +191,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   sendCursor(input: { readonly x: number; readonly y: number }): void {
-    if (this.#phase !== "live" || !this.#canDraw) return;
+    if (this.#phase !== "live" || this.#summaryStatus !== "ready" || this.#snapshots.size > 0 || !this.#canDraw) return;
     const now = this.#now();
     if (now - this.#lastCursorAt < 1000 / WhiteboardV1ProtocolLimits.cursorRatePerSecond) return;
     const frame = { type: "cursor", x: input.x, y: input.y } as const;

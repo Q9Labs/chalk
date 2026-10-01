@@ -14,6 +14,32 @@ const files: ChalkWhiteboardV1FileTransport = {
 };
 
 describe("ChalkWhiteboardV1Client recovery summaries", () => {
+  it("holds cursors until the recovery snapshot is acknowledged", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = recoveryClient(clock, 100);
+    const startup = client.startSceneSubscription();
+    await acceptSnapshot(sockets);
+    await startup;
+    try {
+      sockets[0]?.close(1012);
+      clock.advance(100);
+      sockets[1]?.open();
+      await settle();
+      sockets[1]?.receive(welcome());
+      await settle();
+      client.sendCursor({ x: 10, y: 20 });
+      const frames = () => sockets[1]?.sent.map((wire) => Schema.decodeUnknownSync(WhiteboardV1ClientFrameSchema)(JSON.parse(wire))) ?? [];
+      expect(frames().filter((frame) => frame.type === "cursor")).toHaveLength(0);
+      sockets[1]?.receive(snapshotPage(sockets[1]?.requestId()));
+      await settle();
+      clock.advance(100);
+      client.sendCursor({ x: 30, y: 40 });
+      expect(frames().filter((frame) => frame.type === "cursor")).toHaveLength(1);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
   it("sends edits held behind a snapshot when that snapshot is rejected", async () => {
     const { client, sockets } = recoveryClient();
     const startup = client.startSceneSubscription();
