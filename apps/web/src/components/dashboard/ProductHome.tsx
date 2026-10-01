@@ -5,7 +5,7 @@ import { useDashboardAccount } from "./DashboardAccount";
 import { Icon } from "./DashboardShell";
 import { dashboardSpaceHref, defaultSpaceHrefBuilder, episodeHistoryHref, type SpaceHrefBuilder } from "./space-links";
 
-type HomeState = { spaces: DashboardSpace[]; episodes: DashboardEpisode[] };
+type HomeState = { spaces: DashboardSpace[]; allSpaces: DashboardSpace[]; episodes: DashboardEpisode[] };
 
 export function ProductHome({ spaceHrefBuilder = defaultSpaceHrefBuilder }: { spaceHrefBuilder?: SpaceHrefBuilder } = {}) {
   const { account, current } = useDashboardAccount();
@@ -17,9 +17,9 @@ export function ProductHome({ spaceHrefBuilder = defaultSpaceHrefBuilder }: { sp
     let active = true;
     setState(null);
     setError(null);
-    void Promise.all([listSpaces({ tenantID, pageSize: 6, archived: false }), listEpisodes({ tenantID })])
-      .then(([spaces, episodes]) => {
-        if (active) setState({ spaces: spaces.spaces, episodes: episodes.episodes });
+    void Promise.all([listSpaces({ tenantID, pageSize: 6, archived: false }), listSpaces({ tenantID, pageSize: 100 }), listEpisodes({ tenantID })])
+      .then(([spaces, allSpaces, episodes]) => {
+        if (active) setState({ spaces: spaces.spaces, allSpaces: allSpaces.spaces, episodes: episodes.episodes });
       })
       .catch((cause: unknown) => {
         if (!active) return;
@@ -35,7 +35,7 @@ export function ProductHome({ spaceHrefBuilder = defaultSpaceHrefBuilder }: { sp
     for (const episode of state?.episodes ?? []) grouped.set(episode.space_id, [...(grouped.get(episode.space_id) ?? []), episode]);
     return grouped;
   }, [state]);
-  const spacesByID = useMemo(() => new Map((state?.spaces ?? []).map((space) => [space.id, space])), [state]);
+  const spacesByID = useMemo(() => new Map((state?.allSpaces ?? []).map((space) => [space.id, space])), [state]);
   const recentEpisodes = state?.episodes.slice(0, 5) ?? [];
   const liveEpisodeCount = state?.episodes.filter((episode) => episode.status !== "ended").length ?? 0;
 

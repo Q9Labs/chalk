@@ -311,7 +311,7 @@ export function SpaceDetailPage({ tenantID, spaceID, transcriptionCeiling, clien
         </div>
         <dl className="space-detail-definition-grid">
           <DefinitionCard label="Admission mode" value={admissionLabel(space.admission_policy)} />
-          <DefinitionCard label="Media plane" value={mediaPlaneLabel(space.media_plane)} detail={space.media_plane} />
+          <DefinitionCard label="Media plane" value={mediaPlaneLabel(space.media_plane)} />
           <DefinitionCard label="Default Episode duration" value={durationLabel(space.default_episode_duration_seconds)} />
           <DefinitionCard label="Maximum Episode duration" value={durationLabel(space.maximum_episode_duration_seconds)} />
           <DefinitionCard label="Linger window" value={durationLabel(space.linger_window_seconds, true)} />
@@ -756,6 +756,7 @@ function admissionLabel(value: unknown): string {
 
 function mediaPlaneLabel(value: string): string {
   if (value === "cf_rtk") return "Cloudflare RealtimeKit";
+  if (value === "cf_sfu") return "Cloudflare Realtime SFU";
   return value || "Not configured";
 }
 

@@ -60,7 +60,7 @@ export function SpacePresentation({ skin, palette, texture, stageBackground, hea
         <SpaceHeader {...header} className={cn("relative z-20", header.className)} />
 
         <div className="relative flex min-h-0 w-full flex-1 overflow-hidden">
-          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-3 pt-1 pb-[5.5rem] sm:px-4 md:pb-[7.5rem] lg:px-5">
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-3 pt-1 pb-[9rem] sm:px-4 md:pb-[7.5rem] lg:px-5">
             {stageSurface}
             <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30">
               <div className={cn("pointer-events-auto", compactControls ? "hidden md:block" : "block")}>{controls}</div>

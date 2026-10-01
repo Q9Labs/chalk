@@ -429,11 +429,11 @@ export async function endEpisode(input: { tenantID: string; spaceID: string; epi
   return result;
 }
 
-export function listSpaceRecordings(input: { tenantID: string; spaceID: string; cursor?: string; pageSize?: number }): Promise<DashboardRecordingList> {
+export function listSpaceRecordings(input: { tenantID: string; spaceID?: string; cursor?: string; pageSize?: number }): Promise<DashboardRecordingList> {
   return generatedRequest((client) =>
     client.recordings.listRecordings({
       params: { tenant_id: tenantID(input.tenantID) },
-      query: { cursor: input.cursor, page_size: input.pageSize, space_id: spaceID(input.spaceID) },
+      query: { cursor: input.cursor, page_size: input.pageSize, space_id: input.spaceID === undefined ? undefined : spaceID(input.spaceID) },
     }),
   );
 }

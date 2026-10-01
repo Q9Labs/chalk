@@ -15,6 +15,8 @@ import SourceCodeIcon from "@hugeicons/core-free-icons/SourceCodeIcon";
 import Sun03Icon from "@hugeicons/core-free-icons/Sun03Icon";
 import UnfoldMoreIcon from "@hugeicons/core-free-icons/UnfoldMoreIcon";
 import UserCircleIcon from "@hugeicons/core-free-icons/UserCircleIcon";
+import UserGroupIcon from "@hugeicons/core-free-icons/UserGroupIcon";
+import Video01Icon from "@hugeicons/core-free-icons/Video01Icon";
 import type { IconSvgElement } from "@hugeicons/react";
 import {
   Menu,
@@ -54,6 +56,8 @@ const primaryNavigation = [
   { to: "/home", label: "Overview", icon: Home01Icon },
   { to: "/spaces", label: "Spaces", icon: DashboardSquare01Icon },
   { to: "/episodes", label: "Episodes", icon: PlayCircleIcon },
+  { to: "/artifacts", label: "Recordings", icon: Video01Icon },
+  { to: "/people", label: "People", icon: UserGroupIcon },
 ] as const;
 
 const utilityNavigation = [{ to: "/developer", label: "Developer", icon: SourceCodeIcon }] as const;

@@ -158,8 +158,15 @@ function formatSnapshotValue(key: string, value: unknown): string {
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "number" && key.endsWith("_seconds")) return formatSeconds(value);
   if (key === "media_plane" && value === "cf_rtk") return "Cloudflare RealtimeKit";
+  if (key === "media_plane" && value === "cf_sfu") return "Cloudflare Realtime SFU";
   if (typeof value === "string" || typeof value === "number") return String(value).replaceAll("_", " ");
-  return JSON.stringify(value);
+  if (Array.isArray(value)) return value.map((item) => formatSnapshotValue(key, item)).join(", ");
+  if (value && typeof value === "object") {
+    return Object.entries(value)
+      .map(([name, item]) => `${humanizeKey(name)}: ${formatSnapshotValue(name, item)}`)
+      .join("; ");
+  }
+  return String(value);
 }
 
 function formatSeconds(value: number): string {

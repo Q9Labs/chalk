@@ -45,7 +45,7 @@ export function TenantSettingsPage() {
         <div>
           <p className="eyebrow">{current.tenant.name}</p>
           <h1>Tenant settings</h1>
-          <p>Identity and deployment defaults for this customer boundary.</p>
+          <p>Name, region, and browser access for this Tenant.</p>
         </div>
       </header>
       <section className="settings-panel">
