@@ -62,7 +62,9 @@ func createUserEndpoint(service UserService) Endpoint[createUserRequest, userRes
 		if service == nil {
 			return userResponse{}, apiErrorServiceUnavailable
 		}
-
+		if err := authorizeSystem(ctx); err != nil {
+			return userResponse{}, err
+		}
 		user, err := service.CreateUser(ctx, request.input())
 		if err != nil {
 			return userResponse{}, err
@@ -75,6 +77,7 @@ func createUserEndpoint(service UserService) Endpoint[createUserRequest, userRes
 		Responds(http.StatusCreated, "User", userResponse{}).
 		Errors(
 			apiErrorUnauthenticated,
+			apiErrorForbidden,
 			apiErrorServiceUnavailable,
 			apiErrorInvalidRequest,
 			apiErrorInvalidUserName,
@@ -82,7 +85,7 @@ func createUserEndpoint(service UserService) Endpoint[createUserRequest, userRes
 			apiErrorRateLimited,
 			apiErrorInternal,
 		).
-		MapErrors(userServiceAPIError)
+		MapErrors(userEndpointAPIError)
 }
 
 func listUsersEndpoint(service UserService) Endpoint[listUsersRequest, userListResponse] {
@@ -90,7 +93,7 @@ func listUsersEndpoint(service UserService) Endpoint[listUsersRequest, userListR
 		if service == nil {
 			return userListResponse{}, apiErrorServiceUnavailable
 		}
-		if err := authorizeGlobalRead(ctx); err != nil {
+		if err := authorizeSystem(ctx); err != nil {
 			return userListResponse{}, err
 		}
 
@@ -119,7 +122,9 @@ func getUserEndpoint(service UserService) Endpoint[getUserRequest, userResponse]
 		if service == nil {
 			return userResponse{}, apiErrorServiceUnavailable
 		}
-
+		if err := authorizeAccountRead(ctx, request.UserID); err != nil {
+			return userResponse{}, err
+		}
 		user, err := service.GetUser(ctx, request.UserID)
 		if err != nil {
 			return userResponse{}, err
@@ -131,12 +136,13 @@ func getUserEndpoint(service UserService) Endpoint[getUserRequest, userResponse]
 		Responds(http.StatusOK, "User", userResponse{}).
 		Errors(
 			apiErrorUnauthenticated,
+			apiErrorForbidden,
 			apiErrorServiceUnavailable,
 			apiErrorInvalidUserID,
 			apiErrorUserNotFound,
 			apiErrorInternal,
 		).
-		MapErrors(userServiceAPIError)
+		MapErrors(userEndpointAPIError)
 }
 
 func decodeListUsersRequest(r *http.Request) (listUsersRequest, error) {

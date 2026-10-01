@@ -57,6 +57,34 @@ export function validJourneyID(value: string | null): string | undefined {
   return value && UUID_PATTERN.test(value) ? value.toLowerCase() : undefined;
 }
 
+export async function readBodyWithinLimit(request: Request, maxBytes: number): Promise<ArrayBuffer | undefined> {
+  if (!request.body) return new ArrayBuffer(0);
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteLength += value.byteLength;
+      if (byteLength > maxBytes) {
+        await reader.cancel();
+        return undefined;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const body = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body.buffer;
+}
+
 export function stripTokenFields(value: unknown, extraKeys: readonly string[] = []): unknown {
   if (Array.isArray(value)) return value.map((child) => stripTokenFields(child, extraKeys));
   if (!value || typeof value !== "object") return value;

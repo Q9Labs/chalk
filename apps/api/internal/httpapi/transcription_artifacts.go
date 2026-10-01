@@ -203,6 +203,9 @@ func transcriptArtifactDownloadEndpoint(service TranscriptArtifactService, downl
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsRead, MinimumRole: memberships.RoleObserver}); err != nil {
 			return transcriptDownloadResponse{}, err
 		}
+		if request.Body.ExpiresInSeconds <= 0 || request.Body.ExpiresInSeconds > int(maximumArtifactDownloadURLLifetime/time.Second) {
+			return transcriptDownloadResponse{}, apiErrorInvalidURLExpiration
+		}
 		transcript, err := service.Get(ctx, request.TenantID, request.TranscriptID)
 		if err != nil {
 			return transcriptDownloadResponse{}, err

@@ -1,4 +1,4 @@
-import { JOURNEY_HEADER, UUID_PATTERN, accountCookieName, csrfCookieName, forwardedContextHeaders, hasMatchingCsrfProof, readCookie, stripTokenFields, validJourneyID } from "./request-safety";
+import { JOURNEY_HEADER, UUID_PATTERN, accountCookieName, csrfCookieName, forwardedContextHeaders, hasMatchingCsrfProof, readBodyWithinLimit, readCookie, stripTokenFields, validJourneyID } from "./request-safety";
 
 export type AccountBoundaryEnv = {
   CHALK_API_ORIGIN: string;
@@ -321,8 +321,8 @@ async function boundedBody(request: Request, maxBodyBytes: number): Promise<Arra
   if (contentType !== "application/json") throw new BoundaryError(415, "unsupported_media_type", "Content-Type must be application/json");
   const contentLength = Number(request.headers.get("content-length") ?? 0);
   if (Number.isFinite(contentLength) && contentLength > maxBodyBytes) throw new BoundaryError(413, "payload_too_large", "Request body is too large");
-  const body = await request.arrayBuffer();
-  if (body.byteLength > maxBodyBytes) throw new BoundaryError(413, "payload_too_large", "Request body is too large");
+  const body = await readBodyWithinLimit(request, maxBodyBytes);
+  if (body === undefined) throw new BoundaryError(413, "payload_too_large", "Request body is too large");
   return body;
 }
 

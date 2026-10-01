@@ -1,4 +1,4 @@
-import { JOURNEY_HEADER, accountCookieName, csrfCookieName, forwardedContextHeaders, hasMatchingCsrfProof, readCookie, stripTokenFields, validJourneyID } from "./request-safety";
+import { JOURNEY_HEADER, accountCookieName, csrfCookieName, forwardedContextHeaders, hasMatchingCsrfProof, readBodyWithinLimit, readCookie, stripTokenFields, validJourneyID } from "./request-safety";
 
 export type EpisodeDiagnosticsGatewayEnv = {
   CHALK_API_ORIGIN?: string;
@@ -118,8 +118,8 @@ async function requestBody(request: Request): Promise<ArrayBuffer | undefined> {
   }
   const contentLength = Number(request.headers.get("content-length") ?? 0);
   if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) throw new GatewayError(413, "request.payload_too_large", "Request body is too large");
-  const body = await request.arrayBuffer();
-  if (body.byteLength > MAX_BODY_BYTES) throw new GatewayError(413, "request.payload_too_large", "Request body is too large");
+  const body = await readBodyWithinLimit(request, MAX_BODY_BYTES);
+  if (body === undefined) throw new GatewayError(413, "request.payload_too_large", "Request body is too large");
   return body;
 }
 
