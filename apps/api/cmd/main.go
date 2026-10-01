@@ -698,7 +698,7 @@ func run() error {
 		Feedback:               httpapi.FeedbackHTTPOptions{Service: feedbackService, ParticipantVerifier: episodeDiagnosticsHTTPOptions.ParticipantVerifier, Operator: episodeDiagnosticsHTTPOptions, Audit: httpapi.NewFeedbackAuditWriter(auditLogService)},
 	}
 	applyCapabilityProfile(&routerOptions, cfg.Capabilities)
-	diagnostics.ApplyHTTP(&routerOptions)
+	routerOptions.ApplyDiagnostics(diagnostics)
 
 	if cfg.ProviderBridge.Enabled {
 		recordingController := recordingorchestrator.NewController(recordingPipelineService)
