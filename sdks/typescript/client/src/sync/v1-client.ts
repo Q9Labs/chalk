@@ -646,7 +646,9 @@ export class V1SyncClient implements V1CollaborationClient {
     // Cover brief service restarts without a growing gap; sustained failures
     // still back off, and explicitly configured retry policies are unchanged.
     const exponentialAttempt = configuredDelay === undefined ? Math.max(0, this.#reconnectAttempt - FAST_RECONNECT_ATTEMPTS + 1) : this.#reconnectAttempt;
-    const delay = configuredDelay === 0 ? 0 : Math.min(MAX_RECONNECT_DELAY_MS, (configuredDelay ?? DEFAULT_RECONNECT_DELAY_MS) * 2 ** Math.min(exponentialAttempt, 5));
+    const baseDelay = configuredDelay === 0 ? 0 : Math.min(MAX_RECONNECT_DELAY_MS, (configuredDelay ?? DEFAULT_RECONNECT_DELAY_MS) * 2 ** Math.min(exponentialAttempt, 5));
+    // A Sync restart drops every client at once; ±20% jitter spreads the default retries apart.
+    const delay = configuredDelay === undefined ? Math.round(baseDelay * (0.8 + 0.4 * Math.random())) : baseDelay;
     recordReconnect(this.#options.recordReconnect, "sync_backoff", { boundary: "start", delay_ms: delay, attempt: this.#reconnectAttempt });
     this.#reconnectAttempt += 1;
     const backoffStartedAt = this.#now();

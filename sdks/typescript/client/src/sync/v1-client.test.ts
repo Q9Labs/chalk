@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { SnapshotSchema } from "../generated/sync";
 import { decodeV1ClientFrame, decodeV1ServerFrame, encodeV1ClientFrame } from "./v1-codec";
 import { V1SyncClient, V1SyncError } from "./v1-client";
@@ -240,6 +240,7 @@ describe("V1SyncClient", () => {
   });
 
   it("bounds the default fast retry burst before backing off and cancels it on stop", async () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.5);
     const clock = new TestClock();
     const sockets: TestSocket[] = [];
     const client = new V1SyncClient({
@@ -272,6 +273,41 @@ describe("V1SyncClient", () => {
     const count = sockets.length;
     clock.advance(10_000);
     expect(sockets).toHaveLength(count);
+    random.mockRestore();
+  });
+
+  it("spreads default retries by up to 20% in either direction", async () => {
+    for (const [sample, delay] of [
+      [0, 200],
+      [0.999, 300],
+    ] as const) {
+      const random = vi.spyOn(Math, "random").mockReturnValue(sample);
+      const clock = new TestClock();
+      const sockets: TestSocket[] = [];
+      const client = new V1SyncClient({
+        url: "ws://sync.test/v1/sync",
+        token: async () => "token",
+        webSocket: {
+          connect: () => {
+            const socket = new TestSocket();
+            sockets.push(socket);
+            return socket;
+          },
+        },
+        clock,
+      });
+      await client.start();
+      sockets.at(-1)?.close(1012);
+      clock.advance(0);
+      await settle();
+      const count = sockets.length;
+      clock.advance(delay - 1);
+      expect(sockets).toHaveLength(count);
+      clock.advance(1);
+      expect(sockets).toHaveLength(count + 1);
+      client.stop();
+      random.mockRestore();
+    }
   });
 
   it("gates live traffic on control, media, and presence recovery and declares all four streams", async () => {
