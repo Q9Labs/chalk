@@ -115,6 +115,8 @@ func (handler *HTTPHandler) register(response http.ResponseWriter, request *http
 	}
 	identity, delivered, err := handler.service.Register(request.Context(), input.BootstrapRequest)
 	if err != nil {
+		handler.logger.WarnContext(request.Context(), "recorder fleet bootstrap registration failed",
+			"operation", "register", "provider_node_id", input.ProviderID, "error", err)
 		writeError(response, err)
 		return
 	}
@@ -258,7 +260,12 @@ func writeJSON(response http.ResponseWriter, status int, value any) {
 
 func writeError(response http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError
+	code := ""
 	switch {
+	case errors.Is(err, recorderfleet.ErrInventoryNotReady):
+		status = http.StatusConflict
+		code = recorderfleet.InventoryNotReadyCode
+		response.Header().Set("Retry-After", "1")
 	case errors.Is(err, recorderbootstrapprotocol.ErrInvalidProtocol):
 		status = http.StatusBadRequest
 	case errors.Is(err, ErrUnauthorized), errors.Is(err, ErrConflict):
@@ -268,7 +275,8 @@ func writeError(response http.ResponseWriter, err error) {
 	}
 	writeJSON(response, status, struct {
 		Error string `json:"error"`
-	}{Error: http.StatusText(status)})
+		Code  string `json:"code,omitempty"`
+	}{Error: http.StatusText(status), Code: code})
 }
 
 type registerRequest struct {
@@ -369,6 +377,8 @@ func outcomeName(status int) string {
 		return "invalid"
 	case status == http.StatusForbidden || status == http.StatusUnauthorized:
 		return "rejected"
+	case status == http.StatusConflict:
+		return "inventory_pending"
 	case status == http.StatusServiceUnavailable:
 		return "dependency_unavailable"
 	default:

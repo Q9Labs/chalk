@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -97,18 +98,22 @@ func (c *Client) EnsureBootstrap(ctx context.Context, request recorderfleet.Boot
 		return recorderfleet.NodeIdentity{}, recorderfleet.ErrRoleFence
 	}
 	var response bootstrapResponse
-	if err := c.doJSON(ctx, bootstrapPath, bootstrapRequest{
+	err := c.doJSON(ctx, bootstrapPath, bootstrapRequest{
 		SchemaVersion: BootstrapSchemaVersion, BootstrapRequest: request,
-	}, &response, http.StatusOK); err != nil {
+	}, &response, http.StatusOK)
+	if err != nil && !errors.Is(err, recorderfleet.ErrBootstrapPending) {
 		return recorderfleet.NodeIdentity{}, err
 	}
 	identity := response.Identity
 	if response.SchemaVersion != BootstrapSchemaVersion || identity.ProviderID != request.ProviderID || identity.Role != request.Key.Role || identity.BootGeneration != request.BootGeneration {
 		return recorderfleet.NodeIdentity{}, recorderfleet.ErrRoleFence
 	}
-	workerID, err := utilities.ParseID(identity.WorkerID)
-	if err != nil || workerID.IsZero() {
+	workerID, parseErr := utilities.ParseID(identity.WorkerID)
+	if parseErr != nil || workerID.IsZero() {
 		return recorderfleet.NodeIdentity{}, recorderfleet.ErrRoleFence
+	}
+	if err != nil {
+		return recorderfleet.NodeIdentity{}, err
 	}
 	return identity, nil
 }
@@ -147,7 +152,16 @@ func (c *Client) doJSON(ctx context.Context, path string, input any, output any,
 	if err != nil || len(responseBody) > maximumResponseSize {
 		return fmt.Errorf("%w: invalid recorder fleet issuer response", recorderfleet.ErrProviderUnavailable)
 	}
-	if response.StatusCode != expectedStatus {
+	pending := path == bootstrapPath && response.StatusCode == http.StatusAccepted
+	if response.StatusCode != expectedStatus && !pending {
+		if path == bootstrapPath && response.StatusCode == http.StatusConflict {
+			var failure struct {
+				Code string `json:"code"`
+			}
+			if json.Unmarshal(responseBody, &failure) == nil && failure.Code == recorderfleet.InventoryNotReadyCode {
+				return recorderfleet.ErrInventoryNotReady
+			}
+		}
 		return fmt.Errorf("%w: recorder fleet issuer status %d", recorderfleet.ErrProviderUnavailable, response.StatusCode)
 	}
 	if output == nil {
@@ -164,6 +178,9 @@ func (c *Client) doJSON(ctx context.Context, path string, input any, output any,
 	var trailing any
 	if err := decoder.Decode(&trailing); err != io.EOF {
 		return fmt.Errorf("%w: invalid recorder fleet issuer response", recorderfleet.ErrProviderUnavailable)
+	}
+	if pending {
+		return recorderfleet.ErrBootstrapPending
 	}
 	return nil
 }

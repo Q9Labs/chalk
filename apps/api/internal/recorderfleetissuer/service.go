@@ -371,14 +371,14 @@ func (service *Service) registrationByWorker(identity workeridentity.Identity) (
 
 func (service *Service) verifyInventory(ctx context.Context, request recorderfleet.BootstrapRequest, peerIP netip.Addr) (recorderfleet.Node, error) {
 	node, publicIP, err := service.inventory.InspectNode(ctx, request.Key, request.ProviderID)
-	if err != nil {
+	if err != nil && !errors.Is(err, recorderfleet.ErrInventoryNotReady) {
 		return recorderfleet.Node{}, fmt.Errorf("inspect provider node: %w", err)
 	}
 	requiredTags := []string{
 		service.ownerTag, recorderfleet.EnvironmentTag(request.Key.Environment), recorderfleet.RoleTag(request.Key.Role),
 		recorderfleet.ReleaseTag(request.ReleaseID), recorderfleet.ImageTag(request.ImageDigest), recorderfleet.BootTag(request.BootGeneration),
 	}
-	if node.ProviderID != request.ProviderID || node.Name != request.NodeName || node.Status != "active" || node.Region != request.Region ||
+	if node.ProviderID != request.ProviderID || node.Name != request.NodeName || node.Region != request.Region ||
 		node.BootGeneration != request.BootGeneration || recorderfleet.InventoryDigest(node) != request.InventoryDigest {
 		return recorderfleet.Node{}, ErrUnauthorized
 	}
@@ -386,6 +386,16 @@ func (service *Service) verifyInventory(ctx context.Context, request recorderfle
 		if !slices.Contains(node.Tags, tag) {
 			return recorderfleet.Node{}, ErrUnauthorized
 		}
+	}
+	// Check identity, tags, image and firewall digest before classifying readiness.
+	if node.Status != "active" && node.Status != "new" {
+		return recorderfleet.Node{}, fmt.Errorf("%w: provider node status %q", ErrUnauthorized, node.Status)
+	}
+	if node.Status == "new" {
+		return recorderfleet.Node{}, fmt.Errorf("%w: provider node status is new", recorderfleet.ErrInventoryNotReady)
+	}
+	if !publicIP.IsValid() || errors.Is(err, recorderfleet.ErrInventoryNotReady) {
+		return recorderfleet.Node{}, fmt.Errorf("%w: public IPv4 is absent", recorderfleet.ErrInventoryNotReady)
 	}
 	if peerIP.IsValid() && peerIP.Unmap() != publicIP.Unmap() {
 		return recorderfleet.Node{}, ErrUnauthorized

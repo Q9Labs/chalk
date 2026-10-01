@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -102,7 +103,9 @@ func runLoop(ctx context.Context, interval time.Duration, reconciler reconcileRu
 			return nil
 		case <-timer.C:
 			result, err := reconciler.Reconcile(ctx)
-			if err != nil {
+			if errors.Is(err, recorderfleet.ErrInventoryNotReady) || errors.Is(err, recorderfleet.ErrBootstrapPending) {
+				logger.InfoContext(ctx, "recorder fleet bootstrap pending", "error", err)
+			} else if err != nil {
 				logger.Error("recorder fleet reconciliation failed", "error", err)
 			} else {
 				logger.Info("recorder fleet reconciled",
