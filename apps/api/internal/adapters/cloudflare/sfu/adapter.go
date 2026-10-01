@@ -145,10 +145,11 @@ type tracksRequest struct {
 }
 
 type providerTrack struct {
-	Location  string `json:"location"`
-	Mid       string `json:"mid,omitempty"`
-	TrackName string `json:"trackName"`
-	SessionID string `json:"sessionId,omitempty"`
+	Simulcast *mediaplane.Simulcast `json:"simulcast,omitempty"`
+	Location  string                `json:"location"`
+	Mid       string                `json:"mid,omitempty"`
+	TrackName string                `json:"trackName"`
+	SessionID string                `json:"sessionId,omitempty"`
 }
 
 type addTracksResponse struct {
@@ -278,7 +279,7 @@ func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) 
 	tracks := make([]providerTrack, 0, len(input.Tracks))
 	localTracks := make([]providerTrack, 0, len(input.Tracks))
 	for _, track := range input.Tracks {
-		providerTrack := providerTrack{Location: track.Location, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID}
+		providerTrack := providerTrack{Location: track.Location, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID, Simulcast: track.Simulcast}
 		tracks = append(tracks, providerTrack)
 		if track.Location == "local" {
 			localTracks = append(localTracks, providerTrack)

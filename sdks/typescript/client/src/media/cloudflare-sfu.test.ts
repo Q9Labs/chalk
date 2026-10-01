@@ -164,6 +164,128 @@ describe("Cloudflare SFU HTTP signaling", () => {
 });
 
 describe("Cloudflare SFU client", () => {
+  it("configures only camera with full and half-resolution encodings before the offer", async () => {
+    const harness = createHarness();
+    await harness.client.start(fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
+    harness.client.prepareLocalTrack("screen", new FakeTrack("screen", "video") as unknown as MediaStreamTrack);
+    await setScreenTarget(harness.client, "screen-on", true);
+    expect(harness.peers[0]?.transceiverInits).toEqual([
+      { direction: "sendonly" },
+      {
+        direction: "sendonly",
+        sendEncodings: [
+          { rid: "h", scaleResolutionDownBy: 1, maxBitrate: 2_500_000, scalabilityMode: "L1T1" },
+          { rid: "l", scaleResolutionDownBy: 2, maxBitrate: 650_000, scalabilityMode: "L1T1" },
+        ],
+      },
+      { direction: "sendonly" },
+    ]);
+    harness.client.stop();
+  });
+
+  it.each([
+    ["Mozilla/5.0 Gecko/20100101 Firefox/153.0", 1],
+    ["Mozilla/5.0 Android Gecko/153.0 Firefox/153.0", 1],
+    ["Mozilla/5.0 AppleWebKit/537.36 Chrome/154.0 Safari/537.36", 2],
+    ["Mozilla/5.0 AppleWebKit/605.1.15 Version/26.5 Safari/605.1.15", 2],
+    ["Mozilla/5.0 AppleWebKit/605.1.15 FxiOS/153.0 Mobile", 2],
+  ])("preserves camera encoding policy through replacement and restart for %s", async (userAgent, layers) => {
+    vi.stubGlobal("navigator", { userAgent });
+    const harness = createHarness();
+    try {
+      await harness.client.start(fakeStream(new FakeTrack("camera", "video")));
+      const sender = harness.peers[0]!.getSenders()[0]!;
+      const encodings = sender.getParameters().encodings;
+      expect(encodings).toHaveLength(layers);
+      const target = (operationId: string, enabled: boolean) => harness.client.setLocalPublicationTarget({ operationId, participantId: "participant-1", source: "camera", enabled });
+      await target("off", false);
+      await target("on", true);
+      expect(sender.getParameters().encodings).toEqual(encodings);
+      await harness.client.clearPreparedLocalTrack("camera");
+      harness.client.prepareLocalTrack("camera", new FakeTrack("replacement", "video") as unknown as MediaStreamTrack);
+      await target("replacement-on", true);
+      expect(sender.getParameters().encodings).toEqual(encodings);
+      await harness.client.restart({ bootstrap: bootstrap("connection-2") });
+      expect(harness.peers.at(-1)?.getSenders()[0]?.getParameters().encodings).toEqual(encodings);
+    } finally {
+      harness.client.stop();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it.each([false, true])("camera budget adaptation is isolated and optional (refused=%s)", async (refused) => {
+    vi.useFakeTimers();
+    const harness = createHarness();
+    try {
+      const peer = harness.peers[0]!;
+      peer.availableOutgoingBitrate = 800_000;
+      peer.refuseSenderParameters = refused;
+      await harness.client.start(fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
+      harness.client.prepareLocalTrack("screen", new FakeTrack("screen", "video") as unknown as MediaStreamTrack);
+      await setScreenTarget(harness.client, "screen-on", true);
+      await vi.advanceTimersByTimeAsync(1_000);
+      const [mic, camera, screen] = peer.getSenders();
+      expect(mic?.getParameters().encodings).toEqual([{}]);
+      expect(screen?.getParameters().encodings).toEqual([{}]);
+      expect(camera?.getParameters().encodings).toEqual([
+        { rid: "h", scaleResolutionDownBy: 1, maxBitrate: 2_500_000, scalabilityMode: "L1T1" },
+        { rid: "l", scaleResolutionDownBy: 2, maxBitrate: 650_000, scalabilityMode: "L1T1", ...(refused ? {} : { active: false }) },
+      ]);
+      expect(harness.client.getSnapshot().localTracks.every((track) => track.enabled)).toBe(true);
+      if (!refused) {
+        peer.availableOutgoingBitrate = 2_100_000;
+        await vi.advanceTimersByTimeAsync(4_000);
+        expect(camera?.getParameters().encodings[1]?.active).toBe(false);
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(camera?.getParameters().encodings[1]?.active).toBe(true);
+      }
+      harness.client.stop();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["transceiver", "offer"])("falls back when the browser refuses simulcast at %s creation", async (stage) => {
+    const harness = createHarness();
+    const peer = harness.peers[0]!;
+    peer.refuseSimulcast = stage === "transceiver";
+    peer.refuseSimulcastOffer = stage === "offer";
+    await harness.client.start(fakeStream(new FakeTrack("camera", "video")));
+    expect(harness.client.getSnapshot().localTracks[0]?.enabled).toBe(true);
+    expect(
+      peer
+        .getSenders()
+        .filter((sender) => sender.track)
+        .map((sender) => sender.getParameters().encodings),
+    ).toEqual([[{}]]);
+    expect(peer.transceiverInits.at(-1)).toEqual({ direction: "sendonly" });
+    expect(harness.transport.addInputs).toHaveLength(1);
+    harness.client.stop();
+  });
+
+  it("preserves camera encodings across toggle, device replacement, and connection restart", async () => {
+    const harness = createHarness();
+    await harness.client.start(fakeStream(new FakeTrack("camera", "video")));
+    const sender = harness.peers[0]!.getSenders()[0]!;
+    const encodings = sender.getParameters().encodings;
+    const target = (operationId: string, enabled: boolean) => harness.client.setLocalPublicationTarget({ operationId, participantId: "participant-1", source: "camera", enabled });
+    await target("off", false);
+    await target("on", true);
+    expect(sender.getParameters().encodings).toEqual(encodings);
+    await harness.client.clearPreparedLocalTrack("camera");
+    const replacement = new FakeTrack("new-device", "video") as unknown as MediaStreamTrack;
+    harness.client.prepareLocalTrack("camera", replacement);
+    await target("new-device-on", true);
+    expect(sender.track).toBe(replacement);
+    expect(sender.getParameters().encodings).toEqual(encodings);
+    await harness.client.restart({ bootstrap: bootstrap("connection-2") });
+    expect(harness.peers.at(-1)?.getSenders()[0]?.getParameters().encodings).toEqual(encodings);
+    expect(harness.transport.addInputs.at(-1)?.connectionId).toBe("connection-2");
+    harness.client.stop();
+  });
+
   it("starts without local tracks so receive-only connections do not need getUserMedia", async () => {
     const harness = createHarness();
     await harness.client.start(fakeStream());
@@ -178,6 +300,27 @@ describe("Cloudflare SFU client", () => {
     harness.client.stop();
   });
 
+  it("prefers full camera quality with fallback without changing screen or microphone subscriptions", async () => {
+    const harness = createHarness();
+    await harness.client.start(fakeStream());
+    harness.transport.snapshot = {
+      incarnation: 1,
+      sequence: 1,
+      publications: (["camera", "screen", "microphone"] as const).map((source) => ({
+        participantId: "participant-2",
+        source,
+        publicationId: `remote-connection|${source}`,
+      })),
+    };
+    await harness.client.refreshRemotePublications();
+    expect(harness.transport.addInputs.at(-1)?.tracks.map(({ location, trackName, simulcast }) => ({ location, trackName, simulcast }))).toEqual([
+      { location: "remote", trackName: "camera", simulcast: { preferredRid: "h", priorityOrdering: "none", ridNotAvailable: "asciibetical" } },
+      { location: "remote", trackName: "screen", simulcast: undefined },
+      { location: "remote", trackName: "microphone", simulcast: undefined },
+    ]);
+    harness.client.stop();
+  });
+
   it("replaces a dormant connection before delayed first publication", async () => {
     const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
     const harness = createHarness({ replaceMediaConnection });
@@ -189,6 +332,7 @@ describe("Cloudflare SFU client", () => {
     expect(replaceMediaConnection).toHaveBeenCalledOnce();
     expect(harness.peers[0]?.closed).toBe(true);
     expect(harness.transport.addInputs.map((input) => input.connectionId)).toEqual(["connection-2"]);
+    expectCameraEncodings(harness.peers.at(-1));
     harness.client.stop();
   });
 
@@ -202,6 +346,7 @@ describe("Cloudflare SFU client", () => {
     expect(replaceMediaConnection).not.toHaveBeenCalled();
     expect(harness.transport.addInputs.map((input) => input.connectionId)).toEqual(["connection-1", "connection-2"]);
     expect(harness.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, localTracks: [{ enabled: true }] });
+    expectCameraEncodings(harness.peers.at(-1));
     harness.client.stop();
   });
 
@@ -214,6 +359,7 @@ describe("Cloudflare SFU client", () => {
 
     expect(replaceMediaConnection).toHaveBeenCalledOnce();
     expect(harness.transport.addInputs.map((input) => input.connectionId)).toEqual(["connection-1", "connection-2"]);
+    expectCameraEncodings(harness.peers.at(-1));
     harness.client.stop();
   });
 
@@ -227,6 +373,7 @@ describe("Cloudflare SFU client", () => {
     expect(replaceMediaConnection).toHaveBeenCalledOnce();
     expect(harness.transport.addInputs.map((input) => input.connectionId)).toEqual(["connection-1", "connection-2"]);
     expect(harness.client.getSnapshot().localTracks).toMatchObject([{ source: "camera", enabled: true }]);
+    expectCameraEncodings(harness.peers.at(-1));
     harness.client.stop();
   });
 
@@ -243,6 +390,7 @@ describe("Cloudflare SFU client", () => {
     await expect(harness.client.setLocalPublicationTarget({ operationId: "reenable", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toMatchObject({ outcome: "confirmed" });
     expect(replaceMediaConnection).toHaveBeenCalledOnce();
     expect(harness.transport.addInputs.at(-1)?.tracks[0]?.mid).not.toBe(oldMID);
+    expectCameraEncodings(harness.peers.at(-1));
     harness.client.stop();
   });
 
@@ -514,7 +662,7 @@ describe("Cloudflare SFU client", () => {
 
     await harness.client.refreshRemotePublications();
 
-    expect(harness.transport.addInputs.at(-1)?.tracks).toEqual([{ location: "remote", sessionId: "remote-connection", trackName: "remote-camera-track" }]);
+    expect(harness.transport.addInputs.at(-1)?.tracks).toEqual([{ location: "remote", sessionId: "remote-connection", trackName: "remote-camera-track", simulcast: { preferredRid: "h", priorityOrdering: "none", ridNotAvailable: "asciibetical" } }]);
     expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe(publicationId);
     harness.client.stop();
   });
@@ -1027,6 +1175,18 @@ async function startedRemoteHarness(publicationId: string): Promise<ReturnType<t
   return harness;
 }
 
+function expectCameraEncodings(peer: FakePeerConnection | undefined): void {
+  expect(
+    peer
+      ?.getSenders()
+      .find((sender) => sender.track?.kind === "video")
+      ?.getParameters().encodings,
+  ).toEqual([
+    { rid: "h", scaleResolutionDownBy: 1, maxBitrate: 2_500_000, scalabilityMode: "L1T1" },
+    { rid: "l", scaleResolutionDownBy: 2, maxBitrate: 650_000, scalabilityMode: "L1T1" },
+  ]);
+}
+
 async function startedReplaceableHarness() {
   const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
   const onError = vi.fn();
@@ -1258,6 +1418,9 @@ class FakePeerConnection extends EventTarget {
   closed = false;
   rollbackCalls = 0;
   throwOnCleanup = false;
+  readonly transceiverInits: RTCRtpTransceiverInit[] = [];
+  refuseSimulcast = false;
+  refuseSimulcastOffer = false;
   readonly #activeTransceivers = new Set<RTCRtpTransceiver>();
   readonly #autoConnect: boolean;
   readonly #transceivers: RTCRtpTransceiver[] = [];
@@ -1268,9 +1431,17 @@ class FakePeerConnection extends EventTarget {
     this.#autoConnect = autoConnect;
   }
 
-  addTransceiver(track: MediaStreamTrack): RTCRtpTransceiver {
+  addTransceiver(track: MediaStreamTrack, init: RTCRtpTransceiverInit = {}): RTCRtpTransceiver {
+    this.transceiverInits.push(init);
+    if (this.refuseSimulcast && init.sendEncodings) throw new DOMException("Simulcast unsupported", "NotSupportedError");
     let senderTrack: MediaStreamTrack | null = track;
+    let parameters: Pick<RTCRtpSendParameters, "encodings" | "degradationPreference"> = { encodings: init.sendEncodings ?? [{}] };
     const sender = {
+      getParameters: () => ({ ...parameters, encodings: parameters.encodings.map((encoding) => ({ ...encoding })) }),
+      setParameters: async (next: RTCRtpSendParameters) => {
+        if (this.refuseSenderParameters) throw new DOMException("Sender controls unsupported", "NotSupportedError");
+        parameters = { ...next, encodings: next.encodings.map((encoding) => ({ ...encoding })) };
+      },
       get track() {
         return senderTrack;
       },
@@ -1297,6 +1468,7 @@ class FakePeerConnection extends EventTarget {
   }
 
   async createOffer(): Promise<RTCSessionDescriptionInit> {
+    if (this.refuseSimulcastOffer && this.getSenders().some((sender) => sender.track && sender.getParameters().encodings.length > 1)) throw new DOMException("Simulcast unsupported", "NotSupportedError");
     return { type: "offer", sdp: "browser-offer" };
   }
 
@@ -1304,9 +1476,12 @@ class FakePeerConnection extends EventTarget {
     return { type: "answer", sdp: "browser-answer" };
   }
 
+  availableOutgoingBitrate: number | undefined;
+  refuseSenderParameters = false;
+
   getStats(): Promise<RTCStatsReport> {
     const stat: RTCStats = { id: "candidate-pair", timestamp: 0, type: "candidate-pair" };
-    Object.assign(stat, { selected: true, state: "succeeded" });
+    Object.assign(stat, { selected: true, state: "succeeded", availableOutgoingBitrate: this.availableOutgoingBitrate });
     const stats = new Map<string, RTCStats>([["candidate-pair", stat]]);
     return Promise.resolve(stats);
   }

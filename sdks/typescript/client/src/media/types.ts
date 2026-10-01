@@ -20,6 +20,11 @@ export type CloudflareSFUTrackRequest = {
   readonly mid?: string;
   readonly trackName: string;
   readonly sessionId?: string;
+  readonly simulcast?: {
+    readonly preferredRid: string;
+    readonly priorityOrdering: "none" | "asciibetical";
+    readonly ridNotAvailable: "none" | "asciibetical";
+  };
   readonly source?: MediaSource;
   readonly publicationId?: string;
 };

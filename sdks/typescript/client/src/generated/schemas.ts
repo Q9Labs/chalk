@@ -380,6 +380,15 @@ export const CloudflareSFUTracksAPIResponseSchema = Schema.Struct({
         mid: Schema.optional(Schema.String),
         publication_id: Schema.optional(Schema.String),
         sessionId: Schema.optional(Schema.String),
+        simulcast: Schema.optional(
+          Schema.NullOr(
+            Schema.Struct({
+              preferredRid: Schema.String,
+              priorityOrdering: Schema.String,
+              ridNotAvailable: Schema.String,
+            }),
+          ),
+        ),
         source: Schema.optional(Schema.String),
         trackName: Schema.String,
       }),
@@ -404,6 +413,15 @@ export const CloudflareSFUTracksRequestSchema = Schema.Struct({
       mid: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
       publication_id: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
       sessionId: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+      simulcast: Schema.optional(
+        Schema.NullOr(
+          Schema.Struct({
+            preferredRid: Schema.String.check(Schema.isMinLength(1)),
+            priorityOrdering: Schema.String.check(Schema.isMinLength(1)),
+            ridNotAvailable: Schema.String.check(Schema.isMinLength(1)),
+          }),
+        ),
+      ),
       source: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
       trackName: Schema.String.check(Schema.isMinLength(1)),
     }),
