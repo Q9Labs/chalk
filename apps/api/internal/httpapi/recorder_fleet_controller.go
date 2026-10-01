@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -28,25 +29,28 @@ type RecorderFleetControllerVerifier interface {
 
 type recorderFleetControllerIdentityContextKey struct{}
 
-func NewRecorderFleetControllerRouter(service RecorderFleetControllerService, verifier RecorderFleetControllerVerifier, environment string) http.Handler {
+func NewRecorderFleetControllerRouter(service RecorderFleetControllerService, verifier RecorderFleetControllerVerifier, environment string, logger *slog.Logger) http.Handler {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	router := chi.NewRouter()
 	if service == nil || verifier == nil || strings.TrimSpace(environment) == "" {
 		return router
 	}
 	router.Route("/internal/v1/recorder/fleet", func(router chi.Router) {
 		router.Use(func(next http.Handler) http.Handler { return requireRecorderFleetController(verifier, next) })
-		router.Get("/demand", recorderFleetDemandHandler(service, environment))
-		router.Get("/nodes", recorderFleetNodesHandler(service, environment))
-		router.Post("/nodes/{providerID}/bootstrap", recorderFleetBootstrapHandler(service, environment))
-		router.Post("/nodes/{providerID}/bootstrap/abandon", recorderFleetBootstrapAbandonHandler(service, environment))
-		router.Post("/nodes/{providerID}/admission/close", recorderFleetCommandHandler(service, environment, false))
-		router.Post("/nodes/{providerID}/identity/revoke", recorderFleetCommandHandler(service, environment, true))
-		router.Put("/pool", recorderFleetPoolHandler(service, environment))
+		router.Get("/demand", recorderFleetDemandHandler(service, environment, logger))
+		router.Get("/nodes", recorderFleetNodesHandler(service, environment, logger))
+		router.Post("/nodes/{providerID}/bootstrap", recorderFleetBootstrapHandler(service, environment, logger))
+		router.Post("/nodes/{providerID}/bootstrap/abandon", recorderFleetBootstrapAbandonHandler(service, environment, logger))
+		router.Post("/nodes/{providerID}/admission/close", recorderFleetCommandHandler(service, environment, false, logger))
+		router.Post("/nodes/{providerID}/identity/revoke", recorderFleetCommandHandler(service, environment, true, logger))
+		router.Put("/pool", recorderFleetPoolHandler(service, environment, logger))
 	})
 	return router
 }
 
-func recorderFleetBootstrapAbandonHandler(service RecorderFleetControllerService, environment string) http.HandlerFunc {
+func recorderFleetBootstrapAbandonHandler(service RecorderFleetControllerService, environment string, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, request *http.Request) {
 		body, ok := decodeRecorderWorkerBody[recorderFleetBootstrapRequest](w, request)
 		if !ok {
@@ -58,7 +62,7 @@ func recorderFleetBootstrapAbandonHandler(service RecorderFleetControllerService
 			return
 		}
 		if err := service.AbandonBootstrap(request.Context(), body.BootstrapRequest); err != nil {
-			writeRecorderFleetError(w, err)
+			writeRecorderFleetError(w, request, logger, "bootstrap_abandon", err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -77,7 +81,7 @@ func requireRecorderFleetController(verifier RecorderFleetControllerVerifier, ne
 	})
 }
 
-func recorderFleetDemandHandler(service RecorderFleetControllerService, environment string) http.HandlerFunc {
+func recorderFleetDemandHandler(service RecorderFleetControllerService, environment string, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, request *http.Request) {
 		key, ok := recorderFleetRequestKey(w, request, environment, true)
 		if !ok {
@@ -85,7 +89,7 @@ func recorderFleetDemandHandler(service RecorderFleetControllerService, environm
 		}
 		demand, err := service.GetDemand(request.Context(), key)
 		if err != nil {
-			writeRecorderFleetError(w, err)
+			writeRecorderFleetError(w, request, logger, "get_demand", err)
 			return
 		}
 		// The private listener's 10 s WriteTimeout bounds the whole response.
@@ -93,7 +97,7 @@ func recorderFleetDemandHandler(service RecorderFleetControllerService, environm
 			demand, err = waitForRecorderFleetDemand(request.Context(), service, key, demand, 8*time.Second, 500*time.Millisecond)
 			if err != nil {
 				if request.Context().Err() == nil {
-					writeRecorderFleetError(w, err)
+					writeRecorderFleetError(w, request, logger, "get_demand", err)
 				}
 				return
 			}
@@ -128,7 +132,7 @@ func waitForRecorderFleetDemand(ctx context.Context, service RecorderFleetContro
 	}
 }
 
-func recorderFleetNodesHandler(service RecorderFleetControllerService, environment string) http.HandlerFunc {
+func recorderFleetNodesHandler(service RecorderFleetControllerService, environment string, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, request *http.Request) {
 		key, ok := recorderFleetRequestKey(w, request, environment, false)
 		if !ok {
@@ -136,7 +140,7 @@ func recorderFleetNodesHandler(service RecorderFleetControllerService, environme
 		}
 		nodes, err := service.ObserveNodes(request.Context(), key)
 		if err != nil {
-			writeRecorderFleetError(w, err)
+			writeRecorderFleetError(w, request, logger, "observe_nodes", err)
 			return
 		}
 		if nodes == nil {
@@ -149,7 +153,7 @@ func recorderFleetNodesHandler(service RecorderFleetControllerService, environme
 	}
 }
 
-func recorderFleetBootstrapHandler(service RecorderFleetControllerService, environment string) http.HandlerFunc {
+func recorderFleetBootstrapHandler(service RecorderFleetControllerService, environment string, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, request *http.Request) {
 		body, ok := decodeRecorderWorkerBody[recorderFleetBootstrapRequest](w, request)
 		if !ok {
@@ -162,7 +166,7 @@ func recorderFleetBootstrapHandler(service RecorderFleetControllerService, envir
 		}
 		identity, err := service.EnsureBootstrap(request.Context(), body.BootstrapRequest)
 		if err != nil {
-			writeRecorderFleetError(w, err)
+			writeRecorderFleetError(w, request, logger, "bootstrap", err)
 			return
 		}
 		writeJSON(w, http.StatusOK, recorderFleetBootstrapResponse{
@@ -172,7 +176,7 @@ func recorderFleetBootstrapHandler(service RecorderFleetControllerService, envir
 	}
 }
 
-func recorderFleetCommandHandler(service RecorderFleetControllerService, environment string, revoke bool) http.HandlerFunc {
+func recorderFleetCommandHandler(service RecorderFleetControllerService, environment string, revoke bool, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, request *http.Request) {
 		body, ok := decodeRecorderWorkerBody[recorderFleetCommandRequest](w, request)
 		if !ok {
@@ -183,20 +187,22 @@ func recorderFleetCommandHandler(service RecorderFleetControllerService, environ
 			return
 		}
 		var err error
+		operation := "close_admission"
 		if revoke {
+			operation = "revoke_identity"
 			err = service.RevokeIdentity(request.Context(), body.Identity)
 		} else {
 			err = service.CloseAdmission(request.Context(), body.Identity)
 		}
 		if err != nil {
-			writeRecorderFleetError(w, err)
+			writeRecorderFleetError(w, request, logger, operation, err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
 
-func recorderFleetPoolHandler(service RecorderFleetControllerService, environment string) http.HandlerFunc {
+func recorderFleetPoolHandler(service RecorderFleetControllerService, environment string, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, request *http.Request) {
 		body, ok := decodeRecorderWorkerBody[recorderFleetPoolRequest](w, request)
 		if !ok {
@@ -207,7 +213,7 @@ func recorderFleetPoolHandler(service RecorderFleetControllerService, environmen
 			return
 		}
 		if err := service.PublishPool(request.Context(), body.PoolProjection); err != nil {
-			writeRecorderFleetError(w, err)
+			writeRecorderFleetError(w, request, logger, "publish_pool", err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -229,8 +235,14 @@ func recorderFleetRequestKey(w http.ResponseWriter, request *http.Request, envir
 	return key, true
 }
 
-func writeRecorderFleetError(w http.ResponseWriter, err error) {
+func writeRecorderFleetError(w http.ResponseWriter, request *http.Request, logger *slog.Logger, operation string, err error) {
 	switch {
+	case errors.Is(err, recorderfleet.ErrInventoryNotReady):
+		w.Header().Set("Retry-After", "1")
+		writeError(w, http.StatusConflict, recorderfleet.InventoryNotReadyCode, "Recorder provider inventory is not ready")
+	case errors.Is(err, recorderfleet.ErrBootstrapPending):
+		w.Header().Set("Retry-After", "1")
+		writeError(w, http.StatusConflict, recorderfleet.BootstrapPendingCode, "Recorder worker certificate delivery is pending")
 	case errors.Is(err, recorderfleet.ErrNodeNotFound):
 		writeError(w, http.StatusNotFound, "recorder_fleet.node_not_found", "Recorder fleet node not found")
 	case errors.Is(err, recorderfleet.ErrAdmissionClosed):
@@ -238,6 +250,8 @@ func writeRecorderFleetError(w http.ResponseWriter, err error) {
 	case errors.Is(err, recorderfleet.ErrRoleFence), errors.Is(err, recorderfleet.ErrInventoryDrift), errors.Is(err, recorderfleet.ErrInvalidConfig), errors.Is(err, recorderfleet.ErrInvalidDemand):
 		writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recorder fleet request")
 	default:
+		logger.WarnContext(request.Context(), "recorder fleet operation failed",
+			"operation", operation, "provider_node_id", chi.URLParam(request, "providerID"), "error", err)
 		writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder fleet service is unavailable")
 	}
 }

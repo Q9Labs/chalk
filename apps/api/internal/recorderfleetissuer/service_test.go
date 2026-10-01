@@ -282,6 +282,7 @@ func TestAbandonBootstrapBlocksRegisterAlreadyInspectingInventory(t *testing.T) 
 type inventoryStub struct {
 	node recorderfleet.Node
 	ip   netip.Addr
+	err  error
 }
 
 type blockingInventoryStub struct {
@@ -298,7 +299,7 @@ func (stub *blockingInventoryStub) InspectNode(_ context.Context, _ recorderflee
 }
 
 func (stub inventoryStub) InspectNode(_ context.Context, _ recorderfleet.PoolKey, _ string) (recorderfleet.Node, netip.Addr, error) {
-	return stub.node, stub.ip, nil
+	return stub.node, stub.ip, stub.err
 }
 
 func testService(t *testing.T, store *Store, ca *CertificateAuthority, node recorderfleet.Node, clock *time.Time) *Service {
@@ -373,4 +374,67 @@ func repeat(value string, count int) string {
 		result += value
 	}
 	return result
+}
+
+func TestRegisterWaitsForInventoryWithoutRelaxingIdentityChecks(t *testing.T) {
+	now := time.Now().UTC()
+	node := recorderfleet.Node{
+		ProviderID: "12345", Name: "chalk-recorder-capture-local-1-test", Status: "active", Region: "fra1", Size: "c-2", ImageID: 77,
+		Tags:        []string{"chalk-owner", recorderfleet.EnvironmentTag("local"), recorderfleet.RoleTag(workeridentity.RoleCapture), recorderfleet.ReleaseTag("release-1"), recorderfleet.ImageTag("sha256:" + repeat("ab", 32)), recorderfleet.BootTag(1)},
+		FirewallIDs: []string{"firewall-1"}, BootGeneration: 1, CreatedAt: now.Add(-30 * time.Second),
+	}
+	request := recorderfleet.BootstrapRequest{Key: recorderfleet.PoolKey{Environment: "local", Role: workeridentity.RoleCapture}, ProviderID: node.ProviderID, NodeName: node.Name, Region: node.Region, ReleaseID: "release-1", ImageDigest: "sha256:" + repeat("ab", 32), BootGeneration: 1, InventoryDigest: recorderfleet.InventoryDigest(node)}
+	ca, _ := testCertificateAuthority(t, now)
+	for _, test := range []struct {
+		name      string
+		mutate    func(*recorderfleet.Node)
+		missingIP bool
+		want      error
+	}{
+		{"new", func(n *recorderfleet.Node) { n.Status = "new" }, false, recorderfleet.ErrInventoryNotReady},
+		{"no public IP", func(*recorderfleet.Node) {}, true, recorderfleet.ErrInventoryNotReady},
+		{"off", func(n *recorderfleet.Node) { n.Status = "off" }, false, ErrUnauthorized},
+		{"unknown status", func(n *recorderfleet.Node) { n.Status = "unknown" }, false, ErrUnauthorized},
+		{"wrong image while new", func(n *recorderfleet.Node) { n.Status = "new"; n.ImageID++ }, false, ErrUnauthorized},
+		{"wrong tags without IP", func(n *recorderfleet.Node) { n.Tags = []string{"other"} }, true, ErrUnauthorized},
+		{"wrong firewall while new", func(n *recorderfleet.Node) { n.Status = "new"; n.FirewallIDs = nil }, false, ErrUnauthorized},
+		{"wrong name while new", func(n *recorderfleet.Node) { n.Status = "new"; n.Name = "other" }, false, ErrUnauthorized},
+		{"wrong generation while new", func(n *recorderfleet.Node) { n.Status = "new"; n.BootGeneration++ }, false, ErrUnauthorized},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			store, err := OpenStore(filepath.Join(t.TempDir(), "issuer.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			service := testService(t, store, ca, node, &now)
+			observed := node
+			test.mutate(&observed)
+			inventory := inventoryStub{node: observed, ip: netip.MustParseAddr("192.0.2.10")}
+			if test.missingIP {
+				inventory.ip = netip.Addr{}
+				inventory.err = recorderfleet.ErrInventoryNotReady
+			}
+			service.inventory = inventory
+			identity, _, err := service.Register(t.Context(), request)
+			if !errors.Is(err, test.want) || identity != (recorderfleet.NodeIdentity{}) {
+				t.Fatalf("identity/error = %+v/%v, want %v", identity, err, test.want)
+			}
+			if err := store.read(func(state persistedState) error {
+				if len(state.Registrations) != 0 {
+					t.Fatal("ineligible node registered")
+				}
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			service.inventory = inventoryStub{node: node, ip: netip.MustParseAddr("192.0.2.10")}
+			identity, delivered, err := service.Register(t.Context(), request)
+			if err != nil || delivered || identity.WorkerID == "" {
+				t.Fatalf("eligible retry = %+v/%v/%v", identity, delivered, err)
+			}
+			if _, err := service.verifyInventory(t.Context(), request, netip.MustParseAddr("192.0.2.99")); !errors.Is(err, ErrUnauthorized) {
+				t.Fatalf("wrong peer accepted: %v", err)
+			}
+		})
+	}
 }

@@ -5,6 +5,8 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	issuerclient "github.com/q9labs/chalk/apps/api/internal/adapters/recorderfleetissuer"
 	"github.com/q9labs/chalk/apps/api/internal/recorderbootstrapprotocol"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
@@ -66,6 +69,21 @@ func TestControllerRegistrationReturnsIdentityOnlyAfterNodeDelivery(t *testing.T
 		t.Fatalf("pending registration status/body = %d/%s", firstResponse.Code, firstResponse.Body.String())
 	}
 
+	// Exercise the real issuer adapter: registration exists, but no certificate
+	// has been delivered. This used to become a generic API 503.
+	client, err := issuerclient.NewWithHTTPClient("https://issuer.example.test", &http.Client{Transport: issuerTestTransport(func(request *http.Request) (*http.Response, error) {
+		request.TLS = requestTLS
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		return response.Result(), nil
+	})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if identity, err := client.EnsureBootstrap(t.Context(), bootstrapRequest); !errors.Is(err, recorderfleet.ErrBootstrapPending) || identity != (recorderfleet.NodeIdentity{}) {
+		t.Fatalf("pending certificate identity/error = %+v/%v", identity, err)
+	}
+
 	if err := store.update(func(state *persistedState) error {
 		state.Registrations[node.ProviderID].Certificates["1"] = certificateRecord{SerialNumber: "1"}
 		return nil
@@ -82,6 +100,9 @@ func TestControllerRegistrationReturnsIdentityOnlyAfterNodeDelivery(t *testing.T
 	var response registerResponse
 	if err := json.NewDecoder(secondResponse.Body).Decode(&response); err != nil || response.Identity.ProviderID != node.ProviderID || response.Identity.WorkerID == "" {
 		t.Fatalf("delivered registration response/error = %+v/%v", response, err)
+	}
+	if identity, err := client.EnsureBootstrap(t.Context(), bootstrapRequest); err != nil || identity != response.Identity {
+		t.Fatalf("delivered certificate identity/error = %+v/%v", identity, err)
 	}
 	abandonBody, _ := json.Marshal(abandonRequest{
 		SchemaVersion: recorderbootstrapprotocol.ControllerAbandonSchemaVersion, BootstrapRequest: bootstrapRequest,
@@ -100,4 +121,36 @@ func TestControllerRegistrationReturnsIdentityOnlyAfterNodeDelivery(t *testing.T
 	if lateResponse.Code != http.StatusForbidden {
 		t.Fatalf("late registration status/body = %d/%s", lateResponse.Code, lateResponse.Body.String())
 	}
+}
+
+func TestInventoryPendingHTTPStatusIsDistinctFromRealFailures(t *testing.T) {
+	for _, test := range []struct {
+		err    error
+		status int
+		code   string
+	}{
+		{fmt.Errorf("inspect provider node: %w", recorderfleet.ErrInventoryNotReady), http.StatusConflict, recorderfleet.InventoryNotReadyCode},
+		{ErrUnauthorized, http.StatusForbidden, ""},
+		{ErrConflict, http.StatusForbidden, ""},
+		{recorderfleet.ErrInventoryDrift, http.StatusInternalServerError, ""},
+		{recorderfleet.ErrProviderUnavailable, http.StatusServiceUnavailable, ""},
+	} {
+		response := httptest.NewRecorder()
+		writeError(response, test.err)
+		var body struct {
+			Code string `json:"code"`
+		}
+		if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if response.Code != test.status || body.Code != test.code {
+			t.Fatalf("%v: status/code = %d/%q, want %d/%q", test.err, response.Code, body.Code, test.status, test.code)
+		}
+	}
+}
+
+type issuerTestTransport func(*http.Request) (*http.Response, error)
+
+func (transport issuerTestTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	return transport(request)
 }

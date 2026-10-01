@@ -139,3 +139,35 @@ type issuerRoundTripFunc func(*http.Request) (*http.Response, error)
 func (function issuerRoundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return function(request)
 }
+
+func TestClientClassifiesOnlyVerifiedPendingBootstrapResponses(t *testing.T) {
+	request := issuerBootstrapRequest()
+	valid := `{"schema_version":"recorder_fleet_issuer_bootstrap.v1","identity":{"provider_id":"provider-7","worker_id":"55555555-5555-4555-8555-555555555555","role":"capture","boot_generation":7}}`
+	for _, test := range []struct {
+		name   string
+		status int
+		body   string
+		want   error
+	}{
+		{"certificate pending", http.StatusAccepted, valid, recorderfleet.ErrBootstrapPending},
+		{"inventory pending", http.StatusConflict, `{"error":"Conflict","code":"recorder_fleet.inventory_not_ready"}`, recorderfleet.ErrInventoryNotReady},
+		{"unrelated conflict", http.StatusConflict, `{"error":"Conflict"}`, recorderfleet.ErrProviderUnavailable},
+		{"unauthorized", http.StatusForbidden, `{"error":"secret-provider-body"}`, recorderfleet.ErrProviderUnavailable},
+		{"provider failure", http.StatusServiceUnavailable, `{"error":"secret-provider-body"}`, recorderfleet.ErrProviderUnavailable},
+		{"malformed pending", http.StatusAccepted, `{"assertion":"secret-provider-body"}`, recorderfleet.ErrProviderUnavailable},
+		{"wrong pending identity", http.StatusAccepted, strings.Replace(valid, "provider-7", "other", 1), recorderfleet.ErrRoleFence},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			client, err := NewWithHTTPClient("https://issuer.example", &http.Client{Transport: issuerRoundTripFunc(func(*http.Request) (*http.Response, error) {
+				return issuerJSONResponse(test.status, test.body), nil
+			})})
+			if err != nil {
+				t.Fatal(err)
+			}
+			identity, err := client.EnsureBootstrap(t.Context(), request)
+			if !errors.Is(err, test.want) || identity != (recorderfleet.NodeIdentity{}) || strings.Contains(err.Error(), "secret-provider-body") {
+				t.Fatalf("identity/error = %+v/%v, want %v", identity, err, test.want)
+			}
+		})
+	}
+}

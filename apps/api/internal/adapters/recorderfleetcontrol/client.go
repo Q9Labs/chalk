@@ -172,6 +172,21 @@ func (c *Client) doJSON(ctx context.Context, method, path string, query url.Valu
 		return fmt.Errorf("%w: invalid recorder fleet control response", recorderfleet.ErrProviderUnavailable)
 	}
 	if response.StatusCode != expectedStatus {
+		if method == http.MethodPost && strings.HasSuffix(path, "/bootstrap") && response.StatusCode == http.StatusConflict {
+			var failure struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			if json.Unmarshal(responseBody, &failure) == nil {
+				switch failure.Error.Code {
+				case recorderfleet.InventoryNotReadyCode:
+					return recorderfleet.ErrInventoryNotReady
+				case recorderfleet.BootstrapPendingCode:
+					return recorderfleet.ErrBootstrapPending
+				}
+			}
+		}
 		return fmt.Errorf("%w: recorder fleet control status %d", recorderfleet.ErrProviderUnavailable, response.StatusCode)
 	}
 	if output == nil {

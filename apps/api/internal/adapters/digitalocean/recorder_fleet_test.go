@@ -2,6 +2,7 @@ package digitalocean
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -239,5 +240,63 @@ func writeJSON(t *testing.T, writer http.ResponseWriter, status int, value any) 
 	writer.WriteHeader(status)
 	if err := json.NewEncoder(writer).Encode(value); err != nil {
 		t.Errorf("encode response: %v", err)
+	}
+}
+
+func TestInspectNodeWaitsForPublicIPButRejectsInvalidInventory(t *testing.T) {
+	request := recorderFleetEnsureRequest()
+	for _, test := range []struct {
+		name      string
+		networks  []map[string]any
+		wrongTags bool
+		status    string
+		want      error
+	}{
+		{"pending public IP", nil, false, "active", recorderfleet.ErrInventoryNotReady},
+		{"new without IP", nil, false, "new", recorderfleet.ErrInventoryNotReady},
+		{"off without IP", nil, false, "off", recorderfleet.ErrInventoryDrift},
+		{"malformed public IP", []map[string]any{{"type": "public", "ip_address": "not-an-ip"}}, false, "active", recorderfleet.ErrInventoryDrift},
+		{"multiple public IPs", []map[string]any{{"type": "public", "ip_address": "192.0.2.10"}, {"type": "public", "ip_address": "192.0.2.11"}}, false, "active", recorderfleet.ErrInventoryDrift},
+		{"wrong tags without IP", nil, true, "new", recorderfleet.ErrInventoryDrift},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ready := false
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/v2/droplets/123":
+					droplet := dropletResponse(request, 123)
+					droplet["status"] = test.status
+					networks := test.networks
+					if ready {
+						networks = []map[string]any{{"type": "public", "ip_address": "192.0.2.10"}}
+						droplet["status"] = "active"
+					}
+					if test.wrongTags && !ready {
+						droplet["tags"] = []string{"other"}
+					}
+					droplet["networks"] = map[string]any{"v4": networks}
+					writeJSON(t, w, http.StatusOK, map[string]any{"droplet": droplet})
+				case "/v2/droplets/123/firewalls":
+					writeJSON(t, w, http.StatusOK, map[string]any{"firewalls": []map[string]any{{"id": "firewall-1"}}})
+				default:
+					t.Errorf("unexpected request %s", r.URL.Path)
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer server.Close()
+			adapter := recorderFleetAdapter(t, server, "secret-digitalocean-token")
+			node, ip, err := adapter.InspectNode(t.Context(), request.Key, "123")
+			if !errors.Is(err, test.want) || ip.IsValid() {
+				t.Fatalf("node/IP/error = %+v/%v/%v, want %v", node, ip, err, test.want)
+			}
+			if errors.Is(test.want, recorderfleet.ErrInventoryNotReady) && node.ProviderID != "123" {
+				t.Fatal("pending view lost identity inventory")
+			}
+			ready = true
+			_, ip, err = adapter.InspectNode(t.Context(), request.Key, "123")
+			if err != nil || ip.String() != "192.0.2.10" {
+				t.Fatalf("ready retry = %v/%v", ip, err)
+			}
+		})
 	}
 }

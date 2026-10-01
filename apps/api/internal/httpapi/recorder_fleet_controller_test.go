@@ -1,7 +1,12 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -30,7 +35,7 @@ func TestRecorderFleetControllerRouterMatchesClientContract(t *testing.T) {
 	controllerID, _ := utilities.ParseID("66666666-6666-4666-8666-666666666666")
 	router := NewRecorderFleetControllerRouter(service, recorderFleetControllerVerifierStub{
 		identity: recorderfleet.ControllerIdentity{ControllerID: controllerID},
-	}, "staging")
+	}, "staging", nil)
 	server := httptest.NewTLSServer(router)
 	defer server.Close()
 	client, err := recorderfleetcontrol.New(recorderfleetcontrol.Config{BaseURL: server.URL, HTTPClient: server.Client(), Key: key})
@@ -72,7 +77,7 @@ func TestRecorderFleetControllerRouterMatchesClientContract(t *testing.T) {
 func TestRecorderFleetControllerRouterRequiresControllerAndStrictSchema(t *testing.T) {
 	t.Parallel()
 	service := &recorderFleetControllerServiceStub{}
-	router := NewRecorderFleetControllerRouter(service, recorderFleetControllerVerifierStub{err: recorderfleet.ErrUnverifiedControllerPeer}, "staging")
+	router := NewRecorderFleetControllerRouter(service, recorderFleetControllerVerifierStub{err: recorderfleet.ErrUnverifiedControllerPeer}, "staging", nil)
 	request := httptest.NewRequest(http.MethodGet, "/internal/v1/recorder/fleet/demand?role=capture", nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
@@ -80,7 +85,7 @@ func TestRecorderFleetControllerRouterRequiresControllerAndStrictSchema(t *testi
 		t.Fatalf("unauthorized status/calls = %d/%d", response.Code, service.demandCalls)
 	}
 
-	router = NewRecorderFleetControllerRouter(service, recorderFleetControllerVerifierStub{}, "staging")
+	router = NewRecorderFleetControllerRouter(service, recorderFleetControllerVerifierStub{}, "staging", nil)
 	request = httptest.NewRequest(http.MethodPut, "/internal/v1/recorder/fleet/pool", strings.NewReader(`{"schema_version":"recorder_fleet_pool.v1","key":{"environment":"staging","role":"capture"},"demand_revision":"7","admission_open":false,"ready_capacity":0,"reason":"no_demand","observed_at":"2026-09-06T12:00:00Z","unknown":true}`))
 	request.Header.Set("Content-Type", "application/json")
 	response = httptest.NewRecorder()
@@ -104,6 +109,7 @@ type recorderFleetControllerServiceStub struct {
 	nodes          []recorderfleet.NodeObservation
 	identity       recorderfleet.NodeIdentity
 	bootstrap      recorderfleet.BootstrapRequest
+	bootstrapErr   error
 	abandoned      recorderfleet.BootstrapRequest
 	closed         recorderfleet.NodeIdentity
 	revoked        recorderfleet.NodeIdentity
@@ -156,7 +162,7 @@ func (s *recorderFleetControllerServiceStub) ObserveNodes(context.Context, recor
 
 func (s *recorderFleetControllerServiceStub) EnsureBootstrap(_ context.Context, request recorderfleet.BootstrapRequest) (recorderfleet.NodeIdentity, error) {
 	s.bootstrap = request
-	return s.identity, nil
+	return s.identity, s.bootstrapErr
 }
 
 func (s *recorderFleetControllerServiceStub) CloseAdmission(_ context.Context, identity recorderfleet.NodeIdentity) error {
@@ -172,4 +178,70 @@ func (s *recorderFleetControllerServiceStub) RevokeIdentity(_ context.Context, i
 func (s *recorderFleetControllerServiceStub) PublishPool(_ context.Context, projection recorderfleet.PoolProjection) error {
 	s.projection = projection
 	return nil
+}
+
+func TestBootstrapPendingContractAndUnavailableWarning(t *testing.T) {
+	key := recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}
+	bootstrap := recorderfleet.BootstrapRequest{Key: key, ProviderID: "42", NodeName: "node-42", Region: "fra1", ReleaseID: "release-1", ImageDigest: "sha256:" + strings.Repeat("a", 64), BootGeneration: 1, InventoryDigest: strings.Repeat("b", 64)}
+	for _, test := range []struct {
+		name   string
+		err    error
+		status int
+		code   string
+		want   error
+	}{
+		{"inventory pending", fmt.Errorf("issue bootstrap: %w", recorderfleet.ErrInventoryNotReady), http.StatusConflict, recorderfleet.InventoryNotReadyCode, recorderfleet.ErrInventoryNotReady},
+		{"certificate pending", fmt.Errorf("issue bootstrap: %w", recorderfleet.ErrBootstrapPending), http.StatusConflict, recorderfleet.BootstrapPendingCode, recorderfleet.ErrBootstrapPending},
+		{"issuer unavailable", fmt.Errorf("issue bootstrap: %w: issuer status 503", recorderfleet.ErrProviderUnavailable), http.StatusServiceUnavailable, "service.unavailable", recorderfleet.ErrProviderUnavailable},
+		{"inventory drift", recorderfleet.ErrInventoryDrift, http.StatusBadRequest, "request.invalid", recorderfleet.ErrProviderUnavailable},
+		{"identity rejected", recorderfleet.ErrRoleFence, http.StatusBadRequest, "request.invalid", recorderfleet.ErrProviderUnavailable},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var logs bytes.Buffer
+			logger := slog.New(slog.NewJSONHandler(&logs, nil))
+			service := &recorderFleetControllerServiceStub{bootstrapErr: test.err}
+			router := NewRecorderFleetControllerRouter(service, recorderFleetControllerVerifierStub{}, "staging", logger)
+			body, err := json.Marshal(recorderFleetBootstrapRequest{SchemaVersion: recorderfleet.BootstrapSchemaVersion, BootstrapRequest: bootstrap})
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := httptest.NewRequest(http.MethodPost, "/internal/v1/recorder/fleet/nodes/42/bootstrap", bytes.NewReader(body))
+			request.Header.Set("Authorization", "Bearer secret-controller-token")
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			if response.Code != test.status || !strings.Contains(response.Body.String(), test.code) {
+				t.Fatalf("status/body = %d/%s", response.Code, response.Body.String())
+			}
+			if test.status == http.StatusConflict && response.Header().Get("Retry-After") != "1" {
+				t.Fatal("missing one-second retry hint")
+			}
+			if test.status == http.StatusServiceUnavailable {
+				var event struct {
+					Level      string `json:"level"`
+					Operation  string `json:"operation"`
+					ProviderID string `json:"provider_node_id"`
+					Error      string `json:"error"`
+				}
+				if err := json.Unmarshal(logs.Bytes(), &event); err != nil {
+					t.Fatal(err)
+				}
+				if event.Level != "WARN" || event.Operation != "bootstrap" || event.ProviderID != "42" || event.Error != test.err.Error() {
+					t.Fatalf("warning = %+v", event)
+				}
+			}
+			if strings.Contains(logs.String(), "secret-controller-token") || strings.Contains(logs.String(), bootstrap.InventoryDigest) || strings.Contains(response.Body.String(), test.err.Error()) {
+				t.Fatal("error leaked request or internal detail")
+			}
+			server := httptest.NewTLSServer(router)
+			defer server.Close()
+			client, err := recorderfleetcontrol.New(recorderfleetcontrol.Config{BaseURL: server.URL, HTTPClient: server.Client(), Key: key})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = client.EnsureBootstrap(t.Context(), bootstrap)
+			if !errors.Is(err, test.want) {
+				t.Fatalf("client error = %v, want %v", err, test.want)
+			}
+		})
+	}
 }

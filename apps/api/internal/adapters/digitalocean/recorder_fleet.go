@@ -138,6 +138,10 @@ func (a *RecorderFleet) InspectNode(ctx context.Context, key recorderfleet.PoolK
 		publicAddress = address
 	}
 	if !publicAddress.IsValid() {
+		if node.Status == "new" || node.Status == "active" {
+			// Keep the immutable inventory available for the issuer's identity checks.
+			return node, netip.Addr{}, fmt.Errorf("%w: public IPv4 is absent", recorderfleet.ErrInventoryNotReady)
+		}
 		return recorderfleet.Node{}, netip.Addr{}, recorderfleet.ErrInventoryDrift
 	}
 	return node, publicAddress, nil

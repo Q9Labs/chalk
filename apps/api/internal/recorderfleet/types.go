@@ -26,6 +26,8 @@ const (
 	CommandSchemaVersion          = "recorder_fleet_command.v1"
 	PoolSchemaVersion             = "recorder_fleet_pool.v1"
 	ControllerRole                = "recorder-fleet-controller"
+	InventoryNotReadyCode         = "recorder_fleet.inventory_not_ready"
+	BootstrapPendingCode          = "recorder_fleet.bootstrap_pending"
 )
 
 var (
@@ -33,6 +35,8 @@ var (
 	ErrInvalidDemand       = errors.New("invalid recorder fleet demand")
 	ErrDemandStale         = errors.New("recorder fleet demand is stale")
 	ErrInventoryDrift      = errors.New("recorder fleet inventory drift")
+	ErrInventoryNotReady   = errors.New("recorder fleet provider inventory is not ready")
+	ErrBootstrapPending    = errors.New("recorder fleet worker certificate delivery is pending")
 	ErrCapacityExceeded    = errors.New("recorder fleet capacity exceeded")
 	ErrRoleFence           = errors.New("recorder fleet role fence rejected")
 	ErrJournalNotFound     = errors.New("recorder fleet journal not found")

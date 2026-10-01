@@ -551,7 +551,7 @@ func recorderWorkerPoolHealthHandler(service RecorderWorkerService, fleet Record
 				Resources: body.Resources,
 			})
 			if err != nil {
-				writeRecorderFleetError(w, err)
+				writeRecorderFleetError(w, request, logger, "record_worker_observation", err)
 				return
 			}
 			logRecorderWorkerResources(request.Context(), logger, identity, observation.NodeName, observation.CurrentJobID, body.Resources)

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"testing"
@@ -78,4 +79,50 @@ func (r *timedReconciler) Reconcile(context.Context) (recorderfleet.Result, erro
 		r.cancel()
 	}
 	return recorderfleet.Result{Action: step.action}, step.err
+}
+
+func TestRunLoopRetriesPendingBootstrapInOneSecondAndStopsBurst(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		runner := &timedReconciler{cancel: cancel, steps: []reconcileStep{
+			{err: fmt.Errorf("ensure bootstrap: %w", recorderfleet.ErrInventoryNotReady)},
+			{err: fmt.Errorf("ensure bootstrap: %w", recorderfleet.ErrBootstrapPending)},
+			{action: recorderfleet.ActionBootstrapEnsured},
+			{err: recorderfleet.ErrProviderUnavailable},
+			{err: recorderfleet.ErrRoleFence},
+			{err: recorderfleet.ErrInventoryDrift},
+			{action: recorderfleet.ActionNone},
+		}}
+		interval := 7 * time.Second
+		if err := runLoop(ctx, interval, runner, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
+			t.Fatal(err)
+		}
+		for index, want := range []time.Duration{time.Second, time.Second, fastFollowDelay, interval, interval, interval} {
+			if got := runner.times[index+1].Sub(runner.times[index]); got != want {
+				t.Fatalf("delay %d = %s, want %s", index, got, want)
+			}
+		}
+	})
+}
+
+func TestPendingBootstrapRetryBurstIsBoundedAndResetsOnRecovery(t *testing.T) {
+	var cadence reconcileCadence
+	interval := 7 * time.Second
+	for attempt := range 65 {
+		want := time.Second
+		if attempt == 60 {
+			want = interval
+		}
+		if got := cadence.nextDelay(interval, recorderfleet.ActionNone, recorderfleet.ErrBootstrapPending); got != want {
+			t.Fatalf("attempt %d delay = %s, want %s", attempt, got, want)
+		}
+	}
+	cadence.nextDelay(interval, recorderfleet.ActionBootstrapEnsured, nil)
+	if got := cadence.nextDelay(interval, recorderfleet.ActionNone, recorderfleet.ErrInventoryNotReady); got != time.Second {
+		t.Fatalf("recovery did not reset retry burst: %s", got)
+	}
+	if got := cadence.nextDelay(interval, recorderfleet.ActionNone, recorderfleet.ErrProviderUnavailable); got != interval {
+		t.Fatalf("real failure delay = %s", got)
+	}
 }
