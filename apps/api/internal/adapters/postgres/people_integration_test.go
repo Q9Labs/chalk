@@ -50,7 +50,11 @@ func TestTenantInvitationLifecycleAndOwnerProtection(t *testing.T) {
 	if ownerMembership.UserName != "Invitation account" || ownerMembership.UserEmail != owner.String()+"@invitation.test" {
 		t.Fatalf("created membership identity=%q %q", ownerMembership.UserName, ownerMembership.UserEmail)
 	}
-	listed, err := membershipService.ListTenantMemberships(ctx, tenant, pagination.PageRequest{})
+	page, err := pagination.NewPageRequest(pagination.DefaultPageSize, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed, err := membershipService.ListTenantMemberships(ctx, tenant, page)
 	if err != nil || len(listed.Memberships) != 1 || listed.Memberships[0].UserName != "Invitation account" || listed.Memberships[0].UserEmail != owner.String()+"@invitation.test" {
 		t.Fatalf("listed membership=%v err=%v", listed.Memberships, err)
 	}
