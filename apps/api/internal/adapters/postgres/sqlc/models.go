@@ -1718,6 +1718,18 @@ type TenantArtifactPolicy struct {
 	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
 }
 
+type TenantInvitation struct {
+	ID         pgtype.UUID        `json:"id"`
+	TenantID   pgtype.UUID        `json:"tenant_id"`
+	Email      string             `json:"email"`
+	Role       string             `json:"role"`
+	TokenHash  string             `json:"token_hash"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	ConsumedAt pgtype.Timestamptz `json:"consumed_at"`
+	RevokedAt  pgtype.Timestamptz `json:"revoked_at"`
+}
+
 type TenantOnboardingRequest struct {
 	AccountID          pgtype.UUID        `json:"account_id"`
 	RequestKey         string             `json:"request_key"`

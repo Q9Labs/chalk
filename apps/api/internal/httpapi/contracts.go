@@ -70,6 +70,7 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, tenantEndpoints(nil, nil)...)
 	endpoints = append(endpoints, userEndpoints(nil)...)
 	endpoints = append(endpoints, membershipEndpoints(nil, nil)...)
+	endpoints = append(endpoints, peopleEndpoints(nil, nil)...)
 	endpoints = append(endpoints, spaceEndpoints(nil, nil)...)
 	endpoints = append(endpoints, recordingPreparationEndpoints(nil, nil)...)
 	endpoints = append(endpoints, recordingEntranceEndpoints(nil, nil, nil, nil)...)

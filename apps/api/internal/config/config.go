@@ -142,6 +142,8 @@ const (
 	TranscriptionEnabled         = "CHALK_TRANSCRIPTION_ENABLED"
 	WhiteboardFilesEnabled       = "CHALK_WHITEBOARD_FILES_ENABLED"
 
+	InvitationFrom                  = "CHALK_INVITATION_FROM"
+	InvitationWebOrigin             = "CHALK_INVITATION_WEB_ORIGIN"
 	ResendAPIKey                    = "CHALK_RESEND_API_KEY"
 	ResendTimeoutMS                 = "CHALK_RESEND_TIMEOUT_MS"
 	WebhookEncryptionKey            = "CHALK_WEBHOOK_ENCRYPTION_KEY"
@@ -392,6 +394,8 @@ type Config struct {
 	RecordingUIBuildSHA256 string
 	RecorderFleetIssuer    RecorderFleetIssuerConfig
 	Redis                  RedisConfig
+	InvitationFrom         string
+	InvitationWebOrigin    string
 	Resend                 ResendConfig
 	SyncToken              SyncTokenConfig
 	Transcription          TranscriptionConfig
@@ -488,6 +492,13 @@ func Load() (Config, error) {
 	}
 	if slowRequestThreshold < 0 {
 		return Config{}, fmt.Errorf("%s must be non-negative", APISlowRequestMS)
+	}
+	invitationOrigin := strings.TrimRight(strings.TrimSpace(envOrDefault(InvitationWebOrigin, "")), "/")
+	if invitationOrigin != "" {
+		parsed, err := url.Parse(invitationOrigin)
+		if err != nil || parsed.Host == "" || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Scheme != "http" && parsed.Scheme != "https") || (environment != DefaultEnvironment && parsed.Scheme != "https") {
+			return Config{}, fmt.Errorf("%s must be an absolute web origin (https outside local environments)", InvitationWebOrigin)
+		}
 	}
 	resendTimeout, err := envMilliseconds(ResendTimeoutMS, DefaultResendTimeoutMS)
 	if err != nil {
@@ -695,6 +706,8 @@ func Load() (Config, error) {
 		Redis: RedisConfig{
 			URL: envOrDefault(RedisURL, DefaultRedisURL),
 		},
+		InvitationFrom:      strings.TrimSpace(envOrDefault(InvitationFrom, "")),
+		InvitationWebOrigin: invitationOrigin,
 		Resend: ResendConfig{
 			APIKey:  envOrDefault(ResendAPIKey, ""),
 			Timeout: resendTimeout,

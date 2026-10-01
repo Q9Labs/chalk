@@ -79,6 +79,7 @@ type Options struct {
 	ParticipantMediaVerify     ParticipantMediaVerifier
 	ParticipantMediaActive     ActiveParticipantAuthorizer
 	ParticipantGeneration      ParticipantGenerationAuthorizer
+	People                     PeopleService
 	Memberships                MembershipService
 	AuditLogs                  AuditLogService
 	RecordingDownloads         RecordingDownloadService

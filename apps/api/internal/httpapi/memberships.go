@@ -180,6 +180,7 @@ func updateMembershipEndpoint(service MembershipService, authorizer TenantAuthor
 			apiErrorInvalidMembershipID,
 			apiErrorInvalidMembershipRole,
 			apiErrorMembershipNotFound,
+			apiErrorLastOwner,
 			apiErrorRateLimited,
 			apiErrorInternal,
 		).
@@ -245,6 +246,8 @@ func membershipServiceAPIError(err error) (APIError, bool) {
 		return apiErrorInvalidTenantID, true
 	case errors.Is(err, memberships.ErrInvalidUserID):
 		return apiErrorInvalidUserID, true
+	case errors.Is(err, memberships.ErrLastOwner):
+		return apiErrorLastOwner, true
 	case errors.Is(err, memberships.ErrMembershipNotFound):
 		return apiErrorMembershipNotFound, true
 	default:
