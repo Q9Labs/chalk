@@ -15893,6 +15893,22 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
                 sessionId: {
                   type: "string",
                 },
+                simulcast: {
+                  additionalProperties: false,
+                  properties: {
+                    preferredRid: {
+                      type: "string",
+                    },
+                    priorityOrdering: {
+                      type: "string",
+                    },
+                    ridNotAvailable: {
+                      type: "string",
+                    },
+                  },
+                  required: ["preferredRid", "priorityOrdering", "ridNotAvailable"],
+                  type: ["object", "null"],
+                },
                 source: {
                   type: "string",
                 },
@@ -15949,6 +15965,25 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
                 sessionId: {
                   minLength: 1,
                   type: "string",
+                },
+                simulcast: {
+                  additionalProperties: false,
+                  properties: {
+                    preferredRid: {
+                      minLength: 1,
+                      type: "string",
+                    },
+                    priorityOrdering: {
+                      minLength: 1,
+                      type: "string",
+                    },
+                    ridNotAvailable: {
+                      minLength: 1,
+                      type: "string",
+                    },
+                  },
+                  required: ["preferredRid", "priorityOrdering", "ridNotAvailable"],
+                  type: ["object", "null"],
                 },
                 source: {
                   minLength: 1,

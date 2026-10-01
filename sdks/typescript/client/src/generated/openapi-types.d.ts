@@ -1704,6 +1704,11 @@ export interface components {
         mid?: string;
         publication_id?: string;
         sessionId?: string;
+        simulcast?: {
+          preferredRid: string;
+          priorityOrdering: string;
+          ridNotAvailable: string;
+        } | null;
         source?: string;
         trackName: string;
       }[];
@@ -1719,6 +1724,11 @@ export interface components {
         mid?: string;
         publication_id?: string;
         sessionId?: string;
+        simulcast?: {
+          preferredRid: string;
+          priorityOrdering: string;
+          ridNotAvailable: string;
+        } | null;
         source?: string;
         trackName: string;
       }[];

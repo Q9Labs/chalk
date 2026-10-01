@@ -183,6 +183,40 @@ describe("Cloudflare SFU client", () => {
     harness.client.stop();
   });
 
+  it.each([false, true])("camera budget adaptation is isolated and optional (refused=%s)", async (refused) => {
+    vi.useFakeTimers();
+    const harness = createHarness();
+    try {
+      const peer = harness.peers[0]!;
+      peer.availableOutgoingBitrate = 800_000;
+      peer.refuseSenderParameters = refused;
+      await harness.client.start(fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
+      harness.client.prepareLocalTrack("screen", new FakeTrack("screen", "video") as unknown as MediaStreamTrack);
+      await setScreenTarget(harness.client, "screen-on", true);
+      await vi.advanceTimersByTimeAsync(1_000);
+      const [mic, camera, screen] = peer.getSenders();
+      expect(mic?.getParameters().encodings).toEqual([{}]);
+      expect(screen?.getParameters().encodings).toEqual([{}]);
+      expect(camera?.getParameters().encodings).toEqual([
+        { rid: "h", scaleResolutionDownBy: 1, maxBitrate: 2_500_000 },
+        { rid: "l", scaleResolutionDownBy: 2, maxBitrate: 650_000, ...(refused ? {} : { active: false }) },
+      ]);
+      expect(harness.client.getSnapshot().localTracks.every((track) => track.enabled)).toBe(true);
+      if (!refused) {
+        peer.availableOutgoingBitrate = 2_100_000;
+        await vi.advanceTimersByTimeAsync(4_000);
+        expect(camera?.getParameters().encodings[1]?.active).toBe(false);
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(camera?.getParameters().encodings[1]?.active).toBe(true);
+      }
+      harness.client.stop();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
   it.each(["transceiver", "offer"])("falls back when the browser refuses simulcast at %s creation", async (stage) => {
     const harness = createHarness();
     const peer = harness.peers[0]!;
@@ -233,6 +267,27 @@ describe("Cloudflare SFU client", () => {
 
     expect(harness.transport.addInputs.at(-1)?.tracks).toMatchObject([{ location: "remote", trackName: "camera-a" }]);
     expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe("remote-connection|camera-a");
+    harness.client.stop();
+  });
+
+  it("prefers full camera quality with fallback without changing screen or microphone subscriptions", async () => {
+    const harness = createHarness();
+    await harness.client.start(fakeStream());
+    harness.transport.snapshot = {
+      incarnation: 1,
+      sequence: 1,
+      publications: (["camera", "screen", "microphone"] as const).map((source) => ({
+        participantId: "participant-2",
+        source,
+        publicationId: `remote-connection|${source}`,
+      })),
+    };
+    await harness.client.refreshRemotePublications();
+    expect(harness.transport.addInputs.at(-1)?.tracks.map(({ location, trackName, simulcast }) => ({ location, trackName, simulcast }))).toEqual([
+      { location: "remote", trackName: "camera", simulcast: { preferredRid: "h", priorityOrdering: "none", ridNotAvailable: "asciibetical" } },
+      { location: "remote", trackName: "screen", simulcast: undefined },
+      { location: "remote", trackName: "microphone", simulcast: undefined },
+    ]);
     harness.client.stop();
   });
 
@@ -547,7 +602,7 @@ describe("Cloudflare SFU client", () => {
 
     await harness.client.refreshRemotePublications();
 
-    expect(harness.transport.addInputs.at(-1)?.tracks).toEqual([{ location: "remote", sessionId: "remote-connection", trackName: "remote-camera-track" }]);
+    expect(harness.transport.addInputs.at(-1)?.tracks).toEqual([{ location: "remote", sessionId: "remote-connection", trackName: "remote-camera-track", simulcast: { preferredRid: "h", priorityOrdering: "none", ridNotAvailable: "asciibetical" } }]);
     expect(harness.client.getSnapshot().remoteTracks[0]?.publicationId).toBe(publicationId);
     harness.client.stop();
   });
@@ -1262,8 +1317,13 @@ class FakePeerConnection extends EventTarget {
     this.transceiverInits.push(init);
     if (this.refuseSimulcast && init.sendEncodings) throw new DOMException("Simulcast unsupported", "NotSupportedError");
     let senderTrack: MediaStreamTrack | null = track;
+    let parameters: Pick<RTCRtpSendParameters, "encodings" | "degradationPreference"> = { encodings: init.sendEncodings ?? [{}] };
     const sender = {
-      getParameters: () => ({ encodings: init.sendEncodings ?? [{}] }),
+      getParameters: () => ({ ...parameters, encodings: parameters.encodings.map((encoding) => ({ ...encoding })) }),
+      setParameters: async (next: RTCRtpSendParameters) => {
+        if (this.refuseSenderParameters) throw new DOMException("Sender controls unsupported", "NotSupportedError");
+        parameters = { ...next, encodings: next.encodings.map((encoding) => ({ ...encoding })) };
+      },
       get track() {
         return senderTrack;
       },
@@ -1298,9 +1358,12 @@ class FakePeerConnection extends EventTarget {
     return { type: "answer", sdp: "browser-answer" };
   }
 
+  availableOutgoingBitrate: number | undefined;
+  refuseSenderParameters = false;
+
   getStats(): Promise<RTCStatsReport> {
     const stat: RTCStats = { id: "candidate-pair", timestamp: 0, type: "candidate-pair" };
-    Object.assign(stat, { selected: true, state: "succeeded" });
+    Object.assign(stat, { selected: true, state: "succeeded", availableOutgoingBitrate: this.availableOutgoingBitrate });
     const stats = new Map<string, RTCStats>([["candidate-pair", stat]]);
     return Promise.resolve(stats);
   }

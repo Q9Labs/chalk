@@ -13,13 +13,21 @@ type SessionDescription struct {
 	Type string `json:"type"`
 }
 
+// Simulcast selects a remote encoding and the provider's fallback policy.
+type Simulcast struct {
+	PreferredRID     string `json:"preferredRid"`
+	PriorityOrdering string `json:"priorityOrdering"`
+	RIDNotAvailable  string `json:"ridNotAvailable"`
+}
+
 type Track struct {
-	Location      string `json:"location"`
-	Mid           string `json:"mid,omitempty"`
-	TrackName     string `json:"trackName"`
-	SessionID     string `json:"sessionId,omitempty"`
-	Source        string `json:"source,omitempty"`
-	PublicationID string `json:"publication_id,omitempty"`
+	Simulcast     *Simulcast `json:"simulcast,omitempty"`
+	Location      string     `json:"location"`
+	Mid           string     `json:"mid,omitempty"`
+	TrackName     string     `json:"trackName"`
+	SessionID     string     `json:"sessionId,omitempty"`
+	Source        string     `json:"source,omitempty"`
+	PublicationID string     `json:"publication_id,omitempty"`
 }
 
 type TracksRequest struct {
@@ -124,6 +132,12 @@ func requireTracksRequest(input *TracksRequest) error {
 		track.TrackName = strings.TrimSpace(track.TrackName)
 		track.SessionID = strings.TrimSpace(track.SessionID)
 		track.Source = strings.TrimSpace(track.Source)
+		if err := requireSimulcastPolicy(track.Simulcast); err != nil {
+			return err
+		}
+		if track.Simulcast != nil && track.Location != "remote" {
+			return ErrInvalidSignalRequest
+		}
 		if track.TrackName == "" || (track.Location != "local" && track.Location != "remote") {
 			return ErrInvalidSignalRequest
 		}
@@ -191,6 +205,20 @@ func requireRenegotiateRequest(input *RenegotiateRequest) error {
 func requireSessionDescription(description *SessionDescription) error {
 	description.Type = strings.TrimSpace(description.Type)
 	if strings.TrimSpace(description.SDP) == "" || (description.Type != "offer" && description.Type != "answer") {
+		return ErrInvalidSignalRequest
+	}
+	return nil
+}
+
+func requireSimulcastPolicy(policy *Simulcast) error {
+	if policy == nil {
+		return nil
+	}
+	policy.PreferredRID = strings.TrimSpace(policy.PreferredRID)
+	policy.PriorityOrdering = strings.TrimSpace(policy.PriorityOrdering)
+	policy.RIDNotAvailable = strings.TrimSpace(policy.RIDNotAvailable)
+	validOrdering := func(value string) bool { return value == "none" || value == "asciibetical" }
+	if policy.PreferredRID == "" || !validOrdering(policy.PriorityOrdering) || !validOrdering(policy.RIDNotAvailable) {
 		return ErrInvalidSignalRequest
 	}
 	return nil

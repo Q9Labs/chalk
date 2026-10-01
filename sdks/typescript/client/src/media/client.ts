@@ -1,4 +1,5 @@
 import type { ClientMediaPlane, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaSource } from "./plane";
+import { CameraUplinkPolicy, cameraUplinkBitrate } from "./camera-uplink";
 import { subscribeSnapshot } from "./observers";
 import { resolveMediaTarget } from "./target";
 import { comparePublicationCursor, parseCloudflareSFUPublicationID, publicationKey, requireDescription, requireSFUDescription, validatePublicationSnapshot, waitFor } from "./tracks";
@@ -66,6 +67,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #remoteTracks = new Map<string, CloudflareSFURemoteTrack>();
   #bootstrap: CloudflareSFUBootstrap;
   #connection: RTCPeerConnection;
+  #disposeConnectionObservation: (() => void) | undefined;
   #connectionEpoch = 0;
   #retiredLocalConnection: RTCPeerConnection | null = null;
   #cursor: PublicationCursor | null = null;
@@ -703,9 +705,17 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     return this.#serializeSDP(async () => {
       const connection = this.#connection;
       const connectionId = this.#bootstrap.connectionId;
-      const requested = publications.map((publication) => {
+      const requested = publications.map((publication): CloudflareSFUTrackRequest => {
         const reference = parseCloudflareSFUPublicationID(publication.publicationId);
-        return { location: "remote" as const, sessionId: reference.connectionId, trackName: reference.trackName };
+        return {
+          location: "remote",
+          sessionId: reference.connectionId,
+          trackName: reference.trackName,
+          // h sorts before l: prefer full camera quality, but keep video flowing
+          // when the publisher pauses h. Do not silently downgrade a live h layer.
+          // https://developers.cloudflare.com/realtime/sfu/features/simulcast/#quality-control
+          ...(publication.source === "camera" ? { simulcast: { preferredRid: "h", priorityOrdering: "none", ridNotAvailable: "asciibetical" } as const } : {}),
+        };
       });
       const received = new Map<string, MediaStreamTrack>();
       const onTrack = (event: RTCTrackEvent) => {
@@ -837,11 +847,60 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     );
   }
 
+  #cameraSimulcastSender(state: LocalTrackState | undefined): RTCRtpSender | undefined {
+    if (!state?.enabled) return undefined;
+    const sender = state.transceiver?.sender;
+    if (!sender?.track || sender.getParameters().encodings.length < 2) return undefined;
+    return sender;
+  }
+
+  async #applyCameraUplink(sender: RTCRtpSender, report: RTCStatsReport, policy: CameraUplinkPolicy): Promise<void> {
+    const parameters = sender.getParameters();
+    const low = parameters.encodings.find((encoding) => encoding.rid === "l");
+    if (!low) return;
+    const active = policy.sample(cameraUplinkBitrate(report.values()), low.active !== false);
+    if (active === (low.active !== false)) return;
+    low.active = active;
+    // With only h active the browser can adapt source resolution, rather
+    // than repeatedly pausing h while paying for l. Both RIDs stay intact.
+    parameters.degradationPreference = "maintain-framerate";
+    await sender.setParameters(parameters);
+  }
+
   #observeConnection(connection: RTCPeerConnection, generation: number, connectionEpoch: number): void {
+    this.#disposeConnectionObservation?.();
     let disposed = false;
+    let cameraTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+    const cameraPolicy = new CameraUplinkPolicy();
+    let observedCamera: LocalTrackState | undefined;
+    const current = () => !disposed && generation === this.#generation && connectionEpoch === this.#connectionEpoch && !this.#stopped;
+    const adaptCamera = async () => {
+      if (!current()) return;
+      try {
+        const state = this.#localTracks.get("camera");
+        if (state !== observedCamera) {
+          cameraPolicy.reset();
+          observedCamera = state;
+        }
+        const sender = this.#cameraSimulcastSender(state);
+        if (!sender) {
+          cameraPolicy.reset();
+          return;
+        }
+        const report = await connection.getStats();
+        if (!current() || this.#cameraSimulcastSender(state) !== sender || connection.signalingState !== "stable") return;
+        await this.#applyCameraUplink(sender, report, cameraPolicy);
+      } catch {
+        // Stats and optional sender controls must never break publication.
+        cameraPolicy.reset();
+      } finally {
+        if (current()) cameraTimer = globalThis.setTimeout(adaptCamera, 1_000);
+      }
+    };
     const dispose = () => {
       if (disposed) return;
       disposed = true;
+      if (cameraTimer !== undefined) globalThis.clearTimeout(cameraTimer);
       connection.removeEventListener("connectionstatechange", capture);
       connection.removeEventListener("iceconnectionstatechange", capture);
       connection.removeEventListener("signalingstatechange", capture);
@@ -872,6 +931,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       }
       if (connection.connectionState === "closed") dispose();
     };
+    this.#disposeConnectionObservation = dispose;
+    cameraTimer = globalThis.setTimeout(adaptCamera, 1_000);
     connection.addEventListener("connectionstatechange", capture);
     connection.addEventListener("iceconnectionstatechange", capture);
     connection.addEventListener("signalingstatechange", capture);
@@ -941,6 +1002,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
 
   #disposeConnection(stopSenders: boolean): void {
+    this.#disposeConnectionObservation?.();
+    this.#disposeConnectionObservation = undefined;
     if (stopSenders) {
       for (const sender of this.#connection.getSenders()) {
         if (sender.track) safeStopTrack(sender.track, this.#reportError.bind(this));
