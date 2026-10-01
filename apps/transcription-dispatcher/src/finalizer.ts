@@ -122,7 +122,7 @@ async function processFinalizeAssignment(assignment: FinalizeAssignment, journey
     const terminal = kind === "nonretryable" || kind === "schema";
     const errorCode = safeErrorCode(error);
     logger.warn("finalize_failed", { error: errorCode, attempt: assignment.attempt, terminal });
-    await safeFinalizeRetry(dependencies.control.retryFinalize, assignment, journey, errorCode, terminal, logger);
+    await safeFinalizeRetry(dependencies.control.retryFinalize?.bind(dependencies.control), assignment, journey, errorCode, terminal, logger);
     return "failed";
   }
 }

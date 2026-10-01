@@ -489,9 +489,9 @@ func run() error {
 		if redisClient == nil || transcriptionStorage == nil {
 			return errors.New("transcription workload auth requires Redis and R2")
 		}
-		waker, err := lambdawaker.New(context.Background(), cfg.Transcription.DispatcherFunction, logger)
+		waker, err := lambdawaker.New(context.Background(), cfg.Transcription.DispatcherFunction, cfg.RecordingKMS.Region, logger)
 		if err != nil {
-			return fmt.Errorf("configure transcription dispatcher wake: %w", err)
+			return fmt.Errorf("configure transcription dispatcher wake (%s): %w", config.RecordingKMSRegion, err)
 		}
 		transcriptService = transcriptService.WithDispatcherWaker(waker)
 		recordingDispatcherWake = func(ctx context.Context, jobID utilities.ID) {
