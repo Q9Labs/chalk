@@ -525,15 +525,18 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
 
   #addLocalTransceiver(connection: RTCPeerConnection, state: LocalTrackState): RTCRtpTransceiver {
-    if (state.source !== "camera") return connection.addTransceiver(state.track, { direction: "sendonly" });
+    if (state.source !== "camera" || firefoxCameraSimulcastUnsupported()) return connection.addTransceiver(state.track, { direction: "sendonly" });
+    // 720p and 360p have a 4:1 pixel ratio; budget about 4:1 bandwidth.
+    // Match a single-stream camera's temporal mode so h does not spend
+    // its constrained uplink budget on extra temporal-layer overhead.
+    const sendEncodings = [
+      { rid: "h", scaleResolutionDownBy: 1, maxBitrate: 2_500_000, scalabilityMode: "L1T1" },
+      { rid: "l", scaleResolutionDownBy: 2, maxBitrate: 650_000, scalabilityMode: "L1T1" },
+    ];
     try {
       return connection.addTransceiver(state.track, {
         direction: "sendonly",
-        // 720p and 360p have a 4:1 pixel ratio; budget about 4:1 bandwidth.
-        sendEncodings: [
-          { rid: "h", scaleResolutionDownBy: 1, maxBitrate: 2_500_000 },
-          { rid: "l", scaleResolutionDownBy: 2, maxBitrate: 650_000 },
-        ],
+        sendEncodings,
       });
     } catch (error) {
       if (!simulcastUnsupported(error)) throw error;
@@ -1338,6 +1341,13 @@ function providerDescription(description: ReturnType<typeof requireDescription>)
 
 function retryableRemotePull(error: unknown): boolean {
   return error instanceof CloudflareSFUError && ["signaling_failed", "signaling_timeout", "media_failed", "negotiation_timeout"].includes(error.code);
+}
+
+function firefoxCameraSimulcastUnsupported(): boolean {
+  // Firefox accepts RID encodings but can pause 720p h on an unthrottled link.
+  // Capabilities do not expose that allocation policy. Preserve the single-
+  // camera path for Gecko Firefox; FxiOS uses WebKit and is not matched.
+  return typeof navigator !== "undefined" && /\bFirefox\/\d+/i.test(navigator.userAgent);
 }
 
 function simulcastUnsupported(error: unknown): boolean {

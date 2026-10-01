@@ -174,13 +174,43 @@ describe("Cloudflare SFU client", () => {
       {
         direction: "sendonly",
         sendEncodings: [
-          { rid: "h", scaleResolutionDownBy: 1, maxBitrate: 2_500_000 },
-          { rid: "l", scaleResolutionDownBy: 2, maxBitrate: 650_000 },
+          { rid: "h", scaleResolutionDownBy: 1, maxBitrate: 2_500_000, scalabilityMode: "L1T1" },
+          { rid: "l", scaleResolutionDownBy: 2, maxBitrate: 650_000, scalabilityMode: "L1T1" },
         ],
       },
       { direction: "sendonly" },
     ]);
     harness.client.stop();
+  });
+
+  it.each([
+    ["Mozilla/5.0 Gecko/20100101 Firefox/153.0", 1],
+    ["Mozilla/5.0 Android Gecko/153.0 Firefox/153.0", 1],
+    ["Mozilla/5.0 AppleWebKit/537.36 Chrome/154.0 Safari/537.36", 2],
+    ["Mozilla/5.0 AppleWebKit/605.1.15 Version/26.5 Safari/605.1.15", 2],
+    ["Mozilla/5.0 AppleWebKit/605.1.15 FxiOS/153.0 Mobile", 2],
+  ])("preserves camera encoding policy through replacement and restart for %s", async (userAgent, layers) => {
+    vi.stubGlobal("navigator", { userAgent });
+    const harness = createHarness();
+    try {
+      await harness.client.start(fakeStream(new FakeTrack("camera", "video")));
+      const sender = harness.peers[0]!.getSenders()[0]!;
+      const encodings = sender.getParameters().encodings;
+      expect(encodings).toHaveLength(layers);
+      const target = (operationId: string, enabled: boolean) => harness.client.setLocalPublicationTarget({ operationId, participantId: "participant-1", source: "camera", enabled });
+      await target("off", false);
+      await target("on", true);
+      expect(sender.getParameters().encodings).toEqual(encodings);
+      await harness.client.clearPreparedLocalTrack("camera");
+      harness.client.prepareLocalTrack("camera", new FakeTrack("replacement", "video") as unknown as MediaStreamTrack);
+      await target("replacement-on", true);
+      expect(sender.getParameters().encodings).toEqual(encodings);
+      await harness.client.restart({ bootstrap: bootstrap("connection-2") });
+      expect(harness.peers.at(-1)?.getSenders()[0]?.getParameters().encodings).toEqual(encodings);
+    } finally {
+      harness.client.stop();
+      vi.unstubAllGlobals();
+    }
   });
 
   it.each([false, true])("camera budget adaptation is isolated and optional (refused=%s)", async (refused) => {
@@ -198,8 +228,8 @@ describe("Cloudflare SFU client", () => {
       expect(mic?.getParameters().encodings).toEqual([{}]);
       expect(screen?.getParameters().encodings).toEqual([{}]);
       expect(camera?.getParameters().encodings).toEqual([
-        { rid: "h", scaleResolutionDownBy: 1, maxBitrate: 2_500_000 },
-        { rid: "l", scaleResolutionDownBy: 2, maxBitrate: 650_000, ...(refused ? {} : { active: false }) },
+        { rid: "h", scaleResolutionDownBy: 1, maxBitrate: 2_500_000, scalabilityMode: "L1T1" },
+        { rid: "l", scaleResolutionDownBy: 2, maxBitrate: 650_000, scalabilityMode: "L1T1", ...(refused ? {} : { active: false }) },
       ]);
       expect(harness.client.getSnapshot().localTracks.every((track) => track.enabled)).toBe(true);
       if (!refused) {
