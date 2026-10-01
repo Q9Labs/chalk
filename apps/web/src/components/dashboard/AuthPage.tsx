@@ -71,6 +71,11 @@ export function AuthPage({ mode }: { mode: "sign-in" | "sign-up" }) {
             <input name="password" type="password" autoComplete={signingUp ? "new-password" : "current-password"} required minLength={8} />
             {signingUp ? <span>Use at least 8 characters.</span> : null}
           </label>
+          {!signingUp ? (
+            <p className="auth-forgot-password">
+              <Link to="/forgot-password">Forgot password?</Link>
+            </p>
+          ) : null}
           {error ? (
             <p className="auth-error" role="alert">
               {error}

@@ -7,6 +7,7 @@ const (
 	PolicyNameAuthRecentAuth     = "auth.recent_auth"
 	PolicyNameAuthOAuthStart     = "auth.oauth.start"
 	PolicyNameAuthOAuthCallback  = "auth.oauth.callback"
+	PolicyNameAuthPasswordReset  = "auth.password_reset"
 	PolicyNameCORSPolicyLookup   = "cors.policy_lookup"
 	PolicyNameAuthenticatedWrite = "v1.authenticated.write"
 	PolicyNameWebhookRead        = "v1.webhooks.read"

@@ -155,6 +155,27 @@ describe("account boundary", () => {
     expect(localResponse.headers.get("set-cookie")).not.toContain("Secure");
   });
 
+  it.each([
+    ["request", "/v1/auth/password-reset/request", 202],
+    ["complete", "/v1/auth/password-reset/complete", 200],
+  ])("relays the unauthenticated password-reset %s mutation without browser credentials", async (route, upstreamPath, expectedStatus) => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe(`${upstream.CHALK_API_ORIGIN}${upstreamPath}`);
+      const headers = new Headers(init?.headers);
+      expect(headers.get("authorization")).toBeNull();
+      expect(headers.get("cookie")).toBeNull();
+      return Response.json({ accepted: true }, { status: expectedStatus });
+    });
+    const response = await handleAccountBoundary(
+      jsonRequest(`/api/auth/password-reset/${route}`, { email: "ada@example.com", token: "private-reset-token", password: "new-password" }, { Origin: secureOrigin, Cookie: "__Host-chalk_account=old-account-token; __Host-chalk_csrf=csrf-token", "X-Chalk-CSRF": "csrf-token" }),
+      upstream,
+      fetcher,
+    );
+
+    expect(response.status).toBe(expectedStatus);
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
   it("preserves the account cookie when recent authentication fails", async () => {
     const response = await handleAccountBoundary(
       jsonRequest("/api/me/recent-auth", { password: "wrong", action: "api_key.create" }, { Origin: secureOrigin, Cookie: "__Host-chalk_account=account-token; __Host-chalk_csrf=csrf-token", "X-Chalk-CSRF": "csrf-token" }),

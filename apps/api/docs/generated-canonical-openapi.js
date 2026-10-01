@@ -399,6 +399,226 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         summary: "Logout",
       },
     },
+    "/v1/auth/password-reset/complete": {
+      post: {
+        operationId: "completePasswordReset",
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/PasswordResetCompleteRequest",
+              },
+            },
+          },
+          required: true,
+        },
+        responses: {
+          200: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/Status",
+                },
+              },
+            },
+            description: "OK",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["access.invalid_password", "access.password_reset_token_invalid", "request.invalid"],
+          },
+          413: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Request Entity Too Large",
+            "x-chalk-error-codes": ["request.payload_too_large"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [],
+        summary: "Complete password reset",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          limit: 5,
+          name: "auth.password_reset",
+          window_seconds: 60,
+        },
+      },
+    },
+    "/v1/auth/password-reset/request": {
+      post: {
+        operationId: "requestPasswordReset",
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/PasswordResetRequest",
+              },
+            },
+          },
+          required: true,
+        },
+        responses: {
+          202: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PasswordResetAccepted",
+                },
+              },
+            },
+            description: "Accepted",
+          },
+          400: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Bad Request",
+            "x-chalk-error-codes": ["request.invalid"],
+          },
+          413: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Request Entity Too Large",
+            "x-chalk-error-codes": ["request.payload_too_large"],
+          },
+          429: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Too Many Requests",
+            headers: {
+              "Retry-After": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Limit": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+              "X-RateLimit-Remaining": {
+                required: true,
+                schema: {
+                  type: "integer",
+                },
+              },
+            },
+            "x-chalk-error-codes": ["request.rate_limited"],
+          },
+          500: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"],
+          },
+          503: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"],
+          },
+        },
+        security: [],
+        summary: "Request password reset",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          limit: 5,
+          name: "auth.password_reset",
+          window_seconds: 60,
+        },
+      },
+    },
     "/v1/auth/register": {
       post: {
         operationId: "register",
@@ -18982,6 +19202,34 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
           },
         },
         required: ["external_operation", "participant"],
+        type: "object",
+      },
+      PasswordResetAccepted: {
+        $ref: "#/components/schemas/Status",
+      },
+      PasswordResetCompleteRequest: {
+        additionalProperties: false,
+        properties: {
+          password: {
+            minLength: 1,
+            type: "string",
+          },
+          token: {
+            minLength: 1,
+            type: "string",
+          },
+        },
+        required: ["password", "token"],
+        type: "object",
+      },
+      PasswordResetRequest: {
+        additionalProperties: false,
+        properties: {
+          email: {
+            $ref: "#/components/schemas/Email",
+          },
+        },
+        required: ["email"],
         type: "object",
       },
       PeopleMutation: {

@@ -3,7 +3,9 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
@@ -20,6 +22,8 @@ type AuthenticationService interface {
 	Logout(ctx context.Context, principal authentication.Principal) error
 	StartGoogleSignIn(ctx context.Context) (authentication.GoogleStart, error)
 	CompleteGoogleSignIn(ctx context.Context, state string, code string, userAgent *string) (authentication.AuthResult, error)
+	RequestPasswordReset(ctx context.Context, email string) error
+	CompletePasswordReset(ctx context.Context, token string, password string) (authentication.User, error)
 }
 
 type SessionCookieOptions struct {
@@ -53,6 +57,15 @@ type loginRequest struct {
 	UserAgent *string `json:"-"`
 }
 
+type passwordResetRequest struct {
+	Email string `json:"email"`
+}
+
+type passwordResetCompleteRequest struct {
+	Token    string `json:"token"`
+	Password string `json:"password"`
+}
+
 type googleCallbackRequest struct {
 	State     string
 	Code      string
@@ -81,10 +94,58 @@ func authEndpoints(service AuthenticationService, cookies SessionCookieOptions) 
 	return []RouteEndpoint{
 		registerEndpoint(service, cookies),
 		loginEndpoint(service, cookies),
+		requestPasswordResetEndpoint(service),
+		completePasswordResetEndpoint(service),
 		googleStartEndpoint(service),
 		googleCallbackEndpoint(service, cookies),
 		logoutEndpoint(service, cookies),
 	}
+}
+
+func requestPasswordResetEndpoint(service AuthenticationService) Endpoint[passwordResetRequest, statusResponse] {
+	// Bound background work without making the public response depend on Account lookup or delivery.
+	processing := make(chan struct{}, 32)
+	return Post("/v1/auth/password-reset/request", "/auth/password-reset/request", "requestPasswordReset", decodeJSONBody[passwordResetRequest], func(ctx context.Context, request passwordResetRequest) (statusResponse, error) {
+		if service == nil {
+			return statusResponse{}, apiErrorServiceUnavailable
+		}
+		select {
+		case processing <- struct{}{}:
+			go func() {
+				defer func() { <-processing }()
+				workContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+				defer cancel()
+				// This best-effort flow deliberately keeps all failures out of the public response.
+				if err := service.RequestPasswordReset(workContext, request.Email); err != nil {
+					slog.ErrorContext(workContext, "password reset processing failed", "event", "auth.password_reset.failed")
+				}
+			}()
+		default:
+			// Saturation must have the same response as every other request.
+			slog.WarnContext(ctx, "password reset processing saturated", "event", "auth.password_reset.saturated")
+		}
+		return statusResponse{Status: "If an Account exists for that email, we sent a reset link"}, nil
+	}).RateLimit(authPasswordResetRateLimit).
+		RequestBody("PasswordResetRequest", passwordResetRequest{}).
+		Responds(http.StatusAccepted, "PasswordResetAccepted", statusResponse{}).
+		Errors(apiErrorServiceUnavailable, apiErrorInvalidRequest, apiErrorRateLimited, apiErrorInternal).
+		MapErrors(authenticationAPIError)
+}
+
+func completePasswordResetEndpoint(service AuthenticationService) Endpoint[passwordResetCompleteRequest, statusResponse] {
+	return Post("/v1/auth/password-reset/complete", "/auth/password-reset/complete", "completePasswordReset", decodeJSONBody[passwordResetCompleteRequest], func(ctx context.Context, request passwordResetCompleteRequest) (statusResponse, error) {
+		if service == nil {
+			return statusResponse{}, apiErrorServiceUnavailable
+		}
+		if _, err := service.CompletePasswordReset(ctx, request.Token, request.Password); err != nil {
+			return statusResponse{}, err
+		}
+		return statusResponse{Status: "ok"}, nil
+	}).RateLimit(authPasswordResetRateLimit).
+		RequestBody("PasswordResetCompleteRequest", passwordResetCompleteRequest{}).
+		Responds(http.StatusOK, "Status", statusResponse{}).
+		Errors(apiErrorServiceUnavailable, apiErrorInvalidRequest, apiErrorInvalidPassword, apiErrorPasswordResetTokenInvalid, apiErrorRateLimited, apiErrorInternal).
+		MapErrors(authenticationAPIError)
 }
 
 func registerEndpoint(service AuthenticationService, cookies SessionCookieOptions) Endpoint[registerRequest, authResultResponse] {
@@ -325,6 +386,8 @@ func authenticationAPIError(err error) (APIError, bool) {
 		return apiErrorOAuthEmailConflict, true
 	case errors.Is(err, authentication.ErrOAuthEmailNotVerified):
 		return apiErrorOAuthEmailNotVerified, true
+	case errors.Is(err, authentication.ErrPasswordResetTokenInvalid):
+		return apiErrorPasswordResetTokenInvalid, true
 	default:
 		return APIError{}, false
 	}

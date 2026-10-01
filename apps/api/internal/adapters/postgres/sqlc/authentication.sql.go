@@ -12,6 +12,52 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const completePasswordReset = `-- name: CompletePasswordReset :one
+with consumed as (
+    update password_resets
+    set used_at = $1, updated_at = now()
+    where password_resets.token_hash = $2
+      and password_resets.used_at is null
+      and password_resets.expires_at > $1
+    returning account_id
+), updated_identity as (
+    update auth_identities
+    set password_hash = $3, updated_at = now()
+    from consumed
+    where auth_identities.user_id = consumed.account_id
+      and auth_identities.provider = 'password'
+    returning auth_identities.user_id
+), revoked_sessions as (
+    update login_sessions
+    set revoked_at = $1, updated_at = now()
+    from updated_identity
+    where login_sessions.user_id = updated_identity.user_id
+      and login_sessions.revoked_at is null
+)
+select users.id, users.name, users.email, users.updated_at, users.created_at
+from users
+join updated_identity on updated_identity.user_id = users.id
+`
+
+type CompletePasswordResetParams struct {
+	CompletedAt  pgtype.Timestamptz `json:"completed_at"`
+	TokenHash    string             `json:"token_hash"`
+	PasswordHash pgtype.Text        `json:"password_hash"`
+}
+
+func (q *Queries) CompletePasswordReset(ctx context.Context, arg CompletePasswordResetParams) (User, error) {
+	row := q.db.QueryRow(ctx, completePasswordReset, arg.CompletedAt, arg.TokenHash, arg.PasswordHash)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createGoogleUser = `-- name: CreateGoogleUser :one
 with created_user as (
     insert into users (
@@ -223,6 +269,18 @@ func (q *Queries) CreatePasswordUser(ctx context.Context, arg CreatePasswordUser
 	return i, err
 }
 
+const getAccountPasswordHash = `-- name: GetAccountPasswordHash :one
+select password_hash from auth_identities
+where user_id = $1 and provider = 'password'
+`
+
+func (q *Queries) GetAccountPasswordHash(ctx context.Context, accountID pgtype.UUID) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getAccountPasswordHash, accountID)
+	var password_hash pgtype.Text
+	err := row.Scan(&password_hash)
+	return password_hash, err
+}
+
 const getLoginSessionByTokenHash = `-- name: GetLoginSessionByTokenHash :one
 select
     login_sessions.id as session_id,
@@ -328,6 +386,17 @@ func (q *Queries) GetPasswordIdentityByEmail(ctx context.Context, email string) 
 	return i, err
 }
 
+const getPasswordResetAccount = `-- name: GetPasswordResetAccount :one
+select account_id from password_resets where token_hash = $1
+`
+
+func (q *Queries) GetPasswordResetAccount(ctx context.Context, tokenHash string) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getPasswordResetAccount, tokenHash)
+	var account_id pgtype.UUID
+	err := row.Scan(&account_id)
+	return account_id, err
+}
+
 const getUserByAuthIdentity = `-- name: GetUserByAuthIdentity :one
 select
     users.id,
@@ -384,6 +453,17 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 	return i, err
 }
 
+const lockAuthenticationAccount = `-- name: LockAuthenticationAccount :one
+select id from users where id = $1 for no key update
+`
+
+func (q *Queries) LockAuthenticationAccount(ctx context.Context, accountID pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, lockAuthenticationAccount, accountID)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const revokeLoginSession = `-- name: RevokeLoginSession :one
 update login_sessions
 set
@@ -426,4 +506,32 @@ func (q *Queries) RevokeLoginSession(ctx context.Context, arg RevokeLoginSession
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const storePasswordReset = `-- name: StorePasswordReset :exec
+insert into password_resets (
+    account_id,
+    token_hash,
+    expires_at
+) values (
+    $1,
+    $2,
+    $3
+)
+on conflict (account_id) do update set
+    token_hash = excluded.token_hash,
+    expires_at = excluded.expires_at,
+    used_at = null,
+    updated_at = now()
+`
+
+type StorePasswordResetParams struct {
+	AccountID pgtype.UUID        `json:"account_id"`
+	TokenHash string             `json:"token_hash"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) StorePasswordReset(ctx context.Context, arg StorePasswordResetParams) error {
+	_, err := q.db.Exec(ctx, storePasswordReset, arg.AccountID, arg.TokenHash, arg.ExpiresAt)
+	return err
 }

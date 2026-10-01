@@ -547,6 +547,15 @@ type Participant struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
+type PasswordReset struct {
+	AccountID pgtype.UUID        `json:"account_id"`
+	TokenHash string             `json:"token_hash"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	UsedAt    pgtype.Timestamptz `json:"used_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type ProviderOperationObservation struct {
 	TenantID               pgtype.UUID        `json:"tenant_id"`
 	EpisodeID              pgtype.UUID        `json:"episode_id"`

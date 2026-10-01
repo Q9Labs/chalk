@@ -999,6 +999,14 @@ func (s *tracedAuthenticationService) Login(ctx context.Context, input authentic
 	return result, err
 }
 
+func (s *tracedAuthenticationService) RequestPasswordReset(ctx context.Context, email string) error {
+	return s.next.RequestPasswordReset(ctx, email)
+}
+
+func (s *tracedAuthenticationService) CompletePasswordReset(ctx context.Context, token string, password string) (authentication.User, error) {
+	return s.next.CompletePasswordReset(ctx, token, password)
+}
+
 func (s *tracedAuthenticationService) AuthenticateSession(ctx context.Context, rawToken string) (authentication.SessionUser, error) {
 	span := s.recorder.Start("service", "authentication.Service.AuthenticateSession", "hash bearer token and load active session", map[string]any{
 		"token": "[redacted]",
@@ -1165,6 +1173,14 @@ func (r *tracedAuthenticationRepository) RevokeSession(ctx context.Context, sess
 	return nil
 }
 
+func (r *tracedAuthenticationRepository) StorePasswordReset(context.Context, authentication.StorePasswordResetInput) error {
+	return nil
+}
+
+func (r *tracedAuthenticationRepository) CompletePasswordReset(context.Context, authentication.CompletePasswordResetInput) (authentication.User, error) {
+	return authentication.User{}, authentication.ErrPasswordResetTokenInvalid
+}
+
 type tracedPasswordHasher struct {
 	recorder *Recorder
 }
@@ -1273,6 +1289,11 @@ func (staticAuthentication) Register(context.Context, authentication.RegisterInp
 
 func (staticAuthentication) Login(context.Context, authentication.LoginInput) (authentication.AuthResult, error) {
 	return authentication.AuthResult{}, errors.New("login is not used by this trace scenario")
+}
+
+func (staticAuthentication) RequestPasswordReset(context.Context, string) error { return nil }
+func (staticAuthentication) CompletePasswordReset(context.Context, string, string) (authentication.User, error) {
+	return authentication.User{}, authentication.ErrPasswordResetTokenInvalid
 }
 
 func (staticAuthentication) Logout(context.Context, authentication.Principal) error {
