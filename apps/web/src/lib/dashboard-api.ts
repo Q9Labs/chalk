@@ -7,8 +7,15 @@ import {
   type AccountTenantList,
   type AuthUser,
   type DateTimeString,
+  EmailSchema,
   type Episode,
   type EpisodeEnd,
+  type IssuedTenantInvitation,
+  type Membership,
+  type MembershipList,
+  MembershipIdSchema,
+  type TenantInvitationList,
+  UUIDSchema,
   type PublicAdmissionRequest,
   type PublicAdmissionRequestPage,
   type Pagination,
@@ -61,6 +68,11 @@ export type DashboardAPIKeyPage = { api_keys: DashboardAPIKey[]; pagination: Das
 export type APIKeySecretResult = Omit<DashboardValue<APIKeyWithSecret>, "replayed"> & {
   replayed?: boolean;
 };
+export type DashboardMembership = DashboardValue<Membership>;
+export type DashboardMembershipPage = DashboardValue<MembershipList>;
+export type DashboardTenantInvitation = DashboardValue<TenantInvitationList["invitations"][number]>;
+export type DashboardIssuedInvitation = DashboardValue<IssuedTenantInvitation>;
+export type TenantRole = Membership["role"];
 export type DashboardSpacePublicInvite = DashboardValue<SpacePublicInvite>;
 export type DashboardPublicAdmissionRequest = DashboardValue<PublicAdmissionRequest>;
 export type DashboardPublicAdmissionRequestPage = DashboardValue<PublicAdmissionRequestPage>;
@@ -562,6 +574,62 @@ export function revokeAPIKey(tenantID: string, keyID: string, options: { recentA
       headers: recentAPIKeyHeaders(options.recentAuth),
     }),
   );
+}
+
+export function listMemberships(tenantIDValue: string, options: { cursor?: string; pageSize?: number } = {}): Promise<DashboardMembershipPage> {
+  return generatedRequest((client) =>
+    client.memberships.listMemberships({
+      params: { tenant_id: tenantID(tenantIDValue) },
+      query: { cursor: options.cursor, page_size: options.pageSize },
+    }),
+  );
+}
+
+export function updateMembershipRole(tenantIDValue: string, membershipID: string, role: TenantRole): Promise<DashboardMembership> {
+  return generatedRequest((client) =>
+    client.memberships.updateMembership({
+      params: { tenant_id: tenantID(tenantIDValue), membership_id: Schema.decodeUnknownSync(MembershipIdSchema)(membershipID) },
+      payload: { role },
+    }),
+  );
+}
+
+export async function removeMembership(tenantIDValue: string, membershipID: string): Promise<void> {
+  await generatedRequest((client) =>
+    client.memberships.removeMembership({
+      params: { tenant_id: tenantID(tenantIDValue), membership_id: Schema.decodeUnknownSync(MembershipIdSchema)(membershipID) },
+    }),
+  );
+}
+
+export async function leaveTenant(tenantIDValue: string): Promise<void> {
+  await generatedRequest((client) => client.tenants.leaveTenant({ params: { tenant_id: tenantID(tenantIDValue) } }));
+}
+
+export async function listTenantInvitations(tenantIDValue: string): Promise<DashboardTenantInvitation[]> {
+  const response = await generatedRequest((client) => client.tenants.listTenantInvitations({ params: { tenant_id: tenantID(tenantIDValue) } }));
+  return response.invitations;
+}
+
+export function issueTenantInvitation(tenantIDValue: string, input: { email: string; role: TenantRole }): Promise<DashboardIssuedInvitation> {
+  return generatedRequest((client) =>
+    client.tenants.issueTenantInvitation({
+      params: { tenant_id: tenantID(tenantIDValue) },
+      payload: { email: Schema.decodeUnknownSync(EmailSchema)(input.email), role: input.role },
+    }),
+  );
+}
+
+export async function revokeTenantInvitation(tenantIDValue: string, invitationID: string): Promise<void> {
+  await generatedRequest((client) =>
+    client.tenants.revokeTenantInvitation({
+      params: { tenant_id: tenantID(tenantIDValue), invitation_id: Schema.decodeUnknownSync(UUIDSchema)(invitationID) },
+    }),
+  );
+}
+
+export function acceptTenantInvitation(token: string): Promise<DashboardMembership> {
+  return generatedRequest((client) => client.tenants.acceptTenantInvitation({ payload: { token } }));
 }
 
 export function createRecentAuthProof(input: { password: string; action: string; resource_id?: string }): Promise<RecentAuthProof> {

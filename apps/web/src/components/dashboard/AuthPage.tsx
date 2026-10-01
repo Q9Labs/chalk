@@ -3,7 +3,7 @@ import { Logo } from "@q9labsai/chalk-react";
 import { useState, type FormEvent } from "react";
 import { DashboardAPIError, listAllAccountTenants, loginAccount, registerAccount } from "../../lib/dashboard-api";
 
-export function AuthPage({ mode }: { mode: "sign-in" | "sign-up" }) {
+export function AuthPage({ mode, next }: { mode: "sign-in" | "sign-up"; next?: string }) {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -19,6 +19,10 @@ export function AuthPage({ mode }: { mode: "sign-in" | "sign-up" }) {
         await registerAccount({ name: String(data.get("name") ?? ""), email: String(data.get("email") ?? ""), password: String(data.get("password") ?? "") });
       } else {
         await loginAccount({ email: String(data.get("email") ?? ""), password: String(data.get("password") ?? "") });
+      }
+      if (next) {
+        await navigate({ href: next, replace: true });
+        return;
       }
       const tenants = await listAllAccountTenants();
       await navigate({ to: tenants.length === 0 ? "/onboarding" : "/home", replace: true });
@@ -50,7 +54,7 @@ export function AuthPage({ mode }: { mode: "sign-in" | "sign-up" }) {
         <form className="account-entry-form" onSubmit={submit}>
           <p className="eyebrow">{signingUp ? "Create your Account" : "Welcome back"}</p>
           <h2>{signingUp ? "Bring the work into focus." : "Sign in to Chalk."}</h2>
-          <a className="google-auth-button" href="/api/auth/google/start?return_to=/home">
+          <a className="google-auth-button" href={`/api/auth/google/start?return_to=${encodeURIComponent(next ?? "/home")}`}>
             Continue with Google
           </a>
           <div className="auth-divider">
@@ -80,7 +84,10 @@ export function AuthPage({ mode }: { mode: "sign-in" | "sign-up" }) {
             {busy ? (signingUp ? "Creating Account…" : "Signing in…") : signingUp ? "Create Account" : "Sign in"}
           </button>
           <p className="auth-switch">
-            {signingUp ? "Already have an Account?" : "New to Chalk?"} <Link to={signingUp ? "/sign-in" : "/sign-up"}>{signingUp ? "Sign in" : "Create one"}</Link>
+            {signingUp ? "Already have an Account?" : "New to Chalk?"}{" "}
+            <Link to={signingUp ? "/sign-in" : "/sign-up"} search={{ next }}>
+              {signingUp ? "Sign in" : "Create one"}
+            </Link>
           </p>
           <p className="auth-legal-links">
             <Link to="/privacy">Privacy</Link>

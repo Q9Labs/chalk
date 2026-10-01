@@ -1,14 +1,6 @@
 import { Icon } from "./DashboardShell";
 
 const pageCopy = {
-  people: {
-    eyebrow: "Tenant access",
-    title: "People",
-    description: "Invite people to your Tenant and see where they collaborate.",
-    heading: "No one else has been invited yet",
-    note: "Invitations are coming soon. Until then, anyone who joins a Space from its link appears in that Space's Episodes.",
-    icon: "artifacts",
-  },
   activity: { eyebrow: "What changed", title: "Activity", description: "A timeline of changes across your Tenant.", heading: "Nothing to show yet", note: "Changes to Spaces, API keys, and Tenant settings will appear here.", icon: "activity" },
 } as const;
 

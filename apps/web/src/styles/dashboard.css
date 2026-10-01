@@ -2759,3 +2759,34 @@
     padding: 28px 20px 22px;
   }
 }
+.people-role-select {
+  min-height: 35px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  font: 12px var(--font-body);
+}
+.people-row {
+  min-width: 0;
+}
+.people-row > time {
+  width: 112px;
+}
+.people-row .space-list-copy {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.people-row .api-key-actions .dashboard-button {
+  white-space: nowrap;
+}
+.people-panel {
+  width: 100%;
+  margin-top: 0;
+}
+.people-role-select {
+  width: 150px;
+}
+.people-panel + .people-panel {
+  margin-top: 16px;
+}

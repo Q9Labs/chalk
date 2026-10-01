@@ -25,6 +25,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as SpaceIndexRouteImport } from './routes/space.index'
 import { Route as DocsIndexRouteImport } from './routes/docs.index'
 import { Route as SpaceSlugRouteImport } from './routes/space.$slug'
+import { Route as InvitationsAcceptRouteImport } from './routes/invitations.accept'
 import { Route as DocsSlugRouteImport } from './routes/docs.$slug'
 import { Route as AppTenantRouteImport } from './routes/_app.tenant'
 import { Route as AppSpacesRouteImport } from './routes/_app.spaces'
@@ -116,6 +117,11 @@ const SpaceSlugRoute = SpaceSlugRouteImport.update({
   path: '/$slug',
   getParentRoute: () => SpaceRoute,
 } as any)
+const InvitationsAcceptRoute = InvitationsAcceptRouteImport.update({
+  id: '/invitations/accept',
+  path: '/invitations/accept',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DocsSlugRoute = DocsSlugRouteImport.update({
   id: '/$slug',
   path: '/$slug',
@@ -195,6 +201,7 @@ export interface FileRoutesByFullPath {
   '/spaces': typeof AppSpacesRoute
   '/tenant': typeof AppTenantRoute
   '/docs/$slug': typeof DocsSlugRoute
+  '/invitations/accept': typeof InvitationsAcceptRoute
   '/space/$slug': typeof SpaceSlugRoute
   '/docs/': typeof DocsIndexRoute
   '/space/': typeof SpaceIndexRoute
@@ -221,6 +228,7 @@ export interface FileRoutesByTo {
   '/spaces': typeof AppSpacesRoute
   '/tenant': typeof AppTenantRoute
   '/docs/$slug': typeof DocsSlugRoute
+  '/invitations/accept': typeof InvitationsAcceptRoute
   '/space/$slug': typeof SpaceSlugRoute
   '/docs': typeof DocsIndexRoute
   '/space': typeof SpaceIndexRoute
@@ -251,6 +259,7 @@ export interface FileRoutesById {
   '/_app/spaces': typeof AppSpacesRoute
   '/_app/tenant': typeof AppTenantRoute
   '/docs/$slug': typeof DocsSlugRoute
+  '/invitations/accept': typeof InvitationsAcceptRoute
   '/space/$slug': typeof SpaceSlugRoute
   '/docs/': typeof DocsIndexRoute
   '/space/': typeof SpaceIndexRoute
@@ -281,6 +290,7 @@ export interface FileRouteTypes {
     | '/spaces'
     | '/tenant'
     | '/docs/$slug'
+    | '/invitations/accept'
     | '/space/$slug'
     | '/docs/'
     | '/space/'
@@ -307,6 +317,7 @@ export interface FileRouteTypes {
     | '/spaces'
     | '/tenant'
     | '/docs/$slug'
+    | '/invitations/accept'
     | '/space/$slug'
     | '/docs'
     | '/space'
@@ -336,6 +347,7 @@ export interface FileRouteTypes {
     | '/_app/spaces'
     | '/_app/tenant'
     | '/docs/$slug'
+    | '/invitations/accept'
     | '/space/$slug'
     | '/docs/'
     | '/space/'
@@ -356,6 +368,7 @@ export interface RootRouteChildren {
   StatusRoute: typeof StatusRoute
   TermsRoute: typeof TermsRoute
   WhiteboardRoute: typeof WhiteboardRoute
+  InvitationsAcceptRoute: typeof InvitationsAcceptRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -471,6 +484,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/space/$slug'
       preLoaderRoute: typeof SpaceSlugRouteImport
       parentRoute: typeof SpaceRoute
+    }
+    '/invitations/accept': {
+      id: '/invitations/accept'
+      path: '/invitations/accept'
+      fullPath: '/invitations/accept'
+      preLoaderRoute: typeof InvitationsAcceptRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/docs/$slug': {
       id: '/docs/$slug'
@@ -618,6 +638,7 @@ const rootRouteChildren: RootRouteChildren = {
   StatusRoute: StatusRoute,
   TermsRoute: TermsRoute,
   WhiteboardRoute: WhiteboardRoute,
+  InvitationsAcceptRoute: InvitationsAcceptRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

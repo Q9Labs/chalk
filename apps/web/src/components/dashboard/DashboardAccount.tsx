@@ -12,7 +12,7 @@ type DashboardAccountValue = {
 };
 
 const DashboardAccountContext = createContext<DashboardAccountValue | null>(null);
-const tenantHintKey = "chalk.tenant-hint";
+export const tenantHintKey = "chalk.tenant-hint";
 
 export function DashboardAccountGate({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
