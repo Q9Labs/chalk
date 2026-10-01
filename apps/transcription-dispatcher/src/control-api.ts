@@ -212,18 +212,30 @@ export class RecorderControlApiClient implements ControlApi {
   }
 
   private async call(path: string, method: "POST", body: unknown, context: JourneyContext, signal?: AbortSignal): Promise<unknown> {
-    const response = await this.options.fetch(`${this.options.baseUrl}${path}`, {
-      method,
-      headers: { "content-type": "application/json", ...contextHeaders(context), ...this.options.signer.sign({ method, path, body: JSON.stringify(body), context }) },
-      body: JSON.stringify(body),
-      ...(signal === undefined ? {} : { signal }),
-    });
+    let response: Response;
+    try {
+      response = await this.options.fetch(`${this.options.baseUrl}${path}`, {
+        method,
+        headers: { "content-type": "application/json", ...contextHeaders(context), ...this.options.signer.sign({ method, path, body: JSON.stringify(body), context }) },
+        body: JSON.stringify(body),
+        ...(signal === undefined ? {} : { signal }),
+      });
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      throw new TypeError(`fetch failed: ${method} ${path} (${networkCauseCode(error)})`, { cause: error });
+    }
     if (!response.ok) {
       const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
-      throw new ControlApiError("control API request failed", response.status, retryable);
+      throw new ControlApiError(`control API request failed: ${method} ${path} returned ${response.status}`, response.status, retryable);
     }
     return parseResponse(response);
   }
+}
+
+function networkCauseCode(error: TypeError): string {
+  const cause: unknown = error.cause;
+  if (cause instanceof Error && "code" in cause && typeof cause.code === "string") return cause.code;
+  return "unknown";
 }
 
 function canonicalAssignment(value: unknown): unknown {
