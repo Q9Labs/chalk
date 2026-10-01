@@ -348,6 +348,7 @@ export class ExcalidrawCollabEngine {
 
   private applyRemoteElements(args: { sceneId: string; sceneGeneration?: string; syncAll: boolean; remoteElements: unknown[]; appState?: SharedWhiteboardAppState; isSnapshot: boolean }) {
     const remoteSceneId = args.sceneId;
+    const replacingScene = this.sceneId !== null && remoteSceneId !== this.sceneId;
 
     if (!this.sceneId) {
       this.sceneId = remoteSceneId;
@@ -368,10 +369,17 @@ export class ExcalidrawCollabEngine {
         return;
       }
     }
+    if (replacingScene) {
+      if (this.changeDebounce !== null) clearTimeout(this.changeDebounce);
+      this.changeDebounce = null;
+      this.dirtyDuringSubmission = false;
+      this.sceneGeneration = null;
+    }
     if (args.sceneGeneration) this.sceneGeneration = args.sceneGeneration;
 
     const excalidrawAPI = this.opts.excalidrawAPI;
-    const local = excalidrawAPI.getSceneElementsIncludingDeleted();
+    if (replacingScene) excalidrawAPI.history.clear();
+    const local = replacingScene ? [] : excalidrawAPI.getSceneElementsIncludingDeleted();
     const remoteElements = args.remoteElements as readonly ExcalidrawElement[];
     const restoredRemote = restoreElements(remoteElements, local);
     const remoteForReconcile = toReconcileRemoteElements(restoredRemote);

@@ -9456,8 +9456,8 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         ],
         summary: "List episodes",
         "x-chalk-rate-limit": {
-          limit: 60,
-          name: "v1.authenticated.write",
+          limit: 300,
+          name: "v1.authenticated.read",
           window_seconds: 60,
         },
       },
@@ -9761,8 +9761,8 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         ],
         summary: "Get episode",
         "x-chalk-rate-limit": {
-          limit: 60,
-          name: "v1.authenticated.write",
+          limit: 300,
+          name: "v1.authenticated.read",
           window_seconds: 60,
         },
       },
@@ -11583,8 +11583,8 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         ],
         summary: "Issue episode participant sync token",
         "x-chalk-rate-limit": {
-          limit: 60,
-          name: "v1.authenticated.write",
+          limit: 300,
+          name: "v1.authenticated.read",
           window_seconds: 60,
         },
       },

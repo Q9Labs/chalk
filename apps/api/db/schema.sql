@@ -564,7 +564,7 @@ create index participants_sync_active_episode_capacity_idx
     where status in ('joining', 'active', 'leaving');
 create unique index participants_dashboard_account_episode_idx
     on participants(tenant_id, episode_id, account_id)
-    where account_id is not null;
+    where account_id is not null and status in ('joining', 'active');
 create index participants_dashboard_account_space_idx
     on participants(tenant_id, space_id, account_id, created_at desc)
     where account_id is not null;

@@ -9455,8 +9455,8 @@
         ],
         "summary": "List episodes",
         "x-chalk-rate-limit": {
-          "limit": 60,
-          "name": "v1.authenticated.write",
+          "limit": 300,
+          "name": "v1.authenticated.read",
           "window_seconds": 60
         }
       },
@@ -9760,8 +9760,8 @@
         ],
         "summary": "Get episode",
         "x-chalk-rate-limit": {
-          "limit": 60,
-          "name": "v1.authenticated.write",
+          "limit": 300,
+          "name": "v1.authenticated.read",
           "window_seconds": 60
         }
       }
@@ -11582,8 +11582,8 @@
         ],
         "summary": "Issue episode participant sync token",
         "x-chalk-rate-limit": {
-          "limit": 60,
-          "name": "v1.authenticated.write",
+          "limit": 300,
+          "name": "v1.authenticated.read",
           "window_seconds": 60
         }
       }

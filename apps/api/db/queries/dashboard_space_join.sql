@@ -35,6 +35,7 @@ where tenant_id = sqlc.arg(tenant_id)
   and space_id = sqlc.arg(space_id)
   and episode_id = sqlc.arg(episode_id)
   and account_id = sqlc.arg(account_id)
+  and status in ('joining', 'active')
 for update;
 
 -- name: LockLatestDashboardParticipantForUpdate :one
@@ -46,7 +47,7 @@ join episodes on episodes.tenant_id = participants.tenant_id
 where participants.tenant_id = sqlc.arg(tenant_id)
   and participants.space_id = sqlc.arg(space_id)
   and participants.account_id = sqlc.arg(account_id)
-order by episodes.created_at desc, participants.created_at desc
+order by episodes.created_at desc, participants.created_at desc, participants.generation desc
 limit 1
 for update of participants;
 
@@ -70,7 +71,10 @@ insert into participants (
 ) values (
     sqlc.arg(id), sqlc.arg(name), sqlc.narg(metadata), sqlc.arg(capabilities), sqlc.arg(role),
     sqlc.arg(tenant_id), sqlc.arg(space_id), sqlc.arg(episode_id), sqlc.arg(account_id), null,
-    1, 'joining'
+    (select coalesce(max(generation), 0) + 1 from participants
+     where tenant_id = sqlc.arg(tenant_id)
+       and episode_id = sqlc.arg(episode_id)
+       and account_id = sqlc.arg(account_id)), 'joining'
 )
 returning *;
 

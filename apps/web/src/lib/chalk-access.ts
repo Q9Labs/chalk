@@ -234,7 +234,7 @@ async function dashboardRequest(path: string, method: "GET" | "POST" | "DELETE",
     });
     statusCode = response.status;
     journey?.recordHttpRequest?.({ method, route: path, statusCode, durationMs: Date.now() - startedAt, state: response.ok ? "succeeded" : "failed" });
-    if (!response.ok) throw new Error("This Space is unavailable.");
+    if (!response.ok) throw Object.assign(new Error("Space request failed."), { status: response.status });
     if (response.status === 204) return undefined;
     return response.json();
   } catch (cause) {
@@ -250,7 +250,7 @@ async function dashboardRequest(path: string, method: "GET" | "POST" | "DELETE",
 async function dashboardCSRFToken(signal: AbortSignal): Promise<string> {
   if (dashboardCSRF.token && dashboardCSRF.expiresAt > Date.now()) return dashboardCSRF.token;
   const response = await fetch("/api/auth/csrf", { credentials: "same-origin", headers: { accept: "application/json" }, signal });
-  if (!response.ok) throw new Error("This Space is unavailable.");
+  if (!response.ok) throw Object.assign(new Error("Space request failed."), { status: response.status });
   const value: unknown = await response.json();
   if (typeof value !== "object" || value === null || Array.isArray(value) || !("csrf_token" in value) || typeof value.csrf_token !== "string" || !value.csrf_token) throw new Error("This Space is unavailable.");
   dashboardCSRF.token = value.csrf_token;

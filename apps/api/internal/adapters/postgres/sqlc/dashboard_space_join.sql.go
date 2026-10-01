@@ -116,7 +116,10 @@ insert into participants (
 ) values (
     $1, $2, $3, $4, $5,
     $6, $7, $8, $9, null,
-    1, 'joining'
+    (select coalesce(max(generation), 0) + 1 from participants
+     where tenant_id = $6
+       and episode_id = $8
+       and account_id = $9), 'joining'
 )
 returning id, name, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, generation, status, role, joined_at, left_at, updated_at, created_at
 `
@@ -230,6 +233,7 @@ where tenant_id = $1
   and space_id = $2
   and episode_id = $3
   and account_id = $4
+  and status in ('joining', 'active')
 for update
 `
 
@@ -278,7 +282,7 @@ join episodes on episodes.tenant_id = participants.tenant_id
 where participants.tenant_id = $1
   and participants.space_id = $2
   and participants.account_id = $3
-order by episodes.created_at desc, participants.created_at desc
+order by episodes.created_at desc, participants.created_at desc, participants.generation desc
 limit 1
 for update of participants
 `

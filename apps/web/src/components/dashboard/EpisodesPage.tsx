@@ -113,7 +113,7 @@ export function EpisodesPage({
     const refreshWhenVisible = () => {
       if (document.visibilityState === "visible") refresh();
     };
-    const interval = globalThis.setInterval(refreshWhenVisible, 10_000);
+    const interval = globalThis.setInterval(refreshWhenVisible, 60_000);
     globalThis.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {

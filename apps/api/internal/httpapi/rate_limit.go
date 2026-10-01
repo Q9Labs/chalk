@@ -53,6 +53,11 @@ var (
 		Limit:  600,
 		Window: time.Minute,
 	}
+	authenticatedReadRateLimit = ratelimit.Policy{
+		Name:   ratelimit.PolicyNameAuthenticatedRead,
+		Limit:  300,
+		Window: time.Minute,
+	}
 	authenticatedWriteRateLimit = ratelimit.Policy{
 		Name:   ratelimit.PolicyNameAuthenticatedWrite,
 		Limit:  60,

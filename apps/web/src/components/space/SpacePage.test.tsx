@@ -11,12 +11,49 @@ import { SpacePage } from "./SpacePage";
 const mocks = getSpacePageTestMocks();
 
 beforeEach(() => resetSpacePageTestMocks());
-afterEach(() => {
+afterEach(async () => {
   cleanup();
+  await act(async () => new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0)));
   vi.clearAllMocks();
 });
 
 describe("public Space entry", () => {
+  it("does not blame an invite link for a join conflict", async () => {
+    window.history.replaceState({}, "", "/space/design-lab?entry=dashboard");
+    mocks.joinDashboardSpace.mockRejectedValue(Object.assign(new Error("Participant is not active"), { status: 409 }));
+    render(<SpacePage slug="design-lab" />);
+    await act(async () => enterName("Ada"));
+    await waitFor(() => expect(screen.getByText("You could not enter this Space. Try entering again.")).toBeDefined());
+    expect(screen.queryByText(/check the invite link/)).toBeNull();
+  });
+
+  it("returns to Entrance and requests a fresh admission after Leave", async () => {
+    window.history.replaceState({}, "", "/space/design-lab?entry=dashboard");
+    mocks.joinDashboardSpace.mockResolvedValue({ credential: mocks.prepared.credential, getAccess: mocks.prepared.getAccess, leave: mocks.finish });
+    render(<SpacePage slug="design-lab" />);
+    await act(async () => enterName("Ada"));
+    await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
+    const onLeft = mocks.holder.chalkProps?.onLeft;
+    if (typeof onLeft !== "function") throw new Error("Missing Leave callback");
+    await act(async () => onLeft());
+    await screen.findByLabelText("Your name");
+    await act(async () => enterName("Ada"));
+    await waitFor(() => expect(mocks.joinDashboardSpace).toHaveBeenCalledTimes(2));
+  });
+
+  it("releases a failed media arrival without an error event", async () => {
+    window.history.replaceState({}, "", "/space/design-lab?entry=dashboard");
+    mocks.joinDashboardSpace.mockResolvedValue({ credential: mocks.prepared.credential, getAccess: mocks.prepared.getAccess, leave: mocks.finish });
+    const view = render(<SpacePage slug="design-lab" />);
+    await act(async () => enterName("Ada"));
+    await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
+    const snapshot = mocks.client.getSnapshot();
+    mocks.client.getSnapshot.mockReturnValue({ ...snapshot, connection: { ...snapshot.connection, status: "failed" } });
+    await act(async () => view.rerender(<SpacePage slug="design-lab" />));
+    await waitFor(() => expect(mocks.finish).toHaveBeenCalledTimes(1));
+    mocks.client.getSnapshot.mockReturnValue(snapshot);
+  });
+
   it("prepares Capture on opening an invited Entrance before Join", async () => {
     window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
     render(<SpacePage slug="design-lab" />);
