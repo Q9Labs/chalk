@@ -127,8 +127,11 @@ export function segmentFilter(placements: readonly VideoPlacement[], output: Com
         ? `scale=${tileWidth}:${tileHeight}:force_original_aspect_ratio=increase:force_divisible_by=2,crop=${tileWidth}:${tileHeight}`
         : `scale=${tileWidth}:${tileHeight}:force_original_aspect_ratio=decrease:force_divisible_by=2,pad=${tileWidth}:${tileHeight}:(ow-iw)/2:(oh-ih)/2:black`;
     const holdSeconds = firstFrameHolds.get(placement.sourceId) ?? 0;
-    const hold = holdSeconds > 0 ? `,tpad=start_mode=clone:start_duration=${seconds(holdSeconds)}` : "";
-    chains.push(`[${index}:v]setpts=PTS-STARTPTS${hold},fps=${fps},${fit},setsar=1,format=yuv420p[video${index}]`);
+    // Shift real frames to their recording time, then let fps fill backward.
+    // tpad would round a delay to input frames (a sparse share can be 1 fps).
+    const offset = holdSeconds > 0 ? `+${seconds(holdSeconds)}/TB` : "";
+    const cadence = holdSeconds > 0 ? `fps=${fps}:start_time=0` : `fps=${fps}`;
+    chains.push(`[${index}:v]setpts=PTS-STARTPTS${offset},${cadence},${fit},setsar=1,format=yuv420p[video${index}]`);
     chains.push(`[base${index}][video${index}]overlay=${x}:${y}:eof_action=repeat[base${index + 1}]`);
   }
   const overlayInput = placements.length;

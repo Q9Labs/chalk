@@ -79,8 +79,8 @@ describe("FFmpeg plan", () => {
       output,
     );
     const filter = args[args.indexOf("-filter_complex") + 1];
-    expect(filter).toContain("setpts=PTS-STARTPTS,tpad=start_mode=clone:start_duration=1.000000,fps=15");
-    expect(filter).toContain("setpts=PTS-STARTPTS,tpad=start_mode=clone:start_duration=0.500000,fps=15");
+    expect(filter).toContain("setpts=PTS-STARTPTS+1.000000/TB,fps=15:start_time=0");
+    expect(filter).toContain("setpts=PTS-STARTPTS+0.500000/TB,fps=15:start_time=0");
     expect(args.slice(args.indexOf("-frames:v"), args.indexOf("-frames:v") + 2)).toEqual(["-frames:v", "45"]);
   });
 
