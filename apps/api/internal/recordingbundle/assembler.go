@@ -126,7 +126,8 @@ func validateAssemblerConfig(config AssemblerConfig) error {
 // AddPacket copies the packet and accepts out-of-order arrivals. Once the
 // target cadence is reached, the boundary packet is included and the
 // assembler seals itself. A packet beyond the hard limit is left for the next
-// assembler and returns ErrDurationLimit.
+// assembler and returns ErrDurationLimit. Aggregate payload overflow seals
+// the accepted packets and returns ErrAssemblerClosed for rotation.
 func (a *Assembler) AddPacket(input MediaPacket) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -145,8 +146,16 @@ func (a *Assembler) AddPacket(input MediaPacket) error {
 	if a.packetCount == a.cfg.MaxPackets {
 		return a.failLimitLocked(ErrPacketLimit)
 	}
-	if a.contentBytes > a.cfg.MaxContentBytes-len(input.Packet.Payload) {
+	if len(input.Packet.Payload) > a.cfg.MaxContentBytes {
 		return a.failLimitLocked(ErrContentLimit)
+	}
+	if a.contentBytes > a.cfg.MaxContentBytes-len(input.Packet.Payload) {
+		// The rejected packet belongs in the next bundle. Keep the accepted
+		// fragments sealable, including a keyframe split across this boundary.
+		if err := a.closeLocked(CloseReasonLimitExceeded, a.endMono, a.endMedia); err != nil {
+			return err
+		}
+		return ErrAssemblerClosed
 	}
 	if err := a.validateTrackBindingLocked(input.Track); err != nil {
 		return err
