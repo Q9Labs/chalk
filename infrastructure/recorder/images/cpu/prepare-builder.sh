@@ -15,7 +15,8 @@ source /etc/os-release
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq ca-certificates curl ffmpeg jq xz-utils
+# The native compositor needs emoji glyphs without Chromium's dependencies.
+apt-get install -y -qq ca-certificates curl ffmpeg fonts-noto-color-emoji jq xz-utils
 
 install -d -m 0755 "$toolchain_root"
 temporary_directory="$(mktemp -d)"

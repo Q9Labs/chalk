@@ -12,7 +12,6 @@ function validRequest() {
     workspace_directory: "/private/tmp/recording-1",
     presentation_path: "/private/tmp/recording-1/presentation.json",
     presentation_sha256: SHA256,
-    ui_build_sha256: SHA256,
     asset_directory: "/private/tmp/recording-1/assets",
     decoded_media_path: "/private/tmp/recording-1/media/decoded-media.json",
     decoded_media_sha256: SHA256,

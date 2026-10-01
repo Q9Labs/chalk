@@ -272,7 +272,7 @@ export const ClassicChatPanelSurface = React.memo(
             ))
           )}
           {pendingMessages.map((pending) => (
-            <div key={pending.clientMessageId} className="my-2">
+            <div key={pending.clientMessageId} className={pending.status === "queued" ? "my-2 opacity-70" : "my-2"}>
               <MessageBubble
                 content={pending.text}
                 seed={pending.clientMessageId}
@@ -280,11 +280,12 @@ export const ClassicChatPanelSurface = React.memo(
                 senderName={localParticipantId ? (participantNames[localParticipantId] ?? "You") : "You"}
                 timestamp={new Date().toISOString()}
                 isLocal
-                status="pending"
+                status={pending.status === "queued" ? "queued" : "pending"}
                 attachments={pending.attachments}
                 generatedAvatars={generatedAvatars}
                 onResolveAttachmentUrl={onResolveAttachmentUrl}
               />
+              {pending.status === "queued" ? <p className="mr-14 text-right text-xs text-[var(--chalk-app-text-muted)]">Waiting to send</p> : null}
               {pending.status === "failed" ? (
                 <div className="mr-14 flex items-center justify-end gap-2 text-xs text-[var(--chalk-app-text-muted)]">
                   <span>{pending.error?.message || "Not sent"}</span>

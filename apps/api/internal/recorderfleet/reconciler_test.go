@@ -74,6 +74,37 @@ func TestReconcilerTransitionsZeroToReadyAndDrainsToZero(t *testing.T) {
 	}
 }
 
+func TestReconcilerBootstrapsReplacementBeforeDrainingStaleReadyNode(t *testing.T) {
+	fixture := newFleetFixture(t)
+	oldRequest := fixture.ensureRequest(1)
+	oldNode := fixture.provider.nodeFor(oldRequest, "1001")
+	newRequest := fixture.ensureRequest(2)
+	newNode := fixture.provider.nodeFor(newRequest, "2002")
+	fixture.provider.nodes[oldNode.ProviderID] = oldNode
+	fixture.provider.nodes[newNode.ProviderID] = newNode
+	oldIdentity := fixture.bootstrap.identity(oldNode)
+	lastReadyAt := fixture.now.Add(-fixture.config.ObservationMaxAge - time.Second)
+	fixture.journal.found = true
+	fixture.journal.state = NewJournal()
+	fixture.journal.state.NextBootGeneration = 3
+	fixture.journal.state.Nodes[oldNode.ProviderID] = ManagedNode{
+		ProviderID: oldNode.ProviderID, Name: oldNode.Name, Phase: PhaseReady,
+		BootGeneration: oldNode.BootGeneration, Identity: &oldIdentity, LastReadyAt: &lastReadyAt,
+	}
+	fixture.journal.state.Nodes[newNode.ProviderID] = ManagedNode{
+		ProviderID: newNode.ProviderID, Name: newNode.Name, Phase: PhaseAwaitingBootstrap,
+		BootGeneration: newNode.BootGeneration,
+	}
+
+	result := fixture.step(t, fixture.reconciler(t))
+	if result.Action != ActionBootstrapEnsured || result.ProviderNodeID != newNode.ProviderID || fixture.bootstrap.ensureCalls != 1 {
+		t.Fatalf("replacement bootstrap = %+v, ensure calls %d; want bootstrap for %s before stale drain", result, fixture.bootstrap.ensureCalls, newNode.ProviderID)
+	}
+	if fixture.runtime.closeCalls != 0 {
+		t.Fatalf("closed admission on a stale ready node before replacement bootstrap: %d calls", fixture.runtime.closeCalls)
+	}
+}
+
 func TestReconcilerAdoptsMatchingNodeAfterRestart(t *testing.T) {
 	fixture := newFleetFixture(t)
 	request := fixture.ensureRequest(7)
@@ -324,6 +355,29 @@ func TestReconcilerDrainsStaleImageBeforeReplacementAtCap(t *testing.T) {
 	result := fixture.step(t, reconciler)
 	if result.Action != ActionAdmissionClosed || fixture.provider.ensureCalls != 0 {
 		t.Fatalf("stale-node result = %+v, ensure calls %d", result, fixture.provider.ensureCalls)
+	}
+}
+
+func TestReconcilerRevokesNeverReadyNodeWithoutWaitingForDrainTimeout(t *testing.T) {
+	fixture := newFleetFixture(t)
+	fixture.config.MaxNodes = 1
+	fixture.config.DrainTimeout = 14 * time.Hour
+	request := fixture.ensureRequest(4)
+	node := fixture.provider.nodeFor(request, "4004")
+	fixture.provider.nodes[node.ProviderID] = node
+	identity := fixture.bootstrap.identity(node)
+	drainStartedAt := fixture.now.Add(-time.Minute)
+	fixture.journal.found = true
+	fixture.journal.state = NewJournal()
+	fixture.journal.state.NextBootGeneration = 5
+	fixture.journal.state.Nodes[node.ProviderID] = ManagedNode{
+		ProviderID: node.ProviderID, Name: node.Name, Phase: PhaseDraining,
+		BootGeneration: node.BootGeneration, Identity: &identity, DrainStartedAt: &drainStartedAt,
+	}
+
+	result := fixture.step(t, fixture.reconciler(t))
+	if result.Action != ActionIdentityRevoked || fixture.bootstrap.revokeCalls != 1 {
+		t.Fatalf("never-ready drain result = %+v, revoke calls %d; want immediate revoke", result, fixture.bootstrap.revokeCalls)
 	}
 }
 

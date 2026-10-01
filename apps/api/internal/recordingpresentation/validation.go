@@ -180,7 +180,7 @@ func (snapshot Snapshot) validate(recordingID string) error {
 
 func (profile Profile) validate() error {
 	if !boundedString(profile.Name, 128) || !boundedString(profile.Version, 128) ||
-		!sha256Pattern.MatchString(profile.UIBuildSHA256) || !boundedString(profile.Locale, 64) ||
+		(profile.UIBuildSHA256 != "" && !sha256Pattern.MatchString(profile.UIBuildSHA256)) || !boundedString(profile.Locale, 64) ||
 		!boundedString(profile.TimeZone, 128) || profile.FontAssetIDs == nil || len(profile.FontAssetIDs) > 32 ||
 		profile.Viewport.Width < 320 || profile.Viewport.Height < 240 ||
 		math.IsNaN(profile.Viewport.DeviceScaleFactor) || math.IsInf(profile.Viewport.DeviceScaleFactor, 0) ||

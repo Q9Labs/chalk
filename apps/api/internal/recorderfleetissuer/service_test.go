@@ -9,10 +9,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"math/big"
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -55,6 +57,12 @@ func TestBootstrapPersistsExactIdentityCertificateAndRevocation(t *testing.T) {
 	}
 	if _, err := service.Challenge(context.Background(), netip.MustParseAddr("192.0.2.11"), challengeRequest); err != ErrUnauthorized {
 		t.Fatalf("wrong source IP challenge error = %v", err)
+	}
+	mismatched := challengeRequest
+	mismatched.ReleaseID, mismatched.BootGeneration = "release-2", 2
+	_, err = service.Challenge(context.Background(), netip.MustParseAddr("192.0.2.10"), mismatched)
+	if !errors.Is(err, ErrUnauthorized) || !strings.Contains(err.Error(), `release_id sent="release-2" registered="release-1"`) || !strings.Contains(err.Error(), "boot_generation sent=2 registered=1") {
+		t.Fatalf("mismatched challenge error = %v", err)
 	}
 	peerIP := netip.MustParseAddr("192.0.2.10")
 	challenge, err := service.Challenge(context.Background(), peerIP, challengeRequest)

@@ -28,7 +28,7 @@ export interface MessageBubbleProps {
   generatedAvatars?: boolean;
   isFirstInGroup?: boolean;
   isLastInGroup?: boolean;
-  status?: "pending" | "sent" | "read";
+  status?: "queued" | "pending" | "sent" | "read";
   attachments?: readonly ChatAttachment[];
   readBy?: readonly ChatReadReceipt[];
   participantNames?: Readonly<Record<string, string>>;
@@ -189,7 +189,7 @@ const ChalkMessageBubble = React.memo<MessageBubbleProps>(
     };
 
     const renderStatus = () => {
-      if (!isLocal) return null;
+      if (!isLocal || status === "queued") return null;
 
       const readers = readBy.map((receipt) => participantNames[receipt.participantId] ?? receipt.participantId);
       const readByCount = readers.length;

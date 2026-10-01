@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,12 +22,14 @@ func TestVerifyImageManifestDetectsInstalledFileTamper(t *testing.T) {
 	}
 	installedDigest := sha256.Sum256([]byte("release-binary"))
 	manifest := imageManifest{
-		SchemaVersion:    imageManifestSchemaVersion,
-		ReleaseID:        "release-1",
-		SourceCommit:     "1111111111111111111111111111111111111111",
-		SourceTreeSHA256: "2222222222222222222222222222222222222222222222222222222222222222",
-		Profile:          "cpu-libx264-frame8",
-		Files:            []imageManifestFile{{Path: installedPath, Type: "file", SHA256: hex.EncodeToString(installedDigest[:])}},
+		SchemaVersion:       imageManifestSchemaVersion,
+		ReleaseID:           "release-1",
+		SourceCommit:        "1111111111111111111111111111111111111111",
+		SourceTreeSHA256:    "2222222222222222222222222222222222222222222222222222222222222222",
+		Profile:             "cpu-libx264-frame8",
+		BootstrapServerName: "control.example",
+		BootstrapCASHA256:   strings.Repeat("a", 64),
+		Files:               []imageManifestFile{{Path: installedPath, Type: "file", SHA256: hex.EncodeToString(installedDigest[:])}},
 	}
 	manifestData, err := json.Marshal(manifest)
 	if err != nil {
@@ -61,12 +64,14 @@ func TestVerifyImageManifestAcceptsCurrentAndRollbackProfiles(t *testing.T) {
 	for _, profile := range []string{"cpu-libx264-frame2", "cpu-libx264-frame8", "capture-minimal-v1"} {
 		t.Run(profile, func(t *testing.T) {
 			manifest := imageManifest{
-				SchemaVersion:    imageManifestSchemaVersion,
-				ReleaseID:        "release-1",
-				SourceCommit:     "1111111111111111111111111111111111111111",
-				SourceTreeSHA256: "2222222222222222222222222222222222222222222222222222222222222222",
-				Profile:          profile,
-				Files:            []imageManifestFile{{Path: installedPath, Type: "file", SHA256: hex.EncodeToString(installedDigest[:])}},
+				SchemaVersion:       imageManifestSchemaVersion,
+				ReleaseID:           "release-1",
+				SourceCommit:        "1111111111111111111111111111111111111111",
+				SourceTreeSHA256:    "2222222222222222222222222222222222222222222222222222222222222222",
+				Profile:             profile,
+				BootstrapServerName: "control.example",
+				BootstrapCASHA256:   strings.Repeat("a", 64),
+				Files:               []imageManifestFile{{Path: installedPath, Type: "file", SHA256: hex.EncodeToString(installedDigest[:])}},
 			}
 			manifestPath, expectedDigest := writeSignedManifest(t, directory, manifest)
 			role := workeridentity.RoleRender
@@ -93,16 +98,32 @@ func TestVerifyImageManifestRejectsUnknownProfile(t *testing.T) {
 	}
 	installedDigest := sha256.Sum256([]byte("release-binary"))
 	manifest := imageManifest{
-		SchemaVersion:    imageManifestSchemaVersion,
-		ReleaseID:        "release-1",
-		SourceCommit:     "1111111111111111111111111111111111111111",
-		SourceTreeSHA256: "2222222222222222222222222222222222222222222222222222222222222222",
-		Profile:          "cpu-libx264-frame16",
-		Files:            []imageManifestFile{{Path: installedPath, Type: "file", SHA256: hex.EncodeToString(installedDigest[:])}},
+		SchemaVersion:       imageManifestSchemaVersion,
+		ReleaseID:           "release-1",
+		SourceCommit:        "1111111111111111111111111111111111111111",
+		SourceTreeSHA256:    "2222222222222222222222222222222222222222222222222222222222222222",
+		Profile:             "cpu-libx264-frame16",
+		BootstrapServerName: "control.example",
+		BootstrapCASHA256:   strings.Repeat("a", 64),
+		Files:               []imageManifestFile{{Path: installedPath, Type: "file", SHA256: hex.EncodeToString(installedDigest[:])}},
 	}
 	manifestPath, expectedDigest := writeSignedManifest(t, directory, manifest)
 	if err := VerifyImageManifest(manifestPath, manifest.ReleaseID, expectedDigest, workeridentity.RoleRender); !errors.Is(err, ErrInvalidConfig) {
 		t.Fatalf("unknown image profile error = %v, want invalid config", err)
+	}
+}
+
+func TestBootstrapConfigRejectsBakedIssuerNameMismatch(t *testing.T) {
+	config := Config{
+		Environment: "staging", Role: workeridentity.RoleCapture,
+		ReleaseID: "release-1", ImageDigest: "sha256:" + strings.Repeat("a", 64), BootGeneration: 1,
+		BootstrapEndpoint: "https://issuer.example:8444", BootstrapServerName: "wrong.example",
+		BootstrapCAFile: "/etc/chalk-recorder/bootstrap-ca.pem", IdentityDirectory: "/etc/chalk-recorder/identity",
+		WorkerEnvironment: "/etc/chalk-recorder/worker.env", NodeEnvironment: "/etc/chalk-recorder/node.env",
+		ImageManifest: "/opt/chalk-recorder/image-manifest.json",
+	}
+	if err := config.Validate(); !errors.Is(err, ErrInvalidConfig) || !strings.Contains(err.Error(), "baked bootstrap server name") {
+		t.Fatalf("mismatched issuer name error = %v", err)
 	}
 }
 

@@ -85,12 +85,13 @@ func (r *executorPublicationRegistry) Latest(context.Context, utilities.ID, util
 type executorTrackCloser struct {
 	calls int
 	force bool
+	err   error
 }
 
 func (c *executorTrackCloser) CloseTracks(_ context.Context, input mediaplane.CloseTracksRequest) (mediaplane.CloseTracksResponse, error) {
 	c.calls++
 	c.force = input.Force
-	return mediaplane.CloseTracksResponse{}, nil
+	return mediaplane.CloseTracksResponse{}, c.err
 }
 
 func testExecutorID(t *testing.T, raw string) utilities.ID {
@@ -100,4 +101,24 @@ func testExecutorID(t *testing.T, raw string) utilities.ID {
 		t.Fatalf("parse ID: %v", err)
 	}
 	return id
+}
+
+func TestStaleConnectionEndReconcilesDispatchingReceipt(t *testing.T) {
+	input := testEndOperation(t)
+	participantID := testExecutorID(t, "33333333-3333-4333-8333-333333333333")
+	publicationID := "chalk_pub_v1." + base64.RawURLEncoding.EncodeToString([]byte(`{"c":"stale-connection","m":"0","t":"microphone-track","g":1}`))
+	registry := &executorPublicationRegistry{publication: provideroperations.Publication{ParticipantID: participantID, Source: "microphone", Enabled: true, PublicationID: publicationID}}
+	client := &executorTrackCloser{err: mediaplane.ErrConnectionNotFound}
+	repository := &failureReceiptRepository{}
+	_, _ = repository.Prepare(context.Background(), input)
+	_, _ = repository.MarkDispatching(context.Background(), input.OperationID, input.Effect)
+	service := NewService(repository, NewSFUExecutor(registry, client))
+	result, err := service.Execute(context.Background(), input)
+	if err != nil || result.Outcome != provideroperations.OutcomeSatisfied || registry.publication.PublicationID != "" || repository.receipt.State != provideroperations.ReceiptCompleted {
+		t.Fatalf("stale end = %+v, %v, receipt=%+v", result, err, repository.receipt)
+	}
+	_, err = service.Execute(context.Background(), input)
+	if err != nil || client.calls != 1 {
+		t.Fatalf("completed replay sent another close: calls=%d err=%v", client.calls, err)
+	}
 }

@@ -4,6 +4,7 @@ defmodule ChalkSync.ExternalOperationConsumerPostgresTest do
   alias ChalkSync.ExternalOperationConsumer
   alias ChalkSync.Live.MediaPlaneTestAdapter
   alias ChalkSync.RecordingPlaneTestAdapter
+  alias ChalkSync.Stateholder.Command
   alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
@@ -190,6 +191,170 @@ defmodule ChalkSync.ExternalOperationConsumerPostgresTest do
              RecordingPlaneTestAdapter.calls(recording_adapter)
 
     assert {:ok, %{status: :applied}} = Postgres.read_operation(fixture.episode, end_id)
+  end
+
+  test "migration re-arms exhausted cleanup and its command receipt without replacing identity",
+       %{connections: connections} do
+    connection = hd(connections)
+
+    for mode <- [:pending, :exhausted, :unrelated_failure] do
+      fixture = SyncPostgres.seed_episode(connection, 1)
+      on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+      host = hd(fixture.identities)
+      {:ok, operation} = Operation.new("consumer_pg_stale_end", :end_episode, %{})
+      assert {:ok, %{external_operation_id: end_id}} = Postgres.begin_operation(host, operation)
+
+      Postgrex.query!(connection, "update episodes set status = 'ending' where id = $1", [
+        UUID.dump!(fixture.episode.episode_id)
+      ])
+
+      Postgrex.query!(
+        connection,
+        "update sync_external_operations set attempt_count = 100, next_attempt_at = now() where external_operation_id = $1",
+        [UUID.dump!(end_id)]
+      )
+
+      if mode != :pending do
+        reason = if mode == :exhausted, do: :retry_exhausted, else: :provider_rejected
+        assert {:ok, _} = Postgres.finalize_operation(fixture.episode, end_id, {:failed, reason})
+      end
+
+      assert {:ok, before} = Postgres.read_operation(fixture.episode, end_id)
+
+      migration =
+        File.read!("../api/db/migrations/20260930150000_provider_teardown_failure_receipts.sql")
+
+      [_, recovery] = String.split(migration, "-- Re-arm", parts: 2)
+      [recovery, _] = String.split(recovery, "-- +goose Down", parts: 2)
+      Postgrex.query!(connection, "-- Re-arm" <> recovery, [])
+
+      %{rows: [[product_status]]} =
+        Postgrex.query!(connection, "select status from episodes where id = $1", [
+          UUID.dump!(fixture.episode.episode_id)
+        ])
+
+      assert product_status == if(mode == :unrelated_failure, do: "active", else: "ending")
+      assert {:ok, recovered} = Postgres.read_operation(fixture.episode, end_id)
+      assert recovered.external_operation_id == before.external_operation_id
+      assert recovered.request_fingerprint == before.request_fingerprint
+
+      if mode == :unrelated_failure do
+        assert recovered.status == :failed
+        assert recovered.last_error_code == :provider_rejected
+      else
+        assert recovered.status == :pending
+        assert recovered.attempt_count == 0
+        assert {:ok, claimed} = Postgres.claim_operations(64)
+
+        assert {episode, external} =
+                 Enum.find(claimed, fn {_, candidate} ->
+                   candidate.external_operation_id == end_id
+                 end)
+
+        {:ok, adapter} = MediaPlaneTestAdapter.start_link()
+
+        assert :confirmed =
+                 ExternalOperationConsumer.execute_operation(
+                   episode,
+                   external,
+                   {MediaPlaneTestAdapter, adapter},
+                   nil,
+                   &Postgres.finalize_operation/3
+                 )
+
+        assert {:ok, %{status: :applied}} = Postgres.read_operation(fixture.episode, end_id)
+      end
+    end
+  end
+
+  test "migration leaves reused Episodes and their failed end receipts untouched",
+       %{connections: connections} do
+    connection = hd(connections)
+
+    for {status, activity} <- [
+          {:failed, :join},
+          {:failed, :command},
+          {:failed, :chat_message},
+          {:pending, :join},
+          {:pending, :command}
+        ] do
+      fixture = SyncPostgres.seed_episode(connection, 1)
+      on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+      host = hd(fixture.identities)
+      {:ok, operation} = Operation.new("consumer_pg_reused_end", :end_episode, %{})
+      assert {:ok, %{external_operation_id: end_id}} = Postgres.begin_operation(host, operation)
+
+      Postgrex.query!(
+        connection,
+        "update sync_external_operations set attempt_count = 100 where external_operation_id = $1",
+        [UUID.dump!(end_id)]
+      )
+
+      if status == :failed do
+        assert {:ok, _} =
+                 Postgres.finalize_operation(fixture.episode, end_id, {:failed, :retry_exhausted})
+      end
+
+      case activity do
+        :join ->
+          Postgrex.query!(connection, "update participants set joined_at = now() where id = $1", [
+            UUID.dump!(host.participant_id)
+          ])
+
+        :command ->
+          {:ok, command} =
+            Command.new("consumer_pg_reused_hand", :set_hand_raised, %{"raised" => true})
+
+          assert {:ok, _} = Postgres.decide_command(host, command)
+
+        :chat_message ->
+          assert {:ok, _} =
+                   ChalkSync.Chat.Repository.Postgres.append(host, %{
+                     client_message_id: "consumer_pg_reused_chat",
+                     text: "Still using this Episode",
+                     attachment_ids: []
+                   })
+      end
+
+      %{rows: before_episode} =
+        Postgrex.query!(connection, "select status, updated_at from episodes where id = $1", [
+          UUID.dump!(fixture.episode.episode_id)
+        ])
+
+      %{rows: before_receipt} =
+        Postgrex.query!(
+          connection,
+          "select outcome, rejection_reason, completed_at from sync_command_receipts where external_operation_id = $1",
+          [UUID.dump!(end_id)]
+        )
+
+      assert {:ok, before_operation} = Postgres.read_operation(fixture.episode, end_id)
+
+      migration =
+        File.read!("../api/db/migrations/20260930150000_provider_teardown_failure_receipts.sql")
+
+      [_, recovery] = String.split(migration, "-- Re-arm", parts: 2)
+      [recovery, _] = String.split(recovery, "-- +goose Down", parts: 2)
+      Postgrex.query!(connection, "-- Re-arm" <> recovery, [])
+
+      assert {:ok, ^before_operation} = Postgres.read_operation(fixture.episode, end_id)
+
+      assert %{rows: ^before_episode} =
+               Postgrex.query!(
+                 connection,
+                 "select status, updated_at from episodes where id = $1",
+                 [
+                   UUID.dump!(fixture.episode.episode_id)
+                 ]
+               )
+
+      assert %{rows: ^before_receipt} =
+               Postgrex.query!(
+                 connection,
+                 "select outcome, rejection_reason, completed_at from sync_command_receipts where external_operation_id = $1",
+                 [UUID.dump!(end_id)]
+               )
+    end
   end
 
   defp stop_connection(connection) do

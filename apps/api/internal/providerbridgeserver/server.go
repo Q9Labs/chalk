@@ -43,7 +43,7 @@ func New(cfg config.ProviderBridgeConfig, handler http.Handler) (*Server, error)
 			Handler:           handler,
 			ReadTimeout:       10 * time.Second,
 			ReadHeaderTimeout: 5 * time.Second,
-			WriteTimeout:      10 * time.Second,
+			WriteTimeout:      40 * time.Second,
 			IdleTimeout:       30 * time.Second,
 			MaxHeaderBytes:    64 * 1024,
 		},

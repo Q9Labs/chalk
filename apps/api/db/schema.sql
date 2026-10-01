@@ -1,3 +1,4 @@
+-- Schema snapshot through migration 20260930160000.
 create table tenants (
     id uuid primary key,
     name text not null,
@@ -3302,6 +3303,7 @@ create table provider_operation_receipts (
     state text not null default 'prepared',
     outcome text,
     reason text,
+    last_error_code text,
     created_at timestamptz not null default now(),
     dispatching_at timestamptz,
     completed_at timestamptz,
@@ -3320,6 +3322,7 @@ create table provider_operation_receipts (
     constraint provider_operation_receipts_outcome_check check (outcome is null or outcome in (
         'confirmed', 'satisfied', 'retryable_failure', 'terminal_failure', 'ambiguous'
     )),
+    constraint provider_operation_receipts_error_code_check check (last_error_code is null or octet_length(last_error_code) between 1 and 256),
     constraint provider_operation_receipts_reason_check check (reason is null or octet_length(reason) between 1 and 256),
     constraint provider_operation_receipts_participant_check check (
         (participant_id is not null or participant_generation is null)
@@ -3402,6 +3405,29 @@ create table provider_operation_observations (
 
 create index provider_operation_observations_episode_cursor_idx
     on provider_operation_observations(tenant_id, episode_id, incarnation, sequence);
+
+create function notify_provider_publication_observation() returns trigger
+language plpgsql as $$
+declare
+    episode_space_id uuid;
+begin
+    select space_id into episode_space_id
+    from episodes
+    where tenant_id = new.tenant_id and id = new.episode_id;
+
+    if episode_space_id is not null then
+        perform pg_notify(
+            'chalk_media_publications',
+            new.tenant_id::text || ':' || episode_space_id::text || ':' || new.episode_id::text
+        );
+    end if;
+    return new;
+end;
+$$;
+
+create trigger provider_publication_observation_notify
+after insert on provider_operation_observations
+for each row execute function notify_provider_publication_observation();
 
 create table status_monitor_results (
     result_key text primary key,

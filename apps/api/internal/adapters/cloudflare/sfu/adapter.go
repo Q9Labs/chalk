@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
@@ -22,9 +23,10 @@ import (
 )
 
 const (
-	defaultEndpoint = "https://rtc.live.cloudflare.com/v1"
-	stunServer      = "stun:stun.cloudflare.com:3478"
-	syncOwner       = "elixir"
+	forcedCloseTimeout = 25 * time.Second
+	defaultEndpoint    = "https://rtc.live.cloudflare.com/v1"
+	stunServer         = "stun:stun.cloudflare.com:3478"
+	syncOwner          = "elixir"
 )
 
 var ErrMissingConfig = errors.New("missing cloudflare sfu config")
@@ -81,6 +83,8 @@ func (e providerFailure) Error() string {
 	return message
 }
 
+func (e providerFailure) ProviderFailureCode() string { return e.providerCode }
+
 func (e providerFailure) Unwrap() error {
 	switch {
 	case e.providerCode == "plane_unavailable":
@@ -117,11 +121,12 @@ type providerErrorEnvelope struct {
 }
 
 type Adapter struct {
-	appID         string
-	appSecret     string
-	endpoint      string
-	client        httpClient
-	captureReplay *captureReplayRegistry
+	appID             string
+	appSecret         string
+	endpoint          string
+	client            httpClient
+	forcedCloseClient httpClient
+	captureReplay     *captureReplayRegistry
 }
 
 type ConnectionMetadata struct {
@@ -207,11 +212,12 @@ func NewAdapter(cfg config.CloudflareRealtimeConfig) (Adapter, error) {
 	}
 
 	return Adapter{
-		appID:         appID,
-		appSecret:     appSecret,
-		endpoint:      endpoint,
-		client:        &http.Client{Timeout: cfg.RequestTimeout},
-		captureReplay: newCaptureReplayRegistry(),
+		appID:             appID,
+		appSecret:         appSecret,
+		endpoint:          endpoint,
+		client:            &http.Client{Timeout: cfg.RequestTimeout},
+		forcedCloseClient: &http.Client{Timeout: max(cfg.RequestTimeout, forcedCloseTimeout)},
+		captureReplay:     newCaptureReplayRegistry(),
 	}, nil
 }
 
@@ -222,6 +228,7 @@ func NewAdapterWithClient(cfg config.CloudflareRealtimeConfig, client httpClient
 	}
 	if client != nil {
 		adapter.client = client
+		adapter.forcedCloseClient = client
 	}
 	if strings.TrimSpace(endpoint) != "" {
 		adapter.endpoint = strings.TrimRight(strings.TrimSpace(endpoint), "/")
@@ -305,11 +312,27 @@ func (a Adapter) CloseTracks(ctx context.Context, input mediaplane.CloseTracksRe
 		Force:              input.Force,
 	}
 	providerResponse := closeTracksResponse{requestedTracks: input.Tracks}
+	// Disconnected provider connections can take longer than the interactive
+	// request budget to report their absence. Keep teardown bounded separately.
+	if input.Force && a.forcedCloseClient != nil {
+		a.client = a.forcedCloseClient
+	}
 	err := a.request(ctx, http.MethodPut, fmt.Sprintf("/sessions/%s/tracks/close", url.PathEscape(input.ConnectionID)), request, &providerResponse, "close_tracks")
-	if err != nil {
+	if err != nil && !(input.Force && forcedCloseSatisfied(err)) {
 		return mediaplane.CloseTracksResponse{}, err
 	}
+	alreadyClosed := input.Force && forcedCloseSatisfied(err)
+	if err == nil && len(providerResponse.Tracks) > 0 {
+		alreadyClosed = true
+		for _, track := range providerResponse.Tracks {
+			if !closedTrackAbsent(track.ErrorCode) {
+				alreadyClosed = false
+				break
+			}
+		}
+	}
 	return mediaplane.CloseTracksResponse{
+		AlreadyClosed:                  alreadyClosed,
 		SessionDescription:             providerResponse.SessionDescription,
 		Tracks:                         input.Tracks,
 		RequiresImmediateRenegotiation: providerResponse.RequiresImmediateRenegotiation,
@@ -592,11 +615,26 @@ func addTrackResultFailed(track addTrackResult) bool {
 
 func closedTrackAbsent(code string) bool {
 	switch strings.ToLower(strings.TrimSpace(code)) {
-	case "session_not_found", "track_already_closed", "track_not_found":
+	case "session_not_found", "connection_not_found", "track_already_closed", "track_not_found":
 		return true
 	default:
 		return false
 	}
+}
+
+func forcedCloseSatisfied(err error) bool {
+	var failure providerFailure
+	if !errors.As(err, &failure) || failure.operation != "close_tracks" {
+		return false
+	}
+	if failure.statusCode == http.StatusNotFound || failure.statusCode == http.StatusGone {
+		return true
+	}
+	if failure.statusCode == http.StatusTooEarly {
+		return failure.providerCode == "connection_not_connected"
+	}
+	return failure.statusCode == http.StatusOK &&
+		(failure.providerCode == "connection_not_found" || failure.providerCode == "track_already_closed" || failure.providerCode == "track_not_found")
 }
 
 func newProviderFailure(operation string, stage providerFailureStage, statusCode int, providerCode string) providerFailure {
@@ -946,5 +984,8 @@ func sfuStatusError(operation string, statusCode int, payload []byte) error {
 		}
 	}
 
+	if statusCode == http.StatusTooEarly && code == "session_error" && providerMessageCode(message) == "connection_not_connected" {
+		code = "session_not_connected"
+	}
 	return newProviderResponseFailure(operation, failureStageHTTPStatus, statusCode, code, message, 0, 0)
 }

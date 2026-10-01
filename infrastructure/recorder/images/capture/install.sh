@@ -71,9 +71,9 @@ for unit in chalk-recorder-capture.service chalk-recorder-renew.service chalk-re
 done
 printf 'CHALK_RECORDER_KEYFRAME_INTERVAL=10s\n' >"$image_root/etc/chalk-recorder/capture.env"
 
-python3 - "$image_root" "$release_id" "$source_commit" "$source_tree_sha256" <<'PY'
+python3 - "$image_root" "$release_id" "$source_commit" "$source_tree_sha256" "$bootstrap_server_name" <<'PY'
 import hashlib, json, os, pathlib, sys
-root, release_id, commit, tree = sys.argv[1:]
+root, release_id, commit, tree, bootstrap_server_name = sys.argv[1:]
 files = []
 for directory in ('etc', 'opt', 'usr'):
     for path in pathlib.Path(root, directory).rglob('*'):
@@ -88,6 +88,8 @@ for directory in ('etc', 'opt', 'usr'):
         files.append({'path': str(path)[len(root):], 'type': kind, 'sha256': hashlib.sha256(content).hexdigest()})
 manifest = {'schema_version': 'chalk_recorder_cpu_image.v1', 'release_id': release_id,
             'source_commit': commit, 'source_tree_sha256': tree,
+            'bootstrap_server_name': bootstrap_server_name,
+            'bootstrap_ca_sha256': hashlib.sha256(pathlib.Path(root, 'etc/chalk-recorder/bootstrap-ca.pem').read_bytes()).hexdigest(),
             'profile': 'capture-minimal-v1', 'files': sorted(files, key=lambda item: item['path'])}
 pathlib.Path(root, 'opt/chalk-recorder/image-manifest.json').write_text(
     json.dumps(manifest, separators=(',', ':'), sort_keys=True) + '\n', encoding='utf-8')
@@ -117,5 +119,5 @@ chown -R root:root "/opt/chalk-recorder/releases/$release_id" /opt/chalk-recorde
 chmod 0755 "/opt/chalk-recorder/releases/$release_id/bin/recorder-capture" "/opt/chalk-recorder/releases/$release_id/bin/chalk-recorder-bootstrap"
 systemctl daemon-reload
 systemctl disable chalk-recorder-capture.service chalk-recorder-renew.timer >/dev/null 2>&1 || true
-printf 'release_id=%s\nsource_commit=%s\nsource_tree_sha256=sha256:%s\nbundle_sha256=sha256:%s\nimage_manifest_digest=%s\n' \
-  "$release_id" "$source_commit" "$source_tree_sha256" "$bundle_sha256" "$image_digest"
+printf 'release_id=%s\nsource_commit=%s\nsource_tree_sha256=sha256:%s\nbundle_sha256=sha256:%s\nimage_manifest_digest=%s\nbootstrap_server_name=%s\n' \
+  "$release_id" "$source_commit" "$source_tree_sha256" "$bundle_sha256" "$image_digest" "$bootstrap_server_name"

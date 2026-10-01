@@ -175,7 +175,7 @@ func TestPersistFileRejectsNonRegularOrEmptyInput(t *testing.T) {
 	}
 }
 
-func TestValidateTimelineRequiresInstalledFrozenUIBuild(t *testing.T) {
+func TestValidateTimelineAcceptsLegacyUIBuild(t *testing.T) {
 	installed := strings.Repeat("a", 64)
 	input := recordingrender.ResolvedInput{
 		PresentationSchemaVersion:  recordingrender.PresentationSchemaVersion,
@@ -197,13 +197,17 @@ func TestValidateTimelineRequiresInstalledFrozenUIBuild(t *testing.T) {
 			Viewport: recordingpresentation.Viewport{Width: 1280, Height: 720, DeviceScaleFactor: 1},
 		}},
 	}
-	attempt := &ProductionRenderAttempt{config: ProductionRenderAttemptConfig{UIBuildRegistry: UIBuildRegistry{builds: map[string]struct{}{installed: {}}}}}
+	attempt := &ProductionRenderAttempt{}
 	if err := attempt.validateTimeline(input, timeline); err != nil {
-		t.Fatalf("installed frozen UI build rejected: %v", err)
+		t.Fatalf("legacy UI build rejected: %v", err)
 	}
 	timeline.Initial.Profile.UIBuildSHA256 = strings.Repeat("b", 64)
-	if err := attempt.validateTimeline(input, timeline); !errors.Is(err, ErrInvalidProductionRenderAttempt) {
-		t.Fatalf("uninstalled frozen UI build error = %v", err)
+	if err := attempt.validateTimeline(input, timeline); err != nil {
+		t.Fatalf("another legacy UI build rejected: %v", err)
+	}
+	timeline.Initial.Profile.UIBuildSHA256 = ""
+	if err := attempt.validateTimeline(input, timeline); err != nil {
+		t.Fatalf("new digest-free profile rejected: %v", err)
 	}
 }
 

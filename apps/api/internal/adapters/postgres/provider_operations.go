@@ -93,6 +93,17 @@ func (r ProviderOperationRepository) ResetForRetry(ctx context.Context, operatio
 	return r.resolveTransition(ctx, operationID, effect, true)
 }
 
+func (r ProviderOperationRepository) RecordFailure(ctx context.Context, operationID string, effect provideroperations.Effect, reason string) error {
+	if err := provideroperations.ValidateIdentity(operationID, effect); err != nil {
+		return err
+	}
+	if len(reason) == 0 || len(reason) > 64 {
+		return provideroperations.ErrInvalidReason
+	}
+	_, err := r.queries.RecordProviderOperationFailure(ctx, operationID, effect, reason)
+	return err
+}
+
 func (r ProviderOperationRepository) Complete(ctx context.Context, operationID string, effect provideroperations.Effect, completion provideroperations.Completion) (provideroperations.Receipt, error) {
 	if err := provideroperations.ValidateIdentity(operationID, effect); err != nil {
 		return provideroperations.Receipt{}, err
@@ -278,7 +289,7 @@ func mapProviderOperationReceipt(row providerOperationReceiptRow) provideroperat
 	return provideroperations.Receipt{
 		OperationID: row.OperationID, Effect: provideroperations.Effect(row.Effect), TenantID: utilities.IDFromBytes(row.TenantID.Bytes), EpisodeID: utilities.IDFromBytes(row.EpisodeID.Bytes),
 		ParticipantID: nullableID(row.ParticipantID), ParticipantGeneration: providerNullableInt64(row.ParticipantGeneration), PublicationSource: providerNullableTextValue(row.PublicationSource), RecordingID: nullableID(row.RecordingID),
-		Fingerprint: fingerprint, Payload: jsonRaw(row.RequestPayload), State: provideroperations.ReceiptState(row.State), Outcome: nullableOutcome(row.Outcome), Reason: providerNullableTextPointer(row.Reason), CreatedAt: timestamp(row.CreatedAt), DispatchingAt: nullableTimestamp(row.DispatchingAt), CompletedAt: nullableTimestamp(row.CompletedAt),
+		Fingerprint: fingerprint, Payload: jsonRaw(row.RequestPayload), State: provideroperations.ReceiptState(row.State), Outcome: nullableOutcome(row.Outcome), Reason: providerNullableTextPointer(row.Reason), LastErrorCode: providerNullableTextPointer(row.LastErrorCode), CreatedAt: timestamp(row.CreatedAt), DispatchingAt: nullableTimestamp(row.DispatchingAt), CompletedAt: nullableTimestamp(row.CompletedAt),
 	}
 }
 

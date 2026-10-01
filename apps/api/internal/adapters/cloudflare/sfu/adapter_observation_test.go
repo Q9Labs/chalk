@@ -2,6 +2,7 @@ package sfu
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -111,5 +112,70 @@ func TestMixedLocalAndMissingRemoteTracksCannotBecomeSuccessfulPartialResponse(t
 	err := response.providerError("add_tracks")
 	if err == nil || mediaplane.IsExactRemoteTrackAbsence(err) || mediaplane.IsPartialRemoteTrackResponse(err) {
 		t.Fatalf("mixed batch must remain a failure, got %v", err)
+	}
+}
+
+func TestForcedCloseStaleConnectionConverges(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		status    int
+		body      string
+		satisfied bool
+	}{
+		{"gone", 410, `{}`, true},
+		{"not found", 404, `{}`, true},
+		{"stale disconnected connection", 425, `{"errorCode":"session_error","errorDescription":"Session is not ready yet. Please ensure the PeerConnection is connected before making this request"}`, true},
+		{"top level absent", 200, `{"errorCode":"session_not_found"}`, true},
+		{"already closed", 200, `{"errorCode":"track_already_closed"}`, true},
+		{"track absent", 200, `{"tracks":[{"mid":"0","errorCode":"connection_not_found"}]}`, true},
+		{"unauthorized", 403, `{}`, false},
+		{"rate limited", 429, `{}`, false},
+		{"server failure", 503, `{}`, false},
+		{"unrelated 425", 425, `{"errorCode":"invalid_request"}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			adapter, err := NewAdapterWithClient(config.CloudflareRealtimeConfig{RealtimeAppID: "test-app", RealtimeAppSecret: "test-secret", RequestTimeout: time.Second}, closeResultClient{status: tc.status, body: tc.body}, "https://example.invalid")
+			if err != nil {
+				t.Fatal(err)
+			}
+			response, err := adapter.CloseTracks(context.Background(), mediaplane.CloseTracksRequest{Provider: mediaplane.ProviderCloudflareSFU, ConnectionID: "abandoned-connection", Force: true, Tracks: []mediaplane.CloseTrack{{Mid: "0"}}})
+			if tc.satisfied && (err != nil || !response.AlreadyClosed) {
+				t.Fatalf("stale close must converge: %v", err)
+			}
+			if !tc.satisfied && err == nil {
+				t.Fatal("unproven cleanup must remain a failure")
+			}
+		})
+	}
+}
+
+func TestForcedCloseTimeoutIsNotAbsence(t *testing.T) {
+	adapter, _ := NewAdapterWithClient(config.CloudflareRealtimeConfig{RealtimeAppID: "test-app", RealtimeAppSecret: "test-secret", RequestTimeout: time.Second}, closeResultClient{err: context.DeadlineExceeded}, "https://example.invalid")
+	_, err := adapter.CloseTracks(context.Background(), mediaplane.CloseTracksRequest{Provider: mediaplane.ProviderCloudflareSFU, ConnectionID: "connection", Force: true, Tracks: []mediaplane.CloseTrack{{Mid: "0"}}})
+	if !errors.Is(err, mediaplane.ErrProviderFailed) {
+		t.Fatalf("timeout must stay uncertain: %v", err)
+	}
+}
+
+type closeResultClient struct {
+	status int
+	body   string
+	err    error
+}
+
+func (c closeResultClient) Do(*http.Request) (*http.Response, error) {
+	if c.err != nil {
+		return nil, c.err
+	}
+	return &http.Response{StatusCode: c.status, Body: io.NopCloser(strings.NewReader(c.body))}, nil
+}
+
+func TestForcedCloseBudgetDoesNotChangeInteractiveBudget(t *testing.T) {
+	adapter, err := NewAdapter(config.CloudflareRealtimeConfig{RealtimeAppID: "test-app", RealtimeAppSecret: "test-secret", RequestTimeout: 6 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if adapter.client.(*http.Client).Timeout != 6*time.Second || adapter.forcedCloseClient.(*http.Client).Timeout != 25*time.Second {
+		t.Fatal("teardown must allow the delayed disconnected response without slowing interactive requests")
 	}
 }

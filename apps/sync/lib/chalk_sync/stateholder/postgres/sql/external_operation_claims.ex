@@ -92,7 +92,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
       update sync_external_operations operation
       set
         attempt_count = operation.attempt_count + 1,
-        next_attempt_at = now() + interval '30 seconds'
+        next_attempt_at = now() + interval '60 seconds'
       from candidates
       where operation.external_operation_id = candidates.external_operation_id
       returning operation.*

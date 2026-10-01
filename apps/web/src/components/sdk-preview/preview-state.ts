@@ -15,7 +15,7 @@ export const ENTRANCE_STATES = ["ready", "joining", "waiting", "warning", "timeo
 export type EntranceState = (typeof ENTRANCE_STATES)[number];
 
 /** `failure` is the post-live failed status surface; `reconnecting` remains recoverable. */
-export const SPACE_STATES = ["happy", "empty", "warning", "reconnecting", "retry", "confirmation", "timeout", "failure", "leaving", "left", "ended"] as const;
+export const SPACE_STATES = ["happy", "empty", "warning", "reconnecting", "reconnected", "retry", "confirmation", "timeout", "failure", "leaving", "left", "ended"] as const;
 export type SpaceState = (typeof SPACE_STATES)[number];
 
 export type PreviewState = EntranceState | SpaceState;

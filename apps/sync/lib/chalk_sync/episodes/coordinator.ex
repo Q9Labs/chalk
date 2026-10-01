@@ -21,9 +21,8 @@ defmodule ChalkSync.Episodes.Coordinator do
 
   @repair_interval_ms 5_000
   @queue_check_interval_ms 1_000
-  # Permission grants precede fresh browser publications. Keep their projection
-  # recovery bounded when a provider observation has no push notification.
-  @live_reconcile_interval_ms 2_000
+  # Publication notifications are best-effort; this repairs a missed push.
+  @live_reconcile_interval_ms 15_000
   @diagnostic_record_limit 1_024
 
   def start_link(%EpisodeKey{} = episode) do
@@ -203,6 +202,14 @@ defmodule ChalkSync.Episodes.Coordinator do
     :exit, _reason -> {:error, :coordinator_unavailable}
   end
 
+  @spec publication_observed(EpisodeKey.t()) :: :ok
+  def publication_observed(%EpisodeKey{} = episode) do
+    case whereis(episode) do
+      nil -> :ok
+      coordinator -> GenServer.cast(coordinator, {:publication_observed, episode.space_id})
+    end
+  end
+
   @spec whereis(EpisodeKey.t()) :: pid() | nil
   def whereis(%EpisodeKey{} = episode) do
     case Registry.lookup(ChalkSync.Episodes.Registry, EpisodeKey.authority_key(episode)) do
@@ -237,6 +244,7 @@ defmodule ChalkSync.Episodes.Coordinator do
        sockets: %{},
        live: LiveEpisode.new(episode),
        live_reconcile_task: nil,
+       live_reconcile_pending: false,
        diagnostic_records: %{
          delivery: new_diagnostic_record_set(),
          application: new_diagnostic_record_set(),
@@ -466,6 +474,18 @@ defmodule ChalkSync.Episodes.Coordinator do
   @impl GenServer
   def handle_cast({:unsubscribe, socket}, state), do: stop_if_empty(remove_socket(state, socket))
 
+  def handle_cast({:publication_observed, space_id}, state) do
+    if String.downcase(space_id) == String.downcase(state.episode.space_id),
+      do: handle_cast(:publication_observed, state),
+      else: {:noreply, state}
+  end
+
+  def handle_cast(:publication_observed, %{live_reconcile_task: task} = state)
+      when not is_nil(task),
+      do: {:noreply, %{state | live_reconcile_pending: true}}
+
+  def handle_cast(:publication_observed, state), do: {:noreply, start_live_reconcile(state)}
+
   def handle_cast(:drain, state) do
     state
     |> drain_sockets()
@@ -535,15 +555,19 @@ defmodule ChalkSync.Episodes.Coordinator do
         %{live_reconcile_task: %{ref: reference, live: snapshot}} = state
       ) do
     Process.demonitor(reference, [:flush])
-    state = %{state | live_reconcile_task: nil}
-    {:noreply, apply_live_reconcile_result(state, snapshot, result)}
+    rerun = state.live_reconcile_pending or state.live != snapshot
+    state = %{state | live_reconcile_task: nil, live_reconcile_pending: false}
+    state = apply_live_reconcile_result(state, snapshot, result)
+    {:noreply, if(rerun, do: start_live_reconcile(state), else: state)}
   end
 
   def handle_info(
         {:DOWN, reference, :process, _pid, _reason},
         %{live_reconcile_task: %{ref: reference}} = state
       ) do
-    {:noreply, %{state | live_reconcile_task: nil}}
+    rerun = state.live_reconcile_pending
+    state = %{state | live_reconcile_task: nil, live_reconcile_pending: false}
+    {:noreply, if(rerun, do: start_live_reconcile(state), else: state)}
   end
 
   def handle_info({:DOWN, monitor, :process, socket, _reason}, state) do
