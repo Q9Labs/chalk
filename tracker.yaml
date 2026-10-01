@@ -44,6 +44,7 @@ outcomes:
         Make an unmute after a moderator mute reach every receiver in under two seconds. In production
         it took about six seconds, and one receiver sometimes never hears it.
       - Find whether audio can play for a few tens of milliseconds after a muted badge when Sync restarts.
+      - Check camera simulcast on physical Safari and phones; Firefox publishes one camera layer.
     uncertainty: No real-network or physical-device observation exists.
     theory: theory.md#product-goals
     code:
@@ -170,14 +171,13 @@ outcomes:
     area: recording
     state: in_progress
     summary: >-
-      Managed production produced a verified MP4 on 2026-09-20, when video rendered after every
-      Recording. The code now renders an MP4 only on request, with a fourteen-hour limit, and that
-      flow is not deployed.
+      Export renders an MP4 on request with the native compositor on an s-1vcpu-1gb worker in
+      production. The file declares 30 fps while it plays at 15, and its first frame shows
+      placeholders before the first video keyframes arrive.
     size: S
     remaining:
-      - >-
-        Deploy on-request Export, request one Export end to end, and download it twice to confirm
-        the second download reuses the file.
+      - Ship the 15 fps label and the first-frame fix.
+      - Download one Export twice to confirm the second download reuses the file.
     theory: theory.md#product-memory
     code:
       - apps/api/internal/httpapi/recordings.go
@@ -196,8 +196,8 @@ outcomes:
       - Handle sender clock divergence and pass a one-hour Recording.
       - Prove recorder restart continuity and TLS peer rejection on the managed hosts.
       - >-
-        Make a release fail when a new recorder image can't bootstrap with the issuer. A wrong baked
-        issuer name passed the verifier and stopped every worker.
+        Make a release fail when a new recorder worker can't bootstrap with the issuer or never
+        becomes ready, instead of passing the verifier with zero ready workers.
     uncertainty: >-
       Whether the remaining drift comes from the headless sender or the recorder is not known.
     theory: theory.md#product-memory
@@ -209,26 +209,27 @@ outcomes:
     area: recording
     state: in_progress
     summary: >-
-      A Capture worker takes about 70 seconds from record to ready and runs on a c-2 from the
-      shared image. At 2,000 recorded Episode-hours a month, Capture costs about $230, of which
-      about $131 is Droplets and about $90 is SFU traffic to the recorder.
-    size: L
+      Capture runs on the lean Debian image on s-1vcpu-1gb. A cold worker is ready about 46 seconds
+      after record, and anything said before it is ready is missing from the Recording. Automatic
+      Spaces pre-warm Capture when someone opens the Entrance. SFU traffic to the recorder, about
+      $90 a month at 2,000 hours, is now the largest Capture cost.
+    size: M
     remaining:
       - >-
-        Ship the lean Capture image and move Capture to s-1vcpu-1gb, then measure record to ready on
-        a real Recording.
+        Find and remove the transient registration 503s that can add about 15 seconds to a worker's
+        boot.
       - >-
-        Decide whether to start the Capture worker when the Episode starts, the only way found to get
-        under 30 seconds to ready.
+        Confirm in production that an Automatic Space pre-warms from the Entrance and that its
+        Recording uses the warm node.
       - >-
-        Experiment: publish camera simulcast from the web SDK, have Capture record the low layer, and
-        compare the Export and the SFU traffic to the recorder.
+        Experiment: with camera simulcast live, have Capture record the low camera layer and compare
+        the Export and the SFU traffic to the recorder.
       - >-
         Experiment, only if UDP loss damages Recordings: compare Capture over TURN on TCP with UDP in
         one Recording. Cloudflare's SFU has no direct TCP receiver.
     uncertainty: >-
-      Whether the lean image's faster boot holds across DigitalOcean's variable create step is
-      measured on only two samples.
+      Boot time is measured on few samples across DigitalOcean's variable create step. The owner
+      chose pre-warm for Automatic Spaces only; Manual Spaces may want it later.
     theory: theory.md#product-memory
     code:
       - apps/api/internal/adapters/digitalocean/recorder_fleet.go
@@ -349,6 +350,9 @@ outcomes:
       - >-
         Check that hard delete overrides retention and purged messages never return through replay
         or snapshots.
+      - >-
+        Clear unsent offline chat held in browser storage when the Participant leaves or signs out,
+        so it doesn't stay on a shared computer for up to 24 hours.
     theory: theory.md#constraints
     code:
       - apps/api/internal/artifactpolicy/policy.go
@@ -607,23 +611,21 @@ outcomes:
     area: realtime_sync
     state: planned
     summary: >-
-      Clients reconnect after Sync restarts and short drops, but reconnection hasn't been designed
-      as one self-healing path across Sync, media and the page.
+      Clients rejoin after a page reload, hold offline actions, show a non-blocking reconnecting
+      bar, and recover media in about 2.6 seconds after a 30-second cut. The owner's target is
+      recovery as fast as possible on every path.
     size: M
     remaining:
+      - Confirm the reconnecting bar and its 10-second dialog with a real network cut in production.
       - >-
-        Agree a target for recovery time after a drop, a flapping network, a Sync or API restart, and
-        a page reload.
+        Cut recovery further: restart ICE instead of rebuilding media, overlap SDP readiness, and
+        get keyframes sooner after a cut.
       - >-
-        Close the gaps between today's behavior and that target. A candidate branch,
-        fix/reconnect-heal-20260930, needs base and tip measured on the same machine first.
-      - Make a page reload during an Episode rejoin it without a second click, if the owner wants that.
+        Check with production reconnect telemetry whether Postgres restarts and flapping networks
+        recover more slowly in their worst cases.
       - >-
         Re-record a self-mute that a Sync restart interrupted, so other Participants don't see the
         muted Participant as unmuted.
-      - >-
-        Have the API push fresh media publications to Sync, then return Sync's media recheck from
-        every 2 seconds to a slow backstop.
     theory: theory.md#sync-correctness
     code:
       - sdks/typescript/client/src/sync/v1-client.ts
