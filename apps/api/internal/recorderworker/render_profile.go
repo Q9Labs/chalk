@@ -26,15 +26,9 @@ type RenderAttemptStageMeasurement struct {
 	Succeeded    bool
 }
 
-type RenderFrameEncodingMeasurement struct {
-	Result    FrameEncodeResult
-	Succeeded bool
-}
-
 // RenderAttemptObserver is optional instrumentation for a render attempt.
 // Production workers leave it nil; a bounded profiler supplies it to retain
-// stage walls and the renderer's own timing result without changing the work.
+// stage walls without changing the work.
 type RenderAttemptObserver interface {
 	ObserveRenderAttemptStage(RenderAttemptStageMeasurement)
-	ObserveRenderFrameEncoding(RenderFrameEncodingMeasurement)
 }

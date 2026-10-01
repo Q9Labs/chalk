@@ -46,7 +46,7 @@ export interface RecordingPresentationThemeV1 {
 export interface RecordingPresentationProfileV1 {
   readonly name: string;
   readonly version: string;
-  readonly uiBuildSha256: string;
+  readonly uiBuildSha256?: string;
   readonly viewport: RecordingPresentationViewportV1;
   readonly locale: string;
   readonly timeZone: string;

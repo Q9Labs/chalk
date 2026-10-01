@@ -1,6 +1,6 @@
 import type { VideoPlacement, VideoSegment } from "./scene.js";
 
-export type ComposeEncoder = "libx264" | "h264_videotoolbox";
+export type ComposeEncoder = "libx264" | "h264_videotoolbox" | "h264_nvenc";
 
 export interface ComposeOutput {
   readonly width: number;
@@ -22,6 +22,7 @@ function encoderArgs(encoder: ComposeEncoder): readonly string[] {
   // ultrafast measured SSIM 0.998 against medium at 2 Mb/s for about a third of
   // its CPU; the cost is roughly 14% larger files.
   if (encoder === "libx264") return ["-c:v", "libx264", "-preset", "ultrafast", "-profile:v", "high"];
+  if (encoder === "h264_nvenc") return ["-c:v", "h264_nvenc", "-preset", "p4", "-profile:v", "high"];
   return ["-c:v", "h264_videotoolbox", "-allow_sw", "0", "-realtime", "0", "-profile:v", "high"];
 }
 

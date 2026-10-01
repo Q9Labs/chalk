@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -83,6 +85,15 @@ func (s Service) Execute(ctx context.Context, input provideroperations.Operation
 			attribute.String("chalk.provider.outcome", outcome),
 		))
 		span.End()
+		level := slog.LevelInfo
+		errorCode := result.Reason
+		if err != nil {
+			level = slog.LevelError
+			if errorCode == "" {
+				errorCode = "provider_bridge_failed"
+			}
+		}
+		slog.Log(ctx, level, "Provider operation executed", "operation_id", input.OperationID, "effect", input.Effect, "stage", "execute", "outcome", outcome, "error_code", errorCode)
 	}()
 
 	if s.repository == nil || s.executor == nil {
@@ -133,7 +144,7 @@ func (s Service) resume(ctx context.Context, receipt provideroperations.Receipt)
 		if err != nil {
 			return Result{}, fmt.Errorf("decode provider operation receipt payload: %w", err)
 		}
-		return s.apply(ctx, receipt, s.executor.Reconcile(ctx, input))
+		return s.apply(ctx, receipt, s.runExecutor(ctx, input, "reconcile"))
 
 	case provideroperations.ReceiptPrepared:
 		dispatching, err := s.repository.MarkDispatching(ctx, receipt.OperationID, receipt.Effect)
@@ -151,11 +162,34 @@ func (s Service) resume(ctx context.Context, receipt provideroperations.Receipt)
 		if err != nil {
 			return Result{}, fmt.Errorf("decode provider operation receipt payload: %w", err)
 		}
-		return s.apply(ctx, dispatching, s.executor.Dispatch(ctx, input))
+		return s.apply(ctx, dispatching, s.runExecutor(ctx, input, "dispatch"))
 
 	default:
 		return Result{}, provideroperations.ErrInvalidReceiptState
 	}
+}
+
+func (s Service) runExecutor(ctx context.Context, input provideroperations.OperationInput, stage string) ExecutionResult {
+	slog.InfoContext(ctx, "Provider operation started", "operation_id", input.OperationID, "effect", input.Effect, "stage", stage)
+	var result ExecutionResult
+	if stage == "reconcile" {
+		result = s.executor.Reconcile(ctx, input)
+	} else {
+		result = s.executor.Dispatch(ctx, input)
+	}
+	slog.InfoContext(ctx, "Provider operation result", "operation_id", input.OperationID, "effect", input.Effect, "stage", stage, "outcome", result.Outcome, "error_code", result.Reason)
+	return result
+}
+
+func (s Service) recordFailure(ctx context.Context, receipt provideroperations.Receipt, reason string) error {
+	// A disconnected caller must not erase the durable attempt's failure evidence.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+	defer cancel()
+	if err := s.repository.RecordFailure(ctx, receipt.OperationID, receipt.Effect, reason); err != nil {
+		slog.ErrorContext(ctx, "Provider operation failure could not be recorded", "operation_id", receipt.OperationID, "effect", receipt.Effect, "stage", "record_failure", "error_code", reason)
+		return fmt.Errorf("record provider operation failure: %w", err)
+	}
+	return nil
 }
 
 func (s Service) apply(
@@ -163,14 +197,19 @@ func (s Service) apply(
 	receipt provideroperations.Receipt,
 	execution ExecutionResult,
 ) (Result, error) {
+	if execution.Reason == "" && (execution.Outcome == provideroperations.OutcomeRetryableFailure || execution.Outcome == provideroperations.OutcomeAmbiguous || execution.Outcome == provideroperations.OutcomeTerminalFailure) {
+		execution.Reason = "provider_failure_without_reason"
+	}
 	if err := validateExecutionResult(execution); err != nil {
-		return ambiguousResult(receipt, "invalid_provider_result"), errors.Join(ErrInvalidProviderResult, err)
+		recordErr := s.recordFailure(ctx, receipt, "invalid_provider_result")
+		return ambiguousResult(receipt, "invalid_provider_result"), errors.Join(ErrInvalidProviderResult, err, recordErr)
 	}
 
 	if execution.Observation != nil {
 		if _, err := s.repository.AppendObservation(ctx, *execution.Observation); err != nil &&
 			!errors.Is(err, provideroperations.ErrObservationStale) {
-			return ambiguousResult(receipt, "observation_unavailable"), fmt.Errorf("append provider observation: %w", err)
+			recordErr := s.recordFailure(ctx, receipt, "observation_unavailable")
+			return ambiguousResult(receipt, "observation_unavailable"), errors.Join(fmt.Errorf("append provider observation: %w", err), recordErr)
 		}
 	}
 
@@ -183,17 +222,24 @@ func (s Service) apply(
 			Reason:  optionalReason(execution.Reason),
 		})
 		if err != nil {
-			return Result{}, fmt.Errorf("complete provider operation: %w", err)
+			recordErr := s.recordFailure(ctx, receipt, "receipt_completion_failed")
+			return Result{}, errors.Join(fmt.Errorf("complete provider operation: %w", err), recordErr)
 		}
 		return storedResult(completed)
 
 	case provideroperations.OutcomeRetryableFailure:
+		if err := s.recordFailure(ctx, receipt, execution.Reason); err != nil {
+			return Result{}, err
+		}
 		if _, err := s.repository.ResetForRetry(ctx, receipt.OperationID, receipt.Effect); err != nil {
 			return Result{}, fmt.Errorf("reset retryable provider operation: %w", err)
 		}
 		return executionResult(receipt, execution), nil
 
 	case provideroperations.OutcomeAmbiguous:
+		if err := s.recordFailure(ctx, receipt, execution.Reason); err != nil {
+			return Result{}, err
+		}
 		return executionResult(receipt, execution), nil
 
 	default:

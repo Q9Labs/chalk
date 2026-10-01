@@ -149,11 +149,12 @@ const isViewport = (value: unknown): boolean => isExactObject(value, VIEWPORT_SC
 const isTheme = (value: unknown): boolean => isExactObject(value, THEME_SCHEMA);
 
 const PROFILE_SCHEMA: ObjectSchema = {
-  keys: ["name", "version", "uiBuildSha256", "viewport", "locale", "timeZone", "fontAssetIds", "theme"],
+  keys: ["name", "version", "viewport", "locale", "timeZone", "fontAssetIds", "theme"],
+  optionalKeys: ["uiBuildSha256"],
   checks: [
     checkField("name", boundedString(128)),
     checkField("version", boundedString(128)),
-    checkField("uiBuildSha256", isSHA256),
+    checkField("uiBuildSha256", (value) => value === undefined || isSHA256(value)),
     checkField("viewport", isViewport),
     checkField("locale", boundedString(64)),
     checkField("timeZone", boundedString(128)),

@@ -3,7 +3,7 @@ import Config
 config :chalk_sync,
   database_pool_size: 8,
   enforce_production_boot_checks: false,
-  external_operation_adapter_timeout_ms: 8_000,
+  external_operation_adapter_timeout_ms: 35_000,
   external_operation_poll_interval_ms: 100,
   instance_id: nil,
   listen_ip: {127, 0, 0, 1},

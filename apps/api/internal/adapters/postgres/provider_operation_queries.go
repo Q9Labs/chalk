@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 )
 
 type providerOperationDBTX interface {
@@ -27,6 +28,7 @@ type providerOperationQuerier interface {
 	InsertProviderOperationReceipt(context.Context, insertProviderOperationReceiptParams) (providerOperationReceiptRow, error)
 	MarkProviderOperationDispatching(context.Context, providerOperationIdentityParams) (providerOperationReceiptRow, error)
 	ResetProviderOperationForRetry(context.Context, providerOperationIdentityParams) (providerOperationReceiptRow, error)
+	RecordProviderOperationFailure(context.Context, string, provideroperations.Effect, string) (pgconn.CommandTag, error)
 	CompleteProviderOperation(context.Context, completeProviderOperationParams) (providerOperationReceiptRow, error)
 	EnsureProviderObservationHead(context.Context, providerObservationIdentityParams) error
 	LockProviderObservationHead(context.Context, providerObservationIdentityParams) (providerOperationObservationHeadRow, error)
@@ -50,6 +52,7 @@ type providerOperationReceiptRow struct {
 	State                 string
 	Outcome               pgtype.Text
 	Reason                pgtype.Text
+	LastErrorCode         pgtype.Text
 	CreatedAt             pgtype.Timestamptz
 	DispatchingAt         pgtype.Timestamptz
 	CompletedAt           pgtype.Timestamptz
@@ -94,6 +97,7 @@ func scanProviderOperationReceipt(scanner providerOperationScanner) (providerOpe
 		&row.State,
 		&row.Outcome,
 		&row.Reason,
+		&row.LastErrorCode,
 		&row.CreatedAt,
 		&row.DispatchingAt,
 		&row.CompletedAt,

@@ -17,12 +17,19 @@ import (
 const imageManifestSchemaVersion = "chalk_recorder_cpu_image.v1"
 
 type imageManifest struct {
-	SchemaVersion    string              `json:"schema_version"`
-	ReleaseID        string              `json:"release_id"`
-	SourceCommit     string              `json:"source_commit"`
-	SourceTreeSHA256 string              `json:"source_tree_sha256"`
-	Profile          string              `json:"profile"`
-	Files            []imageManifestFile `json:"files"`
+	SchemaVersion       string              `json:"schema_version"`
+	ReleaseID           string              `json:"release_id"`
+	SourceCommit        string              `json:"source_commit"`
+	SourceTreeSHA256    string              `json:"source_tree_sha256"`
+	Profile             string              `json:"profile"`
+	BootstrapServerName string              `json:"bootstrap_server_name"`
+	BootstrapCASHA256   string              `json:"bootstrap_ca_sha256"`
+	Files               []imageManifestFile `json:"files"`
+}
+
+type ImageBootstrapClaims struct {
+	ServerName string
+	CASHA256   string
 }
 
 type imageManifestFile struct {
@@ -32,32 +39,51 @@ type imageManifestFile struct {
 }
 
 func VerifyImageManifest(path, releaseID, expectedDigest string, role workeridentity.Role) error {
-	data, err := os.ReadFile(path)
-	if err != nil || len(data) == 0 || len(data) > 32<<20 {
-		return fmt.Errorf("%w: read image manifest", ErrInvalidConfig)
+	manifest, err := readImageManifest(path, releaseID, expectedDigest, role)
+	if err != nil {
+		return err
 	}
-	digest := sha256.Sum256(data)
-	if "sha256:"+hex.EncodeToString(digest[:]) != expectedDigest {
-		return fmt.Errorf("%w: image manifest digest mismatch", ErrInvalidConfig)
-	}
-	var manifest imageManifest
-	decoder := json.NewDecoder(strings.NewReader(string(data)))
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(&manifest) != nil || manifest.SchemaVersion != imageManifestSchemaVersion || manifest.ReleaseID != releaseID || !validClaim(manifest.SourceCommit, 128) || !validHexSHA256(manifest.SourceTreeSHA256) || !validImageProfile(manifest.Profile, role) || len(manifest.Files) == 0 || !slices.IsSortedFunc(manifest.Files, func(left, right imageManifestFile) int { return strings.Compare(left.Path, right.Path) }) {
-		return fmt.Errorf("%w: invalid image manifest", ErrInvalidConfig)
-	}
-	previous := ""
 	for _, file := range manifest.Files {
-		if file.Path == previous || !filepath.IsAbs(file.Path) || filepath.Clean(file.Path) != file.Path || !validHexSHA256(file.SHA256) {
-			return fmt.Errorf("%w: invalid image manifest file", ErrInvalidConfig)
-		}
-		previous = file.Path
 		computed, err := installedPathSHA256(file.Path, file.Type)
 		if err != nil || computed != file.SHA256 {
 			return fmt.Errorf("%w: image file digest mismatch for %s", ErrInvalidConfig, file.Path)
 		}
 	}
 	return nil
+}
+
+// VerifyImageManifestClaims checks the attested claims without needing the image's installed files.
+func VerifyImageManifestClaims(path, releaseID, expectedDigest string, role workeridentity.Role) (ImageBootstrapClaims, error) {
+	manifest, err := readImageManifest(path, releaseID, expectedDigest, role)
+	if err != nil {
+		return ImageBootstrapClaims{}, err
+	}
+	return ImageBootstrapClaims{ServerName: manifest.BootstrapServerName, CASHA256: manifest.BootstrapCASHA256}, nil
+}
+
+func readImageManifest(path, releaseID, expectedDigest string, role workeridentity.Role) (imageManifest, error) {
+	data, err := os.ReadFile(path)
+	if err != nil || len(data) == 0 || len(data) > 32<<20 {
+		return imageManifest{}, fmt.Errorf("%w: read image manifest", ErrInvalidConfig)
+	}
+	digest := sha256.Sum256(data)
+	if "sha256:"+hex.EncodeToString(digest[:]) != expectedDigest {
+		return imageManifest{}, fmt.Errorf("%w: image manifest digest mismatch", ErrInvalidConfig)
+	}
+	var manifest imageManifest
+	decoder := json.NewDecoder(strings.NewReader(string(data)))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&manifest) != nil || manifest.SchemaVersion != imageManifestSchemaVersion || manifest.ReleaseID != releaseID || !validClaim(manifest.SourceCommit, 128) || !validHexSHA256(manifest.SourceTreeSHA256) || !validImageProfile(manifest.Profile, role) || !validServerName(manifest.BootstrapServerName) || !validHexSHA256(manifest.BootstrapCASHA256) || len(manifest.Files) == 0 || !slices.IsSortedFunc(manifest.Files, func(left, right imageManifestFile) int { return strings.Compare(left.Path, right.Path) }) {
+		return imageManifest{}, fmt.Errorf("%w: invalid image manifest", ErrInvalidConfig)
+	}
+	previous := ""
+	for _, file := range manifest.Files {
+		if file.Path == previous || !filepath.IsAbs(file.Path) || filepath.Clean(file.Path) != file.Path || !validHexSHA256(file.SHA256) {
+			return imageManifest{}, fmt.Errorf("%w: invalid image manifest file", ErrInvalidConfig)
+		}
+		previous = file.Path
+	}
+	return manifest, nil
 }
 
 func validImageProfile(profile string, role workeridentity.Role) bool {

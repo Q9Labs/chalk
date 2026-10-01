@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -170,7 +169,7 @@ func seedCaptureRestartPresentation(t *testing.T, ctx context.Context, transacti
 		}
 	}
 
-	profile, err := recordingpresentation.NewComposite720PProfile(strings.Repeat("a", sha256.Size*2))
+	profile, err := recordingpresentation.NewComposite720PProfile("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	if err != nil {
 		t.Fatalf("build presentation profile: %v", err)
 	}

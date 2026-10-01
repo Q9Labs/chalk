@@ -14,7 +14,6 @@ const RECORDING_ID = "00000000-0000-4000-8000-000000000201";
 const EPISODE_ID = "00000000-0000-4000-8000-000000000202";
 const SPACE_ID = "00000000-0000-4000-8000-000000000203";
 const ORIGIN_AUTHORITY_ID = "00000000-0000-4000-8000-000000000204";
-const UI_BUILD_SHA256 = "0".repeat(64);
 const PEOPLE = [
   { id: "00000000-0000-4000-8000-000000000211", name: "Avery Chen", hue: 0 },
   { id: "00000000-0000-4000-8000-000000000212", name: "Morgan Diaz", hue: 120 },
@@ -124,7 +123,6 @@ async function main(): Promise<void> {
       profile: {
         name: "recording-space",
         version: "recording-space.v1",
-        uiBuildSha256: UI_BUILD_SHA256,
         viewport: { width: args.width, height: args.height, deviceScaleFactor: 1 },
         locale: "en",
         timeZone: "UTC",
@@ -183,7 +181,6 @@ async function main(): Promise<void> {
     workspace_directory: args.outputDirectory,
     presentation_path: presentationPath,
     presentation_sha256: presentationFacts.sha256,
-    ui_build_sha256: UI_BUILD_SHA256,
     asset_directory: assetsDirectory,
     decoded_media_path: decodedMediaPath,
     decoded_media_sha256: decodedFacts.sha256,

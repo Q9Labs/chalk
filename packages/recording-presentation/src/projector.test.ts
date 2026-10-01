@@ -25,6 +25,14 @@ describe("recording_presentation.v1", () => {
     expect(isRecordingPresentationTimelineV1(fixture("invalid-event-order.json"))).toBe(false);
   });
 
+  it("accepts both stored profiles with a UI digest and new profiles without one", () => {
+    const timeline = parseRecordingPresentationTimelineV1(fixture("minimal-valid.json"));
+    expect(timeline.initial.profile.uiBuildSha256).toMatch(/^[0-9a-f]{64}$/);
+    Reflect.deleteProperty(timeline.initial.profile, "uiBuildSha256");
+    expect(isRecordingPresentationTimelineV1(timeline)).toBe(true);
+    expect(createRecordingPresentationCursor(timeline).at(0).profile.uiBuildSha256).toBeUndefined();
+  });
+
   it("applies equal-time events inclusively with one deterministic clock", () => {
     const timeline = parseRecordingPresentationTimelineV1(fixture("minimal-valid.json"));
 

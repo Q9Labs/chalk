@@ -68,7 +68,7 @@
     "profile": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "version", "uiBuildSha256", "viewport", "locale", "timeZone", "fontAssetIds", "theme"],
+      "required": ["name", "version", "viewport", "locale", "timeZone", "fontAssetIds", "theme"],
       "properties": {
         "name": { "type": "string", "minLength": 1, "maxLength": 128 },
         "version": { "type": "string", "minLength": 1, "maxLength": 128 },

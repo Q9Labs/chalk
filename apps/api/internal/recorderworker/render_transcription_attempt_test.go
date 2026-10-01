@@ -75,8 +75,6 @@ func (observer *transcriptionAttemptObserver) ObserveRenderAttemptStage(measurem
 	observer.stages = append(observer.stages, measurement)
 }
 
-func (*transcriptionAttemptObserver) ObserveRenderFrameEncoding(RenderFrameEncodingMeasurement) {}
-
 func assertTranscriptionPreparationStages(t *testing.T, measurements []RenderAttemptStageMeasurement) {
 	t.Helper()
 	want := []RenderAttemptStage{

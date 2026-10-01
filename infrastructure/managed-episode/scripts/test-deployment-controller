@@ -49,9 +49,9 @@ for recorder_worker_path in \
 done
 "$planner" apps/api/cmd/main.go | jq -e '.classification == "api" and .recorder_image_affected == false' >/dev/null || fail "API-only entrypoint incorrectly planned a recorder image"
 "$planner" apps/api/internal/recordercapture/coordinator_test.go | jq -e '.classification == "api" and .recorder_image_affected == false' >/dev/null || fail "test-only Capture change incorrectly planned a recorder image"
-"$planner" apps/recording-renderer/src/fixture.test.ts | jq -e '.recorder_image_affected == false' >/dev/null || fail "test-only renderer change incorrectly planned a recorder image"
+"$planner" apps/recording-renderer/src/compose-fixture.test.ts | jq -e '.recorder_image_affected == false' >/dev/null || fail "test-only renderer change incorrectly planned a recorder image"
 for recorder_image_path in \
-  apps/recording-renderer/src/fixture.ts \
+  apps/recording-renderer/src/compose-fixture.ts \
   infrastructure/recorder/images/cpu/build-release.sh \
   packages/recording-presentation/src/index.ts \
   sdks/typescript/react/src/index.ts \

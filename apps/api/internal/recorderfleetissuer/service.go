@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/recorderbootstrapprotocol"
@@ -167,12 +168,18 @@ func (service *Service) AbandonBootstrap(request recorderfleet.BootstrapRequest)
 }
 
 func (service *Service) Challenge(ctx context.Context, peerIP netip.Addr, request recorderbootstrapprotocol.ChallengeRequest) (recorderbootstrapprotocol.ChallengeResponse, error) {
-	if err := request.Validate(); err != nil || !peerIP.IsValid() {
-		return recorderbootstrapprotocol.ChallengeResponse{}, ErrUnauthorized
+	if err := request.Validate(); err != nil {
+		return recorderbootstrapprotocol.ChallengeResponse{}, fmt.Errorf("%w: invalid challenge request: %v", ErrUnauthorized, err)
+	}
+	if !peerIP.IsValid() {
+		return recorderbootstrapprotocol.ChallengeResponse{}, fmt.Errorf("%w: invalid peer address", ErrUnauthorized)
 	}
 	registration, err := service.registration(request.ProviderID)
-	if err != nil || !challengeMatchesRegistration(request, registration) {
-		return recorderbootstrapprotocol.ChallengeResponse{}, ErrUnauthorized
+	if err != nil {
+		return recorderbootstrapprotocol.ChallengeResponse{}, fmt.Errorf("%w: no usable registration: %v", ErrUnauthorized, err)
+	}
+	if mismatch := challengeRegistrationMismatch(request, registration); mismatch != "" {
+		return recorderbootstrapprotocol.ChallengeResponse{}, fmt.Errorf("%w: challenge does not match registration: %s", ErrUnauthorized, mismatch)
 	}
 	if _, err := service.verifyInventory(ctx, registration.Request, peerIP); err != nil {
 		return recorderbootstrapprotocol.ChallengeResponse{}, err
@@ -386,9 +393,23 @@ func (service *Service) verifyInventory(ctx context.Context, request recorderfle
 	return node, nil
 }
 
-func challengeMatchesRegistration(request recorderbootstrapprotocol.ChallengeRequest, registration registration) bool {
-	return request.ProviderID == registration.Request.ProviderID && request.ReleaseID == registration.Request.ReleaseID &&
-		request.ImageDigest == registration.Request.ImageDigest && request.BootGeneration == registration.Request.BootGeneration
+// challengeRegistrationMismatch names each differing field so a rejected worker can be diagnosed from logs.
+// None of these values are secret.
+func challengeRegistrationMismatch(request recorderbootstrapprotocol.ChallengeRequest, registration registration) string {
+	var mismatches []string
+	if request.ProviderID != registration.Request.ProviderID {
+		mismatches = append(mismatches, fmt.Sprintf("provider_id sent=%q registered=%q", request.ProviderID, registration.Request.ProviderID))
+	}
+	if request.ReleaseID != registration.Request.ReleaseID {
+		mismatches = append(mismatches, fmt.Sprintf("release_id sent=%q registered=%q", request.ReleaseID, registration.Request.ReleaseID))
+	}
+	if request.ImageDigest != registration.Request.ImageDigest {
+		mismatches = append(mismatches, fmt.Sprintf("image_digest sent=%q registered=%q", request.ImageDigest, registration.Request.ImageDigest))
+	}
+	if request.BootGeneration != registration.Request.BootGeneration {
+		mismatches = append(mismatches, fmt.Sprintf("boot_generation sent=%d registered=%d", request.BootGeneration, registration.Request.BootGeneration))
+	}
+	return strings.Join(mismatches, "; ")
 }
 
 func bootstrapMatchesRegistration(request recorderbootstrapprotocol.BootstrapRequest, registration registration) bool {

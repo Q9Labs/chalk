@@ -5,7 +5,9 @@ import (
 	"errors"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
@@ -82,6 +84,13 @@ func TestProviderOperationRepositoryPersistsReceiptsAndMonotonicObservations(t *
 	if _, err := repository.MarkDispatching(ctx, input.OperationID, input.Effect); err != nil {
 		t.Fatalf("mark dispatching: %v", err)
 	}
+	if err := repository.RecordFailure(ctx, input.OperationID, input.Effect, "provider_timeout"); err != nil {
+		t.Fatal(err)
+	}
+	failed, err := repository.Get(ctx, input.OperationID, input.Effect)
+	if err != nil || failed.Reason == nil || *failed.Reason != "provider_timeout" || failed.LastErrorCode == nil || *failed.LastErrorCode != "provider_timeout" {
+		t.Fatalf("failure receipt = %+v, %v", failed, err)
+	}
 	if _, err := repository.ResetForRetry(ctx, input.OperationID, input.Effect); err != nil {
 		t.Fatalf("reset retry: %v", err)
 	}
@@ -91,13 +100,38 @@ func TestProviderOperationRepositoryPersistsReceiptsAndMonotonicObservations(t *
 	if _, err := repository.Complete(ctx, input.OperationID, input.Effect, provideroperations.Completion{Outcome: provideroperations.OutcomeConfirmed}); err != nil {
 		t.Fatalf("complete: %v", err)
 	}
+	if err := repository.RecordFailure(ctx, input.OperationID, input.Effect, "provider_timeout"); err != nil {
+		t.Fatal(err)
+	}
+	completed, err := repository.Get(ctx, input.OperationID, input.Effect)
+	if err != nil || completed.Reason != nil || completed.LastErrorCode != nil {
+		t.Fatalf("late failure changed completed receipt: %+v, %v", completed, err)
+	}
 	if _, err := repository.Complete(ctx, input.OperationID, input.Effect, provideroperations.Completion{Outcome: provideroperations.OutcomeAmbiguous}); !errors.Is(err, provideroperations.ErrNonTerminalOutcome) {
 		t.Fatalf("ambiguous completion = %v", err)
 	}
 
 	observationInput := provideroperations.ObservationInput{TenantID: tenantID, EpisodeID: episodeID, Incarnation: 1, Sequence: 1, Publications: []provideroperations.Publication{{ParticipantID: input.ParticipantID, Source: "camera", Enabled: true, PublicationID: "episode-1|camera-track"}}}
+	listener, err := pgx.Connect(ctx, url)
+	if err != nil {
+		t.Fatalf("connect publication listener: %v", err)
+	}
+	defer listener.Close(ctx)
+	if _, err := listener.Exec(ctx, `listen chalk_media_publications`); err != nil {
+		t.Fatalf("listen for publications: %v", err)
+	}
 	if _, err := repository.AppendObservation(ctx, observationInput); err != nil {
 		t.Fatalf("append observation: %v", err)
+	}
+	notificationCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	notification, err := listener.WaitForNotification(notificationCtx)
+	if err != nil {
+		t.Fatalf("publication notification: %v", err)
+	}
+	wantPayload := tenantID.String() + ":" + spaceID.String() + ":" + episodeID.String()
+	if notification.Payload != wantPayload {
+		t.Fatalf("publication notification payload = %q, want %q", notification.Payload, wantPayload)
 	}
 	if _, err := repository.AppendObservation(ctx, observationInput); err != nil {
 		t.Fatalf("replay observation: %v", err)
