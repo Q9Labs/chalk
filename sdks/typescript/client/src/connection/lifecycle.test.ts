@@ -1,5 +1,5 @@
 import { Effect, Fiber } from "effect";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { parseParsedAccessGrant } from "../access/grant";
 import { createCoreTestPlatform } from "../space-client/core.test.helpers";
@@ -67,8 +67,11 @@ describe("ConnectionLifecycle Episode snapshot", () => {
         yield* Fiber.join(pendingAction);
         expect(noticeDuringAction).toMatchObject({ state: "live", connection: { sync: "unresponsive" } });
         platform.emitSync({ ...live, connection: { phase: "connecting" } });
-        yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 20)));
-        expect(lifecycle.getSnapshot()).toMatchObject({ state: "live", connection: { sync: "connecting" } });
+        yield* Effect.promise(() => vi.waitFor(() => expect(lifecycle.getSnapshot()).toMatchObject({ state: "live", connection: { sync: "connecting" } })));
+        platform.emitSync({ ...live, connection: { phase: "recovering" } });
+        yield* Effect.promise(() => vi.waitFor(() => expect(lifecycle.getSnapshot().connection.sync).toBe("recovering")));
+        expect(syncCreations).toBe(1);
+        expect(lifecycle.getSnapshot()).toMatchObject({ state: "live", connection: { sync: "recovering" } });
         platform.emitSync({ ...live, connection: { phase: "live" } });
         yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 20)));
         expect(lifecycle.getSnapshot().state).toBe("live");

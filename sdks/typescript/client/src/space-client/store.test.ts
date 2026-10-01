@@ -20,7 +20,10 @@ describe("SpaceStore connection notice", () => {
     expect(store.getSnapshot().connection.status).toBe("reconnecting");
 
     store.updateConnection({ ...live, connection: { sync: "connecting", media: "healthy" } });
-    expect(store.getSnapshot().connection.status).toBe("live");
+    expect(store.getSnapshot().connection.status).toBe("reconnecting");
+
+    store.updateConnection({ ...live, connection: { sync: "recovering", media: "healthy" } });
+    expect(store.getSnapshot().connection.status).toBe("reconnecting");
 
     store.updateConnection(live);
     expect(store.getSnapshot().connection.status).toBe("live");

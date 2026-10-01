@@ -22,6 +22,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
       return null; // Storage may be disabled; manual entry remains available.
     }
   });
+  const [dashboardEntry] = useState(() => hasDashboardSpaceEntry() || Boolean(reloadMarker?.tenantId));
   const initialDisplayName = useMemo(() => new URLSearchParams(globalThis.location?.search ?? "").get("name") ?? "", []);
   const entranceDeviceDefaults = useMemo(() => (dashboardSpaceEntryUsesDevicesOff() ? { microphone: false, camera: false } : { microphone: true, camera: true }), []);
   const [displayName, setDisplayName] = useState(reloadMarker?.displayName ?? initialDisplayName);
@@ -51,7 +52,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
       await client.prepareSpaceEntrance(token);
       return;
     }
-    if (!slug || !hasDashboardSpaceEntry()) return;
+    if (!slug || !dashboardEntry) return;
     const tenantID = await resolveTenantID();
     if (!tenantID) return;
     let cursor: string | undefined;
@@ -64,7 +65,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
       }
       cursor = page.pagination.has_more ? (page.pagination.next_cursor ?? undefined) : undefined;
     } while (cursor);
-  }, [client, journey, slug]);
+  }, [client, dashboardEntry, journey, slug]);
 
   const complete = useCallback(
     (prepared: SpaceEntryAccess, inviteLink: string | undefined, spaceName: string) => {
@@ -110,7 +111,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
       if (!normalizedDisplayName || spaceAccess || pending || preparing) return;
       setDisplayName(normalizedDisplayName);
       setEntranceSettings(settings);
-      const accountEntry = Boolean(slug && !inviteToken && hasDashboardSpaceEntry());
+      const accountEntry = Boolean(slug && !inviteToken && dashboardEntry);
       if (slug && !inviteToken && !accountEntry) {
         setError(neutralSpaceError);
         return;
@@ -152,7 +153,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
           if (active.current) setPreparing(false);
         });
     },
-    [client, complete, defaultEntranceSettings, navigatePublicSpace, pending, preparing, slug, spaceAccess],
+    [client, complete, dashboardEntry, defaultEntranceSettings, navigatePublicSpace, pending, preparing, slug, spaceAccess],
   );
 
   useEffect(() => {
@@ -214,8 +215,14 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
           cleanupPromise.current = undefined;
           throw cause;
         }) ?? Promise.resolve();
-      cleanupPromise.current = attempt;
-      return attempt;
+      const completed = attempt.then(() => {
+        if (!options.keepalive && active.current) {
+          cleanupPromise.current = undefined;
+          setSpaceAccess(null);
+        }
+      });
+      cleanupPromise.current = completed;
+      return completed;
     },
     [spaceAccess],
   );
@@ -379,8 +386,15 @@ async function resumePendingArrival(client: PublicInviteClient, pending: Pending
   return client.arriveBySpacePublicInvite(inviteToken, displayName.trim(), { arrivalHandle });
 }
 
-function neutralMessage(_cause: unknown): string {
-  return neutralSpaceError;
+function neutralMessage(cause: unknown): string {
+  if (cause && typeof cause === "object" && "status" in cause) {
+    if (cause.status === 404 || cause.status === 410) return neutralSpaceError;
+    if (cause.status === 401) return "Sign in again, then enter this Space.";
+    if (cause.status === 403) return "You do not have access to this Space. Ask the owner for access.";
+    if (cause.status === 429) return "Too many requests. Wait a minute, then enter this Space again.";
+    if (cause.status === 409) return "You could not enter this Space. Try entering again.";
+  }
+  return "Chalk could not connect. Check your connection and try entering again.";
 }
 
 function LocalSpace({
@@ -416,7 +430,8 @@ function LocalSpace({
     return nextClient;
   }, [connectionAccess, credential, deviceSelection, getAccess, journey]);
   const release = useMemo(() => createLocalSpaceRelease(client, () => onFinish()), [client, onFinish]);
-  const episodeID = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection.episode?.id;
+  const connection = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection;
+  const episodeID = connection.episode?.id;
   const diagnostics = useEpisodeDiagnosticsAvailability({ diagnosticReference: episodeID ? `chalk.episode:${episodeID}` : undefined });
   const pendingRelease = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(undefined);
   const openDiagnostics = useCallback(() => {
@@ -432,6 +447,10 @@ function LocalSpace({
     }
     void release().catch(() => undefined);
   }, [release]);
+
+  useEffect(() => {
+    if (connection.status === "failed") releaseFromLifecycle();
+  }, [connection.status, releaseFromLifecycle]);
 
   useEffect(() => {
     if (pendingRelease.current !== undefined) {

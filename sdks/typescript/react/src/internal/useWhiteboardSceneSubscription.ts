@@ -20,6 +20,7 @@ export function useWhiteboardSceneSubscription(transport: ChalkWhiteboardV1Trans
     let disposed = false;
     let starting = false;
     let startupSettled = false;
+    let ready = false;
     let recoveryAttempts = 0;
     let recoveryTimer: ReturnType<typeof setTimeout> | undefined;
     let latestSummary: ChalkWhiteboardSummary | undefined;
@@ -55,12 +56,14 @@ export function useWhiteboardSceneSubscription(transport: ChalkWhiteboardV1Trans
       if (summary.status === "ready") {
         if (!starting || startupSettled) {
           recoveryAttempts = 0;
+          ready = true;
           setSubscription({ status: "ready", transport });
         }
         return;
       }
       if (summary.status === "loading" || summary.status === "recovering") {
-        setSubscription({ status: "loading" });
+        // Keep the canvas and its uncommitted local edits mounted during replay.
+        if (!ready) setSubscription({ status: "loading" });
         return;
       }
       if (summary.status === "failed") {
@@ -85,6 +88,7 @@ export function useWhiteboardSceneSubscription(transport: ChalkWhiteboardV1Trans
             if (disposed) return;
             if (!latestSummary || latestSummary.status === "ready") {
               recoveryAttempts = 0;
+              ready = true;
               setSubscription({ status: "ready", transport });
             }
           },

@@ -176,7 +176,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   submitUpdate(input: ChalkWhiteboardV1UpdateInput): Promise<ChalkWhiteboardV1Commit> {
-    this.#assertLive("submit_update");
+    if (!this.#started || !this.#sceneId) this.#assertLive("submit_update");
     if (!this.#canDraw || !this.#capabilities.includes("drawWhiteboard")) {
       throw error(failure("submit_update", "permission_denied", false, "Whiteboard draw permission is required."));
     }
@@ -500,6 +500,9 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#sceneId = frame.scene_id;
     this.#revision = frame.revision;
     this.#publishSummary("ready", null);
+    // Operations persisted while snapshot pages were in flight are sent only
+    // after the final acknowledgement restores the server's live phase.
+    this.#flushQueuedOperations();
     this.#emit({
       type: "snapshot",
       sceneId: frame.scene_id,
@@ -548,7 +551,10 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       deferred = { resolve, reject, settled: false };
     });
     this.#operations.set(frame.operation_id, { pending, deferred, retries: 0 });
-    this.#sendOperation(frame);
+    if (this.#phase === "live" && this.#snapshots.size === 0) {
+      if (this.#waitingForOperations) this.#awaitingOperationIds.add(frame.operation_id);
+      this.#sendOperation(frame);
+    }
     return promise;
   }
 
@@ -599,6 +605,14 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       rejectDeferred(this.#initialSnapshot, snapshotError);
       this.#initialSnapshot = null;
     }
+    if (frame.recoverable) this.#flushQueuedOperations();
+  }
+
+  #flushQueuedOperations(): void {
+    if (this.#phase !== "live" || this.#snapshots.size > 0) return;
+    for (const entry of this.#operations.values()) {
+      if (!this.#awaitingOperationIds.has(entry.pending.operationId)) this.#sendOperation(entry.pending.frame);
+    }
   }
 
   #scheduleOperationRetry(operationId: string, entry: OperationEntry): void {
@@ -642,8 +656,6 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#phase = "connecting";
     this.#waitingForOperations = false;
     this.#participantId = null;
-    this.#capabilities = [];
-    this.#canDraw = false;
     this.#rejectSnapshots(failure("request_snapshot", "unavailable", true, "Whiteboard connection interrupted."));
     this.#publishSummary("recovering", failure("start_scene_subscription", "unavailable", true, "Whiteboard connection interrupted."));
   }

@@ -275,7 +275,7 @@ func listEpisodesEndpoint(service EpisodeLifecycleService, authorizer TenantAuth
 			result.Episodes = append(result.Episodes, newEpisodeResponse(episode))
 		}
 		return result, nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
+	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
 		Parameters(append([]APIParameterContract{tenantIDParameter(), spaceIDParameter()}, paginationParameters()...)...).Responds(http.StatusOK, "EpisodeList", episodeListResponse{}).
 		Errors(lifecycleReadErrors(apiErrorInvalidSpaceID, apiErrorInvalidPageSize, apiErrorInvalidCursor, apiErrorSpaceNotFound, apiErrorEpisodeNotFound)...).MapErrors(episodeLifecycleEndpointAPIError)
 }
@@ -293,7 +293,7 @@ func getEpisodeEndpoint(service EpisodeLifecycleService, authorizer TenantAuthor
 			return episodeResponse{}, err
 		}
 		return newEpisodeResponse(episode), nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
+	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter()).Responds(http.StatusOK, "Episode", episodeResponse{}).
 		Errors(lifecycleReadErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorSpaceNotFound, apiErrorEpisodeNotFound)...).MapErrors(episodeLifecycleEndpointAPIError)
 }
@@ -311,7 +311,7 @@ func issueSyncTokenEndpoint(service SyncTokenRefreshIssuer, authorizer TenantAut
 			return syncTokenResponse{}, err
 		}
 		return syncTokenResponse{SyncToken: token.Value, ExpiresAt: token.ExpiresAt.UTC().Format(time.RFC3339)}, nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
+	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), participantIDParameter()).Responds(http.StatusCreated, "SyncToken", syncTokenResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorParticipantNotFound, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
 }

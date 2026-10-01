@@ -129,6 +129,23 @@ outcomes:
       - sdks/typescript/react/src/components/chalk/Chalk.tsx
       - sdks/typescript/react-native/src/components/SpaceView.shared.tsx
       - sdks/typescript/react-native/src/components/native-space-view/SpaceWhiteboardSurface.tsx
+  - id: collaboration.whiteboard_connection_stability
+    title: Keep whiteboard connections steady
+    area: collaboration
+    state: unknown
+    summary: >-
+      Drawings survive reconnects, but the cause of unexpected whiteboard reconnects is not known.
+    size: Unknown
+    remaining:
+      - Reproduce an unexpected reconnect while drawing.
+      - Find and fix the cause without weakening recovery after a real connection cut.
+      - Confirm the board stays connected during normal drawing and sharing.
+    uncertainty: The reconnect trigger needs investigation before a fix can be scoped.
+    theory: theory.md#sync-correctness
+    code:
+      - sdks/typescript/client/src/connection/lifecycle.ts
+      - sdks/typescript/client/src/whiteboard/v1-client.ts
+      - sdks/typescript/react/src/internal/useWhiteboardSceneSubscription.ts
   - id: collaboration.attachment_retention
     title: Chat attachments stay isolated and get deleted
     area: collaboration

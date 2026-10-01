@@ -14,6 +14,53 @@ const files: ChalkWhiteboardV1FileTransport = {
 };
 
 describe("ChalkWhiteboardV1Client recovery summaries", () => {
+  it("sends edits held behind a snapshot when that snapshot is rejected", async () => {
+    const { client, sockets } = recoveryClient();
+    const startup = client.startSceneSubscription();
+    await acceptSnapshot(sockets);
+    await startup;
+    const snapshot = client.requestSnapshot();
+    void snapshot.catch(() => undefined);
+    const drawing = client.submitUpdate({ sceneId, syncAll: false, elements: [rectangle()] });
+    void drawing.catch(() => undefined);
+    try {
+      await settle();
+      const requests = sockets[0]?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "request_snapshot") ?? [];
+      sockets[0]?.receive({ type: "operation_error", correlation_id: requests.at(-1)?.request_id, operation: "request_snapshot", code: "storage_unavailable", recoverable: true, message: "Storage temporarily unavailable." });
+      await expect(snapshot).rejects.toMatchObject({ code: "storage_unavailable", recoverable: true });
+      await settle();
+      const sent = sockets[0]?.sent.map((wire) => JSON.parse(wire)) ?? [];
+      expect(sent.some((frame) => frame.type === "submit_update")).toBe(true);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("retains and replays a rectangle drawn during socket recovery before replacing the snapshot", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = recoveryClient(clock, 100);
+    const startup = client.startSceneSubscription();
+    await acceptSnapshot(sockets);
+    await startup;
+    sockets[0]?.close(1012);
+    const drawing = client.submitUpdate({ sceneId, syncAll: false, elements: [rectangle()] });
+    await settle();
+    clock.advance(100);
+    sockets[1]?.open();
+    await settle();
+    sockets[1]?.receive(welcome());
+    await settle();
+    const sent = sockets[1]?.sent.map((wire) => Schema.decodeUnknownSync(WhiteboardV1ClientFrameSchema)(JSON.parse(wire))) ?? [];
+    const update = sent.find((frame) => frame.type === "submit_update");
+    expect(update).toMatchObject({ type: "submit_update", elements: [{ id: "rectangle" }] });
+    expect(sent.some((frame) => frame.type === "request_snapshot")).toBe(false);
+    if (!update || update.type !== "submit_update") throw new Error("missing replay");
+    sockets[1]?.receive({ type: "commit", outcome: "committed", operation_id: update.operation_id, scene_id: sceneId, revision: "2" });
+    await expect(drawing).resolves.toMatchObject({ revision: "2" });
+    expect(sockets[1]?.requestId()).toBeDefined();
+    await client.stopSceneSubscription();
+  });
+
   it("uses the application close code when token authentication fails", async () => {
     const socket = new TestSocket();
     const client = new ChalkWhiteboardV1Client({
@@ -35,21 +82,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
 
   it("uses capped exponential reconnect backoff until a welcome is live", async () => {
     const clock = new TestClock();
-    const sockets: TestSocket[] = [];
-    const client = new ChalkWhiteboardV1Client({
-      url: "ws://sync.test/v1/whiteboard",
-      token: async () => "token",
-      files,
-      clock,
-      reconnectDelayMs: 100,
-      webSocket: {
-        connect: () => {
-          const socket = new TestSocket();
-          sockets.push(socket);
-          return socket;
-        },
-      },
-    });
+    const { client, sockets } = recoveryClient(clock, 100);
 
     const startup = client.startSceneSubscription();
     void startup.catch(() => undefined);
@@ -69,29 +102,12 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 
   it("publishes terminal failure after ready and can be started again without duplicate sockets", async () => {
-    const sockets: TestSocket[] = [];
-    const client = new ChalkWhiteboardV1Client({
-      url: "ws://sync.test/v1/whiteboard",
-      token: async () => "token",
-      files,
-      webSocket: {
-        connect: () => {
-          const socket = new TestSocket();
-          sockets.push(socket);
-          return socket;
-        },
-      },
-    });
+    const { client, sockets } = recoveryClient();
     const summaries: ChalkWhiteboardSummary["status"][] = [];
     const unsubscribeSummary = client.subscribeSummary((summary) => summaries.push(summary.status));
 
     const startup = client.startSceneSubscription();
-    await settle();
-    sockets[0]?.open();
-    await settle();
-    sockets[0]?.receive(welcome());
-    await settle();
-    sockets[0]?.receive(snapshotPage(sockets[0]?.requestId()));
+    await acceptSnapshot(sockets);
     await expect(startup).resolves.toBeUndefined();
     expect(summaries.at(-1)).toBe("ready");
 
@@ -99,12 +115,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     expect(summaries.slice(-2)).toEqual(["recovering", "failed"]);
 
     const retry = client.startSceneSubscription();
-    await settle();
-    sockets[1]?.open();
-    await settle();
-    sockets[1]?.receive(welcome());
-    await settle();
-    sockets[1]?.receive(snapshotPage(sockets[1]?.requestId()));
+    await acceptSnapshot(sockets, 1);
     await expect(retry).resolves.toBeUndefined();
     expect(sockets).toHaveLength(2);
     expect(summaries.at(-1)).toBe("ready");
@@ -113,6 +124,39 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     await client.stopSceneSubscription();
   });
 });
+
+function rectangle() {
+  return { id: "rectangle", type: "rectangle", version: 1, versionNonce: 1, index: "a0", isDeleted: false, payload: { x: 10, y: 10, width: 100, height: 100 } };
+}
+
+function recoveryClient(clock = new TestClock(), reconnectDelayMs?: number) {
+  const sockets: TestSocket[] = [];
+  const client = new ChalkWhiteboardV1Client({
+    url: "ws://sync.test/v1/whiteboard",
+    token: async () => "token",
+    files,
+    clock,
+    reconnectDelayMs,
+    webSocket: {
+      connect: () => {
+        const socket = new TestSocket();
+        sockets.push(socket);
+        return socket;
+      },
+    },
+  });
+  return { client, sockets };
+}
+
+async function acceptSnapshot(sockets: readonly TestSocket[], index = 0) {
+  await settle();
+  const socket = sockets[index];
+  socket?.open();
+  await settle();
+  socket?.receive(welcome());
+  await settle();
+  socket?.receive(snapshotPage(socket.requestId()));
+}
 
 function welcome(): Record<string, unknown> {
   return {

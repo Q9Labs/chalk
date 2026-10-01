@@ -578,7 +578,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       const syncSubjectMismatched = (subject: NonNullable<ReturnType<typeof access.currentUnsafe>>["subject"] | null, snapshot: V1EpisodeSnapshot): boolean =>
         subject !== null && snapshot.participantId !== null && (subject.participantId !== snapshot.participantId || subject.participantGeneration !== snapshot.participantGeneration);
       const episodeEnded = (snapshot: V1EpisodeSnapshot): boolean => snapshot.control?.status === "ended" || snapshot.optimisticControl?.status === "ended";
-      const syncNeedsRecovery = (snapshot: V1EpisodeSnapshot): boolean => active(model) && (snapshot.connection.phase === "terminal" || snapshot.connection.phase === "recovering");
+      const syncNeedsRecovery = (snapshot: V1EpisodeSnapshot): boolean => active(model) && snapshot.connection.phase === "terminal";
       const failForSnapshot = (failure: ConnectionLifecycleFailure): Effect.Effect<void> =>
         Effect.gen(function* failForSnapshotEffect() {
           model.failure = toFailure(failure);
