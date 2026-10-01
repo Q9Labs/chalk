@@ -42,7 +42,7 @@ type observedGap struct {
 // Write verifies and decrypts stored bundle objects, decodes their RTP
 // into browser-seekable per-source media, and atomically publishes one
 // decoded_media.v1 directory. It never infers source identity from an object
-// path: every bundle track must join the authenticated presentation timeline
+// path: every included track must join the authenticated presentation timeline
 // by the exact (track_id, track_epoch) pair.
 func Write(ctx context.Context, request Request) (result Result, resultErr error) {
 	if err := validateRequest(ctx, request); err != nil {
@@ -326,6 +326,14 @@ func ingestBundles(ctx context.Context, request Request, catalog map[sourceIdent
 			gaps = append(gaps, observedGap{startMS: gap.StartMediaMilliseconds, endMS: gap.EndMediaMilliseconds, reason: discontinuityReason(gap.Reason, gap.ReplacementAttempt > 0)})
 		}
 		for _, fragment := range bundle.Fragments {
+			// Audio preparation does not depend on video presentation events.
+			// Bundle integrity and capture authority have already been checked.
+			if !request.includesSource(recordingpresentation.MediaKindCamera) && !request.includesSource(recordingpresentation.MediaKindScreenShare) {
+				codec := strings.ToLower(strings.TrimSpace(fragment.Track.Codec))
+				if codec == "vp8" || codec == "h264" {
+					continue
+				}
+			}
 			source, exists := catalog[sourceIdentity{trackID: fragment.Track.TrackID, epoch: fragment.Track.Epoch}]
 			if !exists {
 				clearBundle(&bundle)
