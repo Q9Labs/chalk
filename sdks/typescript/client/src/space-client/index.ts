@@ -58,3 +58,5 @@ export type {
   WhiteboardController,
   WhiteboardSlice,
 } from "./types";
+export { reloadRejoinAccess, readReloadRejoin, writeReloadRejoin, resumeReloadRejoin, reloadRejoinStorageKey } from "./reload-rejoin";
+export type { ReloadRejoinMarker } from "./reload-rejoin";
