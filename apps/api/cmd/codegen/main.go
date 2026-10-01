@@ -18,6 +18,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/apps/api/internal/webhooks"
 )
 
 type openAPIDoc struct {
@@ -613,6 +614,11 @@ func traceIdentifierSchema(length int) map[string]any {
 }
 
 func applyFieldConstraints(schema map[string]any, schemaName string, fieldName string, request bool) map[string]any {
+	if fieldName == "event_types" && schemaTypeIs(schema, "array") {
+		if items, ok := schema["items"].(map[string]any); ok {
+			items["enum"] = webhooks.CoreEventTypes
+		}
+	}
 	if enum := fieldEnum(schemaName, fieldName); len(enum) > 0 {
 		schema["enum"] = enum
 	}

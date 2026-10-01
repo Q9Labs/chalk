@@ -19,6 +19,18 @@ type commitArtifactQuerier struct {
 	authorizeArtifact func(context.Context, sqlc.AuthorizeRecordingArtifactReplayParams) (bool, error)
 }
 
+type artifactReplayTransactor struct{}
+type artifactReplayTx struct{ pgx.Tx }
+
+func (artifactReplayTransactor) BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error) {
+	return artifactReplayTx{}, nil
+}
+func (artifactReplayTx) Rollback(context.Context) error { return nil }
+
+func artifactReplayRepository(queries commitArtifactQuerier) RecordingPipelineRepository {
+	return NewRecordingPipelineRepositoryWithQueriesAndTransactor(queries, artifactReplayTransactor{}, func(sqlc.Querier) sqlc.Querier { return queries })
+}
+
 func (q commitArtifactQuerier) GetRecordingArtifact(ctx context.Context, params sqlc.GetRecordingArtifactParams) (sqlc.RecordingArtifact, error) {
 	return q.getArtifact(ctx, params)
 }
@@ -38,7 +50,7 @@ func TestCommitArtifactAmbiguousRetryReturnsExactArtifact(t *testing.T) {
 	input := artifactInputForTest(t)
 	existing := artifactRecordForTest(input)
 	commitCalled := false
-	repository := NewRecordingPipelineRepository(commitArtifactQuerier{
+	repository := artifactReplayRepository(commitArtifactQuerier{
 		getArtifact: func(context.Context, sqlc.GetRecordingArtifactParams) (sqlc.RecordingArtifact, error) {
 			if commitCalled {
 				return existing, nil
@@ -62,7 +74,7 @@ func TestCommitArtifactAmbiguousRetryReturnsExactArtifact(t *testing.T) {
 
 func TestCommitArtifactReplayRejectsWrongAttemptAuthority(t *testing.T) {
 	input := artifactInputForTest(t)
-	repository := NewRecordingPipelineRepository(commitArtifactQuerier{
+	repository := artifactReplayRepository(commitArtifactQuerier{
 		getArtifact: func(context.Context, sqlc.GetRecordingArtifactParams) (sqlc.RecordingArtifact, error) {
 			return artifactRecordForTest(input), nil
 		},
@@ -82,7 +94,7 @@ func TestCommitArtifactAmbiguousRetryRejectsConflictingArtifact(t *testing.T) {
 	existing := artifactRecordForTest(input)
 	existing.ByteSize++
 	commitCalled := false
-	repository := NewRecordingPipelineRepository(commitArtifactQuerier{
+	repository := artifactReplayRepository(commitArtifactQuerier{
 		getArtifact: func(context.Context, sqlc.GetRecordingArtifactParams) (sqlc.RecordingArtifact, error) {
 			if commitCalled {
 				return existing, nil

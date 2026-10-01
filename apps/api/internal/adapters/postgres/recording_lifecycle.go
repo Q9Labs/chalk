@@ -144,6 +144,7 @@ func (r RecordingLifecycleRepository) publish(ctx context.Context, authority rec
 	if !lifecycleStatusAllowsNewOperation(authorityRow.RecordingStatus, operationName) && !(deadlineStop && (authorityRow.RecordingStatus == "starting" || authorityRow.RecordingStatus == "recording")) {
 		return recordinglifecycle.Publication{}, fmt.Errorf("recording status %q rejects %s: %w", authorityRow.RecordingStatus, operationName, recordinglifecycle.ErrAuthorityMismatch)
 	}
+	var webhookMetric webhookCommitMetric
 	if operationName == recordingCaptureReadyOperation {
 		if authorityRow.CaptureReadyAt.Valid && !authorityRow.CaptureReadyAt.Time.Equal(occurredAt) {
 			return recordinglifecycle.Publication{}, recordinglifecycle.ErrOperationConflict
@@ -157,6 +158,12 @@ func (r RecordingLifecycleRepository) publish(ctx context.Context, authority rec
 			return recordinglifecycle.Publication{}, recordingLifecycleRepositoryError("set capture ready origin", err)
 		}
 		if err := freezeRecordingPresentationSource(ctx, queries, ids, authority.CaptureEpoch, occurredAt); err != nil {
+			return recordinglifecycle.Publication{}, err
+		}
+	}
+	if operationName == recordingCaptureReadyOperation {
+		webhookMetric, err = produceRecordingWebhook(ctx, transaction, id(ids.tenantID), id(ids.recordingID), "started", occurredAt, "")
+		if err != nil {
 			return recordinglifecycle.Publication{}, err
 		}
 	}
@@ -200,6 +207,7 @@ func (r RecordingLifecycleRepository) publish(ctx context.Context, authority rec
 	if err := transaction.Commit(ctx); err != nil {
 		return recordinglifecycle.Publication{}, recordingLifecycleRepositoryError("commit transaction", err)
 	}
+	webhookMetric.Record(ctx)
 	return publication, nil
 }
 

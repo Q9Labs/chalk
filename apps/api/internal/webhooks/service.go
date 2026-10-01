@@ -262,9 +262,6 @@ func validateDeliveryFilters(filters DeliveryFilters) error {
 	for _, value := range CoreEventTypes {
 		events[value] = struct{}{}
 	}
-	for value := range reservedEventTypes {
-		events[value] = struct{}{}
-	}
 	for _, value := range filters.States {
 		if _, ok := states[value]; !ok {
 			return ErrInvalidDeliveryFilter
@@ -310,9 +307,6 @@ func validateEventTypes(values []string) ([]string, error) {
 	}
 	set := make(map[string]struct{}, len(values))
 	for _, value := range values {
-		if _, reserved := reservedEventTypes[value]; reserved {
-			return nil, ErrEventTypeUnavailable
-		}
 		found := false
 		for _, allowed := range CoreEventTypes {
 			if value == allowed {

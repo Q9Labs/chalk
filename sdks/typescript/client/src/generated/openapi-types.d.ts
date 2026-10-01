@@ -1961,7 +1961,22 @@ export interface components {
     CreateWebhookEndpointRequest: {
       api_version: number;
       enabled: boolean;
-      event_types: string[];
+      event_types: (
+        | "episode.ended"
+        | "episode.started"
+        | "participant.joined"
+        | "participant.left"
+        | "recording.started"
+        | "recording.completed"
+        | "recording.failed"
+        | "transcript.started"
+        | "transcript.completed"
+        | "transcript.failed"
+        | "space.archived"
+        | "space.created"
+        | "space.restored"
+        | "space.updated"
+      )[];
       name: string;
       url: string;
     };
@@ -2910,7 +2925,22 @@ export interface components {
     UpdateWebhookEndpointRequest: {
       api_version?: number;
       enabled?: boolean;
-      event_types?: string[];
+      event_types?: (
+        | "episode.ended"
+        | "episode.started"
+        | "participant.joined"
+        | "participant.left"
+        | "recording.started"
+        | "recording.completed"
+        | "recording.failed"
+        | "transcript.started"
+        | "transcript.completed"
+        | "transcript.failed"
+        | "space.archived"
+        | "space.created"
+        | "space.restored"
+        | "space.updated"
+      )[];
       name?: string;
       url?: string;
     };
@@ -2988,7 +3018,22 @@ export interface components {
       api_version: number;
       created_at: components["schemas"]["DateTimeString"];
       enabled: boolean;
-      event_types: string[];
+      event_types: (
+        | "episode.ended"
+        | "episode.started"
+        | "participant.joined"
+        | "participant.left"
+        | "recording.started"
+        | "recording.completed"
+        | "recording.failed"
+        | "transcript.started"
+        | "transcript.completed"
+        | "transcript.failed"
+        | "space.archived"
+        | "space.created"
+        | "space.restored"
+        | "space.updated"
+      )[];
       id: components["schemas"]["UUID"];
       name: string;
       revision: number;
@@ -3006,7 +3051,22 @@ export interface components {
       api_version: number;
       created_at: components["schemas"]["DateTimeString"];
       enabled: boolean;
-      event_types: string[];
+      event_types: (
+        | "episode.ended"
+        | "episode.started"
+        | "participant.joined"
+        | "participant.left"
+        | "recording.started"
+        | "recording.completed"
+        | "recording.failed"
+        | "transcript.started"
+        | "transcript.completed"
+        | "transcript.failed"
+        | "space.archived"
+        | "space.created"
+        | "space.restored"
+        | "space.updated"
+      )[];
       id: components["schemas"]["UUID"];
       name: string;
       revision: number;

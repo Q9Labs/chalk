@@ -38,7 +38,7 @@ func (r RecordingRenderRepository) ResolveInput(ctx context.Context, authority r
 		return recordingrender.StoredInput{}, recordingrender.ErrRepositoryUnavailable
 	}
 	var stored recordingrender.StoredInput
-	err := r.transaction(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite}, func(queries sqlc.Querier) error {
+	err := r.transaction(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite}, func(tx pgx.Tx, queries sqlc.Querier) error {
 		inputRow, err := queries.AuthorizeRecordingRenderInput(ctx, renderAuthorityParams(authority))
 		if errors.Is(err, pgx.ErrNoRows) {
 			return recordingrender.ErrLeaseStale
@@ -260,8 +260,9 @@ func (r RecordingRenderRepository) Commit(ctx context.Context, input recordingre
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return recordingrender.CommitResult{}, err
 	}
+	var webhookMetric webhookCommitMetric
 	var result recordingrender.CommitResult
-	err := r.transaction(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable}, func(queries sqlc.Querier) error {
+	err := r.transaction(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable}, func(tx pgx.Tx, queries sqlc.Querier) error {
 		if replay, err := getRecordingRenderCommit(ctx, queries, input); err == nil {
 			result = replay
 			return nil
@@ -322,9 +323,11 @@ func (r RecordingRenderRepository) Commit(ctx context.Context, input recordingre
 			return fmt.Errorf("complete recording render: %w", err)
 		}
 		result = recordingrender.CommitResult{Artifact: mapCompletedRenderArtifact(artifact), Transcription: transcription}
-		return nil
+		webhookMetric, err = produceRecordingWebhook(ctx, tx, input.Authority.TenantID, input.Authority.RecordingID, "completed", committedAt, "")
+		return err
 	})
 	if err == nil {
+		webhookMetric.Record(ctx)
 		return result, nil
 	}
 	if replay, replayErr := getRecordingRenderCommit(ctx, r.queries, input); replayErr == nil {
@@ -346,7 +349,7 @@ func (r RecordingRenderRepository) CommitTranscriptionPreparation(ctx context.Co
 		return nil, err
 	}
 	var result *recordingrender.TranscriptionResult
-	err := r.transaction(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable}, func(queries sqlc.Querier) error {
+	err := r.transaction(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable}, func(tx pgx.Tx, queries sqlc.Querier) error {
 		if replay, err := getRecordingTranscriptionPreparationCommit(ctx, queries, input); err == nil {
 			result = replay
 			return nil
@@ -412,13 +415,13 @@ func (r RecordingRenderRepository) CommitTranscriptionPreparation(ctx context.Co
 	return nil, err
 }
 
-func (r RecordingRenderRepository) transaction(ctx context.Context, options pgx.TxOptions, work func(sqlc.Querier) error) error {
+func (r RecordingRenderRepository) transaction(ctx context.Context, options pgx.TxOptions, work func(pgx.Tx, sqlc.Querier) error) error {
 	tx, err := r.pool.BeginTx(ctx, options)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if err := work(sqlc.New(tx)); err != nil {
+	if err := work(tx, sqlc.New(tx)); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

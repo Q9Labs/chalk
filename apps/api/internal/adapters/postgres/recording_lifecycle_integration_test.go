@@ -127,6 +127,7 @@ func TestRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T) {
 		AttemptCount: 1, FencingGeneration: 1, CaptureEpoch: 1, EnvelopeDigest: envelopeDigest[:], LeaseOwner: "capture-worker", LeaseToken: "lease-token", LeaseExpiresAt: leaseExpiresAt,
 	}
 	readyInput := recordinglifecycle.ReadyInput{Authority: authority, RequestKey: "capture_ready_" + recordingID.String() + "_1", ReadyAt: time.Now().UTC(), NoPublisher: false}
+	subscribeArtifactWebhooksTx(t, ctx, transaction, tenantID)
 	ready, err := service.PublishReady(ctx, readyInput)
 	if err != nil {
 		t.Fatalf("publish ready: %v", err)
@@ -149,6 +150,10 @@ func TestRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T) {
 	assertRecordingCaptureReadyOrigin(t, ctx, transaction, recordingID, readyInput.ReadyAt)
 
 	conflictingReady := readyInput
+	var startedWebhookCount int
+	if err := transaction.QueryRow(ctx, `select count(*) from webhook_events where tenant_id=$1 and resource_id=$2 and event_name='recording.started'`, uuid(tenantID), uuid(recordingID)).Scan(&startedWebhookCount); err != nil || startedWebhookCount != 1 {
+		t.Fatalf("recording.started count=%d error=%v", startedWebhookCount, err)
+	}
 	conflictingReady.RequestKey += "_new"
 	if _, err := service.PublishReady(ctx, conflictingReady); !errors.Is(err, recordinglifecycle.ErrAuthorityMismatch) {
 		t.Fatalf("new ready operation after Sync advanced error = %v, want authority mismatch", err)

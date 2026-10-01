@@ -24,6 +24,7 @@ whitespace or trailing newline and is stored once before delivery.
 Adding optional fields is compatible with version 1. Removing or renaming a
 field, changing its JSON type or meaning, or moving an Event's authoritative
 emission boundary requires a new numeric API version and new fixtures.
-Recording and Transcript schemas are reserved contracts until their independent
-pipeline capabilities are enabled; their presence here does not authorize
-subscription or emission.
+Recording and Transcript lifecycle Events are subscribable. Recording completion
+is emitted with the verified Export MP4 commit; Transcript completion is emitted
+with the ready document commit. Capture readiness and terminal worker failures
+produce their corresponding lifecycle Events transactionally.

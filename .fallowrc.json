@@ -44,6 +44,7 @@
     "scripts/codegen/generate-effect-http-api.mjs",
     "scripts/codegen/generate-effect-schemas.mjs",
     "scripts/gates/chalk-gate-plan.mjs",
+    "scripts/integration-smoke/run.mjs",
     "scripts/recorder/analyze-media.mjs",
     "scripts/recorder/compare-frames.mjs",
     "scripts/recorder/measure-command.mjs",
@@ -56,7 +57,16 @@
   ],
   "publicPackages": ["@q9labsai/chalk-assets", "@q9labsai/chalk-client", "@q9labsai/chalk-react", "@q9labsai/chalk-react-native", "@q9labsai/chalk-ui", "@q9labsai/chalk-whiteboard", "@q9labsai/facehash"],
   "ignorePatterns": ["scripts/gates/fixtures/package-boundaries/**"],
-  "ignoreUnresolvedImports": ["../../../sdks/typescript/client/dist/effect.js", "../../../sdks/typescript/client/dist/index.js", "../../../sdks/typescript/client/dist/telemetry/index.js", "../../../sdks/typescript/client/dist/webhooks/index.js", "../dist/index.js"],
+  "ignoreUnresolvedImports": [
+    "../../../sdks/typescript/client/dist/effect.js",
+    "../../../sdks/typescript/client/dist/index.js",
+    "../../../sdks/typescript/client/dist/telemetry/index.js",
+    "../../../sdks/typescript/client/dist/webhooks/index.js",
+    "../dist/index.js",
+    "../../sdks/typescript/client/dist/index.js",
+    "../../sdks/typescript/client/dist/server/index.js",
+    "../../sdks/typescript/client/dist/webhooks/index.js"
+  ],
   "ignoreDependencies": [
     "@arethetypeswrong/cli",
     "playwright",

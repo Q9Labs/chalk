@@ -44,12 +44,9 @@ var (
 
 var CoreEventTypes = []string{
 	"episode.ended", "episode.started", "participant.joined", "participant.left",
+	"recording.started", "recording.completed", "recording.failed",
+	"transcript.started", "transcript.completed", "transcript.failed",
 	"space.archived", "space.created", "space.restored", "space.updated",
-}
-
-var reservedEventTypes = map[string]struct{}{
-	"recording.started": {}, "recording.completed": {}, "recording.failed": {},
-	"transcript.started": {}, "transcript.completed": {}, "transcript.failed": {},
 }
 
 type Endpoint struct {
