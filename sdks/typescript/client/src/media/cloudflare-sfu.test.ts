@@ -164,6 +164,64 @@ describe("Cloudflare SFU HTTP signaling", () => {
 });
 
 describe("Cloudflare SFU client", () => {
+  it("configures only camera with full and half-resolution encodings before the offer", async () => {
+    const harness = createHarness();
+    await harness.client.start(fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
+    harness.client.prepareLocalTrack("screen", new FakeTrack("screen", "video") as unknown as MediaStreamTrack);
+    await setScreenTarget(harness.client, "screen-on", true);
+    expect(harness.peers[0]?.transceiverInits).toEqual([
+      { direction: "sendonly" },
+      {
+        direction: "sendonly",
+        sendEncodings: [
+          { rid: "h", scaleResolutionDownBy: 1, maxBitrate: 2_500_000 },
+          { rid: "l", scaleResolutionDownBy: 2, maxBitrate: 650_000 },
+        ],
+      },
+      { direction: "sendonly" },
+    ]);
+    harness.client.stop();
+  });
+
+  it.each(["transceiver", "offer"])("falls back when the browser refuses simulcast at %s creation", async (stage) => {
+    const harness = createHarness();
+    const peer = harness.peers[0]!;
+    peer.refuseSimulcast = stage === "transceiver";
+    peer.refuseSimulcastOffer = stage === "offer";
+    await harness.client.start(fakeStream(new FakeTrack("camera", "video")));
+    expect(harness.client.getSnapshot().localTracks[0]?.enabled).toBe(true);
+    expect(
+      peer
+        .getSenders()
+        .filter((sender) => sender.track)
+        .map((sender) => sender.getParameters().encodings),
+    ).toEqual([[{}]]);
+    expect(peer.transceiverInits.at(-1)).toEqual({ direction: "sendonly" });
+    expect(harness.transport.addInputs).toHaveLength(1);
+    harness.client.stop();
+  });
+
+  it("preserves camera encodings across toggle, device replacement, and connection restart", async () => {
+    const harness = createHarness();
+    await harness.client.start(fakeStream(new FakeTrack("camera", "video")));
+    const sender = harness.peers[0]!.getSenders()[0]!;
+    const encodings = sender.getParameters().encodings;
+    const target = (operationId: string, enabled: boolean) => harness.client.setLocalPublicationTarget({ operationId, participantId: "participant-1", source: "camera", enabled });
+    await target("off", false);
+    await target("on", true);
+    expect(sender.getParameters().encodings).toEqual(encodings);
+    await harness.client.clearPreparedLocalTrack("camera");
+    const replacement = new FakeTrack("new-device", "video") as unknown as MediaStreamTrack;
+    harness.client.prepareLocalTrack("camera", replacement);
+    await target("new-device-on", true);
+    expect(sender.track).toBe(replacement);
+    expect(sender.getParameters().encodings).toEqual(encodings);
+    await harness.client.restart({ bootstrap: bootstrap("connection-2") });
+    expect(harness.peers.at(-1)?.getSenders()[0]?.getParameters().encodings).toEqual(encodings);
+    expect(harness.transport.addInputs.at(-1)?.connectionId).toBe("connection-2");
+    harness.client.stop();
+  });
+
   it("starts without local tracks so receive-only connections do not need getUserMedia", async () => {
     const harness = createHarness();
     await harness.client.start(fakeStream());
@@ -1187,6 +1245,9 @@ class FakePeerConnection extends EventTarget {
   closed = false;
   rollbackCalls = 0;
   throwOnCleanup = false;
+  readonly transceiverInits: RTCRtpTransceiverInit[] = [];
+  refuseSimulcast = false;
+  refuseSimulcastOffer = false;
   readonly #activeTransceivers = new Set<RTCRtpTransceiver>();
   readonly #autoConnect: boolean;
   readonly #transceivers: RTCRtpTransceiver[] = [];
@@ -1197,9 +1258,12 @@ class FakePeerConnection extends EventTarget {
     this.#autoConnect = autoConnect;
   }
 
-  addTransceiver(track: MediaStreamTrack): RTCRtpTransceiver {
+  addTransceiver(track: MediaStreamTrack, init: RTCRtpTransceiverInit = {}): RTCRtpTransceiver {
+    this.transceiverInits.push(init);
+    if (this.refuseSimulcast && init.sendEncodings) throw new DOMException("Simulcast unsupported", "NotSupportedError");
     let senderTrack: MediaStreamTrack | null = track;
     const sender = {
+      getParameters: () => ({ encodings: init.sendEncodings ?? [{}] }),
       get track() {
         return senderTrack;
       },
@@ -1226,6 +1290,7 @@ class FakePeerConnection extends EventTarget {
   }
 
   async createOffer(): Promise<RTCSessionDescriptionInit> {
+    if (this.refuseSimulcastOffer && this.getSenders().some((sender) => sender.track && sender.getParameters().encodings.length > 1)) throw new DOMException("Simulcast unsupported", "NotSupportedError");
     return { type: "offer", sdp: "browser-offer" };
   }
 

@@ -35,7 +35,7 @@ type LocalTrackState = {
 
 type PendingLocalPublication = {
   readonly state: LocalTrackState;
-  readonly transceiver: RTCRtpTransceiver;
+  transceiver: RTCRtpTransceiver;
   readonly trackName: string;
   readonly reusedTransceiver: boolean;
 };
@@ -515,16 +515,49 @@ export class CloudflareSFUClient implements ClientMediaPlane {
 
   async #prepareLocalPublication(connection: RTCPeerConnection, state: LocalTrackState, generation: number): Promise<PendingLocalPublication> {
     const reusedTransceiver = state.transceiver !== null;
-    const transceiver = state.transceiver ?? connection.addTransceiver(state.track, { direction: "sendonly" });
+    const transceiver = state.transceiver ?? this.#addLocalTransceiver(connection, state);
     if (reusedTransceiver) await this.#boundPeerOperation(transceiver.sender.replaceTrack(state.track));
     this.#requireGeneration(generation);
     state.transceiver = transceiver;
     return { state, transceiver, trackName: state.pendingTrackName ?? `${state.source}-${globalThis.crypto.randomUUID()}`, reusedTransceiver };
   }
 
+  #addLocalTransceiver(connection: RTCPeerConnection, state: LocalTrackState): RTCRtpTransceiver {
+    if (state.source !== "camera") return connection.addTransceiver(state.track, { direction: "sendonly" });
+    try {
+      return connection.addTransceiver(state.track, {
+        direction: "sendonly",
+        // 720p and 360p have a 4:1 pixel ratio; budget about 4:1 bandwidth.
+        sendEncodings: [
+          { rid: "h", scaleResolutionDownBy: 1, maxBitrate: 2_500_000 },
+          { rid: "l", scaleResolutionDownBy: 2, maxBitrate: 650_000 },
+        ],
+      });
+    } catch (error) {
+      if (!simulcastUnsupported(error)) throw error;
+      return connection.addTransceiver(state.track, { direction: "sendonly" });
+    }
+  }
+
   async #negotiateLocalPublications(connection: RTCPeerConnection, connectionId: string, publications: readonly PendingLocalPublication[], generation: number): Promise<CloudflareSFUTracksResponse> {
-    const offer = await connection.createOffer();
-    await connection.setLocalDescription(offer);
+    let offer: Parameters<RTCPeerConnection["setRemoteDescription"]>[0];
+    try {
+      offer = await connection.createOffer();
+      await connection.setLocalDescription(offer);
+    } catch (error) {
+      const cameras = publications.filter(({ state, transceiver }) => state.source === "camera" && transceiver.sender.getParameters().encodings.length > 1);
+      if (!simulcastUnsupported(error) || cameras.length === 0) throw error;
+      await this.#rollbackLocalOffer(connection);
+      this.#requireGeneration(generation);
+      for (const publication of cameras) {
+        await this.#boundPeerOperation(publication.transceiver.sender.replaceTrack(null));
+        publication.transceiver.stop();
+        publication.transceiver = connection.addTransceiver(publication.state.track, { direction: "sendonly" });
+        publication.state.transceiver = publication.transceiver;
+      }
+      offer = await connection.createOffer();
+      await connection.setLocalDescription(offer);
+    }
     const tracks = publications.map(
       ({ state, transceiver, trackName }): CloudflareSFUTrackRequest => ({
         location: "local",
@@ -1242,6 +1275,10 @@ function providerDescription(description: ReturnType<typeof requireDescription>)
 
 function retryableRemotePull(error: unknown): boolean {
   return error instanceof CloudflareSFUError && ["signaling_failed", "signaling_timeout", "media_failed", "negotiation_timeout"].includes(error.code);
+}
+
+function simulcastUnsupported(error: unknown): boolean {
+  return error instanceof Error && ["NotSupportedError", "OperationError", "TypeError"].includes(error.name);
 }
 
 function mediaTargetFailure(error: unknown): MediaPlaneResult {
