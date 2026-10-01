@@ -33,7 +33,7 @@ const spacePageTestMocks = vi.hoisted(() => {
   const holder: { chalkProps?: Record<string, unknown>; entranceProps?: Record<string, unknown> } = {};
   const journey = { headers: {}, recordDiagnostic: vi.fn(), recordHttpRequest: vi.fn(), recordRtcSummary: vi.fn() };
   const telemetry = { configureApiBaseURL: vi.fn() };
-  const clientSnapshot = { connection: { episode: { id: "33333333-3333-4333-8333-333333333333" } } };
+  const clientSnapshot = { self: { displayName: "Ada" }, media: { local: { microphone: { state: "disabled" }, camera: { state: "enabled" } } }, connection: { status: "live", episode: { id: "33333333-3333-4333-8333-333333333333" } } };
   const client = { getSnapshot: vi.fn(() => clientSnapshot), subscribe: vi.fn(() => () => undefined), media: {}, leave: vi.fn(async () => undefined), dispose: vi.fn() };
   const finish = vi.fn(async (_options?: { readonly keepalive?: boolean }) => undefined);
   const publicClient = {
@@ -44,6 +44,7 @@ const spacePageTestMocks = vi.hoisted(() => {
     leaveSpacePublicInviteArrival: vi.fn(async () => undefined),
   };
   const prepared = {
+    reloadMarker: () => ({ episodeId: "33333333-3333-4333-8333-333333333333", participantId: "participant-1", participantGeneration: 1, mediaProof: "proof", arrivalHandle: "arrival-11111111" }),
     arrival: undefined,
     credential: { apiBaseURL: "https://api.chalk.test", syncURL: "wss://sync.chalk.test/v1/sync", space: "design-lab" },
     getAccess: vi.fn(),
@@ -77,6 +78,7 @@ const spacePageTestMocks = vi.hoisted(() => {
     listAllAccountTenants: vi.fn(async () => [{ tenant: { id: "tenant-1" } }]),
     listSpaces: vi.fn(async () => ({ spaces: [], pagination: { page_size: 100, next_cursor: null, has_more: false } })),
     joinDashboardSpace: vi.fn(),
+    resumePublicSpace: vi.fn(),
   };
 });
 
@@ -91,6 +93,7 @@ vi.mock("../lib/chalk-access", () => ({
   createPublicInviteClient: getSpacePageTestMocks().createPublicInviteClient,
   createPreparedPublicSpace: getSpacePageTestMocks().createPreparedPublicSpace,
   joinDashboardSpace: getSpacePageTestMocks().joinDashboardSpace,
+  resumePublicSpace: getSpacePageTestMocks().resumePublicSpace,
 }));
 vi.mock("../lib/dashboard-api", () => ({ listAllAccountTenants: getSpacePageTestMocks().listAllAccountTenants, listSpaces: getSpacePageTestMocks().listSpaces }));
 vi.mock("../lib/local-space-client", () => ({
@@ -117,6 +120,8 @@ export const spacePageTestArrival = {
 };
 
 export function resetSpacePageTestMocks(): void {
+  window.sessionStorage.clear();
+  spacePageTestMocks.resumePublicSpace.mockReset().mockResolvedValue(spacePageTestMocks.prepared);
   window.history.replaceState({}, "", "/space");
   spacePageTestMocks.holder.chalkProps = undefined;
   spacePageTestMocks.holder.entranceProps = undefined;
