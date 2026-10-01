@@ -78,12 +78,14 @@ function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInpu
       : undefined,
     transport: createCloudflareSFUHTTPTransport({
       apiBaseURL,
+      telemetry: input.telemetry,
       credential: input.credential,
       tenantId: subject.tenantId,
       spaceId: subject.spaceId,
       episodeId: subject.episodeId,
       participantId: subject.participantId,
     }),
+    recordReconnect: input.recordReconnect,
     onError: input.onFailure,
     ...(input.recordRtcSummary ? { onRtcSummary: input.recordRtcSummary } : {}),
     onScreenEnded: input.onScreenEnded,
@@ -150,6 +152,7 @@ function createSyncClient(syncURL: string, input: ConnectionSyncFactoryInput) {
     token: input.token,
     mediaPlane: input.media,
     telemetry: input.telemetry,
+    recordReconnect: input.recordReconnect,
     persistenceScope: `${input.access.subject.tenantId}:${input.access.subject.episodeId}:${input.access.subject.participantId}`,
   });
 }

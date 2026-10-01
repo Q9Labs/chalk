@@ -1,4 +1,4 @@
-import type { ActiveReaction, Capability, ChatAttachment, ChatMessage, ChatSendInput, ChatUploadFile, ClientEventHandler, ClientEventName, IncomingMediaRequest, MediaRequestKind, Reaction, SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
+import type { ActiveReaction, Capability, ChatAttachment, ChatMessage, ChatSendInput, ChatUploadFile, ClientEventHandler, ClientEventName, IncomingMediaRequest, MediaRequestKind, OfflineActionsPolicy, Reaction, SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
 
 import { createPreviewFeedbackController } from "./preview-feedback";
 import { createPreviewMediaDevices } from "./preview-devices";
@@ -138,6 +138,11 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
       },
       stop: () => dispatch({ type: "stopRecording" }),
     },
+    offline: {
+      send: async () => updateSnapshot((current) => ({ ...current, offline: { ...current.offline, pending: [], decisionNeeded: false } })),
+      discard: async () => updateSnapshot((current) => ({ ...current, offline: { ...current.offline, pending: [], decisionNeeded: false } })),
+      setPolicy: async (policy: OfflineActionsPolicy) => updateSnapshot((current) => ({ ...current, offline: { ...current.offline, policy } })),
+    },
     whiteboard: { transport: () => null },
     join: () => dispatch({ type: "join" }),
     leave: () => dispatch({ type: "leave" }),
@@ -176,6 +181,7 @@ export function createSnapshot(capabilities: readonly Capability[] = ["sendChat"
     chat: { status: "idle", messages: [], pendingSends: [], readReceipts: [], unreadCount: 0, pagination: { cursor: null, hasOlder: false, historyTruncated: false }, lastError: null },
     reactions: { active: [] },
     recording: { current: null },
+    offline: { pending: [], decisionNeeded: false, policy: "ask" },
     whiteboard: { open: false, engine: { status: "unsubscribed", sceneId: null, revision: null, presenting: false, error: null } },
   };
 }

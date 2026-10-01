@@ -1,4 +1,4 @@
-import { createChalkPublicClient, type AccessGrant, type AccessGrantSource, type GetAccess, type PublicArrivalOptions, type PublicSpaceArrival, type PublicSpaceCreated } from "@q9labsai/chalk-client";
+import { createChalkPublicClient, reloadRejoinAccess, resumeReloadRejoin, type ReloadRejoinMarker, type AccessGrant, type AccessGrantSource, type GetAccess, type PublicArrivalOptions, type PublicSpaceArrival, type PublicSpaceCreated } from "@q9labsai/chalk-client";
 import type { SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
 import type { TelemetryJourney } from "@q9labsai/chalk-client/telemetry";
 
@@ -18,6 +18,7 @@ export type AccountSpaceCredential = {
 export type AccountSpaceAccess = {
   readonly credential: AccountSpaceCredential;
   readonly getAccess: GetAccess;
+  readonly reloadMarker: () => Pick<ReloadRejoinMarker, "episodeId" | "participantId" | "participantGeneration" | "mediaProof" | "tenantId">;
   readonly leave: (options?: SpaceAccessCleanupOptions) => Promise<void>;
   readonly inviteLink?: string;
 };
@@ -27,6 +28,7 @@ export type SpaceAccessCleanupOptions = {
 };
 
 export type PublicInviteClient = {
+  readonly prepareSpaceEntrance: (spaceInviteToken: string) => Promise<void>;
   readonly createPublicSpace: (displayName: string) => Promise<PublicSpaceCreated>;
   readonly arriveBySpacePublicInvite: (spaceInviteToken: string, displayName: string, options?: Pick<PublicArrivalOptions, "arrivalHandle">) => Promise<PublicSpaceArrival>;
   readonly getSpacePublicInviteArrival: (arrivalHandle: string) => Promise<PublicSpaceArrival>;
@@ -35,6 +37,7 @@ export type PublicInviteClient = {
 };
 
 export type PreparedPublicSpace = {
+  readonly reloadMarker: () => Pick<ReloadRejoinMarker, "episodeId" | "participantId" | "participantGeneration" | "mediaProof" | "arrivalHandle">;
   readonly arrival: PublicSpaceArrival;
   readonly credential: PublicSpaceCredential | AccountSpaceCredential;
   readonly getAccess: GetAccess;
@@ -60,6 +63,7 @@ export function createPublicInviteClient(journey?: JourneyOptions): PublicInvite
   });
 
   return {
+    prepareSpaceEntrance: (spaceInviteToken) => client.prepareSpaceEntrance(spaceInviteToken),
     createPublicSpace: (displayName) => client.createPublicSpace({ displayName }, { idempotencyKey: requestKey() }),
     arriveBySpacePublicInvite: (spaceInviteToken, displayName, options) => client.arriveBySpacePublicInvite({ spaceInviteToken, displayName }, { idempotencyKey: requestKey(), ...(options?.arrivalHandle === undefined ? {} : { arrivalHandle: options.arrivalHandle }) }),
     getSpacePublicInviteArrival: (arrivalHandle) => client.getSpacePublicInviteArrival({ arrivalHandle }),
@@ -68,9 +72,14 @@ export function createPublicInviteClient(journey?: JourneyOptions): PublicInvite
   };
 }
 
-export async function joinDashboardSpace(tenantID: string, spaceSlug: string, displayName: string, journey?: JourneyOptions): Promise<AccountSpaceAccess> {
+export async function prepareDashboardEntrance(tenantID: string, spaceID: string, journey?: JourneyOptions): Promise<void> {
+  await dashboardRequest(`/api/tenants/${encodeURIComponent(tenantID)}/spaces/${encodeURIComponent(spaceID)}/entrance`, "POST", undefined, journey);
+}
+
+export async function joinDashboardSpace(tenantID: string, spaceSlug: string, displayName: string, journey?: JourneyOptions, reload?: ReloadRejoinMarker): Promise<AccountSpaceAccess> {
   const path = `/api/tenants/${encodeURIComponent(tenantID)}/spaces/by-slug/${encodeURIComponent(spaceSlug)}/participants/self`;
-  const current = dashboardGrant(await dashboardRequest(path, "POST", { display_name: displayName }, journey));
+  const current = dashboardGrant(await dashboardRequest(reload ? `${path}/access-grants` : path, "POST", reload ? { participant_generation: reload.participantGeneration, replace_media_connection: true, current_media_token: reload.mediaProof } : { display_name: displayName }, journey));
+  if (reload) await resumeReloadRejoin(reload, async () => current.access);
   const inviteLink = await dashboardInviteLink(current.tenantID, current.spaceID, journey);
   let active = current;
   let initial = true;
@@ -105,6 +114,7 @@ export async function joinDashboardSpace(tenantID: string, spaceSlug: string, di
   };
 
   return {
+    reloadMarker: () => ({ ...reloadRejoinAccess(active.access), tenantId: active.tenantID }),
     credential: { apiBaseURL: publicAPIBaseURL(), space: active.spaceID, access: active.access, participantGeneration: active.participantGeneration },
     getAccess,
     leave,
@@ -139,6 +149,7 @@ export function createPreparedPublicSpace(client: PublicInviteClient, arrival: P
   };
 
   return {
+    reloadMarker: () => ({ ...reloadRejoinAccess(current), arrivalHandle: arrival.arrival_handle ?? undefined }),
     arrival,
     credential: { apiBaseURL: publicAPIBaseURL(), syncURL: publicSyncURL(publicAPIBaseURL()), space: publicSpaceSlug(arrival) },
     getAccess,
@@ -147,14 +158,14 @@ export function createPreparedPublicSpace(client: PublicInviteClient, arrival: P
   };
 }
 
-export function publicAPIBaseURL(): string {
+function publicAPIBaseURL(): string {
   const configured = import.meta.env.VITE_API_URL?.trim();
   if (configured) return configured;
   if (globalThis.location?.origin) return globalThis.location.origin;
   return defaultAPIOrigin;
 }
 
-export function publicSyncURL(apiBaseURL: string): string {
+function publicSyncURL(apiBaseURL: string): string {
   const configured = import.meta.env.VITE_CHALK_SYNC_URL?.trim();
   if (configured) return configured;
   const url = new URL(apiBaseURL);
@@ -258,4 +269,12 @@ function publicSpaceSlug(arrival: PublicSpaceArrival): string {
   const slug = arrival.space?.slug?.trim();
   if (!slug) throw new Error("This Space is unavailable.");
   return slug;
+}
+
+export async function resumePublicSpace(client: PublicInviteClient, marker: ReloadRejoinMarker): Promise<PreparedPublicSpace> {
+  if (!marker.arrivalHandle) throw new Error("This Space is unavailable.");
+  const arrival = await client.getSpacePublicInviteArrival(marker.arrivalHandle);
+  if (arrival.state !== "admitted" || arrival.space?.slug !== marker.space) throw new Error("This Space is unavailable.");
+  const access = await resumeReloadRejoin(marker, () => client.refreshSpacePublicInviteAccess(marker.arrivalHandle ?? "", marker.mediaProof, { replaceMediaConnection: true }));
+  return createPreparedPublicSpace(client, { ...arrival, access });
 }

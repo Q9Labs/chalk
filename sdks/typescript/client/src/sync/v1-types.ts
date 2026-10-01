@@ -1,3 +1,4 @@
+import type { ReconnectRecorder } from "../telemetry/reconnect";
 import type { SyncV1ServerFrame } from "../generated/sync";
 import type { JourneyTelemetryContext } from "../telemetry/types";
 import type { ClientMediaPlane, MediaPlaneOutcome, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaSource } from "../media/plane";
@@ -102,7 +103,7 @@ export type V1SelfMediaTargetResult = {
 };
 
 export type V1EpisodeSnapshot = {
-  readonly connection: { readonly phase: V1ConnectionPhase; readonly terminalReason?: string };
+  readonly connection: { readonly phase: V1ConnectionPhase; readonly terminalReason?: string; readonly noticeUnresponsive?: boolean };
   readonly participantId: string | null;
   readonly participantGeneration: number | null;
   readonly control: V1ControlState | null;
@@ -187,6 +188,7 @@ export type V1SyncClientOptions = {
   readonly maxOperationPendingAgeMs?: number;
   readonly retryDelayMs?: number;
   readonly collaboration?: V1CollaborationExtensionRequest | false;
+  readonly recordReconnect?: ReconnectRecorder;
   readonly telemetry?: JourneyTelemetryContext;
   readonly maxPendingCollaborationRequests?: number;
 };

@@ -1,3 +1,4 @@
+import { recordInitialConnection, recordReconnect } from "../telemetry/reconnect";
 import { Clock, Context, Data, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, SubscriptionRef } from "effect";
 import type { ConnectionMediaSnapshot } from "../media";
 import type { V1EpisodeSnapshot } from "../sync";
@@ -64,6 +65,7 @@ type Model = {
   sync: ConnectionSyncClient | null;
   media: ConnectionMediaClient | null;
   syncSnapshot: V1EpisodeSnapshot | null;
+  syncNoticeUnresponsive: boolean;
   mediaSnapshot: ConnectionMediaSnapshot | null;
   failure: ConnectionFailure | null;
   initialMedia: InitialMedia;
@@ -144,6 +146,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         sync: null,
         media: null,
         syncSnapshot: null,
+        syncNoticeUnresponsive: false,
         mediaSnapshot: null,
         failure: null,
         initialMedia: (intent) =>
@@ -247,6 +250,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           model.sync = null;
           model.media = null;
           model.syncSnapshot = null;
+          model.syncNoticeUnresponsive = false;
           model.mediaSnapshot = null;
           yield* emitPorts();
           if (scope) yield* Scope.close(scope, Exit.void);
@@ -256,9 +260,17 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       const bindSync = (scope: Scope.Closeable, sync: ConnectionSyncClient): Effect.Effect<void> =>
         Effect.gen(function* () {
           model.syncBindingCleanup?.();
+          model.syncNoticeUnresponsive = false;
           let latestSnapshot: V1EpisodeSnapshot | null = null;
           let snapshotQueued = false;
           const unsubscribe = sync.subscribe((snapshot) => {
+            if (sync === model.sync && snapshot.connection.phase === "live") {
+              const notice = snapshot.connection.noticeUnresponsive === true;
+              if (notice !== model.syncNoticeUnresponsive) {
+                model.syncNoticeUnresponsive = notice;
+                void Effect.runForkWith(context)(publish());
+              }
+            }
             latestSnapshot = snapshot;
             if (snapshotQueued) return;
             snapshotQueued = true;
@@ -322,7 +334,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         );
       const trace = <A, E>(step: Exclude<ConnectionJoinTraceStep, "join">, effect: Effect.Effect<A, E>): Effect.Effect<A, E> => {
         const span = diagnostics.startSpan({ step, state: model.state, epoch: model.epoch });
-        return effect.pipe(
+        return traceRecovery(step, effect, recordInitialConnection).pipe(
           Effect.tap(() => Effect.sync(() => span.end({ state: model.state, epoch: model.epoch, outcome: "succeeded" }))),
           Effect.tapError(() => Effect.sync(() => span.end({ state: model.state, epoch: model.epoch, outcome: "failed" }))),
         );
@@ -352,6 +364,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                     access: grant,
                     credential: () => toPromise(access.getMediaToken()),
                     replaceMediaConnection: () => toPromise(access.refresh("media_recovery", true)).then((replacement) => replacement.media),
+                    recordReconnect: options.recordReconnect,
+                    telemetry: options.telemetry,
                     ...(options.recordRtcSummary ? { recordRtcSummary: options.recordRtcSummary } : {}),
                     onFailure: () => enqueueBackground(handleMediaFailure()),
                     onScreenEnded: () => enqueueBackground(notifyScreenEnded()),
@@ -363,7 +377,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             const sync = yield* trace(
               "create_sync_client",
               Effect.try({
-                try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, telemetry: options.telemetry }),
+                try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, telemetry: options.telemetry, recordReconnect: options.recordReconnect }),
                 catch: (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : lifecycleFailure("sync_start_failed", true, "The sync layer could not start", cause)),
               }),
             );
@@ -452,6 +466,20 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             }),
           );
         });
+      const traceRecovery = <A, E>(step: string, operation: Effect.Effect<A, E>, recordStep = recordReconnect): Effect.Effect<A, E> =>
+        Effect.gen(function* () {
+          const started = yield* Clock.currentTimeMillis;
+          recordStep(options.recordReconnect, step, { boundary: "start" });
+          return yield* operation.pipe(
+            Effect.onExit((exit) =>
+              Clock.currentTimeMillis.pipe(
+                Effect.map((now) => {
+                  recordStep(options.recordReconnect, step, { boundary: "end", duration_ms: Math.max(0, now - started) }, exit._tag === "Success" ? "succeeded" : "failed");
+                }),
+              ),
+            ),
+          );
+        });
       const recover = (kind: RecoveryKind): Effect.Effect<void> =>
         Effect.gen(function* recoverEffect() {
           if (!active(model)) return;
@@ -477,10 +505,11 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           for (let attempt = 1; attempt <= plan.attempts; attempt += 1) {
             const remaining = plan.deadline - (yield* Clock.currentTimeMillis);
             if (remaining <= 0) return null;
+            recordReconnect(options.recordReconnect, "attempt", { recovery_kind: plan.kind, attempt });
             diagnostics.record({ event: "recovery_attempt", state: model.state, epoch: model.epoch, attempt });
             const outcome = yield* Effect.exit(recoveryOperation(plan.kind).pipe(Effect.timeout(remaining)));
             if (outcome._tag === "Success") return attempt;
-            if (attempt < plan.attempts) yield* Effect.sleep(recoveryDelay(plan, attempt));
+            if (attempt < plan.attempts) yield* traceRecovery("lifecycle_backoff", Effect.sleep(recoveryDelay(plan, attempt)));
           }
           return null;
         });
@@ -507,9 +536,13 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           const media = model.media;
           const sync = model.sync;
           if (!media || !sync) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Media recovery requires active ports"));
-          const grant = yield* access.refresh("media_recovery", true).pipe(Effect.mapError(accessFailure));
+          recordReconnect(options.recordReconnect, "media_decision", { strategy: "full_rebuild" });
+          const grant = yield* traceRecovery("access_refresh", access.refresh("media_recovery", true).pipe(Effect.mapError(accessFailure)));
           const restartInput = grant.media.provider === "cloudflare_sfu" ? grant.media.clientPayload : grant.media;
-          yield* foreign(() => media.restart(restartInput));
+          yield* traceRecovery(
+            "media_rebuild",
+            foreign(() => media.restart(restartInput)),
+          );
           model.mediaSnapshot = media.getSnapshot();
           yield* waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60_000));
         });
@@ -523,7 +556,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           model.syncBindingCleanup?.();
           model.sync = null;
           const sync = yield* Effect.try({
-            try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, telemetry: options.telemetry }),
+            try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, telemetry: options.telemetry, recordReconnect: options.recordReconnect }),
             catch: (cause) => lifecycleFailure("sync_start_failed", true, "The sync layer could not start", cause),
           });
           model.sync = sync;
@@ -689,7 +722,7 @@ function snapshotFor(model: Model, access: ParsedAccessGrant | null): Connection
     state: model.state,
     subject: subjectFor(access),
     episode: episodeFor(access, control),
-    connection: Object.freeze({ sync: syncPhase(model.syncSnapshot?.connection.phase), media: mediaPhase(model.mediaSnapshot?.connection.phase) }),
+    connection: Object.freeze({ sync: model.syncSnapshot?.connection.phase === "live" && model.syncNoticeUnresponsive ? "unresponsive" : syncPhase(model.syncSnapshot?.connection.phase), media: mediaPhase(model.mediaSnapshot?.connection.phase) }),
     failure: model.failure ? Object.freeze({ ...model.failure }) : null,
   });
 }

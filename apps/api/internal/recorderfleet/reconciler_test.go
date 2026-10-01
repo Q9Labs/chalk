@@ -74,6 +74,35 @@ func TestReconcilerTransitionsZeroToReadyAndDrainsToZero(t *testing.T) {
 	}
 }
 
+func TestEntrancePreparationConsumptionReusesWarmNode(t *testing.T) {
+	fixture := newFleetFixture(t)
+	reconciler := fixture.reconciler(t)
+	for i := 0; i < 3; i++ {
+		fixture.step(t, reconciler)
+	}
+	node := fixture.provider.onlyNode(t)
+	fixture.runtime.observations = []NodeObservation{{Identity: fixture.bootstrap.identity(node), Ready: true, AdmissionOpen: true, ReadyCapacity: fixture.config.SlotsPerNode, ObservedAt: fixture.now}}
+	fixture.step(t, reconciler)
+	// Preparation demand becomes Recording demand, but the fleet target stays one.
+	fixture.demand.value = Demand{Revision: "recording-consumed-preparation", DesiredNodes: 1, ObservedAt: fixture.now}
+	result := fixture.step(t, reconciler)
+	if result.Action != ActionCapacityPublished || fixture.provider.ensureCalls != 1 || fixture.provider.onlyNode(t).ProviderID != node.ProviderID {
+		t.Fatalf("consumption allocated another node: %+v", result)
+	}
+	fixture.demand.value = Demand{Revision: "abandoned-entrance", DesiredNodes: 0, ObservedAt: fixture.now}
+	if result := fixture.step(t, reconciler); result.Action != ActionAdmissionClosed {
+		t.Fatalf("expiry did not drain: %+v", result)
+	}
+	fixture.runtime.observations[0].AdmissionOpen = false
+	fixture.runtime.observations[0].Ready = false
+	if result := fixture.step(t, reconciler); result.Action != ActionIdentityRevoked {
+		t.Fatalf("idle expiry did not revoke: %+v", result)
+	}
+	if result := fixture.step(t, reconciler); result.Action != ActionNodeDeleted {
+		t.Fatalf("idle expiry did not delete: %+v", result)
+	}
+}
+
 func TestReconcilerBootstrapsReplacementBeforeDrainingStaleReadyNode(t *testing.T) {
 	fixture := newFleetFixture(t)
 	oldRequest := fixture.ensureRequest(1)

@@ -177,6 +177,11 @@ export function createPreviewStore(search: PreviewSearch): SpaceClient {
         update((current) => (current.recording.current ? { ...current, recording: { current: { ...current.recording.current, status: "stopped" } } } : current));
       },
     },
+    offline: {
+      send: async () => update((current) => ({ ...current, offline: { ...current.offline, pending: [], decisionNeeded: false } })),
+      discard: async () => update((current) => ({ ...current, offline: { ...current.offline, pending: [], decisionNeeded: false } })),
+      setPolicy: async (policy) => update((current) => ({ ...current, offline: { ...current.offline, policy } })),
+    },
     whiteboard: { transport: () => createPreviewWhiteboardTransport() },
     join: async () => {
       update(createPreviewSnapshot({ ...search, state: "happy" }));
@@ -279,6 +284,7 @@ export function createPreviewSnapshot(search: PreviewSearch): SpaceSnapshot {
     chat: chatFor(search),
     reactions: { active: PREVIEW_REACTIONS },
     recording: { current: null },
+    offline: { pending: [], decisionNeeded: false, policy: "ask" },
     whiteboard: { open: search.stage === "whiteboard", engine: { status: "ready", sceneId: "preview-board", revision: "1", presenting: search.stage === "whiteboard", error: null } },
   };
 }

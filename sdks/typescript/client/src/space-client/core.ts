@@ -1,3 +1,4 @@
+import type { ReconnectRecorder } from "../telemetry/reconnect";
 import { Clock, Context, Duration, Effect, Layer } from "effect";
 import { requireParsedAccessGrant, type AccessGrant, type ParsedAccessGrant } from "../access/grant";
 import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type ConnectionLifecycleCapability } from "../connection";
@@ -41,6 +42,7 @@ export type SpaceClientPlatform = {
   readonly syncStartupTimeoutMs?: number;
   readonly initialMicrophoneEnabled?: boolean;
   readonly initialCameraEnabled?: boolean;
+  readonly recordReconnect?: ReconnectRecorder;
   readonly telemetry?: JourneyTelemetryContext;
   readonly recordRtcSummary?: CloudflareSFURtcSummaryRecorder;
   readonly onConnectionDiagnostic?: (event: ConnectionDiagnostic) => void;
@@ -85,6 +87,7 @@ export const makeSpaceClientCoreLayer = (options: SpaceClientOptions, platform: 
     initialCameraEnabled: platform.initialCameraEnabled,
     telemetry: platform.telemetry,
     recordRtcSummary: platform.recordRtcSummary,
+    recordReconnect: platform.recordReconnect,
     dependencies,
     diagnostics: {
       onEvent: (event) => {
@@ -111,7 +114,17 @@ export const makeSpaceClientCoreLayerFromServices = (options: SpaceClientOptions
       const selection = new MediaDeviceSelection(dependencies.mediaDevices);
       const episodeDiagnostics = episodeDiagnosticsForDependencies(dependencies);
       if (episodeDiagnostics) registerEpisodeDiagnosticConnection(lifecycle, episodeDiagnostics);
-      const controllers = yield* makeControllerEffects({ apiBaseUrl, connection: lifecycle, store, mediaDeviceSelection: selection, featureFactories: dependencies, fetch: platform.fetch, episodeDiagnostics });
+      const controllers = yield* makeControllerEffects({
+        offlineActionsStorage: options.offlineActionsStorage,
+        offlineActionsStorageKey: `chalk:offline-actions:${JSON.stringify([apiBaseUrl, space])}`,
+        apiBaseUrl,
+        connection: lifecycle,
+        store,
+        mediaDeviceSelection: selection,
+        featureFactories: dependencies,
+        fetch: platform.fetch,
+        episodeDiagnostics,
+      });
       return yield* Effect.acquireRelease(
         Effect.sync(
           () =>

@@ -1,4 +1,5 @@
 import { Context, Effect, Layer } from "effect";
+import type { OfflineActionsHold } from "./offline-actions";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import type { ChalkParticipantMediaState } from "../collaboration/types";
 import type { EpisodeDiagnosticRuntime } from "./episode-diagnostic-runtime";
@@ -30,9 +31,9 @@ export type ParticipantsControllerEffects = {
 export class ParticipantsControllerService extends Context.Service<ParticipantsControllerService, ParticipantsControllerEffects>()("@chalk/client/ParticipantsController") {}
 
 /** Scoped owner of participant subscriptions and native port commands. */
-export const makeParticipantsController = (connection: ConnectionLifecycleCapability, store: SpaceStore, diagnostics?: EpisodeDiagnosticRuntime): Effect.Effect<ParticipantsControllerEffects, never, import("effect").Scope.Scope> =>
+export const makeParticipantsController = (connection: ConnectionLifecycleCapability, store: SpaceStore, diagnostics?: EpisodeDiagnosticRuntime, offline?: OfflineActionsHold): Effect.Effect<ParticipantsControllerEffects, never, import("effect").Scope.Scope> =>
   Effect.acquireRelease(
-    Effect.sync(() => new ParticipantsControllerRuntime(connection, store, diagnostics)),
+    Effect.sync(() => new ParticipantsControllerRuntime(connection, store, diagnostics, offline)),
     (controller) => Effect.sync(() => controller.dispose()),
   );
 
@@ -42,10 +43,12 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
   readonly #connection: ConnectionLifecycleCapability;
   readonly #store: SpaceStore;
   readonly #diagnostics: EpisodeDiagnosticRuntime | undefined;
+  readonly #offline: OfflineActionsHold | undefined;
   #unsubscribePorts: (() => void) | null = null;
   #unsubscribe: (() => void) | null = null;
 
-  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, diagnostics?: EpisodeDiagnosticRuntime) {
+  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, diagnostics?: EpisodeDiagnosticRuntime, offline?: OfflineActionsHold) {
+    this.#offline = offline;
     this.#connection = connection;
     this.#store = store;
     this.#diagnostics = diagnostics;
@@ -102,22 +105,20 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
       return ({ sync }) => foreign(() => sync.deny(requestId));
     });
 
-  raiseHand = (): ClientEffect<void> =>
-    this.#command(
-      "participant.raised_hand.set",
-      ["membership_transition", "participant_result"],
-      () =>
-        ({ sync }) =>
-          foreign(() => sync.setHandRaised(true)),
-    );
-  lowerHand = (): ClientEffect<void> =>
-    this.#command(
-      "participant.raised_hand.set",
-      ["membership_transition", "participant_result"],
-      () =>
-        ({ sync }) =>
-          foreign(() => sync.setHandRaised(false)),
-    );
+  raiseHand = (): ClientEffect<void> => this.#setHandRaised(true);
+  lowerHand = (): ClientEffect<void> => this.#setHandRaised(false);
+
+  #setHandRaised(raised: boolean): ClientEffect<void> {
+    const send = () =>
+      this.#command(
+        "participant.raised_hand.set",
+        ["membership_transition", "participant_result"],
+        () =>
+          ({ sync }) =>
+            foreign(() => sync.setHandRaised(raised)),
+      );
+    return this.#offline?.hold({ kind: raised ? "hand_raise" : "hand_lower" }, send) ?? send();
+  }
 
   renameSelf = (displayName: string): ClientEffect<void> =>
     this.#command("participant.rename", ["membership_transition", "participant_result"], () => {

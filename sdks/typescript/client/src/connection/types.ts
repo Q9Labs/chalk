@@ -139,7 +139,7 @@ export class ConnectionError extends Error {
   }
 }
 
-export type ConnectionConnectionPhase = "idle" | "connecting" | "healthy" | "recovering" | "failed" | "stopped";
+export type ConnectionConnectionPhase = "idle" | "connecting" | "healthy" | "unresponsive" | "recovering" | "failed" | "stopped";
 export type ChalkMediaSource = "microphone" | "camera" | "screen";
 export type ChalkParticipantRole = string;
 export type ChalkAssignableParticipantRole = string;

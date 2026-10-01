@@ -1,3 +1,4 @@
+import type { ReconnectRecorder } from "../telemetry/reconnect";
 import type { AccessSubject } from "../access/grant";
 import type { CloudflareSFURtcSummaryRecorder } from "../media";
 import type { ConnectionDiagnostic } from "./diagnostics";
@@ -23,6 +24,7 @@ export type ConnectionOptions = {
   readonly syncStartupTimeoutMs?: number;
   readonly initialMicrophoneEnabled?: boolean;
   readonly initialCameraEnabled?: boolean;
+  readonly recordReconnect?: ReconnectRecorder;
   readonly telemetry?: JourneyTelemetryContext;
   readonly recordRtcSummary?: CloudflareSFURtcSummaryRecorder;
   readonly accessRefreshWindowMs?: number;

@@ -1,0 +1,59 @@
+smoke arm=a attempt=1 eligible=1 total=1 invalid=0 runner_exit=0
+smoke arm=b attempt=1 eligible=1 total=1 invalid=0 runner_exit=0
+RESUME drop-5000 A=0/0 B=0/0
+drop-5000 arm=a attempt=1 eligible=1 total=1 invalid=0 runner_exit=0
+drop-5000 arm=b attempt=1 eligible=1 total=1 invalid=0 runner_exit=0
+drop-5000 arm=a attempt=2 eligible=2 total=2 invalid=0 runner_exit=0
+drop-5000 arm=b attempt=2 eligible=2 total=2 invalid=0 runner_exit=0
+drop-5000 arm=a attempt=3 eligible=3 total=3 invalid=0 runner_exit=0
+drop-5000 arm=b attempt=3 eligible=3 total=3 invalid=0 runner_exit=0
+drop-5000 arm=a attempt=4 eligible=4 total=4 invalid=0 runner_exit=0
+drop-5000 arm=b attempt=4 eligible=4 total=4 invalid=0 runner_exit=0
+drop-5000 arm=a attempt=5 eligible=5 total=5 invalid=0 runner_exit=0
+drop-5000 arm=b attempt=5 eligible=5 total=5 invalid=0 runner_exit=0
+drop-5000 arm=a attempt=6 eligible=6 total=6 invalid=0 runner_exit=0
+drop-5000 arm=b attempt=6 eligible=6 total=6 invalid=0 runner_exit=0
+drop-5000 arm=a attempt=7 eligible=7 total=7 invalid=0 runner_exit=0
+drop-5000 arm=b attempt=7 eligible=7 total=7 invalid=0 runner_exit=0
+drop-5000 arm=a attempt=8 eligible=8 total=8 invalid=0 runner_exit=0
+drop-5000 arm=b attempt=8 eligible=8 total=8 invalid=0 runner_exit=0
+drop-5000 arm=a attempt=9 eligible=9 total=9 invalid=0 runner_exit=0
+drop-5000 arm=b attempt=9 eligible=9 total=9 invalid=0 runner_exit=0
+drop-5000 arm=a attempt=10 eligible=10 total=10 invalid=0 runner_exit=0
+drop-5000 arm=b attempt=10 eligible=9 total=10 invalid=1 runner_exit=1
+drop-5000 arm=b attempt=11 eligible=10 total=11 invalid=1 runner_exit=0
+DONE drop-5000 A=10/10 B=10/11
+RESUME sync-restart A=0/0 B=0/0
+sync-restart arm=a attempt=1 eligible=1 total=1 invalid=0 runner_exit=0
+sync-restart arm=b attempt=1 eligible=1 total=1 invalid=0 runner_exit=0
+sync-restart arm=a attempt=2 eligible=2 total=2 invalid=0 runner_exit=0
+sync-restart arm=b attempt=2 eligible=2 total=2 invalid=0 runner_exit=0
+sync-restart arm=a attempt=3 eligible=3 total=3 invalid=0 runner_exit=0
+sync-restart arm=b attempt=3 eligible=3 total=3 invalid=0 runner_exit=0
+sync-restart arm=a attempt=4 eligible=4 total=4 invalid=0 runner_exit=0
+sync-restart arm=b attempt=4 eligible=4 total=4 invalid=0 runner_exit=0
+sync-restart arm=a attempt=5 eligible=5 total=5 invalid=0 runner_exit=0
+sync-restart arm=b attempt=5 eligible=5 total=5 invalid=0 runner_exit=0
+DONE sync-restart A=5/5 B=5/5
+RESUME flapping A=0/0 B=0/0
+flapping arm=a attempt=1 eligible=1 total=1 invalid=0 runner_exit=0
+flapping arm=b attempt=1 eligible=1 total=1 invalid=0 runner_exit=0
+flapping arm=a attempt=2 eligible=2 total=2 invalid=0 runner_exit=0
+flapping arm=b attempt=2 eligible=2 total=2 invalid=0 runner_exit=0
+flapping arm=a attempt=3 eligible=3 total=3 invalid=0 runner_exit=0
+flapping arm=b attempt=3 eligible=3 total=3 invalid=0 runner_exit=0
+flapping arm=a attempt=4 eligible=4 total=4 invalid=0 runner_exit=0
+flapping arm=b attempt=4 eligible=4 total=4 invalid=0 runner_exit=0
+flapping arm=a attempt=5 eligible=5 total=5 invalid=0 runner_exit=0
+flapping arm=b attempt=5 eligible=5 total=5 invalid=0 runner_exit=0
+flapping arm=a attempt=6 eligible=6 total=6 invalid=0 runner_exit=0
+flapping arm=b attempt=6 eligible=6 total=6 invalid=0 runner_exit=0
+flapping arm=a attempt=7 eligible=7 total=7 invalid=0 runner_exit=0
+flapping arm=b attempt=7 eligible=7 total=7 invalid=0 runner_exit=0
+flapping arm=a attempt=8 eligible=8 total=8 invalid=0 runner_exit=0
+flapping arm=b attempt=8 eligible=8 total=8 invalid=0 runner_exit=0
+flapping arm=a attempt=9 eligible=9 total=9 invalid=0 runner_exit=0
+flapping arm=b attempt=9 eligible=9 total=9 invalid=0 runner_exit=0
+flapping arm=a attempt=10 eligible=10 total=10 invalid=0 runner_exit=0
+flapping arm=b attempt=10 eligible=10 total=10 invalid=0 runner_exit=0
+DONE flapping A=10/10 B=10/10

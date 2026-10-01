@@ -42,6 +42,35 @@ Verify a rejected append → monitor failure → restored intake → successful 
 
 ## Limits
 
+### Capture Entrance preparations
+
+`recording.entrance.prewarmed` is emitted after an Automatic Space's Entrance
+preparation commits. Repeated opens within its five-minute lifetime do not emit
+another creation or extend the deadline. `recording.preparation.consumed` carries
+`consumed=true` when Recording admission replaces preparation demand, and
+`consumed=false` for a cold admission. These structured logs use request context
+for correlation and never contain invite tokens or participant details.
+`recording.entrance.failed` reports preparation failures; public requests also
+use the standard `public_invite.request` log/span with success, rejection, and
+failure outcomes. The HTTP proof checks successful and rejected Entrance
+requests through this middleware, including invite-token exclusion from logs.
+
+Public Entrance requests require a verified, enabled, current-generation invite;
+a Space slug is not sufficient. Dashboard requests require Tenant Space-read
+access. Manual, Disabled, archived, and already-recording Spaces do not pre-warm.
+Opening an Entrance advances a future preparation to now using its current
+revision. No schema migration or new fleet provisioning path is required.
+
+Demand expires exactly five minutes after preparation. With the default healthy
+five-second reconciliation cadence, an isolated idle node closes admission,
+revokes identity, and is deleted within three more reconciliations: at most
+5m15s, approximately $0.0007814 at $0.00893/hour. Missing observations can use the
+existing five-minute drain timeout: conservatively 10m15s, approximately
+$0.0015256. These are controller-time bounds for an isolated node, not a provider
+billing guarantee: other fleet transitions, controller outages, or failed
+provider deletion can delay cleanup. Preparations are unique per Tenant/Space,
+and total preparation demand is capped at ten minus active base demand.
+
 Provider analytics/logs/webhooks require deployment-specific account connectors. Local checks cover Chalk adapters and endpoint observations, not Cloudflare's internal SFU behavior.
 
 Pre-runtime events, hard crashes before export, unregistered native peer connections, device/carrier internals, and provider actions with no visible output can remain unobserved. Leave unattributable connections unassigned. Use journey sequence and receive time without claiming perfect clock ordering. Expose exporter drops/failures and pipeline-canary alerts instead of implying complete coverage.

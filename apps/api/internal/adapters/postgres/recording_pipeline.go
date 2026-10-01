@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -283,6 +284,7 @@ func (r RecordingPipelineRepository) Reserve(ctx context.Context, input recordin
 		}
 		return recordingpipeline.Reservation{}, fmt.Errorf("reserve recording capacity: %w", err)
 	}
+	slog.InfoContext(ctx, "Recording Capture preparation consumption", "event", "recording.preparation.consumed", "consumed", row.PreparationConsumed)
 	return mapReservation(row), nil
 }
 

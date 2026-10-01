@@ -30,11 +30,17 @@ export type {
   JoinOptions,
   LocalMedia,
   Logger,
+  OfflineAction,
+  OfflineActionKind,
+  OfflineActionsPolicy,
+  OfflineController,
+  OfflineSlice,
   MediaController,
   MediaDevice,
   MediaRequestKind,
   MediaSlice,
   Participant,
+  PendingChatSend,
   ParticipantPresence,
   ParticipantsController,
   ParticipantsSlice,
@@ -52,3 +58,5 @@ export type {
   WhiteboardController,
   WhiteboardSlice,
 } from "./types";
+export { reloadRejoinAccess, readReloadRejoin, writeReloadRejoin, resumeReloadRejoin, reloadRejoinStorageKey } from "./reload-rejoin";
+export type { ReloadRejoinMarker } from "./reload-rejoin";

@@ -88,6 +88,7 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
       initialMicrophoneEnabled: options.microphone,
       initialCameraEnabled: options.camera,
       onConnectionDiagnostic: (event) => journey?.recordDiagnostic(connectionDiagnostic(event)),
+      ...(journey ? { recordReconnect: (observation) => journey.recordDiagnostic(observation) } : {}),
       feedbackSource: options.feedbackSource ?? "embedded",
     },
   );
@@ -153,6 +154,7 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
     participantId: subject.participantId,
     transport: createCloudflareSFUHTTPTransport({
       apiBaseURL,
+      telemetry: input.telemetry,
       credential: () => authenticatedNativeCredential(input.credential, journey),
       tenantId: subject.tenantId,
       spaceId: subject.spaceId,
@@ -172,6 +174,7 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
       observePeerConnection?.(connection as unknown as RtcPeerConnection);
       return connection as unknown as globalThis.RTCPeerConnection;
     },
+    recordReconnect: input.recordReconnect,
     onError: input.onFailure,
     onScreenEnded: input.onScreenEnded,
   });
@@ -227,6 +230,7 @@ function createSyncClient(syncURL: string, input: SyncFactoryInput, lifecycle: R
     lifecycle,
     webSocket,
     telemetry: input.telemetry,
+    recordReconnect: input.recordReconnect,
     ...(storage ? { pendingStore: new AsyncStorageV1PendingTargetStore({ scope, storage }) } : {}),
   });
 }

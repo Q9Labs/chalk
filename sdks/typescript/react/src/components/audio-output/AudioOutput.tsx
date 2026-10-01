@@ -28,6 +28,8 @@ export interface AudioOutputProps {
   audioOutputDeviceId?: string;
   /** Per-participant volume override (0-1). Takes precedence over volume prop. */
   getParticipantVolume?: (participantId: string) => number;
+  /** Label for the single prompt shown when the browser blocks playback. */
+  resumeAudioLabel?: string;
 }
 
 /**
@@ -39,7 +41,7 @@ type SinkAwareAudioElement = HTMLAudioElement & {
   sinkId?: string;
 };
 
-export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, getParticipantVolume }: AudioOutputProps) {
+export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, getParticipantVolume, resumeAudioLabel = "Resume audio" }: AudioOutputProps) {
   const media = useMedia();
   const participantState = useParticipants();
   const volumeContext = useParticipantVolumeContext();
@@ -66,6 +68,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
   // retry play() on the next interaction. Without this, audio can stay silent.
   const pendingAutoplayRetryRef = useRef<Set<HTMLMediaElement>>(new Set());
   const [needsAutoplayUnlock, setNeedsAutoplayUnlock] = useState(false);
+  const resumeAudioRef = useRef<(() => Promise<void>) | null>(null);
 
   const markAutoplayBlocked = (el: HTMLMediaElement) => {
     pendingAutoplayRetryRef.current.add(el);
@@ -159,6 +162,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
       }
     };
 
+    resumeAudioRef.current = tryUnlock;
     const handler = () => {
       void tryUnlock();
     };
@@ -219,10 +223,13 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
         audioEl.srcObject = stream;
 
         // Handle autoplay restrictions
-        audioEl.play().catch(() => {
-          // Autoplay was blocked - retry on next user interaction.
-          markAutoplayBlocked(audioEl!);
-        });
+        const attachedElement = audioEl;
+        audioEl
+          .play()
+          .then(() => clearAutoplayRetryForElement(attachedElement))
+          .catch((cause: unknown) => {
+            if (cause instanceof DOMException && cause.name === "NotAllowedError" && audioElements.get(id) === attachedElement && attachedElement.srcObject === stream) markAutoplayBlocked(attachedElement);
+          });
       }
     }
 
@@ -320,10 +327,13 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
       if (currentTrack?.id !== screenShareAudioTrack.id) {
         const stream = new MediaStream([screenShareAudioTrack]);
         audioEl.srcObject = stream;
-        audioEl.play().catch(() => {
-          // Autoplay was blocked - retry on next user interaction.
-          markAutoplayBlocked(audioEl!);
-        });
+        const attachedElement = audioEl;
+        audioEl
+          .play()
+          .then(() => clearAutoplayRetryForElement(attachedElement))
+          .catch((cause: unknown) => {
+            if (cause instanceof DOMException && cause.name === "NotAllowedError" && audioElements.get(ssKey) === attachedElement && attachedElement.srcObject === stream) markAutoplayBlocked(attachedElement);
+          });
       }
     }
 
@@ -352,8 +362,14 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
     };
   }, []);
 
-  // This component renders nothing visible - audio is played through Audio elements
-  return null;
+  if (!needsAutoplayUnlock) return null;
+  return (
+    <div className="absolute inset-x-0 top-4 z-50 flex justify-center" role="status">
+      <button type="button" className="min-h-11 rounded-full bg-[var(--chalk-app-text)] px-4 text-sm text-[var(--chalk-app-canvas)] shadow-sm hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2" onClick={() => void resumeAudioRef.current?.()}>
+        {resumeAudioLabel}
+      </button>
+    </div>
+  );
 }
 
 AudioOutput.displayName = "AudioOutput";

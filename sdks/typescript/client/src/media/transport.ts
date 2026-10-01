@@ -1,3 +1,4 @@
+import { journeyHeaders } from "../telemetry/trace";
 import type { MediaSource } from "./plane";
 import { CloudflareSFUError } from "./types";
 import type { CloudflareSFUCredentialProvider, CloudflareSFUHTTPTransportOptions, CloudflareSFUPublicationSnapshot, CloudflareSFUSignalingTransport, CloudflareSFUTracksResponse } from "./types";
@@ -19,7 +20,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
       const response = await fetch(`${mediaPath}/${path}`, {
         ...init,
         signal,
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...init?.headers },
+        headers: { ...(options.telemetry ? journeyHeaders(options.telemetry) : {}), Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...init?.headers },
       });
       if (!response.ok) {
         throw new CloudflareSFUError(`Chalk SFU signaling failed with HTTP ${response.status}`, "signaling_failed", {

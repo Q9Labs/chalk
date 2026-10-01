@@ -13,6 +13,7 @@ import type {
   LeaveSpacePublicInviteArrivalError,
   PublicSpaceArrival as GeneratedPublicSpaceArrival,
   PublicSpaceCreated as GeneratedPublicSpaceCreated,
+  PreparePublicSpaceEntranceError,
   RefreshSpacePublicInviteAccessError,
   SpacePublicInviteUnavailableError,
 } from "../generated/schemas.js";
@@ -81,6 +82,7 @@ export type RefreshSpacePublicInviteAccess = (input: PublicRefreshAccessInput | 
 export type LeaveSpacePublicInviteArrival = (reference: PublicArrivalReference | string, options?: PublicLeaveOptions) => Promise<void>;
 
 export type ChalkPublicClient = {
+  readonly prepareSpaceEntrance: (spaceInviteToken: string) => Promise<void>;
   readonly arrive: ArriveBySpacePublicInvite;
   readonly arriveBySpacePublicInvite: ArriveBySpacePublicInvite;
   readonly create: CreatePublicSpace;
@@ -95,6 +97,7 @@ export type ChalkPublicClient = {
 };
 
 export type ChalkPublicInviteError =
+  | PreparePublicSpaceEntranceError
   | ApproveSpacePublicAdmissionRequestError
   | ArriveBySpacePublicInviteError
   | DenySpacePublicAdmissionRequestError

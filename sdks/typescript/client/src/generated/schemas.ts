@@ -516,6 +516,16 @@ export const DashboardSpaceSelfJoinRequestSchema = Schema.Struct({
 });
 export type DashboardSpaceSelfJoinRequest = typeof DashboardSpaceSelfJoinRequestSchema.Type;
 
+export const EntranceInviteSchema = Schema.Struct({
+  space_invite_token: Schema.String.check(Schema.isMinLength(1)),
+});
+export type EntranceInvite = typeof EntranceInviteSchema.Type;
+
+export const EntrancePreparationSchema = Schema.Struct({
+  prepared: Schema.Boolean,
+});
+export type EntrancePreparation = typeof EntrancePreparationSchema.Type;
+
 export const EpisodeSchema = Schema.Struct({
   config_snapshot: Schema.Unknown,
   created_at: DateTimeStringSchema,
@@ -2755,6 +2765,35 @@ export const OnboardTenant429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type OnboardTenant429ResponseHeaders = typeof OnboardTenant429ResponseHeadersSchema.Type;
+
+export const PreparePublicSpaceEntranceRequestBodySchema = EntranceInviteSchema;
+export type PreparePublicSpaceEntranceRequestBody = typeof PreparePublicSpaceEntranceRequestBodySchema.Type;
+
+export const PreparePublicSpaceEntranceResponseSchema = EntrancePreparationSchema;
+export type PreparePublicSpaceEntranceResponse = typeof PreparePublicSpaceEntranceResponseSchema.Type;
+
+export const PreparePublicSpaceEntrance429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type PreparePublicSpaceEntrance429ResponseHeaders = typeof PreparePublicSpaceEntrance429ResponseHeadersSchema.Type;
+
+export const PrepareSpaceEntrancePathParamsSchema = Schema.Struct({
+  space_id: SpaceIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type PrepareSpaceEntrancePathParams = typeof PrepareSpaceEntrancePathParamsSchema.Type;
+
+export const PrepareSpaceEntranceResponseSchema = EntrancePreparationSchema;
+export type PrepareSpaceEntranceResponse = typeof PrepareSpaceEntranceResponseSchema.Type;
+
+export const PrepareSpaceEntrance429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type PrepareSpaceEntrance429ResponseHeaders = typeof PrepareSpaceEntrance429ResponseHeadersSchema.Type;
 
 export const PrepareSpaceRecordingPathParamsSchema = Schema.Struct({
   space_id: SpaceIdSchema,
@@ -6833,6 +6872,12 @@ export const OnboardTenantErrorSchema = Schema.Union([
 ]);
 export type OnboardTenantError = typeof OnboardTenantErrorSchema.Type;
 
+export const PreparePublicSpaceEntranceErrorSchema = Schema.Union([RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, SpaceNotFoundErrorSchema, SpacePublicInviteUnavailableErrorSchema]);
+export type PreparePublicSpaceEntranceError = typeof PreparePublicSpaceEntranceErrorSchema.Type;
+
+export const PrepareSpaceEntranceErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, SpaceInvalidIdErrorSchema, SpaceNotFoundErrorSchema, TenantInvalidIdErrorSchema]);
+export type PrepareSpaceEntranceError = typeof PrepareSpaceEntranceErrorSchema.Type;
+
 export const PrepareSpaceRecordingErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -7319,6 +7364,8 @@ export const ChalkOperationPolicies = {
   listWebhookEndpoints: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   login: { maxBodyBytes: 1048576, rateLimit: { limit: 10, policy: "auth.login", windowSeconds: 60 } },
   onboardTenant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  preparePublicSpaceEntrance: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  prepareSpaceEntrance: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   prepareSpaceRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   redeliverWebhookDelivery: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   refreshDashboardSpaceSelfAccess: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

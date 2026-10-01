@@ -99,6 +99,10 @@ export function createChalkPublicClient(options: ChalkPublicClientOptions): Chal
   };
 
   return {
+    prepareSpaceEntrance: async (spaceInviteToken) => {
+      const client = await Effect.runPromise(createClient(undefined));
+      await Effect.runPromise(client.spaces.preparePublicSpaceEntrance({ payload: { space_invite_token: required(spaceInviteToken, "spaceInviteToken") } }));
+    },
     arrive: arriveBySpacePublicInvite,
     arriveBySpacePublicInvite,
     create: createPublicSpace,
