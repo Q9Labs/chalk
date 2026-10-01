@@ -72,6 +72,7 @@ export interface SceneLayout {
   readonly height: number;
 }
 
+const FIRST_FRAME_HOLD_MS = 2_000;
 const HEADER_HEIGHT = 48;
 const STAGE_MARGIN = 16;
 
@@ -157,7 +158,10 @@ function changeTimes(timeline: RecordingPresentationTimelineV1, media: DecodedMe
 }
 
 function videoAvailable(media: DecodedMediaIndexV1, source: DecodedVisualSourceV1 | undefined, elapsedMs: number): boolean {
-  if (source === undefined || elapsedMs < source.startMs || elapsedMs >= source.endMs) return false;
+  if (source === undefined || elapsedMs >= source.endMs) return false;
+  // Only fill the recording's startup gap; timeline visibility still controls
+  // later joins, camera toggles, and screen shares.
+  if (elapsedMs < source.startMs) return source.startMs <= FIRST_FRAME_HOLD_MS;
   return !media.discontinuities.some((gap) => gap.sourceId === source.sourceId && gap.startMs <= elapsedMs && elapsedMs < gap.endMs);
 }
 
