@@ -6415,6 +6415,7 @@ export const CreateSpaceErrorSchema = Schema.Union([
 export type CreateSpaceError = typeof CreateSpaceErrorSchema.Type;
 
 export const CreateTenantErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
   RequestInvalidErrorSchema,
   RequestPayloadTooLargeErrorSchema,
@@ -6441,7 +6442,17 @@ export const CreateTranscriptDownloadURLErrorSchema = Schema.Union([
 ]);
 export type CreateTranscriptDownloadURLError = typeof CreateTranscriptDownloadURLErrorSchema.Type;
 
-export const CreateUserErrorSchema = Schema.Union([AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, UserInvalidEmailErrorSchema, UserInvalidNameErrorSchema]);
+export const CreateUserErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  UserInvalidEmailErrorSchema,
+  UserInvalidNameErrorSchema,
+]);
 export type CreateUserError = typeof CreateUserErrorSchema.Type;
 
 export const CreateWebhookEndpointErrorSchema = Schema.Union([
@@ -6729,7 +6740,7 @@ export type GetTranscriptDocumentError = typeof GetTranscriptDocumentErrorSchema
 export const GetTranscriptErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema, TranscriptInvalidIdErrorSchema, TranscriptNotFoundErrorSchema]);
 export type GetTranscriptError = typeof GetTranscriptErrorSchema.Type;
 
-export const GetUserErrorSchema = Schema.Union([AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, UserInvalidIdErrorSchema, UserNotFoundErrorSchema]);
+export const GetUserErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, UserInvalidIdErrorSchema, UserNotFoundErrorSchema]);
 export type GetUserError = typeof GetUserErrorSchema.Type;
 
 export const GetWebhookDeliveryErrorSchema = Schema.Union([

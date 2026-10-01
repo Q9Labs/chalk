@@ -386,12 +386,12 @@ func runRouteUserCreate(ctx context.Context) (ScenarioResult, error) {
 		Name:     RouteUserCreateScenario,
 		Recorder: recorder,
 		Handler: routerWithCoreServices(recorder, now, coreOptions{
-			Principal: userPrincipal(),
+			Principal: systemPrincipal(),
 		}),
 		Method:         http.MethodPost,
 		Path:           "/v1/users",
 		Body:           body,
-		Authorization:  "Bearer trace-session-token",
+		Authorization:  "Bearer trace-system-token",
 		ExpectedStatus: http.StatusCreated,
 	})
 }

@@ -3336,6 +3336,17 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             description: "Unauthorized",
             "x-chalk-error-codes": ["access.unauthenticated"],
           },
+          403: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"],
+          },
           413: {
             content: {
               "application/json": {
@@ -15675,6 +15686,17 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             description: "Unauthorized",
             "x-chalk-error-codes": ["access.unauthenticated"],
           },
+          403: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"],
+          },
           413: {
             content: {
               "application/json": {
@@ -15799,6 +15821,17 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             },
             description: "Unauthorized",
             "x-chalk-error-codes": ["access.unauthenticated"],
+          },
+          403: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"],
           },
           404: {
             content: {

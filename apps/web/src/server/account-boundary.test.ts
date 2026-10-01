@@ -2,6 +2,36 @@ import { describe, expect, it, vi } from "vitest";
 import { handleAccountBoundary } from "./account-boundary";
 
 const upstream = { CHALK_API_ORIGIN: "https://api.chalk.test" };
+
+it("stops reading an oversized streamed account request before forwarding", async () => {
+  let cancelled = false;
+  let chunks = 0;
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        chunks += 1;
+        controller.enqueue(new Uint8Array(chunks === 1 ? 64 * 1024 : 1));
+        if (chunks === 3) controller.close();
+      },
+      cancel() {
+        cancelled = true;
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  const init = {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: secureOrigin, Cookie: "__Host-chalk_csrf=csrf-token", "X-Chalk-CSRF": "csrf-token" },
+    body,
+    duplex: "half",
+  };
+  const fetcher = vi.fn(async () => Response.json({}));
+  const response = await handleAccountBoundary(new Request(`${secureOrigin}/api/auth/login`, init), upstream, fetcher);
+  expect(response.status).toBe(413);
+  expect(cancelled).toBe(true);
+  expect(chunks).toBe(2);
+  expect(fetcher).not.toHaveBeenCalled();
+});
 const secureOrigin = "https://chalk.test";
 
 describe("account boundary", () => {

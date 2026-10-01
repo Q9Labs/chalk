@@ -138,7 +138,9 @@ func createTenantEndpoint(service TenantService) Endpoint[createTenantRequest, t
 		if service == nil {
 			return tenantResponse{}, apiErrorServiceUnavailable
 		}
-
+		if err := authorizeSystem(ctx); err != nil {
+			return tenantResponse{}, err
+		}
 		tenant, err := service.CreateTenant(ctx, request.input())
 		if err != nil {
 			return tenantResponse{}, err
@@ -152,6 +154,7 @@ func createTenantEndpoint(service TenantService) Endpoint[createTenantRequest, t
 		Responds(http.StatusCreated, "Tenant", tenantResponse{}).
 		Errors(
 			apiErrorUnauthenticated,
+			apiErrorForbidden,
 			apiErrorServiceUnavailable,
 			apiErrorInvalidRequest,
 			apiErrorInvalidTenantName,
@@ -161,7 +164,7 @@ func createTenantEndpoint(service TenantService) Endpoint[createTenantRequest, t
 			apiErrorRateLimited,
 			apiErrorInternal,
 		).
-		MapErrors(tenantServiceAPIError)
+		MapErrors(tenantEndpointAPIError)
 }
 
 func listTenantsEndpoint(service TenantService) Endpoint[listTenantsRequest, tenantListResponse] {
@@ -170,7 +173,7 @@ func listTenantsEndpoint(service TenantService) Endpoint[listTenantsRequest, ten
 			return tenantListResponse{}, apiErrorServiceUnavailable
 		}
 
-		if err := authorizeGlobalRead(ctx); err != nil {
+		if err := authorizeSystem(ctx); err != nil {
 			return tenantListResponse{}, err
 		}
 

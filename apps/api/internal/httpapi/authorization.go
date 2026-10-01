@@ -22,7 +22,7 @@ func authorizeTenant(ctx context.Context, authorizer TenantAuthorizer, tenantID 
 	return authorizer.AuthorizeTenant(ctx, principal, tenantID, permission)
 }
 
-func authorizeGlobalRead(ctx context.Context) error {
+func authorizeSystem(ctx context.Context) error {
 	principal, ok := authentication.PrincipalFromContext(ctx)
 	if !ok {
 		return apiErrorUnauthenticated
@@ -31,6 +31,20 @@ func authorizeGlobalRead(ctx context.Context) error {
 		return apiErrorForbidden
 	}
 
+	return nil
+}
+
+func authorizeAccountRead(ctx context.Context, userID utilities.ID) error {
+	principal, ok := authentication.PrincipalFromContext(ctx)
+	if !ok {
+		return apiErrorUnauthenticated
+	}
+	if principal.Kind == authentication.PrincipalSystem {
+		return nil
+	}
+	if principal.Kind != authentication.PrincipalUser || principal.UserID != userID {
+		return apiErrorForbidden
+	}
 	return nil
 }
 

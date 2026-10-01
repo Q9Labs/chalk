@@ -19,7 +19,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-const maximumRecordingDownloadURLLifetime = 5 * time.Minute
+const maximumArtifactDownloadURLLifetime = 5 * time.Minute
 
 var (
 	readRecordingsPermission = authorization.TenantPermission{
@@ -242,7 +242,7 @@ func createRecordingDownloadURLEndpoint(service RecordingService, exports Record
 		if service == nil || exports == nil || downloads == nil {
 			return recordingDownloadURLResponse{}, apiErrorServiceUnavailable
 		}
-		if request.Body.ExpiresInSeconds <= 0 || request.Body.ExpiresInSeconds > int(maximumRecordingDownloadURLLifetime/time.Second) {
+		if request.Body.ExpiresInSeconds <= 0 || request.Body.ExpiresInSeconds > int(maximumArtifactDownloadURLLifetime/time.Second) {
 			return recordingDownloadURLResponse{}, apiErrorInvalidURLExpiration
 		}
 
