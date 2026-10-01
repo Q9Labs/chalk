@@ -101,9 +101,12 @@ Set `CHALK_RECORDER_FLEET_SLOTS_PER_NODE=1` for both the serial capture pool and
 the one-job-per-node render pool. This setting is required; the command has no
 implicit role-specific default.
 `CHALK_RECORDER_FLEET_SSH_KEY_IDS` is an optional comma-separated list of at
-most eight DigitalOcean public key IDs for a bounded qualification run. It is
-empty by default, does not open the firewall, and must remain empty in the
-production no-inbound policy.
+most eight DigitalOcean public key IDs. It does not open the firewall.
+DigitalOcean refuses to create a Droplet from a custom-base image, such as the
+lean Debian Capture image, unless the request names an SSH key. In production,
+set it only to the `chalk-recorder-no-login` key: its private half was never
+stored, so nobody can log in with it, and the no-inbound policy still holds.
+Never add a key whose private half exists.
 
 The controller certificate must have exactly one URI SAN:
 `spiffe://<trust-domain>/environment/<environment>/recorder-fleet-controller/<uuid>`.
