@@ -1,4 +1,4 @@
-import { createElement, useState, type ChangeEvent, type ReactNode } from "react";
+import { createElement, useEffect, useState, type ChangeEvent, type ReactNode } from "react";
 import { vi } from "vitest";
 
 function MockEntrance({
@@ -7,13 +7,18 @@ function MockEntrance({
   defaults,
   error,
   onJoin,
+  onPrepare,
 }: {
   readonly defaultDisplayName?: string;
   readonly defaults?: { readonly microphone?: boolean; readonly camera?: boolean };
   readonly joining?: boolean;
   readonly error?: string;
+  readonly onPrepare?: () => Promise<void>;
   readonly onJoin: (settings: { readonly displayName: string; readonly microphone: boolean; readonly camera: boolean }) => void | Promise<void>;
 }) {
+  useEffect(() => {
+    void onPrepare?.().catch(() => undefined);
+  }, [onPrepare]);
   const [displayName, setDisplayName] = useState(defaultDisplayName);
   const [microphone, setMicrophone] = useState(defaults?.microphone ?? true);
   const [camera, setCamera] = useState(defaults?.camera ?? true);
@@ -37,6 +42,7 @@ const spacePageTestMocks = vi.hoisted(() => {
   const client = { getSnapshot: vi.fn(() => clientSnapshot), subscribe: vi.fn(() => () => undefined), media: {}, leave: vi.fn(async () => undefined), dispose: vi.fn() };
   const finish = vi.fn(async (_options?: { readonly keepalive?: boolean }) => undefined);
   const publicClient = {
+    prepareSpaceEntrance: vi.fn(async () => undefined),
     createPublicSpace: vi.fn(),
     arriveBySpacePublicInvite: vi.fn(),
     getSpacePublicInviteArrival: vi.fn(),
@@ -77,6 +83,7 @@ const spacePageTestMocks = vi.hoisted(() => {
     }),
     listAllAccountTenants: vi.fn(async () => [{ tenant: { id: "tenant-1" } }]),
     listSpaces: vi.fn(async () => ({ spaces: [], pagination: { page_size: 100, next_cursor: null, has_more: false } })),
+    prepareDashboardEntrance: vi.fn(async () => undefined),
     joinDashboardSpace: vi.fn(),
     resumePublicSpace: vi.fn(),
   };
@@ -92,6 +99,7 @@ vi.mock("@q9labsai/chalk-react", () => ({
 vi.mock("../lib/chalk-access", () => ({
   createPublicInviteClient: getSpacePageTestMocks().createPublicInviteClient,
   createPreparedPublicSpace: getSpacePageTestMocks().createPreparedPublicSpace,
+  prepareDashboardEntrance: getSpacePageTestMocks().prepareDashboardEntrance,
   joinDashboardSpace: getSpacePageTestMocks().joinDashboardSpace,
   resumePublicSpace: getSpacePageTestMocks().resumePublicSpace,
 }));
@@ -120,6 +128,8 @@ export const spacePageTestArrival = {
 };
 
 export function resetSpacePageTestMocks(): void {
+  spacePageTestMocks.publicClient.prepareSpaceEntrance.mockClear();
+  spacePageTestMocks.prepareDashboardEntrance.mockClear();
   window.sessionStorage.clear();
   spacePageTestMocks.resumePublicSpace.mockReset().mockResolvedValue(spacePageTestMocks.prepared);
   window.history.replaceState({}, "", "/space");

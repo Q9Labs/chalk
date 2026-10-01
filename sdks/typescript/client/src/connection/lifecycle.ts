@@ -65,6 +65,7 @@ type Model = {
   sync: ConnectionSyncClient | null;
   media: ConnectionMediaClient | null;
   syncSnapshot: V1EpisodeSnapshot | null;
+  syncNoticeUnresponsive: boolean;
   mediaSnapshot: ConnectionMediaSnapshot | null;
   failure: ConnectionFailure | null;
   initialMedia: InitialMedia;
@@ -145,6 +146,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         sync: null,
         media: null,
         syncSnapshot: null,
+        syncNoticeUnresponsive: false,
         mediaSnapshot: null,
         failure: null,
         initialMedia: (intent) =>
@@ -248,6 +250,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           model.sync = null;
           model.media = null;
           model.syncSnapshot = null;
+          model.syncNoticeUnresponsive = false;
           model.mediaSnapshot = null;
           yield* emitPorts();
           if (scope) yield* Scope.close(scope, Exit.void);
@@ -257,9 +260,17 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       const bindSync = (scope: Scope.Closeable, sync: ConnectionSyncClient): Effect.Effect<void> =>
         Effect.gen(function* () {
           model.syncBindingCleanup?.();
+          model.syncNoticeUnresponsive = false;
           let latestSnapshot: V1EpisodeSnapshot | null = null;
           let snapshotQueued = false;
           const unsubscribe = sync.subscribe((snapshot) => {
+            if (sync === model.sync && snapshot.connection.phase === "live") {
+              const notice = snapshot.connection.noticeUnresponsive === true;
+              if (notice !== model.syncNoticeUnresponsive) {
+                model.syncNoticeUnresponsive = notice;
+                void Effect.runForkWith(context)(publish());
+              }
+            }
             latestSnapshot = snapshot;
             if (snapshotQueued) return;
             snapshotQueued = true;
@@ -711,7 +722,7 @@ function snapshotFor(model: Model, access: ParsedAccessGrant | null): Connection
     state: model.state,
     subject: subjectFor(access),
     episode: episodeFor(access, control),
-    connection: Object.freeze({ sync: syncPhase(model.syncSnapshot?.connection.phase), media: mediaPhase(model.mediaSnapshot?.connection.phase) }),
+    connection: Object.freeze({ sync: model.syncSnapshot?.connection.phase === "live" && model.syncNoticeUnresponsive ? "unresponsive" : syncPhase(model.syncSnapshot?.connection.phase), media: mediaPhase(model.mediaSnapshot?.connection.phase) }),
     failure: model.failure ? Object.freeze({ ...model.failure }) : null,
   });
 }

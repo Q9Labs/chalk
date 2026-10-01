@@ -220,6 +220,7 @@ func mountPublicInviteRoutes(r chi.Router, options Options) {
 		r.Use(rejectTenantAPIKeyCredential)
 		r.Use(rejectNativePublicCookies)
 		r.Use(optionalAuthentication(options.Authentication))
+		publicRecordingEntranceEndpoint(options.RecordingEntrance, options.EntranceInvites, requirePublicOrigin(options.CORS.AllowedOrigins)).Mount(r, options.RateLimit)
 		for _, endpoint := range publicInvitePublicEndpoints(options.PublicInvites, requirePublicOrigin(options.CORS.AllowedOrigins)) {
 			endpoint.Mount(r, options.RateLimit)
 		}

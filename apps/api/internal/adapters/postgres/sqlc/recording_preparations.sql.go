@@ -72,6 +72,49 @@ func (q *Queries) CancelRecordingPreparation(ctx context.Context, arg CancelReco
 	return i, err
 }
 
+const getRecordingEntranceEligibility = `-- name: GetRecordingEntranceEligibility :one
+select spaces.recording_policy, spaces.archived_at,
+    (exists (select 1 from sync_recordings where sync_recordings.tenant_id = spaces.tenant_id
+        and sync_recordings.space_id = spaces.id and sync_recordings.status in ('starting', 'recording', 'stopping'))
+     or exists (select 1 from recordings join episodes on episodes.id = recordings.episode_id
+        where recordings.tenant_id = spaces.tenant_id and recordings.space_id = spaces.id
+          and episodes.status = 'active' and recordings.status in ('pending', 'processing')))::boolean as active,
+    coalesce(preparation.revision, 0)::bigint as revision,
+    coalesce(preparation.state, '')::text as preparation_state,
+    preparation.starts_at
+from spaces
+left join recording_preparations preparation on preparation.tenant_id = spaces.tenant_id and preparation.space_id = spaces.id
+where spaces.tenant_id = $1 and spaces.id = $2
+`
+
+type GetRecordingEntranceEligibilityParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	SpaceID  pgtype.UUID `json:"space_id"`
+}
+
+type GetRecordingEntranceEligibilityRow struct {
+	RecordingPolicy  string             `json:"recording_policy"`
+	ArchivedAt       pgtype.Timestamptz `json:"archived_at"`
+	Active           bool               `json:"active"`
+	Revision         int64              `json:"revision"`
+	PreparationState string             `json:"preparation_state"`
+	StartsAt         pgtype.Timestamptz `json:"starts_at"`
+}
+
+func (q *Queries) GetRecordingEntranceEligibility(ctx context.Context, arg GetRecordingEntranceEligibilityParams) (GetRecordingEntranceEligibilityRow, error) {
+	row := q.db.QueryRow(ctx, getRecordingEntranceEligibility, arg.TenantID, arg.SpaceID)
+	var i GetRecordingEntranceEligibilityRow
+	err := row.Scan(
+		&i.RecordingPolicy,
+		&i.ArchivedAt,
+		&i.Active,
+		&i.Revision,
+		&i.PreparationState,
+		&i.StartsAt,
+	)
+	return i, err
+}
+
 const getRecordingPreparation = `-- name: GetRecordingPreparation :one
 with eligible as (
     select preparation.tenant_id, preparation.space_id,

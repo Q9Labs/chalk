@@ -1628,6 +1628,37 @@ const spacesGroup = HttpApiGroup.make("spaces")
     }),
   )
   .add(
+    HttpApiEndpoint.post("preparePublicSpaceEntrance", "/v1/public/space-invite-entrance", {
+      payload: S.PreparePublicSpaceEntranceRequestBodySchema,
+      success: S.PreparePublicSpaceEntranceResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.SpacePublicInviteUnavailableErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("prepareSpaceEntrance", "/v1/tenants/:tenant_id/spaces/:space_id/entrance", {
+      params: S.PrepareSpaceEntrancePathParamsSchema,
+      success: S.PrepareSpaceEntranceResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.patch("prepareSpaceRecording", "/v1/tenants/:tenant_id/spaces/:space_id/recording-preparation", {
       params: S.PrepareSpaceRecordingPathParamsSchema,
       payload: S.PrepareSpaceRecordingRequestBodySchema,

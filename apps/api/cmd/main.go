@@ -434,7 +434,9 @@ func run() error {
 	}
 	recordingPipelineService := recordingpipeline.NewService(recordingPipelineRepository)
 	var recordingPreparationService httpapi.RecordingPreparationService
+	var recordingEntrance httpapi.RecordingEntrancePreparer
 	if cfg.Capabilities.Recording {
+		recordingEntrance = postgres.NewRecordingPreparationRepository(pool)
 		recordingPreparationService = recordingpreparation.NewService(postgres.NewRecordingPreparationRepository(pool), spaceService)
 	}
 	recorderHealthService := recorderhealth.NewService(recordingPipelineRepository, 2*time.Minute)
@@ -537,6 +539,7 @@ func run() error {
 		logger.Info("public invite routes disabled because local media credentials are not configured", "event", "public_invite.disabled", "reason", "local_credentials_unavailable")
 	}
 	var publicInviteService httpapi.PublicInviteService
+	var entranceInvites httpapi.EntranceInviteResolver
 	var publicInviteLifecycleScheduler *publicinvites.LifecycleScheduler
 	if publicInviteConfig.Enabled {
 		managedTenantID, err := utilities.ParseID(publicInviteConfig.ManagedTenantID)
@@ -556,6 +559,7 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("configure public invite service: %w", err)
 		}
+		entranceInvites = service
 		spacePort, err := publicinviteapp.NewSpacePort(spaceService, tenantService, publicinviteapp.SpaceConfig{
 			ManagedTenantID:   managedTenantID,
 			DefaultMediaPlane: publicInviteConfig.DefaultMediaPlane,
@@ -656,6 +660,8 @@ func run() error {
 		Recordings:                 recordingService,
 		RecordingExports:           recordingPipelineService,
 		RecordingPreparations:      recordingPreparationService,
+		RecordingEntrance:          recordingEntrance,
+		EntranceInvites:            entranceInvites,
 		Spaces:                     spaceService,
 		Episodes:                   episodeService,
 		SyncTokens:                 syncTokenService,

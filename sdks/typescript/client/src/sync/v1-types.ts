@@ -103,7 +103,7 @@ export type V1SelfMediaTargetResult = {
 };
 
 export type V1EpisodeSnapshot = {
-  readonly connection: { readonly phase: V1ConnectionPhase; readonly terminalReason?: string };
+  readonly connection: { readonly phase: V1ConnectionPhase; readonly terminalReason?: string; readonly noticeUnresponsive?: boolean };
   readonly participantId: string | null;
   readonly participantGeneration: number | null;
   readonly control: V1ControlState | null;

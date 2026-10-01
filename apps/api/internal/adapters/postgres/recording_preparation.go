@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpreparation"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -92,4 +94,37 @@ func getRecordingPreparation(ctx context.Context, queries recordingPreparationQu
 		StartsAt: row.StartsAt.Time, State: recordingpreparation.State(row.State), Revision: row.Revision,
 		CapacityAvailable: row.CapacityAvailable, Ready: row.Ready, UpdatedAt: row.UpdatedAt.Time,
 	}, nil
+}
+
+// PrepareEntrance shares the admission lock and revision protocol with scheduled
+// preparations. An open Entrance cannot extend an existing preparation deadline.
+func (r RecordingPreparationRepository) PrepareEntrance(ctx context.Context, tenantID, spaceID utilities.ID, now time.Time) (bool, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return false, fmt.Errorf("begin Entrance preparation: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	q := sqlc.New(tx)
+	if _, err = q.LockRecordingCapacity(ctx); err != nil {
+		return false, fmt.Errorf("lock Entrance preparation: %w", err)
+	}
+	row, err := q.GetRecordingEntranceEligibility(ctx, sqlc.GetRecordingEntranceEligibilityParams{TenantID: uuid(tenantID), SpaceID: uuid(spaceID)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, spaces.ErrSpaceNotFound
+	}
+	if err != nil {
+		return false, fmt.Errorf("read Entrance eligibility: %w", err)
+	}
+	if row.RecordingPolicy != "automatic" || row.ArchivedAt.Valid || row.Active || (row.PreparationState == "scheduled" && row.StartsAt.Valid && !row.StartsAt.Time.After(now) && now.Before(row.StartsAt.Time.Add(recordingpreparation.NoShowGrace))) {
+		return false, nil
+	}
+	_, err = q.PrepareRecordingSpace(ctx, sqlc.PrepareRecordingSpaceParams{TenantID: uuid(tenantID), SpaceID: uuid(spaceID), StartsAt: timestamptzValue(now), ObservedAt: timestamptzValue(now), ExpectedRevision: row.Revision})
+	if err != nil {
+		return false, fmt.Errorf("prepare Entrance: %w", err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("commit Entrance preparation: %w", err)
+	}
+	slog.InfoContext(ctx, "Capture pre-warmed for Entrance", "event", "recording.entrance.prewarmed", "revision", row.Revision+1)
+	return true, nil
 }
