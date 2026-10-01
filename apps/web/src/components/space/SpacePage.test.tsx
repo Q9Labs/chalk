@@ -17,6 +17,21 @@ afterEach(() => {
 });
 
 describe("public Space entry", () => {
+  it("prepares Capture on opening an invited Entrance before Join", async () => {
+    window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
+    render(<SpacePage slug="design-lab" />);
+    await waitFor(() => expect(mocks.publicClient.prepareSpaceEntrance).toHaveBeenCalledWith(spacePageTestToken));
+    expect(mocks.publicClient.arriveBySpacePublicInvite).not.toHaveBeenCalled();
+    expect(mocks.joinDashboardSpace).not.toHaveBeenCalled();
+  });
+
+  it("does not prepare Capture for an unauthenticated slug-only Entrance", async () => {
+    window.history.replaceState({}, "", "/space/design-lab");
+    render(<SpacePage slug="design-lab" />);
+    await act(async () => undefined);
+    expect(mocks.publicClient.prepareSpaceEntrance).not.toHaveBeenCalled();
+    expect(mocks.prepareDashboardEntrance).not.toHaveBeenCalled();
+  });
   it("keeps devices off for a dashboard no-device entry until a participant changes them", async () => {
     window.history.replaceState({}, "", "/space/design-lab?entry=dashboard&devices=off");
     const getUserMedia = vi.fn();

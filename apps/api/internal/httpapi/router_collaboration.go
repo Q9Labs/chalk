@@ -3,6 +3,7 @@ package httpapi
 import "github.com/go-chi/chi/v5"
 
 func mountSpaceEpisodeRoutes(r chi.Router, options Options) {
+	recordingEntranceEndpoint(options.RecordingEntrance, options.TenantAuthz).Mount(r, options.RateLimit)
 	mountSpaceRoutes(r, options.Spaces, options.TenantAuthz, options.RateLimit)
 	for _, endpoint := range recordingPreparationEndpoints(options.RecordingPreparations, options.TenantAuthz) {
 		endpoint.Mount(r, options.RateLimit)

@@ -3,6 +3,21 @@ import { describe, expect, it } from "vitest";
 import { createChalkPublicClient } from "./client";
 
 describe("public Space invite media recovery", () => {
+  it("prepares an Entrance with the invite capability without creating participant access", async () => {
+    const requests: string[] = [];
+    let requestBody: unknown;
+    const client = createChalkPublicClient({
+      baseUrl: "https://api.chalk.test",
+      fetch: async (input, init) => {
+        requests.push(String(input));
+        requestBody = await new Response(init?.body).json();
+        return Response.json({ prepared: true });
+      },
+    });
+    await client.prepareSpaceEntrance("valid-invite");
+    expect(requests).toEqual(["https://api.chalk.test/v1/public/space-invite-entrance"]);
+    expect(requestBody).toEqual({ space_invite_token: "valid-invite" });
+  });
   it("forwards a requested media connection replacement", async () => {
     let requestBody: unknown;
     const client = createChalkPublicClient({

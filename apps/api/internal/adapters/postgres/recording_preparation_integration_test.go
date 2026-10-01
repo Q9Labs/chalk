@@ -5,12 +5,14 @@ import (
 	"context"
 	"errors"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
@@ -169,4 +171,150 @@ func assertPreparationDemand(t *testing.T, queries *sqlc.Queries, now time.Time,
 	if err != nil || demand.DesiredNodes != want {
 		t.Fatalf("capture demand = %+v, %v; want %d", demand, err, want)
 	}
+}
+
+func TestAutomaticEntrancePreparation(t *testing.T) {
+	pool, err := pgxpool.New(t.Context(), os.Getenv(config.DatabaseURL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	if err := pool.Ping(t.Context()); err != nil {
+		t.Skipf("postgres unavailable: %v", err)
+	}
+	tenant := mustID(t, "bc390000-0000-4000-8000-000000000021")
+	space := mustID(t, "bc390000-0000-4000-8000-000000000022")
+	_, err = pool.Exec(t.Context(), `insert into tenants (id,name) values ($1,'Entrance proof');`, tenant.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Exec(context.Background(), `delete from tenants where id=$1`, tenant.Bytes())
+	_, err = pool.Exec(t.Context(), `insert into spaces (id,tenant_id,name,slug,media_plane,recording_policy) values ($1,$2,'Entrance proof','entrance-proof','cf_sfu','automatic')`, space.Bytes(), tenant.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := postgres.NewRecordingPreparationRepository(pool)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	for _, policy := range []string{"manual", "disabled", "automatic"} {
+		t.Run(policy, func(t *testing.T) {
+			if _, err := pool.Exec(t.Context(), `update spaces set recording_policy=$2 where id=$1`, space.Bytes(), policy); err != nil {
+				t.Fatal(err)
+			}
+			created, err := repository.PrepareEntrance(t.Context(), tenant, space, now)
+			if err != nil || created != (policy == "automatic") {
+				t.Fatalf("Entrance preparation = %v, %v", created, err)
+			}
+		})
+	}
+	var group sync.WaitGroup
+	results := make(chan error, 20)
+	for i := 0; i < 20; i++ {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			created, err := repository.PrepareEntrance(t.Context(), tenant, space, now.Add(time.Second))
+			if err == nil && created {
+				err = errors.New("concurrent Entrance extended deadline")
+			}
+			results <- err
+		}()
+	}
+	group.Wait()
+	close(results)
+	for err := range results {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 10; i++ {
+		if created, err := repository.PrepareEntrance(t.Context(), tenant, space, now.Add(time.Duration(i+1)*time.Second)); err != nil || created {
+			t.Fatalf("repeated Entrance = %v, %v", created, err)
+		}
+	}
+	var count int
+	var starts time.Time
+	if err := pool.QueryRow(t.Context(), `select count(*),max(starts_at) from recording_preparations where space_id=$1`, space.Bytes()).Scan(&count, &starts); err != nil || count != 1 || !starts.Equal(now) {
+		t.Fatalf("bounded preparation: count=%d starts=%v err=%v", count, starts, err)
+	}
+	q := sqlc.New(pool)
+	demand, err := q.GetRecordingFleetDemand(t.Context(), sqlc.GetRecordingFleetDemandParams{Role: "capture", ObservedAt: pgtype.Timestamptz{Time: now.Add(5 * time.Minute), Valid: true}})
+	if err != nil || demand.ScheduledPrewarms != 0 {
+		t.Fatalf("abandoned Entrance demand = %+v, %v", demand, err)
+	}
+	if _, err := q.ExpireRecordingReservations(t.Context(), pgtype.Timestamptz{Time: now.Add(5 * time.Minute), Valid: true}); err != nil {
+		t.Fatal(err)
+	}
+	preparation, err := repository.Get(t.Context(), tenant, space, now.Add(5*time.Minute))
+	if err != nil || preparation.State != "expired" {
+		t.Fatalf("abandoned Entrance = %+v, %v", preparation, err)
+	}
+	// A fresh Entrance after expiry can warm again; joining consumes that demand.
+	if created, err := repository.PrepareEntrance(t.Context(), tenant, space, now); err != nil || !created {
+		t.Fatalf("fresh Entrance = %v, %v", created, err)
+	}
+	episode := mustID(t, "bc390000-0000-4000-8000-000000000023")
+	if _, err := pool.Exec(t.Context(), `insert into episodes (id,tenant_id,space_id,status,config_snapshot) values ($1,$2,$3,'active','{}'::jsonb)`, episode.Bytes(), tenant.Bytes(), space.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Starting Recording demand must not revive an expired preparation.
+	if _, err := q.ExpireRecordingReservations(t.Context(), pgtype.Timestamptz{Time: now.Add(5 * time.Minute), Valid: true}); err != nil {
+		t.Fatal(err)
+	}
+	recording := mustID(t, "bc390000-0000-4000-8000-000000000027")
+	if _, err := pool.Exec(t.Context(), `insert into recordings (id,tenant_id,space_id,episode_id,status,storage_provider) values ($1,$2,$3,$4,'pending','r2')`, recording.Bytes(), tenant.Bytes(), space.Bytes(), episode.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	if created, err := repository.PrepareEntrance(t.Context(), tenant, space, now); err != nil || created {
+		t.Fatalf("starting Recording pre-warm = %v, %v", created, err)
+	}
+	if _, err := pool.Exec(t.Context(), `delete from recordings where id=$1`, recording.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	preparation, err = repository.Get(t.Context(), tenant, space, now.Add(5*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.PrepareRecordingSpace(t.Context(), sqlc.PrepareRecordingSpaceParams{TenantID: pgtype.UUID{Bytes: tenant.Bytes(), Valid: true}, SpaceID: pgtype.UUID{Bytes: space.Bytes(), Valid: true}, StartsAt: pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true}, ObservedAt: pgtype.Timestamptz{Time: now, Valid: true}, ExpectedRevision: preparation.Revision}); err != nil {
+		t.Fatal(err)
+	}
+	if created, err := repository.PrepareEntrance(t.Context(), tenant, space, now); err != nil || !created {
+		t.Fatalf("Entrance should advance a future preparation = %v, %v", created, err)
+	}
+	// Roll back Recording admission and global capacity changes after the proof.
+	tx, err := pool.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(context.Background())
+	q = sqlc.New(tx)
+	if _, err := q.LockRecordingCapacity(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(t.Context(), `update recording_capacity set reserved_episodes=0,reserved_participants=0,reserved_input_bitrate_bps=0 where id=1`); err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	reservation, err := q.CreateRecordingReservation(ctx, sqlc.CreateRecordingReservationParams{
+		TenantID: pgtype.UUID{Bytes: tenant.Bytes(), Valid: true}, SpaceID: pgtype.UUID{Bytes: space.Bytes(), Valid: true}, EpisodeID: pgtype.UUID{Bytes: episode.Bytes(), Valid: true},
+		ID:             pgtype.UUID{Bytes: mustID(t, "bc390000-0000-4000-8000-000000000024").Bytes(), Valid: true},
+		RecordingID:    pgtype.UUID{Bytes: mustID(t, "bc390000-0000-4000-8000-000000000025").Bytes(), Valid: true},
+		CaptureJobID:   pgtype.UUID{Bytes: mustID(t, "bc390000-0000-4000-8000-000000000026").Bytes(), Valid: true},
+		IdempotencyKey: "preparation-materialization", RequestFingerprint: bytes.Repeat([]byte{1}, 32),
+		PolicySnapshotVersion: recordingpipeline.SupportedPolicySnapshotVersion, EpisodeCount: 1, ParticipantCount: 3,
+		InputBitrateBps: 3_000_000, MaxDurationSeconds: 3600, PayloadSchemaVersion: 1, AttemptLimit: 5,
+		AvailableAt: pgtype.Timestamptz{Time: now, Valid: true}, EndsAt: pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, err := q.GetRecordingPreparation(t.Context(), sqlc.GetRecordingPreparationParams{TenantID: pgtype.UUID{Bytes: tenant.Bytes(), Valid: true}, SpaceID: pgtype.UUID{Bytes: space.Bytes(), Valid: true}, ObservedAt: pgtype.Timestamptz{Time: now, Valid: true}})
+	if err != nil || status.State != "consumed" || status.ConsumedRecordingID != reservation.RecordingID || !reservation.PreparationConsumed {
+		t.Fatalf("join consumption = %+v, %+v, %v", status, reservation, err)
+	}
+	demand, err = q.GetRecordingFleetDemand(t.Context(), sqlc.GetRecordingFleetDemandParams{Role: "capture", ObservedAt: pgtype.Timestamptz{Time: now, Valid: true}})
+	if err != nil || demand.DesiredNodes != 1 || demand.ScheduledPrewarms != 0 {
+		t.Fatalf("join must reuse warm demand: %+v, %v", demand, err)
+	}
+
 }

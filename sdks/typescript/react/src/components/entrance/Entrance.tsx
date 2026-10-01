@@ -33,6 +33,7 @@ export type EntranceProps = EntranceDeviceOptions & {
   readonly generatedAvatars?: boolean;
   readonly onJoin: (settings: EntranceSettings) => void | Promise<void>;
   readonly onCancel?: () => void;
+  readonly onPrepare?: () => Promise<void>;
 };
 
 export function Entrance({
@@ -46,6 +47,7 @@ export function Entrance({
   generatedAvatars = true,
   onJoin,
   onCancel,
+  onPrepare,
   audioInputDevices,
   videoInputDevices,
   audioOutputDevices,
@@ -56,6 +58,10 @@ export function Entrance({
   onVideoInputChange,
   onAudioOutputChange,
 }: EntranceProps): React.JSX.Element {
+  useEffect(() => {
+    void onPrepare?.().catch(() => undefined);
+  }, [onPrepare]);
+
   const [displayName, setDisplayName] = useState(defaultDisplayName);
   const [microphone, setMicrophone] = useState(defaults?.microphone ?? true);
   const [camera, setCamera] = useState(defaults?.camera ?? true);

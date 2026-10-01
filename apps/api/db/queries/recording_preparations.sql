@@ -65,3 +65,17 @@ from recording_preparations preparation
 left join eligible on eligible.tenant_id = preparation.tenant_id and eligible.space_id = preparation.space_id
 cross join capacity cross join ready
 where preparation.tenant_id = sqlc.arg(tenant_id) and preparation.space_id = sqlc.arg(space_id);
+
+-- name: GetRecordingEntranceEligibility :one
+select spaces.recording_policy, spaces.archived_at,
+    (exists (select 1 from sync_recordings where sync_recordings.tenant_id = spaces.tenant_id
+        and sync_recordings.space_id = spaces.id and sync_recordings.status in ('starting', 'recording', 'stopping'))
+     or exists (select 1 from recordings join episodes on episodes.id = recordings.episode_id
+        where recordings.tenant_id = spaces.tenant_id and recordings.space_id = spaces.id
+          and episodes.status = 'active' and recordings.status in ('pending', 'processing')))::boolean as active,
+    coalesce(preparation.revision, 0)::bigint as revision,
+    coalesce(preparation.state, '')::text as preparation_state,
+    preparation.starts_at
+from spaces
+left join recording_preparations preparation on preparation.tenant_id = spaces.tenant_id and preparation.space_id = spaces.id
+where spaces.tenant_id = sqlc.arg(tenant_id) and spaces.id = sqlc.arg(space_id);

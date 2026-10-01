@@ -206,6 +206,7 @@ type Querier interface {
 	GetRecordingCapturePlanSource(ctx context.Context, arg GetRecordingCapturePlanSourceParams) (GetRecordingCapturePlanSourceRow, error)
 	GetRecordingCaptureSignalingAuthority(ctx context.Context, arg GetRecordingCaptureSignalingAuthorityParams) (GetRecordingCaptureSignalingAuthorityRow, error)
 	GetRecordingDataKey(ctx context.Context, arg GetRecordingDataKeyParams) (RecordingDataKey, error)
+	GetRecordingEntranceEligibility(ctx context.Context, arg GetRecordingEntranceEligibilityParams) (GetRecordingEntranceEligibilityRow, error)
 	GetRecordingFleetDemand(ctx context.Context, arg GetRecordingFleetDemandParams) (GetRecordingFleetDemandRow, error)
 	GetRecordingJobAttemptAuthorityByClaimRequest(ctx context.Context, claimRequestID pgtype.UUID) (GetRecordingJobAttemptAuthorityByClaimRequestRow, error)
 	GetRecordingPipeline(ctx context.Context, arg GetRecordingPipelineParams) (GetRecordingPipelineRow, error)
