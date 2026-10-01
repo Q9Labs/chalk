@@ -64,13 +64,13 @@ export function ClassicEntranceSurface({
       style={chalkThemeStyle(theme, colorScheme)}
       className="chalk-root chalk-textured-surface relative grid h-full min-h-0 w-full place-items-center overflow-auto bg-[var(--chalk-canvas)] p-4 text-[var(--chalk-text)]"
     >
-      <section className="grid w-full max-w-5xl max-h-full overflow-hidden overflow-y-auto rounded-lg border border-[var(--chalk-line)] bg-[var(--chalk-surface)] shadow-[var(--chalk-shadow)] lg:grid-cols-[minmax(0,1fr)_24rem]">
-        <div className="border-b border-[var(--chalk-line)] p-5 lg:border-r lg:border-b-0 lg:p-6">
+      <section className="grid w-full max-w-5xl grid-cols-[minmax(0,1fr)] max-h-full overflow-hidden overflow-y-auto rounded-lg border border-[var(--chalk-line)] bg-[var(--chalk-surface)] shadow-[var(--chalk-shadow)] lg:grid-cols-[minmax(0,1fr)_24rem]">
+        <div className="min-w-0 border-b border-[var(--chalk-line)] p-5 lg:border-r lg:border-b-0 lg:p-6">
           <header className="mb-5 flex items-center gap-3">
             <LogoSource className="h-auto w-28" height={32} logoUrl={logoUrl} />
             <span className="truncate text-sm text-[var(--chalk-muted-text)]">{spaceName}</span>
           </header>
-          <div className="relative aspect-video min-h-[15rem] overflow-hidden rounded-md border border-[var(--chalk-line)] bg-[var(--chalk-stage)] lg:aspect-[4/3]">
+          <div className="relative aspect-video w-full min-h-[15rem] overflow-hidden rounded-md border border-[var(--chalk-line)] bg-[var(--chalk-stage)] lg:aspect-[4/3]">
             <video ref={videoRef} autoPlay playsInline muted className={hasVideoPreview ? "h-full w-full -scale-x-100 object-cover" : "hidden"} />
             {!hasVideoPreview ? <EntranceParticipantPreview displayName={displayName} microphone={microphone} generatedAvatars={generatedAvatars} /> : null}
             {hasVideoPreview ? <span className="absolute bottom-3 left-3 rounded bg-[var(--chalk-app-text,var(--chalk-text))] px-2 py-1 text-xs text-[var(--chalk-app-canvas,var(--chalk-accent-text))]">{displayName.trim() || "You"}</span> : null}

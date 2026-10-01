@@ -312,7 +312,12 @@ function APIKeyRow({ apiKey, onRotate, onRevoke }: { apiKey: DashboardAPIKey; on
   );
 }
 
-function CreateAPIKeyDialog(props: { open: boolean; name: string; scopes: string[]; expiresAt: string; onClose: () => void; onNameChange: (value: string) => void; onScopesChange: (value: string[]) => void; onExpiresAtChange: (value: string) => void; onContinue: () => void }) {
+function scopeDescription(scope: string): string {
+  const verb = scope.endsWith(":write") ? "Manage" : "Read";
+  return `${verb} ${scope.startsWith("spaces") ? "Spaces" : "Episodes"}`;
+}
+
+export function CreateAPIKeyDialog(props: { open: boolean; name: string; scopes: string[]; expiresAt: string; onClose: () => void; onNameChange: (value: string) => void; onScopesChange: (value: string[]) => void; onExpiresAtChange: (value: string) => void; onContinue: () => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   useModalDialog(dialogRef, props.open);
   const availableScopes = ["spaces:read", "spaces:write", "episodes:read", "episodes:write"];
@@ -330,7 +335,7 @@ function CreateAPIKeyDialog(props: { open: boolean; name: string; scopes: string
           <span />
           <span />
         </div>
-        <button className="dialog-close" value="cancel" aria-label="Close dialog">
+        <button className="dialog-close" type="button" onClick={props.onClose} aria-label="Close dialog">
           ×
         </button>
         <p className="eyebrow">Developer access</p>
@@ -347,13 +352,13 @@ function CreateAPIKeyDialog(props: { open: boolean; name: string; scopes: string
               <input type="checkbox" checked={props.scopes.includes(scope)} onChange={(event) => props.onScopesChange(event.target.checked ? [...props.scopes, scope] : props.scopes.filter((item) => item !== scope))} />
               <span>
                 <strong>{scope}</strong>
-                <small>{scope.startsWith("spaces") ? "Read or manage Spaces" : "Read or manage Episodes"}</small>
+                <small>{scopeDescription(scope)}</small>
               </span>
             </label>
           ))}
         </fieldset>
         <div className="dialog-actions">
-          <button value="cancel" className="dashboard-button secondary">
+          <button type="button" className="dashboard-button secondary" onClick={props.onClose}>
             Cancel
           </button>
           <button className="dashboard-button primary" type="submit" disabled={!props.name.trim() || props.scopes.length === 0}>

@@ -40,7 +40,7 @@ type RecordingHistoryContext = {
   readonly client: SpaceRecordingHistoryClient;
   readonly generation: number;
   readonly reloadGeneration: number;
-  readonly spaceID: string;
+  readonly spaceID?: string;
   readonly tenantID: string;
 };
 
@@ -49,7 +49,7 @@ export type SpaceRecordingHistoryClient = {
   readonly getRecording: (input: { tenantID: string; recordingID: string }) => Promise<DashboardRecording>;
   readonly getTranscriptDocument: (input: { tenantID: string; transcriptID: string }) => Promise<DashboardTranscriptDocument>;
   readonly listRecordingTranscripts: (input: { tenantID: string; recordingID: string; cursor?: string; pageSize?: number }) => Promise<DashboardTranscriptList>;
-  readonly listSpaceRecordings: (input: { tenantID: string; spaceID: string; cursor?: string; pageSize?: number }) => Promise<DashboardRecordingList>;
+  readonly listSpaceRecordings: (input: { tenantID: string; spaceID?: string; cursor?: string; pageSize?: number }) => Promise<DashboardRecordingList>;
   readonly requestRecordingExport: (input: { tenantID: string; recordingID: string }) => Promise<DashboardRecordingExportRequestAcceptedResponse>;
   readonly requestRecordingTranscript: (input: { tenantID: string; recordingID: string }) => Promise<DashboardTranscriptRequestAcceptedResponse>;
 };
@@ -64,7 +64,7 @@ const defaultSpaceRecordingHistoryClient: SpaceRecordingHistoryClient = {
   requestRecordingTranscript,
 };
 
-export function SpaceRecordingHistorySection({ tenantID, spaceID, client = defaultSpaceRecordingHistoryClient }: { readonly tenantID: string; readonly spaceID: string; readonly client?: SpaceRecordingHistoryClient }) {
+export function SpaceRecordingHistorySection({ tenantID, spaceID, client = defaultSpaceRecordingHistoryClient }: { readonly tenantID: string; readonly spaceID?: string; readonly client?: SpaceRecordingHistoryClient }) {
   const [entries, setEntries] = useState<readonly RecordingHistoryEntry[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -311,7 +311,7 @@ export function SpaceRecordingHistorySection({ tenantID, spaceID, client = defau
   );
 }
 
-async function loadRecordingHistoryPage(client: SpaceRecordingHistoryClient, tenantID: string, spaceID: string, isCurrent: () => boolean, cursor?: string): Promise<RecordingHistoryPage | undefined> {
+async function loadRecordingHistoryPage(client: SpaceRecordingHistoryClient, tenantID: string, spaceID: string | undefined, isCurrent: () => boolean, cursor?: string): Promise<RecordingHistoryPage | undefined> {
   const recordings = await client.listSpaceRecordings({
     tenantID,
     spaceID,

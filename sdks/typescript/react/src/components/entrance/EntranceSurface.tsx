@@ -95,13 +95,13 @@ function ChalkEntranceSurface({
         className="chalk-root chalk-textured-surface relative grid h-full min-h-0 w-full place-items-center overflow-auto bg-[var(--chalk-canvas)] p-4 text-[var(--chalk-text)]"
       >
         <section className="w-full max-w-5xl max-h-full overflow-hidden overflow-y-auto">
-          <ChalkPanel className="w-full bg-[var(--chalk-surface)] p-0" contentClassName="grid w-full lg:grid-cols-[minmax(0,1fr)_24rem]" data-chalk-entrance-layout="split" tone="neutral">
+          <ChalkPanel className="w-full bg-[var(--chalk-surface)] p-0" contentClassName="grid w-full grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_24rem]" data-chalk-entrance-layout="split" tone="neutral">
             <div className="border-b border-[var(--chalk-app-line,var(--chalk-line))] p-5 lg:border-r lg:border-b-0 lg:p-6">
               <header className="mb-5 flex items-center gap-3">
                 <LogoSource className="h-auto w-28" height={32} logoUrl={logoUrl} />
                 <span className="truncate text-sm text-[var(--chalk-muted-text)]">{spaceName}</span>
               </header>
-              <ChalkPanel className="relative aspect-video min-h-[15rem] overflow-hidden bg-[var(--chalk-stage)] p-0 lg:aspect-[4/3]" contentClassName="h-full" filled={false}>
+              <ChalkPanel className="relative aspect-video w-full min-h-[15rem] overflow-hidden bg-[var(--chalk-stage)] p-0 lg:aspect-[4/3]" contentClassName="h-full" filled={false}>
                 <video ref={videoRef} autoPlay playsInline muted className={hasVideoPreview ? "h-full w-full -scale-x-100 object-cover" : "hidden"} />
                 {!hasVideoPreview ? <EntranceParticipantPreview displayName={displayName} microphone={microphone} generatedAvatars={generatedAvatars} /> : null}
                 {hasVideoPreview ? (

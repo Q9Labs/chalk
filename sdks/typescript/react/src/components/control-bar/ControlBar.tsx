@@ -120,7 +120,7 @@ export const ControlBarSurface = React.memo(
     onLeft,
     participantColorSeed,
     participantGradientPreference,
-    expanded = false,
+    expanded = true,
     detectDevices = true,
     displayOnly = false,
 
@@ -262,7 +262,7 @@ export const ControlBarSurface = React.memo(
     if (placement === "floating" && density === "compact") {
       return (
         <div
-          className={cn("flex w-full flex-nowrap items-center gap-2 overflow-x-auto bg-transparent px-2 py-3 sm:px-4", className)}
+          className={cn("flex w-full flex-wrap items-center gap-2 bg-transparent px-2 py-3 sm:px-4", className)}
           style={{
             ...(themeVariables as React.CSSProperties),
             paddingBottom: "max(12px, env(safe-area-inset-bottom))",
@@ -270,7 +270,7 @@ export const ControlBarSurface = React.memo(
           role="toolbar"
           aria-label="Space controls"
         >
-          <ChalkControlGroup className="mx-auto min-w-min items-center justify-center gap-1.5">
+          <ChalkControlGroup className="mx-auto flex-wrap items-center justify-center gap-1.5">
             <ChalkPanel className="order-1 shrink-0 rounded-none p-1" seed="control-compact-media" tone="accent">
               <ChalkControlGroup aria-label="Media controls" className="gap-1">
                 <ChalkIconButton aria-label={isMuted ? "Unmute" : "Mute"} aria-pressed={!isMuted} className={!isMuted ? "!text-[var(--chalk-app-control-active-text)]" : "!text-[var(--chalk-app-danger)]"} onClick={onToggleMute} seed="control-compact-mic" size="lg" tone="accent">
@@ -450,7 +450,7 @@ export const ControlBarSurface = React.memo(
       return (
         <div className="pointer-events-none flex w-full items-end justify-center px-3 pb-5">
           <ChalkPanel className={cn("group pointer-events-auto max-w-full rounded-none p-2", className)} role="toolbar" aria-label="Space controls" seed="control-floating-shell" style={themeVariables as React.CSSProperties} filled={false}>
-            <ChalkControlGroup className="max-w-full gap-2 overflow-visible">
+            <ChalkControlGroup className="max-w-full flex-wrap justify-center gap-2 overflow-visible">
               {buttonsToRender.includes("mic") ? (
                 <DevicePopover
                   type="mic"
@@ -491,7 +491,7 @@ export const ControlBarSurface = React.memo(
                     : "-ml-2 grid-cols-[0fr] -translate-x-1.5 opacity-0 group-hover:pointer-events-auto group-hover:ml-0 group-hover:grid-cols-[1fr] group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:ml-0 group-focus-within:grid-cols-[1fr] group-focus-within:translate-x-0 group-focus-within:opacity-100",
                 )}
               >
-                <div className="-my-2 flex min-w-0 items-center gap-2 overflow-hidden py-2">{buttonsToRender.filter((button) => button !== "mic" && button !== "video" && button !== "leave").map(floatingButton)}</div>
+                <div className="-my-2 flex min-w-0 flex-wrap items-center justify-center gap-2 py-2">{buttonsToRender.filter((button) => button !== "mic" && button !== "video" && button !== "leave").map(floatingButton)}</div>
               </div>
               {showLeave ? <FloatingControlBarButton icon={<CallEnd01Icon />} label="Leave" onClick={onLeft} danger seed="control-floating-leave" /> : null}
             </ChalkControlGroup>
