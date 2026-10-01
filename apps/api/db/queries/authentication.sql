@@ -185,3 +185,55 @@ returning
     revoked_at,
     updated_at,
     created_at;
+
+-- name: StorePasswordReset :exec
+insert into password_resets (
+    account_id,
+    token_hash,
+    expires_at
+) values (
+    sqlc.arg(account_id),
+    sqlc.arg(token_hash),
+    sqlc.arg(expires_at)
+)
+on conflict (account_id) do update set
+    token_hash = excluded.token_hash,
+    expires_at = excluded.expires_at,
+    used_at = null,
+    updated_at = now();
+
+-- name: LockAuthenticationAccount :one
+select id from users where id = sqlc.arg(account_id) for no key update;
+
+-- name: GetAccountPasswordHash :one
+select password_hash from auth_identities
+where user_id = sqlc.arg(account_id) and provider = 'password';
+
+-- name: GetPasswordResetAccount :one
+select account_id from password_resets where token_hash = sqlc.arg(token_hash);
+
+-- name: CompletePasswordReset :one
+with consumed as (
+    update password_resets
+    set used_at = sqlc.arg(completed_at), updated_at = now()
+    where password_resets.token_hash = sqlc.arg(token_hash)
+      and password_resets.used_at is null
+      and password_resets.expires_at > sqlc.arg(completed_at)
+    returning account_id
+), updated_identity as (
+    update auth_identities
+    set password_hash = sqlc.arg(password_hash), updated_at = now()
+    from consumed
+    where auth_identities.user_id = consumed.account_id
+      and auth_identities.provider = 'password'
+    returning auth_identities.user_id
+), revoked_sessions as (
+    update login_sessions
+    set revoked_at = sqlc.arg(completed_at), updated_at = now()
+    from updated_identity
+    where login_sessions.user_id = updated_identity.user_id
+      and login_sessions.revoked_at is null
+)
+select users.id, users.name, users.email, users.updated_at, users.created_at
+from users
+join updated_identity on updated_identity.user_id = users.id;

@@ -150,7 +150,7 @@ func run() error {
 
 	queries := postgressqlc.New(pool)
 	operationQueries := diagnostics.Queries(queries)
-	authenticationRepository := postgres.NewAuthenticationRepository(operationQueries)
+	authenticationRepository := postgres.NewAuthenticationRepository(operationQueries, pool, diagnostics.Queries)
 	passwords := passwordadapter.NewBcryptHasher()
 	var googleProvider authentication.GoogleProvider
 	var oauthStates authentication.OAuthStateStore
@@ -182,6 +182,8 @@ func run() error {
 		OAuthStateTTL:                     cfg.Auth.OAuthStateTTL,
 		SessionTTL:                        cfg.Auth.SessionTTL,
 		GoogleReauthenticationRedirectURL: cfg.GoogleOAuth.ReauthenticationRedirectURL,
+		PasswordResetURL:                  cfg.Auth.PasswordResetURL,
+		PasswordResetEmailFrom:            cfg.Auth.PasswordResetEmailFrom,
 	})
 	recentAuthService := recentauth.NewService(authenticationService, recentauth.Config{
 		Secret:    cfg.Auth.RecentAuthSecret,
@@ -198,12 +200,13 @@ func run() error {
 	membershipRepository := postgres.NewMembershipRepository(operationQueries, pool, diagnostics.Queries)
 	membershipService := memberships.NewService(membershipRepository)
 	var invitationSender email.Sender
-	if cfg.Resend.APIKey != "" {
+	if strings.TrimSpace(cfg.Resend.APIKey) != "" {
 		sender, err := resendadapter.NewSender(cfg.Resend)
 		if err != nil {
 			return err
 		}
 		invitationSender = email.NewService(sender)
+		authenticationService = authenticationService.WithEmailSender(invitationSender)
 	}
 	var peopleLogger *slog.Logger
 	if cfg.Observability.OperationLogs {

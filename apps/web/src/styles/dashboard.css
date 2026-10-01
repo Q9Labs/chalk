@@ -1596,6 +1596,30 @@
   color: var(--ink);
   font-weight: 700;
 }
+.auth-forgot-password {
+  margin-top: -9px;
+  font-size: 12px;
+  text-align: right;
+}
+.auth-forgot-password a,
+.auth-switch a {
+  color: var(--ink);
+  font-weight: 700;
+}
+.auth-guidance {
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.auth-success {
+  padding: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
 
 .tenant-onboarding {
   min-height: 100vh;

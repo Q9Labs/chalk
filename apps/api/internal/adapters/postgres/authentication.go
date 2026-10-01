@@ -23,14 +23,30 @@ type authenticationQuerier interface {
 	GetUserByAuthIdentity(ctx context.Context, arg sqlc.GetUserByAuthIdentityParams) (sqlc.User, error)
 	GetUserByEmail(ctx context.Context, email string) (sqlc.User, error)
 	RevokeLoginSession(ctx context.Context, arg sqlc.RevokeLoginSessionParams) (sqlc.LoginSession, error)
+	StorePasswordReset(ctx context.Context, arg sqlc.StorePasswordResetParams) error
+	CompletePasswordReset(ctx context.Context, arg sqlc.CompletePasswordResetParams) (sqlc.User, error)
 }
 
 type AuthenticationRepository struct {
-	queries authenticationQuerier
+	queries    authenticationQuerier
+	transactor authenticationTransactor
+	decorate   func(sqlc.Querier) sqlc.Querier
 }
 
-func NewAuthenticationRepository(queries authenticationQuerier) AuthenticationRepository {
-	return AuthenticationRepository{queries: queries}
+type authenticationTransactor interface {
+	BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
+}
+
+func NewAuthenticationRepository(queries authenticationQuerier, transactor authenticationTransactor, decorate func(sqlc.Querier) sqlc.Querier) AuthenticationRepository {
+	return AuthenticationRepository{queries: queries, transactor: transactor, decorate: decorate}
+}
+
+func (r AuthenticationRepository) transactionQueries(tx pgx.Tx) sqlc.Querier {
+	queries := sqlc.New(tx)
+	if r.decorate != nil {
+		return r.decorate(queries)
+	}
+	return queries
 }
 
 func (r AuthenticationRepository) CreatePasswordUser(ctx context.Context, input authentication.CreatePasswordUserInput) (authentication.User, error) {
@@ -112,7 +128,26 @@ func (r AuthenticationRepository) GetUserByEmail(ctx context.Context, email stri
 }
 
 func (r AuthenticationRepository) CreateSession(ctx context.Context, input authentication.CreateSessionInput) (authentication.Session, error) {
-	session, err := r.queries.CreateLoginSession(ctx, sqlc.CreateLoginSessionParams{
+	tx, err := r.transactor.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return authentication.Session{}, fmt.Errorf("begin login issuance: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	queries := r.transactionQueries(tx)
+	// Reset takes the same account lock before its revocation statement starts.
+	if _, err := queries.LockAuthenticationAccount(ctx, uuid(input.UserID)); err != nil {
+		return authentication.Session{}, fmt.Errorf("lock login Account: %w", err)
+	}
+	if input.ExpectedPasswordHash != nil {
+		hash, err := queries.GetAccountPasswordHash(ctx, uuid(input.UserID))
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && (!hash.Valid || hash.String != *input.ExpectedPasswordHash)) {
+			return authentication.Session{}, authentication.ErrInvalidCredentials
+		}
+		if err != nil {
+			return authentication.Session{}, fmt.Errorf("check login credentials: %w", err)
+		}
+	}
+	session, err := queries.CreateLoginSession(ctx, sqlc.CreateLoginSessionParams{
 		ID:        uuid(input.ID),
 		UserID:    uuid(input.UserID),
 		TokenHash: input.TokenHash,
@@ -121,6 +156,9 @@ func (r AuthenticationRepository) CreateSession(ctx context.Context, input authe
 	})
 	if err != nil {
 		return authentication.Session{}, fmt.Errorf("create login session: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return authentication.Session{}, fmt.Errorf("commit login issuance: %w", err)
 	}
 
 	return mapAuthenticationSession(session), nil
@@ -163,6 +201,50 @@ func (r AuthenticationRepository) RevokeSession(ctx context.Context, sessionID u
 	}
 
 	return nil
+}
+
+func (r AuthenticationRepository) StorePasswordReset(ctx context.Context, input authentication.StorePasswordResetInput) error {
+	err := r.queries.StorePasswordReset(ctx, sqlc.StorePasswordResetParams{
+		AccountID: uuid(input.UserID), TokenHash: input.TokenHash,
+		ExpiresAt: pgtype.Timestamptz{Time: input.ExpiresAt, Valid: true},
+	})
+	if err != nil {
+		return fmt.Errorf("store password reset: %w", err)
+	}
+	return nil
+}
+
+func (r AuthenticationRepository) CompletePasswordReset(ctx context.Context, input authentication.CompletePasswordResetInput) (authentication.User, error) {
+	tx, err := r.transactor.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return authentication.User{}, fmt.Errorf("begin password reset: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	queries := r.transactionQueries(tx)
+	accountID, err := queries.GetPasswordResetAccount(ctx, input.TokenHash)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return authentication.User{}, authentication.ErrPasswordResetTokenInvalid
+	}
+	if err != nil {
+		return authentication.User{}, fmt.Errorf("find reset Account: %w", err)
+	}
+	if _, err := queries.LockAuthenticationAccount(ctx, accountID); err != nil {
+		return authentication.User{}, fmt.Errorf("lock reset Account: %w", err)
+	}
+	user, err := queries.CompletePasswordReset(ctx, sqlc.CompletePasswordResetParams{
+		TokenHash: input.TokenHash, PasswordHash: pgtype.Text{String: input.PasswordHash, Valid: true},
+		CompletedAt: pgtype.Timestamptz{Time: input.CompletedAt, Valid: true},
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return authentication.User{}, authentication.ErrPasswordResetTokenInvalid
+	}
+	if err != nil {
+		return authentication.User{}, fmt.Errorf("complete password reset: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return authentication.User{}, fmt.Errorf("commit password reset: %w", err)
+	}
+	return mapAuthenticationUser(user.ID, user.Name, user.Email, user.UpdatedAt, user.CreatedAt), nil
 }
 
 func mapAuthenticationSession(session sqlc.LoginSession) authentication.Session {

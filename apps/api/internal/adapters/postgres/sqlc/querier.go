@@ -66,6 +66,7 @@ type Querier interface {
 	CompleteChatAttachmentCleanup(ctx context.Context, arg CompleteChatAttachmentCleanupParams) (int64, error)
 	CompleteChatAttachmentUpload(ctx context.Context, arg CompleteChatAttachmentUploadParams) (int64, error)
 	CompleteDiagnosticExportJob(ctx context.Context, arg CompleteDiagnosticExportJobParams) (DiagnosticExportJob, error)
+	CompletePasswordReset(ctx context.Context, arg CompletePasswordResetParams) (User, error)
 	CompleteRecordingCaptureCommand(ctx context.Context, arg CompleteRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
 	CompleteRecordingJob(ctx context.Context, arg CompleteRecordingJobParams) (RecordingJob, error)
 	CompleteRecordingRender(ctx context.Context, arg CompleteRecordingRenderParams) (CompleteRecordingRenderRow, error)
@@ -155,6 +156,7 @@ type Querier interface {
 	FindEventsByIDs(ctx context.Context, arg FindEventsByIDsParams) ([]DiagnosticEvent, error)
 	FinishTranscriptionAttempt(ctx context.Context, arg FinishTranscriptionAttemptParams) (TranscriptionAttempt, error)
 	GetAPIKeyMutation(ctx context.Context, arg GetAPIKeyMutationParams) (ApiKeyMutationRequest, error)
+	GetAccountPasswordHash(ctx context.Context, accountID pgtype.UUID) (pgtype.Text, error)
 	GetAccountTenantByOnboarding(ctx context.Context, arg GetAccountTenantByOnboardingParams) (GetAccountTenantByOnboardingRow, error)
 	GetActiveAPIKeyByPrefix(ctx context.Context, keyPrefix string) (GetActiveAPIKeyByPrefixRow, error)
 	GetArtifactJob(ctx context.Context, id pgtype.UUID) (ArtifactJob, error)
@@ -191,6 +193,7 @@ type Querier interface {
 	GetLatestRecordingCapturePlan(ctx context.Context, planHandle pgtype.UUID) (RecordingCapturePlan, error)
 	GetLoginSessionByTokenHash(ctx context.Context, tokenHash string) (GetLoginSessionByTokenHashRow, error)
 	GetPasswordIdentityByEmail(ctx context.Context, email string) (GetPasswordIdentityByEmailRow, error)
+	GetPasswordResetAccount(ctx context.Context, tokenHash string) (pgtype.UUID, error)
 	GetReadyWhiteboardFile(ctx context.Context, arg GetReadyWhiteboardFileParams) (GetReadyWhiteboardFileRow, error)
 	GetRecordingArtifact(ctx context.Context, arg GetRecordingArtifactParams) (RecordingArtifact, error)
 	GetRecordingBundleAllocation(ctx context.Context, id pgtype.UUID) (RecordingBundleAllocation, error)
@@ -351,6 +354,7 @@ type Querier interface {
 	LockActiveParticipantsForTenantEnd(ctx context.Context, arg LockActiveParticipantsForTenantEndParams) ([]LockActiveParticipantsForTenantEndRow, error)
 	LockActiveRecordingForTenantEnd(ctx context.Context, arg LockActiveRecordingForTenantEndParams) (pgtype.UUID, error)
 	LockAdmissionRequestForParticipant(ctx context.Context, arg LockAdmissionRequestForParticipantParams) (SyncAdmissionRequest, error)
+	LockAuthenticationAccount(ctx context.Context, accountID pgtype.UUID) (pgtype.UUID, error)
 	LockAutoSpaceLifecycle(ctx context.Context, arg LockAutoSpaceLifecycleParams) (AutoSpaceLifecycle, error)
 	LockDashboardJoinIntentForUpdate(ctx context.Context, arg LockDashboardJoinIntentForUpdateParams) (SyncLifecycleIntent, error)
 	LockDashboardParticipantForUpdate(ctx context.Context, arg LockDashboardParticipantForUpdateParams) (Participant, error)
@@ -472,6 +476,7 @@ type Querier interface {
 	SeedDefaultSpaceRoles(ctx context.Context, arg SeedDefaultSpaceRolesParams) error
 	SetRecordingCaptureConnectionActiveCommand(ctx context.Context, arg SetRecordingCaptureConnectionActiveCommandParams) (int64, error)
 	SetRecordingCaptureReadyAt(ctx context.Context, arg SetRecordingCaptureReadyAtParams) (pgtype.Timestamptz, error)
+	StorePasswordReset(ctx context.Context, arg StorePasswordResetParams) error
 	TouchActiveAPIKeyLastUsed(ctx context.Context, arg TouchActiveAPIKeyLastUsedParams) error
 	UpdateDiagnosticExportProgress(ctx context.Context, arg UpdateDiagnosticExportProgressParams) (DiagnosticExportJob, error)
 	UpdateEpisodeDiagnosticLifecycle(ctx context.Context, arg UpdateEpisodeDiagnosticLifecycleParams) (EpisodeDiagnostic, error)

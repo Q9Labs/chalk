@@ -40,6 +40,8 @@ const (
 	AuthRecentAuthSecret             = "CHALK_AUTH_RECENT_AUTH_SECRET"
 	AuthOAuthStateTTLMS              = "CHALK_AUTH_OAUTH_STATE_TTL_MS"
 	AuthSessionTTLMS                 = "CHALK_AUTH_SESSION_TTL_MS"
+	AuthPasswordResetURL             = "CHALK_AUTH_PASSWORD_RESET_URL"
+	AuthPasswordResetEmailFrom       = "CHALK_AUTH_PASSWORD_RESET_EMAIL_FROM"
 	SyncTokenAudience                = "CHALK_SYNC_TOKEN_AUDIENCE"
 	SyncTokenIssuer                  = "CHALK_SYNC_TOKEN_ISSUER"
 	SyncTokenKeyID                   = "CHALK_SYNC_TOKEN_KEY_ID"
@@ -283,6 +285,8 @@ type AuthConfig struct {
 	OAuthStateTTL             time.Duration
 	RecentAuthSecret          []byte
 	SessionTTL                time.Duration
+	PasswordResetURL          string
+	PasswordResetEmailFrom    string
 }
 
 type SyncTokenConfig struct {
@@ -664,6 +668,8 @@ func Load() (Config, error) {
 			OAuthStateTTL:             oauthStateTTL,
 			RecentAuthSecret:          recentAuthSecret,
 			SessionTTL:                sessionTTL,
+			PasswordResetURL:          strings.TrimSpace(envOrDefault(AuthPasswordResetURL, "")),
+			PasswordResetEmailFrom:    strings.TrimSpace(envOrDefault(AuthPasswordResetEmailFrom, "")),
 		},
 		Capabilities:       capabilities,
 		CloudflareRealtime: cloudflareRealtime,

@@ -16,9 +16,11 @@ import { Route as SpaceRouteImport } from './routes/space'
 import { Route as SignUpRouteImport } from './routes/sign-up'
 import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as SdkPreviewRouteImport } from './routes/sdk-preview'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as NewRouteImport } from './routes/new'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as DocsRouteImport } from './routes/docs'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
@@ -73,6 +75,11 @@ const SdkPreviewRoute = SdkPreviewRouteImport.update({
   path: '/sdk-preview',
   getParentRoute: () => rootRouteImport,
 } as any).lazy(() => import('./routes/sdk-preview.lazy').then((d) => d.Route))
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
@@ -86,6 +93,11 @@ const OnboardingRoute = OnboardingRouteImport.update({
 const NewRoute = NewRouteImport.update({
   id: '/new',
   path: '/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DocsRoute = DocsRouteImport.update({
@@ -181,9 +193,11 @@ const AppSpacesSpaceIdRoute = AppSpacesSpaceIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/docs': typeof DocsRouteWithChildren
+  '/forgot-password': typeof ForgotPasswordRoute
   '/new': typeof NewRoute
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/sdk-preview': typeof SdkPreviewRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
@@ -209,9 +223,11 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/new': typeof NewRoute
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/sdk-preview': typeof SdkPreviewRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
@@ -239,9 +255,11 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
   '/docs': typeof DocsRouteWithChildren
+  '/forgot-password': typeof ForgotPasswordRoute
   '/new': typeof NewRoute
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/sdk-preview': typeof SdkPreviewRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
@@ -270,9 +288,11 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/docs'
+    | '/forgot-password'
     | '/new'
     | '/onboarding'
     | '/privacy'
+    | '/reset-password'
     | '/sdk-preview'
     | '/sign-in'
     | '/sign-up'
@@ -298,9 +318,11 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/forgot-password'
     | '/new'
     | '/onboarding'
     | '/privacy'
+    | '/reset-password'
     | '/sdk-preview'
     | '/sign-in'
     | '/sign-up'
@@ -327,9 +349,11 @@ export interface FileRouteTypes {
     | '/'
     | '/_app'
     | '/docs'
+    | '/forgot-password'
     | '/new'
     | '/onboarding'
     | '/privacy'
+    | '/reset-password'
     | '/sdk-preview'
     | '/sign-in'
     | '/sign-up'
@@ -358,9 +382,11 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   DocsRoute: typeof DocsRouteWithChildren
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   NewRoute: typeof NewRoute
   OnboardingRoute: typeof OnboardingRoute
   PrivacyRoute: typeof PrivacyRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   SdkPreviewRoute: typeof SdkPreviewRoute
   SignInRoute: typeof SignInRoute
   SignUpRoute: typeof SignUpRoute
@@ -422,6 +448,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SdkPreviewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/privacy': {
       id: '/privacy'
       path: '/privacy'
@@ -441,6 +474,13 @@ declare module '@tanstack/react-router' {
       path: '/new'
       fullPath: '/new'
       preLoaderRoute: typeof NewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/docs': {
@@ -628,9 +668,11 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   DocsRoute: DocsRouteWithChildren,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   NewRoute: NewRoute,
   OnboardingRoute: OnboardingRoute,
   PrivacyRoute: PrivacyRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   SdkPreviewRoute: SdkPreviewRoute,
   SignInRoute: SignInRoute,
   SignUpRoute: SignUpRoute,

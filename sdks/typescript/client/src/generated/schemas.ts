@@ -961,6 +961,25 @@ export const ParticipantRemovalSchema = Schema.Struct({
 });
 export type ParticipantRemoval = typeof ParticipantRemovalSchema.Type;
 
+export const StatusSchema = Schema.Struct({
+  status: Schema.String,
+});
+export type Status = typeof StatusSchema.Type;
+
+export const PasswordResetAcceptedSchema = StatusSchema;
+export type PasswordResetAccepted = typeof PasswordResetAcceptedSchema.Type;
+
+export const PasswordResetCompleteRequestSchema = Schema.Struct({
+  password: Schema.String.check(Schema.isMinLength(1)),
+  token: Schema.String.check(Schema.isMinLength(1)),
+});
+export type PasswordResetCompleteRequest = typeof PasswordResetCompleteRequestSchema.Type;
+
+export const PasswordResetRequestSchema = Schema.Struct({
+  email: EmailSchema,
+});
+export type PasswordResetRequest = typeof PasswordResetRequestSchema.Type;
+
 export const PeopleMutationSchema = Schema.Struct({
   success: Schema.Boolean,
 });
@@ -1259,11 +1278,6 @@ export const StartIntegrationConnectionRequestSchema = Schema.Struct({
   service: Schema.String.check(Schema.isMinLength(1)),
 });
 export type StartIntegrationConnectionRequest = typeof StartIntegrationConnectionRequestSchema.Type;
-
-export const StatusSchema = Schema.Struct({
-  status: Schema.String,
-});
-export type Status = typeof StatusSchema.Type;
 
 export const StatusMonitorIdentifierSchema = Schema.String.check(Schema.isMinLength(1)).pipe(Schema.brand("StatusMonitorIdentifier"));
 export type StatusMonitorIdentifier = typeof StatusMonitorIdentifierSchema.Type;
@@ -1772,6 +1786,19 @@ export const CompleteGoogleSignIn429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type CompleteGoogleSignIn429ResponseHeaders = typeof CompleteGoogleSignIn429ResponseHeadersSchema.Type;
+
+export const CompletePasswordResetRequestBodySchema = PasswordResetCompleteRequestSchema;
+export type CompletePasswordResetRequestBody = typeof CompletePasswordResetRequestBodySchema.Type;
+
+export const CompletePasswordResetResponseSchema = StatusSchema;
+export type CompletePasswordResetResponse = typeof CompletePasswordResetResponseSchema.Type;
+
+export const CompletePasswordReset429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type CompletePasswordReset429ResponseHeaders = typeof CompletePasswordReset429ResponseHeadersSchema.Type;
 
 export const CompleteRecentAuthGoogleQueryParamsSchema = Schema.Struct({
   code: Schema.String,
@@ -3070,6 +3097,19 @@ export const RenegotiateCloudflareSFU429ResponseHeadersSchema = Schema.Struct({
 });
 export type RenegotiateCloudflareSFU429ResponseHeaders = typeof RenegotiateCloudflareSFU429ResponseHeadersSchema.Type;
 
+export const RequestPasswordResetRequestBodySchema = PasswordResetRequestSchema;
+export type RequestPasswordResetRequestBody = typeof RequestPasswordResetRequestBodySchema.Type;
+
+export const RequestPasswordResetResponseSchema = PasswordResetAcceptedSchema;
+export type RequestPasswordResetResponse = typeof RequestPasswordResetResponseSchema.Type;
+
+export const RequestPasswordReset429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type RequestPasswordReset429ResponseHeaders = typeof RequestPasswordReset429ResponseHeadersSchema.Type;
+
 export const RequestRecordingExportPathParamsSchema = Schema.Struct({
   recording_id: RecordingIdSchema,
   tenant_id: TenantIdSchema,
@@ -3511,6 +3551,25 @@ export const AccessMediaProofRejectedErrorWireSchema = Schema.Struct({
 export const AccessMediaProofRejectedErrorSchema = AccessMediaProofRejectedErrorWireSchema.pipe(
   Schema.decodeTo(AccessMediaProofRejectedError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "AccessMediaProofRejectedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class AccessPasswordResetTokenInvalidError extends Schema.TaggedErrorClass<AccessPasswordResetTokenInvalidError>()("AccessPasswordResetTokenInvalidError", {
+  error: Schema.Struct({
+    code: Schema.Literal("access.password_reset_token_invalid"),
+    message: Schema.String,
+  }),
+}) {}
+export const AccessPasswordResetTokenInvalidErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("access.password_reset_token_invalid"),
+    message: Schema.String,
+  }),
+});
+export const AccessPasswordResetTokenInvalidErrorSchema = AccessPasswordResetTokenInvalidErrorWireSchema.pipe(
+  Schema.decodeTo(AccessPasswordResetTokenInvalidError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "AccessPasswordResetTokenInvalidError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -6283,6 +6342,9 @@ export type CloseCloudflareSFUTracksError = typeof CloseCloudflareSFUTracksError
 export const CompleteGoogleSignInErrorSchema = Schema.Union([OauthEmailConflictErrorSchema, OauthEmailNotVerifiedErrorSchema, OauthInvalidStateErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
 export type CompleteGoogleSignInError = typeof CompleteGoogleSignInErrorSchema.Type;
 
+export const CompletePasswordResetErrorSchema = Schema.Union([AccessInvalidPasswordErrorSchema, AccessPasswordResetTokenInvalidErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
+export type CompletePasswordResetError = typeof CompletePasswordResetErrorSchema.Type;
+
 export const CompleteRecentAuthGoogleErrorSchema = Schema.Union([AccessUnauthenticatedErrorSchema, AuthInvalidRecentAuthErrorSchema, OauthNotConfiguredErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
 export type CompleteRecentAuthGoogleError = typeof CompleteRecentAuthGoogleErrorSchema.Type;
 
@@ -7344,6 +7406,9 @@ export const RenegotiateCloudflareSFUErrorSchema = Schema.Union([
 ]);
 export type RenegotiateCloudflareSFUError = typeof RenegotiateCloudflareSFUErrorSchema.Type;
 
+export const RequestPasswordResetErrorSchema = Schema.Union([RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
+export type RequestPasswordResetError = typeof RequestPasswordResetErrorSchema.Type;
+
 export const RequestRecordingExportErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -7658,6 +7723,7 @@ export const ChalkOperationPolicies = {
   cancelSpaceRecordingPreparation: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   closeCloudflareSFUTracks: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   completeGoogleSignIn: { rateLimit: { limit: 30, policy: "auth.oauth.callback", windowSeconds: 60 } },
+  completePasswordReset: { maxBodyBytes: 1048576, rateLimit: { limit: 5, policy: "auth.password_reset", windowSeconds: 60 } },
   completeRecentAuthGoogle: { rateLimit: { limit: 30, policy: "auth.oauth.callback", windowSeconds: 60 } },
   createAccountFeedbackReport: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createAPIKey: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -7715,6 +7781,7 @@ export const ChalkOperationPolicies = {
   removeEpisodeParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   removeMembership: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   renegotiateCloudflareSFU: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  requestPasswordReset: { maxBodyBytes: 1048576, rateLimit: { limit: 5, policy: "auth.password_reset", windowSeconds: 60 } },
   requestRecordingExport: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   requestTranscript: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   restoreSpace: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

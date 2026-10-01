@@ -35,6 +35,13 @@ function submit(mode: "sign-in" | "sign-up") {
 }
 
 describe("Account entry feedback", () => {
+  it("offers password recovery only from sign-in", () => {
+    const { rerender } = render(<AuthPage mode="sign-in" />);
+    expect(screen.getByRole<HTMLAnchorElement>("link", { name: "Forgot password?" }).getAttribute("href")).toBe("/forgot-password");
+    rerender(<AuthPage mode="sign-up" />);
+    expect(screen.queryByRole("link", { name: "Forgot password?" })).toBeNull();
+  });
+
   it("announces how to correct a rejected password", async () => {
     mocks.register.mockRejectedValue(new DashboardAPIError(400, "access.invalid_password", "Invalid password"));
     submit("sign-up");

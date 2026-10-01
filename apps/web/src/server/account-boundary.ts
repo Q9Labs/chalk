@@ -80,7 +80,7 @@ export async function handleAccountBoundary(request: Request, env: AccountBounda
     }
 
     const upstreamURL = resolveUpstreamURL(env.CHALK_API_ORIGIN, route.upstreamPath, allowedSearch(url, route.queryParameters));
-    const headers = upstreamHeaders(request, journeyID, accountToken, route.mutation ? url.origin : undefined);
+    const headers = upstreamHeaders(request, journeyID, route.authenticated ? accountToken : undefined, route.mutation ? url.origin : undefined);
     const body = request.method === "GET" || request.method === "HEAD" ? undefined : await boundedBody(request, route.maxBodyBytes ?? MAX_BODY_BYTES);
     const upstream = await fetcher(upstreamURL, { method: request.method, headers, body, redirect: "manual" });
     let response: Response;
@@ -142,6 +142,8 @@ function resolveRoute(method: string, pathname: string): BoundaryRoute | undefin
   const routes = new Map<string, BoundaryRoute>([
     ["POST /api/auth/register", { upstreamPath: "/v1/auth/register", mutation: true, authResult: true }],
     ["POST /api/auth/login", { upstreamPath: "/v1/auth/login", mutation: true, authResult: true }],
+    ["POST /api/auth/password-reset/request", { upstreamPath: "/v1/auth/password-reset/request", mutation: true }],
+    ["POST /api/auth/password-reset/complete", { upstreamPath: "/v1/auth/password-reset/complete", mutation: true }],
     ["POST /api/auth/logout", { upstreamPath: "/v1/auth/logout", mutation: true, authenticated: true }],
     ["GET /api/status", { upstreamPath: "/v1/status", publicStatus: true }],
     ["GET /api/auth/google/start", { upstreamPath: "/v1/auth/google/start" }],

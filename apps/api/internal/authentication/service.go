@@ -9,11 +9,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/mail"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/email"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -27,6 +29,7 @@ const (
 
 	DefaultLoginTTL         = 30 * 24 * time.Hour
 	DefaultOAuthStateTTL    = 10 * time.Minute
+	DefaultPasswordResetTTL = 30 * time.Minute
 	authTokenByteCount      = 32
 	googleReauthStatePrefix = "chalk-google-reauth-v1."
 )
@@ -46,6 +49,7 @@ var (
 	ErrOAuthStateNotFound        = errors.New("oauth state not found")
 	ErrOAuthEmailConflict        = errors.New("oauth email conflict")
 	ErrOAuthEmailNotVerified     = errors.New("oauth email not verified")
+	ErrPasswordResetTokenInvalid = errors.New("password reset token is expired, used, or unknown; request a new link")
 )
 
 type User struct {
@@ -107,11 +111,24 @@ type CreateGoogleUserInput struct {
 }
 
 type CreateSessionInput struct {
-	ID        utilities.ID
+	ID                   utilities.ID
+	UserID               utilities.ID
+	TokenHash            string
+	UserAgent            *string
+	ExpiresAt            time.Time
+	ExpectedPasswordHash *string
+}
+
+type StorePasswordResetInput struct {
 	UserID    utilities.ID
 	TokenHash string
-	UserAgent *string
 	ExpiresAt time.Time
+}
+
+type CompletePasswordResetInput struct {
+	TokenHash    string
+	PasswordHash string
+	CompletedAt  time.Time
 }
 
 type AuthResult struct {
@@ -150,6 +167,8 @@ type Repository interface {
 	CreateSession(ctx context.Context, input CreateSessionInput) (Session, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash string) (SessionUser, error)
 	RevokeSession(ctx context.Context, sessionID utilities.ID, revokedAt time.Time) error
+	StorePasswordReset(ctx context.Context, input StorePasswordResetInput) error
+	CompletePasswordReset(ctx context.Context, input CompletePasswordResetInput) (User, error)
 }
 
 type PasswordHasher interface {
@@ -183,6 +202,8 @@ type Config struct {
 	OAuthStateTTL                     time.Duration
 	GoogleReauthenticationRedirectURL string
 	Now                               func() time.Time
+	PasswordResetURL                  string
+	PasswordResetEmailFrom            string
 }
 
 type Service struct {
@@ -195,6 +216,9 @@ type Service struct {
 	oauthStateTTL                     time.Duration
 	googleReauthenticationRedirectURL string
 	now                               func() time.Time
+	emailSender                       email.Sender
+	passwordResetURL                  string
+	passwordResetEmailFrom            string
 }
 
 func NewService(repository Repository, passwords PasswordHasher, google GoogleProvider, oauthStates OAuthStateStore, cfg Config) Service {
@@ -223,7 +247,78 @@ func NewService(repository Repository, passwords PasswordHasher, google GooglePr
 		oauthStateTTL:                     oauthStateTTL,
 		googleReauthenticationRedirectURL: cfg.GoogleReauthenticationRedirectURL,
 		now:                               now,
+		passwordResetURL:                  strings.TrimSpace(cfg.PasswordResetURL),
+		passwordResetEmailFrom:            strings.TrimSpace(cfg.PasswordResetEmailFrom),
 	}
+}
+
+// WithEmailSender supplies outbound delivery without coupling authentication to a provider adapter.
+func (s Service) WithEmailSender(sender email.Sender) Service {
+	s.emailSender = sender
+	return s
+}
+
+func (s Service) RequestPasswordReset(ctx context.Context, rawEmail string) error {
+	canonicalEmail, err := CanonicalEmail(rawEmail)
+	if err != nil {
+		return nil
+	}
+	if s.emailSender == nil || s.passwordResetURL == "" || s.passwordResetEmailFrom == "" {
+		return email.ErrSenderUnavailable
+	}
+	resetURL, err := url.Parse(s.passwordResetURL)
+	if err != nil || resetURL.Host == "" || resetURL.User != nil || (resetURL.Scheme != "https" && resetURL.Scheme != "http") {
+		return errors.New("invalid password reset URL")
+	}
+	identity, err := s.repository.GetPasswordIdentityByEmail(ctx, canonicalEmail)
+	if errors.Is(err, ErrIdentityNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	rawToken, err := randomURLToken(authTokenByteCount)
+	if err != nil {
+		return err
+	}
+	if err := s.repository.StorePasswordReset(ctx, StorePasswordResetInput{
+		UserID: identity.User.ID, TokenHash: SessionTokenHash(rawToken), ExpiresAt: s.now().Add(DefaultPasswordResetTTL),
+	}); err != nil {
+		return err
+	}
+	// Fragments are not sent in HTTP requests or included in server access logs.
+	resetURL.Fragment = url.Values{"token": {rawToken}}.Encode()
+	_, err = s.emailSender.SendEmail(ctx, email.SendEmailInput{
+		From: s.passwordResetEmailFrom, To: []string{canonicalEmail}, Subject: "Reset your Chalk password",
+		TextBody: "Reset your Chalk password using this link (valid for 30 minutes): " + resetURL.String(),
+		HTMLBody: "<p>Reset your Chalk password using this link (valid for 30 minutes): <a href=\"" + html.EscapeString(resetURL.String()) + "\">Reset password</a></p>",
+	})
+	return err
+}
+
+func (s Service) CompletePasswordReset(ctx context.Context, rawToken string, rawPassword string) (User, error) {
+	token := strings.TrimSpace(rawToken)
+	if token == "" {
+		return User{}, ErrPasswordResetTokenInvalid
+	}
+	password, err := PreparePassword(rawPassword)
+	if err != nil {
+		return User{}, err
+	}
+	if s.passwords == nil {
+		return User{}, fmt.Errorf("password hasher is not configured")
+	}
+	passwordHash, err := s.passwords.HashPassword(password)
+	if err != nil {
+		return User{}, fmt.Errorf("hash password: %w", err)
+	}
+	user, err := s.repository.CompletePasswordReset(ctx, CompletePasswordResetInput{
+		TokenHash: SessionTokenHash(token), PasswordHash: passwordHash, CompletedAt: s.now(),
+	})
+	if errors.Is(err, ErrPasswordResetTokenInvalid) {
+		return User{}, ErrPasswordResetTokenInvalid
+	}
+	return user, err
 }
 
 func (s Service) Register(ctx context.Context, input RegisterInput) (AuthResult, error) {
@@ -275,7 +370,7 @@ func (s Service) Register(ctx context.Context, input RegisterInput) (AuthResult,
 		return AuthResult{}, err
 	}
 
-	return s.createAuthResult(ctx, user, input.UserAgent)
+	return s.createAuthResult(ctx, user, input.UserAgent, nil)
 }
 
 func (s Service) Login(ctx context.Context, input LoginInput) (AuthResult, error) {
@@ -307,7 +402,7 @@ func (s Service) Login(ctx context.Context, input LoginInput) (AuthResult, error
 		return AuthResult{}, err
 	}
 
-	return s.createAuthResult(ctx, identity.User, input.UserAgent)
+	return s.createAuthResult(ctx, identity.User, input.UserAgent, &identity.PasswordHash)
 }
 
 // VerifyPassword re-checks the password for an already authenticated user.
@@ -663,7 +758,7 @@ func (s Service) CompleteGoogleSignIn(ctx context.Context, state string, code st
 
 	user, err := s.repository.GetUserByAuthIdentity(ctx, ProviderGoogle, subject)
 	if err == nil {
-		return s.createAuthResult(ctx, user, userAgent)
+		return s.createAuthResult(ctx, user, userAgent, nil)
 	}
 	if !errors.Is(err, ErrIdentityNotFound) {
 		return AuthResult{}, err
@@ -702,10 +797,10 @@ func (s Service) CompleteGoogleSignIn(ctx context.Context, state string, code st
 		return AuthResult{}, err
 	}
 
-	return s.createAuthResult(ctx, user, userAgent)
+	return s.createAuthResult(ctx, user, userAgent, nil)
 }
 
-func (s Service) createAuthResult(ctx context.Context, user User, userAgent *string) (AuthResult, error) {
+func (s Service) createAuthResult(ctx context.Context, user User, userAgent *string, expectedPasswordHash *string) (AuthResult, error) {
 	rawToken, err := randomURLToken(authTokenByteCount)
 	if err != nil {
 		return AuthResult{}, err
@@ -718,11 +813,12 @@ func (s Service) createAuthResult(ctx context.Context, user User, userAgent *str
 
 	expiresAt := s.now().Add(s.sessionTTL)
 	if _, err := s.repository.CreateSession(ctx, CreateSessionInput{
-		ID:        sessionID,
-		UserID:    user.ID,
-		TokenHash: SessionTokenHash(rawToken),
-		UserAgent: userAgent,
-		ExpiresAt: expiresAt,
+		ID:                   sessionID,
+		UserID:               user.ID,
+		TokenHash:            SessionTokenHash(rawToken),
+		UserAgent:            userAgent,
+		ExpiresAt:            expiresAt,
+		ExpectedPasswordHash: expectedPasswordHash,
 	}); err != nil {
 		return AuthResult{}, err
 	}

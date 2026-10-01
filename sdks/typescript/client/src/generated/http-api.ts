@@ -173,6 +173,21 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.post("completePasswordReset", "/v1/auth/password-reset/complete", {
+      payload: S.CompletePasswordResetRequestBodySchema,
+      success: S.CompletePasswordResetResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.AccessInvalidPasswordErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessPasswordResetTokenInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("createAccountFeedbackReport", "/v1/tenants/:tenant_id/feedback-reports", {
       params: S.CreateAccountFeedbackReportPathParamsSchema,
       headers: S.CreateAccountFeedbackReportRequestHeadersSchema,
@@ -679,6 +694,19 @@ const defaultGroup = HttpApiGroup.make("default")
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("requestPasswordReset", "/v1/auth/password-reset/request", {
+      payload: S.RequestPasswordResetRequestBodySchema,
+      success: S.RequestPasswordResetResponseSchema.pipe(HttpApiSchema.status(202)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),

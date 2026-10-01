@@ -387,6 +387,11 @@ func (tracedAuthentication) Login(context.Context, authentication.LoginInput) (a
 	return authentication.AuthResult{}, errors.New("login is not used by trace scenario")
 }
 
+func (tracedAuthentication) RequestPasswordReset(context.Context, string) error { return nil }
+func (tracedAuthentication) CompletePasswordReset(context.Context, string, string) (authentication.User, error) {
+	return authentication.User{}, authentication.ErrPasswordResetTokenInvalid
+}
+
 func (tracedAuthentication) Logout(context.Context, authentication.Principal) error {
 	return errors.New("logout is not used by trace scenario")
 }

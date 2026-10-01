@@ -25,6 +25,9 @@ var (
 		Limit:  10,
 		Window: time.Minute,
 	}
+	authPasswordResetRateLimit = ratelimit.Policy{
+		Name: ratelimit.PolicyNameAuthPasswordReset, Limit: 5, Window: time.Minute,
+	}
 	authMeRateLimit = ratelimit.Policy{
 		Name:   ratelimit.PolicyNameAuthMe,
 		Limit:  100,

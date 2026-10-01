@@ -140,6 +140,14 @@ export async function loginAccount(input: { email: string; password: string }): 
   return response.user;
 }
 
+export async function requestPasswordReset(email: string): Promise<void> {
+  await dashboardRequest("/api/auth/password-reset/request", { method: "POST", body: { email } });
+}
+
+export async function completePasswordReset(input: { token: string; password: string }): Promise<void> {
+  await dashboardRequest("/api/auth/password-reset/complete", { method: "POST", body: input });
+}
+
 export async function logoutAccount(): Promise<void> {
   await dashboardRequest("/api/auth/logout", { method: "POST", body: {} });
   csrfToken = undefined;
