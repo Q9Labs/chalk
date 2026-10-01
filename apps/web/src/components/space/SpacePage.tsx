@@ -1,8 +1,9 @@
+import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
 import { Chalk, Entrance, type EntranceSettings } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { useEpisodeDiagnosticsAvailability } from "../../features/episode-debugger/EpisodeDiagnosticsDeveloperLink";
-import { createPreparedPublicSpace, createPublicInviteClient, joinDashboardSpace, type AccountSpaceCredential, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
+import { createPreparedPublicSpace, createPublicInviteClient, joinDashboardSpace, resumePublicSpace, type AccountSpaceCredential, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
 import { listAllAccountTenants, listSpaces } from "../../lib/dashboard-api";
 import { canonicalSpaceInviteLink, clearDashboardSpaceEntry, dashboardSpaceEntryUsesDevicesOff, hasDashboardSpaceEntry, spaceInviteToken, verifiedSpaceInviteLink } from "../../lib/named-space-route";
 import { createLocalSpaceClient, createLocalSpaceRelease } from "../../lib/local-space-client";
@@ -13,15 +14,24 @@ const neutralSpaceError = "This Space is unavailable. Please check the invite li
 export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistory }: { readonly slug?: string; readonly navigatePublicSpace?: (canonicalSlug: string, inviteLink: string) => Promise<void> } = {}) {
   const { journey, telemetry } = useWebTelemetry();
   const client = useMemo(() => createPublicInviteClient(journey), [journey]);
+  const [reloadMarker] = useState(() => {
+    if (!slug) return null;
+    try {
+      return readReloadRejoin(globalThis.sessionStorage, slug);
+    } catch {
+      return null; // Storage may be disabled; manual entry remains available.
+    }
+  });
   const initialDisplayName = useMemo(() => new URLSearchParams(globalThis.location?.search ?? "").get("name") ?? "", []);
   const entranceDeviceDefaults = useMemo(() => (dashboardSpaceEntryUsesDevicesOff() ? { microphone: false, camera: false } : { microphone: true, camera: true }), []);
-  const [displayName, setDisplayName] = useState(initialDisplayName);
-  const [entranceSettings, setEntranceSettings] = useState<EntranceSettings | null>(null);
+  const [displayName, setDisplayName] = useState(reloadMarker?.displayName ?? initialDisplayName);
+  const [entranceSettings, setEntranceSettings] = useState<EntranceSettings | null>(reloadMarker ? { displayName: reloadMarker.displayName, microphone: reloadMarker.microphone, camera: reloadMarker.camera } : null);
   const [spaceAccess, setSpaceAccess] = useState<JoinedSpaceAccess | null>(null);
   const [pending, setPending] = useState<PendingArrival | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [preparing, setPreparing] = useState(false);
+  const [preparing, setPreparing] = useState(Boolean(reloadMarker));
   const active = useRef(true);
+  const reloadAttempted = useRef(false);
   const pendingRef = useRef<PendingArrival | null>(null);
   const cleanupPromise = useRef<Promise<void> | undefined>(undefined);
   const defaultEntranceSettings = useMemo<EntranceSettings>(() => ({ displayName, ...entranceDeviceDefaults }), [displayName, entranceDeviceDefaults]);
@@ -53,6 +63,24 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
     },
     [telemetry],
   );
+
+  useEffect(() => {
+    if (reloadAttempted.current || !slug || !reloadMarker) return;
+    reloadAttempted.current = true;
+    const marker = reloadMarker;
+    setDisplayName(marker.displayName);
+    setEntranceSettings({ displayName: marker.displayName, microphone: marker.microphone, camera: marker.camera });
+    setPreparing(true);
+    const recovery = marker.arrivalHandle ? resumePublicSpace(client, marker).then((prepared) => ({ prepared, spaceName: slug })) : prepareDashboardSpace(slug, marker.displayName, journey, marker).then((result) => ({ prepared: result.access, spaceName: result.spaceName }));
+    void recovery
+      .then((result) => complete(result.prepared, undefined, result.spaceName))
+      .catch(() => {
+        if (active.current) setError("Could not return to the Episode. Check your access before joining again.");
+      })
+      .finally(() => {
+        if (active.current) setPreparing(false);
+      });
+  }, [client, complete, journey, reloadMarker, slug]);
 
   const start = useCallback(
     (settings: EntranceSettings = defaultEntranceSettings) => {
@@ -175,6 +203,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
     const settings = entranceSettings ?? defaultEntranceSettings;
     return (
       <LocalSpace
+        reloadMarker={spaceAccess.prepared.reloadMarker}
         credential={spaceAccess.prepared.credential}
         displayName={settings.displayName}
         defaults={{ microphone: settings.microphone, camera: settings.camera }}
@@ -190,6 +219,12 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
     );
   }
 
+  if (reloadMarker && preparing)
+    return (
+      <main className="flex h-dvh items-center justify-center" role="status">
+        Returning to the Episode…
+      </main>
+    );
   if (pending) return <SpaceArrival displayName={displayName} error={error} pending preparing={preparing} onCancel={cancel} onDisplayNameChange={setDisplayName} onEnter={() => start()} />;
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
@@ -215,6 +250,7 @@ type JoinedSpaceAccess = {
 };
 
 type SpaceEntryAccess = Pick<PreparedPublicSpace, "credential" | "getAccess"> & {
+  readonly reloadMarker: () => Pick<ReloadRejoinMarker, "episodeId" | "participantId" | "participantGeneration" | "mediaProof" | "arrivalHandle" | "tenantId">;
   readonly connectionAccess?: PreparedPublicSpace["connectionAccess"];
   readonly spaceDescription?: string;
   readonly finish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
@@ -264,12 +300,12 @@ async function replacePublicSpaceHistory(_canonicalSlug: string, inviteLink: str
   globalThis.history?.replaceState(globalThis.history.state, "", inviteLink);
 }
 
-async function prepareDashboardSpace(slug: string, displayName: string, journey: ReturnType<typeof useWebTelemetry>["journey"]): Promise<DashboardPreparation> {
-  const tenantID = await resolveTenantID();
+async function prepareDashboardSpace(slug: string, displayName: string, journey: ReturnType<typeof useWebTelemetry>["journey"], reload?: ReloadRejoinMarker): Promise<DashboardPreparation> {
+  const tenantID = reload?.tenantId ?? (await resolveTenantID());
   if (!tenantID) throw new Error(neutralSpaceError);
-  const [access, spaceDescription] = await Promise.all([joinDashboardSpace(tenantID, slug, displayName, journey), findSpaceDescription(tenantID, slug).catch(() => undefined)]);
+  const [access, spaceDescription] = await Promise.all([reload ? joinDashboardSpace(tenantID, slug, displayName, journey, reload) : joinDashboardSpace(tenantID, slug, displayName, journey), findSpaceDescription(tenantID, slug).catch(() => undefined)]);
   clearDashboardSpaceEntry();
-  return { kind: "dashboard", access: { credential: access.credential, getAccess: access.getAccess, spaceDescription, finish: access.leave }, inviteLink: access.inviteLink, spaceName: slug };
+  return { kind: "dashboard", access: { credential: access.credential, getAccess: access.getAccess, reloadMarker: access.reloadMarker, spaceDescription, finish: access.leave }, inviteLink: access.inviteLink, spaceName: slug };
 }
 
 async function findSpaceDescription(tenantID: string, slug: string): Promise<string | undefined> {
@@ -326,6 +362,7 @@ function neutralMessage(_cause: unknown): string {
 }
 
 function LocalSpace({
+  reloadMarker,
   credential,
   displayName,
   defaults,
@@ -338,6 +375,7 @@ function LocalSpace({
   spaceName,
   spaceDescription,
 }: {
+  readonly reloadMarker: SpaceEntryAccess["reloadMarker"];
   readonly credential: PublicSpaceCredential | AccountSpaceCredential;
   readonly displayName: string;
   readonly defaults: { readonly microphone: boolean; readonly camera: boolean };
@@ -362,7 +400,14 @@ function LocalSpace({
   const openDiagnostics = useCallback(() => {
     if (diagnostics.path) globalThis.open(diagnostics.path, "_blank", "noopener");
   }, [diagnostics.path]);
+  const intentionallyLeft = useRef(false);
   const releaseFromLifecycle = useCallback(() => {
+    intentionallyLeft.current = true;
+    try {
+      globalThis.sessionStorage.removeItem(reloadRejoinStorageKey);
+    } catch {
+      /* Storage may be disabled. */
+    }
     void release().catch(() => undefined);
   }, [release]);
 
@@ -381,11 +426,25 @@ function LocalSpace({
 
   useEffect(() => {
     const releaseOnPageHide = (event: PageTransitionEvent) => {
-      if (!event.persisted) void onFinish({ keepalive: true }).catch(() => undefined);
+      if (event.persisted || intentionallyLeft.current) return;
+      const snapshot = client.getSnapshot();
+      if (snapshot.connection.status !== "live" && snapshot.connection.status !== "reconnecting") return;
+      try {
+        writeReloadRejoin(globalThis.sessionStorage, {
+          ...reloadMarker(),
+          space: globalThis.location.pathname.split("/").at(-1) ?? credential.space,
+          displayName: snapshot.self.displayName ?? displayName,
+          microphone: snapshot.media.local.microphone.state === "enabled",
+          camera: snapshot.media.local.camera.state === "enabled",
+        });
+      } catch {
+        // Without a recoverable tab marker, retain the existing release behavior.
+        void onFinish({ keepalive: true }).catch(() => undefined);
+      }
     };
     globalThis.addEventListener("pagehide", releaseOnPageHide);
     return () => globalThis.removeEventListener("pagehide", releaseOnPageHide);
-  }, [onFinish]);
+  }, [client, credential.space, displayName, onFinish, reloadMarker]);
 
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
