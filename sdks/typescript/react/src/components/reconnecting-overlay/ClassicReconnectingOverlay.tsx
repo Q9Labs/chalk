@@ -9,6 +9,7 @@ export const ClassicReconnectingOverlay = React.memo<ReconnectingOverlayProps>((
   const skin = useSkin();
   if (!isVisible) return null;
 
+  const titles = { connecting: "Connecting", reconnecting: "Reconnecting", failed: "Connection Failed" };
   const defaultMessages = {
     connecting: "Joining space...",
     reconnecting: "Connection lost. Reconnecting...",
@@ -30,7 +31,7 @@ export const ClassicReconnectingOverlay = React.memo<ReconnectingOverlayProps>((
         )}
 
         <h2 id="connection-status-title" className="mb-2 text-center text-xl font-semibold text-[var(--chalk-app-text)]">
-          {status === "failed" ? "Connection Failed" : "Connecting"}
+          {titles[status]}
         </h2>
 
         <p id="connection-status-desc" className="mb-8 text-center text-[var(--chalk-app-text-muted)]">

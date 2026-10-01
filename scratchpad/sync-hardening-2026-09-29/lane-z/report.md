@@ -13,14 +13,14 @@
 
 P95 seconds; state is Lane T's state-plus-outcome `convergenceMs`; media is the slowest of audio and video in both directions.
 
-| Scenario | Arm | Eligible/attempts | Sync | State + outcomes | Four-way media | Action terminal |
-|---|---|---:|---:|---:|---:|---:|
-| 5 s cut | A | 10/10 | 0.111 | 0.366 | 1.158 | 5.256 |
-| 5 s cut | B | 10/11 | 0.132 | 0.382 | 1.374 | 5.214 |
-| 180 s flapping | A | 10/10 | 3.870 | 3.868 | 2.383 | 3.217 |
-| 180 s flapping | B | 10/10 | 3.849 | 3.847 | 2.863 | 3.258 |
-| Sync restart | A | 5/5 | 0.077 | 0.075 | 0.216 | 1.011 |
-| Sync restart | B | 5/5 | 0.072 | 0.068 | 0.256 | 1.002 |
+| Scenario       | Arm | Eligible/attempts |  Sync | State + outcomes | Four-way media | Action terminal |
+| -------------- | --- | ----------------: | ----: | ---------------: | -------------: | --------------: |
+| 5 s cut        | A   |             10/10 | 0.111 |            0.366 |          1.158 |           5.256 |
+| 5 s cut        | B   |             10/11 | 0.132 |            0.382 |          1.374 |           5.214 |
+| 180 s flapping | A   |             10/10 | 3.870 |            3.868 |          2.383 |           3.217 |
+| 180 s flapping | B   |             10/10 | 3.849 |            3.847 |          2.863 |           3.258 |
+| Sync restart   | A   |               5/5 | 0.077 |            0.075 |          0.216 |           1.011 |
+| Sync restart   | B   |               5/5 | 0.072 |            0.068 |          0.256 |           1.002 |
 
 Before measuring, I set timing-noise bounds of **0.5 s** for Sync, state, and actions and **1.0 s** for worst four-way media, applied to both p95 and max. The largest B-minus-A flapping media difference was 0.480 s; all 12 metric/scenario p95 and max comparisons are within their bounds. No new eligible failure, censored outcome, pending/lost/duplicated action, or chat/hand outcome difference counts as noise. All eligible Participant views converged. Chat and hand resolved in all cut and flapping runs; on Sync restart both arms had the same five `chat.payload_invalid` rejections while all hands resolved.
 

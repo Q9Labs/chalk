@@ -257,10 +257,7 @@
         "ineligibleReasons": [
           {
             "run": 10,
-            "errors": [
-              "Initial remote audio/video did not flow in both directions within 25000 ms",
-              "Four-way media did not return within 20000 ms"
-            ],
+            "errors": ["Initial remote audio/video did not flow in both directions within 25000 ms", "Four-way media did not return within 20000 ms"],
             "harnessErrors": []
           }
         ],

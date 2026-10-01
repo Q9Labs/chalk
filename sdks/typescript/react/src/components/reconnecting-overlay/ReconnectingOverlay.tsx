@@ -4,6 +4,10 @@ import { WifiOffIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { useSkin } from "../skin-context";
 import { ClassicReconnectingOverlay } from "./ClassicReconnectingOverlay";
+import { ReconnectingNotice } from "./ReconnectingNotice";
+
+/** A reconnecting state shorter than this shows a non-blocking notice; longer shows the modal. */
+export const RECONNECTING_NOTICE_MS = 10_000;
 
 export interface ReconnectingOverlayProps {
   isVisible: boolean;
@@ -19,6 +23,7 @@ const ChalkReconnectingOverlay = React.memo<ReconnectingOverlayProps>(({ isVisib
   const skin = useSkin();
   if (!isVisible) return null;
 
+  const titles = { connecting: "Connecting", reconnecting: "Reconnecting", failed: "Connection Failed" };
   const defaultMessages = {
     connecting: "Joining space...",
     reconnecting: "Connection lost. Reconnecting...",
@@ -40,7 +45,7 @@ const ChalkReconnectingOverlay = React.memo<ReconnectingOverlayProps>(({ isVisib
         )}
 
         <h2 id="connection-status-title" className="mb-2 text-center text-xl font-semibold text-[var(--chalk-app-text)]">
-          {status === "failed" ? "Connection Failed" : "Connecting"}
+          {titles[status]}
         </h2>
 
         <p id="connection-status-desc" className="mb-8 text-center text-[var(--chalk-app-text-muted)]">
@@ -77,6 +82,19 @@ ChalkReconnectingOverlay.displayName = "ChalkReconnectingOverlay";
 
 export const ReconnectingOverlay = React.memo<ReconnectingOverlayProps>((props: ReconnectingOverlayProps) => {
   const skin = useSkin();
+  const isReconnecting = props.isVisible && props.status === "reconnecting";
+  const [escalated, setEscalated] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isReconnecting) {
+      setEscalated(false);
+      return;
+    }
+    const timer = setTimeout(() => setEscalated(true), RECONNECTING_NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [isReconnecting]);
+
+  if (isReconnecting && !escalated) return <ReconnectingNotice className={props.className} />;
   return skin === "classic" ? <ClassicReconnectingOverlay {...props} /> : <ChalkReconnectingOverlay {...props} />;
 });
 
