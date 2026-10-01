@@ -188,6 +188,13 @@ func TestIngestBundlesUsesExactKeyAndAuthorityForEachCaptureEpoch(t *testing.T) 
 }
 
 func TestWriteDecodesSeekableVP8OnRecordingClock(t *testing.T) {
+	for _, schema := range []string{recordingbundle.LegacyVersion, recordingbundle.Version} {
+		t.Run(schema, func(t *testing.T) { testWriteSeekableVP8WithPadding(t, schema) })
+	}
+}
+
+func testWriteSeekableVP8WithPadding(t *testing.T, schema string) {
+	t.Helper()
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		t.Skip("ffmpeg is not installed")
 	}
@@ -225,11 +232,15 @@ func TestWriteDecodesSeekableVP8OnRecordingClock(t *testing.T) {
 			})
 			sequence++
 		}
+		// Padding probes use RTP sequence numbers but contain no VP8 bytes.
+		// Preserve them in the authenticated bundle to cover existing recordings.
+		packets = append(packets, recordingbundle.RTPPacket{SequenceNumber: sequence, ExtendedSequenceNumber: uint64(sequence), Timestamp: uint32(9_000 + frameIndex*3_000), SSRC: 84, PayloadType: 96, Payload: []byte{}})
+		sequence++
 	}
 	bundle := recordingbundle.Bundle{
-		Version: recordingbundle.Version,
+		Version: schema,
 		Manifest: recordingbundle.Manifest{
-			Version: recordingbundle.Version, RecordingID: presentation.RecordingID,
+			Version: schema, RecordingID: presentation.RecordingID,
 			CaptureEpoch: 1, Sequence: 0,
 			RecorderEnvelopeDigest: strings.Repeat("42", 32),
 			MonotonicRange:         recordingbundle.TimeRange{StartMilliseconds: 100, EndMilliseconds: 167},
@@ -238,7 +249,7 @@ func TestWriteDecodesSeekableVP8OnRecordingClock(t *testing.T) {
 			Encryption: recordingbundle.EncryptionContext{
 				Environment: "test", TenantID: "00000000-0000-4000-8000-000000000009",
 				EpisodeID: presentation.EpisodeID, RecordingID: presentation.RecordingID,
-				JobID: "00000000-0000-4000-8000-000000000008", BundleSchema: recordingbundle.Version,
+				JobID: "00000000-0000-4000-8000-000000000008", BundleSchema: schema,
 			},
 		},
 		Fragments:     []recordingbundle.RTPFragment{{Track: track, Packets: packets}},
@@ -259,7 +270,7 @@ func TestWriteDecodesSeekableVP8OnRecordingClock(t *testing.T) {
 		OriginAuthorityID: presentation.Clock.OriginAuthorityID,
 		CaptureEpoch:      1, DurationMS: presentation.Clock.DurationMillis,
 		OutputDirectory: filepath.Join(root, "decoded"), Presentation: presentation,
-		Bundles: []BundleFile{{Path: bundlePath, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encrypted), Sequence: 0, CaptureEpoch: 1, CaptureJobID: "00000000-0000-4000-8000-000000000008", RecorderEnvelopeDigest: strings.Repeat("42", 32), BundleSchema: recordingbundle.Version}}, DataKeys: []DataKey{{CaptureEpoch: 1, Plaintext: key}},
+		Bundles: []BundleFile{{Path: bundlePath, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encrypted), Sequence: 0, CaptureEpoch: 1, CaptureJobID: "00000000-0000-4000-8000-000000000008", RecorderEnvelopeDigest: strings.Repeat("42", 32), BundleSchema: schema}}, DataKeys: []DataKey{{CaptureEpoch: 1, Plaintext: key}},
 	}
 	result, err := Write(context.Background(), request)
 	if err != nil {
@@ -278,7 +289,7 @@ func TestWriteDecodesSeekableVP8OnRecordingClock(t *testing.T) {
 		OriginAuthorityID: presentation.Clock.OriginAuthorityID,
 		CaptureEpoch:      1, DurationMS: presentation.Clock.DurationMillis,
 		OutputDirectory: filepath.Join(root, "decoded-microphone-only"), Presentation: presentation,
-		Bundles:             []BundleFile{{Path: bundlePath, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encrypted), Sequence: 0, CaptureEpoch: 1, CaptureJobID: "00000000-0000-4000-8000-000000000008", RecorderEnvelopeDigest: strings.Repeat("42", 32), BundleSchema: recordingbundle.Version}},
+		Bundles:             []BundleFile{{Path: bundlePath, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encrypted), Sequence: 0, CaptureEpoch: 1, CaptureJobID: "00000000-0000-4000-8000-000000000008", RecorderEnvelopeDigest: strings.Repeat("42", 32), BundleSchema: schema}},
 		DataKeys:            []DataKey{{CaptureEpoch: 1, Plaintext: append([]byte(nil), key...)}},
 		IncludedSourceKinds: []recordingpresentation.MediaKind{recordingpresentation.MediaKindMicrophone},
 		Runner:              rejectDecodeRunner{},
@@ -299,6 +310,7 @@ func TestWriteDecodesSeekableVP8OnRecordingClock(t *testing.T) {
 		t.Fatalf("VP8 duration = %q, want 0.1 seconds", probeOutput)
 	}
 	assertPassthroughFrameTimes(t, request, filepath.Join(root, "decoded-passthrough"), "vp8")
+
 }
 
 func TestWritePreservesSourceTimingWhenBundleClockLeadsLaggingTrack(t *testing.T) {

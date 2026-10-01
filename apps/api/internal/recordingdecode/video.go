@@ -97,6 +97,14 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 				lossStart = uint64(packet.Timestamp)
 			}
 		}
+		// RTP padding probes have no codec payload but consume sequence numbers.
+		// Keep continuity without feeding them to the VP8 depacketizer, including
+		// probes preserved in older bundles where the padding flag is not stored.
+		if len(packet.Payload) == 0 {
+			previousSequence, previousSSRC, previousTimestamp = packet.ExtendedSequenceNumber, packet.SSRC, packet.Timestamp
+			started = true
+			return nil
+		}
 		isKeyFrame, width, height, headerErr := vp8KeyFrame(packet.Payload)
 		if headerErr != nil {
 			return headerErr
