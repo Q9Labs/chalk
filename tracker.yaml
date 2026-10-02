@@ -212,15 +212,46 @@ outcomes:
     remaining:
       - Handle sender clock divergence and pass a one-hour Recording.
       - Prove recorder restart continuity and TLS peer rejection on the managed hosts.
-      - >-
-        Make a release fail when a new recorder worker can't bootstrap with the issuer or never
-        becomes ready, instead of passing the verifier with zero ready workers.
     uncertainty: >-
       Whether the remaining drift comes from the headless sender or the recorder is not known.
     theory: theory.md#product-memory
     code:
       - apps/api/internal/recorderworker
       - infrastructure/recorder
+  - id: recording.capture_image_boot
+    title: New Capture images boot in production
+    area: recording
+    state: planned
+    summary: >-
+      Production Capture runs on an image from 2026-10-02 because every Capture image built since
+      then registers with the issuer but never asks for its certificate in the fleet. The same image
+      completes a signed bootstrap on an isolated node, so the cause is in fleet provisioning.
+    size: M
+    remaining:
+      - Keep a failing fleet node with its boot logs and creation payload before it is deleted.
+      - Find and fix the cause, then move Capture to a current image.
+      - >-
+        Make image qualification and releases fail unless a new worker completes a fleet-style signed
+        bootstrap and becomes ready.
+    uncertainty: The failure has not reproduced outside the production fleet.
+    theory: theory.md#product-memory
+    code:
+      - apps/api/internal/recorderfleet
+      - apps/api/internal/adapters/digitalocean/recorder_fleet.go
+      - infrastructure/recorder/images
+  - id: recording.completion_recovery
+    title: Recover a Recording after completion retries run out
+    area: recording
+    state: planned
+    summary: >-
+      A Recording whose Capture completion fails three times stays terminal even when all its
+      bundles are stored, so a short server fault can lose a whole Recording.
+    size: S
+    remaining:
+      - Add a supported way to retry completion for a terminal Recording whose bundles are intact.
+    theory: theory.md#product-memory
+    code:
+      - apps/api/internal/recordingpipeline
   - id: recording.capture_cost
     title: Capture starts fast and costs little
     area: recording
@@ -232,12 +263,6 @@ outcomes:
       $90 a month at 2,000 hours, is now the largest Capture cost.
     size: M
     remaining:
-      - >-
-        Find and remove the transient registration 503s that can add about 15 seconds to a worker's
-        boot.
-      - >-
-        Confirm in production that an Automatic Space pre-warms from the Entrance and that its
-        Recording uses the warm node.
       - >-
         Experiment: with camera simulcast live, have Capture record the low camera layer and compare
         the Export and the SFU traffic to the recorder.
