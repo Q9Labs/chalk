@@ -42,6 +42,7 @@ func decodeOpusSource(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 	var previousEnd uint64
 	var previousSSRC uint32
 	var started bool
+	var pendingPacketLoss bool
 	closeSegment := func() error {
 		if writer == nil {
 			return nil
@@ -76,6 +77,15 @@ func decodeOpusSource(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 		if err := validateMediaTimestamp(packet.Timestamp, opusClockRate, durationMS); err != nil {
 			return err
 		}
+		lost := started && (packet.ExtendedSequenceNumber != previousSequence+1 || packet.SSRC != previousSSRC)
+		if len(packet.Payload) == 0 {
+			// Empty RTP probes consume sequence numbers, not audio samples. Keep
+			// the last audio end timestamp so DTX gaps still become silence.
+			pendingPacketLoss = pendingPacketLoss || lost
+			previousSequence, previousSSRC = packet.ExtendedSequenceNumber, packet.SSRC
+			return nil
+		}
+		lost = lost || pendingPacketLoss
 		samples, err := opusPacketSamples(packet.Payload)
 		if err != nil {
 			return fmt.Errorf("%w: Opus packet: %v", ErrDecode, err)
@@ -85,7 +95,7 @@ func decodeOpusSource(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 		if endTicks < startTicks {
 			return fmt.Errorf("%w: Opus timestamp overflow", ErrDecode)
 		}
-		newSegment := !started || packet.ExtendedSequenceNumber != previousSequence+1 || startTicks != previousEnd || packet.SSRC != previousSSRC
+		newSegment := !started || lost || startTicks != previousEnd
 		if started && startTicks < previousEnd {
 			return fmt.Errorf("%w: overlapping Opus timestamps", ErrDecode)
 		}
@@ -95,7 +105,7 @@ func decodeOpusSource(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 			}
 			if started && startTicks > previousEnd {
 				reason := "source_gap"
-				if packet.ExtendedSequenceNumber != previousSequence+1 || packet.SSRC != previousSSRC {
+				if lost {
 					reason = "packet_loss"
 				}
 				resultDiscontinuities = append(resultDiscontinuities, sourceDiscontinuity(state,
@@ -115,6 +125,7 @@ func decodeOpusSource(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 		current.endTicks = endTicks
 		previousSequence, previousEnd, previousSSRC = packet.ExtendedSequenceNumber, endTicks, packet.SSRC
 		started = true
+		pendingPacketLoss = false
 		return nil
 	})
 	if err != nil {
