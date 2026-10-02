@@ -672,14 +672,19 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   defp observe_terminal(state, terminate_reason) do
-    terminal = state.terminal || %{close_code: 1000, reason: terminal_reason(terminate_reason)}
+    terminal = state.terminal || terminal_from(terminate_reason)
 
-    Observability.terminal(state.observability, "sync.websocket.closed", %{
-      protocol: "whiteboard-v1",
-      phase: state.phase,
-      close_code: terminal.close_code,
-      reason: terminal.reason
-    })
+    Observability.terminal(
+      state.observability,
+      "sync.websocket.closed",
+      %{
+        protocol: "whiteboard-v1",
+        phase: state.phase,
+        close_code: terminal.close_code,
+        reason: terminal.reason
+      }
+      |> put_scene_id(state.scene_id)
+    )
 
     if state.identity do
       Diagnostics.record(:whiteboard_disconnect_observed, state.identity,
@@ -693,6 +698,22 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     end
   end
 
-  defp terminal_reason(:normal), do: :normal
-  defp terminal_reason(_reason), do: :client_closed
+  # WebSock reports why the process ended when the server did not choose the close.
+  # Client close text is not recorded because the peer controls it.
+  defp terminal_from(:normal), do: %{close_code: 1000, reason: :normal}
+  defp terminal_from(:remote), do: %{close_code: 1005, reason: :client_closed}
+
+  defp terminal_from({:remote, code, _text}) when is_integer(code) and code in 1000..4999,
+    do: %{close_code: code, reason: :client_closed}
+
+  defp terminal_from({:remote, _code, _text}), do: %{close_code: 1005, reason: :client_closed}
+  defp terminal_from(:timeout), do: %{close_code: 1006, reason: :timeout}
+  defp terminal_from(:shutdown), do: %{close_code: 1001, reason: :server_shutdown}
+  defp terminal_from({:shutdown, _detail}), do: %{close_code: 1001, reason: :server_shutdown}
+  defp terminal_from(_reason), do: %{close_code: 1006, reason: :transport_error}
+
+  defp put_scene_id(attributes, scene_id) when is_binary(scene_id),
+    do: Map.put(attributes, :scene_id, scene_id)
+
+  defp put_scene_id(attributes, _scene_id), do: attributes
 end

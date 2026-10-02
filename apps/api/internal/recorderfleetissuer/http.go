@@ -55,7 +55,7 @@ func NewHTTPHandler(service *Service, controllerVerifier recorderfleet.Controlle
 
 func (handler *HTTPHandler) abandon(response http.ResponseWriter, request *http.Request) {
 	if _, err := handler.controllerVerifier.Verify(request); err != nil {
-		writeError(response, ErrUnauthorized)
+		writeError(response, fmt.Errorf("%w: controller identity: %v", ErrUnauthorized, err))
 		return
 	}
 	var input abandonRequest
@@ -79,7 +79,8 @@ func (handler *HTTPHandler) observe(next http.Handler) http.Handler {
 		outcome := outcomeName(writer.status)
 		handler.metrics.increment(operation, outcome)
 		handler.logger.Info("recorder fleet issuer request",
-			"operation", operation, "outcome", outcome, "status", writer.status, "duration_ms", time.Since(started).Milliseconds())
+			"operation", operation, "outcome", outcome, "status", writer.status, "reason", writer.reason,
+			"duration_ms", time.Since(started).Milliseconds())
 	})
 }
 
@@ -108,7 +109,7 @@ func (handler *HTTPHandler) ready(response http.ResponseWriter, _ *http.Request)
 
 func (handler *HTTPHandler) register(response http.ResponseWriter, request *http.Request) {
 	if _, err := handler.controllerVerifier.Verify(request); err != nil {
-		writeError(response, ErrUnauthorized)
+		writeError(response, fmt.Errorf("%w: controller identity: %v", ErrUnauthorized, err))
 		return
 	}
 	var input registerRequest
@@ -153,7 +154,7 @@ func (handler *HTTPHandler) diagnostic(response http.ResponseWriter, request *ht
 	}
 	peerIP, err := directPeerIP(request)
 	if err != nil {
-		writeError(response, ErrUnauthorized)
+		writeError(response, fmt.Errorf("%w: peer address: %v", ErrUnauthorized, err))
 		return
 	}
 	var input recorderbootstrapprotocol.DiagnosticRequest
@@ -170,7 +171,7 @@ func (handler *HTTPHandler) diagnostic(response http.ResponseWriter, request *ht
 
 func (handler *HTTPHandler) revoke(response http.ResponseWriter, request *http.Request) {
 	if _, err := handler.controllerVerifier.Verify(request); err != nil {
-		writeError(response, ErrUnauthorized)
+		writeError(response, fmt.Errorf("%w: controller identity: %v", ErrUnauthorized, err))
 		return
 	}
 	var input revokeRequest
@@ -189,7 +190,7 @@ func (handler *HTTPHandler) challenge(response http.ResponseWriter, request *htt
 	peerIP, err := directPeerIP(request)
 	if err != nil {
 		handler.logger.Warn("recorder fleet issuer challenge rejected", "remote_addr", request.RemoteAddr, "error", err.Error())
-		writeError(response, ErrUnauthorized)
+		writeError(response, fmt.Errorf("%w: peer address: %v", ErrUnauthorized, err))
 		return
 	}
 	var input recorderbootstrapprotocol.ChallengeRequest
@@ -209,7 +210,7 @@ func (handler *HTTPHandler) challenge(response http.ResponseWriter, request *htt
 func (handler *HTTPHandler) bootstrap(response http.ResponseWriter, request *http.Request) {
 	peerIP, err := directPeerIP(request)
 	if err != nil {
-		writeError(response, ErrUnauthorized)
+		writeError(response, fmt.Errorf("%w: peer address: %v", ErrUnauthorized, err))
 		return
 	}
 	var input recorderbootstrapprotocol.BootstrapRequest
@@ -228,12 +229,12 @@ func (handler *HTTPHandler) bootstrap(response http.ResponseWriter, request *htt
 func (handler *HTTPHandler) renew(response http.ResponseWriter, request *http.Request) {
 	identity, err := handler.workerVerifier.Verify(request)
 	if err != nil {
-		writeError(response, ErrUnauthorized)
+		writeError(response, fmt.Errorf("%w: worker identity: %v", ErrUnauthorized, err))
 		return
 	}
 	peerIP, err := directPeerIP(request)
 	if err != nil {
-		writeError(response, ErrUnauthorized)
+		writeError(response, fmt.Errorf("%w: peer address: %v", ErrUnauthorized, err))
 		return
 	}
 	var input recorderbootstrapprotocol.RenewRequest
@@ -314,6 +315,10 @@ func writeError(response http.ResponseWriter, err error) {
 	case errors.Is(err, recorderfleet.ErrProviderUnavailable):
 		status = http.StatusServiceUnavailable
 	}
+	if writer, ok := response.(*statusWriter); ok && status < http.StatusInternalServerError {
+		// Rejection reasons are fixed protocol or validation text; server errors may wrap provider detail.
+		writer.reason = err.Error()
+	}
 	writeJSON(response, status, struct {
 		Error string `json:"error"`
 		Code  string `json:"code,omitempty"`
@@ -344,6 +349,7 @@ type revokeRequest struct {
 type statusWriter struct {
 	http.ResponseWriter
 	status int
+	reason string
 }
 
 func (writer *statusWriter) WriteHeader(status int) {

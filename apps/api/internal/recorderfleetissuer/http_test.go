@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -155,6 +156,19 @@ func TestInventoryPendingHTTPStatusIsDistinctFromRealFailures(t *testing.T) {
 		if response.Code != test.status || body.Code != test.code {
 			t.Fatalf("%v: status/code = %d/%q, want %d/%q", test.err, response.Code, body.Code, test.status, test.code)
 		}
+	}
+}
+
+func TestRejectedRequestLogNamesTheReason(t *testing.T) {
+	var logs bytes.Buffer
+	handler := &HTTPHandler{logger: slog.New(slog.NewTextHandler(&logs, nil)), metrics: newIssuerMetrics()}
+	rejecting := handler.observe(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		writeError(response, fmt.Errorf("%w: registration revoked", ErrUnauthorized))
+	}))
+	response := httptest.NewRecorder()
+	rejecting.ServeHTTP(response, httptest.NewRequest(http.MethodPost, recorderbootstrapprotocol.ChallengePath, nil))
+	if response.Code != http.StatusForbidden || !strings.Contains(logs.String(), "registration revoked") {
+		t.Fatalf("status = %d, log = %q", response.Code, logs.String())
 	}
 }
 

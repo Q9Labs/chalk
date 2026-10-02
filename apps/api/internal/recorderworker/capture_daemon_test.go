@@ -168,6 +168,10 @@ func TestCaptureCompletionOnlyClaimSkipsMediaAndReportsOutcome(t *testing.T) {
 	if detail := completionFailureDetail(completionStageError{stage: "api_complete", outcome: "returned", cause: HTTPError{Status: 503}}); detail != "stage=api_complete outcome=returned error_class=http http_status=503" {
 		t.Fatalf("HTTP outcome detail = %q", detail)
 	}
+	timedOut := completionStageError{stage: "api_complete", outcome: "timed_out", cause: errors.Join(context.DeadlineExceeded, HTTPError{Status: 500, Code: "recording.invalid_completion_source", Retryable: true})}
+	if detail := completionFailureDetail(timedOut); detail != "stage=api_complete outcome=timed_out error_class=http http_status=500 api_error_code=recording.invalid_completion_source" {
+		t.Fatalf("timed out detail = %q", detail)
+	}
 }
 
 func TestCaptureCompletionCancelsWhenBoundExpiresOrLeaseIsLost(t *testing.T) {

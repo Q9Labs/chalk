@@ -217,7 +217,7 @@ defmodule ChalkSync.Diagnostics do
     invalid_state invalid_target malformed_response not_available not_observable overloaded
     response_too_large retry_exhausted scope_not_found server_unavailable stale_participant_generation timeout
     transport_error unauthorized unknown hello_timeout invalid_token permission_denied protocol_error
-    invalid_acknowledgement delivery_unavailable client_closed normal
+    invalid_acknowledgement delivery_unavailable client_closed normal server_shutdown
   )
 
   @correlation_patterns %{

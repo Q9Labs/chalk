@@ -54,6 +54,39 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
              )
   end
 
+  test "records the close code and reason when the transport ends the socket" do
+    handler = "whiteboard-terminal-#{System.unique_integer([:positive])}"
+    test_pid = self()
+
+    :telemetry.attach(
+      handler,
+      [:chalk_sync, :observability, :event],
+      fn _event, _measure, metadata, _config -> send(test_pid, {:observed, metadata}) end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(handler) end)
+
+    assert {:ok, initial} = SocketWhiteboardV1.init(%{})
+    state = %{initial | phase: :live, scene_id: @scene_id}
+
+    for {terminate_reason, code, reason} <- [
+          {{:remote, 1001, "going away"}, 1001, :client_closed},
+          {:remote, 1005, :client_closed},
+          {:timeout, 1006, :timeout},
+          {:shutdown, 1001, :server_shutdown},
+          {{:error, :closed}, 1006, :transport_error}
+        ] do
+      assert :ok = SocketWhiteboardV1.terminate(terminate_reason, state)
+
+      assert_received {:observed,
+                       %{
+                         event: "sync.websocket.closed",
+                         attributes: %{close_code: ^code, reason: ^reason, scene_id: @scene_id}
+                       }}
+    end
+  end
+
   test "does not echo a participant cursor or replay an applied update" do
     assert {:ok, initial} = SocketWhiteboardV1.init(%{})
 
