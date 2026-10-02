@@ -2,6 +2,7 @@ package recordingdecode
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -19,6 +20,18 @@ import (
 )
 
 const videoClockRate uint64 = 90_000
+
+// Ignore only exact recent media replays, never merely an older timestamp or
+// picture ID. Some SFUs forward retransmissions under new RTP sequence numbers.
+const vp8ReplayWindow = 1_024
+
+type vp8PacketFingerprint struct {
+	payloadHash [sha256.Size]byte
+	timestamp   uint32
+	ssrc        uint32
+	payloadType uint8
+	marker      bool
+}
 
 type videoSegment struct {
 	path       string
@@ -46,7 +59,11 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 	var previousSequence uint64
 	var previousSSRC uint32
 	var previousTimestamp uint32
+	var mediaStarted bool
 	var started bool
+	replays := make(map[vp8PacketFingerprint]int, vp8ReplayWindow)
+	var recentPackets [vp8ReplayWindow]vp8PacketFingerprint
+	var recentPacketCount int
 	var waitingForKeyFrame = true
 	var lossStart uint64
 	closeSegment := func() error {
@@ -79,12 +96,6 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := validateMediaTimestamp(packet.Timestamp, videoClockRate, durationMS); err != nil {
-			return err
-		}
-		if started && packet.Timestamp < previousTimestamp {
-			return fmt.Errorf("%w: VP8 timestamp regressed", ErrDecode)
-		}
 		lost := started && (packet.ExtendedSequenceNumber != previousSequence+1 || packet.SSRC != previousSSRC)
 		if lost {
 			if err := closeSegment(); err != nil {
@@ -93,26 +104,45 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 			waitingForKeyFrame = true
 			if len(frameTimestamps) > 0 {
 				lossStart = frameTimestamps[len(frameTimestamps)-1] + nominalFrameTicks(frameTimestamps)
-			} else {
-				lossStart = uint64(packet.Timestamp)
 			}
 		}
+		previousSequence, previousSSRC = packet.ExtendedSequenceNumber, packet.SSRC
+		started = true
 		// RTP padding probes have no codec payload but consume sequence numbers.
 		// Keep continuity without feeding them to the VP8 depacketizer, including
 		// probes preserved in older bundles where the padding flag is not stored.
 		if len(packet.Payload) == 0 {
-			previousSequence, previousSSRC, previousTimestamp = packet.ExtendedSequenceNumber, packet.SSRC, packet.Timestamp
-			started = true
 			return nil
+		}
+		fingerprint := vp8PacketFingerprint{payloadHash: sha256.Sum256(packet.Payload), timestamp: packet.Timestamp, ssrc: packet.SSRC, payloadType: packet.PayloadType, marker: packet.Marker}
+		if mediaStarted && packet.Timestamp < previousTimestamp {
+			if _, replay := replays[fingerprint]; replay {
+				return nil
+			}
+			return fmt.Errorf("%w: VP8 timestamp regressed", ErrDecode)
+		}
+		if err := validateMediaTimestamp(packet.Timestamp, videoClockRate, durationMS); err != nil {
+			return err
+		}
+		previousTimestamp, mediaStarted = packet.Timestamp, true
+		if lost && len(frameTimestamps) == 0 {
+			lossStart = uint64(packet.Timestamp)
 		}
 		isKeyFrame, width, height, headerErr := vp8KeyFrame(packet.Payload)
 		if headerErr != nil {
 			return headerErr
 		}
+		if recentPacketCount >= vp8ReplayWindow {
+			expired := recentPackets[recentPacketCount%vp8ReplayWindow]
+			if replays[expired] == recentPacketCount-vp8ReplayWindow {
+				delete(replays, expired)
+			}
+		}
+		recentPackets[recentPacketCount%vp8ReplayWindow] = fingerprint
+		replays[fingerprint] = recentPacketCount
+		recentPacketCount++
 		if waitingForKeyFrame {
 			if !isKeyFrame {
-				previousSequence, previousSSRC, previousTimestamp = packet.ExtendedSequenceNumber, packet.SSRC, packet.Timestamp
-				started = true
 				return nil
 			}
 			if err := startSegment(packet, width, height); err != nil {
@@ -131,8 +161,6 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 		if packet.Marker {
 			frameTimestamps = append(frameTimestamps, uint64(packet.Timestamp))
 		}
-		previousSequence, previousSSRC, previousTimestamp = packet.ExtendedSequenceNumber, packet.SSRC, packet.Timestamp
-		started = true
 		return nil
 	})
 	if err != nil {
