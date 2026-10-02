@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       target_sha:
-        description: Full 40-character commit SHA that already passed its local gate
+        description: Full 40-character commit SHA whose pull request passed the Gate workflow
         required: true
         type: string
       release_managed:
@@ -433,7 +433,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22.14.0
+          node-version-file: .tool-versions
 
       - name: Download exact release manifest
         uses: actions/download-artifact@v4
@@ -532,7 +532,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22.14.0
+          node-version-file: .tool-versions
           cache: pnpm
 
       - name: Restore Turbo build cache

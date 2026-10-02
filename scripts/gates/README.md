@@ -6,6 +6,13 @@ runs the same tracker checks followed by `q9gate run --full`. Each gate runs
 with `GOMAXPROCS=1`, `VITEST_MAX_WORKERS=1`, `ERL_FLAGS='+S 1:1'`, and
 q9gate concurrency 1. `gate.report.json` records every selected/skipped lane.
 
+The pre-commit hook runs `pnpm gate:fast`: tracker check plus the `scope`, `format`,
+`hygiene`, `secrets`, `language-ratchet`, and `generated` lanes on staged files
+(about 10 seconds). The full gate runs in `.github/workflows/gate.yml` on every
+pull request. A run with nothing in scope fails in the `scope` lane; set
+`GATE_ALLOW_EMPTY=1` only when that is intended. `GATE_SERVICES=external` drops
+the `services` lane, because CI runs the API and Sync gates as separate jobs.
+
 `pnpm gate:explain <path>` asks q9gate why a path selects lanes. Local hooks
 classify staged files. For branch/CI scope use `pnpm gate -- --base <ref>`;
 q9gate compares `<ref>...HEAD`. Use `pnpm gate -- --files <path>` (repeatable)

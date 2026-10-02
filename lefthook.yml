@@ -1,4 +1,4 @@
 pre-commit:
   commands:
-    quality-gate:
-      run: pnpm run gate
+    fast-gate:
+      run: pnpm run gate:fast

@@ -53,6 +53,7 @@
     "release:web": "node scripts/deploy/deploy-web-release.mjs",
     "release:web:ci": "node scripts/deploy/deploy-web-release.mjs",
     "gate": "GOMAXPROCS=1 VITEST_MAX_WORKERS=1 ERL_FLAGS='+S 1:1' bash scripts/gates/commit.sh",
+    "gate:fast": "bash scripts/gates/commit.sh --fast",
     "gate:full": "GOMAXPROCS=1 VITEST_MAX_WORKERS=1 ERL_FLAGS='+S 1:1' bash scripts/gates/commit.sh --full",
     "gate:boundaries": "node --test scripts/gates/package-boundaries.test.mjs && node --import=tsx node_modules/@q9labsai/gates/dist/cli.js run --full --lane depcruise",
     "gate:explain": "q9gate why",
