@@ -428,18 +428,23 @@ func scheduleControlTail(source CompletionSource, appendEvent func(int64, int, E
 		if fact.Revision != previous+1 {
 			return 0, fmt.Errorf("%w: control tail gap", ErrInvalidCompletionSource)
 		}
-		at, err := elapsedMillis(source, fact.CreatedAt)
-		if err != nil {
-			return 0, err
-		}
 		var emitted []Event
 		if err := applyControlFact(participants, fact, func(event Event) { emitted = append(emitted, event) }); err != nil {
+			return 0, err
+		}
+		previous = fact.Revision
+		// Lifecycle facts can follow the frozen cursor while predating the
+		// worker's capture-ready clock. Only presentation events need an offset.
+		if len(emitted) == 0 {
+			continue
+		}
+		at, err := elapsedMillis(source, fact.CreatedAt)
+		if err != nil {
 			return 0, err
 		}
 		for _, event := range emitted {
 			appendEvent(at, 10, event)
 		}
-		previous = fact.Revision
 	}
 	return previous, nil
 }
