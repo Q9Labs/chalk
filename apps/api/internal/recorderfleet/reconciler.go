@@ -307,6 +307,26 @@ func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes 
 			request := *managed.PendingBootstrap
 			identity, err := r.bootstrap.EnsureBootstrap(ctx, request)
 			if err != nil {
+				if diagnostic, ok := BootstrapDiagnosticFromError(err); ok || errors.Is(err, ErrBootstrapPending) {
+					if !ok {
+						attempts := uint32(1)
+						if managed.BootstrapDiagnostic != nil && managed.BootstrapDiagnostic.Step == "registration" && managed.BootstrapDiagnostic.AttemptCount < ^uint32(0) {
+							attempts = managed.BootstrapDiagnostic.AttemptCount + 1
+						}
+						diagnostic = BootstrapDiagnostic{
+							SchemaVersion: BootstrapDiagnosticSchemaVersion, Step: "registration", AttemptCount: attempts,
+							LastReasonCode: "registration_pending", LastHTTPStatus: 202,
+						}
+					}
+					managed.BootstrapDiagnostic = &diagnostic
+					state.Nodes[providerID] = managed
+					state, saveErr := r.save(ctx, state)
+					result := Result{ProviderNodeID: providerID, BootstrapDiagnostic: &diagnostic}
+					if saveErr != nil {
+						return state, result, true, errors.Join(err, saveErr)
+					}
+					return state, result, true, err
+				}
 				return state, Result{}, true, fmt.Errorf("ensure recorder node bootstrap: %w", err)
 			}
 			if err := identity.Validate(r.config.Key, node); err != nil {
@@ -360,7 +380,7 @@ func (r *Reconciler) advanceDrain(ctx context.Context, state Journal, managed Ma
 		managed.Phase = PhaseDeleting
 		state.Nodes[node.ProviderID] = managed
 		state, err := r.save(ctx, state)
-		return state, Result{Action: ActionNodeDeleted, ProviderNodeID: node.ProviderID}, err
+		return state, Result{Action: ActionNodeDeleted, ProviderNodeID: node.ProviderID, BootstrapDiagnostic: managed.BootstrapDiagnostic}, err
 	case PhaseDraining:
 		deadline := managed.DrainStartedAt.Add(r.config.DrainTimeout)
 		// A node that never became ready never admitted a lease, so it has nothing to drain.
@@ -382,9 +402,14 @@ func (r *Reconciler) advanceDrain(ctx context.Context, state Journal, managed Ma
 		managed.Phase = PhaseIdentityRevoked
 		state.Nodes[node.ProviderID] = managed
 		state, err := r.save(ctx, state)
-		return state, Result{Action: ActionIdentityRevoked, ProviderNodeID: node.ProviderID}, err
+		return state, Result{Action: ActionIdentityRevoked, ProviderNodeID: node.ProviderID, BootstrapDiagnostic: managed.BootstrapDiagnostic}, err
 	default:
 		if managed.Identity == nil && managed.PendingBootstrap != nil {
+			if managed.BootstrapDiagnostic != nil && now.Sub(node.CreatedAt) > r.config.StartupTimeout {
+				diagnostic := *managed.BootstrapDiagnostic
+				diagnostic.LastReasonCode = "registration_deadline_exceeded"
+				managed.BootstrapDiagnostic = &diagnostic
+			}
 			if err := r.bootstrap.AbandonBootstrap(ctx, *managed.PendingBootstrap); err != nil {
 				return state, Result{}, fmt.Errorf("abandon recorder node bootstrap: %w", err)
 			}
@@ -392,7 +417,7 @@ func (r *Reconciler) advanceDrain(ctx context.Context, state Journal, managed Ma
 			managed.Phase = PhaseIdentityRevoked
 			state.Nodes[node.ProviderID] = managed
 			state, err := r.save(ctx, state)
-			return state, Result{Action: ActionIdentityRevoked, ProviderNodeID: node.ProviderID}, err
+			return state, Result{Action: ActionIdentityRevoked, ProviderNodeID: node.ProviderID, BootstrapDiagnostic: managed.BootstrapDiagnostic}, err
 		}
 		if managed.Identity != nil {
 			if err := r.runtime.CloseAdmission(ctx, *managed.Identity); err != nil {

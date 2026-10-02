@@ -183,6 +183,7 @@ func (s *recorderFleetControllerServiceStub) PublishPool(_ context.Context, proj
 func TestBootstrapPendingContractAndUnavailableWarning(t *testing.T) {
 	key := recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}
 	bootstrap := recorderfleet.BootstrapRequest{Key: key, ProviderID: "42", NodeName: "node-42", Region: "fra1", ReleaseID: "release-1", ImageDigest: "sha256:" + strings.Repeat("a", 64), BootGeneration: 1, InventoryDigest: strings.Repeat("b", 64)}
+	diagnostic := recorderfleet.BootstrapDiagnostic{SchemaVersion: recorderfleet.BootstrapDiagnosticSchemaVersion, Step: "challenge", AttemptCount: 4, LastReasonCode: "http_status", LastHTTPStatus: 503}
 	for _, test := range []struct {
 		name   string
 		err    error
@@ -191,7 +192,7 @@ func TestBootstrapPendingContractAndUnavailableWarning(t *testing.T) {
 		want   error
 	}{
 		{"inventory pending", fmt.Errorf("issue bootstrap: %w", recorderfleet.ErrInventoryNotReady), http.StatusConflict, recorderfleet.InventoryNotReadyCode, recorderfleet.ErrInventoryNotReady},
-		{"certificate pending", fmt.Errorf("issue bootstrap: %w", recorderfleet.ErrBootstrapPending), http.StatusConflict, recorderfleet.BootstrapPendingCode, recorderfleet.ErrBootstrapPending},
+		{"certificate pending", fmt.Errorf("issue bootstrap: %w", &recorderfleet.BootstrapPendingError{Diagnostic: diagnostic}), http.StatusConflict, recorderfleet.BootstrapPendingCode, recorderfleet.ErrBootstrapPending},
 		{"issuer unavailable", fmt.Errorf("issue bootstrap: %w: issuer status 503", recorderfleet.ErrProviderUnavailable), http.StatusServiceUnavailable, "service.unavailable", recorderfleet.ErrProviderUnavailable},
 		{"inventory drift", recorderfleet.ErrInventoryDrift, http.StatusBadRequest, "request.invalid", recorderfleet.ErrProviderUnavailable},
 		{"identity rejected", recorderfleet.ErrRoleFence, http.StatusBadRequest, "request.invalid", recorderfleet.ErrProviderUnavailable},
@@ -241,6 +242,12 @@ func TestBootstrapPendingContractAndUnavailableWarning(t *testing.T) {
 			_, err = client.EnsureBootstrap(t.Context(), bootstrap)
 			if !errors.Is(err, test.want) {
 				t.Fatalf("client error = %v, want %v", err, test.want)
+			}
+			if test.name == "certificate pending" {
+				got, ok := recorderfleet.BootstrapDiagnosticFromError(err)
+				if !ok || got != diagnostic {
+					t.Fatalf("client diagnostic = %+v/%t", got, ok)
+				}
 			}
 		})
 	}

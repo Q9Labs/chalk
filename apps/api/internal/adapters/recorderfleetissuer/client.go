@@ -113,6 +113,9 @@ func (c *Client) EnsureBootstrap(ctx context.Context, request recorderfleet.Boot
 		return recorderfleet.NodeIdentity{}, recorderfleet.ErrRoleFence
 	}
 	if err != nil {
+		if errors.Is(err, recorderfleet.ErrBootstrapPending) && response.Diagnostic != nil && response.Diagnostic.Validate() == nil {
+			return recorderfleet.NodeIdentity{}, &recorderfleet.BootstrapPendingError{Diagnostic: *response.Diagnostic}
+		}
 		return recorderfleet.NodeIdentity{}, err
 	}
 	return identity, nil
@@ -191,8 +194,9 @@ type bootstrapRequest struct {
 }
 
 type bootstrapResponse struct {
-	SchemaVersion string                     `json:"schema_version"`
-	Identity      recorderfleet.NodeIdentity `json:"identity"`
+	SchemaVersion string                             `json:"schema_version"`
+	Identity      recorderfleet.NodeIdentity         `json:"identity"`
+	Diagnostic    *recorderfleet.BootstrapDiagnostic `json:"diagnostic,omitempty"`
 }
 
 type abandonRequest struct {

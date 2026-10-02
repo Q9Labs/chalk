@@ -50,6 +50,29 @@ func TestBootstrapPersistsExactIdentityCertificateAndRevocation(t *testing.T) {
 		t.Fatalf("register identity/delivered/error = %+v/%t/%v", identity, delivered, err)
 	}
 	csrPEM, privateKey := testCSR(t)
+	diagnosticRequest := recorderbootstrapprotocol.DiagnosticRequest{
+		SchemaVersion: recorderbootstrapprotocol.DiagnosticSchemaVersion, ProviderID: node.ProviderID,
+		ReleaseID: registrationRequest.ReleaseID, ImageDigest: registrationRequest.ImageDigest,
+		BootGeneration: registrationRequest.BootGeneration, CSRPEM: csrPEM,
+		Diagnostic: recorderfleet.BootstrapDiagnostic{SchemaVersion: recorderfleet.BootstrapDiagnosticSchemaVersion, Step: "challenge", AttemptCount: 3, LastReasonCode: "bootstrap.challenge_unavailable", LastHTTPStatus: 503},
+	}
+	diagnosticProof, err := recorderbootstrapprotocol.CanonicalDiagnosticProof(diagnosticRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	diagnosticRequest.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, diagnosticProof))
+	invalidDiagnostic := diagnosticRequest
+	invalidDiagnostic.Signature = base64.RawURLEncoding.EncodeToString(make([]byte, ed25519.SignatureSize))
+	if err := service.RecordDiagnostic(context.Background(), netip.MustParseAddr("192.0.2.10"), invalidDiagnostic); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("unsigned diagnostic error = %v", err)
+	}
+	if err := service.RecordDiagnostic(context.Background(), netip.MustParseAddr("192.0.2.10"), diagnosticRequest); err != nil {
+		t.Fatalf("record diagnostic: %v", err)
+	}
+	stored, err := service.registration(node.ProviderID)
+	if err != nil || stored.BootstrapDiagnostic == nil || *stored.BootstrapDiagnostic != diagnosticRequest.Diagnostic {
+		t.Fatalf("stored diagnostic/error = %+v/%v", stored.BootstrapDiagnostic, err)
+	}
 	challengeRequest := recorderbootstrapprotocol.ChallengeRequest{
 		SchemaVersion: recorderbootstrapprotocol.ChallengeSchemaVersion, ProviderID: node.ProviderID,
 		ReleaseID: registrationRequest.ReleaseID, ImageDigest: registrationRequest.ImageDigest,

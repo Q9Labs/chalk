@@ -134,6 +134,31 @@ func (service *Service) Register(ctx context.Context, request recorderfleet.Boot
 	return identity, delivered, err
 }
 
+func (service *Service) RecordDiagnostic(ctx context.Context, peerIP netip.Addr, request recorderbootstrapprotocol.DiagnosticRequest) error {
+	if recorderbootstrapprotocol.VerifyDiagnosticProof(request) != nil || !peerIP.IsValid() {
+		return ErrUnauthorized
+	}
+	registration, err := service.registration(request.ProviderID)
+	if err != nil || request.ReleaseID != registration.Request.ReleaseID || request.ImageDigest != registration.Request.ImageDigest || request.BootGeneration != registration.Request.BootGeneration {
+		return ErrUnauthorized
+	}
+	if _, err := service.verifyInventory(ctx, registration.Request, peerIP); err != nil {
+		return err
+	}
+	diagnostic := request.Diagnostic
+	return service.store.update(func(state *persistedState) error {
+		current := state.Registrations[request.ProviderID]
+		if current == nil || current.Request != registration.Request || current.RevokedAt != nil {
+			return ErrUnauthorized
+		}
+		if current.BootstrapDiagnostic != nil && diagnostic.AttemptCount < current.BootstrapDiagnostic.AttemptCount {
+			return nil
+		}
+		current.BootstrapDiagnostic = &diagnostic
+		return nil
+	})
+}
+
 func (service *Service) AbandonBootstrap(request recorderfleet.BootstrapRequest) error {
 	if err := request.Validate(); err != nil || request.Key.Environment != service.environment {
 		return ErrUnauthorized

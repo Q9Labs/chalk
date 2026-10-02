@@ -23,10 +23,12 @@ const (
 	ChallengeSchemaVersion           = "recorder_fleet_node_bootstrap_challenge.v1"
 	BootstrapSchemaVersion           = "recorder_fleet_node_bootstrap.v1"
 	RenewSchemaVersion               = "recorder_fleet_node_renew.v1"
+	DiagnosticSchemaVersion          = "recorder_fleet_node_bootstrap_diagnostic.v1"
 
 	ChallengePath           = "/v1/recorder-fleet/node-bootstrap/challenge"
 	BootstrapPath           = "/v1/recorder-fleet/node-bootstrap"
 	RenewPath               = "/v1/recorder-fleet/node-renew"
+	DiagnosticPath          = "/v1/recorder-fleet/node-bootstrap/diagnostic"
 	ControllerBootstrapPath = "/v1/recorder-fleet/bootstrap"
 	ControllerAbandonPath   = "/v1/recorder-fleet/bootstrap/abandon"
 	ControllerRevokePath    = "/v1/recorder-fleet/revoke"
@@ -86,6 +88,65 @@ type RenewResponse struct {
 	ClientCertificatePEM string    `json:"client_certificate_pem"`
 	ClientCAChainPEM     string    `json:"client_ca_chain_pem"`
 	CertificateExpiresAt time.Time `json:"certificate_expires_at"`
+}
+
+type DiagnosticRequest struct {
+	SchemaVersion  string                            `json:"schema_version"`
+	ProviderID     string                            `json:"provider_id"`
+	ReleaseID      string                            `json:"release_id"`
+	ImageDigest    string                            `json:"image_digest"`
+	BootGeneration uint64                            `json:"boot_generation"`
+	CSRPEM         string                            `json:"csr_pem"`
+	Diagnostic     recorderfleet.BootstrapDiagnostic `json:"diagnostic"`
+	Signature      string                            `json:"signature"`
+}
+
+func (request DiagnosticRequest) Validate() error {
+	challenge := ChallengeRequest{SchemaVersion: ChallengeSchemaVersion, ProviderID: request.ProviderID, ReleaseID: request.ReleaseID, ImageDigest: request.ImageDigest, BootGeneration: request.BootGeneration, CSRPEM: request.CSRPEM}
+	if request.SchemaVersion != DiagnosticSchemaVersion || challenge.Validate() != nil || request.Diagnostic.Validate() != nil {
+		return ErrInvalidProtocol
+	}
+	if decoded, err := base64.RawURLEncoding.DecodeString(request.Signature); err != nil || len(decoded) != ed25519.SignatureSize {
+		return ErrInvalidProtocol
+	}
+	return nil
+}
+
+func CanonicalDiagnosticProof(request DiagnosticRequest) ([]byte, error) {
+	csr, _, err := ParseCSR(request.CSRPEM)
+	if err != nil || request.Diagnostic.Validate() != nil {
+		return nil, ErrInvalidProtocol
+	}
+	digest := sha256.Sum256(csr.Raw)
+	lines := []string{
+		"chalk.recorder_fleet.node_bootstrap_diagnostic.v1",
+		"provider_id=" + request.ProviderID, "release_id=" + request.ReleaseID,
+		"image_digest=" + request.ImageDigest, "boot_generation=" + strconv.FormatUint(request.BootGeneration, 10),
+		"csr_sha256=" + hex.EncodeToString(digest[:]), "step=" + request.Diagnostic.Step,
+		"attempt_count=" + strconv.FormatUint(uint64(request.Diagnostic.AttemptCount), 10),
+		"last_reason_code=" + request.Diagnostic.LastReasonCode,
+		"last_http_status=" + strconv.Itoa(request.Diagnostic.LastHTTPStatus),
+	}
+	return []byte(strings.Join(lines, "\n") + "\n"), nil
+}
+
+func VerifyDiagnosticProof(request DiagnosticRequest) error {
+	if err := request.Validate(); err != nil {
+		return err
+	}
+	message, err := CanonicalDiagnosticProof(request)
+	if err != nil {
+		return err
+	}
+	_, publicKey, err := ParseCSR(request.CSRPEM)
+	if err != nil {
+		return err
+	}
+	signature, _ := base64.RawURLEncoding.DecodeString(request.Signature)
+	if !ed25519.Verify(publicKey, message, signature) {
+		return ErrInvalidProtocol
+	}
+	return nil
 }
 
 func (request ChallengeRequest) Validate() error {

@@ -17,18 +17,52 @@ import (
 )
 
 const (
-	JournalSchemaVersion          = "recorder_fleet_journal.v2"
-	LegacyJournalSchemaVersion    = "recorder_fleet_journal.v1"
-	DemandSchemaVersion           = "recorder_fleet_demand.v1"
-	NodesSchemaVersion            = "recorder_fleet_nodes.v1"
-	BootstrapSchemaVersion        = "recorder_fleet_bootstrap.v1"
-	BootstrapAbandonSchemaVersion = "recorder_fleet_bootstrap_abandon.v1"
-	CommandSchemaVersion          = "recorder_fleet_command.v1"
-	PoolSchemaVersion             = "recorder_fleet_pool.v1"
-	ControllerRole                = "recorder-fleet-controller"
-	InventoryNotReadyCode         = "recorder_fleet.inventory_not_ready"
-	BootstrapPendingCode          = "recorder_fleet.bootstrap_pending"
+	JournalSchemaVersion             = "recorder_fleet_journal.v2"
+	LegacyJournalSchemaVersion       = "recorder_fleet_journal.v1"
+	DemandSchemaVersion              = "recorder_fleet_demand.v1"
+	NodesSchemaVersion               = "recorder_fleet_nodes.v1"
+	BootstrapSchemaVersion           = "recorder_fleet_bootstrap.v1"
+	BootstrapAbandonSchemaVersion    = "recorder_fleet_bootstrap_abandon.v1"
+	CommandSchemaVersion             = "recorder_fleet_command.v1"
+	PoolSchemaVersion                = "recorder_fleet_pool.v1"
+	ControllerRole                   = "recorder-fleet-controller"
+	InventoryNotReadyCode            = "recorder_fleet.inventory_not_ready"
+	BootstrapPendingCode             = "recorder_fleet.bootstrap_pending"
+	BootstrapDiagnosticSchemaVersion = "recorder_fleet_bootstrap_diagnostic.v1"
 )
+
+type BootstrapDiagnostic struct {
+	SchemaVersion  string `json:"schema_version"`
+	Step           string `json:"step"`
+	AttemptCount   uint32 `json:"attempt_count"`
+	LastReasonCode string `json:"last_reason_code"`
+	LastHTTPStatus int    `json:"last_http_status"`
+}
+
+func (diagnostic BootstrapDiagnostic) Validate() error {
+	if diagnostic.SchemaVersion != BootstrapDiagnosticSchemaVersion || diagnostic.AttemptCount == 0 ||
+		!slices.Contains([]string{"registration", "challenge", "certificate", "bootstrap", "install"}, diagnostic.Step) ||
+		!slices.Contains([]string{"registration_pending", "registration_deadline_exceeded", "http_status", "deadline_exceeded", "challenge_unavailable", "certificate_unavailable", "bootstrap_unavailable", "bootstrap.challenge_unavailable", "bootstrap.bootstrap_unavailable"}, diagnostic.LastReasonCode) ||
+		diagnostic.LastHTTPStatus < 0 || diagnostic.LastHTTPStatus > 599 || diagnostic.LastHTTPStatus > 0 && diagnostic.LastHTTPStatus < 100 {
+		return ErrInvalidConfig
+	}
+	return nil
+}
+
+type BootstrapPendingError struct {
+	Diagnostic BootstrapDiagnostic
+}
+
+func (err *BootstrapPendingError) Error() string { return ErrBootstrapPending.Error() }
+func (err *BootstrapPendingError) Unwrap() error { return ErrBootstrapPending }
+
+func BootstrapDiagnosticFromError(err error) (BootstrapDiagnostic, bool) {
+	var pending *BootstrapPendingError
+	if !errors.As(err, &pending) || pending.Diagnostic.Validate() != nil {
+		return BootstrapDiagnostic{}, false
+	}
+	return pending.Diagnostic, true
+}
 
 var (
 	ErrInvalidConfig       = errors.New("invalid recorder fleet config")
@@ -292,14 +326,15 @@ const (
 )
 
 type ManagedNode struct {
-	ProviderID       string            `json:"provider_id"`
-	Name             string            `json:"name"`
-	Phase            Phase             `json:"phase"`
-	BootGeneration   uint64            `json:"boot_generation"`
-	PendingBootstrap *BootstrapRequest `json:"pending_bootstrap,omitempty"`
-	Identity         *NodeIdentity     `json:"identity,omitempty"`
-	LastReadyAt      *time.Time        `json:"last_ready_at,omitempty"`
-	DrainStartedAt   *time.Time        `json:"drain_started_at,omitempty"`
+	ProviderID          string               `json:"provider_id"`
+	Name                string               `json:"name"`
+	Phase               Phase                `json:"phase"`
+	BootGeneration      uint64               `json:"boot_generation"`
+	PendingBootstrap    *BootstrapRequest    `json:"pending_bootstrap,omitempty"`
+	Identity            *NodeIdentity        `json:"identity,omitempty"`
+	LastReadyAt         *time.Time           `json:"last_ready_at,omitempty"`
+	DrainStartedAt      *time.Time           `json:"drain_started_at,omitempty"`
+	BootstrapDiagnostic *BootstrapDiagnostic `json:"bootstrap_diagnostic,omitempty"`
 }
 
 type PendingCreate struct {
@@ -339,6 +374,9 @@ func (j Journal) Validate(key PoolKey) error {
 				return ErrInvalidJournal
 			}
 		}
+		if node.BootstrapDiagnostic != nil && node.BootstrapDiagnostic.Validate() != nil {
+			return ErrInvalidJournal
+		}
 		if node.PendingBootstrap != nil {
 			request := *node.PendingBootstrap
 			if request.Validate() != nil || request.Key != key || request.ProviderID != providerID || request.NodeName != node.Name || request.BootGeneration != node.BootGeneration || node.Identity != nil || node.Phase != PhaseAwaitingBootstrap {
@@ -372,10 +410,11 @@ const (
 )
 
 type Result struct {
-	Action         Action
-	ProviderNodeID string
-	Projection     PoolProjection
-	Quarantined    []string
+	Action              Action
+	ProviderNodeID      string
+	Projection          PoolProjection
+	Quarantined         []string
+	BootstrapDiagnostic *BootstrapDiagnostic
 }
 
 func EnvironmentTag(environment string) string { return "chalk-environment-" + environment }

@@ -103,6 +103,15 @@ func runLoop(ctx context.Context, interval time.Duration, reconciler reconcileRu
 			return nil
 		case <-timer.C:
 			result, err := reconciler.Reconcile(ctx)
+			if diagnostic := result.BootstrapDiagnostic; diagnostic != nil {
+				logger.WarnContext(ctx, "recorder node bootstrap diagnostic",
+					"provider_node_id", result.ProviderNodeID,
+					"bootstrap_step", diagnostic.Step,
+					"bootstrap_attempt_count", diagnostic.AttemptCount,
+					"bootstrap_reason_code", diagnostic.LastReasonCode,
+					"bootstrap_http_status", diagnostic.LastHTTPStatus,
+				)
+			}
 			if errors.Is(err, recorderfleet.ErrInventoryNotReady) || errors.Is(err, recorderfleet.ErrBootstrapPending) {
 				logger.InfoContext(ctx, "recorder fleet bootstrap pending", "error", err)
 			} else if err != nil {

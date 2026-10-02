@@ -445,6 +445,39 @@ func TestReconcilerDrainsNodeThatMissedBootstrapDeadline(t *testing.T) {
 	}
 }
 
+func TestReconcilerPersistsBootstrapDiagnosticUntilNeverReadyNodeRevocation(t *testing.T) {
+	fixture := newFleetFixture(t)
+	request := fixture.ensureRequest(6)
+	node := fixture.provider.nodeFor(request, "6006")
+	fixture.provider.nodes[node.ProviderID] = node
+	diagnostic := BootstrapDiagnostic{
+		SchemaVersion: BootstrapDiagnosticSchemaVersion, Step: "registration", AttemptCount: 1,
+		LastReasonCode: "registration_pending", LastHTTPStatus: 202,
+	}
+	fixture.bootstrap.ensureErr = ErrBootstrapPending
+	reconciler := fixture.reconciler(t)
+
+	if result := fixture.step(t, reconciler); result.Action != ActionMissingNodeReconciled {
+		t.Fatalf("adoption result = %+v", result)
+	}
+	result, err := reconciler.Reconcile(context.Background())
+	if !errors.Is(err, ErrBootstrapPending) || result.BootstrapDiagnostic == nil || *result.BootstrapDiagnostic != diagnostic {
+		t.Fatalf("pending result/error = %+v/%v", result, err)
+	}
+	if stored := fixture.journal.state.Nodes[node.ProviderID].BootstrapDiagnostic; stored == nil || *stored != diagnostic {
+		t.Fatalf("stored diagnostic = %+v", stored)
+	}
+
+	node.CreatedAt = fixture.now.Add(-fixture.config.StartupTimeout - time.Second)
+	fixture.provider.nodes[node.ProviderID] = node
+	fixture.demand.value = Demand{Revision: "demand-zero", DesiredNodes: 0, ObservedAt: fixture.now}
+	result = fixture.step(t, reconciler)
+	diagnostic.LastReasonCode = "registration_deadline_exceeded"
+	if result.Action != ActionIdentityRevoked || result.BootstrapDiagnostic == nil || *result.BootstrapDiagnostic != diagnostic {
+		t.Fatalf("revocation result = %+v", result)
+	}
+}
+
 func TestReconcilerDrainsNodeStuckInProviderCreate(t *testing.T) {
 	fixture := newFleetFixture(t)
 	fixture.config.MaxNodes = 1

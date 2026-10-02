@@ -242,6 +242,19 @@ func writeRecorderFleetError(w http.ResponseWriter, request *http.Request, logge
 		writeError(w, http.StatusConflict, recorderfleet.InventoryNotReadyCode, "Recorder provider inventory is not ready")
 	case errors.Is(err, recorderfleet.ErrBootstrapPending):
 		w.Header().Set("Retry-After", "1")
+		if diagnostic, ok := recorderfleet.BootstrapDiagnosticFromError(err); ok {
+			writeJSON(w, http.StatusConflict, struct {
+				Error struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				} `json:"error"`
+				Diagnostic recorderfleet.BootstrapDiagnostic `json:"diagnostic"`
+			}{Error: struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			}{Code: recorderfleet.BootstrapPendingCode, Message: "Recorder worker certificate delivery is pending"}, Diagnostic: diagnostic})
+			return
+		}
 		writeError(w, http.StatusConflict, recorderfleet.BootstrapPendingCode, "Recorder worker certificate delivery is pending")
 	case errors.Is(err, recorderfleet.ErrNodeNotFound):
 		writeError(w, http.StatusNotFound, "recorder_fleet.node_not_found", "Recorder fleet node not found")
