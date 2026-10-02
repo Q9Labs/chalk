@@ -44,3 +44,5 @@ grants, signed URLs, or raw Event bodies are written to disk.
 The repository's local core disables Capture and Export by default. Transactional
 artifact production is covered by the API PostgreSQL gate; it does not prove the
 deployed Capture/Export fleet. A production PASS is required for the full media flow.
+
+API-key create and rotate use a fresh UUID Idempotency-Key from the server SDK. They are not retried automatically because their secrets can only be returned once. Build the SDK from this checkout before running the smoke.
