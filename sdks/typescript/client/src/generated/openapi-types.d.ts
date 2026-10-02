@@ -2815,7 +2815,7 @@ export interface components {
       source_expires_at?: components["schemas"]["DateTimeString"] | null;
       space_id: components["schemas"]["SpaceId"];
       /** @enum {string} */
-      status: "pending" | "processing" | "completed" | "failed";
+      status: "not_requested" | "preparing" | "transcribing" | "verifying" | "complete" | "retryable_failure" | "terminal_failure" | "deleted" | "pending" | "processing" | "completed" | "failed";
       tenant_id: components["schemas"]["TenantId"];
       updated_at: components["schemas"]["DateTimeString"];
     };

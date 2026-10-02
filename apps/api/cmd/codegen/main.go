@@ -689,8 +689,14 @@ func fieldEnum(schemaName string, fieldName string) []string {
 		switch schemaName {
 		case "Episode", "EpisodeList", "CreateEpisodeRequest", "UpdateEpisodeRequest":
 			return []string{"active", "ending", "ended"}
-		case "Recording", "RecordingList", "CreateRecordingRequest", "UpdateRecordingRequest", "Transcript", "TranscriptList", "CreateTranscriptRequest", "UpdateTranscriptRequest":
+		case "Recording", "RecordingList", "CreateRecordingRequest", "UpdateRecordingRequest":
 			return []string{"pending", "processing", "completed", "failed"}
+		case "Transcript", "TranscriptList", "CreateTranscriptRequest", "UpdateTranscriptRequest":
+			return []string{
+				transcripts.StatusNotRequested, transcripts.StatusPreparing, transcripts.StatusTranscribing, transcripts.StatusVerifying,
+				transcripts.StatusComplete, transcripts.StatusRetryableFailure, transcripts.StatusTerminalFailure, transcripts.StatusDeleted,
+				transcripts.StatusPending, transcripts.StatusProcessing, transcripts.StatusCompleted, transcripts.StatusFailed,
+			}
 		}
 	}
 	return nil

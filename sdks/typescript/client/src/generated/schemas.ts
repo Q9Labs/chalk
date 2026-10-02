@@ -1380,7 +1380,7 @@ export const TranscriptSchema = Schema.Struct({
   recording_id: RecordingIdSchema,
   source_expires_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
   space_id: SpaceIdSchema,
-  status: Schema.Literals(["pending", "processing", "completed", "failed"]),
+  status: Schema.Literals(["not_requested", "preparing", "transcribing", "verifying", "complete", "retryable_failure", "terminal_failure", "deleted", "pending", "processing", "completed", "failed"]),
   tenant_id: TenantIdSchema,
   updated_at: DateTimeStringSchema,
 });
