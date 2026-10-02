@@ -15,7 +15,7 @@
     "@excalidraw/excalidraw": "0.18.1",
     "@hugeicons/core-free-icons": "^4.2.3",
     "@napi-rs/canvas": "1.0.9",
-    "@q9labsai/chalk-react": "workspace:^4.1.15",
+    "@q9labsai/chalk-react": "workspace:^4.1.16",
     "@q9labsai/recording-presentation": "workspace:^0.1.0",
     "happy-dom": "^20.11.2",
     "react": "19.2.7",
