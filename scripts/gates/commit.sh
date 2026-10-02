@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Git worktrees break Go VCS stamping (exit 128); no gate lane needs stamped binaries.
+export GOFLAGS="${GOFLAGS:--buildvcs=false}"
+cd "$(dirname "$0")/../.."
+node scripts/gates/check-install.mjs
+
 if [[ "${1:-}" == "--" ]]; then
   shift
 fi
