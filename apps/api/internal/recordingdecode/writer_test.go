@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -189,11 +190,11 @@ func TestIngestBundlesUsesExactKeyAndAuthorityForEachCaptureEpoch(t *testing.T) 
 
 func TestWriteDecodesSeekableVP8OnRecordingClock(t *testing.T) {
 	for _, schema := range []string{recordingbundle.LegacyVersion, recordingbundle.Version} {
-		t.Run(schema, func(t *testing.T) { testWriteSeekableVP8WithPadding(t, schema) })
+		t.Run(schema, func(t *testing.T) { testWriteSeekableVP8WithPadding(t, schema, vp8ReplayPattern{}) })
 	}
 }
 
-func testWriteSeekableVP8WithPadding(t *testing.T, schema string) {
+func testWriteSeekableVP8WithPadding(t *testing.T, schema string, pattern vp8ReplayPattern) {
 	t.Helper()
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		t.Skip("ffmpeg is not installed")
@@ -220,10 +221,10 @@ func testWriteSeekableVP8WithPadding(t *testing.T, schema string) {
 	}}
 	track := recordingbundle.TrackIdentity{TrackID: "camera-track", Epoch: 1, MID: "1", Codec: "vp8", Layer: "high"}
 	packets := make([]recordingbundle.RTPPacket, 0, len(frames))
-	payloader := codecs.VP8Payloader{}
+	payloader := codecs.VP8Payloader{EnablePictureID: true}
 	sequence := uint16(1)
 	for frameIndex, frame := range frames {
-		payloads := payloader.Payload(1_200, frame)
+		payloads := payloader.Payload(32, frame)
 		for payloadIndex, payload := range payloads {
 			packets = append(packets, recordingbundle.RTPPacket{
 				SequenceNumber: sequence, ExtendedSequenceNumber: uint64(sequence),
@@ -236,6 +237,9 @@ func testWriteSeekableVP8WithPadding(t *testing.T, schema string) {
 		// Preserve them in the authenticated bundle to cover existing recordings.
 		packets = append(packets, recordingbundle.RTPPacket{SequenceNumber: sequence, ExtendedSequenceNumber: uint64(sequence), Timestamp: uint32(9_000 + frameIndex*3_000), SSRC: 84, PayloadType: 96, Payload: []byte{}})
 		sequence++
+	}
+	if pattern.mutate != nil {
+		packets = pattern.mutate(packets)
 	}
 	bundle := recordingbundle.Bundle{
 		Version: schema,
@@ -273,6 +277,12 @@ func testWriteSeekableVP8WithPadding(t *testing.T, schema string) {
 		Bundles: []BundleFile{{Path: bundlePath, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encrypted), Sequence: 0, CaptureEpoch: 1, CaptureJobID: "00000000-0000-4000-8000-000000000008", RecorderEnvelopeDigest: strings.Repeat("42", 32), BundleSchema: schema}}, DataKeys: []DataKey{{CaptureEpoch: 1, Plaintext: key}},
 	}
 	result, err := Write(context.Background(), request)
+	if pattern.wantRegression {
+		if !errors.Is(err, ErrDecode) || !strings.Contains(err.Error(), "VP8 timestamp regressed") {
+			t.Fatalf("expected real media regression, got %v", err)
+		}
+		return
+	}
 	if err != nil {
 		t.Fatalf("write decoded media: %v", err)
 	}
@@ -309,8 +319,11 @@ func testWriteSeekableVP8WithPadding(t *testing.T, schema string) {
 	if err != nil || durationSeconds < 0.09 || durationSeconds > 0.11 {
 		t.Fatalf("VP8 duration = %q, want 0.1 seconds", probeOutput)
 	}
+	playback := exec.Command("ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error", "-xerror", "-i", filepath.Join(result.IndexPath, "..", filepath.FromSlash(source.Path)), "-f", "null", "-")
+	if output, err := playback.CombinedOutput(); err != nil {
+		t.Fatalf("play VP8 output: %v: %s", err, output)
+	}
 	assertPassthroughFrameTimes(t, request, filepath.Join(root, "decoded-passthrough"), "vp8")
-
 }
 
 func TestWritePreservesSourceTimingWhenBundleClockLeadsLaggingTrack(t *testing.T) {
