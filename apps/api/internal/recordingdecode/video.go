@@ -57,6 +57,7 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 	var frameWidth, frameHeight uint16
 	var waitingForKeyFrame = true
 	var lossStart uint64
+	var recoveryPending bool
 	closeSegment := func() error {
 		if writer == nil {
 			return nil
@@ -86,30 +87,37 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 		}
 		return nil
 	}
+	beginRecovery := func(start uint64) error {
+		if len(framePayload) > 0 {
+			start = min(start, uint64(frameTimestamp))
+			quality.drop(frameTimestamp)
+			framePayload = nil
+		}
+		if !recoveryPending || start < lossStart {
+			lossStart = start
+		}
+		recoveryPending = true
+		waitingForKeyFrame = true
+		return closeSegment()
+	}
 	err := readSpool(state.spoolPath, func(packet recordingbundle.RTPPacket) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if started && packet.SSRC == previousSSRC && packet.ExtendedSequenceNumber <= previousSequence {
+		if started && mediaStarted && len(packet.Payload) > 0 && packet.SSRC == previousSSRC && packet.ExtendedSequenceNumber <= previousSequence && packet.Timestamp <= previousTimestamp {
 			quality.latePackets++
-			if len(packet.Payload) > 0 {
-				quality.drop(packet.Timestamp)
-			}
+			quality.drop(packet.Timestamp)
 			return nil
 		}
 		lost := started && (packet.ExtendedSequenceNumber != previousSequence+1 || packet.SSRC != previousSSRC)
 		previousSequence, previousSSRC, started = packet.ExtendedSequenceNumber, packet.SSRC, true
 		if lost {
-			if len(framePayload) > 0 {
-				quality.drop(frameTimestamp)
-				framePayload = nil
-			}
-			if err := closeSegment(); err != nil {
-				return err
-			}
-			waitingForKeyFrame = true
+			start := uint64(packet.Timestamp)
 			if len(frameTimestamps) > 0 {
-				lossStart = frameTimestamps[len(frameTimestamps)-1] + nominalFrameTicks(frameTimestamps)
+				start = frameTimestamps[len(frameTimestamps)-1] + nominalFrameTicks(frameTimestamps)
+			}
+			if err := beginRecovery(start); err != nil {
+				return err
 			}
 		}
 		// Empty probes consume RTP sequence numbers, not codec or media clocks.
@@ -127,30 +135,28 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 		}
 		if err := validateMediaTimestamp(packet.Timestamp, videoClockRate, durationMS); err != nil {
 			quality.malformedPackets++
-			quality.drop(packet.Timestamp)
-			return nil
+			start := uint64(0)
+			if len(framePayload) > 0 {
+				start = uint64(frameTimestamp)
+			} else {
+				quality.drop(packet.Timestamp)
+				if len(frameTimestamps) > 0 {
+					start = frameTimestamps[len(frameTimestamps)-1] + nominalFrameTicks(frameTimestamps)
+				}
+			}
+			return beginRecovery(start)
 		}
 		if len(framePayload) > 0 && packet.Timestamp != frameTimestamp {
-			quality.drop(frameTimestamp)
-			framePayload = nil
-			if err := closeSegment(); err != nil {
+			if err := beginRecovery(uint64(frameTimestamp)); err != nil {
 				return err
 			}
-			waitingForKeyFrame = true
-			lossStart = uint64(frameTimestamp)
 		}
 		var vp8 codecs.VP8Packet
 		_, headerErr := vp8.Unmarshal(packet.Payload)
 		if headerErr != nil || len(vp8.Payload) == 0 {
 			quality.malformedPackets++
 			quality.drop(packet.Timestamp)
-			framePayload = nil
-			if err := closeSegment(); err != nil {
-				return err
-			}
-			waitingForKeyFrame = true
-			lossStart = uint64(packet.Timestamp)
-			return nil
+			return beginRecovery(uint64(packet.Timestamp))
 		}
 		if len(framePayload) > 0 && vp8.S == 1 && vp8.PID == 0 {
 			// A second start at the same timestamp is another copy of this frame,
@@ -170,12 +176,7 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 			if err != nil {
 				quality.malformedPackets++
 				quality.drop(packet.Timestamp)
-				if err := closeSegment(); err != nil {
-					return err
-				}
-				waitingForKeyFrame = true
-				lossStart = uint64(packet.Timestamp)
-				return nil
+				return beginRecovery(uint64(packet.Timestamp))
 			}
 			if waitingForKeyFrame && !frameKey {
 				if len(frameTimestamps) > 0 {
@@ -202,11 +203,11 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 			if err := startSegment(packet, frameWidth, frameHeight); err != nil {
 				return err
 			}
-			if lossStart > 0 && uint64(packet.Timestamp) > lossStart {
+			if recoveryPending && uint64(packet.Timestamp) > lossStart {
 				quality.recoveryTicks += uint64(packet.Timestamp) - lossStart
 				resultDiscontinuities = append(resultDiscontinuities, sourceDiscontinuity(state, ticksToMillisecondsFloor(lossStart, videoClockRate), ticksToMillisecondsCeil(uint64(packet.Timestamp), videoClockRate), "packet_loss"))
 			}
-			lossStart = 0
+			recoveryPending = false
 			waitingForKeyFrame = false
 		}
 		// Feed only complete frames to the codec writer; abandoned fragments must

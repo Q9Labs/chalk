@@ -29,7 +29,7 @@ func TestVP8DegradesWithinBoundAcrossBundleVersions(t *testing.T) {
 	share := generatedVP8Keyframes(t, root, "1280x720")
 	for _, schema := range []string{recordingbundle.LegacyVersion, recordingbundle.Version} {
 		for _, passthrough := range []bool{false, true} {
-			for _, pattern := range []string{"layer-switch", "replay-burst-and-one-unseen-late-frame", "malformed-frame", "missing-marker", "beyond-bound"} {
+			for _, pattern := range []string{"layer-switch", "replay-burst-and-one-unseen-late-frame", "malformed-frame", "missing-marker", "invalid-continuation-timestamp", "recovery-gap-cannot-reset", "origin-zero-recovery-gap", "beyond-bound"} {
 				t.Run(fmt.Sprintf("%s/native=%t/%s", schema, passthrough, pattern), func(t *testing.T) {
 					frames := make([][]byte, 30)
 					for i := range frames {
@@ -62,6 +62,38 @@ func TestVP8DegradesWithinBoundAcrossBundleVersions(t *testing.T) {
 								packets[i].Marker = false
 							}
 						}
+					case "invalid-continuation-timestamp":
+						changed := false
+						for i := range packets {
+							if packets[i].Timestamp == 15000 && packets[i].Payload[0]&0x10 == 0 {
+								packets[i].Timestamp = 999999
+								changed = true
+								break
+							}
+						}
+						if !changed {
+							t.Fatal("fixture needs a continuation")
+						}
+					case "recovery-gap-cannot-reset", "origin-zero-recovery-gap":
+						first := packetizeVP8([][]byte{high[0]})
+						partial := packetizeVP8([][]byte{high[0]})
+						for i := range partial {
+							partial[i].Timestamp = 15000
+							partial[i].Marker = false
+						}
+						if pattern == "origin-zero-recovery-gap" {
+							first = nil
+							for i := range partial {
+								partial[i].Timestamp = 0
+							}
+						}
+						recovered := packetizeVP8([][]byte{high[0]})
+						for i := range recovered {
+							recovered[i].Timestamp = 288000
+						}
+						packets = append(first, partial...)
+						packets = append(packets, recordingbundle.RTPPacket{Timestamp: 283500, SSRC: 84, PayloadType: 96, Payload: []byte{0x80}, Marker: true})
+						packets = renumberVP8Packets(append(packets, recovered...))
 					case "beyond-bound":
 						for frame := 0; frame < 10; frame++ {
 							late := packetizeVP8([][]byte{high[0]})
@@ -75,7 +107,7 @@ func TestVP8DegradesWithinBoundAcrossBundleVersions(t *testing.T) {
 					request := vp8DegradationRequest(t, schema, packets, packetizeVP8([][]byte{share[0], share[0], share[0]}))
 					request.VideoPassthrough = passthrough
 					got, err := Write(context.Background(), request)
-					if pattern == "beyond-bound" {
+					if pattern == "beyond-bound" || pattern == "recovery-gap-cannot-reset" || pattern == "origin-zero-recovery-gap" {
 						if !errors.Is(err, ErrDecode) || !strings.Contains(err.Error(), "VP8 degradation exceeds bound") {
 							t.Fatalf("error=%v", err)
 						}
@@ -109,7 +141,7 @@ func TestVP8DegradesWithinBoundAcrossBundleVersions(t *testing.T) {
 						}
 						if passthrough && source.Kind == "camera" {
 							wantFrames := 30
-							if pattern == "missing-marker" {
+							if pattern == "missing-marker" || pattern == "invalid-continuation-timestamp" {
 								wantFrames--
 							}
 							if len(dimensions) != wantFrames {
@@ -189,4 +221,57 @@ func vp8DegradationRequest(t *testing.T, schema string, camera, share []recordin
 		t.Fatal(err)
 	}
 	return Request{RecordingID: presentation.RecordingID, EpisodeID: presentation.EpisodeID, TenantID: tenantID, Environment: "test", OriginAuthorityID: presentation.Clock.OriginAuthorityID, CaptureEpoch: 1, DurationMS: presentation.Clock.DurationMillis, OutputDirectory: filepath.Join(root, "decoded"), Presentation: presentation, Bundles: []BundleFile{{Path: path, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encrypted), Sequence: 1, CaptureEpoch: 1, CaptureJobID: jobID, RecorderEnvelopeDigest: strings.Repeat("42", 32), BundleSchema: schema}}, DataKeys: []DataKey{{CaptureEpoch: 1, Plaintext: key}}}
+}
+
+func TestVP8RecoveryAllowsSequenceResetWithNewerMedia(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+	root := t.TempDir()
+	frames := generatedVP8Keyframes(t, root, "640x480")
+	packets := packetizeVP8([][]byte{frames[0], frames[0]})
+	next := uint64(1)
+	for i := range packets {
+		if packets[i].Timestamp == 9000 {
+			packets[i].ExtendedSequenceNumber += 1000
+			packets[i].SequenceNumber = uint16(packets[i].ExtendedSequenceNumber)
+		} else {
+			packets[i].ExtendedSequenceNumber = next
+			packets[i].SequenceNumber = uint16(next)
+			next++
+		}
+	}
+	path := filepath.Join(root, "source.rtp")
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, packet := range packets {
+		if err := writeSpoolPacket(file, packet); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	media := filepath.Join(root, "media")
+	if err := os.Mkdir(media, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	state := &sourceState{spoolPath: path, presentation: recordingpresentation.MediaSource{SourceID: "recovery-camera", Kind: recordingpresentation.MediaKindCamera}}
+	source, _, err := decodeVP8Source(context.Background(), execCommandRunner{}, "ffmpeg", root, media, state, 5000, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source.EndMS != 167 {
+		t.Fatalf("recovered end=%d want=167", source.EndMS)
+	}
+	output := filepath.Join(root, filepath.FromSlash(source.Path))
+	probe, err := exec.Command("ffprobe", "-v", "error", "-count_frames", "-select_streams", "v:0", "-show_entries", "stream=nb_read_frames", "-of", "csv=p=0", output).Output()
+	if err != nil || strings.TrimSpace(string(probe)) != "2" {
+		t.Fatalf("recovered frame count=%s error=%v", probe, err)
+	}
+	if log, err := exec.Command("ffmpeg", "-v", "error", "-xerror", "-i", output, "-f", "null", "-").CombinedOutput(); err != nil {
+		t.Fatalf("recovered playback: %v: %s", err, log)
+	}
 }
