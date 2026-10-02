@@ -4929,6 +4929,25 @@ export const RecordingArtifactNotFoundErrorSchema = RecordingArtifactNotFoundErr
   }),
 );
 
+export class RecordingExportRetryLimitReachedError extends Schema.TaggedErrorClass<RecordingExportRetryLimitReachedError>()("RecordingExportRetryLimitReachedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("recording.export_retry_limit_reached"),
+    message: Schema.String,
+  }),
+}) {}
+export const RecordingExportRetryLimitReachedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("recording.export_retry_limit_reached"),
+    message: Schema.String,
+  }),
+});
+export const RecordingExportRetryLimitReachedErrorSchema = RecordingExportRetryLimitReachedErrorWireSchema.pipe(
+  Schema.decodeTo(RecordingExportRetryLimitReachedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "RecordingExportRetryLimitReachedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class RecordingInvalidIdError extends Schema.TaggedErrorClass<RecordingInvalidIdError>()("RecordingInvalidIdError", {
   error: Schema.Struct({
     code: Schema.Literal("recording.invalid_id"),
@@ -7494,6 +7513,7 @@ export type RequestPasswordResetError = typeof RequestPasswordResetErrorSchema.T
 export const RequestRecordingExportErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
+  RecordingExportRetryLimitReachedErrorSchema,
   RecordingInvalidIdErrorSchema,
   RecordingNotFoundErrorSchema,
   RecordingNotReadyErrorSchema,

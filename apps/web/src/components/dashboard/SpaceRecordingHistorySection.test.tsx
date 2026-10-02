@@ -19,7 +19,7 @@ vi.mock("@q9labsai/chalk-react", () => ({
   }: {
     readonly onReadTranscript?: (recording: { readonly id: string }) => void;
     readonly onDownload?: (recording: { readonly id: string }) => void;
-    readonly onRequestExport?: (recording: { readonly id: string }, action: "watch" | "download") => void;
+    readonly onRequestExport?: (recording: { readonly id: string }, action: "watch" | "download" | "retry") => void;
     readonly onRequestTranscript?: (recording: { readonly id: string }) => void;
     readonly onRefreshExport?: (recording: { readonly id: string }) => void;
     readonly onLoadMore?: () => void;
@@ -46,17 +46,18 @@ vi.mock("@q9labsai/chalk-react", () => ({
             {recording.transcript?.status === "requestable" && recording.transcript.requestable ? <button onClick={() => onRequestTranscript?.(recording)}>Request transcript {recording.id.slice(0, 8)}</button> : null}
             {recording.transcript?.text === undefined ? null : <p>{recording.transcript.text}</p>}
             {recording.export?.status === "pending" ? <button onClick={() => onRefreshExport?.(recording)}>Check video status {recording.id.slice(0, 8)}</button> : null}
+            {recording.export?.status === "failed" ? <button onClick={() => onRequestExport?.(recording, "retry")}>Retry Export {recording.id.slice(0, 8)}</button> : null}
             {recording.export?.status === "ready" ? (
               <>
                 <button onClick={() => onWatch?.(recording)}>Watch recording {recording.id.slice(0, 8)}</button>
                 <button onClick={() => onDownload?.(recording)}>Download recording {recording.id.slice(0, 8)}</button>
               </>
-            ) : (
+            ) : recording.export?.status !== "failed" ? (
               <>
                 <button onClick={() => onRequestExport?.(recording, "watch")}>Watch recording {recording.id.slice(0, 8)}</button>
                 <button onClick={() => onRequestExport?.(recording, "download")}>Download recording {recording.id.slice(0, 8)}</button>
               </>
-            )}
+            ) : null}
           </div>
         ))}
         {hasMore ? <button onClick={onLoadMore}>Load more</button> : null}
@@ -114,6 +115,26 @@ afterEach(() => {
 });
 
 describe("SpaceRecordingHistorySection", () => {
+  it("retries a failed Export without opening it after completion", async () => {
+    const failedRecording = { ...recording, export: { failure_message: "The Recording Export failed.", retryable: true, status: "failed" }, status: "failed" };
+    const client: SpaceRecordingHistoryClient = {
+      createRecordingDownloadURL: vi.fn(),
+      getRecording: vi.fn(async () => readyRecording),
+      getTranscriptDocument: vi.fn(),
+      listRecordingTranscripts: vi.fn(async () => ({ pagination: { has_more: false, next_cursor: null, page_size: 20 }, transcripts: [] })),
+      listSpaceRecordings: vi.fn(async () => historyPage([failedRecording])),
+      requestRecordingExport: vi.fn(async () => ({ export: readyRecording.export, recording: readyRecording })),
+      requestRecordingTranscript: vi.fn(),
+    };
+
+    render(<SpaceRecordingHistorySection client={client} spaceID={spaceID} tenantID={tenantID} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Retry Export 44444444" }));
+    await waitFor(() => expect(client.requestRecordingExport).toHaveBeenCalledWith({ recordingID, tenantID }));
+    expect(client.getRecording).not.toHaveBeenCalled();
+    expect(client.createRecordingDownloadURL).not.toHaveBeenCalled();
+  });
+
   it("reads the authenticated transcript document and navigates Watch and Download using their signed URL modes", async () => {
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     const client: SpaceRecordingHistoryClient = {

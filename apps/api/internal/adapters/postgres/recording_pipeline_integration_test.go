@@ -77,6 +77,9 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	}
 	_, _ = pool.Exec(ctx, `delete from recording_artifacts where tenant_id = '6a9b6a12-7457-4fe9-a58b-8b234d0be001'`)
 	_, _ = pool.Exec(ctx, `delete from recording_bundles where tenant_id = '6a9b6a12-7457-4fe9-a58b-8b234d0be001'`)
+	if _, err := pool.Exec(ctx, `delete from recording_job_failure_history where job_id in (select id from recording_jobs where tenant_id = '6a9b6a12-7457-4fe9-a58b-8b234d0be001')`); err != nil {
+		t.Fatalf("reset recording failure history: %v", err)
+	}
 	_, _ = pool.Exec(ctx, `delete from recording_jobs where tenant_id = '6a9b6a12-7457-4fe9-a58b-8b234d0be001'`)
 	_, _ = pool.Exec(ctx, `delete from recording_pipelines where tenant_id = '6a9b6a12-7457-4fe9-a58b-8b234d0be001'`)
 	_, _ = pool.Exec(ctx, `delete from recording_reservations where tenant_id = '6a9b6a12-7457-4fe9-a58b-8b234d0be001'`)
@@ -133,6 +136,9 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 		}
 		if err := resetRecordingPresentations(ctx, pool); err != nil {
 			t.Errorf("clean recording presentations: %v", err)
+		}
+		if _, err := pool.Exec(ctx, `delete from recording_job_failure_history where job_id in (select id from recording_jobs where tenant_id = $1)`, tenantID.Bytes()); err != nil {
+			t.Errorf("clean recording failure history: %v", err)
 		}
 		_, _ = pool.Exec(ctx, `delete from recording_jobs where tenant_id = $1`, tenantID.Bytes())
 		_, _ = pool.Exec(ctx, `delete from recording_pipelines where tenant_id = $1`, tenantID.Bytes())
@@ -1064,6 +1070,71 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	if err != nil || reusedRender.ID != requestedRender.ID {
 		t.Fatalf("reuse deferred MP4 export=%+v first=%+v err=%v", reusedRender, requestedRender, err)
 	}
+	if _, err := pool.Exec(ctx, `update recording_jobs set state='terminal_failure', created_at=now()-interval '1 day', attempt_count=3, fencing_generation=3, error_code='render_probe', error_detail='first failure', terminal_at=now() where id=$1`, requestedRender.ID.Bytes()); err != nil {
+		t.Fatalf("arrange terminal Export: %v", err)
+	}
+	retryTx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin first manual retry: %v", err)
+	}
+	defer retryTx.Rollback(ctx)
+	if _, err := sqlc.New(retryTx).RequestDeferredRecordingRender(ctx, sqlc.RequestDeferredRecordingRenderParams{
+		TenantID: pgtype.UUID{Bytes: tenantID.Bytes(), Valid: true}, RecordingID: pgtype.UUID{Bytes: reservation.RecordingID.Bytes(), Valid: true},
+		RenderJobID:          pgtype.UUID{Bytes: mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be050").Bytes(), Valid: true},
+		PayloadSchemaVersion: recordingpipeline.DefaultPayloadSchemaVersion, AttemptLimit: recordingpipeline.DefaultRenderAttemptLimit,
+	}); err != nil {
+		t.Fatalf("first manual retry: %v", err)
+	}
+	duplicateConnection, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("acquire duplicate request connection: %v", err)
+	}
+	defer duplicateConnection.Release()
+	duplicateRepository := postgres.NewRecordingPipelineRepositoryWithQueriesAndTransactor(sqlc.New(duplicateConnection), duplicateConnection, nil)
+	type exportResult struct {
+		job recordingpipeline.Job
+		err error
+	}
+	duplicateResult := make(chan exportResult, 1)
+	go func() {
+		job, requestErr := duplicateRepository.RequestExport(ctx, recordingpipeline.ExportInput{TenantID: tenantID, RecordingID: reservation.RecordingID}, mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be053"))
+		duplicateResult <- exportResult{job: job, err: requestErr}
+	}()
+	waitForPostgresLock(t, ctx, pool, duplicateConnection.Conn().PgConn().PID())
+	if err := retryTx.Commit(ctx); err != nil {
+		t.Fatalf("commit first manual retry: %v", err)
+	}
+	duplicate := <-duplicateResult
+	if duplicate.err != nil || duplicate.job.ID != requestedRender.ID || duplicate.job.State != recordingpipeline.JobStatePending || duplicate.job.FencingGeneration != 3 || duplicate.job.AttemptCount != 0 {
+		t.Fatalf("overlapping retry=%+v err=%v; want same pending job with preserved fence", duplicate.job, duplicate.err)
+	}
+	var archivedFailureCode, archivedFailureDetail string
+	if err := pool.QueryRow(ctx, `select error_code, error_detail from recording_job_failure_history where job_id=$1 and manual_retry_count=1`, requestedRender.ID.Bytes()).Scan(&archivedFailureCode, &archivedFailureDetail); err != nil || archivedFailureCode != "render_probe" || archivedFailureDetail != "first failure" {
+		t.Fatalf("archived Export failure code=%q detail=%q err=%v", archivedFailureCode, archivedFailureDetail, err)
+	}
+	idempotentRetry, err := repository.RequestExport(ctx, recordingpipeline.ExportInput{TenantID: tenantID, RecordingID: reservation.RecordingID}, mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be052"))
+	if err != nil || idempotentRetry.ID != requestedRender.ID {
+		t.Fatalf("reuse pending manual retry=%+v first=%+v err=%v", idempotentRetry, requestedRender, err)
+	}
+	var failureHistoryCount int
+	if err := pool.QueryRow(ctx, `select count(*) from recording_job_failure_history where job_id=$1`, requestedRender.ID.Bytes()).Scan(&failureHistoryCount); err != nil || failureHistoryCount != 1 {
+		t.Fatalf("pending duplicate failure history count=%d err=%v", failureHistoryCount, err)
+	}
+	if _, err := pool.Exec(ctx, `insert into recording_job_failure_history(job_id, manual_retry_count, attempt_count, fencing_generation, error_code, failed_at) select $1, retries, 3, retries, 'render_probe', now() from generate_series(2, 5) retries`, requestedRender.ID.Bytes()); err != nil {
+		t.Fatalf("arrange capped Export: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `update recording_jobs set state='terminal_failure', error_code='render_probe', terminal_at=now() where id=$1`, requestedRender.ID.Bytes()); err != nil {
+		t.Fatalf("arrange capped Export state: %v", err)
+	}
+	if _, err := repository.RequestExport(ctx, recordingpipeline.ExportInput{TenantID: tenantID, RecordingID: reservation.RecordingID}, mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be051")); !errors.Is(err, recordingpipeline.ErrExportRetryLimit) {
+		t.Fatalf("capped Export retry error=%v, want %v", err, recordingpipeline.ErrExportRetryLimit)
+	}
+	if _, err := pool.Exec(ctx, `delete from recording_job_failure_history where job_id=$1 and manual_retry_count > 1`, requestedRender.ID.Bytes()); err != nil {
+		t.Fatalf("restore retried Export: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `update recording_jobs set state='pending', attempt_count=0, error_code=null, error_detail=null, terminal_at=null where id=$1`, requestedRender.ID.Bytes()); err != nil {
+		t.Fatalf("restore retried Export state: %v", err)
+	}
 	artifactState, err := repository.GetArtifactState(ctx, tenantID, reservation.RecordingID)
 	if err != nil || artifactState.SourceStatus != recordingpipeline.SourceStatusAvailable || artifactState.SourceExpiresAt == nil || !artifactState.SourceExpiresAt.Equal(expectedSourceCleanupDueAt) {
 		t.Fatalf("legacy zero deferred source state=%+v err=%v, want available through %s", artifactState, err, expectedSourceCleanupDueAt)
@@ -1093,7 +1164,11 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("claim render: %v", err)
 	}
-	expectedRenderDeadline := render.CreatedAt.UTC().Add(recordingpipeline.MaximumRenderDuration).Format(time.RFC3339Nano)
+	var retryStartedAt time.Time
+	if err := pool.QueryRow(ctx, `select retried_at from recording_job_failure_history where job_id=$1 and manual_retry_count=1`, render.ID.Bytes()).Scan(&retryStartedAt); err != nil {
+		t.Fatalf("read manual retry execution start: %v", err)
+	}
+	expectedRenderDeadline := retryStartedAt.UTC().Add(recordingpipeline.MaximumRenderDuration).Format(time.RFC3339Nano)
 	if render.Authority == nil || render.Authority.Envelope.HardDeadline != expectedRenderDeadline {
 		t.Fatalf("render hard deadline = %v, want %s", render.Authority, expectedRenderDeadline)
 	}
@@ -1125,7 +1200,7 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 		CaptureEpoch: render.Authority.Envelope.CaptureEpoch, EnvelopeDigest: render.Authority.EnvelopeDigest,
 		LeaseFor: recordingpipeline.MaximumRenderDuration + time.Hour,
 	})
-	if err != nil || renewedRender.LeaseExpiresAt == nil || !renewedRender.LeaseExpiresAt.Equal(render.CreatedAt.Add(recordingpipeline.MaximumRenderDuration)) {
+	if err != nil || renewedRender.LeaseExpiresAt == nil || !renewedRender.LeaseExpiresAt.Equal(retryStartedAt.Add(recordingpipeline.MaximumRenderDuration)) {
 		t.Fatalf("render heartbeat must stop at immutable deadline: expiry=%v err=%v", renewedRender.LeaseExpiresAt, err)
 	}
 	renderAuthority.LeaseExpiresAt = *renewedRender.LeaseExpiresAt

@@ -59,6 +59,7 @@ var (
 	ErrClaimConflict                = errors.New("recording claim request conflict")
 	ErrInvalidEnvelope              = errors.New("invalid recorder job envelope")
 	ErrExportUnavailable            = errors.New("recording export source is unavailable")
+	ErrExportRetryLimit             = errors.New("recording export retry limit reached")
 )
 
 const (

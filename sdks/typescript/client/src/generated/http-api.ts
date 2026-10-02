@@ -1345,6 +1345,7 @@ const recordingsGroup = HttpApiGroup.make("recordings")
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.RecordingNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RecordingExportRetryLimitReachedErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),

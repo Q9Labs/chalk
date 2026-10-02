@@ -2491,6 +2491,18 @@ create index recording_jobs_dead_letter_idx
 create unique index recording_jobs_recording_kind_idx
     on recording_jobs(recording_id, kind);
 
+create table recording_job_failure_history (
+    job_id uuid not null references recording_jobs(id) on delete restrict,
+    manual_retry_count integer not null check (manual_retry_count between 1 and 5),
+    attempt_count integer not null check (attempt_count >= 0),
+    fencing_generation bigint not null check (fencing_generation >= 0),
+    error_code text,
+    error_detail text,
+    failed_at timestamptz not null,
+    retried_at timestamptz not null default now(),
+    primary key (job_id, manual_retry_count)
+);
+
 create table recording_job_attempt_authorities (
     job_id uuid not null references recording_jobs(id) on delete restrict,
     attempt_count integer not null check (attempt_count > 0),

@@ -62,15 +62,28 @@ type recordingPipelineQuerier interface {
 }
 
 func (r RecordingPipelineRepository) RequestExport(ctx context.Context, input recordingpipeline.ExportInput, renderJobID utilities.ID) (recordingpipeline.Job, error) {
-	row, err := r.queries.RequestDeferredRecordingRender(ctx, sqlc.RequestDeferredRecordingRenderParams{
-		TenantID: uuid(input.TenantID), RecordingID: uuid(input.RecordingID), RenderJobID: uuid(renderJobID),
-		PayloadSchemaVersion: recordingpipeline.DefaultPayloadSchemaVersion, Priority: 0, AttemptLimit: recordingpipeline.DefaultRenderAttemptLimit,
+	var row sqlc.RequestDeferredRecordingRenderRow
+	err := r.transaction(ctx, func(tx pgx.Tx, queries recordingPipelineQuerier) error {
+		// Acquire the lock before the request statement so concurrent requests
+		// observe the committed job and failure history in a fresh snapshot.
+		if _, err := tx.Exec(ctx, `select recording_id from recording_pipelines where tenant_id=$1 and recording_id=$2 for update`, input.TenantID.Bytes(), input.RecordingID.Bytes()); err != nil {
+			return fmt.Errorf("lock recording export request: %w", err)
+		}
+		var err error
+		row, err = queries.RequestDeferredRecordingRender(ctx, sqlc.RequestDeferredRecordingRenderParams{
+			TenantID: uuid(input.TenantID), RecordingID: uuid(input.RecordingID), RenderJobID: uuid(renderJobID),
+			PayloadSchemaVersion: recordingpipeline.DefaultPayloadSchemaVersion, Priority: 0, AttemptLimit: recordingpipeline.DefaultRenderAttemptLimit,
+		})
+		return err
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return recordingpipeline.Job{}, recordingpipeline.ErrExportUnavailable
 	}
 	if err != nil {
 		return recordingpipeline.Job{}, fmt.Errorf("request deferred recording export: %w", err)
+	}
+	if row.RetryLimitReached.Valid && row.RetryLimitReached.Bool {
+		return recordingpipeline.Job{}, recordingpipeline.ErrExportRetryLimit
 	}
 	return mapDeferredRecordingJob(row), nil
 }
@@ -470,7 +483,7 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 		leaseExpiresAt = timestamp(row.LeaseExpiresAt)
 		claimed.CaptureEpoch = row.CaptureEpoch
 		claimed.CompletionOnly = row.CompletionOnly
-		hardDeadline, err := recordingJobDeadline(claimed.Kind, row.EndsAt, row.CreatedAt)
+		hardDeadline, err := recordingJobDeadline(claimed.Kind, row.EndsAt, row.ExecutionStartedAt)
 		if err != nil {
 			return err
 		}
@@ -1301,7 +1314,7 @@ func mapAuthorityJob(row sqlc.GetRecordingJobAttemptAuthorityByClaimRequestRow) 
 		return recordingpipeline.Job{}, err
 	}
 	job.CompletionOnly = envelope.CompletionOnly
-	hardDeadline, err := recordingJobDeadline(job.Kind, row.EndsAt, row.CreatedAt)
+	hardDeadline, err := recordingJobDeadline(job.Kind, row.EndsAt, row.ExecutionStartedAt)
 	if err != nil {
 		return recordingpipeline.Job{}, err
 	}

@@ -103,7 +103,7 @@ with candidate as (
                   else recording_deferred_retention_seconds(episodes.config_snapshot)
               end) * interval '1 second') > clock_timestamp())
       and (recording_jobs.kind not in ('render', 'transcription') or
-          recording_jobs.created_at + $3::integer * interval '1 second' > clock_timestamp())
+          coalesce((select max(history.retried_at) from recording_job_failure_history history where history.job_id = recording_jobs.id), recording_jobs.created_at) + $3::integer * interval '1 second' > clock_timestamp())
       and recording_jobs.available_at <= now()
       and (recording_jobs.kind <> 'capture' or recording_pipelines.stop_requested_at is null or $4::boolean)
       and (recording_jobs.kind <> 'capture' or recording_pipelines.stop_requested_at is null or completion.attempts < 3)
@@ -157,7 +157,7 @@ with candidate as (
         lease_owner = $6,
 		lease_expires_at = case when recording_jobs.kind in ('render', 'transcription')
 			then least($7::timestamptz, candidate.source_expires_at,
-				recording_jobs.created_at + $3::integer * interval '1 second')
+				coalesce((select max(history.retried_at) from recording_job_failure_history history where history.job_id = recording_jobs.id), recording_jobs.created_at) + $3::integer * interval '1 second')
             else $7::timestamptz end,
         fencing_generation = fencing_generation + 1,
         attempt_limit = case when candidate.completion_only then greatest(recording_jobs.attempt_limit, recording_jobs.attempt_count + 1) else recording_jobs.attempt_limit end,
@@ -194,6 +194,7 @@ select leased.id, leased.tenant_id, leased.episode_id, leased.recording_id, leas
     leased.available_at, leased.attempt_count, leased.attempt_limit, leased.lease_token,
     leased.lease_owner, leased.lease_expires_at, leased.fencing_generation, leased.error_code,
     leased.error_detail, leased.terminal_at, leased.updated_at, leased.created_at,
+    coalesce((select max(history.retried_at) from recording_job_failure_history history where history.job_id = leased.id), leased.created_at)::timestamptz as execution_started_at,
     pipeline.capture_epoch, leased.completion_only, recording_reservations.space_id,
     recording_reservations.policy_snapshot_version, recording_reservations.ends_at,
     recording_pipelines.capture_completed_at, recording_pipelines.capture_ready_at,
@@ -255,6 +256,7 @@ type ClaimRecordingJobRow struct {
 	TerminalAt                 pgtype.Timestamptz `json:"terminal_at"`
 	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
+	ExecutionStartedAt         pgtype.Timestamptz `json:"execution_started_at"`
 	CaptureEpoch               int64              `json:"capture_epoch"`
 	CompletionOnly             bool               `json:"completion_only"`
 	SpaceID                    pgtype.UUID        `json:"space_id"`
@@ -303,6 +305,7 @@ func (q *Queries) ClaimRecordingJob(ctx context.Context, arg ClaimRecordingJobPa
 		&i.TerminalAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.ExecutionStartedAt,
 		&i.CaptureEpoch,
 		&i.CompletionOnly,
 		&i.SpaceID,
@@ -1548,7 +1551,8 @@ select authority.job_id, authority.attempt_count, authority.fencing_generation,
     jobs.tenant_id, jobs.episode_id, jobs.recording_id, jobs.idempotency_key,
     jobs.payload_schema_version, jobs.state, jobs.priority, jobs.available_at,
     jobs.attempt_limit, jobs.error_code, jobs.error_detail, jobs.terminal_at,
-    jobs.updated_at, jobs.created_at, reservations.space_id,
+    jobs.updated_at, jobs.created_at,
+    coalesce((select max(history.retried_at) from recording_job_failure_history history where history.job_id = jobs.id and history.fencing_generation < authority.fencing_generation), jobs.created_at)::timestamptz as execution_started_at, reservations.space_id,
     reservations.policy_snapshot_version, reservations.ends_at, pipelines.capture_completed_at
 from recording_job_attempt_authorities authority
 join recording_jobs jobs on jobs.id = authority.job_id
@@ -1585,6 +1589,7 @@ type GetRecordingJobAttemptAuthorityByClaimRequestRow struct {
 	TerminalAt            pgtype.Timestamptz `json:"terminal_at"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	ExecutionStartedAt    pgtype.Timestamptz `json:"execution_started_at"`
 	SpaceID               pgtype.UUID        `json:"space_id"`
 	PolicySnapshotVersion string             `json:"policy_snapshot_version"`
 	EndsAt                pgtype.Timestamptz `json:"ends_at"`
@@ -1621,6 +1626,7 @@ func (q *Queries) GetRecordingJobAttemptAuthorityByClaimRequest(ctx context.Cont
 		&i.TerminalAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.ExecutionStartedAt,
 		&i.SpaceID,
 		&i.PolicySnapshotVersion,
 		&i.EndsAt,
@@ -2290,7 +2296,9 @@ select selected.id as recording_id,
         when export_job.state = 'terminal_failure' then 'failed'
         else 'none'
     end as export_status,
-    false as retryable,
+    case when export_job.state = 'terminal_failure'
+        and (select count(*) from recording_job_failure_history history where history.job_id = export_job.id) < 5
+        and selected.source_expires_at > clock_timestamp() then true else false end as retryable,
     case
         when selected.capture_completed_at is null and (selected.pipeline_state = 'terminal_failure' or selected.recording_status = 'failed') then 'capture_failed'
         when selected.capture_completed_at is null or selected.source_expires_at <= clock_timestamp() then 'recording_source_expired'
@@ -2449,7 +2457,7 @@ with expired as (
                 else recording_deferred_retention_seconds(episodes.config_snapshot)
             end) * interval '1 second') <= clock_timestamp() as source_expired,
         jobs.kind in ('render', 'transcription') and
-            jobs.created_at + $1::integer * interval '1 second' <= clock_timestamp() as execution_deadline_reached,
+            coalesce((select max(history.retried_at) from recording_job_failure_history history where history.job_id = jobs.id), jobs.created_at) + $1::integer * interval '1 second' <= clock_timestamp() as execution_deadline_reached,
         (jobs.kind = 'capture' and pipelines.stop_requested_at is not null)::boolean as capture_stopped,
         coalesce((jobs.kind = 'capture' and pipelines.stop_requested_at is not null
          and pipelines.capture_ready_at is not null
@@ -2481,7 +2489,7 @@ with expired as (
                    else recording_deferred_retention_seconds(episodes.config_snapshot)
                end) * interval '1 second') <= clock_timestamp())
        or (jobs.kind in ('render', 'transcription') and jobs.state in ('pending', 'leased') and
-           jobs.created_at + $1::integer * interval '1 second' <= clock_timestamp())
+           coalesce((select max(history.retried_at) from recording_job_failure_history history where history.job_id = jobs.id), jobs.created_at) + $1::integer * interval '1 second' <= clock_timestamp())
        or (jobs.kind = 'capture' and jobs.state = 'pending' and pipelines.stop_requested_at is not null)
     for update of jobs skip locked
 ), recovered as (
@@ -2905,6 +2913,37 @@ with candidate as (
     from recording_jobs jobs
     join candidate on candidate.recording_id = jobs.recording_id
     where jobs.kind = 'render'
+), retry_tally as (
+    select existing.id as job_id, count(history.job_id)::integer as retry_count
+    from existing
+    left join recording_job_failure_history history on history.job_id = existing.id
+    group by existing.id
+), archived_failure as (
+    insert into recording_job_failure_history (
+        job_id, manual_retry_count, attempt_count, fencing_generation,
+        error_code, error_detail, failed_at
+    )
+    select existing.id, retry_tally.retry_count + 1, existing.attempt_count,
+        existing.fencing_generation, existing.error_code, existing.error_detail,
+        coalesce(existing.terminal_at, existing.updated_at)
+    from existing
+    join retry_tally on retry_tally.job_id = existing.id
+    join candidate on candidate.recording_id = existing.recording_id
+    where existing.state = 'terminal_failure'
+      and retry_tally.retry_count < 5
+      and candidate.capture_completed_at +
+          (recording_deferred_retention_seconds(candidate.config_snapshot) * interval '1 second') > clock_timestamp()
+    on conflict (job_id, manual_retry_count) do nothing
+    returning job_id, manual_retry_count
+), retried as (
+    update recording_jobs jobs
+    set state = 'pending', available_at = now(), attempt_count = 0,
+        lease_token = null, lease_owner = null, lease_expires_at = null,
+        error_code = null, error_detail = null, terminal_at = null, updated_at = now()
+    from archived_failure
+    where jobs.id = archived_failure.job_id
+      and jobs.state = 'terminal_failure'
+    returning jobs.id, jobs.tenant_id, jobs.episode_id, jobs.recording_id, jobs.kind, jobs.idempotency_key, jobs.payload_schema_version, jobs.state, jobs.priority, jobs.available_at, jobs.attempt_count, jobs.attempt_limit, jobs.lease_token, jobs.lease_owner, jobs.lease_expires_at, jobs.fencing_generation, jobs.error_code, jobs.error_detail, jobs.terminal_at, jobs.updated_at, jobs.created_at
 ), inserted as (
     insert into recording_jobs (
         id, tenant_id, episode_id, recording_id, kind, idempotency_key,
@@ -2925,14 +2964,20 @@ with candidate as (
 ), queued as (
     update recording_pipelines
     set state = 'render_queued', updated_at = now()
-    from inserted
-    where recording_pipelines.recording_id = inserted.recording_id
-      and recording_pipelines.state = 'capture_complete'
+    where recording_pipelines.recording_id in (
+        select recording_id from inserted union all select recording_id from retried
+    )
+      and recording_pipelines.state in ('capture_complete', 'terminal_failure')
     returning recording_pipelines.recording_id
 )
-select id, tenant_id, episode_id, recording_id, kind, idempotency_key, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation, error_code, error_detail, terminal_at, updated_at, created_at from existing
+select existing.id, existing.tenant_id, existing.episode_id, existing.recording_id, existing.kind, existing.idempotency_key, existing.payload_schema_version, existing.state, existing.priority, existing.available_at, existing.attempt_count, existing.attempt_limit, existing.lease_token, existing.lease_owner, existing.lease_expires_at, existing.fencing_generation, existing.error_code, existing.error_detail, existing.terminal_at, existing.updated_at, existing.created_at, (existing.state = 'terminal_failure' and retry_tally.retry_count >= 5) as retry_limit_reached
+from existing
+join retry_tally on retry_tally.job_id = existing.id
+where existing.state <> 'terminal_failure' or retry_tally.retry_count >= 5
 union all
-select id, tenant_id, episode_id, recording_id, kind, idempotency_key, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation, error_code, error_detail, terminal_at, updated_at, created_at from inserted
+select retried.id, retried.tenant_id, retried.episode_id, retried.recording_id, retried.kind, retried.idempotency_key, retried.payload_schema_version, retried.state, retried.priority, retried.available_at, retried.attempt_count, retried.attempt_limit, retried.lease_token, retried.lease_owner, retried.lease_expires_at, retried.fencing_generation, retried.error_code, retried.error_detail, retried.terminal_at, retried.updated_at, retried.created_at, false as retry_limit_reached from retried
+union all
+select inserted.id, inserted.tenant_id, inserted.episode_id, inserted.recording_id, inserted.kind, inserted.idempotency_key, inserted.payload_schema_version, inserted.state, inserted.priority, inserted.available_at, inserted.attempt_count, inserted.attempt_limit, inserted.lease_token, inserted.lease_owner, inserted.lease_expires_at, inserted.fencing_generation, inserted.error_code, inserted.error_detail, inserted.terminal_at, inserted.updated_at, inserted.created_at, false as retry_limit_reached from inserted
 limit 1
 `
 
@@ -2967,11 +3012,13 @@ type RequestDeferredRecordingRenderRow struct {
 	TerminalAt           pgtype.Timestamptz `json:"terminal_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	RetryLimitReached    pgtype.Bool        `json:"retry_limit_reached"`
 }
 
 // A Recording has one canonical MP4 export. The first authorized request
-// creates its render job; later requests reuse its pending, failed, or
-// completed job without moving the capture-completion retention deadline.
+// creates its render job; active and completed jobs remain idempotent. A
+// terminally failed job may be manually retried five times; each old failure
+// is copied to append-only history before the same fenced job is requeued.
 func (q *Queries) RequestDeferredRecordingRender(ctx context.Context, arg RequestDeferredRecordingRenderParams) (RequestDeferredRecordingRenderRow, error) {
 	row := q.db.QueryRow(ctx, requestDeferredRecordingRender,
 		arg.RecordingID,
@@ -3004,6 +3051,7 @@ func (q *Queries) RequestDeferredRecordingRender(ctx context.Context, arg Reques
 		&i.TerminalAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.RetryLimitReached,
 	)
 	return i, err
 }

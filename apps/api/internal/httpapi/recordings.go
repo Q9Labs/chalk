@@ -161,7 +161,7 @@ func requestRecordingExportEndpoint(service RecordingService, exports RecordingE
 		if err != nil {
 			return requestRecordingExportResponse{}, err
 		}
-		if state.ExportStatus != recordingpipeline.ExportStatusReady && state.ExportStatus != recordingpipeline.ExportStatusUnavailable && state.ExportStatus != recordingpipeline.ExportStatusFailed {
+		if state.ExportStatus != recordingpipeline.ExportStatusReady && state.ExportStatus != recordingpipeline.ExportStatusUnavailable {
 			if _, err := exports.RequestExport(ctx, recordingpipeline.ExportInput{TenantID: request.TenantID, RecordingID: request.RecordingID}); err != nil {
 				return requestRecordingExportResponse{}, err
 			}
@@ -172,7 +172,7 @@ func requestRecordingExportEndpoint(service RecordingService, exports RecordingE
 		}
 		response := newRecordingResponse(recording, state)
 		return requestRecordingExportResponse{Recording: response, Export: response.Export}, nil
-	}).Auth(APIAuthCookieOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), recordingIDParameter()).RequestBody("RequestRecordingExportRequest", struct{}{}).Responds(http.StatusAccepted, "RecordingExportRequestAcceptedResponse", requestRecordingExportResponse{}).Errors(recordingReadErrors(apiErrorInvalidRecordingID, apiErrorRecordingNotFound, apiErrorRecordingNotReady, apiErrorRateLimited)...).MapErrors(recordingEndpointAPIError)
+	}).Auth(APIAuthCookieOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), recordingIDParameter()).RequestBody("RequestRecordingExportRequest", struct{}{}).Responds(http.StatusAccepted, "RecordingExportRequestAcceptedResponse", requestRecordingExportResponse{}).Errors(recordingReadErrors(apiErrorInvalidRecordingID, apiErrorRecordingNotFound, apiErrorRecordingNotReady, apiErrorRecordingExportRetryLimit, apiErrorRateLimited)...).MapErrors(recordingEndpointAPIError)
 }
 
 func decodeRequestRecordingExportEndpointRequest(r *http.Request) (requestRecordingExportEndpointRequest, error) {
@@ -405,6 +405,8 @@ func recordingServiceAPIError(err error) (APIError, bool) {
 		return apiErrorRecordingNotFound, true
 	case errors.Is(err, recordingpipeline.ErrExportUnavailable):
 		return apiErrorRecordingNotReady, true
+	case errors.Is(err, recordingpipeline.ErrExportRetryLimit):
+		return apiErrorRecordingExportRetryLimit, true
 	default:
 		return APIError{}, false
 	}
