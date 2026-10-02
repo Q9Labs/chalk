@@ -43,7 +43,7 @@ export const webhookFixturesV1 = [
   {
     event: "recording.started",
     body_utf8:
-      '{"id":"00000000-0000-4000-8000-000000000009","event":"recording.started","api_version":1,"occurred_at":"2026-07-12T18:06:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"60000000-0000-4000-8000-000000000001","space_id":"20000000-0000-4000-8000-000000000001","episode_id":"30000000-0000-4000-8000-000000000001","status":"started","started_at":"2026-07-12T18:06:00.000Z","completed_at":null,"failed_at":null,"failure":null,"created_at":"2026-07-12T18:06:00.000Z","updated_at":"2026-07-12T18:06:00.000Z"}}}',
+      '{"id":"00000000-0000-4000-8000-000000000009","event":"recording.started","api_version":1,"occurred_at":"2026-07-12T18:06:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"70000000-0000-5000-8000-000000000001","space_id":"20000000-0000-4000-8000-000000000001","episode_id":"30000000-0000-4000-8000-000000000001","status":"started","started_at":"2026-07-12T18:06:00.000Z","completed_at":null,"failed_at":null,"failure":null,"created_at":"2026-07-12T18:06:00.000Z","updated_at":"2026-07-12T18:06:00.000Z"}}}',
   },
   {
     event: "recording.completed",
@@ -58,7 +58,7 @@ export const webhookFixturesV1 = [
   {
     event: "transcript.started",
     body_utf8:
-      '{"id":"00000000-0000-4000-8000-000000000012","event":"transcript.started","api_version":1,"occurred_at":"2026-07-12T19:07:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"70000000-0000-4000-8000-000000000001","recording_id":"60000000-0000-4000-8000-000000000001","space_id":"20000000-0000-4000-8000-000000000001","episode_id":"30000000-0000-4000-8000-000000000001","status":"started","languages":[],"started_at":"2026-07-12T19:07:00.000Z","completed_at":null,"failed_at":null,"failure":null,"created_at":"2026-07-12T19:07:00.000Z","updated_at":"2026-07-12T19:07:00.000Z"}}}',
+      '{"id":"00000000-0000-4000-8000-000000000012","event":"transcript.started","api_version":1,"occurred_at":"2026-07-12T19:07:00.000Z","tenant_id":"10000000-0000-4000-8000-000000000001","data":{"object":{"id":"70000000-0000-4000-8000-000000000001","recording_id":"70000000-0000-5000-8000-000000000001","space_id":"20000000-0000-4000-8000-000000000001","episode_id":"30000000-0000-4000-8000-000000000001","status":"started","languages":[],"started_at":"2026-07-12T19:07:00.000Z","completed_at":null,"failed_at":null,"failure":null,"created_at":"2026-07-12T19:07:00.000Z","updated_at":"2026-07-12T19:07:00.000Z"}}}',
   },
   {
     event: "transcript.completed",

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -45,12 +46,15 @@ func (s Sender) SendEmail(ctx context.Context, input email.SendEmailInput) (emai
 
 	response, err := s.emails.SendWithOptions(ctx, sendEmailRequest(input), sendEmailOptions(input))
 	if errors.Is(err, resendsdk.ErrRateLimit) {
+		slog.WarnContext(ctx, "email delivery failed", "event", "email.delivery.failed", "provider", "resend", "reason", "rate_limited")
 		return email.SendEmailResult{}, fmt.Errorf("send resend email: %w", errors.Join(email.ErrProviderRateLimited, err))
 	}
 	if err != nil {
+		slog.ErrorContext(ctx, "email delivery failed", "event", "email.delivery.failed", "provider", "resend", "reason", "provider_failed")
 		return email.SendEmailResult{}, fmt.Errorf("send resend email: %w", errors.Join(email.ErrProviderFailed, err))
 	}
 	if response == nil || strings.TrimSpace(response.Id) == "" {
+		slog.ErrorContext(ctx, "email delivery failed", "event", "email.delivery.failed", "provider", "resend", "reason", "invalid_response")
 		return email.SendEmailResult{}, fmt.Errorf("send resend email: %w", email.ErrProviderFailed)
 	}
 
@@ -74,7 +78,7 @@ func sendEmailRequest(input email.SendEmailInput) *resendsdk.SendEmailRequest {
 
 func sendEmailOptions(input email.SendEmailInput) *resendsdk.SendEmailOptions {
 	if strings.TrimSpace(input.IdempotencyKey) == "" {
-		return nil
+		return &resendsdk.SendEmailOptions{}
 	}
 
 	return &resendsdk.SendEmailOptions{IdempotencyKey: input.IdempotencyKey}

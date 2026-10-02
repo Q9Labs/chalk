@@ -1,8 +1,10 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -25,8 +27,12 @@ func (s passwordResetHTTPService) CompletePasswordReset(context.Context, string,
 }
 
 func TestPasswordResetRequestDoesNotExposeOperationalFailures(t *testing.T) {
+	var logs bytes.Buffer
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previousLogger) })
 	var expected string
-	for _, failure := range []error{nil, errors.New("database unavailable"), errors.New("email unavailable")} {
+	for _, failure := range []error{nil, errors.New("database unavailable"), errors.New("provider rejected account@example.com token=private-reset-token")} {
 		router := chi.NewRouter()
 		router.Route("/v1", func(r chi.Router) {
 			passwordResetRequestEndpointWithTimeout(passwordResetHTTPService{err: failure}, 100*time.Millisecond, 100*time.Millisecond).Mount(r, DefaultRateLimitOptions())
@@ -40,6 +46,14 @@ func TestPasswordResetRequestDoesNotExposeOperationalFailures(t *testing.T) {
 			expected = response.Body.String()
 		} else if response.Body.String() != expected {
 			t.Fatal("request response reveals operational failure")
+		}
+	}
+	if !strings.Contains(logs.String(), "auth.password_reset.failed") {
+		t.Fatal("password reset failure was not logged")
+	}
+	for _, private := range []string{"account@example.com", "private-reset-token", "provider rejected"} {
+		if strings.Contains(logs.String(), private) {
+			t.Fatal("password reset failure log leaked provider input")
 		}
 	}
 }

@@ -19,6 +19,12 @@ import (
 )
 
 func TestRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T) {
+	for _, policy := range []string{"manual", "automatic"} {
+		t.Run(policy, func(t *testing.T) { testRecordingLifecyclePublishesAndReplaysSyncOperations(t, policy) })
+	}
+}
+
+func testRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T, policy string) {
 	if testing.Short() {
 		t.Skip("postgres integration")
 	}
@@ -54,6 +60,11 @@ func TestRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T) {
 	spaceID := recordingLifecycleIntegrationID(t)
 	episodeID := recordingLifecycleIntegrationID(t)
 	recordingID := recordingLifecycleIntegrationID(t)
+	if policy == "automatic" {
+		bytes := recordingID.Bytes()
+		bytes[6] = (bytes[6] & 0x0f) | 0x50
+		recordingID = utilities.IDFromBytes(bytes)
+	}
 	otherRecordingID := recordingLifecycleIntegrationID(t)
 	reservationID := recordingLifecycleIntegrationID(t)
 	jobID := recordingLifecycleIntegrationID(t)
@@ -68,7 +79,7 @@ func TestRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T) {
 	if _, err := transaction.Exec(ctx, `insert into tenants(id, name) values($1, 'Recording lifecycle integration')`, tenantID.Bytes()); err != nil {
 		t.Fatalf("seed tenant: %v", err)
 	}
-	if _, err := transaction.Exec(ctx, `insert into spaces(id, name, tenant_id, slug, media_plane, recording_policy) values($1, 'Recording lifecycle integration', $2, $3, 'cf_sfu', 'manual')`, spaceID.Bytes(), tenantID.Bytes(), "recording-lifecycle-"+spaceID.String()[:8]); err != nil {
+	if _, err := transaction.Exec(ctx, `insert into spaces(id, name, tenant_id, slug, media_plane, recording_policy) values($1, 'Recording lifecycle integration', $2, $3, 'cf_sfu', $4)`, spaceID.Bytes(), tenantID.Bytes(), "recording-lifecycle-"+spaceID.String()[:8], policy); err != nil {
 		t.Fatalf("seed Space: %v", err)
 	}
 	if _, err := transaction.Exec(ctx, `insert into episodes(id, status, space_id, tenant_id, config_snapshot, deadline_at, deadline_generation) values($1, 'active', $2, $3, '{"roles":{"collaborator":["publishAudio","publishVideo","subscribe"]},"admission_policy":{"mode":"open"},"default_episode_duration_seconds":3600,"maximum_episode_duration_seconds":7200,"linger_window_seconds":0}'::jsonb, now() + interval '1 hour', 1)`, episodeID.Bytes(), spaceID.Bytes(), tenantID.Bytes()); err != nil {
