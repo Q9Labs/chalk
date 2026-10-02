@@ -2,7 +2,6 @@ package recordingdecode
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -21,17 +20,7 @@ import (
 
 const videoClockRate uint64 = 90_000
 
-// Ignore only exact recent media replays, never merely an older timestamp or
-// picture ID. Some SFUs forward retransmissions under new RTP sequence numbers.
 const vp8ReplayWindow = 1_024
-
-type vp8PacketFingerprint struct {
-	payloadHash [sha256.Size]byte
-	timestamp   uint32
-	ssrc        uint32
-	payloadType uint8
-	marker      bool
-}
 
 type videoSegment struct {
 	path       string
@@ -61,9 +50,11 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 	var previousTimestamp uint32
 	var mediaStarted bool
 	var started bool
-	replays := make(map[vp8PacketFingerprint]int, vp8ReplayWindow)
-	var recentPackets [vp8ReplayWindow]vp8PacketFingerprint
-	var recentPacketCount int
+	var quality vp8Quality
+	var framePayload []byte
+	var frameTimestamp uint32
+	var frameKey bool
+	var frameWidth, frameHeight uint16
 	var waitingForKeyFrame = true
 	var lossStart uint64
 	closeSegment := func() error {
@@ -79,6 +70,9 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 		return nil
 	}
 	startSegment := func(packet recordingbundle.RTPPacket, width, height uint16) error {
+		if len(segments) > 0 && (current.width != width || current.height != height) {
+			quality.dimensionSwitches++
+		}
 		current = videoSegment{
 			path:       filepath.Join(segmentDirectory, "segment-"+strconv.Itoa(len(segments))+".ivf"),
 			startTicks: uint64(packet.Timestamp), width: width, height: height,
@@ -96,8 +90,20 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		if started && packet.SSRC == previousSSRC && packet.ExtendedSequenceNumber <= previousSequence {
+			quality.latePackets++
+			if len(packet.Payload) > 0 {
+				quality.drop(packet.Timestamp)
+			}
+			return nil
+		}
 		lost := started && (packet.ExtendedSequenceNumber != previousSequence+1 || packet.SSRC != previousSSRC)
+		previousSequence, previousSSRC, started = packet.ExtendedSequenceNumber, packet.SSRC, true
 		if lost {
+			if len(framePayload) > 0 {
+				quality.drop(frameTimestamp)
+				framePayload = nil
+			}
 			if err := closeSegment(); err != nil {
 				return err
 			}
@@ -106,61 +112,114 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 				lossStart = frameTimestamps[len(frameTimestamps)-1] + nominalFrameTicks(frameTimestamps)
 			}
 		}
-		previousSequence, previousSSRC = packet.ExtendedSequenceNumber, packet.SSRC
-		started = true
-		// RTP padding probes have no codec payload but consume sequence numbers.
-		// Keep continuity without feeding them to the VP8 depacketizer, including
-		// probes preserved in older bundles where the padding flag is not stored.
+		// Empty probes consume RTP sequence numbers, not codec or media clocks.
 		if len(packet.Payload) == 0 {
 			return nil
 		}
-		fingerprint := vp8PacketFingerprint{payloadHash: sha256.Sum256(packet.Payload), timestamp: packet.Timestamp, ssrc: packet.SSRC, payloadType: packet.PayloadType, marker: packet.Marker}
+		if _, seen := quality.seen[packet.Timestamp]; seen {
+			quality.duplicatePackets++
+			return nil
+		}
 		if mediaStarted && packet.Timestamp < previousTimestamp {
-			if _, replay := replays[fingerprint]; replay {
-				return nil
-			}
-			return fmt.Errorf("%w: VP8 timestamp regressed", ErrDecode)
+			quality.latePackets++
+			quality.drop(packet.Timestamp)
+			return nil
 		}
 		if err := validateMediaTimestamp(packet.Timestamp, videoClockRate, durationMS); err != nil {
-			return err
+			quality.malformedPackets++
+			quality.drop(packet.Timestamp)
+			return nil
 		}
-		previousTimestamp, mediaStarted = packet.Timestamp, true
-		if lost && len(frameTimestamps) == 0 {
-			lossStart = uint64(packet.Timestamp)
-		}
-		isKeyFrame, width, height, headerErr := vp8KeyFrame(packet.Payload)
-		if headerErr != nil {
-			return headerErr
-		}
-		if recentPacketCount >= vp8ReplayWindow {
-			expired := recentPackets[recentPacketCount%vp8ReplayWindow]
-			if replays[expired] == recentPacketCount-vp8ReplayWindow {
-				delete(replays, expired)
+		if len(framePayload) > 0 && packet.Timestamp != frameTimestamp {
+			quality.drop(frameTimestamp)
+			framePayload = nil
+			if err := closeSegment(); err != nil {
+				return err
 			}
+			waitingForKeyFrame = true
+			lossStart = uint64(frameTimestamp)
 		}
-		recentPackets[recentPacketCount%vp8ReplayWindow] = fingerprint
-		replays[fingerprint] = recentPacketCount
-		recentPacketCount++
-		if waitingForKeyFrame {
-			if !isKeyFrame {
+		var vp8 codecs.VP8Packet
+		_, headerErr := vp8.Unmarshal(packet.Payload)
+		if headerErr != nil || len(vp8.Payload) == 0 {
+			quality.malformedPackets++
+			quality.drop(packet.Timestamp)
+			framePayload = nil
+			if err := closeSegment(); err != nil {
+				return err
+			}
+			waitingForKeyFrame = true
+			lossStart = uint64(packet.Timestamp)
+			return nil
+		}
+		if len(framePayload) > 0 && vp8.S == 1 && vp8.PID == 0 {
+			// A second start at the same timestamp is another copy of this frame,
+			// not another lost frame. Decode the newest complete copy.
+			quality.duplicatePackets++
+			framePayload = nil
+		}
+		if len(framePayload) == 0 {
+			if vp8.S != 1 || vp8.PID != 0 {
+				if len(frameTimestamps) > 0 {
+					quality.drop(packet.Timestamp)
+				}
 				return nil
 			}
-			if err := startSegment(packet, width, height); err != nil {
+			var err error
+			frameKey, frameWidth, frameHeight, err = vp8KeyFrame(packet.Payload)
+			if err != nil {
+				quality.malformedPackets++
+				quality.drop(packet.Timestamp)
+				if err := closeSegment(); err != nil {
+					return err
+				}
+				waitingForKeyFrame = true
+				lossStart = uint64(packet.Timestamp)
+				return nil
+			}
+			if waitingForKeyFrame && !frameKey {
+				if len(frameTimestamps) > 0 {
+					quality.drop(packet.Timestamp)
+				}
+				return nil
+			}
+			frameTimestamp = packet.Timestamp
+		}
+		if len(framePayload)+len(vp8.Payload) > recordingbundle.MaxPacketPayloadBytes*1_024 {
+			return fmt.Errorf("%w: VP8 frame exceeds size bound", ErrDecode)
+		}
+		framePayload = append(framePayload, vp8.Payload...)
+		if !packet.Marker {
+			return nil
+		}
+		if frameKey && writer != nil && (current.width != frameWidth || current.height != frameHeight) {
+			if err := closeSegment(); err != nil {
+				return err
+			}
+			waitingForKeyFrame = true
+		}
+		if waitingForKeyFrame {
+			if err := startSegment(packet, frameWidth, frameHeight); err != nil {
 				return err
 			}
 			if lossStart > 0 && uint64(packet.Timestamp) > lossStart {
-				resultDiscontinuities = append(resultDiscontinuities, sourceDiscontinuity(state,
-					ticksToMillisecondsFloor(lossStart, videoClockRate), ticksToMillisecondsCeil(uint64(packet.Timestamp), videoClockRate), "packet_loss"))
+				quality.recoveryTicks += uint64(packet.Timestamp) - lossStart
+				resultDiscontinuities = append(resultDiscontinuities, sourceDiscontinuity(state, ticksToMillisecondsFloor(lossStart, videoClockRate), ticksToMillisecondsCeil(uint64(packet.Timestamp), videoClockRate), "packet_loss"))
 			}
+			lossStart = 0
 			waitingForKeyFrame = false
 		}
+		// Feed only complete frames to the codec writer; abandoned fragments must
+		// never be joined to the next timestamp's frame.
 		rtpPacket := toRTPPacket(packet)
+		rtpPacket.Payload = append([]byte{0x10}, framePayload...)
 		if err := writer.WriteRTP(&rtpPacket); err != nil {
 			return fmt.Errorf("%w: write VP8 RTP: %v", ErrDecode, err)
 		}
-		if packet.Marker {
-			frameTimestamps = append(frameTimestamps, uint64(packet.Timestamp))
-		}
+		previousTimestamp, mediaStarted = packet.Timestamp, true
+		frameTimestamps = append(frameTimestamps, uint64(packet.Timestamp))
+		quality.remember(packet.Timestamp)
+		framePayload = nil
 		return nil
 	})
 	if err != nil {
@@ -173,11 +232,21 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 		}
 		return Source{}, nil, err
 	}
+	if len(framePayload) > 0 {
+		quality.drop(frameTimestamp)
+	}
 	if err := closeSegment(); err != nil {
+		return Source{}, nil, err
+	}
+	if err := quality.validate(ctx, state.presentation.SourceID, frameTimestamps); err != nil {
 		return Source{}, nil, err
 	}
 	if len(segments) == 0 || len(frameTimestamps) == 0 {
 		return Source{}, nil, fmt.Errorf("%w: VP8 source has no key frame", ErrDecode)
+	}
+	segments, err = normalizeVP8Segments(ctx, runner, ffmpegPath, segmentDirectory, segments)
+	if err != nil {
+		return Source{}, nil, err
 	}
 	mergedIVF := filepath.Join(segmentDirectory, "source.ivf")
 	if err := mergeIVF(mergedIVF, segments); err != nil {
