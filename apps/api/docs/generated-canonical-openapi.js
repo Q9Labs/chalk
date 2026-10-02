@@ -7684,6 +7684,17 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             description: "Not Found",
             "x-chalk-error-codes": ["recording.not_found"],
           },
+          409: {
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+            description: "Conflict",
+            "x-chalk-error-codes": ["recording.export_retry_limit_reached"],
+          },
           413: {
             content: {
               "application/json": {

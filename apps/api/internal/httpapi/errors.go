@@ -85,6 +85,7 @@ var (
 	apiErrorInvalidURLExpiration      = APIError{Status: http.StatusBadRequest, Code: "url.invalid_expiration", Message: "Invalid url expiration"}
 	apiErrorRecordingNotReady         = APIError{Status: http.StatusBadRequest, Code: "recording.not_ready", Message: "Recording is not ready"}
 	apiErrorRecordingNotFound         = APIError{Status: http.StatusNotFound, Code: "recording.not_found", Message: "Recording not found"}
+	apiErrorRecordingExportRetryLimit = APIError{Status: http.StatusConflict, Code: "recording.export_retry_limit_reached", Message: "Recording Export retry limit reached"}
 	apiErrorRecordingArtifactNotFound = APIError{Status: http.StatusNotFound, Code: "recording_artifact.not_found", Message: "Recording artifact not found"}
 
 	apiErrorInvalidTranscriptID        = APIError{Status: http.StatusBadRequest, Code: "transcript.invalid_id", Message: "Invalid transcript id"}

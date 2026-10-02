@@ -204,7 +204,7 @@ export function SpaceRecordingHistorySection({ tenantID, spaceID, client = defau
         const latest = await waitForExport(client, tenantID, response.recording, () => isCurrentContext(generation));
         if (!latest || !isCurrentContext(generation)) return;
         replaceRecording(latest, generation);
-        if (latest.export.status === "ready") await accessVideo(recording, action);
+        if (latest.export.status === "ready" && action !== "retry") await accessVideo(recording, action);
       } catch (cause) {
         if (isCurrentContext(generation)) setActionError(historyErrorMessage(cause, "Video could not be requested."));
       } finally {

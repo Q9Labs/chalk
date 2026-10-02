@@ -437,8 +437,9 @@ type Querier interface {
 	RelinquishCaptureRecordingJob(ctx context.Context, arg RelinquishCaptureRecordingJobParams) (RelinquishCaptureRecordingJobRow, error)
 	RenewProjectorOffsetLease(ctx context.Context, arg RenewProjectorOffsetLeaseParams) (DiagnosticProjectorOffset, error)
 	// A Recording has one canonical MP4 export. The first authorized request
-	// creates its render job; later requests reuse its pending, failed, or
-	// completed job without moving the capture-completion retention deadline.
+	// creates its render job; active and completed jobs remain idempotent. A
+	// terminally failed job may be manually retried five times; each old failure
+	// is copied to append-only history before the same fenced job is requeued.
 	RequestDeferredRecordingRender(ctx context.Context, arg RequestDeferredRecordingRenderParams) (RequestDeferredRecordingRenderRow, error)
 	RequestRecordingStop(ctx context.Context, arg RequestRecordingStopParams) (RequestRecordingStopRow, error)
 	RequeueArtifactJob(ctx context.Context, arg RequeueArtifactJobParams) (ArtifactJob, error)

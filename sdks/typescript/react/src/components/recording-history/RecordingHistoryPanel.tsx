@@ -10,7 +10,7 @@ export type RecordingHistoryStatus = "pending" | "processing" | "completed" | "f
 export type RecordingSourceStatus = "pending" | "available" | "failed" | "expired";
 export type RecordingExportStatus = "none" | "pending" | "ready" | "failed" | "unavailable";
 export type RecordingTranscriptStatus = "none" | "requestable" | "unavailable" | "pending" | "processing" | "completed" | "failed";
-export type RecordingHistoryAction = "watch" | "download";
+export type RecordingHistoryAction = "watch" | "download" | "retry";
 
 export interface RecordingHistorySource {
   readonly expires_at?: string | null;
@@ -367,6 +367,16 @@ interface RequestedVideoActionsProps {
 
 function RequestedVideoActions({ onRequestExport, recording, requestingExport }: RequestedVideoActionsProps): React.JSX.Element | null {
   if (!onRequestExport) return null;
+  if (recording.export?.status === "failed") {
+    return (
+      <div className="pt-1">
+        <ChalkButton aria-label={`Retry Export ${shortId(recording.id)}`} disabled={requestingExport} loading={requestingExport} onClick={() => onRequestExport(recording, "retry")} variant="ghost" className="shrink-0 px-3">
+          <RefreshIcon className="size-4" />
+          Retry Export
+        </ChalkButton>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-wrap gap-2 pt-1">
       <ChalkButton aria-label={`Watch recording ${shortId(recording.id)}`} disabled={requestingExport} loading={requestingExport} onClick={() => onRequestExport(recording, "watch")} variant="ghost" className="shrink-0 px-3">

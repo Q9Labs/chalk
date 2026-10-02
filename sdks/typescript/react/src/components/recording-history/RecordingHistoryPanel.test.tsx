@@ -146,10 +146,12 @@ describe("RecordingHistoryPanel", () => {
     try {
       await act(async () => root.render(<RecordingHistoryPanel recordings={[recording]} onRequestExport={onRequestExport} />));
       expect(container.textContent).toContain("Video service is temporarily unavailable.");
-      const watch = container.querySelector('button[aria-label="Watch recording recordin"]');
-      if (!(watch instanceof HTMLButtonElement)) throw new Error("Retry watch action is missing");
-      await act(async () => watch.click());
-      expect(onRequestExport).toHaveBeenCalledWith(recording, "watch");
+      const retry = container.querySelector('button[aria-label="Retry Export recordin"]');
+      if (!(retry instanceof HTMLButtonElement)) throw new Error("Retry Export action is missing");
+      expect(container.querySelector('button[aria-label^="Watch recording"]')).toBeNull();
+      expect(container.querySelector('button[aria-label^="Download recording"]')).toBeNull();
+      await act(async () => retry.click());
+      expect(onRequestExport).toHaveBeenCalledWith(recording, "retry");
     } finally {
       await act(async () => root.unmount());
       container.remove();

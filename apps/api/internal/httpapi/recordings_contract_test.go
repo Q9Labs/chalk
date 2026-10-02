@@ -69,16 +69,51 @@ func (s recordingExportHTTPRecordingStub) List(context.Context, utilities.ID, ut
 }
 
 type recordingExportHTTPStub struct {
-	jobID utilities.ID
-	state recordingpipeline.ArtifactState
-	calls int
+	jobID      utilities.ID
+	state      recordingpipeline.ArtifactState
+	calls      int
+	requestErr error
 }
 
 func (s *recordingExportHTTPStub) RequestExport(_ context.Context, _ recordingpipeline.ExportInput) (recordingpipeline.Job, error) {
 	s.calls++
+	if s.requestErr != nil {
+		return recordingpipeline.Job{}, s.requestErr
+	}
 	s.state.ExportJobID = &s.jobID
 	s.state.ExportStatus = recordingpipeline.ExportStatusPending
 	return recordingpipeline.Job{ID: s.jobID, Kind: recordingpipeline.JobKindRender}, nil
+}
+
+func TestRecordingExportRequestRetriesFailureAndReportsRetryLimit(t *testing.T) {
+	tenantID := mustRecordingContractID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be011")
+	recordingID := mustRecordingContractID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be012")
+	recordingService := recordingExportHTTPRecordingStub{recording: recordings.Recording{ID: recordingID, TenantID: tenantID}}
+	exports := &recordingExportHTTPStub{jobID: mustRecordingContractID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be013"), state: recordingpipeline.ArtifactState{
+		SourceStatus: recordingpipeline.SourceStatusAvailable, ExportStatus: recordingpipeline.ExportStatusFailed, Retryable: true,
+	}}
+	router := chi.NewRouter()
+	requestRecordingExportEndpoint(recordingService, exports, &preparationAuthorizer{}).Mount(router, RateLimitOptions{})
+
+	request := httptest.NewRequest(http.MethodPost, "/tenants/"+tenantID.String()+"/recordings/"+recordingID.String()+"/export", strings.NewReader(`{}`))
+	request.Header.Set("Content-Type", "application/json")
+	request = request.WithContext(authentication.ContextWithPrincipal(request.Context(), authentication.Principal{Kind: authentication.PrincipalSystem}))
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusAccepted || exports.calls != 1 {
+		t.Fatalf("retry failed Export status=%d calls=%d body=%s", response.Code, exports.calls, response.Body.String())
+	}
+
+	exports.state.ExportStatus = recordingpipeline.ExportStatusFailed
+	exports.requestErr = recordingpipeline.ErrExportRetryLimit
+	request = httptest.NewRequest(http.MethodPost, "/tenants/"+tenantID.String()+"/recordings/"+recordingID.String()+"/export", strings.NewReader(`{}`))
+	request.Header.Set("Content-Type", "application/json")
+	request = request.WithContext(authentication.ContextWithPrincipal(request.Context(), authentication.Principal{Kind: authentication.PrincipalSystem}))
+	response = httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), `"code":"recording.export_retry_limit_reached"`) {
+		t.Fatalf("capped retry status=%d body=%s", response.Code, response.Body.String())
+	}
 }
 
 func (s *recordingExportHTTPStub) GetArtifactState(context.Context, utilities.ID, utilities.ID) (recordingpipeline.ArtifactState, error) {
