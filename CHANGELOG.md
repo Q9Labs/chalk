@@ -14,27 +14,41 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
-- Escalated the React reconnect notice to a blocking dialog after ten seconds of continuous disconnection, independent of browser online status, and cleared both surfaces on recovery.
-- Refreshed remote Cloudflare SFU publications when Sync pushes a media projection change, with slower periodic discovery and reconciliation as recovery backstops.
 - Updated the Sync HTTP transport and workspace HTTP dependencies to patched releases.
-- Bounded browser Cloudflare SFU signaling and negotiation so stalled media work releases controls and reports a recoverable timeout, with nested provider and client deadlines.
-- Bounded browser Cloudflare SFU signaling and negotiation so stalled media work releases controls and reports a recoverable timeout, with nested provider and client deadlines; preserved the timeout message when another media control succeeds.
-- Bounded browser Cloudflare SFU signaling, negotiation, and credential refresh so stalled media work releases controls and reports a recoverable timeout, with nested provider and client deadlines; preserved the timeout message when another media control succeeds.
-- Bounded browser Cloudflare SFU signaling, negotiation, and credential refresh so stalled media work releases controls and reports a recoverable timeout, with nested provider and client deadlines; reserved the full signaling deadline after credential refresh and preserved the timeout message when another media control succeeds.
 - Updated the locked undici dependency to 7.29.1 to address GHSA-3wwx-pv8p-q78v.
 - Updated transitive brace-expansion and fast-uri dependencies to their security-fixed releases.
-- Resumed camera and microphone media on the existing Cloudflare SFU publication after a Participant re-enables it, without exhausting media sections or leaving remote Participants without media.
-- Paused microphone, camera, and screen senders and exposed their off state before waiting for sender detachment or Sync, preserved rapid off/on command ordering, and restored them if Sync rejects the command.
-- Closed forced-muted Cloudflare SFU tracks, reflected the off state in the affected Participant's controls, and required a fresh publication on re-enable; rebuilt retired bundled connections without restoring other forced-off sources.
-- Reconciled authoritative media publications every two seconds so fresh publications after forced mute do not wait for the slower discovery backstop.
-- Stopped receiver audio and video playback as soon as the projected Participant media state is off.
 - Dropped Capture RTP packets when the latest fenced Episode plan no longer authorizes their source, including while provider reconciliation is pending.
-- Surfaced per-track Cloudflare SFU pull failures in SDK diagnostics and cooled down retries for empty tracks.
-- Preserved self-paused media state across Sync coordinator recovery and retried a retained remote track as soon as its media projection resumed.
 
 ### Added
 
 - Added the managed Cloudflare SFU recording capture runtime with fenced worker leases, Pion RTP capture, KMS envelope encryption, server-owned R2 bundle allocation and verification, durable Sync ready/stopped callbacks, and inspectable journey and trace signals.
+
+## [4.1.16] - 2026-10-02
+
+### Added
+
+- Added SDK policies and React controls to hold offline actions and ask whether to send them after reconnecting.
+- Added tab-scoped Episode rejoin helpers that preserve Participant identity and microphone and camera choices after reload, with a React audio-resume control when browser playback is blocked.
+- Added camera simulcast for low-layer Capture while preserving Firefox camera quality and low-bandwidth frame rates.
+- Added reconnect tracing across Sync, media, and browser and React Native connection recovery.
+- Added typed server-only access refresh state and refreshed Recording and Transcript lifecycle Event contracts and integration documentation.
+- Added generated API contracts for Tenant invitations, protected member removal, member names and emails, password reset, and retrying Recording Exports.
+- Added Automatic Space Entrance preparation to pre-warm Capture before joining.
+
+### Fixed
+
+- Made Episode re-entry and reconnect recovery reliable, cleared stale Participant state, and fenced Whiteboard recovery traffic and scene resets.
+- Showed a lightweight notice during short network drops and escalated it to a blocking React dialog after ten seconds of continuous disconnection, clearing both surfaces on recovery.
+- Kept Episode toolbar controls visible and wrapped them on narrow screens, reserved space for the mobile self-view, and prevented mobile Entrance clipping.
+- Allowed safe retries for failed Recording Exports from the React Recording history panel.
+- Refreshed remote Cloudflare SFU publications on Sync media projection changes and reduced redundant recovery work, retaining periodic reconciliation as a backstop.
+- Bounded Cloudflare SFU signaling, negotiation, and credential refresh deadlines so stalled media operations release controls and preserve recoverable timeout messages.
+- Resumed camera and microphone media on existing publications after re-enable without exhausting media sections or losing remote playback.
+- Paused media senders immediately, preserved rapid off/on command ordering, and restored sender state when Sync rejects a command.
+- Closed forced-muted tracks, required fresh publications on re-enable, and recovered promptly without restoring other forced-off sources.
+- Stopped receiver playback when projected media state is off, preserved self-paused state across coordinator recovery, and retried remote tracks when their media projection resumed.
+- Preserved healthy remote streams, recovered ended tracks, and surfaced per-track pull failures with bounded retries for empty tracks.
+- Updated generated API access contracts to match tightened authorization checks.
 
 ## [4.1.15] - 2026-08-25
 
