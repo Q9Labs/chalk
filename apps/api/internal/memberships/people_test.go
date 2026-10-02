@@ -13,23 +13,29 @@ import (
 
 type invitationRepositoryStub struct {
 	PeopleRepository
-	input IssueInvitationInput
-	calls int
+	input      IssueInvitationInput
+	calls      int
+	afterIssue func()
 }
 
 func (r *invitationRepositoryStub) IssueInvitation(_ context.Context, input IssueInvitationInput) (Invitation, error) {
 	r.input = input
 	r.calls++
+	if r.afterIssue != nil {
+		r.afterIssue()
+	}
 	return Invitation{ID: input.ID, TenantID: input.TenantID, Email: input.Email, Role: input.Role, ExpiresAt: input.ExpiresAt}, nil
 }
 
 type invitationSenderStub struct {
-	input email.SendEmailInput
-	err   error
+	input  email.SendEmailInput
+	err    error
+	ctxErr error
 }
 
-func (s *invitationSenderStub) SendEmail(_ context.Context, input email.SendEmailInput) (email.SendEmailResult, error) {
+func (s *invitationSenderStub) SendEmail(ctx context.Context, input email.SendEmailInput) (email.SendEmailResult, error) {
 	s.input = input
+	s.ctxErr = ctx.Err()
 	return email.SendEmailResult{}, s.err
 }
 func TestIssueInvitationValidationLifetimeAndDelivery(t *testing.T) {
@@ -76,5 +82,24 @@ func TestIssueInvitationValidationLifetimeAndDelivery(t *testing.T) {
 				t.Fatal("invalid input reached repository")
 			}
 		})
+	}
+}
+
+func TestIssueInvitationAttemptsDeliveryAfterRequestCancellation(t *testing.T) {
+	tenant, err := utilities.NewID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	repository := &invitationRepositoryStub{afterIssue: cancel}
+	sender := &invitationSenderStub{}
+	service := NewPeopleService(repository, sender, "Chalk <invitations@example.test>", "https://chalk.test")
+
+	result, err := service.IssueInvitation(ctx, tenant, "person@example.test", RoleCollaborator)
+	if err != nil || !result.EmailDelivered {
+		t.Fatalf("result=%v err=%v", result, err)
+	}
+	if sender.input.Subject == "" || sender.ctxErr != nil {
+		t.Fatalf("delivery was not attempted with a live context: input=%v ctxErr=%v", sender.input, sender.ctxErr)
 	}
 }

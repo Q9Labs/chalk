@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -28,7 +29,7 @@ func TestPasswordResetRequestDoesNotExposeOperationalFailures(t *testing.T) {
 	for _, failure := range []error{nil, errors.New("database unavailable"), errors.New("email unavailable")} {
 		router := chi.NewRouter()
 		router.Route("/v1", func(r chi.Router) {
-			requestPasswordResetEndpoint(passwordResetHTTPService{err: failure}).Mount(r, DefaultRateLimitOptions())
+			passwordResetRequestEndpointWithTimeout(passwordResetHTTPService{err: failure}, 100*time.Millisecond).Mount(r, DefaultRateLimitOptions())
 		})
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/auth/password-reset/request", strings.NewReader(`{"email":"account@example.com"}`)))
@@ -59,33 +60,35 @@ func (s blockingPasswordResetHTTPService) RequestPasswordReset(ctx context.Conte
 	}
 }
 
-func TestPasswordResetResponseDoesNotWaitForLookupOrDelivery(t *testing.T) {
-	service := blockingPasswordResetHTTPService{started: make(chan struct{}, 32), release: make(chan struct{})}
-	t.Cleanup(func() { close(service.release) })
+func TestPasswordResetResponseWaitsForDeliveryAfterRequestCancellation(t *testing.T) {
+	service := blockingPasswordResetHTTPService{started: make(chan struct{}, 1), release: make(chan struct{})}
 	router := chi.NewRouter()
-	router.Route("/v1", func(r chi.Router) { requestPasswordResetEndpoint(service).Mount(r, RateLimitOptions{}) })
-	// Fill all processing slots; the next request must still receive the identical reply.
-	var expected string
-	for attempt := 0; attempt < 33; attempt++ {
-		response := httptest.NewRecorder()
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
-			router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/auth/password-reset/request", strings.NewReader(`{"email":"account@example.com"}`)))
-		}()
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-			t.Fatal("public response waited for lookup or email delivery")
-		}
-		if response.Code != http.StatusAccepted {
-			t.Fatalf("request status = %d", response.Code)
-		}
-		if expected == "" {
-			expected = response.Body.String()
-		} else if response.Body.String() != expected {
-			t.Fatal("saturation changed the public response")
-		}
+	router.Route("/v1", func(r chi.Router) {
+		passwordResetRequestEndpointWithTimeout(service, 100*time.Millisecond).Mount(r, RateLimitOptions{})
+	})
+	response := httptest.NewRecorder()
+	requestContext, cancelRequest := context.WithCancel(context.Background())
+	request := httptest.NewRequest(http.MethodPost, "/v1/auth/password-reset/request", strings.NewReader(`{"email":"account@example.com"}`)).WithContext(requestContext)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		router.ServeHTTP(response, request)
+	}()
+	<-service.started
+	cancelRequest()
+	select {
+	case <-done:
+		t.Fatal("request returned before email delivery completed")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(service.release)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("request did not return after email delivery completed")
+	}
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("request status = %d", response.Code)
 	}
 }
 
@@ -94,7 +97,11 @@ func TestPasswordResetUnauthenticatedRoutesAreRateLimited(t *testing.T) {
 		t.Run(path, func(t *testing.T) {
 			router := chi.NewRouter()
 			router.Route("/v1", func(r chi.Router) {
-				mountAuthRoutes(r, passwordResetHTTPService{}, SessionCookieOptions{}, DefaultRateLimitOptions())
+				if path == "/v1/auth/password-reset/request" {
+					passwordResetRequestEndpointWithTimeout(passwordResetHTTPService{}, time.Millisecond).Mount(r, DefaultRateLimitOptions())
+				} else {
+					mountAuthRoutes(r, passwordResetHTTPService{}, SessionCookieOptions{}, DefaultRateLimitOptions())
+				}
 			})
 			for attempt := 0; attempt <= authPasswordResetRateLimit.Limit; attempt++ {
 				response := httptest.NewRecorder()
@@ -106,4 +113,65 @@ func TestPasswordResetUnauthenticatedRoutesAreRateLimited(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Delays above the former timing floor must still fit the same public envelope.
+type delayedPasswordResetHTTPService struct {
+	AuthenticationService
+	delay time.Duration
+}
+
+func (s delayedPasswordResetHTTPService) RequestPasswordReset(ctx context.Context, _ string) error {
+	select {
+	case <-time.After(s.delay):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func TestPasswordResetResponseUsesSameEnvelopeForSlowAndMissingAccounts(t *testing.T) {
+	for _, delay := range []time.Duration{0, 70 * time.Millisecond, 200 * time.Millisecond} {
+		router := chi.NewRouter()
+		router.Route("/v1", func(r chi.Router) {
+			passwordResetRequestEndpointWithTimeout(delayedPasswordResetHTTPService{delay: delay}, 100*time.Millisecond).Mount(r, RateLimitOptions{})
+		})
+		response := httptest.NewRecorder()
+		started := time.Now()
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/auth/password-reset/request", strings.NewReader(`{"email":"account@example.com"}`)))
+		elapsed := time.Since(started)
+		if response.Code != http.StatusAccepted || elapsed < 100*time.Millisecond || elapsed > 180*time.Millisecond {
+			t.Fatalf("delay=%v status=%d elapsed=%v", delay, response.Code, elapsed)
+		}
+	}
+}
+
+func TestPasswordResetProcessingHasGlobalConcurrencyBound(t *testing.T) {
+	service := blockingPasswordResetHTTPService{started: make(chan struct{}, 33), release: make(chan struct{})}
+	router := chi.NewRouter()
+	router.Route("/v1", func(r chi.Router) {
+		passwordResetRequestEndpointWithTimeout(service, 200*time.Millisecond).Mount(r, RateLimitOptions{})
+	})
+	var requests sync.WaitGroup
+	for attempt := 0; attempt < 33; attempt++ {
+		requests.Add(1)
+		go func() {
+			defer requests.Done()
+			router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/v1/auth/password-reset/request", strings.NewReader(`{"email":"account@example.com"}`)))
+		}()
+	}
+	for attempt := 0; attempt < 32; attempt++ {
+		select {
+		case <-service.started:
+		case <-time.After(time.Second):
+			t.Fatal("processing slots did not fill")
+		}
+	}
+	select {
+	case <-service.started:
+		t.Error("more than 32 service calls ran concurrently")
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(service.release)
+	requests.Wait()
 }
