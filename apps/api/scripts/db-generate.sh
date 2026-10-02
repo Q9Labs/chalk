@@ -16,6 +16,7 @@ Usage:
 
 Commands:
   run       Generate Go query code. This is also the default.
+  check     Fail if the checked-in Go query code differs from a fresh generation. Needs no database.
   describe  Describe this helper.
   help      Show this help.
 
@@ -31,6 +32,10 @@ EOF
 command="${1:-run}"
 case "${command}" in
   run)
+    ;;
+  check)
+    go tool sqlc diff
+    exit 0
     ;;
   describe | help | -h | --help)
     describe

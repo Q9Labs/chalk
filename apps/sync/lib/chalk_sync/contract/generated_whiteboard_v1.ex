@@ -13,7 +13,8 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "route" => "/v1/whiteboard",
       "transport" => "websocket-json-text"
     },
-    "extensions" => %{"presentation" => %{"name" => "presentation_v1", "exactFields" => ["name"]}},
+    "extensions" => %{"presentation" => %{"name" => "presentation_v1",
+        "exactFields" => ["name"]}},
     "identity" => %{
       "credential" => "participant-access-token",
       "authorityKey" => ["tenant_id", "space_id", "episode_id"],
@@ -21,7 +22,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
     },
     "capabilities" => ["drawWhiteboard", "manageWhiteboard"],
     "phases" => [
-      %{"id" => "awaiting_hello", "accepts" => ["hello", "ping"], "deadlineMs" => 5_000},
+      %{"id" => "awaiting_hello", "accepts" => ["hello", "ping"], "deadlineMs" => 5000},
       %{
         "id" => "live",
         "accepts" => [
@@ -42,7 +43,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
     "limits" => %{
       "decodedInboundFrameBytes" => 262_144,
       "encodedOutboundFrameBytes" => 262_144,
-      "tokenBytes" => 8_192,
+      "tokenBytes" => 8192,
       "operationIdMinBytes" => 16,
       "operationIdMaxBytes" => 64,
       "requestIdMinBytes" => 16,
@@ -55,13 +56,13 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "snapshotPageMaxItems" => 128,
       "snapshotPageEncodedBytes" => 196_608,
       "snapshotMaxPages" => 128,
-      "cursorFrameBytes" => 1_024,
+      "cursorFrameBytes" => 1024,
       "displayNameMaxBytes" => 256,
       "errorMessageMaxBytes" => 256,
       "jsonMaxDepth" => 16,
       "socketQueueMaxFrames" => 256,
       "socketQueueMaxBytes" => 2_097_152,
-      "socketQueueMaxAgeMs" => 5_000,
+      "socketQueueMaxAgeMs" => 5000,
       "cursorTtlMs" => 10_000,
       "cursorRatePerSecond" => 60,
       "pendingOperationMaxItems" => 128,
@@ -155,7 +156,8 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
           "app_state"
         ]
       },
-      "update" => %{"exactFields" => ["type", "operation_id", "scene_id", "revision", "elements"]},
+      "update" => %{"exactFields" => ["type", "operation_id", "scene_id", "revision",
+          "elements"]},
       "updatePart" => %{
         "exactFields" => [
           "type",
@@ -217,7 +219,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
     "notifications" => %{
       "durableHeadChannel" => "chalk_whiteboard_v1_heads",
       "transientCursorChannel" => "chalk_whiteboard_v1_cursors",
-      "transientEnvelopeBytes" => 1_024,
+      "transientEnvelopeBytes" => 1024,
       "durablePayloadContainsContent" => false
     },
     "fileTransport" => %{
@@ -251,15 +253,15 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "forbidden" => ["elements", "file_contents", "presigned_urls", "access_tokens"]
     },
     "closeCodes" => [
-      %{"code" => 1_008, "reasons" => ["invalid token", "policy violation"]},
-      %{"code" => 1_009, "reasons" => ["malformed frame", "oversized frame"]},
-      %{"code" => 1_012, "reasons" => ["dependency unavailable", "server draining"]}
+      %{"code" => 1008, "reasons" => ["invalid token", "policy violation"]},
+      %{"code" => 1009, "reasons" => ["malformed frame", "oversized frame"]},
+      %{"code" => 1012, "reasons" => ["dependency unavailable", "server draining"]}
     ]
   }
   @limits %{
     "decodedInboundFrameBytes" => 262_144,
     "encodedOutboundFrameBytes" => 262_144,
-    "tokenBytes" => 8_192,
+    "tokenBytes" => 8192,
     "operationIdMinBytes" => 16,
     "operationIdMaxBytes" => 64,
     "requestIdMinBytes" => 16,
@@ -272,13 +274,13 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
     "snapshotPageMaxItems" => 128,
     "snapshotPageEncodedBytes" => 196_608,
     "snapshotMaxPages" => 128,
-    "cursorFrameBytes" => 1_024,
+    "cursorFrameBytes" => 1024,
     "displayNameMaxBytes" => 256,
     "errorMessageMaxBytes" => 256,
     "jsonMaxDepth" => 16,
     "socketQueueMaxFrames" => 256,
     "socketQueueMaxBytes" => 2_097_152,
-    "socketQueueMaxAgeMs" => 5_000,
+    "socketQueueMaxAgeMs" => 5000,
     "cursorTtlMs" => 10_000,
     "cursorRatePerSecond" => 60,
     "pendingOperationMaxItems" => 128,
@@ -313,38 +315,18 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
 
   def decode_client_frame(frame) when is_map(frame) do
     case Map.get(frame, "type") do
-      "hello" ->
-        decode_hello(frame)
-
-      "submit_update" ->
-        decode_submit_update(frame)
-
-      "submit_update_part" ->
-        decode_submit_update_part(frame)
-
-      "request_snapshot" ->
-        decode_request_snapshot(frame)
-
-      "snapshot_ack" ->
-        decode_snapshot_ack(frame)
-
-      "clear" ->
-        decode_clear(frame)
-
-      "set_draw_permission" ->
-        decode_set_draw_permission(frame)
-
-      "set_presentation" ->
-        decode_set_presentation(frame)
-
-      "cursor" ->
-        decode_cursor(frame)
-
-      "ping" ->
-        if(exact?(frame, ["type"]), do: {:ok, {:ping, %{}}}, else: {:error, :invalid_frame})
-
-      _ ->
-        {:error, :unknown_type}
+      "hello" -> decode_hello(frame)
+      "submit_update" -> decode_submit_update(frame)
+      "submit_update_part" -> decode_submit_update_part(frame)
+      "request_snapshot" -> decode_request_snapshot(frame)
+      "snapshot_ack" -> decode_snapshot_ack(frame)
+      "clear" -> decode_clear(frame)
+      "set_draw_permission" -> decode_set_draw_permission(frame)
+      "set_presentation" -> decode_set_presentation(frame)
+      "cursor" -> decode_cursor(frame)
+      "ping" -> if(exact?(frame, ["type"]), do: {:ok, {:ping, %{}}}, else: {:error,
+          :invalid_frame})
+      _ -> {:error, :unknown_type}
     end
   end
 
@@ -383,10 +365,21 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
 
   defp hello_extensions(frame) do
     cond do
-      exact?(frame, ["type", "protocol", "token", "cursor"]) ->
+      exact?(frame, [
+  "type",
+  "protocol",
+  "token",
+  "cursor"
+]) ->
         {:ok, []}
 
-      exact?(frame, ["type", "protocol", "token", "cursor", "extensions"]) and
+      exact?(frame, [
+  "type",
+  "protocol",
+  "token",
+  "cursor",
+  "extensions"
+]) and
           frame["extensions"] == [%{"name" => "presentation_v1"}] ->
         {:ok, frame["extensions"]}
 
@@ -396,117 +389,122 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   end
 
   defp decode_submit_update(frame) do
-    with true <- exact?(frame, ["type", "operation_id", "scene_id", "sync_all", "elements"]),
+    with true <- exact?(frame, [
+  "type",
+  "operation_id",
+  "scene_id",
+  "sync_all",
+  "elements"
+]),
          true <- operation_id?(frame["operation_id"]),
          true <- uuid?(frame["scene_id"]),
          sync_all when is_boolean(sync_all) <- frame["sync_all"],
          {:ok, elements} <- element_batch(frame["elements"], @limits["elementBatchMaxItems"]) do
-      {:ok,
-       {:submit_update,
-        %{
-          operation_id: frame["operation_id"],
-          scene_id: frame["scene_id"],
-          sync_all: sync_all,
-          elements: elements
-        }}}
+      {:ok, {:submit_update, %{operation_id: frame["operation_id"], scene_id: frame["scene_id"],
+          sync_all: sync_all, elements: elements}}}
     else
       _ -> {:error, :invalid_payload}
     end
   end
 
   defp decode_submit_update_part(frame) do
-    with true <-
-           exact?(frame, [
-             "type",
-             "operation_id",
-             "scene_id",
-             "sync_all",
-             "part",
-             "part_count",
-             "element_count",
-             "elements"
-           ]),
+    with true <- exact?(frame, [
+  "type",
+  "operation_id",
+  "scene_id",
+  "sync_all",
+  "part",
+  "part_count",
+  "element_count",
+  "elements"
+]),
          true <- operation_id?(frame["operation_id"]),
          true <- uuid?(frame["scene_id"]),
          sync_all when is_boolean(sync_all) <- frame["sync_all"],
          true <- multipart_coordinates?(frame),
          {:ok, elements} <- element_batch(frame["elements"], @limits["elementBatchMaxItems"]) do
-      {:ok,
-       {:submit_update_part,
-        %{
-          operation_id: frame["operation_id"],
-          scene_id: frame["scene_id"],
-          sync_all: sync_all,
-          part: frame["part"],
-          part_count: frame["part_count"],
-          element_count: frame["element_count"],
-          elements: elements
-        }}}
+      {:ok, {:submit_update_part, %{operation_id: frame["operation_id"],
+          scene_id: frame["scene_id"], sync_all: sync_all, part: frame["part"],
+          part_count: frame["part_count"], element_count: frame["element_count"],
+          elements: elements}}}
     else
       _ -> {:error, :invalid_payload}
     end
   end
 
   defp decode_request_snapshot(frame) do
-    if exact?(frame, ["type", "request_id"]) and request_id?(frame["request_id"]),
+    if exact?(frame, [
+  "type",
+  "request_id"
+]) and request_id?(frame["request_id"]),
       do: {:ok, {:request_snapshot, %{request_id: frame["request_id"]}}},
       else: {:error, :invalid_payload}
   end
 
   defp decode_snapshot_ack(frame) do
-    if exact?(frame, ["type", "request_id", "scene_id", "revision", "page"]) and
+    if exact?(frame, [
+  "type",
+  "request_id",
+  "scene_id",
+  "revision",
+  "page"
+]) and
          request_id?(frame["request_id"]) and uuid?(frame["scene_id"]) and
          unsigned_decimal?(frame["revision"]) and non_negative_integer?(frame["page"]) and
          frame["page"] < @limits["snapshotMaxPages"] do
-      {:ok,
-       {:snapshot_ack,
-        %{
-          request_id: frame["request_id"],
-          scene_id: frame["scene_id"],
-          revision: frame["revision"],
-          page: frame["page"]
-        }}}
+      {:ok, {:snapshot_ack, %{request_id: frame["request_id"], scene_id: frame["scene_id"],
+          revision: frame["revision"], page: frame["page"]}}}
     else
       {:error, :invalid_payload}
     end
   end
 
   defp decode_clear(frame) do
-    if exact?(frame, ["type", "operation_id", "scene_id"]) and
-         operation_id?(frame["operation_id"]) and uuid?(frame["scene_id"]),
-       do: {:ok, {:clear, %{operation_id: frame["operation_id"], scene_id: frame["scene_id"]}}},
-       else: {:error, :invalid_payload}
+    if exact?(frame, [
+  "type",
+  "operation_id",
+  "scene_id"
+]) and operation_id?(frame["operation_id"]) and uuid?(frame["scene_id"]),
+      do: {:ok, {:clear, %{operation_id: frame["operation_id"], scene_id: frame["scene_id"]}}},
+      else: {:error, :invalid_payload}
   end
 
   defp decode_set_draw_permission(frame) do
-    if exact?(frame, ["type", "operation_id", "participant_id", "can_draw"]) and
+    if exact?(frame, [
+  "type",
+  "operation_id",
+  "participant_id",
+  "can_draw"
+]) and
          operation_id?(frame["operation_id"]) and uuid?(frame["participant_id"]) and
          is_boolean(frame["can_draw"]) do
-      {:ok,
-       {:set_draw_permission,
-        %{
-          operation_id: frame["operation_id"],
-          participant_id: frame["participant_id"],
-          can_draw: frame["can_draw"]
-        }}}
+      {:ok, {:set_draw_permission, %{operation_id: frame["operation_id"],
+          participant_id: frame["participant_id"], can_draw: frame["can_draw"]}}}
     else
       {:error, :invalid_payload}
     end
   end
 
   defp decode_set_presentation(frame) do
-    if exact?(frame, ["type", "operation_id", "presenting"]) and
+    if exact?(frame, [
+  "type",
+  "operation_id",
+  "presenting"
+]) and
          operation_id?(frame["operation_id"]) and is_boolean(frame["presenting"]) do
-      {:ok,
-       {:set_presentation,
-        %{operation_id: frame["operation_id"], presenting: frame["presenting"]}}}
+      {:ok, {:set_presentation, %{operation_id: frame["operation_id"],
+          presenting: frame["presenting"]}}}
     else
       {:error, :invalid_payload}
     end
   end
 
   defp decode_cursor(frame) do
-    if exact?(frame, ["type", "x", "y"]) and finite_number?(frame["x"]) and
+    if exact?(frame, [
+  "type",
+  "x",
+  "y"
+]) and finite_number?(frame["x"]) and
          finite_number?(frame["y"]) and encoded_bytes(frame) <= @limits["cursorFrameBytes"] do
       {:ok, {:cursor, %{x: frame["x"], y: frame["y"]}}}
     else
@@ -516,58 +514,67 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
 
   defp valid_welcome?(frame) do
     (exact?(frame, [
-       "type",
-       "protocol",
-       "participant_id",
-       "participant_generation",
-       "capabilities",
-       "participant_capabilities",
-       "scene_id",
-       "revision",
-       "can_draw"
-     ]) or
+  "type",
+  "protocol",
+  "participant_id",
+  "participant_generation",
+  "capabilities",
+  "participant_capabilities",
+  "scene_id",
+  "revision",
+  "can_draw"
+]) or
        (exact?(frame, [
-          "type",
-          "protocol",
-          "participant_id",
-          "participant_generation",
-          "capabilities",
-          "participant_capabilities",
-          "scene_id",
-          "revision",
-          "can_draw",
-          "presenting"
-        ]) and
+  "type",
+  "protocol",
+  "participant_id",
+  "participant_generation",
+  "capabilities",
+  "participant_capabilities",
+  "scene_id",
+  "revision",
+  "can_draw",
+  "presenting"
+]) and
           is_boolean(frame["presenting"]))) and
       frame["protocol"] == "whiteboard-v1" and uuid?(frame["participant_id"]) and
       is_integer(frame["participant_generation"]) and frame["participant_generation"] > 0 and
-      capabilities?(frame["capabilities"]) and capabilities?(frame["participant_capabilities"]) and
+      capabilities?(frame["capabilities"]) and
+          capabilities?(frame["participant_capabilities"]) and
       uuid?(frame["scene_id"]) and unsigned_decimal?(frame["revision"]) and
-      is_boolean(frame["can_draw"])
+          is_boolean(frame["can_draw"])
   end
 
   defp valid_snapshot_page?(frame) do
     exact?(frame, [
-      "type",
-      "request_id",
-      "scene_id",
-      "revision",
-      "page",
-      "page_count",
-      "elements",
-      "app_state"
-    ]) and
+  "type",
+  "request_id",
+  "scene_id",
+  "revision",
+  "page",
+  "page_count",
+  "elements",
+  "app_state"
+]) and
       request_id?(frame["request_id"]) and uuid?(frame["scene_id"]) and
       unsigned_decimal?(frame["revision"]) and non_negative_integer?(frame["page"]) and
       is_integer(frame["page_count"]) and frame["page_count"] > 0 and
-      frame["page_count"] <= @limits["snapshotMaxPages"] and frame["page"] < frame["page_count"] and
-      match?({:ok, _elements}, element_batch(frame["elements"], @limits["snapshotPageMaxItems"])) and
+      frame["page_count"] <= @limits["snapshotMaxPages"] and
+          frame["page"] < frame["page_count"] and
+      match?({:ok, _elements}, element_batch(frame["elements"],
+          @limits["snapshotPageMaxItems"])) and
       valid_app_state?(frame["app_state"]) and
-      encoded_bytes(frame) <= @limits["snapshotPageEncodedBytes"]
+          encoded_bytes(frame) <= @limits["snapshotPageEncodedBytes"]
   end
 
   defp valid_update?(frame) do
-    exact?(frame, ["type", "operation_id", "scene_id", "revision", "elements"]) and
+    exact?(frame, [
+  "type",
+  "operation_id",
+  "scene_id",
+  "revision",
+  "elements"
+]) and
       operation_id?(frame["operation_id"]) and uuid?(frame["scene_id"]) and
       unsigned_decimal?(frame["revision"]) and
       match?({:ok, _elements}, element_batch(frame["elements"], @limits["elementBatchMaxItems"]))
@@ -575,62 +582,89 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
 
   defp valid_update_part?(frame) do
     exact?(frame, [
-      "type",
-      "operation_id",
-      "scene_id",
-      "revision",
-      "part",
-      "part_count",
-      "element_count",
-      "elements"
-    ]) and
+  "type",
+  "operation_id",
+  "scene_id",
+  "revision",
+  "part",
+  "part_count",
+  "element_count",
+  "elements"
+]) and
       operation_id?(frame["operation_id"]) and uuid?(frame["scene_id"]) and
       unsigned_decimal?(frame["revision"]) and multipart_coordinates?(frame) and
       match?({:ok, _elements}, element_batch(frame["elements"], @limits["elementBatchMaxItems"]))
   end
 
   defp valid_commit?(frame) do
-    exact?(frame, ["type", "operation_id", "outcome", "scene_id", "revision"]) and
-      operation_id?(frame["operation_id"]) and
+    exact?(frame, [
+  "type",
+  "operation_id",
+  "outcome",
+  "scene_id",
+  "revision"
+]) and operation_id?(frame["operation_id"]) and
       frame["outcome"] in @receipt_outcomes and uuid?(frame["scene_id"]) and
-      unsigned_decimal?(frame["revision"])
+          unsigned_decimal?(frame["revision"])
   end
 
   defp valid_server_cursor?(frame) do
-    exact?(frame, ["type", "participant_id", "display_name", "x", "y", "occurred_at"]) and
-      uuid?(frame["participant_id"]) and
-      bounded_string?(frame["display_name"], 1, @limits["displayNameMaxBytes"]) and
+    exact?(frame, [
+  "type",
+  "participant_id",
+  "display_name",
+  "x",
+  "y",
+  "occurred_at"
+]) and
+      uuid?(frame["participant_id"]) and bounded_string?(frame["display_name"], 1,
+          @limits["displayNameMaxBytes"]) and
       finite_number?(frame["x"]) and finite_number?(frame["y"]) and
-      is_binary(frame["occurred_at"]) and
+          is_binary(frame["occurred_at"]) and
       encoded_bytes(frame) <= @limits["cursorFrameBytes"]
   end
 
   defp valid_permission_updated?(frame) do
-    exact?(frame, ["type", "participant_id", "can_draw"]) and
+    exact?(frame, [
+  "type",
+  "participant_id",
+  "can_draw"
+]) and
       uuid?(frame["participant_id"]) and is_boolean(frame["can_draw"])
   end
 
   defp valid_presentation_updated?(frame) do
-    exact?(frame, ["type", "scene_id", "revision", "presenting"]) and
+    exact?(frame, [
+  "type",
+  "scene_id",
+  "revision",
+  "presenting"
+]) and
       uuid?(frame["scene_id"]) and unsigned_decimal?(frame["revision"]) and
       is_boolean(frame["presenting"])
   end
 
   defp valid_reset_required?(frame) do
-    exact?(frame, ["type", "scene_id", "reason"]) and uuid?(frame["scene_id"]) and
+    exact?(frame, [
+  "type",
+  "scene_id",
+  "reason"
+]) and uuid?(frame["scene_id"]) and
       frame["reason"] in @reset_reasons
   end
 
   defp valid_operation_error?(frame) do
-    exact?(frame, ["type", "correlation_id", "operation", "code", "recoverable", "message"]) and
+    exact?(frame, [
+  "type",
+  "correlation_id",
+  "operation",
+  "code",
+  "recoverable",
+  "message"
+]) and
       request_id?(frame["correlation_id"]) and
-      frame["operation"] in [
-        "submit_update",
-        "request_snapshot",
-        "clear",
-        "set_draw_permission",
-        "set_presentation"
-      ] and
+      frame["operation"] in ["submit_update", "request_snapshot", "clear", "set_draw_permission",
+          "set_presentation"] and
       frame["code"] in @error_codes and is_boolean(frame["recoverable"]) and
       bounded_string?(frame["message"], 0, @limits["errorMessageMaxBytes"])
   end
@@ -639,9 +673,9 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
 
   defp cursor(%{"scene_id" => scene_id, "revision" => revision} = cursor) do
     if exact?(cursor, ["scene_id", "revision"]) and uuid?(scene_id) and
-         unsigned_decimal?(revision),
-       do: {:ok, %{scene_id: scene_id, revision: revision}},
-       else: {:error, :invalid_cursor}
+        unsigned_decimal?(revision),
+      do: {:ok, %{scene_id: scene_id, revision: revision}},
+      else: {:error, :invalid_cursor}
   end
 
   defp cursor(_cursor), do: {:error, :invalid_cursor}
@@ -653,15 +687,23 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   defp element_batch(_elements, _maximum), do: {:error, :invalid_element_batch}
 
   defp element?(element) when is_map(element) do
-    exact?(element, ["id", "type", "version", "version_nonce", "index", "is_deleted", "payload"]) and
+    exact?(element, [
+  "id",
+  "type",
+  "version",
+  "version_nonce",
+  "index",
+  "is_deleted",
+  "payload"
+]) and
       bounded_string?(element["id"], 1, @limits["elementIdMaxBytes"]) and
       bounded_string?(element["type"], 1, @limits["elementTypeMaxBytes"]) and
       bounded_string?(element["index"], 1, @limits["elementIndexMaxBytes"]) and
       non_negative_integer?(element["version"]) and
-      non_negative_integer?(element["version_nonce"]) and
+          non_negative_integer?(element["version_nonce"]) and
       is_boolean(element["is_deleted"]) and is_map(element["payload"]) and
       json_value?(element["payload"], 0) and
-      encoded_bytes(element["payload"]) <= @limits["elementPayloadEncodedBytes"]
+          encoded_bytes(element["payload"]) <= @limits["elementPayloadEncodedBytes"]
   end
 
   defp element?(_element), do: false
@@ -669,7 +711,9 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   defp valid_app_state?(nil), do: true
 
   defp valid_app_state?(app_state) do
-    exact?(app_state, ["view_background_color"]) and
+    exact?(app_state, [
+  "view_background_color"
+]) and
       bounded_string?(app_state["view_background_color"], 0, 64)
   end
 
@@ -688,36 +732,26 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   defp capabilities?(_capabilities), do: false
 
   defp json_value?(_value, depth) when depth > @json_max_depth, do: false
-
   defp json_value?(value, _depth) when is_nil(value) or is_boolean(value) or is_binary(value),
-    do: true
-
+      do: true
   defp json_value?(value, _depth) when is_number(value), do: finite_number?(value)
-
-  defp json_value?(value, depth) when is_list(value),
-    do: Enum.all?(value, &json_value?(&1, depth + 1))
-
-  defp json_value?(value, depth) when is_map(value),
-    do: Enum.all?(value, fn {key, item} -> is_binary(key) and json_value?(item, depth + 1) end)
-
+  defp json_value?(value, depth) when is_list(value), do: Enum.all?(value, &json_value?(&1,
+      depth + 1))
+  defp json_value?(value, depth) when is_map(value), do: Enum.all?(value, fn {key,
+      item} -> is_binary(key) and json_value?(item, depth + 1) end)
   defp json_value?(_value, _depth), do: false
 
-  defp exact?(value, keys) when is_map(value),
-    do: map_size(value) == length(keys) and Enum.all?(keys, &Map.has_key?(value, &1))
-
+  defp exact?(value, keys) when is_map(value), do: map_size(value) == length(keys) and
+      Enum.all?(keys, &Map.has_key?(value, &1))
   defp exact?(_value, _keys), do: false
   defp uuid?(value), do: is_binary(value) and Regex.match?(@uuid, value)
   defp unsigned_decimal?(value), do: is_binary(value) and Regex.match?(@unsigned_decimal, value)
-
-  defp operation_id?(value),
-    do: bounded_string?(value, @limits["operationIdMinBytes"], @limits["operationIdMaxBytes"])
-
-  defp request_id?(value),
-    do: bounded_string?(value, @limits["requestIdMinBytes"], @limits["requestIdMaxBytes"])
-
-  defp bounded_string?(value, minimum, maximum),
-    do: is_binary(value) and byte_size(value) >= minimum and byte_size(value) <= maximum
-
+  defp operation_id?(value), do: bounded_string?(value, @limits["operationIdMinBytes"],
+      @limits["operationIdMaxBytes"])
+  defp request_id?(value), do: bounded_string?(value, @limits["requestIdMinBytes"],
+      @limits["requestIdMaxBytes"])
+  defp bounded_string?(value, minimum, maximum), do: is_binary(value) and
+      byte_size(value) >= minimum and byte_size(value) <= maximum
   defp non_negative_integer?(value), do: is_integer(value) and value >= 0
   defp finite_number?(value), do: is_number(value)
   defp encoded_bytes(value), do: value |> JSON.encode!() |> byte_size()
