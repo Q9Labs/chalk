@@ -230,7 +230,7 @@ func EncodeRecordingEvent(metadata EventMetadata, s RecordingSnapshot) ([]byte, 
 	if metadata.Name != "recording.started" && metadata.Name != "recording.completed" && metadata.Name != "recording.failed" {
 		return nil, [32]byte{}, ErrInvalidEventType
 	}
-	if !validUUIDv4(s.ID) || !validUUIDv4(s.SpaceID) || !validUUIDv4(s.EpisodeID) || s.CreatedAt.IsZero() || s.UpdatedAt.IsZero() {
+	if !validRecordingID(s.ID) || !validUUIDv4(s.SpaceID) || !validUUIDv4(s.EpisodeID) || s.CreatedAt.IsZero() || s.UpdatedAt.IsZero() {
 		return nil, [32]byte{}, errors.New("invalid recording identity")
 	}
 	if err := validateArtifactTransition(metadata.Name, s.Status, s.StartedAt, s.CompletedAt, s.FailedAt, s.Failure); err != nil {
@@ -242,7 +242,7 @@ func EncodeTranscriptEvent(metadata EventMetadata, s TranscriptSnapshot) ([]byte
 	if metadata.Name != "transcript.started" && metadata.Name != "transcript.completed" && metadata.Name != "transcript.failed" {
 		return nil, [32]byte{}, ErrInvalidEventType
 	}
-	if !validUUIDv4(s.ID) || !validUUIDv4(s.RecordingID) || !validUUIDv4(s.SpaceID) || !validUUIDv4(s.EpisodeID) || s.CreatedAt.IsZero() || s.UpdatedAt.IsZero() {
+	if !validUUIDv4(s.ID) || !validRecordingID(s.RecordingID) || !validUUIDv4(s.SpaceID) || !validUUIDv4(s.EpisodeID) || s.CreatedAt.IsZero() || s.UpdatedAt.IsZero() {
 		return nil, [32]byte{}, errors.New("invalid transcript identity")
 	}
 	seenLanguages := make(map[string]struct{}, len(s.Languages))
@@ -304,12 +304,21 @@ func validateArtifactTransition(eventName, status string, startedAt, completedAt
 }
 
 func validUUIDv4(value string) bool {
+	return validUUIDVersion(value, 4)
+}
+
+// Automatic Recordings use a deterministic UUIDv5; manual Recordings use UUIDv4.
+func validRecordingID(value string) bool {
+	return validUUIDVersion(value, 4) || validUUIDVersion(value, 5)
+}
+
+func validUUIDVersion(value string, version byte) bool {
 	id, err := utilities.ParseID(value)
 	if err != nil || id.String() != value {
 		return false
 	}
 	bytes := id.Bytes()
-	return bytes[6]>>4 == 4 && bytes[8]>>6 == 2
+	return bytes[6]>>4 == version && bytes[8]>>6 == 2
 }
 
 func zeroTime(value *time.Time) bool { return value == nil || value.IsZero() }

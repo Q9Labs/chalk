@@ -17,6 +17,7 @@ const isCanonicalTimestamp = (value) => {
 const readJSON = async (name) => JSON.parse(await readFile(`${contractDirectory}/${name}`, "utf8"));
 
 const [schema, fixturesDocument, signatureVectors, journeyEvents] = await Promise.all([readJSON("event.schema.json"), readJSON("fixtures.json"), readJSON("signature-vectors.json"), readJSON("journey-events.json")]);
+const recordingIDPattern = new RegExp(schema.$defs.recordingID.pattern);
 
 const fail = (message) => {
   throw new Error(`webhook v1 contract: ${message}`);
@@ -34,12 +35,20 @@ const collectEventConstants = (value, constants = new Set()) => {
 };
 
 const isIdentifierKey = (key) => key === "id" || key.endsWith("_id");
-const isUuidV4 = (value) => typeof value === "string" && uuidV4Pattern.test(value);
+const isCanonicalIdentifier = (value, path, recordingIDPath) => {
+  const pattern = path === recordingIDPath ? recordingIDPattern : uuidV4Pattern;
+  return typeof value === "string" && pattern.test(value);
+};
 
-const validateIdentifier = (key, value, path) => {
-  if (!isIdentifierKey(key)) return;
-  if (value === null) return;
-  if (!isUuidV4(value)) fail(`${path} must be a lowercase UUIDv4`);
+const recordingIdentityPath = (eventName) => {
+  if (eventName.startsWith("recording.")) return "event.data.object.id";
+  if (eventName.startsWith("transcript.")) return "event.data.object.recording_id";
+  return "";
+};
+
+const validateIdentifier = (key, value, path, recordingIDPath) => {
+  if (!isIdentifierKey(key) || value === null) return;
+  if (!isCanonicalIdentifier(value, path, recordingIDPath)) fail(`${path} must match its lowercase canonical UUID pattern`);
 };
 
 const isTimestamp = (value) => typeof value === "string" && isCanonicalTimestamp(value);
@@ -50,12 +59,12 @@ const validateTimestamp = (key, value, path) => {
   if (!isTimestamp(value)) fail(`${path} must be UTC RFC 3339 with millisecond precision`);
 };
 
-const validateIdentifiersAndTimestamps = (value, path = "event") => {
+const validateIdentifiersAndTimestamps = (value, recordingIDPath, path = "event") => {
   for (const [key, child] of objectEntries(value)) {
     const childPath = Array.isArray(value) ? `${path}[${key}]` : `${path}.${key}`;
-    validateIdentifier(key, child, childPath);
+    validateIdentifier(key, child, childPath, recordingIDPath);
     validateTimestamp(key, child, childPath);
-    validateIdentifiersAndTimestamps(child, childPath);
+    validateIdentifiersAndTimestamps(child, recordingIDPath, childPath);
   }
 };
 
@@ -83,7 +92,7 @@ for (const fixture of fixtures) {
   }
   if (fixtureEvents.has(event.event)) fail(`duplicate fixture for ${event.event}`);
   if (fixtureIDs.has(event.id)) fail(`duplicate Event ID ${event.id}`);
-  validateIdentifiersAndTimestamps(event);
+  validateIdentifiersAndTimestamps(event, recordingIdentityPath(event.event));
   const changedFields = event.data?.changed_fields;
   if (changedFields && changedFields.join("\0") !== [...changedFields].sort().join("\0")) {
     fail(`${fixture.event} changed_fields must be sorted`);

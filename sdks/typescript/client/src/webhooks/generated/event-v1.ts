@@ -79,6 +79,11 @@ export const webhookEventSchemaV1 = {
       format: "uuid",
       pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
     },
+    recordingID: {
+      type: "string",
+      format: "uuid",
+      pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    },
     timestamp: {
       type: "string",
       format: "date-time",
@@ -215,7 +220,7 @@ export const webhookEventSchemaV1 = {
       required: ["id", "space_id", "episode_id", "status", "started_at", "completed_at", "failed_at", "failure", "created_at", "updated_at"],
       properties: {
         id: {
-          $ref: "#/$defs/uuid",
+          $ref: "#/$defs/recordingID",
         },
         space_id: {
           $ref: "#/$defs/uuid",
@@ -255,7 +260,7 @@ export const webhookEventSchemaV1 = {
           $ref: "#/$defs/uuid",
         },
         recording_id: {
-          $ref: "#/$defs/uuid",
+          $ref: "#/$defs/recordingID",
         },
         space_id: {
           $ref: "#/$defs/uuid",

@@ -36,6 +36,11 @@
       "format": "uuid",
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
     },
+    "recordingID": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
     "timestamp": {
       "type": "string",
       "format": "date-time",
@@ -107,7 +112,7 @@
       "type": "object",
       "required": ["id", "space_id", "episode_id", "status", "started_at", "completed_at", "failed_at", "failure", "created_at", "updated_at"],
       "properties": {
-        "id": { "$ref": "#/$defs/uuid" },
+        "id": { "$ref": "#/$defs/recordingID" },
         "space_id": { "$ref": "#/$defs/uuid" },
         "episode_id": { "$ref": "#/$defs/uuid" },
         "status": { "enum": ["started", "completed", "failed"] },
@@ -125,7 +130,7 @@
       "required": ["id", "recording_id", "space_id", "episode_id", "status", "languages", "started_at", "completed_at", "failed_at", "failure", "created_at", "updated_at"],
       "properties": {
         "id": { "$ref": "#/$defs/uuid" },
-        "recording_id": { "$ref": "#/$defs/uuid" },
+        "recording_id": { "$ref": "#/$defs/recordingID" },
         "space_id": { "$ref": "#/$defs/uuid" },
         "episode_id": { "$ref": "#/$defs/uuid" },
         "status": { "enum": ["started", "completed", "failed"] },
