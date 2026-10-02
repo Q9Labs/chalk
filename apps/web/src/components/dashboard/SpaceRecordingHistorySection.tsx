@@ -390,7 +390,12 @@ function sourceStatus(status: string): NonNullable<RecordingHistoryItem["source"
   return "expired";
 }
 
-function transcriptStatus(status: string): NonNullable<RecordingHistoryItem["transcript"]>["status"] {
+function transcriptStatus(status: DashboardTranscript["status"]): NonNullable<RecordingHistoryItem["transcript"]>["status"] {
+  if (status === "not_requested") return "none";
+  if (status === "preparing") return "pending";
+  if (status === "transcribing" || status === "verifying") return "processing";
+  if (status === "complete") return "completed";
+  if (status === "deleted") return "unavailable";
   if (status === "pending" || status === "processing" || status === "completed") return status;
   return "failed";
 }

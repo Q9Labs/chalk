@@ -98,7 +98,7 @@ const completedTranscript = {
   recording_id: recordingID,
   source_expires_at: "2026-10-22T09:00:00Z",
   space_id: spaceID,
-  status: "completed",
+  status: "complete",
   tenant_id: tenantID,
   updated_at: "2026-09-22T09:00:00Z",
 };
@@ -115,6 +115,31 @@ afterEach(() => {
 });
 
 describe("SpaceRecordingHistorySection", () => {
+  it.each([
+    ["not_requested", "none"],
+    ["preparing", "pending"],
+    ["transcribing", "processing"],
+    ["verifying", "processing"],
+    ["complete", "completed"],
+    ["retryable_failure", "failed"],
+    ["terminal_failure", "failed"],
+    ["deleted", "unavailable"],
+  ])("shows durable Transcript state %s as %s", async (status, expected) => {
+    const client: SpaceRecordingHistoryClient = {
+      createRecordingDownloadURL: vi.fn(),
+      getRecording: vi.fn(),
+      getTranscriptDocument: vi.fn(),
+      listRecordingTranscripts: vi.fn(async () => ({ pagination: { has_more: false, next_cursor: null, page_size: 2 }, transcripts: [{ ...completedTranscript, status }] })),
+      listSpaceRecordings: vi.fn(async () => historyPage([recording])),
+      requestRecordingExport: vi.fn(),
+      requestRecordingTranscript: vi.fn(),
+    };
+
+    render(<SpaceRecordingHistorySection client={client} tenantID={tenantID} />);
+
+    expect(await screen.findByText(`Transcript 44444444: ${expected}`)).toBeTruthy();
+  });
+
   it("retries a failed Export without opening it after completion", async () => {
     const failedRecording = { ...recording, export: { failure_message: "The Recording Export failed.", retryable: true, status: "failed" }, status: "failed" };
     const client: SpaceRecordingHistoryClient = {

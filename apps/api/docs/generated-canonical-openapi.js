@@ -20540,7 +20540,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             $ref: "#/components/schemas/SpaceId",
           },
           status: {
-            enum: ["pending", "processing", "completed", "failed"],
+            enum: ["not_requested", "preparing", "transcribing", "verifying", "complete", "retryable_failure", "terminal_failure", "deleted", "pending", "processing", "completed", "failed"],
             type: "string",
           },
           tenant_id: {
