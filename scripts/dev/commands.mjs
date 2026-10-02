@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline/promises";
 import { stdin as processStdin, stdout as processStdout } from "node:process";
-import { readManifest, readOwner, removeRuntimeFiles, validateOwnedPid } from "./ownership.mjs";
+import { readManifest, readOwner, releaseStaleOwnership, removeRuntimeFiles, validateOwnedPid } from "./ownership.mjs";
 import { stopProcessGroup, tailLog } from "./process.mjs";
 import { DevCommand } from "./config.mjs";
 import { FailureKind, RuntimeState, failure, isReadyState } from "./model.mjs";
@@ -8,7 +8,11 @@ import { FailureKind, RuntimeState, failure, isReadyState } from "./model.mjs";
 const helpText = `Usage: pnpm dev [command] [options]
 
 Commands: start, status, logs [service], smoke, stop, reset
-Options: --profile core|mobile, --fresh, --yes`;
+Options: --profile core|mobile, --fresh, --yes
+
+start creates a local Tenant and Space with a valid media plane (cf_sfu); its ids are
+in the ready summary. The seed:dataset showcase Spaces use cf_rtk, so use the dev
+fixture for local media runs.`;
 
 export async function runCommand(command, config, { supervisor, service, yes = false, confirm = confirmReset, hooks = {}, output = console.log } = {}) {
   switch (command) {
@@ -91,6 +95,9 @@ export async function stopCommand(config, { supervisor, hooks = {}, output } = {
   const supervisorAlive = await validatePid(owner.supervisorPid);
   const supervisorExpectedCommand = owner.supervisorExpectedCommand || owner.supervisor?.expectedCommand;
   if (supervisorAlive) {
+    if (owner.checkout && owner.checkout !== config.root) {
+      throw failure(FailureKind.OWNERSHIP_CONFLICT, `runtime belongs to another checkout (${owner.checkout}, pid ${owner.supervisorPid}); run dev:stop from the owning checkout`, { stage: "ownership" });
+    }
     if (!supervisorExpectedCommand) {
       throw failure(FailureKind.OWNERSHIP_CONFLICT, `cannot verify supervisor ${owner.supervisorPid}; its recorded command is missing`, { stage: "ownership" });
     }
@@ -101,7 +108,9 @@ export async function stopCommand(config, { supervisor, hooks = {}, output } = {
     (hooks.kill || process.kill.bind(process))(owner.supervisorPid, "SIGTERM");
     await waitForPidExit(owner.supervisorPid, config.timeouts.stopTimeoutMs ?? 120000, { expectedCommand: supervisorExpectedCommand, validate: validatePid });
   } else {
+    output?.(`Chalk dev supervisor ${owner.supervisorPid} is no longer running; releasing its stale ownership`);
     await stopManifestProcesses(owner.manifestPath, { hooks, config });
+    await releaseStaleOwnership(config, { isAlive: (pid) => validatePid(pid) });
   }
   const result = { state: RuntimeState.STOPPED, stopped: true, runtimeId: owner.runtimeId };
   output?.(JSON.stringify(result, null, 2));
@@ -174,7 +183,7 @@ async function waitForPidExit(pid, timeoutMs, { expectedCommand, validate = vali
   }
 }
 
-export async function confirmReset(prompt, { input = processStdin, output = processStdout } = {}) {
+async function confirmReset(prompt, { input = processStdin, output = processStdout } = {}) {
   if (!input || typeof input.on !== "function" || input.isTTY === false || (input === processStdin && input.isTTY !== true)) throw failure(FailureKind.CONFIG, "dev:reset requires --yes when interactive stdin is unavailable", { stage: "reset" });
   const readline = createInterface({ input, output });
   try {

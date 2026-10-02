@@ -109,6 +109,14 @@ export async function acquireMachineLease(config, { runtimeId = randomUUID(), is
   return lease;
 }
 
+export async function releaseStaleOwnership(config, { isAlive = processAlive } = {}) {
+  const lease = await readJson(join(config.lockPath, "lease.json"));
+  if (lease && (await isAlive(lease.supervisorPid))) return { released: false, reason: "lock-owner-alive" };
+  await removeLock(config.lockPath);
+  await unlink(config.ownerPath).catch(() => {});
+  return { released: true };
+}
+
 export function ownerRecord({ lease, config, state, revision = "unknown", supervisorPid = process.pid, supervisorExpectedCommand = process.argv[1] || process.execPath, manifestPath = config.manifestPath, services = {}, resources = [] }) {
   return {
     schemaVersion: 1,
