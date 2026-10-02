@@ -29,7 +29,7 @@ func TestPasswordResetRequestDoesNotExposeOperationalFailures(t *testing.T) {
 	for _, failure := range []error{nil, errors.New("database unavailable"), errors.New("email unavailable")} {
 		router := chi.NewRouter()
 		router.Route("/v1", func(r chi.Router) {
-			passwordResetRequestEndpointWithTimeout(passwordResetHTTPService{err: failure}, 100*time.Millisecond).Mount(r, DefaultRateLimitOptions())
+			passwordResetRequestEndpointWithTimeout(passwordResetHTTPService{err: failure}, 100*time.Millisecond, 100*time.Millisecond).Mount(r, DefaultRateLimitOptions())
 		})
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/auth/password-reset/request", strings.NewReader(`{"email":"account@example.com"}`)))
@@ -64,7 +64,7 @@ func TestPasswordResetResponseWaitsForDeliveryAfterRequestCancellation(t *testin
 	service := blockingPasswordResetHTTPService{started: make(chan struct{}, 1), release: make(chan struct{})}
 	router := chi.NewRouter()
 	router.Route("/v1", func(r chi.Router) {
-		passwordResetRequestEndpointWithTimeout(service, 100*time.Millisecond).Mount(r, RateLimitOptions{})
+		passwordResetRequestEndpointWithTimeout(service, 100*time.Millisecond, 100*time.Millisecond).Mount(r, RateLimitOptions{})
 	})
 	response := httptest.NewRecorder()
 	requestContext, cancelRequest := context.WithCancel(context.Background())
@@ -98,7 +98,7 @@ func TestPasswordResetUnauthenticatedRoutesAreRateLimited(t *testing.T) {
 			router := chi.NewRouter()
 			router.Route("/v1", func(r chi.Router) {
 				if path == "/v1/auth/password-reset/request" {
-					passwordResetRequestEndpointWithTimeout(passwordResetHTTPService{}, time.Millisecond).Mount(r, DefaultRateLimitOptions())
+					passwordResetRequestEndpointWithTimeout(passwordResetHTTPService{}, time.Millisecond, time.Millisecond).Mount(r, DefaultRateLimitOptions())
 				} else {
 					mountAuthRoutes(r, passwordResetHTTPService{}, SessionCookieOptions{}, DefaultRateLimitOptions())
 				}
@@ -131,17 +131,26 @@ func (s delayedPasswordResetHTTPService) RequestPasswordReset(ctx context.Contex
 }
 
 func TestPasswordResetResponseUsesSameEnvelopeForSlowAndMissingAccounts(t *testing.T) {
-	for _, delay := range []time.Duration{0, 70 * time.Millisecond, 200 * time.Millisecond} {
+	// Deliveries faster than the floor all respond at the floor; a slower one may
+	// respond when it finishes, but never after the processing budget.
+	for _, test := range []struct {
+		delay    time.Duration
+		min, max time.Duration
+	}{
+		{delay: 0, min: 100 * time.Millisecond, max: 180 * time.Millisecond},
+		{delay: 70 * time.Millisecond, min: 100 * time.Millisecond, max: 180 * time.Millisecond},
+		{delay: 400 * time.Millisecond, min: 300 * time.Millisecond, max: 380 * time.Millisecond},
+	} {
 		router := chi.NewRouter()
 		router.Route("/v1", func(r chi.Router) {
-			passwordResetRequestEndpointWithTimeout(delayedPasswordResetHTTPService{delay: delay}, 100*time.Millisecond).Mount(r, RateLimitOptions{})
+			passwordResetRequestEndpointWithTimeout(delayedPasswordResetHTTPService{delay: test.delay}, 300*time.Millisecond, 100*time.Millisecond).Mount(r, RateLimitOptions{})
 		})
 		response := httptest.NewRecorder()
 		started := time.Now()
 		router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/auth/password-reset/request", strings.NewReader(`{"email":"account@example.com"}`)))
 		elapsed := time.Since(started)
-		if response.Code != http.StatusAccepted || elapsed < 100*time.Millisecond || elapsed > 180*time.Millisecond {
-			t.Fatalf("delay=%v status=%d elapsed=%v", delay, response.Code, elapsed)
+		if response.Code != http.StatusAccepted || elapsed < test.min || elapsed > test.max {
+			t.Fatalf("delay=%v status=%d elapsed=%v", test.delay, response.Code, elapsed)
 		}
 	}
 }
@@ -150,7 +159,7 @@ func TestPasswordResetProcessingHasGlobalConcurrencyBound(t *testing.T) {
 	service := blockingPasswordResetHTTPService{started: make(chan struct{}, 33), release: make(chan struct{})}
 	router := chi.NewRouter()
 	router.Route("/v1", func(r chi.Router) {
-		passwordResetRequestEndpointWithTimeout(service, 200*time.Millisecond).Mount(r, RateLimitOptions{})
+		passwordResetRequestEndpointWithTimeout(service, 200*time.Millisecond, 200*time.Millisecond).Mount(r, RateLimitOptions{})
 	})
 	var requests sync.WaitGroup
 	for attempt := 0; attempt < 33; attempt++ {

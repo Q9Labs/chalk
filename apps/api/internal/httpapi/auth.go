@@ -16,6 +16,7 @@ const sessionCookieName = "chalk_session"
 
 const (
 	passwordResetProcessingTimeout = 20 * time.Second
+	passwordResetResponseFloor     = 3 * time.Second
 )
 
 type AuthenticationService interface {
@@ -107,10 +108,10 @@ func authEndpoints(service AuthenticationService, cookies SessionCookieOptions) 
 }
 
 func requestPasswordResetEndpoint(service AuthenticationService) Endpoint[passwordResetRequest, statusResponse] {
-	return passwordResetRequestEndpointWithTimeout(service, passwordResetProcessingTimeout)
+	return passwordResetRequestEndpointWithTimeout(service, passwordResetProcessingTimeout, passwordResetResponseFloor)
 }
 
-func passwordResetRequestEndpointWithTimeout(service AuthenticationService, timeout time.Duration) Endpoint[passwordResetRequest, statusResponse] {
+func passwordResetRequestEndpointWithTimeout(service AuthenticationService, timeout, floor time.Duration) Endpoint[passwordResetRequest, statusResponse] {
 	processing := make(chan struct{}, 32)
 	return Post("/v1/auth/password-reset/request", "/auth/password-reset/request", "requestPasswordReset", decodeJSONBody[passwordResetRequest], func(ctx context.Context, request passwordResetRequest) (statusResponse, error) {
 		if service == nil {
@@ -130,10 +131,11 @@ func passwordResetRequestEndpointWithTimeout(service AuthenticationService, time
 		case <-workContext.Done():
 			slog.WarnContext(workContext, "password reset processing saturated", "event", "auth.password_reset.saturated")
 		}
-		// Use the entire processing budget for every response, not just a floor:
-		// slow provider calls must not reveal whether the Account exists. The
-		// budget stays below the public server's 30-second write timeout.
-		if remaining := timeout - time.Since(startedAt); remaining > 0 {
+		// A uniform floor hides whether the Account exists for normal provider
+		// latency without making every user wait for the whole delivery budget.
+		// Only a send slower than the floor can lengthen one response, and the
+		// rate limit bounds probing.
+		if remaining := floor - time.Since(startedAt); remaining > 0 {
 			timer := time.NewTimer(remaining)
 			defer timer.Stop()
 			<-timer.C
