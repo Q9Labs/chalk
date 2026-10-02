@@ -88,7 +88,11 @@ func (s PeopleService) IssueInvitation(ctx context.Context, tenantID utilities.I
 	}
 	result := InvitationResult{Invitation: invitation, AcceptLink: s.webOrigin + "/invitations/accept#token=" + token}
 	if s.sender != nil && s.from != "" && s.webOrigin != "" {
-		_, err = s.sender.SendEmail(ctx, email.SendEmailInput{From: s.from, To: []string{address}, Subject: "Your Tenant invitation", TextBody: "Sign in with this email to accept your Tenant invitation: " + result.AcceptLink + "\nThis invitation expires in 7 days.", IdempotencyKey: id.String()})
+		// The invitation is already durable. Do not let a client disconnect abandon
+		// the synchronous delivery attempt before the response reports its result.
+		deliveryContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), 20*time.Second)
+		defer cancel()
+		_, err = s.sender.SendEmail(deliveryContext, email.SendEmailInput{From: s.from, To: []string{address}, Subject: "Your Tenant invitation", TextBody: "Sign in with this email to accept your Tenant invitation: " + result.AcceptLink + "\nThis invitation expires in 7 days.", IdempotencyKey: id.String()})
 		// A delivery failure must not hide the valid invitation. The Owner can share its link.
 		result.EmailDelivered = err == nil
 	}

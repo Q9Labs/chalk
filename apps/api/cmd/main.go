@@ -878,7 +878,9 @@ func run() error {
 
 	shutdownStartedAt := time.Now()
 	logger.Info("api shutdown requested", "event", "api.shutdown_requested")
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// Allow in-flight synchronous email delivery and its uniform response window
+	// to finish before releasing the API dependencies.
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {

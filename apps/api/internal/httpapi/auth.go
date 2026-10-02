@@ -14,6 +14,11 @@ import (
 
 const sessionCookieName = "chalk_session"
 
+const (
+	passwordResetProcessingTimeout = 20 * time.Second
+	passwordResetResponseFloor     = 3 * time.Second
+)
+
 type AuthenticationService interface {
 	Register(ctx context.Context, input authentication.RegisterInput) (authentication.AuthResult, error)
 	Login(ctx context.Context, input authentication.LoginInput) (authentication.AuthResult, error)
@@ -103,26 +108,37 @@ func authEndpoints(service AuthenticationService, cookies SessionCookieOptions) 
 }
 
 func requestPasswordResetEndpoint(service AuthenticationService) Endpoint[passwordResetRequest, statusResponse] {
-	// Bound background work without making the public response depend on Account lookup or delivery.
+	return passwordResetRequestEndpointWithTimeout(service, passwordResetProcessingTimeout, passwordResetResponseFloor)
+}
+
+func passwordResetRequestEndpointWithTimeout(service AuthenticationService, timeout, floor time.Duration) Endpoint[passwordResetRequest, statusResponse] {
 	processing := make(chan struct{}, 32)
 	return Post("/v1/auth/password-reset/request", "/auth/password-reset/request", "requestPasswordReset", decodeJSONBody[passwordResetRequest], func(ctx context.Context, request passwordResetRequest) (statusResponse, error) {
 		if service == nil {
 			return statusResponse{}, apiErrorServiceUnavailable
 		}
+		startedAt := time.Now()
+		workContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+		defer cancel()
+		// Finish the delivery attempt before acknowledging the request. Detaching from
+		// the client prevents a disconnect after persistence from abandoning email.
 		select {
 		case processing <- struct{}{}:
-			go func() {
-				defer func() { <-processing }()
-				workContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
-				defer cancel()
-				// This best-effort flow deliberately keeps all failures out of the public response.
-				if err := service.RequestPasswordReset(workContext, request.Email); err != nil {
-					slog.ErrorContext(workContext, "password reset processing failed", "event", "auth.password_reset.failed")
-				}
-			}()
-		default:
-			// Saturation must have the same response as every other request.
-			slog.WarnContext(ctx, "password reset processing saturated", "event", "auth.password_reset.saturated")
+			if err := service.RequestPasswordReset(workContext, request.Email); err != nil {
+				slog.ErrorContext(workContext, "password reset processing failed", "event", "auth.password_reset.failed")
+			}
+			<-processing
+		case <-workContext.Done():
+			slog.WarnContext(workContext, "password reset processing saturated", "event", "auth.password_reset.saturated")
+		}
+		// A uniform floor hides whether the Account exists for normal provider
+		// latency without making every user wait for the whole delivery budget.
+		// Only a send slower than the floor can lengthen one response, and the
+		// rate limit bounds probing.
+		if remaining := floor - time.Since(startedAt); remaining > 0 {
+			timer := time.NewTimer(remaining)
+			defer timer.Stop()
+			<-timer.C
 		}
 		return statusResponse{Status: "If an Account exists for that email, we sent a reset link"}, nil
 	}).RateLimit(authPasswordResetRateLimit).
