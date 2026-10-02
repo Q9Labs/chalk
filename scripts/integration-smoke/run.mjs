@@ -21,11 +21,7 @@ if (!webhookURL.startsWith("https://")) throw new Error("CHALK_SMOKE_WEBHOOK_URL
 const apiBaseURL = process.env.CHALK_API_URL || "https://api.chalkmeet.com";
 const port = Number(process.env.CHALK_SMOKE_PORT || 9415);
 const origin = `http://127.0.0.1:${port}`;
-const boundedFetch = (input, init) => {
-  const headers = new Headers(init?.headers);
-  if (init?.method === "POST" && !headers.has("Idempotency-Key")) headers.set("Idempotency-Key", crypto.randomUUID());
-  return fetch(input, { ...init, headers, signal: AbortSignal.timeout(15_000) });
-};
+const boundedFetch = (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(15_000) });
 const bootstrap = createChalkServerClient({ apiKey, tenantId, apiBaseURL, fetch: boundedFetch });
 const events = new Map();
 const browsers = [];

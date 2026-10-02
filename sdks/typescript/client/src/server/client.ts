@@ -150,7 +150,7 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
           path: `${tenantPath}/api-keys`,
           body: apiKeyCreateRequest(input),
           expectedStatus: 201,
-          retry: "never",
+          retry: "caller_idempotency",
         }),
       list: (input) =>
         request<APIKeyList>({
@@ -165,7 +165,7 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
           path: `${tenantPath}/api-keys/${segment(apiKeyId)}/rotate`,
           body: { expires_at: input?.expiresAt },
           expectedStatus: 200,
-          retry: "never",
+          retry: "caller_idempotency",
         }),
       revoke: (apiKeyId) =>
         request<void>({
