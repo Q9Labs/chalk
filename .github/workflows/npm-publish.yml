@@ -77,7 +77,7 @@ jobs:
         if: inputs.dry_run
         run: |
           mkdir -p "$RUNNER_TEMP/npm-packages"
-          pnpm --sort --workspace-concurrency=1 --filter './packages/*' --filter './sdks/typescript/*' --recursive pack --pack-destination "$RUNNER_TEMP/npm-packages"
+          pnpm --workspace-concurrency=1 --filter './packages/*' --filter './sdks/typescript/*' --recursive pack --pack-destination "$RUNNER_TEMP/npm-packages"
 
       - name: Publish packages
         if: ${{ !inputs.dry_run }}

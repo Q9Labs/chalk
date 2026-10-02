@@ -116,7 +116,9 @@ chown root:chalk-recorder /etc/chalk-recorder /etc/chalk-recorder/image.env
 chmod 0750 /etc/chalk-recorder
 chmod 0440 /etc/chalk-recorder/image.env
 chown -R root:root "/opt/chalk-recorder/releases/$release_id" /opt/chalk-recorder/image-manifest.json
+chmod -R u=rwX,go=rX "/opt/chalk-recorder/releases/$release_id"
 chmod 0755 "/opt/chalk-recorder/releases/$release_id/bin/recorder-capture" "/opt/chalk-recorder/releases/$release_id/bin/chalk-recorder-bootstrap"
+setpriv --reuid chalk-recorder --regid chalk-recorder --clear-groups test -x "/opt/chalk-recorder/releases/$release_id/bin/recorder-capture" || { echo "recorder-capture is not executable by chalk-recorder" >&2; exit 1; }
 systemctl daemon-reload
 systemctl disable chalk-recorder-capture.service chalk-recorder-renew.timer >/dev/null 2>&1 || true
 printf 'release_id=%s\nsource_commit=%s\nsource_tree_sha256=sha256:%s\nbundle_sha256=sha256:%s\nimage_manifest_digest=%s\nbootstrap_server_name=%s\n' \
