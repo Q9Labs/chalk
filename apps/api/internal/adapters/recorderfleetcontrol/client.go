@@ -177,12 +177,16 @@ func (c *Client) doJSON(ctx context.Context, method, path string, query url.Valu
 				Error struct {
 					Code string `json:"code"`
 				} `json:"error"`
+				Diagnostic *recorderfleet.BootstrapDiagnostic `json:"diagnostic,omitempty"`
 			}
 			if json.Unmarshal(responseBody, &failure) == nil {
 				switch failure.Error.Code {
 				case recorderfleet.InventoryNotReadyCode:
 					return recorderfleet.ErrInventoryNotReady
 				case recorderfleet.BootstrapPendingCode:
+					if failure.Diagnostic != nil && failure.Diagnostic.Validate() == nil {
+						return &recorderfleet.BootstrapPendingError{Diagnostic: *failure.Diagnostic}
+					}
 					return recorderfleet.ErrBootstrapPending
 				}
 			}

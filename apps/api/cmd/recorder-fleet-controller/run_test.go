@@ -71,6 +71,36 @@ func TestRunLoopReconcilesImmediatelyAndStopsOnCancellation(t *testing.T) {
 	}
 }
 
+func TestRunLoopLogsBootstrapDiagnostic(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	diagnostic := recorderfleet.BootstrapDiagnostic{
+		SchemaVersion: recorderfleet.BootstrapDiagnosticSchemaVersion, Step: "challenge", AttemptCount: 8,
+		LastReasonCode: "http_status", LastHTTPStatus: http.StatusServiceUnavailable,
+	}
+	runner := &resultReconciler{cancel: cancel, result: recorderfleet.Result{
+		Action: recorderfleet.ActionIdentityRevoked, ProviderNodeID: "node-7", BootstrapDiagnostic: &diagnostic,
+	}}
+	var logs bytes.Buffer
+	if err := runLoop(ctx, time.Hour, runner, slog.New(slog.NewJSONHandler(&logs, nil))); err != nil {
+		t.Fatalf("run loop: %v", err)
+	}
+	for _, field := range []string{`"bootstrap_step":"challenge"`, `"bootstrap_attempt_count":8`, `"bootstrap_reason_code":"http_status"`, `"bootstrap_http_status":503`} {
+		if !strings.Contains(logs.String(), field) {
+			t.Fatalf("log missing %s: %s", field, logs.String())
+		}
+	}
+}
+
+type resultReconciler struct {
+	cancel context.CancelFunc
+	result recorderfleet.Result
+}
+
+func (r *resultReconciler) Reconcile(context.Context) (recorderfleet.Result, error) {
+	r.cancel()
+	return r.result, nil
+}
+
 type cancelingReconciler struct {
 	cancel context.CancelFunc
 	calls  int

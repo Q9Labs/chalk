@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -22,12 +23,29 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/recorderbootstrapprotocol"
+	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 const maximumResponseBytes = 1 << 20
 
 var ErrBootstrapUnavailable = errors.New("recorder node bootstrap unavailable")
+
+type responseError struct {
+	status int
+}
+
+type stepError struct {
+	step string
+	err  error
+}
+
+func (e stepError) Error() string { return e.err.Error() }
+func (e stepError) Unwrap() error { return e.err }
+
+func (e responseError) Error() string {
+	return fmt.Sprintf("bootstrap endpoint returned status %d", e.status)
+}
 
 type Client struct {
 	baseURL    *url.URL
@@ -67,6 +85,10 @@ type Claims struct {
 }
 
 func (client *Client) Bootstrap(ctx context.Context, claims Claims, csrPEM string, privateKey ed25519.PrivateKey) (recorderbootstrapprotocol.BootstrapResponse, error) {
+	return client.bootstrap(ctx, claims, csrPEM, privateKey, 1)
+}
+
+func (client *Client) bootstrap(ctx context.Context, claims Claims, csrPEM string, privateKey ed25519.PrivateKey, attempt int) (recorderbootstrapprotocol.BootstrapResponse, error) {
 	challengeRequest := recorderbootstrapprotocol.ChallengeRequest{
 		SchemaVersion: recorderbootstrapprotocol.ChallengeSchemaVersion, ProviderID: claims.ProviderID,
 		ReleaseID: claims.ReleaseID, ImageDigest: claims.ImageDigest, BootGeneration: claims.BootGeneration, CSRPEM: csrPEM,
@@ -75,15 +97,20 @@ func (client *Client) Bootstrap(ctx context.Context, claims Claims, csrPEM strin
 		return recorderbootstrapprotocol.BootstrapResponse{}, ErrInvalidConfig
 	}
 	var challenge recorderbootstrapprotocol.ChallengeResponse
+	logStep("challenge", attempt, "started", 0, nil)
 	if err := client.doJSON(ctx, recorderbootstrapprotocol.ChallengePath, nil, challengeRequest, &challenge); err != nil {
-		return recorderbootstrapprotocol.BootstrapResponse{}, err
+		logStep("challenge", attempt, reasonCode(err, "challenge_unavailable"), httpStatus(err), err)
+		return recorderbootstrapprotocol.BootstrapResponse{}, stepError{step: "challenge", err: err}
 	}
 	if challenge.SchemaVersion != recorderbootstrapprotocol.ChallengeSchemaVersion || challenge.ExpiresAt.Before(client.now().Add(time.Second)) {
-		return recorderbootstrapprotocol.BootstrapResponse{}, ErrBootstrapUnavailable
+		logStep("challenge", attempt, "invalid_response", 0, ErrBootstrapUnavailable)
+		return recorderbootstrapprotocol.BootstrapResponse{}, stepError{step: "challenge", err: ErrBootstrapUnavailable}
 	}
 	if _, err := recorderbootstrapprotocol.DecodeNonce(challenge.Nonce); err != nil {
-		return recorderbootstrapprotocol.BootstrapResponse{}, ErrBootstrapUnavailable
+		logStep("challenge", attempt, "invalid_response", 0, ErrBootstrapUnavailable)
+		return recorderbootstrapprotocol.BootstrapResponse{}, stepError{step: "challenge", err: ErrBootstrapUnavailable}
 	}
+	logStep("challenge", attempt, "completed", http.StatusOK, nil)
 	request := recorderbootstrapprotocol.BootstrapRequest{
 		SchemaVersion: recorderbootstrapprotocol.BootstrapSchemaVersion, ProviderID: claims.ProviderID,
 		ReleaseID: claims.ReleaseID, ImageDigest: claims.ImageDigest, BootGeneration: claims.BootGeneration, CSRPEM: csrPEM,
@@ -98,10 +125,27 @@ func (client *Client) Bootstrap(ctx context.Context, claims Claims, csrPEM strin
 		return recorderbootstrapprotocol.BootstrapResponse{}, ErrInvalidConfig
 	}
 	var response recorderbootstrapprotocol.BootstrapResponse
+	logStep("certificate", attempt, "started", 0, nil)
 	if err := client.doJSON(ctx, recorderbootstrapprotocol.BootstrapPath, nil, request, &response); err != nil {
-		return recorderbootstrapprotocol.BootstrapResponse{}, err
+		logStep("certificate", attempt, reasonCode(err, "certificate_unavailable"), httpStatus(err), err)
+		return recorderbootstrapprotocol.BootstrapResponse{}, stepError{step: "certificate", err: err}
 	}
+	logStep("certificate", attempt, "completed", http.StatusOK, nil)
 	return response, nil
+}
+
+func (client *Client) reportDiagnostic(ctx context.Context, claims Claims, csrPEM string, privateKey ed25519.PrivateKey, diagnostic recorderfleet.BootstrapDiagnostic) error {
+	request := recorderbootstrapprotocol.DiagnosticRequest{
+		SchemaVersion: recorderbootstrapprotocol.DiagnosticSchemaVersion, ProviderID: claims.ProviderID,
+		ReleaseID: claims.ReleaseID, ImageDigest: claims.ImageDigest, BootGeneration: claims.BootGeneration,
+		CSRPEM: csrPEM, Diagnostic: diagnostic,
+	}
+	proof, err := recorderbootstrapprotocol.CanonicalDiagnosticProof(request)
+	if err != nil {
+		return ErrInvalidConfig
+	}
+	request.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, proof))
+	return client.doNoContent(ctx, recorderbootstrapprotocol.DiagnosticPath, request)
 }
 
 func (client *Client) Renew(ctx context.Context, endpoint string, certificateFile, privateKeyFile string, request recorderbootstrapprotocol.RenewRequest) (recorderbootstrapprotocol.RenewResponse, error) {
@@ -149,12 +193,12 @@ func (client *Client) doJSON(ctx context.Context, path string, alternate *http.C
 	}
 	response, err := httpClient.Do(request)
 	if err != nil {
-		return fmt.Errorf("%w: request: %v", ErrBootstrapUnavailable, err)
+		return fmt.Errorf("%w: request: %w", ErrBootstrapUnavailable, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, maximumResponseBytes))
-		return fmt.Errorf("%w: status %d", ErrBootstrapUnavailable, response.StatusCode)
+		return fmt.Errorf("%w: %w", ErrBootstrapUnavailable, responseError{status: response.StatusCode})
 	}
 	decoder := json.NewDecoder(io.LimitReader(response.Body, maximumResponseBytes))
 	decoder.DisallowUnknownFields()
@@ -166,6 +210,66 @@ func (client *Client) doJSON(ctx context.Context, path string, alternate *http.C
 		return fmt.Errorf("%w: trailing response", ErrBootstrapUnavailable)
 	}
 	return nil
+}
+
+func (client *Client) doNoContent(ctx context.Context, path string, input any) error {
+	encoded, err := json.Marshal(input)
+	if err != nil {
+		return ErrInvalidConfig
+	}
+	endpoint := client.baseURL.ResolveReference(&url.URL{Path: path})
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.String(), bytes.NewReader(encoded))
+	if err != nil {
+		return ErrInvalidConfig
+	}
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("Content-Type", "application/json")
+	response, err := client.httpClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("%w: diagnostic request", ErrBootstrapUnavailable)
+	}
+	defer response.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, maximumResponseBytes))
+	if response.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("%w: %w", ErrBootstrapUnavailable, responseError{status: response.StatusCode})
+	}
+	return nil
+}
+
+func httpStatus(err error) int {
+	var response responseError
+	if errors.As(err, &response) {
+		return response.status
+	}
+	return 0
+}
+
+func reasonCode(err error, fallback string) string {
+	if httpStatus(err) != 0 {
+		return "http_status"
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "deadline_exceeded"
+	}
+	return fallback
+}
+
+func diagnosticFor(err error, attempt int) recorderfleet.BootstrapDiagnostic {
+	step := "bootstrap"
+	var failedStep stepError
+	if errors.As(err, &failedStep) {
+		step = failedStep.step
+	}
+	reason := reasonCode(err, step+"_unavailable")
+	return recorderfleet.BootstrapDiagnostic{
+		SchemaVersion: recorderfleet.BootstrapDiagnosticSchemaVersion, Step: step,
+		AttemptCount: uint32(attempt), LastReasonCode: reason, LastHTTPStatus: httpStatus(err),
+	}
+}
+
+func logStep(step string, attempt int, reason string, status int, _ error) {
+	attributes := []any{"step", step, "attempt", attempt, "reason_code", reason, "last_http_status", status}
+	slog.Info("recorder node bootstrap step", attributes...)
 }
 
 func ValidateBootstrapResponse(config Config, claims Claims, csrPEM string, response recorderbootstrapprotocol.BootstrapResponse, now time.Time) error {

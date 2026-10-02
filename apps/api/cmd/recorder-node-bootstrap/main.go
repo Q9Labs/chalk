@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,8 +15,9 @@ import (
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
 	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, "chalk-recorder-bootstrap:", err)
+		fmt.Fprintln(os.Stderr, "chalk-recorder-bootstrap: operation failed; see bounded step diagnostics")
 		os.Exit(1)
 	}
 }
@@ -45,8 +47,10 @@ func run(arguments []string) error {
 	}
 	config, err := loadConfig(*environmentFile, *imageEnvironmentFile)
 	if err != nil {
+		slog.Error("recorder node bootstrap step", "step", "config", "attempt", 0, "reason_code", "invalid_config", "last_http_status", 0)
 		return err
 	}
+	slog.Info("recorder node bootstrap step", "step", "config", "attempt", 0, "reason_code", "completed", "last_http_status", 0)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	timeout := 9 * time.Minute

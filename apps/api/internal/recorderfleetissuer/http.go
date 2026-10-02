@@ -27,6 +27,8 @@ type HTTPHandler struct {
 	metrics            *issuerMetrics
 	service            *Service
 	workerVerifier     workeridentity.Verifier
+	diagnosticMu       sync.Mutex
+	nextDiagnosticAt   time.Time
 }
 
 func NewHTTPHandler(service *Service, controllerVerifier recorderfleet.ControllerVerifier, workerVerifier workeridentity.Verifier, logger *slog.Logger) (http.Handler, error) {
@@ -46,6 +48,7 @@ func NewHTTPHandler(service *Service, controllerVerifier recorderfleet.Controlle
 	mux.HandleFunc("POST "+recorderbootstrapprotocol.ControllerRevokePath, handler.revoke)
 	mux.HandleFunc("POST "+recorderbootstrapprotocol.ChallengePath, handler.challenge)
 	mux.HandleFunc("POST "+recorderbootstrapprotocol.BootstrapPath, handler.bootstrap)
+	mux.HandleFunc("POST "+recorderbootstrapprotocol.DiagnosticPath, handler.diagnostic)
 	mux.HandleFunc("POST "+recorderbootstrapprotocol.RenewPath, handler.renew)
 	return handler.observe(mux), nil
 }
@@ -124,7 +127,45 @@ func (handler *HTTPHandler) register(response http.ResponseWriter, request *http
 	if delivered {
 		status = http.StatusOK
 	}
-	writeJSON(response, status, registerResponse{SchemaVersion: recorderbootstrapprotocol.ControllerBootstrapSchemaVersion, Identity: identity})
+	result := registerResponse{SchemaVersion: recorderbootstrapprotocol.ControllerBootstrapSchemaVersion, Identity: identity}
+	if !delivered {
+		if registration, lookupErr := handler.service.registration(input.ProviderID); lookupErr == nil {
+			result.Diagnostic = registration.BootstrapDiagnostic
+		}
+	}
+	writeJSON(response, status, result)
+}
+
+func (handler *HTTPHandler) diagnostic(response http.ResponseWriter, request *http.Request) {
+	// A fixed-size global limiter bounds parsing, inventory calls, and durable
+	// writes without keeping an attacker-controlled map of peer addresses.
+	handler.diagnosticMu.Lock()
+	now := time.Now()
+	limited := now.Before(handler.nextDiagnosticAt)
+	if !limited {
+		handler.nextDiagnosticAt = now.Add(250 * time.Millisecond)
+	}
+	handler.diagnosticMu.Unlock()
+	if limited {
+		response.Header().Set("Retry-After", "1")
+		response.WriteHeader(http.StatusTooManyRequests)
+		return
+	}
+	peerIP, err := directPeerIP(request)
+	if err != nil {
+		writeError(response, ErrUnauthorized)
+		return
+	}
+	var input recorderbootstrapprotocol.DiagnosticRequest
+	if decodeJSON(response, request, &input) != nil {
+		writeError(response, recorderbootstrapprotocol.ErrInvalidProtocol)
+		return
+	}
+	if err := handler.service.RecordDiagnostic(request.Context(), peerIP, input); err != nil {
+		writeError(response, err)
+		return
+	}
+	response.WriteHeader(http.StatusNoContent)
 }
 
 func (handler *HTTPHandler) revoke(response http.ResponseWriter, request *http.Request) {
@@ -285,8 +326,9 @@ type registerRequest struct {
 }
 
 type registerResponse struct {
-	SchemaVersion string                     `json:"schema_version"`
-	Identity      recorderfleet.NodeIdentity `json:"identity"`
+	SchemaVersion string                             `json:"schema_version"`
+	Identity      recorderfleet.NodeIdentity         `json:"identity"`
+	Diagnostic    *recorderfleet.BootstrapDiagnostic `json:"diagnostic,omitempty"`
 }
 
 type abandonRequest struct {
@@ -360,6 +402,8 @@ func operationName(path string) string {
 		return "challenge"
 	case recorderbootstrapprotocol.BootstrapPath:
 		return "bootstrap"
+	case recorderbootstrapprotocol.DiagnosticPath:
+		return "diagnostic"
 	case recorderbootstrapprotocol.RenewPath:
 		return "renew"
 	case "/v1/recorder-fleet/crl.pem":

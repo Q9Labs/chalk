@@ -68,6 +68,13 @@ func TestControllerRegistrationReturnsIdentityOnlyAfterNodeDelivery(t *testing.T
 	if firstResponse.Code != http.StatusAccepted {
 		t.Fatalf("pending registration status/body = %d/%s", firstResponse.Code, firstResponse.Body.String())
 	}
+	diagnostic := recorderfleet.BootstrapDiagnostic{SchemaVersion: recorderfleet.BootstrapDiagnosticSchemaVersion, Step: "challenge", AttemptCount: 4, LastReasonCode: "bootstrap.challenge_unavailable", LastHTTPStatus: 503}
+	if err := store.update(func(state *persistedState) error {
+		state.Registrations[node.ProviderID].BootstrapDiagnostic = &diagnostic
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	// Exercise the real issuer adapter: registration exists, but no certificate
 	// has been delivered. This used to become a generic API 503.
@@ -82,6 +89,8 @@ func TestControllerRegistrationReturnsIdentityOnlyAfterNodeDelivery(t *testing.T
 	}
 	if identity, err := client.EnsureBootstrap(t.Context(), bootstrapRequest); !errors.Is(err, recorderfleet.ErrBootstrapPending) || identity != (recorderfleet.NodeIdentity{}) {
 		t.Fatalf("pending certificate identity/error = %+v/%v", identity, err)
+	} else if got, ok := recorderfleet.BootstrapDiagnosticFromError(err); !ok || got != diagnostic {
+		t.Fatalf("pending diagnostic = %+v/%t, want %+v", got, ok, diagnostic)
 	}
 
 	if err := store.update(func(state *persistedState) error {
@@ -153,4 +162,30 @@ type issuerTestTransport func(*http.Request) (*http.Response, error)
 
 func (transport issuerTestTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	return transport(request)
+}
+
+func TestDiagnosticEndpointRateLimitsBeforeParsing(t *testing.T) {
+	handler := &HTTPHandler{nextDiagnosticAt: time.Now().Add(time.Minute)}
+	response := httptest.NewRecorder()
+	handler.diagnostic(response, httptest.NewRequest(http.MethodPost, recorderbootstrapprotocol.DiagnosticPath, nil))
+	if response.Code != http.StatusTooManyRequests || response.Header().Get("Retry-After") != "1" {
+		t.Fatalf("rate-limited status/headers = %d/%v", response.Code, response.Header())
+	}
+}
+
+func TestDiagnosticEndpointRejectsOversizeAndUnsignedReports(t *testing.T) {
+	for _, test := range []struct {
+		body   string
+		status int
+	}{
+		{body: `{}`, status: http.StatusForbidden},
+		{body: `{"csr_pem":"` + string(bytes.Repeat([]byte("x"), maximumRequestBytes)) + `"}`, status: http.StatusBadRequest},
+	} {
+		handler := &HTTPHandler{service: &Service{}}
+		response := httptest.NewRecorder()
+		handler.diagnostic(response, httptest.NewRequest(http.MethodPost, recorderbootstrapprotocol.DiagnosticPath, bytes.NewBufferString(test.body)))
+		if response.Code != test.status {
+			t.Fatalf("diagnostic status = %d, want %d", response.Code, test.status)
+		}
+	}
 }

@@ -38,11 +38,12 @@ type abandonment struct {
 }
 
 type registration struct {
-	Request             recorderfleet.BootstrapRequest `json:"request"`
-	Identity            recorderfleet.NodeIdentity     `json:"identity"`
-	Certificates        map[string]certificateRecord   `json:"certificates"`
-	CurrentCertificates map[string]string              `json:"current_certificates"`
-	RevokedAt           *time.Time                     `json:"revoked_at,omitempty"`
+	Request             recorderfleet.BootstrapRequest     `json:"request"`
+	Identity            recorderfleet.NodeIdentity         `json:"identity"`
+	Certificates        map[string]certificateRecord       `json:"certificates"`
+	CurrentCertificates map[string]string                  `json:"current_certificates"`
+	RevokedAt           *time.Time                         `json:"revoked_at,omitempty"`
+	BootstrapDiagnostic *recorderfleet.BootstrapDiagnostic `json:"bootstrap_diagnostic,omitempty"`
 }
 
 type certificateRecord struct {
@@ -102,6 +103,11 @@ func OpenStore(path string) (*Store, error) {
 	case stateSchemaVersion:
 		if store.state.Abandonments == nil {
 			return nil, fmt.Errorf("%w: invalid persisted issuer state", ErrInvalidConfig)
+		}
+		for _, registration := range store.state.Registrations {
+			if registration == nil || registration.BootstrapDiagnostic != nil && registration.BootstrapDiagnostic.Validate() != nil {
+				return nil, fmt.Errorf("%w: invalid persisted issuer state", ErrInvalidConfig)
+			}
 		}
 		for providerID, tombstone := range store.state.Abandonments {
 			if tombstone == nil || tombstone.Request.ProviderID != providerID || tombstone.Request.Validate() != nil || tombstone.RevokedAt.IsZero() {
