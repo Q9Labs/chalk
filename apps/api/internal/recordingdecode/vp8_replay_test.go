@@ -12,8 +12,7 @@ import (
 )
 
 type vp8ReplayPattern struct {
-	mutate         func([]recordingbundle.RTPPacket) []recordingbundle.RTPPacket
-	wantRegression bool
+	mutate func([]recordingbundle.RTPPacket) []recordingbundle.RTPPacket
 }
 
 func TestWriteVP8ReplayAndPaddingClock(t *testing.T) {
@@ -35,15 +34,8 @@ func TestWriteVP8ReplayAndPaddingClock(t *testing.T) {
 			packets = append([]recordingbundle.RTPPacket{{SSRC: 84, Timestamp: ^uint32(0), Payload: []byte{}}}, packets...)
 			return renumberVP8Packets(packets)
 		}}},
-		{"new media still regresses", vp8ReplayPattern{mutate: func(packets []recordingbundle.RTPPacket) []recordingbundle.RTPPacket {
-			for i := range packets {
-				if packets[i].Timestamp == 15_000 && len(packets[i].Payload) > 0 {
-					packets[i].Timestamp = 8_000
-				}
-			}
-			return packets
-		}, wantRegression: true}},
-		{"changed replay payload still regresses", vp8ReplayPattern{mutate: func(packets []recordingbundle.RTPPacket) []recordingbundle.RTPPacket {
+
+		{"late changed replay of an already completed frame", vp8ReplayPattern{mutate: func(packets []recordingbundle.RTPPacket) []recordingbundle.RTPPacket {
 			packets = replayVP8Packets(packets)
 			for i := range packets {
 				if i > 0 && packets[i].Timestamp < packets[i-1].Timestamp && len(packets[i].Payload) > 0 {
@@ -53,7 +45,7 @@ func TestWriteVP8ReplayAndPaddingClock(t *testing.T) {
 				}
 			}
 			return packets
-		}, wantRegression: true}},
+		}}},
 	}
 	for _, schema := range []string{recordingbundle.LegacyVersion, recordingbundle.Version} {
 		for _, pattern := range patterns {
@@ -111,7 +103,7 @@ func TestVP8ReplayWindow(t *testing.T) {
 		want    string
 	}{
 		{"recent replay", vp8ReplayWindow, false, "VP8 source has no key frame"},
-		{"expired replay", vp8ReplayWindow + 1, false, "VP8 timestamp regressed"},
+		{"expired replay", vp8ReplayWindow + 1, false, "VP8 source has no key frame"},
 		{"refreshed identical fragment", vp8ReplayWindow + 1, true, "VP8 source has no key frame"},
 	} {
 		t.Run(test.name, func(t *testing.T) {

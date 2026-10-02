@@ -84,3 +84,18 @@ pnpm run observability:stop
 ```
 
 The stack includes a minute-by-minute trace/metric/log canary. Smoke checks send and query correlated signals and check the dashboard/critical alerts. API and Sync gates cover durable intake, idempotency, propagation, and service health. Live provider connectors and alert delivery need their own checks.
+
+## Recording VP8 source quality
+
+Render emits `recording.decode.vp8.quality` when a VP8 source needs recovery.
+The structured event reports accepted/dropped frames, late/duplicate/malformed
+packets, dimension switches, damaged media time, the allowed frame count, and
+`within_bound`, correlated by the opaque source ID. It contains no media payloads.
+
+Resolution switches restart decoding at a complete keyframe and normalize each
+segment to the first segment's dimensions, preserving aspect ratio and RTP
+spacing. Known frame replays are redundant copies, not additional lost frames.
+Other damage is limited to three frames or 1% of observed frames (whichever is
+larger), and two seconds or 1% of the source span (whichever is larger). Both
+limits must hold. Beyond either limit, source preparation fails explicitly with
+`VP8 degradation exceeds bound`; Render does not publish an incomplete Export.

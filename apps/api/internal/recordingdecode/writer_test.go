@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -277,12 +276,6 @@ func testWriteSeekableVP8WithPadding(t *testing.T, schema string, pattern vp8Rep
 		Bundles: []BundleFile{{Path: bundlePath, ExpectedSHA256: recordingbundle.ObjectChecksumHex(encrypted), Sequence: 0, CaptureEpoch: 1, CaptureJobID: "00000000-0000-4000-8000-000000000008", RecorderEnvelopeDigest: strings.Repeat("42", 32), BundleSchema: schema}}, DataKeys: []DataKey{{CaptureEpoch: 1, Plaintext: key}},
 	}
 	result, err := Write(context.Background(), request)
-	if pattern.wantRegression {
-		if !errors.Is(err, ErrDecode) || !strings.Contains(err.Error(), "VP8 timestamp regressed") {
-			t.Fatalf("expected real media regression, got %v", err)
-		}
-		return
-	}
 	if err != nil {
 		t.Fatalf("write decoded media: %v", err)
 	}
