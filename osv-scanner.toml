@@ -17,3 +17,8 @@ reason = "@typespec/compiler is used only by the dev-only contract-fixture-proof
 id = "GHSA-86w9-cpqp-85rv"
 ignoreUntil = 2026-10-08
 reason = "node-forge 1.4.0 has no released fix for this unreviewed low-exponent RSA verification advisory. The locked consumers are Expo CLI and its development code-signing tools, not Chalk's production signature verification; Chalk has no Expo update code-signing configuration. Expo's generated keys use Forge's default exponent 65537 rather than the vulnerable low exponents. Revisit if Forge is used at a production trust boundary, Expo code signing is configured, or upstream ships a fix."
+
+[[IgnoredVulns]]
+id = "GHSA-vfj7-8cjw-p6xm"
+ignoreUntil = 2026-10-17
+reason = "braces 3.0.3 has no fixed release for this deep-nesting stack-exhaustion advisory. Every locked path reaches it through Node build and dev tooling (fast-glob and micromatch in q9gate, chokidar under sass via Excalidraw, and the React Native CLI and Jest), which expand only patterns written in this repo. No Chalk service or SDK runtime passes user input to brace expansion, and no browser bundle includes braces. Revisit when braces ships a depth-limited release or a runtime path appears."
