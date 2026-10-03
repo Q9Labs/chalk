@@ -43,7 +43,12 @@ jobs:
         id: select
         env:
           BASE_REF: ${{ github.base_ref || 'master' }}
-        run: node scripts/gates/chalk-gate-plan.mjs --services "origin/${BASE_REF}" >> "${GITHUB_OUTPUT}"
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            printf 'api=true\nsync=true\n' >> "${GITHUB_OUTPUT}"
+          else
+            node scripts/gates/chalk-gate-plan.mjs --services "origin/${BASE_REF}" >> "${GITHUB_OUTPUT}"
+          fi
 
   root:
     name: Root gate
@@ -92,7 +97,12 @@ jobs:
         env:
           GATE_SERVICES: external
           GATE_BASE_REF: origin/${{ github.base_ref || 'master' }}
-        run: pnpm run gate -- --base "origin/${{ github.base_ref || 'master' }}"
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            pnpm run gate:full
+          else
+            pnpm run gate -- --base "origin/${{ github.base_ref || 'master' }}"
+          fi
 
   api:
     name: API gate
