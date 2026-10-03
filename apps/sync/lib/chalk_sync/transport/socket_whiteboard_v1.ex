@@ -672,11 +672,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   defp observe_terminal(state, terminate_reason) do
-    terminal = state.terminal || terminal_from(terminate_reason)
-
-    terminal_attributes =
-      %{close_code: terminal.close_code, reason: terminal.reason}
-      |> Map.reject(fn {_key, value} -> is_nil(value) end)
+    terminal_attributes = state.terminal || %{reason: terminal_reason(terminate_reason)}
 
     Observability.terminal(
       state.observability,
@@ -694,14 +690,14 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     end
   end
 
-  # Bandit reports peer closes as :remote without forwarding the close frame code.
-  # Leave that code absent rather than claiming the peer sent no code (1005).
-  defp terminal_from(:normal), do: %{close_code: 1000, reason: :normal}
-  defp terminal_from(:remote), do: %{close_code: nil, reason: :client_closed}
-  defp terminal_from(:timeout), do: %{close_code: 1006, reason: :timeout}
-  defp terminal_from(:shutdown), do: %{close_code: 1001, reason: :server_shutdown}
-  defp terminal_from({:shutdown, _detail}), do: %{close_code: 1001, reason: :server_shutdown}
-  defp terminal_from(_reason), do: %{close_code: 1006, reason: :transport_error}
+  # The transport callback does not forward its close frame code. Only closes
+  # chosen by this socket have an observed code; do not infer one from the reason.
+  defp terminal_reason(:normal), do: :normal
+  defp terminal_reason(:remote), do: :client_closed
+  defp terminal_reason(:timeout), do: :timeout
+  defp terminal_reason(:shutdown), do: :server_shutdown
+  defp terminal_reason({:shutdown, _detail}), do: :server_shutdown
+  defp terminal_reason(_reason), do: :transport_error
 
   defp put_scene_id(attributes, scene_id) when is_binary(scene_id),
     do: Map.put(attributes, :scene_id, scene_id)

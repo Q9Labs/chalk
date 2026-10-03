@@ -54,7 +54,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
              )
   end
 
-  test "records the close code and reason when the transport ends the socket" do
+  test "retains transport close reasons without guessing unavailable close codes" do
     handler = "whiteboard-terminal-#{System.unique_integer([:positive])}"
     test_pid = self()
 
@@ -70,11 +70,11 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     assert {:ok, initial} = SocketWhiteboardV1.init(%{})
     state = %{initial | phase: :live, scene_id: @scene_id}
 
-    for {terminate_reason, code, reason} <- [
-          {:remote, nil, :client_closed},
-          {:timeout, 1006, :timeout},
-          {:shutdown, 1001, :server_shutdown},
-          {{:error, :closed}, 1006, :transport_error}
+    for {terminate_reason, reason} <- [
+          {:remote, :client_closed},
+          {:timeout, :timeout},
+          {:shutdown, :server_shutdown},
+          {{:error, :closed}, :transport_error}
         ] do
       assert :ok = SocketWhiteboardV1.terminate(terminate_reason, state)
 
@@ -84,12 +84,24 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
                          attributes: %{reason: ^reason, scene_id: @scene_id} = attributes
                        }}
 
-      if is_nil(code) do
-        refute Map.has_key?(attributes, :close_code)
-      else
-        assert attributes.close_code == code
-      end
+      refute Map.has_key?(attributes, :close_code)
     end
+
+    assert :ok =
+             SocketWhiteboardV1.terminate(:normal, %{
+               state
+               | terminal: %{close_code: 1008, reason: :permission_denied}
+             })
+
+    assert_received {:observed,
+                     %{
+                       event: "sync.websocket.closed",
+                       attributes: %{
+                         close_code: 1008,
+                         reason: :permission_denied,
+                         scene_id: @scene_id
+                       }
+                     }}
   end
 
   test "does not echo a participant cursor or replay an applied update" do
