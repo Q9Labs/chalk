@@ -40,7 +40,7 @@ The response exposes bounded counters, ages, and failure classes—not URLs, ide
 
 Verify a rejected append → monitor failure → restored intake → successful append/recovery and durable cursor. Whiteboard sockets record scoped `whiteboard.connect`, `whiteboard.recover`, and `whiteboard.disconnect` events; terminal events include bounded close details and trace correlation, not protocol frames.
 
-The `sync.websocket.closed` log and the `whiteboard.disconnect` event carry `close_code` and `reason` with the trace and journey IDs, and the whiteboard log adds `scene_id`. When Sync didn't choose the close, the reason comes from the transport: `client_closed` with the peer's code (1005 when it sent none), `timeout`, `server_shutdown`, or `transport_error` (1006). Client close text is never recorded.
+The `sync.websocket.closed` log and the `whiteboard.disconnect` event carry `close_code` and `reason` with the trace and journey IDs, and the whiteboard log adds `scene_id`. When Sync didn't choose the close, the reason comes from the transport: `client_closed` (the current transport does not forward the peer's close code, so `close_code` is omitted), `timeout`, `server_shutdown`, or `transport_error` (1006). Client close text is never recorded.
 
 ## Failure evidence by service
 

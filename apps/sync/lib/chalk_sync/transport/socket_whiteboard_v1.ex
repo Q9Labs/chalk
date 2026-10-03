@@ -674,39 +674,30 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   defp observe_terminal(state, terminate_reason) do
     terminal = state.terminal || terminal_from(terminate_reason)
 
+    terminal_attributes =
+      %{close_code: terminal.close_code, reason: terminal.reason}
+      |> Map.reject(fn {_key, value} -> is_nil(value) end)
+
     Observability.terminal(
       state.observability,
       "sync.websocket.closed",
-      %{
-        protocol: "whiteboard-v1",
-        phase: state.phase,
-        close_code: terminal.close_code,
-        reason: terminal.reason
-      }
+      terminal_attributes
+      |> Map.merge(%{protocol: "whiteboard-v1", phase: state.phase})
       |> put_scene_id(state.scene_id)
     )
 
     if state.identity do
       Diagnostics.record(:whiteboard_disconnect_observed, state.identity,
         observability: state.observability,
-        attributes: %{
-          transport: :websocket,
-          close_code: terminal.close_code,
-          reason: terminal.reason
-        }
+        attributes: Map.put(terminal_attributes, :transport, :websocket)
       )
     end
   end
 
-  # WebSock reports why the process ended when the server did not choose the close.
-  # Client close text is not recorded because the peer controls it.
+  # Bandit reports peer closes as :remote without forwarding the close frame code.
+  # Leave that code absent rather than claiming the peer sent no code (1005).
   defp terminal_from(:normal), do: %{close_code: 1000, reason: :normal}
-  defp terminal_from(:remote), do: %{close_code: 1005, reason: :client_closed}
-
-  defp terminal_from({:remote, code, _text}) when is_integer(code) and code in 1000..4999,
-    do: %{close_code: code, reason: :client_closed}
-
-  defp terminal_from({:remote, _code, _text}), do: %{close_code: 1005, reason: :client_closed}
+  defp terminal_from(:remote), do: %{close_code: nil, reason: :client_closed}
   defp terminal_from(:timeout), do: %{close_code: 1006, reason: :timeout}
   defp terminal_from(:shutdown), do: %{close_code: 1001, reason: :server_shutdown}
   defp terminal_from({:shutdown, _detail}), do: %{close_code: 1001, reason: :server_shutdown}

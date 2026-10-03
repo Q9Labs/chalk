@@ -283,9 +283,14 @@ func (d *CaptureDaemon) completeCapture(ctx context.Context, lease recordingpipe
 	result := make(chan error, 1)
 	// A timeout would otherwise hide the API answer that kept the retries going.
 	var lastRetryable atomic.Pointer[error]
+	var lastHTTP atomic.Pointer[error]
 	timedOut := func() error {
 		cause := ctx.Err()
-		if last := lastRetryable.Load(); last != nil {
+		last := lastHTTP.Load()
+		if last == nil {
+			last = lastRetryable.Load()
+		}
+		if last != nil {
 			cause = errors.Join(cause, *last)
 		}
 		return completionStageError{stage: "api_complete", outcome: "timed_out", cause: cause}
@@ -300,6 +305,10 @@ func (d *CaptureDaemon) completeCapture(ctx context.Context, lease recordingpipe
 				return
 			}
 			lastRetryable.Store(&err)
+			var httpErr HTTPError
+			if errors.As(err, &httpErr) {
+				lastHTTP.Store(&err)
+			}
 			if waitErr := d.config.Wait(ctx, d.config.ClaimRetryWait); waitErr != nil {
 				result <- errors.Join(err, waitErr)
 				return

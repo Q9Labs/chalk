@@ -71,8 +71,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     state = %{initial | phase: :live, scene_id: @scene_id}
 
     for {terminate_reason, code, reason} <- [
-          {{:remote, 1001, "going away"}, 1001, :client_closed},
-          {:remote, 1005, :client_closed},
+          {:remote, nil, :client_closed},
           {:timeout, 1006, :timeout},
           {:shutdown, 1001, :server_shutdown},
           {{:error, :closed}, 1006, :transport_error}
@@ -82,8 +81,14 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       assert_received {:observed,
                        %{
                          event: "sync.websocket.closed",
-                         attributes: %{close_code: ^code, reason: ^reason, scene_id: @scene_id}
+                         attributes: %{reason: ^reason, scene_id: @scene_id} = attributes
                        }}
+
+      if is_nil(code) do
+        refute Map.has_key?(attributes, :close_code)
+      else
+        assert attributes.close_code == code
+      end
     end
   end
 
