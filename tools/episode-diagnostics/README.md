@@ -1,5 +1,28 @@
 # Episode diagnostics tooling
 
+## Cross-tool trace briefs
+
+`pnpm diag check --prod` checks the Episode command source and Axiom trace
+and API-log datasets. An operator can load the read-only Axiom query credential
+with `export AXIOM_QUERY_TOKEN=$(op read "op://dev/Axiom MCP API token/credential")`.
+Never commit or paste the token into config, fixtures, or reports. Production
+Episode operator configuration is also needed for the command source.
+
+`pnpm diag trace <32-hex-trace-id> --prod --json` joins retained Episode events
+with Go/Elixir spans and redacted API log lines. The
+`recording.provider.callback` flow in `diagnostics/flows.json` follows the four
+required checkpoints in the shared contract. Its fixture's 2/3/4/5-second
+deadlines become a 2-second initial window and three 1-second dependent
+windows. The first window starts at the first visible flow event, so it cannot
+independently identify a late first checkpoint. The catalog has no conditional
+or best-effort checkpoints for this action. Success and failure are branch
+outcomes on the authorized-branch and provider-result steps.
+
+The command adapter uses the Episode diagnostic ID as `flow_run` and resolves
+`run <flowRun>` through the operator-authorized Episode event pages. Events
+without a valid W3C trace/span pair cannot be represented in a q9 diagnostic
+event and are omitted from that lookup.
+
 This private package owns the bounded `trace:inspect` resolver, deterministic
 local fixture server, and desktop visual proof harness for Chalk Episode
 Diagnostics. It does not mount an API route or enable any production worker.

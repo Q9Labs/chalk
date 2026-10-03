@@ -103,10 +103,10 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.3",
-    "@q9labsai/cli": "^0.3.0",
+    "@q9labsai/cli": "^0.4.0",
     "@q9labsai/config-depcruise": "^0.3.0",
-    "@q9labsai/diagnostics": "^0.3.0",
-    "@q9labsai/gates": "^0.3.0",
+    "@q9labsai/diagnostics": "^0.4.0",
+    "@q9labsai/gates": "^0.3.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.14",
     "dependency-cruiser": "18.2.0",
