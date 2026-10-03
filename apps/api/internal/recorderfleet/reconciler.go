@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
@@ -173,7 +174,7 @@ func (r *Reconciler) classifyInventory(inventory []Node, state Journal, now time
 		}
 		_, managed := state.Nodes[node.ProviderID]
 		pending := state.PendingCreate != nil && state.PendingCreate.Request.Name == node.Name
-		if hasTag(node.Tags, DiagnosticTag) && !managed && !pending {
+		if hasTag(node.Tags, DiagnosticTag) && strings.HasPrefix(node.Name, DiagnosticTag+"-") && !managed && !pending {
 			continue
 		}
 		if _, duplicate := nodes[node.ProviderID]; duplicate {

@@ -372,11 +372,14 @@ logs, or a tracked file.
 
 ### Retained boot diagnostics and cold qualification
 
-Create a separately owned boot probe with `chalk-recorder-diagnostic` present
+Create a separately owned boot probe whose name starts with
+`chalk-recorder-diagnostic-`, with the `chalk-recorder-diagnostic` tag present
 **in its original provider create payload**, alongside the normal environment,
 owner, role, release, image, and boot-generation tags. The fleet validates its
 inventory fences but does not adopt, count, bootstrap, drain, or delete an
-unmanaged diagnostic node. A journal-managed node or a pending fleet create
+unmanaged diagnostic node in that separate name namespace. Fleet-generated names
+are never excluded, even with the tag, so a probe cannot collide with a future
+fleet create. A journal-managed node or a pending fleet create
 cannot escape its lifecycle by adding this tag. Direct issuer inventory inspection
 and peer-IP verification remain unchanged: the tag grants no bootstrap authority.
 

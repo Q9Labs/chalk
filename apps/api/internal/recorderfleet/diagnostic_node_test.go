@@ -13,6 +13,7 @@ func TestDiagnosticNodeSurvivesWithoutDemand(t *testing.T) {
 	fixture.demand.value.DesiredNodes = 0
 	fixture.demand.value.ScheduledPrewarms = 0
 	node := fixture.provider.nodeFor(fixture.ensureRequest(7), "7007")
+	node.Name = "chalk-recorder-diagnostic-" + node.Name
 	node.Tags = append(node.Tags, "chalk-recorder-diagnostic")
 	node.CreatedAt = fixture.now.Add(-time.Hour)
 	fixture.provider.nodes[node.ProviderID] = node
@@ -32,6 +33,7 @@ func TestDiagnosticNodeDoesNotConsumeLiveCapacity(t *testing.T) {
 	fixture := newFleetFixture(t)
 	fixture.config.MaxNodes = 1
 	node := fixture.provider.nodeFor(fixture.ensureRequest(7), "7007")
+	node.Name = "chalk-recorder-diagnostic-" + node.Name
 	node.Tags = append(node.Tags, "chalk-recorder-diagnostic")
 	fixture.provider.nodes[node.ProviderID] = node
 	result := fixture.step(t, fixture.reconciler(t))
@@ -43,6 +45,7 @@ func TestDiagnosticNodeDoesNotConsumeLiveCapacity(t *testing.T) {
 func TestDiagnosticTagDoesNotBypassInventoryFences(t *testing.T) {
 	fixture := newFleetFixture(t)
 	node := fixture.provider.nodeFor(fixture.ensureRequest(7), "7007")
+	node.Name = "chalk-recorder-diagnostic-" + node.Name
 	node.Tags = append(node.Tags, "chalk-recorder-diagnostic")
 	node.Tags = slices.DeleteFunc(node.Tags, func(tag string) bool { return tag == fixture.config.OwnerTag })
 	fixture.provider.nodes[node.ProviderID] = node
@@ -76,5 +79,34 @@ func TestDiagnosticTagCannotHidePendingCreate(t *testing.T) {
 	result := fixture.step(t, reconciler)
 	if result.Action != ActionNodeEnsured || fixture.journal.state.Nodes[node.ProviderID].ProviderID != node.ProviderID {
 		t.Fatalf("pending create escaped lifecycle: result=%+v journal=%+v", result, fixture.journal.state)
+	}
+}
+
+func TestDiagnosticNodeNameCannotCollideWithNextFleetCreate(t *testing.T) {
+	fixture := newFleetFixture(t)
+	node := fixture.provider.nodeFor(fixture.ensureRequest(1), "7007")
+	node.Name = "chalk-recorder-diagnostic-" + node.Name
+	node.Tags = append(node.Tags, "chalk-recorder-diagnostic")
+	fixture.provider.nodes[node.ProviderID] = node
+	reconciler := fixture.reconciler(t)
+	result := fixture.step(t, reconciler)
+	if result.Action != ActionCreatePlanned || fixture.journal.state.PendingCreate.Request.Name == node.Name {
+		t.Fatalf("diagnostic name collided with planned create: result=%+v journal=%+v", result, fixture.journal.state)
+	}
+	fixture.step(t, reconciler)
+	fixture.step(t, reconciler)
+	if _, exists := fixture.journal.state.Nodes[node.ProviderID]; exists {
+		t.Fatal("diagnostic node was adopted through pending-create recovery")
+	}
+}
+
+func TestDiagnosticTagOnFleetNameDoesNotHideNode(t *testing.T) {
+	fixture := newFleetFixture(t)
+	node := fixture.provider.nodeFor(fixture.ensureRequest(1), "7007")
+	node.Tags = append(node.Tags, "chalk-recorder-diagnostic")
+	fixture.provider.nodes[node.ProviderID] = node
+	result := fixture.step(t, fixture.reconciler(t))
+	if result.Action != ActionMissingNodeReconciled || result.ProviderNodeID != node.ProviderID {
+		t.Fatalf("fleet name escaped management with diagnostic tag: result=%+v", result)
 	}
 }
