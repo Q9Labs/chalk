@@ -28,7 +28,7 @@ with authorized as (
       and authority.lease_token = sqlc.arg(lease_token)
       and authority.lease_owner = sqlc.arg(lease_owner)
       and ((jobs.kind = 'render' and pipelines.state = 'rendering')
-        or (jobs.kind = 'transcription' and pipelines.state = 'capture_complete'))
+        or (jobs.kind = 'transcription' and pipelines.state <> 'deleted'))
       and pipelines.capture_completed_at is not null
       and reservations.space_id = sqlc.arg(space_id)
       and reservations.episode_id = sqlc.arg(episode_id)
@@ -96,7 +96,7 @@ where inputs.render_input_handle = sqlc.arg(render_input_handle)
   and authority.lease_token = sqlc.arg(lease_token)
   and authority.lease_owner = sqlc.arg(lease_owner)
   and ((jobs.kind = 'render' and pipelines.state = 'rendering')
-    or (jobs.kind = 'transcription' and pipelines.state = 'capture_complete'))
+    or (jobs.kind = 'transcription' and pipelines.state <> 'deleted'))
 	and pipelines.capture_completed_at is not null
   and pipelines.capture_completed_at +
       ((case when jobs.kind = 'transcription'
@@ -444,10 +444,11 @@ where inputs.render_input_handle = sqlc.arg(render_input_handle)
   and jobs.lease_owner = sqlc.arg(lease_owner)
   and jobs.lease_expires_at = sqlc.arg(lease_expires_at)
   and jobs.lease_expires_at > clock_timestamp()
-  and pipelines.state = 'capture_complete'
+  and pipelines.capture_completed_at is not null
+  and pipelines.state <> 'deleted'
   and pipelines.capture_completed_at +
       (recording_transcription_source_window_seconds(episodes.config_snapshot) * interval '1 second') > clock_timestamp()
-  and recordings.status in ('pending', 'processing')
+  and recordings.status in ('pending', 'processing', 'completed')
 for update of jobs, recordings;
 
 -- name: GetRecordingTranscriptionPreparationCommit :one
