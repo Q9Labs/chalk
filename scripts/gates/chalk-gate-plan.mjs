@@ -330,8 +330,10 @@ export function createGatePlan(files, options = {}) {
   const sourceFiles = nonDocumentationFiles.filter((file) => sourceExtensions.has(path.extname(file)) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const formattedFiles = normalizedFiles.filter((file) => formatExtensions.has(path.extname(file)) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const publishableWorkspaces = selectedWorkspaces.filter((workspace) => workspace.isPublic && startsWithAny(workspace.directory, ["packages", "sdks/typescript"]));
-  const serviceGates = [api ? "apps/api/scripts/gate.sh" : null, sync ? "apps/sync/scripts/reliability-correctness" : null].filter(Boolean);
-  const base = options.base ?? process.env.GATE_BASE_REF ?? "origin/master";
+  // CI runs the API and Sync gates as their own jobs and passes services: "external".
+  const servicesExternal = options.services === "external";
+  const serviceGates = servicesExternal ? [] : [api ? "apps/api/scripts/gate.sh" : null, sync ? "apps/sync/scripts/reliability-correctness" : null].filter(Boolean);
+  const base = options.base ?? "origin/master";
   const scope = options.scope ?? "staged";
   const fallowCommand = explicitFull ? ["pnpm", "run", "static:fallow"] : scope === "staged" ? ["bash", "-lc", "git diff --cached --no-ext-diff --binary | pnpm exec fallow audit --diff-stdin"] : ["pnpm", "exec", "fallow", "audit", "--changed-since", base];
   const formatCommand = formattedFiles.length > 0 ? ["pnpm", "exec", "oxfmt", "--check", ...formattedFiles] : null;
@@ -341,6 +343,7 @@ export function createGatePlan(files, options = {}) {
     task("language-ratchet", "Language vocabulary ratchet", true, "always required", ["pnpm", "run", "language:ratchet"]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: scope, GITLEAKS_BASE_REF: base }),
+    task("generated", "Generated files are current", true, "always required", ["pnpm", "run", "check:generated"]),
     task("architecture", "Architecture Worker", architecture, architecture ? "architecture inputs changed" : "no architecture inputs changed", ["pnpm", "run", "architecture:build"]),
     task("format", "Formatting", Boolean(formatCommand), full ? fullReason : `${formattedFiles.length} changed formattable file(s)`, formatCommand),
     task("fallow", "Changed-code analysis", full || architecture || sourceFiles.length > 0, full ? fullReason : architecture ? "architecture inputs changed" : `${sourceFiles.length} source file(s) changed`, fallowCommand),
@@ -351,7 +354,13 @@ export function createGatePlan(files, options = {}) {
       "gate:boundaries",
     ]),
     task("osv", "Dependency vulnerability scan", dependencyChange, dependencyChange ? "dependency inputs changed" : "no dependency inputs changed", ["bash", "scripts/gates/osv-scanner.sh"]),
-    task("services", "Service-backed API and Sync correctness gates", serviceGates.length > 0, serviceGates.length > 0 ? serviceGates.join(" and ") : "API and Sync are unaffected", ["bash", "scripts/gates/with-postgres.sh", ...serviceGates]),
+    task(
+      "services",
+      "Service-backed API and Sync correctness gates",
+      serviceGates.length > 0,
+      serviceGates.length > 0 ? serviceGates.join(" and ") : servicesExternal ? "API and Sync run as separate CI jobs" : "API and Sync are unaffected",
+      serviceGates.length > 0 ? ["bash", "scripts/gates/with-postgres.sh", ...serviceGates] : null,
+    ),
     task("contracts", "Contract and generated SDK drift", contracts, contracts ? "contract producers or consumers changed" : "contracts are unaffected", ["pnpm", "run", "contract:check"]),
     task("image-size", "Patched image-size parser contract", imageSizePatch, imageSizePatch ? "image-size patch or guard changed" : "image-size patch is unaffected", ["pnpm", "run", "security:image-size"]),
     task("syncpack", "Workspace dependency policy", dependencyChange, dependencyChange ? "workspace dependency inputs changed" : "workspace dependency inputs are unchanged", ["pnpm", "run", "deps:syncpack"]),
@@ -390,6 +399,68 @@ export function createGatePlan(files, options = {}) {
     target,
     selectedWorkspaces,
     excludedWorkspaces,
+    services: { api, sync },
     tasks,
   };
+}
+
+// CI entry: print which service gates a pull request needs, as lines for $GITHUB_OUTPUT.
+export function resolveGateTarget(environmentTarget, flagTarget) {
+  if (environmentTarget && flagTarget && environmentTarget !== flagTarget) throw new Error("GATE_TARGET and --target must match");
+  return environmentTarget ?? flagTarget;
+}
+
+function snapshotForScope(scope) {
+  if (scope === "staged") return { mode: "index" };
+  if (scope === "branch") return { mode: "ref", ref: "HEAD" };
+  return { mode: "worktree" };
+}
+
+export function gatePlanOptions(context, environment = process.env) {
+  return {
+    full: context.scope === "full" || context.classification.fullRequired,
+    scope: context.scope === "branch" ? "merge base to HEAD" : "staged",
+    base: context.base ?? environment.GATE_BASE_REF ?? "origin/master",
+    target: resolveGateTarget(environment.GATE_TARGET, context.target),
+    services: environment.GATE_SERVICES === "external" ? "external" : "local",
+    snapshot: snapshotForScope(context.scope),
+  };
+}
+
+export function laneEnvironment(laneId, taskEnv, changedFiles, explicitFiles) {
+  const env = Object.entries(taskEnv).map(([name, value]) => ({ name, value }));
+  if (laneId === "secrets" && explicitFiles) env.push({ name: "GATE_EXPLICIT_FILES", value: changedFiles.join("\n") });
+  return env;
+}
+
+export function laneResult(laneId, result) {
+  if (!result.failed) return { status: "passed" };
+  const message = [result.stdout, result.stderr].filter(Boolean).join("\n") || `${laneId} failed`;
+  return { status: "failed", findings: [{ file: "gate.config.ts", rule: laneId, message }] };
+}
+
+export function emptyScopeResult(context, environment = process.env) {
+  if (context.allChangedFiles.length > 0 || context.scope === "full" || environment.GATE_ALLOW_EMPTY === "1") return { status: "passed" };
+  const used = context.scope === "branch" ? `branch scope against ${context.base ?? "the base ref"}` : `${context.scope} scope`;
+  const message = [
+    `Nothing is in scope (${used}), so every lane was skipped. This is not a pass.`,
+    "Stage your changes, or pick another scope: `pnpm run gate -- --base origin/master` (branch), `pnpm run gate -- --files <path>`, or `pnpm run gate:full`.",
+    "Set GATE_ALLOW_EMPTY=1 only when an empty scope is intended.",
+  ].join("\n");
+  return { status: "failed", findings: [{ file: "gate.config.ts", rule: "scope", message }] };
+}
+
+function printServiceGates(base) {
+  const files = gitLines(["diff", "--name-only", `${base}...HEAD`]);
+  const { services } = createGatePlan(files, { scope: "merge base to HEAD", base, snapshot: { mode: "ref", ref: "HEAD" } });
+  console.log(`api=${services.api}\nsync=${services.sync}`);
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const [flag, base] = process.argv.slice(2);
+  if (flag !== "--services" || !base) {
+    console.error("Usage: chalk-gate-plan.mjs --services <base-ref>");
+    process.exit(2);
+  }
+  printServiceGates(base);
 }
