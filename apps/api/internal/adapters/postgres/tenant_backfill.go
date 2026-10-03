@@ -24,7 +24,7 @@ func backfillIDs(scope tenantpurge.Scope, b tenantpurge.Backfill) ([]string, []s
 	return tenants, spaces
 }
 
-func snapshotBackfill(ctx context.Context, tx pgx.Tx, scope tenantpurge.Scope, b tenantpurge.Backfill, values bool) (tenantpurge.Plan, purgeCatalog, error) {
+func snapshotBackfill(ctx context.Context, tx purgeQueryer, scope tenantpurge.Scope, b tenantpurge.Backfill, values bool) (tenantpurge.Plan, purgeCatalog, error) {
 	plan := tenantpurge.Plan{Version: 1, Kind: "backfill", CreatedAt: time.Now().UTC(), Scope: scope, Backfill: &b}
 	if err := b.Validate(scope); err != nil {
 		return plan, purgeCatalog{}, err

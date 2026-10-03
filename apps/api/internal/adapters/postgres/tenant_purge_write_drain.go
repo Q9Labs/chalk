@@ -6,13 +6,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/tenantpurge"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 )
 
-func snapshotPurgeWriteDrain(ctx context.Context, tx pgx.Tx, catalog purgeCatalog, selected map[string]string, ids []string) (*tenantpurge.WriteDrain, error) {
+func snapshotPurgeWriteDrain(ctx context.Context, tx purgeQueryer, catalog purgeCatalog, selected map[string]string, ids []string) (*tenantpurge.WriteDrain, error) {
 	var deadlines []string
 	for _, table := range catalog.Tables {
 		condition := selected[table.Name]
