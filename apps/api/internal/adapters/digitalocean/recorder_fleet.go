@@ -388,7 +388,7 @@ func renderRecorderCloudInit(request recorderfleet.EnsureNodeRequest) (string, e
 		"CHALK_RECORDER_GPU=" + quoteEnv(strconv.FormatBool(request.Release.GPU)),
 		"CHALK_RECORDER_BOOTSTRAP_ASSERTION_SOURCE=" + quoteEnv("external-reconciler"),
 	}
-	return "#cloud-config\nwrite_files:\n  - path: /etc/chalk-recorder/bootstrap.env\n    permissions: \"0400\"\n    owner: root:root\n    content: |\n      " + strings.Join(values, "\n      ") + "\nruncmd:\n  - [ \"/usr/local/sbin/chalk-recorder-bootstrap\", \"--one-time\", \"--require-signed-assertion\", \"--require-droplet-inventory-match\", \"--require-boot-generation\", \"--env-file\", \"/etc/chalk-recorder/bootstrap.env\" ]\n  - [ \"/bin/systemctl\", \"enable\", \"--now\", \"" + workerUnit + "\", \"chalk-recorder-renew.timer\" ]\n  - [ \"/usr/bin/rm\", \"-f\", \"/etc/chalk-recorder/bootstrap.env\" ]\n", nil
+	return "#cloud-config\nwrite_files:\n  - path: /etc/chalk-recorder/bootstrap.env\n    permissions: \"0400\"\n    owner: root:root\n    content: |\n      " + strings.Join(values, "\n      ") + "\nruncmd:\n  - set -e\n  - [ \"/usr/local/sbin/chalk-recorder-bootstrap\", \"--one-time\", \"--require-signed-assertion\", \"--require-droplet-inventory-match\", \"--require-boot-generation\", \"--env-file\", \"/etc/chalk-recorder/bootstrap.env\" ]\n  - [ \"/bin/systemctl\", \"enable\", \"--now\", \"" + workerUnit + "\", \"chalk-recorder-renew.timer\" ]\n  - [ \"/usr/bin/rm\", \"-f\", \"/etc/chalk-recorder/bootstrap.env\" ]\n", nil
 }
 
 func quoteEnv(value string) string { return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'" }

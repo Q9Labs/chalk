@@ -27,8 +27,9 @@ def collect():
                 files[name] = {"content": raw.decode(errors="replace"), "sha256": hashlib.sha256(raw).hexdigest()}
     commands = {"cloud_init": ["cloud-init", "status", "--long"], "addresses": ["ip", "address"],
                 "routes": ["ip", "route"], "clock": ["timedatectl"],
+                "resolver": ["resolvectl", "status"], "network_units": ["systemctl", "status", "networking", "systemd-networkd", "ssh", "--no-pager"],
                 "units": ["systemctl", "status", "chalk-recorder-capture.service", "chalk-recorder-render.service", "--no-pager"],
-                "journal": ["journalctl", "-b", "-u", "cloud-final.service", "-u", "chalk-recorder-capture.service", "-u", "chalk-recorder-render.service", "--no-pager", "-n", "200"]}
+                "journal": ["journalctl", "-b", "--no-pager", "-n", "1000"]}
     results = {}
     for name, command in commands.items():
         try:
@@ -36,6 +37,8 @@ def collect():
             results[name] = {"status": result.returncode, "stdout": result.stdout, "stderr": result.stderr}
         except subprocess.TimeoutExpired:
             results[name] = {"status": "TIMEOUT"}
+        except FileNotFoundError:
+            results[name] = {"status": "UNAVAILABLE"}
     process = []
     for path in pathlib.Path("/proc").glob("[0-9]*/cmdline"):
         try:

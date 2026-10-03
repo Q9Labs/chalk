@@ -53,6 +53,31 @@ func TestChangedCloudInitContractFailsBeforeCreate(t *testing.T) {
 	}
 }
 
+func TestEarlyGuestEvidencePreservesFleetCommands(t *testing.T) {
+	original := "#cloud-config\nwrite_files:\n  - path: /etc/chalk-recorder/bootstrap.env\nruncmd:\n  - [\"bootstrap\"]\n  - [\"worker\"]\n"
+	body, _ := json.Marshal(createRequest{UserData: original})
+	command := []string{"/bin/sh", "-c", "nohup collector >/var/log/evidence 2>&1 &"}
+	modified, err := addEvidenceBootCommand(body, command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result createRequest
+	if err := json.Unmarshal(modified, &result); err != nil {
+		t.Fatal(err)
+	}
+	encoded, _ := json.Marshal(command)
+	added := "bootcmd:\n  - " + string(encoded) + "\n"
+	if strings.Replace(result.UserData, added, "", 1) != original {
+		t.Fatal("evidence changed fleet cloud-init commands")
+	}
+	if !strings.HasPrefix(result.UserData, "#cloud-config\nbootcmd:") {
+		t.Fatal("evidence starts too late")
+	}
+	if _, err := addEvidenceBootCommand(modified, command); err == nil {
+		t.Fatal("duplicate evidence command accepted")
+	}
+}
+
 func TestCertificateReceiptRejectsWrongIdentitySerialAndTrust(t *testing.T) {
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
