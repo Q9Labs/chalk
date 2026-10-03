@@ -74,6 +74,26 @@ class BootCheckTests(unittest.TestCase):
         with patch.object(boot, 'command', return_value=''):
             self.assertEqual(services.aws('s3api', 'delete-object'), {})
 
+    def test_first_upload_can_arrive_after_certificate_registration(self):
+        installed = self.fixture()[3]
+        running = copy.deepcopy(installed)
+        running['commands']['cloud_init']['stdout'] = 'status: running\n'
+        with tempfile.TemporaryDirectory() as directory, patch.object(boot, 'guest_evidence', side_effect=[
+                boot.GuestEvidenceUnavailable('not uploaded'), running, installed]) as fetch, \
+                patch.object(boot.time, 'time', return_value=10), patch.object(boot.time, 'sleep'):
+            self.assertEqual(boot.wait_guest_boot(None, Path(directory), 20), installed)
+            self.assertEqual(fetch.call_count, 3)
+
+    def test_missing_guest_upload_is_bounded_and_wrong_boot_is_not_retried(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(boot, 'guest_evidence',
+                side_effect=boot.GuestEvidenceUnavailable('not uploaded')), patch.object(boot.time, 'time', return_value=20):
+            with self.assertRaisesRegex(RuntimeError, 'boot deadline'):
+                boot.wait_guest_boot(None, Path(directory), 20)
+        with patch.object(boot, 'guest_evidence', side_effect=RuntimeError('boot binding mismatch')) as fetch:
+            with self.assertRaisesRegex(RuntimeError, 'binding mismatch'):
+                boot.wait_guest_boot(None, Path('/unused'), 20)
+            self.assertEqual(fetch.call_count, 1)
+
     def fixture(self):
         manifest = json.dumps({'source_commit': 'a' * 40, 'release_id': 'candidate'})
         digest = hashlib.sha256(manifest.encode()).hexdigest()

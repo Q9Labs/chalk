@@ -29,6 +29,10 @@ def require(condition, message):
         raise RuntimeError(message)
 
 
+class GuestEvidenceUnavailable(RuntimeError):
+    pass
+
+
 def command(args, *, text=None, timeout=60, env=None):
     result = subprocess.run(args, input=text, text=True, capture_output=True, timeout=timeout,
                             env={**os.environ, "AWS_PAGER": "", "AWS_CLI_AUTO_PROMPT": "off", **(env or {})})
@@ -384,12 +388,29 @@ def guest_evidence(services, directory):
     state = ledger(directory)
     require(state.get("evidence_bucket"), "private guest evidence transport was not provisioned")
     target = directory / "guest-latest.json"
-    services.aws("s3api", "get-object", "--bucket", state["evidence_bucket"], "--key", state["evidence_key"], target)
+    try:
+        services.aws("s3api", "get-object", "--bucket", state["evidence_bucket"], "--key", state["evidence_key"], target)
+    except (RuntimeError, subprocess.TimeoutExpired) as error:
+        raise GuestEvidenceUnavailable("guest upload not available; see bounded retry ledger") from error
     require(target.stat().st_size <= 20 << 20, "guest evidence exceeds bounded size")
     evidence = json.loads(target.read_text())
     require(evidence.get("binding") == {"name": state["name"], "boot_generation": state["generation"]}, "guest evidence boot binding mismatch")
     require(state["started_at"] <= evidence["collected_at"] <= state["deadline"], "guest evidence timestamp outside cold boot")
     return evidence
+
+
+def wait_guest_boot(services, directory, until):
+    while True:
+        try:
+            installed = guest_evidence(services, directory)
+        except GuestEvidenceUnavailable as error:
+            append(directory, {"guest_evidence_retry": str(error)})
+            if time.time() >= until:
+                raise RuntimeError("guest evidence did not arrive before the boot deadline") from error
+        else:
+            if installed_boot(installed) or time.time() >= until or installed.get("commands", {}).get("cloud_init", {}).get("status") not in (0, 2):
+                return installed
+        time.sleep(min(2, max(0, until - time.time())))
 
 
 def run(request_path, receipt_path):
@@ -518,15 +539,11 @@ def run(request_path, receipt_path):
                 try:
                     installed = guest_evidence(services, directory)
                     private_json(directory / ("node-" + str(time.time_ns()) + ".json"), installed)
-                except (RuntimeError, subprocess.TimeoutExpired):
+                except GuestEvidenceUnavailable:
                     pass
                 time.sleep(10)
             evidence = pending.result()
-        while True:
-            installed = guest_evidence(services, directory)
-            if installed_boot(installed) or time.time() >= until or installed.get("commands", {}).get("cloud_init", {}).get("status") not in (0, 2):
-                break
-            time.sleep(2)
+        installed = wait_guest_boot(services, directory, until)
         private_json(directory / "node-final.json", installed)
         cached = installed["files"].get("/var/lib/cloud/instance/user-data.txt")
         require(cached and cached["sha256"] == provisioning["user_data_sha256"], "node did not run the transmitted cloud-init payload")
