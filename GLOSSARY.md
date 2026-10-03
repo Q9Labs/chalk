@@ -8,8 +8,8 @@ CallKit, Cloudflare SFU vocabulary) stay foreign and are translated at adapter
 seams.
 
 Provenance: the rulings behind every entry, with reasoning and rejected
-candidates, live in
-`scratchpad/history/2026-W32.md`. The
+candidates, are in git history:
+`git show 3f6d94f9:scratchpad/history/2026-W32.md`. The
 superseded `sdks/ubiquitous-language.md` is deleted; its UI shape catalog
 remains in git history as input for the React-wave design sheet. A CI
 ratchet (per-surface banned-term counts that may only decrease) enforces this

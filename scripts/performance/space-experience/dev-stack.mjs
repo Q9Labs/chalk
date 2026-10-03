@@ -18,7 +18,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
 
-const repoRoot = join(fileURLToPath(import.meta.url), "..", "..", "..");
+const repoRoot = join(fileURLToPath(import.meta.url), "..", "..", "..", "..");
 const runtimeRoot = join(repoRoot, ".private", "chalk-perf");
 
 const PORTS = { api: 18080, sync: 4100, web: 13070, postgres: 5432, redis: 6380, objectStorage: 19000 };

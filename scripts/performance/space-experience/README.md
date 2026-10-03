@@ -5,7 +5,7 @@ This directory contains a dependency-free Playwright and CDP profiler for the fu
 Start the isolated local stack, then run a short validation:
 
 ```sh
-node scratchpad/perf-harness/dev-stack.mjs --up
+node scripts/performance/space-experience/dev-stack.mjs --up
 ```
 
 The stack launcher defaults to the normal local PostgreSQL container but recreates only the `chalk_perf_profile` database. Set `CHALK_PERF_DATABASE_NAME`, `CHALK_POSTGRES_CONTAINER`, `CHALK_POSTGRES_VOLUME`, `CHALK_REDIS_CONTAINER`, and `CHALK_REDIS_VOLUME` to give a remote or concurrent run unique resources. It reads `CHALK_CLOUDFLARE_REALTIME_APP_ID` and `CHALK_CLOUDFLARE_REALTIME_APP_SECRET` together when they are present; otherwise it resolves the local development credentials through 1Password.
