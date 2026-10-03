@@ -235,7 +235,7 @@ cleanup() {
       -m immediate \
       stop >/dev/null 2>&1 || true
   elif [[ "${backend}" == "docker" ]]; then
-    "${CHALK_SYNC_TOPOLOGY_DOCKER_BIN}" rm -f \
+    "${CHALK_SYNC_TOPOLOGY_DOCKER_BIN}" rm -f --volumes \
       "${CHALK_SYNC_TOPOLOGY_PRIMARY_CONTAINER}" \
       "${CHALK_SYNC_TOPOLOGY_STANDBY_CONTAINER}" >/dev/null 2>&1 || true
     "${CHALK_SYNC_TOPOLOGY_DOCKER_BIN}" volume rm \

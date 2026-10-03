@@ -82,7 +82,7 @@ cleanup() {
     callback_pid=""
   fi
   if [[ "${backend}" == "docker" ]]; then
-    "${docker_bin}" rm -f "${container}" >/dev/null 2>&1 || true
+    "${docker_bin}" rm -f --volumes "${container}" >/dev/null 2>&1 || true
   elif [[ "${backend}" == "native" ]]; then
     if [[ -n "${native_root}" && "$(basename "${native_root}")" == chalk-gate-postgres.* ]]; then
       "${native_pg_bin}/pg_ctl" \

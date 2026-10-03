@@ -184,7 +184,7 @@ reap_stale() {
       [[ "${name}" =~ ^chalk-gate-postgres-([0-9]{8}T[0-9]{6}Z)- ]] || continue
       if [[ "${BASH_REMATCH[1]}" < "${cutoff}" ]]; then
         echo "[remote] removing orphaned container ${name}"
-        "${docker_bin}" rm -f "${name}" >/dev/null 2>&1 || true
+        "${docker_bin}" rm -f --volumes "${name}" >/dev/null 2>&1 || true
       fi
     done < <("${docker_bin}" ps -a --filter name=chalk-gate-postgres --format '{{.Names}}' 2>/dev/null)
   fi
