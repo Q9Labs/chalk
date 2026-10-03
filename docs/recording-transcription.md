@@ -209,3 +209,54 @@ This qualification does **not** claim completion of live in-Space captions,
 first-party mobile recording/transcript wiring, every regional load ceiling,
 every possible worker-loss timing, or managed observability and notification
 configuration. Those remain separate product and operational milestones.
+
+## Recorder release command
+
+`pnpm release:recorder` replaces private release wrappers. Set `AWS_PROFILE` and
+`AWS_REGION`; production identifiers are read at launch from the non-secret SSM
+String `/chalk/production/release/recorder.json`. Secrets remain at their existing
+parameter paths. The version-1 configuration contains `do_context`,
+`bootstrap_ca_parameter`, `bootstrap_server_name`, `builder` (region, size, image,
+ttl_seconds, ssh_cidr), `worker` (region, size, disk_gb), `runtime` (instance_id,
+parameter_prefix, document_name, log_group, user_id), and `dispatcher` (state_bucket,
+state_key, function_name, scheduler_name, scheduler_group). Keep its values and all
+release evidence outside Git. Update the SSH CIDR when the operator's address changes.
+
+First run `pnpm release:recorder plan --dry-run --role render`. This covers all
+seven phases using provider reads only. Every subcommand accepts `--dry-run`;
+none sends a remote command, creates compute, writes pins, or deploys. A dry run
+does not claim image qualification, zero OpenTofu drift, or loaded-process proof.
+
+For an authorized release, use one new private directory outside the checkout,
+one exact public `--source` commit, and the same `--role` on every invocation:
+
+```sh
+pnpm release:recorder plan --role render --source "$SOURCE_COMMIT" --state "$RELEASE_STATE"
+pnpm release:recorder build --role render --state "$RELEASE_STATE"
+pnpm release:recorder snapshot --role render --state "$RELEASE_STATE"
+pnpm release:recorder qualify --role render --state "$RELEASE_STATE" --boot-check "$BOOT_CHECK"
+pnpm release:recorder publish-pins --role render --state "$RELEASE_STATE"
+pnpm release:recorder deploy --role render --state "$RELEASE_STATE" --managed-manifest "$MANAGED_MANIFEST"
+pnpm release:recorder verify --role render --state "$RELEASE_STATE"
+```
+
+Snapshot precedes qualification because qualification boots the resulting image.
+The detached build worker and exact-ID deadline guard survive terminal/session
+loss. The uploaded script builds, cleans up and seals itself; never SSH back
+into a sealed builder. Snapshot checks minimum disk, deletes only owned resources,
+confirms Droplet absence, and removes its key files. The guard never scans by tag.
+After interruption, inspect `release.json`, `build-worker.log` and the guard log;
+continue the next phase only after the worker completes. Do not start a second
+builder or cancel its deadline to recover a stalled one.
+
+`BOOT_CHECK` is BOOTDIAG's executable hook, not a RELEASEKIT implementation. It
+receives `--request <json> --receipt <json>` with schema_version, role, source_commit,
+release_id, image_id, image_digest, region and size. It must clean up its resources
+and return those same identities plus `result: "PASS"` and
+`fleet_equivalent_signed_boot: true`. Missing or mismatched evidence blocks pins.
+Only one release owner may publish: SSM has no atomic compare-and-swap. Publication
+checks the planned version/hash immediately before writing, preserves other values
+and KMS metadata, and verifies readback. Deploy uses a canonical managed manifest
+(including unchanged component provenance for an input-only reload), permits only
+a Scheduler state change, and checks actual loaded process inputs. On failure the
+Scheduler stays disabled; inspect the canonical controller result before recovery.
