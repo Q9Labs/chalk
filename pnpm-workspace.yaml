@@ -62,3 +62,12 @@ patchedDependencies:
 
 # Allow q9stack GitHub release tarballs until they are published to npm.
 blockExoticSubdeps: false
+
+# Preserve the dependency scripts skipped by pnpm 10; keep strict build checks.
+allowBuilds:
+  "@parcel/watcher": false
+  esbuild: false
+  lefthook: false
+  msgpackr-extract: false
+  msw: false
+  workerd: false
