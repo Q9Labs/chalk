@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -221,7 +222,7 @@ type recorderTranscriptionPreparationCommitResponse struct {
 	TranscriptionJobIDs   []string `json:"transcription_job_ids"`
 }
 
-func mountRecorderRenderAuthorityRoutes(r chi.Router, service RecorderRenderAuthorityService) {
+func mountRecorderRenderAuthorityRoutes(r chi.Router, service RecorderRenderAuthorityService, logger *slog.Logger) {
 	if service == nil {
 		return
 	}
@@ -230,7 +231,7 @@ func mountRecorderRenderAuthorityRoutes(r chi.Router, service RecorderRenderAuth
 	r.Post("/render-objects/reserve", recorderReserveRenderObjectHandler(service))
 	r.Post("/render-objects/finalize", recorderFinalizeRenderObjectHandler(service))
 	r.Post("/render-objects/commit", recorderCommitRenderObjectHandler(service))
-	r.Post("/renders/commit", recorderCommitRenderHandler(service))
+	r.Post("/renders/commit", recorderCommitRenderHandler(service, logger))
 	r.Post("/renders/transcription-commit", recorderCommitTranscriptionPreparationHandler(service))
 }
 
@@ -364,7 +365,10 @@ func recorderCommitRenderObjectHandler(service RecorderRenderAuthorityService) h
 	}
 }
 
-func recorderCommitRenderHandler(service RecorderRenderAuthorityService) http.HandlerFunc {
+func recorderCommitRenderHandler(service RecorderRenderAuthorityService, logger *slog.Logger) http.HandlerFunc {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return func(w http.ResponseWriter, request *http.Request) {
 		identity, ok := recorderRenderIdentity(w, request)
 		if !ok {
@@ -387,6 +391,7 @@ func recorderCommitRenderHandler(service RecorderRenderAuthorityService) http.Ha
 			writeRecorderRenderAuthorityError(w, err)
 			return
 		}
+		logExportDegradation(logger, input.Authority.JobID.String(), input.VideoDegradation)
 		writeJSON(w, http.StatusOK, recorderRenderCommitResponseValue(result))
 	}
 }
