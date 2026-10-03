@@ -17,7 +17,7 @@ The commit hook runs the fast gate lanes. The Gate workflow runs the full root, 
 - Sync (Elixir): `apps/sync/AGENTS.md`.
 - Contracts and code generation: `docs/contract-codegen.md`.
 - Gates, the commit hook, and the M4 runner: `scripts/gates/README.md`.
-- Recording bundles: `go run ./cmd/recording-bundle` in `apps/api` summarizes, replays, and turns a stored bundle into a sanitized fixture.
+- Recording bundle formats: `apps/api/internal/recordingbundle`.
 - Product outcomes and remaining work: `tracker.yaml`.
 - Code review: reviewers apply `CODING_STANDARDS.md` to the diff.
 

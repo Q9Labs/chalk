@@ -4,7 +4,7 @@ Reviewers apply these to a diff. They are judgement calls that no gate can check
 
 ## A fix must reproduce the real failure
 
-A fix for a production failure needs a test that fails without the fix and is built from what was observed: a sanitized fixture from the real bundle (`go run ./cmd/recording-bundle fixture` in `apps/api`), the logged request, or the retained trace. A fix proven only against invented input can pass review and still fail in production, as the first VP8 Export fix did.
+A fix for a production failure needs a test that fails without the fix and is built from what was observed: a sanitized fixture from the real bundle, the logged request, or the retained trace. A fix proven only against invented input can pass review and still fail in production, as the first VP8 Export fix did.
 
 ## Sibling paths keep the same limits
 
