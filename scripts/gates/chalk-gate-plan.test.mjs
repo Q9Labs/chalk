@@ -106,3 +106,19 @@ test("empty scope fails unless files exist, the scope is full, or empty is allow
   assert.match(emptyScopeResult({ allChangedFiles: [], scope: "branch" }, {}).findings[0].message, /the base ref/u);
   assert.match(emptyScopeResult({ allChangedFiles: [], scope: "staged" }, {}).findings[0].message, /staged scope/u);
 });
+
+test("scoped builds include workspace dependencies without widening other lanes", () => {
+  const workspaces = [
+    { name: "web", directory: "apps/web", scripts: { build: "vite build", test: "vitest", "check-types": "tsc" }, dependencies: ["@chalk/shared"] },
+    { name: "@chalk/shared", directory: "packages/shared", scripts: { build: "tsc" }, dependencies: [] },
+    { name: "unrelated", directory: "apps/unrelated", scripts: { build: "tsc" }, dependencies: [] },
+  ];
+  const plan = createGatePlan(["apps/web/src/main.ts"], { workspaces });
+  const command = (id) => plan.tasks.find((task) => task.id === id).command;
+  assert.deepEqual(command("build"), ["pnpm", "exec", "turbo", "run", "build", "--force", "--filter=web..."]);
+  assert.deepEqual(command("types"), ["pnpm", "--workspace-concurrency=1", "--sort", "--filter", "web", "run", "check-types"]);
+  assert.deepEqual(command("tests"), ["pnpm", "--workspace-concurrency=1", "--sort", "--filter", "web", "run", "test", "--coverage"]);
+  const docs = createGatePlan(["docs/guide.md"], { workspaces });
+  assert.equal(docs.tasks.find((task) => task.id === "build").command, null);
+  assert.deepEqual(docs.services, { api: false, sync: false });
+});

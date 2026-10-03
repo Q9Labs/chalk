@@ -53,6 +53,10 @@ shipment target from branch, release mode, or directory.
   rejected, and packages or SDKs cannot import applications. This lane does not
   enforce intra-workspace cycles, development-dependency policy, or orphan
   detection. Generated build output and dedicated fixtures are excluded.
+- Selected workspace builds run through Turbo with their workspace dependency
+  closure, using the existing `^build` task graph before building each consumer.
+  The gate forces rebuilds rather than trusting cached build artifacts. Type
+  checks and tests keep their affected-workspace scope.
 - Tests run once with coverage; lint aliases do not repeat formatting or type
   checks.
 - Go API changes run the complete language gate. Elixir Sync changes run the
