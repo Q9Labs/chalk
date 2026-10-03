@@ -18,6 +18,7 @@ def presigned_put(bucket, key, region, credentials, expires, now=None):
     path = "/" + quote(key, safe="/~")
     parameters = {"X-Amz-Algorithm": "AWS4-HMAC-SHA256", "X-Amz-Credential": credentials["AccessKeyId"] + "/" + scope,
                   "X-Amz-Date": stamp, "X-Amz-Expires": str(expires), "X-Amz-SignedHeaders": "host"}
+    # Fixed AWS credential-process JSON field, at this provider adapter seam.
     if credentials.get("SessionToken"):
         parameters["X-Amz-Security-Token"] = credentials["SessionToken"]
     query = urlencode(sorted(parameters.items()), quote_via=quote, safe="~")
