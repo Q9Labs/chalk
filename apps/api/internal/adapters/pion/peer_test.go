@@ -547,3 +547,55 @@ func testTrack(mid string) captureplane.PulledCaptureTrack {
 		RequestedLayer:        captureplane.TrackLayerAuto,
 	}, MID: captureplane.ProviderReference(mid)}
 }
+
+// Capture must not accept SFU RTX with rewritten original sequence numbers.
+func TestRecorderVideoOfferDoesNotNegotiateRTX(t *testing.T) {
+	api, err := newRecorderAPI()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pc, err := api.NewPeerConnection(webrtc.Configuration{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = pc.Close() })
+	if _, err := pc.AddTransceiverFromKind(webrtc.RTPCodecTypeVideo, webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionRecvonly}); err != nil {
+		t.Fatal(err)
+	}
+	offer, err := pc.CreateOffer(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publisher, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = publisher.Close() })
+	if _, err := publisher.AddTransceiverFromKind(webrtc.RTPCodecTypeVideo, webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionSendonly}); err != nil {
+		t.Fatal(err)
+	}
+	remoteOffer, err := publisher.CreateOffer(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.ToLower(remoteOffer.SDP), "rtx/90000") {
+		t.Fatal("test publisher must offer RTX")
+	}
+	if err := pc.SetRemoteDescription(remoteOffer); err != nil {
+		t.Fatal(err)
+	}
+	answer, err := pc.CreateAnswer(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, description := range map[string]string{"offer": offer.SDP, "answer": answer.SDP} {
+		if strings.Contains(strings.ToLower(description), "rtx/90000") {
+			t.Errorf("Capture %s negotiates RTX", name)
+		}
+		for _, required := range []string{"VP8/90000", "H264/90000", " nack\r\n", " nack pli\r\n"} {
+			if !strings.Contains(description, required) {
+				t.Errorf("%s missing video capability %q", name, required)
+			}
+		}
+	}
+}

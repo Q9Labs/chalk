@@ -151,6 +151,9 @@ const PROVIDER_VOCABULARY_ADAPTERS = new Set([
   "apps/api/internal/adapters/cloudflare/sfu/capture_plane.go",
   "apps/api/internal/adapters/cloudflare/sfu/capture_plane_test.go",
   "apps/api/internal/adapters/cloudflare/sfu/live_capture_test.go",
+  // Test-only Cloudflare wire fields and the browser CLI retain provider spelling.
+  "apps/api/internal/recorderworker/ingress_measurement_test.go",
+  "scripts/capture-ingress/run.mjs",
   "apps/api/internal/adapters/pion/peer.go",
   "apps/api/internal/adapters/pion/peer_test.go",
   "apps/recording-renderer/src/cli.ts",

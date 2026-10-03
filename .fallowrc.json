@@ -43,6 +43,7 @@
     "scripts/codegen/generate-effect-schemas.mjs",
     "scripts/gates/chalk-gate-plan.mjs",
     "scripts/integration-smoke/run.mjs",
+    "scripts/capture-ingress/run.mjs",
     "scripts/recorder/analyze-media.mjs",
     "scripts/recorder/compare-frames.mjs",
     "scripts/recorder/measure-command.mjs",
