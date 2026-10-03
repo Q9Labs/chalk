@@ -208,6 +208,8 @@ type Querier interface {
 	GetRecordingCapturePlanForCommand(ctx context.Context, arg GetRecordingCapturePlanForCommandParams) (RecordingCapturePlan, error)
 	GetRecordingCapturePlanSource(ctx context.Context, arg GetRecordingCapturePlanSourceParams) (GetRecordingCapturePlanSourceRow, error)
 	GetRecordingCaptureSignalingAuthority(ctx context.Context, arg GetRecordingCaptureSignalingAuthorityParams) (GetRecordingCaptureSignalingAuthorityRow, error)
+	GetRecordingCompletionRecovery(ctx context.Context, arg GetRecordingCompletionRecoveryParams) (RecordingCompletionRecovery, error)
+	GetRecordingCompletionRecoveryCandidate(ctx context.Context, arg GetRecordingCompletionRecoveryCandidateParams) (GetRecordingCompletionRecoveryCandidateRow, error)
 	GetRecordingDataKey(ctx context.Context, arg GetRecordingDataKeyParams) (RecordingDataKey, error)
 	GetRecordingEntranceEligibility(ctx context.Context, arg GetRecordingEntranceEligibilityParams) (GetRecordingEntranceEligibilityRow, error)
 	GetRecordingFleetDemand(ctx context.Context, arg GetRecordingFleetDemandParams) (GetRecordingFleetDemandRow, error)
@@ -322,6 +324,7 @@ type Querier interface {
 	ListPendingSpacePublicAdmissionRequests(ctx context.Context, arg ListPendingSpacePublicAdmissionRequestsParams) ([]SpacePublicAdmissionRequest, error)
 	ListProjectionChangesAfterCursor(ctx context.Context, arg ListProjectionChangesAfterCursorParams) ([]DiagnosticProjectionChange, error)
 	ListProjectorDeadLetters(ctx context.Context, arg ListProjectorDeadLettersParams) ([]DiagnosticProjectorDeadLetter, error)
+	ListRecordingCompletionRecoveryBundles(ctx context.Context, arg ListRecordingCompletionRecoveryBundlesParams) ([]ListRecordingCompletionRecoveryBundlesRow, error)
 	ListRecordingDeadLetters(ctx context.Context, arg ListRecordingDeadLettersParams) ([]RecordingJob, error)
 	ListRecordingDeferredArtifactStates(ctx context.Context, arg ListRecordingDeferredArtifactStatesParams) ([]ListRecordingDeferredArtifactStatesRow, error)
 	ListRecordingFleetNodeObservations(ctx context.Context, arg ListRecordingFleetNodeObservationsParams) ([]ListRecordingFleetNodeObservationsRow, error)
@@ -377,6 +380,7 @@ type Querier interface {
 	LockRecordingCaptureLifecycleOperation(ctx context.Context, arg LockRecordingCaptureLifecycleOperationParams) (SyncExternalOperation, error)
 	LockRecordingCapturePlanHandle(ctx context.Context, planHandle string) error
 	LockRecordingCaptureSignalingAuthority(ctx context.Context, arg LockRecordingCaptureSignalingAuthorityParams) (LockRecordingCaptureSignalingAuthorityRow, error)
+	LockRecordingCompletionRecovery(ctx context.Context, arg LockRecordingCompletionRecoveryParams) (pgtype.UUID, error)
 	LockRecordingJobClaimRequest(ctx context.Context, claimRequestID string) error
 	LockRecordingRenderCommitAuthority(ctx context.Context, arg LockRecordingRenderCommitAuthorityParams) (LockRecordingRenderCommitAuthorityRow, error)
 	LockRecordingTranscriptionPreparationAuthority(ctx context.Context, arg LockRecordingTranscriptionPreparationAuthorityParams) (LockRecordingTranscriptionPreparationAuthorityRow, error)
@@ -441,6 +445,7 @@ type Querier interface {
 	// terminally failed job may be manually retried five times; each old failure
 	// is copied to append-only history before the same fenced job is requeued.
 	RequestDeferredRecordingRender(ctx context.Context, arg RequestDeferredRecordingRenderParams) (RequestDeferredRecordingRenderRow, error)
+	RequestRecordingCompletionRecovery(ctx context.Context, arg RequestRecordingCompletionRecoveryParams) (pgtype.UUID, error)
 	RequestRecordingStop(ctx context.Context, arg RequestRecordingStopParams) (RequestRecordingStopRow, error)
 	RequeueArtifactJob(ctx context.Context, arg RequeueArtifactJobParams) (ArtifactJob, error)
 	ReserveAPIKeyMutation(ctx context.Context, arg ReserveAPIKeyMutationParams) (ApiKeyMutationRequest, error)

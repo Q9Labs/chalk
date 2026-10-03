@@ -1752,6 +1752,17 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 		}
 	}
 
+	testCompletionRecovery(t, ctx, pool, priorMediaJob, claimCompletion, true)
+
+	failedRecoveryJob, _ := seedStoppedCapture("6a9b6a12-7457-4fe9-a58b-8b234d0be080", "6a9b6a12-7457-4fe9-a58b-8b234d0be081", "6a9b6a12-7457-4fe9-a58b-8b234d0be082", "6a9b6a12-7457-4fe9-a58b-8b234d0be083", "6a9b6a12-7457-4fe9-a58b-8b234d0be084", 0)
+	for _, value := range []string{"6a9b6a12-7457-4fe9-a58b-8b234d0be085", "6a9b6a12-7457-4fe9-a58b-8b234d0be086", "6a9b6a12-7457-4fe9-a58b-8b234d0be087"} {
+		_, lease := claimCompletion(value)
+		if _, err := repository.Fail(ctx, recordingpipeline.FailureInput{LeaseInput: lease, AvailableAt: time.Now(), ErrorCode: "capture_completion_failed", ErrorDetail: "stage=api_complete outcome=returned error_class=http http_status=503"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	testCompletionRecovery(t, ctx, pool, failedRecoveryJob, claimCompletion, false)
+
 	handoffInput := recordingpipeline.ReservationInput{
 		TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID,
 		RecordingID:           mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be041"),
@@ -2099,7 +2110,7 @@ func resetRecordingJobAuthorities(ctx context.Context, pool *pgxpool.Pool) error
 		return err
 	}
 	defer transaction.Rollback(ctx)
-	for _, table := range []string{"recording_render_commits", "recording_render_object_allocations", "recording_render_inputs", "recording_bundle_allocations", "recording_data_keys"} {
+	for _, table := range []string{"recording_completion_recoveries", "recording_render_commits", "recording_render_object_allocations", "recording_render_inputs", "recording_bundle_allocations", "recording_data_keys"} {
 		if _, err := transaction.Exec(ctx, `alter table `+table+` disable trigger user`); err != nil {
 			return err
 		}
