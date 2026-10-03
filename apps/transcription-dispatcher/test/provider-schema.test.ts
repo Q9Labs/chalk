@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ProviderError, providerSchemaFields } from "../src/errors.js";
-import { DeepInfraWhisperProvider } from "../src/providers.js";
+import { CloudflareWhisperProvider, DeepInfraWhisperProvider } from "../src/providers.js";
 import type { ProviderPolicy } from "../src/types.js";
 
 const policy: ProviderPolicy = {
@@ -53,6 +53,21 @@ describe("content-free provider schema diagnostics", () => {
   it("uses a bounded request ID header when the native request ID is null", async () => {
     const error = await failure({ ...payload, request_id: null, words: false }, { "x-request-id": "request-header-123" });
     expect(providerSchemaFields(error)).toMatchObject({ fieldPath: "words", expectedType: "array", actualType: "boolean", providerRequestId: "request-header-123" });
+  });
+
+  it("preserves the supported native camelCase request ID", async () => {
+    const error = await failure({ ...payload, request_id: null, requestId: "request-alias-123", words: false });
+    expect(providerSchemaFields(error).providerRequestId).toBe("request-alias-123");
+  });
+
+  it.each(["request_id", "requestId"])("preserves Cloudflare's nested %s on schema failure", async (key) => {
+    const provider = new CloudflareWhisperProvider({ policy, token: "PRIVATE_TOKEN", accountId: "test", adapterContractVersion: "test", fetch: async () => Response.json({ result: { text: "PRIVATE_TRANSCRIPT", segments: false, [key]: "request-nested-123" } }) });
+    await expect(provider.transcribe({ audio: new Uint8Array([1]), contentType: "audio/flac", chunkId: "chunk-1" })).rejects.toMatchObject({ schemaFailure: { fieldPath: "segments", actualType: "boolean", providerRequestId: "request-nested-123" } });
+  });
+
+  it("falls back to a valid header rather than logging a malformed body request ID", async () => {
+    const error = await failure({ ...payload, request_id: "PRIVATE TRANSCRIPT", words: false }, { "x-request-id": "request-header-123" });
+    expect(providerSchemaFields(error).providerRequestId).toBe("request-header-123");
   });
 
   it.each(["PRIVATE TRANSCRIPT", "x".repeat(129), { secret: "PRIVATE_VALUE" }])("does not log malformed request IDs", async (requestId) => {

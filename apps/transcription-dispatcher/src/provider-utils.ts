@@ -19,10 +19,18 @@ export async function parseProviderResponse(response: Response, maxBytes: number
 }
 
 function responseRequestId(response: Response, body: unknown): string {
-  const bodyId = typeof body === "object" && body !== null && "request_id" in body ? body.request_id : undefined;
-  const candidate = bodyId ?? response.headers.get("x-request-id") ?? response.headers.get("request-id");
+  const result = typeof body === "object" && body !== null && "result" in body ? body.result : undefined;
+  const candidates = [...requestIds(body), ...requestIds(result), response.headers.get("x-request-id"), response.headers.get("request-id")];
   // Only bounded identifier characters, never arbitrary response strings.
-  return typeof candidate === "string" && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u.test(candidate) ? candidate : "unavailable";
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u.test(candidate)) return candidate;
+  }
+  return "unavailable";
+}
+
+function requestIds(body: unknown): unknown[] {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return [];
+  return ["request_id" in body ? body.request_id : undefined, "requestId" in body ? body.requestId : undefined];
 }
 
 export async function readBoundedBody(response: Response, maxBytes: number): Promise<Uint8Array> {
