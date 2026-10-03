@@ -1,0 +1,14 @@
+# Generated files. `pnpm run regen` rebuilds them from their sources.
+# The `generated` merge driver keeps the current side without conflict markers
+# (installed by `pnpm run hooks:install`; clones without it fall back to a normal merge).
+# A kept side can be stale after a rebase, so run `pnpm run regen` and let
+# `pnpm run check:generated` confirm before pushing.
+apps/api/docs/generated-canonical-openapi.js linguist-generated merge=generated
+apps/api/internal/adapters/postgres/sqlc/** linguist-generated merge=generated
+apps/sync/lib/chalk_sync/contract/generated.ex linguist-generated merge=generated
+apps/sync/lib/chalk_sync/contract/generated_whiteboard_v1.ex linguist-generated merge=generated
+contract/generated/** linguist-generated merge=generated
+packages/diagnostics-contracts/fixtures/*.json linguist-generated merge=generated
+sdks/typescript/client/src/generated/** linguist-generated merge=generated
+tracker-human.html linguist-generated merge=generated
+tracker-human.md linguist-generated merge=generated

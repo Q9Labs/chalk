@@ -17,6 +17,8 @@ pnpm run contract:generate # also fixture proof and API design artifacts
 pnpm run contract:check    # non-mutating drift and contract checks
 ```
 
+`pnpm run regen` runs every generator in dependency order: contract, SDK, OpenAPI, API design, Sync contract, sqlc, migration `LatestVersion`, diagnostics fixtures, and tracker views. `pnpm run check:generated` verifies all of them in seconds without Postgres or Docker. Run `pnpm run hooks:install` once so rebases keep one side of generated files without conflicts; then run `pnpm run regen` to rebuild them. Toolchain versions live in `.tool-versions` (Node, Erlang, Elixir, OpenTofu), `apps/api/go.mod` (Go), and `packageManager` (pnpm). The language ratchet baseline is a reviewed baseline, not generated output: `check:generated` runs it but `regen` never rewrites it.
+
 The root gate includes contract checks. For endpoint declarations, see [the API route guide](../apps/api/docs/route-workflow.md).
 
 ## Preserve semantics

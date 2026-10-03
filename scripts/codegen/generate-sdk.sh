@@ -10,7 +10,6 @@ CODEGEN_SYNC_PROTOCOL_VERSION=1 node tools/contract-fixture-proof/src/emitters/s
 CODEGEN_SYNC_PROTOCOL_VERSION=1 node tools/contract-fixture-proof/src/emitters/sync-elixir.mjs
 node tools/contract-fixture-proof/src/emitters/whiteboard-typescript.mjs
 node tools/contract-fixture-proof/src/emitters/whiteboard-elixir.mjs
-(cd apps/sync && mix format lib/chalk_sync/contract/generated_whiteboard_v1.ex)
 pnpm exec openapi-typescript contract/generated/openapi.json --output sdks/typescript/client/src/generated/openapi-types.d.ts
 pnpm exec oxfmt --write \
   contract/generated/openapi.json \

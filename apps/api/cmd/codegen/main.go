@@ -15,6 +15,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/journeys"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
+	"github.com/q9labs/chalk/apps/api/internal/recordings"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -690,7 +691,7 @@ func fieldEnum(schemaName string, fieldName string) []string {
 		case "Episode", "EpisodeList", "CreateEpisodeRequest", "UpdateEpisodeRequest":
 			return []string{"active", "ending", "ended"}
 		case "Recording", "RecordingList", "CreateRecordingRequest", "UpdateRecordingRequest":
-			return []string{"pending", "processing", "completed", "failed"}
+			return []string{recordings.StatusPending, recordings.StatusProcessing, recordings.StatusCompleted, recordings.StatusFailed}
 		case "Transcript", "TranscriptList", "CreateTranscriptRequest", "UpdateTranscriptRequest":
 			return []string{
 				transcripts.StatusNotRequested, transcripts.StatusPreparing, transcripts.StatusTranscribing, transcripts.StatusVerifying,
