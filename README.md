@@ -106,3 +106,5 @@ Run `pnpm serve:tracker` for the read-only viewer at
 `http://127.0.0.1:4176/tracker-human.html`. `TRACKER_PORT` overrides the port;
 Ctrl-C stops the server. The HTML also opens directly as a file. Do not edit the
 generated Markdown or HTML views.
+
+<!-- Temporary docs-only gate scope proof. -->
