@@ -115,28 +115,33 @@ for (const defect of ["URL lifetime", "null headers", "montage font"]) {
       assert.equal(request.headers.get("x-proof"), defect === "null headers" ? null : "signed");
       return new Response(bytes);
     });
+    const signedHeaders = defect === "null headers" ? null : { "x-proof": "signed" };
     const run = {
       directory,
       tenantPath: "/tenant",
       recordingId: "recording",
       apiRequest: async (_method, path, body) => {
-        if (path.endsWith("/download-url")) {
-          if (defect === "URL lifetime") assert.ok(body.expires_in_seconds > 0 && body.expires_in_seconds <= 300, "API rejects URL lifetimes above 300 seconds");
-          return { url: "https://example.invalid/export", signed_headers: defect === "null headers" ? null : { "x-proof": "signed" } };
+        if (!path.endsWith("/download-url")) return { export: { status: "ready" } };
+        if (defect === "URL lifetime") {
+          assert.ok(body.expires_in_seconds > 0);
+          assert.ok(body.expires_in_seconds <= 300, "API rejects URL lifetimes above 300 seconds");
         }
-        return { export: { status: "ready" } };
+        return { url: "https://example.invalid/export", signed_headers: signedHeaders };
       },
     };
     let montage = false;
+    const outputs = {
+      ffprobe: JSON.stringify({ streams: [{ codec_type: "video", width: 1280, height: 720 }, { codec_type: "audio" }], format: { duration: "20" } }),
+      ffmpeg: "",
+    };
     const execute = async (program, args) => {
-      if (program === "ffprobe") return JSON.stringify({ streams: [{ codec_type: "video", width: 1280, height: 720 }, { codec_type: "audio" }], format: { duration: "20" } });
-      if (program === "magick" && args[0] === "-list") return "  Font: ProofSans\n";
-      if (program === "magick" && args[0] === "montage") {
-        montage = true;
-        if (defect === "montage font") {
-          assert.ok(args.includes("-font"), "montage requires an explicit installed font");
-          assert.equal(args[args.indexOf("-font") + 1], "ProofSans");
-        }
+      if (program !== "magick") return outputs[program];
+      if (args[0] === "-list") return "  Font: ProofSans\n";
+      assert.equal(args[0], "montage");
+      montage = true;
+      if (defect === "montage font") {
+        assert.ok(args.includes("-font"), "montage requires an explicit installed font");
+        assert.equal(args[args.indexOf("-font") + 1], "ProofSans");
       }
       return "";
     };
