@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/recordinglifecycle"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -50,7 +51,8 @@ func NewRecorderJobAuthority(job Job, facts ClaimFacts, claimRequestID utilities
 	var captureReadyAt *string
 	if facts.CaptureReadyAt != nil {
 		readyAt := facts.CaptureReadyAt.UTC()
-		if readyAt.IsZero() || readyAt.After(issuedAt.UTC()) {
+		// Preserve the clock-skew allowance used when this origin was admitted.
+		if readyAt.IsZero() || readyAt.After(issuedAt.UTC().Add(recordinglifecycle.MaximumCaptureReadyClockSkew)) {
 			return JobAuthority{}, ErrInvalidEnvelope
 		}
 		canonical := readyAt.Format(time.RFC3339Nano)

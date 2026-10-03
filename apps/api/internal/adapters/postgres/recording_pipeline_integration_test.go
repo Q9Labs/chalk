@@ -1594,9 +1594,10 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	if recovered, err := repository.RecoverExpired(ctx); err != nil || len(recovered) != 0 {
 		t.Fatalf("expired no-show job must not require a worker-driven recovery: %+v, %v", recovered, err)
 	}
+	// Immediate retries must already be available on the database clock.
 	failedRetry, err := repository.Fail(ctx, recordingpipeline.FailureInput{
 		LeaseInput: recordingpipeline.LeaseInput{JobID: retryJob.ID, AttemptCount: retryJob.AttemptCount, FencingGeneration: retryJob.FencingGeneration, LeaseToken: retryJob.Authority.LeaseToken, LeaseOwner: retryJob.Authority.LeaseOwner, CaptureEpoch: retryJob.Authority.Envelope.CaptureEpoch, EnvelopeDigest: retryJob.Authority.EnvelopeDigest},
-		ErrorCode:  "capture_shutdown_failed", ErrorDetail: "qualification fixture", AvailableAt: time.Now(),
+		ErrorCode:  "capture_shutdown_failed", ErrorDetail: "qualification fixture", AvailableAt: time.Now().Add(-time.Second),
 	})
 	if err != nil || failedRetry.State != recordingpipeline.JobStatePending {
 		t.Fatalf("fail stopped capture attempt: %+v, %v", failedRetry, err)
@@ -1740,7 +1741,7 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	}
 	for _, requestValue := range []string{"6a9b6a12-7457-4fe9-a58b-8b234d0be065", "6a9b6a12-7457-4fe9-a58b-8b234d0be066", "6a9b6a12-7457-4fe9-a58b-8b234d0be067"} {
 		job, lease := claimCompletion(requestValue)
-		failed, err := repository.Fail(ctx, recordingpipeline.FailureInput{LeaseInput: lease, AvailableAt: time.Now(), ErrorCode: "capture_completion_failed", ErrorDetail: "stage=api_complete outcome=returned error_class=http http_status=503"})
+		failed, err := repository.Fail(ctx, recordingpipeline.FailureInput{LeaseInput: lease, AvailableAt: time.Now().Add(-time.Second), ErrorCode: "capture_completion_failed", ErrorDetail: "stage=api_complete outcome=returned error_class=http http_status=503"})
 		if err != nil {
 			t.Fatalf("fail completion attempt %d: %v", job.AttemptCount, err)
 		}
@@ -1757,7 +1758,7 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	failedRecoveryJob, _ := seedStoppedCapture("6a9b6a12-7457-4fe9-a58b-8b234d0be080", "6a9b6a12-7457-4fe9-a58b-8b234d0be081", "6a9b6a12-7457-4fe9-a58b-8b234d0be082", "6a9b6a12-7457-4fe9-a58b-8b234d0be083", "6a9b6a12-7457-4fe9-a58b-8b234d0be084", 0)
 	for _, value := range []string{"6a9b6a12-7457-4fe9-a58b-8b234d0be085", "6a9b6a12-7457-4fe9-a58b-8b234d0be086", "6a9b6a12-7457-4fe9-a58b-8b234d0be087"} {
 		_, lease := claimCompletion(value)
-		if _, err := repository.Fail(ctx, recordingpipeline.FailureInput{LeaseInput: lease, AvailableAt: time.Now(), ErrorCode: "capture_completion_failed", ErrorDetail: "stage=api_complete outcome=returned error_class=http http_status=503"}); err != nil {
+		if _, err := repository.Fail(ctx, recordingpipeline.FailureInput{LeaseInput: lease, AvailableAt: time.Now().Add(-time.Second), ErrorCode: "capture_completion_failed", ErrorDetail: "stage=api_complete outcome=returned error_class=http http_status=503"}); err != nil {
 			t.Fatal(err)
 		}
 	}
