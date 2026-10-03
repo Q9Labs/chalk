@@ -170,6 +170,34 @@ func TestTenantPurgeTransactionProtectsKeptRowsAndSharedUsers(t *testing.T) {
 	}
 }
 
+func TestTenantPurgeWaitsForClearedTranscriptionPUTAuthority(t *testing.T) {
+	pool := purgeIntegrationPool(t)
+	f := createPurgeFixture(t, pool)
+	ctx := context.Background()
+	updated := time.Now().UTC().Truncate(time.Microsecond)
+	for _, kind := range []string{"transcription_chunk", "transcription_finalize"} {
+		id := accountTenantIntegrationID(t).String()
+		if _, err := pool.Exec(ctx, `insert into artifact_jobs(id,idempotency_key,tenant_id,artifact_kind,payload_schema_version,state,terminal_at,updated_at) values($1,$1::uuid::text,$2,$3,1,'cancelled',$4,$4)`, id, f.erased, kind, updated); err != nil {
+			t.Fatal(err)
+		}
+	}
+	repo := NewTenantPurgeRepository(pool)
+	plan, err := repo.Snapshot(ctx, f.scope, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.WriteDrain == nil || !plan.WriteDrain.NotBefore.Equal(updated.Add(17*time.Minute)) {
+		t.Fatalf("cleared worker leases did not hold PUT drain: %+v", plan.WriteDrain)
+	}
+	if _, err := repo.Apply(ctx, plan, fixtureReceipt(t, plan)); err == nil {
+		t.Fatal("purge committed before worker PUT authority drained")
+	}
+	var count int
+	if err := pool.QueryRow(ctx, `select count(*) from tenants`).Scan(&count); err != nil || count != 3 {
+		t.Fatalf("drain rejection changed Tenants: %d %v", count, err)
+	}
+}
+
 func TestTenantPurgeRejectsDriftAndRetainedLinks(t *testing.T) {
 	pool := purgeIntegrationPool(t)
 	f := createPurgeFixture(t, pool)

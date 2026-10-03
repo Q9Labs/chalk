@@ -10,7 +10,7 @@ import (
 )
 
 const transcriptionWorkloadRole = "transcription-dispatcher"
-const transcriptionWorkLeaseDuration = 15 * time.Minute
+const transcriptionWorkLeaseDuration = transcripts.WorkLeaseDuration
 
 type TranscriptWorkerService interface {
 	Claim(context.Context, transcripts.ClaimInput) (transcripts.Assignment, error)

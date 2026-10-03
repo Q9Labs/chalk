@@ -6,6 +6,7 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/q9labs/chalk/apps/api/internal/tenantpurge"
@@ -91,6 +92,9 @@ func (r TenantPurgeRepository) CleanupObjects(ctx context.Context, plan tenantpu
 }
 
 func verifyObjectCleanupTx(ctx context.Context, tx pgx.Tx, plan tenantpurge.Plan) error {
+	if err := plan.WriteDrain.Validate(time.Now().UTC()); err != nil {
+		return err
+	}
 	if err := checkPurgeScope(ctx, tx, plan.Scope, false); err != nil {
 		return err
 	}

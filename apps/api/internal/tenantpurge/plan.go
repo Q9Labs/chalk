@@ -63,6 +63,21 @@ type Plan struct {
 	Tables       []Table         `json:"tables"`
 	Backfill     *Backfill       `json:"backfill,omitempty"`
 	Objects      *ObjectManifest `json:"objects,omitempty"`
+	WriteDrain   *WriteDrain     `json:"write_drain,omitempty"`
+}
+
+// R2 has no atomic conditional DELETE. Direct upload permissions and worker
+// leases must expire before removing their rows; erased Tenants cannot mint
+// new permissions. SQL references are fenced separately during cleanup.
+type WriteDrain struct {
+	NotBefore time.Time `json:"not_before"`
+}
+
+func (d *WriteDrain) Validate(now time.Time) error {
+	if d == nil || d.NotBefore.After(now) {
+		return errors.New("verified expired object-write permissions and leases are required")
+	}
+	return nil
 }
 
 // WithoutValues preserves the approved row keys but keeps credentials and

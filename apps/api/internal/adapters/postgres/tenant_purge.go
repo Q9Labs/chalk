@@ -91,6 +91,10 @@ func snapshotPurge(ctx context.Context, tx pgx.Tx, scope tenantpurge.Scope, valu
 		}
 		plan.Tables = append(plan.Tables, data)
 	}
+	plan.WriteDrain, err = snapshotPurgeWriteDrain(ctx, tx, catalog, selected, ids)
+	if err != nil {
+		return plan, catalog, selected, err
+	}
 	return plan, catalog, selected, nil
 }
 
@@ -287,6 +291,9 @@ func (r TenantPurgeRepository) Apply(ctx context.Context, expected tenantpurge.P
 		return current, err
 	}
 	if err := tenantpurge.SameRows(expected, current); err != nil {
+		return current, err
+	}
+	if err := current.WriteDrain.Validate(time.Now().UTC()); err != nil {
 		return current, err
 	}
 	ids := purgeIDs(expected.Scope)

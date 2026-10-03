@@ -64,8 +64,13 @@ part of the approved schema digest; unexpected guards fail closed.
 
 Cleanup is a separate repeatable operation. It requires deleted Tenants to be
 absent, scans all remaining rows for object/shared-namespace references, and
-fences SQL writers during deletion. It uses conditional R2 deletes against
-backed-up ETags; unsupported preconditions or changed bytes stop cleanup. Each
+fences SQL writers during deletion. R2 ignores DELETE If-Match (verified with an isolated operator-owned probe).
+Before relational erase, persisted object-upload permissions and worker leases
+must have expired, with a two-minute drain margin, and all jobs/Episodes must be
+terminal. Removing the Tenant prevents new permissions. Cleanup checks backed-up
+ETags/sizes before ordinary deletes under the retained-reference writer fence;
+this is not atomic storage compare-and-delete. Other administrators must not
+write these scoped objects during the cleanup window. Changed bytes stop cleanup. Each
 confirmed absence is fsynced to the private journal. Restarting cleanup safely
 accepts already-absent objects. Keep the original approved plan and backup.
 Cloudflare SFU/RTK resources are not guessed from historical demo identifiers;

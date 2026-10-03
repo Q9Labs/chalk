@@ -63,12 +63,15 @@ func (m ObjectManifest) Validate(scope Scope) error {
 
 type ObjectStore interface {
 	InspectObject(context.Context, string) (objectstorage.ObjectFacts, error)
-	DeleteObjectIfMatch(context.Context, string, string) error
+	DeleteObject(context.Context, string) error
 }
 
 // CleanupObjects is repeatable after a committed relational erase. Callers
 // must first prove the deleted identities are absent and kept references are
-// clear. Object absence counts as success; changed bytes never get deleted.
+// clear and require the plan's expired write authorities. R2 ignores DELETE
+// If-Match, so this is an inspect/delete under an application write drain,
+// not atomic storage compare-and-delete. Outside administrators must not write
+// these scoped objects during cleanup. Absence counts as repeatable success.
 func CleanupObjects(ctx context.Context, store ObjectStore, manifest ObjectManifest, record func(StorageObject) error) error {
 	for _, object := range manifest.Objects {
 		facts, err := store.InspectObject(ctx, object.Key)
@@ -84,7 +87,7 @@ func CleanupObjects(ctx context.Context, store ObjectStore, manifest ObjectManif
 		if facts.Size != object.Size || strings.Trim(facts.ETag, "\"") != strings.Trim(object.ETag, "\"") {
 			return errors.New("approved object bytes changed; cleanup stopped")
 		}
-		if err := store.DeleteObjectIfMatch(ctx, object.Key, facts.ETag); err != nil {
+		if err := store.DeleteObject(ctx, object.Key); err != nil {
 			return fmt.Errorf("delete approved object: %w", err)
 		}
 		if _, err := store.InspectObject(ctx, object.Key); !errors.Is(err, objectstorage.ErrObjectNotFound) {

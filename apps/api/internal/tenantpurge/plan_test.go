@@ -72,3 +72,19 @@ func TestRowDriftAndBackupValueRedaction(t *testing.T) {
 		t.Fatal("byte drift accepted")
 	}
 }
+
+func TestWriteDrainRejectsMissingOrLivePermissions(t *testing.T) {
+	now := time.Now().UTC()
+	var missing *WriteDrain
+	if missing.Validate(now) == nil {
+		t.Fatal("unproved write drain accepted")
+	}
+	live := WriteDrain{NotBefore: now.Add(time.Minute)}
+	if live.Validate(now) == nil {
+		t.Fatal("live upload permissions accepted")
+	}
+	expired := WriteDrain{NotBefore: now.Add(-time.Minute)}
+	if err := expired.Validate(now); err != nil {
+		t.Fatal(err)
+	}
+}

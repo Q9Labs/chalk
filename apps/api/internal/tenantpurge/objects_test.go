@@ -20,7 +20,7 @@ func (s *fixtureStore) InspectObject(context.Context, string) (objectstorage.Obj
 	}
 	return objectstorage.ObjectFacts{Object: objectstorage.Object{Size: s.size, ETag: s.etag}}, nil
 }
-func (s *fixtureStore) DeleteObjectIfMatch(context.Context, string, string) error {
+func (s *fixtureStore) DeleteObject(context.Context, string) error {
 	s.deletes++
 	s.exists = false
 	return nil
