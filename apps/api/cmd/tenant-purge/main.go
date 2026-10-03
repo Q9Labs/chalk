@@ -23,8 +23,8 @@ import (
 )
 
 type options struct {
-	operation, scope, plan, planOut, backfill, objects, backup, result, journal string
-	apply, dryRun, export                                                       bool
+	operation, scope, plan, planOut, backfill, objects, backup, result, journal, backupRefresh string
+	apply, dryRun, export                                                                      bool
 }
 
 func main() {
@@ -43,13 +43,14 @@ func run() error {
 	flag.StringVar(&o.backfill, "backfill", "", "explicit Space candidates and service exclusions JSON")
 	flag.StringVar(&o.objects, "objects", "", "explicit backed-up storage object manifest JSON")
 	flag.StringVar(&o.backup, "backup-receipt", "", "restore-verified encrypted backup receipt")
+	flag.StringVar(&o.backupRefresh, "backup-refresh-command", "", "private executable: frozen before-images on stdin, verified backup receipt on stdout")
 	flag.StringVar(&o.result, "result-out", "", "create private relational commit receipt")
 	flag.StringVar(&o.journal, "journal", "", "private append-only object cleanup journal")
 	flag.BoolVar(&o.apply, "apply", false, "apply only an approved plan with verified backup")
 	flag.BoolVar(&o.dryRun, "dry-run", false, "read-only (also the default)")
 	flag.BoolVar(&o.export, "export", false, "stream affected before-images for encrypted backup; NEVER log this stream")
 	flag.Parse()
-	if flag.NArg() != 0 || o.apply && (o.dryRun || o.export) {
+	if flag.NArg() != 0 || o.apply && (o.dryRun || o.export) || o.backupRefresh != "" && (!o.apply || o.operation != "purge") {
 		return errors.New("invalid argument combination")
 	}
 	if o.operation != "purge" && o.operation != "backfill" && o.operation != "cleanup" {
@@ -105,6 +106,12 @@ func run() error {
 		var applied tenantpurge.Plan
 		if o.operation == "backfill" {
 			applied, err = repository.ApplyBackfill(ctx, plan, receipt)
+		} else if o.backupRefresh != "" {
+			refresh, refreshErr := frozenBackupCommand(o.backupRefresh)
+			if refreshErr != nil {
+				return refreshErr
+			}
+			applied, err = repository.ApplyWithFrozenBackup(ctx, plan, receipt, refresh)
 		} else {
 			applied, err = repository.Apply(ctx, plan, receipt)
 		}

@@ -88,3 +88,29 @@ func TestWriteDrainRejectsMissingOrLivePermissions(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestFrozenBackupAllowsOnlyExistingCleanupJobValues(t *testing.T) {
+	before := Plan{Version: 1, Kind: "purge", SchemaDigest: "same", Tables: []Table{
+		{Name: "tenants", Count: 1, Digest: "tenant"},
+		{Name: "transcription_cleanup_jobs", Count: 1, Digest: "pending", Rows: []Row{{Key: []byte(`{"id":"job"}`)}}},
+	}}
+	current := before
+	current.Tables = append([]Table(nil), before.Tables...)
+	current.Tables[1].Digest = "completed"
+	current.Tables[1].Rows = []Row{{Key: []byte(`{ "id": "job" }`)}}
+	if err := SameRowsForFrozenBackup(before, current); err != nil {
+		t.Fatal(err)
+	}
+	if SameRows(before, current) == nil {
+		t.Fatal("ordinary apply silently refreshed backup")
+	}
+	current.Tables[0].Digest = "different identity"
+	if SameRowsForFrozenBackup(before, current) == nil {
+		t.Fatal("Tenant byte drift accepted")
+	}
+	current.Tables[0] = before.Tables[0]
+	current.Tables[1].Rows = []Row{{Key: []byte(`{"id":"other-job"}`)}}
+	if SameRowsForFrozenBackup(before, current) == nil {
+		t.Fatal("different cleanup-job key accepted")
+	}
+}

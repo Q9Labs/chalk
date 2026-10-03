@@ -121,6 +121,45 @@ func SameRows(expected, current Plan) error {
 	return nil
 }
 
+// SameRowsForFrozenBackup permits refreshing values, never keys or counts,
+// only for cleanup jobs that the background retention worker completes. All
+// other approved rows (including Tenant identities) and the schema stay exact.
+func SameRowsForFrozenBackup(expected, current Plan) error {
+	copy := current
+	copy.Tables = append([]Table(nil), current.Tables...)
+	for index, table := range expected.Tables {
+		if table.Name != "transcription_cleanup_jobs" || index >= len(copy.Tables) {
+			continue
+		}
+		other := copy.Tables[index]
+		if other.Name != table.Name || len(table.Rows) != len(other.Rows) {
+			return errors.New("cleanup-job key set changed")
+		}
+		for rowIndex, row := range table.Rows {
+			var before, after interface{}
+			if err := json.Unmarshal(row.Key, &before); err != nil {
+				return err
+			}
+			if err := json.Unmarshal(other.Rows[rowIndex].Key, &after); err != nil {
+				return err
+			}
+			left, err := json.Marshal(before)
+			if err != nil {
+				return err
+			}
+			right, err := json.Marshal(after)
+			if err != nil {
+				return err
+			}
+			if string(left) != string(right) {
+				return errors.New("cleanup-job key set changed")
+			}
+		}
+		copy.Tables[index].Digest = table.Digest
+	}
+	return SameRows(expected, copy)
+}
+
 type BackupReceipt struct {
 	PlanDigest      string    `json:"plan_digest"`
 	ArchivePath     string    `json:"archive_path"`
