@@ -1083,6 +1083,7 @@ func startCaptureReader(ctx context.Context, peer CapturePeer, mid string, track
 		defer cancel()
 		lossFeedback := captureVideoLossFeedback{interval: keyFrameInterval}
 		var packetWindow capturePacketWindow
+		var replayWindow captureVideoReplayWindow
 		for {
 			if err := readerCtx.Err(); err != nil {
 				return
@@ -1116,6 +1117,11 @@ func startCaptureReader(ctx context.Context, peer CapturePeer, mid string, track
 					sendCaptureRuntimeEvent(readerCtx, events, captureRuntimeEvent{mid: mid, track: track, err: fmt.Errorf("request keyframe after RTP loss for capture MID %s: %w", mid, err)})
 					return
 				}
+			}
+			// Observe transport continuity before discarding media replays, so
+			// their sequence numbers do not create artificial loss feedback.
+			if video && !replayWindow.accept(packet, packet.SequenceNumber == packetWindow.sequence.last) {
+				continue
 			}
 			if err := sendCaptureRuntimeEvent(readerCtx, events, captureRuntimeEvent{mid: mid, track: track, packet: packet, at: receivedAt.UTC()}); err != nil {
 				return
