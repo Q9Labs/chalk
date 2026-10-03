@@ -16,16 +16,20 @@ const releaseRootFiles = new Set(["package.json", "pnpm-lock.yaml", "pnpm-worksp
 const attwIgnoreRules = ["cjs-resolves-to-esm", "internal-resolution-error"];
 const attwExcludedEntrypoints = ["./styles.css", "./src/styles.css", "./dist/styles/*", "./styles/*"];
 
-export const releasePackages = Object.freeze([
-  { directory: "packages/diagnostics-contracts", name: "@q9labsai/diagnostics-contracts", version: "0.1.1" },
-  { directory: "packages/assets", name: "@q9labsai/chalk-assets", version: "4.1.16" },
-  { directory: "packages/facehash", name: "@q9labsai/facehash", version: "4.1.16" },
-  { directory: "packages/ui", name: "@q9labsai/chalk-ui", version: "4.1.16" },
-  { directory: "packages/whiteboard", name: "@q9labsai/chalk-whiteboard", version: "4.1.16" },
-  { directory: "sdks/typescript/client", name: "@q9labsai/chalk-client", version: "4.1.16" },
-  { directory: "sdks/typescript/react", name: "@q9labsai/chalk-react", version: "4.1.16" },
-  { directory: "sdks/typescript/react-native", name: "@q9labsai/chalk-react-native", version: "4.1.16" },
-]);
+const releasePackageEntries = [
+  { directory: "packages/diagnostics-contracts", name: "@q9labsai/diagnostics-contracts", independent: true },
+  { directory: "packages/assets", name: "@q9labsai/chalk-assets" },
+  { directory: "packages/facehash", name: "@q9labsai/facehash" },
+  { directory: "packages/ui", name: "@q9labsai/chalk-ui" },
+  { directory: "packages/whiteboard", name: "@q9labsai/chalk-whiteboard" },
+  { directory: "sdks/typescript/client", name: "@q9labsai/chalk-client" },
+  { directory: "sdks/typescript/react", name: "@q9labsai/chalk-react" },
+  { directory: "sdks/typescript/react-native", name: "@q9labsai/chalk-react-native" },
+];
+const clientReleaseSource = "sdks/typescript/client/src/space-client/core.ts";
+
+// Versions come from each package.json, so a bump never edits this file.
+export const releasePackages = Object.freeze(releasePackageEntries.map((entry) => ({ ...entry, version: readJson(path.join(entry.directory, "package.json")).version })));
 
 const packageByName = new Map(releasePackages.map((releasePackage) => [releasePackage.name, releasePackage]));
 export const chalkReleaseVersion = releasePackages.find(({ name }) => name === "@q9labsai/chalk-assets").version;
@@ -34,9 +38,11 @@ export function usage() {
   return `Usage:
   pnpm run package:release                 Build, validate, and pack only (default)
   pnpm run package:release -- --publish   Build, validate, and publish after confirmation
+  pnpm run package:release -- --bump 4.2.0 Rewrite versions, workspace ranges, the client release id, and the lockfile
 
 Options:
-  --dry-run              Keep the default no-publish mode explicit
+  --dry-run              Keep the default no-publish mode explicit; with --bump, list the files without writing
+  --bump <version>       Set the synchronized Chalk release version everywhere, then refresh pnpm-lock.yaml
   --publish              Enable publishing; requires typing the release confirmation
   --skip-install         Skip pnpm install --frozen-lockfile
   --artifact-dir <path>  Use an empty directory outside the repository for tarballs
@@ -69,6 +75,20 @@ function parseInlineArtifactDirectory(context, argument) {
   return 0;
 }
 
+function parseBumpVersion(context, argumentsList, index, argument) {
+  const value = argumentsList[index + 1];
+  if (!value || value.startsWith("--")) throw new Error(`${argument} requires a version`);
+  context.options.bump = value;
+  return 1;
+}
+
+function parseInlineBumpVersion(context, _argumentsList, _index, argument) {
+  const value = argument.slice(argument.indexOf("=") + 1);
+  if (!value) throw new Error("--bump requires a version");
+  context.options.bump = value;
+  return 0;
+}
+
 const argumentHandlers = [
   { matches: (argument) => argument === "--", apply: () => 0 },
   {
@@ -82,6 +102,7 @@ const argumentHandlers = [
     matches: (argument) => argument === "--dry-run",
     apply: (context) => {
       selectMode(context, "dry-run");
+      context.options.dryRun = true;
       return 0;
     },
   },
@@ -99,6 +120,8 @@ const argumentHandlers = [
       return 0;
     },
   },
+  { matches: (argument) => argument === "--bump", apply: parseBumpVersion },
+  { matches: (argument) => argument.startsWith("--bump="), apply: parseInlineBumpVersion },
   { matches: (argument) => argument === "--artifact-dir" || argument === "--artifact-directory", apply: parseArtifactDirectory },
   { matches: (argument) => argument.startsWith("--artifact-dir=") || argument.startsWith("--artifact-directory="), apply: parseInlineArtifactDirectory },
 ];
@@ -108,7 +131,7 @@ function findArgumentHandler(argument) {
 }
 
 export function parseArguments(argumentsList) {
-  const context = { options: { mode: "dry-run", skipInstall: false, artifactDirectory: null, help: false }, mode: null };
+  const context = { options: { mode: "dry-run", skipInstall: false, artifactDirectory: null, help: false, bump: null, dryRun: false }, mode: null };
   for (let index = 0; index < argumentsList.length; index += 1) {
     const argument = argumentsList[index];
     const handler = findArgumentHandler(argument);
@@ -223,7 +246,7 @@ function fieldMismatch(field, actual, expected) {
 function manifestFieldErrors(releasePackage, packageManifest) {
   return [
     ["name", packageManifest.name, releasePackage.name],
-    ["version", packageManifest.version, releasePackage.version],
+    ["version", packageManifest.version, releasePackage.independent ? releasePackage.version : chalkReleaseVersion],
     ["license", packageManifest.license, "MIT"],
   ]
     .map(([field, actual, expected]) => fieldMismatch(field, actual, expected))
@@ -257,6 +280,11 @@ function assertPackageManifest(releasePackage, packageManifest) {
   if (errors.length > 0) throw new Error(`${releasePackage.directory}/package.json: ${errors.join("; ")}`);
 }
 
+function assertClientReleaseId() {
+  const expected = `chalk-client@${chalkReleaseVersion}`;
+  if (!readFileSync(path.join(repositoryRoot, clientReleaseSource), "utf8").includes(`"${expected}"`)) throw new Error(`${clientReleaseSource}: release id must be "${expected}"`);
+}
+
 export function loadReleaseManifests() {
   const manifests = new Map();
   for (const releasePackage of releasePackages) {
@@ -266,6 +294,7 @@ export function loadReleaseManifests() {
     assertPackageManifest(releasePackage, packageManifest);
     manifests.set(releasePackage.name, packageManifest);
   }
+  assertClientReleaseId();
   return manifests;
 }
 
@@ -537,9 +566,74 @@ async function dispatchRelease() {
   dispatchPublishWorkflow(head);
 }
 
+const versionSourceFiles = [clientReleaseSource];
+const semverPattern = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+
+function replaceAllText(text, from, to) {
+  return text.split(from).join(to);
+}
+
+export function bumpWorkspaceRange(range, fromVersion, toVersion) {
+  if (!workspaceRangeMatches(range, fromVersion) || !String(range).includes(fromVersion)) return range;
+  return replaceAllText(String(range), fromVersion, toVersion);
+}
+
+function bumpManifestText(text, fromVersion, toVersion) {
+  const packageManifest = JSON.parse(text);
+  let next = text;
+  const synchronized = releasePackages.some(({ name, independent }) => name === packageManifest.name && !independent);
+  if (synchronized) next = next.replace(`"version": "${fromVersion}"`, `"version": "${toVersion}"`);
+  for (const { name, range } of localDependencies(packageManifest)) {
+    const bumped = bumpWorkspaceRange(range, fromVersion, toVersion);
+    if (bumped !== range) next = replaceAllText(next, `"${name}": "${range}"`, `"${name}": "${bumped}"`);
+  }
+  return next;
+}
+
+// Takes a map of relative path to file text for every workspace package.json and version source.
+function assertBumpTarget(fromVersion, toVersion) {
+  if (!semverPattern.test(toVersion)) throw new Error(`--bump requires a version like 4.2.0, got ${toVersion}`);
+  if (toVersion === fromVersion) throw new Error(`Release version is already ${fromVersion}`);
+}
+
+function bumpFileText(relativePath, text, fromVersion, toVersion) {
+  if (versionSourceFiles.includes(relativePath)) return replaceAllText(text, fromVersion, toVersion);
+  return bumpManifestText(text, fromVersion, toVersion);
+}
+
+export function planVersionBump(files, fromVersion, toVersion) {
+  assertBumpTarget(fromVersion, toVersion);
+  const changes = new Map();
+  for (const [relativePath, text] of files) {
+    const next = bumpFileText(relativePath, text, fromVersion, toVersion);
+    if (next !== text) changes.set(relativePath, next);
+  }
+  return changes;
+}
+
+function readVersionBumpFiles() {
+  const manifests = gitLines(["ls-files", "--", "package.json", "**/package.json"]);
+  return new Map([...manifests, ...versionSourceFiles].map((relativePath) => [relativePath, readFileSync(path.join(repositoryRoot, relativePath), "utf8")]));
+}
+
+function applyVersionBump(changes) {
+  for (const [relativePath, text] of changes) writeFileSync(path.join(repositoryRoot, relativePath), text);
+  runCommand("pnpm", ["install", "--lockfile-only"], { label: "refresh pnpm-lock.yaml" });
+  console.log("Bump applied. Review the diff, then run pnpm run package:release.");
+}
+
+function bumpReleaseVersion(toVersion, { dryRun }) {
+  const changes = planVersionBump(readVersionBumpFiles(), chalkReleaseVersion, toVersion);
+  const note = dryRun ? " (dry run, nothing written)" : "";
+  console.log(`Bump ${chalkReleaseVersion} -> ${toVersion}${note}`);
+  for (const relativePath of changes.keys()) console.log(`- ${relativePath}`);
+  if (!dryRun) applyVersionBump(changes);
+}
+
 export async function main(argumentsList = process.argv.slice(2)) {
   const options = parseArguments(argumentsList);
   if (options.help) return console.log(usage());
+  if (options.bump) return bumpReleaseVersion(options.bump, { dryRun: options.dryRun });
   const order = prepareReleasePlan(options);
   installDependencies(options.skipInstall);
   const artifactDirectory = prepareArtifactDirectory(options.artifactDirectory);
