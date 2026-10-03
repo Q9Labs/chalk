@@ -268,6 +268,20 @@ func purgePKJoin(table purgeTable, a, b string) string {
 }
 
 func (r TenantPurgeRepository) Apply(ctx context.Context, expected tenantpurge.Plan, receipt tenantpurge.BackupReceipt) (tenantpurge.Plan, error) {
+	return r.apply(ctx, expected, receipt, nil)
+}
+
+// ApplyWithFrozenBackup refreshes only existing cleanup-job before-images
+// while the transaction fences writers. The callback must restore-verify the
+// full affected subset before returning its matching encrypted-backup receipt.
+func (r TenantPurgeRepository) ApplyWithFrozenBackup(ctx context.Context, expected tenantpurge.Plan, receipt tenantpurge.BackupReceipt, refresh func(context.Context, tenantpurge.Plan) (tenantpurge.BackupReceipt, error)) (tenantpurge.Plan, error) {
+	if refresh == nil {
+		return tenantpurge.Plan{}, errors.New("frozen backup callback required")
+	}
+	return r.apply(ctx, expected, receipt, refresh)
+}
+
+func (r TenantPurgeRepository) apply(ctx context.Context, expected tenantpurge.Plan, receipt tenantpurge.BackupReceipt, refresh func(context.Context, tenantpurge.Plan) (tenantpurge.BackupReceipt, error)) (tenantpurge.Plan, error) {
 	if expected.Kind != "purge" {
 		return tenantpurge.Plan{}, errors.New("not a purge plan")
 	}
@@ -286,11 +300,15 @@ func (r TenantPurgeRepository) Apply(ctx context.Context, expected tenantpurge.P
 	if err := lockPurgeTables(ctx, tx, catalog); err != nil {
 		return tenantpurge.Plan{}, err
 	}
-	current, _, selected, err := snapshotPurge(ctx, tx, expected.Scope, false)
+	current, _, selected, err := snapshotPurge(ctx, tx, expected.Scope, refresh != nil)
 	if err != nil {
 		return current, err
 	}
-	if err := tenantpurge.SameRows(expected, current); err != nil {
+	compare := tenantpurge.SameRows
+	if refresh != nil {
+		compare = tenantpurge.SameRowsForFrozenBackup
+	}
+	if err := compare(expected, current); err != nil {
 		return current, err
 	}
 	if err := current.WriteDrain.Validate(time.Now().UTC()); err != nil {
@@ -319,6 +337,16 @@ func (r TenantPurgeRepository) Apply(ctx context.Context, expected tenantpurge.P
 			return current, err
 		}
 		if err := checkRetainedObjectReferences(ctx, tx, catalog, selected, ids, *expected.Objects); err != nil {
+			return current, err
+		}
+	}
+	if refresh != nil {
+		current.Objects = expected.Objects
+		fresh, err := refresh(ctx, current)
+		if err != nil {
+			return current, fmt.Errorf("frozen backup: %w", err)
+		}
+		if err := fresh.Validate(current, time.Now().UTC()); err != nil {
 			return current, err
 		}
 	}

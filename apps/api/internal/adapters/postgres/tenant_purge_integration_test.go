@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -301,5 +303,71 @@ func TestTenantPurgeRejectsSharedLogicalJourney(t *testing.T) {
 	}
 	if _, err := repo.Snapshot(ctx, f.scope, false); err == nil {
 		t.Fatal("shared logical journey accepted")
+	}
+}
+
+func TestTenantPurgeFrozenBackupFencesWritersAndRequiresFreshReceipt(t *testing.T) {
+	for _, failBackup := range []bool{true, false} {
+		t.Run(map[bool]string{true: "backup-fails", false: "backup-succeeds"}[failBackup], func(t *testing.T) {
+			pool := purgeIntegrationPool(t)
+			f := createPurgeFixture(t, pool)
+			ctx := context.Background()
+			transcript, job := accountTenantIntegrationID(t).String(), accountTenantIntegrationID(t).String()
+			if _, err := pool.Exec(ctx, `insert into transcriptions(id,tenant_id,recording_id,space_id,episode_id,status,languages,deleted_at) select $1,tenant_id,id,space_id,episode_id,'deleted','{}',now() from recordings where tenant_id=$2 limit 1`, transcript, f.erased); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := pool.Exec(ctx, `insert into transcription_cleanup_jobs(id,tenant_id,recording_id,transcript_id,object_key,object_kind,due_at) values($1,$2,(select recording_id from transcriptions where id=$3),$3,'fixture/result.json','temp_result',now())`, job, f.erased, transcript); err != nil {
+				t.Fatal(err)
+			}
+			repo := NewTenantPurgeRepository(pool)
+			before, err := repo.Snapshot(ctx, f.scope, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := pool.Exec(ctx, `update transcription_cleanup_jobs set state='completed',verified_at=now(),updated_at=now() where id=$1`, job); err != nil {
+				t.Fatal(err)
+			}
+			called := false
+			_, err = repo.ApplyWithFrozenBackup(ctx, before, fixtureReceipt(t, before), func(ctx context.Context, frozen tenantpurge.Plan) (tenantpurge.BackupReceipt, error) {
+				called = true
+				for _, table := range frozen.Tables {
+					if table.Name == "transcription_cleanup_jobs" {
+						var row struct{ State string }
+						if len(table.Rows) != 1 || json.Unmarshal(table.Rows[0].Value, &row) != nil || row.State != "completed" {
+							t.Fatal("callback did not receive full fresh cleanup before-image")
+						}
+					}
+				}
+				other, err := pool.Begin(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer other.Rollback(ctx)
+				if _, err := other.Exec(ctx, `set local lock_timeout='50ms'`); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := other.Exec(ctx, `update spaces set name='Must not happen' where id=$1`, f.heldSpace); err == nil {
+					t.Fatal("writer escaped frozen-backup fence")
+				}
+				if failBackup {
+					return tenantpurge.BackupReceipt{}, errors.New("restore verification failed")
+				}
+				return fixtureReceipt(t, frozen), nil
+			})
+			if !called || (err != nil) != failBackup {
+				t.Fatalf("called=%v error=%v", called, err)
+			}
+			var count int
+			if err := pool.QueryRow(ctx, `select count(*) from tenants`).Scan(&count); err != nil {
+				t.Fatal(err)
+			}
+			want := 2
+			if failBackup {
+				want = 3
+			}
+			if count != want {
+				t.Fatalf("Tenant count %d, wanted %d", count, want)
+			}
+		})
 	}
 }

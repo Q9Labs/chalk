@@ -105,3 +105,23 @@ cuts/current webhook revisions and immutable Episode policies require care).
 Never load the staging schema into production or overwrite kept rows. Backfill
 reversal uses the backed-up before-images only if current values still match
 the recorded backfill result; otherwise stop for review.
+
+### A retention worker still completing approved cleanup jobs
+
+Use `--backup-refresh-command /absolute/private/executable` only with `--apply`
+for purge. It does not bypass the existing encrypted, restore-verified backup.
+Tenant identities, schema, row counts, row keys and every other table's bytes
+must still match. Only existing approved `transcription_cleanup_jobs` values
+may refresh. The operator holds its writer fence and sends full fresh
+before-images to the executable's stdin, never ordinary logs. The executable
+must encrypt a fresh full affected-row subset, `pg_dump`/restore-verify it,
+preserve the verified object-byte backup, and return a matching `BackupReceipt`
+JSON on stdout. Its new private plan must use `WithoutValues` row-key format
+and preserve the exact object manifest for subsequent cleanup.
+
+Production SQL credentials are removed from the child environment. No row
+erasure begins unless its receipt, table hashes, 14-day retention and actual
+encrypted archive SHA pass. Backup failure rolls back; the fence remains held
+through backup verification and erase. The backup executable owns its isolated
+restore-cluster cleanup, including interruption handling. After commit, use
+its refreshed private plan/receipt for storage cleanup, not the superseded plan.
