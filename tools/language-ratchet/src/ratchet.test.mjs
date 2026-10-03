@@ -15,6 +15,8 @@ test("Cloudflare vocabulary exceptions are exact wire-boundary paths", () => {
   assert.equal(exclusionReason("sdks/typescript/client/src/media/tracks.ts"), null);
   assert.equal(exclusionReason("apps/api/internal/adapters/cloudflare/sfu/adapter.go"), "provider SDK vocabulary adapter");
   assert.equal(exclusionReason("apps/api/internal/httpapi/sfu_signaling.go"), "provider SDK vocabulary adapter");
+  assert.equal(exclusionReason("apps/api/internal/recorderworker/ingress_measurement_test.go"), "provider SDK vocabulary adapter");
+  assert.equal(exclusionReason("scripts/capture-ingress/run.mjs"), "provider SDK vocabulary adapter");
   assert.equal(exclusionReason("apps/api/internal/mediapublications/reconciliation.go"), null);
   assert.equal(exclusionReason("apps/api/internal/httpapi/episodes.go"), null);
 });
