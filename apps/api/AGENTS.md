@@ -10,9 +10,9 @@ lifecycle, recordings, transcripts, integrations, audit logs, and webhooks.
 
 ## Development
 
-- Consult the relevant sections of `docs/code-standards.md` when writing Go here.
-- Read `docs/route-workflow.md` before adding a new route.
-- Read `docs/database-workflow.md` when doing database work.
+- Consult the relevant sections of `apps/api/docs/code-standards.md` when writing Go here.
+- Read `apps/api/docs/route-workflow.md` before adding a new route.
+- Read `apps/api/docs/database-workflow.md` when doing database work.
 - Run the gate before committing: `scripts/gate.sh`.
 - Add a trace-harness scenario when it helps test or explain the change.
 

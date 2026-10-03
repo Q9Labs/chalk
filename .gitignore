@@ -25,6 +25,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .env.local
 .private/
 /private/
+# Task-scoped credential and evidence folders from release and diagnosis runs.
+*.private/
+*.private.artifacts/
 /.codebase-memory/
 /typescript
 infrastructure/architecture-worker/.generated/
