@@ -10,6 +10,8 @@ fi
 export CHALK_API_GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN:-go1.25.13+auto}"
 export GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN}"
 export CHALK_API_ENV=local
+# Git worktrees break Go VCS stamping (exit 128); the gate never needs stamped binaries.
+export GOFLAGS="${GOFLAGS:--buildvcs=false}"
 
 describe() {
   cat <<'EOF'

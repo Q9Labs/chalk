@@ -63,7 +63,19 @@ if [[ -z "${CHALK_SYNC_TEST_DATABASE_URL:-${CHALK_DATABASE_URL:-}}" ]]; then
   exit 2
 fi
 
-run "Credo" mix credo --strict
-run "Tests (zero skips)" scripts/test-strict --max-cases "${CHALK_SYNC_TEST_MAX_CASES:-10}"
+# The SDK campaign imports the built diagnostics-contracts package, which a fresh checkout lacks.
+repository_root="$(cd ../.. && pwd)"
+if [[ ! -f "${repository_root}/packages/diagnostics-contracts/dist/index.js" ]]; then
+  if [[ ! -d "${repository_root}/node_modules/.bin" ]]; then
+    echo "node_modules is missing; run 'pnpm install --frozen-lockfile' at the repository root" >&2
+    exit 2
+  fi
+  run "Build diagnostics-contracts" pnpm --dir "${repository_root}/packages/diagnostics-contracts" run build
+fi
+
+# Bounded so a hung test run fails with a clear message instead of stalling the gate.
+test_timeout_seconds="${CHALK_SYNC_TEST_TIMEOUT_SECONDS:-1800}"
+run "Credo" "${repository_root}/scripts/gates/with-timeout.sh" 600 "Sync Credo" -- mix credo --strict
+run "Tests (zero skips)" "${repository_root}/scripts/gates/with-timeout.sh" "${test_timeout_seconds}" "Sync tests" -- scripts/test-strict --max-cases "${CHALK_SYNC_TEST_MAX_CASES:-10}"
 
 printf '\nSync server gate passed.\n'

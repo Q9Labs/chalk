@@ -67,3 +67,15 @@ shipment target from branch, release mode, or directory.
   The full mode selects every rule. Separate nightly and release-candidate
   workflows add multi-node partitions, PostgreSQL failover, sustained load,
   process restart, and real-browser proof.
+
+## Running a gate on the M4
+
+`scripts/gates/remote.sh <root|api|sync|recorder|-- command...>` runs a gate in
+a throwaway checkout on the M4 and always cleans up; `--dry-run` prints the plan.
+It snapshots the local commit plus uncommitted work as `origin/master` and the
+branch tip, so branch scope and Fallow work. Before starting it reaps stale
+`/tmp/chalk-*` checkouts and orphaned `chalk-gate-postgres-*` containers, and it
+refuses to start below `CHALK_REMOTE_MIN_FREE_GIB` free disk. Dependencies come
+from the M4 user's default pnpm, Go, Hex, and Mix caches. The root
+gate fails early when installed packages differ from `pnpm-lock.yaml`
+(`check-install.mjs`), and slow steps run under `with-timeout.sh`.

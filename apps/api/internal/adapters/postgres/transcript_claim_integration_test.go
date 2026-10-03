@@ -163,13 +163,15 @@ func newTranscriptClaimFixture(t *testing.T, kind, transcriptState string, expir
 		attemptCount = 4
 		jobState = "leased"
 	}
+	// The claim compares available_at with the caller's Now, so seed it from the same Go clock.
+	// The database's now() can run ahead of the host clock and hide a job that is due.
 	if _, err := tx.Exec(ctx, `insert into artifact_jobs (
 		id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id, artifact_kind,
 		payload_schema_version, state, available_at, attempt_count, attempt_limit,
 		lease_token_hash, lease_owner, lease_expires_at
-	) values ($1, $2, $3, $4, $5, $6, $7, 1, $8, now(), $9, 4, $10, $11, $12)`,
+	) values ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9, $10, 4, $11, $12, $13)`,
 		jobID.Bytes(), "transcript-claim-"+jobID.String(), tenantID.Bytes(), episodeID.Bytes(), recordingID.Bytes(), transcriptID.Bytes(), kind,
-		jobState, attemptCount, leaseHash, leaseOwner, leaseExpiresAt); err != nil {
+		jobState, time.Now(), attemptCount, leaseHash, leaseOwner, leaseExpiresAt); err != nil {
 		t.Fatalf("seed %s job: %v", kind, err)
 	}
 	return ctx, tx, NewTranscriptRepositoryWithPool(sqlc.New(tx), tx), transcriptID, jobID
