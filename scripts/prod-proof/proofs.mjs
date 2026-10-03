@@ -113,11 +113,16 @@ async function startCapture(run, pages) {
 }
 function statsSampler(run, pages) {
   const samples = [];
-  return async (phase) => {
+  let pending = Promise.resolve();
+  const sample = async (phase) => {
     const value = await stats(pages);
     samples.push({ phase, at: new Date().toISOString(), guests: value });
     await save(`${run.directory}/webrtc-stats.json`, samples);
     return value;
+  };
+  return (phase) => {
+    pending = pending.then(() => sample(phase));
+    return pending;
   };
 }
 async function baselineLayers(run, sample) {
