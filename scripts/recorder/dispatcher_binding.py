@@ -36,7 +36,7 @@ def has_unknown(value):
     return value is True
 
 
-def check_binding_plan(plan, release, key, version):
+def check_binding_plan(plan, release, key, version, config_digest=None):
     for item in plan.get("resource_changes", []):
         change = item["change"]
         if change["actions"] in (["no-op"], ["read"]):
@@ -50,9 +50,13 @@ def check_binding_plan(plan, release, key, version):
             expected[tag]["chalk_release_id"] = release
         if address.endswith("aws_lambda_function.dispatcher"):
             expected["environment"][0]["variables"]["CHALK_RELEASE_ID"] = release
+            if config_digest:
+                expected["environment"][0]["variables"]["CHALK_CONFIG_DIGEST"] = config_digest
+                for tag in ("tags", "tags_all"):
+                    expected[tag]["chalk_config_digest"] = config_digest
             expected.update(s3_key=key, s3_object_version=version, description=f"Track-aware transcription dispatcher ({release})")
         # These provider-computed fields change when identical code is selected under a new key.
-        computed = {"last_modified", "qualified_arn", "qualified_invoke_arn", "version"}
+        computed = {"last_modified", "qualified_arn", "qualified_invoke_arn", "version", "code_sha256", "source_code_size"}
         unknown = change.get("after_unknown", {})
         require(all(name in computed or not has_unknown(value) for name, value in unknown.items()), "unexpected unknown binding plan field")
         actual = copy.deepcopy(change["after"])
@@ -75,6 +79,9 @@ def dispatcher_root(provider, config):
 def verify_dispatcher(provider, config, release):
     root = dispatcher_root(provider, config)
     inputs = root["module"]["dispatcher"]
+    # Legacy recorder states have no API identity. The host verifier still
+    # compares this observed binding to its loaded API and approved manifest.
+    release = release or inputs["release_id"]
     require(inputs["release_id"] == release, "dispatcher state release binding mismatch")
     function = provider.aws("lambda", "get-function-configuration", "--function-name", config["function_name"])
     check_binding(function, release, inputs["artifact_sha256_base64"])
@@ -89,7 +96,8 @@ def bind(provider, config, manifest, dry_run):
     check_binding(function, inputs["release_id"], inputs["artifact_sha256_base64"])
     proof = {"action": "already-bound" if inputs["release_id"] == release else "rebind", "release_id": release,
              "previous_release_id": inputs["release_id"], "artifact_sha256": inputs["artifact_sha256"],
-             "artifact_action": "copy unchanged ZIP to versioned release key", "verified": False}
+             "artifact_action": "retain current versioned ZIP" if inputs["release_id"] == release else "copy unchanged ZIP to versioned release key",
+             "verified": False}
     if dry_run:
         return proof
     with tempfile.TemporaryDirectory(prefix="chalk-dispatcher-binding-") as directory:
@@ -115,11 +123,18 @@ def bind(provider, config, manifest, dry_run):
             copied = provider.aws("s3api", "copy-object", "--bucket", bucket, "--key", key, "--copy-source", source)
             version = copied.get("VersionId")
             require(version and version != "null", "dispatcher destination bucket must have versioning enabled")
-            inputs.update(release_id=release, artifact_s3_key=key, artifact_s3_object_version=version)
+            environment = {**function["Environment"]["Variables"], "CHALK_RELEASE_ID": release}
+            environment.pop("CHALK_CONFIG_DIGEST", None)
+            config_digest = "sha256:" + digest(json.dumps(environment, sort_keys=True, separators=(",", ":")))
+            inputs.update(release_id=release, artifact_s3_key=key, artifact_s3_object_version=version, config_digest=config_digest)
             private_json(path, root)
-            tofu("plan", "-input=false", "-no-color", "-out=binding.plan")
-            check_binding_plan(json.loads(tofu("show", "-json", "binding.plan")), release, key, version)
-            tofu("apply", "-input=false", "-no-color", "binding.plan")
+            # Full plans defer unchanged policies through log/Lambda dependencies.
+            # Finish each dependency first; never approve an unknown IAM policy.
+            for resource in ("aws_cloudwatch_log_group.dispatcher", "aws_lambda_function.dispatcher"):
+                tofu("plan", "-input=false", "-no-color", "-target=module.dispatcher." + resource, "-out=binding.plan")
+                check_binding_plan(json.loads(tofu("show", "-json", "binding.plan")), release, key, version, config_digest)
+                tofu("apply", "-input=false", "-no-color", "binding.plan")
+            tofu("plan", "-input=false", "-detailed-exitcode", "-no-color")
         proof.update(verify_dispatcher(provider, config, release))
     return proof
 

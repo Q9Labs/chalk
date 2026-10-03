@@ -36,6 +36,23 @@ class ReleaseContracts(unittest.TestCase):
             _, pins, _ = release.read_production()
         self.assertEqual(set(pins), {"capture", "render"})
 
+    def test_verify_existing_state_checks_observed_binding_against_loaded_api(self):
+        release = Release.__new__(Release)
+        release.state = {"published": {"updates": {}}, "role": "capture",
+                         "managed": {"release_id": "managed-old", "source_revision": "a" * 40}}
+        release.args = Mock(region="test-region", profile="test-profile")
+        release.config = {"dispatcher": {}, "runtime": {"instance_id": "test", "user_id": 1000, "parameter_prefix": "/test"}}
+        release.provider = Mock()
+        release.provider.aws.side_effect = [{"Command": {"CommandId": "test"}},
+                                            {"Status": "Success", "StandardOutputContent": '{"result":"PASS"}'}]
+        release.save = Mock()
+        with patch("release.verify_dispatcher", return_value={"release_id": "retained-api", "verified": True}) as binding:
+            release.verify()
+        binding.assert_called_once_with(release.provider, {}, None)
+        command = release.provider.aws.call_args_list[0].kwargs["payload"]["Parameters"]["commands"][0]
+        encoded = command.split("python3 - ", 1)[1].split(" ", 1)[0]
+        self.assertEqual(json.loads(base64.b64decode(encoded))["dispatcher_release_id"], "retained-api")
+
     def test_already_paused_scheduler_recovery_is_read_only(self):
         release = Release.__new__(Release)
         release.config = {"dispatcher": {"scheduler_name": "test", "scheduler_group": "default"}}

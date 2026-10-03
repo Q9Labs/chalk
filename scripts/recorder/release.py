@@ -447,7 +447,7 @@ class Release:
 
     def verify(self):
         require(self.state.get("published") and self.state.get("managed"), "verification requires published pins and managed deployment identity")
-        binding = verify_dispatcher(self.provider, self.config["dispatcher"], self.state["managed"]["api_release_id"])
+        binding = verify_dispatcher(self.provider, self.config["dispatcher"], self.state["managed"].get("api_release_id"))
         options = {"dispatcher_release_id": binding["release_id"], **self.state["managed"], "region": self.args.region, "user_id": self.config["runtime"]["user_id"],
                    "parameter_prefix": self.config["runtime"]["parameter_prefix"],
                    "pins": {self.state["role"]: self.state["published"]["updates"]}}

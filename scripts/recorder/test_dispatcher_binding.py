@@ -39,6 +39,33 @@ class DispatcherBindingTests(unittest.TestCase):
             check_binding_plan(plan, "new-release", "new.zip", "new")
 
 class BindingDeploymentTests(unittest.TestCase):
+    def test_retained_api_dry_run_explicitly_needs_no_copy(self):
+        from unittest.mock import Mock, patch
+        from dispatcher_binding import bind
+        provider = Mock()
+        provider.aws.return_value = {"State": "Active", "LastUpdateStatus": "Successful", "CodeSha256": "code-hash",
+                                     "Environment": {"Variables": {"CHALK_RELEASE_ID": "retained-api"}}}
+        root = {"module": {"dispatcher": {"release_id": "retained-api", "artifact_sha256": "digest", "artifact_sha256_base64": "code-hash"}}}
+        with patch("dispatcher_binding.dispatcher_root", return_value=root):
+            proof = bind(provider, {"function_name": "dispatcher"}, {"component_releases": {"api": {"release_id": "retained-api"}}}, True)
+        self.assertEqual(proof["action"], "already-bound")
+        self.assertEqual(proof["artifact_action"], "retain current versioned ZIP")
+        provider.command.assert_not_called()
+
+    def test_e30_plan_rejects_deferred_policies_but_allows_targeted_binding(self):
+        import json
+        from pathlib import Path
+        plan = json.loads(Path(__file__).with_name("fixtures").joinpath("dispatcher-rebind-plan.json").read_text())
+        with self.assertRaisesRegex(ValueError, "allowlist"):
+            check_binding_plan(plan, "next-api-release", "next-api-release/qualified.zip", "next-version", "redacted-16")
+        for suffix in ("aws_cloudwatch_log_group.dispatcher", "aws_lambda_function.dispatcher"):
+            resource = next(item for item in plan["resource_changes"] if item["address"].endswith(suffix))
+            check_binding_plan({"resource_changes": [resource]}, "next-api-release", "next-api-release/qualified.zip", "next-version", "redacted-16")
+        function = next(item for item in plan["resource_changes"] if item["address"].endswith("aws_lambda_function.dispatcher"))
+        for field in ("code_sha256", "source_code_size"):
+            function["change"]["after_unknown"][field] = True
+        check_binding_plan({"resource_changes": [function]}, "next-api-release", "next-api-release/qualified.zip", "next-version", "redacted-16")
+
     def test_rebind_copies_pinned_bytes_and_verifies_after_apply(self):
         import base64
         import json

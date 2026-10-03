@@ -332,16 +332,22 @@ For a changed API component, it:
    bytes match the recorded SHA-256.
 2. Copies those bytes to a key containing the API component release and digest,
    pins the returned S3 version, and plans the binding change.
-3. Allows only the Lambda release environment value, artifact location,
-   description and release tags, plus the log group's release tag. It applies
-   that saved plan and verifies Lambda health, code digest and release readback.
+3. Refreshes the non-secret runtime configuration digest and allows only the
+   Lambda release/configuration digests, artifact location, description and
+   corresponding tags, plus the log group's release tag. It applies guarded
+   targeted plans for the log group and then Lambda, avoiding deferred unknown
+   IAM policy changes. A full zero-drift plan and Lambda health, code digest and
+   release readback must pass afterward.
 
 The release fails if binding or verification fails, even if the host deployment
 succeeded. `pnpm release:recorder deploy` keeps the scheduler disabled until its
 loaded-runtime verifier also matches the observed Lambda binding to the running
 API process. Scheduler resume reconstructs fresh state so it cannot restore an
-old binding. If deployment fails, inspect the failure and rerun with the same
-manifest; do not manually enable the scheduler before verification passes.
+old binding. If deployment fails, inspect the failure and restore a clean
+baseline before retrying with the same manifest. A failed Lambda apply after
+the log-tag step can leave that tag ahead of the bound release; restore the tag
+to the currently bound release before retrying. Do not manually enable the
+scheduler before verification passes.
 Requests already running during a release can briefly receive 401; normal fenced
 retries reconcile them after the binding update.
 

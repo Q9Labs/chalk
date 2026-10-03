@@ -1,0 +1,164 @@
+{
+  "resource_changes": [
+    {
+      "address": "module.dispatcher.aws_cloudwatch_log_group.dispatcher",
+      "change": {
+        "actions": ["update"],
+        "after_unknown": {},
+        "before": {
+          "tags": {
+            "chalk_component": "redacted-5",
+            "chalk_environment": "redacted-6",
+            "chalk_release_id": "previous-api-release"
+          },
+          "tags_all": {
+            "chalk_component": "redacted-5",
+            "chalk_environment": "redacted-6",
+            "chalk_release_id": "previous-api-release"
+          }
+        },
+        "after": {
+          "tags": {
+            "chalk_component": "redacted-5",
+            "chalk_environment": "redacted-6",
+            "chalk_release_id": "next-api-release"
+          },
+          "tags_all": {
+            "chalk_component": "redacted-5",
+            "chalk_environment": "redacted-6",
+            "chalk_release_id": "next-api-release"
+          }
+        }
+      }
+    },
+    {
+      "address": "module.dispatcher.aws_iam_role_policy.dispatcher",
+      "change": {
+        "actions": ["update"],
+        "after_unknown": {
+          "policy": true
+        },
+        "before": {
+          "policy": "redacted-7"
+        },
+        "after": {
+          "policy": null
+        }
+      }
+    },
+    {
+      "address": "module.dispatcher.aws_iam_role_policy.scheduler",
+      "change": {
+        "actions": ["update"],
+        "after_unknown": {
+          "policy": true
+        },
+        "before": {
+          "policy": "redacted-8"
+        },
+        "after": {
+          "policy": null
+        }
+      }
+    },
+    {
+      "address": "module.dispatcher.aws_lambda_function.dispatcher",
+      "change": {
+        "actions": ["update"],
+        "after_unknown": {
+          "architectures": [false],
+          "dead_letter_config": [],
+          "environment": [
+            {
+              "variables": {}
+            }
+          ],
+          "ephemeral_storage": [{}],
+          "file_system_config": [],
+          "image_config": [],
+          "last_modified": true,
+          "layers": [],
+          "logging_config": [{}],
+          "snap_start": [],
+          "tags": {},
+          "tags_all": {},
+          "tracing_config": [{}],
+          "vpc_config": []
+        },
+        "before": {
+          "description": "redacted-9",
+          "environment": [
+            {
+              "variables": {
+                "CHALK_RELEASE_ID": "previous-api-release",
+                "CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN": "redacted-10",
+                "CHALK_CONFIG_DIGEST": "redacted-14"
+              }
+            }
+          ],
+          "last_modified": "redacted-11",
+          "s3_key": "redacted-12",
+          "s3_object_version": "redacted-13",
+          "tags": {
+            "chalk_component": "redacted-5",
+            "chalk_config_digest": "redacted-14",
+            "chalk_environment": "redacted-6",
+            "chalk_release_id": "previous-api-release",
+            "chalk_release_manifest_digest": "redacted-15"
+          },
+          "tags_all": {
+            "chalk_component": "redacted-5",
+            "chalk_config_digest": "redacted-14",
+            "chalk_environment": "redacted-6",
+            "chalk_release_id": "previous-api-release",
+            "chalk_release_manifest_digest": "redacted-15"
+          }
+        },
+        "after": {
+          "description": "Track-aware transcription dispatcher (next-api-release)",
+          "environment": [
+            {
+              "variables": {
+                "CHALK_RELEASE_ID": "next-api-release",
+                "CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN": "redacted-10",
+                "CHALK_CONFIG_DIGEST": "redacted-16"
+              }
+            }
+          ],
+          "last_modified": null,
+          "s3_key": "next-api-release/qualified.zip",
+          "s3_object_version": "next-version",
+          "tags": {
+            "chalk_component": "redacted-5",
+            "chalk_config_digest": "redacted-16",
+            "chalk_environment": "redacted-6",
+            "chalk_release_id": "next-api-release",
+            "chalk_release_manifest_digest": "redacted-15"
+          },
+          "tags_all": {
+            "chalk_component": "redacted-5",
+            "chalk_config_digest": "redacted-16",
+            "chalk_environment": "redacted-6",
+            "chalk_release_id": "next-api-release",
+            "chalk_release_manifest_digest": "redacted-15"
+          }
+        }
+      }
+    },
+    {
+      "address": "module.dispatcher.aws_sqs_queue_policy.async_failure",
+      "change": {
+        "actions": ["update"],
+        "after_unknown": {
+          "policy": true
+        },
+        "before": {
+          "policy": "redacted-17"
+        },
+        "after": {
+          "policy": null
+        }
+      }
+    }
+  ]
+}
