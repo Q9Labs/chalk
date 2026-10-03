@@ -5,7 +5,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 tofu_dir="$repo_root/infrastructure/recorder"
 
 node --test "$tofu_dir/images/cpu/relocate-renderer.test.mjs"
-python3 -m unittest discover -s "$repo_root/scripts/recorder" -p 'test_release.py'
+python3 -m unittest discover -s "$repo_root/scripts/recorder" -p 'test_*.py'
 bash -n "$repo_root/scripts/recorder/build-and-seal.sh"
 
 tofu -chdir="$tofu_dir" fmt -check -recursive

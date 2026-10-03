@@ -254,6 +254,43 @@ receives `--request <json> --receipt <json>` with schema_version, role, source_c
 release_id, image_id, image_digest, region and size. It must clean up its resources
 and return those same identities plus `result: "PASS"` and
 `fleet_equivalent_signed_boot: true`. Missing or mismatched evidence blocks pins.
+The executable is `scripts/recorder/boot-check.py`. Run it from a checkout with Go,
+Python 3, AWS CLI, `doctl`, SSH and curl installed. Set
+`CHALK_BOOT_CHECK_AWS_PROFILE`, `CHALK_BOOT_CHECK_AWS_REGION` and
+`CHALK_BOOT_CHECK_DO_CONTEXT`; set `CHALK_BOOT_CHECK_INSTANCE_ID` when the account
+has more than one online managed instance. No controller/issuer private key leaves
+the managed runtime. `CHALK_BOOT_CHECK_PROVIDER` may point to a prebuilt
+`apps/api/cmd/recorder-boot-probe` binary instead of using `go run`.
+
+```sh
+BOOT_CHECK="$PWD/scripts/recorder/boot-check.py"
+pnpm release:recorder qualify --role capture --state "$RELEASE_STATE" --boot-check "$BOOT_CHECK"
+```
+
+The hook reads current role settings and uses the fleet's provider adapter and
+controller bootstrap API. It creates a separately named/tagged diagnostic node,
+mirrors bootstrap egress, and blocks the worker API so it cannot take live work.
+All configured fleet SSH keys are preserved; the task key is added only to the
+diagnostic create payload, outside the fleet config's key-count limit. A durable
+create fence blocks a second POST after an accepted or uncertain response; a
+definite provider 422 may retry without counting as another boot.
+There are no pin, demand or fleet-setting writes. The only guest addition copies
+the bootstrap environment **after** the unchanged bootstrap/worker commands.
+Private evidence beside the receipt records actual create/user-data hashes,
+provider inventory, cloud-init, issuer issuance and the installed certificate.
+PASS requires the candidate manifest, matching issuer certificate, CA/identity/
+serial verification and confirmed scoped cleanup. Registration alone is FAIL.
+
+A detached watchdog owns cleanup even if the caller exits. The default invocation
+budget is eight minutes, below the release command's ten-minute hook timeout;
+the runner rejects compute estimates above $0.05. For a separately authorized
+diagnostic, `CHALK_BOOT_CHECK_DEADLINE_SECONDS` may extend the cap to 2700 seconds
+and `CHALK_BOOT_CHECK_BOOT_TIMEOUT` bounds registration inside that cap. Never
+extend a release qualification past its caller timeout. On cleanup failure, use
+the receipt's private evidence directory and `ledger.jsonl` to recover the exact
+owned IDs; do not scan/delete shared production tags. A failed or interrupted
+attempt cannot be repaired into a passing cold-boot receipt.
+
 Only one release owner may publish: SSM has no atomic compare-and-swap. Publication
 checks the planned version/hash immediately before writing, preserves other values
 and KMS metadata, and verifies readback. Deploy uses a canonical managed manifest
