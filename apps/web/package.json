@@ -8,7 +8,7 @@
     "dev": "node ../../scripts/dev-log.mjs dev:raw",
     "dev:raw": "node scripts/local-dev.mjs",
     "dev:vite": "vite dev --host 127.0.0.1 --port 3070",
-    "build": "pnpm run sync:public && vite build && pnpm exec tsx scripts/prepare-pages-spa.mjs",
+    "build": "pnpm --filter @q9labsai/chalk-whiteboard run build && pnpm run sync:public && vite build && pnpm exec tsx scripts/prepare-pages-spa.mjs",
     "sync:public": "pnpm exec tsx scripts/sync-public-assets.ts",
     "preview": "vite preview",
     "test": "pnpm exec vitest run --config ./vitest.config.ts",
