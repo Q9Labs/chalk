@@ -24,23 +24,24 @@ import (
 )
 
 type Input struct {
-	Operation          string                          `json:"operation"`
-	Environment        string                          `json:"environment"`
-	Role               workeridentity.Role             `json:"role"`
-	OwnerTag           string                          `json:"owner_tag"`
-	ProjectID          string                          `json:"project_id"`
-	VPCUUID            string                          `json:"vpc_uuid"`
-	SSHKeyIDs          []int64                         `json:"ssh_key_ids"`
-	DiagnosticSSHKeyID int64                           `json:"diagnostic_ssh_key_id"`
-	Request            recorderfleet.EnsureNodeRequest `json:"request"`
-	ProviderID         string                          `json:"provider_id"`
-	EvidencePath       string                          `json:"evidence_path"`
-	MutationDeadline   time.Time                       `json:"mutation_deadline"`
-	CertificatePEM     string                          `json:"certificate_pem"`
-	CAPEM              string                          `json:"ca_pem"`
-	Serial             string                          `json:"serial"`
-	Identity           recorderfleet.NodeIdentity      `json:"identity"`
-	TrustDomain        string                          `json:"trust_domain"`
+	Operation           string                          `json:"operation"`
+	Environment         string                          `json:"environment"`
+	Role                workeridentity.Role             `json:"role"`
+	OwnerTag            string                          `json:"owner_tag"`
+	ProjectID           string                          `json:"project_id"`
+	VPCUUID             string                          `json:"vpc_uuid"`
+	SSHKeyIDs           []int64                         `json:"ssh_key_ids"`
+	DiagnosticSSHKeyID  int64                           `json:"diagnostic_ssh_key_id"`
+	EvidenceBootCommand []string                        `json:"evidence_boot_command"`
+	Request             recorderfleet.EnsureNodeRequest `json:"request"`
+	ProviderID          string                          `json:"provider_id"`
+	EvidencePath        string                          `json:"evidence_path"`
+	MutationDeadline    time.Time                       `json:"mutation_deadline"`
+	CertificatePEM      string                          `json:"certificate_pem"`
+	CAPEM               string                          `json:"ca_pem"`
+	Serial              string                          `json:"serial"`
+	Identity            recorderfleet.NodeIdentity      `json:"identity"`
+	TrustDomain         string                          `json:"trust_domain"`
 }
 
 type Output struct {
@@ -66,10 +67,11 @@ type auditEntry struct {
 }
 
 type evidenceTransport struct {
-	next               http.RoundTripper
-	path               string
-	diagnosticSSHKeyID int64
-	deadline           time.Time
+	next                http.RoundTripper
+	path                string
+	diagnosticSSHKeyID  int64
+	evidenceBootCommand []string
+	deadline            time.Time
 }
 
 func addDiagnosticSSHKey(body []byte, keyID int64) ([]byte, error) {
@@ -119,6 +121,32 @@ func preserveEnvironment(body []byte) ([]byte, error) {
 	return bytes.Replace(body, original, updated, 1), nil
 }
 
+func addEvidenceBootCommand(body []byte, command []string) ([]byte, error) {
+	var payload createRequest
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, err
+	}
+	if !strings.HasPrefix(payload.UserData, "#cloud-config\nwrite_files:\n") || len(command) != 3 || command[0] != "/bin/sh" || command[1] != "-c" {
+		return nil, errors.New("invalid evidence cloud-init command")
+	}
+	encoded, err := json.Marshal(command)
+	if err != nil {
+		return nil, err
+	}
+	original, err := json.Marshal(payload.UserData)
+	if err != nil {
+		return nil, err
+	}
+	updated, err := json.Marshal(strings.Replace(payload.UserData, "#cloud-config\n", "#cloud-config\nbootcmd:\n  - "+string(encoded)+"\n", 1))
+	if err != nil {
+		return nil, err
+	}
+	if bytes.Count(body, original) != 1 {
+		return nil, errors.New("ambiguous evidence cloud-init payload")
+	}
+	return bytes.Replace(body, original, updated, 1), nil
+}
+
 func (t evidenceTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	var original, body []byte
 	var err error
@@ -138,6 +166,12 @@ func (t evidenceTransport) RoundTrip(request *http.Request) (*http.Response, err
 			}
 			if t.diagnosticSSHKeyID > 0 {
 				body, err = addDiagnosticSSHKey(body, t.diagnosticSSHKeyID)
+				if err != nil {
+					return nil, err
+				}
+			}
+			if len(t.evidenceBootCommand) > 0 {
+				body, err = addEvidenceBootCommand(body, t.evidenceBootCommand)
 				if err != nil {
 					return nil, err
 				}
@@ -212,7 +246,7 @@ func Run(ctx context.Context, input Input, token string) (Output, error) {
 	adapter, err := digitalocean.NewRecorderFleet(digitalocean.RecorderFleetConfig{
 		Token: token, Environment: input.Environment, Role: input.Role, OwnerTag: input.OwnerTag,
 		ProjectID: input.ProjectID, VPCUUID: input.VPCUUID, SSHKeyIDs: input.SSHKeyIDs,
-		HTTPClient: &http.Client{Transport: evidenceTransport{next: transport, path: input.EvidencePath, deadline: input.MutationDeadline, diagnosticSSHKeyID: input.DiagnosticSSHKeyID}, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
+		HTTPClient: &http.Client{Transport: evidenceTransport{next: transport, path: input.EvidencePath, deadline: input.MutationDeadline, diagnosticSSHKeyID: input.DiagnosticSSHKeyID, evidenceBootCommand: input.EvidenceBootCommand}, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 	})
 	if err != nil {
 		return Output{}, err

@@ -20,6 +20,60 @@ host = load('boot-check-host')
 
 
 class BootCheckTests(unittest.TestCase):
+    def test_early_upload_is_private_fixed_object_and_does_not_need_ssh(self):
+        from datetime import datetime, timezone
+        from urllib.parse import urlsplit, parse_qs
+        credentials = {'AccessKeyId': 'EXAMPLE', 'SecretAccessKey': 'fixture', 'SessionToken': 'temporary token'}
+        url = boot.upload.presigned_put('private-bucket', 'bootdiag/owned/guest.json', 'region', credentials, 480,
+                                        datetime(2026, 10, 3, tzinfo=timezone.utc))
+        parsed = urlsplit(url)
+        self.assertEqual(parsed.path, '/bootdiag/owned/guest.json')
+        self.assertEqual(parse_qs(parsed.query)['X-Amz-Expires'], ['480'])
+        self.assertEqual(parse_qs(parsed.query)['X-Amz-SignedHeaders'], ['host'])
+        self.assertNotIn('fixture', url)
+        command = boot.upload.boot_command('def collect(): return {}', url, 10, {'name': 'owned'})
+        self.assertEqual(command[:2], ['/bin/sh', '-c'])
+        self.assertTrue(command[2].endswith('2>&1 &'))
+        self.assertNotIn('ssh ', command[2])
+
+    def test_guest_object_cleanup_rejects_wrong_owner_and_removes_versions(self):
+        class Service:
+            def __init__(self):
+                self.versions = [{'Key': 'bootdiag/owned/guest.json', 'VersionId': 'one'}]
+                self.deleted = []
+            def aws(self, service, operation, *args):
+                if operation == 'list-object-versions':
+                    return {'Versions': self.versions}
+                if '--version-id' in args:
+                    self.deleted.append(args[-1]); self.versions = []
+                return {}
+        service = Service()
+        state = {'name': 'owned', 'evidence_bucket': 'private', 'evidence_key': 'bootdiag/owned/guest.json'}
+        boot.upload.clean_objects(service, state)
+        self.assertEqual(service.deleted, ['one'])
+        with self.assertRaisesRegex(RuntimeError, 'ownership'):
+            boot.upload.clean_objects(service, {**state, 'evidence_key': 'other/guest.json'})
+
+    def test_uploaded_guest_evidence_requires_exact_boot_and_fresh_timestamp(self):
+        class Service:
+            def __init__(self, value): self.value = value
+            def aws(self, service, operation, *args): Path(args[-1]).write_text(json.dumps(self.value)); return {}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            boot.append(path, {'name': 'owned', 'generation': 7, 'started_at': 10, 'deadline': 20,
+                               'evidence_bucket': 'private', 'evidence_key': 'bootdiag/owned/guest.json'})
+            value = {'binding': {'name': 'owned', 'boot_generation': 7}, 'collected_at': 15}
+            self.assertEqual(boot.guest_evidence(Service(value), path), value)
+            for changed in ({**value, 'binding': {'name': 'other', 'boot_generation': 7}},
+                            {**value, 'collected_at': 9}, {**value, 'collected_at': 21}):
+                with self.assertRaises(RuntimeError): boot.guest_evidence(Service(changed), path)
+
+    def test_aws_empty_delete_response_is_successful(self):
+        services = boot.Services.__new__(boot.Services)
+        services.profile, services.region = 'profile', 'region'
+        with patch.object(boot, 'command', return_value=''):
+            self.assertEqual(services.aws('s3api', 'delete-object'), {})
+
     def fixture(self):
         manifest = json.dumps({'source_commit': 'a' * 40, 'release_id': 'candidate'})
         digest = hashlib.sha256(manifest.encode()).hexdigest()

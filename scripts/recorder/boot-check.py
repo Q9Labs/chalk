@@ -3,6 +3,7 @@
 import argparse
 import base64
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -18,6 +19,9 @@ from datetime import datetime, timezone
 SCRIPTS = Path(__file__).resolve().parent
 ROOT = SCRIPTS.parent.parent
 IDENTITIES = ("schema_version", "role", "source_commit", "release_id", "image_id", "image_digest", "region", "size")
+_upload_spec = importlib.util.spec_from_file_location("boot_check_upload", SCRIPTS / "boot-check-upload.py")
+upload = importlib.util.module_from_spec(_upload_spec)
+_upload_spec.loader.exec_module(upload)
 
 
 def require(condition, message):
@@ -120,8 +124,9 @@ class Services:
             raise RuntimeError(f"DigitalOcean {method} failed HTTP {error.code}; payload suppressed") from None
 
     def aws(self, service, operation, *args, timeout=60):
-        return json.loads(command(["aws", "--profile", self.profile, "--region", self.region, service, operation,
-                                   *map(str, args), "--output", "json"], timeout=timeout))
+        raw = command(["aws", "--profile", self.profile, "--region", self.region, service, operation,
+                       *map(str, args), "--output", "json"], timeout=timeout)
+        return json.loads(raw) if raw.strip() else {}
 
     def host(self, task, directory, *, timeout=60, output_name=None):
         if not self.instance:
@@ -297,6 +302,11 @@ def cleanup(services, directory):
         errors.append(str(error))
     for name in ("ssh-key", "ssh-key.pub", "known-hosts"):
         (directory / name).unlink(missing_ok=True)
+    if state.get("evidence_bucket"):
+        try:
+            upload.clean_objects(services, state)
+        except Exception as error:
+            errors.append(str(error))
     require(not errors, "; ".join(errors))
     private_json(directory / "cleanup.json", {"result": "PASS", "cleaned_at": time.time(), "node_id": state.get("node_id")})
 
@@ -317,19 +327,6 @@ def watchdog(directory):
             append(directory, {"cleanup_error": str(error), "cleanup_attempt": attempt + 1})
     private_json(directory / "cleanup-failed.json", {"result": "FAIL", "pid": os.getpid()})
     raise RuntimeError("cleanup unproved; see private watchdog ledger")
-
-
-def ssh_evidence(directory, ip):
-    args = ["ssh", "-i", str(directory / "ssh-key"), "-o", "BatchMode=yes", "-o", "ConnectTimeout=8",
-            "-o", "StrictHostKeyChecking=accept-new", "-o", "UserKnownHostsFile=" + str(directory / "known-hosts"),
-            "root@" + ip, "python3 -"]
-    source = (SCRIPTS / "boot-check-node.py").read_text() + "\nprint(json.dumps(collect()))\n"
-    result = subprocess.run(args, input=source, text=True, capture_output=True, timeout=80)
-    if result.returncode:
-        with (directory / "ssh-errors.log").open("a") as file:
-            file.write(result.stderr[-4000:])
-        raise RuntimeError("read-only SSH evidence collection failed; see private ssh-errors.log")
-    return json.loads(result.stdout)
 
 
 def certificate_der(pem):
@@ -383,6 +380,18 @@ def provisioning_receipt(directory, request, inspected, tags):
             "vpc_uuid": payload.get("vpc_uuid", "")}
 
 
+def guest_evidence(services, directory):
+    state = ledger(directory)
+    require(state.get("evidence_bucket"), "private guest evidence transport was not provisioned")
+    target = directory / "guest-latest.json"
+    services.aws("s3api", "get-object", "--bucket", state["evidence_bucket"], "--key", state["evidence_key"], target)
+    require(target.stat().st_size <= 20 << 20, "guest evidence exceeds bounded size")
+    evidence = json.loads(target.read_text())
+    require(evidence.get("binding") == {"name": state["name"], "boot_generation": state["generation"]}, "guest evidence boot binding mismatch")
+    require(state["started_at"] <= evidence["collected_at"] <= state["deadline"], "guest evidence timestamp outside cold boot")
+    return evidence
+
+
 def run(request_path, receipt_path):
     invocation_started = time.time()
     os.umask(0o077)
@@ -424,6 +433,24 @@ def run(request_path, receipt_path):
         raise RuntimeError("cleanup watchdog did not confirm liveness")
     result = {**request, "result": "FAIL", "fleet_equivalent_signed_boot": False, "evidence_directory": str(directory)}
     try:
+        evidence_command = None
+        bucket = os.environ.get("CHALK_BOOT_CHECK_EVIDENCE_BUCKET")
+        if not bucket:
+            config = services.aws("ssm", "get-parameter", "--name", "/chalk/production/release/recorder.json")
+            bucket = json.loads(config["Parameter"]["Value"])["dispatcher"]["state_bucket"]
+        require(re.fullmatch(r"[a-z0-9][a-z0-9-]{1,61}[a-z0-9]", bucket), "private evidence bucket must be a DNS-compatible name without dots")
+        if bucket:
+            public = services.aws("s3api", "get-public-access-block", "--bucket", bucket)["PublicAccessBlockConfiguration"]
+            require(all(public.get(k) for k in ("BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets")), "guest evidence bucket must block public access")
+            services.aws("s3api", "get-bucket-encryption", "--bucket", bucket)
+            credentials = json.loads(command(["aws", "--profile", services.profile, "configure", "export-credentials", "--format", "process"]))
+            if credentials.get("Expiration"):
+                require(datetime.fromisoformat(credentials["Expiration"].replace("Z", "+00:00")).timestamp() > started + hard_seconds, "upload credentials expire before diagnostic deadline")
+            key = "bootdiag/" + name + "/guest.json"
+            append(directory, {"evidence_bucket": bucket, "evidence_key": key})
+            url = upload.presigned_put(bucket, key, services.region, credentials, max(1, int(started + hard_seconds - time.time())))
+            evidence_command = upload.boot_command((SCRIPTS / "boot-check-node.py").read_text(), url, started + hard_seconds,
+                                                  {"name": name, "boot_generation": generation})
         command(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", name, "-f", str(directory / "ssh-key")])
         public = (directory / "ssh-key.pub").read_text().strip()
         append(directory, {"key_intent": True, "public_key": public})
@@ -454,6 +481,8 @@ def run(request_path, receipt_path):
                             "release": {"release_id": request["release_id"], "image_id": request["image_id"], "image_digest": request["image_digest"],
                                         "region": request["region"], "size": request["size"], "firewall_id": created["id"],
                                         "bootstrap_endpoint": live["BOOTSTRAP_ENDPOINT"], "gpu": False}}}
+        if evidence_command:
+            base["evidence_boot_command"] = evidence_command
         all_firewalls = services.do("GET", "/firewalls?per_page=200")["firewalls"]
         require(not any(fw["id"] != created["id"] and set(fw.get("tags", [])) & set(tags) for fw in all_firewalls), "a shared tag firewall would alter bootstrap/worker isolation")
         append(directory, {"create_intent": True})
@@ -478,7 +507,7 @@ def run(request_path, receipt_path):
         bootstrap = inspected["bootstrap"]
         append(directory, {"bootstrap": bootstrap, "ip": inspected["public_ip"]})
         private_json(directory / "inspection.json", inspected)
-        # Run registration concurrently with a single read-only SSH evidence collector.
+        # Registration and guest evidence run independently; uploads need no inbound SSH.
         import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
             pending = pool.submit(services.host, {"action": "register", "role": request["role"], "bootstrap": bootstrap,
@@ -487,14 +516,14 @@ def run(request_path, receipt_path):
             installed = None
             while time.time() < until and not pending.done():
                 try:
-                    installed = ssh_evidence(directory, inspected["public_ip"])
+                    installed = guest_evidence(services, directory)
                     private_json(directory / ("node-" + str(time.time_ns()) + ".json"), installed)
                 except (RuntimeError, subprocess.TimeoutExpired):
                     pass
                 time.sleep(10)
             evidence = pending.result()
         while True:
-            installed = ssh_evidence(directory, inspected["public_ip"])
+            installed = guest_evidence(services, directory)
             if installed_boot(installed) or time.time() >= until or installed.get("commands", {}).get("cloud_init", {}).get("status") not in (0, 2):
                 break
             time.sleep(2)

@@ -5,6 +5,9 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -13,6 +16,59 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
+
+func TestRecorderCloudInitStopsBeforeWorkerAndCleanupOnBootstrapFailure(t *testing.T) {
+	data, err := renderRecorderCloudInit(recorderFleetEnsureRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, commands, ok := strings.Cut(data, "\nruncmd:\n")
+	if !ok {
+		t.Fatal("missing cloud-init commands")
+	}
+	directory := t.TempDir()
+	marker := filepath.Join(directory, "worker-or-cleanup-ran")
+	bootstrap := filepath.Join(directory, "bootstrap")
+	next := filepath.Join(directory, "next")
+	if err := os.WriteFile(bootstrap, []byte("#!/bin/sh\nexit 23\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(next, []byte("#!/bin/sh\nprintf ran > \""+marker+"\"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// cloud-init shellifies scalar commands directly and quotes array arguments.
+	var script strings.Builder
+	script.WriteString("#!/bin/sh\n")
+	for _, line := range strings.Split(strings.TrimSpace(commands), "\n") {
+		command := strings.TrimPrefix(strings.TrimSpace(line), "- ")
+		if !strings.HasPrefix(command, "[") {
+			script.WriteString(command + "\n")
+			continue
+		}
+		var args []string
+		if err := json.Unmarshal([]byte(command), &args); err != nil {
+			t.Fatal(err)
+		}
+		if args[0] == "/usr/local/sbin/chalk-recorder-bootstrap" {
+			args[0] = bootstrap
+		} else {
+			args[0] = next
+		}
+		for _, arg := range args {
+			script.WriteString("'" + strings.ReplaceAll(arg, "'", "'\\''") + "' ")
+		}
+		script.WriteByte('\n')
+	}
+	run := exec.Command("/bin/sh", "-c", script.String())
+	err = run.Run()
+	var exited *exec.ExitError
+	if !errors.As(err, &exited) || exited.ExitCode() != 23 {
+		t.Fatalf("failed bootstrap was hidden: %v", err)
+	}
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("worker/cleanup ran after failed bootstrap: %v", err)
+	}
+}
 
 func TestRecorderFleetEnsureCreatesFencedNodeAndAttachesFirewall(t *testing.T) {
 	request := recorderFleetEnsureRequest()

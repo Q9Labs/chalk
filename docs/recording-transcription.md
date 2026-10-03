@@ -274,10 +274,25 @@ All configured fleet SSH keys are preserved; the task key is added only to the
 diagnostic create payload, outside the fleet config's key-count limit. A durable
 create fence blocks a second POST after an accepted or uncertain response; a
 definite provider 422 may retry without counting as another boot.
-There are no pin, demand or fleet-setting writes. The only guest addition copies
+There are no pin, demand or fleet-setting writes. The diagnostic also copies
 the bootstrap environment **after** the unchanged bootstrap/worker commands.
-Private evidence beside the receipt records actual create/user-data hashes,
-provider inventory, cloud-init, issuer issuance and the installed certificate.
+Fleet cloud-init stops on a failed bootstrap or worker start; subsequent commands
+cannot hide that failure by returning success, and workers cannot start after a
+failed identity bootstrap.
+Guest evidence does not depend on SSH. An evidence-only `bootcmd` starts a bounded
+background collector before the unchanged bootstrap/worker commands. Every thirty
+seconds it PUTs cloud-init logs/status, boot journal, network/resolver state and
+the installed public certificate to one short-lived presigned S3 object. No AWS
+credential or identity private key is installed on the guest. The bucket defaults
+to the private state bucket in the release configuration; an explicit
+`CHALK_BOOT_CHECK_EVIDENCE_BUCKET` may select another encrypted, public-blocked,
+DNS-compatible bucket without dots in the same AWS region. The operator needs
+bucket encryption/public-block reads and scoped object read/write/version-delete
+permissions. Existing fleet HTTPS egress must permit the upload; it is never
+widened silently. The watchdog removes every object version and deletion marker
+after node deletion. Downloaded evidence remains private beside the receipt and
+records actual create/user-data hashes, provider inventory, cloud-init, issuer
+issuance and the installed certificate.
 PASS requires the candidate manifest, matching issuer certificate, CA/identity/
 serial verification and confirmed scoped cleanup. Registration alone is FAIL.
 
