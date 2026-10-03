@@ -275,37 +275,63 @@ func (r WebhookRepository) Delete(ctx context.Context, tenantID, endpointID util
 		return err
 	}
 	defer tx.Rollback(ctx)
+	count, err := r.deleteWebhookEndpointTx(ctx, tx, tenantID, endpointID, revision, key)
+	if err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	webhooks.RecordTerminalDeliveries(ctx, "canceled", count)
+	return nil
+}
+
+func (r WebhookRepository) deleteWebhookEndpointTx(ctx context.Context, tx pgx.Tx, tenantID, endpointID utilities.ID, revision int, key string) (int64, error) {
 	queries := sqlc.New(tx)
 	if err := lockWebhookTenant(ctx, queries, tenantID); err != nil {
-		return err
+		return 0, err
 	}
 	hash := idempotencyHash(struct {
 		Endpoint string
 		Revision int
 	}{endpointID.String(), revision})
 	if _, ok, err := r.replayIdempotency(ctx, tx, tenantID, "endpoint.delete", key, hash); err != nil {
-		return err
+		return 0, err
 	} else if ok {
-		return nil
+		return 0, nil
 	}
+	canceledCount, err := eraseWebhookEndpointTx(ctx, tx, tenantID, endpointID, revision)
+	if err != nil {
+		return 0, err
+	}
+	if err := r.storeIdempotency(ctx, tx, tenantID, "endpoint.delete", key, hash, 204, endpointID, webhookIdempotencyResponse{}); err != nil {
+		return 0, err
+	}
+	return canceledCount, nil
+}
+
+// eraseWebhookEndpointTx shares payload destruction without creating a new
+// encrypted API-idempotency response during an operator hard-delete.
+func eraseWebhookEndpointTx(ctx context.Context, tx pgx.Tx, tenantID, endpointID utilities.ID, revision int) (int64, error) {
+	queries := sqlc.New(tx)
 	var currentRevision int32
 	var deleted bool
-	err = tx.QueryRow(ctx, `select revision,deleted_at is not null from webhook_endpoints where tenant_id=$1 and id=$2 for update`, uuid(tenantID), uuid(endpointID)).Scan(&currentRevision, &deleted)
+	err := tx.QueryRow(ctx, `select revision,deleted_at is not null from webhook_endpoints where tenant_id=$1 and id=$2 for update`, uuid(tenantID), uuid(endpointID)).Scan(&currentRevision, &deleted)
 	if errors.Is(err, pgx.ErrNoRows) || deleted {
-		return webhooks.ErrEndpointNotFound
+		return 0, webhooks.ErrEndpointNotFound
 	}
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if currentRevision != int32(revision) {
-		return webhooks.ErrRevisionConflict
+		return 0, webhooks.ErrRevisionConflict
 	}
 	_, err = queries.DeleteWebhookEndpoint(ctx, sqlc.DeleteWebhookEndpointParams{TenantID: uuid(tenantID), EndpointID: uuid(endpointID), ExpectedRevision: int32(revision)})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("delete webhook endpoint after locked revision check: %w", err)
+		return 0, fmt.Errorf("delete webhook endpoint after locked revision check: %w", err)
 	}
 	if err != nil {
-		return err
+		return 0, err
 	}
 	var canceledCount int64
 	err = cancelWebhookDeliveries(ctx, tx, tenantID, endpointID, nil, "endpoint_deleted", &canceledCount)
@@ -313,19 +339,12 @@ func (r WebhookRepository) Delete(ctx context.Context, tenantID, endpointID util
 		_, err = queries.DestroyWebhookEndpointURLs(ctx, sqlc.DestroyWebhookEndpointURLsParams{TenantID: uuid(tenantID), EndpointID: uuid(endpointID)})
 	}
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if err := insertWebhookAudit(ctx, tx, tenantID, "webhook_endpoint.delete", "webhook_endpoint", endpointID, map[string]any{"revision": revision + 1}); err != nil {
-		return err
+		return 0, err
 	}
-	if err := r.storeIdempotency(ctx, tx, tenantID, "endpoint.delete", key, hash, 204, endpointID, webhookIdempotencyResponse{}); err != nil {
-		return err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return err
-	}
-	webhooks.RecordTerminalDeliveries(ctx, "canceled", canceledCount)
-	return nil
+	return canceledCount, nil
 }
 
 func (r WebhookRepository) RotateSecret(ctx context.Context, tenantID, endpointID utilities.ID, immediate bool, key string) (webhooks.RotateResult, error) {

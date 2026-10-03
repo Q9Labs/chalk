@@ -21,6 +21,17 @@ func (r TranscriptRepository) Delete(ctx context.Context, tenantID, transcriptID
 		return transcripts.Transcript{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	value, err := deleteTranscriptTx(ctx, tx, tenantID, transcriptID)
+	if err != nil {
+		return transcripts.Transcript{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return transcripts.Transcript{}, err
+	}
+	return value, nil
+}
+
+func deleteTranscriptTx(ctx context.Context, tx pgx.Tx, tenantID, transcriptID utilities.ID) (transcripts.Transcript, error) {
 	q := sqlc.New(tx)
 	row, err := q.DeleteTenantTranscription(ctx, sqlc.DeleteTenantTranscriptionParams{TenantID: uuid(tenantID), ID: uuid(transcriptID)})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -71,9 +82,6 @@ func (r TranscriptRepository) Delete(ctx context.Context, tenantID, transcriptID
 		if err := enqueueRecordingTranscriptionSourceCleanupTx(ctx, q, source, dueAt); err != nil {
 			return transcripts.Transcript{}, err
 		}
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return transcripts.Transcript{}, err
 	}
 	return mapTranscript(row), nil
 }

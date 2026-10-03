@@ -98,7 +98,8 @@
     "check:tracker": "node scripts/generate-tracker.mjs --check",
     "serve:tracker": "node scripts/tracker-server.mjs",
     "test:tracker": "node --test scripts/tracker.node-test.mjs",
-    "prod:proof": "node scripts/prod-proof/index.mjs"
+    "prod:proof": "node scripts/prod-proof/index.mjs",
+    "tenant:purge": "cd apps/api && go run ./cmd/tenant-purge"
   },
   "dependencies": {
     "clsx": "^2.1.1",
