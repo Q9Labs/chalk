@@ -209,7 +209,7 @@ sudo infrastructure/recorder/images/cpu/install.sh \
 ```
 
 The build uses checksum-pinned Go 1.25.13 and Node.js 22.23.2 toolchains plus
-pnpm 10.26.2. It records the Git commit, a deterministic SHA-256 of the complete
+pnpm 12.8.1. It records the Git commit, a deterministic SHA-256 of the complete
 public source tree and every installed recorder file. The
 installer prints `image_manifest_digest`; this is specifically the SHA-256 of
 `/opt/chalk-recorder/image-manifest.json`, not an OCI digest or a digest of the

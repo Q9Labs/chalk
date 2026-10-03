@@ -14,17 +14,26 @@ function aliasTargetVersion(version) {
 
 // Lists the root importer's direct dependencies as { name, version } from pnpm-lock.yaml (lockfile v9).
 export function rootLockedVersions(lockfileText) {
-  const lines = lockfileText.split("\n");
-  const start = lines.indexOf("  .:");
-  if (start === -1) return [];
   const locked = [];
-  let name;
-  for (const line of lines.slice(start + 1)) {
-    if (/^ {2}\S/.test(line)) break;
-    const entry = /^ {6}'?([^':]+(?:\/[^':]+)?)'?:$/.exec(line);
-    if (entry) name = entry[1];
-    const version = /^ {8}version: (\S+)$/.exec(line);
-    if (version && name) locked.push({ name, version: aliasTargetVersion(version[1].replace(/\(.*$/, "")) });
+  // pnpm 12 puts package-manager/config dependencies in a separate YAML document.
+  for (const document of lockfileText.split(/^---\s*$/m)) {
+    const lines = document.split("\n");
+    const start = lines.indexOf("  .:");
+    if (start === -1) continue;
+    let name;
+    let directDependencies = false;
+    for (const line of lines.slice(start + 1)) {
+      if (/^(?:\S| {2}\S)/.test(line)) break;
+      if (/^ {4}\S/.test(line)) {
+        directDependencies = /^ {4}(?:dependencies|devDependencies|optionalDependencies):/.test(line);
+        name = undefined;
+      }
+      if (!directDependencies) continue;
+      const entry = /^ {6}'?([^':]+(?:\/[^':]+)?)'?:$/.exec(line);
+      if (entry) name = entry[1];
+      const version = /^ {8}version: (\S+)$/.exec(line);
+      if (version && name) locked.push({ name, version: aliasTargetVersion(version[1].replace(/\(.*$/, "")) });
+    }
   }
   return locked;
 }

@@ -34,7 +34,7 @@ try {
   const diagnosticsArchive = requiredArchive(archives, "diagnostics-contracts");
   const supportingArchives = [requiredArchive(archives, "chalk-assets"), requiredArchive(archives, "facehash"), requiredArchive(archives, "recording-presentation"), requiredArchive(archives, "chalk-ui"), requiredArchive(archives, "chalk-whiteboard")];
 
-  await writeFile(join(consumerDirectory, "package.json"), `${JSON.stringify({ name: "chalk-packed-web-consumer", private: true, type: "module", packageManager: "pnpm@10.26.2" }, null, 2)}\n`);
+  await writeFile(join(consumerDirectory, "package.json"), `${JSON.stringify({ name: "chalk-packed-web-consumer", private: true, type: "module", packageManager: "pnpm@12.8.1" }, null, 2)}\n`);
   await writeFile(join(consumerDirectory, "pnpm-workspace.yaml"), workspacePolicy(archiveDirectory, { clientArchive, reactArchive, diagnosticsArchive, supportingArchives }));
   await run(
     "pnpm",
@@ -402,10 +402,14 @@ function workspacePolicy(archiveDirectory_, archives) {
     "# Packed workspace dependencies must resolve to artifacts from this run, never to the registry.",
     "overrides:",
     ...overrides,
-    "# esbuild needs its platform binary; the optional native msgpackr accelerator is unused by this browser fixture.",
+    "# Only esbuild needs a build script in this browser fixture; explicitly deny the repository's other scripts.",
     "allowBuilds:",
+    '  "@parcel/watcher": false',
     "  esbuild: true",
+    "  lefthook: false",
     "  msgpackr-extract: false",
+    "  msw: false",
+    "  workerd: false",
     "# This exact beta is pinned by the packed SDK; the exclusion only accommodates pnpm's machine-local no-downgrade trust policy.",
     "trustPolicyExclude:",
     '  - "effect@4.0.0-beta.102"',

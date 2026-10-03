@@ -11,7 +11,7 @@ export const verifierPath = join(repositoryRoot, "scripts/deploy/verify-web-depl
 
 export const RELEASE_TOOL_VERSIONS = Object.freeze({
   minimumNodeMajor: 22,
-  pnpm: "10.26.2",
+  pnpm: "12.8.1",
   wrangler: "4.107.0",
 });
 

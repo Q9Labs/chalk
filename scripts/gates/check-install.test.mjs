@@ -31,6 +31,49 @@ test("reads only the root importer", () => {
   );
 });
 
+test("reads real dependencies after pnpm 12's package-manager document", () => {
+  const pnpm12Lockfile = `---
+lockfileVersion: '9.0'
+importers:
+  .:
+    configDependencies: {}
+    packageManagerDependencies:
+      pnpm:
+        specifier: 12.8.1
+        version: 12.8.1
+packages:
+  pnpm@12.8.1:
+    resolution: {}
+---
+${lockfile}`;
+  assert.deepEqual(rootLockedVersions(pnpm12Lockfile), rootLockedVersions(lockfile));
+  assert.deepEqual(
+    installMismatches(rootLockedVersions(pnpm12Lockfile), () => undefined),
+    ["react: locked 19.2.7, not installed", "@q9labsai/gates: locked https://example.invalid/q9labsai-gates-0.3.0.tgz, not installed", "typescript-7: locked 7.0.1-rc, not installed"],
+  );
+  assert.match(installMismatches(rootLockedVersions(pnpm12Lockfile), () => "0.0.0")[0], /react: locked 19.2.7, installed 0.0.0/);
+});
+
+test("ignores configuration dependencies but checks optional dependencies", () => {
+  assert.deepEqual(
+    rootLockedVersions(`importers:
+  .:
+    configDependencies:
+      config:
+        version: 1.0.0
+    optionalDependencies:
+      optional:
+        version: 2.0.0
+packages:
+  unrelated:
+    dependencies:
+      other:
+        version: 3.0.0
+`),
+    [{ name: "optional", version: "2.0.0" }],
+  );
+});
+
 test("compares an npm alias with its target version", () => {
   const alias = rootLockedVersions(lockfile).find(({ name }) => name === "typescript-7");
   assert.equal(alias.version, "7.0.1-rc");

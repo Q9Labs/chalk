@@ -59,3 +59,15 @@ patchedDependencies:
   image-size@2.0.2: patches/image-size@2.0.2.patch
   minimatch@3.1.5: patches/minimatch@3.1.5.patch
   minimatch@5.1.9: patches/minimatch@5.1.9.patch
+
+# Allow q9stack GitHub release tarballs until they are published to npm.
+blockExoticSubdeps: false
+
+# Preserve the dependency scripts skipped by pnpm 10; keep strict build checks.
+allowBuilds:
+  "@parcel/watcher": false
+  esbuild: false
+  lefthook: false
+  msgpackr-extract: false
+  msw: false
+  workerd: false
