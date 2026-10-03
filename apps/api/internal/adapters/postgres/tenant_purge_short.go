@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -105,7 +106,14 @@ func shortProtectedSQL(table purgeTable) string {
 	if len(table.Primary) > 0 {
 		condition = "not exists(select 1 from " + shortTemp(table.Name) + " s where " + purgePKJoin(table, "r", "s") + ")"
 	}
-	return `select (select count(*) from ` + purgeName(table.Name) + `),encode(sha256(convert_to(coalesce(string_agg(to_jsonb(r)::text,E'\n' order by to_jsonb(r)::text),''),'UTF8')),'hex') from ` + purgeName(table.Name) + ` r where ` + condition
+	// Under the writer fence an UPDATE creates a new xmin/ctid tuple version,
+	// and DELETE/INSERT changes the multiset. Hash headers, not large retained
+	// monitoring payloads. Vacuum/rewrite is also excluded by the table fence.
+	// Numeric system fields contain no ':' or newline, so this encoding is
+	// unambiguous without per-row JSON construction. tableoid disambiguates
+	// physical tuple positions when reading partitioned parents.
+	version := `r.tableoid::text||':'||r.xmin::text||':'||r.ctid::text`
+	return `select (select count(*) from ` + purgeName(table.Name) + `),encode(sha256(convert_to(coalesce(string_agg(` + version + `,E'\n' order by ` + version + ` collate "C"),''),'UTF8')),'hex') from ` + purgeName(table.Name) + ` r where ` + condition
 }
 
 func (r TenantPurgeRepository) shortCatalog(ctx context.Context, plan tenantpurge.Plan) (purgeCatalog, string, error) {
@@ -307,15 +315,47 @@ func shortBoundaryQueries(catalog purgeCatalog) []string {
 }
 
 func shortObjectQuery(catalog purgeCatalog, selected map[string]string, manifest *tenantpurge.ObjectManifest) string {
+	return shortObjectQueryAfterSnapshot(catalog, selected, manifest, "")
+}
+
+func shortObjectQueryAfterSnapshot(catalog purgeCatalog, selected map[string]string, manifest *tenantpurge.ObjectManifest, snapshot string) string {
 	if manifest == nil {
 		return "select false"
 	}
 	var values []string
+	var namespaces []string
+	seen := map[string]bool{}
+	addNamespace := func(prefix string) {
+		if !seen[prefix] {
+			seen[prefix] = true
+			values = append(values, prefix)
+			namespaces = append(namespaces, prefix)
+		}
+	}
+	for _, prefix := range manifest.SharedPrefixes {
+		addNamespace(prefix)
+	}
 	decoded := false
 	for _, o := range manifest.Objects {
+		// Validated ownership lets us fence the whole approved namespace once.
+		// This is stronger than matching every object individually, and avoids
+		// rescanning large retained JSON values hundreds of times per row.
+		prefix := "tenants/" + o.OwnerTenantID + "/"
+		if o.OwnerTenantID != "" && strings.HasPrefix(o.Key, prefix) {
+			addNamespace(prefix)
+			continue
+		}
+		covered := false
+		for _, prefix := range manifest.SharedPrefixes {
+			if strings.HasPrefix(o.Key, prefix) {
+				covered = true
+			}
+		}
+		if covered {
+			continue
+		}
 		values = append(values, o.Key)
 	}
-	values = append(values, manifest.SharedPrefixes...)
 	var patterns []string
 	for _, value := range values {
 		for _, char := range value {
@@ -323,20 +363,19 @@ func shortObjectQuery(catalog purgeCatalog, selected map[string]string, manifest
 				decoded = true
 			}
 		}
-		pattern := strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(value)
-		patterns = append(patterns, purgeLiteral("%"+pattern+"%"))
+		patterns = append(patterns, regexp.QuoteMeta(value))
 	}
-	for _, prefix := range manifest.SharedPrefixes {
+	for _, prefix := range namespaces {
 		namespace := strings.TrimSuffix(prefix, "/")
 		exact := namespace
 		if !decoded {
 			exact = "\"" + namespace + "\""
 		}
-		exact = strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(exact)
-		if !decoded {
-			exact = "%" + exact + "%"
+		exact = regexp.QuoteMeta(exact)
+		if decoded {
+			exact = "^" + exact + "$"
 		}
-		patterns = append(patterns, purgeLiteral(exact))
+		patterns = append(patterns, exact)
 	}
 	if len(patterns) == 0 {
 		return "select false"
@@ -347,18 +386,49 @@ func shortObjectQuery(catalog purgeCatalog, selected map[string]string, manifest
 		if condition == "" {
 			condition = "false"
 		}
-		match := `to_jsonb(r)::text like any(n.patterns)`
+		version := ""
+		// Direct Tenant ownership changes necessarily UPDATE this tuple. An
+		// unconditionally retained table cannot change ownership. Other logical
+		// and user-linked predicates can change without updating their child:
+		// scan those fully, including accounts newly linked to kept Tenants.
+		if snapshot != "" && (table.has("tenant_id") || condition == "false") {
+			// Use the oldest-active cutoff, not pg_visible_in_snapshot: xmin may
+			// be a subtransaction ID absent from the snapshot's top-level xip list.
+			version = ` and ` + pgx.Identifier{table.Name, "xmin"}.Sanitize() + `::text::xid8>=pg_snapshot_xmin(` + purgeLiteral(snapshot) + `::pg_snapshot)`
+		}
+		match := `to_jsonb(r)::text ~ n.pattern`
 		// Decode unusual object keys exactly as the original erase scanner does;
 		// ordinary product-generated keys need no per-scalar JSON traversal.
 		if decoded {
-			match = `exists(select 1 from (select v from jsonb_path_query(to_jsonb(r),'strict $.** ? (@.type() == "string")') v union all select k from jsonb_path_query(to_jsonb(r),'strict $.** ? (@.type() == "object").keyvalue().key') k) strings(v) where (v #>> '{}') like any(n.patterns))`
+			match = `exists(select 1 from (select v from jsonb_path_query(to_jsonb(r),'strict $.** ? (@.type() == "string")') v union all select k from jsonb_path_query(to_jsonb(r),'strict $.** ? (@.type() == "object").keyvalue().key') k) strings(v) where (v #>> '{}') ~ n.pattern)`
 		}
-		refs = append(refs, `exists(select 1 from (select * from `+purgeName(table.Name)+` where not coalesce((`+condition+`),false)) r cross join chalk_object_patterns n where `+match+`)`)
+		refs = append(refs, `exists(select 1 from (select * from `+purgeName(table.Name)+` where not coalesce((`+condition+`),false)`+version+`) r cross join chalk_object_patterns n where `+match+`)`)
 	}
 	if len(refs) == 0 {
 		return "select false"
 	}
-	return `with chalk_object_patterns as materialized(select array[` + strings.Join(patterns, ",") + `]::text[] patterns) select ` + strings.Join(refs, " or ")
+	return `with chalk_object_patterns as materialized(select ` + purgeLiteral("("+strings.Join(patterns, "|")+")") + `::text pattern) select ` + strings.Join(refs, " or ")
+}
+
+func (r TenantPurgeRepository) shortObjectSnapshot(ctx context.Context, catalog purgeCatalog, selected map[string]string, manifest *tenantpurge.ObjectManifest) (string, error) {
+	if manifest == nil {
+		return "", nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	var snapshot string
+	var epochOK, referenced bool
+	query := `with s as materialized(select pg_current_snapshot() snapshot) select snapshot::text,pg_snapshot_xmax(snapshot)<'4294967296'::xid8,(` + shortObjectQuery(catalog, selected, manifest) + `) from s`
+	if err := r.pool.QueryRow(ctx, query).Scan(&snapshot, &epochOK, &referenced); err != nil {
+		return "", fmt.Errorf("object reference preflight: %w", err)
+	}
+	if !epochOK {
+		return "", errors.New("object version fence requires epoch-zero transaction IDs")
+	}
+	if referenced {
+		return "", errors.New("retained reference in object namespace before fence")
+	}
+	return snapshot, nil
 }
 
 // ApplyTenantShort ignores snapshot value/count drift. Live materialized rows
@@ -385,6 +455,14 @@ func (r TenantPurgeRepository) ApplyTenantShort(ctx context.Context, expected te
 }
 
 func (r TenantPurgeRepository) shortChange(ctx context.Context, expected tenantpurge.Plan, target string, catalog purgeCatalog, fingerprint string, selected, retained map[string]string, backup func(context.Context, tenantpurge.Plan) error, deleting bool) (tenantpurge.Plan, error) {
+	var objectSnapshot string
+	if deleting {
+		var err error
+		objectSnapshot, err = r.shortObjectSnapshot(ctx, catalog, retained, expected.Objects)
+		if err != nil {
+			return tenantpurge.Plan{}, err
+		}
+	}
 	ids := purgeIDs(expected.Scope)
 	final := deleting && target == ids[len(ids)-1]
 	b := shortSQL{}
@@ -403,7 +481,8 @@ func (r TenantPurgeRepository) shortChange(ctx context.Context, expected tenantp
 		for _, check := range shortBoundaryQueries(catalog) {
 			boundaryIndexes = append(boundaryIndexes, b.add(check))
 		}
-		boundaryIndexes = append(boundaryIndexes, b.add(shortObjectQuery(catalog, retained, expected.Objects)))
+		boundaryIndexes = append(boundaryIndexes, b.add(`select pg_snapshot_xmax(pg_current_snapshot())>='4294967296'::xid8`))
+		boundaryIndexes = append(boundaryIndexes, b.add(shortObjectQueryAfterSnapshot(catalog, retained, expected.Objects, objectSnapshot)))
 		for _, check := range []string{`select exists(select 1 from ` + shortTemp("episodes") + ` where status<>'ended')`, `select exists(select 1 from ` + shortTemp("recording_jobs") + ` where state not in ('succeeded','terminal_failure','cancelled'))`, `select exists(select 1 from ` + shortTemp("recording_reservations") + ` where state not in ('released','expired'))`} {
 			boundaryIndexes = append(boundaryIndexes, b.add(check))
 		}
@@ -672,6 +751,10 @@ func (r TenantPurgeRepository) CleanupObjectsShort(ctx context.Context, plan ten
 	if err != nil {
 		return err
 	}
+	objectSnapshot, err := r.shortObjectSnapshot(ctx, catalog, nil, plan.Objects)
+	if err != nil {
+		return err
+	}
 	for _, object := range plan.Objects.Objects {
 		err := func() error {
 			ctx, cancel := context.WithTimeout(ctx, shortPurgeDeadline)
@@ -694,7 +777,8 @@ func (r TenantPurgeRepository) CleanupObjectsShort(ctx context.Context, plan ten
 			schema := b.add(shortSchemaSQL)
 			scope := b.add(`select coalesce(json_agg(json_build_object('id',id::text,'name',name)),'[]'::json)::text from public.tenants`)
 			absent := b.add(`select count(*) from public.tenants where id=any(` + purgeArray(purgeIDs(plan.Scope)) + `)`)
-			refs := b.add(shortObjectQuery(catalog, nil, &one))
+			epoch := b.add(`select pg_snapshot_xmax(pg_current_snapshot())>='4294967296'::xid8`)
+			refs := b.add(shortObjectQueryAfterSnapshot(catalog, nil, &one, objectSnapshot))
 			result, err := b.run(ctx, tx)
 			if err != nil {
 				return err
@@ -705,7 +789,7 @@ func (r TenantPurgeRepository) CleanupObjectsShort(ctx context.Context, plan ten
 			if err := shortCheckScope(result[scope].Rows[0], plan.Scope, "", false); err != nil {
 				return err
 			}
-			if string(result[absent].Rows[0][0]) != "0" || string(result[refs].Rows[0][0]) != "f" {
+			if string(result[absent].Rows[0][0]) != "0" || string(result[refs].Rows[0][0]) != "f" || string(result[epoch].Rows[0][0]) != "f" {
 				return errors.New("deleted Tenant remains or kept object reference exists")
 			}
 			if err := cleanup(ctx, one); err != nil {

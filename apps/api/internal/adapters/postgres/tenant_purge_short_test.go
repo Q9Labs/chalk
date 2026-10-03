@@ -145,6 +145,172 @@ func TestTenantPurgeShortObjectReferenceEncoding(t *testing.T) {
 	}
 }
 
+func TestTenantPurgeShortApprovedObjectNamespaceFence(t *testing.T) {
+	pool := purgeIntegrationPool(t)
+	f := createPurgeFixture(t, pool)
+	ctx := context.Background()
+	repo := NewTenantPurgeRepository(pool)
+	plan, err := repo.SnapshotShort(ctx, f.scope, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := "tenants/" + f.erased
+	shared := "showcase/quoted\"&\u2028/"
+	plan.Objects = &tenantpurge.ObjectManifest{Bucket: "fixture", SharedPrefixes: []string{shared}, Objects: []tenantpurge.StorageObject{
+		{Key: root + "/one", ETag: "fixture", OwnerTenantID: f.erased},
+		{Key: root + "/two", ETag: "fixture", OwnerTenantID: f.erased},
+		{Key: shared + "asset", ETag: "fixture"},
+	}}
+	for _, reference := range []string{root + "/not-in-manifest", root, shared + "asset"} {
+		metadata, _ := json.Marshal(map[string]string{reference: "property-name only"})
+		if _, err := pool.Exec(ctx, `update spaces set metadata=$1::jsonb where id=$2`, string(metadata), f.heldSpace); err != nil {
+			t.Fatal(err)
+		}
+		_, err := repo.ApplyTenantShort(ctx, plan, f.erased, func(context.Context, tenantpurge.Plan) error {
+			t.Fatal("namespace reference reached erase")
+			return nil
+		})
+		if err == nil || !strings.Contains(err.Error(), "retained reference") {
+			t.Fatalf("approved namespace not fenced: %v", err)
+		}
+	}
+	metadata, _ := json.Marshal(map[string]string{root + "-other/asset": "sibling", strings.TrimSuffix(shared, "/") + "-other/asset": "sibling"})
+	if _, err := pool.Exec(ctx, `update spaces set metadata=$1::jsonb where id=$2`, string(metadata), f.heldSpace); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.ApplyTenantShort(ctx, plan, f.erased, func(context.Context, tenantpurge.Plan) error { return nil }); err != nil {
+		t.Fatal("sibling namespace blocked", err)
+	}
+}
+
+func TestTenantPurgeShortObjectSnapshotCatchesSubtransactionAndOwnershipChanges(t *testing.T) {
+	pool := purgeIntegrationPool(t)
+	f := createPurgeFixture(t, pool)
+	ctx := context.Background()
+	repo := NewTenantPurgeRepository(pool)
+	plan, err := repo.SnapshotShort(ctx, f.scope, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := "tenants/" + f.erased + "/asset"
+	plan.Objects = &tenantpurge.ObjectManifest{Bucket: "fixture", Objects: []tenantpurge.StorageObject{{Key: key, ETag: "fixture", OwnerTenantID: f.erased}}}
+	catalog, _, err := repo.shortCatalog(ctx, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, retained, err := shortPredicates(catalog, plan, f.erased)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Rollback(ctx)
+	sub, err := other.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sub.Exec(ctx, `update spaces set metadata=jsonb_build_object($1::text,'reference') where id=$2`, key, f.heldSpace); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := repo.shortObjectSnapshot(ctx, catalog, retained, plan.Objects)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sub.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := other.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var held bool
+	if err := pool.QueryRow(ctx, shortObjectQueryAfterSnapshot(catalog, retained, plan.Objects, snapshot)).Scan(&held); err != nil || !held {
+		t.Fatalf("preexisting in-flight subtransaction escaped: %v %v", held, err)
+	}
+	if _, err := pool.Exec(ctx, `update spaces set metadata=null where id=$1`, f.heldSpace); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `update users set name=$1 where id=$2`, key, f.exclusiveUser); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err = repo.shortObjectSnapshot(ctx, catalog, retained, plan.Objects)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `insert into memberships(id,tenant_id,user_id,role) values($1,$2,$3,'owner')`, accountTenantIntegrationID(t).String(), f.kept, f.exclusiveUser); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, shortObjectQueryAfterSnapshot(catalog, retained, plan.Objects, snapshot)).Scan(&held); err != nil || !held {
+		t.Fatalf("unchanged account newly owned by kept Tenant escaped: %v %v", held, err)
+	}
+}
+
+func TestTenantPurgeShortRetainedTupleVersionGuard(t *testing.T) {
+	pool := purgeIntegrationPool(t)
+	f := createPurgeFixture(t, pool)
+	ctx := context.Background()
+	repo := NewTenantPurgeRepository(pool)
+	plan, err := repo.SnapshotShort(ctx, f.scope, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog, _, err := repo.shortCatalog(ctx, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	table, _ := catalog.table("spaces")
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `create temporary table `+shortTemp("spaces")+` on commit drop as select * from spaces where false`); err != nil {
+		t.Fatal(err)
+	}
+	var count, afterCount int64
+	var before, locked, changed string
+	if err := tx.QueryRow(ctx, shortProtectedSQL(table)).Scan(&count, &before); err != nil {
+		t.Fatal(err)
+	}
+	var id string
+	if err := tx.QueryRow(ctx, `select id::text from spaces where id=$1 for update`, f.heldSpace).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.QueryRow(ctx, shortProtectedSQL(table)).Scan(&afterCount, &locked); err != nil || before != locked || count != afterCount {
+		t.Fatalf("row lock changed tuple guard: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `update spaces set name=name where id=$1`, f.heldSpace); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.QueryRow(ctx, shortProtectedSQL(table)).Scan(&afterCount, &changed); err != nil || before == changed || count != afterCount {
+		t.Fatalf("same-value UPDATE escaped tuple guard: %v", err)
+	}
+}
+
+func TestTenantPurgeShortLiveKeptOwnershipRetainsAccount(t *testing.T) {
+	pool := purgeIntegrationPool(t)
+	f := createPurgeFixture(t, pool)
+	ctx := context.Background()
+	repo := NewTenantPurgeRepository(pool)
+	plan, err := repo.SnapshotShort(ctx, f.scope, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Nullable ownership FKs in the fixture must not poison the anti-set. A
+	// new non-null kept ownership link, however, must veto account deletion.
+	if _, err := pool.Exec(ctx, `update spaces set created_by_user_id=$1 where id=$2`, f.exclusiveUser, f.heldSpace); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.ApplyTenantShort(ctx, plan, f.erased, func(context.Context, tenantpurge.Plan) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	var exists bool
+	if err := pool.QueryRow(ctx, `select exists(select 1 from users where id=$1)`, f.exclusiveUser).Scan(&exists); err != nil || !exists {
+		t.Fatalf("live kept ownership account erased: %v %v", exists, err)
+	}
+}
+
 func TestTenantPurgeShortLateSeedsSurviveEarlierParentErase(t *testing.T) {
 	pool := purgeIntegrationPool(t)
 	f := createPurgeFixture(t, pool)
@@ -379,7 +545,7 @@ func TestTenantPurgeShortCleanupUsesSeparateReferenceFences(t *testing.T) {
 	}
 	calls = 0
 	err = repo.CleanupObjectsShort(ctx, plan, func(context.Context, tenantpurge.ObjectManifest) error { calls++; return nil })
-	if err == nil || calls != 1 {
-		t.Fatalf("kept reference not stopped before its object: %d %v", calls, err)
+	if err == nil || calls != 0 {
+		t.Fatalf("kept namespace reference not stopped before any object: %d %v", calls, err)
 	}
 }
