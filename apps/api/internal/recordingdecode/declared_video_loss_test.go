@@ -3,6 +3,7 @@ package recordingdecode
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -31,6 +32,9 @@ func TestDeclaredVideoLossRequiresMissingPictures(t *testing.T) {
 }
 
 func TestDeclaredCaptureOutageHoldsVideoTailWithoutSequenceGap(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
 	root := t.TempDir()
 	packets := packetizeVP8(generatedVP8Keyframes(t, root, "320x240"))
 	request := policyBundleRequest(t, [][]recordingbundle.RTPPacket{packets}, 2_000)
