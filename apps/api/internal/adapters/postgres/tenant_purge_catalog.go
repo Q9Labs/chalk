@@ -172,7 +172,10 @@ func (c purgeCatalog) predicates() (map[string]string, error) {
 		if fk.Child == "showcase_dataset_registries" {
 			condition = `product<>'chalk'`
 		}
-		exclusive += ` and not exists(select 1 from ` + purgeName(fk.Child) + ` where ` + purgeQuote(fk.ChildColumns[0]) + `=u.id and (` + condition + `))`
+		// A null-filtered anti-set preserves NOT EXISTS semantics while allowing
+		// one hashed scan, instead of rescanning unindexed audit rows per user.
+		column := purgeQuote(fk.ChildColumns[0])
+		exclusive += ` and u.id not in(select ` + column + ` from ` + purgeName(fk.Child) + ` where ` + column + ` is not null and (` + condition + `))`
 	}
 	selected["users"] = `id in (` + exclusive + `)`
 	if _, ok := c.table("showcase_dataset_registries"); ok {

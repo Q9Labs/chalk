@@ -42,11 +42,28 @@ identities from earlier commits, including new bookkeeping, into the final
 selection. Keep that directory and the original plan when resuming. Kept
 memberships, incoming FK/logical links and object references still veto erasure.
 Bookkeeping drift is captured, not compared with stale snapshot hashes.
+The object reference check fences each validated Tenant/shared namespace once,
+including bare namespace references, rather than comparing hundreds of keys
+against every retained JSON row. This stronger fence also holds unlisted keys
+inside an approved namespace; lookalike sibling namespaces do not match.
+
+The full object-reference scan runs as one autocommit SELECT before taking the
+writer fence. Its MVCC oldest-active cutoff covers subsequent inserts/updates,
+including already in-flight subtransactions; those rows are rescanned under the
+fence. User/logical ownership-dependent rows are always rescanned because their
+ownership can change without updating the child. The optimized cutoff refuses
+transaction-ID epochs beyond zero rather than misreading wrapped IDs. Cleanup
+uses one full scan, then a new delta fence for every object.
 
 This path reuses the hard-delete catalog, cycle cuts, known append-only guards,
 delete ordering and storage erase helper. It does not generate the soft-delete
 helpers' additional audit/cleanup rows. Every table's count difference must equal
-its backed count, and every unselected row must retain its exact digest.
+its backed count, and every unselected row must retain its exact `tableoid`/`xmin`/`ctid`
+version digest under the writer fence. An UPDATE creates a new tuple version;
+the fence excludes vacuum/rewrite too. This detects even same-value UPDATEs
+without repeatedly serializing large monitoring payloads. See PostgreSQL's
+[system columns](https://www.postgresql.org/docs/current/ddl-system-columns.html)
+and [snapshot functions](https://www.postgresql.org/docs/current/functions-info.html#FUNCTIONS-PG-SNAPSHOT).
 Constraints stay enabled; suspended guards must be restored before commit.
 
 Each encrypted file has `CHALKTPB1` magic, 12-byte nonce, then AES-256-GCM
