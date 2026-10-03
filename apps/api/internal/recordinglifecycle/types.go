@@ -23,7 +23,8 @@ var (
 
 var requestKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{16,128}$`)
 
-const maximumCaptureReadyClockSkew = 30 * time.Second
+// MaximumCaptureReadyClockSkew bounds accepted Capture-ready origins and subsequent job authorities.
+const MaximumCaptureReadyClockSkew = 30 * time.Second
 
 // Authority is the complete worker authority tuple. The repository repeats
 // every value against the live capture lease in the same transaction.
@@ -103,7 +104,7 @@ func validateReadyInput(input ReadyInput, now time.Time) error {
 	if err := validateRequestKey(input.RequestKey); err != nil {
 		return err
 	}
-	if input.ReadyAt.IsZero() || input.ReadyAt.After(now.UTC().Add(maximumCaptureReadyClockSkew)) {
+	if input.ReadyAt.IsZero() || input.ReadyAt.After(now.UTC().Add(MaximumCaptureReadyClockSkew)) {
 		return ErrInvalidRequest
 	}
 	return nil

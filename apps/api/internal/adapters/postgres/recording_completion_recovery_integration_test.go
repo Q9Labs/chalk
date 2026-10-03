@@ -138,7 +138,7 @@ func testCompletionRecovery(t *testing.T, ctx context.Context, pool *pgxpool.Poo
 				t.Fatalf("complete recovery: %v", err)
 			}
 		} else {
-			failed, err := repository.Fail(ctx, recordingpipeline.FailureInput{LeaseInput: lease, AvailableAt: time.Now(), ErrorCode: "capture_completion_failed", ErrorDetail: "recovery failed"})
+			failed, err := repository.Fail(ctx, recordingpipeline.FailureInput{LeaseInput: lease, AvailableAt: time.Now().Add(-time.Second), ErrorCode: "capture_completion_failed", ErrorDetail: "recovery failed"})
 			if err != nil || failed.State != recordingpipeline.JobStateTerminalFailure {
 				t.Fatalf("recovery received automatic retries: %+v %v", failed, err)
 			}
