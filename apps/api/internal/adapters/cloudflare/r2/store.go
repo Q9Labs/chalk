@@ -180,6 +180,21 @@ func (s Store) DeleteObject(ctx context.Context, key string) error {
 	return nil
 }
 
+// DeleteObjectIfMatch refuses to erase bytes different from a backed-up
+// manifest. Unsupported provider preconditions must fail, never downgrade.
+func (s Store) DeleteObjectIfMatch(ctx context.Context, key, etag string) error {
+	if s.objects == nil {
+		return objectstorage.ErrStoreUnavailable
+	}
+	_, err := s.objects.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(s.bucket), Key: aws.String(key), IfMatch: aws.String(etag),
+	})
+	if err != nil {
+		return providerError("conditionally delete r2 object", err)
+	}
+	return nil
+}
+
 func (s Store) CreateUploadURL(ctx context.Context, input objectstorage.CreateUploadURLInput) (objectstorage.SignedURL, error) {
 	if s.presign == nil {
 		return objectstorage.SignedURL{}, objectstorage.ErrStoreUnavailable
