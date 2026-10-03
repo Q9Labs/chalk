@@ -40,6 +40,15 @@ The response exposes bounded counters, ages, and failure classes—not URLs, ide
 
 Verify a rejected append → monitor failure → restored intake → successful append/recovery and durable cursor. Whiteboard sockets record scoped `whiteboard.connect`, `whiteboard.recover`, and `whiteboard.disconnect` events; terminal events include bounded close details and trace correlation, not protocol frames.
 
+The `sync.websocket.closed` log and the `whiteboard.disconnect` event carry `close_code` and `reason` with the trace and journey IDs, and the whiteboard log adds `scene_id`. When Sync didn't choose the close, the reason comes from the transport: `client_closed` (the current transport does not forward the peer's close code, so `close_code` is omitted), `timeout`, `server_shutdown`, or `transport_error` (1006). Client close text is never recorded.
+
+## Failure evidence by service
+
+- **Capture**: a failed completion stores `stage`, `outcome`, `error_class`, `http_status`, and `api_error_code` in the job's failure detail. A `timed_out` outcome keeps the last retryable API answer, so repeated 5xx responses show up next to the timeout. The API code is read from the response's `error.code` and kept only when it is a short identifier.
+- **Recorder fleet issuer**: every 4xx request log line (`recorder fleet issuer request`) has a `reason` field, such as `registration not found`, `registration revoked`, `bootstrap request does not match registration`, or `controller identity`. Provider-side failures (5xx) are not copied into it.
+- **Dashboard**: when a 2xx response breaks the generated client contract, the user sees the calm "Response did not match the expected contract" message and the browser console gets a `dashboard response did not match the expected contract` warning with the endpoint (identifiers replaced by `:id`), HTTP status, first failing field path, and journey ID. Received values are left out.
+- **Recorder nodes**: node and container logs (`podman logs`, journals) disappear when the node is replaced or deleted, and the fleet controller has no channel to read them. Bootstrap failures survive as bounded diagnostics; anything else needs the node to ship its logs while it runs.
+
 ## Limits
 
 ### Capture Entrance preparations

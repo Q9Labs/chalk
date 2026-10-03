@@ -78,7 +78,7 @@ func TestBootstrapPersistsExactIdentityCertificateAndRevocation(t *testing.T) {
 		ReleaseID: registrationRequest.ReleaseID, ImageDigest: registrationRequest.ImageDigest,
 		BootGeneration: registrationRequest.BootGeneration, CSRPEM: csrPEM,
 	}
-	if _, err := service.Challenge(context.Background(), netip.MustParseAddr("192.0.2.11"), challengeRequest); err != ErrUnauthorized {
+	if _, err := service.Challenge(context.Background(), netip.MustParseAddr("192.0.2.11"), challengeRequest); !errors.Is(err, ErrUnauthorized) || !strings.Contains(err.Error(), "peer address differs") {
 		t.Fatalf("wrong source IP challenge error = %v", err)
 	}
 	mismatched := challengeRequest

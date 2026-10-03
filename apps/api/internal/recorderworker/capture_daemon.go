@@ -281,6 +281,20 @@ func (d *CaptureDaemon) completeCapture(ctx context.Context, lease recordingpipe
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	result := make(chan error, 1)
+	// A timeout would otherwise hide the API answer that kept the retries going.
+	var lastRetryable atomic.Pointer[error]
+	var lastHTTP atomic.Pointer[error]
+	timedOut := func() error {
+		cause := ctx.Err()
+		last := lastHTTP.Load()
+		if last == nil {
+			last = lastRetryable.Load()
+		}
+		if last != nil {
+			cause = errors.Join(cause, *last)
+		}
+		return completionStageError{stage: "api_complete", outcome: "timed_out", cause: cause}
+	}
 	// Freezing the presentation performs object I/O; preserve the same capture
 	// authority while it runs, without starting another media attempt.
 	go func() {
@@ -289,6 +303,11 @@ func (d *CaptureDaemon) completeCapture(ctx context.Context, lease recordingpipe
 			if err == nil || !errors.Is(err, ErrControlPlaneRetryable) {
 				result <- err
 				return
+			}
+			lastRetryable.Store(&err)
+			var httpErr HTTPError
+			if errors.As(err, &httpErr) {
+				lastHTTP.Store(&err)
 			}
 			if waitErr := d.config.Wait(ctx, d.config.ClaimRetryWait); waitErr != nil {
 				result <- errors.Join(err, waitErr)
@@ -301,13 +320,13 @@ func (d *CaptureDaemon) completeCapture(ctx context.Context, lease recordingpipe
 		case err := <-result:
 			if err != nil {
 				if ctx.Err() != nil {
-					return completionStageError{stage: "api_complete", outcome: "timed_out", cause: ctx.Err()}
+					return timedOut()
 				}
 				return completionStageError{stage: "api_complete", outcome: "returned", cause: err}
 			}
 			return nil
 		case <-ctx.Done():
-			return completionStageError{stage: "api_complete", outcome: "timed_out", cause: ctx.Err()}
+			return timedOut()
 		case <-d.config.After(d.config.HeartbeatInterval):
 			job, err := d.heartbeat(ctx, lease, expiresAt)
 			if err != nil {
@@ -417,7 +436,7 @@ func (e completionStageError) Error() string {
 func (e completionStageError) Unwrap() error { return e.cause }
 
 func completionFailureDetail(err error) string {
-	stage, outcome, class, status := "api_complete", "returned", "unknown", 0
+	stage, outcome, class, status, apiCode := "api_complete", "returned", "unknown", 0, ""
 	var stageErr completionStageError
 	if errors.As(err, &stageErr) {
 		stage, outcome = stageErr.stage, stageErr.outcome
@@ -427,7 +446,7 @@ func completionFailureDetail(err error) string {
 	var protocolErr ProtocolError
 	switch {
 	case errors.As(err, &httpErr):
-		class, status = "http", httpErr.Status
+		class, status, apiCode = "http", httpErr.Status, httpErr.Code
 	case errors.Is(err, context.DeadlineExceeded):
 		class = "deadline"
 	case errors.As(err, &transportErr):
@@ -437,7 +456,11 @@ func completionFailureDetail(err error) string {
 	case errors.Is(err, ErrControlPlaneFenced):
 		class = "fenced"
 	}
-	return fmt.Sprintf("stage=%s outcome=%s error_class=%s http_status=%d", stage, outcome, class, status)
+	detail := fmt.Sprintf("stage=%s outcome=%s error_class=%s http_status=%d", stage, outcome, class, status)
+	if apiCode != "" {
+		detail += " api_error_code=" + apiCode
+	}
+	return detail
 }
 
 func (d *CaptureDaemon) reportCompletionFailure(ctx context.Context, lease recordingpipeline.LeaseInput, cause error) error {

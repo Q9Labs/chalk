@@ -201,7 +201,7 @@ func (service *Service) Challenge(ctx context.Context, peerIP netip.Addr, reques
 	}
 	registration, err := service.registration(request.ProviderID)
 	if err != nil {
-		return recorderbootstrapprotocol.ChallengeResponse{}, fmt.Errorf("%w: no usable registration: %v", ErrUnauthorized, err)
+		return recorderbootstrapprotocol.ChallengeResponse{}, err
 	}
 	if mismatch := challengeRegistrationMismatch(request, registration); mismatch != "" {
 		return recorderbootstrapprotocol.ChallengeResponse{}, fmt.Errorf("%w: challenge does not match registration: %s", ErrUnauthorized, mismatch)
@@ -241,12 +241,18 @@ func (service *Service) Challenge(ctx context.Context, peerIP netip.Addr, reques
 }
 
 func (service *Service) Bootstrap(ctx context.Context, peerIP netip.Addr, request recorderbootstrapprotocol.BootstrapRequest) (recorderbootstrapprotocol.BootstrapResponse, error) {
-	if err := recorderbootstrapprotocol.VerifyBootstrapProof(request); err != nil || !peerIP.IsValid() {
-		return recorderbootstrapprotocol.BootstrapResponse{}, ErrUnauthorized
+	if err := recorderbootstrapprotocol.VerifyBootstrapProof(request); err != nil {
+		return recorderbootstrapprotocol.BootstrapResponse{}, fmt.Errorf("%w: bootstrap proof: %v", ErrUnauthorized, err)
+	}
+	if !peerIP.IsValid() {
+		return recorderbootstrapprotocol.BootstrapResponse{}, fmt.Errorf("%w: invalid peer address", ErrUnauthorized)
 	}
 	registration, err := service.registration(request.ProviderID)
-	if err != nil || !bootstrapMatchesRegistration(request, registration) {
-		return recorderbootstrapprotocol.BootstrapResponse{}, ErrUnauthorized
+	if err != nil {
+		return recorderbootstrapprotocol.BootstrapResponse{}, err
+	}
+	if !bootstrapMatchesRegistration(request, registration) {
+		return recorderbootstrapprotocol.BootstrapResponse{}, fmt.Errorf("%w: bootstrap request does not match registration", ErrUnauthorized)
 	}
 	if _, err := service.verifyInventory(ctx, registration.Request, peerIP); err != nil {
 		return recorderbootstrapprotocol.BootstrapResponse{}, err
@@ -371,8 +377,11 @@ func (service *Service) registration(providerID string) (registration, error) {
 	var result registration
 	err := service.store.read(func(state persistedState) error {
 		candidate := state.Registrations[providerID]
-		if candidate == nil || candidate.RevokedAt != nil {
-			return ErrUnauthorized
+		if candidate == nil {
+			return fmt.Errorf("%w: registration not found", ErrUnauthorized)
+		}
+		if candidate.RevokedAt != nil {
+			return fmt.Errorf("%w: registration revoked", ErrUnauthorized)
 		}
 		result = *candidate
 		return nil
@@ -389,7 +398,7 @@ func (service *Service) registrationByWorker(identity workeridentity.Identity) (
 				return nil
 			}
 		}
-		return ErrUnauthorized
+		return fmt.Errorf("%w: no active registration for worker", ErrUnauthorized)
 	})
 	return result, err
 }
@@ -405,11 +414,11 @@ func (service *Service) verifyInventory(ctx context.Context, request recorderfle
 	}
 	if node.ProviderID != request.ProviderID || node.Name != request.NodeName || node.Region != request.Region ||
 		node.BootGeneration != request.BootGeneration || recorderfleet.InventoryDigest(node) != request.InventoryDigest {
-		return recorderfleet.Node{}, ErrUnauthorized
+		return recorderfleet.Node{}, fmt.Errorf("%w: provider inventory does not match the request", ErrUnauthorized)
 	}
 	for _, tag := range requiredTags {
 		if !slices.Contains(node.Tags, tag) {
-			return recorderfleet.Node{}, ErrUnauthorized
+			return recorderfleet.Node{}, fmt.Errorf("%w: provider node lacks required tag %q", ErrUnauthorized, tag)
 		}
 	}
 	// Check identity, tags, image and firewall digest before classifying readiness.
@@ -423,7 +432,7 @@ func (service *Service) verifyInventory(ctx context.Context, request recorderfle
 		return recorderfleet.Node{}, fmt.Errorf("%w: public IPv4 is absent", recorderfleet.ErrInventoryNotReady)
 	}
 	if peerIP.IsValid() && peerIP.Unmap() != publicIP.Unmap() {
-		return recorderfleet.Node{}, ErrUnauthorized
+		return recorderfleet.Node{}, fmt.Errorf("%w: peer address differs from provider public address", ErrUnauthorized)
 	}
 	return node, nil
 }

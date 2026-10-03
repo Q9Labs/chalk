@@ -91,6 +91,19 @@ func TestControlPlaneClientClaimExactBodyAndNoWork(t *testing.T) {
 	}
 }
 
+func TestControlPlaneClientKeepsOnlyABoundedAPIErrorCode(t *testing.T) {
+	for body, want := range map[string]string{
+		`{"error":{"code":"recording.invalid_completion_source","message":"event precedes recording origin"}}`: "recording.invalid_completion_source",
+		`{"error":{"code":"Bearer secret value","message":"x"}}`:                                               "",
+		`not json`: "",
+	} {
+		var httpErr HTTPError
+		if err := withAPIErrorCode(classifyHTTPError(http.StatusInternalServerError), []byte(body)); !errors.As(err, &httpErr) || httpErr.Code != want || !httpErr.Retryable {
+			t.Fatalf("body %q: error = %#v, want code %q", body, err, want)
+		}
+	}
+}
+
 func TestControlPlaneClientClaimDecodesAndVerifiesEnvelope(t *testing.T) {
 	claimID := testID(t, "11111111-1111-4111-8111-111111111111")
 	envelope := testEnvelope(t)

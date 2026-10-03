@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect, Schema, SchemaIssue } from "effect";
 import type { FeedbackReportReceiptV1, FeedbackReportRequestV1 } from "@q9labsai/chalk-client";
 import {
   createChalkEffectClient,
@@ -720,11 +720,6 @@ export function startRecentAuthGoogle(input: { action: string; resource_id?: str
   return dashboardRequest(`/api/me/recent-auth/google/start?${query.toString()}`);
 }
 
-export function completeRecentAuthGoogle(input: { state: string; code: string }): Promise<RecentAuthProof> {
-  const query = new URLSearchParams({ state: input.state, code: input.code });
-  return dashboardRequest(`/api/me/recent-auth/google/callback?${query.toString()}`);
-}
-
 type DashboardRequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
@@ -735,6 +730,7 @@ type DashboardRequestCorrelation = {
   journeyID: string;
   traceparent: string;
   responseStatus?: number;
+  endpoint?: string;
 };
 
 async function createDashboardEffectClient(correlation: DashboardRequestCorrelation): Promise<DashboardEffectClient> {
@@ -752,7 +748,7 @@ async function generatedRequest<A, E = never>(operation: (client: DashboardEffec
     const client = await createDashboardEffectClient(correlation);
     return dashboardValue(await Effect.runPromise(operation(client)));
   } catch (cause) {
-    throw dashboardEffectError(cause, correlation.responseStatus);
+    throw dashboardEffectError(cause, correlation.responseStatus, correlation);
   }
 }
 
@@ -784,6 +780,7 @@ function dashboardTransport(correlation: DashboardRequestCorrelation): typeof gl
       body,
     });
     correlation.responseStatus = response.status;
+    correlation.endpoint = `${method} ${boundedEndpointPath(targetURL.pathname)}`;
     if (retryCSRF && (await retryableCSRFResponse(response, method))) {
       csrfToken = undefined;
       csrfExpiresAt = 0;
@@ -834,12 +831,32 @@ async function retryableCSRFResponse(response: Response, method: string): Promis
   }
 }
 
-function dashboardEffectError(cause: unknown, responseStatus?: number): DashboardAPIError {
+function dashboardEffectError(cause: unknown, responseStatus?: number, correlation?: DashboardRequestCorrelation): DashboardAPIError {
   const apiError = apiErrorFields(cause);
   if (apiError) return new DashboardAPIError(effectErrorStatus(cause) ?? responseStatus ?? 500, apiError.code, apiError.message);
   const status = effectErrorStatus(cause) ?? responseStatus;
-  if (status !== undefined && status >= 200 && status < 300) return new DashboardAPIError(502, "response.invalid", "Response did not match the expected contract");
+  if (status !== undefined && status >= 200 && status < 300) {
+    reportContractMismatch(cause, correlation);
+    return new DashboardAPIError(502, "response.invalid", "Response did not match the expected contract");
+  }
   return new DashboardAPIError(status ?? 500, "request.failed", "Request failed");
+}
+
+/** Path segments that hold identifiers become `:id` so the endpoint is safe to log and groups by route. */
+function boundedEndpointPath(pathname: string): string {
+  return pathname.replace(/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?=\/|$)/gi, "/:id");
+}
+
+/** Names the endpoint and the first failing field. Received values stay out because they can be personal data. */
+function reportContractMismatch(cause: unknown, correlation?: DashboardRequestCorrelation): void {
+  const failure = Schema.isSchemaError(cause) ? SchemaIssue.makeFormatterStandardSchemaV1()(cause.issue).issues[0] : undefined;
+  const path = failure?.path?.map((segment) => (typeof segment === "object" ? String(segment.key) : String(segment))).join(".");
+  console.warn("dashboard response did not match the expected contract", {
+    endpoint: correlation?.endpoint,
+    status: correlation?.responseStatus,
+    failing_path: path ?? "unknown",
+    journey_id: correlation?.journeyID,
+  });
 }
 
 function apiErrorFields(value: unknown): { code: string; message: string } | undefined {
@@ -1098,18 +1115,22 @@ function isCompositeEpisodeCursor(value: unknown): value is CompositeEpisodeCurs
 
 function mutationRequestKey(action: string, fingerprint: string): { key: string; storageKey: string } {
   const storageKey = mutationStorageKey(action);
+  return { key: storedRequestKey(storageKey, fingerprint), storageKey };
+}
+
+function storedRequestKey(storageKey: string, fingerprint: string): string {
   try {
     const existing = JSON.parse(window.localStorage.getItem(storageKey) ?? "null") as {
       fingerprint?: unknown;
       key?: unknown;
     } | null;
-    if (existing?.fingerprint === fingerprint && typeof existing.key === "string") return { key: existing.key, storageKey };
+    if (existing?.fingerprint === fingerprint && typeof existing.key === "string") return existing.key;
   } catch {
     // Replace malformed retry metadata below.
   }
   const key = crypto.randomUUID().replaceAll("-", "");
   window.localStorage.setItem(storageKey, JSON.stringify({ fingerprint, key }));
-  return { key, storageKey };
+  return key;
 }
 
 function mutationStorageKey(action: string): string {
@@ -1144,19 +1165,7 @@ async function getCSRFToken(): Promise<string> {
 }
 
 function tenantOnboardingRequestKey(fingerprint: string): string {
-  const storageKey = "chalk.tenant-onboarding-request";
-  try {
-    const existing = JSON.parse(window.localStorage.getItem(storageKey) ?? "null") as {
-      fingerprint?: unknown;
-      key?: unknown;
-    } | null;
-    if (existing?.fingerprint === fingerprint && typeof existing.key === "string") return existing.key;
-  } catch {
-    // Replace malformed local retry metadata below.
-  }
-  const key = crypto.randomUUID().replaceAll("-", "");
-  window.localStorage.setItem(storageKey, JSON.stringify({ fingerprint, key }));
-  return key;
+  return storedRequestKey("chalk.tenant-onboarding-request", fingerprint);
 }
 
 function newTraceparent(): string {

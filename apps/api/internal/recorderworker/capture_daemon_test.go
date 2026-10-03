@@ -136,6 +136,34 @@ func TestCaptureCompletionHeartbeatsWhileBlockedAndRetriesTransientFailure(t *te
 	}
 }
 
+func TestCaptureCompletionTimeoutRetainsHTTPAnswerAfterTransportRetry(t *testing.T) {
+	control := &captureControlStub{}
+	control.complete = func(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+		if control.completeCalls == 1 {
+			return recordingpipeline.Job{}, HTTPError{Status: 503, Code: "recording.invalid_completion_source", Retryable: true}
+		}
+		return recordingpipeline.Job{}, TransportError{Err: errors.New("response lost")}
+	}
+	daemon := captureDaemonForTest(t, control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
+		return &captureAttemptStub{run: func(context.Context) error { return nil }}, nil
+	}), nil)
+	daemon.config.CompletionTimeout = time.Second
+	daemon.config.Wait = func(ctx context.Context, _ time.Duration) error {
+		if control.completeCalls == 1 {
+			return nil
+		}
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	if err := daemon.runClaim(context.Background(), captureDaemonClaim(t, 7)); err != nil {
+		t.Fatalf("reported completion failure: %v", err)
+	}
+	want := "stage=api_complete outcome=timed_out error_class=http http_status=503 api_error_code=recording.invalid_completion_source"
+	if control.completeCalls != 2 || control.failCalls != 1 || control.failed.ErrorDetail != want {
+		t.Fatalf("completion calls=%d failures=%d detail=%q", control.completeCalls, control.failCalls, control.failed.ErrorDetail)
+	}
+}
+
 func TestCaptureCompletionDoesNotRetryTerminalFailure(t *testing.T) {
 	control := &captureControlStub{complete: func(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
 		return recordingpipeline.Job{}, ErrControlPlaneFenced
@@ -167,6 +195,10 @@ func TestCaptureCompletionOnlyClaimSkipsMediaAndReportsOutcome(t *testing.T) {
 	}
 	if detail := completionFailureDetail(completionStageError{stage: "api_complete", outcome: "returned", cause: HTTPError{Status: 503}}); detail != "stage=api_complete outcome=returned error_class=http http_status=503" {
 		t.Fatalf("HTTP outcome detail = %q", detail)
+	}
+	timedOut := completionStageError{stage: "api_complete", outcome: "timed_out", cause: errors.Join(context.DeadlineExceeded, HTTPError{Status: 500, Code: "recording.invalid_completion_source", Retryable: true})}
+	if detail := completionFailureDetail(timedOut); detail != "stage=api_complete outcome=timed_out error_class=http http_status=500 api_error_code=recording.invalid_completion_source" {
+		t.Fatalf("timed out detail = %q", detail)
 	}
 }
 

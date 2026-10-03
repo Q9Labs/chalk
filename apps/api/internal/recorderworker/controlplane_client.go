@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -43,13 +44,18 @@ var (
 // control plane uses 409/412 as fences, other 4xx responses as terminal, and
 // 429/5xx responses as retryable.
 type HTTPError struct {
-	Status    int
+	Status int
+	// Code is the API error code from the response body, empty when absent or not a bounded identifier.
+	Code      string
 	Retryable bool
 	Fenced    bool
 	Terminal  bool
 }
 
 func (e HTTPError) Error() string {
+	if e.Code != "" {
+		return fmt.Sprintf("recorder control-plane request failed with HTTP status %d code %s", e.Status, e.Code)
+	}
 	return fmt.Sprintf("recorder control-plane request failed with HTTP status %d", e.Status)
 }
 
@@ -916,8 +922,8 @@ func (c *ControlPlaneClient) do(ctx context.Context, method, path string, payloa
 	}
 	defer response.Body.Close()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, int64(responseLimit)))
-		return nil, response.StatusCode, classifyHTTPError(response.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(response.Body, int64(responseLimit)))
+		return nil, response.StatusCode, withAPIErrorCode(classifyHTTPError(response.StatusCode), body)
 	}
 	data, readErr := readBounded(response.Body, responseLimit)
 	if readErr != nil {
@@ -934,6 +940,26 @@ func classifyHTTPError(status int) error {
 		return HTTPError{Status: status, Fenced: true}
 	}
 	return HTTPError{Status: status, Terminal: true}
+}
+
+var apiErrorCodePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,63}$`)
+
+// withAPIErrorCode attaches the API error code so a terminal failure names why the control plane refused.
+// Messages are not kept because they can carry request detail.
+func withAPIErrorCode(err error, body []byte) error {
+	var httpErr HTTPError
+	if !errors.As(err, &httpErr) {
+		return err
+	}
+	var envelope struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &envelope) == nil && apiErrorCodePattern.MatchString(envelope.Error.Code) {
+		httpErr.Code = envelope.Error.Code
+	}
+	return httpErr
 }
 
 func decodeBoundedJSON(data []byte, destination any, limit int) error {

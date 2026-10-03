@@ -5,6 +5,7 @@ defmodule ChalkSync.Diagnostics.WhiteboardLifecycleTest do
   alias ChalkSync.Diagnostics.Buffer
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
+  alias ChalkSync.Transport.SocketWhiteboardV1
 
   setup do
     previous = Application.get_env(:chalk_sync, :episode_diagnostics)
@@ -49,5 +50,29 @@ defmodule ChalkSync.Diagnostics.WhiteboardLifecycleTest do
              {"whiteboard.disconnect",
               %{"transport" => "websocket", "close_code" => 1008, "reason" => "permission_denied"}}
            ]
+  end
+
+  test "retains a peer disconnect when the transport does not provide its close code", %{
+    buffer: buffer
+  } do
+    identity = %Identity{
+      episode: %EpisodeKey{
+        tenant_id: "10000000-0000-4000-8000-000000000001",
+        space_id: "20000000-0000-4000-8000-000000000002",
+        episode_id: "30000000-0000-4000-8000-000000000003"
+      },
+      participant_id: "40000000-0000-4000-8000-000000000004",
+      participant_generation: 1
+    }
+
+    assert {:ok, state} = SocketWhiteboardV1.init(%{})
+
+    assert :ok =
+             SocketWhiteboardV1.terminate(:remote, %{state | identity: identity, phase: :live})
+
+    assert {:ok, scope, [entry]} = Buffer.take_batch(buffer, 10, 16 * 1024)
+    assert scope["participantId"] == identity.participant_id
+    assert entry.event["name"] == "whiteboard.disconnect"
+    assert entry.event["attributes"] == %{"transport" => "websocket", "reason" => "client_closed"}
   end
 end
