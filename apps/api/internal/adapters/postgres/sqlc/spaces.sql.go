@@ -250,7 +250,7 @@ select
     $6,
     $7,
     $8,
-    coalesce($9::text, 'disabled'),
+    coalesce($9::text, 'automatic'),
     coalesce($10::text, tenant_facts.transcription_default_mode),
     $11,
     $12,

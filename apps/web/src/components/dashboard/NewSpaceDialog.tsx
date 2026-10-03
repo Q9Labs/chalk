@@ -1,24 +1,29 @@
 import { useRef, useState } from "react";
 import { createSpace, type RecordingPolicy, type Space, type TranscriptionPolicy } from "../../lib/dashboard-api";
 import { runSpaceMutation, slugifySpaceName, SpaceDialogActions, SpaceDialogError, SpaceDialogFrame, SpaceDialogHeading, useModalDialog } from "./SpaceDialogPrimitives";
-import { SpaceArtifactPolicyFields, transcriptionNeedsCapture } from "./SpaceArtifactPolicyFields";
+import { SpaceArtifactPolicyFields, transcriptionNeedsCapture, transcriptionPolicyOrDisabled } from "./SpaceArtifactPolicyFields";
 
 type NewSpaceDialogProps = {
   open: boolean;
   onClose: () => void;
   tenantID?: string;
   transcriptionCeiling?: string | null;
+  transcriptionDefaultMode?: string | null;
   onCreated?: (space: Space) => void;
 };
 
-export function NewSpaceDialog({ open, onClose, tenantID, transcriptionCeiling, onCreated }: NewSpaceDialogProps) {
+export function NewSpaceDialog(props: NewSpaceDialogProps) {
+  return <NewSpaceDialogForm key={`${props.tenantID}:${props.transcriptionDefaultMode}`} {...props} />;
+}
+
+function NewSpaceDialogForm({ open, onClose, tenantID, transcriptionCeiling, transcriptionDefaultMode, onCreated }: NewSpaceDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
   const [admission, setAdmission] = useState<"open" | "knock">("open");
-  const [recordingPolicy, setRecordingPolicy] = useState<RecordingPolicy>("disabled");
-  const [transcriptionPolicy, setTranscriptionPolicy] = useState<TranscriptionPolicy>("disabled");
+  const [recordingPolicy, setRecordingPolicy] = useState<RecordingPolicy>("automatic");
+  const [transcriptionPolicy, setTranscriptionPolicy] = useState<TranscriptionPolicy>(transcriptionPolicyOrDisabled(transcriptionDefaultMode ?? "on_demand"));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const missingCapture = transcriptionNeedsCapture(recordingPolicy, transcriptionPolicy);
@@ -51,8 +56,8 @@ export function NewSpaceDialog({ open, onClose, tenantID, transcriptionCeiling, 
         setSlug("");
         setDescription("");
         setAdmission("open");
-        setRecordingPolicy("disabled");
-        setTranscriptionPolicy("disabled");
+        setRecordingPolicy("automatic");
+        setTranscriptionPolicy(transcriptionPolicyOrDisabled(transcriptionDefaultMode ?? "on_demand"));
         onClose();
       },
       setBusy: setSaving,

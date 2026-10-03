@@ -362,6 +362,8 @@ func prepareCreateSpaceInput(input *CreateSpaceInput) error {
 		return err
 	}
 	if !input.RecordingPolicySet {
+		// Keep omission placeholders stable for idempotent request fingerprints.
+		// The repository passes NULL so database defaults decide new-row policy.
 		input.RecordingPolicy = artifactpolicy.RecordingDisabled
 	}
 	if !input.TranscriptionPolicySet {

@@ -208,6 +208,9 @@ func mapOnboardedAccountTenant(row sqlc.GetAccountTenantByOnboardingRow) tenants
 			ID: row.ID, Name: row.Name, DefaultRegion: row.DefaultRegion, DefaultMediaPlane: row.DefaultMediaPlane,
 			MediaPlaneProviderConfig: row.MediaPlaneProviderConfig, AiProviderConfig: row.AiProviderConfig,
 			StorageProviderConfig: row.StorageProviderConfig, CorsAllowedOrigins: row.CorsAllowedOrigins, LogoKey: row.LogoKey, Website: row.Website,
+			TranscriptionCeiling: row.TranscriptionCeiling, TranscriptionDefaultMode: row.TranscriptionDefaultMode,
+			ProviderPolicyVersion: row.ProviderPolicyVersion, RecordingRetentionSeconds: row.RecordingRetentionSeconds,
+			TranscriptRetentionSeconds: row.TranscriptRetentionSeconds, SourceWindowSeconds: row.SourceWindowSeconds,
 			UpdatedAt: row.UpdatedAt, CreatedAt: row.CreatedAt,
 		}),
 		Access: tenants.TenantAccess{

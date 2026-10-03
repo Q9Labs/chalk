@@ -43,6 +43,8 @@ export function DashboardShell() {
         <NewSpaceDialog
           open={createOpen}
           tenantID={current.tenant.id}
+          transcriptionCeiling={current.tenant.transcription_ceiling}
+          transcriptionDefaultMode={current.tenant.transcription_default_mode}
           onClose={() => setCreateOpen(false)}
           onCreated={() => {
             setCreateOpen(false);

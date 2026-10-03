@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -13,9 +14,116 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
+	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
+
+// Exercise the same Tenant/Space creation and frozen-policy resolution used
+// by registration and the API, then request a Transcript after the Episode.
+func TestNewTenantSpaceTranscriptDefaults(t *testing.T) {
+	pool := accountTenantIntegrationPool(t)
+	ctx := t.Context()
+	connection, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer connection.Release()
+	queries := sqlc.New(connection)
+	for _, scenario := range []struct {
+		name            string
+		tenantDisabled  bool
+		defaultDisabled bool
+		spaceDisabled   bool
+	}{
+		{name: "no settings changed"},
+		{name: "explicit Space disabled", spaceDisabled: true},
+		{name: "explicit Tenant ceiling disabled", tenantDisabled: true},
+		{name: "explicit Tenant default disabled", defaultDisabled: true},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			tenantID := mustTenantPolicyTestID(t)
+			defer cleanupTranscriptPolicyFixture(t, ctx, connection, tenantID)
+			tenant, err := NewTenantRepository(queries).CreateTenant(ctx, tenants.CreateTenantInput{
+				ID: tenantID, Name: "Transcript defaults", CORSAllowedOrigins: []string{},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			policy := tenant.ArtifactPolicy
+			if policy.TranscriptionCeiling != artifactpolicy.TranscriptionOnDemand || policy.TranscriptionDefault != artifactpolicy.TranscriptionOnDemand || policy.ProviderPolicyVersion == "" || policy.TranscriptionSourceWindow != 24*time.Hour {
+				t.Fatalf("new Tenant policy = %+v", policy)
+			}
+			if scenario.tenantDisabled {
+				if _, err := connection.Exec(ctx, `update tenant_artifact_policies set transcription_ceiling='disabled', transcription_default_mode='disabled', source_window_seconds=0 where tenant_id=$1`, tenantID.Bytes()); err != nil {
+					t.Fatal(err)
+				}
+			} else if scenario.defaultDisabled {
+				if _, err := connection.Exec(ctx, `update tenant_artifact_policies set transcription_default_mode='disabled' where tenant_id=$1`, tenantID.Bytes()); err != nil {
+					t.Fatal(err)
+				}
+			}
+			spaceMode := artifactpolicy.TranscriptionDisabled
+			if scenario.tenantDisabled {
+				spaceMode = artifactpolicy.TranscriptionOnDemand
+			}
+			space, err := spaces.NewService(NewSpaceRepository(queries)).CreateSpace(ctx, spaces.CreateSpaceInput{
+				TenantID: tenantID, Name: "Transcript defaults", Slug: "transcript-defaults", MediaPlane: "cf_sfu",
+				TranscriptionPolicy: spaceMode, TranscriptionPolicySet: scenario.spaceDisabled || scenario.tenantDisabled,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantMode := artifactpolicy.TranscriptionOnDemand
+			if scenario.spaceDisabled || scenario.tenantDisabled || scenario.defaultDisabled {
+				wantMode = artifactpolicy.TranscriptionDisabled
+			}
+			wantSpaceMode := wantMode
+			if scenario.tenantDisabled {
+				wantSpaceMode = artifactpolicy.TranscriptionOnDemand
+			}
+			if space.TranscriptionPolicy != wantSpaceMode || space.RecordingPolicy != artifactpolicy.RecordingAutomatic {
+				t.Fatalf("new Space policies = %s/%s, want automatic/%s", space.RecordingPolicy, space.TranscriptionPolicy, wantMode)
+			}
+			row, err := queries.GetTenantSpace(ctx, sqlc.GetTenantSpaceParams{TenantID: uuid(tenantID), ID: uuid(space.ID)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			document, err := resolveArtifactPolicyDocument(ctx, queries, tenantID, row)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var frozen artifactpolicy.Document
+			if err := json.Unmarshal(document, &frozen); err != nil {
+				t.Fatal(err)
+			}
+			if frozen.Transcription.Mode != wantMode {
+				t.Fatalf("frozen mode = %s, want %s", frozen.Transcription.Mode, wantMode)
+			}
+			// A completed Capture supplies audio, not a rendered Video Export.
+			episodeID, recordingID := mustTenantPolicyTestID(t), mustTenantPolicyTestID(t)
+			snapshot := fmt.Sprintf(`{"roles":{},"admission_policy":{"mode":"open"},"default_episode_duration_seconds":60,"maximum_episode_duration_seconds":60,"linger_window_seconds":0,"artifact_policy":%s}`, document)
+			if _, err := connection.Exec(ctx, `insert into episodes(id,status,space_id,tenant_id,config_snapshot,started_at,ended_at) values($1,'ended',$2,$3,$4::jsonb,now(),now())`, episodeID.Bytes(), space.ID.Bytes(), tenantID.Bytes(), snapshot); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := connection.Exec(ctx, `insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider) values($1,$2,$3,$4,'pending','r2')`, recordingID.Bytes(), tenantID.Bytes(), space.ID.Bytes(), episodeID.Bytes()); err != nil {
+				t.Fatal(err)
+			}
+			insertTranscriptSourceFixture(t, ctx, connection, tenantID, recordingID)
+			repository := NewTranscriptRepositoryWithPool(queries, connection)
+			if wantMode == artifactpolicy.TranscriptionDisabled {
+				assertDisabledTranscriptRequest(t, ctx, repository, tenantID, recordingID)
+				return
+			}
+			_, _, err = repository.Request(ctx, transcriptPolicyRequestInput(t, tenantID, recordingID, "default-request"))
+			if err != nil {
+				t.Fatalf("request default on-demand Transcript: %v", err)
+			}
+			assertTranscriptArtifactCounts(t, ctx, connection, recordingID, 1, 1)
+		})
+	}
+}
 
 func TestTranscriptRequestEnforcesFrozenEpisodeTranscriptionPolicy(t *testing.T) {
 	if testing.Short() {

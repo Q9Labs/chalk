@@ -23,6 +23,12 @@ select
     tenants.cors_allowed_origins,
     tenants.logo_key,
     tenants.website,
+    coalesce(tenant_artifact_policies.transcription_ceiling, 'disabled') as transcription_ceiling,
+    coalesce(tenant_artifact_policies.transcription_default_mode, 'disabled') as transcription_default_mode,
+    coalesce(tenant_artifact_policies.provider_policy_version, '') as provider_policy_version,
+    coalesce(tenant_artifact_policies.recording_retention_seconds, 0) as recording_retention_seconds,
+    coalesce(tenant_artifact_policies.transcript_retention_seconds, 0) as transcript_retention_seconds,
+    coalesce(tenant_artifact_policies.source_window_seconds, 0) as source_window_seconds,
     tenants.updated_at,
     tenants.created_at,
     memberships.id as tenant_access_id,
@@ -32,6 +38,7 @@ select
     memberships.created_at as access_created_at
 from tenant_onboarding_requests
 join tenants on tenants.id = tenant_onboarding_requests.tenant_id
+left join tenant_artifact_policies on tenant_artifact_policies.tenant_id = tenants.id
 join memberships on memberships.tenant_id = tenants.id and memberships.user_id = tenant_onboarding_requests.account_id
 where tenant_onboarding_requests.account_id = $1
   and tenant_onboarding_requests.request_key = $2
@@ -43,23 +50,29 @@ type GetAccountTenantByOnboardingParams struct {
 }
 
 type GetAccountTenantByOnboardingRow struct {
-	ID                       pgtype.UUID        `json:"id"`
-	Name                     string             `json:"name"`
-	DefaultRegion            pgtype.Text        `json:"default_region"`
-	DefaultMediaPlane        pgtype.Text        `json:"default_media_plane"`
-	MediaPlaneProviderConfig []byte             `json:"media_plane_provider_config"`
-	AiProviderConfig         []byte             `json:"ai_provider_config"`
-	StorageProviderConfig    []byte             `json:"storage_provider_config"`
-	CorsAllowedOrigins       []string           `json:"cors_allowed_origins"`
-	LogoKey                  pgtype.Text        `json:"logo_key"`
-	Website                  pgtype.Text        `json:"website"`
-	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
-	CreatedAt                pgtype.Timestamptz `json:"created_at"`
-	TenantAccessID           pgtype.UUID        `json:"tenant_access_id"`
-	AccountID                pgtype.UUID        `json:"account_id"`
-	AccessRole               string             `json:"access_role"`
-	AccessUpdatedAt          pgtype.Timestamptz `json:"access_updated_at"`
-	AccessCreatedAt          pgtype.Timestamptz `json:"access_created_at"`
+	ID                         pgtype.UUID        `json:"id"`
+	Name                       string             `json:"name"`
+	DefaultRegion              pgtype.Text        `json:"default_region"`
+	DefaultMediaPlane          pgtype.Text        `json:"default_media_plane"`
+	MediaPlaneProviderConfig   []byte             `json:"media_plane_provider_config"`
+	AiProviderConfig           []byte             `json:"ai_provider_config"`
+	StorageProviderConfig      []byte             `json:"storage_provider_config"`
+	CorsAllowedOrigins         []string           `json:"cors_allowed_origins"`
+	LogoKey                    pgtype.Text        `json:"logo_key"`
+	Website                    pgtype.Text        `json:"website"`
+	TranscriptionCeiling       string             `json:"transcription_ceiling"`
+	TranscriptionDefaultMode   string             `json:"transcription_default_mode"`
+	ProviderPolicyVersion      string             `json:"provider_policy_version"`
+	RecordingRetentionSeconds  int64              `json:"recording_retention_seconds"`
+	TranscriptRetentionSeconds int64              `json:"transcript_retention_seconds"`
+	SourceWindowSeconds        int64              `json:"source_window_seconds"`
+	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
+	TenantAccessID             pgtype.UUID        `json:"tenant_access_id"`
+	AccountID                  pgtype.UUID        `json:"account_id"`
+	AccessRole                 string             `json:"access_role"`
+	AccessUpdatedAt            pgtype.Timestamptz `json:"access_updated_at"`
+	AccessCreatedAt            pgtype.Timestamptz `json:"access_created_at"`
 }
 
 func (q *Queries) GetAccountTenantByOnboarding(ctx context.Context, arg GetAccountTenantByOnboardingParams) (GetAccountTenantByOnboardingRow, error) {
@@ -76,6 +89,12 @@ func (q *Queries) GetAccountTenantByOnboarding(ctx context.Context, arg GetAccou
 		&i.CorsAllowedOrigins,
 		&i.LogoKey,
 		&i.Website,
+		&i.TranscriptionCeiling,
+		&i.TranscriptionDefaultMode,
+		&i.ProviderPolicyVersion,
+		&i.RecordingRetentionSeconds,
+		&i.TranscriptRetentionSeconds,
+		&i.SourceWindowSeconds,
 		&i.UpdatedAt,
 		&i.CreatedAt,
 		&i.TenantAccessID,

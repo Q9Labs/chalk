@@ -63,12 +63,12 @@ create index tenants_created_at_id_idx on tenants(created_at desc, id desc);
 
 create table tenant_artifact_policies (
     tenant_id uuid primary key references tenants(id) on delete cascade,
-    transcription_ceiling text not null default 'disabled',
-    transcription_default_mode text not null default 'disabled',
-    provider_policy_version text not null default '',
+    transcription_ceiling text not null default 'on_demand',
+    transcription_default_mode text not null default 'on_demand',
+    provider_policy_version text not null default 'chalk-on-demand-v1',
     recording_retention_seconds bigint not null default 2592000,
     transcript_retention_seconds bigint not null default 0,
-    source_window_seconds bigint not null default 0,
+    source_window_seconds bigint not null default 86400,
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now(),
     constraint tenant_artifact_policies_ceiling_check
@@ -268,9 +268,9 @@ create table spaces (
     recurring_policy jsonb,
     admission_policy jsonb not null default '{"mode":"open"}'::jsonb
         check (jsonb_typeof(admission_policy) = 'object' and admission_policy ->> 'mode' in ('open', 'knock', 'members_only')),
-    recording_policy text not null default 'disabled'
+    recording_policy text not null default 'automatic'
         check (recording_policy in ('disabled', 'manual', 'automatic')),
-    transcription_policy text not null default 'disabled'
+    transcription_policy text not null default 'on_demand'
         check (transcription_policy in ('disabled', 'on_demand', 'automatic')),
     default_episode_duration_seconds integer not null default 86400,
     maximum_episode_duration_seconds integer not null default 86400,
