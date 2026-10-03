@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { movingLayers, proveLayers } from "./media.mjs";
 import { cleanupRun } from "./runtime.mjs";
-import { checkShareProgress, episodeEnd } from "./proofs.mjs";
+import { checkShareProgress, episodeEnd, exportProof } from "./proofs.mjs";
 import { proofServer } from "./webhooks.mjs";
 import { createServer } from "node:net";
 import { once } from "node:events";
@@ -103,3 +103,49 @@ test("cleanup continues after a failed resource and reports the failure", async 
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+for (const defect of ["URL lifetime", "null headers", "montage font"]) {
+  test(`Export proof handles ${defect}`, async (t) => {
+    const directory = await mkdtemp(join(tmpdir(), "chalk-proofkit-export-"));
+    const bytes = Buffer.alloc(2048);
+    bytes.write("ftyp", 4);
+    t.mock.method(globalThis, "fetch", async (url, options) => {
+      // Request uses the same HeadersInit validation as the real fetch.
+      const request = new Request(url, options);
+      assert.equal(request.headers.get("x-proof"), defect === "null headers" ? null : "signed");
+      return new Response(bytes);
+    });
+    const run = {
+      directory,
+      tenantPath: "/tenant",
+      recordingId: "recording",
+      apiRequest: async (_method, path, body) => {
+        if (path.endsWith("/download-url")) {
+          if (defect === "URL lifetime") assert.ok(body.expires_in_seconds > 0 && body.expires_in_seconds <= 300, "API rejects URL lifetimes above 300 seconds");
+          return { url: "https://example.invalid/export", signed_headers: defect === "null headers" ? null : { "x-proof": "signed" } };
+        }
+        return { export: { status: "ready" } };
+      },
+    };
+    let montage = false;
+    const execute = async (program, args) => {
+      if (program === "ffprobe") return JSON.stringify({ streams: [{ codec_type: "video", width: 1280, height: 720 }, { codec_type: "audio" }], format: { duration: "20" } });
+      if (program === "magick" && args[0] === "-list") return "  Font: ProofSans\n";
+      if (program === "magick" && args[0] === "montage") {
+        montage = true;
+        if (defect === "montage font") {
+          assert.ok(args.includes("-font"), "montage requires an explicit installed font");
+          assert.equal(args[args.indexOf("-font") + 1], "ProofSans");
+        }
+      }
+      return "";
+    };
+    try {
+      const result = await exportProof(run, execute);
+      assert.equal(result.bytes, 2048);
+      assert.ok(montage);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+}
