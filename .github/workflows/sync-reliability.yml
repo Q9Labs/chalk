@@ -48,7 +48,7 @@ jobs:
         if: github.event.inputs.profile == 'release'
         uses: pnpm/action-setup@v4
         with:
-          version: 10.26.2
+          version: 12.8.1
 
       - name: Setup Node
         if: github.event.inputs.profile == 'release'

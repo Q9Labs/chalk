@@ -5,7 +5,7 @@ go_version="1.25.13"
 go_archive_sha256="39042a078ea9ceebe3ecda4a7188f0f5b96e14a071d27923ba7f40b456e85ae3"
 node_version="22.23.2"
 node_archive_sha256="d60acfe00a2932254bb0ad20e01b0d74397a0875595de719654b214f4b03f307"
-pnpm_version="10.26.2"
+pnpm_version="12.8.1"
 toolchain_root="/opt/chalk-recorder/toolchains"
 
 [[ "$(id -u)" == "0" ]] || { echo "prepare-builder must run as root" >&2; exit 1; }
