@@ -54,6 +54,15 @@ and verify all four state counts against Postgres. Then run the service once,
 confirm the four snapshots in Axiom, and enable `chalk-alert-state.timer`.
 Only install these alert files: do not run an application deployment controller.
 
+The next managed release targets the existing host: its controller replaces only
+the managed runtime files and leaves `/opt/chalk-alerts` and the root alert units
+in `/etc/systemd/system` intact. The controller regression suite checks preservation
+of the alert units. Reboots also keep them; the collector is ordered after the
+runtime restore service so the private environment is restored first. There is
+currently no managed host-replacement path. A genuinely new host needs this
+alert-only installation repeated before alerts are considered healthy; the native
+freshness monitor remains enabled independently and detects a missing collector.
+
 ## Reconcile the native monitors
 
 Load these values privately: `AXIOM_TOKEN` (monitor/notifier management),

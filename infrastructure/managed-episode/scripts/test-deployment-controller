@@ -534,11 +534,18 @@ fi
 stable_state="${fixture_root}/stable-state"
 if group_enabled healthy; then
 mkdir -p "$stable_state"
+mkdir -p "${fixture_root}/systemd"
+for alert_unit in chalk-alert-state.service chalk-alert-state.timer; do
+  printf 'alert unit preservation sentinel\n' >"${fixture_root}/systemd/${alert_unit}"
+done
 make_request stable "${fixture_root}/request.json"
 : >"${fixture_root}/commands.log"
 : >"${fixture_root}/secret-state"
 : >"${fixture_root}/aws.log"
 run_controller "$stable_state" "${fixture_root}/request.json" "$manifest" ok >/dev/null
+for alert_unit in chalk-alert-state.service chalk-alert-state.timer; do
+  grep -Fxq 'alert unit preservation sentinel' "${fixture_root}/systemd/${alert_unit}" || fail "managed deployment replaced ${alert_unit}"
+done
 jq -e -R -s '
   split("\n")
   | map(select(startswith("ssm get-parameters --names ")) | split(" ") | .[3:index("--with-decryption")])

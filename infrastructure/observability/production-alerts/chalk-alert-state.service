@@ -1,6 +1,6 @@
 [Unit]
 Description=Chalk read-only production alert state snapshot
-After=network-online.target
+After=network-online.target chalk-runtime-restore.service
 Wants=network-online.target
 
 [Service]
