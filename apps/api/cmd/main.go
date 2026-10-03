@@ -269,7 +269,7 @@ func run() error {
 	recordingPipelineRepository = recordingPipelineRepository.WithTranscriptionEnabled(cfg.Capabilities.Transcription)
 	recordingPipelineRepository = recordingPipelineRepository.WithRecordingBundleV2Enabled(cfg.RecordingBundleV2Enabled)
 	if cfg.Capabilities.Recording {
-		profile, err := recordingpresentation.NewComposite720PProfile(cfg.RecordingUIBuildSHA256)
+		profile, err := recordingpresentation.NewComposite720PProfile()
 		if err != nil {
 			return fmt.Errorf("configure recording presentation profile: %w", err)
 		}
