@@ -241,7 +241,14 @@ export async function recordProof(run, receiver, cameraShare, forceLayerSwitch) 
   for (const page of pages) await page.context().close();
   return { recording, camera: cameraResult(share, baselineError, forceLayerSwitch) };
 }
-export async function exportProof(run) {
+export function contactSheetFont(fonts, platform = process.platform) {
+  // macOS ImageMagick can have no registered fonts despite system fonts existing.
+  if (platform === "darwin" && !fonts.trim()) return "/System/Library/Fonts/Supplemental/Arial.ttf";
+  const font = fonts.match(/^\s*Font:\s*(\S.*)$/m)?.[1].trim();
+  check(font, "ImageMagick has no installed font for the contact sheet");
+  return font;
+}
+export async function exportProof(run, execute = command) {
   const started = Date.now();
   await run.apiRequest("POST", `${run.tenantPath}/recordings/${run.recordingId}/export`, {});
   console.log("Export requested");
@@ -258,14 +265,15 @@ export async function exportProof(run) {
     run.signal,
   );
   const wallSeconds = (Date.now() - started) / 1000;
-  const download = await run.apiRequest("POST", `${run.tenantPath}/recordings/${run.recordingId}/download-url`, { expires_in_seconds: 900 });
-  const response = await fetch(download.url, { headers: download.signed_headers, signal: AbortSignal.timeout(120_000) });
+  // Download immediately; one minute stays below the API artifact URL cap.
+  const download = await run.apiRequest("POST", `${run.tenantPath}/recordings/${run.recordingId}/download-url`, { expires_in_seconds: 60 });
+  const response = await fetch(download.url, { headers: download.signed_headers ?? {}, signal: AbortSignal.timeout(120_000) });
   check(response.ok, `MP4 download failed: HTTP ${response.status}`);
   const bytes = Buffer.from(await response.arrayBuffer());
   check(bytes.length > 1024 && bytes.subarray(4, 8).toString() === "ftyp", "Download is not an MP4");
   const mp4 = `${run.directory}/export.mp4`;
   await writeFile(mp4, bytes, { mode: 0o600 });
-  const probe = JSON.parse(await command("ffprobe", ["-v", "error", "-show_streams", "-show_format", "-of", "json", mp4]));
+  const probe = JSON.parse(await execute("ffprobe", ["-v", "error", "-show_streams", "-show_format", "-of", "json", mp4]));
   check(
     probe.streams.some((stream) => stream.codec_type === "video" && stream.width >= 640 && stream.height >= 360),
     "Export has no usable video",
@@ -279,10 +287,11 @@ export async function exportProof(run) {
   const frames = [];
   for (let index = 0; index < 4; index++) {
     const frame = `${run.directory}/frame-${index + 1}.png`;
-    await command("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-ss", String((duration * (index + 0.5)) / 4), "-i", mp4, "-frames:v", "1", "-vf", "scale=1000:-1", frame]);
+    await execute("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-ss", String((duration * (index + 0.5)) / 4), "-i", mp4, "-frames:v", "1", "-vf", "scale=1000:-1", frame]);
     frames.push(frame);
   }
-  await command("magick", ["montage", ...frames, "-tile", "2x2", "-geometry", "+16+16", `${run.directory}/contact-sheet.png`]);
+  const font = contactSheetFont(await execute("magick", ["-list", "font"]));
+  await execute("magick", ["montage", "-font", font, ...frames, "-tile", "2x2", "-geometry", "+16+16", `${run.directory}/contact-sheet.png`]);
   await save(`${run.directory}/ffprobe.json`, probe);
   const result = {
     wallSeconds,
