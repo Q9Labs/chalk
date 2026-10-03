@@ -37,7 +37,7 @@ func TestPrepareFreezesReferencedAssetsBeforePublishingTimeline(t *testing.T) {
 	}
 	readyAt := time.Date(2026, time.September, 6, 12, 0, 0, 0, time.UTC)
 	participantID := "00000000-0000-4000-8000-000000000105"
-	profile, err := NewComposite720PProfile("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	profile, err := NewComposite720PProfile()
 	if err != nil {
 		t.Fatalf("build profile: %v", err)
 	}

@@ -106,7 +106,7 @@ func testRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T, polic
 	if _, err := transaction.Exec(ctx, `insert into recording_pipelines(recording_id, tenant_id, reservation_id, state, capture_epoch) values($1, $2, $3, 'capture_leased', 1)`, recordingID.Bytes(), tenantID.Bytes(), reservationID.Bytes()); err != nil {
 		t.Fatalf("seed pipeline: %v", err)
 	}
-	presentationProfile, err := recordingpresentation.NewComposite720PProfile("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	presentationProfile, err := recordingpresentation.NewComposite720PProfile()
 	if err != nil {
 		t.Fatalf("build presentation profile: %v", err)
 	}

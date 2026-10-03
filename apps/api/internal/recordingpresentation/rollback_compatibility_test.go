@@ -8,7 +8,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
 )
 
-func TestNewAPIBaselineCanFinalizeAfterAPIRollback(t *testing.T) {
+func TestDigestFreeBaselineCanFinalizeAndPresentationCanRetry(t *testing.T) {
 	fixture := newParticipantBuilderFixture(t)
 	baseline, err := json.Marshal(fixture.source.Profile)
 	if err != nil {
@@ -18,8 +18,11 @@ func TestNewAPIBaselineCanFinalizeAfterAPIRollback(t *testing.T) {
 	if err := json.Unmarshal(baseline, &stored); err != nil {
 		t.Fatal(err)
 	}
-	if err := validateRollbackProfile(stored); err != nil {
-		t.Fatalf("old API rejected new baseline: %v", err)
+	if stored.UIBuildSHA256 != "" {
+		t.Fatal("new baseline contains retired UI digest")
+	}
+	if err := ValidateProfile(stored); err != nil {
+		t.Fatalf("validate baseline: %v", err)
 	}
 	fixture.source.Profile = stored
 	setParticipantPlan(t, &fixture.source, 1, []captureplan.ParticipantSnapshot{activeParticipant(fixture.first, "Alex", 1)}, nil)
@@ -27,44 +30,45 @@ func TestNewAPIBaselineCanFinalizeAfterAPIRollback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("finalize persisted baseline: %v", err)
 	}
-	if err := validateRollbackProfile(built.Timeline.Initial.Profile); err != nil {
-		t.Fatalf("old API rejected finalized profile: %v", err)
-	}
-	stored.UIBuildSHA256 = ""
-	if err := validateRollbackProfile(stored); err == nil {
-		t.Fatal("old API fixture accepted a digest-free baseline")
-	}
-}
-
-func TestNewAPIPresentationCanBeClaimedAndRetriedAfterNativeWorkerRollback(t *testing.T) {
-	fixture := newParticipantBuilderFixture(t)
-	setParticipantPlan(t, &fixture.source, 1, []captureplan.ParticipantSnapshot{activeParticipant(fixture.first, "Alex", 1)}, nil)
-	built, err := buildPresentation(fixture.source)
-	if err != nil {
-		t.Fatal(err)
-	}
 	presentation, err := Encode(built.Timeline)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Old native workers decode and validate the same stored presentation on every retry.
 	for _, attempt := range []string{"claim", "retry"} {
 		timeline, err := Decode(presentation)
 		if err != nil {
 			t.Fatalf("%s: decode presentation: %v", attempt, err)
 		}
-		if err := validateRollbackProfile(timeline.Initial.Profile); err != nil {
-			t.Fatalf("%s: old native worker rejected profile: %v", attempt, err)
+		if timeline.Initial.Profile.UIBuildSHA256 != "" {
+			t.Fatalf("%s: finalized profile contains retired digest", attempt)
 		}
 	}
-	built.Timeline.Initial.Profile.UIBuildSHA256 = ""
-	if err := validateRollbackProfile(built.Timeline.Initial.Profile); err == nil {
-		t.Fatal("old worker fixture accepted a digest-free presentation")
+}
+
+func TestStoredRollbackProfilesRemainReadable(t *testing.T) {
+	profile, err := NewComposite720PProfile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile.UIBuildSHA256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	if err := validateRollbackProfile(profile); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored Profile
+	if err := json.Unmarshal(encoded, &stored); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateProfile(stored); err != nil {
+		t.Fatalf("validate old stored profile: %v", err)
 	}
 }
 
 // Frozen Profile.validate from 1952389b, used by both the old API and old native
-// worker. Keep its required-digest predicate unchanged during this compatibility release.
+// worker. Retained to prove compatibility with stored digest-bearing profiles.
 func validateRollbackProfile(profile Profile) error {
 	if !boundedString(profile.Name, 128) || !boundedString(profile.Version, 128) ||
 		!sha256Pattern.MatchString(profile.UIBuildSHA256) || !boundedString(profile.Locale, 64) ||
