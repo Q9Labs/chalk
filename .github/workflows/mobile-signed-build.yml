@@ -42,7 +42,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
-          node-version: 25.6.1
+          node-version-file: .tool-versions
           cache: pnpm
 
       - name: Set up Java 17
@@ -94,7 +94,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
-          node-version: 25.6.1
+          node-version-file: .tool-versions
           cache: pnpm
 
       - name: Install 1Password CLI

@@ -144,7 +144,8 @@ with candidate as (
                 and operation.status = 'applied'
           )))
       and ((recording_jobs.kind = 'capture' and recording_pipelines.state in ('reserved', 'retryable_failure'))
-        or (recording_jobs.kind = 'transcription' and recording_pipelines.state = 'capture_complete')
+        or (recording_jobs.kind = 'transcription' and recording_pipelines.capture_completed_at is not null
+            and recording_pipelines.state <> 'deleted')
         or (recording_jobs.kind = 'render' and recording_pipelines.state in ('render_queued', 'retryable_failure')))
     order by recording_jobs.priority desc, recording_jobs.available_at, recording_jobs.id
     for update of recording_jobs, recording_pipelines skip locked
@@ -185,7 +186,8 @@ with candidate as (
     where recording_pipelines.recording_id = leased.recording_id
       and (leased.kind <> 'capture' or leased.completion_only or recording_pipelines.stop_operation_id is null)
       and ((leased.kind = 'capture' and recording_pipelines.state in ('reserved', 'retryable_failure'))
-        or (leased.kind = 'transcription' and recording_pipelines.state = 'capture_complete')
+        or (leased.kind = 'transcription' and recording_pipelines.capture_completed_at is not null
+            and recording_pipelines.state <> 'deleted')
         or (leased.kind = 'render' and recording_pipelines.state in ('render_queued', 'retryable_failure')))
     returning recording_pipelines.recording_id, recording_pipelines.capture_epoch
 )

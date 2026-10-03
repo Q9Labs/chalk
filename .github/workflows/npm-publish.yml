@@ -58,26 +58,35 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22.14.0
+          node-version-file: .tool-versions
           cache: pnpm
           registry-url: https://registry.npmjs.org/
 
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Select release packages
+        run: |
+          filters="$(node --input-type=module -e 'import { releasePackages } from "./scripts/npm-release.mjs"; console.log(releasePackages.map(({ name }) => `--filter ${name}`).join(" "));')"
+          echo "RELEASE_FILTERS=$filters" >> "$GITHUB_ENV"
+
       - name: Build packages
-        run: pnpm --sort --workspace-concurrency=1 --filter './packages/*' --filter './sdks/typescript/*' build
+        run: |
+          read -ra release_filters <<< "$RELEASE_FILTERS"
+          pnpm --sort --workspace-concurrency=1 "${release_filters[@]}" build
 
       - name: Check packages
         run: |
-          pnpm run package:publint
-          pnpm run package:attw
+          read -ra release_filters <<< "$RELEASE_FILTERS"
+          pnpm "${release_filters[@]}" exec publint
+          pnpm "${release_filters[@]}" exec attw --pack --ignore-rules cjs-resolves-to-esm internal-resolution-error --exclude-entrypoints './styles.css' './src/styles.css' './dist/styles/*' './styles/*'
 
       - name: Pack packages
         if: inputs.dry_run
         run: |
           mkdir -p "$RUNNER_TEMP/npm-packages"
-          pnpm --workspace-concurrency=1 --filter './packages/*' --filter './sdks/typescript/*' --recursive pack --pack-destination "$RUNNER_TEMP/npm-packages"
+          read -ra release_filters <<< "$RELEASE_FILTERS"
+          pnpm --workspace-concurrency=1 "${release_filters[@]}" --recursive pack --pack-destination "$RUNNER_TEMP/npm-packages"
 
       - name: Publish packages
         if: ${{ !inputs.dry_run }}
@@ -92,8 +101,7 @@ jobs:
               package_filters+=(--filter "$package_name")
             fi
           done < <(
-            pnpm --filter './packages/*' --filter './sdks/typescript/*' --recursive list --depth -1 --json |
-              node -e 'const fs = require("node:fs"); for (const { name, version, private: privatePackage } of JSON.parse(fs.readFileSync(0, "utf8"))) if (!privatePackage) console.log(name+"\t"+version);'
+            node --input-type=module -e 'import { releasePackages } from "./scripts/npm-release.mjs"; for (const { name, version } of releasePackages) console.log(name+"\t"+version);'
           )
           if (( ${#package_filters[@]} == 0 )); then
             echo "All release versions are already published."

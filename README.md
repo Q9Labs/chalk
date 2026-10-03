@@ -70,6 +70,10 @@ pnpm dev:reset                # destructive: asks before removing local state
 pnpm dev:reset -- --yes       # skip only the confirmation prompt
 ```
 
+`pnpm dev` also creates a local Tenant and Space with the `cf_sfu` media plane and
+prints their ids in the ready summary. Use that Space for local end-to-end runs;
+the `seed:dataset` showcase Spaces use `cf_rtk`.
+
 `--fresh` replaces only this checkout's tenant and Space fixture. It leaves
 backing services, unrelated rows, and caches in place.
 

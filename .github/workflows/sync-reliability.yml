@@ -35,14 +35,14 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.25.12
+          go-version-file: apps/api/go.mod
           cache-dependency-path: apps/api/go.sum
 
       - name: Setup Erlang and Elixir
         uses: erlef/setup-beam@v1
         with:
-          otp-version: "28"
-          elixir-version: 1.19.5
+          version-file: .tool-versions
+          version-type: strict
 
       - name: Setup pnpm
         if: github.event.inputs.profile == 'release'
@@ -54,7 +54,7 @@ jobs:
         if: github.event.inputs.profile == 'release'
         uses: actions/setup-node@v4
         with:
-          node-version: 22.14.0
+          node-version-file: .tool-versions
           cache: pnpm
 
       - name: Install release dependencies

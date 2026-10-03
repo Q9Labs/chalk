@@ -44,8 +44,6 @@ CODEGEN_WHITEBOARD_TYPESCRIPT_OUTPUT_PATH="$tmpdir/whiteboard-v1.ts" \
 CODEGEN_WHITEBOARD_ELIXIR_OUTPUT_PATH="$tmpdir/generated_whiteboard_v1.ex" \
   node tools/contract-fixture-proof/src/emitters/whiteboard-elixir.mjs
 
-(cd apps/sync && mix format "$tmpdir/generated_whiteboard_v1.ex")
-
 pnpm exec openapi-typescript "$tmpdir/openapi.json" --output "$tmpdir/openapi-types.d.ts"
 pnpm exec oxfmt --write \
   "$tmpdir/openapi.json" \
@@ -61,5 +59,6 @@ diff -u sdks/typescript/client/src/generated/http-api.ts "$tmpdir/http-api.ts"
 diff -u sdks/typescript/client/src/generated/sync.ts "$tmpdir/sync.ts"
 diff -u sdks/typescript/client/src/generated/whiteboard-v1.ts "$tmpdir/whiteboard-v1.ts"
 diff -u sdks/typescript/client/src/generated/openapi-types.d.ts "$tmpdir/openapi-types.d.ts"
+
 diff -u apps/sync/lib/chalk_sync/contract/generated.ex "$tmpdir/generated.ex"
 diff -u apps/sync/lib/chalk_sync/contract/generated_whiteboard_v1.ex "$tmpdir/generated_whiteboard_v1.ex"

@@ -6,6 +6,13 @@ runs the same tracker checks followed by `q9gate run --full`. Each gate runs
 with `GOMAXPROCS=1`, `VITEST_MAX_WORKERS=1`, `ERL_FLAGS='+S 1:1'`, and
 q9gate concurrency 1. `gate.report.json` records every selected/skipped lane.
 
+The pre-commit hook runs `pnpm gate:fast`: tracker check plus the `scope`, `format`,
+`hygiene`, `secrets`, `language-ratchet`, and `generated` lanes on staged files
+(about 10 seconds). The full gate runs in `.github/workflows/gate.yml` on every
+pull request. A run with nothing in scope fails in the `scope` lane; set
+`GATE_ALLOW_EMPTY=1` only when that is intended. `GATE_SERVICES=external` drops
+the `services` lane, because CI runs the API and Sync gates as separate jobs.
+
 `pnpm gate:explain <path>` asks q9gate why a path selects lanes. Local hooks
 classify staged files. For branch/CI scope use `pnpm gate -- --base <ref>`;
 q9gate compares `<ref>...HEAD`. Use `pnpm gate -- --files <path>` (repeatable)
@@ -60,3 +67,15 @@ shipment target from branch, release mode, or directory.
   The full mode selects every rule. Separate nightly and release-candidate
   workflows add multi-node partitions, PostgreSQL failover, sustained load,
   process restart, and real-browser proof.
+
+## Running a gate on the M4
+
+`scripts/gates/remote.sh <root|api|sync|recorder|-- command...>` runs a gate in
+a throwaway checkout on the M4 and always cleans up; `--dry-run` prints the plan.
+It snapshots the local commit plus uncommitted work as `origin/master` and the
+branch tip, so branch scope and Fallow work. Before starting it reaps stale
+`/tmp/chalk-*` checkouts and orphaned `chalk-gate-postgres-*` containers, and it
+refuses to start below `CHALK_REMOTE_MIN_FREE_GIB` free disk. Dependencies come
+from the M4 user's default pnpm, Go, Hex, and Mix caches. The root
+gate fails early when installed packages differ from `pnpm-lock.yaml`
+(`check-install.mjs`), and slow steps run under `with-timeout.sh`.

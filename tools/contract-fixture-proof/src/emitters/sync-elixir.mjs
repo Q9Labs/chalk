@@ -1,23 +1,17 @@
 // @ts-check
 
-import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
+import { ElixirAtom, renderAttribute, renderElixirValue, wrapElixirSource } from "./elixir-layout.mjs";
 import { codegenPath, loadSyncContract, syncProtocolVersion } from "./sync-contract.mjs";
 
-const execute = promisify(execFile);
-const sourceDirectory = path.dirname(fileURLToPath(import.meta.url));
-const syncDirectory = path.resolve(sourceDirectory, "../../../../apps/sync");
 const protocolVersion = syncProtocolVersion();
 const outputPath = codegenPath("CODEGEN_SYNC_ELIXIR_OUTPUT_PATH", "apps/sync/lib/chalk_sync/contract/generated.ex");
 const contract = await loadSyncContract(undefined, protocolVersion);
 const source = renderElixir(contract);
 
 await mkdir(path.dirname(outputPath), { recursive: true });
-await writeFile(outputPath, source);
-await execute("mix", ["format", outputPath], { cwd: syncDirectory });
+await writeFile(outputPath, wrapElixirSource(source));
 
 /**
  * @param {Record<string, any>} contract
@@ -48,28 +42,28 @@ function renderElixir(contract) {
     "  @moduledoc false",
     "",
     "  @protocol_version 1",
-    `  @client_commands %{${contract.commands.map((command) => `${JSON.stringify(command.name)} => :${command.name}`).join(", ")}}`,
-    `  @client_operations %{${contract.operations.map((operation) => `${JSON.stringify(operation.name)} => :${operation.name}`).join(", ")}}`,
-    `  @event_origins ${renderElixirValue(eventOrigins)}`,
-    `  @limits ${renderElixirValue(limits)}`,
+    ...renderAttribute("client_commands", new Map(contract.commands.map((command) => [command.name, new ElixirAtom(command.name)]))),
+    ...renderAttribute("client_operations", new Map(contract.operations.map((operation) => [operation.name, new ElixirAtom(operation.name)]))),
+    ...renderAttribute("event_origins", eventOrigins),
+    ...renderAttribute("limits", limits),
     `  @correlation_reserved_bytes @limits["correlationReservedBytes"]`,
-    `  @close_codes ${renderCloseCodes(contract.closeCodes)}`,
-    `  @metadata ${renderElixirValue(metadata)}`,
-    `  @correlation_field_keys ${renderElixirValue(Object.keys(contract.correlation.optionalTopLevelFields))}`,
-    `  @capabilities ${renderElixirValue(contract.capabilities)}`,
-    `  @terminal_reasons ${renderElixirValue(contract.terminal.reasons)}`,
-    `  @rejection_reasons ${renderElixirValue(contract.rejectionReasons)}`,
-    `  @retryable_codes ${renderElixirValue(contract.retryableError.codes)}`,
-    `  @protocol_error_codes ${renderElixirValue(contract.error.code)}`,
-    `  @live_target_names ${renderElixirValue(contract.liveTargetFrames.request.name)}`,
-    `  @live_target_outcomes ${renderElixirValue(contract.liveTargetFrames.result.outcome)}`,
-    `  @directed_request_names ${renderElixirValue(contract.directedRequestFrames.send.name)}`,
-    `  @directed_request_results ${renderElixirValue(contract.directedRequestFrames.result.result)}`,
-    `  @collaboration_capabilities ${renderElixirValue(contract.collaboration.capabilities)}`,
-    `  @reactions ${renderElixirValue(contract.collaboration.reactions)}`,
-    `  @collaboration_error_codes ${renderElixirValue(contract.collaboration.errorCodes)}`,
-    `  @media_sources ${renderElixirValue(contract.projectionFrames.mediaSnapshot.items.source)}`,
-    `  @presence_states ${renderElixirValue(contract.projectionFrames.presenceSnapshot.items.state)}`,
+    ...renderAttribute("close_codes", new Map(contract.closeCodes.map((closeCode) => [closeCode.code, closeCode]))),
+    ...renderAttribute("metadata", metadata),
+    ...renderAttribute("correlation_field_keys", Object.keys(contract.correlation.optionalTopLevelFields)),
+    ...renderAttribute("capabilities", contract.capabilities),
+    ...renderAttribute("terminal_reasons", contract.terminal.reasons),
+    ...renderAttribute("rejection_reasons", contract.rejectionReasons),
+    ...renderAttribute("retryable_codes", contract.retryableError.codes),
+    ...renderAttribute("protocol_error_codes", contract.error.code),
+    ...renderAttribute("live_target_names", contract.liveTargetFrames.request.name),
+    ...renderAttribute("live_target_outcomes", contract.liveTargetFrames.result.outcome),
+    ...renderAttribute("directed_request_names", contract.directedRequestFrames.send.name),
+    ...renderAttribute("directed_request_results", contract.directedRequestFrames.result.result),
+    ...renderAttribute("collaboration_capabilities", contract.collaboration.capabilities),
+    ...renderAttribute("reactions", contract.collaboration.reactions),
+    ...renderAttribute("collaboration_error_codes", contract.collaboration.errorCodes),
+    ...renderAttribute("media_sources", contract.projectionFrames.mediaSnapshot.items.source),
+    ...renderAttribute("presence_states", contract.projectionFrames.presenceSnapshot.items.state),
     "  @uuid ~r/\\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\z/i",
     "  @traceparent ~r/\\A00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}\\z/",
     "  @tracestate ~r/\\A[a-z][a-z0-9_*\\x2f-]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256}(,[a-z][a-z0-9_*\\x2f-]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256})*\\z/",
@@ -283,7 +277,7 @@ function renderElixir(contract) {
     '  defp valid_event?(%{"name" => name, "event_id" => event_id, "base_revision" => base_revision, "revision" => revision, "schema_version" => schema_version, "resulting_state_digest" => digest, "payload" => payload} = frame) do',
     '    common = ["type", "stream", "name", "event_id", "base_revision", "revision", "schema_version", "resulting_state_digest", "payload"]',
     "    origin = Map.get(@event_origins, name)",
-    `    origin_keys = if origin == "command_or_external", do: [${JSON.stringify(contract.eventFrame.commandOriginField)}, ${JSON.stringify(contract.eventFrame.externalOriginField)}], else: [if(origin == "command", do: ${JSON.stringify(contract.eventFrame.commandOriginField)}, else: if(origin == "lifecycle", do: ${JSON.stringify(contract.eventFrame.lifecycleOriginField)}, else: ${JSON.stringify(contract.eventFrame.externalOriginField)}) )]`,
+    `    origin_keys = if origin == "command_or_external", do: [${JSON.stringify(contract.eventFrame.commandOriginField)}, ${JSON.stringify(contract.eventFrame.externalOriginField)}], else: [if(origin == "command", do: ${JSON.stringify(contract.eventFrame.commandOriginField)}, else: if(origin == "lifecycle", do: ${JSON.stringify(contract.eventFrame.lifecycleOriginField)}, else: ${JSON.stringify(contract.eventFrame.externalOriginField)}))]`,
     '    Enum.any?(origin_keys, fn key -> correlation_exact_keys?(frame, common ++ [key]) and valid_origin_id?(key, frame[key]) end) and frame["stream"] == "control" and valid_uuid?(event_id) and valid_revision_pair?(base_revision, revision) and valid_positive_integer?(schema_version) and valid_digest?(digest) and valid_event_payload?(name, payload) and frame_within_limit?(frame, @limits["encodedLiveEventBytes"])',
     "  end",
     "  defp valid_event?(_frame), do: false",
@@ -299,7 +293,11 @@ function renderElixir(contract) {
     "  defp valid_replay_page?(_frame), do: false",
     "  defp valid_replay_range?([], _first, _last), do: false",
     "  defp valid_replay_range?([first | rest], first_revision, last_revision) do",
-    '    valid_event?(first) and first["revision"] == first_revision and Enum.reduce_while(rest, first, fn event, previous -> if valid_event?(event) and event["base_revision"] == previous["revision"], do: {:cont, event}, else: {:halt, false} end) |> case do false -> false; last -> last["revision"] == last_revision end',
+    '    valid_event?(first) and first["revision"] == first_revision and valid_replay_chain?(rest, first, last_revision)',
+    "  end",
+    '  defp valid_replay_chain?([], last, last_revision), do: last["revision"] == last_revision',
+    "  defp valid_replay_chain?([event | rest], previous, last_revision) do",
+    '    valid_event?(event) and event["base_revision"] == previous["revision"] and valid_replay_chain?(rest, event, last_revision)',
     "  end",
     "",
     '  defp valid_ack?(%{"outcome" => "committed", "command_id" => id, "delivery" => delivery, "event_id" => event_id, "revision" => revision, "state_digest" => digest} = frame), do: correlation_exact_keys?(frame, ["type", "command_id", "delivery", "outcome", "event_id", "revision", "state_digest"]) and valid_ack_base?(id, delivery) and valid_uuid?(event_id) and valid_positive_integer?(revision) and valid_digest?(digest)',
@@ -480,40 +478,6 @@ function renderAckClause(ack) {
 /**
  * @param {unknown} value
  */
-function renderElixirValue(value) {
-  if (value === null) {
-    return "nil";
-  }
-  if (typeof value === "string") {
-    return inspectString(value);
-  }
-  if (typeof value === "number") {
-    const rendered = String(value);
-    if (Number.isInteger(value) && Math.abs(value) >= 10_000) {
-      const sign = rendered.startsWith("-") ? "-" : "";
-      const digits = sign ? rendered.slice(1) : rendered;
-      return sign + digits.replace(/\B(?=(\d{3})+(?!\d))/gu, "_");
-    }
-    return rendered;
-  }
-  if (typeof value === "boolean") {
-    return String(value);
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map(renderElixirValue).join(", ")}]`;
-  }
-  return `%{${Object.entries(value)
-    .map(([key, child]) => `${inspectString(key)} => ${renderElixirValue(child)}`)
-    .join(", ")}}`;
-}
-
-/**
- * @param {Record<string, any>[]} closeCodes
- */
-function renderCloseCodes(closeCodes) {
-  return `%{${closeCodes.map((closeCode) => `${closeCode.code} => ${renderElixirValue(closeCode)}`).join(", ")}}`;
-}
-
 /**
  * @param {string} value
  */

@@ -1,0 +1,200 @@
+name: Gate
+
+# Required status checks: "Root gate", "API gate", "Sync gate".
+# The API and Sync jobs skip themselves (and count as passed) when their inputs are unchanged.
+# The pre-commit hook runs only the fast lanes; this workflow is the full verification.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chalk-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  GOMAXPROCS: "2"
+  VITEST_MAX_WORKERS: "2"
+
+jobs:
+  changes:
+    name: Select service gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      api: ${{ steps.select.outputs.api }}
+      sync: ${{ steps.select.outputs.sync }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version-file: .tool-versions
+
+      - name: Select gates from changed paths
+        id: select
+        env:
+          BASE_REF: ${{ github.base_ref || 'master' }}
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            printf 'api=true\nsync=true\n' >> "${GITHUB_OUTPUT}"
+          else
+            node scripts/gates/chalk-gate-plan.mjs --services "origin/${BASE_REF}" >> "${GITHUB_OUTPUT}"
+          fi
+
+  root:
+    name: Root gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10.26.2
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+
+      # Go runs gitleaks, osv-scanner, and the contract checks.
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+
+      - name: Install Semgrep
+        run: pipx install semgrep==1.179.0
+
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The recorder lane runs scripts/recorder/gate.sh, which needs tofu.
+      - name: Set up OpenTofu
+        uses: ./.github/actions/setup-opentofu
+
+      # The root tests lane runs tools/sdk-web-consumer-e2e in Chromium.
+      - name: Install browser runtime
+        run: pnpm --dir sdks/typescript/client exec playwright install --with-deps chromium
+
+      # API and Sync have their own jobs below, so the root gate leaves its service lane out.
+      - name: Run the root gate against the pull request base
+        env:
+          GATE_SERVICES: external
+          GATE_BASE_REF: origin/${{ github.base_ref || 'master' }}
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            pnpm run gate:full
+          else
+            pnpm run gate -- --base "origin/${{ github.base_ref || 'master' }}"
+          fi
+
+  api:
+    name: API gate
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10.26.2
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+
+      # The migration proofs run mix deps.get in apps/sync.
+      - name: Set up Erlang and Elixir
+        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124
+        with:
+          version-file: .tool-versions
+          version-type: strict
+
+      # The lifecycle smoke test is a Node script.
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The gate starts its own PostgreSQL container through scripts/gates/with-postgres.sh.
+      - name: Run the API gate
+        run: apps/api/scripts/gate.sh
+
+  sync:
+    name: Sync gate
+    needs: changes
+    if: needs.changes.outputs.sync == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10.26.2
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+
+      # Go applies the API migrations to the gate database.
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+
+      - name: Set up Erlang and Elixir
+        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124
+        with:
+          version-file: .tool-versions
+          version-type: strict
+
+      # The wire SDK phase runs the client SDK source through pnpm exec tsx, which imports the built diagnostics contracts.
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build diagnostics contracts
+        run: pnpm --dir packages/diagnostics-contracts run build
+
+      - name: Cache Mix dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            apps/sync/deps
+            apps/sync/_build
+          key: sync-mix-${{ runner.os }}-${{ hashFiles('apps/sync/mix.lock') }}
+
+      # One PostgreSQL container serves the Sync gate and the Sync correctness harness.
+      - name: Run the Sync gate and correctness harness
+        run: scripts/gates/with-postgres.sh apps/sync/scripts/gate.sh apps/sync/scripts/reliability-correctness

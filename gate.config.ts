@@ -1,8 +1,9 @@
 import { defineGate, lanes } from "@q9labsai/gates";
-import { createGatePlan } from "./scripts/gates/chalk-gate-plan.mjs";
+import { createGatePlan, emptyScopeResult, gatePlanOptions, laneEnvironment, laneResult } from "./scripts/gates/chalk-gate-plan.mjs";
 
-const taskIds = ["self-test", "language-ratchet", "hygiene", "secrets", "architecture", "format", "fallow", "semgrep", "boundaries", "osv", "services", "contracts", "image-size", "syncpack", "types", "tests", "build", "recorder", "publint", "attw"];
-const alwaysIds = new Set(["self-test", "language-ratchet", "hygiene", "secrets"]);
+const taskIds = ["self-test", "language-ratchet", "hygiene", "secrets", "generated", "architecture", "format", "fallow", "semgrep", "boundaries", "osv", "services", "contracts", "image-size", "syncpack", "types", "tests", "build", "recorder", "publint", "attw"];
+// Format is always on so documentation-only changes are still checked.
+const alwaysIds = new Set(["self-test", "language-ratchet", "hygiene", "secrets", "generated", "format"]);
 const sharedTargetRoots = [
   "apps/api",
   "apps/sync",
@@ -27,16 +28,10 @@ const sharedTargetRoots = [
 ];
 const explicitFiles = process.env.GATE_FILES !== undefined || process.argv.some((argument) => argument === "--files" || argument.startsWith("--files="));
 
-function chalkPlan(context: { allChangedFiles: readonly string[]; scope: string; classification: { fullRequired: boolean }; target: string | undefined; base?: string }) {
-  const target = process.env.GATE_TARGET ?? context.target;
-  if (process.env.GATE_TARGET && context.target && process.env.GATE_TARGET !== context.target) throw new Error("GATE_TARGET and --target must match");
-  return createGatePlan([...context.allChangedFiles], {
-    full: context.scope === "full" || context.classification.fullRequired,
-    scope: context.scope === "branch" ? "merge base to HEAD" : "staged",
-    base: context.base ?? process.env.GATE_BASE_REF ?? "origin/master",
-    target,
-    snapshot: context.scope === "staged" ? { mode: "index" } : context.scope === "branch" ? { mode: "ref", ref: "HEAD" } : { mode: "worktree" },
-  });
+type GateContext = { allChangedFiles: readonly string[]; scope: string; classification: { fullRequired: boolean }; target: string | undefined; base?: string };
+
+function chalkPlan(context: GateContext) {
+  return createGatePlan([...context.allChangedFiles], gatePlanOptions(context));
 }
 
 const chalkLanes = taskIds.map((id) =>
@@ -49,16 +44,20 @@ const chalkLanes = taskIds.map((id) =>
       const task = chalkPlan(context).tasks.find((candidate) => candidate.id === id);
       if (!task?.command) return { status: "skipped" };
       const [command, ...args] = task.command;
-      const env = Object.entries(task.env).map(([name, value]) => ({ name, value }));
-      if (id === "secrets" && explicitFiles) env.push({ name: "GATE_EXPLICIT_FILES", value: context.allChangedFiles.join("\n") });
-      const result = await context.exec(command, args, {
-        cwd: context.repoRoot,
-        env,
-      });
-      return result.failed ? { status: "failed", findings: [{ file: "gate.config.ts", rule: id, message: [result.stdout, result.stderr].filter(Boolean).join("\n") || `${id} failed` }] } : { status: "passed" };
+      const env = laneEnvironment(id, task.env, context.allChangedFiles, explicitFiles);
+      return laneResult(id, await context.exec(command, args, { cwd: context.repoRoot, env }));
     },
   }),
 );
+
+// q9gate skips every lane when nothing is in scope and still exits 0. That is not a pass.
+const emptyScopeLane = lanes.custom({
+  id: "scope",
+  title: "Chalk non-empty scope",
+  exclusive: true,
+  triggers: (context) => context.allChangedFiles.length === 0,
+  run: async (context) => emptyScopeResult(context),
+});
 
 export default defineGate({
   workspaceRoots: ["apps", "infrastructure", "packages", "sdks/typescript", "tools"],
@@ -72,5 +71,5 @@ export default defineGate({
     contract: ["contract/", "packages/diagnostics-contracts/"],
   },
   concurrency: 1,
-  lanes: [...chalkLanes, lanes.depcruise({ config: ".dependency-cruiser.cjs", source: "." })],
+  lanes: [emptyScopeLane, ...chalkLanes, lanes.depcruise({ config: ".dependency-cruiser.cjs", source: "." })],
 });

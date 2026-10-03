@@ -149,7 +149,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
   }
 }
 
-export function defaultServiceSpecs(config) {
+function defaultServiceSpecs(config) {
   const specs = [
     { id: "api", command: "go", expectedCommand: null, args: ["run", "./cmd"], cwd: `${config.root}/apps/api`, readiness: { url: `${config.urls.api}/readyz` }, watchRoots: [`${config.root}/apps/api`] },
     { id: "sync", command: "mix", expectedCommand: null, args: ["run", "--no-halt"], cwd: `${config.root}/apps/sync`, dependsOn: ["api"], readiness: { url: `${config.urls.sync}/readyz` }, watchRoots: [`${config.root}/apps/sync`] },
@@ -182,6 +182,7 @@ function formatReadySummary(config, bindings) {
     `Logs      ${config.aggregateLog}`,
     "Proof     pnpm dev:smoke",
     bindings ? `Runtime   ${bindings.marker}` : "",
+    bindings ? `Space     ${bindings.spaceId} (Tenant ${bindings.tenantId}, media plane cf_sfu)` : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -200,7 +201,7 @@ function stableFixtureMarker(root) {
   return createHash("sha256").update(root).digest("hex").slice(0, 12);
 }
 
-export function discoverWebJoinPath(root) {
+function discoverWebJoinPath(root) {
   const routesDirectory = join(root, "apps", "web", "src", "routes");
   const candidates = findFiles(routesDirectory)
     .filter(({ path, content }) => path.endsWith(".tsx") && (/from\s+["']@q9labsai\/chalk-react["']/.test(content) || /from\s+["'][^"']*\/components\/space\/SpacePage["']/.test(content)))

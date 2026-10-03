@@ -1,10 +1,36 @@
 name: Mobile CI
 
+# Paths are apps/mobile plus every workspace package it depends on, directly or
+# transitively (pnpm ls -r). Update them when apps/mobile gains a dependency.
 on:
   pull_request:
+    paths:
+      - apps/mobile/**
+      - sdks/typescript/react-native/**
+      - sdks/typescript/client/**
+      - packages/facehash/**
+      - packages/whiteboard/**
+      - packages/diagnostics-contracts/**
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - package.json
+      - patches/**
+      - .github/workflows/mobile-ci.yml
   push:
     branches:
       - master
+    paths:
+      - apps/mobile/**
+      - sdks/typescript/react-native/**
+      - sdks/typescript/client/**
+      - packages/facehash/**
+      - packages/whiteboard/**
+      - packages/diagnostics-contracts/**
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - package.json
+      - patches/**
+      - .github/workflows/mobile-ci.yml
   workflow_dispatch:
 
 permissions:
@@ -34,7 +60,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
-          node-version: 25.6.1
+          node-version-file: .tool-versions
           cache: pnpm
 
       - name: Install JavaScript dependencies
@@ -62,7 +88,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
-          node-version: 25.6.1
+          node-version-file: .tool-versions
           cache: pnpm
 
       - name: Set up Java 17
@@ -109,7 +135,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
-          node-version: 25.6.1
+          node-version-file: .tool-versions
           cache: pnpm
 
       - name: Install JavaScript dependencies

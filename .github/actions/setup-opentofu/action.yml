@@ -1,0 +1,32 @@
+name: Set up OpenTofu
+description: Install the OpenTofu version pinned in .tool-versions and verify it against a checksum recorded here.
+
+runs:
+  using: composite
+  steps:
+    - name: Install pinned OpenTofu
+      shell: bash
+      run: |
+        set -euo pipefail
+        version="$(awk '$1 == "opentofu" { print $2 }' .tool-versions)"
+        if [[ -z "${version}" ]]; then
+          echo "No opentofu line in .tool-versions" >&2
+          exit 1
+        fi
+        # Checksums are pinned in the repo rather than read from the release, so a tampered
+        # release cannot vouch for itself. Add the linux_amd64 checksum when bumping OpenTofu.
+        case "${version}" in
+          1.12.3) sha256="f87d45408dcbb963ddbe10b2f75e55b3495310556e05c35765dfd5913551f182" ;;
+          *)
+            echo "No pinned checksum for OpenTofu ${version}; add it to .github/actions/setup-opentofu/action.yml" >&2
+            exit 1
+            ;;
+        esac
+        archive="tofu_${version}_linux_amd64.tar.gz"
+        base_url="https://github.com/opentofu/opentofu/releases/download/v${version}"
+        bin_dir="${RUNNER_TEMP}/tofu-bin"
+        mkdir -p "${bin_dir}"
+        curl --fail --silent --show-error --location "${base_url}/${archive}" --output "${RUNNER_TEMP}/${archive}"
+        echo "${sha256}  ${RUNNER_TEMP}/${archive}" | sha256sum --check
+        tar -xzf "${RUNNER_TEMP}/${archive}" -C "${bin_dir}" tofu
+        echo "${bin_dir}" >> "${GITHUB_PATH}"

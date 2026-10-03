@@ -49,7 +49,7 @@ where inputs.render_input_handle = $1
   and authority.lease_token = $13
   and authority.lease_owner = $14
   and ((jobs.kind = 'render' and pipelines.state = 'rendering')
-    or (jobs.kind = 'transcription' and pipelines.state = 'capture_complete'))
+    or (jobs.kind = 'transcription' and pipelines.state <> 'deleted'))
 	and pipelines.capture_completed_at is not null
   and pipelines.capture_completed_at +
       ((case when jobs.kind = 'transcription'
@@ -1163,7 +1163,7 @@ with authorized as (
       and authority.lease_token = $19
       and authority.lease_owner = $20
       and ((jobs.kind = 'render' and pipelines.state = 'rendering')
-        or (jobs.kind = 'transcription' and pipelines.state = 'capture_complete'))
+        or (jobs.kind = 'transcription' and pipelines.state <> 'deleted'))
       and pipelines.capture_completed_at is not null
       and reservations.space_id = $3
       and reservations.episode_id = $4
@@ -1498,10 +1498,11 @@ where inputs.render_input_handle = $1
   and jobs.lease_owner = $14
   and jobs.lease_expires_at = $15
   and jobs.lease_expires_at > clock_timestamp()
-  and pipelines.state = 'capture_complete'
+  and pipelines.capture_completed_at is not null
+  and pipelines.state <> 'deleted'
   and pipelines.capture_completed_at +
       (recording_transcription_source_window_seconds(episodes.config_snapshot) * interval '1 second') > clock_timestamp()
-  and recordings.status in ('pending', 'processing')
+  and recordings.status in ('pending', 'processing', 'completed')
 for update of jobs, recordings
 `
 
