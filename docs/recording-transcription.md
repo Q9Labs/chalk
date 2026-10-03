@@ -241,7 +241,7 @@ pnpm release:recorder verify --role render --state "$RELEASE_STATE"
 ```
 
 Snapshot precedes qualification because qualification boots the resulting image.
-The detached build worker and exact-ID deadline guard survive terminal/session
+The detached build worker and exact-ID deadline guard survive terminal connection
 loss. The uploaded script builds, cleans up and seals itself; never SSH back
 into a sealed builder. Snapshot checks minimum disk, deletes only owned resources,
 confirms Droplet absence, and removes its key files. The guard never scans by tag.

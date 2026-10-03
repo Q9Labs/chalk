@@ -84,7 +84,7 @@ def check_image(image, worker):
 
 
 def check_qualification(receipt, state):
-    for key in ("role", "source_commit", "release_id", "image_id", "image_digest"):
+    for key in ("role", "source_commit", "release_id", "image_id", "image_digest", "region", "size"):
         require(receipt.get(key) == state.get(key), "qualification identity mismatch: " + key)
     require(receipt.get("result") == "PASS" and receipt.get("fleet_equivalent_signed_boot") is True,
             "BOOTDIAG signed-boot qualification is required before publishing")
@@ -155,6 +155,10 @@ def rebuild_dispatcher(state, module, backend, region, profile):
     inputs["ssm_kms_key_arns"] = sorted({arn for statement in policy["Statement"]
                                          for arn in ([statement["Resource"]] if isinstance(statement["Resource"], str) else statement["Resource"])
                                          if ":kms:" in arn})
+    permission = resources.get("aws_lambda_permission.control_api")
+    if permission:
+        inputs["control_api_invoker_principal"] = permission["principal"]
+        inputs["control_api_invoke_source_arn"] = permission["source_arn"]
     return {"terraform": {"required_providers": {"aws": {"source": "hashicorp/aws", "version": "~> 5.0"}},
                           "backend": {"s3": {"bucket": backend["state_bucket"], "key": backend["state_key"],
                                              "region": region, "profile": profile, "encrypt": True, "use_lockfile": True}}},

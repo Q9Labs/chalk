@@ -14,14 +14,22 @@ def expire(identity, context, deadline, stop_file):
     base = ["doctl", "--context", context, "compute", "droplet"]
     while time.time() < deadline:
         if Path(stop_file).exists():
-            read = subprocess.run(base + ["get", str(identity["id"]), "--output", "json"], capture_output=True, text=True, timeout=60)
+            try:
+                read = subprocess.run(base + ["get", str(identity["id"]), "--output", "json"], capture_output=True, text=True, timeout=60)
+            except subprocess.TimeoutExpired:
+                continue
             if read.returncode and "404" in read.stderr:
                 print("GUARD_CLEANUP_ABSENCE_VERIFIED", flush=True)
                 return
         time.sleep(min(5, max(0, deadline - time.time())))
     # Bounded retries tolerate provider lag; a 404 is success, never a reason to broaden deletion.
     for attempt in range(3):
-        read = subprocess.run(base + ["get", str(identity["id"]), "--output", "json"], capture_output=True, text=True, timeout=60)
+        try:
+            read = subprocess.run(base + ["get", str(identity["id"]), "--output", "json"], capture_output=True, text=True, timeout=60)
+        except subprocess.TimeoutExpired:
+            if attempt == 2:
+                raise RuntimeError("guard could not read exact builder after three provider timeouts") from None
+            continue
         if read.returncode:
             if "404" in read.stderr:
                 print("GUARD_ALREADY_ABSENT", flush=True)
@@ -30,7 +38,12 @@ def expire(identity, context, deadline, stop_file):
                 raise RuntimeError("guard could not read exact builder identity")
         else:
             builder_identity(json.loads(read.stdout)[0], identity)
-            delete = subprocess.run(base + ["delete", str(identity["id"]), "--force"], capture_output=True, text=True, timeout=60)
+            try:
+                delete = subprocess.run(base + ["delete", str(identity["id"]), "--force"], capture_output=True, text=True, timeout=60)
+            except subprocess.TimeoutExpired:
+                if attempt == 2:
+                    raise RuntimeError("guard exact-builder deletion timed out after three attempts") from None
+                continue
             if delete.returncode == 0 or "404" in delete.stderr:
                 print("GUARD_EXACT_BUILDER_DELETE_ACCEPTED", flush=True)
                 return

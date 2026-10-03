@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Uploaded once. The same session verifies sealing; never reconnect after success.
+# Uploaded once. The same connection verifies sealing; never reconnect after success.
 source_commit="$1"
 release_id="$2"
 role="$3"

@@ -85,12 +85,16 @@ class Release:
     def read_production(self):
         configured = {}
         pins = {}
+        sizes = self.provider.do("compute", "size", "list")
         for role in ("capture", "render"):
             parameter = self.provider.parameter(self.parameter_name(role))
             values = env_values(parameter["Value"])
-            worker = self.config["worker"]
-            require(values["CHALK_RECORDER_FLEET_SIZE"] == worker["size"] and
-                    values["CHALK_RECORDER_FLEET_REGION"] == worker["region"], "fleet shape differs from release configuration")
+            size = next((item for item in sizes if item["slug"] == values["CHALK_RECORDER_FLEET_SIZE"]), None)
+            require(size, "configured fleet size is unknown")
+            worker = {"region": values["CHALK_RECORDER_FLEET_REGION"], "disk_gb": size["disk"]}
+            if role == self.args.role:
+                require(values["CHALK_RECORDER_FLEET_SIZE"] == self.config["worker"]["size"] and
+                        worker["region"] == self.config["worker"]["region"], "selected fleet shape differs from release configuration")
             image_id = values["CHALK_RECORDER_FLEET_IMAGE_ID"]
             require(re.fullmatch(r"[1-9][0-9]*", image_id), "invalid pinned image ID")
             image = self.provider.do("compute", "image", "get", image_id)[0]
@@ -98,7 +102,6 @@ class Release:
             configured[role] = parameter
             pins[role] = {"before_version": parameter["Version"], "before_sha256": digest(parameter["Value"]),
                           "image_id": image_id, "image_digest": values["CHALK_RECORDER_FLEET_IMAGE_DIGEST"]}
-        sizes = self.provider.do("compute", "size", "list")
         for section in ("builder", "worker"):
             selected = next((size for size in sizes if size["slug"] == self.config[section]["size"]), None)
             require(selected and selected["available"] and self.config[section]["region"] in selected["regions"],
@@ -187,7 +190,7 @@ class Release:
                                         "--name", identity["name"], "--created-at", identity["created_at"],
                                         "--context", self.config["do_context"], "--deadline", str(deadline),
                                         "--stop-file", str(self.directory / (label + "-guard.stop"))],
-                                       stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, close_fds=True)
+                                       stdin=subprocess.DEVNULL, stdout=log, stderr=log, preexec_fn=os.setsid, close_fds=True)
         return {**identity, "guard_pid": process.pid, "deadline": deadline, "guard_log": str(log_path)}
 
     def create_node(self, label, image, size):
@@ -310,11 +313,16 @@ class Release:
             raise
 
     def snapshot(self):
-        require(self.state.get("sealed") and not self.state.get("image_id"), "snapshot requires a sealed build and no prior snapshot")
+        require(self.state.get("sealed"), "snapshot requires a sealed build")
+        if self.state.get("image_id"):
+            check_image(self.provider.do("compute", "image", "get", self.state["image_id"])[0], self.config["worker"])
+            if not self.state["builder"].get("cleaned"):
+                self.cleanup_node("builder")
+            return {"result": "PASS", "phase": "snapshot", "min_disk_fits": True, "builder_cleaned": True}
         node = self.state["builder"]
         droplet = self.provider.do("compute", "droplet", "get", node["id"])[0]
         builder_identity(droplet, node)
-        require(time.time() + 300 < node["deadline"], "insufficient time before builder deadline; do not cancel the spend guard")
+        require(time.time() + 840 < node["deadline"], "insufficient time before builder deadline; do not cancel the spend guard")
         self.provider.do("compute", "droplet-action", "power-off", node["id"], "--wait", timeout=180)
         require(self.provider.do("compute", "droplet", "get", node["id"])[0]["status"] == "off", "builder is not powered off")
         self.provider.do("compute", "droplet-action", "snapshot", node["id"], "--snapshot-name", self.state["release_id"], "--wait", timeout=600)
@@ -350,7 +358,7 @@ class Release:
         require(not receipt_path.exists(), "stale boot receipt; use a fresh release plan")
         self.provider.command([str(hook), "--request", str(self.directory / "boot-request.json"), "--receipt", str(receipt_path)], timeout=600)
         receipt = json.loads(receipt_path.read_text())
-        check_qualification(receipt, self.state)
+        check_qualification(receipt, {**self.state, "region": self.config["worker"]["region"], "size": self.config["worker"]["size"]})
         receipt_path.chmod(0o600)
         self.state["qualification"] = {"receipt_sha256": digest(receipt_path.read_bytes()), "signed_boot": True}
         self.save()
@@ -360,7 +368,7 @@ class Release:
         require(self.state.get("qualification"), "signed-boot qualification required")
         receipt_path = self.directory / "boot-receipt.json"
         require(digest(receipt_path.read_bytes()) == self.state["qualification"]["receipt_sha256"], "qualification receipt changed")
-        check_qualification(json.loads(receipt_path.read_text()), self.state)
+        check_qualification(json.loads(receipt_path.read_text()), {**self.state, "region": self.config["worker"]["region"], "size": self.config["worker"]["size"]})
         role = self.state["role"]
         parameter = self.provider.parameter(self.parameter_name(role))
         check_fresh(parameter, self.state["pins"][role])
@@ -406,8 +414,10 @@ class Release:
         private_json(path, root)
         self.tofu("plan", "-input=false", "-no-color", "-out=scheduler.plan")
         plan = json.loads(self.tofu("show", "-json", "scheduler.plan"))
-        scheduler_changes(plan, desired)
-        self.tofu("apply", "-input=false", "-no-color", "scheduler.plan")
+        changed = [item for item in plan.get("resource_changes", []) if item["change"]["actions"] not in (["no-op"], ["read"])]
+        if changed:
+            scheduler_changes(plan, desired)
+            self.tofu("apply", "-input=false", "-no-color", "scheduler.plan")
         dispatcher = self.config["dispatcher"]
         observed = self.provider.aws("scheduler", "get-schedule", "--name", dispatcher["scheduler_name"], "--group-name", dispatcher["scheduler_group"])
         require(observed["State"] == desired, "scheduler state readback mismatch")
@@ -467,7 +477,7 @@ def main():
         log_path = release.directory / "build-worker.log"
         with open(log_path, "w", opener=lambda name, flags: os.open(name, flags, 0o600)) as log:
             process = subprocess.Popen([sys.executable, str(SCRIPTS / "release.py"), *sys.argv[1:], "--build-worker"],
-                                       stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, close_fds=True)
+                                       stdin=subprocess.DEVNULL, stdout=log, stderr=log, preexec_fn=os.setsid, close_fds=True)
         print(json.dumps({"build_worker_pid": process.pid, "log": str(log_path)}), file=sys.stderr, flush=True)
         require(process.wait() == 0, "detached build failed; see " + str(log_path))
         result = json.loads(log_path.read_text())
