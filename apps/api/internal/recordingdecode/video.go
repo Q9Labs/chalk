@@ -54,6 +54,8 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 	var framePayload []byte
 	var frameTimestamp uint32
 	var frameKey bool
+	var framePictureID vp8PictureID
+	var previousPictureID vp8PictureID
 	var frameWidth, frameHeight uint16
 	var waitingForKeyFrame = true
 	var lossStart uint64
@@ -109,19 +111,27 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 			quality.drop(packet.Timestamp)
 			return nil
 		}
-		lost := started && (packet.ExtendedSequenceNumber != previousSequence+1 || packet.SSRC != previousSSRC)
+		sameSSRC := started && packet.SSRC == previousSSRC
+		lost := started && (packet.ExtendedSequenceNumber != previousSequence+1 || !sameSSRC)
 		previousSequence, previousSSRC, started = packet.ExtendedSequenceNumber, packet.SSRC, true
-		if lost {
+		beginPacketRecovery := func() error {
 			start := uint64(packet.Timestamp)
 			if len(frameTimestamps) > 0 {
 				start = frameTimestamps[len(frameTimestamps)-1] + nominalFrameTicks(frameTimestamps)
 			}
-			if err := beginRecovery(start); err != nil {
+			return beginRecovery(start)
+		}
+		if lost && (!sameSSRC || len(framePayload) > 0) {
+			if err := beginPacketRecovery(); err != nil {
 				return err
 			}
+			lost = false
 		}
 		// Empty probes consume RTP sequence numbers, not codec or media clocks.
 		if len(packet.Payload) == 0 {
+			if lost {
+				return beginPacketRecovery()
+			}
 			return nil
 		}
 		if _, seen := quality.seen[packet.Timestamp]; seen {
@@ -158,6 +168,18 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 			quality.drop(packet.Timestamp)
 			return beginRecovery(uint64(packet.Timestamp))
 		}
+		pictureID := vp8PictureIDFromPayload(vp8, packet.Payload)
+		// Stale replay traffic can occupy RTP sequence numbers between two
+		// complete pictures. Only bridge a frame boundary with independent codec
+		// continuity and a normal frame interval; never bridge inside a frame.
+		continuousPicture := lost && sameSSRC && !waitingForKeyFrame && len(framePayload) == 0 &&
+			vp8.S == 1 && vp8.PID == 0 && pictureID.follows(previousPictureID) &&
+			uint64(packet.Timestamp)-uint64(previousTimestamp) <= 2*nominalFrameTicks(frameTimestamps)
+		if lost && !continuousPicture {
+			if err := beginPacketRecovery(); err != nil {
+				return err
+			}
+		}
 		if len(framePayload) > 0 && vp8.S == 1 && vp8.PID == 0 {
 			// A second start at the same timestamp is another copy of this frame,
 			// not another lost frame. Decode the newest complete copy.
@@ -185,6 +207,7 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 				return nil
 			}
 			frameTimestamp = packet.Timestamp
+			framePictureID = pictureID
 		}
 		if len(framePayload)+len(vp8.Payload) > recordingbundle.MaxPacketPayloadBytes*1_024 {
 			return fmt.Errorf("%w: VP8 frame exceeds size bound", ErrDecode)
@@ -218,6 +241,7 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 			return fmt.Errorf("%w: write VP8 RTP: %v", ErrDecode, err)
 		}
 		previousTimestamp, mediaStarted = packet.Timestamp, true
+		previousPictureID = framePictureID
 		frameTimestamps = append(frameTimestamps, uint64(packet.Timestamp))
 		quality.remember(packet.Timestamp)
 		framePayload = nil
