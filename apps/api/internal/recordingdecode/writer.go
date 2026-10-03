@@ -28,6 +28,7 @@ type sourceIdentity struct {
 }
 
 type sourceState struct {
+	observedGaps []observedGap
 	visibleSpans []visibleSpan
 	spanStartMS  int64
 	spanEndMS    int64
@@ -124,6 +125,7 @@ func Write(ctx context.Context, request Request) (result Result, resultErr error
 		}
 		state.spanStartMS, state.spanEndMS = visualSourceSpan(request.Presentation, state.presentation.SourceID)
 		state.visibleSpans = visualSourceSpans(request.Presentation, state.presentation.SourceID)
+		state.observedGaps = gaps
 		state.hasSpan = true
 		source, sourceDiscontinuities, err := decodeSource(ctx, runner, ffmpegPath, temporaryDirectory, mediaDirectory, state, request.DurationMS, request.VideoPassthrough)
 		if err != nil {

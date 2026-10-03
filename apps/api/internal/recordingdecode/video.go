@@ -285,6 +285,7 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 	if err != nil {
 		return Source{}, nil, err
 	}
+	resultDiscontinuities = declaredVideoLoss(state, frameTimestamps, durationMS, resultDiscontinuities)
 	quality.result(state, frameTimestamps, durationMS, resultDiscontinuities)
 	if len(segments) == 0 {
 		return Source{}, nil, nil
@@ -465,6 +466,7 @@ func decodeH264Source(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 		resultDiscontinuities = append(resultDiscontinuities, sourceDiscontinuity(state,
 			ticksToMillisecondsFloor(lossStart, videoClockRate), durationMS, "packet_loss"))
 	}
+	resultDiscontinuities = declaredVideoLoss(state, frameTimestamps, durationMS, resultDiscontinuities)
 	if err := concatenateFiles(rawPath, segments); err != nil {
 		return Source{}, nil, err
 	}
@@ -473,10 +475,12 @@ func decodeH264Source(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 	nominalTicks := nominalFrameTicks(frameTimestamps)
 	endTicks := frameTimestamps[len(frameTimestamps)-1] + nominalTicks
 	maximumTicks := uint64(durationMS) * videoClockRate / 1_000
-	if waitingForKeyFrame {
-		endTicks = maximumTicks
-		if state.hasSpan {
-			endTicks = uint64(state.spanEndMS) * videoClockRate / 1_000
+	for _, gap := range resultDiscontinuities {
+		if gap.EndMS == durationMS {
+			endTicks = maximumTicks
+			if state.hasSpan {
+				endTicks = uint64(state.spanEndMS) * videoClockRate / 1_000
+			}
 		}
 	}
 	if endTicks > maximumTicks {
