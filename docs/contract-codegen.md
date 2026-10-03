@@ -37,3 +37,5 @@ The default TypeScript client is Promise-based; Effect is an optional subpath. K
 `tools/contract-fixture-proof` compares TypeSpec and Chalk-native JSON on a representative fixture through `ContractIR`. The [generated report](../contract/generated/frontend-proof.report.md) records coverage, diagnostics, dependency cost, deterministic output, and the unresolved frontend decision.
 
 Fixture parity is not universal contract equivalence. Production emitters remain independent of that selection. Keep source-language/compiler objects out of the shared IR; do not turn the proof's old migration plan or scoring rubric into instructions for routine SDK changes.
+
+<!-- Temporary docs-only Gate routing verification. -->
