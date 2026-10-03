@@ -107,7 +107,9 @@ try {
   });
   const bundle = await build({
     stdin: {
-      contents: `import {createSpaceClientForPlatform} from './sdks/typescript/client/src/effect.ts';
+      contents: `import {controlCamera} from './scripts/capture-ingress/camera-control.mjs';
+window.ingressControlCamera=controlCamera;
+import {createSpaceClientForPlatform} from './sdks/typescript/client/src/effect.ts';
 window.ingressJoin=async()=>{window.ingressClient=createSpaceClientForPlatform({space:${JSON.stringify(space.slug)},baseUrl:'http://127.0.0.1:18080',getAccess:async()=>{const r=await fetch('http://127.0.0.1:13071/access');if(!r.ok)throw Error('access');return r.json();}},{syncUrl:'ws://127.0.0.1:4100/v1/sync'});await window.ingressClient.join({displayName:'Ingress synthetic camera',microphone:false,camera:true});return {state:window.ingressClient.getSnapshot().connection.status,publication:window.ingressPublication,encodings:window.ingressPCs.flatMap(p=>p.getSenders()).filter(s=>s.track?.kind==='video').map(s=>s.getParameters().encodings)}};`,
       resolveDir: root,
       sourcefile: "ingress.ts",
@@ -140,6 +142,9 @@ navigator.mediaDevices.getUserMedia=async()=>{const canvas=document.createElemen
   await writeFile(out + "/publisher.json", JSON.stringify(joined, null, 2), { mode: 0o600 });
   if (!joined.publication?.session || !joined.publication?.track) throw new Error("SDK camera publication not observed");
   if (joined.encodings?.length !== 1 || joined.encodings[0].map((e) => e.rid).join(",") !== "h,l") throw new Error("SDK h/l simulcast not negotiated");
+  await evaluate(
+    `(()=>{const s=window.ingressPCs.flatMap(p=>p.getSenders()).find(s=>s.track?.kind==='video');window.ingressLimit=window.ingressControlCamera(s);window.ingressSample=async()=>{const report=await s.getStats();const low=[...report.values()].find(r=>r.type==='outbound-rtp'&&r.rid==='l');const encodings=s.getParameters().encodings;return {at:Date.now(),bytes:low?.bytesSent,encodings}}})()`,
+  );
   stamp("publisher-ready");
   const env = { ...process.env, GOMAXPROCS: "1", CHALK_INGRESS_MEASUREMENT: "1", INGRESS_APP_ID: credential.appId, INGRESS_APP_SECRET: credential.appSecret, INGRESS_PUBLISHER_SESSION: joined.publication.session, INGRESS_TRACK: joined.publication.track, INGRESS_OUTPUT: out };
   const { open } = await import("node:fs/promises");
@@ -165,13 +170,21 @@ navigator.mediaDevices.getUserMedia=async()=>{const canvas=document.createElemen
   }
   stamp("paired-ready");
   await delay(60000, undefined, { signal: abort.signal });
-  const limited = await evaluate(
-    `(async()=>{const s=window.ingressPCs.flatMap(p=>p.getSenders()).find(s=>s.track?.kind==='video');const p=s.getParameters();if(p.encodings.map(e=>e.rid).join(',')!=='h,l')throw Error('unexpected RIDs');for(const e of p.encodings){e.active=e.rid==='l';e.maxBitrate=80000}await s.setParameters(p);return s.getParameters().encodings})()`,
-  );
+  const limited = await evaluate(`(async()=>{await window.ingressLimit(true);return window.ingressSample()})()`);
   stamp("bandwidth-limited");
-  await writeFile(out + "/limit.json", JSON.stringify({ at: Date.now(), encodings: limited }, null, 2), { mode: 0o600 });
-  await delay(45000, undefined, { signal: abort.signal });
-  await evaluate(`(async()=>{const s=window.ingressPCs.flatMap(p=>p.getSenders()).find(s=>s.track?.kind==='video');const p=s.getParameters();for(const e of p.encodings){e.active=true;e.maxBitrate=e.rid==='h'?2500000:650000}await s.setParameters(p);return true})()`);
+  const samples = [limited];
+  try {
+    for (let sample = 0; sample < 9; sample++) {
+      await delay(5000, undefined, { signal: abort.signal });
+      const next = await evaluate("window.ingressSample()");
+      const low = next.encodings.find((encoding) => encoding.rid === "l");
+      if (!low?.active || low.maxBitrate !== 80000 || next.encodings.find((encoding) => encoding.rid === "h")?.active || !(next.bytes > samples.at(-1).bytes)) throw Error("forced low layer did not sustain transmission");
+      samples.push(next);
+    }
+  } finally {
+    await writeFile(out + "/limit.json", JSON.stringify(samples, null, 2), { mode: 0o600 });
+  }
+  await evaluate("window.ingressLimit(false)");
   stamp("bandwidth-restored");
   const code = await Promise.race([
     done,

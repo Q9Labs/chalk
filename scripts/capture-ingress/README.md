@@ -19,6 +19,8 @@ The runner reuses the exact SFU credentials already selected by its ready develo
 
 Both subscriptions run for 180 seconds, with a 250 ms read deadline and the release-default 10-second keyframe interval. At 60 seconds, the publisher disables `h` and caps `l` at 80 kb/s for 45 seconds, then restores both layers. The SDK supplies the real `h` and `l` encodings.
 
+During the forced interval, the test-only sender wrapper preserves those encoding settings when the SDK samples uplink capacity. Every five seconds, the runner requires `l` to remain active and its sent-byte count to increase; otherwise the run fails. Header-only samples are saved in `limit.json`. Check this control without a live SFU with `node --test scripts/capture-ingress/camera-control.test.mjs`.
+
 Each subscription is bounded to 500,000 header records. Artifacts contain arrival times, RTP/RTX header attribution, VP8 descriptor metadata, run-local salted payload fingerprints, admission results and normalized timestamps. No media payload, complete SDP, credentials or reusable fingerprint salt is retained after cleanup. Keep all artifacts outside Git. The Go test also requires `CHALK_INGRESS_MEASUREMENT=1` and skips under `go test -short`.
 
 The analyzer excludes empty payloads from video-repeat and PictureID counts, but includes their sequence positions when counting gaps. Unrepaired positions are holes between the first and last primary RTP sequence observed, after all admitted repairs; these are receiver-side sequence gaps, not an end-to-end publisher loss estimate. A regression can also be legitimate packet reordering, so inspect the admission and RTX counters together. This harness does not measure decoded video freeze duration.
