@@ -1,9 +1,8 @@
-package recorderworker
+package httpapi
 
 import (
 	"bytes"
 	"encoding/json"
-	"log/slog"
 	"strings"
 	"testing"
 
@@ -13,14 +12,12 @@ import (
 
 func TestExportDegradationLogIsOneBoundedIdentifierFreeEvent(t *testing.T) {
 	var output bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(observability.New(observability.Config{LogFormat: observability.LogFormatJSON}, &output).Logger())
-	defer slog.SetDefault(previous)
+	logger := observability.New(observability.Config{LogFormat: observability.LogFormatJSON}, &output).Logger()
 	sources := make([]recordingpipeline.VideoDegradation, 20)
 	for i := range sources {
 		sources[i] = recordingpipeline.VideoDegradation{SourceID: "source-identity-not-for-logs", Kind: "camera", FrozenMS: 1000, DroppedFrames: 30, Recoveries: 1}
 	}
-	logExportDegradation("job", sources)
+	logExportDegradation(logger, "job", sources)
 	if strings.Count(output.String(), "\n") != 1 || strings.Contains(output.String(), "source-identity-not-for-logs") || strings.Contains(output.String(), "source_id") || strings.Contains(output.String(), "journey_id") || strings.Contains(output.String(), "trace_id") || strings.Contains(output.String(), "span_id") {
 		t.Fatalf("unbounded or identifying log: %s", output.String())
 	}
@@ -44,7 +41,7 @@ func TestExportDegradationLogIsOneBoundedIdentifierFreeEvent(t *testing.T) {
 		t.Fatalf("quality counters: %+v", event)
 	}
 	output.Reset()
-	logExportDegradation("job", []recordingpipeline.VideoDegradation{{Kind: "camera"}})
+	logExportDegradation(logger, "job", []recordingpipeline.VideoDegradation{{Kind: "camera"}})
 	if output.Len() != 0 {
 		t.Fatalf("clean Export logged as degraded: %s", output.String())
 	}

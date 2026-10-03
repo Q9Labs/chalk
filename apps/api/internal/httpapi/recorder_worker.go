@@ -112,7 +112,7 @@ func mountRecorderWorkerRoutesWithControls(r chi.Router, service RecorderWorkerS
 		mountRecorderCaptureSignalingRoutes(r, controls.CaptureSignaling)
 		mountRecorderRecordingAuthorityRoutes(r, controls.RecordingKeys, controls.RecordingObjects)
 		mountRecorderRecordingLifecycleRoutes(r, controls.RecordingLifecycle)
-		mountRecorderRenderAuthorityRoutes(r, controls.RenderAuthority)
+		mountRecorderRenderAuthorityRoutes(r, controls.RenderAuthority, controls.Logger)
 	})
 }
 
