@@ -846,6 +846,7 @@ type RecordingJob struct {
 	TerminalAt           pgtype.Timestamptz `json:"terminal_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	ResultMetadata       []byte             `json:"result_metadata"`
 }
 
 type RecordingJobAttemptAuthority struct {

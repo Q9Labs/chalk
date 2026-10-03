@@ -3,10 +3,7 @@ package recordingdecode
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/binary"
-	"encoding/hex"
-	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,42 +16,15 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
 )
 
-func TestWritePublishesNoPublisherMixAndIndex(t *testing.T) {
-	t.Parallel()
-
+func TestWriteRejectsRecordingWithNoVideoOrAudio(t *testing.T) {
 	presentation := decodePresentationFixture(t)
 	output := filepath.Join(t.TempDir(), "decoded")
-	result, err := Write(context.Background(), Request{
-		RecordingID: presentation.RecordingID, EpisodeID: presentation.EpisodeID,
-		TenantID: "00000000-0000-4000-8000-000000000009", Environment: "test",
-		OriginAuthorityID: presentation.Clock.OriginAuthorityID,
-		CaptureEpoch:      presentation.Clock.CaptureEpoch, DurationMS: presentation.Clock.DurationMillis,
-		OutputDirectory: output, Presentation: presentation, DataKeys: []DataKey{{CaptureEpoch: presentation.Clock.CaptureEpoch, Plaintext: make([]byte, 32)}},
-	})
-	if err != nil {
-		t.Fatalf("write decoded media: %v", err)
+	_, err := Write(context.Background(), Request{RecordingID: presentation.RecordingID, EpisodeID: presentation.EpisodeID, TenantID: "00000000-0000-4000-8000-000000000009", Environment: "test", OriginAuthorityID: presentation.Clock.OriginAuthorityID, CaptureEpoch: presentation.Clock.CaptureEpoch, DurationMS: presentation.Clock.DurationMillis, OutputDirectory: output, Presentation: presentation, DataKeys: []DataKey{{CaptureEpoch: presentation.Clock.CaptureEpoch, Plaintext: make([]byte, 32)}}})
+	if err == nil || !strings.Contains(err.Error(), "no decodable video or audio") {
+		t.Fatalf("empty Export: %v", err)
 	}
-	if len(result.Index.Sources) != 0 || len(result.Index.Discontinuities) != 0 {
-		t.Fatalf("unexpected decoded sources: %#v", result.Index)
-	}
-	wantMixBytes := int64(wavHeaderBytes + presentation.Clock.DurationMillis*48*2*2)
-	if result.Index.Mix.ByteSize != wantMixBytes || result.Index.Mix.StartMS != 0 || result.Index.Mix.EndMS != presentation.Clock.DurationMillis {
-		t.Fatalf("mix = %#v, want %d bytes through duration", result.Index.Mix, wantMixBytes)
-	}
-	indexBytes, err := os.ReadFile(result.IndexPath)
-	if err != nil {
-		t.Fatalf("read index: %v", err)
-	}
-	digest := sha256.Sum256(indexBytes)
-	if got := hex.EncodeToString(digest[:]); got != result.IndexSHA256 {
-		t.Fatalf("index digest = %q, want %q", result.IndexSHA256, got)
-	}
-	var decoded Index
-	if err := json.Unmarshal(indexBytes, &decoded); err != nil {
-		t.Fatalf("decode index: %v", err)
-	}
-	if decoded.SchemaVersion != SchemaVersion || decoded.Clock != result.Index.Clock || decoded.Mix.SHA256 != result.Index.Mix.SHA256 {
-		t.Fatalf("published index mismatch: %#v", decoded)
+	if _, err := os.Stat(output); !os.IsNotExist(err) {
+		t.Fatalf("empty Export published output: %v", err)
 	}
 }
 
@@ -604,6 +574,27 @@ func TestWriteDecodesSeekableH264OnRecordingClock(t *testing.T) {
 		t.Fatalf("H264 duration = %q, want 0.1 seconds", probeOutput)
 	}
 	assertPassthroughFrameTimes(t, request, filepath.Join(root, "decoded-passthrough"), "h264")
+	t.Run("loss through EOF holds last frame", func(t *testing.T) {
+		last := &bundle.Fragments[0].Packets[len(bundle.Fragments[0].Packets)-1]
+		last.SequenceNumber++
+		last.ExtendedSequenceNumber++
+		encrypted, err := recordingbundle.Encrypt(key, bundle)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(bundlePath, encrypted, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		request.OutputDirectory = filepath.Join(root, "decoded-tail")
+		request.Bundles[0].ExpectedSHA256 = recordingbundle.ObjectChecksumHex(encrypted)
+		result, err := Write(context.Background(), request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Index.Sources[0].EndMS != request.DurationMS || len(result.Index.Discontinuities) != 1 || result.VideoDegradation[0].FrozenMS <= 0 {
+			t.Fatalf("H264 tail must be held and counted: %+v %+v", result.Index, result.VideoDegradation)
+		}
+	})
 }
 
 func readAnnexBAccessUnits(t *testing.T, path string) [][]byte {

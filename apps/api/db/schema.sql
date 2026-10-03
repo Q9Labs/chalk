@@ -2473,6 +2473,7 @@ create table recording_jobs (
     terminal_at timestamptz,
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now(),
+    result_metadata jsonb not null default '{}'::jsonb,
     check (error_code is null or octet_length(error_code) <= 128),
     check (error_detail is null or octet_length(error_detail) <= 2048),
     check ((state = 'leased') = (lease_token is not null and lease_owner is not null and lease_expires_at is not null))

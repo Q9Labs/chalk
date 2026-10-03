@@ -1,10 +1,6 @@
 package recordingdecode
 
-import (
-	"context"
-	"fmt"
-	"log/slog"
-)
+import "github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 
 // Remember frame timestamps, not private media. Replayed copies of a completed
 // or already discarded frame do not represent additional lost output frames.
@@ -45,26 +41,41 @@ func (q *vp8Quality) drop(timestamp uint32) {
 	q.remember(timestamp)
 }
 
-// Allow at most three damaged frames for short sources, or 1% of observed
-// frames for longer sources; damaged media time is also capped at two seconds
-// or 1% of the source span. Replays of known frames consume neither budget.
-func (q *vp8Quality) validate(ctx context.Context, sourceID string, timestamps []uint64) error {
-	allowedFrames := max(3, (len(timestamps)+q.droppedFrames)/100)
-	nominal := nominalFrameTicks(timestamps)
-	var span uint64
-	if len(timestamps) > 0 {
-		span = timestamps[len(timestamps)-1] - timestamps[0] + nominal
+// Only time after a usable frame is frozen. Startup without one is a placeholder.
+func (q *vp8Quality) result(state *sourceState, timestamps []uint64, durationMS int64, gaps []Discontinuity) {
+	spanStart, spanEnd := int64(0), durationMS
+	if state.hasSpan {
+		spanStart, spanEnd = state.spanStartMS, state.spanEndMS
 	}
-	allowedTicks := max(2*videoClockRate, span/100)
-	damagedTicks := max(uint64(q.droppedFrames)*nominal, q.recoveryTicks)
-	withinBound := q.droppedFrames <= allowedFrames && damagedTicks <= allowedTicks
-	if q.droppedFrames > 0 || q.latePackets > 0 || q.duplicatePackets > 0 || q.dimensionSwitches > 0 {
-		slog.InfoContext(ctx, "recording.decode.vp8.quality", "source_id", sourceID, "accepted_frames", len(timestamps), "dropped_frames", q.droppedFrames,
-			"late_packets", q.latePackets, "duplicate_packets", q.duplicatePackets, "malformed_packets", q.malformedPackets, "dimension_switches", q.dimensionSwitches,
-			"allowed_dropped_frames", allowedFrames, "damaged_ms", ticksToMillisecondsCeil(damagedTicks, videoClockRate), "within_bound", withinBound)
+	spans := state.visibleSpans
+	if spans == nil {
+		spans = []visibleSpan{{spanStart, spanEnd}}
 	}
-	if !withinBound {
-		return fmt.Errorf("%w: VP8 degradation exceeds bound: dropped %d frames (allowed %d), damaged %d ms (allowed %d ms)", ErrDecode, q.droppedFrames, allowedFrames, ticksToMillisecondsCeil(damagedTicks, videoClockRate), ticksToMillisecondsFloor(allowedTicks, videoClockRate))
+	value := recordingpipeline.VideoDegradation{SourceID: state.presentation.SourceID, Kind: string(state.presentation.Kind), DroppedFrames: q.droppedFrames}
+	if len(timestamps) == 0 {
+		value.PlaceholderMS = visibleMilliseconds(spans, spanStart, spanEnd)
+		state.degradation = value
+		return
 	}
-	return nil
+	start := max(spanStart, ticksToMillisecondsCeil(timestamps[0], videoClockRate))
+	// The compositor backfills only a first frame within two seconds of the
+	// recording origin, not late source joins. Otherwise startup is placeholder.
+	if start > 2_000 {
+		value.PlaceholderMS = visibleMilliseconds(spans, spanStart, start)
+	}
+	var heldUntil int64
+	for _, gap := range normalizeDiscontinuities(gaps) {
+		if gap.Reason != "packet_loss" {
+			continue
+		}
+		if gap.EndMS < durationMS && visibleMilliseconds(spans, gap.StartMS, gap.EndMS) > 0 {
+			value.Recoveries++
+		}
+		from, to := max(start, gap.StartMS), min(spanEnd, gap.EndMS)
+		if to > max(from, heldUntil) {
+			value.FrozenMS += visibleMilliseconds(spans, max(from, heldUntil), to)
+			heldUntil = to
+		}
+	}
+	state.degradation = value
 }

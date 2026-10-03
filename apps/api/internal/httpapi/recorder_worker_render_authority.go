@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/recordingkeys"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingrender"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
@@ -54,6 +55,8 @@ type recorderRenderObjectFinalizeBody struct {
 	SHA256         string `json:"sha256"`
 	DurationMillis *int64 `json:"duration_ms"`
 }
+
+const recorderRenderCommitBodyLimit = 64 << 20
 
 type recorderRenderObjectCommitBody struct {
 	recorderRenderAuthorityBody
@@ -100,6 +103,7 @@ type recorderRenderTranscriptionSourceBody struct {
 }
 
 type recorderRenderCommitBody struct {
+	VideoDegradation []recordingpipeline.VideoDegradation `json:"video_degradation,omitempty"`
 	recorderRenderAuthorityBody
 	CommitDigest        string                                 `json:"commit_digest"`
 	PresentationSHA256  string                                 `json:"presentation_sha256"`
@@ -366,7 +370,10 @@ func recorderCommitRenderHandler(service RecorderRenderAuthorityService) http.Ha
 		if !ok {
 			return
 		}
-		body, ok := decodeRecorderWorkerBody[recorderRenderCommitBody](w, request)
+		// A bounded timeline can introduce 100,000 canonical source IDs over
+		// its history. Their per-source quality results exceed the ordinary
+		// 1 MiB API body cap; only this authenticated worker commit gets 64 MiB.
+		body, ok := decodeRecorderWorkerBodyWithLimit[recorderRenderCommitBody](w, request, recorderRenderCommitBodyLimit)
 		if !ok {
 			return
 		}
@@ -453,7 +460,7 @@ func recordingRenderCommitInput(identity workeridentity.Identity, body recorderR
 	if !ok || commitErr != nil || presentationErr != nil || ffprobeErr != nil || !videoOK {
 		return recordingrender.CommitInput{}, false
 	}
-	input := recordingrender.CommitInput{Authority: authority, CommitDigest: commitDigest, PresentationSHA256: presentationSHA256, DurationMillis: body.DurationMillis, Video: video, FFprobeFactsDigest: ffprobeDigest}
+	input := recordingrender.CommitInput{VideoDegradation: body.VideoDegradation, Authority: authority, CommitDigest: commitDigest, PresentationSHA256: presentationSHA256, DurationMillis: body.DurationMillis, Video: video, FFprobeFactsDigest: ffprobeDigest}
 	if body.TranscriptionSource != nil {
 		source, valid := recordingRenderTranscriptionSource(*body.TranscriptionSource)
 		if !valid {

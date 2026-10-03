@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/recordingbundle"
@@ -100,11 +99,10 @@ func TestVP8ReplayWindow(t *testing.T) {
 		name    string
 		count   int
 		refresh bool
-		want    string
 	}{
-		{"recent replay", vp8ReplayWindow, false, "VP8 source has no key frame"},
-		{"expired replay", vp8ReplayWindow + 1, false, "VP8 source has no key frame"},
-		{"refreshed identical fragment", vp8ReplayWindow + 1, true, "VP8 source has no key frame"},
+		{"recent replay", vp8ReplayWindow, false},
+		{"expired replay", vp8ReplayWindow + 1, false},
+		{"refreshed identical fragment", vp8ReplayWindow + 1, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := t.TempDir()
@@ -136,8 +134,8 @@ func TestVP8ReplayWindow(t *testing.T) {
 				t.Fatal(err)
 			}
 			_, _, err = decodeVP8Source(context.Background(), rejectDecodeRunner{}, "ffmpeg", root, root, state, 1_000, true)
-			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("decode error = %v, want %q", err, test.want)
+			if err != nil || state.degradation.PlaceholderMS != 1000 {
+				t.Fatalf("undecodable replay stream must use placeholder: %v %+v", err, state.degradation)
 			}
 		})
 	}

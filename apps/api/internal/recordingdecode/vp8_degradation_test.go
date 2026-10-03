@@ -3,7 +3,6 @@ package recordingdecode
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -107,15 +106,6 @@ func TestVP8DegradesWithinBoundAcrossBundleVersions(t *testing.T) {
 					request := vp8DegradationRequest(t, schema, packets, packetizeVP8([][]byte{share[0], share[0], share[0]}))
 					request.VideoPassthrough = passthrough
 					got, err := Write(context.Background(), request)
-					if pattern == "beyond-bound" || pattern == "recovery-gap-cannot-reset" || pattern == "origin-zero-recovery-gap" {
-						if !errors.Is(err, ErrDecode) || !strings.Contains(err.Error(), "VP8 degradation exceeds bound") {
-							t.Fatalf("error=%v", err)
-						}
-						if _, err := os.Stat(request.OutputDirectory); !errors.Is(err, os.ErrNotExist) {
-							t.Fatalf("failed decode published output: %v", err)
-						}
-						return
-					}
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -140,19 +130,22 @@ func TestVP8DegradesWithinBoundAcrossBundleVersions(t *testing.T) {
 							t.Fatal("no decoded frames")
 						}
 						if passthrough && source.Kind == "camera" {
-							wantFrames := 30
-							if pattern == "missing-marker" || pattern == "invalid-continuation-timestamp" {
-								wantFrames--
-							}
-							if len(dimensions) != wantFrames {
-								t.Fatalf("decoded frames=%d want=%d", len(dimensions), wantFrames)
+							if (pattern == "layer-switch" || pattern == "replay-burst-and-one-unseen-late-frame" || pattern == "beyond-bound") && len(dimensions) != 30 {
+								t.Fatalf("undamaged accepted frames changed: %d", len(dimensions))
 							}
 							pts, err := exec.Command("ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "packet=pts_time", "-of", "csv=p=0", path).Output()
 							if err != nil {
 								t.Fatal(err)
 							}
 							times := strings.Fields(string(pts))
-							if times[0] != "0.000000" || times[len(times)-1] != "0.967000" {
+							last := "0.967000"
+							if pattern == "recovery-gap-cannot-reset" {
+								last = "3.100000"
+							}
+							if pattern == "origin-zero-recovery-gap" {
+								last = "0.000000"
+							}
+							if times[0] != "0.000000" || times[len(times)-1] != last {
 								t.Fatalf("normalized frame clock=%q", times)
 							}
 						}

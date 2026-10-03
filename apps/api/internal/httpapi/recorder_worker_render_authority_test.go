@@ -1,15 +1,42 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
 	"github.com/q9labs/chalk/apps/api/internal/recordingrender"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
+
+func TestRenderQualityCommitFitsBoundedWorkerTransport(t *testing.T) {
+	body := recorderRenderCommitBody{VideoDegradation: make([]recordingpipeline.VideoDegradation, recordingpresentation.MaximumEvents)}
+	for index := range body.VideoDegradation {
+		body.VideoDegradation[index] = recordingpipeline.VideoDegradation{SourceID: "rps_" + strings.Repeat("f", 64), Kind: "screen_share", FrozenMS: 21_600_000, DroppedFrames: 2_147_483_647, Recoveries: 2_147_483_647}
+	}
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(encoded) <= maxRequestBodyBytes || len(encoded) >= recorderRenderCommitBodyLimit {
+		t.Fatalf("maximum quality transport size = %d", len(encoded))
+	}
+	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(encoded))
+	decoded, ok := decodeRecorderWorkerBodyWithLimit[recorderRenderCommitBody](httptest.NewRecorder(), request, recorderRenderCommitBodyLimit)
+	if !ok || len(decoded.VideoDegradation) != recordingpresentation.MaximumEvents {
+		t.Fatal("valid timeline's quality metadata cannot cross worker transport")
+	}
+	request = httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(encoded))
+	if _, ok := decodeRecorderWorkerBody[recorderRenderCommitBody](httptest.NewRecorder(), request); ok {
+		t.Fatal("ordinary API body limit was relaxed")
+	}
+}
 
 const (
 	workerTestRenderInputHandle   = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"

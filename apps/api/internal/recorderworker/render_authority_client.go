@@ -169,6 +169,7 @@ type renderTranscriptionSourceRequest struct {
 }
 
 type renderCommitRequest struct {
+	VideoDegradation []recordingpipeline.VideoDegradation `json:"video_degradation,omitempty"`
 	renderAuthorityRequest
 	CommitDigest        string                            `json:"commit_digest"`
 	PresentationSHA256  string                            `json:"presentation_sha256"`
@@ -321,6 +322,7 @@ func (c *ControlPlaneClient) CommitRender(ctx context.Context, input recordingre
 		return recordingrender.CommitResult{}, ErrInvalidControlPlaneRequest
 	}
 	payload := renderCommitRequest{
+		VideoDegradation:       input.VideoDegradation,
 		renderAuthorityRequest: renderAuthorityBody(input.Authority),
 		CommitDigest:           hex.EncodeToString(input.CommitDigest),
 		PresentationSHA256:     hex.EncodeToString(input.PresentationSHA256),

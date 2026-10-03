@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type ComposeOutput, muxArgs, needsDenseKeyframes, overlayListFor, seekDecodeSeconds, segmentArgs, segmentFilter } from "./plan.js";
+import { type ComposeOutput, denseKeyframeArgs, muxArgs, needsDenseKeyframes, overlayListFor, seekDecodeSeconds, segmentArgs, segmentFilter } from "./plan.js";
 import type { SceneSpan, VideoSegment } from "./scene.js";
 
 const output: ComposeOutput = { width: 1280, height: 720, fps: 15, encoder: "libx264", threads: 2 };
@@ -15,6 +15,13 @@ const placements = [
 const segment: VideoSegment = { startFrame: 15, endFrame: 45, placements, spans };
 
 describe("FFmpeg plan", () => {
+  it("fills frozen spans before seeking without changing clean-source encoding", () => {
+    const clean = denseKeyframeArgs("source.webm", "dense.mkv", output);
+    expect(clean).not.toContain("-vf");
+    const damaged = denseKeyframeArgs("source.webm", "dense.mkv", output, 195);
+    expect(damaged).toContain("tpad=stop_mode=clone:stop_duration=195.000000,fps=15");
+    expect(damaged.slice(damaged.indexOf("-t"), damaged.indexOf("-t") + 2)).toEqual(["-t", "195.000000"]);
+  });
   it("writes each overlay duration and repeats the last file", () => {
     expect(overlayListFor(segment, (key) => `/tmp/${key}.png`, 15)).toBe("ffconcat version 1.0\nfile '/tmp/one.png'\nduration 1.000000\nfile '/tmp/two.png'\nduration 1.000000\nfile '/tmp/two.png'\n");
   });

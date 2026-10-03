@@ -211,8 +211,12 @@ func decodeNoRequest(r *http.Request) (noRequest, error) {
 }
 
 func decodeJSONBody[Request any](r *http.Request) (Request, error) {
+	return decodeJSONBodyWithLimit[Request](r, maxRequestBodyBytes)
+}
+
+func decodeJSONBodyWithLimit[Request any](r *http.Request, limit int64) (Request, error) {
 	var request Request
-	if err := decodeRequest(r, &request); err != nil {
+	if err := decodeRequestWithLimit(r, &request, limit); err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
 			return request, apiErrorPayloadTooLarge

@@ -3,6 +3,7 @@ package postgres
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -309,8 +310,12 @@ func (r RecordingRenderRepository) Commit(ctx context.Context, input recordingre
 		for _, jobID := range admission.JobIDs {
 			jobIDs = append(jobIDs, uuid(jobID))
 		}
+		qualityJSON, err := json.Marshal(input.VideoDegradation)
+		if err != nil {
+			return fmt.Errorf("encode Render quality metadata: %w", err)
+		}
 		artifact, err := queries.CompleteRecordingRender(ctx, sqlc.CompleteRecordingRenderParams{
-			RenderJobID: uuid(input.Authority.JobID), TenantID: uuid(input.Authority.TenantID), RecordingID: uuid(input.Authority.RecordingID),
+			VideoDegradation: qualityJSON, RenderJobID: uuid(input.Authority.JobID), TenantID: uuid(input.Authority.TenantID), RecordingID: uuid(input.Authority.RecordingID),
 			AttemptCount: int32(input.Authority.AttemptCount), FencingGeneration: input.Authority.FencingGeneration, CaptureEpoch: input.Authority.CaptureEpoch,
 			RenderInputHandle: uuid(input.Authority.RenderInputHandle), CommitDigest: input.CommitDigest, PresentationSha256: input.PresentationSHA256,
 			DurationMillis: input.DurationMillis, VideoAllocationID: uuid(input.Video.AllocationID), FfprobeFactsDigest: input.FFprobeFactsDigest,

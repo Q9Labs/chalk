@@ -99,17 +99,30 @@ pnpm run observability:stop
 
 The stack includes a minute-by-minute trace/metric/log canary. Smoke checks send and query correlated signals and check the dashboard/critical alerts. API and Sync gates cover durable intake, idempotency, propagation, and service health. Live provider connectors and alert delivery need their own checks.
 
-## Recording VP8 source quality
+## Recording Export video degradation
 
-Render emits `recording.decode.vp8.quality` when a VP8 source needs recovery.
-The structured event reports accepted/dropped frames, late/duplicate/malformed
-packets, dimension switches, damaged media time, the allowed frame count, and
-`within_bound`, correlated by the opaque source ID. It contains no media payloads.
+Render holds each source's last decodable frame over video damage, including a
+loss at the end of the source. A source with no decodable frame uses its normal
+placeholder tile. Audio remains on the recording-relative clock. An Export
+with neither decodable video nor audio fails with `recording has no decodable
+video or audio`; video damage alone does not reject an Export.
 
-Resolution switches restart decoding at a complete keyframe and normalize each
+Render job `result_metadata.video_degradation` stores per-source frozen
+milliseconds, dropped frames, recoveries and placeholder time. Durations count
+only visible intervals, not hidden camera/share time. Startup placeholders
+are counted unless the compositor backfills the first frame (within two seconds
+of the recording origin).
+These are internal job facts, not additions to the public Export API.
+
+A successfully committed degraded Export emits one `recording.export.degraded`
+structured event with its job ID, total frozen milliseconds, degraded source
+count, and counters for at most 16 sources (plus an omitted count). Logged
+sources use list positions and media kinds, never source, participant, Recording
+or Episode identifiers. No media payloads are logged. Production alerting can
+count this event independently of failed Exports.
+
+Resolution switches restart decoding at complete keyframes and normalize each
 segment to the first segment's dimensions, preserving aspect ratio and RTP
-spacing. Known frame replays are redundant copies, not additional lost frames.
-Other damage is limited to three frames or 1% of observed frames (whichever is
-larger), and two seconds or 1% of the source span (whichever is larger). Both
-limits must hold. Beyond either limit, source preparation fails explicitly with
-`VP8 degradation exceeds bound`; Render does not publish an incomplete Export.
+spacing. Known replays are redundant copies, not additional lost frames. Codec
+validation discards undecodable pictures and waits for a usable keyframe before
+resuming; source preparation fills frozen spans before compositor input seeks.
