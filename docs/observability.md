@@ -77,6 +77,11 @@ Pre-runtime events, hard crashes before export, unregistered native peer connect
 
 ## Local checks
 
+Production user-facing alerts use [native Axiom monitors and Discord](../infrastructure/observability/production-alerts/README.md),
+with read-only Postgres snapshots for durable job state. Local Grafana provisioning
+is not a production route. A created monitor or a direct Discord webhook test does
+not establish end-to-end production alert delivery.
+
 ```sh
 pnpm run observability:start
 pnpm run observability:smoke

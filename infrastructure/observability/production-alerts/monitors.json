@@ -1,0 +1,50 @@
+[
+  {
+    "name": "Chalk user-facing job and webhook failures",
+    "description": "The summary group preserves each user-facing failure message. State comes from read-only Postgres snapshots; no IDs or customer payloads are exported.",
+    "type": "Threshold",
+    "aplQuery": "['${LOG_DATASET}'] | where chalk_alert_stream == 'production-state-v1' | summarize arg_max(_time, chalk_alert_value) by chalk_alert_rule, chalk_alert_summary | summarize value=max(chalk_alert_value) by chalk_alert_rule, chalk_alert_summary",
+    "columnName": "value",
+    "operator": "Above",
+    "threshold": 0,
+    "intervalMinutes": 1,
+    "rangeMinutes": 10,
+    "triggerFromNRuns": 1,
+    "triggerAfterNPositiveResults": 1,
+    "notifyByGroup": true,
+    "notifyEveryRun": false,
+    "alertOnNoData": false
+  },
+  {
+    "name": "Chalk API requests or Sync connections are failing",
+    "description": "Users are seeing API requests fail, or failing to connect or repeatedly reconnecting to a Space; start with `pnpm diag trace <32-hex-trace-id>` from an affected response or connection. API: more than 0.05 5xx/s over five minutes. Sync: more than ten upgrade rejections or WebSocket closures over five minutes. Require five consecutive one-minute evaluations.",
+    "type": "Threshold",
+    "aplQuery": "['${LOG_DATASET}'] | union ['${TRACE_DATASET}'] | where (['service.name'] == 'chalk-api' and ['attributes.event'] == 'http.request' and ['attributes.status'] >= 500) or (['service.name'] == 'chalk-sync' and name in ('sync.http.upgrade_rejected', 'sync.websocket.closed')) | extend rule=iff(['service.name'] == 'chalk-sync', 'sync', 'api'), weight=iff(['service.name'] == 'chalk-sync', 3, 2), summary=iff(['service.name'] == 'chalk-sync', 'Users are failing to connect or repeatedly reconnecting to a Space; start with `pnpm diag trace <32-hex-trace-id>` from an affected connection.', 'Users are seeing API requests fail; start with `pnpm diag trace <32-hex-trace-id>` from a failing response.') | summarize value=sum(weight) by rule, summary",
+    "columnName": "value",
+    "operator": "Above",
+    "threshold": 30,
+    "intervalMinutes": 1,
+    "rangeMinutes": 5,
+    "triggerFromNRuns": 5,
+    "triggerAfterNPositiveResults": 5,
+    "notifyByGroup": true,
+    "notifyEveryRun": false,
+    "alertOnNoData": false
+  },
+  {
+    "name": "Chalk production alert state is stale",
+    "description": "Chalk cannot prove all four job and webhook alert snapshots arrived in the last five minutes. Check chalk-alert-state.timer, its service journal, Postgres access and Axiom ingest. Missing state is not success.",
+    "type": "Threshold",
+    "aplQuery": "['${LOG_DATASET}'] | where chalk_alert_stream == 'production-state-v1' and chalk_alert_rule in ('recording', 'export', 'transcript', 'webhook') | summarize value=dcount(chalk_alert_rule)",
+    "columnName": "value",
+    "operator": "Below",
+    "threshold": 4,
+    "intervalMinutes": 1,
+    "rangeMinutes": 5,
+    "triggerFromNRuns": 1,
+    "triggerAfterNPositiveResults": 1,
+    "notifyByGroup": false,
+    "notifyEveryRun": false,
+    "alertOnNoData": true
+  }
+]
