@@ -66,7 +66,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 	if err != nil {
 		return r.failClosed(ctx, state, demand.Revision, now, fmt.Errorf("list recorder fleet nodes: %w", errors.Join(ErrProviderUnavailable, err)))
 	}
-	nodes, quarantined, err := r.classifyInventory(inventory, now)
+	nodes, quarantined, err := r.classifyInventory(inventory, state, now)
 	if err != nil {
 		result, closedErr := r.failClosed(ctx, state, demand.Revision, now, err)
 		result.Quarantined = quarantined
@@ -150,7 +150,7 @@ func (r *Reconciler) save(ctx context.Context, state Journal) (Journal, error) {
 	return saved, nil
 }
 
-func (r *Reconciler) classifyInventory(inventory []Node, now time.Time) (map[string]Node, []string, error) {
+func (r *Reconciler) classifyInventory(inventory []Node, state Journal, now time.Time) (map[string]Node, []string, error) {
 	nodes := make(map[string]Node, len(inventory))
 	quarantined := make([]string, 0)
 	environmentTag := EnvironmentTag(r.config.Key.Environment)
@@ -169,6 +169,11 @@ func (r *Reconciler) classifyInventory(inventory []Node, now time.Time) (map[str
 		}
 		if err := node.Validate(); err != nil || node.CreatedAt.After(now.Add(time.Second)) || !hasTargetRole || hasOtherRole || !hasTag(node.Tags, r.config.OwnerTag) {
 			quarantined = append(quarantined, node.ProviderID)
+			continue
+		}
+		_, managed := state.Nodes[node.ProviderID]
+		pending := state.PendingCreate != nil && state.PendingCreate.Request.Name == node.Name
+		if hasTag(node.Tags, DiagnosticTag) && !managed && !pending {
 			continue
 		}
 		if _, duplicate := nodes[node.ProviderID]; duplicate {

@@ -17,6 +17,8 @@ import (
 )
 
 const (
+	// DiagnosticTag marks separately owned boot probes, never live capacity.
+	DiagnosticTag                    = "chalk-recorder-diagnostic"
 	JournalSchemaVersion             = "recorder_fleet_journal.v2"
 	LegacyJournalSchemaVersion       = "recorder_fleet_journal.v1"
 	DemandSchemaVersion              = "recorder_fleet_demand.v1"

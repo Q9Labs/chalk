@@ -369,3 +369,33 @@ node certificate bound to environment, role, release, intended Droplet, region,
 and boot generation; the controller revokes that identity on pool removal. No
 bootstrap assertion or reusable credential enters OpenTofu state, cloud-init,
 logs, or a tracked file.
+
+### Retained boot diagnostics and cold qualification
+
+Create a separately owned boot probe with `chalk-recorder-diagnostic` present
+**in its original provider create payload**, alongside the normal environment,
+owner, role, release, image, and boot-generation tags. The fleet validates its
+inventory fences but does not adopt, count, bootstrap, drain, or delete an
+unmanaged diagnostic node. A journal-managed node or a pending fleet create
+cannot escape its lifecycle by adding this tag. Direct issuer inventory inspection
+and peer-IP verification remain unchanged: the tag grants no bootstrap authority.
+
+The diagnostic operator must own a bounded cleanup deadline, certificate
+revocation/registration abandonment, provider deletion, and task-key/firewall
+cleanup. Never retag a live node. The tag does not isolate worker traffic: use a
+task firewall that preserves the bootstrap route but blocks the worker's
+control-plane route, so a successful probe cannot join live Capture demand.
+Keep provider create payloads, cloud-init logs, bootstrap environments, and
+identity artifacts in private evidence, never in this public repository.
+
+Before publishing a Capture image pin, require a cold boot of the sealed snapshot
+through the same provider adapter and generated user-data as the fleet. Match the
+fleet's region, size, VPC default/selection, DNS, bootstrap egress, CA, TLS server
+name, release/image binding, and controller generation/inventory fences. Do not
+use a tunnel, hosts override, post-boot repair, or manual bootstrap rerun for the
+passing qualification. Retain the node on failure until its evidence is captured.
+A passing receipt must bind the image ID/digest, source revision, provider ID,
+boot generation, issuer certificate identity/serial and issuance time to the
+installed certificate fingerprint. File presence, `--help`, and an HTTP 202
+registration response are not qualification. A rejected or missing receipt must
+prevent pin publication; worker/media qualification remains a separate gate.
