@@ -97,3 +97,17 @@ test("--bump parses in both forms", () => {
   assert.equal(parseArguments(["--bump=4.2.0", "--dry-run"]).dryRun, true);
   assert.throws(() => parseArguments(["--bump"]), /requires a version/);
 });
+
+test("bump leaves independently versioned runtime contracts and their consumer ranges unchanged", () => {
+  const files = new Map([
+    ["packages/ui/package.json", JSON.stringify({ name: "@q9labsai/chalk-ui", version: "0.1.0" }, null, 2)],
+    ["packages/recording-presentation/package.json", JSON.stringify({ name: "@q9labsai/recording-presentation", version: "0.1.0" }, null, 2)],
+    ["apps/consumer/package.json", JSON.stringify({ name: "consumer", dependencies: { "@q9labsai/chalk-ui": "workspace:^0.1.0", "@q9labsai/recording-presentation": "workspace:^0.1.0" } }, null, 2)],
+  ]);
+  const changes = planVersionBump(files, "0.1.0", "0.2.0");
+  assert.equal(changes.has("packages/recording-presentation/package.json"), false);
+  assert.equal(JSON.parse(changes.get("packages/ui/package.json")).version, "0.2.0");
+  const consumer = JSON.parse(changes.get("apps/consumer/package.json"));
+  assert.equal(consumer.dependencies["@q9labsai/chalk-ui"], "workspace:^0.2.0");
+  assert.equal(consumer.dependencies["@q9labsai/recording-presentation"], "workspace:^0.1.0");
+});
