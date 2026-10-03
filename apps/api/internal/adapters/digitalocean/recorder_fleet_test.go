@@ -172,6 +172,7 @@ func TestNewRecorderFleetAcceptsCPURenderPool(t *testing.T) {
 
 func TestRecorderFleetInspectNodeReturnsFreshExactInventoryAndExclusivePublicIP(t *testing.T) {
 	request := recorderFleetEnsureRequest()
+	request.RequiredTags = append(request.RequiredTags, recorderfleet.DiagnosticTag)
 	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, httpRequest *http.Request) {
 		switch httpRequest.URL.Path {
 		case "/v2/droplets/123":
