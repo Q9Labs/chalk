@@ -5085,3 +5085,32 @@ CREATE TABLE tenant_invitations (
  revoked_at timestamptz
 );
 CREATE UNIQUE INDEX tenant_invitations_pending_email ON tenant_invitations(tenant_id,email) WHERE consumed_at IS NULL AND revoked_at IS NULL;
+
+create table recording_completion_recoveries (
+    job_id uuid primary key references recording_jobs(id) on delete restrict,
+    request_id uuid not null unique,
+    database_user text not null default current_user,
+    operator text not null check (octet_length(operator) between 1 and 256),
+    reason text not null check (octet_length(reason) between 1 and 1024),
+    attempt_count integer not null check (attempt_count > 0),
+    fencing_generation bigint not null check (fencing_generation > 0),
+    error_code text,
+    error_detail text,
+    failed_at timestamptz not null,
+    source_expires_at timestamptz not null,
+    requested_at timestamptz not null default now()
+);
+
+create function reject_recording_completion_recovery_mutation() returns trigger
+language plpgsql as $$
+begin
+    raise exception 'recording completion recoveries are append-only';
+end;
+$$;
+
+create trigger recording_completion_recoveries_immutable
+before update or delete on recording_completion_recoveries
+for each row execute function reject_recording_completion_recovery_mutation();
+create trigger recording_completion_recoveries_no_truncate
+before truncate on recording_completion_recoveries
+for each statement execute function reject_recording_completion_recovery_mutation();

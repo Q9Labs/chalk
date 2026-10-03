@@ -239,19 +239,6 @@ outcomes:
       - apps/api/internal/recorderfleet
       - apps/api/internal/adapters/digitalocean/recorder_fleet.go
       - infrastructure/recorder/images
-  - id: recording.completion_recovery
-    title: Recover a Recording after completion retries run out
-    area: recording
-    state: planned
-    summary: >-
-      A Recording whose Capture completion fails three times stays terminal even when all its
-      bundles are stored, so a short server fault can lose a whole Recording.
-    size: S
-    remaining:
-      - Add a supported way to retry completion for a terminal Recording whose bundles are intact.
-    theory: theory.md#product-memory
-    code:
-      - apps/api/internal/recordingpipeline
   - id: recording.capture_cost
     title: Capture starts fast and costs little
     area: recording

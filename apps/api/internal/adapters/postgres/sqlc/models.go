@@ -785,6 +785,21 @@ type RecordingCaptureRetiredPublication struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
+type RecordingCompletionRecovery struct {
+	JobID             pgtype.UUID        `json:"job_id"`
+	RequestID         pgtype.UUID        `json:"request_id"`
+	DatabaseUser      string             `json:"database_user"`
+	Operator          string             `json:"operator"`
+	Reason            string             `json:"reason"`
+	AttemptCount      int32              `json:"attempt_count"`
+	FencingGeneration int64              `json:"fencing_generation"`
+	ErrorCode         pgtype.Text        `json:"error_code"`
+	ErrorDetail       pgtype.Text        `json:"error_detail"`
+	FailedAt          pgtype.Timestamptz `json:"failed_at"`
+	SourceExpiresAt   pgtype.Timestamptz `json:"source_expires_at"`
+	RequestedAt       pgtype.Timestamptz `json:"requested_at"`
+}
+
 type RecordingDataKey struct {
 	RecordingID             pgtype.UUID        `json:"recording_id"`
 	CaptureEpoch            int64              `json:"capture_epoch"`
