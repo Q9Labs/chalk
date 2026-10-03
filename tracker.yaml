@@ -94,9 +94,9 @@ outcomes:
     area: realtime_sync
     state: in_progress
     summary: >-
-      A local fault soak kills Sync right after an acknowledgement, restarts and stops Postgres, and
-      slows a client. It has not been run on a production-like topology, and production runs a
-      single database node with no standby.
+      Local checks cover repeated Sync restarts and chat queued during reconnects, alongside
+      database outages and slow clients. Recovery on a production-like topology remains
+      unqualified, and production has no database standby.
     priority: P1
     size: M
     remaining:

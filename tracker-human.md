@@ -54,9 +54,9 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
 ## Sync
 
 5. **Sync survives node and database failure** (Partly working · size M · P1)
-    A local fault soak kills Sync right after an acknowledgement, restarts and stops
-    Postgres, and slows a client. It has not been run on a production-like topology, and
-    production runs a single database node with no standby.
+    Local checks cover repeated Sync restarts and chat queued during reconnects,
+    alongside database outages and slow clients. Recovery on a production-like topology
+    remains unqualified, and production has no database standby.
     Open question: The soak has only run on one machine with a local Postgres.
     - Run the fault soak against a named production-like topology, including the
       original database coming back after an outage.
