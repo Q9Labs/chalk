@@ -1,0 +1,17 @@
+[Unit]
+Description=Chalk read-only production alert state snapshot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=chalk
+EnvironmentFile=/run/chalk/env/api.env
+EnvironmentFile=-/etc/chalk-alerts/collector.env
+ExecStart=/opt/chalk-alerts/collector
+TimeoutStartSec=40
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
