@@ -22,7 +22,7 @@ func NewTenantPurgeRepository(pool *pgxpool.Pool) TenantPurgeRepository {
 	return TenantPurgeRepository{pool: pool}
 }
 
-func readPurgeTable(ctx context.Context, tx pgx.Tx, table purgeTable, condition string, ids []string, values bool) (tenantpurge.Table, error) {
+func readPurgeTable(ctx context.Context, tx purgeQueryer, table purgeTable, condition string, ids []string, values bool) (tenantpurge.Table, error) {
 	result := tenantpurge.Table{Name: table.Name, Digest: tenantpurge.Digest(nil)}
 	var ddl []string
 	for _, column := range table.Columns {
@@ -51,6 +51,15 @@ func readPurgeTable(ctx context.Context, tx pgx.Tx, table purgeTable, condition 
 		hash.Write([]byte(key + "\n" + value + "\n"))
 		result.Count++
 		row := tenantpurge.Row{Key: json.RawMessage(key)}
+		if table.Name == "observability_journey_events" {
+			var event struct {
+				JourneyID string `json:"journey_id"`
+			}
+			if err := json.Unmarshal([]byte(value), &event); err != nil {
+				return result, err
+			}
+			row.JourneyID = event.JourneyID
+		}
 		if values {
 			row.Value = json.RawMessage(value)
 		}
@@ -63,7 +72,7 @@ func readPurgeTable(ctx context.Context, tx pgx.Tx, table purgeTable, condition 
 	return result, nil
 }
 
-func snapshotPurge(ctx context.Context, tx pgx.Tx, scope tenantpurge.Scope, values bool) (tenantpurge.Plan, purgeCatalog, map[string]string, error) {
+func snapshotPurge(ctx context.Context, tx purgeQueryer, scope tenantpurge.Scope, values bool) (tenantpurge.Plan, purgeCatalog, map[string]string, error) {
 	plan := tenantpurge.Plan{Version: 1, Kind: "purge", CreatedAt: time.Now().UTC(), Scope: scope}
 	if err := checkPurgeScope(ctx, tx, scope, true); err != nil {
 		return plan, purgeCatalog{}, nil, err

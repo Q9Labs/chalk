@@ -6,6 +6,70 @@ Never commit scope, plans, backups, manifests, results or journals: they contain
 production identifiers, credentials or content. Keep files mode `0600` inside a
 private directory outside Git. Supply runtime secrets through the environment.
 
+## Short transactions on managed PostgreSQL
+
+Use `purge-short`, `cleanup-short` and `backfill-short` for managed production.
+[PlanetScale recommends transactions under three seconds](https://planetscale.com/docs/postgres/connection-resilience).
+The older all-Tenant transaction below is not suitable for that window.
+
+Inventory with `--operation purge-short --dry-run --scope /private/scope.json
+--objects /private/objects.json --plan-out /private/current-plan.json`.
+These are autocommit reads, not a long repeatable-read transaction. Finish
+migrations first, then refresh the schema. Preserve the restore-verified baseline
+dump/object archive and its original plan/receipt; baseline values may have
+changed, but the approved identities and backed object manifest must not.
+
+Set `CHALK_TENANT_PURGE_BACKUP_KEY` to the separate vault's base64 32-byte key.
+Create an owner-only directory outside Git, resolving any parent symlinks.
+For each approved Tenant in ascending UUID order, run:
+
+```
+pnpm tenant:purge --operation purge-short --apply --tenant-id <approved-id> \
+  --plan /private/current-plan.json --baseline-plan /private/baseline-plan.json \
+  --backup-receipt /private/baseline-receipt.json \
+  --before-images-directory /private/encrypted-backups \
+  --result-out /private/unique-tenant-result.json
+```
+
+Each invocation takes a Tenant advisory lock and brief table writer fences,
+materializes live rows with `FOR UPDATE`, encrypts and fsyncs their exact
+before-images and directory, then deletes those PKs. Statement timeout is two
+seconds, lock timeout 200ms and wall-clock transaction deadline 2.8 seconds,
+including backup fsync. No pg_dump/restore or subprocess runs inside the fence.
+Shared users and global journey rows wait for the final approved Tenant; the
+final invocation refuses while another approved Tenant remains. The shared before-image directory carries authenticated live account/journey
+identities from earlier commits, including new bookkeeping, into the final
+selection. Keep that directory and the original plan when resuming. Kept
+memberships, incoming FK/logical links and object references still veto erasure.
+Bookkeeping drift is captured, not compared with stale snapshot hashes.
+
+This path reuses the hard-delete catalog, cycle cuts, known append-only guards,
+delete ordering and storage erase helper. It does not generate the soft-delete
+helpers' additional audit/cleanup rows. Every table's count difference must equal
+its backed count, and every unselected row must retain its exact digest.
+Constraints stay enabled; suspended guards must be restored before commit.
+
+Each encrypted file has `CHALKTPB1` magic, 12-byte nonce, then AES-256-GCM
+ciphertext/tag with the magic as associated data. An fsynced sibling receipt
+records ciphertext/plaintext hashes and at least 14 days' retention. Do not
+delete before-images after rollback: they also support unknown commit outcomes.
+If interrupted, inspect target absence, before-image PKs and retained identities
+before proceeding; never blindly replay an unconfirmed commit. Previously
+committed Tenants are not rolled back because a later Tenant fails.
+
+After all relational commits, use `cleanup-short` with the current purge plan,
+baseline plan/receipt and private journal. It checks each object's retained
+references under its own short fence, reusing the idempotent inspect/delete/HEAD
+helper. The deadline includes the external call; no transaction spans the whole
+manifest. Then inventory/apply `backfill-short` with the explicit backfill spec,
+matching backfill baseline and before-image directory. It remains one short,
+raise-only transaction with service Spaces and deliberate values protected.
+
+Outside all production transactions, authenticate each live before-image,
+materialize exactly its rows in an isolated PostgreSQL staging database, dump
+and restore-verify them using the procedure below. Keep these verified dumps,
+the encrypted live authority files and object bytes at least 14 days.
+
 ## Approval and backup
 
 1. Create `scope.json` with `delete` and `keep` arrays of exact `{id, name}`

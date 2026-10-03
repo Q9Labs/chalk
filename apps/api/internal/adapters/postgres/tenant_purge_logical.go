@@ -3,13 +3,12 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"github.com/jackc/pgx/v5"
 	"strings"
 )
 
 // These links deliberately have no SQL FK. A retained Tenant's feedback or
 // journey references must not be masked by selecting the entire journey.
-func checkPurgeLogicalBoundaries(ctx context.Context, tx pgx.Tx, catalog purgeCatalog, selected map[string]string, ids []string) error {
+func checkPurgeLogicalBoundaries(ctx context.Context, tx purgeQueryer, catalog purgeCatalog, selected map[string]string, ids []string) error {
 	if _, ok := catalog.table("feedback_reports"); ok {
 		var linked bool
 		if err := tx.QueryRow(ctx, `select exists(select 1 from public.feedback_reports where not(tenant_id=any($1::uuid[])) and (space_id in(select id from public.spaces where tenant_id=any($1::uuid[])) or episode_id in(select id from public.episodes where tenant_id=any($1::uuid[]))))`, ids).Scan(&linked); err != nil {

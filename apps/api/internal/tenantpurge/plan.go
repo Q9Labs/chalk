@@ -42,8 +42,9 @@ func (s Scope) Validate() error {
 }
 
 type Row struct {
-	Key   json.RawMessage `json:"key"`
-	Value json.RawMessage `json:"value,omitempty"`
+	Key       json.RawMessage `json:"key"`
+	Value     json.RawMessage `json:"value,omitempty"`
+	JourneyID string          `json:"journey_id,omitempty"`
 }
 
 type Table struct {
@@ -55,15 +56,25 @@ type Table struct {
 }
 
 type Plan struct {
-	Version      int             `json:"version"`
-	Kind         string          `json:"kind"`
-	CreatedAt    time.Time       `json:"created_at"`
-	Scope        Scope           `json:"scope"`
-	SchemaDigest string          `json:"schema_digest"`
-	Tables       []Table         `json:"tables"`
-	Backfill     *Backfill       `json:"backfill,omitempty"`
-	Objects      *ObjectManifest `json:"objects,omitempty"`
-	WriteDrain   *WriteDrain     `json:"write_drain,omitempty"`
+	DeferredSeeds     *DeferredSeeds  `json:"deferred_seeds,omitempty"`
+	Version           int             `json:"version"`
+	Kind              string          `json:"kind"`
+	CreatedAt         time.Time       `json:"created_at"`
+	Scope             Scope           `json:"scope"`
+	SchemaFingerprint string          `json:"schema_fingerprint,omitempty"`
+	SchemaDigest      string          `json:"schema_digest"`
+	Tables            []Table         `json:"tables"`
+	Backfill          *Backfill       `json:"backfill,omitempty"`
+	Objects           *ObjectManifest `json:"objects,omitempty"`
+	WriteDrain        *WriteDrain     `json:"write_drain,omitempty"`
+}
+
+// These identities come from encrypted before-images of already visited
+// approved Tenants. Their global rows are selected only in the final purge.
+type DeferredSeeds struct {
+	Users    []string `json:"users,omitempty"`
+	Journeys []string `json:"journeys,omitempty"`
+	Events   []string `json:"events,omitempty"`
 }
 
 // R2 has no atomic conditional DELETE. Direct upload permissions and worker
@@ -89,7 +100,7 @@ func (p Plan) WithoutValues() Plan {
 		result.Tables[index] = table
 		result.Tables[index].Rows = make([]Row, len(table.Rows))
 		for rowIndex, row := range table.Rows {
-			result.Tables[index].Rows[rowIndex] = Row{Key: row.Key}
+			result.Tables[index].Rows[rowIndex] = Row{Key: row.Key, JourneyID: row.JourneyID}
 		}
 	}
 	return result

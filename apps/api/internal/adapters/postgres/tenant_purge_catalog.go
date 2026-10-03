@@ -32,7 +32,7 @@ type purgeCatalog struct {
 
 type purgeTrigger struct{ Table, Name, Function, Definition, FunctionDigest, Enabled string }
 
-func loadPurgeCatalog(ctx context.Context, tx pgx.Tx) (purgeCatalog, error) {
+func loadPurgeCatalog(ctx context.Context, tx purgeQueryer) (purgeCatalog, error) {
 	var catalog purgeCatalog
 	rows, err := tx.Query(ctx, `select c.relname,a.attname,format_type(a.atttypid,a.atttypmod) from pg_class c join pg_namespace n on n.oid=c.relnamespace join pg_attribute a on a.attrelid=c.oid where n.nspname='public' and c.relkind in ('r','p') and a.attnum>0 and not a.attisdropped order by c.relname,a.attnum`)
 	if err != nil {
@@ -237,7 +237,7 @@ func purgeIDs(scope tenantpurge.Scope) []string {
 	return result
 }
 
-func checkPurgeScope(ctx context.Context, tx pgx.Tx, scope tenantpurge.Scope, requireDeleted bool) error {
+func checkPurgeScope(ctx context.Context, tx purgeQueryer, scope tenantpurge.Scope, requireDeleted bool) error {
 	if err := scope.Validate(); err != nil {
 		return err
 	}
@@ -285,7 +285,7 @@ func primaryExpression(table purgeTable, alias string) string {
 	return `jsonb_build_object(` + strings.Join(values, ",") + `)`
 }
 
-func checkPurgeBoundaries(ctx context.Context, tx pgx.Tx, catalog purgeCatalog, selected map[string]string, ids []string) error {
+func checkPurgeBoundaries(ctx context.Context, tx purgeQueryer, catalog purgeCatalog, selected map[string]string, ids []string) error {
 	if err := checkPurgeLogicalBoundaries(ctx, tx, catalog, selected, ids); err != nil {
 		return err
 	}

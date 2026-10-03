@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 
 type options struct {
 	operation, scope, plan, planOut, backfill, objects, backup, result, journal, backupRefresh string
+	baseline, target, beforeImages                                                             string
 	apply, dryRun, export                                                                      bool
 }
 
@@ -37,6 +39,9 @@ func main() {
 func run() error {
 	var o options
 	flag.StringVar(&o.operation, "operation", "purge", "purge, backfill, or cleanup")
+	flag.StringVar(&o.baseline, "baseline-plan", "", "restore-verified pre-purge baseline plan")
+	flag.StringVar(&o.target, "tenant-id", "", "one exact approved Tenant for purge-short")
+	flag.StringVar(&o.beforeImages, "before-images-directory", "", "owner-only encrypted backup directory outside Git")
 	flag.StringVar(&o.scope, "scope", "", "private exact identity partition JSON")
 	flag.StringVar(&o.plan, "plan", "", "private previously inventoried plan")
 	flag.StringVar(&o.planOut, "plan-out", "", "create a private keys/counts plan")
@@ -53,7 +58,7 @@ func run() error {
 	if flag.NArg() != 0 || o.apply && (o.dryRun || o.export) || o.backupRefresh != "" && (!o.apply || o.operation != "purge") {
 		return errors.New("invalid argument combination")
 	}
-	if o.operation != "purge" && o.operation != "backfill" && o.operation != "cleanup" {
+	if o.operation != "purge" && o.operation != "backfill" && o.operation != "cleanup" && o.operation != "purge-short" && o.operation != "backfill-short" && o.operation != "cleanup-short" {
 		return errors.New("unknown operation")
 	}
 	if o.export && o.planOut == "" {
@@ -71,6 +76,9 @@ func run() error {
 	}
 	defer pool.Close()
 	repository := postgres.NewTenantPurgeRepository(pool)
+	if strings.HasSuffix(o.operation, "-short") {
+		return runShort(ctx, repository, o)
+	}
 	if o.apply || o.operation == "cleanup" {
 		if o.plan == "" || o.backup == "" {
 			return errors.New("plan and backup receipt required")
@@ -270,8 +278,10 @@ func cleanup(ctx context.Context, repository postgres.TenantPurgeRepository, pla
 	if plan.Objects == nil {
 		return errors.New("approved plan has no object manifest")
 	}
-	if err := repository.VerifyObjectCleanup(ctx, plan); err != nil {
-		return err
+	if o.operation != "cleanup-short" {
+		if err := repository.VerifyObjectCleanup(ctx, plan); err != nil {
+			return err
+		}
 	}
 	if !o.apply {
 		return json.NewEncoder(os.Stdout).Encode(struct {
@@ -298,14 +308,19 @@ func cleanup(ctx context.Context, repository postgres.TenantPurgeRepository, pla
 		return err
 	}
 	defer journal.Close()
-	err = repository.CleanupObjects(ctx, plan, func() error {
-		return tenantpurge.CleanupObjects(ctx, store, *plan.Objects, func(object tenantpurge.StorageObject) error {
+	cleanupOne := func(ctx context.Context, manifest tenantpurge.ObjectManifest) error {
+		return tenantpurge.CleanupObjects(ctx, store, manifest, func(object tenantpurge.StorageObject) error {
 			if err := json.NewEncoder(journal).Encode(object); err != nil {
 				return err
 			}
 			return journal.Sync()
 		})
-	})
+	}
+	if o.operation == "cleanup-short" {
+		err = repository.CleanupObjectsShort(ctx, plan, cleanupOne)
+	} else {
+		err = repository.CleanupObjects(ctx, plan, func() error { return cleanupOne(ctx, *plan.Objects) })
+	}
 	if err != nil {
 		return err
 	}
