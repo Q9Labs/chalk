@@ -20,15 +20,26 @@ export async function runManagedRelease({ arguments_, commandRunner = runCommand
   }
 
   const release = await prepareRelease({ allowedSecretIds, now, options });
+  const binding = await dispatcherBinding({ commandRunner, options, dryRun: true });
   if (options.dryRun) {
-    const proof = buildDryRunProof({ ...release, options });
+    const proof = { ...buildDryRunProof({ ...release, options }), dispatcher_binding: binding };
     stdout.write(`${JSON.stringify(proof, null, 2)}\n`);
     return proof;
   }
 
   const result = await deployRelease({ commandRunner, options, release, sleep });
+  result.dispatcher_binding = await dispatcherBinding({ commandRunner, options, dryRun: false });
   stdout.write(`${JSON.stringify(result)}\n`);
   return result;
+}
+
+async function dispatcherBinding({ commandRunner, options, dryRun }) {
+  if (options.environment !== "production") return { action: "not-configured", environment: options.environment };
+  const script = fileURLToPath(new URL("../recorder/dispatcher_binding.py", import.meta.url));
+  const args = [script, "--manifest", resolve(options.manifestPath), "--region", options.region, "--instance-id", options.instanceId, "--parameter-prefix", options.parameterPrefix];
+  if (dryRun) args.push("--dry-run");
+  const result = await commandRunner({ command: "python3", args });
+  return JSON.parse(result.stdout);
 }
 
 async function prepareRelease({ allowedSecretIds, now, options }) {

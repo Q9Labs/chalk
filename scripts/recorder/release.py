@@ -19,6 +19,7 @@ from release_core import (PHASES, PREFIX, PIN_KEYS, builder_identity, check_fres
                           check_qualification, digest, env_values, rebuild_dispatcher, require,
                           replace_pins, scheduler_changes, sealed_result, validate_config)
 from release_io import Provider, private_json
+from dispatcher_binding import binding_target, dispatcher_root, verify_dispatcher
 
 SCRIPTS = Path(__file__).resolve().parent
 REPO = SCRIPTS.parent.parent
@@ -144,8 +145,9 @@ class Release:
             "read_operations": self.provider.reads,
         }
         if self.args.managed_manifest:
-            self.managed_deploy(dry_run=True)
+            managed = self.managed_deploy(dry_run=True)
             proof["canonical_managed_deploy_dry_run"] = True
+            proof["dispatcher_binding"] = managed["dispatcher_binding"]
         # Check the reconstructed input shape without persisting production state or root files.
         require(root["module"]["dispatcher"]["scheduler_name"] == self.config["dispatcher"]["scheduler_name"], "scheduler identity mismatch")
         return proof
@@ -157,7 +159,7 @@ class Release:
             "snapshot": "no post-seal SSH; power off, snapshot, validate fleet minimum disk, delete exact builder/key/firewall",
             "qualify": "temporary fleet-size image checks plus required BOOTDIAG executable receipt; clean own resources",
             "publish-pins": "require signed qualification; re-read SSM version/hash; change only image identity and Capture evidence",
-            "deploy": "guarded scheduler pause; canonical managed release input reload; loaded-runtime verify; restore scheduler",
+            "deploy": "guarded scheduler pause; canonical managed release input reload and dispatcher rebind; loaded-runtime verify; restore scheduler",
             "verify": "health, manifest/component identities, running image digests, loaded /proc environment versus SSM",
         }[phase]
 
@@ -409,7 +411,7 @@ class Release:
 
     def set_scheduler(self, desired):
         path = self.directory / "dispatcher/main.tf.json"
-        root = json.loads(path.read_text())
+        root = dispatcher_root(self.provider, self.config["dispatcher"])
         root["module"]["dispatcher"]["scheduler_state"] = desired
         private_json(path, root)
         self.tofu("plan", "-input=false", "-no-color", "-out=scheduler.plan")
@@ -428,11 +430,13 @@ class Release:
         require(self.state.get("published"), "publish qualified pins first")
         require(self.args.managed_manifest, "--managed-manifest is required")
         self.managed_deploy(dry_run=True)
-        # Reprove baseline from fresh live state; never apply a root rebuilt only from an old scratch copy.
+        # A failed prior deploy may already have rebound Lambda. Never restore its old root.
+        private_json(self.directory / "dispatcher/main.tf.json", dispatcher_root(self.provider, self.config["dispatcher"]))
         self.tofu("plan", "-input=false", "-detailed-exitcode", "-no-color")
         self.set_scheduler("DISABLED")
         manifest = json.loads(Path(self.args.managed_manifest).read_text())
         self.state["managed"] = {key: manifest[key] for key in ("release_id", "source_revision")}
+        self.state["managed"]["api_release_id"] = binding_target(manifest)
         self.save()
         self.managed_deploy()
         result = self.verify()
@@ -443,7 +447,8 @@ class Release:
 
     def verify(self):
         require(self.state.get("published") and self.state.get("managed"), "verification requires published pins and managed deployment identity")
-        options = {**self.state["managed"], "region": self.args.region, "user_id": self.config["runtime"]["user_id"],
+        binding = verify_dispatcher(self.provider, self.config["dispatcher"], self.state["managed"].get("api_release_id"))
+        options = {"dispatcher_release_id": binding["release_id"], **self.state["managed"], "region": self.args.region, "user_id": self.config["runtime"]["user_id"],
                    "parameter_prefix": self.config["runtime"]["parameter_prefix"],
                    "pins": {self.state["role"]: self.state["published"]["updates"]}}
         script = (SCRIPTS / "verify-loaded-runtime.py").read_text()

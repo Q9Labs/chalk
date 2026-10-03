@@ -472,6 +472,9 @@ jobs:
           role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
 
+      - name: Set up OpenTofu for dispatcher binding
+        uses: ./.github/actions/setup-opentofu
+
       - name: Deploy, health-check, and prove release
         env:
           CHALK_MANAGED_AWS_REGION: ${{ vars.CHALK_MANAGED_AWS_REGION }}
