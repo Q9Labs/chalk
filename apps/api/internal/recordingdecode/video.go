@@ -103,23 +103,34 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 		return closeSegment()
 	}
 	deferredSequenceGap := false
-	err := readSpool(state.spoolPath, func(packet recordingbundle.RTPPacket) error {
+	err := readVP8Pictures(ctx, state.spoolPath, durationMS, &quality, func(packet recordingbundle.RTPPacket) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		if started && mediaStarted && len(packet.Payload) > 0 && packet.SSRC == previousSSRC && packet.ExtendedSequenceNumber <= previousSequence && packet.Timestamp <= previousTimestamp {
 			quality.latePackets++
-			quality.drop(packet.Timestamp)
 			return nil
 		}
 		sameSSRC := started && packet.SSRC == previousSSRC
 		lost := deferredSequenceGap || started && (packet.ExtendedSequenceNumber != previousSequence+1 || !sameSSRC)
 		deferredSequenceGap = lost
 		previousSequence, previousSSRC, started = packet.ExtendedSequenceNumber, packet.SSRC, true
+		// Classify stale media before it can abandon an in-progress live picture.
+		// Its RTP sequence still contributes to transport gap detection.
+		if len(packet.Payload) > 0 {
+			if _, seen := quality.seen[packet.Timestamp]; seen {
+				quality.duplicatePackets++
+				return nil
+			}
+			if mediaStarted && packet.Timestamp < previousTimestamp {
+				quality.latePackets++
+				return nil
+			}
+		}
 		beginPacketRecovery := func() error {
 			start := uint64(packet.Timestamp)
 			if len(frameTimestamps) > 0 {
-				start = frameTimestamps[len(frameTimestamps)-1] + nominalFrameTicks(frameTimestamps)
+				start = frameTimestamps[len(frameTimestamps)-1] + quality.frameTicks(frameTimestamps)
 			}
 			return beginRecovery(start)
 		}
@@ -137,15 +148,6 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 			}
 			return nil
 		}
-		if _, seen := quality.seen[packet.Timestamp]; seen {
-			quality.duplicatePackets++
-			return nil
-		}
-		if mediaStarted && packet.Timestamp < previousTimestamp {
-			quality.latePackets++
-			quality.drop(packet.Timestamp)
-			return nil
-		}
 		if err := validateMediaTimestamp(packet.Timestamp, videoClockRate, durationMS); err != nil {
 			quality.malformedPackets++
 			start := uint64(0)
@@ -154,7 +156,7 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 			} else {
 				quality.drop(packet.Timestamp)
 				if len(frameTimestamps) > 0 {
-					start = frameTimestamps[len(frameTimestamps)-1] + nominalFrameTicks(frameTimestamps)
+					start = frameTimestamps[len(frameTimestamps)-1] + quality.frameTicks(frameTimestamps)
 				}
 			}
 			return beginRecovery(start)
@@ -177,7 +179,7 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 		// continuity and a normal frame interval; never bridge inside a frame.
 		continuousPicture := lost && sameSSRC && !waitingForKeyFrame && len(framePayload) == 0 &&
 			vp8.S == 1 && vp8.PID == 0 && pictureID.follows(previousPictureID) &&
-			uint64(packet.Timestamp)-uint64(previousTimestamp) <= 2*nominalFrameTicks(frameTimestamps)
+			uint64(packet.Timestamp)-uint64(previousTimestamp) <= 2*quality.frameTicks(frameTimestamps)
 		if lost && !continuousPicture {
 			if err := beginPacketRecovery(); err != nil {
 				return err
@@ -264,9 +266,17 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 	if len(framePayload) > 0 {
 		start := uint64(frameTimestamp)
 		if len(frameTimestamps) > 0 {
-			start = min(start, frameTimestamps[len(frameTimestamps)-1]+nominalFrameTicks(frameTimestamps))
+			start = min(start, frameTimestamps[len(frameTimestamps)-1]+quality.frameTicks(frameTimestamps))
 		}
 		if err := beginRecovery(start); err != nil {
+			return Source{}, nil, err
+		}
+	}
+	for _, gap := range quality.selectionLosses {
+		resultDiscontinuities = append(resultDiscontinuities, sourceDiscontinuity(state, ticksToMillisecondsFloor(gap.start, videoClockRate), ticksToMillisecondsCeil(gap.end, videoClockRate), "packet_loss"))
+	}
+	if quality.selectionTail && len(frameTimestamps) > 0 {
+		if err := beginRecovery(frameTimestamps[len(frameTimestamps)-1] + quality.frameTicks(frameTimestamps)); err != nil {
 			return Source{}, nil, err
 		}
 	}
@@ -300,7 +310,7 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 	}
 	codecStartTicks := segments[0].startTicks
 	startTicks := frameTimestamps[0]
-	endTicks := frameTimestamps[len(frameTimestamps)-1] + nominalFrameTicks(frameTimestamps)
+	endTicks := frameTimestamps[len(frameTimestamps)-1] + quality.frameTicks(frameTimestamps)
 	maximumTicks := uint64(durationMS) * videoClockRate / 1_000
 	for _, gap := range resultDiscontinuities {
 		if gap.EndMS == durationMS {
@@ -320,7 +330,7 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 	}
 	relativePath := filepath.Join("media", state.presentation.SourceID+".webm")
 	outputPath := filepath.Join(mediaDirectory, state.presentation.SourceID+".webm")
-	frameDuration := float64(nominalFrameTicks(frameTimestamps)) / float64(videoClockRate)
+	frameDuration := float64(quality.frameTicks(frameTimestamps)) / float64(videoClockRate)
 	sourceDuration := float64(endMS-startMS) / 1_000
 	// Passthrough copies the recorded frames; the native compositor holds the
 	// last frame itself. The browser renderer needs a re-encoded, padded file.
@@ -330,7 +340,7 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 			"-c:v", "libvpx", "-deadline", "good", "-cpu-used", "4", "-pix_fmt", "yuv420p", "-fps_mode", "vfr"}
 	}
 	if !passthrough && state.degradation.FrozenMS > 0 {
-		encode = []string{"-vf", "tpad=stop_mode=clone:stop_duration=" + strconv.FormatFloat(sourceDuration, 'f', 6, 64) + ",fps=90000/" + strconv.FormatUint(nominalFrameTicks(frameTimestamps), 10),
+		encode = []string{"-vf", "tpad=stop_mode=clone:stop_duration=" + strconv.FormatFloat(sourceDuration, 'f', 6, 64) + ",fps=90000/" + strconv.FormatUint(quality.frameTicks(frameTimestamps), 10),
 			"-c:v", "libvpx", "-deadline", "realtime", "-cpu-used", "4", "-threads", "1", "-pix_fmt", "yuv420p"}
 	}
 	args := []string{"-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-threads", "1", "-f", "ivf", "-i", mergedIVF}

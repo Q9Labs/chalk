@@ -16,6 +16,16 @@ type vp8Quality struct {
 	malformedPackets  int
 	dimensionSwitches int
 	recoveryTicks     uint64
+	selectionTail     bool
+	selectionCadence  uint64
+	selectionLosses   []vp8SelectionLoss
+}
+
+func (q *vp8Quality) frameTicks(timestamps []uint64) uint64 {
+	if q.selectionCadence != 0 {
+		return q.selectionCadence
+	}
+	return nominalFrameTicks(timestamps)
 }
 
 func (q *vp8Quality) remember(timestamp uint32) {
