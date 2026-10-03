@@ -241,6 +241,13 @@ export async function recordProof(run, receiver, cameraShare, forceLayerSwitch) 
   for (const page of pages) await page.context().close();
   return { recording, camera: cameraResult(share, baselineError, forceLayerSwitch) };
 }
+export function contactSheetFont(fonts, platform = process.platform) {
+  // macOS ImageMagick can have no registered fonts despite system fonts existing.
+  if (platform === "darwin" && !fonts.trim()) return "/System/Library/Fonts/Supplemental/Arial.ttf";
+  const font = fonts.match(/^\s*Font:\s*(\S.*)$/m)?.[1].trim();
+  check(font, "ImageMagick has no installed font for the contact sheet");
+  return font;
+}
 export async function exportProof(run, execute = command) {
   const started = Date.now();
   await run.apiRequest("POST", `${run.tenantPath}/recordings/${run.recordingId}/export`, {});
@@ -283,9 +290,7 @@ export async function exportProof(run, execute = command) {
     await execute("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-ss", String((duration * (index + 0.5)) / 4), "-i", mp4, "-frames:v", "1", "-vf", "scale=1000:-1", frame]);
     frames.push(frame);
   }
-  const fonts = await execute("magick", ["-list", "font"]);
-  const font = fonts.match(/^\s*Font:\s*(\S.*)$/m)?.[1].trim();
-  check(font, "ImageMagick has no installed font for the contact sheet");
+  const font = contactSheetFont(await execute("magick", ["-list", "font"]));
   await execute("magick", ["montage", "-font", font, ...frames, "-tile", "2x2", "-geometry", "+16+16", `${run.directory}/contact-sheet.png`]);
   await save(`${run.directory}/ffprobe.json`, probe);
   const result = {
