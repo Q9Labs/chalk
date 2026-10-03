@@ -251,3 +251,24 @@ func TestReplayHonorsCancellation(t *testing.T) {
 		t.Fatalf("canceled replay: %v", err)
 	}
 }
+
+func TestFixtureKeepsDescriptorOnlyDamage(t *testing.T) {
+	original := syntheticVP8Fixture().Fragments()
+	original[0].Packets[3].Payload = []byte{0x10}
+	fixture, _, err := NewFixture(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := ReplayVP8(context.Background(), original, 10000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, err := ReplayVP8(context.Background(), fixture.Fragments(), 10000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("original=%+v sanitized=%+v", before[0], after[0])
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("sanitization changed assembly verdict")
+	}
+}

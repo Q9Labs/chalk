@@ -120,6 +120,10 @@ func (value FixturePacket) payload() []byte {
 	if value.PayloadID == 0 {
 		return []byte{}
 	}
+	// A descriptor without codec bytes is damaged media, not a synthetic frame.
+	if len(value.Descriptor) > 0 && value.PayloadSize == len(value.Descriptor) {
+		return append([]byte(nil), value.Descriptor...)
+	}
 	// Descriptor with S set for a frame start, then the 3-byte frame tag whose
 	// lowest bit is 0 for key frames, then the key frame start code and size.
 	var payload []byte

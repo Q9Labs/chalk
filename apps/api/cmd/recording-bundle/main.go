@@ -17,6 +17,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strings"
 
@@ -69,7 +70,12 @@ func run(args []string, stdout, stderr io.Writer) error {
 	case "replay":
 		duration := *durationMS
 		if duration < 0 {
+			// The inclusive bundle boundary floors RTP ticks to milliseconds.
+			// Round its replay bound up so a fractional final packet is included.
 			duration = bundle.Manifest.MediaRange.EndMilliseconds
+			if duration < math.MaxInt64 {
+				duration++
+			}
 		}
 		results, err := recordingdecode.ReplayVP8(context.Background(), bundle.Fragments, duration)
 		if err != nil {
