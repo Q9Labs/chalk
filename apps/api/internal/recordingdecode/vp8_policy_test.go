@@ -28,6 +28,33 @@ type sanitizedVP8Packet struct {
 	body       uint8
 }
 
+func TestVideoQualityCountsOnlyVisibleDamageAndStartup(t *testing.T) {
+	timeline := decodePresentationFixture(t)
+	timeline.Clock.DurationMillis = 10_000
+	source := recordingpresentation.MediaSource{SourceID: "camera", Kind: recordingpresentation.MediaKindCamera, Visible: true}
+	timeline.Initial.Media = []recordingpresentation.MediaSource{source}
+	hidden := source
+	hidden.Visible = false
+	timeline.Events = []recordingpresentation.Event{
+		recordingpresentation.MediaSourceChangedEvent{EventBase: recordingpresentation.EventBase{AtMillis: 4_000}, Source: hidden},
+		recordingpresentation.MediaSourceChangedEvent{EventBase: recordingpresentation.EventBase{AtMillis: 7_000}, Source: source},
+	}
+	state := &sourceState{presentation: source, hasSpan: true, spanEndMS: 10_000, visibleSpans: visualSourceSpans(timeline, "camera")}
+	quality := vp8Quality{}
+	quality.result(state, nil, 10_000, nil)
+	if state.degradation.PlaceholderMS != 7_000 {
+		t.Fatalf("hidden time counted as placeholder: %+v", state.degradation)
+	}
+	quality.result(state, []uint64{270_000}, 10_000, []Discontinuity{{StartMS: 3_500, EndMS: 8_000, Reason: "packet_loss"}, {StartMS: 4_500, EndMS: 5_000, Reason: "packet_loss"}})
+	if state.degradation.PlaceholderMS != 3_000 || state.degradation.FrozenMS != 1_500 || state.degradation.Recoveries != 1 {
+		t.Fatalf("visible startup/loss counters: %+v", state.degradation)
+	}
+	quality.result(state, []uint64{90_000}, 10_000, nil)
+	if state.degradation.PlaceholderMS != 0 {
+		t.Fatal("compositor's startup backfill counted as a placeholder")
+	}
+}
+
 func (packet *sanitizedVP8Packet) UnmarshalJSON(encoded []byte) error {
 	var fields []json.RawMessage
 	if err := json.Unmarshal(encoded, &fields); err != nil {

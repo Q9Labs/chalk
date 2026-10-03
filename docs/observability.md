@@ -99,7 +99,10 @@ with neither decodable video nor audio fails with `recording has no decodable
 video or audio`; video damage alone does not reject an Export.
 
 Render job `result_metadata.video_degradation` stores per-source frozen
-milliseconds, dropped frames, recoveries and whole-source placeholder time.
+milliseconds, dropped frames, recoveries and placeholder time. Durations count
+only visible intervals, not hidden camera/share time. Startup placeholders
+are counted unless the compositor backfills the first frame (within two seconds
+of the recording origin).
 These are internal job facts, not additions to the public Export API.
 
 A successfully committed degraded Export emits one `recording.export.degraded`

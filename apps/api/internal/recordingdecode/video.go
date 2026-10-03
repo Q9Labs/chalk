@@ -102,6 +102,7 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 		waitingForKeyFrame = true
 		return closeSegment()
 	}
+	deferredSequenceGap := false
 	err := readSpool(state.spoolPath, func(packet recordingbundle.RTPPacket) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -112,7 +113,8 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 			return nil
 		}
 		sameSSRC := started && packet.SSRC == previousSSRC
-		lost := started && (packet.ExtendedSequenceNumber != previousSequence+1 || !sameSSRC)
+		lost := deferredSequenceGap || started && (packet.ExtendedSequenceNumber != previousSequence+1 || !sameSSRC)
+		deferredSequenceGap = lost
 		previousSequence, previousSSRC, started = packet.ExtendedSequenceNumber, packet.SSRC, true
 		beginPacketRecovery := func() error {
 			start := uint64(packet.Timestamp)
@@ -126,6 +128,7 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 				return err
 			}
 			lost = false
+			deferredSequenceGap = false
 		}
 		// Empty probes consume RTP sequence numbers, not codec or media clocks.
 		if len(packet.Payload) == 0 {
@@ -180,6 +183,7 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 				return err
 			}
 		}
+		deferredSequenceGap = false
 		if len(framePayload) > 0 && vp8.S == 1 && vp8.PID == 0 {
 			// A second start at the same timestamp is another copy of this frame,
 			// not another lost frame. Decode the newest complete copy.
@@ -359,6 +363,7 @@ func decodeH264Source(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 	var segments []videoSegment
 	var frameTimestamps []uint64
 	var writer *h264writer.H264Writer
+	quality := vp8Quality{}
 	var current videoSegment
 	var previousSequence uint64
 	var previousSSRC uint32
@@ -411,6 +416,9 @@ func decodeH264Source(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 		}
 		if waitingForKeyFrame {
 			if !h264StartsKeyFrame(packet.Payload) {
+				if started && packet.Marker {
+					quality.drop(packet.Timestamp)
+				}
 				previousSequence, previousSSRC, previousTimestamp = packet.ExtendedSequenceNumber, packet.SSRC, packet.Timestamp
 				started = true
 				return nil
@@ -449,20 +457,28 @@ func decodeH264Source(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 		return Source{}, nil, err
 	}
 	if len(segments) == 0 || len(frameTimestamps) == 0 {
-		quality := vp8Quality{}
 		quality.result(state, nil, durationMS, nil)
 		return Source{}, nil, nil
 	}
 	rawPath := filepath.Join(segmentDirectory, "source.h264")
+	if waitingForKeyFrame {
+		resultDiscontinuities = append(resultDiscontinuities, sourceDiscontinuity(state,
+			ticksToMillisecondsFloor(lossStart, videoClockRate), durationMS, "packet_loss"))
+	}
 	if err := concatenateFiles(rawPath, segments); err != nil {
 		return Source{}, nil, err
 	}
-	quality := vp8Quality{}
 	quality.result(state, frameTimestamps, durationMS, resultDiscontinuities)
 	startTicks := segments[0].startTicks
 	nominalTicks := nominalFrameTicks(frameTimestamps)
 	endTicks := frameTimestamps[len(frameTimestamps)-1] + nominalTicks
 	maximumTicks := uint64(durationMS) * videoClockRate / 1_000
+	if waitingForKeyFrame {
+		endTicks = maximumTicks
+		if state.hasSpan {
+			endTicks = uint64(state.spanEndMS) * videoClockRate / 1_000
+		}
+	}
 	if endTicks > maximumTicks {
 		endTicks = maximumTicks
 	}

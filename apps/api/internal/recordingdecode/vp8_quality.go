@@ -47,24 +47,33 @@ func (q *vp8Quality) result(state *sourceState, timestamps []uint64, durationMS 
 	if state.hasSpan {
 		spanStart, spanEnd = state.spanStartMS, state.spanEndMS
 	}
+	spans := state.visibleSpans
+	if spans == nil {
+		spans = []visibleSpan{{spanStart, spanEnd}}
+	}
 	value := recordingpipeline.VideoDegradation{SourceID: state.presentation.SourceID, Kind: string(state.presentation.Kind), DroppedFrames: q.droppedFrames}
 	if len(timestamps) == 0 {
-		value.PlaceholderMS = max(0, spanEnd-spanStart)
+		value.PlaceholderMS = visibleMilliseconds(spans, spanStart, spanEnd)
 		state.degradation = value
 		return
 	}
 	start := max(spanStart, ticksToMillisecondsCeil(timestamps[0], videoClockRate))
+	// The compositor backfills only a first frame within two seconds of the
+	// recording origin, not late source joins. Otherwise startup is placeholder.
+	if start > 2_000 {
+		value.PlaceholderMS = visibleMilliseconds(spans, spanStart, start)
+	}
 	var heldUntil int64
 	for _, gap := range normalizeDiscontinuities(gaps) {
 		if gap.Reason != "packet_loss" {
 			continue
 		}
-		if gap.EndMS < durationMS {
+		if gap.EndMS < durationMS && visibleMilliseconds(spans, gap.StartMS, gap.EndMS) > 0 {
 			value.Recoveries++
 		}
 		from, to := max(start, gap.StartMS), min(spanEnd, gap.EndMS)
 		if to > max(from, heldUntil) {
-			value.FrozenMS += to - max(from, heldUntil)
+			value.FrozenMS += visibleMilliseconds(spans, max(from, heldUntil), to)
 			heldUntil = to
 		}
 	}

@@ -153,3 +153,26 @@ func TestVP8ReplayCannotHideLossInsideFrame(t *testing.T) {
 		t.Fatalf("replay must not conceal an incomplete frame: %v", err)
 	}
 }
+
+func TestVP8IgnoredReplayPreservesMissingPicture(t *testing.T) {
+	root := t.TempDir()
+	state := &sourceState{track: recordingbundle.TrackIdentity{TrackID: "camera", Epoch: 1, Codec: "vp8"}, spoolPath: filepath.Join(root, "camera.spool"), presentation: recordingpresentation.MediaSource{SourceID: "camera", Kind: recordingpresentation.MediaKindCamera}}
+	packet := func(seq uint64, timestamp uint32, picture byte, key bool) recordingbundle.RTPPacket {
+		body := []byte{1, 0}
+		if key {
+			body = []byte{0, 0, 0, 0x9d, 0x01, 0x2a, 0x40, 0x01, 0xf0, 0}
+		}
+		return recordingbundle.RTPPacket{SequenceNumber: uint16(seq), ExtendedSequenceNumber: seq, Timestamp: timestamp, SSRC: 1, Marker: true, Payload: append([]byte{0x90, 0x80, picture}, body...)}
+	}
+	packets := []recordingbundle.RTPPacket{packet(1, 0, 10, true), packet(3, 0, 10, true), packet(4, 3_000, 12, false), packet(5, 6_000, 13, false), packet(6, 9_000, 14, true)}
+	if err := appendFragmentRun(context.Background(), state, recordingbundle.RTPFragment{Track: state.track, Packets: packets}, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := finalizeSourceSpool(context.Background(), state); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := decodeVP8Source(context.Background(), pictureFixtureRunner{}, "ffmpeg", root, root, state, 1_000, true)
+	if !errors.Is(err, errPictureFixtureComplete) || state.degradation.DroppedFrames != 2 || state.degradation.Recoveries != 1 {
+		t.Fatalf("missing picture concealed by replay: %v %+v", err, state.degradation)
+	}
+}

@@ -56,6 +56,8 @@ type recorderRenderObjectFinalizeBody struct {
 	DurationMillis *int64 `json:"duration_ms"`
 }
 
+const recorderRenderCommitBodyLimit = 64 << 20
+
 type recorderRenderObjectCommitBody struct {
 	recorderRenderAuthorityBody
 	AllocationID string `json:"allocation_id"`
@@ -368,7 +370,10 @@ func recorderCommitRenderHandler(service RecorderRenderAuthorityService) http.Ha
 		if !ok {
 			return
 		}
-		body, ok := decodeRecorderWorkerBody[recorderRenderCommitBody](w, request)
+		// A bounded timeline can introduce 100,000 canonical source IDs over
+		// its history. Their per-source quality results exceed the ordinary
+		// 1 MiB API body cap; only this authenticated worker commit gets 64 MiB.
+		body, ok := decodeRecorderWorkerBodyWithLimit[recorderRenderCommitBody](w, request, recorderRenderCommitBodyLimit)
 		if !ok {
 			return
 		}

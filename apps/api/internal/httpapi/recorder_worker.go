@@ -678,7 +678,11 @@ func decodeEnvelopeDigest(value string) ([]byte, error) {
 }
 
 func decodeRecorderWorkerBody[T any](w http.ResponseWriter, request *http.Request) (T, bool) {
-	body, err := decodeJSONBody[T](request)
+	return decodeRecorderWorkerBodyWithLimit[T](w, request, maxRequestBodyBytes)
+}
+
+func decodeRecorderWorkerBodyWithLimit[T any](w http.ResponseWriter, request *http.Request, limit int64) (T, bool) {
+	body, err := decodeJSONBodyWithLimit[T](request, limit)
 	if err != nil {
 		if apiErr, ok := errorAsAPIError(err); ok {
 			writeAPIError(w, apiErr)

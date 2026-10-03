@@ -28,6 +28,7 @@ type sourceIdentity struct {
 }
 
 type sourceState struct {
+	visibleSpans []visibleSpan
 	spanStartMS  int64
 	spanEndMS    int64
 	hasSpan      bool
@@ -122,6 +123,7 @@ func Write(ctx context.Context, request Request) (result Result, resultErr error
 			return Result{}, err
 		}
 		state.spanStartMS, state.spanEndMS = visualSourceSpan(request.Presentation, state.presentation.SourceID)
+		state.visibleSpans = visualSourceSpans(request.Presentation, state.presentation.SourceID)
 		state.hasSpan = true
 		source, sourceDiscontinuities, err := decodeSource(ctx, runner, ffmpegPath, temporaryDirectory, mediaDirectory, state, request.DurationMS, request.VideoPassthrough)
 		if err != nil {
@@ -146,8 +148,7 @@ func Write(ctx context.Context, request Request) (result Result, resultErr error
 		if _, exists := knownQuality[source.SourceID]; exists {
 			continue
 		}
-		start, end := visualSourceSpan(request.Presentation, source.SourceID)
-		degradation = append(degradation, recordingpipeline.VideoDegradation{SourceID: source.SourceID, Kind: string(source.Kind), PlaceholderMS: end - start})
+		degradation = append(degradation, recordingpipeline.VideoDegradation{SourceID: source.SourceID, Kind: string(source.Kind), PlaceholderMS: visibleMilliseconds(visualSourceSpans(request.Presentation, source.SourceID), 0, request.DurationMS)})
 	}
 	sort.Slice(degradation, func(i, j int) bool { return degradation[i].SourceID < degradation[j].SourceID })
 	if len(sources) == 0 && len(request.IncludedSourceKinds) == 0 {
@@ -631,26 +632,44 @@ func ticksToMillisecondsCeil(ticks uint64, rate uint64) int64 {
 
 // Visibility controls the source's span independently of the Recording clock.
 func visualSourceSpan(timeline recordingpresentation.Timeline, sourceID string) (start, end int64) {
-	visible, seen := false, false
+	spans := visualSourceSpans(timeline, sourceID)
+	if len(spans) == 0 {
+		return 0, 0
+	}
+	return spans[0].start, spans[len(spans)-1].end
+}
+
+type visibleSpan struct{ start, end int64 }
+
+func visibleMilliseconds(spans []visibleSpan, start, end int64) int64 {
+	var total int64
+	for _, span := range spans {
+		total += max(0, min(end, span.end)-max(start, span.start))
+	}
+	return total
+}
+
+func visualSourceSpans(timeline recordingpresentation.Timeline, sourceID string) []visibleSpan {
+	visible := false
+	start := int64(0)
+	spans := make([]visibleSpan, 0)
 	for _, source := range timeline.Initial.Media {
 		if source.SourceID == sourceID && source.Visible {
-			visible, seen = true, true
+			visible = true
 		}
 	}
-	end = timeline.Clock.DurationMillis
 	visit := func(event recordingpresentation.MediaSourceChangedEvent) {
 		if event.Source.SourceID != sourceID {
 			return
 		}
-		if event.Source.Visible {
-			if !seen {
-				start = event.AtMillis
-			}
-			visible, seen = true, true
-			end = timeline.Clock.DurationMillis
+		if event.Source.Visible && !visible {
+			start = event.AtMillis
+			visible = true
 		} else if visible {
-			visible = false
-			end = event.AtMillis
+			if !event.Source.Visible {
+				spans = append(spans, visibleSpan{start, event.AtMillis})
+				visible = false
+			}
 		}
 	}
 	for _, event := range timeline.Events {
@@ -663,10 +682,10 @@ func visualSourceSpan(timeline recordingpresentation.Timeline, sourceID string) 
 			}
 		}
 	}
-	if !seen {
-		return 0, 0
+	if visible {
+		spans = append(spans, visibleSpan{start, timeline.Clock.DurationMillis})
 	}
-	return start, max(start, end)
+	return spans
 }
 
 // Recovery can start before the first decodable frame or end after a source's
