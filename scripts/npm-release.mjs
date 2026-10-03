@@ -591,8 +591,7 @@ function bumpManifestText(text, fromVersion, toVersion) {
   let next = text;
   const synchronized = releasePackages.some(({ name, independent }) => name === packageManifest.name && !independent);
   if (synchronized) next = next.replace(`"version": "${fromVersion}"`, `"version": "${toVersion}"`);
-  for (const { name, range } of localDependencies(packageManifest)) {
-    if (!synchronizedPackageNames.has(name)) continue;
+  for (const { name, range } of localDependencies(packageManifest).filter(({ name }) => synchronizedPackageNames.has(name))) {
     const bumped = bumpWorkspaceRange(range, fromVersion, toVersion);
     if (bumped !== range) next = replaceAllText(next, `"${name}": "${range}"`, `"${name}": "${bumped}"`);
   }
