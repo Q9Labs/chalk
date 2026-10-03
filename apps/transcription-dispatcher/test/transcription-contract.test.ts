@@ -1,11 +1,15 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
 import { RecorderControlApiClient } from "../src/control-api.js";
+import { runDispatcher } from "../src/dispatcher.js";
+import { DeepInfraWhisperProvider } from "../src/providers.js";
 import { AssignmentError, ProviderError } from "../src/errors.js";
 import { normalizeTranscriptChunk } from "../src/normalize.js";
 import { InvocationCircuit, transcribeWithFallback } from "../src/retry.js";
 import { conditionalPutJson } from "../src/storage.js";
-import type { ProviderPolicy, ProviderResult, TranscriptionAssignment, TranscriptionProvider } from "../src/types.js";
+import type { ProviderPolicy, ProviderResult, ReleaseConfig, TranscriptionAssignment, TranscriptionProvider } from "../src/types.js";
 import { validateAssignment, validateSpeakerTurnManifest } from "../src/urls.js";
 
 const SHA_A = "a".repeat(64);
@@ -56,7 +60,7 @@ const assignment: TranscriptionAssignment = {
   outputContentType: "application/json",
 };
 
-function sourceManifest(): Record<string, unknown> {
+function sourceManifest(audioSha256 = SHA_A): Record<string, unknown> {
   return {
     schema_version: "recording-transcription-source.v1",
     tenant_id: "tenant-1",
@@ -85,7 +89,7 @@ function sourceManifest(): Record<string, unknown> {
         source_start_ms: 2_000,
         source_end_ms: 12_000,
         overlap: false,
-        storage: { allocation_id: "allocation-1", object_key: "private/source-1.flac", object_version: "", etag: "etag-1", content_type: "audio/flac", byte_size: 4_096, sha256: SHA_A },
+        storage: { allocation_id: "allocation-1", object_key: "private/source-1.flac", object_version: "", etag: "etag-1", content_type: "audio/flac", byte_size: 4_096, sha256: audioSha256 },
       },
       {
         chunk_id: "chunk-2",
@@ -242,5 +246,61 @@ describe("provider sequencing", () => {
     const result = await transcribeWithFallback({ primary, fallback, request: { audio: new Uint8Array([1]), contentType: "audio/flac", chunkId: "chunk-1" }, policy, circuit: new InvocationCircuit(5, 1_000), runtime: { sleep: async () => undefined, random: () => 0, now: () => 0 } });
     expect(result.usedFallback).toBe(true);
     expect(calls).toEqual(["deepinfra:start", "deepinfra:end", "cloudflare:start", "cloudflare:end"]);
+  });
+});
+
+describe("dispatcher provider schema logging", () => {
+  it("logs only schema metadata and still reports a terminal retry", async () => {
+    const audio = new Uint8Array(4096);
+    const audioHash = createHash("sha256").update(audio).digest("hex");
+    const manifest = JSON.stringify(sourceManifest(audioHash));
+    const claim = { ...assignment, chunk: { ...assignment.chunk, inputSha256: audioHash }, manifest: { ...assignment.manifest, sizeBytes: Buffer.byteLength(manifest), sha256: createHash("sha256").update(manifest).digest("hex") } };
+    const policy: ProviderPolicy = { timeoutMs: 1000, maxAudioBytes: 8192, maxAudioSeconds: 900, maxResponseBytes: 8192, maxTextChars: 1024, maxSegments: 100, maxWords: 100, maxRetries: 0, retryBaseDelayMs: 1, retryMaxDelayMs: 1, circuitFailureThreshold: 5, circuitCooldownMs: 1000 };
+    const config: ReleaseConfig = {
+      environment: "test",
+      releaseId: "test-release",
+      controlApiAudience: "test",
+      controlApiBaseUrl: "https://control.example",
+      maxBatch: 1,
+      concurrency: 1,
+      timeoutReserveMs: 1000,
+      privacyGateAccepted: true,
+      deepInfra: { enabled: true, model: "openai/whisper-large-v3-turbo", token: "PRIVATE_TOKEN" },
+      cloudflare: { enabled: false },
+      provider: policy,
+    };
+    const body = { text: "PRIVATE_TRANSCRIPT", segments: [{ start: 0, end: false, text: "PRIVATE_TRANSCRIPT" }], request_id: "request-123" };
+    const provider = new DeepInfraWhisperProvider({ policy, token: "PRIVATE_TOKEN", fetch: async () => Response.json(body) });
+    const warnings: { event: string; fields?: Record<string, string | number | boolean> }[] = [];
+    const retries: { errorCode: string; terminal?: boolean }[] = [];
+    const result = await runDispatcher(
+      { source: "wake" },
+      { getRemainingTimeInMillis: () => 30000 },
+      {
+        config,
+        primary: provider,
+        control: {
+          claim: async () => ({ assignments: [claim] }),
+          heartbeat: async () => undefined,
+          complete: async () => {
+            throw new Error("invalid response must not complete");
+          },
+          retry: async (input) => {
+            retries.push(input);
+          },
+        },
+        fetch: async (url) => (String(url) === claim.chunk.inputUrl ? new Response(audio, { headers: { "content-type": "audio/flac" } }) : new Response(manifest, { headers: { "content-type": "application/json" } })),
+        logger: {
+          info: () => undefined,
+          warn: (event, fields) => {
+            warnings.push({ event, fields });
+          },
+        },
+      },
+    );
+    expect(result).toEqual({ claimed: 1, completed: 0, failed: 1 });
+    expect(warnings).toEqual([{ event: "provider_schema_invalid", fields: { fieldPath: "segments[0].end", expectedType: "finite nonnegative number", actualType: "boolean", responseSizeBytes: Buffer.byteLength(JSON.stringify(body)), providerRequestId: "request-123" } }]);
+    expect(JSON.stringify(warnings)).not.toContain("PRIVATE");
+    expect(retries).toEqual([expect.objectContaining({ errorCode: "provider_schema_invalid", terminal: true })]);
   });
 });

@@ -1,5 +1,5 @@
-import { ProviderError } from "./errors.js";
-import { classifyProviderStatus, ensureAbortableTimeout, errorCodeFromBody, parseJson, parseProviderResult, readBoundedBody } from "./provider-utils.js";
+import { ProviderError, providerSchemaError } from "./errors.js";
+import { classifyProviderStatus, ensureAbortableTimeout, errorCodeFromBody, parseJson, parseProviderResponse, parseProviderResult, readBoundedBody } from "./provider-utils.js";
 import type { ProviderPolicy, ProviderRequest, ProviderResult, TranscriptionProvider } from "./types.js";
 import { nativeDeepInfraBody, observedDeepInfraCost, observedDeepInfraIdentity, observedDeepInfraVersion } from "./deepinfra-response.js";
 
@@ -28,7 +28,7 @@ interface CloudflareOptions {
 
 function requestIdentity(row: ProviderResult, expectedModel: string): void {
   if (row.providerIdentity?.model && row.providerIdentity.model !== expectedModel) {
-    throw new ProviderError("provider model identity mismatched release", "schema");
+    throw providerSchemaError("provider model identity mismatched release", "model", "matching model string", row.providerIdentity?.model);
   }
 }
 
@@ -53,8 +53,8 @@ export class DeepInfraWhisperProvider implements TranscriptionProvider {
   }
 
   async transcribe(request: ProviderRequest): Promise<ProviderResult> {
-    if (request.audio.byteLength === 0 || request.audio.byteLength > this.options.policy.maxAudioBytes) throw new ProviderError("audio exceeded provider bound", "schema");
-    if (!request.contentType.startsWith("audio/")) throw new ProviderError("audio content type is invalid", "schema");
+    if (request.audio.byteLength === 0 || request.audio.byteLength > this.options.policy.maxAudioBytes) throw providerSchemaError("audio exceeded provider bound", "request.audio", "nonempty bounded bytes", request.audio);
+    if (!request.contentType.startsWith("audio/")) throw providerSchemaError("audio content type is invalid", "request.contentType", "audio content type string", request.contentType);
     const signal = ensureAbortableTimeout(this.options.policy.timeoutMs, request.signal);
     const form = new FormData();
     const audioCopy = Uint8Array.from(request.audio);
@@ -73,32 +73,33 @@ export class DeepInfraWhisperProvider implements TranscriptionProvider {
       throw new ProviderError("provider network request failed", "retryable");
     }
     if (!response.ok) throw await parseError(response, this.options.policy, "deepinfra");
-    const body = parseJson(await readBoundedBody(response, this.options.policy.maxResponseBytes));
-    const result = parseProviderResult(nativeDeepInfraBody(body), {
-      provider: "deepinfra",
-      model: DEEPINFRA_MODEL,
-      versionContract: this.options.versionContract ?? "deepinfra-native-whisper-turbo.v1",
-      maxTextChars: this.options.policy.maxTextChars,
-      maxSegments: this.options.policy.maxSegments,
-      maxWords: this.options.policy.maxWords,
-      maxAudioSeconds: this.options.policy.maxAudioSeconds,
+    return parseProviderResponse(response, this.options.policy.maxResponseBytes, (body) => {
+      const result = parseProviderResult(nativeDeepInfraBody(body, this.options.policy.maxTextChars), {
+        provider: "deepinfra",
+        model: DEEPINFRA_MODEL,
+        versionContract: this.options.versionContract ?? "deepinfra-native-whisper-turbo.v1",
+        maxTextChars: this.options.policy.maxTextChars,
+        maxSegments: this.options.policy.maxSegments,
+        maxWords: this.options.policy.maxWords,
+        maxAudioSeconds: this.options.policy.maxAudioSeconds,
+      });
+      requestIdentity(result, DEEPINFRA_MODEL);
+      const observedIdentity = observedDeepInfraIdentity(response, body);
+      if (this.options.executionIdentityPin && observedIdentity !== this.options.executionIdentityPin) {
+        throw providerSchemaError("provider execution identity mismatched release", "execution_identity", "matching execution identity string", observedIdentity);
+      }
+      const observedVersion = observedDeepInfraVersion(response, body);
+      const reportedCost = observedDeepInfraCost(body);
+      if (this.options.modelVersionPin && observedVersion !== this.options.modelVersionPin) {
+        throw providerSchemaError("provider model version mismatched release", "model_version", "matching model version string", observedVersion);
+      }
+      return {
+        ...result,
+        ...(reportedCost === undefined ? {} : { providerReportedCostUsd: reportedCost }),
+        ...(observedIdentity === undefined ? {} : { executionIdentity: observedIdentity }),
+        ...(observedVersion === undefined ? {} : { providerIdentity: { ...result.providerIdentity, modelVersion: observedVersion } }),
+      };
     });
-    requestIdentity(result, DEEPINFRA_MODEL);
-    const observedIdentity = observedDeepInfraIdentity(response, body);
-    if (this.options.executionIdentityPin && observedIdentity !== this.options.executionIdentityPin) {
-      throw new ProviderError("provider execution identity mismatched release", "schema");
-    }
-    const observedVersion = observedDeepInfraVersion(response, body);
-    const reportedCost = observedDeepInfraCost(body);
-    if (this.options.modelVersionPin && observedVersion !== this.options.modelVersionPin) {
-      throw new ProviderError("provider model version mismatched release", "schema");
-    }
-    return {
-      ...result,
-      ...(reportedCost === undefined ? {} : { providerReportedCostUsd: reportedCost }),
-      ...(observedIdentity === undefined ? {} : { executionIdentity: observedIdentity }),
-      ...(observedVersion === undefined ? {} : { providerIdentity: { ...result.providerIdentity, modelVersion: observedVersion } }),
-    };
   }
 }
 
@@ -112,8 +113,8 @@ export class CloudflareWhisperProvider implements TranscriptionProvider {
   }
 
   async transcribe(request: ProviderRequest): Promise<ProviderResult> {
-    if (request.audio.byteLength === 0 || request.audio.byteLength > this.options.policy.maxAudioBytes) throw new ProviderError("audio exceeded provider bound", "schema");
-    if (!request.contentType.startsWith("audio/")) throw new ProviderError("audio content type is invalid", "schema");
+    if (request.audio.byteLength === 0 || request.audio.byteLength > this.options.policy.maxAudioBytes) throw providerSchemaError("audio exceeded provider bound", "request.audio", "nonempty bounded bytes", request.audio);
+    if (!request.contentType.startsWith("audio/")) throw providerSchemaError("audio content type is invalid", "request.contentType", "audio content type string", request.contentType);
     const signal = ensureAbortableTimeout(this.options.policy.timeoutMs, request.signal);
     const modelSlug = this.options.modelSlug ?? CLOUDFLARE_MODEL;
     const endpoint = this.options.endpoint ?? `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(this.options.accountId)}/ai/run/${modelSlug}`;
@@ -130,26 +131,27 @@ export class CloudflareWhisperProvider implements TranscriptionProvider {
       throw new ProviderError("provider network request failed", "retryable");
     }
     if (!response.ok) throw await parseError(response, this.options.policy, "cloudflare");
-    const body = parseJson(await readBoundedBody(response, this.options.policy.maxResponseBytes));
-    const root = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : undefined;
-    const resultPayload = root?.result ?? body;
-    const result = parseProviderResult(resultPayload, {
-      provider: "cloudflare",
-      model: CLOUDFLARE_MODEL,
-      versionContract: this.options.adapterContractVersion,
-      maxTextChars: this.options.policy.maxTextChars,
-      maxSegments: this.options.policy.maxSegments,
-      maxWords: this.options.policy.maxWords,
-      maxAudioSeconds: this.options.policy.maxAudioSeconds,
+    return parseProviderResponse(response, this.options.policy.maxResponseBytes, (body) => {
+      const root = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : undefined;
+      const resultPayload = root?.result ?? body;
+      const result = parseProviderResult(resultPayload, {
+        provider: "cloudflare",
+        model: CLOUDFLARE_MODEL,
+        versionContract: this.options.adapterContractVersion,
+        maxTextChars: this.options.policy.maxTextChars,
+        maxSegments: this.options.policy.maxSegments,
+        maxWords: this.options.policy.maxWords,
+        maxAudioSeconds: this.options.policy.maxAudioSeconds,
+      });
+      requestIdentity(result, CLOUDFLARE_MODEL);
+      const rootRequestId = root?.request_id ?? root?.requestId;
+      if (rootRequestId !== undefined && typeof rootRequestId !== "string") throw providerSchemaError("provider request identity is invalid", root?.request_id !== undefined ? "request_id" : "requestId", "string", rootRequestId);
+      const rootModel = root?.model;
+      if (rootModel !== undefined && typeof rootModel !== "string") throw providerSchemaError("provider model identity is invalid", "model", "string", rootModel);
+      if (rootModel !== undefined && rootModel !== CLOUDFLARE_MODEL) throw providerSchemaError("provider model identity mismatched release", "model", "matching model string", rootModel);
+      if (rootRequestId === undefined && rootModel === undefined) return result;
+      return { ...result, providerIdentity: { ...(result.providerIdentity ?? {}), ...(rootRequestId === undefined ? {} : { requestId: rootRequestId }), ...(rootModel === undefined ? {} : { model: rootModel }) } };
     });
-    requestIdentity(result, CLOUDFLARE_MODEL);
-    const rootRequestId = root?.request_id ?? root?.requestId;
-    if (rootRequestId !== undefined && typeof rootRequestId !== "string") throw new ProviderError("provider request identity is invalid", "schema");
-    const rootModel = root?.model;
-    if (rootModel !== undefined && typeof rootModel !== "string") throw new ProviderError("provider model identity is invalid", "schema");
-    if (rootModel !== undefined && rootModel !== CLOUDFLARE_MODEL) throw new ProviderError("provider model identity mismatched release", "schema");
-    if (rootRequestId === undefined && rootModel === undefined) return result;
-    return { ...result, providerIdentity: { ...(result.providerIdentity ?? {}), ...(rootRequestId === undefined ? {} : { requestId: rootRequestId }), ...(rootModel === undefined ? {} : { model: rootModel }) } };
   }
 }
 

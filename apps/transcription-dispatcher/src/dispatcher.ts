@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { AssignmentError, ControlApiError, providerFailureKind, safeErrorCode } from "./errors.js";
+import { AssignmentError, ControlApiError, ProviderError, providerFailureKind, providerSchemaFields, safeErrorCode } from "./errors.js";
 import { InvocationCircuit, transcribeWithFallback } from "./retry.js";
 import { normalizeTranscriptChunk, serializeTranscript } from "./normalize.js";
 import { validateSpeakerTurnManifest } from "./urls.js";
@@ -186,6 +186,7 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
     }
     const kind = providerFailureKind(error);
     const terminal = kind === "nonretryable" || kind === "schema";
+    if (error instanceof ProviderError && error.kind === "schema") logger.warn("provider_schema_invalid", { ...providerSchemaFields(error) });
     await safeRetry(dependencies.control, assignment, journey, safeErrorCode(error), terminal, logger);
     return "failed";
   }

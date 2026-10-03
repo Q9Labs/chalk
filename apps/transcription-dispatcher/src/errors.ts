@@ -1,9 +1,18 @@
 export type ProviderFailureKind = "retryable" | "nonretryable" | "schema" | "timeout";
 
+export interface ProviderSchemaFailure {
+  fieldPath: string;
+  expectedType: string;
+  actualType: string;
+  responseSizeBytes: number;
+  providerRequestId: string;
+}
+
 export class ProviderError extends Error {
   readonly kind: ProviderFailureKind;
   readonly status: number | undefined;
   readonly providerCode: string | undefined;
+  schemaFailure: ProviderSchemaFailure | undefined;
 
   constructor(message: string, kind: ProviderFailureKind, options?: { status?: number; providerCode?: string }) {
     super(message);
@@ -12,6 +21,22 @@ export class ProviderError extends Error {
     this.status = options?.status;
     this.providerCode = options?.providerCode;
   }
+}
+
+export function providerSchemaError(message: string, fieldPath: string, expectedType: string, actual: unknown, responseSizeBytes = 0): ProviderError {
+  const error = new ProviderError(message, "schema");
+  error.schemaFailure = {
+    fieldPath,
+    expectedType,
+    actualType: actual === null ? "null" : Array.isArray(actual) ? "array" : typeof actual,
+    responseSizeBytes,
+    providerRequestId: "unavailable",
+  };
+  return error;
+}
+
+export function providerSchemaFields(error: ProviderError): ProviderSchemaFailure {
+  return error.schemaFailure ?? { fieldPath: "$", expectedType: "documented provider response", actualType: "unknown", responseSizeBytes: 0, providerRequestId: "unavailable" };
 }
 
 export class ConfigError extends Error {

@@ -1,12 +1,36 @@
-import { ProviderError } from "./errors.js";
+import { ProviderError, providerSchemaError, providerSchemaFields } from "./errors.js";
 import type { ProviderRequest, ProviderResult, ProviderSegment, ProviderWord } from "./types.js";
+
+export async function parseProviderResponse(response: Response, maxBytes: number, parse: (body: unknown) => ProviderResult): Promise<ProviderResult> {
+  let size = 0;
+  let body: unknown;
+  try {
+    const bytes = await readBoundedBody(response, maxBytes);
+    size = bytes.byteLength;
+    body = parseJson(bytes);
+    return parse(body);
+  } catch (error) {
+    if (error instanceof ProviderError && error.kind === "schema") {
+      const fields = providerSchemaFields(error);
+      error.schemaFailure = { ...fields, responseSizeBytes: size || fields.responseSizeBytes, providerRequestId: responseRequestId(response, body) };
+    }
+    throw error;
+  }
+}
+
+function responseRequestId(response: Response, body: unknown): string {
+  const bodyId = typeof body === "object" && body !== null && "request_id" in body ? body.request_id : undefined;
+  const candidate = bodyId ?? response.headers.get("x-request-id") ?? response.headers.get("request-id");
+  // Only bounded identifier characters, never arbitrary response strings.
+  return typeof candidate === "string" && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u.test(candidate) ? candidate : "unavailable";
+}
 
 export async function readBoundedBody(response: Response, maxBytes: number): Promise<Uint8Array> {
   const declared = response.headers.get("content-length");
-  if (declared && Number(declared) > maxBytes) throw new ProviderError("provider response exceeded bound", "schema");
+  if (declared && Number(declared) > maxBytes) throw providerSchemaError("provider response exceeded bound", "$", "bounded response bytes", Number(declared), Number(declared));
   if (!response.body) {
     const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.byteLength > maxBytes) throw new ProviderError("provider response exceeded bound", "schema");
+    if (bytes.byteLength > maxBytes) throw providerSchemaError("provider response exceeded bound", "$", "bounded response bytes", bytes.byteLength, bytes.byteLength);
     return bytes;
   }
   const reader = response.body.getReader();
@@ -17,7 +41,7 @@ export async function readBoundedBody(response: Response, maxBytes: number): Pro
       const next = await reader.read();
       if (next.done) break;
       total += next.value.byteLength;
-      if (total > maxBytes) throw new ProviderError("provider response exceeded bound", "schema");
+      if (total > maxBytes) throw providerSchemaError("provider response exceeded bound", "$", "bounded response bytes", total, total);
       chunks.push(next.value);
     }
   } finally {
@@ -36,28 +60,28 @@ export function parseJson(bytes: Uint8Array): unknown {
   try {
     return JSON.parse(new TextDecoder().decode(bytes)) as unknown;
   } catch {
-    throw new ProviderError("provider response was not JSON", "schema");
+    throw providerSchemaError("provider response was not JSON", "$", "JSON", "", bytes.byteLength);
   }
 }
 
 function object(value: unknown, label: string): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new ProviderError(`${label} is invalid`, "schema");
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw providerSchemaError(`${label} is invalid`, label, "object", value);
   return value as Record<string, unknown>;
 }
 
 function string(value: unknown, label: string, maxLength: number): string {
-  if (typeof value !== "string" || value.length > maxLength) throw new ProviderError(`${label} is invalid`, "schema");
+  if (typeof value !== "string" || value.length > maxLength) throw providerSchemaError(`${label} is invalid`, label, "bounded string", value);
   return value;
 }
 
 function finite(value: unknown, label: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) throw new ProviderError(`${label} is invalid`, "schema");
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) throw providerSchemaError(`${label} is invalid`, label, "finite nonnegative number", value);
   return value;
 }
 
 function confidence(value: unknown, label: string): number {
   const number = finite(value, label);
-  if (number > 1) throw new ProviderError(`${label} is invalid`, "schema");
+  if (number > 1) throw providerSchemaError(`${label} is invalid`, label, "number in [0, 1]", value);
   return number;
 }
 
@@ -67,37 +91,37 @@ function optionalFinite(value: unknown, label: string): number | undefined {
 }
 
 function parseSegments(value: unknown, max: number, maxTextChars: number): ProviderSegment[] {
-  if (!Array.isArray(value) || value.length === 0 || value.length > max) throw new ProviderError("provider timings are required", "schema");
+  if (!Array.isArray(value) || value.length === 0 || value.length > max) throw providerSchemaError("provider timings are required", "segments", "nonempty bounded array", value);
   let previousEnd = 0;
   return value.map((item, index) => {
-    const row = object(item, `segment ${index}`);
-    const startSeconds = finite(row.start, `segment ${index} start`);
-    const endSeconds = finite(row.end, `segment ${index} end`);
-    if (endSeconds <= startSeconds) throw new ProviderError("segment timing is invalid", "schema");
-    if (startSeconds < previousEnd) throw new ProviderError("segment timings are not ordered", "schema");
+    const row = object(item, `segments[${index}]`);
+    const startSeconds = finite(row.start, `segments[${index}].start`);
+    const endSeconds = finite(row.end, `segments[${index}].end`);
+    if (endSeconds <= startSeconds) throw providerSchemaError("segment timing is invalid", `segments[${index}].end`, "number greater than start", row.end);
+    if (startSeconds < previousEnd) throw providerSchemaError("segment timings are not ordered", `segments[${index}].start`, "number at or after previous end", row.start);
     previousEnd = endSeconds;
     return {
       startSeconds,
       endSeconds,
-      text: string(row.text, `segment ${index} text`, maxTextChars),
-      ...(row.confidence !== undefined ? { confidence: confidence(row.confidence, `segment ${index} confidence`) } : {}),
+      text: string(row.text, `segments[${index}].text`, maxTextChars),
+      ...(row.confidence !== undefined ? { confidence: confidence(row.confidence, `segments[${index}].confidence`) } : {}),
     };
   });
 }
 
 function parseWords(value: unknown, max: number, maxTextChars: number): ProviderWord[] | undefined {
   if (value === undefined || value === null) return undefined;
-  if (!Array.isArray(value) || value.length > max) throw new ProviderError("provider words are invalid", "schema");
+  if (!Array.isArray(value) || value.length > max) throw providerSchemaError("provider words are invalid", "words", "bounded array", value);
   return value.map((item, index) => {
-    const row = object(item, `word ${index}`);
-    const startSeconds = finite(row.start, `word ${index} start`);
-    const endSeconds = finite(row.end, `word ${index} end`);
-    if (endSeconds <= startSeconds) throw new ProviderError("word timing is invalid", "schema");
+    const row = object(item, `words[${index}]`);
+    const startSeconds = finite(row.start, `words[${index}].start`);
+    const endSeconds = finite(row.end, `words[${index}].end`);
+    if (endSeconds <= startSeconds) throw providerSchemaError("word timing is invalid", `words[${index}].end`, "number greater than start", row.end);
     return {
       startSeconds,
       endSeconds,
-      word: string(row.word, `word ${index}`, maxTextChars),
-      ...(row.confidence !== undefined ? { confidence: confidence(row.confidence, `word ${index} confidence`) } : {}),
+      word: string(row.word, `words[${index}].word`, maxTextChars),
+      ...(row.confidence !== undefined ? { confidence: confidence(row.confidence, `words[${index}].confidence`) } : {}),
     };
   });
 }
@@ -115,19 +139,19 @@ export function parseProviderResult(
     maxAudioSeconds: number;
   },
 ): ProviderResult {
-  const row = object(value, "provider response");
-  const text = string(row.text, "provider text", options.maxTextChars);
+  const row = object(value, "$");
+  const text = string(row.text, "text", options.maxTextChars);
   const segments = parseSegments(row.segments, options.maxSegments, options.maxTextChars);
   const words = parseWords(row.words, options.maxWords, options.maxTextChars);
-  const durationSeconds = optionalFinite(row.duration, "provider duration");
-  if (durationSeconds !== undefined && durationSeconds > options.maxAudioSeconds) throw new ProviderError("provider duration exceeded bound", "schema");
-  for (const segment of segments) {
-    if (segment.endSeconds > options.maxAudioSeconds) throw new ProviderError("provider timing exceeded bound", "schema");
+  const durationSeconds = optionalFinite(row.duration, "duration");
+  if (durationSeconds !== undefined && durationSeconds > options.maxAudioSeconds) throw providerSchemaError("provider duration exceeded bound", "duration", "bounded audio seconds", row.duration);
+  for (const [index, segment] of segments.entries()) {
+    if (segment.endSeconds > options.maxAudioSeconds) throw providerSchemaError("provider timing exceeded bound", `segments[${index}].end`, "bounded audio seconds", segment.endSeconds);
   }
-  for (const word of words ?? []) {
-    if (word.endSeconds > options.maxAudioSeconds) throw new ProviderError("provider word timing exceeded bound", "schema");
+  for (const [index, word] of (words ?? []).entries()) {
+    if (word.endSeconds > options.maxAudioSeconds) throw providerSchemaError("provider word timing exceeded bound", `words[${index}].end`, "bounded audio seconds", word.endSeconds);
   }
-  const language = row.language === undefined || row.language === null ? undefined : string(row.language, "provider language", 64);
+  const language = row.language === undefined || row.language === null ? undefined : string(row.language, "language", 64);
   const providerIdentity = parseIdentity(row);
   const confidenceValues = segments.flatMap((segment) => (segment.confidence === undefined ? [] : [segment.confidence]));
   return {
@@ -152,8 +176,8 @@ export function parseProviderResult(
 function parseIdentity(row: Record<string, unknown>): ProviderResult["providerIdentity"] {
   const requestId = row.request_id ?? row.requestId ?? undefined;
   const model = row.model ?? undefined;
-  if (requestId !== undefined && typeof requestId !== "string") throw new ProviderError("provider request identity is invalid", "schema");
-  if (model !== undefined && typeof model !== "string") throw new ProviderError("provider model identity is invalid", "schema");
+  if (requestId !== undefined && typeof requestId !== "string") throw providerSchemaError("provider request identity is invalid", row.request_id != null ? "request_id" : "requestId", "string", requestId);
+  if (model !== undefined && typeof model !== "string") throw providerSchemaError("provider model identity is invalid", "model", "string", model);
   if (requestId === undefined && model === undefined) return undefined;
   return {
     ...(requestId === undefined ? {} : { requestId }),
