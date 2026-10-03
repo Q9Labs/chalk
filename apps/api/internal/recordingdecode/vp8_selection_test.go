@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -102,9 +103,9 @@ func TestVP8InterleavedRealPicturesAreCoherent(t *testing.T) {
 		if !errors.Is(err, errVP8AssemblyInspected) {
 			t.Fatal(err)
 		}
-		minimum := []int{1900, 1750}[index]
-		maximumFreeze := []int64{20_000, 28_000}[index]
-		if inspector.accepted < minimum || state.degradation.FrozenMS > maximumFreeze || state.degradation.DroppedFrames > 50 {
+		minimum := []int{2100, 1980}[index]
+		maximumFreeze := []int64{9_000, 12_000}[index]
+		if inspector.accepted < minimum || state.degradation.FrozenMS > maximumFreeze || state.degradation.DroppedFrames > 5 {
 			t.Fatalf("camera %d accepted=%d quality=%+v; competing layers must not poison the selected pictures", index, inspector.accepted, state.degradation)
 		}
 		t.Logf("camera %d accepted=%d frozen_ms=%d dropped_frames=%d recoveries=%d", index, inspector.accepted, state.degradation.FrozenMS, state.degradation.DroppedFrames, state.degradation.Recoveries)
@@ -272,5 +273,55 @@ func TestVP8MissingReferenceCountsRejectedDescendants(t *testing.T) {
 	accepted, dropped, frozen := inspectSelectedVideo(t, packets)
 	if dropped != 2 {
 		t.Fatalf("accepted=%d dropped=%d frozen=%d, want drops=2", accepted, dropped, frozen)
+	}
+}
+
+func TestVP8ContinuousTransportPreservesVariableCadence(t *testing.T) {
+	packets := []recordingbundle.RTPPacket{selectionPacket(1, 0, 1, true, true, 640), selectionPacket(2, 0, 700, true, true, 320), selectionPacket(3, 3000, 2, false, true, 0), selectionPacket(4, 6000, 3, false, true, 0), selectionPacket(5, 60000, 4, false, true, 0)}
+	accepted, dropped, frozen := inspectSelectedVideo(t, packets)
+	if accepted != 4 || dropped != 0 || frozen != 0 {
+		t.Fatalf("accepted=%d dropped=%d frozen=%d; continuous pictures and transport must survive a deliberate pause", accepted, dropped, frozen)
+	}
+	packets[4].SequenceNumber = 6
+	packets[4].ExtendedSequenceNumber = 6
+	accepted, _, frozen = inspectSelectedVideo(t, packets)
+	if accepted != 3 || frozen == 0 {
+		t.Fatalf("unknown transport hole was bridged across a long pause: accepted=%d frozen=%d", accepted, frozen)
+	}
+}
+
+func TestVP8DistinctCloselySpacedKeyframePreservesPrecedingPicture(t *testing.T) {
+	packets := []recordingbundle.RTPPacket{selectionPacket(1, 0, 1, true, true, 640), selectionPacket(2, 0, 700, true, true, 320), selectionPacket(3, 3000, 2, false, true, 0), selectionPacket(4, 6000, 3, false, true, 0), selectionPacket(5, 6100, 4, true, true, 640), selectionPacket(6, 9000, 5, false, true, 0)}
+	accepted, dropped, frozen := inspectSelectedVideo(t, packets)
+	if accepted != 5 || dropped != 0 || frozen != 0 {
+		t.Fatalf("accepted=%d dropped=%d frozen=%d; distinct timestamps must not be coalesced", accepted, dropped, frozen)
+	}
+}
+
+func TestVP8UnattributedOrphanIsNotSelectedLayerDamage(t *testing.T) {
+	for _, id := range []uint16{3, 702} {
+		// Both encoding contexts exist. Without the orphan's missing predecessor,
+		// the packet does not prove which context it belongs to. Neither a guessed
+		// PictureID range nor the old single-stream drop count is an oracle.
+		packets := []recordingbundle.RTPPacket{selectionPacket(1, 0, 1, true, true, 640), selectionPacket(2, 0, 700, true, true, 320), selectionPacket(4, 6000, id, false, true, 0), selectionPacket(5, 9000, 4, true, true, 640)}
+		accepted, dropped, frozen := inspectSelectedVideo(t, packets)
+		if accepted != 2 || dropped != 0 || frozen == 0 {
+			t.Fatalf("orphan id=%d accepted=%d dropped=%d frozen=%d; require a keyframe and report the coverage hole, not guessed layer damage", id, accepted, dropped, frozen)
+		}
+	}
+}
+
+func BenchmarkVP8WrappedPictureSelection(b *testing.B) {
+	for _, size := range []int{12800, 25600, 51200} {
+		b.Run(fmt.Sprint(size), func(b *testing.B) {
+			candidates := make([]vp8Candidate, size)
+			for i := range candidates {
+				candidates[i] = vp8Candidate{identity: vp8Identity{timestamp: uint32(i * 3000), ssrc: 1, picture: vp8PictureID{value: uint16(i % 128), mask: 127}}, firstSequence: uint64(i + 1), lastSequence: uint64(i + 1), complete: true, key: i == 0, width: 640, height: 360}
+			}
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				chooseVP8Pictures(candidates, 3000)
+			}
+		})
 	}
 }

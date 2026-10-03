@@ -140,7 +140,10 @@ func chooseVP8Pictures(candidates []vp8Candidate, nominal uint64) []vp8Candidate
 		}
 		return candidates[i].firstSequence < candidates[j].firstSequence
 	})
-	byPicture := map[vp8PictureID][]int{}
+	window, windowPositions := vp8PredecessorSets(candidates, false)
+	generations, generationPositions := vp8PredecessorSets(candidates, true)
+	originals := map[vp8ReplayIdentity]int{}
+	activated, expired := 0, 0
 	prefix := make([]int, len(candidates))
 	best := -1
 	better := func(a, b int) bool {
@@ -148,12 +151,27 @@ func chooseVP8Pictures(candidates []vp8Candidate, nominal uint64) []vp8Candidate
 	}
 	for index := range candidates {
 		candidate := &candidates[index]
+		// Equal-timestamp candidates are never dependencies of each other.
+		for activated < index && candidates[activated].identity.timestamp < candidate.identity.timestamp {
+			parent := candidates[activated]
+			key := vp8PredecessorKey{ssrc: parent.identity.ssrc, picture: parent.identity.picture}
+			window[key].activate(windowPositions[activated], true)
+			key.generation = parent.generation
+			generations[key].activate(generationPositions[activated], true)
+			activated++
+		}
+		for expired < activated && uint64(candidates[expired].identity.timestamp)+2*nominal < uint64(candidate.identity.timestamp) {
+			parent := candidates[expired]
+			key := vp8PredecessorKey{ssrc: parent.identity.ssrc, picture: parent.identity.picture}
+			window[key].activate(windowPositions[expired], false)
+			expired++
+		}
 		candidate.parent = -1
 		candidate.accepted, candidate.resolution = 0, 0
 		if candidate.complete && candidate.key {
 			// Do not count two conflicting layer pictures as two display frames.
 			limit := sort.Search(index, func(i int) bool {
-				return uint64(candidates[i].identity.timestamp)+nominal/2 > uint64(candidate.identity.timestamp)
+				return candidates[i].identity.timestamp >= candidate.identity.timestamp
 			})
 			if limit > 0 {
 				candidate.parent = prefix[limit-1]
@@ -167,25 +185,19 @@ func chooseVP8Pictures(candidates []vp8Candidate, nominal uint64) []vp8Candidate
 		} else {
 			previousID := candidate.identity.picture
 			previousID.value = (previousID.value - 1) & previousID.mask
-			for _, previous := range byPicture[previousID] {
-				parent := candidates[previous]
-				if parent.identity.ssrc != candidate.identity.ssrc || parent.lastSequence >= candidate.firstSequence || candidate.identity.timestamp <= parent.identity.timestamp || uint64(candidate.identity.timestamp-parent.identity.timestamp) > 2*nominal {
-					continue
-				}
-				if candidate.parent < 0 || parent.lastSequence > candidates[candidate.parent].lastSequence {
-					candidate.parent = previous
-				}
+			key := vp8PredecessorKey{ssrc: candidate.identity.ssrc, picture: previousID}
+			candidate.parent = window[key].before(candidate.firstSequence, candidates)
+			key.generation = candidate.generation
+			previous := generations[key].before(candidate.firstSequence, candidates)
+			if previous >= 0 && (candidate.parent < 0 || candidates[previous].lastSequence > candidates[candidate.parent].lastSequence || candidates[previous].lastSequence == candidates[candidate.parent].lastSequence && previous < candidate.parent) {
+				candidate.parent = previous
 			}
 			if candidate.parent >= 0 && candidates[candidate.parent].accepted == 0 {
 				// A byte-identical start of a previously complete identity is a
 				// replay, not a new missing reference that poisons the live chain.
 				replay := candidates[candidate.parent]
-				for _, previous := range byPicture[previousID] {
-					original := candidates[previous]
-					if original.accepted > 0 && original.lastSequence < candidate.firstSequence && original.identity == replay.identity && original.firstPayload == replay.firstPayload {
-						candidate.parent = previous
-						break
-					}
+				if previous, exists := originals[vp8ReplayIdentity{replay.identity, replay.firstPayload}]; exists && candidates[previous].lastSequence < candidate.firstSequence {
+					candidate.parent = previous
 				}
 			}
 			if candidate.parent >= 0 && !candidate.key {
@@ -202,8 +214,13 @@ func chooseVP8Pictures(candidates []vp8Candidate, nominal uint64) []vp8Candidate
 		if candidate.accepted > 0 && better(index, best) {
 			best = index
 		}
+		if candidate.accepted > 0 {
+			key := vp8ReplayIdentity{candidate.identity, candidate.firstPayload}
+			if previous, exists := originals[key]; !exists || candidates[previous].lastSequence > candidate.lastSequence {
+				originals[key] = index
+			}
+		}
 		prefix[index] = best
-		byPicture[candidate.identity.picture] = append(byPicture[candidate.identity.picture], index)
 	}
 	var chosen []vp8Candidate
 	for best >= 0 {
@@ -265,6 +282,9 @@ func accountVP8Selection(candidates, chosen []vp8Candidate, nominal uint64, qual
 		previous := chosen[position-1]
 		// Follow consecutive identities back to the currently selected picture.
 		// A separately decodable branch is another layer, not a failed picture.
+		// With an entirely absent reference, its encoding cannot be established
+		// from PictureID alone. Do not invent selected-layer drops for orphans;
+		// the missing output interval is still reported as a recovery freeze.
 		for ancestor := index; ancestor >= 0; ancestor = candidates[ancestor].parent {
 			parent := candidates[ancestor]
 			if _, exists := selected[parent.start]; exists {
@@ -319,7 +339,8 @@ func readVP8Pictures(ctx context.Context, path string, durationMS int64, quality
 	defer func() { resultErr = errors.Join(resultErr, file.Close()) }()
 	var sequence uint64
 	for index, candidate := range chosen {
-		if index > 0 && uint64(candidate.identity.timestamp-chosen[index-1].identity.timestamp) > 2*nominal {
+		if index > 0 && uint64(candidate.identity.timestamp-chosen[index-1].identity.timestamp) > 2*nominal &&
+			(candidate.identity.ssrc != chosen[index-1].identity.ssrc || !candidate.identity.picture.follows(chosen[index-1].identity.picture) || candidate.generation != chosen[index-1].generation) {
 			sequence++ // A real clock hole, not excluded layer/replay packets.
 		}
 		reader := bufio.NewReaderSize(io.NewSectionReader(file, candidate.start, candidate.end-candidate.start), 64<<10)
