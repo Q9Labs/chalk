@@ -26,6 +26,7 @@ type sanitizedVP8Packet struct {
 	width      uint16
 	height     uint16
 	body       uint8
+	payloadID  uint32
 }
 
 func TestVideoQualityCountsOnlyVisibleDamageAndStartup(t *testing.T) {
@@ -60,7 +61,7 @@ func (packet *sanitizedVP8Packet) UnmarshalJSON(encoded []byte) error {
 	if err := json.Unmarshal(encoded, &fields); err != nil {
 		return err
 	}
-	if len(fields) != 8 {
+	if len(fields) != 8 && len(fields) != 9 {
 		return fmt.Errorf("invalid sanitized packet")
 	}
 	for index, decode := range []func(json.RawMessage) error{
@@ -76,6 +77,9 @@ func (packet *sanitizedVP8Packet) UnmarshalJSON(encoded []byte) error {
 		if err := decode(fields[index]); err != nil {
 			return err
 		}
+	}
+	if len(fields) == 9 {
+		return json.Unmarshal(fields[8], &packet.payloadID)
 	}
 	return nil
 }
