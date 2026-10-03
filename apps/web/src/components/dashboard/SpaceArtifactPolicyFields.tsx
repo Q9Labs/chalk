@@ -79,7 +79,7 @@ function recordingPolicyDescription(policy: RecordingPolicy): string {
 }
 
 function transcriptionPolicyDescription(policy: TranscriptionPolicy): string {
-  if (policy === "on_demand") return "A transcript is created from captured audio only when requested.";
+  if (policy === "on_demand") return "On demand is the default for new Tenants. A Transcript is created from captured audio only when requested.";
   if (policy === "automatic") return "A transcript is created automatically from captured audio.";
   return "No transcript is created.";
 }

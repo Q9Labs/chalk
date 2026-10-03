@@ -48,6 +48,9 @@ func TestAccountTenantOnboardingIsAtomicScopedAndIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first onboarding: %v", err)
 	}
+	if policy := first.AccountTenant.Tenant.ArtifactPolicy; policy.TranscriptionCeiling != artifactpolicy.TranscriptionOnDemand || policy.TranscriptionDefault != artifactpolicy.TranscriptionOnDemand {
+		t.Fatalf("onboarded Tenant policy = %+v", policy)
+	}
 	second, err := service.OnboardTenant(ctx, input)
 	if err != nil {
 		t.Fatalf("replay onboarding: %v", err)

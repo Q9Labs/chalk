@@ -54,7 +54,7 @@ select
     sqlc.narg(metadata),
     sqlc.narg(recurring_policy),
     sqlc.narg(admission_policy),
-    coalesce(sqlc.narg(recording_policy)::text, 'disabled'),
+    coalesce(sqlc.narg(recording_policy)::text, 'automatic'),
     coalesce(sqlc.narg(transcription_policy)::text, tenant_facts.transcription_default_mode),
     sqlc.arg(default_episode_duration_seconds),
     sqlc.arg(maximum_episode_duration_seconds),
