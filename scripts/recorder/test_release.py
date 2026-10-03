@@ -48,7 +48,9 @@ class ReleaseContracts(unittest.TestCase):
             release.directory = Path(directory)
             (release.directory / "dispatcher").mkdir()
             (release.directory / "dispatcher/main.tf.json").write_text(json.dumps({"module": {"dispatcher": {"scheduler_state": "DISABLED"}}}))
-            release.set_scheduler("DISABLED")
+            with patch("release.dispatcher_root", return_value={"module": {"dispatcher": {"scheduler_state": "DISABLED", "release_id": "current-api-release"}}}):
+                release.set_scheduler("DISABLED")
+            self.assertEqual(json.loads((release.directory / "dispatcher/main.tf.json").read_text())["module"]["dispatcher"]["release_id"], "current-api-release")
         self.assertEqual(release.state["scheduler_state"], "DISABLED")
         self.assertFalse(any(call.args[0] == "apply" for call in release.tofu.call_args_list))
 

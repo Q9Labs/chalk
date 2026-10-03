@@ -312,3 +312,47 @@ and KMS metadata, and verifies readback. Deploy uses a canonical managed manifes
 (including unchanged component provenance for an input-only reload), permits only
 a Scheduler state change, and checks actual loaded process inputs. On failure the
 Scheduler stays disabled; inspect the canonical controller result before recovery.
+
+## Dispatcher binding during managed releases
+
+The API authenticates each dispatcher request with HMAC over the body, path,
+release, environment, role, audience and tracing context. It also checks the
+signature window and consumes the nonce once. The release must equal the loaded
+API component release (`CHALK_API_VERSION`); an old or unapproved release remains
+unauthorized. These checks are unchanged.
+
+Production `scripts/deploy/deploy-managed-release.mjs` now carries the dispatcher
+binding forward after the host controller proves a healthy deployment. It reads
+the recorder release configuration from SSM, verifies the target runtime and the
+Lambda's current digest/binding, and reconstructs the dispatcher OpenTofu root
+from current remote state. A retained API component keeps its existing binding.
+For a changed API component, it:
+
+1. Requires a clean OpenTofu drift plan and a version-pinned source ZIP whose
+   bytes match the recorded SHA-256.
+2. Copies those bytes to a key containing the API component release and digest,
+   pins the returned S3 version, and plans the binding change.
+3. Allows only the Lambda release environment value, artifact location,
+   description and release tags, plus the log group's release tag. It applies
+   that saved plan and verifies Lambda health, code digest and release readback.
+
+The release fails if binding or verification fails, even if the host deployment
+succeeded. `pnpm release:recorder deploy` keeps the scheduler disabled until its
+loaded-runtime verifier also matches the observed Lambda binding to the running
+API process. Scheduler resume reconstructs fresh state so it cannot restore an
+old binding. If deployment fails, inspect the failure and rerun with the same
+manifest; do not manually enable the scheduler before verification passes.
+Requests already running during a release can briefly receive 401; normal fenced
+retries reconcile them after the binding update.
+
+Both managed release `--dry-run` and recorder `deploy --dry-run
+--managed-manifest <path>` report `dispatcher_binding` with the previous/target
+release, retained ZIP digest and planned copy action. Dry runs do not copy,
+apply, invoke SSM commands or verify loaded processes. Production configuration
+is mandatory; other environments explicitly report `not-configured`.
+
+The deployment identity needs the existing dispatcher module's read/apply
+permissions, remote state and lock access, SSM configuration read, and versioned
+artifact read/copy permissions. CI installs the repository-pinned OpenTofu. No
+new API trust key, allowlist of older releases or authentication exception is
+introduced. Public workflow runs must not log private configuration or state.

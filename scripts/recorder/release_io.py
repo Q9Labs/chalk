@@ -43,7 +43,7 @@ class Provider:
 
     def aws(self, service, operation, *arguments, payload=None, timeout=120):
         read_only = (service, operation) in AWS_READS and payload is None
-        command = ["aws", "--profile", self.profile, "--region", self.region, service, operation, *map(str, arguments)]
+        command = ["aws", *(["--profile", self.profile] if self.profile else []), "--region", self.region, service, operation, *map(str, arguments)]
         if read_only:
             self.reads.append(service + ":" + operation)
         if payload is None:

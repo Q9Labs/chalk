@@ -49,6 +49,7 @@ def verify(options):
     api_config = configured("api.env")
     api = loaded("chalk-api", manifest["images"]["api"])
     require(api["CHALK_API_VERSION"] == manifest["component_releases"]["api"]["release_id"], "API component identity mismatch")
+    require(api["CHALK_API_VERSION"] == options["dispatcher_release_id"], "dispatcher/API loaded release binding mismatch")
     for key in ("CHALK_RECORDING_UI_BUILD_SHA256", "CHALK_RECORDING_BUNDLE_V2_ENABLED"):
         require(api.get(key) == api_config.get(key), "API loaded input mismatch: " + key)
     sync = loaded("chalk-sync", manifest["images"]["sync"])
@@ -63,7 +64,7 @@ def verify(options):
         if role in options.get("pins", {}):
             for key, value in options["pins"][role].items():
                 require(config.get(key) == value, "unexpected published pin: " + key)
-    print(json.dumps({"result": "PASS", "loaded_inputs_match": True, "release_id": manifest["release_id"],
+    print(json.dumps({"result": "PASS", "loaded_inputs_match": True, "dispatcher_binding_matches": True, "release_id": manifest["release_id"],
                       "source_revision": manifest["source_revision"]}))
 
 

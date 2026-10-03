@@ -58,7 +58,7 @@ test("hands a release to the pinned SSM document and returns its controller proo
   });
 
   const sendCommand = calls.find(({ args }) => args.includes("send-command"));
-  assert.deepEqual(result, controllerResult);
+  assert.deepEqual(result, { ...controllerResult, dispatcher_binding: { action: "not-configured", environment: "staging" } });
   assert.equal(calls.filter(({ args }) => args.includes("send-command")).length, 1);
   assert.equal(calls.filter(({ args }) => args.includes("get-command-invocation")).length, 2);
   assert.equal(sendCommand.command, "aws");
@@ -121,3 +121,58 @@ async function writeManifest() {
   );
   return path;
 }
+
+test("production dry run includes the dispatcher rebind without deploying", async () => {
+  const manifestPath = await writeManifest();
+  const calls = [];
+  const arguments_ = requiredArguments(manifestPath).map((value) => value.replaceAll("staging", "production"));
+  const proof = await runManagedRelease({
+    arguments_: arguments_.concat("--dry-run"),
+    allowedSecretIds,
+    commandRunner: async (command) => {
+      calls.push(command);
+      return { stdout: JSON.stringify({ action: "rebind", release_id: releaseId }), stderr: "" };
+    },
+    stdout: { write: () => {} },
+  });
+  assert.equal(proof.dispatcher_binding.action, "rebind");
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].args.includes("--dry-run"));
+});
+
+test("production cannot report success when dispatcher binding fails after host deployment", async () => {
+  const manifestPath = await writeManifest();
+  const calls = [];
+  await assert.rejects(
+    runManagedRelease({
+      arguments_: requiredArguments(manifestPath).map((value) => value.replaceAll("staging", "production")),
+      allowedSecretIds,
+      stdout: { write: () => {} },
+      commandRunner: async (command) => {
+        calls.push(command);
+        if (command.command === "python3") {
+          if (!command.args.includes("--dry-run")) throw new Error("dispatcher runtime release binding mismatch");
+          return { stdout: JSON.stringify({ action: "rebind", release_id: releaseId }) };
+        }
+        if (command.args.includes("send-command")) return { stdout: JSON.stringify({ Command: { CommandId: "01234567-89ab-cdef-0123-456789abcdef" } }) };
+        return {
+          stdout: JSON.stringify({
+            Status: "Success",
+            StandardOutputContent: `RESULT ${JSON.stringify({
+              schema_version: 1,
+              status: "deployed",
+              release_id: releaseId,
+              request_id: "12345.2",
+              health: "passed",
+              rolled_back: false,
+            })}`,
+          }),
+        };
+      },
+    }),
+    /dispatcher runtime release binding mismatch/,
+  );
+  assert.equal(calls.at(-1).command, "python3");
+  assert.equal(calls.at(-1).args.includes("--dry-run"), false);
+  assert.ok(calls.some(({ args }) => args.includes("get-command-invocation")));
+});
