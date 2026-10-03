@@ -261,20 +261,16 @@ active attempt.
 
 The database constrains both presentation baselines and finalized presentations
 to `recording_presentation.v1`. The native compositor reads that version for
-all stored Recordings. For one compatibility release, the API continues writing
-its configured `uiBuildSha256` into new baselines and finalized presentations.
-The new Render ignores the digest; it does not select or install a UI build.
-Keep `CHALK_RECORDING_UI_BUILD_SHA256` and its existing release-publisher value
-for this release. No database column or old presentation is rewritten.
+all stored Recordings, including existing digest-bearing profiles. New baselines
+and finalized presentations omit the retired `uiBuildSha256`; native Render does
+not select or install a UI build. The API no longer reads
+`CHALK_RECORDING_UI_BUILD_SHA256`, and managed-runtime preflight does not require
+it. No database column or old presentation is rewritten.
 
-API and Render may be upgraded or rolled back in either order during this
-compatibility release. Old API validation can finalize new baselines, and old
-native Render workers can claim or retry new presentations because the digest
-is retained. Do not remove the publisher value or digest-writing API config
-until the next release, after the rollback window for the old API and native
-workers has closed. Rolling back to the browser image still requires that old
-image's retained UI build; this PR does not restore browser artifacts to the new
-image. Remove any obsolete profile storage only in a later migration.
+Rollback targets must support digest-free v1 profiles (#113 or later). API and
+Render releases predating that cutover require the old digest and cannot process
+new profiles. Rolling back to a browser image also requires that image's retained
+UI build. Remove any obsolete profile storage only in a later migration.
 
 Capture bundles are private R2 objects under
 `tenants/<tenant>/recordings/<recording>/capture/...`. They are deleted by the

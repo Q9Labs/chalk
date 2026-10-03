@@ -136,13 +136,11 @@ const (
 	TranscriptionDispatcherFunction = "CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME"
 	RecordingEnabled                = "CHALK_RECORDING_ENABLED"
 	RecordingBundleV2Enabled        = "CHALK_RECORDING_BUNDLE_V2_ENABLED"
-	// Kept only for rollback compatibility; can go in the next release.
-	RecordingUIBuildSHA256       = "CHALK_RECORDING_UI_BUILD_SHA256"
-	RecordingKMSKeyID            = "CHALK_RECORDING_KMS_KEY_ID"
-	RecordingKMSRegion           = "CHALK_RECORDING_KMS_REGION"
-	RecordingKMSRequestTimeoutMS = "CHALK_RECORDING_KMS_REQUEST_TIMEOUT_MS"
-	TranscriptionEnabled         = "CHALK_TRANSCRIPTION_ENABLED"
-	WhiteboardFilesEnabled       = "CHALK_WHITEBOARD_FILES_ENABLED"
+	RecordingKMSKeyID               = "CHALK_RECORDING_KMS_KEY_ID"
+	RecordingKMSRegion              = "CHALK_RECORDING_KMS_REGION"
+	RecordingKMSRequestTimeoutMS    = "CHALK_RECORDING_KMS_REQUEST_TIMEOUT_MS"
+	TranscriptionEnabled            = "CHALK_TRANSCRIPTION_ENABLED"
+	WhiteboardFilesEnabled          = "CHALK_WHITEBOARD_FILES_ENABLED"
 
 	InvitationFrom                  = "CHALK_INVITATION_FROM"
 	InvitationWebOrigin             = "CHALK_INVITATION_WEB_ORIGIN"
@@ -394,16 +392,14 @@ type Config struct {
 	R2                       R2Config
 	RecordingKMS             RecordingKMSConfig
 	RecordingBundleV2Enabled bool
-	// Kept only for rollback compatibility; can go in the next release.
-	RecordingUIBuildSHA256 string
-	RecorderFleetIssuer    RecorderFleetIssuerConfig
-	Redis                  RedisConfig
-	InvitationFrom         string
-	InvitationWebOrigin    string
-	Resend                 ResendConfig
-	SyncToken              SyncTokenConfig
-	Transcription          TranscriptionConfig
-	Webhooks               WebhookConfig
+	RecorderFleetIssuer      RecorderFleetIssuerConfig
+	Redis                    RedisConfig
+	InvitationFrom           string
+	InvitationWebOrigin      string
+	Resend                   ResendConfig
+	SyncToken                SyncTokenConfig
+	Transcription            TranscriptionConfig
+	Webhooks                 WebhookConfig
 }
 
 func Load() (Config, error) {
@@ -707,7 +703,6 @@ func Load() (Config, error) {
 		R2:                       r2Config,
 		RecordingKMS:             recordingKMS,
 		RecordingBundleV2Enabled: envBool(RecordingBundleV2Enabled),
-		RecordingUIBuildSHA256:   strings.TrimSpace(envOrDefault(RecordingUIBuildSHA256, "")),
 		RecorderFleetIssuer:      recorderFleetIssuer,
 		Redis: RedisConfig{
 			URL: envOrDefault(RedisURL, DefaultRedisURL),

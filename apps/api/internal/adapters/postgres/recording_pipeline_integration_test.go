@@ -158,7 +158,7 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 		_, _ = pool.Exec(ctx, `update recording_capacity set reserved_episodes = 0, reserved_participants = 0, reserved_input_bitrate_bps = 0 where id = 1`)
 	}()
 
-	presentationProfile, err := recordingpresentation.NewComposite720PProfile("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	presentationProfile, err := recordingpresentation.NewComposite720PProfile()
 	if err != nil {
 		t.Fatalf("build recording presentation profile: %v", err)
 	}
