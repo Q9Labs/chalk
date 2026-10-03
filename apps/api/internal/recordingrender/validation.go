@@ -8,6 +8,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -77,6 +78,20 @@ func (input CommitObjectInput) Validate() error {
 }
 
 func (input CommitInput) Validate() error {
+	if len(input.VideoDegradation) > recordingpresentation.MaximumEvents {
+		return ErrInvalidRequest
+	}
+	seen := make(map[string]struct{}, len(input.VideoDegradation))
+	for _, source := range input.VideoDegradation {
+		if len(source.SourceID) == 0 || len(source.SourceID) > 256 || (source.Kind != "camera" && source.Kind != "screen_share") || source.FrozenMS < 0 || source.FrozenMS > input.DurationMillis || source.PlaceholderMS < 0 || source.PlaceholderMS > input.DurationMillis || source.FrozenMS+source.PlaceholderMS > input.DurationMillis || source.DroppedFrames < 0 || source.DroppedFrames > 2_147_483_647 || source.Recoveries < 0 || source.Recoveries > 2_147_483_647 {
+			return ErrInvalidRequest
+		}
+		if _, duplicate := seen[source.SourceID]; duplicate {
+			return ErrInvalidRequest
+		}
+		seen[source.SourceID] = struct{}{}
+	}
+
 	if err := input.Authority.Validate(); err != nil {
 		return err
 	}

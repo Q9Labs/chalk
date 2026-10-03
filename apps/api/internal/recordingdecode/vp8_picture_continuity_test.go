@@ -108,16 +108,13 @@ func TestVP8ConsecutivePicturesBridgeReplaySequenceGaps(t *testing.T) {
 			}
 			_, _, err := decodeVP8Source(context.Background(), pictureFixtureRunner{}, "ffmpeg", root, root, state, 3_000, true)
 			if scenario == "consecutive" || scenario == "picture_wrap" {
-				if err == nil || !strings.Contains(err.Error(), errPictureFixtureComplete.Error()) {
-					t.Fatalf("complete consecutive pictures must reach conversion: %v", err)
+				if err == nil || !strings.Contains(err.Error(), errPictureFixtureComplete.Error()) || state.degradation.DroppedFrames != 0 {
+					t.Fatalf("consecutive pictures must reach conversion without drops: %v %+v", err, state.degradation)
 				}
-			} else if scenario == "packet_loss" {
-				if err == nil || !strings.Contains(err.Error(), "VP8 source has no key frame") {
-					t.Fatalf("incomplete key frame must not reach conversion: %v", err)
-				}
-			} else if err == nil || !strings.Contains(err.Error(), "VP8 degradation exceeds bound") {
-				t.Fatalf("unproven continuity must retain strict recovery: %v", err)
+			} else if state.degradation.DroppedFrames == 0 {
+				t.Fatalf("real loss must still discard pictures: %v %+v", err, state.degradation)
 			}
+
 		})
 	}
 }
@@ -152,7 +149,7 @@ func TestVP8ReplayCannotHideLossInsideFrame(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, _, err := decodeVP8Source(context.Background(), pictureFixtureRunner{}, "ffmpeg", root, root, state, 1_000, true)
-	if err == nil || !strings.Contains(err.Error(), "VP8 degradation exceeds bound") {
+	if err == nil || !strings.Contains(err.Error(), errPictureFixtureComplete.Error()) || state.degradation.DroppedFrames < 5 {
 		t.Fatalf("replay must not conceal an incomplete frame: %v", err)
 	}
 }

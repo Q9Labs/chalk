@@ -563,7 +563,8 @@ with render_commit as (
     returning id
 ), completed_job as (
     update recording_jobs jobs
-    set state = 'succeeded', lease_token = null, lease_owner = null,
+    set result_metadata = jsonb_build_object('video_degradation', sqlc.arg(video_degradation)::jsonb),
+        state = 'succeeded', lease_token = null, lease_owner = null,
         lease_expires_at = null, terminal_at = render_commit.committed_at,
         updated_at = render_commit.committed_at
     from render_commit

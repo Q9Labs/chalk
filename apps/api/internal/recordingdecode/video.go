@@ -258,16 +258,32 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 		return Source{}, nil, err
 	}
 	if len(framePayload) > 0 {
-		quality.drop(frameTimestamp)
+		start := uint64(frameTimestamp)
+		if len(frameTimestamps) > 0 {
+			start = min(start, frameTimestamps[len(frameTimestamps)-1]+nominalFrameTicks(frameTimestamps))
+		}
+		if err := beginRecovery(start); err != nil {
+			return Source{}, nil, err
+		}
 	}
 	if err := closeSegment(); err != nil {
 		return Source{}, nil, err
 	}
-	if err := quality.validate(ctx, state.presentation.SourceID, frameTimestamps); err != nil {
-		return Source{}, nil, err
+	if recoveryPending && len(frameTimestamps) > 0 {
+		resultDiscontinuities = append(resultDiscontinuities, sourceDiscontinuity(state, ticksToMillisecondsFloor(lossStart, videoClockRate), durationMS, "packet_loss"))
 	}
 	if len(segments) == 0 || len(frameTimestamps) == 0 {
-		return Source{}, nil, fmt.Errorf("%w: VP8 source has no key frame", ErrDecode)
+		quality.result(state, nil, durationMS, nil)
+		return Source{}, nil, nil
+	}
+	quality.result(state, frameTimestamps, durationMS, resultDiscontinuities)
+	segments, frameTimestamps, resultDiscontinuities, err = usableVP8Segments(ctx, runner, ffmpegPath, segmentDirectory, segments, frameTimestamps, resultDiscontinuities, state, &quality, durationMS)
+	if err != nil {
+		return Source{}, nil, err
+	}
+	quality.result(state, frameTimestamps, durationMS, resultDiscontinuities)
+	if len(segments) == 0 {
+		return Source{}, nil, nil
 	}
 	segments, err = normalizeVP8Segments(ctx, runner, ffmpegPath, segmentDirectory, segments)
 	if err != nil {
@@ -277,15 +293,25 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 	if err := mergeIVF(mergedIVF, segments); err != nil {
 		return Source{}, nil, err
 	}
-	startTicks := segments[0].startTicks
+	codecStartTicks := segments[0].startTicks
+	startTicks := frameTimestamps[0]
 	endTicks := frameTimestamps[len(frameTimestamps)-1] + nominalFrameTicks(frameTimestamps)
 	maximumTicks := uint64(durationMS) * videoClockRate / 1_000
+	for _, gap := range resultDiscontinuities {
+		if gap.EndMS == durationMS {
+			endTicks = maximumTicks
+			if state.hasSpan && state.spanEndMS > ticksToMillisecondsCeil(startTicks, videoClockRate) {
+				endTicks = uint64(state.spanEndMS) * videoClockRate / 1000
+			}
+		}
+	}
 	if endTicks > maximumTicks {
 		endTicks = maximumTicks
 	}
 	startMS, endMS := ticksToMillisecondsFloor(startTicks, videoClockRate), ticksToMillisecondsCeil(endTicks, videoClockRate)
 	if endMS <= startMS {
-		return Source{}, nil, fmt.Errorf("%w: VP8 interval is empty", ErrDecode)
+		quality.result(state, nil, durationMS, nil)
+		return Source{}, nil, nil
 	}
 	relativePath := filepath.Join("media", state.presentation.SourceID+".webm")
 	outputPath := filepath.Join(mediaDirectory, state.presentation.SourceID+".webm")
@@ -294,12 +320,20 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 	// Passthrough copies the recorded frames; the native compositor holds the
 	// last frame itself. The browser renderer needs a re-encoded, padded file.
 	encode := []string{"-c:v", "copy"}
-	if !passthrough {
+	if !passthrough || startTicks > codecStartTicks {
 		encode = []string{"-vf", "tpad=stop_mode=clone:stop_duration=" + strconv.FormatFloat(frameDuration, 'f', 6, 64),
 			"-c:v", "libvpx", "-deadline", "good", "-cpu-used", "4", "-pix_fmt", "yuv420p", "-fps_mode", "vfr"}
 	}
-	args := append([]string{"-hide_banner", "-nostdin", "-y", "-loglevel", "error",
-		"-f", "ivf", "-i", mergedIVF, "-map", "0:v:0", "-an", "-t", strconv.FormatFloat(sourceDuration, 'f', 6, 64)}, encode...)
+	if !passthrough && state.degradation.FrozenMS > 0 {
+		encode = []string{"-vf", "tpad=stop_mode=clone:stop_duration=" + strconv.FormatFloat(sourceDuration, 'f', 6, 64) + ",fps=90000/" + strconv.FormatUint(nominalFrameTicks(frameTimestamps), 10),
+			"-c:v", "libvpx", "-deadline", "realtime", "-cpu-used", "4", "-threads", "1", "-pix_fmt", "yuv420p"}
+	}
+	args := []string{"-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-threads", "1", "-f", "ivf", "-i", mergedIVF}
+	if startTicks > codecStartTicks {
+		args = append(args, "-ss", strconv.FormatFloat(float64(startTicks-codecStartTicks)/float64(videoClockRate), 'f', 6, 64))
+	}
+	args = append(args, "-map", "0:v:0", "-an", "-t", strconv.FormatFloat(sourceDuration, 'f', 6, 64))
+	args = append(args, encode...)
 	if err := runFFmpeg(ctx, runner, ffmpegPath, append(args, "-f", "webm", outputPath)...); err != nil {
 		return Source{}, nil, err
 	}
@@ -415,12 +449,16 @@ func decodeH264Source(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 		return Source{}, nil, err
 	}
 	if len(segments) == 0 || len(frameTimestamps) == 0 {
-		return Source{}, nil, fmt.Errorf("%w: H264 source has no key frame", ErrDecode)
+		quality := vp8Quality{}
+		quality.result(state, nil, durationMS, nil)
+		return Source{}, nil, nil
 	}
 	rawPath := filepath.Join(segmentDirectory, "source.h264")
 	if err := concatenateFiles(rawPath, segments); err != nil {
 		return Source{}, nil, err
 	}
+	quality := vp8Quality{}
+	quality.result(state, frameTimestamps, durationMS, resultDiscontinuities)
 	startTicks := segments[0].startTicks
 	nominalTicks := nominalFrameTicks(frameTimestamps)
 	endTicks := frameTimestamps[len(frameTimestamps)-1] + nominalTicks

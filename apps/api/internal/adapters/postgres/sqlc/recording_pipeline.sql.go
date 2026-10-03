@@ -515,7 +515,7 @@ with completed as (
             and authority.lease_token = $4
             and authority.lease_owner = $5
       )
-    returning recording_jobs.id, recording_jobs.tenant_id, recording_jobs.episode_id, recording_jobs.recording_id, recording_jobs.kind, recording_jobs.idempotency_key, recording_jobs.payload_schema_version, recording_jobs.state, recording_jobs.priority, recording_jobs.available_at, recording_jobs.attempt_count, recording_jobs.attempt_limit, recording_jobs.lease_token, recording_jobs.lease_owner, recording_jobs.lease_expires_at, recording_jobs.fencing_generation, recording_jobs.error_code, recording_jobs.error_detail, recording_jobs.terminal_at, recording_jobs.updated_at, recording_jobs.created_at
+    returning recording_jobs.id, recording_jobs.tenant_id, recording_jobs.episode_id, recording_jobs.recording_id, recording_jobs.kind, recording_jobs.idempotency_key, recording_jobs.payload_schema_version, recording_jobs.state, recording_jobs.priority, recording_jobs.available_at, recording_jobs.attempt_count, recording_jobs.attempt_limit, recording_jobs.lease_token, recording_jobs.lease_owner, recording_jobs.lease_expires_at, recording_jobs.fencing_generation, recording_jobs.error_code, recording_jobs.error_detail, recording_jobs.terminal_at, recording_jobs.updated_at, recording_jobs.created_at, recording_jobs.result_metadata
 ), pipeline as (
     update recording_pipelines
     set state = 'capture_complete', capture_completed_at = now(), updated_at = now()
@@ -595,7 +595,7 @@ with completed as (
         due_at = least(transcription_cleanup_jobs.due_at, excluded.due_at),
         updated_at = now()
 )
-select id, tenant_id, episode_id, recording_id, kind, idempotency_key, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation, error_code, error_detail, terminal_at, updated_at, created_at from completed
+select id, tenant_id, episode_id, recording_id, kind, idempotency_key, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation, error_code, error_detail, terminal_at, updated_at, created_at, result_metadata from completed
 `
 
 type CompleteCaptureRecordingJobParams struct {
@@ -635,6 +635,7 @@ type CompleteCaptureRecordingJobRow struct {
 	TerminalAt           pgtype.Timestamptz `json:"terminal_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	ResultMetadata       []byte             `json:"result_metadata"`
 }
 
 func (q *Queries) CompleteCaptureRecordingJob(ctx context.Context, arg CompleteCaptureRecordingJobParams) (CompleteCaptureRecordingJobRow, error) {
@@ -675,6 +676,7 @@ func (q *Queries) CompleteCaptureRecordingJob(ctx context.Context, arg CompleteC
 		&i.TerminalAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.ResultMetadata,
 	)
 	return i, err
 }
@@ -704,7 +706,7 @@ where id = $1
 returning id, tenant_id, episode_id, recording_id, kind, idempotency_key,
     payload_schema_version, state, priority, available_at, attempt_count,
     attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
-    error_code, error_detail, terminal_at, updated_at, created_at
+    error_code, error_detail, terminal_at, updated_at, created_at, result_metadata
 `
 
 type CompleteRecordingJobParams struct {
@@ -750,6 +752,7 @@ func (q *Queries) CompleteRecordingJob(ctx context.Context, arg CompleteRecordin
 		&i.TerminalAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.ResultMetadata,
 	)
 	return i, err
 }
@@ -1244,7 +1247,7 @@ with failure_policy as (
             and authority.lease_token = $7
             and authority.lease_owner = $8
       )
-    returning recording_jobs.id, recording_jobs.tenant_id, recording_jobs.episode_id, recording_jobs.recording_id, recording_jobs.kind, recording_jobs.idempotency_key, recording_jobs.payload_schema_version, recording_jobs.state, recording_jobs.priority, recording_jobs.available_at, recording_jobs.attempt_count, recording_jobs.attempt_limit, recording_jobs.lease_token, recording_jobs.lease_owner, recording_jobs.lease_expires_at, recording_jobs.fencing_generation, recording_jobs.error_code, recording_jobs.error_detail, recording_jobs.terminal_at, recording_jobs.updated_at, recording_jobs.created_at
+    returning recording_jobs.id, recording_jobs.tenant_id, recording_jobs.episode_id, recording_jobs.recording_id, recording_jobs.kind, recording_jobs.idempotency_key, recording_jobs.payload_schema_version, recording_jobs.state, recording_jobs.priority, recording_jobs.available_at, recording_jobs.attempt_count, recording_jobs.attempt_limit, recording_jobs.lease_token, recording_jobs.lease_owner, recording_jobs.lease_expires_at, recording_jobs.fencing_generation, recording_jobs.error_code, recording_jobs.error_detail, recording_jobs.terminal_at, recording_jobs.updated_at, recording_jobs.created_at, recording_jobs.result_metadata
 ), pipeline as (
     update recording_pipelines
     set state = case
@@ -1392,7 +1395,7 @@ func (q *Queries) FailRecordingJob(ctx context.Context, arg FailRecordingJobPara
 }
 
 const getCompletedCaptureRecordingJob = `-- name: GetCompletedCaptureRecordingJob :one
-select jobs.id, jobs.tenant_id, jobs.episode_id, jobs.recording_id, jobs.kind, jobs.idempotency_key, jobs.payload_schema_version, jobs.state, jobs.priority, jobs.available_at, jobs.attempt_count, jobs.attempt_limit, jobs.lease_token, jobs.lease_owner, jobs.lease_expires_at, jobs.fencing_generation, jobs.error_code, jobs.error_detail, jobs.terminal_at, jobs.updated_at, jobs.created_at
+select jobs.id, jobs.tenant_id, jobs.episode_id, jobs.recording_id, jobs.kind, jobs.idempotency_key, jobs.payload_schema_version, jobs.state, jobs.priority, jobs.available_at, jobs.attempt_count, jobs.attempt_limit, jobs.lease_token, jobs.lease_owner, jobs.lease_expires_at, jobs.fencing_generation, jobs.error_code, jobs.error_detail, jobs.terminal_at, jobs.updated_at, jobs.created_at, jobs.result_metadata
 from recording_jobs jobs
 join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id
 join recording_job_attempt_authorities authority
@@ -1455,6 +1458,7 @@ func (q *Queries) GetCompletedCaptureRecordingJob(ctx context.Context, arg GetCo
 		&i.TerminalAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.ResultMetadata,
 	)
 	return i, err
 }
@@ -1926,7 +1930,7 @@ where id = $2
 returning id, tenant_id, episode_id, recording_id, kind, idempotency_key,
     payload_schema_version, state, priority, available_at, attempt_count,
     attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
-    error_code, error_detail, terminal_at, updated_at, created_at
+    error_code, error_detail, terminal_at, updated_at, created_at, result_metadata
 `
 
 type HeartbeatRecordingJobParams struct {
@@ -1974,6 +1978,7 @@ func (q *Queries) HeartbeatRecordingJob(ctx context.Context, arg HeartbeatRecord
 		&i.TerminalAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.ResultMetadata,
 	)
 	return i, err
 }
@@ -2180,7 +2185,7 @@ const listRecordingDeadLetters = `-- name: ListRecordingDeadLetters :many
 select id, tenant_id, episode_id, recording_id, kind, idempotency_key,
     payload_schema_version, state, priority, available_at, attempt_count,
     attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
-    error_code, error_detail, terminal_at, updated_at, created_at
+    error_code, error_detail, terminal_at, updated_at, created_at, result_metadata
 from recording_jobs
 where tenant_id = $1 and state = 'terminal_failure'
 order by terminal_at desc, id desc
@@ -2223,6 +2228,7 @@ func (q *Queries) ListRecordingDeadLetters(ctx context.Context, arg ListRecordin
 			&i.TerminalAt,
 			&i.UpdatedAt,
 			&i.CreatedAt,
+			&i.ResultMetadata,
 		); err != nil {
 			return nil, err
 		}
@@ -2373,7 +2379,7 @@ const listRecordingJobsForReconciliation = `-- name: ListRecordingJobsForReconci
 select id, tenant_id, episode_id, recording_id, kind, idempotency_key,
     payload_schema_version, state, priority, available_at, attempt_count,
     attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
-    error_code, error_detail, terminal_at, updated_at, created_at
+    error_code, error_detail, terminal_at, updated_at, created_at, result_metadata
 from recording_jobs
 where (state = 'leased' and lease_expires_at <= now())
    or (state = 'pending' and available_at < $1)
@@ -2419,6 +2425,7 @@ func (q *Queries) ListRecordingJobsForReconciliation(ctx context.Context, arg Li
 			&i.TerminalAt,
 			&i.UpdatedAt,
 			&i.CreatedAt,
+			&i.ResultMetadata,
 		); err != nil {
 			return nil, err
 		}
@@ -2514,7 +2521,7 @@ with expired as (
     returning recording_jobs.id, tenant_id, episode_id, recording_id, kind, idempotency_key,
         payload_schema_version, state, priority, available_at, attempt_count,
         attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
-        error_code, error_detail, terminal_at, updated_at, created_at
+        error_code, error_detail, terminal_at, updated_at, created_at, result_metadata
 ), pipeline as (
     update recording_pipelines
     set state = case when recovered.state = 'terminal_failure' then 'terminal_failure' else 'retryable_failure' end,
@@ -2783,7 +2790,7 @@ with locked as (
     returning recording_jobs.id, tenant_id, episode_id, recording_id, kind, idempotency_key,
         payload_schema_version, state, priority, available_at, attempt_count,
         attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
-        error_code, error_detail, terminal_at, updated_at, created_at
+        error_code, error_detail, terminal_at, updated_at, created_at, result_metadata
 ), pipeline as (
     update recording_pipelines
     set state = 'retryable_failure', updated_at = now()
@@ -2791,11 +2798,11 @@ with locked as (
     where recording_pipelines.recording_id = relinquished.recording_id
     returning recording_pipelines.recording_id
 ), result as (
-    select relinquished.id, relinquished.tenant_id, relinquished.episode_id, relinquished.recording_id, relinquished.kind, relinquished.idempotency_key, relinquished.payload_schema_version, relinquished.state, relinquished.priority, relinquished.available_at, relinquished.attempt_count, relinquished.attempt_limit, relinquished.lease_token, relinquished.lease_owner, relinquished.lease_expires_at, relinquished.fencing_generation, relinquished.error_code, relinquished.error_detail, relinquished.terminal_at, relinquished.updated_at, relinquished.created_at
+    select relinquished.id, relinquished.tenant_id, relinquished.episode_id, relinquished.recording_id, relinquished.kind, relinquished.idempotency_key, relinquished.payload_schema_version, relinquished.state, relinquished.priority, relinquished.available_at, relinquished.attempt_count, relinquished.attempt_limit, relinquished.lease_token, relinquished.lease_owner, relinquished.lease_expires_at, relinquished.fencing_generation, relinquished.error_code, relinquished.error_detail, relinquished.terminal_at, relinquished.updated_at, relinquished.created_at, relinquished.result_metadata
     from relinquished
     join pipeline on pipeline.recording_id = relinquished.recording_id
     union all
-    select jobs.id, jobs.tenant_id, jobs.episode_id, jobs.recording_id, jobs.kind, jobs.idempotency_key, jobs.payload_schema_version, jobs.state, jobs.priority, jobs.available_at, jobs.attempt_count, jobs.attempt_limit, jobs.lease_token, jobs.lease_owner, jobs.lease_expires_at, jobs.fencing_generation, jobs.error_code, jobs.error_detail, jobs.terminal_at, jobs.updated_at, jobs.created_at
+    select jobs.id, jobs.tenant_id, jobs.episode_id, jobs.recording_id, jobs.kind, jobs.idempotency_key, jobs.payload_schema_version, jobs.state, jobs.priority, jobs.available_at, jobs.attempt_count, jobs.attempt_limit, jobs.lease_token, jobs.lease_owner, jobs.lease_expires_at, jobs.fencing_generation, jobs.error_code, jobs.error_detail, jobs.terminal_at, jobs.updated_at, jobs.created_at, jobs.result_metadata
     from recording_jobs jobs
     join recording_pipelines current_pipeline on current_pipeline.recording_id = jobs.recording_id
     where jobs.id = $1
@@ -2824,7 +2831,7 @@ with locked as (
 select id, tenant_id, episode_id, recording_id, kind, idempotency_key,
     payload_schema_version, state, priority, available_at, attempt_count,
     attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
-    error_code, error_detail, terminal_at, updated_at, created_at
+    error_code, error_detail, terminal_at, updated_at, created_at, result_metadata
 from result
 `
 
@@ -2860,6 +2867,7 @@ type RelinquishCaptureRecordingJobRow struct {
 	TerminalAt           pgtype.Timestamptz `json:"terminal_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	ResultMetadata       []byte             `json:"result_metadata"`
 }
 
 func (q *Queries) RelinquishCaptureRecordingJob(ctx context.Context, arg RelinquishCaptureRecordingJobParams) (RelinquishCaptureRecordingJobRow, error) {
@@ -2895,6 +2903,7 @@ func (q *Queries) RelinquishCaptureRecordingJob(ctx context.Context, arg Relinqu
 		&i.TerminalAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.ResultMetadata,
 	)
 	return i, err
 }
@@ -2911,7 +2920,7 @@ with candidate as (
       and recordings.tenant_id = $2
     for update of pipelines
 ), existing as (
-    select jobs.id, jobs.tenant_id, jobs.episode_id, jobs.recording_id, jobs.kind, jobs.idempotency_key, jobs.payload_schema_version, jobs.state, jobs.priority, jobs.available_at, jobs.attempt_count, jobs.attempt_limit, jobs.lease_token, jobs.lease_owner, jobs.lease_expires_at, jobs.fencing_generation, jobs.error_code, jobs.error_detail, jobs.terminal_at, jobs.updated_at, jobs.created_at
+    select jobs.id, jobs.tenant_id, jobs.episode_id, jobs.recording_id, jobs.kind, jobs.idempotency_key, jobs.payload_schema_version, jobs.state, jobs.priority, jobs.available_at, jobs.attempt_count, jobs.attempt_limit, jobs.lease_token, jobs.lease_owner, jobs.lease_expires_at, jobs.fencing_generation, jobs.error_code, jobs.error_detail, jobs.terminal_at, jobs.updated_at, jobs.created_at, jobs.result_metadata
     from recording_jobs jobs
     join candidate on candidate.recording_id = jobs.recording_id
     where jobs.kind = 'render'
@@ -2945,7 +2954,7 @@ with candidate as (
     from archived_failure
     where jobs.id = archived_failure.job_id
       and jobs.state = 'terminal_failure'
-    returning jobs.id, jobs.tenant_id, jobs.episode_id, jobs.recording_id, jobs.kind, jobs.idempotency_key, jobs.payload_schema_version, jobs.state, jobs.priority, jobs.available_at, jobs.attempt_count, jobs.attempt_limit, jobs.lease_token, jobs.lease_owner, jobs.lease_expires_at, jobs.fencing_generation, jobs.error_code, jobs.error_detail, jobs.terminal_at, jobs.updated_at, jobs.created_at
+    returning jobs.id, jobs.tenant_id, jobs.episode_id, jobs.recording_id, jobs.kind, jobs.idempotency_key, jobs.payload_schema_version, jobs.state, jobs.priority, jobs.available_at, jobs.attempt_count, jobs.attempt_limit, jobs.lease_token, jobs.lease_owner, jobs.lease_expires_at, jobs.fencing_generation, jobs.error_code, jobs.error_detail, jobs.terminal_at, jobs.updated_at, jobs.created_at, jobs.result_metadata
 ), inserted as (
     insert into recording_jobs (
         id, tenant_id, episode_id, recording_id, kind, idempotency_key,
@@ -2962,7 +2971,7 @@ with candidate as (
       and candidate.capture_completed_at +
           (recording_deferred_retention_seconds(candidate.config_snapshot) * interval '1 second') > clock_timestamp()
     on conflict (recording_id, kind) do nothing
-    returning id, tenant_id, episode_id, recording_id, kind, idempotency_key, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation, error_code, error_detail, terminal_at, updated_at, created_at
+    returning id, tenant_id, episode_id, recording_id, kind, idempotency_key, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation, error_code, error_detail, terminal_at, updated_at, created_at, result_metadata
 ), queued as (
     update recording_pipelines
     set state = 'render_queued', updated_at = now()
@@ -2972,14 +2981,14 @@ with candidate as (
       and recording_pipelines.state in ('capture_complete', 'terminal_failure')
     returning recording_pipelines.recording_id
 )
-select existing.id, existing.tenant_id, existing.episode_id, existing.recording_id, existing.kind, existing.idempotency_key, existing.payload_schema_version, existing.state, existing.priority, existing.available_at, existing.attempt_count, existing.attempt_limit, existing.lease_token, existing.lease_owner, existing.lease_expires_at, existing.fencing_generation, existing.error_code, existing.error_detail, existing.terminal_at, existing.updated_at, existing.created_at, (existing.state = 'terminal_failure' and retry_tally.retry_count >= 5) as retry_limit_reached
+select existing.id, existing.tenant_id, existing.episode_id, existing.recording_id, existing.kind, existing.idempotency_key, existing.payload_schema_version, existing.state, existing.priority, existing.available_at, existing.attempt_count, existing.attempt_limit, existing.lease_token, existing.lease_owner, existing.lease_expires_at, existing.fencing_generation, existing.error_code, existing.error_detail, existing.terminal_at, existing.updated_at, existing.created_at, existing.result_metadata, (existing.state = 'terminal_failure' and retry_tally.retry_count >= 5) as retry_limit_reached
 from existing
 join retry_tally on retry_tally.job_id = existing.id
 where existing.state <> 'terminal_failure' or retry_tally.retry_count >= 5
 union all
-select retried.id, retried.tenant_id, retried.episode_id, retried.recording_id, retried.kind, retried.idempotency_key, retried.payload_schema_version, retried.state, retried.priority, retried.available_at, retried.attempt_count, retried.attempt_limit, retried.lease_token, retried.lease_owner, retried.lease_expires_at, retried.fencing_generation, retried.error_code, retried.error_detail, retried.terminal_at, retried.updated_at, retried.created_at, false as retry_limit_reached from retried
+select retried.id, retried.tenant_id, retried.episode_id, retried.recording_id, retried.kind, retried.idempotency_key, retried.payload_schema_version, retried.state, retried.priority, retried.available_at, retried.attempt_count, retried.attempt_limit, retried.lease_token, retried.lease_owner, retried.lease_expires_at, retried.fencing_generation, retried.error_code, retried.error_detail, retried.terminal_at, retried.updated_at, retried.created_at, retried.result_metadata, false as retry_limit_reached from retried
 union all
-select inserted.id, inserted.tenant_id, inserted.episode_id, inserted.recording_id, inserted.kind, inserted.idempotency_key, inserted.payload_schema_version, inserted.state, inserted.priority, inserted.available_at, inserted.attempt_count, inserted.attempt_limit, inserted.lease_token, inserted.lease_owner, inserted.lease_expires_at, inserted.fencing_generation, inserted.error_code, inserted.error_detail, inserted.terminal_at, inserted.updated_at, inserted.created_at, false as retry_limit_reached from inserted
+select inserted.id, inserted.tenant_id, inserted.episode_id, inserted.recording_id, inserted.kind, inserted.idempotency_key, inserted.payload_schema_version, inserted.state, inserted.priority, inserted.available_at, inserted.attempt_count, inserted.attempt_limit, inserted.lease_token, inserted.lease_owner, inserted.lease_expires_at, inserted.fencing_generation, inserted.error_code, inserted.error_detail, inserted.terminal_at, inserted.updated_at, inserted.created_at, inserted.result_metadata, false as retry_limit_reached from inserted
 limit 1
 `
 
@@ -3014,6 +3023,7 @@ type RequestDeferredRecordingRenderRow struct {
 	TerminalAt           pgtype.Timestamptz `json:"terminal_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	ResultMetadata       []byte             `json:"result_metadata"`
 	RetryLimitReached    pgtype.Bool        `json:"retry_limit_reached"`
 }
 
@@ -3053,6 +3063,7 @@ func (q *Queries) RequestDeferredRecordingRender(ctx context.Context, arg Reques
 		&i.TerminalAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.ResultMetadata,
 		&i.RetryLimitReached,
 	)
 	return i, err

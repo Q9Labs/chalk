@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
 )
 
@@ -66,9 +67,10 @@ type Request struct {
 }
 
 type Result struct {
-	Index       Index
-	IndexPath   string
-	IndexSHA256 string
+	VideoDegradation []recordingpipeline.VideoDegradation
+	Index            Index
+	IndexPath        string
+	IndexSHA256      string
 }
 
 type Index struct {

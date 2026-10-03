@@ -142,7 +142,7 @@ func decodeOpusSource(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 		return Source{}, nil, err
 	}
 	if len(segments) == 0 {
-		return Source{}, nil, fmt.Errorf("%w: microphone source has no decodable packets", ErrDecode)
+		return Source{}, nil, nil
 	}
 
 	startMS := ticksToMillisecondsFloor(segments[0].startTicks, opusClockRate)

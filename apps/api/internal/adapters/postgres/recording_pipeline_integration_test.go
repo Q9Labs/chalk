@@ -1345,8 +1345,10 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	}
 	committedAt := time.Now().UTC().Add(-time.Second).Truncate(time.Microsecond)
 	uuidValue := func(value utilities.ID) pgtype.UUID { return pgtype.UUID{Bytes: value.Bytes(), Valid: true} }
+	qualityJSON := []byte(`[{"source_id":"camera-test","kind":"camera","frozen_ms":1000,"dropped_frames":30,"recoveries":1,"placeholder_ms":0}]`)
 	committedArtifact, err := sqlc.New(commitTransaction).CompleteRecordingRender(ctx, sqlc.CompleteRecordingRenderParams{
-		RenderJobID: uuidValue(commitInput.Authority.JobID), TenantID: uuidValue(commitInput.Authority.TenantID), RecordingID: uuidValue(commitInput.Authority.RecordingID),
+		VideoDegradation: qualityJSON,
+		RenderJobID:      uuidValue(commitInput.Authority.JobID), TenantID: uuidValue(commitInput.Authority.TenantID), RecordingID: uuidValue(commitInput.Authority.RecordingID),
 		AttemptCount: int32(commitInput.Authority.AttemptCount), FencingGeneration: commitInput.Authority.FencingGeneration, CaptureEpoch: commitInput.Authority.CaptureEpoch,
 		RenderInputHandle: uuidValue(commitInput.Authority.RenderInputHandle), CommitDigest: commitInput.CommitDigest, PresentationSha256: commitInput.PresentationSHA256,
 		DurationMillis: commitInput.DurationMillis, VideoAllocationID: uuidValue(commitInput.Video.AllocationID), FfprobeFactsDigest: commitInput.FFprobeFactsDigest,
@@ -1355,6 +1357,14 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	if err != nil {
 		_ = commitTransaction.Rollback(ctx)
 		t.Fatalf("complete render timestamp regression transaction: %v", err)
+	}
+	var storedQuality []byte
+	if err := commitTransaction.QueryRow(ctx, `select result_metadata->'video_degradation' from recording_jobs where id=$1`, commitInput.Authority.JobID.Bytes()).Scan(&storedQuality); err != nil {
+		t.Fatal(err)
+	}
+	var stored []recordingpipeline.VideoDegradation
+	if err := json.Unmarshal(storedQuality, &stored); err != nil || len(stored) != 1 || stored[0].FrozenMS != 1000 || stored[0].DroppedFrames != 30 || stored[0].Recoveries != 1 {
+		t.Fatalf("Render job quality metadata: %s, %v", storedQuality, err)
 	}
 	if !committedArtifact.CreatedAt.Valid || !committedArtifact.CommittedAt.Valid || !committedArtifact.CreatedAt.Time.Equal(committedAt) || !committedArtifact.CommittedAt.Time.Equal(committedAt) {
 		_ = commitTransaction.Rollback(ctx)

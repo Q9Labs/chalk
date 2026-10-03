@@ -71,7 +71,7 @@ describe("scene spans", () => {
     expect(frameTimeMs(15, 15)).toBe(1_000);
   });
 
-  it("merges nonvisual events but splits at visual events, expiry, media edges, and gaps", () => {
+  it("merges nonvisual events and damage holds but splits at visual events, expiry, and media edges", () => {
     const events: readonly RecordingPresentationEventV1[] = [
       { atMs: 1_000, sequence: 1, kind: "participant_hand_raised_changed", participantId: "avery", raised: true },
       { atMs: 2_000, sequence: 2, kind: "reaction_added", reaction },
@@ -83,14 +83,12 @@ describe("scene spans", () => {
       [10, 20],
       [20, 30],
       [30, 50],
-      [50, 60],
-      [60, 65],
-      [65, 70],
+      [50, 70],
       [70, 80],
     ]);
     expect(spans[2]?.scene.reactions).toHaveLength(1);
     expect(spans[3]?.scene.reactions).toHaveLength(0);
-    expect(spans.map((span) => span.scene.tiles.some((tile) => tile.kind !== "whiteboard" && tile.video !== undefined))).toEqual([false, false, false, false, true, false, true, false]);
+    expect(spans.map((span) => span.scene.tiles.some((tile) => tile.kind !== "whiteboard" && tile.video !== undefined))).toEqual([false, false, false, false, true, false]);
   });
 
   it.each(["camera", "screen_share"] as const)("uses %s media at frame zero when its first decoded frame arrives within two seconds", (kind) => {
@@ -107,8 +105,8 @@ describe("scene spans", () => {
     expect(spans[0]?.startFrame).toBe(0);
     expect(spans[0]?.scene.tiles.some((tile) => tile.kind !== "whiteboard" && tile.video?.sourceId === sourceId)).toBe(true);
     expect(spans.at(-1)?.endFrame).toBe(120);
-    // Later gaps and the source end still show placeholders.
-    expect(spans.find((span) => span.startFrame === 90)?.scene.tiles.every((tile) => tile.kind === "whiteboard" || tile.video === undefined)).toBe(true);
+    // Damage holds the last frame; the source end still shows a placeholder.
+    expect(spans.find((span) => span.startFrame <= 90 && span.endFrame > 90)?.scene.tiles.some((tile) => tile.kind !== "whiteboard" && tile.video?.sourceId === sourceId)).toBe(true);
     expect(spans.at(-1)?.scene.tiles.every((tile) => tile.kind === "whiteboard" || tile.video === undefined)).toBe(true);
   });
 
@@ -135,9 +133,7 @@ describe("scene spans", () => {
     const segments = groupVideoSegments(split);
     expect(segments.map(({ startFrame, endFrame, placements }) => [startFrame, endFrame, placements.length])).toEqual([
       [0, 50, 0],
-      [50, 60, 1],
-      [60, 65, 0],
-      [65, 70, 1],
+      [50, 70, 1],
       [70, 80, 0],
     ]);
     expect(segments[0]?.spans).toHaveLength(2);

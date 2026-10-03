@@ -501,7 +501,7 @@ where id = sqlc.arg(id)
 returning id, tenant_id, episode_id, recording_id, kind, idempotency_key,
     payload_schema_version, state, priority, available_at, attempt_count,
     attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
-    error_code, error_detail, terminal_at, updated_at, created_at;
+    error_code, error_detail, terminal_at, updated_at, created_at, result_metadata;
 
 -- name: CompleteRecordingJob :one
 update recording_jobs
@@ -528,7 +528,7 @@ where id = sqlc.arg(id)
 returning id, tenant_id, episode_id, recording_id, kind, idempotency_key,
     payload_schema_version, state, priority, available_at, attempt_count,
     attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
-    error_code, error_detail, terminal_at, updated_at, created_at;
+    error_code, error_detail, terminal_at, updated_at, created_at, result_metadata;
 
 -- name: RequestDeferredRecordingRender :one
 -- A Recording has one canonical MP4 export. The first authorized request
@@ -982,7 +982,7 @@ with locked as (
     returning recording_jobs.id, tenant_id, episode_id, recording_id, kind, idempotency_key,
         payload_schema_version, state, priority, available_at, attempt_count,
         attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
-        error_code, error_detail, terminal_at, updated_at, created_at
+        error_code, error_detail, terminal_at, updated_at, created_at, result_metadata
 ), pipeline as (
     update recording_pipelines
     set state = 'retryable_failure', updated_at = now()
@@ -1023,7 +1023,7 @@ with locked as (
 select id, tenant_id, episode_id, recording_id, kind, idempotency_key,
     payload_schema_version, state, priority, available_at, attempt_count,
     attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
-    error_code, error_detail, terminal_at, updated_at, created_at
+    error_code, error_detail, terminal_at, updated_at, created_at, result_metadata
 from result;
 
 -- name: RecoverExpiredRecordingJobs :many
@@ -1090,7 +1090,7 @@ with expired as (
     returning recording_jobs.id, tenant_id, episode_id, recording_id, kind, idempotency_key,
         payload_schema_version, state, priority, available_at, attempt_count,
         attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
-        error_code, error_detail, terminal_at, updated_at, created_at
+        error_code, error_detail, terminal_at, updated_at, created_at, result_metadata
 ), pipeline as (
     update recording_pipelines
     set state = case when recovered.state = 'terminal_failure' then 'terminal_failure' else 'retryable_failure' end,
@@ -1160,7 +1160,7 @@ from recovered cross join (select count(*) from reservation_release) released;
 select id, tenant_id, episode_id, recording_id, kind, idempotency_key,
     payload_schema_version, state, priority, available_at, attempt_count,
     attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
-    error_code, error_detail, terminal_at, updated_at, created_at
+    error_code, error_detail, terminal_at, updated_at, created_at, result_metadata
 from recording_jobs
 where tenant_id = sqlc.arg(tenant_id) and state = 'terminal_failure'
 order by terminal_at desc, id desc
@@ -1453,7 +1453,7 @@ cross join (select count(*) from artifact_cleanup) cleanup;
 select id, tenant_id, episode_id, recording_id, kind, idempotency_key,
     payload_schema_version, state, priority, available_at, attempt_count,
     attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
-    error_code, error_detail, terminal_at, updated_at, created_at
+    error_code, error_detail, terminal_at, updated_at, created_at, result_metadata
 from recording_jobs
 where (state = 'leased' and lease_expires_at <= now())
    or (state = 'pending' and available_at < sqlc.arg(stale_before))

@@ -5,25 +5,28 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 )
 
 const transcriptionPreparationDigestSchemaVersion = "recording_transcription_preparation.v1"
 
 type canonicalCommit struct {
-	TenantID            string                        `json:"tenant_id"`
-	SpaceID             string                        `json:"space_id"`
-	EpisodeID           string                        `json:"episode_id"`
-	RecordingID         string                        `json:"recording_id"`
-	RenderJobID         string                        `json:"render_job_id"`
-	AttemptCount        int                           `json:"attempt_count"`
-	FencingGeneration   int64                         `json:"fencing_generation"`
-	CaptureEpoch        int64                         `json:"capture_epoch"`
-	RenderInputHandle   string                        `json:"render_input_handle"`
-	PresentationSHA256  string                        `json:"presentation_sha256"`
-	DurationMillis      int64                         `json:"duration_ms"`
-	Video               canonicalCommitObject         `json:"video"`
-	FFprobeFactsDigest  string                        `json:"ffprobe_facts_digest"`
-	TranscriptionSource *canonicalTranscriptionSource `json:"transcription_source,omitempty"`
+	VideoDegradation    []recordingpipeline.VideoDegradation `json:"video_degradation,omitempty"`
+	TenantID            string                               `json:"tenant_id"`
+	SpaceID             string                               `json:"space_id"`
+	EpisodeID           string                               `json:"episode_id"`
+	RecordingID         string                               `json:"recording_id"`
+	RenderJobID         string                               `json:"render_job_id"`
+	AttemptCount        int                                  `json:"attempt_count"`
+	FencingGeneration   int64                                `json:"fencing_generation"`
+	CaptureEpoch        int64                                `json:"capture_epoch"`
+	RenderInputHandle   string                               `json:"render_input_handle"`
+	PresentationSHA256  string                               `json:"presentation_sha256"`
+	DurationMillis      int64                                `json:"duration_ms"`
+	Video               canonicalCommitObject                `json:"video"`
+	FFprobeFactsDigest  string                               `json:"ffprobe_facts_digest"`
+	TranscriptionSource *canonicalTranscriptionSource        `json:"transcription_source,omitempty"`
 }
 
 type canonicalTranscriptionPreparation struct {
@@ -82,7 +85,8 @@ type canonicalTranscriptionChunk struct {
 
 func CommitDigest(input CommitInput) ([]byte, error) {
 	canonical := canonicalCommit{
-		TenantID: input.Authority.TenantID.String(), SpaceID: input.Authority.SpaceID.String(),
+		VideoDegradation: input.VideoDegradation,
+		TenantID:         input.Authority.TenantID.String(), SpaceID: input.Authority.SpaceID.String(),
 		EpisodeID: input.Authority.EpisodeID.String(), RecordingID: input.Authority.RecordingID.String(),
 		RenderJobID: input.Authority.JobID.String(), AttemptCount: input.Authority.AttemptCount,
 		FencingGeneration: input.Authority.FencingGeneration, CaptureEpoch: input.Authority.CaptureEpoch,

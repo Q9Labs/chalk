@@ -269,6 +269,7 @@ type TranscriptionSource struct {
 }
 
 type CommitInput struct {
+	VideoDegradation    []recordingpipeline.VideoDegradation
 	Authority           Authority
 	CommitDigest        []byte
 	PresentationSHA256  []byte

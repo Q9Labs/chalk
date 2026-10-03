@@ -73,8 +73,34 @@ export function keyframeProbeArgs(path: string): readonly string[] {
 }
 
 /** Re-encodes a track with a keyframe every 30 frames, keeping its timestamps, so each segment seek decodes at most about a second. */
-export function denseKeyframeArgs(inputPath: string, outputPath: string, output: ComposeOutput): readonly string[] {
-  return [...COMMON_ARGS, ...inputThreadArgs(output), "-i", inputPath, "-map", "0:v:0", "-an", ...outputThreadArgs(output), "-fps_mode", "passthrough", "-c:v", "libx264", "-preset", "ultrafast", "-g", "30", "-pix_fmt", "yuv420p", "-f", "matroska", outputPath];
+export function denseKeyframeArgs(inputPath: string, outputPath: string, output: ComposeOutput, frozenDurationSeconds?: number): readonly string[] {
+  // Materialize holds before seeking: a seek inside a sparse damaged span must
+  // not jump to a future keyframe, nor lose the last image beyond input EOF.
+  const holds = frozenDurationSeconds === undefined ? [] : ["-vf", `tpad=stop_mode=clone:stop_duration=${seconds(frozenDurationSeconds)},fps=${output.fps}`, "-t", seconds(frozenDurationSeconds)];
+  return [
+    ...COMMON_ARGS,
+    ...inputThreadArgs(output),
+    "-i",
+    inputPath,
+    "-map",
+    "0:v:0",
+    "-an",
+    ...outputThreadArgs(output),
+    ...holds,
+    "-fps_mode",
+    frozenDurationSeconds === undefined ? "passthrough" : "cfr",
+    "-c:v",
+    "libx264",
+    "-preset",
+    "ultrafast",
+    "-g",
+    "30",
+    "-pix_fmt",
+    "yuv420p",
+    "-f",
+    "matroska",
+    outputPath,
+  ];
 }
 
 /** An ffconcat list that shows each UI image for its span; the concat demuxer ignores the last duration unless the last file repeats. */

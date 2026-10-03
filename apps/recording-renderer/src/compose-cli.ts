@@ -163,9 +163,10 @@ async function seekableSources(ffmpegPath: string, inputs: VerifiedRenderInputs,
     let path = file.path;
     if (starts.length > 0) {
       const keyframes = (await runProbe(ffprobePathFor(ffmpegPath), keyframeProbeArgs(path))).split("\n").map(Number.parseFloat).filter(Number.isFinite);
-      if (needsDenseKeyframes(keyframes, starts, (source.endMs - source.startMs) / 1_000)) {
+      const frozenSeek = inputs.media.discontinuities.some((gap) => gap.sourceId === source.sourceId && (gap.endMs >= source.endMs || starts.some((start) => start * 1_000 + source.startMs >= gap.startMs && start * 1_000 + source.startMs < gap.endMs)));
+      if (frozenSeek || needsDenseKeyframes(keyframes, starts, (source.endMs - source.startMs) / 1_000)) {
         path = join(workDirectory, `dense-${denseCount}.mkv`);
-        await runFFmpeg(ffmpegPath, denseKeyframeArgs(file.path, path, output), `dense keyframes ${source.sourceId}`);
+        await runFFmpeg(ffmpegPath, denseKeyframeArgs(file.path, path, output, frozenSeek ? (source.endMs - source.startMs) / 1_000 : undefined), `dense keyframes ${source.sourceId}`);
         denseCount++;
       }
     }

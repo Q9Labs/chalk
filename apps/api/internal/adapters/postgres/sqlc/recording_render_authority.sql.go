@@ -290,7 +290,8 @@ with render_commit as (
     returning id
 ), completed_job as (
     update recording_jobs jobs
-    set state = 'succeeded', lease_token = null, lease_owner = null,
+    set result_metadata = jsonb_build_object('video_degradation', $16::jsonb),
+        state = 'succeeded', lease_token = null, lease_owner = null,
         lease_expires_at = null, terminal_at = render_commit.committed_at,
         updated_at = render_commit.committed_at
     from render_commit
@@ -338,6 +339,7 @@ type CompleteRecordingRenderParams struct {
 	TranscriptionSourceID pgtype.UUID        `json:"transcription_source_id"`
 	TranscriptionJobIds   []pgtype.UUID      `json:"transcription_job_ids"`
 	CommittedAt           pgtype.Timestamptz `json:"committed_at"`
+	VideoDegradation      []byte             `json:"video_degradation"`
 }
 
 type CompleteRecordingRenderRow struct {
@@ -371,6 +373,7 @@ func (q *Queries) CompleteRecordingRender(ctx context.Context, arg CompleteRecor
 		arg.TranscriptionSourceID,
 		arg.TranscriptionJobIds,
 		arg.CommittedAt,
+		arg.VideoDegradation,
 	)
 	var i CompleteRecordingRenderRow
 	err := row.Scan(

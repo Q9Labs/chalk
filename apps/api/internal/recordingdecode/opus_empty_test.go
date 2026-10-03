@@ -177,7 +177,7 @@ func TestEmptyOpusDoesNotHidePacketLossOrMalformedAudio(t *testing.T) {
 				}
 			}
 			_, _, _, err = decodeOpusBundle(t, version, []recordingbundle.RTPPacket{opusPacket(1, 4800, nil)}, nil)
-			if !errors.Is(err, recordingdecode.ErrDecode) || !strings.Contains(err.Error(), "no decodable packets") {
+			if !errors.Is(err, recordingdecode.ErrDecode) || !strings.Contains(err.Error(), "no decodable video or audio") {
 				t.Fatalf("empty-only source: %v", err)
 			}
 		})

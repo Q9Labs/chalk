@@ -98,7 +98,7 @@ export function buildSceneSpans(timeline: RecordingPresentationTimelineV1, media
   for (const [index, startFrame] of boundaries.entries()) {
     const endFrame = boundaries[index + 1] ?? frameCount;
     const snapshot = cursor.at(frameTimeMs(startFrame, fps));
-    const scene = sceneFor(snapshot, (sourceId) => videoAvailable(media, visualSources.get(sourceId), snapshot.elapsedMs), layout);
+    const scene = sceneFor(snapshot, (sourceId) => videoAvailable(visualSources.get(sourceId), snapshot.elapsedMs), layout);
     const sceneKey = JSON.stringify(scene);
     appendSceneSpan(spans, { startFrame, endFrame, sceneKey, scene });
   }
@@ -157,12 +157,13 @@ function changeTimes(timeline: RecordingPresentationTimelineV1, media: DecodedMe
   return times;
 }
 
-function videoAvailable(media: DecodedMediaIndexV1, source: DecodedVisualSourceV1 | undefined, elapsedMs: number): boolean {
+function videoAvailable(source: DecodedVisualSourceV1 | undefined, elapsedMs: number): boolean {
   if (source === undefined || elapsedMs >= source.endMs) return false;
   // Only fill the recording's startup gap; timeline visibility still controls
   // later joins, camera toggles, and screen shares.
   if (elapsedMs < source.startMs) return source.startMs <= FIRST_FRAME_HOLD_MS;
-  return !media.discontinuities.some((gap) => gap.sourceId === source.sourceId && gap.startMs <= elapsedMs && elapsedMs < gap.endMs);
+  // Recorded damage freezes the source; visibility still comes from the timeline.
+  return true;
 }
 
 /** Mirrors RecordingSpaceView's stage items and the live Stage's geometry, without the chat sidebar. */

@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/q9labs/chalk/apps/api/internal/recordingbundle"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
 )
 
@@ -27,6 +28,10 @@ type sourceIdentity struct {
 }
 
 type sourceState struct {
+	spanStartMS  int64
+	spanEndMS    int64
+	hasSpan      bool
+	degradation  recordingpipeline.VideoDegradation
 	presentation recordingpresentation.MediaSource
 	track        recordingbundle.TrackIdentity
 	spoolPath    string
@@ -110,20 +115,46 @@ func Write(ctx context.Context, request Request) (result Result, resultErr error
 		return stateValues[i].presentation.SourceID < stateValues[j].presentation.SourceID
 	})
 	sources := make([]Source, 0, len(stateValues))
+	degradation := make([]recordingpipeline.VideoDegradation, 0)
 	discontinuities := make([]Discontinuity, 0)
 	for _, state := range stateValues {
 		if err := ctx.Err(); err != nil {
 			return Result{}, err
 		}
+		state.spanStartMS, state.spanEndMS = visualSourceSpan(request.Presentation, state.presentation.SourceID)
+		state.hasSpan = true
 		source, sourceDiscontinuities, err := decodeSource(ctx, runner, ffmpegPath, temporaryDirectory, mediaDirectory, state, request.DurationMS, request.VideoPassthrough)
 		if err != nil {
 			return Result{}, err
 		}
-		sources = append(sources, source)
+		if source.SourceID != "" {
+			sources = append(sources, source)
+		}
+		if state.degradation.SourceID != "" {
+			degradation = append(degradation, state.degradation)
+		}
 		discontinuities = append(discontinuities, sourceDiscontinuities...)
 	}
+	knownQuality := make(map[string]struct{}, len(degradation))
+	for _, source := range degradation {
+		knownQuality[source.SourceID] = struct{}{}
+	}
+	for _, source := range catalog {
+		if !request.includesSource(source.Kind) || !mediaKindIsVideo(source.Kind) {
+			continue
+		}
+		if _, exists := knownQuality[source.SourceID]; exists {
+			continue
+		}
+		start, end := visualSourceSpan(request.Presentation, source.SourceID)
+		degradation = append(degradation, recordingpipeline.VideoDegradation{SourceID: source.SourceID, Kind: string(source.Kind), PlaceholderMS: end - start})
+	}
+	sort.Slice(degradation, func(i, j int) bool { return degradation[i].SourceID < degradation[j].SourceID })
+	if len(sources) == 0 && len(request.IncludedSourceKinds) == 0 {
+		return Result{}, fmt.Errorf("%w: recording has no decodable video or audio", ErrDecode)
+	}
 	discontinuities = append(discontinuities, expandObservedGaps(gaps, sources)...)
-	discontinuities = normalizeDiscontinuities(discontinuities)
+	discontinuities = bindDiscontinuities(discontinuities, sources)
 	if len(discontinuities) > recordingpresentation.MaximumEvents {
 		return Result{}, fmt.Errorf("%w: discontinuity count exceeds bound", ErrOutputLimit)
 	}
@@ -175,7 +206,7 @@ func Write(ctx context.Context, request Request) (result Result, resultErr error
 	}
 	digest := sha256.Sum256(indexBytes)
 	return Result{
-		Index: index, IndexPath: filepath.Join(outputDirectory, IndexFileName),
+		VideoDegradation: degradation, Index: index, IndexPath: filepath.Join(outputDirectory, IndexFileName),
 		IndexSHA256: hex.EncodeToString(digest[:]),
 	}, nil
 }
@@ -596,4 +627,66 @@ func ticksToMillisecondsFloor(ticks uint64, rate uint64) int64 {
 
 func ticksToMillisecondsCeil(ticks uint64, rate uint64) int64 {
 	return int64((ticks*1_000 + rate - 1) / rate)
+}
+
+// Visibility controls the source's span independently of the Recording clock.
+func visualSourceSpan(timeline recordingpresentation.Timeline, sourceID string) (start, end int64) {
+	visible, seen := false, false
+	for _, source := range timeline.Initial.Media {
+		if source.SourceID == sourceID && source.Visible {
+			visible, seen = true, true
+		}
+	}
+	end = timeline.Clock.DurationMillis
+	visit := func(event recordingpresentation.MediaSourceChangedEvent) {
+		if event.Source.SourceID != sourceID {
+			return
+		}
+		if event.Source.Visible {
+			if !seen {
+				start = event.AtMillis
+			}
+			visible, seen = true, true
+			end = timeline.Clock.DurationMillis
+		} else if visible {
+			visible = false
+			end = event.AtMillis
+		}
+	}
+	for _, event := range timeline.Events {
+		switch value := event.(type) {
+		case recordingpresentation.MediaSourceChangedEvent:
+			visit(value)
+		case *recordingpresentation.MediaSourceChangedEvent:
+			if value != nil {
+				visit(*value)
+			}
+		}
+	}
+	if !seen {
+		return 0, 0
+	}
+	return start, max(start, end)
+}
+
+// Recovery can start before the first decodable frame or end after a source's
+// visible span. Keep the media index bound to actual files, not startup waits.
+func bindDiscontinuities(gaps []Discontinuity, sources []Source) []Discontinuity {
+	byID := make(map[string]Source, len(sources))
+	for _, source := range sources {
+		byID[source.SourceID] = source
+	}
+	bound := make([]Discontinuity, 0, len(gaps))
+	for _, gap := range gaps {
+		source, exists := byID[gap.SourceID]
+		if !exists {
+			continue
+		}
+		gap.StartMS = max(gap.StartMS, source.StartMS)
+		gap.EndMS = min(gap.EndMS, source.EndMS)
+		if gap.EndMS > gap.StartMS {
+			bound = append(bound, gap)
+		}
+	}
+	return normalizeDiscontinuities(bound)
 }
