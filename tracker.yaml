@@ -291,13 +291,12 @@ outcomes:
     area: transcription
     state: in_progress
     summary: >-
-      Production Recordings produce a Transcript through the direct DeepInfra adapter, and new
-      Tenants and Spaces allow on-demand Transcripts by default. Tenants and Spaces created before
-      that default still have Transcripts disabled.
+      Production Recordings produce a Transcript through the direct DeepInfra adapter, and every
+      Tenant allows on-demand Transcripts. Who can read a production Transcript and how the new path
+      handles failure are not checked.
     priority: P1
     size: M
     remaining:
-      - Allow on-demand Transcripts for the existing Tenants and Spaces that should have them.
       - Check that only the right Tenant and Participants can read a production Transcript.
       - >-
         Check that provider failure, retry, cancellation and Artifact Policy limits behave on the
