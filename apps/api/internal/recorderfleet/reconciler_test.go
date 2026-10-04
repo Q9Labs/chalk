@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -54,6 +55,7 @@ func TestReconcilerTransitionsZeroToReadyAndDrainsToZero(t *testing.T) {
 	}
 
 	fixture.runtime.observations[0].ActiveLeases = 0
+	fixture.runtime.observations[0].ObservedAt = fixture.now.Add(time.Nanosecond)
 	result = fixture.step(t, reconciler)
 	if result.Action != ActionIdentityRevoked || fixture.bootstrap.revokeCalls != 1 {
 		t.Fatalf("revoke result = %+v, calls %d", result, fixture.bootstrap.revokeCalls)
@@ -93,6 +95,7 @@ func TestEntrancePreparationConsumptionReusesWarmNode(t *testing.T) {
 	if result := fixture.step(t, reconciler); result.Action != ActionAdmissionClosed {
 		t.Fatalf("expiry did not drain: %+v", result)
 	}
+	fixture.runtime.observations[0].ObservedAt = fixture.now.Add(time.Nanosecond)
 	fixture.runtime.observations[0].AdmissionOpen = false
 	fixture.runtime.observations[0].Ready = false
 	if result := fixture.step(t, reconciler); result.Action != ActionIdentityRevoked {
@@ -387,26 +390,135 @@ func TestReconcilerDrainsStaleImageBeforeReplacementAtCap(t *testing.T) {
 	}
 }
 
-func TestReconcilerRevokesNeverReadyNodeWithoutWaitingForDrainTimeout(t *testing.T) {
-	fixture := newFleetFixture(t)
-	fixture.config.MaxNodes = 1
-	fixture.config.DrainTimeout = 14 * time.Hour
-	request := fixture.ensureRequest(4)
-	node := fixture.provider.nodeFor(request, "4004")
-	fixture.provider.nodes[node.ProviderID] = node
-	identity := fixture.bootstrap.identity(node)
-	drainStartedAt := fixture.now.Add(-time.Minute)
-	fixture.journal.found = true
-	fixture.journal.state = NewJournal()
-	fixture.journal.state.NextBootGeneration = 5
-	fixture.journal.state.Nodes[node.ProviderID] = ManagedNode{
-		ProviderID: node.ProviderID, Name: node.Name, Phase: PhaseDraining,
-		BootGeneration: node.BootGeneration, Identity: &identity, DrainStartedAt: &drainStartedAt,
+func TestReconcilerDrainingIdentityWaitsForLeaseEvidence(t *testing.T) {
+	for _, wasReady := range []bool{false, true} {
+		for _, scenario := range []struct {
+			name         string
+			observed     bool
+			age          time.Duration
+			activeLeases int
+		}{
+			{name: "active lease", observed: true, activeLeases: 1},
+			{name: "no observation"},
+			{name: "pre-drain zero leases", observed: true, age: 2 * time.Second},
+			{name: "same-time zero leases", observed: true, age: time.Second},
+		} {
+			t.Run(fmt.Sprintf("ready=%t/%s", wasReady, scenario.name), func(t *testing.T) {
+				fixture := newFleetFixture(t)
+				fixture.config.Now = func() time.Time { return fixture.now }
+				fixture.demand.value = Demand{Revision: "drain", ObservedAt: fixture.now}
+				fixture.config.Key.Role = workeridentity.RoleRender
+				fixture.config.MaxNodes = 2
+				fixture.config.SlotsPerNode = 1
+				fixture.provider.config = fixture.config
+				node := fixture.provider.nodeFor(fixture.ensureRequest(4), "4004")
+				fixture.provider.nodes[node.ProviderID] = node
+				identity := fixture.bootstrap.identity(node)
+				identity.Role = fixture.config.Key.Role
+				drainStartedAt := fixture.now.Add(-time.Second)
+				fixture.journal.found = true
+				fixture.journal.state = NewJournal()
+				fixture.journal.state.NextBootGeneration = 5
+				managed := ManagedNode{
+					ProviderID: node.ProviderID, Name: node.Name, Phase: PhaseDraining,
+					BootGeneration: node.BootGeneration, Identity: &identity, DrainStartedAt: &drainStartedAt,
+				}
+				if wasReady {
+					managed.LastReadyAt = &drainStartedAt
+				}
+				fixture.journal.state.Nodes[node.ProviderID] = managed
+				if scenario.observed {
+					fixture.runtime.observations = []NodeObservation{{Identity: identity,
+						ObservedAt: fixture.now.Add(-scenario.age), ActiveLeases: scenario.activeLeases}}
+				}
+				reconciler := fixture.reconciler(t)
+				for range 2 {
+					result := fixture.step(t, reconciler)
+					if result.Action != ActionDrainWaiting || fixture.bootstrap.revokeCalls != 0 || fixture.provider.deleteCalls != 0 {
+						t.Fatalf("unsafe drain = %+v, revoke/delete = %d/%d", result, fixture.bootstrap.revokeCalls, fixture.provider.deleteCalls)
+					}
+				}
+				fixture.runtime.observations = []NodeObservation{{Identity: identity, ObservedAt: fixture.now}}
+				if result := fixture.step(t, reconciler); result.Action != ActionIdentityRevoked {
+					t.Fatalf("lease ended: %+v", result)
+				}
+				if result := fixture.step(t, reconciler); result.Action != ActionNodeDeleted {
+					t.Fatalf("drained deletion: %+v", result)
+				}
+			})
+		}
 	}
+}
 
-	result := fixture.step(t, fixture.reconciler(t))
-	if result.Action != ActionIdentityRevoked || fixture.bootstrap.revokeCalls != 1 {
-		t.Fatalf("never-ready drain result = %+v, revoke calls %d; want immediate revoke", result, fixture.bootstrap.revokeCalls)
+func TestReconcilerDrainTimeoutStillRevokesIdentity(t *testing.T) {
+	for _, activeLeases := range []int{0, 1} {
+		t.Run(fmt.Sprintf("active leases=%d", activeLeases), func(t *testing.T) {
+			fixture := newFleetFixture(t)
+			fixture.demand.value = Demand{Revision: "drain", ObservedAt: fixture.now}
+			node := fixture.provider.nodeFor(fixture.ensureRequest(4), "4004")
+			fixture.provider.nodes[node.ProviderID] = node
+			identity := fixture.bootstrap.identity(node)
+			identity.Role = fixture.config.Key.Role
+			drainStartedAt := fixture.now.Add(-fixture.config.DrainTimeout)
+			fixture.journal.found = true
+			fixture.journal.state = NewJournal()
+			fixture.journal.state.NextBootGeneration = 5
+			fixture.journal.state.Nodes[node.ProviderID] = ManagedNode{
+				ProviderID: node.ProviderID, Name: node.Name, Phase: PhaseDraining,
+				BootGeneration: node.BootGeneration, Identity: &identity, DrainStartedAt: &drainStartedAt,
+			}
+			if activeLeases > 0 {
+				fixture.runtime.observations = []NodeObservation{{Identity: identity, ObservedAt: fixture.now, ActiveLeases: activeLeases}}
+			}
+			reconciler := fixture.reconciler(t)
+			if result := fixture.step(t, reconciler); result.Action != ActionIdentityRevoked || fixture.bootstrap.revokeCalls != 1 {
+				t.Fatalf("timeout revoke = %+v", result)
+			}
+			if result := fixture.step(t, reconciler); result.Action != ActionNodeDeleted || fixture.provider.deleteCalls != 1 {
+				t.Fatalf("timeout deletion = %+v", result)
+			}
+		})
+	}
+}
+
+func TestReconcilerScaleDownPrefersObservedIdleNode(t *testing.T) {
+	for _, busyObserved := range []bool{true, false} {
+		t.Run(fmt.Sprintf("busy observed=%t", busyObserved), func(t *testing.T) {
+			fixture := newFleetFixture(t)
+			fixture.config.Key.Role = workeridentity.RoleRender
+			fixture.config.MaxNodes = 2
+			fixture.config.SlotsPerNode = 1
+			fixture.provider.config = fixture.config
+			fixture.journal.found = true
+			fixture.journal.state = NewJournal()
+			fixture.journal.state.NextBootGeneration = 5
+			for index, id := range []string{"1001", "2002"} {
+				node := fixture.provider.nodeFor(fixture.ensureRequest(uint64(index+2)), id)
+				fixture.provider.nodes[id] = node
+				identity := fixture.bootstrap.identity(node)
+				identity.Role = fixture.config.Key.Role
+				managed := ManagedNode{ProviderID: id, Name: node.Name, Phase: PhaseReady,
+					BootGeneration: node.BootGeneration, Identity: &identity, LastReadyAt: &fixture.now}
+				observation := NodeObservation{Identity: identity, Ready: true, AdmissionOpen: true,
+					ReadyCapacity: 1, ObservedAt: fixture.now}
+				if index == 1 {
+					// A worker can claim before the controller records readiness.
+					managed.Phase, managed.LastReadyAt = PhaseBootstrapping, nil
+					observation.ActiveLeases = 1
+				}
+				fixture.journal.state.Nodes[id] = managed
+				if index == 0 || busyObserved {
+					fixture.runtime.observations = append(fixture.runtime.observations, observation)
+				}
+			}
+			result := fixture.step(t, fixture.reconciler(t))
+			if result.Action != ActionAdmissionClosed || result.ProviderNodeID != "1001" {
+				t.Fatalf("scale-down chose busy newer node: %+v", result)
+			}
+			if fixture.bootstrap.revokeCalls != 0 || fixture.provider.deleteCalls != 0 {
+				t.Fatal("scale-down revoked or deleted before closing admission")
+			}
+		})
 	}
 }
 

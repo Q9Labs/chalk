@@ -116,7 +116,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 		return r.finish(ctx, state, nodes, observed, demand, now, result, err)
 	}
 
-	candidate := r.drainCandidate(current, stale, targetNodes, state)
+	candidate := r.drainCandidate(current, stale, targetNodes, observed)
 	if candidate != nil {
 		state, result, err = r.advanceDrain(ctx, state, *candidate, nodes[candidate.ProviderID], observed[candidate.ProviderID], now)
 		result.Quarantined = quarantined
@@ -389,9 +389,9 @@ func (r *Reconciler) advanceDrain(ctx context.Context, state Journal, managed Ma
 		return state, Result{Action: ActionNodeDeleted, ProviderNodeID: node.ProviderID, BootstrapDiagnostic: managed.BootstrapDiagnostic}, err
 	case PhaseDraining:
 		deadline := managed.DrainStartedAt.Add(r.config.DrainTimeout)
-		// A node that never became ready never admitted a lease, so it has nothing to drain.
-		if managed.Identity != nil && managed.LastReadyAt != nil && now.Before(deadline) {
-			if observation.ObservedAt.IsZero() || observation.ActiveLeases > 0 {
+		// Registered workers can claim before the controller records readiness.
+		if managed.Identity != nil && now.Before(deadline) {
+			if !observation.ObservedAt.After(*managed.DrainStartedAt) || observation.ActiveLeases > 0 {
 				return state, Result{Action: ActionDrainWaiting, ProviderNodeID: node.ProviderID}, nil
 			}
 		}
@@ -532,7 +532,7 @@ func readyObservationExpired(managed ManagedNode, observation NodeObservation, n
 	return managed.Phase == PhaseReady && observation.ObservedAt.IsZero() && managed.LastReadyAt != nil && now.Sub(*managed.LastReadyAt) > maxAge
 }
 
-func (r *Reconciler) drainCandidate(current, stale []ManagedNode, desired int, state Journal) *ManagedNode {
+func (r *Reconciler) drainCandidate(current, stale []ManagedNode, desired int, observed map[string]NodeObservation) *ManagedNode {
 	if len(stale) > 0 {
 		return &stale[0]
 	}
@@ -540,6 +540,16 @@ func (r *Reconciler) drainCandidate(current, stale []ManagedNode, desired int, s
 		return nil
 	}
 	slices.SortFunc(current, func(left, right ManagedNode) int {
+		leftObservation, leftObserved := observed[left.ProviderID]
+		rightObservation, rightObserved := observed[right.ProviderID]
+		leftIdle := leftObserved && leftObservation.ActiveLeases == 0
+		rightIdle := rightObserved && rightObservation.ActiveLeases == 0
+		if leftIdle != rightIdle {
+			if leftIdle {
+				return -1
+			}
+			return 1
+		}
 		if left.BootGeneration > right.BootGeneration {
 			return -1
 		}

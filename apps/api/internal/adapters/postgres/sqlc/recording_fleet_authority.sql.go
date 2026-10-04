@@ -331,7 +331,10 @@ select
     coalesce((
         select count(*)
         from recording_jobs job
-        where job.kind = node.role
+        where (
+            job.kind = node.role
+            or (node.role = 'render' and job.kind = 'transcription')
+        )
           and job.state = 'leased'
           and job.lease_owner = node.worker_id::text
           and job.lease_expires_at > $1::timestamptz
