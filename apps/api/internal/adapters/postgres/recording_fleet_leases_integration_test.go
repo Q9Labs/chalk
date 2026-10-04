@@ -19,7 +19,7 @@ func TestRenderFleetObservationCountsLiveJobLeases(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			now := time.Now().UTC()
+			now := time.Now().UTC().Truncate(time.Microsecond)
 			heartbeat := now.Add(-10 * time.Second)
 			execCleanupFixture(t, transaction, `
 				update recording_jobs set lease_owner = $2, lease_expires_at = $3 where id = $1`,
