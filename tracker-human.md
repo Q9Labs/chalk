@@ -162,10 +162,8 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
 
 16. **Recordings produce a Transcript in production** (Partly working · size M · P1)
     Production Recordings produce a Transcript through the direct DeepInfra adapter, and
-    new Tenants and Spaces allow on-demand Transcripts by default. Tenants and Spaces
-    created before that default still have Transcripts disabled.
-    - Allow on-demand Transcripts for the existing Tenants and Spaces that should have
-      them.
+    every Tenant allows on-demand Transcripts. Who can read a production Transcript and
+    how the new path handles failure are not checked.
     - Check that only the right Tenant and Participants can read a production
       Transcript.
     - Check that provider failure, retry, cancellation and Artifact Policy limits behave
