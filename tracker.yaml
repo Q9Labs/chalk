@@ -189,12 +189,16 @@ outcomes:
     state: in_progress
     summary: >-
       Export renders an MP4 on request with the native compositor on an s-1vcpu-1gb worker in
-      production. The file declares 30 fps while it plays at 15, and its first frame shows
-      placeholders before the first video keyframes arrive.
-    size: S
+      production. When a camera's video is damaged, the Export holds the last good frame and is
+      marked degraded instead of failing. A camera can still freeze for several seconds after its
+      quality changes.
+    size: M
     remaining:
-      - Ship the 15 fps label and the first-frame fix.
+      - Find why a camera freezes after a quality change, and shorten the freeze.
+      - Report Capture's packet and repeat counts for each Recording in production.
       - Download one Export twice to confirm the second download reuses the file.
+    uncertainty: >-
+      The freeze may be the wait for the next keyframe after a quality change. This is not measured.
     theory: theory.md#product-memory
     code:
       - apps/api/internal/httpapi/recordings.go
@@ -218,27 +222,6 @@ outcomes:
     code:
       - apps/api/internal/recorderworker
       - infrastructure/recorder
-  - id: recording.capture_image_boot
-    title: New Capture images boot in production
-    area: recording
-    state: planned
-    summary: >-
-      Production Capture runs on an image from 2026-10-02 because every Capture image built since
-      then registers with the issuer but never asks for its certificate in the fleet. The same image
-      completes a signed bootstrap on an isolated node, so the cause is in fleet provisioning.
-    size: M
-    remaining:
-      - Keep a failing fleet node with its boot logs and creation payload before it is deleted.
-      - Find and fix the cause, then move Capture to a current image.
-      - >-
-        Make image qualification and releases fail unless a new worker completes a fleet-style signed
-        bootstrap and becomes ready.
-    uncertainty: The failure has not reproduced outside the production fleet.
-    theory: theory.md#product-memory
-    code:
-      - apps/api/internal/recorderfleet
-      - apps/api/internal/adapters/digitalocean/recorder_fleet.go
-      - infrastructure/recorder/images
   - id: recording.capture_cost
     title: Capture starts fast and costs little
     area: recording
@@ -308,20 +291,17 @@ outcomes:
     area: transcription
     state: in_progress
     summary: >-
-      The transcript-first pipeline and the direct DeepInfra adapter are built, and the production
-      dispatcher is healthy. No production Recording has produced a Transcript yet: on 2026-09-23
-      audio preparation stalled after capture.
+      Production Recordings produce a Transcript through the direct DeepInfra adapter, and new
+      Tenants and Spaces allow on-demand Transcripts by default. Tenants and Spaces created before
+      that default still have Transcripts disabled.
     priority: P1
     size: M
     remaining:
-      - Find and fix the audio preparation stall.
-      - >-
-        Produce a Transcript from a production Recording and check that only the right Tenant and
-        Participants can read it.
+      - Allow on-demand Transcripts for the existing Tenants and Spaces that should have them.
+      - Check that only the right Tenant and Participants can read a production Transcript.
       - >-
         Check that provider failure, retry, cancellation and Artifact Policy limits behave on the
         new path.
-    uncertainty: The cause of the stall is not known.
     theory: theory.md#product-memory
     code:
       - apps/transcription-dispatcher/src/providers.ts
@@ -578,17 +558,17 @@ outcomes:
   - id: observability_and_operations.failure_recovery
     title: Alerts fire and service recovers from failure
     area: observability_and_operations
-    state: unknown
+    state: in_progress
     summary: >-
-      Production passes health checks, but no alert route has been tested and no failure has been
-      injected and recovered from.
+      Production alerts for Recording, Export, Transcript, API and Sync failures reach Discord, and
+      a test alert arrived. No failure has been injected and recovered from.
     priority: P1
     size: M
     remaining:
       - >-
         Inject one scoped service failure, confirm the alert and public status change, then recover
         and confirm healthy state.
-    uncertainty: No alert delivery or failure drill has been observed.
+    uncertainty: No failure drill has been observed.
     theory: theory.md#product-memory
     code:
       - infrastructure/observability

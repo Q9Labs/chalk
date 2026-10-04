@@ -110,11 +110,15 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
 
 ## Recording
 
-11. **Download a Recording as MP4** (Partly working · size S)
+11. **Download a Recording as MP4** (Partly working · size M)
     Export renders an MP4 on request with the native compositor on an s-1vcpu-1gb worker
-    in production. The file declares 30 fps while it plays at 15, and its first frame
-    shows placeholders before the first video keyframes arrive.
-    - Ship the 15 fps label and the first-frame fix.
+    in production. When a camera's video is damaged, the Export holds the last good
+    frame and is marked degraded instead of failing. A camera can still freeze for
+    several seconds after its quality changes.
+    Open question: The freeze may be the wait for the next keyframe after a quality
+    change. This is not measured.
+    - Find why a camera freezes after a quality change, and shorten the freeze.
+    - Report Capture's packet and repeat counts for each Recording in production.
     - Download one Export twice to confirm the second download reuses the file.
 
 12. **Long Recordings stay in sync** (Not started · size Unknown)
@@ -125,19 +129,7 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Handle sender clock divergence and pass a one-hour Recording.
     - Prove recorder restart continuity and TLS peer rejection on the managed hosts.
 
-13. **New Capture images boot in production** (Not started · size M)
-    Production Capture runs on an image from 2026-10-02 because every Capture image
-    built since then registers with the issuer but never asks for its certificate in the
-    fleet. The same image completes a signed bootstrap on an isolated node, so the cause
-    is in fleet provisioning.
-    Open question: The failure has not reproduced outside the production fleet.
-    - Keep a failing fleet node with its boot logs and creation payload before it is
-      deleted.
-    - Find and fix the cause, then move Capture to a current image.
-    - Make image qualification and releases fail unless a new worker completes a
-      fleet-style signed bootstrap and becomes ready.
-
-14. **Capture starts fast and costs little** (Partly working · size M)
+13. **Capture starts fast and costs little** (Partly working · size M)
     Capture runs on the lean Debian image on s-1vcpu-1gb. A cold worker is ready about
     46 seconds after record, and anything said before it is ready is missing from the
     Recording. Automatic Spaces pre-warm Capture when someone opens the Entrance. SFU
@@ -151,14 +143,14 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Experiment, only if UDP loss damages Recordings: compare Capture over TURN on TCP
       with UDP in one Recording. Cloudflare's SFU has no direct TCP receiver.
 
-15. **Scheduled Recordings in a real integration** (Partly working · size M · P1)
+14. **Scheduled Recordings in a real integration** (Partly working · size M · P1)
     Scheduled preparation works in production: the 2026-09-20 canary started from a
     ready preparation. No first-party integration uses it yet, and reschedule, cancel,
     no-show and expiry have not run live.
     - Use the contract in a first-party integration and exercise reschedule, cancel,
       no-show and expiry live.
 
-16. **Recordings and Transcripts on mobile** (Partly working · size M · P2)
+15. **Recordings and Transcripts on mobile** (Partly working · size M · P2)
     Mobile Participants with manageRecording can start and stop a Recording and see its
     status. There is no disclosure or consent step and no way to open the finished
     Recording or Transcript.
@@ -168,18 +160,18 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
 
 ## Transcription
 
-17. **Recordings produce a Transcript in production** (Partly working · size M · P1)
-    The transcript-first pipeline and the direct DeepInfra adapter are built, and the
-    production dispatcher is healthy. No production Recording has produced a Transcript
-    yet: on 2026-09-23 audio preparation stalled after capture.
-    Open question: The cause of the stall is not known.
-    - Find and fix the audio preparation stall.
-    - Produce a Transcript from a production Recording and check that only the right
-      Tenant and Participants can read it.
+16. **Recordings produce a Transcript in production** (Partly working · size M · P1)
+    Production Recordings produce a Transcript through the direct DeepInfra adapter, and
+    new Tenants and Spaces allow on-demand Transcripts by default. Tenants and Spaces
+    created before that default still have Transcripts disabled.
+    - Allow on-demand Transcripts for the existing Tenants and Spaces that should have
+      them.
+    - Check that only the right Tenant and Participants can read a production
+      Transcript.
     - Check that provider failure, retry, cancellation and Artifact Policy limits behave
       on the new path.
 
-18. **Transcripts for mixed-language Recordings** (Not started · size M · P2)
+17. **Transcripts for mixed-language Recordings** (Not started · size M · P2)
     Whisper expects one language per Recording, so speech that switches between
     languages, such as Urdu and English or Arabic and English, transcribes badly. The
     hard part is finding a model that handles it at an acceptable cost.
@@ -189,7 +181,7 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
       automatic routing that sends mixed-language audio to it and single-language audio
       to the cheaper model.
 
-19. **Live captions in a Space** (Not started · size L · P3)
+18. **Live captions in a Space** (Not started · size L · P3)
     Captions are off in Chalk and no live caption path exists. The Transcript panel only
     shows finished Transcripts.
     - Deliver live partial and final captions with consent, capability checks and
@@ -198,7 +190,7 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
 
 ## Security and compliance
 
-20. **Tenant-set chat retention** (Not started · size M · P2)
+19. **Tenant-set chat retention** (Not started · size M · P2)
     Tenants can set retention for Recordings and Transcripts but not for chat, and Sync
     has no chat purge.
     - Add chat retention to Tenant policy and purge expired messages and their
@@ -210,7 +202,7 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
 
 ## SDK and embedding
 
-21. **Published packages work in a fresh app** (Unclear · size S · P1)
+20. **Published packages work in a fresh app** (Unclear · size S · P1)
     A packed-archive browser test covers recovery and attachments on three browsers
     against mocked signaling. Type consumption, a React Native release app and the
     server-only package are unchecked.
@@ -220,7 +212,7 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Build a React Native release app from the packages and check that server-only
       imports pull in no browser or native code.
 
-22. **Same Chalk props on web and mobile** (Not started · size M · P1)
+21. **Same Chalk props on web and mobile** (Not started · size M · P1)
     Native Chalk lacks the recording and sounds features and four web props, and it
     names its feedback prop differently. The hooks already match.
     - Add the missing native features and props, or document each as an OS or rendering
@@ -228,13 +220,13 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Unify the feedback prop and add a type check that fails when the two prop types
       drift.
 
-23. **SDK app name in server telemetry** (Not started · size S · P1)
+22. **SDK app name in server telemetry** (Not started · size S · P1)
     No appName option exists on the client, SpaceClient, Chalk or AccessGrant request.
     - Add appName with the bounds from theory.md and carry it on HTTP and WebSocket
       requests into spans and logs.
     - Check omitted and oversized values and that appName never affects authorization.
 
-24. **Every public endpoint is in the generated client** (Unclear · size S · P1)
+23. **Every public endpoint is in the generated client** (Unclear · size S · P1)
     OpenAPI and the generated client cover integrations, API keys, status and
     attachments, but nobody has compared every public route against them.
     Open question: No full route comparison has been made.
@@ -243,27 +235,27 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Call one Tenant-scoped integration route and one attachment route through the
       public client.
 
-25. **Swift SDK** (Not started · size XL · P2)
+24. **Swift SDK** (Not started · size XL · P2)
     Only TypeScript SDKs exist.
     - Define the supported surface, generate or write the package, and ship it with an
       independent consumer build and contract fixtures.
 
-26. **Kotlin SDK** (Not started · size XL · P2)
+25. **Kotlin SDK** (Not started · size XL · P2)
     Only TypeScript SDKs exist.
     - Define the supported surface, generate or write the package, and ship it with an
       independent consumer build and contract fixtures.
 
-27. **Python SDK** (Not started · size XL · P2)
+26. **Python SDK** (Not started · size XL · P2)
     Only TypeScript SDKs exist.
     - Define the supported surface, generate or write the package, and ship it with an
       independent consumer build and contract fixtures.
 
-28. **Go SDK** (Not started · size XL · P2)
+27. **Go SDK** (Not started · size XL · P2)
     Only TypeScript SDKs exist.
     - Define the supported surface, generate or write the package, and ship it with an
       independent consumer build and contract fixtures.
 
-29. **Embed a Space in an iframe** (Not started · size L · P2)
+28. **Embed a Space in an iframe** (Not started · size L · P2)
     The SDK can be embedded, but there is no supported iframe contract for origins,
     access handoff or lifecycle messages.
     - Define the iframe entry, access handoff, allowed origins and lifecycle messages.
@@ -272,7 +264,7 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
 
 ## Integrations and webhooks
 
-30. **Connect third-party apps in the dashboard** (Not started · size M · P2)
+29. **Connect third-party apps in the dashboard** (Not started · size M · P2)
     The API can connect a Tenant to third-party apps through Composio, such as Gmail,
     Google Calendar, Drive, Docs and GitHub. The dashboard has no page to browse,
     connect or disconnect them.
@@ -281,7 +273,7 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Require member permission and recent authentication for secrets, and show the
       audit records.
 
-31. **Webhooks deliver and recover on a deployment** (Unclear · size S · P1)
+30. **Webhooks deliver and recover on a deployment** (Unclear · size S · P1)
     Signing, rotation and idempotency are implemented and unit-tested, but no deployed
     delivery or outage recovery has been observed.
     Open question: No deployed delivery has been observed.
@@ -291,21 +283,21 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
 
 ## Operations
 
-32. **Alerts fire and service recovers from failure** (Unclear · size M · P1)
-    Production passes health checks, but no alert route has been tested and no failure
-    has been injected and recovered from.
-    Open question: No alert delivery or failure drill has been observed.
+31. **Alerts fire and service recovers from failure** (Partly working · size M · P1)
+    Production alerts for Recording, Export, Transcript, API and Sync failures reach
+    Discord, and a test alert arrived. No failure has been injected and recovered from.
+    Open question: No failure drill has been observed.
     - Inject one scoped service failure, confirm the alert and public status change,
       then recover and confirm healthy state.
 
-33. **Customer-operated app tier runs** (Unclear · size M · P1)
+32. **Customer-operated app tier runs** (Unclear · size M · P1)
     The API, Sync and Postgres are meant to run on a customer app tier, but no
     self-hosted revision has been deployed and validated.
     Open question: No self-hosted deployment has been observed.
     - Deploy a named revision on a customer-style app tier with a configured media
       adapter and pass validate-runtime and a web join.
 
-34. **Join an Episode faster** (Not started · size M · P1)
+33. **Join an Episode faster** (Not started · size M · P1)
     Seeing the other Participant takes about 4 seconds after clicking join. About 2
     seconds of that is Cloudflare SFU track setup and the browser handshake, which
     Chalk's code can't shorten; only starting them earlier can.
@@ -318,7 +310,7 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Consider pushing chat message bodies over Sync instead of a head signal plus a
       fetch.
 
-35. **Tests and gate catch real bugs** (Not started · size M)
+34. **Tests and gate catch real bugs** (Not started · size M)
     The gate passed while real media and reconnect bugs shipped, because tests fake
     Cloudflare SFU and the gate skips server checks for SDK-only changes. Many tests
     kill no mutation.
@@ -332,7 +324,7 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
 
 ## Other products
 
-36. **Run several local stacks at once** (Not started · size S)
+35. **Run several local stacks at once** (Not started · size S)
     The local stack allows one runtime per machine, fixes its container and database
     names, and its stop command fails its own ownership check, so parallel agents
     collide.
@@ -340,12 +332,12 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Make stopping the stack work after a rebase or a supervisor restart.
     - Stop the local unused-code check from failing on untracked scratchpad scripts.
 
-37. **Desktop app** (Not started · size XL · P3)
+36. **Desktop app** (Not started · size XL · P3)
     No desktop app exists; the browser is the desktop surface.
     - Decide scope and distribution, then build with native integration, updates and a
       release proof.
 
-38. **Bring your own agents** (Unclear · size XL · P3)
+37. **Bring your own agents** (Unclear · size XL · P3)
     People bring their own agents into a Space, as an assistant beside them or acting on
     their behalf. Agents can already join as Participants, but nothing lets a person
     bring, authorize or direct one.
@@ -354,7 +346,7 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
       how others see it.
     - Build the agent join, authority and consent flow on the existing Agent identity.
 
-39. **Chalk MCP server** (Not started · size L · P3)
+38. **Chalk MCP server** (Not started · size L · P3)
     Chalk has no MCP server, so AI tools cannot use Chalk directly.
     - Decide which Space, Episode, Recording and Transcript operations to expose, then
       ship an MCP server on the public API.
