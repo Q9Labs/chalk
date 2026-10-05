@@ -211,6 +211,7 @@ describe("Cloudflare SFU HTTP signaling", () => {
       await vi.advanceTimersByTimeAsync(500);
       expect(failingAgain).toHaveBeenCalledTimes(2);
       harness.peerConnectionFactory.mockImplementationOnce(() => {
+        expect(harness.client.getSnapshot().connection.phase).toBe("recovering");
         throw new Error("peer creation failed after disposal");
       });
       await expect(harness.client.restart(bootstrap("connection-2"))).rejects.toThrow("peer creation failed");
