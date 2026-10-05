@@ -4,31 +4,44 @@ import type { ParticipantMediaAccess } from "../access/grant";
 import { CloudflareRTKClient, type CloudflareRTKConnection } from "./rtk";
 
 describe("RealtimeKit recovery ownership", () => {
-  it.each(["enable", "disable"] as const)("settles abandoned %s and cleanup when its generation is replaced", async (operation) => {
-    const { initial, client, target } = await preparedSource("microphone", operation === "disable");
-    let release = () => {};
-    const pending = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const enable = vi.spyOn(initial.self, operation === "enable" ? "enableAudio" : "disableAudio").mockImplementationOnce(() => pending);
-    const enabling = client.setLocalPublicationTarget({ ...target, enabled: operation === "enable" });
-    await vi.waitFor(() => expect(enable).toHaveBeenCalledOnce());
-    let cleared = false;
-    const clearing = client.clearPreparedLocalTrack("microphone").then(() => {
-      cleared = true;
-    });
-    try {
-      if (operation === "enable") await vi.waitFor(() => expect(cleared).toBe(true));
-      await client.restart(access("replacement"));
-      await vi.waitFor(() => expect(cleared).toBe(true));
-      expect(await enabling).toMatchObject({ outcome: "retryable_failure" });
-      expect(client.getSnapshot().localTracks).toEqual([]);
-    } finally {
-      release();
-      await Promise.allSettled([enabling, clearing]);
-      client.stop();
-    }
-  });
+  it.each((["microphone", "camera", "screen"] as const).flatMap((source) => (source === "screen" ? ["enable", "disable"] : ["enable", "disable", "start"]).flatMap((operation) => ["clear", "restart", "stop"].map((retire) => ({ source, operation, retire })))))(
+    "settles $source $operation after $retire without leaving a late publication",
+    async ({ source, operation, retire }) => {
+      const { initial, client, target } = await preparedSource(source, operation === "disable", operation !== "start");
+      let release = () => {};
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const enableMethod = source === "microphone" ? "enableAudio" : source === "camera" ? "enableVideo" : "enableScreenShare";
+      const disableMethod = source === "microphone" ? "disableAudio" : source === "camera" ? "disableVideo" : "disableScreenShare";
+      const disable = vi.spyOn(initial.self, disableMethod);
+      const enable = vi.spyOn(initial.self, operation === "disable" ? disableMethod : enableMethod).mockImplementationOnce(() => pending);
+      const enabling = operation === "start" ? client.start({ getTracks: () => [] } as unknown as MediaStream).then(() => ({ outcome: "started" })) : client.setLocalPublicationTarget({ ...target, enabled: operation === "enable" });
+      await vi.waitFor(() => expect(enable).toHaveBeenCalledOnce());
+      let cleared = false;
+      const clearing = client.clearPreparedLocalTrack(source).then(() => {
+        cleared = true;
+      });
+      try {
+        if (operation !== "disable") await vi.waitFor(() => expect(cleared).toBe(true));
+        if (retire === "restart") await client.restart(access("replacement"));
+        if (retire === "stop") client.stop();
+        release();
+        await vi.waitFor(() => expect(cleared).toBe(true));
+        expect(await enabling).toMatchObject({ outcome: operation === "start" ? "started" : operation === "disable" && retire === "clear" ? "confirmed" : "retryable_failure" });
+        await vi.waitFor(() => expect(disable).toHaveBeenCalled());
+        if (retire === "stop") expect(client.getSnapshot().connection.phase).toBe("stopped");
+        else {
+          expect(client.getSnapshot().localTracks).toEqual([]);
+          expect(client.getSnapshot().connection.phase).toBe("live");
+        }
+      } finally {
+        release();
+        await Promise.allSettled([enabling, clearing]);
+        client.stop();
+      }
+    },
+  );
   it.each(["disable", "clear"] as const)("applies %s truthfully after concurrent recovery", async (intent) => {
     const source = "microphone";
     const { initial, replacement, client, target } = await preparedSource(source);
@@ -58,7 +71,7 @@ describe("RealtimeKit recovery ownership", () => {
   });
 
   it.each(["microphone", "camera", "screen"] as const)("keeps a confirmed %s mute off when restoration finishes later", async (source) => {
-    const { initial, replacement, client, track, target } = await preparedSource(source);
+    const { replacement, client, track, target } = await preparedSource(source);
     let release = () => {};
     const pending = new Promise<void>((resolve) => {
       release = resolve;
@@ -125,11 +138,11 @@ function access(token: string): ParticipantMediaAccess {
   return { provider: "cloudflare_rtk", token, expiresAt: "2030-01-01T00:00:00Z", clientPayload: { token, providerSubject: "participant" } };
 }
 
-async function preparedSource(source: MediaSource, enabled = true) {
+async function preparedSource(source: MediaSource, enabled = true, started = true) {
   const initial = connection();
   const replacement = connection();
   const client = new CloudflareRTKClient({ authToken: "initial", participantId: "participant", clientFactory: async ({ authToken }) => (authToken === "initial" ? initial : replacement) });
-  await client.start({ getTracks: () => [] } as unknown as MediaStream);
+  if (started) await client.start({ getTracks: () => [] } as unknown as MediaStream);
   const track = Object.assign(new EventTarget(), { kind: source === "microphone" ? "audio" : "video", enabled: true, stop: () => {} });
   client.prepareLocalTrack(source, track as unknown as MediaStreamTrack);
   const target = { operationId: "privacy", participantId: "participant", source, enabled: true };

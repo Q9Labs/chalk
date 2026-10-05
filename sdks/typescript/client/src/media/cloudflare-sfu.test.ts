@@ -210,6 +210,13 @@ describe("Cloudflare SFU HTTP signaling", () => {
       expect(failingAgain).toHaveBeenCalledTimes(1);
       await vi.advanceTimersByTimeAsync(500);
       expect(failingAgain).toHaveBeenCalledTimes(2);
+      harness.peerConnectionFactory.mockImplementationOnce(() => {
+        throw new Error("peer creation failed after disposal");
+      });
+      await expect(harness.client.restart(bootstrap("connection-2"))).rejects.toThrow("peer creation failed");
+      expect(harness.client.getSnapshot().connection.phase).toBe("failed");
+      await harness.client.restart(bootstrap("connection-3"));
+      expect(harness.client.getSnapshot().connection.phase).toBe("live");
     } finally {
       harness.client.stop();
       vi.restoreAllMocks();
@@ -1309,6 +1316,11 @@ function createHarness(
 ) {
   const peers: FakePeerConnection[] = [];
   const transport = new FakeTransport(() => peers.at(-1));
+  const peerConnectionFactory = vi.fn(() => {
+    const peer = new FakePeerConnection(options.autoConnect ?? true);
+    peers.push(peer);
+    return peer as unknown as RTCPeerConnection;
+  });
   const client = new CloudflareSFUClient({
     bootstrap: bootstrap("connection-1"),
     participantId: "participant-1",
@@ -1319,13 +1331,9 @@ function createHarness(
     pollIntervalMs: options.pollIntervalMs ?? 60_000,
     onError: options.onError,
     onScreenEnded: options.onScreenEnded,
-    peerConnectionFactory: () => {
-      const peer = new FakePeerConnection(options.autoConnect ?? true);
-      peers.push(peer);
-      return peer as unknown as RTCPeerConnection;
-    },
+    peerConnectionFactory,
   });
-  return { client, peers, transport };
+  return { client, peers, transport, peerConnectionFactory };
 }
 
 class FakeTransport implements CloudflareSFUSignalingTransport {

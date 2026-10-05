@@ -321,6 +321,7 @@ export class CloudflareRTKClient {
           });
         } catch (error) {
           if (!this.#isCurrentGeneration(generation)) return;
+          if (this.#localTracks.get(state.source) !== state) continue;
           throw error;
         }
       }
@@ -407,18 +408,24 @@ export class CloudflareRTKClient {
     const connection = this.#connection;
     const generation = this.#generation;
     if (!connection) throw new CloudflareRTKError("The RealtimeKit connection is not active", "media_stopped");
+    const disable = () => (state.source === "microphone" ? connection.self.disableAudio() : state.source === "camera" ? connection.self.disableVideo() : connection.self.disableScreenShare());
     if (state.source === "microphone") {
       if (enabled) await connection.self.enableAudio(state.track);
-      else await connection.self.disableAudio();
+      else await disable();
     } else if (state.source === "camera") {
       if (enabled) await connection.self.enableVideo(state.track);
-      else await connection.self.disableVideo();
+      else await disable();
     } else {
       this.#screenDisableRequested = !enabled;
       if (enabled) await connection.self.enableScreenShare();
-      else await connection.self.disableScreenShare();
+      else await disable();
     }
-    this.#requireCurrentSource(state, connection, generation);
+    try {
+      this.#requireCurrentSource(state, connection, generation);
+    } catch (error) {
+      if (enabled) await disable();
+      throw error;
+    }
     state.enabled = enabled;
     state.track.enabled = enabled;
     this.#publishSnapshot();

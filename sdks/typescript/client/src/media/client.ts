@@ -378,14 +378,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (options.bootstrap.connectionId !== this.#bootstrap.connectionId) this.#started = false;
     this.#bootstrap = options.bootstrap;
     if (options.transport) this.#transport = options.transport;
-    this.#connection = this.#createPeerConnection(options.bootstrap);
-    this.#observeConnection(this.#connection, generation, connectionEpoch);
+    this.#rebuildPeerConnection(options.bootstrap, generation, connectionEpoch);
     for (const state of this.#localTracks.values()) {
       state.transceiver = null;
       state.enabled = false;
     }
     const enabled = [...this.#localTracks.values()].filter((state) => state.desiredEnabled && state.track.readyState !== "ended");
-    this.#setPhase("recovering", null);
     await this.#activatePreparedTracks(enabled, generation);
   }
 
@@ -1074,16 +1072,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#clearRemoteTracks();
     this.#cursor = null;
     this.#bootstrap = bootstrap;
-    this.#connection = this.#createPeerConnection(bootstrap);
+    this.#rebuildPeerConnection(bootstrap, generation, connectionEpoch);
     this.#retiredLocalConnection = null;
     this.#negotiatedGeneration = null;
-    this.#observeConnection(this.#connection, generation, connectionEpoch);
     for (const state of this.#localTracks.values()) {
       state.transceiver = null;
       state.enabled = false;
       state.providerPublicationId = null;
     }
-    this.#setPhase("recovering", null);
     this.remotePublicationsChanged();
   }
 
@@ -1112,7 +1108,18 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     return create({ iceServers: [{ urls: bootstrap.stunServer }], bundlePolicy: "max-bundle" });
   }
 
+  #rebuildPeerConnection(bootstrap: CloudflareSFUBootstrap, generation: number, connectionEpoch: number): void {
+    try {
+      this.#connection = this.#createPeerConnection(bootstrap);
+      this.#observeConnection(this.#connection, generation, connectionEpoch);
+    } catch (error) {
+      this.#setFailure(error, "media_failed");
+      throw error;
+    }
+  }
+
   #disposeConnection(stopSenders: boolean): void {
+    if (!stopSenders) this.#setPhase("recovering", null);
     this.#disposeConnectionObservation?.();
     this.#disposeConnectionObservation = undefined;
     if (stopSenders) {
