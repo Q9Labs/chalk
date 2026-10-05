@@ -164,6 +164,47 @@ describe("Cloudflare SFU HTTP signaling", () => {
 });
 
 describe("Cloudflare SFU client", () => {
+  it("detects a stalled receive direction while publishing still progresses and preserves desired camera on rebuild", async () => {
+    vi.useFakeTimers();
+    const onError = vi.fn();
+    const harness = createHarness({ onError });
+    try {
+      await harness.client.start(fakeStream(new FakeTrack("camera", "video")));
+      harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
+      await harness.client.refreshRemotePublications();
+      await vi.advanceTimersByTimeAsync(1_000);
+      const remote = harness.client.getSnapshot().remoteTracks[0];
+      if (!remote) throw new Error("Expected a remote camera");
+      const peer = harness.peers[0];
+      if (!peer) throw new Error("Expected a peer");
+      peer.measureFlow = true;
+      await vi.advanceTimersByTimeAsync(1_000);
+      peer.stalledTrackIds.add(remote.track.id);
+      await vi.advanceTimersByTimeAsync(4_000);
+      expect(harness.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "media_failed", recoverable: true } });
+      expect(onError.mock.calls.some(([error]) => error instanceof Error && error.message === "Media subscribe video stopped flowing")).toBe(true);
+      await harness.client.restart(bootstrap("connection-2"));
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(harness.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, localTracks: [{ source: "camera", enabled: true }] });
+    } finally {
+      harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+  it("retries a failed publication poll promptly instead of waiting for the idle poll interval", async () => {
+    vi.useFakeTimers();
+    const harness = createHarness();
+    const list = vi.spyOn(harness.transport, "listPublications").mockRejectedValueOnce(new CloudflareSFUError("temporary discovery failure", "signaling_failed"));
+    try {
+      await harness.client.start(fakeStream());
+      await vi.advanceTimersByTimeAsync(1_001);
+      expect(list).toHaveBeenCalledTimes(2);
+    } finally {
+      harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
   it("configures only camera with full and half-resolution encodings before the offer", async () => {
     const harness = createHarness();
     await harness.client.start(fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
@@ -1479,10 +1520,27 @@ class FakePeerConnection extends EventTarget {
   availableOutgoingBitrate: number | undefined;
   refuseSenderParameters = false;
 
-  getStats(): Promise<RTCStatsReport> {
+  measureFlow = false;
+  readonly stalledTrackIds = new Set<string>();
+  readonly flowProgress = new Map<string, number>();
+
+  getStats(selector?: MediaStreamTrack): Promise<RTCStatsReport> {
     const stat: RTCStats = { id: "candidate-pair", timestamp: 0, type: "candidate-pair" };
     Object.assign(stat, { selected: true, state: "succeeded", availableOutgoingBitrate: this.availableOutgoingBitrate });
     const stats = new Map<string, RTCStats>([["candidate-pair", stat]]);
+    if (this.measureFlow) {
+      const sources = selector
+        ? [{ track: selector, type: this.getSenders().some((sender) => sender.track === selector) ? "outbound-rtp" : "inbound-rtp" }]
+        : this.#transceivers.flatMap((transceiver) => [...(transceiver.sender.track ? [{ track: transceiver.sender.track, type: "outbound-rtp" }] : []), ...(transceiver.receiver.track ? [{ track: transceiver.receiver.track, type: "inbound-rtp" }] : [])]);
+      for (const { track, type } of sources) {
+        if (selector && selector !== track) continue;
+        const count = (this.flowProgress.get(track.id) ?? 1) + (this.stalledTrackIds.has(track.id) ? 0 : 1);
+        this.flowProgress.set(track.id, count);
+        const stat: RTCStats = { id: track.id, timestamp: 0, type };
+        Object.assign(stat, { kind: track.kind, packetsSent: count, packetsReceived: count, framesDecoded: count });
+        stats.set(track.id, stat);
+      }
+    }
     return Promise.resolve(stats);
   }
 

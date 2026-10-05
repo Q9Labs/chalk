@@ -41,6 +41,7 @@ const MAX_PROJECTION_EVENT_EVIDENCE = 256;
 const CLIENT_RESTART_CLOSE_CODE = 4000;
 const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5_000;
+const HEARTBEAT_INTERVAL_MS = 1_000;
 const FAST_RECONNECT_ATTEMPTS = 8;
 const NOTICE_PROBE_INTERVAL_MS = 500;
 const NOTICE_SILENCE_MS = 750;
@@ -95,6 +96,7 @@ export class V1SyncClient implements V1CollaborationClient {
 
   constructor(options: V1SyncClientOptions) {
     assertV1Url(options.url);
+    if (options.commandTimeoutMs !== undefined && (!Number.isSafeInteger(options.commandTimeoutMs) || options.commandTimeoutMs < 1 || options.commandTimeoutMs > 60_000)) throw new TypeError("Command timeout must be an integer between 1 and 60000 milliseconds");
     this.#options = options;
     this.#commandScheduler = new V1CommandScheduler({
       store: options.pendingStore ?? new InMemoryV1PendingTargetStore(),
@@ -103,6 +105,7 @@ export class V1SyncClient implements V1CollaborationClient {
       maxPendingBytes: options.maxPendingBytes,
       maxPendingAgeMs: options.maxPendingAgeMs,
       maxOperationPendingAgeMs: options.maxOperationPendingAgeMs,
+      commandTimeoutMs: options.commandTimeoutMs,
       retryDelayMs: options.retryDelayMs,
       clock: () => this.#clock(),
       isStarted: () => this.#started,
@@ -126,6 +129,8 @@ export class V1SyncClient implements V1CollaborationClient {
       request: options.collaboration,
       requestIds: options.requestIds,
       maxPendingRequests: options.maxPendingCollaborationRequests,
+      commandTimeoutMs: options.commandTimeoutMs,
+      clock: () => this.#clock(),
       isLive: () => this.#phase.phase === "live",
       send: (frame) => this.#send(frame),
       stateChanged: () => this.#emit(),
@@ -402,6 +407,7 @@ export class V1SyncClient implements V1CollaborationClient {
         }
       }
       await this.#handleFrame(frame);
+      if (socket === this.#socket) this.#missedHeartbeats = 0;
     } catch {
       this.#recover("invalid_frame");
     }
@@ -795,12 +801,12 @@ export class V1SyncClient implements V1CollaborationClient {
       if (this.#phase.phase !== "live") return;
       this.#missedHeartbeats += 1;
       if (this.#missedHeartbeats > 2) {
-        this.#socket?.close(CLIENT_RESTART_CLOSE_CODE, "heartbeat timeout");
+        this.#recover("heartbeat timeout");
         return;
       }
       this.#send({ type: "ping" });
       this.#startHeartbeat();
-    }, 20_000);
+    }, HEARTBEAT_INTERVAL_MS);
   }
 
   #clearHeartbeat(): void {

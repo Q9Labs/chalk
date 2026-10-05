@@ -180,7 +180,7 @@ async function verifyRecovery(alice, bob, baseURL) {
 
 async function forceAndWaitForRecovery(page, url) {
   await post(url);
-  await waitFor(page, (snapshot) => snapshot.state === "reconnecting" || snapshot.state === "live");
+  await waitForState(page, "reconnecting");
   await waitForState(page, "live");
 }
 

@@ -2,6 +2,7 @@ import { recordReconnect, traceReconnect } from "../telemetry/reconnect";
 import type { ClientMediaPlane, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaSource } from "./plane";
 import { CameraUplinkPolicy, cameraUplinkBitrate } from "./camera-uplink";
 import { subscribeSnapshot } from "./observers";
+import { MediaFlowWatchdog } from "./flow-watchdog";
 import { resolveMediaTarget } from "./target";
 import { comparePublicationCursor, parseCloudflareSFUPublicationID, publicationKey, requireDescription, requireSFUDescription, validatePublicationSnapshot, waitFor } from "./tracks";
 import { matchRemotePullTracks } from "./remote-track-response";
@@ -87,6 +88,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #reusableLocalTransceivers = new Map<MediaSource, RTCRtpTransceiver>();
   readonly #reusableLocalPublicationIds = new Map<MediaSource, string>();
   readonly #remoteTracks = new Map<string, CloudflareSFURemoteTrack>();
+  readonly #expectedRemotePublications = new Map<string, CloudflareSFUPublication>();
+  readonly #flowWatchdog = new MediaFlowWatchdog();
+  #flowTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   #bootstrap: CloudflareSFUBootstrap;
   #connection: RTCPeerConnection;
   #disposeConnectionObservation: (() => void) | undefined;
@@ -358,6 +362,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#polling = false;
     this.#pollAfterCurrent = false;
     this.#clearPoll();
+    this.#clearFlowWatch();
+    this.#expectedRemotePublications.clear();
     this.#remotePullRetryAfter.clear();
     this.#disposeConnection(false);
     this.#reusableLocalTransceivers.clear();
@@ -389,6 +395,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#started = true;
       this.#setPhase("live", null);
       this.#schedulePoll(0);
+      this.#scheduleFlowWatch();
     } catch (error) {
       if (generation === this.#generation && !this.#stopped) this.#setFailure(error, "media_failed");
       throw error;
@@ -401,6 +408,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#generation++;
     this.#connectionEpoch++;
     this.#clearPoll();
+    this.#clearFlowWatch();
+    this.#expectedRemotePublications.clear();
     this.#remotePullRetryAfter.clear();
     this.#polling = false;
     this.#pollAfterCurrent = false;
@@ -655,6 +664,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (ordering === "stale" || (ordering === "same" && !this.#remotePullIncomplete)) return;
 
     const desired = this.#desiredRemotePublications(authoritative, cursor);
+    this.#expectedRemotePublications.clear();
+    for (const [key, publication] of desired) this.#expectedRemotePublications.set(key, publication);
     const toPull = this.#pendingRemotePulls(desired);
     const pulled = await this.#pullWithRecovery(toPull, cursor, generation);
     if (pulled === null) return;
@@ -873,6 +884,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#generation++;
     this.#connectionEpoch++;
     this.#clearPoll();
+    this.#clearFlowWatch();
+    this.#expectedRemotePublications.clear();
     this.#polling = false;
     this.#disposeConnection(false);
     this.#setFailure(error, "media_failed");
@@ -1155,12 +1168,15 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         this.#schedulePoll();
         return;
       }
+      let nextDelay = this.#pollIntervalMs;
       try {
         await this.refreshRemotePublications();
+        if (this.#remotePullIncomplete) nextDelay = 750;
       } catch {
-        // Remote discovery reports its own operation-scoped error and retries on the next poll.
+        // Discovery reports its operation-scoped error; retry promptly after transient failure.
+        nextDelay = this.#remotePullIncomplete ? 750 : 500 + Math.random() * 500;
       } finally {
-        this.#schedulePoll(this.#remotePullIncomplete ? 750 : this.#pollIntervalMs);
+        this.#schedulePoll(nextDelay);
       }
     }, delayMs);
   }
@@ -1168,6 +1184,59 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #clearPoll(): void {
     if (this.#pollTimer !== undefined) globalThis.clearTimeout(this.#pollTimer);
     this.#pollTimer = undefined;
+  }
+
+  #scheduleFlowWatch(): void {
+    if (this.#stopped || !this.#started || this.#snapshot.connection.phase === "failed" || this.#flowTimer !== undefined) return;
+    this.#flowTimer = globalThis.setTimeout(async () => {
+      this.#flowTimer = undefined;
+      const generation = this.#generation;
+      const connectionEpoch = this.#connectionEpoch;
+      try {
+        if (this.#flowWatchPaused()) {
+          this.#flowWatchdog.clear();
+          return;
+        }
+        await this.#checkMediaFlow(generation, connectionEpoch);
+      } catch (error) {
+        if (!this.#stopped && generation === this.#generation && connectionEpoch === this.#connectionEpoch) this.#reportError(error);
+      } finally {
+        if (generation === this.#generation) this.#scheduleFlowWatch();
+      }
+    }, 1_000);
+  }
+
+  #flowWatchPaused(): boolean {
+    return this.#snapshot.connection.phase === "failed" || !connectionIsLive(this.#connection) || (typeof document !== "undefined" && document.visibilityState === "hidden");
+  }
+
+  #flowSources() {
+    return [
+      ...[...this.#localTracks.values()].filter((state) => state.source !== "screen" && state.enabled && state.desiredEnabled && state.track.enabled).map((state) => ({ key: `publish:${state.source}`, direction: "publish" as const, track: state.track, kind: state.track.kind })),
+      ...[...this.#expectedRemotePublications]
+        .filter(([, publication]) => publication.source !== "screen")
+        .map(([key, publication]) => ({ key: `subscribe:${publication.publicationId}`, direction: "subscribe" as const, track: this.#remoteTracks.get(key)?.track ?? null, kind: publication.source === "microphone" ? "audio" : "video" })),
+    ];
+  }
+
+  async #checkMediaFlow(generation: number, connectionEpoch: number): Promise<void> {
+    const sources = this.#flowSources();
+    this.#flowWatchdog.retain(new Set(sources.map((source) => source.key)));
+    for (const source of sources) {
+      const kind = source.kind;
+      const report = source.track ? await this.#connection.getStats(source.track) : null;
+      if (this.#stopped || generation !== this.#generation || connectionEpoch !== this.#connectionEpoch) return;
+      if (this.#flowWatchdog.observe(source.key, report ? mediaFlowProgress(report, source.direction, kind) : 0, Date.now())) {
+        this.#setFailure(new CloudflareSFUError(`Media ${source.direction} ${kind} stopped flowing`, "media_failed"), "media_failed");
+        return;
+      }
+    }
+  }
+
+  #clearFlowWatch(): void {
+    if (this.#flowTimer !== undefined) globalThis.clearTimeout(this.#flowTimer);
+    this.#flowTimer = undefined;
+    this.#flowWatchdog.clear();
   }
 
   #projectLocalPublications(): readonly MediaPublication[] {
@@ -1214,6 +1283,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
 
   #setFailure(error: unknown, fallback: CloudflareSFUFailureCode): void {
+    this.#clearFlowWatch();
     const code = error instanceof CloudflareSFUError ? error.code : fallback;
     this.#publishSnapshot("failed", { code, recoverable: code !== "invalid_bootstrap" && code !== "invalid_target" && code !== "invalid_publication" });
     this.#reportError(error);
@@ -1467,4 +1537,13 @@ function recoveryTrafficCount(entry: RTCStats, direction: string, unit: "packet"
 
 function trafficStalled(progress: TrafficProgress, sample: TrafficSample): boolean {
   return sample.existed && !progress.stalled && sample.now - progress.lastProgress >= 1000 && (sample.unit === "packet" || progress.count > 0);
+}
+
+function mediaFlowProgress(report: RTCStatsReport, direction: "publish" | "subscribe", kind: string): number {
+  let progress = 0;
+  report.forEach((stat) => {
+    if (direction === "publish" && stat.type === "outbound-rtp") progress += rtcNumber(stat, "packetsSent") ?? 0;
+    if (direction === "subscribe" && stat.type === "inbound-rtp") progress += rtcNumber(stat, kind === "video" ? "framesDecoded" : "packetsReceived") ?? 0;
+  });
+  return progress;
 }

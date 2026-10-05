@@ -17,6 +17,48 @@ const projectionId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c24";
 const commandIds = Array.from({ length: 20 }, (_, index) => `018f2f65-2a77-7a44-8e9a-${(0x5b0b6f8d4d00 + index).toString(16)}`);
 
 describe("V1SyncClient", () => {
+  it("bounds a caller's durable action during disconnect while retaining its ID for receipt recovery", async () => {
+    const clock = new TestClock();
+    const store = new InMemoryV1PendingTargetStore();
+    const { client, socket } = await liveClient({ clock, pendingStore: store, commandTimeoutMs: 500 });
+    const target = client.setHandRaised(true, { commandId: commandIds[0] });
+    const rejected = expect(target).rejects.toMatchObject({ code: "command_timeout" });
+    await settle();
+    socket.close();
+    clock.advance(0);
+    await settle();
+    clock.advance(500);
+    await rejected;
+    expect(await store.load()).toMatchObject([{ commandId: commandIds[0] }]);
+    client.stop();
+  });
+
+  it("bounds an unconfirmed transient operation without waiting for disconnect", async () => {
+    const clock = new TestClock();
+    const { client, socket } = await liveClient({ clock, commandTimeoutMs: 500 });
+    try {
+      const rejected = expect(client.leave({ commandId: commandIds[0] })).rejects.toMatchObject({ code: "command_timeout" });
+      clock.advance(500);
+      await rejected;
+      expect(operationFrames(socket, commandIds[0])).toHaveLength(1);
+    } finally {
+      client.stop();
+    }
+  });
+
+  it("recovers a silent socket even when close never emits a close event", async () => {
+    const clock = new TestClock();
+    const { client, socket } = await liveClient({ clock });
+    socket.onclose = null;
+    try {
+      clock.advance(3_000);
+      expect(client.getSnapshot().connection.phase).toBe("connecting");
+      expect(socket.closeCalls).toContainEqual({ code: 4000, reason: "heartbeat timeout" });
+    } finally {
+      client.stop();
+    }
+  });
+
   it("round-trips approved frames and rejects aliases or unknown fields", () => {
     const command = {
       type: "command",
@@ -210,7 +252,7 @@ describe("V1SyncClient", () => {
     expect(client.getSnapshot().connection).toMatchObject({ phase: "live", noticeUnresponsive: true });
     expect(socket.closeCalls).toEqual([]);
     clock.advance(250);
-    expect(socket.frames().filter((frame) => frame.type === "ping")).toHaveLength(2);
+    expect(socket.frames().filter((frame) => frame.type === "ping")).toHaveLength(3);
     socket.receive({ type: "pong" });
     await settle();
     expect(client.getSnapshot().connection).toMatchObject({ phase: "live", noticeUnresponsive: false });
@@ -817,11 +859,11 @@ describe("V1SyncClient", () => {
 
   it("bounds self-media confirmation when the server never responds", async () => {
     const clock = new TestClock();
-    const { client, mediaPlane } = await liveClient({ clock });
+    const { client, socket, mediaPlane } = await liveClient({ clock });
     const result = client.setCameraEnabled(false, { requestId: commandIds[0] });
     const rejected = expect(result).rejects.toMatchObject({ code: "retry_exhausted" });
 
-    clock.advance(15_000);
+    await advanceConnectedClock(clock, socket, 15_000);
 
     await rejected;
     expect(mediaPlane.targets).toEqual([]);
@@ -832,12 +874,12 @@ describe("V1SyncClient", () => {
     const mediaPlane = new BlockingMediaPlane();
     const { client, socket } = await liveClient({ clock, mediaPlane });
     const result = client.setCameraEnabled(false, { requestId: commandIds[0] });
-    clock.advance(14_999);
+    await advanceConnectedClock(clock, socket, 14_999);
     socket.receive({ type: "live_target_result", operation_id: commandIds[0], name: "set_camera_enabled", outcome: "confirmed", error_code: null });
     await settle();
     expect(mediaPlane.targets).toHaveLength(1);
 
-    clock.advance(44_999);
+    await advanceConnectedClock(clock, socket, 44_999);
     expect(client.getSnapshot().localMedia.camera).toBe("requesting");
     const rejected = expect(result).rejects.toMatchObject({ code: "media_timeout" });
     clock.advance(1);
@@ -1104,7 +1146,7 @@ describe("V1SyncClient", () => {
     expect(operationFrames(socket, commandIds[0])).toHaveLength(3);
     clock.advance(1);
     await rejected;
-    clock.advance(10_000);
+    await advanceConnectedClock(clock, socket, 10_000);
     expect(operationFrames(socket, commandIds[0])).toHaveLength(3);
     void client.leave({ commandId: commandIds[1] }).catch(() => undefined);
     expect(operationFrames(socket, commandIds[1])).toHaveLength(1);
@@ -1219,6 +1261,16 @@ describe("V1SyncClient", () => {
 });
 
 describe("V1SyncClient collaboration_v1", () => {
+  it("bounds chat confirmation even while the transport still appears live without queueing a retry", async () => {
+    const clock = new TestClock();
+    const { client, socket } = await liveCollaborationClient({ clock, commandTimeoutMs: 500 });
+    const chat = client.sendChatMessage({ text: "uncertain delivery", clientMessageId: commandIds[1] });
+    const rejected = expect(chat).rejects.toMatchObject({ code: "command_timeout" });
+    clock.advance(500);
+    await rejected;
+    expect(socket.frames().filter((frame) => frame.type === "chat_send")).toHaveLength(1);
+    client.stop();
+  });
   it("negotiates the extension and maps reactions, attachments, reads, and pages", async () => {
     const { client, socket } = await liveCollaborationClient();
     expect(socket.frames()[0]).toMatchObject({
@@ -2044,4 +2096,14 @@ function snapshotWhen(client: V1SyncClient, predicate: (snapshot: V1EpisodeSnaps
 
 function operationFrames(socket: TestSocket, commandId: string): Record<string, unknown>[] {
   return socket.frames().filter((frame) => (frame.type === "operation" || frame.type === "command") && frame.command_id === commandId);
+}
+
+async function advanceConnectedClock(clock: TestClock, socket: TestSocket, milliseconds: number): Promise<void> {
+  for (let remaining = milliseconds; remaining > 0; ) {
+    const step = Math.min(500, remaining);
+    clock.advance(step);
+    socket.receive({ type: "pong" });
+    await settle();
+    remaining -= step;
+  }
 }
