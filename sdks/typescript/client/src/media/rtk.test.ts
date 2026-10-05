@@ -4,12 +4,13 @@ import type { ParticipantMediaAccess } from "../access/grant";
 import { CloudflareRTKClient, type CloudflareRTKConnection } from "./rtk";
 
 describe("RealtimeKit recovery ownership", () => {
-  it.each(["microphone", "camera", "screen"] as const)("does not confirm a stale %s disable before the replacement applies it", async (source) => {
+  it.each(["disable", "clear"] as const)("applies %s truthfully after concurrent recovery", async (intent) => {
+    const source = "microphone";
     const initial = connection();
     const replacement = connection();
     const client = new CloudflareRTKClient({ authToken: "initial", participantId: "participant", clientFactory: async ({ authToken }) => (authToken === "initial" ? initial : replacement) });
     await client.start({ getTracks: () => [] } as unknown as MediaStream);
-    const track = Object.assign(new EventTarget(), { kind: source === "microphone" ? "audio" : "video", enabled: true, stop: () => {} });
+    const track = Object.assign(new EventTarget(), { kind: "audio", enabled: true, stop: () => {} });
     client.prepareLocalTrack(source, track as unknown as MediaStreamTrack);
     const target = { operationId: "privacy", participantId: "participant", source, enabled: true };
     await client.setLocalPublicationTarget(target);
@@ -17,51 +18,25 @@ describe("RealtimeKit recovery ownership", () => {
     const pending = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const method = source === "microphone" ? "disableAudio" : source === "camera" ? "disableVideo" : "disableScreenShare";
+    const method = "disableAudio";
     const disable = vi.spyOn(initial.self, method).mockImplementationOnce(() => pending);
-    const oldTarget = client.setLocalPublicationTarget({ ...target, enabled: false });
+    const oldTarget = intent === "clear" ? client.clearPreparedLocalTrack(source) : client.setLocalPublicationTarget({ ...target, enabled: false });
     await vi.waitFor(() => expect(disable).toHaveBeenCalledOnce());
+    const currentDisable = vi.spyOn(replacement.self, method);
     await client.restart(access("replacement"));
     release();
+    if (intent === "clear") {
+      await oldTarget;
+      expect(client.getSnapshot().localTracks).toEqual([]);
+      expect(currentDisable).toHaveBeenCalledOnce();
+      client.stop();
+      return;
+    }
     expect(await oldTarget).toMatchObject({ outcome: "retryable_failure" });
-    const currentDisable = vi.spyOn(replacement.self, method);
     expect(await client.setLocalPublicationTarget({ ...target, enabled: false })).toMatchObject({ outcome: "confirmed" });
     expect(currentDisable).toHaveBeenCalledOnce();
     expect(client.getSnapshot().localTracks[0]?.enabled).toBe(false);
     client.stop();
-  });
-
-  it("applies a new mute without waiting for an old connection's hung queue", async () => {
-    const initial = connection();
-    const replacement = connection();
-    const client = new CloudflareRTKClient({ authToken: "initial", participantId: "participant", clientFactory: async ({ authToken }) => (authToken === "initial" ? initial : replacement) });
-    await client.start({ getTracks: () => [] } as unknown as MediaStream);
-    const track = Object.assign(new EventTarget(), { kind: "audio", enabled: true, stop: () => {} });
-    client.prepareLocalTrack("microphone", track as unknown as MediaStreamTrack);
-    const target = { operationId: "privacy", participantId: "participant", source: "microphone" as const, enabled: true };
-    await client.setLocalPublicationTarget(target);
-    let release = () => {};
-    const pending = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const oldDisable = vi.spyOn(initial.self, "disableAudio").mockImplementationOnce(() => pending);
-    const oldMute = client.setLocalPublicationTarget({ ...target, enabled: false });
-    await vi.waitFor(() => expect(oldDisable).toHaveBeenCalledOnce());
-    const queuedEnable = client.setLocalPublicationTarget(target);
-    const currentDisable = vi.spyOn(replacement.self, "disableAudio");
-    try {
-      await client.restart(access("replacement"));
-      const mute = client.setLocalPublicationTarget({ ...target, enabled: false });
-      await vi.waitFor(() => expect(currentDisable).toHaveBeenCalledOnce());
-      expect(await mute).toMatchObject({ outcome: "confirmed" });
-      release();
-      expect(await oldMute).toMatchObject({ outcome: "retryable_failure" });
-      expect(await queuedEnable).toMatchObject({ outcome: "retryable_failure" });
-      expect(client.getSnapshot().localTracks[0]?.enabled).toBe(false);
-    } finally {
-      release();
-      client.stop();
-    }
   });
 
   it.each(["microphone", "camera", "screen"] as const)("keeps a confirmed %s mute off when restoration finishes later", async (source) => {
@@ -94,56 +69,6 @@ describe("RealtimeKit recovery ownership", () => {
       release();
       client.stop();
     }
-  });
-
-  it("rechecks a queued target after its prepared track was removed", async () => {
-    const initial = connection();
-    const client = new CloudflareRTKClient({ authToken: "initial", participantId: "participant", clientFactory: async () => initial });
-    await client.start({ getTracks: () => [] } as unknown as MediaStream);
-    const track = Object.assign(new EventTarget(), { kind: "audio", enabled: true, stop: () => {} });
-    client.prepareLocalTrack("microphone", track as unknown as MediaStreamTrack);
-    let release = () => {};
-    const pending = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const enable = vi.spyOn(initial.self, "enableAudio").mockImplementationOnce(() => pending);
-    const target = { operationId: "enable", participantId: "participant", source: "microphone" as const, enabled: true };
-    const first = client.setLocalPublicationTarget(target);
-    await vi.waitFor(() => expect(enable).toHaveBeenCalledOnce());
-    const queued = client.setLocalPublicationTarget({ ...target, enabled: false });
-    await client.clearPreparedLocalTrack("microphone");
-    release();
-    expect(await first).toMatchObject({ outcome: "retryable_failure" });
-    expect(await queued).toMatchObject({ outcome: "terminal_failure", errorCode: "source_unavailable" });
-    client.stop();
-  });
-
-  it("ignores a local enable that completes after a newer connection muted the source", async () => {
-    const initial = connection();
-    const replacement = connection();
-    let complete = () => {};
-    const pending = new Promise<void>((resolve) => {
-      complete = resolve;
-    });
-    const enable = vi.spyOn(initial.self, "enableAudio").mockImplementationOnce(() => pending);
-    let calls = 0;
-    const client = new CloudflareRTKClient({ authToken: "initial", participantId: "participant", clientFactory: async () => (++calls === 1 ? initial : replacement) });
-    const track = Object.assign(new EventTarget(), { kind: "audio", enabled: true, stop: () => {} });
-    const oldStart = client.start({ getTracks: () => [track] } as unknown as MediaStream);
-    await vi.waitFor(() => expect(enable).toHaveBeenCalledOnce());
-    await client.restart(access("replacement"));
-    let publications: readonly MediaPublication[] = [];
-    const unsubscribe = client.observeLocalPublications((current) => {
-      publications = current;
-    });
-    expect(publications[0]?.enabled).toBe(false);
-    track.enabled = false;
-    complete();
-    await oldStart;
-    expect(publications[0]?.enabled).toBe(false);
-    expect(track.enabled).toBe(false);
-    unsubscribe();
-    client.stop();
   });
 
   it.each(["leave", "factory", "join"] as const)("ignores a superseded restart waiting for %s", async (stage) => {

@@ -164,12 +164,18 @@ export class CloudflareRTKClient {
   async clearPreparedLocalTrack(source: MediaSource): Promise<void> {
     const state = this.#localTracks.get(source);
     if (!state) return;
-    if (state.enabled) {
-      await this.#setSourceEnabled(state, false);
+    try {
+      await this.#queueSourceOperation(source, async () => {
+        if (this.#localTracks.get(source) !== state) return;
+        if (state.enabled) await this.#setSourceEnabled(state, false);
+        if (state.endedListener) state.track.removeEventListener("ended", state.endedListener);
+        this.#localTracks.delete(source);
+        this.#publishSnapshot();
+      });
+    } catch (error) {
+      if (!(error instanceof CloudflareRTKError) || error.code !== "stale_generation") throw error;
+      if (this.#localTracks.get(source) === state) await this.clearPreparedLocalTrack(source);
     }
-    if (state.endedListener) state.track.removeEventListener("ended", state.endedListener);
-    this.#localTracks.delete(source);
-    this.#publishSnapshot();
   }
 
   async start(localMedia: MediaStream): Promise<void> {

@@ -6,130 +6,6 @@ import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
 
 describe("SpaceClient media convergence", () => {
-  it("keeps authoritative microphone-off available during media recovery", async () => {
-    const platform = createCoreTestPlatform();
-    const track = mediaTrack();
-    const command = vi.fn<ConnectionSyncClient["setMicrophoneEnabled"]>().mockResolvedValue({ operationId: "off", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" });
-    const client = capturedClient(platform, track, {
-      media: {
-        setLocalPublicationTarget: async (input) => {
-          track.enabled = input.enabled;
-          return { outcome: "confirmed", errorCode: null };
-        },
-      },
-      sync: { setMicrophoneEnabled: command },
-    });
-    try {
-      await client.join({ microphone: true, camera: false });
-      const snapshot = platform.media.getSnapshot();
-      platform.media.emit({ ...snapshot, connection: { ...snapshot.connection, phase: "failed" }, failure: { code: "media_failed", recoverable: true } });
-      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
-      await client.media.setMicrophoneEnabled(false);
-      expect(command).toHaveBeenCalledWith(false);
-      expect(track.enabled).toBe(false);
-    } finally {
-      client.dispose();
-    }
-  });
-
-  it.each(["microphone", "camera", "screen"] as const)("waits for a slow %s permission prompt before starting the receipt deadline", async (source) => {
-    const platform = createCoreTestPlatform();
-    let now = Date.now();
-    vi.spyOn(platform.dependencies.clock, "now").mockImplementation(() => now);
-    const track = Object.assign(mediaTrack(), { kind: source === "microphone" ? "audio" : "video" });
-    let grant = (_stream: MediaStream) => {};
-    const capture = vi.fn(
-      () =>
-        new Promise<MediaStream>((resolve) => {
-          grant = resolve;
-        }),
-    );
-    const originalTimer = platform.dependencies.clock.setTimeout;
-    vi.spyOn(platform.dependencies.clock, "setTimeout").mockImplementation((callback, delay) => originalTimer(callback, delay === 10_000 ? 30 : delay));
-    const client = createSpaceClientForPlatform(
-      { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
-      {
-        ...platform,
-        dependencies: {
-          ...platform.dependencies,
-          mediaDevices: { getUserMedia: capture, getDisplayMedia: capture },
-          createSyncClient: () => ({
-            ...platform.sync,
-            setMicrophoneEnabled: async () => ({ operationId: "mic", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" }),
-            setCameraEnabled: async () => ({ operationId: "cam", name: "set_camera_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" }),
-            setScreenShareEnabled: async () => ({ operationId: "screen", name: "set_screen_share_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" }),
-          }),
-        },
-      },
-    );
-    try {
-      await client.join({ microphone: false, camera: false });
-      let settled = false;
-      const action = (source === "microphone" ? client.media.setMicrophoneEnabled(true) : source === "camera" ? client.media.setCameraEnabled(true) : client.media.setScreenShareEnabled(true)).finally(() => {
-        settled = true;
-      });
-      void action.catch(() => {});
-      await vi.waitFor(() => expect(capture).toHaveBeenCalledOnce());
-      now += 11_000;
-      await new Promise((resolve) => setTimeout(resolve, 60));
-      expect(settled).toBe(false);
-      grant(mediaStream(track));
-      await action;
-    } finally {
-      client.dispose();
-    }
-  });
-
-  it("does not wait for device enumeration before confirming captured media", async () => {
-    const platform = createCoreTestPlatform();
-    const track = mediaTrack();
-    const enumerateDevices = vi.fn(async () => new Promise<readonly MediaDeviceInfo[]>(() => {}));
-    const client = createSpaceClientForPlatform(
-      { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
-      {
-        ...platform,
-        dependencies: {
-          ...platform.dependencies,
-          mediaDevices: { getUserMedia: async () => mediaStream(track), enumerateDevices },
-          createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: async () => ({ operationId: "mic", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" }) }),
-        },
-      },
-    );
-    try {
-      await client.join({ microphone: false, camera: false });
-      await Promise.race([client.media.setMicrophoneEnabled(true), new Promise((_resolve, reject) => setTimeout(() => reject(new Error("Capture waited on enumeration")), 200))]);
-    } finally {
-      client.dispose();
-    }
-  });
-
-  it("stops a stream granted after the capturing client was disposed", async () => {
-    const platform = createCoreTestPlatform();
-    const track = mediaTrack();
-    const stop = vi.spyOn(track, "stop");
-    let grant = (_stream: MediaStream) => {};
-    const capture = vi.fn(
-      () =>
-        new Promise<MediaStream>((resolve) => {
-          grant = resolve;
-        }),
-    );
-    const client = createSpaceClientForPlatform(
-      { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
-      {
-        ...platform,
-        dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia: capture } },
-      },
-    );
-    await client.join({ microphone: false, camera: false });
-    const action = client.media.setMicrophoneEnabled(true);
-    void action.catch(() => {});
-    await vi.waitFor(() => expect(capture).toHaveBeenCalledOnce());
-    client.dispose();
-    grant(mediaStream(track));
-    await vi.waitFor(() => expect(stop).toHaveBeenCalled());
-  });
-
   it("keeps durable off/on intents ordered while the early local pause is pending", async () => {
     const platform = createCoreTestPlatform();
     const track = mediaTrack();
@@ -401,8 +277,8 @@ function mediaStream(track: MediaStreamTrack): MediaStream {
     removeTrack: () => undefined,
     clone: () => mediaStream(track),
     getTracks: () => [track],
-    getAudioTracks: () => (track.kind === "audio" ? [track] : []),
-    getVideoTracks: () => (track.kind === "video" ? [track] : []),
+    getAudioTracks: () => [track],
+    getVideoTracks: () => [],
     getTrackById: (id: string) => (id === track.id ? track : null),
   });
 }

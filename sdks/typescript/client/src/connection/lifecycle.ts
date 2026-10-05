@@ -162,14 +162,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         failure: null,
         initialMedia: (intent) =>
           Effect.tryPromise({
-            try: async (signal) => {
-              const stream = intent.microphone || intent.camera ? await platform.mediaDevices.getUserMedia({ audio: intent.microphone, video: intent.camera }) : streamFromTracks([]);
-              if (signal.aborted || model.joinCancelled || model.closed) {
-                stopStream(stream);
-                throw lifecycleFailure("invalid_state", false, "Media capture belongs to an inactive Connection");
-              }
-              return stream;
-            },
+            try: () => (intent.microphone || intent.camera ? platform.mediaDevices.getUserMedia({ audio: intent.microphone, video: intent.camera }) : Promise.resolve(streamFromTracks([]))),
             catch: (cause) => cause,
           }),
         intent: { microphone: options.initialMicrophoneEnabled ?? true, camera: options.initialCameraEnabled ?? true },
@@ -271,8 +264,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                     if (model.epoch !== epoch || !active(model)) return;
                     model.refreshInFlight = false;
                     if (failure) {
+                      diagnostics.record({ event: "access_refresh_failed", state: model.state, epoch, code: failure.code === "access.invalid" ? "invalid_access" : "access_unavailable" });
                       if (failure.code === "access.invalid") return yield* failForSnapshot(accessFailure(failure));
-                      diagnostics.record({ event: "access_refresh_failed", state: model.state, epoch, code: "access_unavailable" });
                       model.refreshFailures = Math.min(model.refreshFailures + 1, 5);
                       yield* scheduleRefresh(Math.min(BACKGROUND_RETRY_MAX_MS, REFRESH_RETRY_MS * 2 ** (model.refreshFailures - 1)));
                       return;
@@ -430,7 +423,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             const sync = yield* trace(
               "create_sync_client",
               Effect.try({
-                try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, telemetry: options.telemetry, recordReconnect: options.recordReconnect, commandTimeoutMs: boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60_000) }),
+                try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, telemetry: options.telemetry, recordReconnect: options.recordReconnect }),
                 catch: (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : lifecycleFailure("sync_start_failed", true, "The sync layer could not start", cause)),
               }),
             );
@@ -440,29 +433,9 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               [
                 trace(
                   "start_media",
-                  foreign(
-                    () =>
-                      media.start(stream!).then(() => {
-                        if (media !== model.media) media.stop();
-                      }),
-                    "media_start_failed",
-                    "The media layer could not start",
-                  ).pipe((effect) => withinForegroundBudget(effect, MEDIA_RECOVERY_TIMEOUT_MS, lifecycleFailure("media_start_failed", true, "The media layer could not start in time"))),
+                  foreign(() => media.start(stream!), "media_start_failed", "The media layer could not start"),
                 ),
-                trace(
-                  "start_sync",
-                  foreign(
-                    () =>
-                      sync.start().then(() => {
-                        if (sync !== model.sync) sync.stop();
-                      }),
-                    "sync_start_failed",
-                    "The sync layer could not start",
-                  ).pipe(
-                    (effect) => withinForegroundBudget(effect, MEDIA_RECOVERY_TIMEOUT_MS, lifecycleFailure("sync_start_failed", true, "The sync layer could not start in time")),
-                    Effect.andThen(trace("wait_for_sync_live", waitForSyncLive(sync, boundedInteger(options.syncStartupTimeoutMs, START_TIMEOUT_MS, 1, 60_000)))),
-                  ),
-                ),
+                trace("start_sync", foreign(() => sync.start(), "sync_start_failed", "The sync layer could not start").pipe(Effect.andThen(trace("wait_for_sync_live", waitForSyncLive(sync, boundedInteger(options.syncStartupTimeoutMs, START_TIMEOUT_MS, 1, 60_000)))))),
               ],
               { concurrency: "unbounded", discard: true },
             );
@@ -553,8 +526,6 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             ),
           );
         });
-      const boundCommand = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E | ConnectionLifecycleFailure> =>
-        withinForegroundBudget(effect, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60_000), lifecycleFailure("command_rejected", true, "The action wasn't confirmed in time. Try again when reconnected."));
       const recover = (kind: RecoveryKind): Effect.Effect<void> =>
         Effect.gen(function* () {
           const scope = model.activeScope;
@@ -756,7 +727,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               model.syncBindingCleanup?.();
               model.sync = null;
               const sync = yield* Effect.try({
-                try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, telemetry: options.telemetry, recordReconnect: options.recordReconnect, commandTimeoutMs: boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60_000) }),
+                try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, telemetry: options.telemetry, recordReconnect: options.recordReconnect }),
                 catch: (cause) => lifecycleFailure("sync_start_failed", true, "The sync layer could not start", cause),
               });
               model.sync = sync;
@@ -948,21 +919,19 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             return yield* enqueue(performLeave());
           }),
         runCommand: <A, E>(operation: (ports: ConnectionPorts) => Effect.Effect<A, E>) =>
-          boundCommand(
-            enqueue(
-              Effect.gen(function* () {
-                const ports = portsFor(model);
-                if (!active(model) || !ports || ports.sync.getSnapshot().connection.phase !== "live") return yield* Effect.fail(lifecycleFailure("invalid_state", true, "Connection interrupted. Try again when reconnected."));
-                return ports;
-              }),
-            ).pipe(
-              Effect.flatMap((ports) =>
-                withFreshAccess(() =>
-                  Effect.suspend<A, E | ConnectionLifecycleFailure, never>(() => {
-                    if (!active(model) || ports.sync !== model.sync) return Effect.fail(lifecycleFailure("invalid_state", true, "Connection interrupted. Try again when reconnected."));
-                    return operation(ports).pipe(Effect.flatMap((value) => (active(model) && ports.sync === model.sync ? Effect.succeed(value) : Effect.fail(lifecycleFailure("invalid_state", true, "The command belongs to an inactive Connection")))));
-                  }),
-                ),
+          enqueue(
+            Effect.gen(function* () {
+              const ports = portsFor(model);
+              if (!active(model) || !ports || ports.sync.getSnapshot().connection.phase !== "live") return yield* Effect.fail(lifecycleFailure("invalid_state", true, "Connection interrupted. Try again when reconnected."));
+              return ports;
+            }),
+          ).pipe(
+            Effect.flatMap((ports) =>
+              withFreshAccess(() =>
+                Effect.suspend<A, E | ConnectionLifecycleFailure, never>(() => {
+                  if (!active(model) || ports.sync !== model.sync) return Effect.fail(lifecycleFailure("invalid_state", true, "Connection interrupted. Try again when reconnected."));
+                  return operation(ports).pipe(Effect.flatMap((value) => (active(model) && ports.sync === model.sync ? Effect.succeed(value) : Effect.fail(lifecycleFailure("invalid_state", true, "The command belongs to an inactive Connection")))));
+                }),
               ),
             ),
           ),

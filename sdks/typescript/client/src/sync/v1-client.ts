@@ -1,6 +1,5 @@
-import { scheduleForegroundDeadline } from "../foreground-deadline";
 import { recordReconnect } from "../telemetry/reconnect";
-import { SyncProtocolMetadata, SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame } from "../generated/sync";
+import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame } from "../generated/sync";
 import type { ClientMediaPlane } from "../media/plane";
 import type { ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
 import { syncTelemetryCorrelation } from "../telemetry/sync";
@@ -42,7 +41,6 @@ const MAX_PROJECTION_EVENT_EVIDENCE = 256;
 const CLIENT_RESTART_CLOSE_CODE = 4000;
 const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5_000;
-const HEARTBEAT = SyncProtocolMetadata.phases[2].heartbeat;
 const FAST_RECONNECT_ATTEMPTS = 8;
 const NOTICE_PROBE_INTERVAL_MS = 500;
 const NOTICE_SILENCE_MS = 750;
@@ -64,7 +62,6 @@ export class V1SyncClient implements V1CollaborationClient {
   readonly #controlEvents = new Map<number, string>();
   readonly #liveTargets: V1LiveTargetCoordinator;
   readonly #requests = new Map<string, RequestDeferred>();
-  readonly #requestDeadlineTimers = new Map<string, () => void>();
   readonly #mediaEventEvidence = new Map<number, string>();
   readonly #presenceEventEvidence = new Map<number, string>();
   #phase: V1EpisodeSnapshot["connection"] = { phase: "idle" };
@@ -98,7 +95,6 @@ export class V1SyncClient implements V1CollaborationClient {
 
   constructor(options: V1SyncClientOptions) {
     assertV1Url(options.url);
-    if (options.commandTimeoutMs !== undefined && (!Number.isSafeInteger(options.commandTimeoutMs) || options.commandTimeoutMs < 1 || options.commandTimeoutMs > 60_000)) throw new TypeError("Command timeout must be an integer between 1 and 60000 milliseconds");
     this.#options = options;
     this.#commandScheduler = new V1CommandScheduler({
       store: options.pendingStore ?? new InMemoryV1PendingTargetStore(),
@@ -107,8 +103,6 @@ export class V1SyncClient implements V1CollaborationClient {
       maxPendingBytes: options.maxPendingBytes,
       maxPendingAgeMs: options.maxPendingAgeMs,
       maxOperationPendingAgeMs: options.maxOperationPendingAgeMs,
-      commandTimeoutMs: options.commandTimeoutMs,
-      recordReconnect: options.recordReconnect,
       retryDelayMs: options.retryDelayMs,
       clock: () => this.#clock(),
       isStarted: () => this.#started,
@@ -119,8 +113,6 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#liveTargets = new V1LiveTargetCoordinator({
       mediaPlane: options.mediaPlane,
       requestIds: options.requestIds,
-      commandTimeoutMs: options.commandTimeoutMs,
-      recordReconnect: options.recordReconnect,
       retryDelayMs: options.retryDelayMs,
       clock: () => this.#clock(),
       participantId: () => this.#participantId,
@@ -134,9 +126,6 @@ export class V1SyncClient implements V1CollaborationClient {
       request: options.collaboration,
       requestIds: options.requestIds,
       maxPendingRequests: options.maxPendingCollaborationRequests,
-      commandTimeoutMs: options.commandTimeoutMs,
-      recordReconnect: options.recordReconnect,
-      clock: () => this.#clock(),
       isLive: () => this.#phase.phase === "live",
       send: (frame) => this.#send(frame),
       stateChanged: () => this.#emit(),
@@ -345,26 +334,8 @@ export class V1SyncClient implements V1CollaborationClient {
     if (this.#requests.has(requestId) || this.#liveTargets.has(requestId)) throw new V1SyncError("request ID is already pending", "request_id_conflict");
     const frame = { type: "directed_request", request_id: requestId, name, target_participant_id: participantId } as const;
     encodeV1ClientFrame(frame);
-    const promise = new Promise<V1DirectedRequestResult>((resolve, reject) => {
-      const deferred = { resolve, reject, settled: false, frame };
-      this.#requests.set(requestId, deferred);
-      const timeoutMs = this.#options.commandTimeoutMs ?? 10_000;
-      const cancel = scheduleForegroundDeadline(this.#clock(), timeoutMs, () => {
-        if (this.#requests.get(requestId) !== deferred) return;
-        this.#requests.delete(requestId);
-        this.#clearRequestDeadline(requestId);
-        recordReconnect(this.#options.recordReconnect, "command_timeout", { frame_type: frame.type, timeout_ms: timeoutMs }, "failed");
-        rejectDeferred(deferred, new V1SyncError("The action was not confirmed in time. Reconnect and try again.", "command_timeout"));
-      });
-      this.#requestDeadlineTimers.set(requestId, cancel);
-      try {
-        this.#send(frame);
-      } catch (error) {
-        this.#requests.delete(requestId);
-        this.#clearRequestDeadline(requestId);
-        rejectDeferred(deferred, error instanceof Error ? error : new V1SyncError("Transport could not send the request", "transport_error"));
-      }
-    });
+    const promise = new Promise<V1DirectedRequestResult>((resolve, reject) => this.#requests.set(requestId, { resolve, reject, settled: false, frame }));
+    this.#send(frame);
     return promise;
   }
 
@@ -435,7 +406,6 @@ export class V1SyncClient implements V1CollaborationClient {
         }
       }
       await this.#handleFrame(frame);
-      if (socket === this.#socket) this.#missedHeartbeats = 0;
     } catch {
       this.#recover("invalid_frame");
     }
@@ -581,7 +551,6 @@ export class V1SyncClient implements V1CollaborationClient {
       const previous = this.#media?.items ?? [];
       this.#media = { projectionId: frame.projection_id, sequence: 0, items: frame.items.map(mediaItem) };
       this.#mediaEventEvidence.clear();
-      this.#options.mediaPlane?.setRemotePublicationTargets?.(this.#media.items);
       for (const item of this.#media.items)
         this.#notifyRemotePublicationResumed(
           previous.find((candidate) => mediaKey(candidate) === mediaKey(item)),
@@ -603,7 +572,6 @@ export class V1SyncClient implements V1CollaborationClient {
       const item = mediaItem(frame.item);
       const previous = this.#media?.items.find((candidate) => mediaKey(candidate) === mediaKey(item));
       this.#media = updateProjection(this.#media, frame.projection_id, frame.sequence, item, mediaKey);
-      this.#options.mediaPlane?.setRemotePublicationTargets?.(this.#media.items);
       rememberBoundedEvidence(this.#mediaEventEvidence, frame.sequence, frameSignature(frame), MAX_PROJECTION_EVENT_EVIDENCE);
       this.#notifyRemotePublicationResumed(previous, item);
       if (item.participantId !== this.#participantId && (previous?.enabled !== item.enabled || previous?.publicationId !== item.publicationId)) {
@@ -628,7 +596,6 @@ export class V1SyncClient implements V1CollaborationClient {
     const deferred = this.#requests.get(frame.request_id);
     if (!deferred) return;
     this.#requests.delete(frame.request_id);
-    this.#clearRequestDeadline(frame.request_id);
     resolveDeferred(deferred, frame);
   }
 
@@ -735,14 +702,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#liveTargets.disconnect(code);
   }
 
-  #clearRequestDeadline(requestId: string): void {
-    this.#requestDeadlineTimers.get(requestId)?.();
-    this.#requestDeadlineTimers.delete(requestId);
-  }
-
   #rejectRequests(code: string): void {
-    for (const cancel of this.#requestDeadlineTimers.values()) cancel();
-    this.#requestDeadlineTimers.clear();
     for (const deferred of this.#requests.values()) rejectDeferred(deferred, new V1SyncError(code, code));
     this.#requests.clear();
   }
@@ -838,13 +798,13 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#heartbeatTimer = undefined;
       if (this.#phase.phase !== "live") return;
       this.#missedHeartbeats += 1;
-      if (this.#missedHeartbeats > HEARTBEAT.missedDeadlinesBeforeClose) {
-        this.#recover("heartbeat timeout");
+      if (this.#missedHeartbeats > 2) {
+        this.#socket?.close(CLIENT_RESTART_CLOSE_CODE, "heartbeat timeout");
         return;
       }
       this.#send({ type: "ping" });
       this.#startHeartbeat();
-    }, HEARTBEAT.intervalMs);
+    }, 20_000);
   }
 
   #clearHeartbeat(): void {

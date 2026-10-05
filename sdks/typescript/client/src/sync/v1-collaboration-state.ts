@@ -1,5 +1,3 @@
-import { scheduleForegroundDeadline } from "../foreground-deadline";
-import { recordReconnect } from "../telemetry/reconnect";
 import type { SyncV1ClientFrame, SyncV1ServerFrame } from "../generated/sync";
 import type { ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
 import { chatMessageFromFrame, chatReadReceiptFromFrame, reactionFromFrame } from "../collaboration/wire";
@@ -28,9 +26,6 @@ type V1CollaborationStateOptions = {
   readonly request: V1SyncClientOptions["collaboration"];
   readonly requestIds: V1SyncClientOptions["requestIds"];
   readonly maxPendingRequests: number | undefined;
-  readonly commandTimeoutMs: number | undefined;
-  readonly recordReconnect: V1SyncClientOptions["recordReconnect"];
-  readonly clock: () => NonNullable<V1SyncClientOptions["clock"]>;
   readonly isLive: () => boolean;
   readonly send: (frame: SyncV1ClientFrame) => void;
   readonly stateChanged: () => void;
@@ -250,24 +245,9 @@ export class V1CollaborationState {
 
   #sendTrackedRequest<Result>(requestId: string, frame: SyncV1ClientFrame, pending: Map<string, V1Deferred<Result>>): Promise<Result> {
     encodeV1ClientFrame(frame);
-    let cancel = () => {};
-    const promise = new Promise<Result>((resolve, reject) => {
-      const deferred = { resolve, reject, settled: false };
-      pending.set(requestId, deferred);
-      cancel = scheduleForegroundDeadline(this.#options.clock(), this.#options.commandTimeoutMs ?? 10_000, () => {
-        if (pending.get(requestId) !== deferred) return;
-        pending.delete(requestId);
-        recordReconnect(this.#options.recordReconnect, "command_timeout", { frame_type: frame.type, timeout_ms: this.#options.commandTimeoutMs ?? 10_000 }, "failed");
-        rejectV1Deferred(deferred, new V1SyncError("The action was not confirmed in time. Reconnect and try again.", "command_timeout"));
-      });
-      try {
-        this.#options.send(frame);
-      } catch (error) {
-        pending.delete(requestId);
-        rejectV1Deferred(deferred, error instanceof Error ? error : new V1SyncError("Transport could not send the action", "transport_error"));
-      }
-    });
-    return promise.finally(() => cancel());
+    const promise = new Promise<Result>((resolve, reject) => pending.set(requestId, { resolve, reject, settled: false }));
+    this.#options.send(frame);
+    return promise;
   }
 
   #observeChatMessage(frame: Extract<SyncV1ServerFrame, { readonly type: "chat_message" }>): void {

@@ -186,7 +186,6 @@ export type V1SyncClientOptions = {
   readonly maxPendingBytes?: number;
   readonly maxPendingAgeMs?: number;
   readonly maxOperationPendingAgeMs?: number;
-  readonly commandTimeoutMs?: number;
   readonly retryDelayMs?: number;
   readonly collaboration?: V1CollaborationExtensionRequest | false;
   readonly recordReconnect?: ReconnectRecorder;

@@ -89,7 +89,6 @@ export type ConnectionMediaFactoryInput = {
 };
 
 export type ConnectionSyncFactoryInput = {
-  readonly commandTimeoutMs?: number;
   readonly access: ParsedAccessGrant;
   readonly token: () => Promise<string>;
   readonly media: ConnectionMediaClient;

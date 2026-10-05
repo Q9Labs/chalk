@@ -17,268 +17,6 @@ const projectionId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c24";
 const commandIds = Array.from({ length: 20 }, (_, index) => `018f2f65-2a77-7a44-8e9a-${(0x5b0b6f8d4d00 + index).toString(16)}`);
 
 describe("V1SyncClient", () => {
-  it.each(["unmute", "camera"] as const)("expires a lost directed %s result and releases capacity with evidence", async (kind) => {
-    const clock = new TestClock();
-    const recordReconnect = vi.fn();
-    const { client, socket } = await liveClient({ clock, commandTimeoutMs: 500, maxPendingCommands: 1, recordReconnect });
-    try {
-      const action = kind === "unmute" ? client.requestUnmute(peerId, { requestId: commandIds[0] }) : client.requestStartCamera(peerId, { requestId: commandIds[0] });
-      void action.catch(() => {});
-      let settled = false;
-      void action
-        .finally(() => {
-          settled = true;
-        })
-        .catch(() => {});
-      clock.advance(500);
-      await settle();
-      expect(settled).toBe(true);
-      await expect(action).rejects.toMatchObject({ code: "command_timeout" });
-      expect(recordReconnect).toHaveBeenCalledWith(expect.objectContaining({ code: "reconnect.command_timeout", attributes: { frame_type: "directed_request", timeout_ms: 500 } }));
-      socket.receive({ type: "directed_request_result", request_id: commandIds[0], result: "delivered" });
-      await settle();
-      const next = client.requestUnmute(peerId, { requestId: commandIds[1] });
-      socket.receive({ type: "directed_request_result", request_id: commandIds[1], result: "delivered" });
-      await expect(next).resolves.toMatchObject({ result: "delivered" });
-    } finally {
-      client.stop();
-    }
-  });
-
-  it.each(["result", "disconnect", "stop", "send failure"] as const)("cleans a directed-request deadline after %s", async (finish) => {
-    const clock = new TestClock();
-    const recordReconnect = vi.fn();
-    const { client, socket } = await liveClient({ clock, commandTimeoutMs: 500, recordReconnect });
-    try {
-      if (finish === "send failure")
-        vi.spyOn(socket, "send").mockImplementationOnce(() => {
-          throw new Error("send failed");
-        });
-      const action = client.requestUnmute(peerId, { requestId: commandIds[0] });
-      void action.catch(() => {});
-      const visibility = { visibilityState: "hidden" };
-      vi.stubGlobal("document", visibility);
-      clock.advance(500);
-      await settle();
-      visibility.visibilityState = "visible";
-      if (finish === "result") {
-        socket.receive({ type: "directed_request_result", request_id: commandIds[0], result: "delivered" });
-        await action;
-      } else if (finish === "disconnect") {
-        socket.close(1012);
-        clock.advance(0);
-        await expect(action).rejects.toMatchObject({ code: "disconnected_before_delivery" });
-      } else if (finish === "stop") {
-        client.stop();
-        await expect(action).rejects.toMatchObject({ code: "client_stopped" });
-      } else await expect(action).rejects.toThrow("send failed");
-      clock.advance(500);
-      await settle();
-      expect(recordReconnect.mock.calls.some(([event]) => event.code === "reconnect.command_timeout")).toBe(false);
-    } finally {
-      client.stop();
-      vi.unstubAllGlobals();
-    }
-  });
-
-  it("applies the configured receipt budget to live targets with timeout evidence", async () => {
-    const clock = new TestClock();
-    const recordReconnect = vi.fn();
-    const { client } = await liveClient({ clock, commandTimeoutMs: 500, recordReconnect });
-    try {
-      const action = client.setCameraEnabled(false, { requestId: commandIds[0] });
-      void action.catch(() => {});
-      let settled = false;
-      void action
-        .finally(() => {
-          settled = true;
-        })
-        .catch(() => {});
-      clock.advance(500);
-      await settle();
-      expect(settled).toBe(true);
-      await expect(action).rejects.toMatchObject({ code: "retry_exhausted" });
-      expect(recordReconnect).toHaveBeenCalledWith(expect.objectContaining({ code: "reconnect.command_timeout", attributes: { frame_type: "live_target", timeout_ms: 500 } }));
-    } finally {
-      client.stop();
-    }
-  });
-
-  it.each(["hidden", "throttled"] as const)("keeps a live-target retry inside the foreground budget after a %s interval", async (state) => {
-    const clock = new TestClock();
-    const recordReconnect = vi.fn();
-    const { client, socket } = await liveClient({ clock, recordReconnect });
-    const visibility = { visibilityState: state === "hidden" ? "hidden" : "visible" };
-    vi.stubGlobal("document", visibility);
-    try {
-      const action = client.setMicrophoneEnabled(false, { requestId: commandIds[0] });
-      let settled = false;
-      void action
-        .finally(() => {
-          settled = true;
-        })
-        .catch(() => {});
-      if (state === "hidden") clock.advance(16_000);
-      else clock.suspend(18_001);
-      visibility.visibilityState = "visible";
-      socket.receive({ type: "live_target_result", operation_id: commandIds[0], name: "set_microphone_enabled", outcome: "retryable_failure", error_code: "dependency_unavailable" });
-      await settle();
-      expect(settled).toBe(false);
-      clock.advance(100);
-      socket.receive({ type: "live_target_result", operation_id: commandIds[0], name: "set_microphone_enabled", outcome: "confirmed", error_code: null });
-      await expect(action).resolves.toMatchObject({ serverOutcome: "confirmed" });
-      expect(recordReconnect.mock.calls.some(([event]) => event.code === "reconnect.command_timeout")).toBe(false);
-    } finally {
-      client.stop();
-      vi.unstubAllGlobals();
-    }
-  });
-
-  it.each(["server", "media"] as const)("records a live-target %s timeout and respects hidden foreground deadlines", async (stage) => {
-    const clock = new TestClock();
-    const recordReconnect = vi.fn();
-    const mediaPlane = new TestMediaPlane();
-    vi.spyOn(mediaPlane, "setLocalPublicationTarget").mockImplementation(() => new Promise(() => {}));
-    const { client, socket } = await liveClient({ clock, mediaPlane, recordReconnect });
-    const visibility = { visibilityState: "hidden" };
-    vi.stubGlobal("document", visibility);
-    try {
-      const action = client.setMicrophoneEnabled(false, { requestId: commandIds[0] });
-      void action.catch(() => {});
-      if (stage === "media") {
-        socket.receive({ type: "live_target_result", operation_id: commandIds[0], name: "set_microphone_enabled", outcome: "confirmed", error_code: null });
-        await settle();
-      }
-      let settled = false;
-      void action
-        .finally(() => {
-          settled = true;
-        })
-        .catch(() => {});
-      const budget = stage === "server" ? 15_000 : 45_000;
-      clock.advance(budget);
-      await settle();
-      expect(settled).toBe(false);
-      visibility.visibilityState = "visible";
-      // Feed healthy heartbeats so only the missing action result is under test.
-      for (let time = 0; time < budget; time += 5_000) {
-        socket.receive({ type: "pong" });
-        await settle();
-        clock.advance(5_000);
-      }
-      await settle();
-      expect(settled).toBe(true);
-      await expect(action).rejects.toMatchObject({ code: stage === "server" ? "retry_exhausted" : "media_timeout" });
-      expect(recordReconnect).toHaveBeenCalledWith(expect.objectContaining({ code: "reconnect.command_timeout", attributes: { frame_type: "live_target", timeout_ms: budget } }));
-    } finally {
-      client.stop();
-      vi.unstubAllGlobals();
-    }
-  });
-
-  it.each(["target", "chat"] as const)("pauses %s receipt deadlines while hidden or after a throttled timer", async (kind) => {
-    const clock = new TestClock();
-    const { client } = kind === "chat" ? await liveCollaborationClient({ clock, commandTimeoutMs: 500 }) : await liveClient({ clock, commandTimeoutMs: 500 });
-    const visibility = { visibilityState: "hidden" };
-    vi.stubGlobal("document", visibility);
-    try {
-      let settled = false;
-      const action = (kind === "chat" ? client.sendChatMessage({ text: "slow", clientMessageId: commandIds[0] }) : client.setHandRaised(true, { commandId: commandIds[0] })).finally(() => {
-        settled = true;
-      });
-      void action.catch(() => {});
-      await settle();
-      clock.advance(500);
-      await settle();
-      expect(settled).toBe(false);
-      visibility.visibilityState = "visible";
-      clock.suspend(10_000);
-      await settle();
-      expect(settled).toBe(false);
-      clock.advance(500);
-      await expect(action).rejects.toMatchObject({ code: "command_timeout" });
-    } finally {
-      client.stop();
-      vi.unstubAllGlobals();
-    }
-  });
-
-  it("restarts only the transport while retaining pending durable receipts", async () => {
-    const clock = new TestClock();
-    const store = new InMemoryV1PendingTargetStore();
-    const { client, socket } = await liveClient({ clock, pendingStore: store });
-    const action = client.setHandRaised(true, { commandId: commandIds[0] });
-    void action.catch(() => {});
-    await settle();
-    client.restartTransport?.();
-    expect(socket.closeCalls).toHaveLength(1);
-    expect(await store.load()).toMatchObject([{ commandId: commandIds[0] }]);
-    expect(client.getSnapshot().pendingCommandCount).toBe(1);
-    client.stop();
-  });
-
-  it("bounds a caller's durable action during disconnect while retaining its ID for receipt recovery", async () => {
-    const clock = new TestClock();
-    const store = new InMemoryV1PendingTargetStore();
-    const recordReconnect = vi.fn();
-    const { client, socket } = await liveClient({ clock, pendingStore: store, commandTimeoutMs: 500, recordReconnect });
-    const target = client.setHandRaised(true, { commandId: commandIds[0] });
-    const rejected = expect(target).rejects.toMatchObject({ code: "command_timeout" });
-    await settle();
-    socket.close();
-    clock.advance(0);
-    await settle();
-    clock.advance(500);
-    await rejected;
-    expect(await store.load()).toMatchObject([{ commandId: commandIds[0] }]);
-    expect(recordReconnect).toHaveBeenCalledWith({ category: "recovery", code: "reconnect.command_timeout", phase: "recovery", state: "failed", attributes: { frame_type: "command", durable_target: true, timeout_ms: 500 } });
-    client.stop();
-  });
-
-  it("bounds an unconfirmed transient operation without waiting for disconnect", async () => {
-    const clock = new TestClock();
-    const { client, socket } = await liveClient({ clock, commandTimeoutMs: 500 });
-    try {
-      const rejected = expect(client.leave({ commandId: commandIds[0] })).rejects.toMatchObject({ code: "command_timeout" });
-      clock.advance(500);
-      await rejected;
-      expect(operationFrames(socket, commandIds[0])).toHaveLength(1);
-    } finally {
-      client.stop();
-    }
-  });
-
-  it("keeps a healthy inbound pause inside the contract heartbeat interval live", async () => {
-    const clock = new TestClock();
-    const { client, socket } = await liveClient({ clock });
-    try {
-      clock.advance(19_999);
-      expect(client.getSnapshot().connection.phase).toBe("live");
-      expect(socket.closeCalls).toEqual([]);
-      clock.advance(1);
-      expect(client.getSnapshot().connection.phase).toBe("live");
-      socket.receive({ type: "pong" });
-      await settle();
-      clock.advance(40_000);
-      expect(client.getSnapshot().connection.phase).toBe("live");
-    } finally {
-      client.stop();
-    }
-  });
-
-  it("recovers a silent socket even when close never emits a close event", async () => {
-    const clock = new TestClock();
-    const { client, socket } = await liveClient({ clock });
-    socket.onclose = null;
-    try {
-      clock.advance(60_000);
-      expect(client.getSnapshot().connection.phase).toBe("connecting");
-      expect(socket.closeCalls).toContainEqual({ code: 4000, reason: "heartbeat timeout" });
-    } finally {
-      client.stop();
-    }
-  });
-
   it("round-trips approved frames and rejects aliases or unknown fields", () => {
     const command = {
       type: "command",
@@ -781,18 +519,6 @@ describe("V1SyncClient", () => {
     expect(client.getSnapshot().connection.phase).toBe("connecting");
   });
 
-  it("passes remote projection intent to the media watchdog even before a track arrives", async () => {
-    const { client, socket, mediaPlane } = await liveClient();
-    const paused = { participant_id: peerId, source: "camera", enabled: false, publication_id: "remote-connection|camera" } as const;
-    socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item: paused });
-    await settle();
-    expect(mediaPlane.remoteTargets).toEqual([{ participantId: peerId, source: "camera", enabled: false, publicationId: "remote-connection|camera" }]);
-    socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 2, item: { ...paused, enabled: true } });
-    await settle();
-    expect(mediaPlane.remoteTargets[0]?.enabled).toBe(true);
-    client.stop();
-  });
-
   it("retries a retained remote publication when its paused projection resumes", async () => {
     const { client, socket, mediaPlane } = await liveClient();
     const before = mediaPlane.changed;
@@ -1091,11 +817,11 @@ describe("V1SyncClient", () => {
 
   it("bounds self-media confirmation when the server never responds", async () => {
     const clock = new TestClock();
-    const { client, socket, mediaPlane } = await liveClient({ clock });
+    const { client, mediaPlane } = await liveClient({ clock });
     const result = client.setCameraEnabled(false, { requestId: commandIds[0] });
     const rejected = expect(result).rejects.toMatchObject({ code: "retry_exhausted" });
 
-    await advanceConnectedClock(clock, socket, 15_000);
+    clock.advance(15_000);
 
     await rejected;
     expect(mediaPlane.targets).toEqual([]);
@@ -1106,12 +832,12 @@ describe("V1SyncClient", () => {
     const mediaPlane = new BlockingMediaPlane();
     const { client, socket } = await liveClient({ clock, mediaPlane });
     const result = client.setCameraEnabled(false, { requestId: commandIds[0] });
-    await advanceConnectedClock(clock, socket, 14_999);
+    clock.advance(14_999);
     socket.receive({ type: "live_target_result", operation_id: commandIds[0], name: "set_camera_enabled", outcome: "confirmed", error_code: null });
     await settle();
     expect(mediaPlane.targets).toHaveLength(1);
 
-    await advanceConnectedClock(clock, socket, 44_999);
+    clock.advance(44_999);
     expect(client.getSnapshot().localMedia.camera).toBe("requesting");
     const rejected = expect(result).rejects.toMatchObject({ code: "media_timeout" });
     clock.advance(1);
@@ -1378,7 +1104,7 @@ describe("V1SyncClient", () => {
     expect(operationFrames(socket, commandIds[0])).toHaveLength(3);
     clock.advance(1);
     await rejected;
-    await advanceConnectedClock(clock, socket, 10_000);
+    clock.advance(10_000);
     expect(operationFrames(socket, commandIds[0])).toHaveLength(3);
     void client.leave({ commandId: commandIds[1] }).catch(() => undefined);
     expect(operationFrames(socket, commandIds[1])).toHaveLength(1);
@@ -1493,18 +1219,6 @@ describe("V1SyncClient", () => {
 });
 
 describe("V1SyncClient collaboration_v1", () => {
-  it("bounds chat confirmation even while the transport still appears live without queueing a retry", async () => {
-    const clock = new TestClock();
-    const recordReconnect = vi.fn();
-    const { client, socket } = await liveCollaborationClient({ clock, commandTimeoutMs: 500, recordReconnect });
-    const chat = client.sendChatMessage({ text: "uncertain delivery", clientMessageId: commandIds[1] });
-    const rejected = expect(chat).rejects.toMatchObject({ code: "command_timeout" });
-    clock.advance(500);
-    await rejected;
-    expect(socket.frames().filter((frame) => frame.type === "chat_send")).toHaveLength(1);
-    expect(recordReconnect).toHaveBeenCalledWith({ category: "recovery", code: "reconnect.command_timeout", phase: "recovery", state: "failed", attributes: { frame_type: "chat_send", timeout_ms: 500 } });
-    client.stop();
-  });
   it("negotiates the extension and maps reactions, attachments, reads, and pages", async () => {
     const { client, socket } = await liveCollaborationClient();
     expect(socket.frames()[0]).toMatchObject({
@@ -2080,15 +1794,6 @@ class TestClock {
     if (typeof handle === "number") this.#timers.delete(handle);
   }
 
-  suspend(milliseconds: number): void {
-    this.#now += milliseconds;
-    for (const [handle, timer] of [...this.#timers]) {
-      if (timer.at > this.#now) continue;
-      this.#timers.delete(handle);
-      timer.callback();
-    }
-  }
-
   advance(milliseconds: number): void {
     const target = this.#now + milliseconds;
     while (true) {
@@ -2220,10 +1925,6 @@ class AlwaysFailRemoveStore extends InMemoryV1PendingTargetStore {
 class TestMediaPlane implements V1ClientMediaPlane {
   readonly targets: V1MediaPlaneTarget[] = [];
   readonly results: V1MediaPlaneResult[] = [];
-  remoteTargets: readonly V1MediaPublication[] = [];
-  setRemotePublicationTargets(publications: readonly V1MediaPublication[]): void {
-    this.remoteTargets = publications;
-  }
   readonly resumed: string[] = [];
   changed = 0;
   #localListener: ((publications: readonly V1MediaPublication[]) => void) | undefined;
@@ -2343,14 +2044,4 @@ function snapshotWhen(client: V1SyncClient, predicate: (snapshot: V1EpisodeSnaps
 
 function operationFrames(socket: TestSocket, commandId: string): Record<string, unknown>[] {
   return socket.frames().filter((frame) => (frame.type === "operation" || frame.type === "command") && frame.command_id === commandId);
-}
-
-async function advanceConnectedClock(clock: TestClock, socket: TestSocket, milliseconds: number): Promise<void> {
-  for (let remaining = milliseconds; remaining > 0; ) {
-    const step = Math.min(500, remaining);
-    clock.advance(step);
-    socket.receive({ type: "pong" });
-    await settle();
-    remaining -= step;
-  }
 }

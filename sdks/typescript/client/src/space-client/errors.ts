@@ -1,5 +1,4 @@
 import { Data } from "effect";
-import { ConnectionLifecycleFailure } from "../connection/lifecycle";
 import type { ConnectionError } from "../connection/types";
 import { V1SyncError } from "../sync/v1-error";
 import type { ClientFailure, ErrorCode } from "./types";
@@ -41,12 +40,6 @@ const INVALID_PAYLOAD_CODE_BY_ACTION: ReadonlyMap<ConnectionError["action"], Err
 
 export function normalizeClientError(cause: unknown, fallback: ErrorCode = "client.internal_error"): SpaceClientError {
   if (cause instanceof SpaceClientError) return cause;
-  if (cause instanceof ConnectionLifecycleFailure) {
-    return new SpaceClientError({ code: connectionErrorCode(cause.code, null), recoverable: cause.recoverable, message: cause.message });
-  }
-  if (cause instanceof V1SyncError && ["command_timeout", "operation_pending_timeout", "disconnected_before_delivery", "retry_exhausted"].includes(cause.code)) {
-    return new SpaceClientError({ code: "connection.invalid_state", recoverable: true, message: "The action wasn't confirmed. Reconnect and try again." });
-  }
   if (isConnectionError(cause)) {
     return new SpaceClientError({
       code: connectionErrorCode(cause.code, cause.action),
