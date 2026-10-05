@@ -104,6 +104,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #replacementAttemptedGeneration: number | null = null;
   #polling = false;
   #pollAfterCurrent = false;
+  #pollFailures = 0;
+  #pollFailedPull = false;
   #pollTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   #sdpTail: Promise<void> = Promise.resolve();
   #snapshot: CloudflareSFUSnapshot;
@@ -216,11 +218,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (!this.#started || this.#stopped || this.#polling) return;
     this.#polling = true;
     const generation = this.#generation;
+    this.#pollFailedPull = false;
     try {
       const transport = this.#requireTransport();
       const authoritative = await traceReconnect(this.#recordReconnect, "list_publications", () => transport.listPublications());
       this.#requireGeneration(generation);
       await this.#reconcileRemotePublications(authoritative, generation);
+      this.#requireGeneration(generation);
+      this.#pollFailures = 0;
     } catch (error) {
       if (generation === this.#generation && !this.#stopped) this.#reportError(error);
       throw error;
@@ -667,6 +672,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#expectedRemotePublications.clear();
     for (const [key, publication] of desired) this.#expectedRemotePublications.set(key, publication);
     const toPull = this.#pendingRemotePulls(desired);
+    this.#pollFailedPull = true;
+    this.#pollFailures = 0;
     const pulled = await this.#pullWithRecovery(toPull, cursor, generation);
     if (pulled === null) return;
     this.#requireGeneration(generation);
@@ -1173,8 +1180,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         await this.refreshRemotePublications();
         if (this.#remotePullIncomplete) nextDelay = 750;
       } catch {
-        // Discovery reports its operation-scoped error; retry promptly after transient failure.
-        nextDelay = this.#remotePullIncomplete ? 750 : 500 + Math.random() * 500;
+        // Keep the first retry prompt, then return toward the idle polling cadence.
+        if (this.#pollFailedPull && this.#remotePullIncomplete) nextDelay = 750;
+        else {
+          this.#pollFailures = Math.min(this.#pollFailures + 1, 6);
+          nextDelay = Math.min(this.#pollIntervalMs, (500 + Math.random() * 500) * 2 ** (this.#pollFailures - 1));
+        }
       } finally {
         this.#schedulePoll(nextDelay);
       }
@@ -1182,6 +1193,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
 
   #clearPoll(): void {
+    this.#pollFailures = 0;
     if (this.#pollTimer !== undefined) globalThis.clearTimeout(this.#pollTimer);
     this.#pollTimer = undefined;
   }

@@ -122,6 +122,7 @@ export class CloudflareRTKClient {
   #participantUnsubscribers = new Map<string, readonly (() => void)[]>();
   #snapshot: ConnectionMediaSnapshot;
   #stopped = false;
+  #generation = 0;
   #screenDisableRequested = false;
   #initialAuthToken: string;
 
@@ -174,6 +175,7 @@ export class CloudflareRTKClient {
   async start(localMedia: MediaStream): Promise<void> {
     if (this.#snapshot.connection.phase === "live") return;
     this.#requireStartable();
+    const generation = ++this.#generation;
     this.#setPhase("connecting", null);
     try {
       const tracks = localMedia.getTracks().filter((track) => track.kind === "audio" || track.kind === "video");
@@ -181,14 +183,10 @@ export class CloudflareRTKClient {
         const source = track.kind === "audio" ? "microphone" : "camera";
         if (!this.#localTracks.has(source)) this.#localTracks.set(source, { source, track, enabled: false, endedListener: null });
       }
-      await this.#openConnection(this.#initialAuthToken);
-      for (const state of this.#localTracks.values()) {
-        if (state.source === "microphone" || state.source === "camera") await this.#setSourceEnabled(state, true);
-      }
-      this.#setPhase("live", null);
+      if (!(await this.#openConnection(this.#initialAuthToken, generation))) return;
+      await this.#restoreLocalTracks(generation, true);
     } catch (error) {
-      this.#setFailure(error);
-      this.#reportError(error);
+      this.#failCurrentGeneration(generation, error);
       throw error;
     }
   }
@@ -230,15 +228,15 @@ export class CloudflareRTKClient {
   async restart(input: ParticipantMediaAccess): Promise<void> {
     if (!isRTKAccess(input)) throw new CloudflareRTKError("The RealtimeKit adapter requires a Cloudflare RealtimeKit access grant", "invalid_client");
     if (this.#stopped) throw new CloudflareRTKError("The RealtimeKit media client has stopped", "media_stopped");
+    const generation = ++this.#generation;
     this.#setPhase("recovering", null);
     try {
       await this.#closeConnection();
-      await this.#openConnection(input.clientPayload.token);
-      for (const state of this.#localTracks.values()) if (state.enabled) await this.#setSourceEnabled(state, true);
-      this.#setPhase("live", null);
+      if (!this.#isCurrentGeneration(generation)) return;
+      if (!(await this.#openConnection(input.clientPayload.token, generation))) return;
+      await this.#restoreLocalTracks(generation, false);
     } catch (error) {
-      this.#setFailure(error);
-      this.#reportError(error);
+      this.#failCurrentGeneration(generation, error);
       throw error;
     }
   }
@@ -246,6 +244,7 @@ export class CloudflareRTKClient {
   stop(): void {
     if (this.#stopped) return;
     this.#stopped = true;
+    this.#generation += 1;
     const leave = this.#closeConnection();
     void leave.catch((error: unknown) => this.#reportError(error));
     for (const state of this.#localTracks.values()) if (state.endedListener) state.track.removeEventListener("ended", state.endedListener);
@@ -253,10 +252,39 @@ export class CloudflareRTKClient {
     this.#setPhase("stopped", null);
   }
 
-  async #openConnection(authToken: string): Promise<void> {
-    this.#connection = await this.#clientFactory({ authToken, onError: (error) => this.#reportError(error) });
-    this.#bindConnection(this.#connection);
-    await this.#connection.join();
+  #isCurrentGeneration(generation: number): boolean {
+    return !this.#stopped && generation === this.#generation;
+  }
+
+  async #restoreLocalTracks(generation: number, initial: boolean): Promise<void> {
+    for (const state of this.#localTracks.values()) {
+      if (!this.#isCurrentGeneration(generation)) return;
+      const enable = initial ? state.source !== "screen" : state.enabled;
+      if (enable) await this.#setSourceEnabled(state, true);
+    }
+    if (this.#isCurrentGeneration(generation)) this.#setPhase("live", null);
+  }
+
+  #failCurrentGeneration(generation: number, error: unknown): void {
+    if (!this.#isCurrentGeneration(generation)) return;
+    this.#setFailure(error);
+    this.#reportError(error);
+  }
+
+  async #openConnection(authToken: string, generation: number): Promise<boolean> {
+    const connection = await this.#clientFactory({ authToken, onError: (error) => this.#reportError(error) });
+    if (!this.#isCurrentGeneration(generation)) {
+      await connection.leave();
+      return false;
+    }
+    this.#connection = connection;
+    this.#bindConnection(connection);
+    await connection.join();
+    if (!this.#isCurrentGeneration(generation)) {
+      await connection.leave();
+      return false;
+    }
+    return true;
   }
 
   async #closeConnection(): Promise<void> {

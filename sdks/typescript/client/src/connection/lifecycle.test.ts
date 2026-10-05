@@ -66,7 +66,7 @@ describe("ConnectionLifecycle Episode snapshot", () => {
       await new Promise<void>((resolve) => {
         release = resolve;
       });
-      platform.media.emit({ ...platform.media.getSnapshot(), failure: null, connection: { ...platform.media.getSnapshot().connection, phase: "live" } });
+      emitMediaPhase(platform, "live");
     });
     const layer = testLifecycleLayer({
       access: replacementAccess(),
@@ -76,12 +76,75 @@ describe("ConnectionLifecycle Episode snapshot", () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const lifecycle = yield* joinedLifecycle();
-        platform.media.emit({ ...platform.media.getSnapshot(), failure: { code: "media_failed", recoverable: true }, connection: { ...platform.media.getSnapshot().connection, phase: "failed" } });
+        emitMediaPhase(platform, "failed");
         yield* Effect.promise(() => vi.waitFor(() => expect(restart).toHaveBeenCalledOnce()));
         const result = yield* lifecycle.runCommand(() => Effect.succeed("action completed")).pipe(Effect.timeout(100), Effect.result);
         release?.();
         expect(result).toMatchObject({ _tag: "Success", success: "action completed" });
       }).pipe(Effect.provide(layer)),
+    );
+  });
+
+  it("restarts media again after a recovering adapter hangs past the budget", async () => {
+    const platform = createCoreTestPlatform();
+    const media = testMediaClient(platform);
+    let now = Date.now();
+    vi.spyOn(platform.dependencies.clock, "now").mockImplementation(() => now);
+    const access = vi.fn(replacementAccess());
+    const restart = vi
+      .spyOn(media, "restart")
+      .mockImplementationOnce(async () => {
+        emitMediaPhase(platform, "recovering");
+        await new Promise<void>(() => {});
+      })
+      .mockImplementation(async () => {
+        emitMediaPhase(platform, "live");
+      });
+    const layer = testLifecycleLayer({ access, dependencies: platform.dependencies, recovery: { budgetMs: 30, maxAttempts: 1 } });
+    await Effect.runPromise(
+      joinedLifecycle().pipe(
+        Effect.flatMap((lifecycle) =>
+          Effect.gen(function* () {
+            emitMediaPhase(platform, "failed");
+            yield* Effect.promise(() => vi.waitFor(() => expect(restart).toHaveBeenCalledOnce()));
+            now += 60_001;
+            yield* Effect.promise(() => vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(2), { timeout: 1_500 }));
+            yield* Effect.promise(() => vi.waitFor(() => expect(lifecycle.getSnapshot().state).toBe("live"), { timeout: 1_500 }));
+            expect(access).toHaveBeenCalledTimes(3);
+          }),
+        ),
+        Effect.provide(layer),
+      ),
+    );
+  });
+
+  it("lets a progressing media rebuild outlive the lifecycle waiting budget", async () => {
+    const platform = createCoreTestPlatform();
+    const media = testMediaClient(platform);
+    let release = () => {};
+    const restart = vi.spyOn(media, "restart").mockImplementation(async () => {
+      emitMediaPhase(platform, "recovering");
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      emitMediaPhase(platform, "live");
+    });
+    const layer = testLifecycleLayer({ access: replacementAccess(), dependencies: platform.dependencies, recovery: { budgetMs: 30, maxAttempts: 1 } });
+    await Effect.runPromise(
+      joinedLifecycle().pipe(
+        Effect.flatMap((lifecycle) =>
+          Effect.gen(function* () {
+            emitMediaPhase(platform, "failed");
+            yield* Effect.promise(() => vi.waitFor(() => expect(restart).toHaveBeenCalledOnce()));
+            yield* Effect.sleep(450);
+            const calls = restart.mock.calls.length;
+            release();
+            expect(calls).toBe(1);
+            yield* Effect.promise(() => vi.waitFor(() => expect(lifecycle.getSnapshot().state).toBe("live"), { timeout: 2_500 }));
+          }),
+        ),
+        Effect.provide(layer),
+      ),
     );
   });
 
@@ -101,13 +164,13 @@ describe("ConnectionLifecycle Episode snapshot", () => {
     const platform = createCoreTestPlatform();
     const media = testMediaClient(platform);
     const restart = vi.spyOn(media, "restart").mockImplementation(async () => {
-      platform.media.emit({ ...platform.media.getSnapshot(), failure: null, connection: { ...platform.media.getSnapshot().connection, phase: "live" } });
+      emitMediaPhase(platform, "live");
     });
     const sync = {
       ...platform.sync,
       start: async () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
-        platform.media.emit({ ...platform.media.getSnapshot(), failure: { code: "media_failed", recoverable: true }, connection: { ...platform.media.getSnapshot().connection, phase: "failed" } });
+        emitMediaPhase(platform, "failed");
         await new Promise((resolve) => setTimeout(resolve, 10));
         await platform.sync.start();
       },
@@ -360,4 +423,9 @@ function replacementAccess() {
     const grant = opaqueAccessGrant(1);
     return parseParsedAccessGrant({ ...grant, media: { ...grant.media, client_payload: { connectionId: `replacement-${++grants}`, stunServer: "stun:test" } } });
   };
+}
+
+function emitMediaPhase(platform: ReturnType<typeof createCoreTestPlatform>, phase: "live" | "recovering" | "failed"): void {
+  const snapshot = platform.media.getSnapshot();
+  platform.media.emit({ ...snapshot, failure: phase === "failed" ? { code: "media_failed", recoverable: true } : null, connection: { ...snapshot.connection, phase } });
 }

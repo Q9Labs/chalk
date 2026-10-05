@@ -1,3 +1,4 @@
+import { recordReconnect } from "../telemetry/reconnect";
 import type { SyncV1ClientFrame, SyncV1ServerFrame } from "../generated/sync";
 import { encodeV1ClientFrame } from "./v1-codec";
 import { rejectV1Deferred, resolveV1Deferred, type V1Deferred } from "./v1-deferred";
@@ -32,6 +33,7 @@ type V1CommandSchedulerOptions = {
   readonly maxPendingAgeMs: number | undefined;
   readonly maxOperationPendingAgeMs: number | undefined;
   readonly commandTimeoutMs: number | undefined;
+  readonly recordReconnect: V1SyncClientOptions["recordReconnect"];
   readonly retryDelayMs: number | undefined;
   readonly clock: () => NonNullable<V1SyncClientOptions["clock"]>;
   readonly isStarted: () => boolean;
@@ -259,6 +261,7 @@ export class V1CommandScheduler {
           this.#acknowledgements.delete(commandId);
           this.#clearCommandRetryTimer(commandId);
         }
+        recordReconnect(this.#options.recordReconnect, "command_timeout", { frame_type: frame.type, durable_target: durableTarget, timeout_ms: this.#options.commandTimeoutMs ?? COMMAND_TIMEOUT_MS }, "failed");
         rejectV1Deferred(deferred, new V1SyncError("The action was not confirmed in time. Reconnect and try again.", "command_timeout"));
         this.#options.stateChanged();
       }, this.#options.commandTimeoutMs ?? COMMAND_TIMEOUT_MS);

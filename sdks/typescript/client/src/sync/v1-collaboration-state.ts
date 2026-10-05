@@ -1,3 +1,4 @@
+import { recordReconnect } from "../telemetry/reconnect";
 import type { SyncV1ClientFrame, SyncV1ServerFrame } from "../generated/sync";
 import type { ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
 import { chatMessageFromFrame, chatReadReceiptFromFrame, reactionFromFrame } from "../collaboration/wire";
@@ -27,6 +28,7 @@ type V1CollaborationStateOptions = {
   readonly requestIds: V1SyncClientOptions["requestIds"];
   readonly maxPendingRequests: number | undefined;
   readonly commandTimeoutMs: number | undefined;
+  readonly recordReconnect: V1SyncClientOptions["recordReconnect"];
   readonly clock: () => NonNullable<V1SyncClientOptions["clock"]>;
   readonly isLive: () => boolean;
   readonly send: (frame: SyncV1ClientFrame) => void;
@@ -254,6 +256,7 @@ export class V1CollaborationState {
       timer = this.#options.clock().setTimeout(() => {
         if (pending.get(requestId) !== deferred) return;
         pending.delete(requestId);
+        recordReconnect(this.#options.recordReconnect, "command_timeout", { frame_type: frame.type, timeout_ms: this.#options.commandTimeoutMs ?? 10_000 }, "failed");
         rejectV1Deferred(deferred, new V1SyncError("The action was not confirmed in time. Reconnect and try again.", "command_timeout"));
       }, this.#options.commandTimeoutMs ?? 10_000);
       try {

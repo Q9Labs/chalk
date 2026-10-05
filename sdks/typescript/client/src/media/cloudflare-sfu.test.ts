@@ -205,6 +205,37 @@ describe("Cloudflare SFU client", () => {
     }
   });
 
+  it("backs off persistent publication-list failures and resets after discovery succeeds", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const harness = createHarness({ pollIntervalMs: 15_000 });
+    const list = vi.spyOn(harness.transport, "listPublications").mockRejectedValue(new CloudflareSFUError("discovery unavailable", "signaling_failed"));
+    try {
+      await harness.client.start(fakeStream());
+      const beforePoll = list.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(list).toHaveBeenCalledTimes(beforePoll + 1);
+      for (const delay of [500, 1_000, 2_000, 4_000, 8_000, 15_000, 15_000]) {
+        const calls = list.mock.calls.length;
+        await vi.advanceTimersByTimeAsync(delay - 1);
+        expect(list).toHaveBeenCalledTimes(calls);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(list).toHaveBeenCalledTimes(calls + 1);
+      }
+      list.mockRestore();
+      await vi.advanceTimersByTimeAsync(15_000);
+      const failingAgain = vi.spyOn(harness.transport, "listPublications").mockRejectedValue(new CloudflareSFUError("new discovery failure", "signaling_failed"));
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(failingAgain).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(500);
+      expect(failingAgain).toHaveBeenCalledTimes(2);
+    } finally {
+      harness.client.stop();
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    }
+  });
+
   it("configures only camera with full and half-resolution encodings before the offer", async () => {
     const harness = createHarness();
     await harness.client.start(fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));

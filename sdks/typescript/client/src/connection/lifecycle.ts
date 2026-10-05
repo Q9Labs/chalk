@@ -11,6 +11,10 @@ import { stopStream, streamFromTracks } from "./media-devices";
 import { createDefaultConnectionDependencies } from "./production";
 import { ConnectionError, type ConnectionConnectionPhase, type ConnectionFailure, type ConnectionState } from "./types";
 
+// SFU negotiation can take 35s; the lifecycle waiting budget must not cancel its ownership.
+const MEDIA_RECOVERY_TIMEOUT_MS = 60_000;
+type MediaRecoveryAttempt = { expiresAt: number | null };
+
 const START_TIMEOUT_MS = 10_000;
 const LEAVE_TIMEOUT_MS = 5_000;
 const RECOVERY_BUDGET_MS = 10_000;
@@ -531,9 +535,10 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                 }),
               );
               let cycle = 0;
+              const mediaAttempt: MediaRecoveryAttempt = { expiresAt: null };
               while (model.epoch === epoch && active(model)) {
                 const plan = yield* recoveryPlan(kind);
-                const outcome = yield* attemptRecovery(plan).pipe(
+                const outcome = yield* attemptRecovery(plan, mediaAttempt).pipe(
                   Effect.match({
                     onSuccess: (attempt) => ({ attempt, failure: null }),
                     onFailure: (failure) => ({ attempt: null, failure }),
@@ -573,14 +578,14 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             delays: options.recovery?.backoffMs?.length ? options.recovery.backoffMs : [100, 250, 500],
           })),
         );
-      const attemptRecovery = (plan: RecoveryPlan): Effect.Effect<number | null, ConnectionLifecycleFailure> =>
+      const attemptRecovery = (plan: RecoveryPlan, mediaAttempt: MediaRecoveryAttempt): Effect.Effect<number | null, ConnectionLifecycleFailure> =>
         Effect.gen(function* () {
           for (let attempt = 1; attempt <= plan.attempts; attempt += 1) {
             const remaining = plan.deadline - (yield* Clock.currentTimeMillis);
             if (remaining <= 0) return null;
             recordReconnect(options.recordReconnect, "attempt", { recovery_kind: plan.kind, attempt });
             diagnostics.record({ event: "recovery_attempt", state: model.state, epoch: model.epoch, attempt });
-            const failure = yield* recoveryOperation(plan.kind).pipe(
+            const failure = yield* recoveryOperation(plan.kind, mediaAttempt).pipe(
               Effect.timeout(remaining),
               Effect.catchTag("TimeoutError", () => Effect.fail(lifecycleFailure("sync_start_failed", true, "Connection recovery is still waiting for the transport"))),
               Effect.match({ onSuccess: () => null, onFailure: (cause) => cause }),
@@ -591,7 +596,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           }
           return null;
         });
-      const recoveryOperation = (kind: RecoveryKind): Effect.Effect<void, ConnectionLifecycleFailure> => (kind === "media" ? recoverMedia() : recoverSync());
+      const recoveryOperation = (kind: RecoveryKind, mediaAttempt: MediaRecoveryAttempt): Effect.Effect<void, ConnectionLifecycleFailure> => (kind === "media" ? recoverMedia(mediaAttempt) : recoverSync());
       const recoveryDelay = (plan: RecoveryPlan, attempt: number): number => Math.max(0, plan.delays[Math.min(attempt - 1, plan.delays.length - 1)] ?? 0);
       const finishRecovery = (attempt: number, epoch: number): Effect.Effect<void> =>
         Effect.gen(function* () {
@@ -618,15 +623,20 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           observe();
           return Effect.sync(unsubscribe);
         });
-      const recoverMedia = (): Effect.Effect<void, ConnectionLifecycleFailure> =>
+      const recoverMedia = (attempt: MediaRecoveryAttempt): Effect.Effect<void, ConnectionLifecycleFailure> =>
         Effect.gen(function* () {
           const media = model.media;
           if (!media) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Media recovery requires active ports"));
           if (media.getSnapshot().connection.phase === "live") return;
-          if (media.getSnapshot().connection.phase === "recovering") return yield* waitForMediaLive(media);
+          if (media.getSnapshot().connection.phase === "recovering") {
+            const now = yield* Clock.currentTimeMillis;
+            attempt.expiresAt ??= now + MEDIA_RECOVERY_TIMEOUT_MS;
+            if (now < attempt.expiresAt) return yield* waitForMediaLive(media);
+          }
           recordReconnect(options.recordReconnect, "media_decision", { strategy: "full_rebuild" });
           const grant = yield* traceRecovery("access_refresh", access.refresh("media_recovery", true).pipe(Effect.mapError(accessFailure)));
           const restartInput = grant.media.provider === "cloudflare_sfu" ? grant.media.clientPayload : grant.media;
+          attempt.expiresAt = (yield* Clock.currentTimeMillis) + MEDIA_RECOVERY_TIMEOUT_MS;
           yield* traceRecovery(
             "media_rebuild",
             foreign(() => media.restart(restartInput), "media_start_failed", "Media transport could not restart"),

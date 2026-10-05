@@ -20,7 +20,8 @@ describe("V1SyncClient", () => {
   it("bounds a caller's durable action during disconnect while retaining its ID for receipt recovery", async () => {
     const clock = new TestClock();
     const store = new InMemoryV1PendingTargetStore();
-    const { client, socket } = await liveClient({ clock, pendingStore: store, commandTimeoutMs: 500 });
+    const recordReconnect = vi.fn();
+    const { client, socket } = await liveClient({ clock, pendingStore: store, commandTimeoutMs: 500, recordReconnect });
     const target = client.setHandRaised(true, { commandId: commandIds[0] });
     const rejected = expect(target).rejects.toMatchObject({ code: "command_timeout" });
     await settle();
@@ -30,6 +31,7 @@ describe("V1SyncClient", () => {
     clock.advance(500);
     await rejected;
     expect(await store.load()).toMatchObject([{ commandId: commandIds[0] }]);
+    expect(recordReconnect).toHaveBeenCalledWith({ category: "recovery", code: "reconnect.command_timeout", phase: "recovery", state: "failed", attributes: { frame_type: "command", durable_target: true, timeout_ms: 500 } });
     client.stop();
   });
 
@@ -1263,12 +1265,14 @@ describe("V1SyncClient", () => {
 describe("V1SyncClient collaboration_v1", () => {
   it("bounds chat confirmation even while the transport still appears live without queueing a retry", async () => {
     const clock = new TestClock();
-    const { client, socket } = await liveCollaborationClient({ clock, commandTimeoutMs: 500 });
+    const recordReconnect = vi.fn();
+    const { client, socket } = await liveCollaborationClient({ clock, commandTimeoutMs: 500, recordReconnect });
     const chat = client.sendChatMessage({ text: "uncertain delivery", clientMessageId: commandIds[1] });
     const rejected = expect(chat).rejects.toMatchObject({ code: "command_timeout" });
     clock.advance(500);
     await rejected;
     expect(socket.frames().filter((frame) => frame.type === "chat_send")).toHaveLength(1);
+    expect(recordReconnect).toHaveBeenCalledWith({ category: "recovery", code: "reconnect.command_timeout", phase: "recovery", state: "failed", attributes: { frame_type: "chat_send", timeout_ms: 500 } });
     client.stop();
   });
   it("negotiates the extension and maps reactions, attachments, reads, and pages", async () => {

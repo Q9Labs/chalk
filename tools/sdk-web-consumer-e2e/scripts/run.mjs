@@ -1,3 +1,4 @@
+import { waitForRecovery } from "./recovery.mjs";
 import { randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
 import { cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -179,9 +180,11 @@ async function verifyRecovery(alice, bob, baseURL) {
 }
 
 async function forceAndWaitForRecovery(page, url) {
+  // Observe the replacement transport before accepting live, which can predate the forced close.
+  const replacement = page.waitForEvent("websocket").then((socket) => socket.waitForEvent("framereceived"));
   await post(url);
-  await waitForState(page, "reconnecting");
-  await waitForState(page, "live");
+  await replacement;
+  await waitForRecovery(page, waitFor);
 }
 
 async function verifyRemovalAndLeave(alice, bob) {
