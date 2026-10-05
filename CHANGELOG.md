@@ -14,6 +14,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Kept transient SDK recovery running in the background without blocking actions or uploads, and healed media failures that occur during Join.
+- Rebuilt expired recovery transports and backed off exhausted recovery, access refresh, and publication discovery retries.
+
 - Updated the Sync HTTP transport and workspace HTTP dependencies to patched releases.
 - Updated the locked undici dependency to 7.29.1 to address GHSA-3wwx-pv8p-q78v.
 - Updated transitive brace-expansion and fast-uri dependencies to their security-fixed releases.
