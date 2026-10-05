@@ -21,7 +21,7 @@ describe("ConnectionLifecycle Episode snapshot", () => {
       withJoinedLifecycle((lifecycle) =>
         Effect.promise(async () => {
           await vi.waitFor(() => expect(waitingFor(1_000)).toBe(true));
-      access.mockRejectedValue(new ConnectionAccessFailure({ code: "access.invalid", cause: "invalid scheduled refresh" }));
+          access.mockRejectedValue(new ConnectionAccessFailure({ code: "access.invalid", cause: "invalid scheduled refresh" }));
           await advance(1_000);
           await vi.waitFor(() => expect(lifecycle.getSnapshot().state).toBe("failed"));
           expect(lifecycle.getDiagnostics()).toContainEqual(expect.objectContaining({ event: "access_refresh_failed", code: "invalid_access" }));
