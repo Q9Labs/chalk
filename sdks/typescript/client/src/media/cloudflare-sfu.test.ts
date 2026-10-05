@@ -191,6 +191,89 @@ describe("Cloudflare SFU client", () => {
       vi.useRealTimers();
     }
   });
+  it("keeps a bounded missing-track deadline across incomplete pulls and slow discovery polls", async () => {
+    vi.useFakeTimers();
+    const harness = createHarness({ pollIntervalMs: 750 });
+    try {
+      await harness.client.start(fakeStream(new FakeTrack("camera", "video")));
+      const peer = harness.peers[0];
+      if (!peer) throw new Error("Expected a publishing peer");
+      peer.measureFlow = true;
+      harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
+      harness.transport.omittedRemoteTrackNames.add("camera-a");
+      const list = harness.transport.listPublications.bind(harness.transport);
+      vi.spyOn(harness.transport, "listPublications").mockImplementation(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+        return list();
+      });
+      const refreshed = harness.client.refreshRemotePublications();
+      await vi.advanceTimersByTimeAsync(1_000);
+      await refreshed;
+      await vi.advanceTimersByTimeAsync(40_000);
+      expect(harness.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "media_failed", recoverable: true } });
+    } finally {
+      harness.client.stop();
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    }
+  });
+
+  it("lets an in-flight remote negotiation finish before starting its first-flow deadline", async () => {
+    vi.useFakeTimers();
+    const harness = createHarness();
+    try {
+      await harness.client.start(fakeStream(new FakeTrack("camera", "video")));
+      const peer = harness.peers[0];
+      if (!peer) throw new Error("Expected a publishing peer");
+      peer.measureFlow = true;
+      harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
+      const addTracks = harness.transport.addTracks.bind(harness.transport);
+      vi.spyOn(harness.transport, "addTracks").mockImplementation(async (input) => {
+        await new Promise((resolve) => setTimeout(resolve, 12_000));
+        return addTracks(input);
+      });
+      const refreshed = harness.client.refreshRemotePublications();
+      await vi.advanceTimersByTimeAsync(11_000);
+      expect(harness.client.getSnapshot().connection.phase).toBe("live");
+      await vi.advanceTimersByTimeAsync(1_000);
+      await refreshed;
+      expect(harness.client.getSnapshot().remoteTracks).toHaveLength(1);
+      expect(harness.client.getSnapshot().connection.phase).toBe("live");
+    } finally {
+      harness.client.stop();
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    }
+  });
+
+  it("ignores a muted retained remote track and restarts its observation window on unmute", async () => {
+    vi.useFakeTimers();
+    const harness = createHarness();
+    try {
+      await harness.client.start(fakeStream());
+      harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
+      await harness.client.refreshRemotePublications();
+      await vi.advanceTimersByTimeAsync(1_000);
+      const remote = harness.client.getSnapshot().remoteTracks[0];
+      const peer = harness.peers[0];
+      if (!remote || !peer) throw new Error("Expected a remote camera and peer");
+      peer.measureFlow = true;
+      await vi.advanceTimersByTimeAsync(1_000);
+      remote.track.enabled = false;
+      peer.stalledTrackIds.add(remote.track.id);
+      await vi.advanceTimersByTimeAsync(12_000);
+      expect(harness.client.getSnapshot().connection.phase).toBe("live");
+      remote.track.enabled = true;
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(harness.client.getSnapshot().connection.phase).toBe("live");
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(harness.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "media_failed", recoverable: true } });
+    } finally {
+      harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
   it("retries a failed publication poll promptly instead of waiting for the idle poll interval", async () => {
     vi.useFakeTimers();
     const harness = createHarness();

@@ -85,6 +85,85 @@ describe("ConnectionLifecycle Episode snapshot", () => {
     );
   });
 
+  it.each(["access", "media_snapshot", "sync_snapshot"] as const)("backs off exhausted background cycles and resumes after %s recovery", async (recovery) => {
+    vi.spyOn(Math, "random").mockReturnValue(1);
+    const platform = createCoreTestPlatform();
+    let now = Date.now();
+    const grantProvider = replacementAccess();
+    const fetchAccess = async () => {
+      const grant = await grantProvider();
+      const expiresAt = new Date(now + 3_600_000).toISOString();
+      return { ...grant, sync: { ...grant.sync, expiresAt }, media: { ...grant.media, expiresAt } };
+    };
+    const access = vi.fn(fetchAccess);
+    let nextTimer = 0;
+    const timers = new Map<number, { at: number; callback: () => void }>();
+    const clock = {
+      now: () => now,
+      setTimeout: (callback: () => void, milliseconds: number) => {
+        const handle = nextTimer++;
+        timers.set(handle, { at: now + milliseconds, callback });
+        return handle;
+      },
+      clearTimeout: (handle: unknown) => {
+        if (typeof handle === "number") timers.delete(handle);
+      },
+    };
+    const advance = async (milliseconds: number) => {
+      now += milliseconds;
+      for (const [handle, timer] of [...timers]) {
+        if (timer.at > now) continue;
+        timers.delete(handle);
+        timer.callback();
+      }
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    };
+    const waitingFor = (milliseconds: number) => [...timers.values()].some((timer) => timer.at === now + milliseconds);
+    const media = testMediaClient(platform);
+    vi.spyOn(media, "restart").mockImplementation(async () => emitMediaPhase(platform, "live"));
+    const layer = testLifecycleLayer({ access, dependencies: { ...platform.dependencies, clock }, recovery: { budgetMs: 1_000, maxAttempts: 1 } });
+    try {
+      await Effect.runPromise(
+        joinedLifecycle().pipe(
+          Effect.flatMap((lifecycle) =>
+            Effect.promise(async () => {
+              access.mockRejectedValue(new Error("access temporarily unavailable"));
+              emitMediaPhase(platform, "failed");
+              await vi.waitFor(() => expect(waitingFor(250)).toBe(true));
+              await advance(250);
+              await vi.waitFor(() => expect(access).toHaveBeenCalledTimes(2));
+              for (const delay of [250, 500, 1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 60_000, 60_000]) {
+                await vi.waitFor(() => expect(waitingFor(delay)).toBe(true));
+                const calls = access.mock.calls.length;
+                await advance(delay - 1);
+                expect(access).toHaveBeenCalledTimes(calls);
+                await advance(1);
+                await vi.waitFor(() => expect(access).toHaveBeenCalledTimes(calls + 1));
+              }
+              await vi.waitFor(() => expect(waitingFor(60_000)).toBe(true));
+              if (recovery === "access") {
+                access.mockImplementation(fetchAccess);
+                await advance(60_000);
+              } else {
+                if (recovery === "sync_snapshot") platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "connecting" } });
+                emitMediaPhase(platform, "live");
+                if (recovery === "sync_snapshot") platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
+              }
+              await vi.waitFor(() => expect(lifecycle.getSnapshot().state).toBe("live"));
+              const calls = access.mock.calls.length;
+              await advance(60_000);
+              expect(access).toHaveBeenCalledTimes(calls);
+            }),
+          ),
+          Effect.scoped,
+          Effect.provide(layer),
+        ),
+      );
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it("restarts media again after a recovering adapter hangs past the budget", async () => {
     const platform = createCoreTestPlatform();
     const media = testMediaClient(platform);

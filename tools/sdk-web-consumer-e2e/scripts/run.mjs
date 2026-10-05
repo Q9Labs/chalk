@@ -1,4 +1,4 @@
-import { waitForRecovery } from "./recovery.mjs";
+import { forceAndWaitForRecovery } from "./recovery.mjs";
 import { randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
 import { cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -175,16 +175,8 @@ async function verifyScreenShare(alice, bob) {
 
 async function verifyRecovery(alice, bob, baseURL) {
   await Promise.all([waitForAccessRefresh(alice), waitForAccessRefresh(bob)]);
-  await forceAndWaitForRecovery(alice, `${baseURL}/test/force-sync?participant=alice`);
-  await forceAndWaitForRecovery(bob, `${baseURL}/test/force-media?participant=bob`);
-}
-
-async function forceAndWaitForRecovery(page, url) {
-  // Observe the replacement transport before accepting live, which can predate the forced close.
-  const replacement = page.waitForEvent("websocket").then((socket) => socket.waitForEvent("framereceived"));
-  await post(url);
-  await replacement;
-  await waitForRecovery(page, waitFor);
+  await forceAndWaitForRecovery(alice, `${baseURL}/test/force-sync?participant=alice`, post, waitFor);
+  await forceAndWaitForRecovery(bob, `${baseURL}/test/force-media?participant=bob`, post, waitFor);
 }
 
 async function verifyRemovalAndLeave(alice, bob) {

@@ -48,12 +48,30 @@ describe("V1SyncClient", () => {
     }
   });
 
+  it("keeps a healthy inbound pause inside the contract heartbeat interval live", async () => {
+    const clock = new TestClock();
+    const { client, socket } = await liveClient({ clock });
+    try {
+      clock.advance(19_999);
+      expect(client.getSnapshot().connection.phase).toBe("live");
+      expect(socket.closeCalls).toEqual([]);
+      clock.advance(1);
+      expect(client.getSnapshot().connection.phase).toBe("live");
+      socket.receive({ type: "pong" });
+      await settle();
+      clock.advance(40_000);
+      expect(client.getSnapshot().connection.phase).toBe("live");
+    } finally {
+      client.stop();
+    }
+  });
+
   it("recovers a silent socket even when close never emits a close event", async () => {
     const clock = new TestClock();
     const { client, socket } = await liveClient({ clock });
     socket.onclose = null;
     try {
-      clock.advance(3_000);
+      clock.advance(60_000);
       expect(client.getSnapshot().connection.phase).toBe("connecting");
       expect(socket.closeCalls).toContainEqual({ code: 4000, reason: "heartbeat timeout" });
     } finally {
@@ -254,7 +272,7 @@ describe("V1SyncClient", () => {
     expect(client.getSnapshot().connection).toMatchObject({ phase: "live", noticeUnresponsive: true });
     expect(socket.closeCalls).toEqual([]);
     clock.advance(250);
-    expect(socket.frames().filter((frame) => frame.type === "ping")).toHaveLength(3);
+    expect(socket.frames().filter((frame) => frame.type === "ping")).toHaveLength(2);
     socket.receive({ type: "pong" });
     await settle();
     expect(client.getSnapshot().connection).toMatchObject({ phase: "live", noticeUnresponsive: false });

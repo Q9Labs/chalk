@@ -21,7 +21,7 @@ const RECOVERY_BUDGET_MS = 10_000;
 const MAX_RECOVERY_ATTEMPTS = 3;
 const REFRESH_RETRY_MS = 5_000;
 const RECONNECT_GRACE_MS = 250;
-const BACKGROUND_RETRY_MAX_MS = 2_000;
+const BACKGROUND_RETRY_MAX_MS = 60_000;
 
 type RecoveryKind = "sync" | "media";
 type EpisodeControl = NonNullable<V1EpisodeSnapshot["control"]>;
@@ -562,8 +562,9 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                     yield* publish();
                   }),
                 );
-                const delay = Math.min(BACKGROUND_RETRY_MAX_MS, 250 * 2 ** Math.min(cycle++, 3));
-                yield* Effect.sleep(delay * (0.5 + Math.random() * 0.5));
+                const delay = Math.min(BACKGROUND_RETRY_MAX_MS, 250 * 2 ** cycle);
+                cycle = Math.min(cycle + 1, 8);
+                yield* Effect.race(Effect.sleep(delay * (0.5 + Math.random() * 0.5)), waitForLiveTransports());
               }
             }),
             scope,
@@ -611,6 +612,21 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           yield* transition("live");
           yield* publish();
           yield* scheduleRefresh();
+        });
+      const waitForLiveTransports = (): Effect.Effect<void> =>
+        Effect.callback((resume) => {
+          const sync = model.sync;
+          const media = model.media;
+          const observe = () => {
+            if (model.sync?.getSnapshot().connection.phase === "live" && model.media?.getSnapshot().connection.phase === "live") resume(Effect.void);
+          };
+          const unsubscribeSync = sync?.subscribe(observe);
+          const unsubscribeMedia = media?.subscribe(observe);
+          observe();
+          return Effect.sync(() => {
+            unsubscribeSync?.();
+            unsubscribeMedia?.();
+          });
         });
       const waitForMediaLive = (media: ConnectionMediaClient): Effect.Effect<void, ConnectionLifecycleFailure> =>
         Effect.callback((resume) => {

@@ -1224,10 +1224,18 @@ export class CloudflareSFUClient implements ClientMediaPlane {
 
   #flowSources() {
     return [
-      ...[...this.#localTracks.values()].filter((state) => state.source !== "screen" && state.enabled && state.desiredEnabled && state.track.enabled).map((state) => ({ key: `publish:${state.source}`, direction: "publish" as const, track: state.track, kind: state.track.kind })),
+      ...[...this.#localTracks.values()]
+        .filter((state) => state.source !== "screen" && state.enabled && state.desiredEnabled && state.track.enabled)
+        .map((state) => ({ key: `publish:${state.source}`, direction: "publish" as const, track: state.track, kind: state.track.kind, firstFlowTimeoutMs: 10_000 })),
       ...[...this.#expectedRemotePublications]
         .filter(([, publication]) => publication.source !== "screen")
-        .map(([key, publication]) => ({ key: `subscribe:${publication.publicationId}`, direction: "subscribe" as const, track: this.#remoteTracks.get(key)?.track ?? null, kind: publication.source === "microphone" ? "audio" : "video" })),
+        .flatMap(([key, publication]) => {
+          const remote = this.#remoteTracks.get(key);
+          const track = remote?.publicationId === publication.publicationId ? remote.track : null;
+          if (track?.enabled === false) return [];
+          // A missing track gets one negotiation budget across all discovery retries.
+          return [{ key: `subscribe:${publication.publicationId}${track ? "" : ":pending"}`, direction: "subscribe" as const, track, kind: publication.source === "microphone" ? "audio" : "video", firstFlowTimeoutMs: track ? 10_000 : NEGOTIATION_TIMEOUT_MS }];
+        }),
     ];
   }
 
@@ -1238,7 +1246,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       const kind = source.kind;
       const report = source.track ? await this.#connection.getStats(source.track) : null;
       if (this.#stopped || generation !== this.#generation || connectionEpoch !== this.#connectionEpoch) return;
-      if (this.#flowWatchdog.observe(source.key, report ? mediaFlowProgress(report, source.direction, kind) : 0, Date.now())) {
+      if (this.#flowWatchdog.observe(source.key, report ? mediaFlowProgress(report, source.direction, kind) : 0, Date.now(), source.firstFlowTimeoutMs)) {
         this.#setFailure(new CloudflareSFUError(`Media ${source.direction} ${kind} stopped flowing`, "media_failed"), "media_failed");
         return;
       }

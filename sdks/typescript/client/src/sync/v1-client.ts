@@ -1,5 +1,5 @@
 import { recordReconnect } from "../telemetry/reconnect";
-import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame } from "../generated/sync";
+import { SyncProtocolMetadata, SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame } from "../generated/sync";
 import type { ClientMediaPlane } from "../media/plane";
 import type { ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
 import { syncTelemetryCorrelation } from "../telemetry/sync";
@@ -41,7 +41,7 @@ const MAX_PROJECTION_EVENT_EVIDENCE = 256;
 const CLIENT_RESTART_CLOSE_CODE = 4000;
 const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5_000;
-const HEARTBEAT_INTERVAL_MS = 1_000;
+const HEARTBEAT = SyncProtocolMetadata.phases[2].heartbeat;
 const FAST_RECONNECT_ATTEMPTS = 8;
 const NOTICE_PROBE_INTERVAL_MS = 500;
 const NOTICE_SILENCE_MS = 750;
@@ -802,13 +802,13 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#heartbeatTimer = undefined;
       if (this.#phase.phase !== "live") return;
       this.#missedHeartbeats += 1;
-      if (this.#missedHeartbeats > 2) {
+      if (this.#missedHeartbeats > HEARTBEAT.missedDeadlinesBeforeClose) {
         this.#recover("heartbeat timeout");
         return;
       }
       this.#send({ type: "ping" });
       this.#startHeartbeat();
-    }, HEARTBEAT_INTERVAL_MS);
+    }, HEARTBEAT.intervalMs);
   }
 
   #clearHeartbeat(): void {

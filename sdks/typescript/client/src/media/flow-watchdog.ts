@@ -4,13 +4,13 @@ type Progress = { value: number; changedAt: number; flowing: boolean };
 export class MediaFlowWatchdog {
   readonly #progress = new Map<string, Progress>();
 
-  observe(key: string, value: number, now: number): boolean {
+  observe(key: string, value: number, now: number, firstFlowTimeoutMs = 10_000): boolean {
     const previous = this.#progress.get(key);
     if (!previous || value !== previous.value) {
       this.#progress.set(key, { value, changedAt: now, flowing: value > 0 });
       return false;
     }
-    return now - previous.changedAt >= (previous.flowing ? 3_000 : 10_000);
+    return now - previous.changedAt >= (previous.flowing ? 3_000 : firstFlowTimeoutMs);
   }
 
   retain(keys: ReadonlySet<string>): void {
