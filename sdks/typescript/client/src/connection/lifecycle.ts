@@ -151,7 +151,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       let joinDeferred: Deferred.Deferred<void, ConnectionLifecycleFailure> | null = null;
       let activeJoin: Fiber.Fiber<void, ConnectionLifecycleFailure> | null = null;
       let fallbackIdentifier = 0;
-      let emittedSync: ConnectionSyncClient | null = null;
+      let emittedPorts: ConnectionPorts | null = null;
       let foregroundRecoveryDeadline = 0;
       const model: Model = {
         state: "idle",
@@ -193,8 +193,30 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         );
       const toPromise = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseWith(context)(effect);
       const publish = (): Effect.Effect<void> =>
-        Effect.sync(() => snapshotFor(model, access.currentUnsafe())).pipe(
-          Effect.tap((snapshot) => SubscriptionRef.set(snapshotRef, snapshot)),
+        Effect.sync(() => ({ previous: SubscriptionRef.getUnsafe(snapshotRef), snapshot: snapshotFor(model, access.currentUnsafe()) })).pipe(
+          Effect.tap(({ snapshot }) => SubscriptionRef.set(snapshotRef, snapshot)),
+          Effect.tap(({ previous, snapshot }) =>
+            Effect.sync(() => {
+              const ports = portsFor(model);
+              if (
+                ![
+                  ports?.sync === emittedPorts?.sync,
+                  ports?.media === emittedPorts?.media,
+                  ["healthy", "unresponsive"].includes(previous.connection.sync) === ["healthy", "unresponsive"].includes(snapshot.connection.sync),
+                  (previous.connection.media === "healthy") === (snapshot.connection.media === "healthy"),
+                ].every(Boolean)
+              ) {
+                emittedPorts = ports;
+                for (const listener of portListeners) {
+                  try {
+                    listener(ports);
+                  } catch {
+                    /* Feature observers cannot affect lifecycle ownership. */
+                  }
+                }
+              }
+            }),
+          ),
           Effect.asVoid,
           Effect.tap(() =>
             Effect.sync(() => {
@@ -208,18 +230,6 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             }),
           ),
         );
-      const emitPorts = (): Effect.Effect<void> =>
-        Effect.sync(() => {
-          const ports = portsFor(model);
-          emittedSync = ports?.sync ?? null;
-          for (const listener of portListeners) {
-            try {
-              listener(ports);
-            } catch {
-              // Feature observers cannot affect lifecycle ownership.
-            }
-          }
-        });
       const transition = (state: ConnectionState): Effect.Effect<void> =>
         Effect.gen(function* () {
           if (model.state === state) return;
@@ -299,7 +309,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           model.syncNoticeUnresponsive = false;
           model.mediaSnapshot = null;
           model.recoveryQueued = null;
-          yield* emitPorts();
+          yield* publish();
           if (scope) yield* Scope.close(scope, Exit.void);
           yield* access.clear;
           yield* publish();
@@ -471,7 +481,6 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                   model.mediaSnapshot = model.media?.getSnapshot() ?? null;
                   yield* transition("live");
                   if (model.mediaSnapshot?.connection.phase !== "live") yield* recover("media");
-                  yield* emitPorts();
                   yield* scheduleRefresh();
                   span.end({ state: model.state, epoch: model.epoch, outcome: "succeeded" });
                 }),
@@ -663,7 +672,6 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           if (model.syncSnapshot?.connection.phase !== "live") return yield* recover("sync");
           if (model.mediaSnapshot?.connection.phase !== "live") return yield* recover("media");
           mediaAttempt.expiresAt = null;
-          if (model.sync !== emittedSync) yield* emitPorts();
           diagnostics.record({ event: "recovery_succeeded", state: model.state, epoch, attempt });
           yield* transition("live");
           yield* publish();
@@ -800,7 +808,6 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             ),
           );
           yield* waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60_000));
-          yield* enqueue(emitPorts());
         });
 
       const handleSyncSnapshot = (sync: ConnectionSyncClient, snapshot: V1EpisodeSnapshot): Effect.Effect<void> =>

@@ -161,68 +161,46 @@ describe("Cloudflare SFU HTTP signaling", () => {
       vi.useRealTimers();
     }
   });
-  it("backs off persistent incomplete screen pulls and resets after reconciliation succeeds", async () => {
+  it.each(["incomplete", "discovery"] as const)("backs off %s polling and resets after success", async (mode) => {
     await withTimedHarness(
       async (harness) => {
+        vi.spyOn(Math, "random").mockReturnValue(0);
+        const list = vi.spyOn(harness.transport, "listPublications");
+        if (mode === "discovery") list.mockRejectedValue(new CloudflareSFUError("discovery unavailable", "signaling_failed"));
         await harness.client.start(fakeStream());
         const snapshot = publicationSnapshot(1, 1, "remote-connection|screen-a");
         harness.transport.snapshot = { ...snapshot, publications: snapshot.publications.map((publication) => ({ ...publication, source: "screen" })) };
         harness.transport.omittedRemoteTrackNames.add("screen-a");
-        const add = vi.spyOn(harness.transport, "addTracks");
+        const attempts = mode === "discovery" ? list : vi.spyOn(harness.transport, "addTracks");
         await vi.advanceTimersByTimeAsync(0);
-        expect(add).toHaveBeenCalledOnce();
-        for (const delay of [750, 1_500, 3_000, 6_000, 12_000, 15_000, 15_000]) {
-          const before = add.mock.calls.length;
+        for (const delay of mode === "discovery" ? [500, 1_000, 2_000, 4_000, 8_000, 15_000, 15_000] : [750, 1_500, 3_000, 6_000, 12_000, 15_000, 15_000]) {
+          const before = attempts.mock.calls.length;
           await vi.advanceTimersByTimeAsync(delay - 1);
-          expect(add).toHaveBeenCalledTimes(before);
+          expect(attempts).toHaveBeenCalledTimes(before);
           await vi.advanceTimersByTimeAsync(1);
-          expect(add).toHaveBeenCalledTimes(before + 1);
+          expect(attempts).toHaveBeenCalledTimes(before + 1);
         }
+        list.mockRestore();
         harness.transport.omittedRemoteTrackNames.clear();
         await vi.advanceTimersByTimeAsync(15_000);
         expect(harness.client.getSnapshot().remoteTracks).toHaveLength(1);
+        if (mode === "discovery") {
+          const failingAgain = vi.spyOn(harness.transport, "listPublications").mockRejectedValue(new CloudflareSFUError("discovery unavailable", "signaling_failed"));
+          await vi.advanceTimersByTimeAsync(15_000);
+          await vi.advanceTimersByTimeAsync(500);
+          expect(failingAgain).toHaveBeenCalledTimes(2);
+          harness.peerConnectionFactory.mockImplementationOnce(() => {
+            expect(harness.client.getSnapshot().connection.phase).toBe("recovering");
+            throw new Error("peer creation failed after disposal");
+          });
+          await expect(harness.client.restart(bootstrap("connection-2"))).rejects.toThrow("peer creation failed");
+          expect(harness.client.getSnapshot().connection.phase).toBe("failed");
+          await harness.client.restart(bootstrap("connection-3"));
+          expect(harness.client.getSnapshot().connection.phase).toBe("live");
+        }
       },
       { pollIntervalMs: 15_000 },
     );
-  });
-
-  it("backs off persistent publication-list failures and resets after discovery succeeds", async () => {
-    vi.useFakeTimers();
-    vi.spyOn(Math, "random").mockReturnValue(0);
-    const harness = createHarness({ pollIntervalMs: 15_000 });
-    const list = vi.spyOn(harness.transport, "listPublications").mockRejectedValue(new CloudflareSFUError("discovery unavailable", "signaling_failed"));
-    try {
-      await harness.client.start(fakeStream());
-      const beforePoll = list.mock.calls.length;
-      await vi.advanceTimersByTimeAsync(0);
-      expect(list).toHaveBeenCalledTimes(beforePoll + 1);
-      for (const delay of [500, 1_000, 2_000, 4_000, 8_000, 15_000, 15_000]) {
-        const calls = list.mock.calls.length;
-        await vi.advanceTimersByTimeAsync(delay - 1);
-        expect(list).toHaveBeenCalledTimes(calls);
-        await vi.advanceTimersByTimeAsync(1);
-        expect(list).toHaveBeenCalledTimes(calls + 1);
-      }
-      list.mockRestore();
-      await vi.advanceTimersByTimeAsync(15_000);
-      const failingAgain = vi.spyOn(harness.transport, "listPublications").mockRejectedValue(new CloudflareSFUError("new discovery failure", "signaling_failed"));
-      await vi.advanceTimersByTimeAsync(15_000);
-      expect(failingAgain).toHaveBeenCalledTimes(1);
-      await vi.advanceTimersByTimeAsync(500);
-      expect(failingAgain).toHaveBeenCalledTimes(2);
-      harness.peerConnectionFactory.mockImplementationOnce(() => {
-        expect(harness.client.getSnapshot().connection.phase).toBe("recovering");
-        throw new Error("peer creation failed after disposal");
-      });
-      await expect(harness.client.restart(bootstrap("connection-2"))).rejects.toThrow("peer creation failed");
-      expect(harness.client.getSnapshot().connection.phase).toBe("failed");
-      await harness.client.restart(bootstrap("connection-3"));
-      expect(harness.client.getSnapshot().connection.phase).toBe("live");
-    } finally {
-      harness.client.stop();
-      vi.restoreAllMocks();
-      vi.useRealTimers();
-    }
   });
 });
 

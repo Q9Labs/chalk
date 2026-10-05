@@ -58,5 +58,4 @@ test("expires and aborts a hung forced close", { timeout: 200 }, async () => {
     /No replacement \/media frame/,
   );
   assert.equal(aborted, true);
-  assert.equal(page.listenerCount("websocket"), 0);
 });

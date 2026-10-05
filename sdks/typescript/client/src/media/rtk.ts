@@ -165,28 +165,17 @@ export class CloudflareRTKClient {
   async clearPreparedLocalTrack(source: MediaSource): Promise<void> {
     const state = this.#localTracks.get(source);
     if (!state) return;
-    const remove = () => {
-      if (state.endedListener) state.track.removeEventListener("ended", state.endedListener);
-      this.#localTracks.delete(source);
-      this.#publishSnapshot();
-    };
-    // An unconfirmed enable cannot hold capture rollback behind its native promise.
-    if (!state.enabled) {
-      remove();
-      return;
-    }
-    const clear = () =>
-      this.#queueSourceOperation(source, async () => {
-        if (this.#localTracks.get(source) !== state) return;
-        if (state.enabled) await this.#setSourceEnabled(state, false);
-        remove();
-      });
+    const connection = this.#connection;
+    if (state.endedListener) state.track.removeEventListener("ended", state.endedListener);
+    this.#localTracks.delete(source);
+    const actions = connection ? this.#sourceActions(state, connection) : null;
+    // Remove desired state before notifying; order cleanup ahead of any newly prepared source.
+    const cleanup = actions?.enabled && state.enabled ? this.#queueSourceOperation(source, () => (connection === this.#connection ? actions.disable() : Promise.resolve())) : Promise.resolve();
+    this.#publishSnapshot();
     try {
-      await clear();
+      await cleanup;
     } catch (error) {
-      if (!(error instanceof CloudflareRTKError) || error.code !== "stale_generation") throw error;
-      // Retry once on the replacement; another replacement must fail truthfully.
-      if (this.#localTracks.get(source) === state) await clear();
+      if (!isStaleGeneration(error)) throw error;
     }
   }
 
@@ -315,11 +304,11 @@ export class CloudflareRTKClient {
       const enable = initial ? state.source !== "screen" : state.enabled;
       if (enable) {
         await this.#queueSourceOperation(state.source, async () => {
-          if (!this.#isCurrentGeneration(generation) || this.#localTracks.get(state.source) !== state) return;
+          if (!this.#isCurrentGeneration(generation) || this.#localTracks.get(state.source) !== state || (!initial && !state.enabled)) return;
           await this.#setSourceEnabled(state, true);
         }).catch((error: unknown) => {
           if (!this.#isCurrentGeneration(generation)) return;
-          if (error instanceof CloudflareRTKError && error.code === "stale_generation" && this.#localTracks.get(state.source) !== state) return;
+          if (isStaleGeneration(error) && this.#localTracks.get(state.source) !== state) return;
           throw error;
         });
       }
@@ -406,17 +395,7 @@ export class CloudflareRTKClient {
     const connection = this.#connection;
     const generation = this.#generation;
     if (!connection) throw new CloudflareRTKError("The RealtimeKit connection is not active", "media_stopped");
-    const actions = {
-      microphone: { enable: () => connection.self.enableAudio(state.track), disable: () => connection.self.disableAudio() },
-      camera: { enable: () => connection.self.enableVideo(state.track), disable: () => connection.self.disableVideo() },
-      screen: {
-        enable: () => connection.self.enableScreenShare(),
-        disable: () => {
-          if (connection === this.#connection) this.#screenDisableRequested = true;
-          return connection.self.disableScreenShare();
-        },
-      },
-    }[state.source];
+    const actions = this.#sourceActions(state, connection);
     if (state.source === "screen") this.#screenDisableRequested = !enabled;
     await actions[enabled ? "enable" : "disable"]();
     try {
@@ -432,6 +411,21 @@ export class CloudflareRTKClient {
     state.enabled = enabled;
     state.track.enabled = enabled;
     this.#publishSnapshot();
+  }
+
+  #sourceActions(state: LocalTrackState, connection: CloudflareRTKConnection) {
+    return {
+      microphone: { enabled: connection.self.audioEnabled, enable: () => connection.self.enableAudio(state.track), disable: () => connection.self.disableAudio() },
+      camera: { enabled: connection.self.videoEnabled, enable: () => connection.self.enableVideo(state.track), disable: () => connection.self.disableVideo() },
+      screen: {
+        enabled: connection.self.screenShareEnabled,
+        enable: () => connection.self.enableScreenShare(),
+        disable: () => {
+          if (connection === this.#connection) this.#screenDisableRequested = true;
+          return connection.self.disableScreenShare();
+        },
+      },
+    }[state.source];
   }
 
   #requireCurrentSource(state: LocalTrackState, connection: CloudflareRTKConnection, generation: number): void {
@@ -657,4 +651,8 @@ function toParticipant(participant: RTKParticipant): CloudflareRTKParticipant {
       return () => participant.off("screenShareUpdate", callback);
     },
   };
+}
+
+function isStaleGeneration(error: unknown): boolean {
+  return error instanceof CloudflareRTKError && error.code === "stale_generation";
 }
