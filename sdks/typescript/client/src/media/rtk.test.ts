@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import type { MediaPublication } from "./plane";
 import type { ParticipantMediaAccess } from "../access/grant";
 import { CloudflareRTKClient, type CloudflareRTKConnection } from "./rtk";
 

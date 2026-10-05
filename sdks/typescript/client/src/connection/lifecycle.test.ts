@@ -393,10 +393,6 @@ function waitForLive(lifecycle: ConnectionLifecycleCapability) {
   return Effect.promise(() => vi.waitFor(() => expect(lifecycle.getSnapshot().state).toBe("live")));
 }
 
-function expectAccessRevoked(lifecycle: ConnectionLifecycleCapability): void {
-  expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "invalid_access", recoverable: false } });
-}
-
 function joinedLifecycle() {
   return Effect.gen(function* () {
     const lifecycle = yield* Effect.service(ConnectionLifecycleService);
