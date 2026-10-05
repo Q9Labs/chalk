@@ -354,6 +354,7 @@ export class CloudflareRTKClient {
       if (enabled) await connection.self.enableScreenShare();
       else await connection.self.disableScreenShare();
     }
+    if (connection !== this.#connection || this.#stopped) return;
     state.enabled = enabled;
     state.track.enabled = enabled;
     this.#publishSnapshot();

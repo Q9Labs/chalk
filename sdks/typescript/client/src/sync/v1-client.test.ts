@@ -17,6 +17,47 @@ const projectionId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c24";
 const commandIds = Array.from({ length: 20 }, (_, index) => `018f2f65-2a77-7a44-8e9a-${(0x5b0b6f8d4d00 + index).toString(16)}`);
 
 describe("V1SyncClient", () => {
+  it.each(["target", "chat"] as const)("pauses %s receipt deadlines while hidden or after a throttled timer", async (kind) => {
+    const clock = new TestClock();
+    const { client } = kind === "chat" ? await liveCollaborationClient({ clock, commandTimeoutMs: 500 }) : await liveClient({ clock, commandTimeoutMs: 500 });
+    const visibility = { visibilityState: "hidden" };
+    vi.stubGlobal("document", visibility);
+    try {
+      let settled = false;
+      const action = (kind === "chat" ? client.sendChatMessage({ text: "slow", clientMessageId: commandIds[0] }) : client.setHandRaised(true, { commandId: commandIds[0] })).finally(() => {
+        settled = true;
+      });
+      void action.catch(() => {});
+      await settle();
+      clock.advance(500);
+      await settle();
+      expect(settled).toBe(false);
+      visibility.visibilityState = "visible";
+      clock.suspend(10_000);
+      await settle();
+      expect(settled).toBe(false);
+      clock.advance(500);
+      await expect(action).rejects.toMatchObject({ code: "command_timeout" });
+    } finally {
+      client.stop();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("restarts only the transport while retaining pending durable receipts", async () => {
+    const clock = new TestClock();
+    const store = new InMemoryV1PendingTargetStore();
+    const { client, socket } = await liveClient({ clock, pendingStore: store });
+    const action = client.setHandRaised(true, { commandId: commandIds[0] });
+    void action.catch(() => {});
+    await settle();
+    client.restartTransport?.();
+    expect(socket.closeCalls).toHaveLength(1);
+    expect(await store.load()).toMatchObject([{ commandId: commandIds[0] }]);
+    expect(client.getSnapshot().pendingCommandCount).toBe(1);
+    client.stop();
+  });
+
   it("bounds a caller's durable action during disconnect while retaining its ID for receipt recovery", async () => {
     const clock = new TestClock();
     const store = new InMemoryV1PendingTargetStore();
@@ -579,6 +620,18 @@ describe("V1SyncClient", () => {
     socket.receive({ type: "projection_event", stream: "presence", projection_id: projectionId, sequence: 1, item: { participant_id: ownerId, state: "connected", speaking: false, active_speaker: false } });
     await recovering;
     expect(client.getSnapshot().connection.phase).toBe("connecting");
+  });
+
+  it("passes remote projection intent to the media watchdog even before a track arrives", async () => {
+    const { client, socket, mediaPlane } = await liveClient();
+    const paused = { participant_id: peerId, source: "camera", enabled: false, publication_id: "remote-connection|camera" } as const;
+    socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item: paused });
+    await settle();
+    expect(mediaPlane.remoteTargets).toEqual([{ participantId: peerId, source: "camera", enabled: false, publicationId: "remote-connection|camera" }]);
+    socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 2, item: { ...paused, enabled: true } });
+    await settle();
+    expect(mediaPlane.remoteTargets[0]?.enabled).toBe(true);
+    client.stop();
   });
 
   it("retries a retained remote publication when its paused projection resumes", async () => {
@@ -1868,6 +1921,15 @@ class TestClock {
     if (typeof handle === "number") this.#timers.delete(handle);
   }
 
+  suspend(milliseconds: number): void {
+    this.#now += milliseconds;
+    for (const [handle, timer] of [...this.#timers]) {
+      if (timer.at > this.#now) continue;
+      this.#timers.delete(handle);
+      timer.callback();
+    }
+  }
+
   advance(milliseconds: number): void {
     const target = this.#now + milliseconds;
     while (true) {
@@ -1999,6 +2061,10 @@ class AlwaysFailRemoveStore extends InMemoryV1PendingTargetStore {
 class TestMediaPlane implements V1ClientMediaPlane {
   readonly targets: V1MediaPlaneTarget[] = [];
   readonly results: V1MediaPlaneResult[] = [];
+  remoteTargets: readonly V1MediaPublication[] = [];
+  setRemotePublicationTargets(publications: readonly V1MediaPublication[]): void {
+    this.remoteTargets = publications;
+  }
   readonly resumed: string[] = [];
   changed = 0;
   #localListener: ((publications: readonly V1MediaPublication[]) => void) | undefined;

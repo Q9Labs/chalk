@@ -139,6 +139,10 @@ export class V1SyncClient implements V1CollaborationClient {
     });
   }
 
+  restartTransport(): void {
+    this.#recover("lifecycle transport deadline");
+  }
+
   async start(): Promise<void> {
     if (this.#started) return;
     this.#started = true;
@@ -555,6 +559,7 @@ export class V1SyncClient implements V1CollaborationClient {
       const previous = this.#media?.items ?? [];
       this.#media = { projectionId: frame.projection_id, sequence: 0, items: frame.items.map(mediaItem) };
       this.#mediaEventEvidence.clear();
+      this.#options.mediaPlane?.setRemotePublicationTargets?.(this.#media.items);
       for (const item of this.#media.items)
         this.#notifyRemotePublicationResumed(
           previous.find((candidate) => mediaKey(candidate) === mediaKey(item)),
@@ -576,6 +581,7 @@ export class V1SyncClient implements V1CollaborationClient {
       const item = mediaItem(frame.item);
       const previous = this.#media?.items.find((candidate) => mediaKey(candidate) === mediaKey(item));
       this.#media = updateProjection(this.#media, frame.projection_id, frame.sequence, item, mediaKey);
+      this.#options.mediaPlane?.setRemotePublicationTargets?.(this.#media.items);
       rememberBoundedEvidence(this.#mediaEventEvidence, frame.sequence, frameSignature(frame), MAX_PROJECTION_EVENT_EVIDENCE);
       this.#notifyRemotePublicationResumed(previous, item);
       if (item.participantId !== this.#participantId && (previous?.enabled !== item.enabled || previous?.publicationId !== item.publicationId)) {

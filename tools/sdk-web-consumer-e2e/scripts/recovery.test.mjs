@@ -110,6 +110,28 @@ test("cleans up observers when forcing loss fails", async () => {
   assert.equal(page.listenerCount("websocket"), 0);
 });
 
+test("bounds a hung forced-close request and aborts it before cleaning observers", { timeout: 200 }, async () => {
+  const page = new TestEmitter();
+  let aborted = false;
+  await assert.rejects(
+    forceAndWaitForRecovery(
+      page,
+      "http://fixture.test/test/force-media",
+      async (_url, signal) => {
+        signal?.addEventListener("abort", () => {
+          aborted = true;
+        });
+        await new Promise(() => {});
+      },
+      async () => assert.fail("Loss did not complete"),
+      5,
+    ),
+    /No replacement \/media frame/,
+  );
+  assert.equal(aborted, true);
+  assert.equal(page.listenerCount("websocket"), 0);
+});
+
 class TestEmitter extends EventEmitter {
   constructor(address = "ws://fixture.test/media") {
     super();

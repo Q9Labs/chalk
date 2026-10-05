@@ -1,3 +1,4 @@
+import { scheduleForegroundDeadline } from "../foreground-deadline";
 import { recordReconnect } from "../telemetry/reconnect";
 import type { SyncV1ClientFrame, SyncV1ServerFrame } from "../generated/sync";
 import { encodeV1ClientFrame } from "./v1-codec";
@@ -50,7 +51,7 @@ export class V1CommandScheduler {
   readonly #acknowledgements = new Map<string, Extract<V1CommandResult, { readonly outcome: "committed" | "satisfied" }>>();
   readonly #pendingRemovals = new Map<string, V1PendingTarget>();
   readonly #commandRetryTimers = new Map<string, unknown>();
-  readonly #commandDeadlineTimers = new Map<string, unknown>();
+  readonly #commandDeadlineTimers = new Map<string, () => void>();
   readonly #pendingRemovalRetryTimers = new Map<string, unknown>();
   #stopGeneration = 0;
 
@@ -100,7 +101,7 @@ export class V1CommandScheduler {
   stop(code: string): void {
     this.#stopGeneration += 1;
     this.#clearCommandRetryTimers();
-    for (const timer of this.#commandDeadlineTimers.values()) this.#options.clock().clearTimeout(timer);
+    for (const cancel of this.#commandDeadlineTimers.values()) cancel();
     this.#commandDeadlineTimers.clear();
     this.#clearPendingRemovalRetryTimers();
     for (const deferred of this.#commands.values()) rejectV1Deferred(deferred, new V1SyncError(code, code));
@@ -252,7 +253,7 @@ export class V1CommandScheduler {
     return new Promise((resolve, reject) => {
       const deferred = { resolve, reject, settled: false, frame, retries: 0, durableTarget, createdAt };
       this.#commands.set(commandId, deferred);
-      const timer = this.#options.clock().setTimeout(() => {
+      const timer = scheduleForegroundDeadline(this.#options.clock(), this.#options.commandTimeoutMs ?? COMMAND_TIMEOUT_MS, () => {
         this.#commandDeadlineTimers.delete(commandId);
         if (this.#commands.get(commandId) !== deferred || deferred.settled) return;
         // Keep durable targets and their IDs until a receipt resolves uncertain delivery.
@@ -264,7 +265,7 @@ export class V1CommandScheduler {
         recordReconnect(this.#options.recordReconnect, "command_timeout", { frame_type: frame.type, durable_target: durableTarget, timeout_ms: this.#options.commandTimeoutMs ?? COMMAND_TIMEOUT_MS }, "failed");
         rejectV1Deferred(deferred, new V1SyncError("The action was not confirmed in time. Reconnect and try again.", "command_timeout"));
         this.#options.stateChanged();
-      }, this.#options.commandTimeoutMs ?? COMMAND_TIMEOUT_MS);
+      });
       this.#commandDeadlineTimers.set(commandId, timer);
     });
   }
@@ -406,7 +407,7 @@ export class V1CommandScheduler {
   #clearCommandDeadline(commandId: string): void {
     const timer = this.#commandDeadlineTimers.get(commandId);
     if (timer === undefined) return;
-    this.#options.clock().clearTimeout(timer);
+    timer();
     this.#commandDeadlineTimers.delete(commandId);
   }
 }

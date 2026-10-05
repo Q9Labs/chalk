@@ -4,27 +4,159 @@ import { describe, expect, it, vi } from "vitest";
 import { parseParsedAccessGrant } from "../access/grant";
 import { ConnectionAccessFailure } from "../access/manager";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
-import { ConnectionLifecycleService, makeConnectionLifecycleLayer } from "./lifecycle";
+import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type ConnectionLifecycleCapability } from "./lifecycle";
 import type { ConnectionOptions } from "./index";
 
 describe("ConnectionLifecycle Episode snapshot", () => {
+  it("pauses the action deadline while the tab is hidden", async () => {
+    const platform = createCoreTestPlatform();
+    const layer = testLifecycleLayer({ access: replacementAccess(), dependencies: platform.dependencies, recovery: { budgetMs: 20 } });
+    await Effect.runPromise(
+      withJoinedLifecycle((lifecycle) =>
+        Effect.gen(function* () {
+          const visibility = { visibilityState: "hidden" };
+          vi.stubGlobal("document", visibility);
+          try {
+            const receipt = yield* Deferred.make<string>();
+            let settled = false;
+            const action = yield* Effect.forkScoped(
+              lifecycle
+                .runCommand(() => Deferred.await(receipt))
+                .pipe(
+                  Effect.onExit(() =>
+                    Effect.sync(() => {
+                      settled = true;
+                    }),
+                  ),
+                ),
+            );
+            yield* Effect.sleep(50);
+            expect(settled).toBe(false);
+            visibility.visibilityState = "visible";
+            yield* Deferred.succeed(receipt, "confirmed");
+            expect(yield* Fiber.join(action)).toBe("confirmed");
+          } finally {
+            vi.unstubAllGlobals();
+          }
+        }),
+      ).pipe(Effect.scoped, Effect.provide(layer)),
+    );
+  });
+
+  it.each(["media", "sync"] as const)("gives an in-flight %s rebuild a fresh window when a suspended tab returns", async (kind) => {
+    const platform = createCoreTestPlatform();
+    const advanceClock = freezeLifecycleTime(platform);
+    let foreground = () => {};
+    const { promise: pending, resolve: finish } = pendingVoid();
+    const media = testMediaClient(platform);
+    const restart = vi.spyOn(media, "restart").mockImplementationOnce(async () => {
+      emitMediaPhase(platform, "recovering");
+      await pending;
+      emitMediaPhase(platform, "live");
+    });
+    let count = 0;
+    const createSyncClient = vi.fn(() => {
+      const replacement = ++count === 2;
+      return {
+        ...platform.sync,
+        start:
+          replacement && kind === "sync"
+            ? async () => {
+                platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "connecting" } });
+                await pending;
+                await platform.sync.start();
+              }
+            : platform.sync.start,
+      };
+    });
+    const layer = testLifecycleLayer({
+      access: replacementAccess(),
+      dependencies: {
+        ...platform.dependencies,
+        createSyncClient,
+        subscribeForeground: (listener) => {
+          foreground = listener;
+          return () => {};
+        },
+      },
+      recovery: { budgetMs: 30, maxAttempts: 1 },
+    });
+    await Effect.runPromise(
+      withJoinedLifecycle((lifecycle) =>
+        Effect.gen(function* () {
+          if (kind === "media") emitMediaPhase(platform, "failed");
+          else platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "fixture_disconnect" } });
+          yield* Effect.promise(() => vi.waitFor(() => expect(kind === "media" ? restart.mock.calls.length : createSyncClient.mock.calls.length).toBe(kind === "media" ? 1 : 2)));
+          advanceClock(60_001);
+          foreground();
+          yield* Effect.sleep(500);
+          expect(kind === "media" ? restart.mock.calls.length : createSyncClient.mock.calls.length).toBe(kind === "media" ? 1 : 2);
+          finish();
+          yield* waitForLive(lifecycle);
+        }),
+      ).pipe(Effect.provide(layer)),
+    );
+  });
+
+  it("rebuilds a custom Sync transport that never completes its own reconnect", async () => {
+    const platform = createCoreTestPlatform();
+    const advanceClock = freezeLifecycleTime(platform);
+    const createSyncClient = vi.fn(() => ({ ...platform.sync }));
+    const layer = testLifecycleLayer({ access: replacementAccess(), dependencies: { ...platform.dependencies, createSyncClient }, recovery: { budgetMs: 30, maxAttempts: 1 } });
+    await Effect.runPromise(
+      withJoinedLifecycle((lifecycle) =>
+        Effect.gen(function* () {
+          platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "connecting" } });
+          yield* Effect.promise(() => vi.waitFor(() => expect(lifecycle.getSnapshot().failure?.code).toBe("sync_recovery_exhausted")));
+          advanceClock(60_001);
+          yield* Effect.promise(() => vi.waitFor(() => expect(createSyncClient).toHaveBeenCalledTimes(2), { timeout: 1_500 }));
+          yield* waitForLive(lifecycle);
+        }),
+      ).pipe(Effect.provide(layer)),
+    );
+  });
+
   it("does not block lifecycle loss or other actions behind a long-running upload", async () => {
     const platform = createCoreTestPlatform();
     const layer = testLifecycleLayer({ access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)), dependencies: platform.dependencies, recovery: { budgetMs: 50, maxAttempts: 1 } });
     await Effect.runPromise(
+      withJoinedLifecycle((lifecycle) =>
+        Effect.gen(function* () {
+          const started = yield* Deferred.make<void>();
+          const uploaded = yield* Deferred.make<string>();
+          const upload = yield* Effect.forkScoped(lifecycle.runPortCommand(() => Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(uploaded)))));
+          yield* Deferred.await(started);
+          const result = yield* lifecycle.runCommand(() => Effect.succeed("action completed")).pipe(Effect.timeout(100), Effect.result);
+          expect(result).toMatchObject({ _tag: "Success", success: "action completed" });
+          platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "connecting" } });
+          yield* Effect.sleep(400);
+          expect(lifecycle.getSnapshot()).toMatchObject({ state: "reconnecting", failure: { recoverable: true } });
+          yield* Deferred.succeed(uploaded, "finalized");
+          expect(yield* Fiber.join(upload)).toBe("finalized");
+        }),
+      ).pipe(Effect.scoped, Effect.provide(layer)),
+    );
+  });
+
+  it("stops default initial capture when permission is granted after Leave cancelled Join", async () => {
+    const platform = createCoreTestPlatform();
+    const stop = vi.fn();
+    let grant = (_stream: MediaStream) => {};
+    const capture = vi.spyOn(platform.dependencies.mediaDevices, "getUserMedia").mockImplementation(
+      () =>
+        new Promise<MediaStream>((resolve) => {
+          grant = resolve;
+        }),
+    );
+    const layer = testLifecycleLayer({ access: replacementAccess(), dependencies: platform.dependencies });
+    await Effect.runPromise(
       Effect.gen(function* () {
-        const lifecycle = yield* joinedLifecycle();
-        const started = yield* Deferred.make<void>();
-        const uploaded = yield* Deferred.make<string>();
-        const upload = yield* Effect.forkScoped(lifecycle.runPortCommand(() => Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(uploaded)))));
-        yield* Deferred.await(started);
-        const result = yield* lifecycle.runCommand(() => Effect.succeed("action completed")).pipe(Effect.timeout(100), Effect.result);
-        expect(result).toMatchObject({ _tag: "Success", success: "action completed" });
-        platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "connecting" } });
-        yield* Effect.sleep(400);
-        expect(lifecycle.getSnapshot()).toMatchObject({ state: "reconnecting", failure: { recoverable: true } });
-        yield* Deferred.succeed(uploaded, "finalized");
-        expect(yield* Fiber.join(upload)).toBe("finalized");
+        const lifecycle = yield* ConnectionLifecycleService;
+        yield* Effect.forkScoped(lifecycle.join());
+        yield* Effect.promise(() => vi.waitFor(() => expect(capture).toHaveBeenCalledOnce()));
+        yield* lifecycle.leave();
+        grant({ getTracks: () => [{ stop }] } as unknown as MediaStream);
+        yield* Effect.promise(() => vi.waitFor(() => expect(stop).toHaveBeenCalledOnce()));
       }).pipe(Effect.scoped, Effect.provide(layer)),
     );
   });
@@ -46,15 +178,120 @@ describe("ConnectionLifecycle Episode snapshot", () => {
       dependencies: platform.dependencies,
     });
     await Effect.runPromise(
+      withJoinedLifecycle((lifecycle) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => vi.waitFor(() => expect(release).toBeDefined()));
+          platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "recovering" } });
+          yield* Effect.sleep(350);
+          const snapshot = lifecycle.getSnapshot();
+          release?.();
+          expect(snapshot).toMatchObject({ state: "reconnecting", connection: { sync: "recovering" } });
+        }),
+      ).pipe(Effect.provide(layer)),
+    );
+  });
+
+  it.each(["media", "sync"] as const)("bounds a hung initial %s start after capture and fails locally", async (kind) => {
+    const platform = createCoreTestPlatform();
+    const start = vi.fn(async () => {
+      await new Promise<void>(() => {});
+    });
+    const timer = platform.dependencies.clock.setTimeout;
+    vi.spyOn(platform.dependencies.clock, "setTimeout").mockImplementation((callback, milliseconds) => timer(callback, milliseconds === 60_000 ? 30 : milliseconds));
+    const media = testMediaClient(platform);
+    const dependencies = { ...platform.dependencies, createMediaClient: () => ({ ...media, start: kind === "media" ? start : media.start }), createSyncClient: () => ({ ...platform.sync, start: kind === "sync" ? start : platform.sync.start }) };
+    const layer = testLifecycleLayer({ access: replacementAccess(), dependencies });
+    await Effect.runPromise(
       Effect.gen(function* () {
-        const lifecycle = yield* joinedLifecycle();
-        yield* Effect.promise(() => vi.waitFor(() => expect(release).toBeDefined()));
-        platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "recovering" } });
-        yield* Effect.sleep(350);
-        const snapshot = lifecycle.getSnapshot();
-        release?.();
-        expect(snapshot).toMatchObject({ state: "reconnecting", connection: { sync: "recovering" } });
+        const lifecycle = yield* ConnectionLifecycleService;
+        const result = yield* lifecycle.join().pipe(Effect.timeout(200), Effect.result);
+        expect(result).toMatchObject({ _tag: "Failure", failure: { code: kind === "media" ? "media_start_failed" : "sync_start_failed" } });
+        expect(lifecycle.getSnapshot().state).toBe("failed");
       }).pipe(Effect.provide(layer)),
+    );
+  });
+
+  it("keeps actions available while automatic media access replacement hangs", async () => {
+    const platform = createCoreTestPlatform();
+    const media = testMediaClient(platform);
+    let complete = () => {};
+    const restart = vi.spyOn(media, "restart").mockImplementation(async () => {
+      emitMediaPhase(platform, "recovering");
+      await new Promise<void>((resolve) => {
+        complete = resolve;
+      });
+      emitMediaPhase(platform, "live");
+    });
+    const grants = replacementAccess();
+    let calls = 0;
+    const access = async () => {
+      const grant = await grants();
+      return calls++ === 0 ? { ...grant, media: { ...grant.media, expiresAt: new Date(Date.now() + 50).toISOString() } } : grant;
+    };
+    const layer = testLifecycleLayer({ access, accessRefreshWindowMs: 0, dependencies: platform.dependencies });
+    await Effect.runPromise(
+      withJoinedLifecycle((lifecycle) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => vi.waitFor(() => expect(restart).toHaveBeenCalledOnce()));
+          const result = yield* lifecycle.runCommand(() => Effect.succeed("confirmed")).pipe(Effect.timeout(100), Effect.result);
+          complete();
+          expect(result).toMatchObject({ _tag: "Success", success: "confirmed" });
+        }),
+      ).pipe(Effect.provide(layer)),
+    );
+  });
+
+  it("backs off scheduled access refresh failures and resets after success", async () => {
+    const platform = createCoreTestPlatform();
+    const { clock, advance, waitingFor: waiting } = controlledLifecycleClock();
+    const freshGrant = replacementAccess();
+    const fetchAccess = async () => {
+      const grant = await freshGrant();
+      return { ...grant, sync: { ...grant.sync, expiresAt: new Date(clock.now() + 1_000).toISOString() }, media: { ...grant.media, expiresAt: new Date(clock.now() + 1_000).toISOString() } };
+    };
+    const access = vi.fn(fetchAccess);
+    const layer = testLifecycleLayer({ access, accessRefreshWindowMs: 0, dependencies: { ...platform.dependencies, clock } });
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* joinedLifecycle();
+        yield* Effect.promise(async () => {
+          await vi.waitFor(() => expect(waiting(1_000)).toBe(true));
+          access.mockRejectedValue(new Error("Temporary access outage"));
+          await advance(1_000);
+          await vi.waitFor(() => expect(access).toHaveBeenCalledTimes(2));
+          for (const delay of [5_000, 10_000, 20_000, 40_000, 60_000, 60_000]) {
+            await vi.waitFor(() => expect(waiting(delay)).toBe(true));
+            const before = access.mock.calls.length;
+            await advance(delay);
+            await vi.waitFor(() => expect(access).toHaveBeenCalledTimes(before + 1));
+          }
+          access.mockImplementation(fetchAccess);
+          await vi.waitFor(() => expect(waiting(60_000)).toBe(true));
+          await advance(60_000);
+          await vi.waitFor(() => expect(waiting(1_000)).toBe(true));
+          access.mockRejectedValue(new Error("Temporary access outage"));
+          await advance(1_000);
+          await vi.waitFor(() => expect(waiting(5_000)).toBe(true));
+        });
+      }).pipe(Effect.provide(layer)),
+    );
+  });
+
+  it("caps an attempt's configured backoff at the remaining cycle budget", async () => {
+    const platform = createCoreTestPlatform();
+    const access = vi.fn(replacementAccess());
+    const media = testMediaClient(platform);
+    vi.spyOn(media, "restart").mockImplementation(async () => emitMediaPhase(platform, "live"));
+    const layer = testLifecycleLayer({ access, dependencies: platform.dependencies, recovery: { budgetMs: 30, maxAttempts: 3, backoffMs: [600_000] } });
+    await Effect.runPromise(
+      withJoinedLifecycle((lifecycle) =>
+        Effect.gen(function* () {
+          access.mockRejectedValueOnce(new Error("Temporary access outage"));
+          emitMediaPhase(platform, "failed");
+          yield* Effect.promise(() => vi.waitFor(() => expect(access).toHaveBeenCalledTimes(3), { timeout: 1_500 }));
+          yield* waitForLive(lifecycle);
+        }),
+      ).pipe(Effect.provide(layer)),
     );
   });
 
@@ -74,51 +311,29 @@ describe("ConnectionLifecycle Episode snapshot", () => {
       recovery: { budgetMs: 1_000, maxAttempts: 1 },
     });
     await Effect.runPromise(
-      Effect.gen(function* () {
-        const lifecycle = yield* joinedLifecycle();
-        emitMediaPhase(platform, "failed");
-        yield* Effect.promise(() => vi.waitFor(() => expect(restart).toHaveBeenCalledOnce()));
-        const result = yield* lifecycle.runCommand(() => Effect.succeed("action completed")).pipe(Effect.timeout(100), Effect.result);
-        release?.();
-        expect(result).toMatchObject({ _tag: "Success", success: "action completed" });
-      }).pipe(Effect.provide(layer)),
+      withJoinedLifecycle((lifecycle) =>
+        Effect.gen(function* () {
+          emitMediaPhase(platform, "failed");
+          yield* Effect.promise(() => vi.waitFor(() => expect(restart).toHaveBeenCalledOnce()));
+          const result = yield* lifecycle.runCommand(() => Effect.succeed("action completed")).pipe(Effect.timeout(100), Effect.result);
+          release?.();
+          expect(result).toMatchObject({ _tag: "Success", success: "action completed" });
+        }),
+      ).pipe(Effect.provide(layer)),
     );
   });
 
   it.each(["access", "media_snapshot", "sync_snapshot"] as const)("backs off exhausted background cycles and resumes after %s recovery", async (recovery) => {
     vi.spyOn(Math, "random").mockReturnValue(1);
     const platform = createCoreTestPlatform();
-    let now = Date.now();
+    const { clock, advance, waitingFor } = controlledLifecycleClock();
     const grantProvider = replacementAccess();
     const fetchAccess = async () => {
       const grant = await grantProvider();
-      const expiresAt = new Date(now + 3_600_000).toISOString();
+      const expiresAt = new Date(clock.now() + 3_600_000).toISOString();
       return { ...grant, sync: { ...grant.sync, expiresAt }, media: { ...grant.media, expiresAt } };
     };
     const access = vi.fn(fetchAccess);
-    let nextTimer = 0;
-    const timers = new Map<number, { at: number; callback: () => void }>();
-    const clock = {
-      now: () => now,
-      setTimeout: (callback: () => void, milliseconds: number) => {
-        const handle = nextTimer++;
-        timers.set(handle, { at: now + milliseconds, callback });
-        return handle;
-      },
-      clearTimeout: (handle: unknown) => {
-        if (typeof handle === "number") timers.delete(handle);
-      },
-    };
-    const advance = async (milliseconds: number) => {
-      now += milliseconds;
-      for (const [handle, timer] of [...timers]) {
-        if (timer.at > now) continue;
-        timers.delete(handle);
-        timer.callback();
-      }
-      await new Promise<void>((resolve) => setImmediate(resolve));
-    };
-    const waitingFor = (milliseconds: number) => [...timers.values()].some((timer) => timer.at === now + milliseconds);
     const media = testMediaClient(platform);
     vi.spyOn(media, "restart").mockImplementation(async () => emitMediaPhase(platform, "live"));
     const layer = testLifecycleLayer({ access, dependencies: { ...platform.dependencies, clock }, recovery: { budgetMs: 1_000, maxAttempts: 1 } });
@@ -167,8 +382,7 @@ describe("ConnectionLifecycle Episode snapshot", () => {
   it("restarts media again after a recovering adapter hangs past the budget", async () => {
     const platform = createCoreTestPlatform();
     const media = testMediaClient(platform);
-    let now = Date.now();
-    vi.spyOn(platform.dependencies.clock, "now").mockImplementation(() => now);
+    const advanceClock = freezeLifecycleTime(platform);
     const access = vi.fn(replacementAccess());
     const restart = vi
       .spyOn(media, "restart")
@@ -186,7 +400,7 @@ describe("ConnectionLifecycle Episode snapshot", () => {
           Effect.gen(function* () {
             emitMediaPhase(platform, "failed");
             yield* Effect.promise(() => vi.waitFor(() => expect(restart).toHaveBeenCalledOnce()));
-            now += 60_001;
+            advanceClock(60_001);
             yield* Effect.promise(() => vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(2), { timeout: 1_500 }));
             yield* Effect.promise(() => vi.waitFor(() => expect(lifecycle.getSnapshot().state).toBe("live"), { timeout: 1_500 }));
             expect(access).toHaveBeenCalledTimes(3);
@@ -231,11 +445,12 @@ describe("ConnectionLifecycle Episode snapshot", () => {
     const platform = createCoreTestPlatform();
     const layer = testLifecycleLayer({ access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)), dependencies: platform.dependencies, recovery: { budgetMs: 10 } });
     await Effect.runPromise(
-      Effect.gen(function* () {
-        const lifecycle = yield* joinedLifecycle();
-        const result = yield* lifecycle.runPortCommand(() => Effect.sleep(30).pipe(Effect.as("finalized")));
-        expect(result).toBe("finalized");
-      }).pipe(Effect.provide(layer)),
+      withJoinedLifecycle((lifecycle) =>
+        Effect.gen(function* () {
+          const result = yield* lifecycle.runPortCommand(() => Effect.sleep(30).pipe(Effect.as("finalized")));
+          expect(result).toBe("finalized");
+        }),
+      ).pipe(Effect.provide(layer)),
     );
   });
 
@@ -259,12 +474,13 @@ describe("ConnectionLifecycle Episode snapshot", () => {
       dependencies: { ...platform.dependencies, createSyncClient: () => sync },
     });
     await Effect.runPromise(
-      Effect.gen(function* () {
-        const lifecycle = yield* joinedLifecycle();
-        yield* Effect.sleep(350);
-        expect(restart).toHaveBeenCalledTimes(1);
-        expect(lifecycle.getSnapshot()).toMatchObject({ state: "live", connection: { media: "healthy" } });
-      }).pipe(Effect.provide(layer)),
+      withJoinedLifecycle((lifecycle) =>
+        Effect.gen(function* () {
+          yield* Effect.sleep(350);
+          expect(restart).toHaveBeenCalledTimes(1);
+          expect(lifecycle.getSnapshot()).toMatchObject({ state: "live", connection: { media: "healthy" } });
+        }),
+      ).pipe(Effect.provide(layer)),
     );
   });
 
@@ -282,11 +498,12 @@ describe("ConnectionLifecycle Episode snapshot", () => {
       dependencies: platform.dependencies,
     });
     await Effect.runPromise(
-      Effect.gen(function* () {
-        const lifecycle = yield* joinedLifecycle();
-        yield* Effect.sleep(200);
-        expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "invalid_access", recoverable: false } });
-      }).pipe(Effect.provide(layer)),
+      withJoinedLifecycle((lifecycle) =>
+        Effect.gen(function* () {
+          yield* Effect.sleep(200);
+          expectAccessRevoked(lifecycle);
+        }),
+      ).pipe(Effect.provide(layer)),
     );
   });
   it("processes loss while an action is awaiting its receipt and heals after the foreground budget", async () => {
@@ -299,21 +516,22 @@ describe("ConnectionLifecycle Episode snapshot", () => {
       dependencies: { ...platform.dependencies, createSyncClient },
     });
     await Effect.runPromise(
-      Effect.gen(function* () {
-        const lifecycle = yield* joinedLifecycle();
-        const receipt = yield* Deferred.make<void>();
-        yield* Effect.forkScoped(lifecycle.runCommand(() => Deferred.await(receipt)));
-        yield* Effect.sleep(10);
-        platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "connecting" } });
-        yield* Effect.sleep(400);
-        expect(lifecycle.getSnapshot()).toMatchObject({ state: "reconnecting", failure: { recoverable: true } });
-        expect(stopMedia).not.toHaveBeenCalled();
-        platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
-        yield* Effect.sleep(400);
-        expect(lifecycle.getSnapshot()).toMatchObject({ state: "live", failure: null });
-        expect(createSyncClient).toHaveBeenCalledTimes(1);
-        yield* Deferred.succeed(receipt, undefined);
-      }).pipe(Effect.scoped, Effect.provide(layer)),
+      withJoinedLifecycle((lifecycle) =>
+        Effect.gen(function* () {
+          const receipt = yield* Deferred.make<void>();
+          yield* Effect.forkScoped(lifecycle.runCommand(() => Deferred.await(receipt)));
+          yield* Effect.sleep(10);
+          platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "connecting" } });
+          yield* Effect.sleep(400);
+          expect(lifecycle.getSnapshot()).toMatchObject({ state: "reconnecting", failure: { recoverable: true } });
+          expect(stopMedia).not.toHaveBeenCalled();
+          platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
+          yield* Effect.sleep(400);
+          expect(lifecycle.getSnapshot()).toMatchObject({ state: "live", failure: null });
+          expect(createSyncClient).toHaveBeenCalledTimes(1);
+          yield* Deferred.succeed(receipt, undefined);
+        }),
+      ).pipe(Effect.scoped, Effect.provide(layer)),
     );
   });
 
@@ -321,18 +539,56 @@ describe("ConnectionLifecycle Episode snapshot", () => {
     const platform = createCoreTestPlatform();
     const layer = testLifecycleLayer({ access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)), dependencies: platform.dependencies });
     await Effect.runPromise(
-      Effect.gen(function* () {
-        const lifecycle = yield* joinedLifecycle();
-        const states: string[] = [];
-        const unsubscribe = lifecycle.subscribe(() => states.push(lifecycle.getSnapshot().state));
-        platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "connecting" } });
-        yield* Effect.sleep(50);
-        platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
-        yield* Effect.sleep(300);
-        expect(states).not.toContain("reconnecting");
-        expect(lifecycle.getSnapshot().state).toBe("live");
-        unsubscribe();
-      }).pipe(Effect.provide(layer)),
+      withJoinedLifecycle((lifecycle) =>
+        Effect.gen(function* () {
+          const states: string[] = [];
+          const unsubscribe = lifecycle.subscribe(() => states.push(lifecycle.getSnapshot().state));
+          platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "connecting" } });
+          yield* Effect.sleep(50);
+          platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
+          yield* Effect.sleep(300);
+          expect(states).not.toContain("reconnecting");
+          expect(lifecycle.getSnapshot().state).toBe("live");
+          unsubscribe();
+        }),
+      ).pipe(Effect.provide(layer)),
+    );
+  });
+
+  it("rebuilds an expired replacement Sync start and ignores its late completion", async () => {
+    const platform = createCoreTestPlatform();
+    const advanceClock = freezeLifecycleTime(platform);
+    let finish = () => {};
+    let creations = 0;
+    const stop = vi.fn();
+    const createSyncClient = vi.fn(() => {
+      const replacement = ++creations === 2;
+      return {
+        ...platform.sync,
+        stop: replacement ? stop : platform.sync.stop,
+        start: replacement
+          ? async () => {
+              platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "connecting" } });
+              await new Promise<void>((resolve) => {
+                finish = resolve;
+              });
+            }
+          : platform.sync.start,
+      };
+    });
+    const layer = testLifecycleLayer({ access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)), dependencies: { ...platform.dependencies, createSyncClient }, recovery: { budgetMs: 30, maxAttempts: 1 } });
+    await Effect.runPromise(
+      withJoinedLifecycle((lifecycle) =>
+        Effect.gen(function* () {
+          platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "fixture_disconnect" } });
+          yield* Effect.promise(() => vi.waitFor(() => expect(createSyncClient).toHaveBeenCalledTimes(2)));
+          advanceClock(60_001);
+          yield* Effect.promise(() => vi.waitFor(() => expect(createSyncClient).toHaveBeenCalledTimes(3), { timeout: 1_500 }));
+          expect(stop).toHaveBeenCalledOnce();
+          finish();
+          yield* waitForLive(lifecycle);
+        }),
+      ).pipe(Effect.provide(layer)),
     );
   });
 
@@ -355,12 +611,13 @@ describe("ConnectionLifecycle Episode snapshot", () => {
     });
     const layer = testLifecycleLayer({ access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)), dependencies: { ...platform.dependencies, createSyncClient }, recovery: { budgetMs: 500, maxAttempts: 3, backoffMs: [10] } });
     await Effect.runPromise(
-      Effect.gen(function* () {
-        const lifecycle = yield* joinedLifecycle();
-        platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "fixture_disconnect" } });
-        yield* Effect.promise(() => vi.waitFor(() => expect(createSyncClient).toHaveBeenCalledTimes(failure === "none" ? 2 : 3)));
-        yield* Effect.promise(() => vi.waitFor(() => expect(lifecycle.getSnapshot()).toMatchObject({ state: "live", connection: { sync: "healthy" }, failure: null })));
-      }).pipe(Effect.provide(layer)),
+      withJoinedLifecycle((lifecycle) =>
+        Effect.gen(function* () {
+          platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "fixture_disconnect" } });
+          yield* Effect.promise(() => vi.waitFor(() => expect(createSyncClient).toHaveBeenCalledTimes(failure === "none" ? 2 : 3)));
+          yield* Effect.promise(() => vi.waitFor(() => expect(lifecycle.getSnapshot()).toMatchObject({ state: "live", connection: { sync: "healthy" }, failure: null })));
+        }),
+      ).pipe(Effect.provide(layer)),
     );
   });
 
@@ -368,12 +625,13 @@ describe("ConnectionLifecycle Episode snapshot", () => {
     const platform = createCoreTestPlatform();
     const layer = testLifecycleLayer({ access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)), dependencies: platform.dependencies });
     await Effect.runPromise(
-      Effect.gen(function* () {
-        const lifecycle = yield* joinedLifecycle();
-        platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "participant_inactive" } });
-        yield* Effect.sleep(50);
-        expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "invalid_access", recoverable: false } });
-      }).pipe(Effect.provide(layer)),
+      withJoinedLifecycle((lifecycle) =>
+        Effect.gen(function* () {
+          platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "participant_inactive" } });
+          yield* Effect.sleep(50);
+          expectAccessRevoked(lifecycle);
+        }),
+      ).pipe(Effect.provide(layer)),
     );
   });
 
@@ -478,6 +736,62 @@ describe("ConnectionLifecycle Episode snapshot", () => {
 function credential(audience: "chalk-sync" | "chalk-media"): string {
   const encode = (value: unknown) => btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
   return `${encode({ alg: "EdDSA" })}.${encode({ aud: audience })}.signature`;
+}
+
+function freezeLifecycleTime(platform: ReturnType<typeof createCoreTestPlatform>) {
+  let now = Date.now();
+  vi.spyOn(platform.dependencies.clock, "now").mockImplementation(() => now);
+  return (milliseconds: number) => {
+    now += milliseconds;
+  };
+}
+
+function pendingVoid() {
+  let resolve = () => {};
+  const promise = new Promise<void>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
+
+function controlledLifecycleClock() {
+  let now = Date.now();
+  let next = 0;
+  const timers = new Map<number, { at: number; callback: () => void }>();
+  const clock = {
+    now: () => now,
+    setTimeout: (callback: () => void, delay: number) => {
+      const id = next++;
+      timers.set(id, { at: now + delay, callback });
+      return id;
+    },
+    clearTimeout: (id: unknown) => {
+      if (typeof id === "number") timers.delete(id);
+    },
+  };
+  const advance = async (delay: number) => {
+    now += delay;
+    for (const [id, timer] of [...timers]) {
+      if (timer.at > now) continue;
+      timers.delete(id);
+      timer.callback();
+    }
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  };
+  const waitingFor = (delay: number) => [...timers.values()].some((timer) => timer.at === now + delay);
+  return { clock, advance, waitingFor };
+}
+
+function withJoinedLifecycle<A, E, R>(exercise: (lifecycle: ConnectionLifecycleCapability) => Effect.Effect<A, E, R>) {
+  return joinedLifecycle().pipe(Effect.flatMap(exercise));
+}
+
+function waitForLive(lifecycle: ConnectionLifecycleCapability) {
+  return Effect.promise(() => vi.waitFor(() => expect(lifecycle.getSnapshot().state).toBe("live")));
+}
+
+function expectAccessRevoked(lifecycle: ConnectionLifecycleCapability): void {
+  expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "invalid_access", recoverable: false } });
 }
 
 function joinedLifecycle() {

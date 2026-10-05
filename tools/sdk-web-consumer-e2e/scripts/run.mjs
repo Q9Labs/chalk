@@ -330,8 +330,8 @@ async function waitForSettledState(page, predicate, timeout, message) {
   }
 }
 
-async function post(url) {
-  const response = await fetch(url, { method: "POST" });
+async function post(url, signal) {
+  const response = await fetch(url, { method: "POST", signal });
   if (!response.ok) throw new TypeError(`Fixture control request failed with HTTP ${response.status}: ${url}`);
 }
 

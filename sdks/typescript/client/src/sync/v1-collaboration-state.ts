@@ -1,3 +1,4 @@
+import { scheduleForegroundDeadline } from "../foreground-deadline";
 import { recordReconnect } from "../telemetry/reconnect";
 import type { SyncV1ClientFrame, SyncV1ServerFrame } from "../generated/sync";
 import type { ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
@@ -249,16 +250,16 @@ export class V1CollaborationState {
 
   #sendTrackedRequest<Result>(requestId: string, frame: SyncV1ClientFrame, pending: Map<string, V1Deferred<Result>>): Promise<Result> {
     encodeV1ClientFrame(frame);
-    let timer: unknown;
+    let cancel = () => {};
     const promise = new Promise<Result>((resolve, reject) => {
       const deferred = { resolve, reject, settled: false };
       pending.set(requestId, deferred);
-      timer = this.#options.clock().setTimeout(() => {
+      cancel = scheduleForegroundDeadline(this.#options.clock(), this.#options.commandTimeoutMs ?? 10_000, () => {
         if (pending.get(requestId) !== deferred) return;
         pending.delete(requestId);
         recordReconnect(this.#options.recordReconnect, "command_timeout", { frame_type: frame.type, timeout_ms: this.#options.commandTimeoutMs ?? 10_000 }, "failed");
         rejectV1Deferred(deferred, new V1SyncError("The action was not confirmed in time. Reconnect and try again.", "command_timeout"));
-      }, this.#options.commandTimeoutMs ?? 10_000);
+      });
       try {
         this.#options.send(frame);
       } catch (error) {
@@ -266,7 +267,7 @@ export class V1CollaborationState {
         rejectV1Deferred(deferred, error instanceof Error ? error : new V1SyncError("Transport could not send the action", "transport_error"));
       }
     });
-    return promise.finally(() => this.#options.clock().clearTimeout(timer));
+    return promise.finally(() => cancel());
   }
 
   #observeChatMessage(frame: Extract<SyncV1ServerFrame, { readonly type: "chat_message" }>): void {

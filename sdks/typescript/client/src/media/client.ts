@@ -36,6 +36,14 @@ type LocalTrackState = {
   endedListener: (() => void) | null;
 };
 
+type MediaFlowSource = {
+  key: string;
+  direction: "publish" | "subscribe";
+  track: MediaStreamTrack | null;
+  kind: string;
+  firstFlowTimeoutMs: number;
+};
+
 type TrafficProgress = {
   count: number;
   lastProgress: number;
@@ -68,6 +76,7 @@ const EMPTY_REMOTE: readonly CloudflareSFURemoteTrack[] = Object.freeze([]);
 const INVALID_PUBLICATION_SIGNATURE = "\u0000invalid";
 const CONNECTION_TIMEOUT_MS = 8_000;
 const NEGOTIATION_TIMEOUT_MS = 35_000;
+const FLOW_SAMPLE_TIMEOUT_MS = 60_000;
 const PEER_OPERATION_TIMEOUT_MS = 8_000;
 
 export class CloudflareSFUClient implements ClientMediaPlane {
@@ -89,7 +98,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #reusableLocalPublicationIds = new Map<MediaSource, string>();
   readonly #remoteTracks = new Map<string, CloudflareSFURemoteTrack>();
   readonly #expectedRemotePublications = new Map<string, CloudflareSFUPublication>();
+  #remotePublicationTargets: ReadonlyMap<string, boolean> | null = null;
   readonly #flowWatchdog = new MediaFlowWatchdog();
+  #visibilityCleanup: (() => void) | undefined;
+  #cancelFlowSample: (() => void) | undefined;
   #flowTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   #bootstrap: CloudflareSFUBootstrap;
   #connection: RTCPeerConnection;
@@ -135,6 +147,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       failure: null,
     });
     this.#observeConnection(this.#connection, this.#generation, this.#connectionEpoch);
+    if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+      const visibilityDocument = document;
+      const resetFlow = () => this.#flowWatchdog.clear();
+      visibilityDocument.addEventListener("visibilitychange", resetFlow);
+      this.#visibilityCleanup = () => visibilityDocument.removeEventListener("visibilitychange", resetFlow);
+    }
   }
 
   getSnapshot(): CloudflareSFUSnapshot {
@@ -143,6 +161,15 @@ export class CloudflareSFUClient implements ClientMediaPlane {
 
   subscribe(listener: () => void): () => void {
     return subscribeSnapshot(this.#snapshotListeners, listener);
+  }
+
+  setRemotePublicationTargets(publications: readonly MediaPublication[]): void {
+    const targets = new Map<string, boolean>();
+    for (const publication of publications) {
+      if (publication.participantId !== this.#participantId && publication.publicationId !== null) targets.set(publication.publicationId, publication.enabled);
+    }
+    this.#remotePublicationTargets = targets;
+    this.#flowWatchdog.retain(new Set(this.#flowSources().map((source) => source.key)));
   }
 
   remotePublicationResumed(publicationId: string): void {
@@ -225,20 +252,22 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#requireGeneration(generation);
       await this.#reconcileRemotePublications(authoritative, generation);
       this.#requireGeneration(generation);
-      this.#pollFailures = 0;
+      if (!this.#remotePullIncomplete) this.#pollFailures = 0;
     } catch (error) {
       if (generation === this.#generation && !this.#stopped) this.#reportError(error);
       throw error;
     } finally {
-      if (generation === this.#generation) {
-        this.#polling = false;
-        if (this.#pollAfterCurrent) {
-          this.#pollAfterCurrent = false;
-          this.#clearPoll();
-          this.#schedulePoll(0);
-        }
-      }
+      this.#finishPublicationPoll(generation);
     }
+  }
+
+  #finishPublicationPoll(generation: number): void {
+    if (generation !== this.#generation) return;
+    this.#polling = false;
+    if (!this.#pollAfterCurrent) return;
+    this.#pollAfterCurrent = false;
+    this.#clearPoll();
+    this.#schedulePoll(0);
   }
 
   async setLocalPublicationTarget(target: MediaPlaneTarget): Promise<MediaPlaneResult> {
@@ -410,6 +439,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   stop(): void {
     if (this.#stopped) return;
     this.#stopped = true;
+    this.#visibilityCleanup?.();
+    this.#visibilityCleanup = undefined;
     this.#generation++;
     this.#connectionEpoch++;
     this.#clearPoll();
@@ -673,7 +704,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     for (const [key, publication] of desired) this.#expectedRemotePublications.set(key, publication);
     const toPull = this.#pendingRemotePulls(desired);
     this.#pollFailedPull = true;
-    this.#pollFailures = 0;
     const pulled = await this.#pullWithRecovery(toPull, cursor, generation);
     if (pulled === null) return;
     this.#requireGeneration(generation);
@@ -1178,10 +1208,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       let nextDelay = this.#pollIntervalMs;
       try {
         await this.refreshRemotePublications();
-        if (this.#remotePullIncomplete) nextDelay = 750;
+        if (this.#remotePullIncomplete) nextDelay = this.#incompletePullDelay();
       } catch {
         // Keep the first retry prompt, then return toward the idle polling cadence.
-        if (this.#pollFailedPull && this.#remotePullIncomplete) nextDelay = 750;
+        if (this.#pollFailedPull && this.#remotePullIncomplete) nextDelay = this.#incompletePullDelay();
         else {
           this.#pollFailures = Math.min(this.#pollFailures + 1, 6);
           nextDelay = Math.min(this.#pollIntervalMs, (500 + Math.random() * 500) * 2 ** (this.#pollFailures - 1));
@@ -1192,6 +1222,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }, delayMs);
   }
 
+  #incompletePullDelay(): number {
+    this.#pollFailures = Math.min(this.#pollFailures + 1, 6);
+    return Math.min(this.#pollIntervalMs, 750 * 2 ** (this.#pollFailures - 1));
+  }
+
   #clearPoll(): void {
     this.#pollFailures = 0;
     if (this.#pollTimer !== undefined) globalThis.clearTimeout(this.#pollTimer);
@@ -1200,10 +1235,13 @@ export class CloudflareSFUClient implements ClientMediaPlane {
 
   #scheduleFlowWatch(): void {
     if (this.#stopped || !this.#started || this.#snapshot.connection.phase === "failed" || this.#flowTimer !== undefined) return;
+    const scheduledAt = Date.now();
     this.#flowTimer = globalThis.setTimeout(async () => {
       this.#flowTimer = undefined;
       const generation = this.#generation;
       const connectionEpoch = this.#connectionEpoch;
+      const now = Date.now();
+      if (now - scheduledAt > 3_000) this.#flowWatchdog.clear();
       try {
         if (this.#flowWatchPaused()) {
           this.#flowWatchdog.clear();
@@ -1211,7 +1249,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         }
         await this.#checkMediaFlow(generation, connectionEpoch);
       } catch (error) {
-        if (!this.#stopped && generation === this.#generation && connectionEpoch === this.#connectionEpoch) this.#reportError(error);
+        if (!this.#stopped && generation === this.#generation && connectionEpoch === this.#connectionEpoch) {
+          if (this.#flowWatchPaused()) this.#flowWatchdog.clear();
+          else this.#setFailure(error, "media_failed");
+        }
       } finally {
         if (generation === this.#generation) this.#scheduleFlowWatch();
       }
@@ -1222,13 +1263,13 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     return this.#snapshot.connection.phase === "failed" || !connectionIsLive(this.#connection) || (typeof document !== "undefined" && document.visibilityState === "hidden");
   }
 
-  #flowSources() {
+  #flowSources(): readonly MediaFlowSource[] {
     return [
       ...[...this.#localTracks.values()]
-        .filter((state) => state.source !== "screen" && state.enabled && state.desiredEnabled && state.track.enabled)
+        .filter((state) => state.source !== "screen" && state.enabled && state.desiredEnabled && state.track.enabled && !state.track.muted && state.track.readyState !== "ended")
         .map((state) => ({ key: `publish:${state.source}`, direction: "publish" as const, track: state.track, kind: state.track.kind, firstFlowTimeoutMs: 10_000 })),
       ...[...this.#expectedRemotePublications]
-        .filter(([, publication]) => publication.source !== "screen")
+        .filter(([, publication]) => publication.source !== "screen" && (this.#remotePublicationTargets === null || this.#remotePublicationTargets.get(publication.publicationId) === true))
         .flatMap(([key, publication]) => {
           const remote = this.#remoteTracks.get(key);
           const track = remote?.publicationId === publication.publicationId ? remote.track : null;
@@ -1244,8 +1285,13 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#flowWatchdog.retain(new Set(sources.map((source) => source.key)));
     for (const source of sources) {
       const kind = source.kind;
-      const report = source.track ? await this.#connection.getStats(source.track) : null;
+      const report = await this.#readFlowStats(source);
+      if (!this.#flowSources().some((current) => current.key === source.key)) continue;
       if (this.#stopped || generation !== this.#generation || connectionEpoch !== this.#connectionEpoch) return;
+      if (this.#flowWatchPaused()) {
+        this.#flowWatchdog.clear();
+        return;
+      }
       if (this.#flowWatchdog.observe(source.key, report ? mediaFlowProgress(report, source.direction, kind) : 0, Date.now(), source.firstFlowTimeoutMs)) {
         this.#setFailure(new CloudflareSFUError(`Media ${source.direction} ${kind} stopped flowing`, "media_failed"), "media_failed");
         return;
@@ -1253,7 +1299,41 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
   }
 
+  async #readFlowStats(source: MediaFlowSource): Promise<RTCStatsReport | null> {
+    try {
+      return source.track ? await this.#sampleMediaFlow(source.track) : null;
+    } catch (error) {
+      if (!this.#flowSources().some((current) => current.key === source.key)) return null;
+      throw error;
+    }
+  }
+
+  async #sampleMediaFlow(track: MediaStreamTrack): Promise<RTCStatsReport | null> {
+    let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+    let cancel = () => {};
+    const started = Date.now();
+    const deadline = new Promise<RTCStatsReport | null>((resolve, reject) => {
+      cancel = () => resolve(null);
+      timer = globalThis.setTimeout(() => {
+        if (this.#flowWatchPaused() || Date.now() - started > FLOW_SAMPLE_TIMEOUT_MS + 2_000) {
+          this.#flowWatchdog.clear();
+          resolve(null);
+        } else reject(new CloudflareSFUError("Browser media stats did not respond", "media_failed"));
+      }, FLOW_SAMPLE_TIMEOUT_MS);
+    });
+    this.#cancelFlowSample = cancel;
+    try {
+      const report = await Promise.race([this.#connection.getStats(track), deadline]);
+      return report;
+    } finally {
+      if (timer !== undefined) globalThis.clearTimeout(timer);
+      if (this.#cancelFlowSample === cancel) this.#cancelFlowSample = undefined;
+    }
+  }
+
   #clearFlowWatch(): void {
+    this.#cancelFlowSample?.();
+    this.#cancelFlowSample = undefined;
     if (this.#flowTimer !== undefined) globalThis.clearTimeout(this.#flowTimer);
     this.#flowTimer = undefined;
     this.#flowWatchdog.clear();

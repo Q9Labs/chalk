@@ -18,12 +18,12 @@ export async function forceAndWaitForRecovery(page, url, post, waitFor, timeoutM
     socket.once("framereceived", received);
   };
   let timer;
+  const abort = new AbortController();
   // Arm before the forced loss, and observe every matching replacement attempt.
   page.on("websocket", observe);
   try {
-    await post(url);
     await Promise.race([
-      replacement,
+      post(url, abort.signal).then(() => replacement),
       new Promise((_resolve, reject) => {
         timer = setTimeout(() => reject(new Error(`No replacement ${transportPath} frame within ${timeoutMs}ms`)), timeoutMs);
       }),
@@ -31,6 +31,7 @@ export async function forceAndWaitForRecovery(page, url, post, waitFor, timeoutM
     await waitForRecovery(page, waitFor);
   } finally {
     clearTimeout(timer);
+    abort.abort();
     page.off("websocket", observe);
     for (const socket of sockets) socket.off("framereceived", received);
   }

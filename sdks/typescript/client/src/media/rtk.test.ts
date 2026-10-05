@@ -1,8 +1,37 @@
 import { describe, expect, it, vi } from "vitest";
+import type { MediaPublication } from "./plane";
 import type { ParticipantMediaAccess } from "../access/grant";
 import { CloudflareRTKClient, type CloudflareRTKConnection } from "./rtk";
 
 describe("RealtimeKit recovery ownership", () => {
+  it("ignores a local enable that completes after a newer connection muted the source", async () => {
+    const initial = connection();
+    const replacement = connection();
+    let complete = () => {};
+    const pending = new Promise<void>((resolve) => {
+      complete = resolve;
+    });
+    const enable = vi.spyOn(initial.self, "enableAudio").mockImplementationOnce(() => pending);
+    let calls = 0;
+    const client = new CloudflareRTKClient({ authToken: "initial", participantId: "participant", clientFactory: async () => (++calls === 1 ? initial : replacement) });
+    const track = Object.assign(new EventTarget(), { kind: "audio", enabled: true, stop: () => {} });
+    const oldStart = client.start({ getTracks: () => [track] } as unknown as MediaStream);
+    await vi.waitFor(() => expect(enable).toHaveBeenCalledOnce());
+    await client.restart(access("replacement"));
+    let publications: readonly MediaPublication[] = [];
+    const unsubscribe = client.observeLocalPublications((current) => {
+      publications = current;
+    });
+    expect(publications[0]?.enabled).toBe(false);
+    track.enabled = false;
+    complete();
+    await oldStart;
+    expect(publications[0]?.enabled).toBe(false);
+    expect(track.enabled).toBe(false);
+    unsubscribe();
+    client.stop();
+  });
+
   it.each(["leave", "factory", "join"] as const)("ignores a superseded restart waiting for %s", async (stage) => {
     const initial = connection();
     const stale = connection();

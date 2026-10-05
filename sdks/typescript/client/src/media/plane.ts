@@ -50,6 +50,7 @@ export type ClientMediaPlane = {
   readonly closeForcedLocalPublication?: (source: MediaSource) => Promise<void>;
   readonly observeLocalPublications: (listener: (publications: readonly MediaPublication[]) => void) => () => void;
   readonly observeRemotePublications: (listener: (publications: readonly MediaPublication[]) => void) => () => void;
+  readonly setRemotePublicationTargets?: (publications: readonly MediaPublication[]) => void;
   readonly remotePublicationsChanged?: () => void;
   readonly remotePublicationResumed?: (publicationId: string) => void;
 };
