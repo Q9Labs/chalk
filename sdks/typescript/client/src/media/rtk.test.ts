@@ -26,6 +26,10 @@ describe("RealtimeKit recovery ownership", () => {
             () => ({ outcome: "failed" }),
           )
         : client.setLocalPublicationTarget({ ...target, enabled: operation === "enable" });
+    let settled = false;
+    void enabling.then(() => {
+      settled = true;
+    });
     await vi.waitFor(() => expect(enable).toHaveBeenCalledOnce());
     let cleared = false;
     const clearing = client.clearPreparedLocalTrack(source).then(() => {
@@ -35,6 +39,7 @@ describe("RealtimeKit recovery ownership", () => {
       if (operation !== "disable") await vi.waitFor(() => expect(cleared).toBe(true));
       if (retire === "restart") await client.restart(access("replacement"));
       if (retire === "stop") client.stop();
+      if (retire === "restart" || retire === "stop") await vi.waitFor(() => expect(settled && cleared).toBe(true));
       release();
       await vi.waitFor(() => expect(cleared).toBe(true));
       expect(await enabling).toMatchObject({ outcome: operation === "start" ? (retire === "clear_error" ? "failed" : "started") : operation === "disable" && retire === "clear" ? "confirmed" : "retryable_failure" });
