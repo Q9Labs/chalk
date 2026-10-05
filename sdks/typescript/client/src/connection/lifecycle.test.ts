@@ -336,6 +336,7 @@ describe("ConnectionLifecycle Episode snapshot", () => {
           yield* Effect.promise(() => vi.waitFor(() => expect(createSyncClient).toHaveBeenCalledTimes(3), { timeout: 1_500 }));
           expect(stop).toHaveBeenCalledOnce();
           finish();
+          yield* Effect.promise(() => vi.waitFor(() => expect(stop).toHaveBeenCalledTimes(2)));
           yield* waitForLive(lifecycle);
         }),
       ).pipe(Effect.provide(layer)),
