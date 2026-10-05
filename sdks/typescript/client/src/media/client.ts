@@ -226,15 +226,17 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       if (generation === this.#generation && !this.#stopped) this.#reportError(error);
       throw error;
     } finally {
-      if (generation === this.#generation) {
-        this.#polling = false;
-        if (this.#pollAfterCurrent) {
-          this.#pollAfterCurrent = false;
-          this.#clearPoll();
-          this.#schedulePoll(0);
-        }
-      }
+      this.#finishPublicationPoll(generation);
     }
+  }
+
+  #finishPublicationPoll(generation: number): void {
+    if (generation !== this.#generation) return;
+    this.#polling = false;
+    if (!this.#pollAfterCurrent) return;
+    this.#pollAfterCurrent = false;
+    this.#clearPoll();
+    this.#schedulePoll(0);
   }
 
   async setLocalPublicationTarget(target: MediaPlaneTarget): Promise<MediaPlaneResult> {
