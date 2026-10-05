@@ -409,7 +409,13 @@ export class CloudflareRTKClient {
     const actions = {
       microphone: { enable: () => connection.self.enableAudio(state.track), disable: () => connection.self.disableAudio() },
       camera: { enable: () => connection.self.enableVideo(state.track), disable: () => connection.self.disableVideo() },
-      screen: { enable: () => connection.self.enableScreenShare(), disable: () => connection.self.disableScreenShare() },
+      screen: {
+        enable: () => connection.self.enableScreenShare(),
+        disable: () => {
+          if (connection === this.#connection) this.#screenDisableRequested = true;
+          return connection.self.disableScreenShare();
+        },
+      },
     }[state.source];
     if (state.source === "screen") this.#screenDisableRequested = !enabled;
     await actions[enabled ? "enable" : "disable"]();

@@ -9,7 +9,7 @@ describe("RealtimeKit recovery ownership", () => {
       (source === "screen" ? ["enable", "disable"] : ["enable", "disable", "start"]).flatMap((operation) => (operation === "disable" ? ["clear", "restart", "stop"] : ["clear", "restart", "stop", "clear_error"]).map((retire) => ({ source, operation, retire }))),
     ),
   )("settles $source $operation after $retire without leaving a late publication", async ({ source, operation, retire }) => {
-    const { initial, client, target } = await preparedSource(source, operation === "disable", operation !== "start");
+    const { initial, client, target, ended } = await preparedSource(source, operation === "disable", operation !== "start");
     let release = () => {};
     const pending = new Promise<void>((resolve) => {
       release = resolve;
@@ -44,6 +44,7 @@ describe("RealtimeKit recovery ownership", () => {
       await vi.waitFor(() => expect(cleared).toBe(true));
       expect(await enabling).toMatchObject({ outcome: operation === "start" ? (retire === "clear_error" ? "failed" : "started") : operation === "disable" && retire === "clear" ? "confirmed" : "retryable_failure" });
       await vi.waitFor(() => expect(disable).toHaveBeenCalled());
+      if (source === "screen") expect(ended).not.toHaveBeenCalled();
       if (retire === "stop") expect(client.getSnapshot().connection.phase).toBe("stopped");
       else {
         expect(client.getSnapshot().localTracks).toEqual([]);
@@ -154,17 +155,19 @@ function access(token: string): ParticipantMediaAccess {
 async function preparedSource(source: MediaSource, enabled = true, started = true) {
   const initial = connection();
   const replacement = connection();
-  const client = new CloudflareRTKClient({ authToken: "initial", participantId: "participant", clientFactory: async ({ authToken }) => (authToken === "initial" ? initial : replacement) });
+  const ended = vi.fn();
+  const client = new CloudflareRTKClient({ authToken: "initial", participantId: "participant", onScreenEnded: ended, clientFactory: async ({ authToken }) => (authToken === "initial" ? initial : replacement) });
   if (started) await client.start({ getTracks: () => [] } as unknown as MediaStream);
   const track = Object.assign(new EventTarget(), { kind: source === "microphone" ? "audio" : "video", enabled: true, stop: () => {} });
   client.prepareLocalTrack(source, track as unknown as MediaStreamTrack);
   const target = { operationId: "privacy", participantId: "participant", source, enabled: true };
   if (enabled) await client.setLocalPublicationTarget(target);
-  return { initial, replacement, client, track, target };
+  return { initial, replacement, client, track, target, ended };
 }
 
 function connection() {
   const observe = () => () => {};
+  let screenUpdate: Parameters<CloudflareRTKConnection["self"]["onScreenShareUpdate"]>[0] | null = null;
   return {
     self: {
       peerId: "peer",
@@ -179,10 +182,17 @@ function connection() {
       enableScreenShare: async () => {},
       disableAudio: async () => {},
       disableVideo: async () => {},
-      disableScreenShare: async () => {},
+      disableScreenShare: async () => {
+        screenUpdate?.({ screenShareEnabled: false, screenShareTracks: {} });
+      },
       onAudioUpdate: observe,
       onVideoUpdate: observe,
-      onScreenShareUpdate: observe,
+      onScreenShareUpdate: (listener) => {
+        screenUpdate = listener;
+        return () => {
+          screenUpdate = null;
+        };
+      },
       onLeft: observe,
     },
     participants: { joined: { list: () => [], onJoined: observe, onLeft: observe } },
