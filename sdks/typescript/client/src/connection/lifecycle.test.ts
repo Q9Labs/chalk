@@ -154,7 +154,8 @@ describe("ConnectionLifecycle self-healing", () => {
       await vi.waitFor(() => expect(lifecycle.getSnapshot().state).toBe("failed"));
       const code = reason === "episode_ended" ? "episode_ended" : "invalid_access";
       expect(record).toHaveBeenCalledWith(expect.objectContaining({ code: "reconnect.terminal_failure", attributes: { code, terminal_reason: reason === "join" ? "participant_inactive" : ["participant_inactive", "stale_participant_generation", "episode_ended"].includes(reason) ? reason : code } }));
-      expect(events.slice(reason === "recovery_with_hung_sync" ? 1 : 0, reason === "recovery_with_hung_sync" ? 3 : 2)).toEqual(["evidence", "stop"]);
+      const teardownsBeforeTerminal = reason === "recovery_with_hung_sync" || reason === "join" ? 1 : 0;
+      expect(events.slice(teardownsBeforeTerminal, teardownsBeforeTerminal + 2)).toEqual(["evidence", "stop"]);
     });
   });
 

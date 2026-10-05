@@ -469,9 +469,10 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                     return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
                   }
                   span.end({ state: model.state, epoch: model.epoch, outcome: "failed", code: failure.code });
-                  yield* recordFailure(failure);
+                  const retry = !retried && failure.code === "invalid_access";
+                  if (!retry) yield* recordFailure(failure);
                   yield* stopPorts();
-                  if (!retried && failure.code === "invalid_access") return yield* performJoin("access_retry", true);
+                  if (retry) return yield* performJoin("access_retry", true);
                   yield* transition("failed");
                   return yield* Effect.fail(failure);
                 }),
