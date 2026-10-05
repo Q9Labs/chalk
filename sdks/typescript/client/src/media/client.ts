@@ -218,7 +218,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async clearPreparedLocalTrack(source: MediaSource): Promise<void> {
     const state = this.#localTracks.get(source);
     if (!state) return;
+    const generation = this.#generation;
     if (state.enabled) await this.#setPreparedTrackEnabled(state, false);
+    this.#requireCurrentLocalSource(state, generation);
     if (state.transceiver) this.#reusableLocalTransceivers.set(source, state.transceiver);
     if (state.providerPublicationId) this.#reusableLocalPublicationIds.set(source, state.providerPublicationId);
     this.#removeOwnedLocalTrack(state);
@@ -274,17 +276,26 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const resolved = resolveMediaTarget(this.#participantId, this.#stopped, this.#localTracks, target);
     if (resolved.kind === "result") return resolved.result;
     const state = resolved.value;
+    const generation = this.#generation;
     if (this.#pausedTarget(target)) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
     try {
       if (target.enabled) await this.#retireUnavailableLocalPublication(state);
+      this.#requireCurrentLocalSource(state, generation);
       if (this.#pausedTarget(target)) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
       if (state.enabled === target.enabled) return { outcome: "satisfied", errorCode: null };
       await this.#setPreparedTrackEnabled(state, target.enabled, target.operationId);
+      this.#requireCurrentLocalSource(state, generation);
+      if (this.#pausedTarget(target)) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
       return { outcome: "confirmed", errorCode: null };
     } catch (error) {
       if (!this.#stopped) this.#reportError(error);
       return mediaTargetFailure(error);
     }
+  }
+
+  #requireCurrentLocalSource(state: LocalTrackState, generation: number): void {
+    this.#requireGeneration(generation);
+    if (this.#localTracks.get(state.source) !== state) throw new CloudflareSFUError("The local media target belongs to a removed source", "stale_generation");
   }
 
   #pausedTarget(target: MediaPlaneTarget): boolean {
@@ -472,16 +483,21 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
 
   async #enablePreparedTrack(state: LocalTrackState, operationId?: string): Promise<void> {
+    const generation = this.#generation;
     if (state.providerPublicationId && state.transceiver) {
+      const transceiver = state.transceiver;
       state.desiredEnabled = true;
       state.track.enabled = true;
       try {
         await this.#boundPeerOperation(state.transceiver.sender.replaceTrack(state.track));
       } catch (error) {
+        this.#requireCurrentLocalSource(state, generation);
         state.desiredEnabled = false;
         state.track.enabled = false;
         throw error;
       }
+      this.#requireCurrentLocalSource(state, generation);
+      if (transceiver !== state.transceiver) throw new CloudflareSFUError("The local media sender was replaced", "stale_generation");
       state.enabled = !this.#locallyPausedSources.has(state.source);
       state.desiredEnabled = state.enabled;
       state.track.enabled = state.enabled;
@@ -496,10 +512,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     state.desiredEnabled = true;
     state.track.enabled = true;
-    const generation = this.#generation;
     try {
       await this.#publishPreparedTracks([state], generation);
     } catch (error) {
+      this.#requireCurrentLocalSource(state, generation);
       state.desiredEnabled = false;
       state.enabled = false;
       state.track.enabled = false;

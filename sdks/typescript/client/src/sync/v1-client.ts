@@ -1,3 +1,4 @@
+import { scheduleForegroundDeadline } from "../foreground-deadline";
 import { recordReconnect } from "../telemetry/reconnect";
 import { SyncProtocolMetadata, SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame } from "../generated/sync";
 import type { ClientMediaPlane } from "../media/plane";
@@ -63,6 +64,7 @@ export class V1SyncClient implements V1CollaborationClient {
   readonly #controlEvents = new Map<number, string>();
   readonly #liveTargets: V1LiveTargetCoordinator;
   readonly #requests = new Map<string, RequestDeferred>();
+  readonly #requestDeadlineTimers = new Map<string, () => void>();
   readonly #mediaEventEvidence = new Map<number, string>();
   readonly #presenceEventEvidence = new Map<number, string>();
   #phase: V1EpisodeSnapshot["connection"] = { phase: "idle" };
@@ -117,6 +119,8 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#liveTargets = new V1LiveTargetCoordinator({
       mediaPlane: options.mediaPlane,
       requestIds: options.requestIds,
+      commandTimeoutMs: options.commandTimeoutMs,
+      recordReconnect: options.recordReconnect,
       retryDelayMs: options.retryDelayMs,
       clock: () => this.#clock(),
       participantId: () => this.#participantId,
@@ -341,8 +345,26 @@ export class V1SyncClient implements V1CollaborationClient {
     if (this.#requests.has(requestId) || this.#liveTargets.has(requestId)) throw new V1SyncError("request ID is already pending", "request_id_conflict");
     const frame = { type: "directed_request", request_id: requestId, name, target_participant_id: participantId } as const;
     encodeV1ClientFrame(frame);
-    const promise = new Promise<V1DirectedRequestResult>((resolve, reject) => this.#requests.set(requestId, { resolve, reject, settled: false, frame }));
-    this.#send(frame);
+    const promise = new Promise<V1DirectedRequestResult>((resolve, reject) => {
+      const deferred = { resolve, reject, settled: false, frame };
+      this.#requests.set(requestId, deferred);
+      const timeoutMs = this.#options.commandTimeoutMs ?? 10_000;
+      const cancel = scheduleForegroundDeadline(this.#clock(), timeoutMs, () => {
+        if (this.#requests.get(requestId) !== deferred) return;
+        this.#requests.delete(requestId);
+        this.#clearRequestDeadline(requestId);
+        recordReconnect(this.#options.recordReconnect, "command_timeout", { frame_type: frame.type, timeout_ms: timeoutMs }, "failed");
+        rejectDeferred(deferred, new V1SyncError("The action was not confirmed in time. Reconnect and try again.", "command_timeout"));
+      });
+      this.#requestDeadlineTimers.set(requestId, cancel);
+      try {
+        this.#send(frame);
+      } catch (error) {
+        this.#requests.delete(requestId);
+        this.#clearRequestDeadline(requestId);
+        rejectDeferred(deferred, error instanceof Error ? error : new V1SyncError("Transport could not send the request", "transport_error"));
+      }
+    });
     return promise;
   }
 
@@ -606,6 +628,7 @@ export class V1SyncClient implements V1CollaborationClient {
     const deferred = this.#requests.get(frame.request_id);
     if (!deferred) return;
     this.#requests.delete(frame.request_id);
+    this.#clearRequestDeadline(frame.request_id);
     resolveDeferred(deferred, frame);
   }
 
@@ -712,7 +735,14 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#liveTargets.disconnect(code);
   }
 
+  #clearRequestDeadline(requestId: string): void {
+    this.#requestDeadlineTimers.get(requestId)?.();
+    this.#requestDeadlineTimers.delete(requestId);
+  }
+
   #rejectRequests(code: string): void {
+    for (const cancel of this.#requestDeadlineTimers.values()) cancel();
+    this.#requestDeadlineTimers.clear();
     for (const deferred of this.#requests.values()) rejectDeferred(deferred, new V1SyncError(code, code));
     this.#requests.clear();
   }

@@ -176,6 +176,7 @@ export class CloudflareRTKClient {
     if (this.#snapshot.connection.phase === "live") return;
     this.#requireStartable();
     const generation = ++this.#generation;
+    this.#sourceOperations.clear();
     this.#setPhase("connecting", null);
     try {
       const tracks = localMedia.getTracks().filter((track) => track.kind === "audio" || track.kind === "video");
@@ -194,26 +195,34 @@ export class CloudflareRTKClient {
   async setLocalPublicationTarget(target: MediaPlaneTarget): Promise<MediaPlaneResult> {
     const resolved = resolveMediaTarget(this.#participantId, this.#stopped, this.#localTracks, target);
     if (resolved.kind === "result") return resolved.result;
-    const state = resolved.value;
-    const previous = this.#sourceOperations.get(target.source) ?? Promise.resolve();
-    const operation = previous
-      .catch(() => undefined)
-      .then(async () => {
-        if (state.enabled === target.enabled) return "satisfied" as const;
-        try {
-          await this.#setSourceEnabled(state, target.enabled);
-          return "confirmed" as const;
-        } catch (error) {
-          this.#reportError(error);
-          return "retryable_failure" as const;
-        }
-      });
-    this.#sourceOperations.set(target.source, operation);
+    const generation = this.#generation;
+    return this.#queueSourceOperation(target.source, () => this.#applyLocalTarget(target, generation));
+  }
+
+  async #queueSourceOperation<Result>(source: MediaSource, apply: () => Promise<Result>): Promise<Result> {
+    const previous = this.#sourceOperations.get(source) ?? Promise.resolve();
+    const operation = previous.catch(() => undefined).then(apply);
+    this.#sourceOperations.set(source, operation);
     try {
-      const outcome = await operation;
-      return { outcome, errorCode: outcome === "retryable_failure" ? "media_failed" : null };
+      return await operation;
     } finally {
-      if (this.#sourceOperations.get(target.source) === operation) this.#sourceOperations.delete(target.source);
+      if (this.#sourceOperations.get(source) === operation) this.#sourceOperations.delete(source);
+    }
+  }
+
+  async #applyLocalTarget(target: MediaPlaneTarget, generation: number): Promise<MediaPlaneResult> {
+    if (!this.#isCurrentGeneration(generation)) return { outcome: "retryable_failure", errorCode: "stale_generation" };
+    const resolved = resolveMediaTarget(this.#participantId, this.#stopped, this.#localTracks, target);
+    if (resolved.kind === "result") return resolved.result;
+    const state = resolved.value;
+    try {
+      if (!this.#connection) throw new CloudflareRTKError("The RealtimeKit connection is recovering", "stale_generation");
+      if (state.enabled === target.enabled) return { outcome: "satisfied", errorCode: null };
+      await this.#setSourceEnabled(state, target.enabled);
+      return { outcome: "confirmed", errorCode: null };
+    } catch (error) {
+      this.#reportError(error);
+      return { outcome: "retryable_failure", errorCode: error instanceof CloudflareRTKError ? error.code : "media_failed" };
     }
   }
 
@@ -229,6 +238,7 @@ export class CloudflareRTKClient {
     if (!isRTKAccess(input)) throw new CloudflareRTKError("The RealtimeKit adapter requires a Cloudflare RealtimeKit access grant", "invalid_client");
     if (this.#stopped) throw new CloudflareRTKError("The RealtimeKit media client has stopped", "media_stopped");
     const generation = ++this.#generation;
+    this.#sourceOperations.clear();
     this.#setPhase("recovering", null);
     try {
       await this.#closeConnection();
@@ -245,6 +255,7 @@ export class CloudflareRTKClient {
     if (this.#stopped) return;
     this.#stopped = true;
     this.#generation += 1;
+    this.#sourceOperations.clear();
     const leave = this.#closeConnection();
     void leave.catch((error: unknown) => this.#reportError(error));
     for (const state of this.#localTracks.values()) if (state.endedListener) state.track.removeEventListener("ended", state.endedListener);
@@ -260,7 +271,17 @@ export class CloudflareRTKClient {
     for (const state of this.#localTracks.values()) {
       if (!this.#isCurrentGeneration(generation)) return;
       const enable = initial ? state.source !== "screen" : state.enabled;
-      if (enable) await this.#setSourceEnabled(state, true);
+      if (enable) {
+        try {
+          await this.#queueSourceOperation(state.source, async () => {
+            if (!this.#isCurrentGeneration(generation) || this.#localTracks.get(state.source) !== state) return;
+            await this.#setSourceEnabled(state, true);
+          });
+        } catch (error) {
+          if (!this.#isCurrentGeneration(generation)) return;
+          throw error;
+        }
+      }
     }
     if (this.#isCurrentGeneration(generation)) this.#setPhase("live", null);
   }
@@ -342,6 +363,7 @@ export class CloudflareRTKClient {
 
   async #setSourceEnabled(state: LocalTrackState, enabled: boolean): Promise<void> {
     const connection = this.#connection;
+    const generation = this.#generation;
     if (!connection) throw new CloudflareRTKError("The RealtimeKit connection is not active", "media_stopped");
     if (state.source === "microphone") {
       if (enabled) await connection.self.enableAudio(state.track);
@@ -354,10 +376,16 @@ export class CloudflareRTKClient {
       if (enabled) await connection.self.enableScreenShare();
       else await connection.self.disableScreenShare();
     }
-    if (connection !== this.#connection || this.#stopped) return;
+    this.#requireCurrentSource(state, connection, generation);
     state.enabled = enabled;
     state.track.enabled = enabled;
     this.#publishSnapshot();
+  }
+
+  #requireCurrentSource(state: LocalTrackState, connection: CloudflareRTKConnection, generation: number): void {
+    if (!this.#isCurrentGeneration(generation) || connection !== this.#connection || this.#localTracks.get(state.source) !== state) {
+      throw new CloudflareRTKError("The local media target belongs to a replaced connection or source", "stale_generation");
+    }
   }
 
   #syncLocalState(source: MediaSource): void {
