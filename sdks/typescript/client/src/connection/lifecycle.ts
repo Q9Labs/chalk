@@ -151,6 +151,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       let joinDeferred: Deferred.Deferred<void, ConnectionLifecycleFailure> | null = null;
       let activeJoin: Fiber.Fiber<void, ConnectionLifecycleFailure> | null = null;
       let fallbackIdentifier = 0;
+      let emittedSync: ConnectionSyncClient | null = null;
       let foregroundRecoveryDeadline = 0;
       const model: Model = {
         state: "idle",
@@ -209,6 +210,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       const emitPorts = (): Effect.Effect<void> =>
         Effect.sync(() => {
           const ports = portsFor(model);
+          emittedSync = ports?.sync ?? null;
           for (const listener of portListeners) {
             try {
               listener(ports);
@@ -628,6 +630,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           model.failure = null;
           if (model.syncSnapshot?.connection.phase !== "live") return yield* recover("sync");
           if (model.mediaSnapshot?.connection.phase !== "live") return yield* recover("media");
+          if (model.sync !== emittedSync) yield* emitPorts();
           diagnostics.record({ event: "recovery_succeeded", state: model.state, epoch, attempt });
           yield* transition("live");
           yield* publish();

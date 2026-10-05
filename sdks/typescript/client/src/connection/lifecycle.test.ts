@@ -8,6 +8,39 @@ import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type Connecti
 import type { ConnectionOptions } from "./index";
 
 describe("ConnectionLifecycle Episode snapshot", () => {
+  it("publishes ports when replacement startup outlives its recovery cycle", async () => {
+    const platform = createCoreTestPlatform();
+    let finish = () => {};
+    const pending = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const replacement = {
+      ...platform.sync,
+      start: async () => {
+        await pending;
+        await platform.sync.start();
+      },
+    };
+    const factory = vi.fn().mockReturnValueOnce(platform.sync).mockReturnValue(replacement);
+    const layer = testLifecycleLayer({ access: replacementAccess(), dependencies: { ...platform.dependencies, createSyncClient: factory }, recovery: { budgetMs: 30, maxAttempts: 1 } });
+    await Effect.runPromise(
+      withJoinedLifecycle((lifecycle) =>
+        Effect.gen(function* () {
+          let observed = platform.sync;
+          const unsubscribe = lifecycle.subscribePorts((ports) => {
+            if (ports) observed = ports.sync;
+          });
+          platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "fixture_disconnect" } });
+          yield* Effect.promise(() => vi.waitFor(() => expect(factory).toHaveBeenCalledTimes(2)));
+          yield* Effect.sleep(100);
+          finish();
+          yield* waitForLive(lifecycle);
+          expect(observed).toBe(replacement);
+          unsubscribe();
+        }),
+      ).pipe(Effect.scoped, Effect.provide(layer)),
+    );
+  });
   it("records invalid scheduled refresh evidence before failing", async () => {
     const platform = createCoreTestPlatform();
     const { clock, advance, waitingFor } = controlledLifecycleClock();

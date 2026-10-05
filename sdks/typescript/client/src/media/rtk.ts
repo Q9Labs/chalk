@@ -116,6 +116,7 @@ export class CloudflareRTKClient {
   readonly #clientFactory: CloudflareRTKClientFactory;
   readonly #snapshotListeners = new Set<() => void>();
   readonly #sourceOperations = new Map<MediaSource, Promise<unknown>>();
+  readonly #generationInvalidators = new Set<() => void>();
   #connection: CloudflareRTKConnection | null = null;
   #localTracks = new Map<MediaSource, LocalTrackState>();
   #connectionUnsubscribers: readonly (() => void)[] = [];
@@ -164,13 +165,21 @@ export class CloudflareRTKClient {
   async clearPreparedLocalTrack(source: MediaSource): Promise<void> {
     const state = this.#localTracks.get(source);
     if (!state) return;
+    const remove = () => {
+      if (state.endedListener) state.track.removeEventListener("ended", state.endedListener);
+      this.#localTracks.delete(source);
+      this.#publishSnapshot();
+    };
+    // An unconfirmed enable cannot hold capture rollback behind its native promise.
+    if (!state.enabled) {
+      remove();
+      return;
+    }
     const clear = () =>
       this.#queueSourceOperation(source, async () => {
         if (this.#localTracks.get(source) !== state) return;
         if (state.enabled) await this.#setSourceEnabled(state, false);
-        if (state.endedListener) state.track.removeEventListener("ended", state.endedListener);
-        this.#localTracks.delete(source);
-        this.#publishSnapshot();
+        remove();
       });
     try {
       await clear();
@@ -184,8 +193,7 @@ export class CloudflareRTKClient {
   async start(localMedia: MediaStream): Promise<void> {
     if (this.#snapshot.connection.phase === "live") return;
     this.#requireStartable();
-    const generation = ++this.#generation;
-    this.#sourceOperations.clear();
+    const generation = this.#advanceGeneration();
     this.#setPhase("connecting", null);
     try {
       const tracks = localMedia.getTracks().filter((track) => track.kind === "audio" || track.kind === "video");
@@ -205,16 +213,35 @@ export class CloudflareRTKClient {
     const resolved = resolveMediaTarget(this.#participantId, this.#stopped, this.#localTracks, target);
     if (resolved.kind === "result") return resolved.result;
     const generation = this.#generation;
-    return this.#queueSourceOperation(target.source, () => this.#applyLocalTarget(target, generation));
+    try {
+      return await this.#queueSourceOperation(target.source, () => this.#applyLocalTarget(target, generation));
+    } catch (error) {
+      return { outcome: "retryable_failure", errorCode: error instanceof CloudflareRTKError ? error.code : "media_failed" };
+    }
   }
 
   async #queueSourceOperation<Result>(source: MediaSource, apply: () => Promise<Result>): Promise<Result> {
     const previous = this.#sourceOperations.get(source) ?? Promise.resolve();
-    const operation = previous.catch(() => undefined).then(apply);
+    const generation = this.#generation;
+    let invalidate = () => {};
+    const retired = new Promise<never>((_resolve, reject) => {
+      invalidate = () => reject(new CloudflareRTKError("The media operation belongs to a retired connection", "stale_generation"));
+      this.#generationInvalidators.add(invalidate);
+    });
+    const operation = Promise.race([
+      previous
+        .catch(() => undefined)
+        .then(() => {
+          if (!this.#isCurrentGeneration(generation)) throw new CloudflareRTKError("The queued media operation belongs to a retired connection", "stale_generation");
+          return apply();
+        }),
+      retired,
+    ]);
     this.#sourceOperations.set(source, operation);
     try {
       return await operation;
     } finally {
+      this.#generationInvalidators.delete(invalidate);
       if (this.#sourceOperations.get(source) === operation) this.#sourceOperations.delete(source);
     }
   }
@@ -246,8 +273,7 @@ export class CloudflareRTKClient {
   async restart(input: ParticipantMediaAccess): Promise<void> {
     if (!isRTKAccess(input)) throw new CloudflareRTKError("The RealtimeKit adapter requires a Cloudflare RealtimeKit access grant", "invalid_client");
     if (this.#stopped) throw new CloudflareRTKError("The RealtimeKit media client has stopped", "media_stopped");
-    const generation = ++this.#generation;
-    this.#sourceOperations.clear();
+    const generation = this.#advanceGeneration();
     this.#setPhase("recovering", null);
     try {
       await this.#closeConnection();
@@ -263,8 +289,7 @@ export class CloudflareRTKClient {
   stop(): void {
     if (this.#stopped) return;
     this.#stopped = true;
-    this.#generation += 1;
-    this.#sourceOperations.clear();
+    this.#advanceGeneration();
     const leave = this.#closeConnection();
     void leave.catch((error: unknown) => this.#reportError(error));
     for (const state of this.#localTracks.values()) if (state.endedListener) state.track.removeEventListener("ended", state.endedListener);
@@ -274,6 +299,14 @@ export class CloudflareRTKClient {
 
   #isCurrentGeneration(generation: number): boolean {
     return !this.#stopped && generation === this.#generation;
+  }
+
+  #advanceGeneration(): number {
+    const generation = ++this.#generation;
+    this.#sourceOperations.clear();
+    for (const invalidate of this.#generationInvalidators) invalidate();
+    this.#generationInvalidators.clear();
+    return generation;
   }
 
   async #restoreLocalTracks(generation: number, initial: boolean): Promise<void> {
