@@ -314,16 +314,14 @@ export class CloudflareRTKClient {
       if (!this.#isCurrentGeneration(generation)) return;
       const enable = initial ? state.source !== "screen" : state.enabled;
       if (enable) {
-        try {
-          await this.#queueSourceOperation(state.source, async () => {
-            if (!this.#isCurrentGeneration(generation) || this.#localTracks.get(state.source) !== state) return;
-            await this.#setSourceEnabled(state, true);
-          });
-        } catch (error) {
+        await this.#queueSourceOperation(state.source, async () => {
+          if (!this.#isCurrentGeneration(generation) || this.#localTracks.get(state.source) !== state) return;
+          await this.#setSourceEnabled(state, true);
+        }).catch((error: unknown) => {
           if (!this.#isCurrentGeneration(generation)) return;
-          if (this.#localTracks.get(state.source) !== state) continue;
+          if (error instanceof CloudflareRTKError && error.code === "stale_generation" && this.#localTracks.get(state.source) !== state) return;
           throw error;
-        }
+        });
       }
     }
     if (this.#isCurrentGeneration(generation)) this.#setPhase("live", null);
@@ -408,22 +406,21 @@ export class CloudflareRTKClient {
     const connection = this.#connection;
     const generation = this.#generation;
     if (!connection) throw new CloudflareRTKError("The RealtimeKit connection is not active", "media_stopped");
-    const disable = () => (state.source === "microphone" ? connection.self.disableAudio() : state.source === "camera" ? connection.self.disableVideo() : connection.self.disableScreenShare());
-    if (state.source === "microphone") {
-      if (enabled) await connection.self.enableAudio(state.track);
-      else await disable();
-    } else if (state.source === "camera") {
-      if (enabled) await connection.self.enableVideo(state.track);
-      else await disable();
-    } else {
-      this.#screenDisableRequested = !enabled;
-      if (enabled) await connection.self.enableScreenShare();
-      else await disable();
-    }
+    const actions = {
+      microphone: { enable: () => connection.self.enableAudio(state.track), disable: () => connection.self.disableAudio() },
+      camera: { enable: () => connection.self.enableVideo(state.track), disable: () => connection.self.disableVideo() },
+      screen: { enable: () => connection.self.enableScreenShare(), disable: () => connection.self.disableScreenShare() },
+    }[state.source];
+    if (state.source === "screen") this.#screenDisableRequested = !enabled;
+    await actions[enabled ? "enable" : "disable"]();
     try {
       this.#requireCurrentSource(state, connection, generation);
     } catch (error) {
-      if (enabled) await disable();
+      if (enabled)
+        await actions.disable().catch((cause: unknown) => {
+          this.#failCurrentGeneration(generation, cause);
+          throw cause;
+        });
       throw error;
     }
     state.enabled = enabled;
