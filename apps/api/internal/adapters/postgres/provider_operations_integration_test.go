@@ -167,6 +167,21 @@ func TestProviderOperationRepositoryPersistsReceiptsAndMonotonicObservations(t *
 	if page.Observations[1].Sequence != 2 || removedPublication.Enabled || removedPublication.PublicationID != "" {
 		t.Fatalf("persisted publication removal = %+v", page.Observations[1])
 	}
+	latest, err := repository.LatestObservation(ctx, tenantID, episodeID)
+	if err != nil || latest.Sequence != 2 || len(latest.Publications) != 1 || latest.Publications[0].Enabled {
+		t.Fatalf("latest publication removal = %+v, err=%v", latest, err)
+	}
+	restarted := removedObservation
+	restarted.Incarnation = 2
+	restarted.Sequence = 1
+	if _, err := repository.AppendObservation(ctx, restarted); err != nil {
+		t.Fatal(err)
+	}
+	latest, err = repository.LatestObservation(ctx, tenantID, episodeID)
+	if err != nil || latest.Incarnation != 2 || latest.Sequence != 1 {
+		t.Fatalf("latest provider incarnation = %+v, err=%v", latest, err)
+	}
+
 }
 
 func mustProviderOperationID(t *testing.T) utilities.ID {
