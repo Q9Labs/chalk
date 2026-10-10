@@ -26,20 +26,14 @@ describe("server-only Access refresh state", () => {
     expect(Object.isFrozen(retained)).toBe(true);
   });
   it.each(["refresh", "retry"] as const)("retains media for a forwarded %s request", async (reason) => {
-    const initial = accessGrantFromParsed(accessGrant(Date.now() + 60_000, "initial"));
-    const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json(initial, { status: 201 }));
-    const client = createChalkServerClient({ apiKey: "server-secret", tenantId: "tenant-1", apiBaseURL: "https://api.chalk.test", fetch });
-    const state = getAccessRefreshState(initial);
+    const { fetch, client, state } = forwardedRequestFixture();
     const request = { space: "space-1", reason, replaceMediaConnection: false };
     await client.participants.issueAccess("space-1", "episode-1", "participant-1", state, request);
     expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({ participant_generation: 1, replace_media_connection: false, current_media_token: state.currentMediaToken });
   });
 
   it("replaces media for a forwarded recovery request without sending the old credential", async () => {
-    const initial = accessGrantFromParsed(accessGrant(Date.now() + 60_000, "initial"));
-    const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json(initial, { status: 201 }));
-    const client = createChalkServerClient({ apiKey: "server-secret", tenantId: "tenant-1", apiBaseURL: "https://api.chalk.test", fetch });
-    const state = getAccessRefreshState(initial);
+    const { initial, fetch, client, state } = forwardedRequestFixture();
     const request = { space: "space-1", reason: "retry", replaceMediaConnection: true };
     await client.participants.issueAccess("space-1", "episode-1", "participant-1", state, request);
     expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({ participant_generation: 1, replace_media_connection: true });
@@ -54,3 +48,10 @@ describe("server-only Access refresh state", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
+
+function forwardedRequestFixture() {
+  const initial = accessGrantFromParsed(accessGrant(Date.now() + 60_000, "initial"));
+  const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json(initial, { status: 201 }));
+  const client = createChalkServerClient({ apiKey: "server-secret", tenantId: "tenant-1", apiBaseURL: "https://api.chalk.test", fetch });
+  return { initial, fetch, client, state: getAccessRefreshState(initial) };
+}
