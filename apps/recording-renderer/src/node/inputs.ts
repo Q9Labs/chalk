@@ -108,7 +108,9 @@ function validateProfileAuthority(request: FrameRenderRequestV1, timeline: Recor
 }
 
 function validateDecodedSource(source: RecordingPresentationTimelineV1["initial"]["media"][number], decoded: DecodedMediaIndexV1["sources"][number] | undefined): void {
-  if (decoded === undefined) throw new TypeError(`recording presentation source ${source.sourceId} has no authenticated decoded media`);
+  // A roster track can have no captured media. Its presentation identity is still
+  // authenticated by the caller, and the scene keeps its no-video placeholder.
+  if (decoded === undefined) return;
   const sourceMatches = [decoded.kind === source.kind, decoded.participantId === source.participantId, decoded.participantGeneration === source.participantGeneration, decoded.trackId === source.trackId, decoded.trackEpoch === source.epoch].every(Boolean);
   if (!sourceMatches) throw new TypeError(`recording presentation source ${source.sourceId} has no authenticated decoded media`);
 }
