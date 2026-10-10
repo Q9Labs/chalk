@@ -526,6 +526,8 @@ func lifecycleReadErrors(extra ...APIError) []APIError {
 
 func episodeLifecycleEndpointAPIError(err error) (APIError, bool) {
 	switch {
+	case errors.Is(err, mediaplane.ErrConnectionNotFound):
+		return apiErrorMediaConnectionNotFound, true
 	case errors.Is(err, episodes.ErrEpisodeControlBusy):
 		return apiErrorEpisodeControlBusy, true
 	case errors.Is(err, mediapublications.ErrInvalidPublication), errors.Is(err, mediaplane.ErrInvalidSignalRequest):
