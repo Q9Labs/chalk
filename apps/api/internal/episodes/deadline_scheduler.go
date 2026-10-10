@@ -71,7 +71,7 @@ func (s *DeadlineScheduler) runCycle(ctx context.Context) error {
 		}
 		s.record(time.Now().UTC(), nil)
 		if count > 0 {
-			slog.InfoContext(ctx, "deadline scheduler enqueued maximum-duration operations", "event", "episode.deadline_scheduler.enqueued", "count", count)
+			slog.InfoContext(ctx, "deadline scheduler enqueued deadline or empty-Episode operations", "event", "episode.deadline_scheduler.enqueued", "count", count)
 		}
 		if count < int(s.batch) {
 			return nil
