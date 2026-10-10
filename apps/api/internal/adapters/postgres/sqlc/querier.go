@@ -39,6 +39,7 @@ type Querier interface {
 	ClaimChatAttachmentUploadFinalize(ctx context.Context, arg ClaimChatAttachmentUploadFinalizeParams) (ClaimChatAttachmentUploadFinalizeRow, error)
 	ClaimDiagnosticExportJobs(ctx context.Context, arg ClaimDiagnosticExportJobsParams) ([]DiagnosticExportJob, error)
 	ClaimDueEpisodeDeadlines(ctx context.Context, batchSize int32) ([]ClaimDueEpisodeDeadlinesRow, error)
+	ClaimEmptyEpisodeLingers(ctx context.Context, batchSize int32) ([]ClaimEmptyEpisodeLingersRow, error)
 	// Retention claims and bounded deletes.
 	ClaimExpiredDiagnostics(ctx context.Context, arg ClaimExpiredDiagnosticsParams) ([]EpisodeDiagnostic, error)
 	// Projector leasing, event paging, and projection writes.
@@ -140,6 +141,9 @@ type Querier interface {
 	EnsureDiagnosticEnvironmentOwnership(ctx context.Context, environment string) (string, error)
 	EnsureEpisodeDiagnostic(ctx context.Context, arg EnsureEpisodeDiagnosticParams) (EpisodeDiagnostic, error)
 	EnsureWebhookTenantState(ctx context.Context, tenantID pgtype.UUID) error
+	// Discovery uses an earlier snapshot. Recheck occupancy, clock and window key
+	// after locking the Episode, which serializes all admission paths.
+	EpisodeLingerStillDue(ctx context.Context, arg EpisodeLingerStillDueParams) (EpisodeLingerStillDueRow, error)
 	EraseWebhookEventsForUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	ExpireRecordingReservations(ctx context.Context, now pgtype.Timestamptz) ([]ExpireRecordingReservationsRow, error)
 	ExtendRecordingReservation(ctx context.Context, arg ExtendRecordingReservationParams) (ExtendRecordingReservationRow, error)

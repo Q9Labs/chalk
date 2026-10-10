@@ -200,6 +200,15 @@ func prepareSetDeadlineInput(input *SetDeadlineInput) error {
 	return nil
 }
 
+func NewLingerRequest(tenantID, spaceID, episodeID utilities.ID, lastDepartureAt time.Time) (Request, error) {
+	input := RequestEpisodeEndInput{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID,
+		Request: Request{Key: "empty-episode-linger-" + strconv.FormatInt(lastDepartureAt.UnixMicro(), 10)}}
+	if err := prepareEpisodeEndInput(&input); err != nil {
+		return Request{}, err
+	}
+	return input.Request, nil
+}
+
 func NewMaximumDurationRequest(tenantID, spaceID, episodeID utilities.ID, generation int64) (Request, error) {
 	payload, err := json.Marshal(struct {
 		DeadlineGeneration int64 `json:"deadlineGeneration"`
