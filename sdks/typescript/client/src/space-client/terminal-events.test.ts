@@ -17,7 +17,7 @@ describe("SpaceClient terminal callbacks", () => {
       await vi.waitFor(() => expect(client.getSnapshot().participants.roster).toHaveLength(1));
       if (ending === "leave") await client.leave();
       else if (ending === "participant end") await client.endEpisode();
-      else if (ending.startsWith("terminal")) platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: ending === "terminal ended welcome" ? "episode_ended" : "participant_inactive" }, control: null });
+      else if (ending === "removed" || ending.startsWith("terminal")) platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: ending === "terminal ended welcome" ? "episode_ended" : "participant_inactive" }, control: null });
       else platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...control, status: ending === "server end" ? "ended" : "active", participants: [] } });
       if (ending === "server end" || ending === "participant end") {
         await vi.waitFor(() => expect(ended).toHaveBeenCalledOnce());
@@ -116,14 +116,103 @@ describe("SpaceClient terminal callbacks", () => {
     }
   });
 
-  it("reports expired Access once when refresh is unavailable", async () => {
+  it("rejects an initial terminal welcome with episode.ended without joining or ending a live Episode", async () => {
+    const platform = terminalTestPlatform();
+    const client = createSpaceClientForPlatform(
+      { space: "test", getAccess: async () => opaqueAccessGrant(1) },
+      {
+        ...platform,
+        dependencies: {
+          ...platform.dependencies,
+          createSyncClient: () => ({
+            ...platform.sync,
+            stop: platform.syncStopped,
+            start: async () => {
+              platform.emitSync({ ...platform.sync.getSnapshot(), participantId: "participant-1", participantGeneration: 1, connection: { phase: "terminal", terminalReason: "episode_ended" } });
+            },
+          }),
+        },
+      },
+    );
+    const error = vi.fn();
+    const ended = vi.fn();
+    const states: string[] = [];
+    client.on("error", error);
+    client.on("episodeEnded", ended);
+    const unsubscribe = client.subscribe(() => states.push(client.getSnapshot().connection.status));
+    try {
+      await expect(client.join({ microphone: false, camera: false })).rejects.toMatchObject({ code: "episode.ended", recoverable: false });
+      expect(client.getSnapshot().connection.status).toBe("failed");
+      expect(client.getSnapshot().connection.lastError?.code).toBe("episode.ended");
+      expect(states).not.toContain("live");
+      expect(error).toHaveBeenCalledOnce();
+      expect(error).toHaveBeenCalledWith({ error: expect.objectContaining({ code: "episode.ended" }) });
+      expect(ended).not.toHaveBeenCalled();
+      expect(platform.syncStopped).toHaveBeenCalledOnce();
+      expect(platform.stopped).toHaveBeenCalledOnce();
+    } finally {
+      unsubscribe();
+      client.dispose();
+    }
+  }, 15_000);
+
+  it.each(["knock admission", "initial control snapshot", "Sync recovery", "new generation rejoin"] as const)("does not infer removal from an empty roster during %s", async (scenario) => {
+    const platform = terminalTestPlatform();
+    const grant = opaqueAccessGrant(1);
+    const generation = scenario === "new generation rejoin" ? 2 : 1;
+    const client = createSpaceClientForPlatform(
+      { space: "test", getAccess: async () => ({ ...grant, subject: { ...grant.subject, participant_generation: generation } }) },
+      {
+        ...platform,
+        dependencies: {
+          ...platform.dependencies,
+          createSyncClient: () => ({
+            ...platform.sync,
+            stop: platform.syncStopped,
+            start: async () => {
+              platform.emitSync({ ...platform.sync.getSnapshot(), participantId: "participant-1", participantGeneration: generation, connection: { phase: "live" }, control: { ...control, admissionPolicy: scenario === "knock admission" ? "knock" : "open", participants: [] } });
+            },
+          }),
+        },
+      },
+    );
+    const error = vi.fn();
+    client.on("error", error);
+    try {
+      await client.join({ microphone: false, camera: false });
+      if (scenario === "Sync recovery") {
+        platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "connecting" } });
+        await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
+      }
+      platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" }, control: { ...control, participants: [] } });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(client.getSnapshot().connection.status).toBe("live");
+      expect(platform.stopped).not.toHaveBeenCalled();
+      expect(platform.syncStopped).not.toHaveBeenCalled();
+      expect(error).not.toHaveBeenCalled();
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("keeps retrying an expired Access grant through an outage and recovers without errors", async () => {
     const platform = terminalTestPlatform();
     let now = Date.now();
+    const timers = new Map<() => void, number>();
     platform.dependencies.clock.now = () => now;
+    platform.dependencies.clock.setTimeout = (callback, delay) => {
+      timers.set(callback, delay);
+      return callback;
+    };
+    platform.dependencies.clock.clearTimeout = (callback) => {
+      timers.delete(callback as () => void);
+    };
     let foreground = () => undefined;
     const access = vi.fn(async () => {
-      if (access.mock.calls.length > 1) throw new Error("Access unavailable");
-      return opaqueAccessGrant(1);
+      if (access.mock.calls.length === 2 || access.mock.calls.length === 3) throw new Error("Access unavailable");
+      const grant = opaqueAccessGrant(1);
+      const expiresAt = new Date(now + 300_000).toISOString();
+      return { ...grant, sync: { ...grant.sync, expires_at: expiresAt }, media: { ...grant.media, expires_at: expiresAt, client_payload: { connectionId: access.mock.calls.length > 1 ? "connection-2" : "connection-1", stunServer: "stun:stun.cloudflare.com:3478" } } };
     });
     const client = createSpaceClientForPlatform(
       { space: "test", getAccess: access },
@@ -142,18 +231,31 @@ describe("SpaceClient terminal callbacks", () => {
     const ended = vi.fn();
     client.on("error", error);
     client.on("episodeEnded", ended);
+    const retry = async (calls: number) => {
+      await vi.waitFor(() => expect([...timers.values()]).toContain(5_000));
+      expect(client.getSnapshot().connection.status).toBe("live");
+      expect(error).not.toHaveBeenCalled();
+      const timer = [...timers].find(([, delay]) => delay === 5_000)?.[0];
+      if (!timer) throw new Error("Expected the refresh retry timer");
+      timers.delete(timer);
+      now += 5_000;
+      timer();
+      await vi.waitFor(() => expect(access).toHaveBeenCalledTimes(calls));
+    };
     try {
       await client.join({ microphone: false, camera: false });
       now += 301_000;
       foreground();
-      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("failed"));
-      expect(error).toHaveBeenCalledOnce();
-      expect(error).toHaveBeenCalledWith({ error: expect.objectContaining({ code: "access.unavailable", recoverable: false }) });
+      await retry(3);
+      await retry(4);
+      await vi.waitFor(() => expect([...timers.values()]).toContain(240_000));
+      expect(client.getSnapshot().connection.status).toBe("live");
+      expect(client.getSnapshot().connection.lastError).toBeNull();
+      expect(error).not.toHaveBeenCalled();
       expect(ended).not.toHaveBeenCalled();
-      expect(platform.stopped).toHaveBeenCalledOnce();
-      expect(platform.syncStopped).toHaveBeenCalledOnce();
+      expect(platform.stopped).not.toHaveBeenCalled();
+      expect(platform.syncStopped).not.toHaveBeenCalled();
     } finally {
-      await client.leave().catch(() => undefined);
       client.dispose();
     }
   });

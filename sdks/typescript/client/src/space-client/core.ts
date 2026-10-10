@@ -232,6 +232,7 @@ export class SpaceClientCore {
           this.#syncConnectOperation?.fail("connect_failed");
         }),
       ),
+      Effect.catchTag("ConnectionLifecycleFailure", (failure) => Effect.fail(failure.code === "episode_ended" ? new SpaceClientError({ code: "episode.ended", recoverable: failure.recoverable, message: failure.message }) : failure)),
       Effect.mapError(normalizeClientError),
     );
   }

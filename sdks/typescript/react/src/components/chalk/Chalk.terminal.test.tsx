@@ -16,6 +16,52 @@ vi.mock("../media-request-dialog/MediaRequestDialog", () => ({ MediaRequestDialo
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe("Chalk terminal callbacks with a real SpaceClient", () => {
+  it("renders an already-ended join failure and preserves episode.ended for the integrator", async () => {
+    const platform = terminalTestPlatform();
+    const client = createSpaceClientForPlatform(
+      { space: "test", getAccess: async () => opaqueAccessGrant(1) },
+      {
+        ...platform,
+        fetch: async () => new Response(null, { status: 204 }),
+        dependencies: {
+          ...platform.dependencies,
+          createSyncClient: () => ({
+            ...platform.sync,
+            stop: platform.syncStopped,
+            start: async () => {
+              platform.emitSync({ ...platform.sync.getSnapshot(), participantId: "participant-1", participantGeneration: 1, connection: { phase: "terminal", terminalReason: "episode_ended" } });
+            },
+          }),
+        },
+      },
+    );
+    const onError = vi.fn();
+    const onEpisodeEnded = vi.fn();
+    const onJoined = vi.fn();
+    const onLeft = vi.fn();
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(<Chalk client={client} entrance={false} defaults={{ microphone: false, camera: false }} onError={onError} onEpisodeEnded={onEpisodeEnded} onJoined={onJoined} onLeft={onLeft} />));
+      await act(async () => {
+        await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("failed"));
+      });
+      expect(client.getSnapshot().connection.lastError?.code).toBe("episode.ended");
+      expect(onError).toHaveBeenCalledOnce();
+      expect(onError).toHaveBeenCalledWith({ error: expect.objectContaining({ code: "episode.ended" }) });
+      expect(onEpisodeEnded).not.toHaveBeenCalled();
+      expect(onJoined).not.toHaveBeenCalled();
+      expect(onLeft).not.toHaveBeenCalled();
+      expect(container.textContent).toContain("The Episode has ended");
+      expect(container.textContent).not.toContain("Entering");
+    } finally {
+      await act(async () => root.unmount());
+      client.dispose();
+      container.remove();
+    }
+  });
+
   it.each(["server end", "participant end", "leave", "removed", "expired Access"] as const)("%s invokes only the appropriate callbacks", async (ending) => {
     const platform = terminalTestPlatform();
     let now = Date.now();
@@ -59,11 +105,13 @@ describe("Chalk terminal callbacks with a real SpaceClient", () => {
         else if (ending === "expired Access") {
           now += 301_000;
           foreground();
-        } else platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...control, status: ending === "server end" ? "ended" : "active", participants: [] } });
-        await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe(ending === "expired Access" ? "failed" : "left"));
+          await vi.waitFor(() => expect(getAccess).toHaveBeenCalledTimes(2));
+        } else if (ending === "removed") platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "participant_inactive" } });
+        else platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...control, status: ending === "server end" ? "ended" : "active", participants: [] } });
+        await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe(ending === "expired Access" ? "live" : "left"));
       });
       expect(onEpisodeEnded).toHaveBeenCalledTimes(ending === "server end" || ending === "participant end" ? 1 : 0);
-      expect(onError).toHaveBeenCalledTimes(ending === "expired Access" ? 1 : 0);
+      expect(onError).not.toHaveBeenCalled();
       expect(onLeft).toHaveBeenCalledTimes(ending === "expired Access" ? 0 : 1);
       if (ending === "server end" || ending === "participant end") {
         expect(container.textContent).toContain("Episode ended");

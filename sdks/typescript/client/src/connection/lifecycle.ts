@@ -235,12 +235,6 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           const result = yield* Effect.exit(access.ensureFresh("scheduled_refresh"));
           if (result._tag === "Failure") {
             diagnostics.record({ event: "access_refresh_failed", state: model.state, epoch, code: "access_unavailable" });
-            const grant = access.currentUnsafe();
-            const now = yield* Clock.currentTimeMillis;
-            if (grant && Math.min(Date.parse(grant.sync.expiresAt), Date.parse(grant.media.expiresAt)) <= now) {
-              yield* failForSnapshot(lifecycleFailure("access_unavailable", false, "Access expired and could not be refreshed"));
-              return;
-            }
             yield* scheduleRefresh(REFRESH_RETRY_MS);
             return;
           }
@@ -325,14 +319,13 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         });
       const waitForSyncLive = (sync: ConnectionSyncClient, timeoutMs: number): Effect.Effect<void, ConnectionLifecycleFailure> =>
         Effect.callback<void, ConnectionLifecycleFailure>((resume) => {
-          if (sync.getSnapshot().connection.phase === "live") {
-            resume(Effect.void);
-            return;
-          }
-          const unsubscribe = sync.subscribe((snapshot) => {
-            if (snapshot.connection.phase === "live") resume(Effect.void);
+          const observe = (snapshot: V1EpisodeSnapshot) => {
+            if (episodeEnded(snapshot)) resume(Effect.fail(lifecycleFailure("episode_ended", false, "The Episode has ended")));
+            else if (snapshot.connection.phase === "live") resume(Effect.void);
             else if (snapshot.connection.phase === "terminal" || snapshot.connection.phase === "stopped") resume(Effect.fail(lifecycleFailure("sync_start_failed", true, "Sync stopped before becoming live")));
-          });
+          };
+          const unsubscribe = sync.subscribe(observe);
+          observe(sync.getSnapshot());
           return Effect.sync(unsubscribe);
         }).pipe(
           Effect.timeout(timeoutMs),
@@ -580,7 +573,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             model.episodeEndConfirmed = true;
             return yield* finishTerminalSnapshot();
           }
-          if (snapshot.connection.terminalReason === "participant_inactive" || participantRemoved(snapshot)) return yield* finishTerminalSnapshot();
+          if (snapshot.connection.terminalReason === "participant_inactive") return yield* finishTerminalSnapshot();
           if (syncNeedsRecovery(snapshot)) yield* recover("sync");
           yield* publish();
         });
@@ -588,7 +581,6 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       const syncSubjectMismatched = (subject: NonNullable<ReturnType<typeof access.currentUnsafe>>["subject"] | null, snapshot: V1EpisodeSnapshot): boolean =>
         subject !== null && snapshot.participantId !== null && (subject.participantId !== snapshot.participantId || subject.participantGeneration !== snapshot.participantGeneration);
       const episodeEnded = (snapshot: V1EpisodeSnapshot): boolean => snapshot.control?.status === "ended" || snapshot.connection.terminalReason === "episode_ended";
-      const participantRemoved = (snapshot: V1EpisodeSnapshot): boolean => snapshot.control !== null && snapshot.participantId !== null && !snapshot.control.participants.some((participant) => participant.participantId === snapshot.participantId);
       const finishTerminalSnapshot = (): Effect.Effect<void> =>
         Effect.gen(function* () {
           model.failure = null;

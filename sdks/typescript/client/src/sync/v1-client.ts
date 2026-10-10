@@ -439,6 +439,10 @@ export class V1SyncClient implements V1CollaborationClient {
           const control = this.#requireControl();
           this.#send({ type: "delivery_ack", stream: "control", revision: control.revision, state_digest: control.stateDigest });
         }
+        if (frame.name === "participant_left" && frame.payload.participant_id === this.#participantId) {
+          this.#phase = { phase: "terminal", terminalReason: "participant_inactive" };
+          this.#socket?.close(1000, "participant inactive");
+        }
         this.#emit();
         return;
       case "ack":
@@ -582,7 +586,7 @@ export class V1SyncClient implements V1CollaborationClient {
   }
 
   #mediaEnded(): boolean {
-    return this.#control !== null && (this.#control.status === "ended" || (this.#participantId !== null && !this.#control.participants.some((participant) => participant.participantId === this.#participantId)));
+    return this.#control?.status === "ended" || this.#phase.phase === "terminal";
   }
 
   #notifyRemotePublicationResumed(previous: V1MediaPublication | undefined, current: V1MediaPublication): void {

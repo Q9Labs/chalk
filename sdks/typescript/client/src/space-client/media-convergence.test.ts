@@ -91,6 +91,24 @@ describe("SpaceClient media convergence", () => {
     }
   });
 
+  it("applies revoked media while the self row is absent from the control roster", async () => {
+    const platform = createCoreTestPlatform();
+    const track = mediaTrack();
+    const close = vi.fn(async () => undefined);
+    const client = capturedClient(platform, track, { media: { closeForcedLocalPublication: close } });
+    try {
+      await client.join({ microphone: true, camera: false });
+      const active = { participantId: "participant-1", source: "microphone" as const, enabled: true, publicationId: "old-publication" };
+      platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...control, participants: [] }, media: { projectionId: "media-1", sequence: 1, items: [active] } });
+      platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ ...active, track }] });
+      platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "media-1", sequence: 2, items: [] } });
+      await vi.waitFor(() => expect(close).toHaveBeenCalledOnce());
+      expect(client.getSnapshot().connection.status).toBe("live");
+    } finally {
+      client.dispose();
+    }
+  });
+
   it("does not close a revoked publication after an Episode end", async () => {
     const platform = createCoreTestPlatform();
     const track = mediaTrack();

@@ -532,6 +532,39 @@ describe("V1SyncClient", () => {
     client.stop();
   });
 
+  it.each(["open", "knock"] as const)("keeps remote media notifications when the self row is absent (%s admission)", async (admissionPolicy) => {
+    const initial = { ...baseState(), admissionPolicy, participants: [] };
+    const { client, socket, mediaPlane } = await liveClient({}, initial);
+    try {
+      // The first recovery projection must not be dropped because self is absent.
+      expect(mediaPlane.changed).toBe(1);
+      const item = { participant_id: peerId, source: "camera", enabled: false, publication_id: "remote-connection|camera" } as const;
+      socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item });
+      await snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 1);
+      socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 2, item: { ...item, enabled: true } });
+      await snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 2);
+      expect(mediaPlane.resumed).toEqual([item.publication_id]);
+      expect(mediaPlane.changed).toBe(3);
+      expect(client.getSnapshot().connection.phase).toBe("live");
+    } finally {
+      client.stop();
+    }
+  });
+
+  it("marks only an authoritative self-removal event terminal", async () => {
+    const { client, socket, state } = await liveClient({}, stateWithPeer("observer"), peerId);
+    try {
+      const next = { ...state, revision: 2, stateDigest: "0".repeat(64), participants: state.participants.filter((participant) => participant.participantId !== peerId) };
+      const digest = await computeV1StateDigest(next);
+      socket.receive({ type: "event", stream: "control", name: "participant_left", event_id: recoveryId, base_revision: 1, revision: 2, schema_version: 1, resulting_state_digest: digest, payload: { participant_id: peerId, reason: "removed" }, external_operation_id: commandIds[1] });
+      await snapshotWhen(client, (snapshot) => snapshot.connection.phase === "terminal");
+      expect(client.getSnapshot().connection).toEqual({ phase: "terminal", terminalReason: "participant_inactive" });
+      expect(socket.sent.some((raw) => JSON.parse(raw).type === "delivery_ack")).toBe(true);
+    } finally {
+      client.stop();
+    }
+  });
+
   it("announces new and removed remote publications once per projection event", async () => {
     const { client, socket, mediaPlane } = await liveClient();
     const before = mediaPlane.changed;
