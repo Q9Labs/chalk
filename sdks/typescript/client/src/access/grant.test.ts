@@ -1,8 +1,22 @@
 import { describe, expect, it } from "vitest";
 
-import { isParsedAccessGrant, parseAccessGrant, parseParsedAccessGrant, requireParsedAccessGrant } from "./grant";
+import { isParsedAccessGrant, parseAccessGrant, parseParsedAccessGrant, requireParsedAccessGrant, requireAccessGrant } from "./grant";
 
 describe("access grant parsing", () => {
+  describe.each([requireParsedAccessGrant, requireAccessGrant])("HTTP grant reader %s", (read) => {
+    it.each([408, 425, 429, 500, 502, 503, 504, 599])("classifies HTTP %s as unavailable", async (status) => {
+      await expect(read(new Response(null, { status }))).rejects.toMatchObject({ code: "access.unavailable" });
+    });
+
+    it.each([400, 401, 403, 404, 409, 422, 499, 302])("classifies HTTP %s as invalid", async (status) => {
+      await expect(read(new Response(null, { status }))).rejects.toMatchObject({ code: "access.invalid" });
+    });
+
+    it.each(["not-json", "{}"])("rejects a malformed successful body: %s", async (body) => {
+      await expect(read(new Response(body))).rejects.toMatchObject({ code: "access.invalid" });
+    });
+  });
+
   it("brands distinct audiences and preserves the participant subject", async () => {
     const wire = accessWire();
     const parsed = parseParsedAccessGrant(wire);

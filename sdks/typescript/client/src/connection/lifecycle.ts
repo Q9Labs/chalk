@@ -98,7 +98,7 @@ export const makeConnectionLifecycleLayer = (options: ConnectionOptions) => {
     (request) =>
       Effect.tryPromise({
         try: (signal) => Promise.resolve(options.access(request ? { ...request, signal } : undefined)),
-        catch: (cause) => new ConnectionAccessFailure({ code: "access.unavailable", cause }),
+        catch: (cause) => (cause instanceof ConnectionAccessFailure ? cause : new ConnectionAccessFailure({ code: accessRejected(cause) ? "access.invalid" : "access.unavailable", cause })),
       }),
     options.accessRefreshWindowMs,
   );
@@ -758,7 +758,7 @@ function toFailure(value: ConnectionLifecycleFailure): ConnectionFailure {
 }
 
 function accessFailure(value: ConnectionAccessFailure): ConnectionLifecycleFailure {
-  return lifecycleFailure(value.code === "access.invalid" ? "invalid_access" : "access_unavailable", value.code === "access.unavailable", "Access was rejected", value.cause);
+  return lifecycleFailure(value.code === "access.invalid" ? "invalid_access" : "access_unavailable", value.code === "access.unavailable", value.code === "access.invalid" ? "Access was rejected" : "Could not reach the Space. Check your network and try again.", value.cause);
 }
 
 function captureFailure(cause: unknown): ConnectionLifecycleFailure {

@@ -7,6 +7,17 @@ import { ConnectionAccessService, makeConnectionAccessLayer } from "./manager";
 import { accessGrant } from "./grant.test.helpers";
 
 describe("ConnectionAccessService", () => {
+  it("classifies an initial provider timeout as unavailable", async () => {
+    const program = Effect.gen(function* () {
+      const service = yield* ConnectionAccessService;
+      const pending = yield* Effect.forkChild(service.initialize().pipe(Effect.flip));
+      yield* TestClock.adjust("7 seconds");
+      return yield* Fiber.join(pending);
+    });
+    const failure = await Effect.runPromise(program.pipe(Effect.provide(makeConnectionAccessLayer(() => Effect.never)), Effect.provide(TestClock.layer())));
+    expect(failure.code).toBe("access.unavailable");
+  });
+
   it("releases a stalled access refresh so a later request can proceed", async () => {
     let requests = 0;
     const provider = () => (requests++ === 0 ? Effect.never : Effect.succeed(accessGrant(30_000, "replacement", "connection-2")));
