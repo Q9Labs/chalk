@@ -114,6 +114,8 @@ func writeRecorderRecordingLifecycleError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, recordinglifecycle.ErrInvalidRequest):
 		writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recording capture lifecycle request")
+	case errors.Is(err, recordinglifecycle.ErrDeadlineStopPending):
+		writeError(w, http.StatusServiceUnavailable, "capture.deadline_pending", "Capture deadline has not yet elapsed")
 	case errors.Is(err, recordinglifecycle.ErrEpisodeStopPending):
 		writeError(w, http.StatusServiceUnavailable, "episode.stop_pending", "Episode stop is still being applied")
 	case errors.Is(err, recordinglifecycle.ErrAuthorityMismatch):

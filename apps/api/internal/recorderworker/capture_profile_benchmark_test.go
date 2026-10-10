@@ -18,9 +18,17 @@ import (
 // encryption and upload handoff at compressed time. It does not qualify an SFU,
 // video decoder, shared-CPU cloud SKU, or real-time network behavior.
 func BenchmarkCaptureThreeParticipantsHour(b *testing.B) {
+	benchmarkCaptureProfile(b, time.Hour)
+}
+
+func BenchmarkCaptureThreeParticipantsMinute(b *testing.B) {
+	benchmarkCaptureProfile(b, time.Minute)
+}
+
+func benchmarkCaptureProfile(b *testing.B, duration time.Duration) {
 	const payloadBytes = 1_100
-	const recordingBytes = 4_000_000 / 8 * 3_600
-	const packetCount = recordingBytes / payloadBytes
+	recordingBytes := 4_000_000 / 8 * int(duration/time.Second)
+	packetCount := recordingBytes / payloadBytes
 	origin := time.Unix(1_700_000_000, 0)
 	for range b.N {
 		storage := &captureProfileStorage{}
@@ -31,7 +39,7 @@ func BenchmarkCaptureThreeParticipantsHour(b *testing.B) {
 				RecordingID:  captureTestID(b, "55555555-5555-4555-8555-555555555555"),
 				JobID:        captureTestID(b, "66666666-6666-4666-8666-666666666666"),
 				CaptureEpoch: 1, AttemptCount: 1, FencingGeneration: 1,
-				Envelope: recordingpipeline.RecorderJobEnvelope{KeyHandle: "synthetic-key"}, EnvelopeDigest: bytesOf(0x42),
+				Envelope: recordingpipeline.RecorderJobEnvelope{KeyHandle: "synthetic-key", BundleSchemaVersion: recordingpipeline.RecordingBundleSchema}, EnvelopeDigest: bytesOf(0x42),
 			},
 			lease: capturesignaling.WorkerLease{Token: "synthetic-lease"},
 			keys:  storage, objects: storage, bundles: storage,
@@ -57,7 +65,7 @@ func BenchmarkCaptureThreeParticipantsHour(b *testing.B) {
 			payload[index] = byte(index % 251)
 		}
 		for index := range packetCount {
-			at := origin.Add(time.Duration(index) * time.Hour / packetCount)
+			at := origin.Add(time.Duration(index) * duration / time.Duration(packetCount))
 			track := tracks[index%len(tracks)]
 			clockRate := int64(90_000)
 			if track.CaptureTrack().Kind == captureplane.TrackKindAudio {
@@ -69,15 +77,15 @@ func BenchmarkCaptureThreeParticipantsHour(b *testing.B) {
 				b.Fatal(err)
 			}
 		}
-		if err := writer.close(recordingbundle.CloseReasonFinalStop, origin.Add(time.Hour)); err != nil {
+		if err := writer.close(recordingbundle.CloseReasonFinalStop, origin.Add(duration)); err != nil {
 			b.Fatal(err)
 		}
 		if storage.uploads == 0 || storage.uploads != storage.commits || storage.uploadedBytes < packetCount*payloadBytes {
 			b.Fatalf("incomplete upload handoff: %+v", storage)
 		}
-		b.ReportMetric(float64(storage.uploads), "bundles/hour")
+		b.ReportMetric(float64(storage.uploads), "bundles/recording")
 	}
-	b.SetBytes(packetCount * payloadBytes)
+	b.SetBytes(int64(packetCount * payloadBytes))
 	b.ReportAllocs()
 }
 

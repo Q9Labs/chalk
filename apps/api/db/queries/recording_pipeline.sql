@@ -639,11 +639,13 @@ with selected as (
 			else 'disabled'
 		end::text as transcription_policy,
 		artifacts.recording_id is not null as has_artifact,
-		artifacts.expires_at as artifact_expires_at
+		artifacts.expires_at as artifact_expires_at,
+        coalesce(capture.result_metadata ->> 'capture_stop_reason', '')::text as capture_stop_reason
     from recordings
     left join recording_pipelines pipelines on pipelines.recording_id = recordings.id
     join episodes on episodes.id = recordings.episode_id
     left join recording_artifacts artifacts on artifacts.recording_id = recordings.id
+    left join recording_jobs capture on capture.recording_id = recordings.id and capture.kind = 'capture'
     where recordings.id = any(sqlc.arg(recording_ids)::uuid[])
       and recordings.tenant_id = sqlc.arg(tenant_id)
 ), export_job as (
@@ -666,6 +668,7 @@ select selected.id as recording_id,
         else 'available'
 	end as source_status,
 	selected.source_expires_at,
+    selected.capture_stop_reason,
 	selected.transcription_policy,
 	case
 		when selected.transcription_policy = 'disabled' then 'none'
