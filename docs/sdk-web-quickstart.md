@@ -121,6 +121,15 @@ try {
 }
 ```
 
+Missing, busy, permission-denied, or constrained input devices do not prevent
+entry. Chalk enters with working devices and emits one recoverable `onError`
+warning (`media.device_not_found`, `media.device_busy`,
+`media.permission_denied`, `media.device_constraint_invalid`, or
+`media.capture_failed`). The React entrance also uses this recovery, and Chalk
+shows the warning after entry. An unavailable capture API or an insecure browser
+context still rejects capture as `environment.unsupported`. See the
+[join capture error contract](../sdks/typescript/client/README.md#join-capture-errors).
+
 Run `leave()` before disposing an application-owned client so Chalk can finish the durable Leave operation. `dispose()` releases the client after the application is done with it.
 
 ## Render the turnkey Chalk experience

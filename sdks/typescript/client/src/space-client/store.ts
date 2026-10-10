@@ -48,10 +48,10 @@ export class SpaceStore {
   };
   updateConnection(snapshot: ConnectionLifecycleSnapshot): void {
     const current = this.getSnapshot().connection;
-    const error = snapshot.failure ? empty({ code: mapCode(snapshot.failure.code), recoverable: snapshot.failure.recoverable, message: snapshot.failure.message }) : null;
+    const error = snapshot.failure ? empty({ code: publicCode(snapshot.failure.code), recoverable: snapshot.failure.recoverable, message: snapshot.failure.message }) : null;
     const status = snapshot.state === "live" && (INTERRUPTED_CONNECTION_PHASES.has(snapshot.connection.sync) || INTERRUPTED_CONNECTION_PHASES.has(snapshot.connection.media)) ? "reconnecting" : snapshot.state;
     if (current.status === status && sameEpisode(current.episode, snapshot.episode) && sameError(current.lastError, error)) return;
-    this.#replace("connection", empty({ status, episode: snapshot.episode, lastError: error }));
+    this.#replace("connection", empty({ status, episode: snapshot.episode, lastError: sameError(current.lastError, error) ? current.lastError : error }));
   }
   updateSelf(value: SelfSlice): void {
     this.#replace("self", value);
@@ -116,4 +116,19 @@ function sameError(left: ConnectionSlice["lastError"], right: ConnectionSlice["l
   if (left === right) return true;
   if (!left || !right) return false;
   return left.code === right.code && left.recoverable === right.recoverable && left.message === right.message;
+}
+
+function publicCode(code: string): ReturnType<typeof mapCode> {
+  switch (code) {
+    case "device_not_found":
+      return "media.device_not_found";
+    case "device_busy":
+      return "media.device_busy";
+    case "device_constraint_invalid":
+      return "media.device_constraint_invalid";
+    case "media_capture_failed":
+      return "media.capture_failed";
+    default:
+      return mapCode(code);
+  }
 }

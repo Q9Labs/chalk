@@ -18,6 +18,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Updated the locked undici dependency to 7.29.1 to address GHSA-3wwx-pv8p-q78v.
 - Updated transitive brace-expansion and fast-uri dependencies to their security-fixed releases.
 - Dropped Capture RTP packets when the latest fenced Episode plan no longer authorizes their source, including while provider reconciliation is pending.
+- Kept Space joins available when a camera or microphone is missing, busy, constrained, or permission-denied. Participants enter with working devices and receive one recoverable, device-specific capture error; React shows the warning after entry.
 
 ### Added
 
