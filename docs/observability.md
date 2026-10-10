@@ -134,8 +134,8 @@ resuming; source preparation fills frozen spans before compositor input seeks.
 The alert-only collector and monitor definitions live in
 `infrastructure/observability/production-alerts`. Capture and Export failure
 rules are disjoint. A custom webhook template puts customer impact and next
-action before the engineer diagnostic line. Threshold closure only says the
-threshold is no longer exceeded; aging out is not repair. Verify actual Discord
+action before the engineer diagnostic line. A cleared alert says only that it has
+gone quiet; aging out is not repair. Verify actual Discord
 receipt separately from valid templates or accepted Axiom requests.
 
 State alerts read Tenant display names and stable grouping IDs at runtime; neither is committed. This is a deliberate privacy trade-off against the former anonymous aggregates. Zero counts for each Tenant prevent stale positive groups. API/Sync alerts cannot currently name a Tenant safely and say so. Export/transcript messages include the earliest known source expiry and explicitly flag unknown/expired deadlines.
