@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recordinglifecycle"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
@@ -60,7 +61,7 @@ func recorderCaptureReadyHandler(service RecorderRecordingLifecycleService) http
 			return
 		}
 		if _, err := service.PublishReady(request.Context(), recordinglifecycle.ReadyInput{Authority: authority, RequestKey: body.RequestKey, ReadyAt: observedAt, NoPublisher: body.NoPublisher}); err != nil {
-			writeRecorderRecordingLifecycleError(w, err)
+			writeRecorderRecordingLifecycleError(w, request, err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -84,7 +85,7 @@ func recorderCaptureStoppedHandler(service RecorderRecordingLifecycleService) ht
 			return
 		}
 		if _, err := service.PublishStopped(request.Context(), recordinglifecycle.StoppedInput{Authority: authority, RequestKey: body.RequestKey, StoppedAt: observedAt}); err != nil {
-			writeRecorderRecordingLifecycleError(w, err)
+			writeRecorderRecordingLifecycleError(w, request, err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -110,11 +111,12 @@ func setRecorderLifecycleNoStore(w http.ResponseWriter) {
 	w.Header().Set("Pragma", "no-cache")
 }
 
-func writeRecorderRecordingLifecycleError(w http.ResponseWriter, err error) {
+func writeRecorderRecordingLifecycleError(w http.ResponseWriter, request *http.Request, err error) {
 	switch {
 	case errors.Is(err, recordinglifecycle.ErrInvalidRequest):
 		writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recording capture lifecycle request")
 	case errors.Is(err, recordinglifecycle.ErrEpisodeStopPending):
+		observability.LogHTTPError(request.Context(), request.Method, "/internal/v1/recorder/capture/stopped", "episode.stop_pending", err)
 		writeError(w, http.StatusServiceUnavailable, "episode.stop_pending", "Episode stop is still being applied")
 	case errors.Is(err, recordinglifecycle.ErrAuthorityMismatch):
 		writeError(w, http.StatusConflict, "lease.stale", "Recording capture authority is stale or unavailable")
@@ -123,8 +125,10 @@ func writeRecorderRecordingLifecycleError(w http.ResponseWriter, err error) {
 	case errors.Is(err, recordinglifecycle.ErrRecordingNotFound):
 		writeError(w, http.StatusNotFound, "recording.not_found", "Recording capture lifecycle resource was not found")
 	case errors.Is(err, recordinglifecycle.ErrRepositoryUnavailable):
+		observability.LogHTTPError(request.Context(), request.Method, request.URL.Path, "service.unavailable", err)
 		writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recording capture lifecycle service is unavailable")
 	default:
+		observability.LogHTTPError(request.Context(), request.Method, request.URL.Path, "internal.error", err)
 		writeError(w, http.StatusInternalServerError, "internal.error", "Recording capture lifecycle operation failed")
 	}
 }

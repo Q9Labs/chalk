@@ -7,13 +7,11 @@ func (d Diagnostics) WrapHTTP(handler http.Handler) http.Handler {
 		return nil
 	}
 	middleware := []func(http.Handler) http.Handler{OTelHTTPMiddleware(), JourneyMiddleware}
-	if d.config.RequestLogs != RequestLogOff {
-		middleware = append(middleware, RequestMiddleware(d.logger, RequestLogConfig{
-			Mode:          d.config.RequestLogs,
-			SampleRate:    d.config.RequestSampleRate,
-			SlowThreshold: d.config.SlowRequestThreshold,
-		}))
-	}
+	middleware = append(middleware, RequestMiddleware(d.logger, RequestLogConfig{
+		Mode:          d.config.RequestLogs,
+		SampleRate:    d.config.RequestSampleRate,
+		SlowThreshold: d.config.SlowRequestThreshold,
+	}))
 	for index := len(middleware) - 1; index >= 0; index-- {
 		handler = middleware[index](handler)
 	}
