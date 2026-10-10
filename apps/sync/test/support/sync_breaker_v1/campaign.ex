@@ -6,6 +6,7 @@ defmodule ChalkSync.SyncBreakerV1.Campaign do
   alias ChalkSync.SyncBreakerV1.ExternalMediaPhase
   alias ChalkSync.SyncBreakerV1.WireSdkPhase
   alias ChalkSync.SyncPostgres
+  alias ChalkSync.TestProcess
 
   @phase_order [
     "durable_lifecycle_reference",
@@ -84,9 +85,5 @@ defmodule ChalkSync.SyncBreakerV1.Campaign do
     end
   end
 
-  defp stop(pid) do
-    if Process.alive?(pid), do: GenServer.stop(pid)
-  catch
-    :exit, _reason -> :ok
-  end
+  defp stop(pid), do: TestProcess.stop(pid)
 end

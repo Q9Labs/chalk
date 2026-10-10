@@ -9,6 +9,7 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
   alias ChalkSync.SyncBreakerV1.ScriptedMediaPlane
   alias ChalkSync.SyncBreakerV1.Verdict
   alias ChalkSync.SyncPostgres
+  alias ChalkSync.TestProcess
   alias ChalkSync.UUID
 
   @name "external-operation-live-media"
@@ -521,5 +522,5 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
   defp restore(previous), do: Enum.each(previous, fn {key, value} -> restore_env(key, value) end)
   defp restore_env(key, nil), do: Application.delete_env(:chalk_sync, key)
   defp restore_env(key, value), do: Application.put_env(:chalk_sync, key, value)
-  defp stop(pid), do: if(Process.alive?(pid), do: GenServer.stop(pid))
+  defp stop(pid), do: TestProcess.stop(pid)
 end
