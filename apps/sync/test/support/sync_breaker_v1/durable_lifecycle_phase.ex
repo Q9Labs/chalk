@@ -8,6 +8,7 @@ defmodule ChalkSync.SyncBreakerV1.DurableLifecyclePhase do
   alias ChalkSync.SyncBreakerV1.Oracle
   alias ChalkSync.SyncBreakerV1.Verdict
   alias ChalkSync.SyncPostgres
+  alias ChalkSync.TestProcess
   alias ChalkSync.UUID
 
   @name "durable_lifecycle_reference"
@@ -421,9 +422,5 @@ defmodule ChalkSync.SyncBreakerV1.DurableLifecyclePhase do
   defp restore(key, nil), do: Application.delete_env(:chalk_sync, key)
   defp restore(key, value), do: Application.put_env(:chalk_sync, key, value)
 
-  defp stop(pid) do
-    if Process.alive?(pid), do: GenServer.stop(pid)
-  catch
-    :exit, _reason -> :ok
-  end
+  defp stop(pid), do: TestProcess.stop(pid)
 end

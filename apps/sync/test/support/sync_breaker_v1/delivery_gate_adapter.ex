@@ -3,6 +3,8 @@ defmodule ChalkSync.SyncBreakerV1.DeliveryGateAdapter do
 
   use GenServer
 
+  alias ChalkSync.TestProcess
+
   @behaviour ChalkSync.DeliveryGate
 
   @max_actions 64
@@ -20,7 +22,7 @@ defmodule ChalkSync.SyncBreakerV1.DeliveryGateAdapter do
   end
 
   def stop do
-    if Process.whereis(__MODULE__), do: GenServer.stop(__MODULE__)
+    TestProcess.stop(__MODULE__)
   end
 
   def observations, do: GenServer.call(__MODULE__, :observations)

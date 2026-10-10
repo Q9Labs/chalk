@@ -6,6 +6,7 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
   alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
+  alias ChalkSync.TestProcess
   alias ChalkSync.UUID
 
   @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
@@ -1369,14 +1370,5 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
   defp restore_env(key, nil), do: Application.delete_env(:chalk_sync, key)
   defp restore_env(key, value), do: Application.put_env(:chalk_sync, key, value)
 
-  defp stop_connection(connection) do
-    if Process.alive?(connection) do
-      try do
-        GenServer.stop(connection)
-      catch
-        :exit, {:noproc, _details} -> :ok
-        :exit, :noproc -> :ok
-      end
-    end
-  end
+  defp stop_connection(connection), do: TestProcess.stop(connection)
 end
