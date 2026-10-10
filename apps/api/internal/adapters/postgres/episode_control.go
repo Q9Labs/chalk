@@ -205,7 +205,7 @@ func createEndReadyOperation(ctx context.Context, queries *sqlc.Queries, tx pgx.
 				Source: source, ExternalOperationID: operation.ExternalOperationID,
 			})
 			if err != nil || owner != operation.ExternalOperationID {
-				if err == nil {
+				if err == nil || errors.Is(err, pgx.ErrNoRows) {
 					err = episodes.ErrEpisodeControlBusy
 				}
 				return sqlc.SyncExternalOperation{}, fmt.Errorf("install episode end publication fence: %w", err)

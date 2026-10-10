@@ -70,6 +70,7 @@ var (
 	apiErrorInvalidParticipantID          = APIError{Status: http.StatusBadRequest, Code: "participant.invalid_id", Message: "Invalid Participant id"}
 	apiErrorInvalidRequestKey             = APIError{Status: http.StatusBadRequest, Code: "request.invalid_idempotency_key", Message: "Idempotency-Key must contain 16 to 128 ASCII letters, digits, underscores, or hyphens"}
 	apiErrorEpisodeNotActive              = APIError{Status: http.StatusConflict, Code: "episode.not_active", Message: "Episode is not active"}
+	apiErrorEpisodeControlBusy            = APIError{Status: http.StatusConflict, Code: "episode.control_busy", Message: "Another Episode control operation is still being applied"}
 	apiErrorParticipantNotFound           = APIError{Status: http.StatusNotFound, Code: "participant.not_found", Message: "Participant not found"}
 	apiErrorParticipantNotActive          = APIError{Status: http.StatusConflict, Code: "participant.not_active", Message: "Participant is not active"}
 	apiErrorParticipantGenerationMismatch = APIError{Status: http.StatusConflict, Code: "participant.generation_mismatch", Message: "Participant generation does not match"}

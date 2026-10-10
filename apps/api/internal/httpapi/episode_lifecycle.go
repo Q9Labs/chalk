@@ -403,7 +403,7 @@ func removeParticipantEndpoint(service EpisodeLifecycleService, authorizer Tenan
 	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), participantIDParameter(), idempotencyKeyParameter()).RequestBody("RemoveEpisodeParticipantRequest", removeParticipantRequest{}).
 		Responds(http.StatusAccepted, "ParticipantRemoval", participantRemovalResponse{}).
-		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorInvalidRequestKey, apiErrorEpisodeNotFound, apiErrorEpisodeNotActive, apiErrorParticipantNotFound, apiErrorParticipantNotActive, apiErrorParticipantGenerationMismatch, apiErrorIdempotencyConflict, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
+		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorInvalidRequestKey, apiErrorEpisodeNotFound, apiErrorEpisodeNotActive, apiErrorParticipantNotFound, apiErrorParticipantNotActive, apiErrorParticipantGenerationMismatch, apiErrorIdempotencyConflict, apiErrorEpisodeControlBusy, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
 }
 
 func endEpisodeEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[endEpisodeEndpointRequest, episodeControlResponse] {
@@ -421,7 +421,7 @@ func endEpisodeEndpoint(service EpisodeLifecycleService, authorizer TenantAuthor
 		return episodeControlResponse{EpisodeID: end.Episode.ID.String(), Status: end.Episode.Status, Operation: newExternalOperationResponseFromIntent(end.Intent)}, nil
 	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), idempotencyKeyParameter()).Responds(http.StatusAccepted, "EpisodeEnd", episodeControlResponse{}).
-		Errors(lifecycleWriteErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidRequestKey, apiErrorEpisodeNotFound, apiErrorEpisodeNotActive, apiErrorIdempotencyConflict, apiErrorEpisodeCapacityExceeded, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
+		Errors(lifecycleWriteErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidRequestKey, apiErrorEpisodeNotFound, apiErrorEpisodeNotActive, apiErrorIdempotencyConflict, apiErrorEpisodeControlBusy, apiErrorEpisodeCapacityExceeded, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
 }
 
 func setDeadlineEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[setDeadlineEndpointRequest, episodeControlResponse] {
@@ -439,7 +439,7 @@ func setDeadlineEndpoint(service EpisodeLifecycleService, authorizer TenantAutho
 		return episodeControlResponse{EpisodeID: control.Episode.ID.String(), Status: control.Episode.Status, Operation: newExternalOperationResponse(control.Operation)}, nil
 	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), idempotencyKeyParameter()).RequestBody("SetEpisodeDeadlineRequest", setDeadlineRequest{}).Responds(http.StatusAccepted, "EpisodeDeadline", episodeControlResponse{}).
-		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidRequestKey, apiErrorEpisodeNotFound, apiErrorEpisodeNotActive, apiErrorIdempotencyConflict, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
+		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidRequestKey, apiErrorEpisodeNotFound, apiErrorEpisodeNotActive, apiErrorIdempotencyConflict, apiErrorEpisodeControlBusy, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
 }
 
 func resolveMediaPlane(ctx context.Context, resolver MediaPlaneResolver, spacesService SpaceService, tenantsService TenantService, tenantID, spaceID utilities.ID) (*mediaplane.Service, error) {
@@ -526,6 +526,8 @@ func lifecycleReadErrors(extra ...APIError) []APIError {
 
 func episodeLifecycleEndpointAPIError(err error) (APIError, bool) {
 	switch {
+	case errors.Is(err, episodes.ErrEpisodeControlBusy):
+		return apiErrorEpisodeControlBusy, true
 	case errors.Is(err, mediapublications.ErrInvalidPublication), errors.Is(err, mediaplane.ErrInvalidSignalRequest):
 		return apiErrorInvalidRequest, true
 	case errors.Is(err, mediapublications.ErrUnavailable), errors.Is(err, mediaplaneproviders.ErrUnknownProvider), errors.Is(err, mediaplaneproviders.ErrInvalidMode), errors.Is(err, mediaplaneproviders.ErrMissingProviderConfig), errors.Is(err, mediaplaneproviders.ErrInvalidProviderConfig), errors.Is(err, mediaplaneproviders.ErrAdapterUnavailable), errors.Is(err, mediaplane.ErrPlaneUnavailable), errors.Is(err, mediaplane.ErrProviderFailed):
@@ -558,7 +560,7 @@ func episodeLifecycleEndpointAPIError(err error) (APIError, bool) {
 		return apiErrorEpisodeCapacityExceeded, true
 	case errors.Is(err, episodes.ErrCapacityExceeded):
 		return apiErrorEpisodeCapacityExceeded, true
-	case errors.Is(err, episodes.ErrAdmissionClosed), errors.Is(err, episodes.ErrInvalidAdmissionPolicy), errors.Is(err, episodes.ErrInvalidRole), errors.Is(err, episodes.ErrInvalidRoleCapabilities), errors.Is(err, episodes.ErrInvalidConfigSnapshot), errors.Is(err, episodes.ErrInvalidParticipantName), errors.Is(err, episodes.ErrInvalidParticipantGeneration), errors.Is(err, episodes.ErrInvalidIntentPayload), errors.Is(err, episodes.ErrInvalidInitialControlState), errors.Is(err, episodes.ErrInvalidMaximumDuration), errors.Is(err, episodes.ErrInvalidMaximumDurationCeiling), errors.Is(err, episodes.ErrInvalidDeadline), errors.Is(err, episodes.ErrDeadlineExceedsCeiling), errors.Is(err, episodes.ErrDeadlineChangePending), errors.Is(err, episodes.ErrEpisodeControlBusy):
+	case errors.Is(err, episodes.ErrAdmissionClosed), errors.Is(err, episodes.ErrInvalidAdmissionPolicy), errors.Is(err, episodes.ErrInvalidRole), errors.Is(err, episodes.ErrInvalidRoleCapabilities), errors.Is(err, episodes.ErrInvalidConfigSnapshot), errors.Is(err, episodes.ErrInvalidParticipantName), errors.Is(err, episodes.ErrInvalidParticipantGeneration), errors.Is(err, episodes.ErrInvalidIntentPayload), errors.Is(err, episodes.ErrInvalidInitialControlState), errors.Is(err, episodes.ErrInvalidMaximumDuration), errors.Is(err, episodes.ErrInvalidMaximumDurationCeiling), errors.Is(err, episodes.ErrInvalidDeadline), errors.Is(err, episodes.ErrDeadlineExceedsCeiling), errors.Is(err, episodes.ErrDeadlineChangePending):
 		return apiErrorInvalidRequest, true
 	default:
 		return authorizationAPIError(err), true
