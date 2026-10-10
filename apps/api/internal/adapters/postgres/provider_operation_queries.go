@@ -35,6 +35,7 @@ type providerOperationQuerier interface {
 	UpdateProviderObservationHead(context.Context, updateProviderObservationHeadParams) (providerOperationObservationHeadRow, error)
 	InsertProviderObservation(context.Context, insertProviderObservationParams) (providerOperationObservationRow, error)
 	GetProviderObservation(context.Context, getProviderObservationParams) (providerOperationObservationRow, error)
+	LatestProviderObservation(context.Context, providerObservationIdentityParams) (providerOperationObservationRow, error)
 	ListProviderObservations(context.Context, listProviderObservationsParams) ([]providerOperationObservationRow, error)
 }
 

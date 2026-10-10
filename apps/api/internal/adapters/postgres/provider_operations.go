@@ -391,3 +391,20 @@ func providerTextPointer(value *string) pgtype.Text {
 }
 
 var _ provideroperations.Repository = ProviderOperationRepository{}
+
+func (r ProviderOperationRepository) LatestObservation(ctx context.Context, tenantID, episodeID utilities.ID) (provideroperations.Observation, error) {
+	if tenantID.IsZero() {
+		return provideroperations.Observation{}, provideroperations.ErrInvalidTenantID
+	}
+	if episodeID.IsZero() {
+		return provideroperations.Observation{}, provideroperations.ErrInvalidEpisodeID
+	}
+	row, err := r.queries.LatestProviderObservation(ctx, providerObservationIdentityParams{TenantID: uuid(tenantID), EpisodeID: uuid(episodeID)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return provideroperations.Observation{}, provideroperations.ErrObservationNotFound
+	}
+	if err != nil {
+		return provideroperations.Observation{}, fmt.Errorf("read latest provider observation: %w", err)
+	}
+	return mapProviderObservation(row)
+}

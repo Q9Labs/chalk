@@ -312,3 +312,18 @@ func optionalReason(reason string) *string {
 	}
 	return &reason
 }
+
+// LatestObservation reads current provider truth without replaying Episode history.
+func (s Service) LatestObservation(ctx context.Context, tenantID, episodeID utilities.ID) (provideroperations.ObservationPage, error) {
+	if s.repository == nil {
+		return provideroperations.ObservationPage{}, ErrUnavailable
+	}
+	observation, err := s.repository.LatestObservation(ctx, tenantID, episodeID)
+	if errors.Is(err, provideroperations.ErrObservationNotFound) {
+		return provideroperations.ObservationPage{Observations: []provideroperations.Observation{}}, nil
+	}
+	if err != nil {
+		return provideroperations.ObservationPage{}, fmt.Errorf("read latest provider observation: %w", err)
+	}
+	return provideroperations.ObservationPage{Observations: []provideroperations.Observation{observation}}, nil
+}
