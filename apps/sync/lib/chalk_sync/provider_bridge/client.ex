@@ -208,13 +208,18 @@ defmodule ChalkSync.ProviderBridge.Client do
     limit = Keyword.get(options, :limit, client.max_observations)
     after_incarnation = Keyword.get(options, :after_incarnation)
     after_sequence = Keyword.get(options, :after_sequence)
+    latest = Keyword.get(options, :latest, is_nil(after_incarnation) and is_nil(after_sequence))
 
     with true <- is_integer(limit) and limit > 0 and limit <= client.max_observations,
+         true <-
+           is_boolean(latest) and
+             (not latest or (is_nil(after_incarnation) and is_nil(after_sequence))),
          {:ok, cursor_params} <- cursor_params(after_incarnation, after_sequence) do
       params =
         [{"tenant_id", episode.tenant_id}, {"episode_id", episode.episode_id}]
         |> Kernel.++(cursor_params)
         |> Kernel.++([{"limit", Integer.to_string(limit)}])
+        |> Kernel.++(if latest, do: [{"latest", "true"}], else: [])
 
       {:ok, URI.encode_query(params)}
     else

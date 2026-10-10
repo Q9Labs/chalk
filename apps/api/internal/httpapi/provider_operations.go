@@ -22,6 +22,7 @@ const (
 type ProviderBridgeService interface {
 	Execute(context.Context, provideroperations.OperationInput) (providerbridge.Result, error)
 	ListObservations(context.Context, utilities.ID, utilities.ID, *provideroperations.Cursor, int) (provideroperations.ObservationPage, error)
+	LatestObservation(context.Context, utilities.ID, utilities.ID) (provideroperations.ObservationPage, error)
 	Ready(context.Context) error
 }
 
@@ -158,7 +159,20 @@ func handleProviderObservations(service ProviderBridgeService) http.HandlerFunc 
 			writeProviderBridgeError(w, err)
 			return
 		}
-		page, err := service.ListObservations(request.Context(), tenantID, episodeID, after, limit)
+		latest := false
+		if value := request.URL.Query().Get("latest"); value != "" {
+			latest, err = strconv.ParseBool(value)
+			if err != nil || (latest && after != nil) {
+				writeProviderBridgeError(w, provideroperations.ErrInvalidObservationCursor)
+				return
+			}
+		}
+		var page provideroperations.ObservationPage
+		if latest {
+			page, err = service.LatestObservation(request.Context(), tenantID, episodeID)
+		} else {
+			page, err = service.ListObservations(request.Context(), tenantID, episodeID, after, limit)
+		}
 		if err != nil {
 			writeProviderBridgeError(w, err)
 			return

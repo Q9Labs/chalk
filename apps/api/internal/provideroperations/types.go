@@ -181,6 +181,7 @@ type Repository interface {
 	Get(context.Context, string, Effect) (Receipt, error)
 	AppendObservation(context.Context, ObservationInput) (Observation, error)
 	ListObservations(context.Context, utilities.ID, utilities.ID, *Cursor, int) (ObservationPage, error)
+	LatestObservation(context.Context, utilities.ID, utilities.ID) (Observation, error)
 }
 
 type canonicalPayload struct {
