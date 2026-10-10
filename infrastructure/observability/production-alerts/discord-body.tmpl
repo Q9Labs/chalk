@@ -8,5 +8,5 @@
 {{- end -}}
 {{- $count := "" -}}{{- if or (eq $rule "recording") (eq $rule "export") (eq $rule "transcript") (eq $rule "webhook") -}}{{- $count = printf " Affected items: %v." .Value -}}{{- end -}}
 {{- $content := printf "%s\n%s%s\n%s\n%s" $headline $summary $count $next $engineers -}}
-{{- if eq .Action "Closed" -}}{{- $content = printf "The alert threshold is no longer exceeded\nThis does not prove the earlier failure was fixed. Check the earlier message and affected records.\nAn engineer must confirm the outcome; do not treat this as recovery.\n%s" $engineers -}}{{- end -}}
+{{- if eq .Action "Closed" -}}{{- $content = printf "The alert threshold is no longer exceeded\nEarlier alert: %s. %s\nThis does not prove the earlier failure was fixed. An engineer must check the earlier message and affected records; do not treat this as recovery.\n%s" $headline $summary $engineers -}}{{- end -}}
 {"content": {{printf "%q" $content}}, "allowed_mentions": {"parse": []}}

@@ -237,3 +237,36 @@ func TestStateSQLSeparatesFailuresAndClearsTenantGroups(t *testing.T) {
 		}
 	}
 }
+
+func TestClosedMessagesPreserveTenantContext(t *testing.T) {
+	body, err := os.ReadFile("discord-body.tmpl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpl, err := template.New("discord").Parse(string(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var outputs []string
+	for _, name := range []string{"Example school one", "Example school two"} {
+		item := snapshot{Rule: "export", Tenant: "synthetic", TenantName: name}
+		formatMessage(&item)
+		var output bytes.Buffer
+		if err := tmpl.Execute(&output, map[string]interface{}{"Action": "Closed", "Value": 0, "GroupKeys": []string{"rule", "headline", "summary", "next", "engineers"}, "GroupValues": []string{item.Rule, item.Headline, item.Summary, item.Next, "For engineers: export."}}); err != nil {
+			t.Fatal(err)
+		}
+		var payload struct {
+			Content string `json:"content"`
+		}
+		if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(payload.Content, name) || !strings.Contains(payload.Content, "does not prove") {
+			t.Fatal(payload.Content)
+		}
+		outputs = append(outputs, payload.Content)
+	}
+	if outputs[0] == outputs[1] {
+		t.Fatal("different Tenants must not produce identical closure messages")
+	}
+}
