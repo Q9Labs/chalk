@@ -28,8 +28,10 @@ Recording deadline; neither clock has a guaranteed execution order.
   override above the two-hour ceiling.
 
 The API Space defaults are 24 hours for both Episode duration settings. These
-are Episode limits, not a promise of 24 hours of Recording. Recording policy
-must also be enabled: a new API Space defaults to `disabled`.
+are Episode limits, not a promise of 24 hours of Recording. The Space's
+`recording_policy` decides whether a Recording starts at all: a Space created
+without one gets `automatic`, so send `disabled` or `manual` if that is not
+what you want.
 
 ## Detecting a duration stop
 
