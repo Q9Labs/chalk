@@ -1,20 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { opaqueAccessGrant } from "./core.test.helpers";
-import { control, terminalTestPlatform } from "./terminal.test.helpers";
+import { control, expectAcknowledgedEnd, joinWithTerminalControl, terminalTestClient, terminalTestPlatform } from "./terminal.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
 
 describe("SpaceClient terminal callbacks", () => {
   it.each(["server end", "participant end", "leave", "removed", "terminal ended welcome", "terminal inactive welcome"] as const)("%s closes transports without an error", async (ending) => {
     const platform = terminalTestPlatform();
-    const client = createSpaceClientForPlatform({ space: "test", getAccess: async () => opaqueAccessGrant(1) }, platform);
-    const ended = vi.fn();
-    const error = vi.fn();
-    client.on("episodeEnded", ended);
-    client.on("error", error);
+    const { client, ended, error } = terminalTestClient(platform);
     try {
-      await client.join({ microphone: false, camera: false });
-      platform.emitSync({ ...platform.sync.getSnapshot(), control });
-      await vi.waitFor(() => expect(client.getSnapshot().participants.roster).toHaveLength(1));
+      await joinWithTerminalControl(client, platform);
       if (ending === "leave") await client.leave();
       else if (ending === "participant end") await client.endEpisode();
       else if (ending === "removed" || ending.startsWith("terminal")) platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: ending === "terminal ended welcome" ? "episode_ended" : "participant_inactive" }, control: null });
@@ -45,18 +39,11 @@ describe("SpaceClient terminal callbacks", () => {
   it("closes from an acknowledged end even without a final control event", async () => {
     const platform = terminalTestPlatform();
     platform.endEpisode.mockResolvedValue({ type: "ack", command_id: "end", delivery: "original", outcome: "satisfied", revision: 2, state_digest: "digest" });
-    const client = createSpaceClientForPlatform({ space: "test", getAccess: async () => opaqueAccessGrant(1) }, platform);
-    const ended = vi.fn();
-    const error = vi.fn();
-    client.on("episodeEnded", ended);
-    client.on("error", error);
+    const { client, ended, error } = terminalTestClient(platform);
     try {
       await client.join({ microphone: false, camera: false });
       await client.endEpisode();
-      expect(client.getSnapshot().connection.status).toBe("left");
-      expect(ended).toHaveBeenCalledOnce();
-      expect(error).not.toHaveBeenCalled();
-      expect(platform.stopped).toHaveBeenCalledOnce();
+      expectAcknowledgedEnd({ client, ended, error }, platform);
     } finally {
       await client.leave().catch(() => undefined);
       client.dispose();
@@ -69,11 +56,7 @@ describe("SpaceClient terminal callbacks", () => {
     const result = { type: "ack", command_id: "end", delivery: "original", outcome: "satisfied", revision: 2, state_digest: "digest" } as const;
     platform.endEpisode.mockReturnValue(ack.promise);
     platform.leave.mockRejectedValue(new Error("The Episode has already ended"));
-    const client = createSpaceClientForPlatform({ space: "test", getAccess: async () => opaqueAccessGrant(1) }, platform);
-    const ended = vi.fn();
-    const error = vi.fn();
-    client.on("episodeEnded", ended);
-    client.on("error", error);
+    const { client, ended, error } = terminalTestClient(platform);
     try {
       await client.join({ microphone: false, camera: false });
       const end = client.endEpisode();
@@ -83,9 +66,7 @@ describe("SpaceClient terminal callbacks", () => {
       await Promise.all([end, leave]);
       expect(client.getSnapshot().connection.status).toBe("left");
       expect(platform.leave).not.toHaveBeenCalled();
-      expect(ended).toHaveBeenCalledOnce();
-      expect(error).not.toHaveBeenCalled();
-      expect(platform.stopped).toHaveBeenCalledOnce();
+      expectAcknowledgedEnd({ client, ended, error }, platform);
     } finally {
       ack.resolve(result);
       await client.leave().catch(() => undefined);
@@ -95,15 +76,9 @@ describe("SpaceClient terminal callbacks", () => {
 
   it("does not end locally from an unconfirmed optimistic end", async () => {
     const platform = terminalTestPlatform();
-    const client = createSpaceClientForPlatform({ space: "test", getAccess: async () => opaqueAccessGrant(1) }, platform);
-    const ended = vi.fn();
-    const error = vi.fn();
-    client.on("episodeEnded", ended);
-    client.on("error", error);
+    const { client, ended, error } = terminalTestClient(platform);
     try {
-      await client.join({ microphone: false, camera: false });
-      platform.emitSync({ ...platform.sync.getSnapshot(), control });
-      await vi.waitFor(() => expect(client.getSnapshot().participants.roster).toHaveLength(1));
+      await joinWithTerminalControl(client, platform);
       platform.emitSync({ ...platform.sync.getSnapshot(), control, optimisticControl: { ...control, status: "ended", participants: [] } });
       await new Promise((resolve) => setTimeout(resolve, 20));
       expect(client.getSnapshot().connection.status).toBe("live");

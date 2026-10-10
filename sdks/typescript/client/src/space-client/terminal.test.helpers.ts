@@ -1,7 +1,8 @@
-import { vi } from "vitest";
+import { expect, vi, type Mock } from "vitest";
 import type { ConnectionSyncClient, ConnectionMediaFactoryInput } from "../connection/dependencies";
 import type { V1ControlState } from "../sync/v1-types";
-import { createCoreTestPlatform } from "./core.test.helpers";
+import { createSpaceClientForPlatform } from "./space-client";
+import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 
 export function terminalTestPlatform() {
   const platform = createCoreTestPlatform();
@@ -38,3 +39,32 @@ export const control: V1ControlState = {
   admissionRequests: [],
   participants: [{ participantId: "participant-1", displayName: "Ada", handRaised: false, admissionRevision: 1, role: "owner", eligibleRoles: [], capabilities: ["endEpisode"] }],
 };
+
+export function terminalTestClient(platform: ReturnType<typeof terminalTestPlatform>): { client: ReturnType<typeof createSpaceClientForPlatform>; ended: Mock; error: Mock } {
+  const client = createSpaceClientForPlatform({ space: "test", getAccess: async () => opaqueAccessGrant(1) }, platform);
+  const ended = vi.fn();
+  const error = vi.fn();
+  client.on("episodeEnded", ended);
+  client.on("error", error);
+  return { client, ended, error };
+}
+
+export function expectAcknowledgedEnd(context: ReturnType<typeof terminalTestClient>, platform: ReturnType<typeof terminalTestPlatform>) {
+  expect(context.client.getSnapshot().connection.status).toBe("left");
+  expect(context.ended).toHaveBeenCalledOnce();
+  expect(context.error).not.toHaveBeenCalled();
+  expect(platform.stopped).toHaveBeenCalledOnce();
+}
+
+export function observeMicrophonePublication(platform: ReturnType<typeof createCoreTestPlatform>, track: MediaStreamTrack, options: { control?: V1ControlState; publicationId?: string } = {}) {
+  const active = { participantId: "participant-1", source: "microphone" as const, enabled: true, publicationId: "old-publication" };
+  platform.emitSync({ ...platform.sync.getSnapshot(), ...(options.control ? { control: options.control } : {}), media: { projectionId: "media-1", sequence: 1, items: [active] } });
+  platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ ...active, publicationId: options.publicationId ?? active.publicationId, track }] });
+  return active;
+}
+
+export async function joinWithTerminalControl(client: ReturnType<typeof createSpaceClientForPlatform>, platform: ReturnType<typeof terminalTestPlatform>) {
+  await client.join({ microphone: false, camera: false });
+  platform.emitSync({ ...platform.sync.getSnapshot(), control });
+  await vi.waitFor(() => expect(client.getSnapshot().participants.roster).toHaveLength(1));
+}
