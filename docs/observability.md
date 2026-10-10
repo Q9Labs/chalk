@@ -40,7 +40,7 @@ The response exposes bounded counters, ages, and failure classes—not URLs, ide
 
 Verify a rejected append → monitor failure → restored intake → successful append/recovery and durable cursor. Whiteboard sockets record scoped `whiteboard.connect`, `whiteboard.recover`, and `whiteboard.disconnect` events; terminal events include bounded close details and trace correlation, not protocol frames.
 
-The `sync.websocket.closed` log and the `whiteboard.disconnect` event carry `reason` and, when Sync chose the close, `close_code` with the trace and journey IDs, and the whiteboard log adds `scene_id`. When Sync didn't choose the close, the transport does not forward its close code to the callback, so `close_code` is omitted. The reason comes from the transport: `client_closed`, `timeout`, `server_shutdown`, or `transport_error`. Client close text is never recorded.
+The `sync.websocket.closed` log and the `whiteboard.disconnect` event carry `reason` and, when Sync chose the close, `close_code` with the trace and journey IDs, and the whiteboard log adds `scene_id`. When Sync didn't choose the close, the transport does not forward its close code to the callback, so `close_code` is omitted. The reason comes from the transport: `client_closed`, `timeout`, `server_shutdown`, or `transport_error`. Client close text is never recorded. Both Sync sockets add `close_kind`: `normal` for a client close or acknowledged class end, `drain` for server shutdown, and `abnormal` for transport errors, timeouts, rejected admission and server-chosen failure closes. Only abnormal closures and rejected upgrades count toward the production Sync monitor. The transport callback does not expose peer close codes; a peer-sent close frame is a normal leave, while abrupt TCP loss is a transport error.
 
 ## Failure evidence by service
 
@@ -128,3 +128,14 @@ segment to the first segment's dimensions, preserving aspect ratio and RTP
 spacing. Known replays are redundant copies, not additional lost frames. Codec
 validation discards undecodable pictures and waits for a usable keyframe before
 resuming; source preparation fills frozen spans before compositor input seeks.
+
+## Production Discord alerts
+
+The alert-only collector and monitor definitions live in
+`infrastructure/observability/production-alerts`. Capture and Export failure
+rules are disjoint. A custom webhook template puts customer impact and next
+action before the engineer diagnostic line. A cleared alert says only that it has
+gone quiet; aging out is not repair. Verify actual Discord
+receipt separately from valid templates or accepted Axiom requests.
+
+State alerts read Tenant display names and stable grouping IDs at runtime; neither is committed. This is a deliberate privacy trade-off against the former anonymous aggregates. Zero counts for each Tenant prevent stale positive groups. API/Sync alerts cannot currently name a Tenant safely and say so. Export/transcript messages include the earliest known source expiry and explicitly flag unknown/expired deadlines.
