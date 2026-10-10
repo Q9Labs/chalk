@@ -160,33 +160,49 @@ async function seekableSources(ffmpegPath: string, inputs: VerifiedRenderInputs,
     const file = inputs.mediaFiles.get(source.sourceId);
     if (source.kind === "microphone" || file === undefined) continue;
     const starts = segments.filter((segment) => segment.placements.some((placement) => placement.sourceId === source.sourceId)).map((segment) => Math.max(0, segment.startFrame / output.fps - source.startMs / 1_000));
-    let path = file.path;
-    let changingSize = false;
-    if (starts.length > 0) {
-      const pictures = (await runProbe(ffprobePathFor(ffmpegPath), keyframeProbeArgs(path)))
-        .split("\n")
-        .map((line) => line.split(","))
-        .filter((fields) => Number.isFinite(Number.parseFloat(fields[0] ?? "")));
-      const keyframes = pictures.map((fields) => Number.parseFloat(fields[0]!));
-      changingSize = new Set(pictures.map((fields) => fields.slice(1, 3).join("x"))).size > 1;
-      const oddSize = pictures.some((fields) => fields.slice(1, 3).some((dimension) => Number(dimension) % 2 !== 0));
-      const keepRecordedFrames = changingSize || oddSize;
-      const frozenSeek = inputs.media.discontinuities.some((gap) => gap.sourceId === source.sourceId && (gap.endMs >= source.endMs || starts.some((start) => start * 1_000 + source.startMs >= gap.startMs && start * 1_000 + source.startMs < gap.endMs)));
-      if (keepRecordedFrames && frozenSeek) {
-        sources.set(source.sourceId, { path, startMs: source.startMs, changingSize, decodeFromStartSeconds: (source.endMs - source.startMs) / 1_000 });
-        continue;
-      }
-      // A fixed-size dense encode would discard changing aspect ratios/detail;
-      // yuv420p x264 also rejects odd dimensions. Compose these frames directly.
-      if (!keepRecordedFrames && (frozenSeek || needsDenseKeyframes(keyframes, starts, (source.endMs - source.startMs) / 1_000))) {
-        path = join(workDirectory, `dense-${denseCount}.mkv`);
-        await runFFmpeg(ffmpegPath, denseKeyframeArgs(file.path, path, output, frozenSeek ? (source.endMs - source.startMs) / 1_000 : undefined), `dense keyframes ${source.sourceId}`);
-        denseCount++;
-      }
-    }
-    sources.set(source.sourceId, { path, startMs: source.startMs, changingSize });
+    const prepared = await prepareSeekableSource(ffmpegPath, inputs.media, source, file.path, starts, output, join(workDirectory, `dense-${denseCount}.mkv`));
+    sources.set(source.sourceId, prepared.source);
+    if (prepared.densified) denseCount++;
   }
   return { sources, denseCount };
+}
+
+async function prepareSeekableSource(
+  ffmpegPath: string,
+  media: VerifiedRenderInputs["media"],
+  source: VerifiedRenderInputs["media"]["sources"][number],
+  path: string,
+  starts: readonly number[],
+  output: ComposeOutput,
+  densePath: string,
+): Promise<{ readonly source: PlannedSource; readonly densified: boolean }> {
+  if (starts.length === 0) return { source: { path, startMs: source.startMs, changingSize: false }, densified: false };
+  const { keyframes, changingSize, keepRecordedFrames } = await probeSourceFrames(ffmpegPath, path);
+  const frozenSeek = hasFrozenSeek(media, source, starts);
+  const duration = (source.endMs - source.startMs) / 1_000;
+  if (keepRecordedFrames && frozenSeek) return { source: { path, startMs: source.startMs, changingSize, decodeFromStartSeconds: duration }, densified: false };
+  // A fixed-size dense encode would discard changing aspect ratios/detail;
+  // yuv420p x264 also rejects odd dimensions. Compose these frames directly.
+  if (!keepRecordedFrames && (frozenSeek || needsDenseKeyframes(keyframes, starts, duration))) {
+    await runFFmpeg(ffmpegPath, denseKeyframeArgs(path, densePath, output, frozenSeek ? duration : undefined), `dense keyframes ${source.sourceId}`);
+    return { source: { path: densePath, startMs: source.startMs, changingSize }, densified: true };
+  }
+  return { source: { path, startMs: source.startMs, changingSize }, densified: false };
+}
+
+async function probeSourceFrames(ffmpegPath: string, path: string) {
+  const pictures = (await runProbe(ffprobePathFor(ffmpegPath), keyframeProbeArgs(path)))
+    .split("\n")
+    .map((line) => line.split(","))
+    .filter((fields) => Number.isFinite(Number.parseFloat(fields[0] ?? "")));
+  const keyframes = pictures.map((fields) => Number.parseFloat(fields[0]!));
+  const changingSize = new Set(pictures.map((fields) => fields.slice(1, 3).join("x"))).size > 1;
+  const oddSize = pictures.some((fields) => fields.slice(1, 3).some((dimension) => Number(dimension) % 2 !== 0));
+  return { keyframes, changingSize, keepRecordedFrames: changingSize || oddSize };
+}
+
+function hasFrozenSeek(media: VerifiedRenderInputs["media"], source: VerifiedRenderInputs["media"]["sources"][number], starts: readonly number[]): boolean {
+  return media.discontinuities.some((gap) => gap.sourceId === source.sourceId && (gap.endMs >= source.endMs || starts.some((start) => start * 1_000 + source.startMs >= gap.startMs && start * 1_000 + source.startMs < gap.endMs)));
 }
 
 function ffprobePathFor(ffmpegPath: string): string {

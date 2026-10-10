@@ -166,6 +166,13 @@ export function segmentArgs(segment: VideoSegment, sources: ReadonlyMap<string, 
   return args;
 }
 
+function placementFit(placement: VideoPlacement, dynamicCover: boolean): string {
+  const { width, height } = placement.rect;
+  if (placement.fit !== "cover") return `scale=${width}:${height}:force_original_aspect_ratio=decrease:force_divisible_by=2:eval=frame,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:black:eval=frame`;
+  const scale = `scale=${width}:${height}:force_original_aspect_ratio=increase:force_divisible_by=2:eval=frame`;
+  return dynamicCover ? scale : `${scale},crop=${width}:${height}`;
+}
+
 export function segmentFilter(
   placements: readonly VideoPlacement[],
   output: ComposeOutput,
@@ -178,11 +185,7 @@ export function segmentFilter(
   for (const [index, placement] of placements.entries()) {
     const { x, y, width: tileWidth, height: tileHeight } = placement.rect;
     const dynamicCover = placement.fit === "cover" && changingSizes.has(placement.sourceId);
-    const fit = dynamicCover
-      ? `scale=${tileWidth}:${tileHeight}:force_original_aspect_ratio=increase:force_divisible_by=2:eval=frame`
-      : placement.fit === "cover"
-        ? `scale=${tileWidth}:${tileHeight}:force_original_aspect_ratio=increase:force_divisible_by=2:eval=frame,crop=${tileWidth}:${tileHeight}`
-        : `scale=${tileWidth}:${tileHeight}:force_original_aspect_ratio=decrease:force_divisible_by=2:eval=frame,pad=${tileWidth}:${tileHeight}:(ow-iw)/2:(oh-ih)/2:black:eval=frame`;
+    const fit = placementFit(placement, dynamicCover);
     const holdSeconds = firstFrameHolds.get(placement.sourceId) ?? 0;
     // Shift real frames to their recording time, then let fps fill backward.
     // tpad would round a delay to input frames (a sparse share can be 1 fps).
