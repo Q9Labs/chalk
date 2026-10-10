@@ -23,7 +23,13 @@ export function SpacePage() {
   return (
     <Chalk
       space="design-review"
-      getAccess={({ space, reason }) => fetch(`/api/chalk/spaces/${space}/access?reason=${reason}`)}
+      getAccess={({ space, reason, replaceMediaConnection }) =>
+        fetch("/api/chalk/access", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ space, reason, replaceMediaConnection }),
+        })
+      }
       defaults={{ microphone: true, camera: true }}
       features={{ chat: true, screenShare: true, reactions: true }}
       spaceName="Design review"

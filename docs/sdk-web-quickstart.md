@@ -59,7 +59,8 @@ Retain the Space, Episode, and Participant IDs on your backend. After admission 
 import { getAccessRefreshState } from "@q9labsai/chalk-client/server";
 
 let refreshState = getAccessRefreshState(admission.access);
-const renewed = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, refreshState);
+// Forward getAccess's replaceMediaConnection boolean in your endpoint request.
+const renewed = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, request.body.replaceMediaConnection === true ? { participantGeneration: refreshState.participantGeneration, replaceMediaConnection: true } : refreshState);
 refreshState = getAccessRefreshState(renewed);
 // Persist refreshState server-side, then return renewed unchanged to the browser.
 ```
@@ -74,17 +75,17 @@ Return the grant with `cache-control: no-store`. Your endpoint owns admission an
 
 ## Create the access callback
 
-`GetAccess` receives `{ space, reason }`, where reason is `join`, `refresh`, or `retry`. Return the endpoint's `Response` or decoded grant unchanged; Chalk rejects non-OK or malformed responses.
+`GetAccess` receives `{ space, reason, replaceMediaConnection }`, where reason is `join`, `refresh`, or `retry`. Return the endpoint's `Response` or decoded grant unchanged; Chalk rejects non-OK or malformed responses. Forward `replaceMediaConnection` to your endpoint: recovery after moderator mute can require a fresh media connection. Do not replace on every `retry`; Sync recovery may retain the existing media connection.
 
 ```ts
 // browser/access.ts
 import type { GetAccess } from "@q9labsai/chalk-client";
 
-export const getAccess: GetAccess = ({ space, reason }) =>
+export const getAccess: GetAccess = ({ space, reason, replaceMediaConnection }) =>
   fetch("/api/chalk/access", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ space, reason }),
+    body: JSON.stringify({ space, reason, replaceMediaConnection }),
   });
 ```
 

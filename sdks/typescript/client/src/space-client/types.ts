@@ -19,6 +19,8 @@ export type AccessReason = "join" | "refresh" | "retry";
 export type AccessContext = {
   readonly space: string;
   readonly reason: AccessReason;
+  /** Forward to the access endpoint so media recovery can obtain a fresh connection. */
+  readonly replaceMediaConnection: boolean;
   readonly signal?: AbortSignal;
 };
 

@@ -28,7 +28,12 @@ import { createSpaceClient } from "@q9labsai/chalk-client";
 
 const client = createSpaceClient({
   space: "design-review",
-  getAccess: ({ space, reason }) => fetch(`/api/chalk/spaces/${space}/access?reason=${reason}`),
+  getAccess: ({ space, reason, replaceMediaConnection }) =>
+    fetch("/api/chalk/access", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ space, reason, replaceMediaConnection }),
+    }),
 });
 
 await client.join({
@@ -41,7 +46,9 @@ await client.join({
 `getAccess` receives `reason: "join" | "refresh" | "retry"`. `Connection`
 uses it for Entrance freshness, scheduled refresh, wake revalidation, and one
 refresh-and-retry after an access rejection. Keep the callback available for
-the full lifetime of the client.
+the full lifetime of the client. Forward `replaceMediaConnection` to your backend:
+media recovery needs a fresh connection when it is `true`; ordinary refresh
+retains the current binding when it is `false`. The quickstart shows both paths.
 
 ## Snapshot store
 
