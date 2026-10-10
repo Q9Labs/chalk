@@ -677,7 +677,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     Observability.terminal(
       state.observability,
       "sync.websocket.closed",
-      terminal_attributes
+      ChalkSync.Transport.SocketClose.attributes(terminate_reason, state.terminal)
       |> Map.merge(%{protocol: "whiteboard-v1", phase: state.phase})
       |> put_scene_id(state.scene_id)
     )

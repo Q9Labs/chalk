@@ -40,6 +40,7 @@ defmodule ChalkSync.Transport.SocketV1 do
     {:ok,
      %{
        phase: :awaiting_hello,
+       terminal: nil,
        hello_timer: timer,
        heartbeat_timer: nil,
        terminal_ack_timer: nil,
@@ -64,11 +65,11 @@ defmodule ChalkSync.Transport.SocketV1 do
   end
 
   def handle_in({_payload, _opts}, state),
-    do: {:stop, :normal, {1009, "text frames only"}, state}
+    do: stop(state, 1009, "text frames only", :protocol_error)
 
   @impl true
   def handle_info(:hello_timeout, %{phase: :awaiting_hello} = state),
-    do: {:stop, :normal, {1008, "hello timeout"}, state}
+    do: stop(state, 1008, "hello timeout", :hello_timeout)
 
   def handle_info(:hello_timeout, state), do: {:ok, state}
 
@@ -77,7 +78,7 @@ defmodule ChalkSync.Transport.SocketV1 do
 
     if missed >= @missed_heartbeat_limit do
       cancel_timer(state.heartbeat_timer)
-      {:stop, :normal, {1001, "heartbeat timeout"}, %{state | heartbeat_timer: nil}}
+      stop(%{state | heartbeat_timer: nil}, 1001, "heartbeat timeout", :timeout)
     else
       {:ok,
        state
@@ -90,8 +91,12 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   def handle_info(:terminal_ack_timeout, %{phase: :terminal} = state),
     do:
-      {:stop, :normal, {1012, "terminal acknowledgement timeout"},
-       %{state | terminal_ack_timer: nil}}
+      stop(
+        %{state | terminal_ack_timer: nil},
+        1012,
+        "terminal acknowledgement timeout",
+        :ack_timeout
+      )
 
   def handle_info(:terminal_ack_timeout, state),
     do: {:ok, %{state | terminal_ack_timer: nil}}
@@ -176,7 +181,7 @@ defmodule ChalkSync.Transport.SocketV1 do
       ) do
     case Coordinator.advance_recovery(coordinator, self()) do
       :ok -> {:ok, state}
-      {:error, _reason} -> {:stop, :normal, {1012, "delivery recovery required"}, state}
+      {:error, _reason} -> stop(state, 1012, "delivery recovery required", :delivery_failure)
     end
   end
 
@@ -194,41 +199,56 @@ defmodule ChalkSync.Transport.SocketV1 do
         state
       ) do
     Logger.warning("sync v1 delivery recovery required: reason=#{reason}")
-    {:stop, :normal, {1012, "delivery recovery required"}, state}
+    stop(state, 1012, "delivery recovery required", :delivery_failure)
   end
 
   def handle_info({:sync_server_drained, coordinator}, %{coordinator: coordinator} = state) do
-    {:stop, :normal, {1012, "server draining"}, %{state | phase: :draining}}
+    stop(%{state | phase: :draining}, 1012, "server draining", :server_shutdown)
   end
 
   @impl true
-  def terminate(_reason, %{coordinator: coordinator} = state) when is_pid(coordinator) do
+  def terminate(reason, %{coordinator: coordinator} = state) when is_pid(coordinator) do
     cancel_timer(state.heartbeat_timer)
     cancel_timer(state.terminal_ack_timer)
     unsubscribe_collaboration(state)
     CollaborationQueue.close(state.collaboration_queue)
     Coordinator.unsubscribe(coordinator, self())
 
-    Observability.terminal(state.observability, "sync.websocket.closed", %{
-      protocol: 1,
-      phase: state.phase
-    })
+    Observability.terminal(
+      state.observability,
+      "sync.websocket.closed",
+      %{
+        protocol: 1,
+        phase: state.phase
+      }
+      |> Map.merge(ChalkSync.Transport.SocketClose.attributes(reason, state.terminal))
+    )
 
     :ok
   end
 
-  def terminate(_reason, state) do
+  def terminate(reason, state) do
     cancel_timer(state.heartbeat_timer)
     cancel_timer(state.terminal_ack_timer)
     unsubscribe_collaboration(state)
     CollaborationQueue.close(state.collaboration_queue)
 
-    Observability.terminal(state.observability, "sync.websocket.closed", %{
-      protocol: 1,
-      phase: state.phase
-    })
+    Observability.terminal(
+      state.observability,
+      "sync.websocket.closed",
+      %{
+        protocol: 1,
+        phase: state.phase
+      }
+      |> Map.merge(ChalkSync.Transport.SocketClose.attributes(reason, state.terminal))
+    )
 
     :ok
+  end
+
+  defp stop(state, close_code, message, reason) do
+    {:stop, :normal, {close_code, message},
+     %{state | terminal: %{close_code: close_code, reason: reason}}}
   end
 
   defp handle_frame(
@@ -262,22 +282,22 @@ defmodule ChalkSync.Transport.SocketV1 do
       )
     else
       {:error, :invalid_token} ->
-        {:stop, :normal, {1008, "invalid token"}, state}
+        stop(state, 1008, "invalid token", :admission_rejected)
 
       {:error, :invalid_identity} ->
-        {:stop, :normal, {1008, "invalid token"}, state}
+        stop(state, 1008, "invalid token", :admission_rejected)
 
       {:error, :invalid_admission_intent} ->
-        {:stop, :normal, {1008, "policy violation"}, state}
+        stop(state, 1008, "policy violation", :admission_rejected)
 
       {:error, reason} ->
         Logger.warning("sync v1 hello failed: reason=#{reason}")
 
-        {:stop, :normal, {1012, "dependency unavailable"}, state}
+        stop(state, 1012, "dependency unavailable", :dependency_unavailable)
 
       {:retryable, reason} ->
         Logger.warning("sync v1 hello retryable: #{reason}")
-        {:stop, :normal, {1012, "dependency unavailable"}, state}
+        stop(state, 1012, "dependency unavailable", :dependency_unavailable)
     end
   end
 
@@ -295,11 +315,10 @@ defmodule ChalkSync.Transport.SocketV1 do
       :ok ->
         cancel_timer(state.terminal_ack_timer)
 
-        {:stop, :normal, {1000, "terminal event acknowledged"},
-         %{state | terminal_ack_timer: nil}}
+        stop(%{state | terminal_ack_timer: nil}, 1000, "terminal event acknowledged", :normal)
 
       {:error, _reason} ->
-        {:stop, :normal, {1012, "delivery recovery required"}, state}
+        stop(state, 1012, "delivery recovery required", :delivery_failure)
     end
   end
 
@@ -312,7 +331,7 @@ defmodule ChalkSync.Transport.SocketV1 do
         {:ok, state}
 
       {:error, _reason} ->
-        {:stop, :normal, {1012, "delivery recovery required"}, state}
+        stop(state, 1012, "delivery recovery required", :delivery_failure)
     end
   end
 
@@ -336,7 +355,7 @@ defmodule ChalkSync.Transport.SocketV1 do
            self()
          ) do
       :ok -> {:ok, state}
-      {:error, _reason} -> {:stop, :normal, {1012, "delivery recovery required"}, state}
+      {:error, _reason} -> stop(state, 1012, "delivery recovery required", :delivery_failure)
     end
   end
 
@@ -544,12 +563,12 @@ defmodule ChalkSync.Transport.SocketV1 do
       {:error, reason} ->
         Coordinator.unsubscribe(coordinator, self())
         Logger.warning("sync v1 recovery failed: reason=#{reason}")
-        {:stop, :normal, {1012, "dependency unavailable"}, state}
+        stop(state, 1012, "dependency unavailable", :dependency_unavailable)
 
       {:retryable, reason} ->
         Coordinator.unsubscribe(coordinator, self())
         Logger.warning("sync v1 recovery retryable: #{reason}")
-        {:stop, :normal, {1012, "dependency unavailable"}, state}
+        stop(state, 1012, "dependency unavailable", :dependency_unavailable)
     end
   end
 
@@ -626,7 +645,8 @@ defmodule ChalkSync.Transport.SocketV1 do
     code = if(reason == :unsupported_protocol, do: :unsupported_protocol, else: :invalid_frame)
 
     {:stop, :normal, {1009, detail},
-     {:text, encode_with_context(state, ProtocolV1.error(code, detail))}, state}
+     {:text, encode_with_context(state, ProtocolV1.error(code, detail))},
+     %{state | terminal: %{close_code: 1009, reason: :protocol_error}}}
   end
 
   defp identity(%Claims{} = claims) do
@@ -687,7 +707,7 @@ defmodule ChalkSync.Transport.SocketV1 do
         {:ok, state}
 
       {:error, _reason} ->
-        {:stop, :normal, {1012, "delivery recovery required"}, state}
+        stop(state, 1012, "delivery recovery required", :delivery_failure)
     end
   end
 
@@ -730,7 +750,7 @@ defmodule ChalkSync.Transport.SocketV1 do
         push_collaboration(state)
 
       {:error, _reason} ->
-        {:stop, :normal, {1012, "space action delivery recovery required"}, state}
+        stop(state, 1012, "space action delivery recovery required", :delivery_failure)
     end
   end
 
@@ -742,7 +762,7 @@ defmodule ChalkSync.Transport.SocketV1 do
         {:ok, state}
 
       {:error, _reason} ->
-        {:stop, :normal, {1012, "space action delivery recovery required"}, state}
+        stop(state, 1012, "space action delivery recovery required", :delivery_failure)
     end
   end
 
@@ -763,7 +783,7 @@ defmodule ChalkSync.Transport.SocketV1 do
         {:ok, state}
 
       {:error, _reason} ->
-        {:stop, :normal, {1012, "space action delivery recovery required"}, state}
+        stop(state, 1012, "space action delivery recovery required", :delivery_failure)
 
       :control_required ->
         {:ok, state}

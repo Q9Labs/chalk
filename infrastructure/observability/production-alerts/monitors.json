@@ -1,9 +1,9 @@
 [
   {
     "name": "Chalk user-facing job and webhook failures",
-    "description": "The summary group preserves each user-facing failure message. State comes from read-only Postgres snapshots; no IDs or customer payloads are exported.",
+    "description": "A class Recording, video, transcript or customer notification needs attention. Each message identifies the affected rule.",
     "type": "Threshold",
-    "aplQuery": "['${LOG_DATASET}'] | where chalk_alert_stream == 'production-state-v1' | summarize arg_max(_time, chalk_alert_value) by chalk_alert_rule, chalk_alert_summary | summarize value=max(chalk_alert_value) by chalk_alert_rule, chalk_alert_summary",
+    "aplQuery": "['${LOG_DATASET}'] | where chalk_alert_stream == 'production-state-v2' | summarize arg_max(_time, *) by chalk_alert_rule | summarize value=max(chalk_alert_value) by rule=chalk_alert_rule, headline=chalk_alert_headline, summary=chalk_alert_summary, next=chalk_alert_next, engineers=chalk_alert_engineers",
     "columnName": "value",
     "operator": "Above",
     "threshold": 0,
@@ -17,9 +17,9 @@
   },
   {
     "name": "Chalk API requests or Sync connections are failing",
-    "description": "Users are seeing API requests fail, or failing to connect or repeatedly reconnecting to a Space; start with `pnpm diag trace <32-hex-trace-id>` from an affected response or connection. API: more than 0.05 5xx/s over five minutes. Sync: more than ten upgrade rejections or WebSocket closures over five minutes. Require five consecutive one-minute evaluations.",
+    "description": "Joining, loading, Recording or class connections may be failing right now. Normal leaves and server drains do not count.",
     "type": "Threshold",
-    "aplQuery": "['${LOG_DATASET}'] | union ['${TRACE_DATASET}'] | where (['service.name'] == 'chalk-api' and ['attributes.event'] == 'http.request' and ['attributes.status'] >= 500) or (['service.name'] == 'chalk-sync' and name in ('sync.http.upgrade_rejected', 'sync.websocket.closed')) | extend rule=iff(['service.name'] == 'chalk-sync', 'sync', 'api'), weight=iff(['service.name'] == 'chalk-sync', 3, 2), summary=iff(['service.name'] == 'chalk-sync', 'Users are failing to connect or repeatedly reconnecting to a Space; start with `pnpm diag trace <32-hex-trace-id>` from an affected connection.', 'Users are seeing API requests fail; start with `pnpm diag trace <32-hex-trace-id>` from a failing response.') | summarize value=sum(weight) by rule, summary",
+    "aplQuery": "['${LOG_DATASET}'] | union ['${TRACE_DATASET}'] | where (['service.name'] == 'chalk-api' and ['attributes.event'] == 'http.request' and ['attributes.status'] >= 500) or (['service.name'] == 'chalk-sync' and (name == 'sync.http.upgrade_rejected' or (name == 'sync.websocket.closed' and ['attributes.close_kind'] == 'abnormal'))) | extend rule=iff(['service.name'] == 'chalk-sync', 'sync', 'api'), weight=iff(rule == 'sync', 3, 2), headline=iff(rule == 'sync', 'People are being disconnected from classes or cannot connect right now', 'Chalk is returning errors to people in class'), summary=iff(rule == 'sync', 'More than ten failed connections or abnormal drops occurred in five minutes. Normal leaves and server drains are excluded. Tenant attribution is not available for these events.', 'More than fifteen server errors occurred in five minutes. Joining, loading or starting a Recording may be failing right now. Tenant attribution is not available for these events.'), next='An engineer must investigate now; customers may need to reconnect after the cause is fixed.', engineers=strcat('For engineers: ', rule, '; `pnpm diag trace <32-hex-trace-id>` from an affected response or connection.') | summarize value=sum(weight) by rule, headline, summary, next, engineers",
     "columnName": "value",
     "operator": "Above",
     "threshold": 30,
@@ -33,9 +33,9 @@
   },
   {
     "name": "Chalk production alert state is stale",
-    "description": "Chalk cannot prove all four job and webhook alert snapshots arrived in the last five minutes. Check chalk-alert-state.timer, its service journal, Postgres access and Axiom ingest. Missing state is not success.",
+    "description": "Chalk may be working, but nobody would be told about a job or webhook failure until this is fixed.",
     "type": "Threshold",
-    "aplQuery": "['${LOG_DATASET}'] | where chalk_alert_stream == 'production-state-v1' and chalk_alert_rule in ('recording', 'export', 'transcript', 'webhook') | summarize value=dcount(chalk_alert_rule)",
+    "aplQuery": "['${LOG_DATASET}'] | where chalk_alert_stream == 'production-state-v2' and chalk_alert_rule in ('recording', 'export', 'transcript', 'webhook') | summarize value=dcount(chalk_alert_rule)",
     "columnName": "value",
     "operator": "Below",
     "threshold": 4,

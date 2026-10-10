@@ -5,24 +5,23 @@ API/Sync traces and metrics, Postgres state, and an uptime Worker. CloudWatch
 holds transcription Lambda and deployment logs; it does not cover all these
 failures. No hosted Grafana was found on the managed runtime host.
 
-Use Axiom's native Discord webhook notifier. Three grouped monitors fit the
+Use Axiom's custom webhook notifier with `discord-body.tmpl` aimed directly at the Discord webhook. Three grouped monitors fit the
 current monitor allowance. Keep the live organization, dataset names, monitor
 IDs and Discord webhook in private configuration, never in this public repo.
 
-| Rule                               | Production source             | Evaluation                                                                         |
-| ---------------------------------- | ----------------------------- | ---------------------------------------------------------------------------------- |
-| Recording Capture or Render failed | `recording_jobs`              | Terminal failure in the last 15 minutes                                            |
-| Export failed or overdue           | `recording_jobs`, Render kind | Terminal failure in 15 minutes, or active for over 14 hours                        |
-| Transcript failed or overdue       | `transcriptions`              | Terminal failure in 15 minutes, or active for over 30 minutes                      |
-| Webhook retries exhausted          | `webhook_deliveries`          | Exhausted in the last 15 minutes                                                   |
-| API 5xx rate                       | Axiom API request logs        | More than 15 server errors in 5 minutes, sustained for 5 evaluations               |
-| Sync connection failures           | Axiom Sync event spans        | More than 10 upgrade rejections/closures in 5 minutes, sustained for 5 evaluations |
+| Rule                         | Production source             | Evaluation                                                                                  |
+| ---------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------- |
+| Recording Capture failed     | `recording_jobs`              | Terminal failure in the last 15 minutes                                                     |
+| Export failed or overdue     | `recording_jobs`, Render kind | Terminal failure in 15 minutes, or active for over 14 hours                                 |
+| Transcript failed or overdue | `transcriptions`              | Terminal failure in 15 minutes, or active for over 30 minutes                               |
+| Webhook retries exhausted    | `webhook_deliveries`          | Exhausted in the last 15 minutes                                                            |
+| API 5xx rate                 | Axiom API request logs        | More than 15 server errors in 5 minutes, sustained for 5 evaluations                        |
+| Sync connection failures     | Axiom Sync event spans        | More than 10 upgrade rejections/abnormal closures in 5 minutes, sustained for 5 evaluations |
 
-The SQL and user-facing summaries match PR #139. API errors are unsampled in the
+The Capture and Export rules are disjoint: a Render failure only counts as Export. API errors are unsampled in the
 production `errors` request-log mode. Sync exports the same named events as spans;
 its stdout logs are not required. The API count is the 0.05-errors/second threshold
-over a five-minute window, not a percentage of all requests. Sync preserves #139's
-closure definition, including ordinary closures; changing that policy is separate.
+over a five-minute window, not a percentage of all requests. Sync counts only rejected upgrades and closures explicitly marked `close_kind=abnormal`. Normal leaves, acknowledged class ends and server drains are excluded; unclassified older events are not counted. Install the Sync instrumentation before switching the monitor.
 
 ## Read-only state collector
 
@@ -87,15 +86,15 @@ and existing telemetry health checks, not by a new claim of complete telemetry.
 
 ## Prove delivery and reset
 
-All rules share one route: Axiom monitor → native DiscordWebhook notifier → Discord.
+All rules share one route: Axiom monitor → custom webhook notifier → Discord.
 A direct webhook POST proves the endpoint only, not this route.
 
 1. With production monitors enabled, run `collector --test`. This emits a dedicated
    `delivery-test` group, with no database write or induced user failure.
 2. Wait for the native monitor evaluation using its history/completion evidence.
-   Confirm the **TEST: Chalk production alert delivery proof** message in the actual
+   Confirm the **TEST: Chalk alert delivery** message in the actual
    Discord channel. Record the monitor history and channel/message evidence privately.
-3. Run `collector --clear-test`, confirm native recovery, and remove the test
+3. Run `collector --clear-test`, confirm the honest threshold-closed message, and remove the test
    notification from the channel when supported. The test events remain in Axiom's
    normal retention but carry no customer data; the latest test value is zero.
 4. Query all rule groups and freshness, and confirm the timer remains active.
@@ -104,3 +103,25 @@ If the Discord item is absent, finish the code and checks, leave monitors disabl
 and report delivery as unproved. Do not infer receipt from a successful HTTP response
 from Axiom or from a created notifier. Rollback disables the three named monitors
 and stops/disables only `chalk-alert-state.timer`; it leaves all app units alone.
+
+## Discord layout and recovery
+
+Axiom's [custom webhook documentation](https://axiom.co/docs/monitor-data/custom-webhook-notifier)
+exposes Go templates, `Action`, `Value`, `GroupKeys` and `GroupValues`. The
+[notifier API](https://axiom.co/docs/restapi/endpoints/createNotifier) accepts
+`properties.customWebhook.url` and `body`. The template finds fields by key, not
+array order. Its output is Discord JSON with all mentions disabled. Threshold
+closure is explicitly **not proof of repair**. It says the threshold is no
+longer exceeded and asks an engineer to confirm the earlier outcome. No
+undocumented resolve-suppression flag is used.
+
+The freshness headline is “The alert system has stopped reporting”. API and
+Sync describe the threshold (more than 15 server errors or ten connection
+failures in five minutes), not the weighted internal value. Job messages show
+the count. The last line is always “For engineers” and a first diagnostic command.
+Capture terminal failure does not establish that all source is unrecoverable:
+the completion recovery path can retain source. Therefore no complete video is
+promised; an engineer checks recoverability immediately. Export and transcript
+messages require checking the actual source expiry, not an invented deadline.
+These changes have not been sent to production Discord; receipt and Axiom's
+runtime template rendering require the lead's staged delivery proof.

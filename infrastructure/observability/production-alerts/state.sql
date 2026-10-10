@@ -1,7 +1,7 @@
 SELECT 'recording' AS rule, count(*) AS value,
   'A user saw a Recording fail during Capture or Render; start with `pnpm diag trace <32-hex-trace-id>` using the job journey ID.' AS summary
 FROM recording_jobs
-WHERE kind IN ('capture', 'render') AND state = 'terminal_failure'
+WHERE kind = 'capture' AND state = 'terminal_failure'
   AND terminal_at >= now() - interval '15 minutes'
 UNION ALL
 SELECT 'export', count(*),

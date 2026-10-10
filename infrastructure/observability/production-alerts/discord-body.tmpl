@@ -1,0 +1,12 @@
+{{- $headline := "The alert system has stopped reporting" -}}{{- $summary := .Description -}}{{- $next := "An engineer must restore the alert collector now; until then job and webhook failures may go unnoticed." -}}{{- $engineers := "For engineers: freshness; `systemctl status chalk-alert-state.timer chalk-alert-state.service`." -}}{{- $rule := "freshness" -}}
+{{- range $i, $key := .GroupKeys -}}
+{{- if eq $key "headline" -}}{{- $headline = index $.GroupValues $i -}}{{- end -}}
+{{- if eq $key "summary" -}}{{- $summary = index $.GroupValues $i -}}{{- end -}}
+{{- if eq $key "next" -}}{{- $next = index $.GroupValues $i -}}{{- end -}}
+{{- if eq $key "engineers" -}}{{- $engineers = index $.GroupValues $i -}}{{- end -}}
+{{- if eq $key "rule" -}}{{- $rule = index $.GroupValues $i -}}{{- end -}}
+{{- end -}}
+{{- $count := "" -}}{{- if or (eq $rule "recording") (eq $rule "export") (eq $rule "transcript") (eq $rule "webhook") -}}{{- $count = printf " Affected items: %v." .Value -}}{{- end -}}
+{{- $content := printf "%s\n%s%s\n%s\n%s" $headline $summary $count $next $engineers -}}
+{{- if eq .Action "Closed" -}}{{- $content = printf "The alert threshold is no longer exceeded\nThis does not prove the earlier failure was fixed. Check the earlier message and affected records.\nAn engineer must confirm the outcome; do not treat this as recovery.\n%s" $engineers -}}{{- end -}}
+{"content": {{printf "%q" $content}}, "allowed_mentions": {"parse": []}}
