@@ -23,7 +23,13 @@ export function SpacePage() {
   return (
     <Chalk
       space="design-review"
-      getAccess={({ space, reason }) => fetch(`/api/chalk/spaces/${space}/access?reason=${reason}`)}
+      getAccess={(request) =>
+        fetch("/api/chalk/access", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(request),
+        })
+      }
       defaults={{ microphone: true, camera: true }}
       features={{ chat: true, screenShare: true, reactions: true }}
       spaceName="Design review"
@@ -32,6 +38,11 @@ export function SpacePage() {
   );
 }
 ```
+
+Forward the `getAccess` request unchanged to your authenticated backend. Pass it
+as the final `participants.issueAccess` argument with the server-only state from
+`getAccessRefreshState`; Chalk selects replacement only when recovery needs it.
+See the [web quickstart](../../../docs/sdk-web-quickstart.md) for the endpoint call.
 
 Pass an existing client when its lifecycle belongs to the embedding
 application. Chalk will use it without disposing it.

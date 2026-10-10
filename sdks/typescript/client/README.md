@@ -28,7 +28,12 @@ import { createSpaceClient } from "@q9labsai/chalk-client";
 
 const client = createSpaceClient({
   space: "design-review",
-  getAccess: ({ space, reason }) => fetch(`/api/chalk/spaces/${space}/access?reason=${reason}`),
+  getAccess: (request) =>
+    fetch("/api/chalk/access", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+    }),
 });
 
 await client.join({
@@ -41,7 +46,11 @@ await client.join({
 `getAccess` receives `reason: "join" | "refresh" | "retry"`. `Connection`
 uses it for Entrance freshness, scheduled refresh, wake revalidation, and one
 refresh-and-retry after an access rejection. Keep the callback available for
-the full lifetime of the client.
+the full lifetime of the client. Forward the request unchanged to your backend,
+then pass it as the final `participants.issueAccess` argument alongside the
+server-only state from `getAccessRefreshState`. Chalk selects media replacement
+when recovery needs it and retains healthy media for ordinary refresh and Sync
+recovery. The quickstart shows the endpoint call; no conditional is needed.
 
 ## Snapshot store
 

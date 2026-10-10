@@ -95,6 +95,7 @@
     "@tanstack/devtools-vite",
     "typescript-7"
   ],
+  "ignoreExports": [{ "file": "sdks/typescript/client/src/server/types.ts", "exports": ["Recording"] }],
   "duplicates": {
     "ignore": [
       "scripts/gates/**",

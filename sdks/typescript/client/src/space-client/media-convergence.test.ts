@@ -6,6 +6,34 @@ import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
 
 describe("SpaceClient media convergence", () => {
+  it("lets the access backend replace the media binding requested by SFU recovery", async () => {
+    const platform = createCoreTestPlatform();
+    let replace = async (): Promise<unknown> => {
+      throw new Error("Media recovery is not bound");
+    };
+    const getAccess = vi.fn(async (context: { readonly replaceMediaConnection?: boolean }) => opaqueAccessGrant("test", "test", context.replaceMediaConnection ? "connection-2" : "connection-1"));
+    const client = createSpaceClientForPlatform(
+      { space: "space-1", getAccess },
+      {
+        ...platform,
+        dependencies: {
+          ...platform.dependencies,
+          createMediaClient: (input) => {
+            replace = input.replaceMediaConnection!;
+            return platform.dependencies.createMediaClient(input);
+          },
+        },
+      },
+    );
+    try {
+      await client.join({ microphone: false, camera: false });
+      await expect(replace()).resolves.toMatchObject({ provider: "cloudflare_sfu", clientPayload: { connectionId: "connection-2" } });
+      expect(getAccess.mock.calls.map(([context]) => context.replaceMediaConnection)).toEqual([false, true]);
+    } finally {
+      client.dispose();
+    }
+  });
+
   it("keeps durable off/on intents ordered while the early local pause is pending", async () => {
     const platform = createCoreTestPlatform();
     const track = mediaTrack();
