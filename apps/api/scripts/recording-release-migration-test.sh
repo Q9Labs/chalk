@@ -3,7 +3,7 @@ set -euo pipefail
 
 repository_root="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "${repository_root}/apps/api"
-export GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN:-go1.25.11+auto}"
+export GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN:-go1.26.9+auto}"
 
 if [[ "${CHALK_RECORDING_RELEASE_PROOF_CHILD:-0}" != "1" ]]; then
   CHALK_GATE_POSTGRES_MIGRATION_TARGET=20260820100000 \
