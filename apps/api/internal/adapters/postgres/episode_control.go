@@ -125,6 +125,39 @@ func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Conte
 			}
 			count++
 		}
+		empty, err := queries.ClaimEmptyEpisodeLingers(ctx, batch-int32(count))
+		if err != nil {
+			return fmt.Errorf("claim empty episode lingers: %w", err)
+		}
+		for _, row := range empty {
+			window, err := queries.EpisodeLingerStillDue(ctx, sqlc.EpisodeLingerStillDueParams{
+				TenantID: row.TenantID, SpaceID: row.SpaceID, EpisodeID: row.EpisodeID,
+			})
+			if err != nil {
+				return fmt.Errorf("recheck empty episode linger: %w", err)
+			}
+			if !window.Due {
+				continue
+			}
+			input := episodes.RequestEpisodeEndInput{
+				TenantID:  utilities.IDFromBytes(row.TenantID.Bytes),
+				SpaceID:   utilities.IDFromBytes(row.SpaceID.Bytes),
+				EpisodeID: utilities.IDFromBytes(row.EpisodeID.Bytes),
+			}
+			request, err := episodes.NewLingerRequest(input.TenantID, input.SpaceID, input.EpisodeID, timestamp(window.LastDepartureAt))
+			if err != nil {
+				return err
+			}
+			input.Request = request
+			if _, err := createEndReadyOperation(ctx, queries, tx, tenantExternalOperationInput{
+				TenantID: input.TenantID, SpaceID: input.SpaceID, EpisodeID: input.EpisodeID,
+				OperationName: episodes.OperationTenantEndEpisode, Request: input.Request,
+				JourneyName: "episode.linger_expired", Payload: input.Request.Payload(),
+			}); err != nil {
+				return err
+			}
+			count++
+		}
 		return nil
 	})
 	return count, err

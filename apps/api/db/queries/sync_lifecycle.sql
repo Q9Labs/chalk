@@ -664,3 +664,57 @@ where
     and id = sqlc.arg(episode_id)
     and status = 'active'
 returning *;
+
+-- name: ClaimEmptyEpisodeLingers :many
+select episodes.tenant_id, episodes.space_id, episodes.id as episode_id
+from episodes
+join sync_episode_control control on control.tenant_id = episodes.tenant_id
+    and control.space_id = episodes.space_id and control.episode_id = episodes.id
+join lateral (
+    select max(p.left_at) as last_departure_at from participants p
+    where p.tenant_id = episodes.tenant_id and p.space_id = episodes.space_id and p.episode_id = episodes.id
+        and p.joined_at is not null
+) departure on departure.last_departure_at is not null
+where episodes.status = 'active'
+    and not exists (
+        select 1 from sync_external_operations o
+        where o.tenant_id = episodes.tenant_id and o.space_id = episodes.space_id and o.episode_id = episodes.id
+            and o.operation_name = 'tenant_end_episode'
+            and o.request_key = 'empty-episode-linger-' || ((extract(epoch from departure.last_departure_at) * 1000000)::bigint)::text
+    )
+    and not exists (
+        select 1 from participants p
+        where p.tenant_id = episodes.tenant_id and p.space_id = episodes.space_id and p.episode_id = episodes.id
+            and p.status in ('joining', 'active', 'leaving')
+    )
+    and departure.last_departure_at + make_interval(secs => coalesce((episodes.config_snapshot->>'linger_window_seconds')::integer, 0)) <= now()
+order by episodes.id
+for update of episodes skip locked
+limit sqlc.arg(batch_size);
+
+-- name: EpisodeLingerStillDue :one
+-- Discovery uses an earlier snapshot. Recheck occupancy, clock and window key
+-- after locking the Episode, which serializes all admission paths.
+select departure.last_departure_at::timestamptz as last_departure_at, coalesce(
+    episodes.status = 'active'
+    and not exists (
+        select 1 from participants p
+        where p.tenant_id = episodes.tenant_id and p.space_id = episodes.space_id and p.episode_id = episodes.id
+            and p.status in ('joining', 'active', 'leaving')
+    )
+    and not exists (
+        select 1 from sync_external_operations o
+        where o.tenant_id = episodes.tenant_id and o.space_id = episodes.space_id and o.episode_id = episodes.id
+            and o.operation_name = 'tenant_end_episode'
+            and o.request_key = 'empty-episode-linger-' || ((extract(epoch from departure.last_departure_at) * 1000000)::bigint)::text
+    )
+    and departure.last_departure_at + make_interval(secs => coalesce((episodes.config_snapshot->>'linger_window_seconds')::integer, 0)) <= now(),
+    false
+)::boolean as due
+from episodes
+cross join lateral (
+    select max(p.left_at) as last_departure_at from participants p
+    where p.tenant_id = episodes.tenant_id and p.space_id = episodes.space_id and p.episode_id = episodes.id
+        and p.joined_at is not null
+) departure
+where episodes.tenant_id = sqlc.arg(tenant_id) and episodes.space_id = sqlc.arg(space_id) and episodes.id = sqlc.arg(episode_id);
