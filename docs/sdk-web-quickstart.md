@@ -59,13 +59,13 @@ Retain the Space, Episode, and Participant IDs on your backend. After admission 
 import { getAccessRefreshState } from "@q9labsai/chalk-client/server";
 
 let refreshState = getAccessRefreshState(admission.access);
-// Forward getAccess's replaceMediaConnection boolean in your endpoint request.
-const renewed = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, request.body.replaceMediaConnection === true ? { participantGeneration: refreshState.participantGeneration, replaceMediaConnection: true } : refreshState);
+// Pass the authenticated endpoint request through to the SDK unchanged.
+const renewed = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, refreshState, request.body);
 refreshState = getAccessRefreshState(renewed);
 // Persist refreshState server-side, then return renewed unchanged to the browser.
 ```
 
-The state contains the current media credential and Participant generation. Keep it in server-side storage, never logs or browser responses. A normal refresh keeps the same Participant and media connection; it does not admit another Participant. `replaceMediaConnection: true` explicitly replaces the media connection and is not routine refresh.
+The state contains the current media credential and Participant generation. Keep it in server-side storage, never logs or browser responses. A normal refresh keeps the same Participant and media connection; it does not admit another Participant. The optional final request argument makes `issueAccess` select media replacement when Chalk requests it; applications need no conditional. Keep the retained state scoped to the authenticated Participant, and validate and authorize the endpoint request before passing it on.
 
 ## Expose an access endpoint
 
@@ -75,17 +75,17 @@ Return the grant with `cache-control: no-store`. Your endpoint owns admission an
 
 ## Create the access callback
 
-`GetAccess` receives `{ space, reason, replaceMediaConnection }`, where reason is `join`, `refresh`, or `retry`. Return the endpoint's `Response` or decoded grant unchanged; Chalk rejects non-OK or malformed responses. Forward `replaceMediaConnection` to your endpoint: recovery after moderator mute can require a fresh media connection. Do not replace on every `retry`; Sync recovery may retain the existing media connection.
+`GetAccess` receives `{ space, reason, replaceMediaConnection }`, where reason is `join`, `refresh`, or `retry`. Return the endpoint's `Response` or decoded grant unchanged; Chalk rejects non-OK or malformed responses. Forward the request unchanged to your endpoint and pass it as the final `issueAccess` argument shown above. Chalk selects media replacement for recovery when needed, while ordinary refresh and Sync recovery retain healthy media.
 
 ```ts
 // browser/access.ts
 import type { GetAccess } from "@q9labsai/chalk-client";
 
-export const getAccess: GetAccess = ({ space, reason, replaceMediaConnection }) =>
+export const getAccess: GetAccess = (request) =>
   fetch("/api/chalk/access", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ space, reason, replaceMediaConnection }),
+    body: JSON.stringify(request),
   });
 ```
 

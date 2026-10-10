@@ -1,4 +1,5 @@
 import { parseAccessGrant } from "../access/grant.js";
+import { accessRefreshInput } from "./access-refresh.js";
 import { ChalkAPIError } from "./errors.js";
 import { createServerRequester } from "./transport.js";
 import type {
@@ -123,13 +124,14 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
         });
         return participantLifecycle(lifecycle);
       },
-      issueAccess: async (spaceId, episodeId, participantId, input) => {
+      issueAccess: async (spaceId, episodeId, participantId, input, refreshRequest) => {
+        const resolvedInput = accessRefreshInput(input, refreshRequest);
         const access = await request<AccessGrantWire>({
           method: "POST",
           path: `${tenantPath}/spaces/${segment(spaceId)}/episodes/${segment(episodeId)}/participants/${segment(participantId)}/access-grant`,
-          body: accessGrantRequest(input),
+          body: accessGrantRequest(resolvedInput),
           expectedStatus: 201,
-          retry: input.replaceMediaConnection === true ? "never" : "always",
+          retry: resolvedInput.replaceMediaConnection === true ? "never" : "always",
         });
         return accessGrant(access);
       },
