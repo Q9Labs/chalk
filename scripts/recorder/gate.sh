@@ -5,6 +5,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 tofu_dir="$repo_root/infrastructure/recorder"
 
 node --test "$tofu_dir/images/cpu/relocate-renderer.test.mjs"
+node --experimental-import-meta-resolve --test "$tofu_dir/images/cpu/check-runtime-imports.test.mjs"
 node --test "$repo_root/scripts/deploy/deploy-managed-release.test.mjs"
 python3 -m unittest discover -s "$repo_root/scripts/recorder" -p 'test_*.py'
 bash -n "$repo_root/scripts/recorder/build-and-seal.sh"
