@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -129,6 +130,7 @@ func TestVP8DegradesWithinBoundAcrossBundleVersions(t *testing.T) {
 						if len(dimensions) == 0 {
 							t.Fatal("no decoded frames")
 						}
+						var frameTimes []string
 						if passthrough && source.Kind == "camera" {
 							if (pattern == "layer-switch" || pattern == "replay-burst-and-one-unseen-late-frame" || pattern == "beyond-bound") && len(dimensions) != 30 {
 								t.Fatalf("undamaged accepted frames changed: %d", len(dimensions))
@@ -138,6 +140,7 @@ func TestVP8DegradesWithinBoundAcrossBundleVersions(t *testing.T) {
 								t.Fatal(err)
 							}
 							times := strings.Fields(string(pts))
+							frameTimes = times
 							last := "0.967000"
 							if pattern == "recovery-gap-cannot-reset" {
 								last = "3.100000"
@@ -149,9 +152,21 @@ func TestVP8DegradesWithinBoundAcrossBundleVersions(t *testing.T) {
 								t.Fatalf("normalized frame clock=%q", times)
 							}
 						}
-						for _, dimension := range dimensions {
-							if dimension != want {
-								t.Fatalf("frame dimensions=%s want=%s", dimension, want)
+						for index, dimension := range dimensions {
+							frameWant := want
+							if passthrough && source.Kind == "camera" && pattern != "recovery-gap-cannot-reset" && pattern != "origin-zero-recovery-gap" {
+								// Accepted low-layer pictures retain their original dimensions.
+								// Use the packet clock because damaged cases may drop a picture.
+								seconds, err := strconv.ParseFloat(frameTimes[index], 64)
+								if err != nil {
+									t.Fatal(err)
+								}
+								if seconds >= 0.333 && seconds < 0.666 {
+									frameWant = "320,240"
+								}
+							}
+							if dimension != frameWant {
+								t.Fatalf("frame dimensions=%s want=%s", dimension, frameWant)
 							}
 						}
 					}

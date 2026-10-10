@@ -14,6 +14,9 @@ export interface ComposeOutput {
 export interface PlannedSource {
   readonly path: string;
   readonly startMs: number;
+  readonly changingSize?: boolean;
+  /** A changing-size damaged source must fill holds before trimming a segment. */
+  readonly decodeFromStartSeconds?: number;
 }
 
 const COMMON_ARGS = ["-hide_banner", "-nostdin", "-y", "-loglevel", "error"];
@@ -69,7 +72,7 @@ export function needsDenseKeyframes(keyframes: readonly number[], starts: readon
 
 /** ffprobe arguments that print one line per keyframe time; only keyframes are decoded. */
 export function keyframeProbeArgs(path: string): readonly string[] {
-  return ["-v", "error", "-select_streams", "v:0", "-skip_frame", "nokey", "-show_entries", "frame=pts_time", "-of", "csv=p=0", path];
+  return ["-v", "error", "-select_streams", "v:0", "-skip_frame", "nokey", "-show_entries", "frame=pts_time,width,height", "-of", "csv=p=0", path];
 }
 
 /** Re-encodes a track with a keyframe every 30 frames, keeping its timestamps, so each segment seek decodes at most about a second. */
@@ -80,6 +83,8 @@ export function denseKeyframeArgs(inputPath: string, outputPath: string, output:
   return [
     ...COMMON_ARGS,
     ...inputThreadArgs(output),
+    "-reinit_filter",
+    "0",
     "-i",
     inputPath,
     "-map",
@@ -132,32 +137,70 @@ export function segmentArgs(segment: VideoSegment, sources: ReadonlyMap<string, 
     const source = sources.get(placement.sourceId);
     if (source === undefined) throw new TypeError(`composed video source ${placement.sourceId} has no decoded media`);
     const offset = Math.max(0, startSeconds - source.startMs / 1_000);
-    args.push(...inputThreadArgs(output), "-ss", seconds(offset), "-t", seconds(inputSeconds), "-i", source.path);
+    const seek = source.decodeFromStartSeconds === undefined ? ["-ss", seconds(offset)] : [];
+    args.push(...inputThreadArgs(output), "-reinit_filter", "0", ...seek, "-t", seconds(inputSeconds + (source.decodeFromStartSeconds === undefined ? 0 : offset)), "-i", source.path);
   }
   args.push("-f", "concat", "-safe", "0", "-i", overlayListPath);
   const firstFrameHolds = new Map(segment.placements.map((placement) => [placement.sourceId, Math.max(0, sources.get(placement.sourceId)!.startMs / 1_000 - startSeconds)]));
-  args.push(...outputThreadArgs(output), "-filter_complex", segmentFilter(segment.placements, output, firstFrameHolds), "-map", "[out]");
+  args.push(
+    ...outputThreadArgs(output),
+    "-filter_complex",
+    segmentFilter(
+      segment.placements,
+      output,
+      firstFrameHolds,
+      new Map(
+        segment.placements.flatMap((placement) => {
+          const source = sources.get(placement.sourceId)!;
+          return source.decodeFromStartSeconds === undefined ? [] : [[placement.sourceId, { duration: source.decodeFromStartSeconds, trim: Math.max(0, startSeconds - source.startMs / 1_000) }] as const];
+        }),
+      ),
+      new Set(segment.placements.filter((placement) => sources.get(placement.sourceId)?.changingSize).map((placement) => placement.sourceId)),
+    ),
+    "-map",
+    "[out]",
+  );
   args.push("-frames:v", String(frames), "-r", String(output.fps), "-fps_mode", "cfr");
   // The final mux writes one timestamp per composed frame in packet order.
   args.push(...encoderArgs(output.encoder), "-bf", "0", "-b:v", "2M", "-maxrate", "3M", "-bufsize", "4M", "-pix_fmt", "yuv420p", "-an", "-f", "mpegts", outputPath);
   return args;
 }
 
-export function segmentFilter(placements: readonly VideoPlacement[], output: ComposeOutput, firstFrameHolds: ReadonlyMap<string, number> = new Map()): string {
+export function segmentFilter(
+  placements: readonly VideoPlacement[],
+  output: ComposeOutput,
+  firstFrameHolds: ReadonlyMap<string, number> = new Map(),
+  holdsBeforeTrim: ReadonlyMap<string, { readonly duration: number; readonly trim: number }> = new Map(),
+  changingSizes: ReadonlySet<string> = new Set(),
+): string {
   const { width, height, fps } = output;
   const chains = [`color=c=black:s=${width}x${height}:r=${fps},format=yuv420p[base0]`];
   for (const [index, placement] of placements.entries()) {
     const { x, y, width: tileWidth, height: tileHeight } = placement.rect;
-    const fit =
-      placement.fit === "cover"
-        ? `scale=${tileWidth}:${tileHeight}:force_original_aspect_ratio=increase:force_divisible_by=2,crop=${tileWidth}:${tileHeight}`
-        : `scale=${tileWidth}:${tileHeight}:force_original_aspect_ratio=decrease:force_divisible_by=2,pad=${tileWidth}:${tileHeight}:(ow-iw)/2:(oh-ih)/2:black`;
+    const dynamicCover = placement.fit === "cover" && changingSizes.has(placement.sourceId);
+    const fit = dynamicCover
+      ? `scale=${tileWidth}:${tileHeight}:force_original_aspect_ratio=increase:force_divisible_by=2:eval=frame`
+      : placement.fit === "cover"
+        ? `scale=${tileWidth}:${tileHeight}:force_original_aspect_ratio=increase:force_divisible_by=2:eval=frame,crop=${tileWidth}:${tileHeight}`
+        : `scale=${tileWidth}:${tileHeight}:force_original_aspect_ratio=decrease:force_divisible_by=2:eval=frame,pad=${tileWidth}:${tileHeight}:(ow-iw)/2:(oh-ih)/2:black:eval=frame`;
     const holdSeconds = firstFrameHolds.get(placement.sourceId) ?? 0;
     // Shift real frames to their recording time, then let fps fill backward.
     // tpad would round a delay to input frames (a sparse share can be 1 fps).
     const offset = holdSeconds > 0 ? `+${seconds(holdSeconds)}/TB` : "";
     const cadence = holdSeconds > 0 ? `fps=${fps}:start_time=0` : `fps=${fps}`;
-    chains.push(`[${index}:v]setpts=PTS-STARTPTS${offset},${cadence},${fit},setsar=1,format=yuv420p[video${index}]`);
+    const hold = holdsBeforeTrim.get(placement.sourceId);
+    const tail = hold === undefined ? "" : `,tpad=stop_mode=clone:stop_duration=${seconds(hold.duration)}`;
+    const trim = hold === undefined ? "" : `,trim=start=${seconds(hold.trim)},setpts=PTS-STARTPTS`;
+    // fps and clone-mode tpad retain frames without assuming their dimensions.
+    // Resize at output cadence, without resetting the timeline on a layer switch.
+    const label = dynamicCover ? `sized${index}` : `video${index}`;
+    chains.push(`[${index}:v]setpts=PTS-STARTPTS${offset}${tail},${cadence}${trim},${fit},setsar=1,format=yuv420p[${label}]`);
+    if (dynamicCover) {
+      // crop caches its initial input size. Overlay evaluates the current frame
+      // size instead, centering and clipping a rotating camera to a fixed tile.
+      chains.push(`color=c=black:s=${tileWidth}x${tileHeight}:r=${fps},format=yuv420p[tile${index}]`);
+      chains.push(`[tile${index}][sized${index}]overlay=(W-w)/2:(H-h)/2:eval=frame:eof_action=repeat[video${index}]`);
+    }
     chains.push(`[base${index}][video${index}]overlay=${x}:${y}:eof_action=repeat[base${index + 1}]`);
   }
   const overlayInput = placements.length;
