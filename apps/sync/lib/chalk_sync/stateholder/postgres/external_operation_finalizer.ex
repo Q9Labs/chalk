@@ -806,10 +806,11 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
           Postgrex.rollback(connection, {:error, :invalid_state})
       end
 
-    Postgrex.query!(
+    Lifecycle.complete_episode_participants(
       connection,
-      SQL.complete_external_episode_participants(),
-      Scope.episode(episode)
+      episode,
+      external,
+      webhook_object.ended_at
     )
 
     Postgrex.query!(

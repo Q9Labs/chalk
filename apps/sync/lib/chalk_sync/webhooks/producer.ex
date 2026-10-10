@@ -39,6 +39,35 @@ defmodule ChalkSync.Webhooks.Producer do
 
   def produce_external(_connection, %EpisodeKey{}, _external, _event, _object), do: :ok
 
+  def produce_episode_departures(connection, episode, context, objects) do
+    tenant_id = UUID.dump!(episode.tenant_id)
+    Postgrex.query!(connection, SQL.ensure_tenant_state(), [tenant_id])
+    [[^tenant_id]] = Postgrex.query!(connection, SQL.lock_tenant_state(), [tenant_id]).rows
+
+    revisions =
+      Postgrex.query!(connection, SQL.matching_revisions(), [tenant_id, "participant.left"]).rows
+
+    Enum.each(objects, fn object ->
+      source = %{
+        transition_key: "episode_end:#{episode.episode_id}:participant:#{object.id}",
+        event_name: "participant.left",
+        journey_id: context.journey_id,
+        parent_journey_event_id: context.parent_journey_event_id,
+        producing_trace_id: context.producing_trace_id,
+        producing_span_id: context.producing_span_id
+      }
+
+      produce_versions(
+        connection,
+        episode,
+        source,
+        Map.put(object, :reason, "episode_ended"),
+        "participant.left",
+        revisions
+      )
+    end)
+  end
+
   defp produce_source(connection, episode, source, object) do
     event_name = source.event_name
     tenant_id = UUID.dump!(episode.tenant_id)

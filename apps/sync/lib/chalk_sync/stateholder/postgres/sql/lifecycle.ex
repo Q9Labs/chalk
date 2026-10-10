@@ -220,12 +220,21 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.Lifecycle do
 
   def complete_all_episode_participants do
     """
-    update participants
-    set status = 'left', left_at = coalesce(left_at, now()), updated_at = now()
-    where tenant_id = $1
-      and space_id = $2
-      and episode_id = $3
-      and status != 'left'
+    with departing as (
+      select id, status as previous_status from participants
+      where tenant_id = $1 and space_id = $2 and episode_id = $3 and status != 'left'
+      for update
+    ), completed as (
+      update participants p
+      set status = 'left', left_at = $4, updated_at = now()
+      from departing d
+      where p.id = d.id
+      returning p.id, p.identity_id, p.space_id, p.episode_id, p.name, p.status,
+                p.joined_at, p.left_at, p.updated_at, d.previous_status
+    )
+    select id, identity_id, space_id, episode_id, name, status, joined_at, left_at, updated_at
+    from completed where previous_status in ('active', 'leaving')
+    order by id
     """
   end
 
