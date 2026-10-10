@@ -85,14 +85,36 @@ func (a *RecorderFleet) ListNodes(ctx context.Context, key recorderfleet.PoolKey
 	if err != nil {
 		return nil, err
 	}
+	var firewalls []digitalOceanFirewall
+	for _, droplet := range droplets {
+		if slices.Contains(droplet.Tags, recorderfleet.EnvironmentTag(a.environment)) && slices.Contains(droplet.Tags, recorderfleet.RoleTag(a.role)) {
+			firewalls, err = a.listFirewalls(ctx)
+			if err != nil {
+				return nil, err
+			}
+			break
+		}
+	}
 	nodes := make([]recorderfleet.Node, 0, len(droplets))
 	for _, droplet := range droplets {
 		if !slices.Contains(droplet.Tags, recorderfleet.EnvironmentTag(a.environment)) {
 			continue
 		}
-		node, err := a.mapNode(ctx, droplet, slices.Contains(droplet.Tags, recorderfleet.RoleTag(a.role)))
+		node, err := a.mapNode(ctx, droplet, false)
 		if err != nil {
 			return nil, err
+		}
+		if slices.Contains(droplet.Tags, recorderfleet.RoleTag(a.role)) {
+			for _, firewall := range firewalls {
+				attached := slices.Contains(firewall.DropletIDs, droplet.ID)
+				for _, tag := range firewall.Tags {
+					attached = attached || slices.Contains(droplet.Tags, tag)
+				}
+				if attached {
+					node.FirewallIDs = append(node.FirewallIDs, firewall.ID)
+				}
+			}
+			slices.Sort(node.FirewallIDs)
 		}
 		nodes = append(nodes, node)
 	}
@@ -284,6 +306,29 @@ func (a *RecorderFleet) mapNode(ctx context.Context, droplet digitalOceanDroplet
 	}
 	slices.Sort(node.FirewallIDs)
 	return node, nil
+}
+
+// One account-wide snapshot replaces a firewall request for every pool node.
+// Keep exact per-node reads in InspectNode for bootstrap authorization.
+func (a *RecorderFleet) listFirewalls(ctx context.Context) ([]digitalOceanFirewall, error) {
+	path := "/v2/firewalls"
+	query := url.Values{"per_page": {strconv.Itoa(dropletsPerPage)}}
+	var firewalls []digitalOceanFirewall
+	for {
+		var response listFirewallsResponse
+		if err := a.doJSON(ctx, http.MethodGet, path, query, nil, &response, http.StatusOK); err != nil {
+			return nil, err
+		}
+		firewalls = append(firewalls, response.Firewalls...)
+		if response.Links.Pages.Next == "" {
+			return firewalls, nil
+		}
+		next, err := url.Parse(response.Links.Pages.Next)
+		if err != nil || next.Scheme != a.baseURL.Scheme || next.Host != a.baseURL.Host || next.User != nil {
+			return nil, recorderfleet.ErrProviderUnavailable
+		}
+		path, query = next.Path, next.Query()
+	}
 }
 
 func (a *RecorderFleet) ensureFirewall(ctx context.Context, node recorderfleet.Node, firewallID string) (recorderfleet.Node, error) {
@@ -506,10 +551,19 @@ type retrieveDropletResponse struct {
 	Droplet digitalOceanDroplet `json:"droplet"`
 }
 
+type digitalOceanFirewall struct {
+	ID         string   `json:"id"`
+	DropletIDs []int64  `json:"droplet_ids"`
+	Tags       []string `json:"tags"`
+}
+
 type listFirewallsResponse struct {
-	Firewalls []struct {
-		ID string `json:"id"`
-	} `json:"firewalls"`
+	Firewalls []digitalOceanFirewall `json:"firewalls"`
+	Links     struct {
+		Pages struct {
+			Next string `json:"next"`
+		} `json:"pages"`
+	} `json:"links"`
 }
 
 type firewallDropletsRequest struct {
