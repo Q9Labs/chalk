@@ -2579,6 +2579,8 @@ export interface components {
       expires_at?: components["schemas"]["DateTimeString"] | null;
       /** @enum {string} */
       status: "pending" | "available" | "failed" | "expired";
+      /** @enum {string} */
+      stop_reason?: "duration_limit";
     };
     RecordingTranscriptionPreparation: {
       /** @enum {string} */

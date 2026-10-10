@@ -1124,6 +1124,7 @@ export type RecordingId = typeof RecordingIdSchema.Type;
 export const RecordingSourceSchema = Schema.Struct({
   expires_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
   status: Schema.Literals(["pending", "available", "failed", "expired"]),
+  stop_reason: Schema.optional(Schema.Literal("duration_limit")),
 });
 export type RecordingSource = typeof RecordingSourceSchema.Type;
 

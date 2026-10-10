@@ -481,6 +481,7 @@ type Querier interface {
 	ScanOperationGraceDeadlinesGlobal(ctx context.Context, arg ScanOperationGraceDeadlinesGlobalParams) ([]DiagnosticOperation, error)
 	SeedDefaultSpaceRoles(ctx context.Context, arg SeedDefaultSpaceRolesParams) error
 	SetRecordingCaptureConnectionActiveCommand(ctx context.Context, arg SetRecordingCaptureConnectionActiveCommandParams) (int64, error)
+	SetRecordingCaptureDurationLimit(ctx context.Context, arg SetRecordingCaptureDurationLimitParams) error
 	SetRecordingCaptureReadyAt(ctx context.Context, arg SetRecordingCaptureReadyAtParams) (pgtype.Timestamptz, error)
 	StorePasswordReset(ctx context.Context, arg StorePasswordResetParams) error
 	TouchActiveAPIKeyLastUsed(ctx context.Context, arg TouchActiveAPIKeyLastUsedParams) error

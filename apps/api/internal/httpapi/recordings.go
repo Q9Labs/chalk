@@ -89,8 +89,9 @@ type recordingExportResponse struct {
 }
 
 type recordingSourceResponse struct {
-	Status    string  `json:"status"`
-	ExpiresAt *string `json:"expires_at,omitempty"`
+	StopReason string  `json:"stop_reason,omitempty"`
+	Status     string  `json:"status"`
+	ExpiresAt  *string `json:"expires_at,omitempty"`
 }
 
 type recordingTranscriptionPreparationResponse struct {
@@ -486,7 +487,7 @@ func newRecordingResponse(recording recordings.Recording, state recordingpipelin
 }
 
 func newRecordingSourceResponse(state recordingpipeline.ArtifactState) recordingSourceResponse {
-	response := recordingSourceResponse{Status: string(state.SourceStatus)}
+	response := recordingSourceResponse{Status: string(state.SourceStatus), StopReason: state.CaptureStopReason}
 	if state.SourceExpiresAt != nil {
 		expiresAt := utilities.FormatTimestamp(*state.SourceExpiresAt)
 		response.ExpiresAt = &expiresAt
