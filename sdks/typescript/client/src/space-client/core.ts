@@ -152,6 +152,7 @@ export class SpaceClientCore {
   readonly #episodeDiagnosticTracks = new Map<string, DiagnosticRemoteTrack>();
   readonly #handlers: { [TEvent in ClientEventName]: Set<ClientEventHandler<TEvent>> } = { participantJoined: new Set(), participantLeft: new Set(), episodeEnded: new Set(), screenShareStarted: new Set(), screenShareStopped: new Set(), error: new Set() };
   #disposed = false;
+  #episodeEnded = false;
   #previous: SpaceSnapshot;
   #unsubscribeConnection: (() => void) | null = null;
   #unsubscribeStore: (() => void) | null = null;
@@ -195,7 +196,12 @@ export class SpaceClientCore {
     this.#previous = this.#store.getSnapshot();
     this.#unsubscribeStore = this.#store.subscribe(() => this.#publishStore());
     this.#unsubscribeConnection = connection.subscribe(() => {
-      this.#store.updateConnection(connection.getSnapshot());
+      const snapshot = connection.getSnapshot();
+      const episode = snapshot.episode ?? this.#store.getSnapshot().connection.episode;
+      this.#store.updateConnection(snapshot);
+      const newlyEnded = snapshot.episodeEnded && !this.#episodeEnded;
+      this.#episodeEnded = snapshot.episodeEnded ?? false;
+      if (newlyEnded) this.#emit("episodeEnded", { episode });
       this.#publishConnectionDiagnostics();
     });
     this.#publishConnectionDiagnostics();
@@ -226,6 +232,7 @@ export class SpaceClientCore {
           this.#syncConnectOperation?.fail("connect_failed");
         }),
       ),
+      Effect.catchTag("ConnectionLifecycleFailure", (failure) => Effect.fail(failure.code === "episode_ended" ? new SpaceClientError({ code: "episode.ended", recoverable: failure.recoverable, message: failure.message }) : failure)),
       Effect.mapError(normalizeClientError),
     );
   }
@@ -238,11 +245,10 @@ export class SpaceClientCore {
     );
   }
   endEpisode(): ClientEffect<void> {
-    return trackedEffect(
-      this.#episodeDiagnostics,
-      "episode.end.authorized",
-      this.#connection.runCommand(({ sync }) => foreign(() => sync.endEpisode()).pipe(Effect.tap(() => this.#connection.confirmEpisodeEnded))),
-    ).pipe(Effect.asVoid, Effect.mapError(normalizeClientError));
+    return trackedEffect(this.#episodeDiagnostics, "episode.end.authorized", this.#connection.runCommand(({ sync }) => foreign(() => sync.endEpisode()).pipe(Effect.tap(() => this.#connection.confirmEpisodeEnded))).pipe(Effect.tap(() => this.#connection.leave()))).pipe(
+      Effect.asVoid,
+      Effect.mapError(normalizeClientError),
+    );
   }
   extendEpisode(minutes: number): ClientEffect<void> {
     return trackedEffect(
@@ -330,7 +336,6 @@ export class SpaceClientCore {
   }
   #emitChanges(previous: SpaceSnapshot, next: SpaceSnapshot): void {
     this.#emitParticipantChanges(previous, next);
-    this.#emitEpisodeEnd(previous, next);
     this.#emitScreenShareChanges(previous, next);
     this.#emitErrorChange(previous, next);
   }
@@ -339,9 +344,6 @@ export class SpaceClientCore {
     const after = new Map(next.participants.roster.map((participant) => [participant.participantId, participant]));
     for (const participant of after.values()) if (!before.has(participant.participantId)) this.#emit("participantJoined", { participant });
     for (const participant of before.values()) if (!after.has(participant.participantId)) this.#emit("participantLeft", { participant });
-  }
-  #emitEpisodeEnd(previous: SpaceSnapshot, next: SpaceSnapshot): void {
-    if (previous.connection.lastError?.code !== "episode.ended" && next.connection.lastError?.code === "episode.ended") this.#emit("episodeEnded", { episode: previous.connection.episode ?? next.connection.episode });
   }
   #emitScreenShareChanges(previous: SpaceSnapshot, next: SpaceSnapshot): void {
     const previousShares = screenShares(previous);
