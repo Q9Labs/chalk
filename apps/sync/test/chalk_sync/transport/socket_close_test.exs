@@ -1,5 +1,6 @@
 defmodule ChalkSync.Transport.SocketCloseTest do
   use ExUnit.Case, async: false
+  alias ChalkSync.Transport.SocketClose
   alias ChalkSync.Transport.SocketV1
   alias ChalkSync.Transport.SocketWhiteboardV1
 
@@ -56,7 +57,7 @@ defmodule ChalkSync.Transport.SocketCloseTest do
   end
 
   test "acknowledging a class end is normal" do
-    assert ChalkSync.Transport.SocketClose.attributes(:normal, %{
+    assert SocketClose.attributes(:normal, %{
              reason: :normal,
              close_code: 1000
            }) ==

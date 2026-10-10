@@ -10,6 +10,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   alias ChalkSync.Observability
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
+  alias ChalkSync.Transport.SocketClose
   alias ChalkSync.WhiteboardV1.Episode
   alias ChalkSync.WhiteboardV1.Fanout
   alias ChalkSync.WhiteboardV1.Multipart
@@ -677,7 +678,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     Observability.terminal(
       state.observability,
       "sync.websocket.closed",
-      ChalkSync.Transport.SocketClose.attributes(terminate_reason, state.terminal)
+      SocketClose.attributes(terminate_reason, state.terminal)
       |> Map.merge(%{protocol: "whiteboard-v1", phase: state.phase})
       |> put_scene_id(state.scene_id)
     )

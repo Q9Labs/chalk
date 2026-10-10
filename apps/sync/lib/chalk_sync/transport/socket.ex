@@ -19,6 +19,7 @@ defmodule ChalkSync.Transport.SocketV1 do
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Transport.CollaborationQueue, as: CollaborationQueue
+  alias ChalkSync.Transport.SocketClose
   alias ChalkSync.UUID
 
   @hello_timeout_ms 5_000
@@ -221,7 +222,7 @@ defmodule ChalkSync.Transport.SocketV1 do
         protocol: 1,
         phase: state.phase
       }
-      |> Map.merge(ChalkSync.Transport.SocketClose.attributes(reason, state.terminal))
+      |> Map.merge(SocketClose.attributes(reason, state.terminal))
     )
 
     :ok
@@ -240,7 +241,7 @@ defmodule ChalkSync.Transport.SocketV1 do
         protocol: 1,
         phase: state.phase
       }
-      |> Map.merge(ChalkSync.Transport.SocketClose.attributes(reason, state.terminal))
+      |> Map.merge(SocketClose.attributes(reason, state.terminal))
     )
 
     :ok
