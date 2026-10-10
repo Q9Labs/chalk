@@ -37,7 +37,7 @@ describe("FFmpeg plan", () => {
       "segment.ts",
       output,
     );
-    expect(args.join(" ")).toContain("-threads 1 -ss 1.000000 -t 2.066667 -i cam.webm -threads 1 -ss 0.500000 -t 2.066667 -i screen.webm");
+    expect(args.join(" ")).toContain("-threads 1 -reinit_filter 0 -ss 1.000000 -t 2.066667 -i cam.webm -threads 1 -reinit_filter 0 -ss 0.500000 -t 2.066667 -i screen.webm");
     expect(args).toContain("-filter_complex_threads");
     expect(args.slice(args.indexOf("-frames:v"), args.indexOf("-frames:v") + 4)).toEqual(["-frames:v", "30", "-r", "15"]);
     expect(args.slice(-3)).toEqual(["-f", "mpegts", "segment.ts"]);
@@ -60,8 +60,8 @@ describe("FFmpeg plan", () => {
 
   it("uses crop for cover and pad for contain", () => {
     const filter = segmentFilter(placements, output);
-    expect(filter).toContain("force_original_aspect_ratio=increase:force_divisible_by=2,crop=320:240");
-    expect(filter).toContain("force_original_aspect_ratio=decrease:force_divisible_by=2,pad=640:360:(ow-iw)/2:(oh-ih)/2:black");
+    expect(filter).toContain("force_original_aspect_ratio=increase:force_divisible_by=2:eval=frame,crop=320:240");
+    expect(filter).toContain("force_original_aspect_ratio=decrease:force_divisible_by=2:eval=frame,pad=640:360:(ow-iw)/2:(oh-ih)/2:black");
     expect(filter).toContain("[base2][ui]overlay=0:0:format=yuv420:eof_action=repeat[out]");
     // An fps filter on the sparse UI stream makes overlay queue every base frame.
     expect(filter).toContain("[2:v]format=yuva420p[ui]");

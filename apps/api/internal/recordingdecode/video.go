@@ -300,9 +300,13 @@ func decodeVP8Source(ctx context.Context, runner CommandRunner, ffmpegPath, work
 	if len(segments) == 0 {
 		return Source{}, nil, nil
 	}
-	segments, err = normalizeVP8Segments(ctx, runner, ffmpegPath, segmentDirectory, segments)
-	if err != nil {
-		return Source{}, nil, err
+	// Native composition scales decoded frames directly to their output tile.
+	// Only the legacy encoder (or trimming invisible preroll) needs a fixed canvas.
+	if !passthrough || frameTimestamps[0] > segments[0].startTicks {
+		segments, err = normalizeVP8Segments(ctx, runner, ffmpegPath, segmentDirectory, segments)
+		if err != nil {
+			return Source{}, nil, err
+		}
 	}
 	mergedIVF := filepath.Join(segmentDirectory, "source.ivf")
 	if err := mergeIVF(mergedIVF, segments); err != nil {
@@ -608,9 +612,6 @@ func mergeIVF(outputPath string, segments []videoSegment) (resultErr error) {
 			if _, err := output.Write(outputHeader[:]); err != nil {
 				return errors.Join(fmt.Errorf("write IVF header: %w", err), closeFileWithContext(input, "close IVF segment"))
 			}
-		} else if binary.LittleEndian.Uint16(header[12:14]) != binary.LittleEndian.Uint16(outputHeader[12:14]) ||
-			binary.LittleEndian.Uint16(header[14:16]) != binary.LittleEndian.Uint16(outputHeader[14:16]) {
-			return errors.Join(fmt.Errorf("%w: VP8 dimensions changed within source", ErrDecode), closeFileWithContext(input, "close IVF segment"))
 		}
 		for {
 			var frameHeader [12]byte
