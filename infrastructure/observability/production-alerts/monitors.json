@@ -1,9 +1,9 @@
 [
   {
     "name": "Chalk user-facing job and webhook failures",
-    "description": "A class Recording, video, transcript or customer notification needs attention. Each message identifies the affected rule.",
+    "description": "The message names the Tenant from the database and counts affected Recordings or exhausted deliveries. Test Tenants remain visible, not silently suppressed.",
     "type": "Threshold",
-    "aplQuery": "['${LOG_DATASET}'] | where chalk_alert_stream == 'production-state-v2' | summarize arg_max(_time, *) by chalk_alert_rule | summarize value=max(chalk_alert_value) by rule=chalk_alert_rule, headline=chalk_alert_headline, summary=chalk_alert_summary, next=chalk_alert_next, engineers=chalk_alert_engineers",
+    "aplQuery": "['${LOG_DATASET}'] | where chalk_alert_stream == 'production-state-v2' | summarize arg_max(_time, *) by chalk_alert_rule, chalk_alert_tenant | summarize value=max(chalk_alert_value) by tenant=chalk_alert_tenant, rule=chalk_alert_rule, headline=chalk_alert_headline, summary=chalk_alert_summary, next=chalk_alert_next, engineers=chalk_alert_engineers",
     "columnName": "value",
     "operator": "Above",
     "threshold": 0,

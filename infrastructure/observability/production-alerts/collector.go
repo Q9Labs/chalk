@@ -13,6 +13,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -21,14 +22,18 @@ import (
 var stateSQL string
 
 type snapshot struct {
-	Time      string `json:"_time"`
-	Stream    string `json:"chalk_alert_stream"`
-	Rule      string `json:"chalk_alert_rule"`
-	Value     int64  `json:"chalk_alert_value"`
-	Summary   string `json:"chalk_alert_summary"`
-	Headline  string `json:"chalk_alert_headline"`
-	Next      string `json:"chalk_alert_next"`
-	Engineers string `json:"chalk_alert_engineers"`
+	Tenant        string     `json:"chalk_alert_tenant"`
+	TenantName    string     `json:"-"`
+	ExpiresAt     *time.Time `json:"-"`
+	UnknownExpiry int64      `json:"-"`
+	Time          string     `json:"_time"`
+	Stream        string     `json:"chalk_alert_stream"`
+	Rule          string     `json:"chalk_alert_rule"`
+	Value         int64      `json:"chalk_alert_value"`
+	Summary       string     `json:"chalk_alert_summary"`
+	Headline      string     `json:"chalk_alert_headline"`
+	Next          string     `json:"chalk_alert_next"`
+	Engineers     string     `json:"chalk_alert_engineers"`
 }
 
 func main() {
@@ -66,7 +71,7 @@ func run() error {
 		return errors.New("unknown collector mode")
 	}
 	for i := range snapshots {
-		snapshots[i].Headline, snapshots[i].Summary, snapshots[i].Next = message(snapshots[i].Rule)
+		formatMessage(&snapshots[i])
 		snapshots[i].Engineers = "For engineers: " + snapshots[i].Rule + "; `pnpm diag trace <32-hex-trace-id>` from the affected journey."
 		snapshots[i].Time = time.Now().UTC().Format(time.RFC3339Nano)
 		snapshots[i].Stream = "production-state-v2"
@@ -102,6 +107,42 @@ func message(rule string) (headline, impact, next string) {
 	}
 }
 
+func formatMessage(item *snapshot) {
+	item.Headline, item.Summary, item.Next = message(item.Rule)
+	if item.Tenant != "" {
+		item.Summary = "Tenant: " + safeTenantName(item.TenantName) + ". " + item.Summary
+	}
+	if item.ExpiresAt != nil {
+		if item.ExpiresAt.Before(time.Now()) {
+			item.Next = "The earliest affected source expired at " + item.ExpiresAt.UTC().Format(time.RFC3339) + "; recovery is not promised. An engineer must check what remains now."
+		} else {
+			item.Next += " Earliest affected source expires at " + item.ExpiresAt.UTC().Format(time.RFC3339) + "."
+		}
+	}
+	if (item.Rule == "export" || item.Rule == "transcript") && item.Value > 0 && item.UnknownExpiry > 0 {
+		item.Next += " Some source expiry times are unknown; an engineer must check them now."
+	}
+}
+
+func safeTenantName(name string) string {
+	name = strings.Map(func(r rune) rune {
+		// Keep JSON quoting and Discord layout safe without exporting customer payloads.
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || strings.ContainsRune("`*_<>[]\\", r) {
+			return ' '
+		}
+		return r
+	}, name)
+	name = strings.Join(strings.Fields(name), " ")
+	runes := []rune(name)
+	if len(runes) > 80 {
+		name = string(runes[:80]) + "…"
+	}
+	if name == "" {
+		return "Unnamed Tenant"
+	}
+	return name
+}
+
 func collect(ctx context.Context, databaseURL string) ([]snapshot, error) {
 	if databaseURL == "" {
 		return nil, errors.New("CHALK_DATABASE_URL is required")
@@ -128,14 +169,16 @@ func collect(ctx context.Context, databaseURL string) ([]snapshot, error) {
 	}
 	defer rows.Close()
 	var snapshots []snapshot
+	seenRules := make(map[string]bool)
 	for rows.Next() {
 		var item snapshot
-		if err := rows.Scan(&item.Rule, &item.Value, &item.Summary); err != nil {
+		if err := rows.Scan(&item.Rule, &item.Tenant, &item.TenantName, &item.Value, &item.ExpiresAt, &item.UnknownExpiry); err != nil {
 			return nil, errors.New("alert state result decoding failed")
 		}
+		seenRules[item.Rule] = true
 		snapshots = append(snapshots, item)
 	}
-	if rows.Err() != nil || len(snapshots) != 4 {
+	if rows.Err() != nil || len(seenRules) != 4 {
 		return nil, errors.New("alert state snapshot incomplete")
 	}
 	return snapshots, nil

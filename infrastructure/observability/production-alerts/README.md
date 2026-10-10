@@ -34,8 +34,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o collector ../../infrastructure
 ```
 
 The collector uses one connection, a read-only transaction and a five-second SQL
-timeout. It emits only four aggregate counts and public summaries, no job IDs,
-Tenant IDs, connection strings, error details or customer payloads. A rejected or
+timeout. It emits four counts per Tenant plus four empty-Tenant heartbeat rows, including zero values to clear earlier failures. Tenant display names and stable Tenant IDs are read at run time and exported to the private Axiom dataset; only names appear in Discord. No job IDs, connection strings, error details or customer payloads are exported. This deliberately reverses the former no-Tenant-data policy; keep attribution in its separate commit for privacy review. A rejected or
 partial ingest fails the service. The freshness monitor detects missing snapshots
 within five minutes. Latest values, not sums of repeated snapshots, drive alerts.
 
@@ -49,8 +48,8 @@ database credential when one is available; the transaction itself always forbids
 writes. Keep credentials out of SSM command bodies and CI output.
 
 Before enabling the timer, run `collector --check` with the private environment
-and verify all four state counts against Postgres. Then run the service once,
-confirm the four snapshots in Axiom, and enable `chalk-alert-state.timer`.
+and verify the per-Tenant state counts against Postgres. Then run the service once,
+confirm all per-Tenant snapshots and the four heartbeat rows in Axiom, and enable `chalk-alert-state.timer`.
 Only install these alert files: do not run an application deployment controller.
 
 The next managed release targets the existing host: its controller replaces only
@@ -125,3 +124,23 @@ promised; an engineer checks recoverability immediately. Export and transcript
 messages require checking the actual source expiry, not an invented deadline.
 These changes have not been sent to production Discord; receipt and Axiom's
 runtime template rendering require the lead's staged delivery proof.
+
+## Tenant attribution (separate commit)
+
+Names come from `tenants.name` in the read-only snapshot, never from committed
+configuration. Every rule emits a zero for every Tenant on every collection, so
+latest-value evaluation clears an old count immediately instead of keeping a
+stale positive group. Stable Tenant IDs distinguish identical display names.
+Counts are distinct affected Recordings for Capture, Export and transcript, and
+exhausted deliveries for webhooks; they are not necessarily distinct classes.
+Names are limited to 80 characters and stripped of control/Discord formatting
+characters. Discord mentions are disabled. Names may reveal internal tests but
+are not a reliable test/customer classification: no rule suppresses a Tenant
+based on its name. API/Sync events have no safe Tenant attribution today; their
+messages explicitly say attribution is unavailable rather than guess.
+
+For Export, the earliest source expiry is calculated from the Capture completion
+and the Episode's frozen retention policy, matching the API's deferred artifact
+query. Transcript uses its immutable `source_expires_at`. Unknown or already
+expired deadlines are stated explicitly; recoverability is not promised. Tenant
+names/IDs and expiry timestamps go to private observability, not the public repo.
