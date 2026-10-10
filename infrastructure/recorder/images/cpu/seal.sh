@@ -9,7 +9,7 @@ systemctl is-active --quiet chalk-recorder-render.service && { echo "render work
 systemctl disable chalk-recorder-capture.service chalk-recorder-render.service chalk-recorder-renew.timer >/dev/null 2>&1 || true
 rm -f -- /etc/chalk-recorder/bootstrap.env /etc/chalk-recorder/node.env /etc/chalk-recorder/worker.env
 rm -f -- /usr/local/bin/go /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/pnpm
-rm -rf -- /opt/chalk-recorder/toolchains/go-1.25.13 /opt/chalk-recorder/toolchains/corepack
+rm -rf -- /opt/chalk-recorder/toolchains/go-1.26.9 /opt/chalk-recorder/toolchains/corepack
 find /etc/chalk-recorder/identity -mindepth 1 -maxdepth 1 -type f -delete
 find /root/.ssh /home -type f -name authorized_keys -delete 2>/dev/null || true
 find /etc/ssh -maxdepth 1 -type f -name 'ssh_host_*' -delete

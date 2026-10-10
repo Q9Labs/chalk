@@ -7,7 +7,7 @@ repository_root="$(cd "${api_root}/../.." && pwd)"
 if [[ -d /usr/local/go/bin ]]; then
   export PATH="/usr/local/go/bin:${PATH}"
 fi
-export CHALK_API_GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN:-go1.25.13+auto}"
+export CHALK_API_GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN:-go1.26.9+auto}"
 export GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN}"
 export CHALK_API_ENV=local
 # Git worktrees break Go VCS stamping (exit 128); the gate never needs stamped binaries.
@@ -41,7 +41,7 @@ Optional:
 Notes:
   This gate prepends /usr/local/go/bin when present, sets
   CHALK_API_ENV=local, and sets
-  GOTOOLCHAIN=${CHALK_API_GOTOOLCHAIN:-go1.25.13+auto}.
+  GOTOOLCHAIN=${CHALK_API_GOTOOLCHAIN:-go1.26.9+auto}.
   Isolated PostgreSQL preparation and migrations overlap database-free checks;
   database tests and lifecycle smoke wait for that PostgreSQL to be ready.
 EOF
