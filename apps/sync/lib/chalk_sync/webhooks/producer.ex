@@ -52,9 +52,16 @@ defmodule ChalkSync.Webhooks.Producer do
   end
 
   defp produce_versions(connection, episode, intent, object, event_name, revisions) do
-    revisions
-    |> Enum.group_by(fn [_revision_id, _endpoint_id, _revision, api_version] -> api_version end)
-    |> Enum.each(fn {api_version, version_revisions} ->
+    versions =
+      Enum.group_by(revisions, fn [_revision_id, _endpoint_id, _revision, api_version] ->
+        api_version
+      end)
+
+    # A terminal Episode Event is durable evidence even after the last receiver
+    # is removed. Delivery eligibility must not decide whether the Episode ended.
+    versions = if event_name == "episode.ended", do: Map.put_new(versions, 1, []), else: versions
+
+    Enum.each(versions, fn {api_version, version_revisions} ->
       produce_version(
         connection,
         episode,

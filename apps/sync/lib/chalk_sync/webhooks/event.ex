@@ -11,6 +11,7 @@ defmodule ChalkSync.Webhooks.Event do
     validate_uuid!(event_id, :event_id)
     validate_uuid!(tenant_id, :tenant_id)
     validate_datetime!(occurred_at, :occurred_at)
+    object = normalize_object(event_name, object)
     validate_object!(event_name, object)
 
     body =
@@ -68,6 +69,13 @@ defmodule ChalkSync.Webhooks.Event do
       {"updated_at", timestamp(object.updated_at)}
     ])
   end
+
+  # Legacy Episodes can lack started_at. Match the API snapshot fallback while
+  # retaining the webhook contract's non-null timestamp.
+  defp normalize_object("episode.ended", %{started_at: nil, created_at: created_at} = object),
+    do: %{object | started_at: created_at}
+
+  defp normalize_object(_event_name, object), do: object
 
   defp validate_object!(event_name, object)
        when event_name in ["participant.joined", "participant.left"] and is_map(object) do
