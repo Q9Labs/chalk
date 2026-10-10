@@ -656,7 +656,16 @@ func schedulePlanTail(source CompletionSource, active map[string]activeTrack, or
 		if fact.Revision <= source.CapturePlanStartRevision {
 			continue
 		}
-		at, err := elapsedMillis(source, fact.CreatedAt)
+		// The API freezes the plan cursor before the worker's capture-ready
+		// callback. A newer plan can already exist on the API clock while its
+		// timestamp precedes the worker's origin. Keep that state transition at
+		// zero rather than discard captured media. Revisions, identities, missing
+		// timestamps and the end boundary still undergo their normal validation.
+		createdAt := fact.CreatedAt
+		if !createdAt.IsZero() && createdAt.Before(source.CaptureReadyAt) {
+			createdAt = source.CaptureReadyAt
+		}
+		at, err := elapsedMillis(source, createdAt)
 		if err != nil {
 			return nil, 0, err
 		}
