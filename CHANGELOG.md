@@ -15,6 +15,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Fixed
 
 - Updated the Sync HTTP transport and workspace HTTP dependencies to patched releases.
+- Classified `getAccess` HTTP 408, 425, 429, and 5xx responses as recoverable `access.unavailable` failures for scheduled-refresh retry, and clarified initial-join network and timeout failures. Other non-OK responses and malformed grants remain `access.invalid`.
 - Updated the locked undici dependency to 7.29.1 to address GHSA-3wwx-pv8p-q78v.
 - Updated transitive brace-expansion and fast-uri dependencies to their security-fixed releases.
 - Dropped Capture RTP packets when the latest fenced Episode plan no longer authorizes their source, including while provider reconciliation is pending.

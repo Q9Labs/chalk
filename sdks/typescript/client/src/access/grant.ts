@@ -63,6 +63,22 @@ export class AccessGrantError extends TypeError {
   }
 }
 
+class AccessUnavailableError extends Error {
+  readonly code = "access.unavailable" as const;
+
+  constructor(status: number) {
+    super(`Access grant request failed with HTTP ${status}`);
+    this.name = "AccessUnavailableError";
+  }
+}
+
+function requireSuccessfulResponse(response: Response): void {
+  if (response.ok) return;
+  const status = response.status;
+  if (status === 408 || status === 425 || status === 429 || status >= 500) throw new AccessUnavailableError(status);
+  throw new AccessGrantError(`Access grant request failed with HTTP ${status}`);
+}
+
 export function parseParsedAccessGrant(value: unknown): ParsedAccessGrant {
   if (!isRecord(value)) throw new AccessGrantError();
   const subject = parseSubject(value.subject);
@@ -114,7 +130,7 @@ export function accessGrantFromParsed(value: ParsedAccessGrant): AccessGrant {
 
 export async function requireParsedAccessGrant(value: unknown): Promise<ParsedAccessGrant> {
   if (typeof Response !== "undefined" && value instanceof Response) {
-    if (!value.ok) throw new AccessGrantError(`Access grant request failed with HTTP ${value.status}`);
+    requireSuccessfulResponse(value);
     try {
       return parseParsedAccessGrant(await value.json());
     } catch (error) {
@@ -127,7 +143,7 @@ export async function requireParsedAccessGrant(value: unknown): Promise<ParsedAc
 
 export async function requireAccessGrant(value: unknown): Promise<AccessGrant> {
   if (typeof Response !== "undefined" && value instanceof Response) {
-    if (!value.ok) throw new AccessGrantError(`Access grant request failed with HTTP ${value.status}`);
+    requireSuccessfulResponse(value);
     try {
       return parseAccessGrant(await value.json());
     } catch (error) {
