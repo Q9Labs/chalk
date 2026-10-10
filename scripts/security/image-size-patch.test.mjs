@@ -7,35 +7,35 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
-const patchedPackageDirectory = (await readdir(join(projectRoot, "node_modules/.pnpm"))).find((entry) => entry.startsWith("image-size@2.0.2_patch_hash="));
+const packageDirectory = (await readdir(join(projectRoot, "node_modules/.pnpm"))).find((entry) => entry === "image-size@2.0.3");
 
-if (!patchedPackageDirectory) {
-  throw new Error("The patched image-size package is not installed");
+if (!packageDirectory) {
+  throw new Error("The fixed image-size 2.0.3 package is not installed");
 }
 
-const packageRoot = join(projectRoot, "node_modules/.pnpm", patchedPackageDirectory, "node_modules/image-size/dist");
+const packageRoot = join(projectRoot, "node_modules/.pnpm", packageDirectory, "node_modules/image-size/dist");
 const parserEntrypoints = [
-  ["ESM", join(packageRoot, "index.mjs"), "buffer"],
-  ["CommonJS", join(packageRoot, "index.cjs"), "buffer"],
-  ["ESM fromFile", join(packageRoot, "fromFile.mjs"), "file"],
-  ["CommonJS fromFile", join(packageRoot, "fromFile.cjs"), "file"],
+  ["ESM", join(packageRoot, "esm/index.js"), "buffer"],
+  ["CommonJS", join(packageRoot, "cjs/index.js"), "buffer"],
+  ["ESM fromFile", join(packageRoot, "esm/fromFile.js"), "file"],
+  ["CommonJS fromFile", join(packageRoot, "cjs/fromFile.js"), "file"],
 ];
 
 const malformedImages = [
   {
     name: "HEIF zero-size ispe box",
     hex: "00000010667479706176696600000000000000246d657461000000000000000869707270000000146970636f000000006973706500000000000000000000000000000000",
-    result: { width: 0, height: 0, type: "avif" },
+    error: "Invalid HEIF",
   },
   {
     name: "ICNS zero-size entry",
     hex: "69636e73000000106973333200000000",
-    result: { width: 16, height: 16, type: "icns" },
+    error: "Invalid ICNS",
   },
   {
     name: "JXL zero-size partial stream",
     hex: "000000084a584c2000000010667479706a786c2000000000000000006a786c70",
-    error: "Reached end of input",
+    error: "Invalid JXL",
   },
   {
     name: "unsupported bytes",
