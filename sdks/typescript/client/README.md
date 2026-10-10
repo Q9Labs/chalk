@@ -184,6 +184,36 @@ Events are `participantJoined`, `participantLeft`, `episodeEnded`,
 stable codes such as `access.invalid`, `episode.ended`, and
 `chat.payload_invalid`.
 
+### Join capture errors
+
+`join()` requests the microphone and camera by default. If both work, capture
+still uses one request. If a requested device fails, Chalk tries the requested
+devices separately and enters with the working devices; the unavailable device
+is off. This also applies to the React entrance, including a device that works
+in preview but fails at entry. A capture warning does not reject `join()`.
+
+Listen to `client.on("error", ({ error }) => ...)` (React: `onError`) for one
+recoverable warning, also available as `connection.lastError`. Its message names
+the failing device or devices. React displays a dismissible warning after entry.
+
+| Capture problem                     | Public error code                 |
+| ----------------------------------- | --------------------------------- |
+| Missing microphone, camera, or both | `media.device_not_found`          |
+| Busy microphone or camera           | `media.device_busy`               |
+| Denied microphone, camera, or both  | `media.permission_denied`         |
+| Unavailable device constraint       | `media.device_constraint_invalid` |
+| Other device capture failure        | `media.capture_failed`            |
+
+When both devices fail for different reasons, the warning uses the microphone's
+code and names both devices. Integrations must allow these codes and must not
+treat a recoverable capture warning as failed entry. Participants can enable a
+device later through `client.media` after resolving the problem.
+
+Only an unavailable capture API or an insecure browser context fails capture
+as nonrecoverable `environment.unsupported`. Joining with both devices explicitly
+off does not require capture. Access, Sync, or media transport failures can still
+reject `join()` independently of capture.
+
 ## Journey telemetry
 
 Client telemetry is opt-in. Start a `space.join` journey when a Participant

@@ -1,9 +1,10 @@
 import type { ConnectionMediaDevices } from "./dependencies";
+import { ConnectionError } from "./types";
 
 export function createBrowserMediaDevices(mediaDevices: MediaDevices | undefined = globalThis.navigator?.mediaDevices): ConnectionMediaDevices {
   return {
     async getUserMedia(constraints) {
-      if (!mediaDevices?.getUserMedia) throw new DOMException("Browser media capture is unavailable", "NotSupportedError");
+      if (!mediaDevices?.getUserMedia || globalThis.isSecureContext === false) throw new ConnectionError({ code: "unsupported_environment", action: null, recoverable: false, message: "Browser media capture is unavailable. Use a supported browser over HTTPS." });
       return mediaDevices.getUserMedia(constraints);
     },
     async getDisplayMedia(constraints) {
