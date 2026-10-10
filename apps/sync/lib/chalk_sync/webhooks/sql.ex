@@ -72,8 +72,12 @@ defmodule ChalkSync.Webhooks.SQL do
     from webhook_events event
     left join webhook_deliveries delivery
       on delivery.tenant_id = event.tenant_id and delivery.event_id = event.id
-    where event.tenant_id = $1 and event.semantic_transition_key = $2
+    where event.tenant_id = $1 and (
+      event.semantic_transition_key = $2
+      or ($3 != '' and starts_with(event.semantic_transition_key, $3))
+    )
     group by
+      event.id,
       event.event_name,
       event.api_version,
       event.journey_id,

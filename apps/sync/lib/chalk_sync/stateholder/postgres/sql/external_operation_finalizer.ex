@@ -99,14 +99,6 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer do
     """
   end
 
-  def complete_external_episode_participants do
-    """
-    update participants
-    set status = 'left', left_at = coalesce(left_at, now()), updated_at = now()
-    where tenant_id = $1 and space_id = $2 and episode_id = $3 and status <> 'left'
-    """
-  end
-
   def complete_external_episode_admissions do
     """
     update sync_admission_requests

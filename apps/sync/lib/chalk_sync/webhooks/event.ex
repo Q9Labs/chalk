@@ -45,7 +45,7 @@ defmodule ChalkSync.Webhooks.Event do
 
   defp encode_object(event_name, object)
        when event_name in ["participant.joined", "participant.left"] do
-    encode_fields([
+    fields = [
       {"id", object.id},
       {"identity_id", object.identity_id},
       {"space_id", object.space_id},
@@ -54,7 +54,11 @@ defmodule ChalkSync.Webhooks.Event do
       {"status", object.status},
       {"joined_at", nullable_timestamp(object.joined_at)},
       {"left_at", nullable_timestamp(object.left_at)}
-    ])
+    ]
+
+    encode_fields(
+      fields ++ if(Map.has_key?(object, :reason), do: [{"reason", object.reason}], else: [])
+    )
   end
 
   defp encode_object("episode.ended", object) do
