@@ -130,9 +130,7 @@ func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Conte
 			return fmt.Errorf("claim empty episode lingers: %w", err)
 		}
 		for _, row := range empty {
-			window, err := queries.EpisodeLingerStillDue(ctx, sqlc.EpisodeLingerStillDueParams{
-				TenantID: row.TenantID, SpaceID: row.SpaceID, EpisodeID: row.EpisodeID,
-			})
+			window, err := queries.EpisodeLingerStillDue(ctx, sqlc.EpisodeLingerStillDueParams(row))
 			if err != nil {
 				return fmt.Errorf("recheck empty episode linger: %w", err)
 			}
