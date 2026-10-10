@@ -48,6 +48,9 @@ export default defineConfig({
     tsconfigPaths: true,
   },
   ssr: {
-    noExternal: ["@q9labsai/recording-presentation", "@q9labsai/chalk-react", "@q9labsai/chalk-whiteboard", "@excalidraw/excalidraw", "@hugeicons/core-free-icons"],
+    // Bundle transitive dependencies too: chunks resolve imports from the renderer,
+    // not from the original package's pnpm dependency directory.
+    noExternal: true,
+    external: ["@napi-rs/canvas", "happy-dom"],
   },
 });
