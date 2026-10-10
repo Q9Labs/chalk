@@ -587,7 +587,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     }
   }
   #applyForcedMediaState(ports: ConnectionPorts, snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]>): void {
-    if (!snapshot.media || !snapshot.participantId) return;
+    if (!snapshot.media || !snapshot.participantId || snapshot.control?.status === "ended" || snapshot.connection.phase === "terminal" || (snapshot.control && !snapshot.control.participants.some((participant) => participant.participantId === snapshot.participantId))) return;
     for (const source of MEDIA_SOURCES) {
       const projected = snapshot.media.items.find((item) => item.participantId === snapshot.participantId && item.source === source);
       if (projected?.publicationId) {

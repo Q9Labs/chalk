@@ -3,6 +3,7 @@ import type { ConnectionSyncClient } from "../connection/dependencies";
 import type { V1DirectedRequest } from "../sync/v1-types";
 import { V1SyncError } from "../sync/v1-error";
 import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
+import { control } from "./terminal.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
 
 describe("SpaceClient media convergence", () => {
@@ -85,6 +86,26 @@ describe("SpaceClient media convergence", () => {
       expect(close).toHaveBeenCalledTimes(fresh ? 0 : 1);
       expect(track.enabled).toBe(fresh);
       expect(client.getSnapshot().media.local.microphone.state).toBe(fresh ? "enabled" : "disabled");
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("does not close a revoked publication after an Episode end", async () => {
+    const platform = createCoreTestPlatform();
+    const track = mediaTrack();
+    const close = vi.fn(async () => undefined);
+    const stop = vi.spyOn(track, "stop");
+    const client = capturedClient(platform, track, { media: { closeForcedLocalPublication: close } });
+    try {
+      await client.join({ microphone: true, camera: false });
+      const active = { participantId: "participant-1", source: "microphone" as const, enabled: true, publicationId: "old-publication" };
+      platform.emitSync({ ...platform.sync.getSnapshot(), control, media: { projectionId: "media-1", sequence: 1, items: [active] } });
+      platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ ...active, track }] });
+      platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...control, status: "ended", participants: [] }, media: { projectionId: "media-1", sequence: 2, items: [] } });
+      expect(close).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("left"));
+      expect(stop).toHaveBeenCalled();
     } finally {
       client.dispose();
     }

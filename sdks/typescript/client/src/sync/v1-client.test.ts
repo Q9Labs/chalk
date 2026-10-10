@@ -575,6 +575,22 @@ describe("V1SyncClient", () => {
     expect(client.getSnapshot().pendingCommandCount).toBe(0);
   });
 
+  it("does not poll remote publications after the Episode has ended", async () => {
+    const { client, socket, state, mediaPlane } = await liveClient();
+    try {
+      const ended = { ...state, revision: 2, stateDigest: "0".repeat(64), status: "ended" as const, participants: [], admissionRequests: [], recording: null };
+      const digest = await computeV1StateDigest(ended);
+      socket.receive({ type: "event", stream: "control", name: "episode_ended", event_id: recoveryId, base_revision: 1, revision: 2, schema_version: 1, resulting_state_digest: digest, payload: { reason: "ended_by_participant" }, external_operation_id: commandIds[1] });
+      await snapshotWhen(client, (snapshot) => snapshot.control?.status === "ended");
+      const before = mediaPlane.changed;
+      socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item: { participant_id: peerId, source: "camera", enabled: false, publication_id: null } });
+      await snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 1);
+      expect(mediaPlane.changed).toBe(before);
+    } finally {
+      client.stop();
+    }
+  });
+
   it("settles Episode end from its committed ACK without waiting for a control event the departing client may not receive", async () => {
     const { client, socket } = await liveClient();
     const operation = client.endEpisode({ commandId: commandIds[0] });

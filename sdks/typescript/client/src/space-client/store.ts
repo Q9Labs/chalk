@@ -51,7 +51,7 @@ export class SpaceStore {
     const error = snapshot.failure ? empty({ code: mapCode(snapshot.failure.code), recoverable: snapshot.failure.recoverable, message: snapshot.failure.message }) : null;
     const status = snapshot.state === "live" && (INTERRUPTED_CONNECTION_PHASES.has(snapshot.connection.sync) || INTERRUPTED_CONNECTION_PHASES.has(snapshot.connection.media)) ? "reconnecting" : snapshot.state;
     if (current.status === status && sameEpisode(current.episode, snapshot.episode) && sameError(current.lastError, error)) return;
-    this.#replace("connection", empty({ status, episode: snapshot.episode, lastError: error }));
+    this.#replace("connection", empty({ status, episode: snapshot.episode, lastError: sameError(current.lastError, error) ? current.lastError : error }));
   }
   updateSelf(value: SelfSlice): void {
     this.#replace("self", value);
@@ -103,9 +103,16 @@ export const makeSpaceStoreLayer = Layer.effect(SpaceStoreService, SpaceStore.ma
 export const makeFakeSpaceStoreLayer = (store = new SpaceStore()) => Layer.succeed(SpaceStoreService, store);
 
 function mapCode(code: string): ConnectionSlice["lastError"] extends infer T ? (T extends { readonly code: infer C } ? C : never) : never {
-  return ({ invalid_access: "access.invalid", episode_ended: "episode.ended", invalid_payload: "chat.payload_invalid", permission_denied: "media.permission_denied", unsupported_environment: "environment.unsupported", rate_limited: "command.rate_limited", command_rejected: "command.rejected" }[
-    code
-  ] ?? "client.internal_error") as never;
+  return ({
+    invalid_access: "access.invalid",
+    access_unavailable: "access.unavailable",
+    episode_ended: "episode.ended",
+    invalid_payload: "chat.payload_invalid",
+    permission_denied: "media.permission_denied",
+    unsupported_environment: "environment.unsupported",
+    rate_limited: "command.rate_limited",
+    command_rejected: "command.rejected",
+  }[code] ?? "client.internal_error") as never;
 }
 function sameEpisode(left: ConnectionSlice["episode"], right: ConnectionSlice["episode"]): boolean {
   if (left === right) return true;

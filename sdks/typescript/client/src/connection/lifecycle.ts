@@ -235,6 +235,12 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           const result = yield* Effect.exit(access.ensureFresh("scheduled_refresh"));
           if (result._tag === "Failure") {
             diagnostics.record({ event: "access_refresh_failed", state: model.state, epoch, code: "access_unavailable" });
+            const grant = access.currentUnsafe();
+            const now = yield* Clock.currentTimeMillis;
+            if (grant && Math.min(Date.parse(grant.sync.expiresAt), Date.parse(grant.media.expiresAt)) <= now) {
+              yield* failForSnapshot(lifecycleFailure("access_unavailable", false, "Access expired and could not be refreshed"));
+              return;
+            }
             yield* scheduleRefresh(REFRESH_RETRY_MS);
             return;
           }
@@ -570,14 +576,26 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           if (!isCurrentSyncSnapshot(sync, snapshot)) return;
           model.syncSnapshot = snapshot;
           if (syncSubjectMismatched(access.currentUnsafe()?.subject ?? null, snapshot)) return yield* failForSnapshot(lifecycleFailure("invalid_access", false, "Sync authenticated a different participant subject"));
-          if (episodeEnded(snapshot)) return yield* failForSnapshot(lifecycleFailure("episode_ended", false, "The Episode has ended"));
+          if (episodeEnded(snapshot)) {
+            model.episodeEndConfirmed = true;
+            return yield* finishTerminalSnapshot();
+          }
+          if (snapshot.connection.terminalReason === "participant_inactive" || participantRemoved(snapshot)) return yield* finishTerminalSnapshot();
           if (syncNeedsRecovery(snapshot)) yield* recover("sync");
           yield* publish();
         });
       const isCurrentSyncSnapshot = (sync: ConnectionSyncClient, snapshot: V1EpisodeSnapshot): boolean => sync === model.sync && snapshot !== model.syncSnapshot;
       const syncSubjectMismatched = (subject: NonNullable<ReturnType<typeof access.currentUnsafe>>["subject"] | null, snapshot: V1EpisodeSnapshot): boolean =>
         subject !== null && snapshot.participantId !== null && (subject.participantId !== snapshot.participantId || subject.participantGeneration !== snapshot.participantGeneration);
-      const episodeEnded = (snapshot: V1EpisodeSnapshot): boolean => snapshot.control?.status === "ended" || snapshot.optimisticControl?.status === "ended";
+      const episodeEnded = (snapshot: V1EpisodeSnapshot): boolean => snapshot.control?.status === "ended" || snapshot.connection.terminalReason === "episode_ended";
+      const participantRemoved = (snapshot: V1EpisodeSnapshot): boolean => snapshot.control !== null && snapshot.participantId !== null && !snapshot.control.participants.some((participant) => participant.participantId === snapshot.participantId);
+      const finishTerminalSnapshot = (): Effect.Effect<void> =>
+        Effect.gen(function* () {
+          model.failure = null;
+          yield* transition("leaving");
+          yield* stopPorts();
+          yield* transition("left");
+        });
       const syncNeedsRecovery = (snapshot: V1EpisodeSnapshot): boolean => active(model) && snapshot.connection.phase === "terminal";
       const failForSnapshot = (failure: ConnectionLifecycleFailure): Effect.Effect<void> =>
         Effect.gen(function* failForSnapshotEffect() {
@@ -724,6 +742,7 @@ function snapshotFor(model: Model, access: ParsedAccessGrant | null): Connection
     episode: episodeFor(access, control),
     connection: Object.freeze({ sync: model.syncSnapshot?.connection.phase === "live" && model.syncNoticeUnresponsive ? "unresponsive" : syncPhase(model.syncSnapshot?.connection.phase), media: mediaPhase(model.mediaSnapshot?.connection.phase) }),
     failure: model.failure ? Object.freeze({ ...model.failure }) : null,
+    episodeEnded: model.episodeEndConfirmed,
   });
 }
 
