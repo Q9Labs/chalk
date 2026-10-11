@@ -93,13 +93,13 @@ export function createCoreTestPlatform(): CoreTestPlatform {
   };
 }
 
-export function opaqueAccessGrant(value: string | number, suffix = String(value)): AccessGrant {
+export function opaqueAccessGrant(value: string | number, suffix = String(value), connectionId = "connection-1"): AccessGrant {
   const generation = typeof value === "number" ? value : undefined;
   const expiresAt = new Date(Date.now() + 300_000).toISOString();
   return {
     subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: "participant-1", participant_generation: 1 },
     sync: { token: credential("chalk-sync", suffix), expires_at: expiresAt },
-    media: { token: credential("chalk-media", suffix), expires_at: expiresAt, provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:stun.cloudflare.com:3478" } },
+    media: { token: credential("chalk-media", suffix), expires_at: expiresAt, provider: "cloudflare_sfu", client_payload: { connectionId, stunServer: "stun:stun.cloudflare.com:3478" } },
     ...(generation === undefined ? {} : { diagnostics: { token: credential("chalk-diagnostics", suffix), expires_at: expiresAt, generation, intake_path: "/_internal/episode-diagnostic-events" } }),
   } as unknown as AccessGrant;
 }

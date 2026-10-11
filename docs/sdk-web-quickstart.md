@@ -59,12 +59,13 @@ Retain the Space, Episode, and Participant IDs on your backend. After admission 
 import { getAccessRefreshState } from "@q9labsai/chalk-client/server";
 
 let refreshState = getAccessRefreshState(admission.access);
-const renewed = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, refreshState);
+// Pass the authenticated endpoint request through to the SDK unchanged.
+const renewed = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, refreshState, request.body);
 refreshState = getAccessRefreshState(renewed);
 // Persist refreshState server-side, then return renewed unchanged to the browser.
 ```
 
-The state contains the current media credential and Participant generation. Keep it in server-side storage, never logs or browser responses. A normal refresh keeps the same Participant and media connection; it does not admit another Participant. `replaceMediaConnection: true` explicitly replaces the media connection and is not routine refresh.
+The state contains the current media credential and Participant generation. Keep it in server-side storage, never logs or browser responses. A normal refresh keeps the same Participant and media connection; it does not admit another Participant. The optional final request argument makes `issueAccess` select media replacement when Chalk requests it; applications need no conditional. Keep the retained state scoped to the authenticated Participant, and validate and authorize the endpoint request before passing it on.
 
 ## Expose an access endpoint
 
@@ -74,7 +75,7 @@ Return the grant with `cache-control: no-store`. Your endpoint owns admission an
 
 ## Create the access callback
 
-`GetAccess` receives `{ space, reason }`, where reason is `join`, `refresh`, or `retry`. Return the endpoint's `Response` or decoded grant unchanged; Chalk classifies non-OK responses and rejects malformed grants.
+`GetAccess` receives `{ space, reason, replaceMediaConnection }`, where reason is `join`, `refresh`, or `retry`. Return the endpoint's `Response` or decoded grant unchanged; Chalk classifies non-OK responses and rejects malformed grants. Forward the request unchanged to your endpoint and pass it as the final `issueAccess` argument shown above. Chalk selects media replacement for recovery when needed, while ordinary refresh and Sync recovery retain healthy media.
 
 HTTP 408, 425, 429, and 5xx responses, network failures, and provider timeouts are `access.unavailable` (recoverable). Scheduled refresh retries these failures while retaining the current grant. Other non-OK responses (including 401 and 403) and malformed grants are `access.invalid`. Initial join does not automatically retry unavailable Access: show the failure and let the person check their network and try again. Return the `Response` unchanged so Chalk can classify its status; throwing a generic error for every non-OK response loses that distinction.
 
@@ -82,11 +83,11 @@ HTTP 408, 425, 429, and 5xx responses, network failures, and provider timeouts a
 // browser/access.ts
 import type { GetAccess } from "@q9labsai/chalk-client";
 
-export const getAccess: GetAccess = ({ space, reason }) =>
+export const getAccess: GetAccess = (request) =>
   fetch("/api/chalk/access", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ space, reason }),
+    body: JSON.stringify(request),
   });
 ```
 
