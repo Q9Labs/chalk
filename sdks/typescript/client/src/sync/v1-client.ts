@@ -439,6 +439,10 @@ export class V1SyncClient implements V1CollaborationClient {
           const control = this.#requireControl();
           this.#send({ type: "delivery_ack", stream: "control", revision: control.revision, state_digest: control.stateDigest });
         }
+        if (frame.name === "participant_left" && frame.payload.participant_id === this.#participantId) {
+          this.#phase = { phase: "terminal", terminalReason: "participant_inactive" };
+          this.#socket?.close(1000, "participant inactive");
+        }
         this.#emit();
         return;
       case "ack":
@@ -552,7 +556,7 @@ export class V1SyncClient implements V1CollaborationClient {
           previous.find((candidate) => mediaKey(candidate) === mediaKey(item)),
           item,
         );
-      this.#options.mediaPlane?.remotePublicationsChanged?.();
+      if (!this.#mediaEnded()) this.#options.mediaPlane?.remotePublicationsChanged?.();
     } else {
       this.#presence = { projectionId: frame.projection_id, sequence: 0, items: frame.items.map(presenceItem) };
       this.#presenceEventEvidence.clear();
@@ -570,7 +574,7 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#media = updateProjection(this.#media, frame.projection_id, frame.sequence, item, mediaKey);
       rememberBoundedEvidence(this.#mediaEventEvidence, frame.sequence, frameSignature(frame), MAX_PROJECTION_EVENT_EVIDENCE);
       this.#notifyRemotePublicationResumed(previous, item);
-      if (item.participantId !== this.#participantId && (previous?.enabled !== item.enabled || previous?.publicationId !== item.publicationId)) {
+      if (!this.#mediaEnded() && item.participantId !== this.#participantId && (previous?.enabled !== item.enabled || previous?.publicationId !== item.publicationId)) {
         this.#options.mediaPlane?.remotePublicationsChanged?.();
       }
     } else {
@@ -581,7 +585,12 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#emit();
   }
 
+  #mediaEnded(): boolean {
+    return this.#control?.status === "ended" || this.#phase.phase === "terminal";
+  }
+
   #notifyRemotePublicationResumed(previous: V1MediaPublication | undefined, current: V1MediaPublication): void {
+    if (this.#mediaEnded()) return;
     if (previous?.enabled === false && current.enabled && current.publicationId && previous.publicationId === current.publicationId && current.participantId !== this.#participantId) {
       this.#options.mediaPlane?.remotePublicationResumed?.(current.publicationId);
     }

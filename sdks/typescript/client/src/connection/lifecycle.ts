@@ -8,6 +8,7 @@ import type { ConnectionLifecycleSnapshot, ConnectionOptions, ConnectionPorts } 
 import { ConnectionDiagnostics, type ConnectionDiagnostic, type ConnectionJoinTraceEvent, type ConnectionJoinTraceStep } from "./diagnostics";
 import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionDependencies, type ConnectionMediaClient, type ConnectionSyncClient } from "./dependencies";
 import { stopStream, streamFromTracks } from "./media-devices";
+import { describeMediaCaptureError } from "../media/capture-error";
 import { createDefaultConnectionDependencies } from "./production";
 import { ConnectionError, type ConnectionConnectionPhase, type ConnectionFailure, type ConnectionState } from "./types";
 
@@ -44,7 +45,7 @@ export type ConnectionLifecycleCapability = {
   readonly subscribeScreenEnded: (listener: () => void) => () => void;
   readonly getDiagnostics: () => readonly ConnectionDiagnostic[];
   readonly getJoinTrace: () => readonly ConnectionJoinTraceEvent[];
-  readonly setInitialMedia: (provider: InitialMedia) => Effect.Effect<void>;
+  readonly setInitialMedia: (provider: InitialMedia, intent?: () => Readonly<{ microphone: boolean; camera: boolean }>) => Effect.Effect<void>;
   readonly configureJoin: (intent: Readonly<{ microphone?: boolean; camera?: boolean }>) => Effect.Effect<void, ConnectionLifecycleFailure>;
   readonly getSyncToken: () => Effect.Effect<string, ConnectionLifecycleFailure>;
   readonly confirmEpisodeEnded: Effect.Effect<void>;
@@ -69,6 +70,7 @@ type Model = {
   mediaSnapshot: ConnectionMediaSnapshot | null;
   failure: ConnectionFailure | null;
   initialMedia: InitialMedia;
+  initialMediaIntent: (() => Readonly<{ microphone: boolean; camera: boolean }>) | null;
   intent: { microphone: boolean; camera: boolean };
   episodeEndConfirmed: boolean;
   activeScope: Scope.Closeable | null;
@@ -98,7 +100,7 @@ export const makeConnectionLifecycleLayer = (options: ConnectionOptions) => {
     (request) =>
       Effect.tryPromise({
         try: (signal) => Promise.resolve(options.access(request ? { ...request, signal } : undefined)),
-        catch: (cause) => new ConnectionAccessFailure({ code: "access.unavailable", cause }),
+        catch: (cause) => (cause instanceof ConnectionAccessFailure ? cause : new ConnectionAccessFailure({ code: accessRejected(cause) ? "access.invalid" : "access.unavailable", cause })),
       }),
     options.accessRefreshWindowMs,
   );
@@ -154,6 +156,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             try: () => (intent.microphone || intent.camera ? platform.mediaDevices.getUserMedia({ audio: intent.microphone, video: intent.camera }) : Promise.resolve(streamFromTracks([]))),
             catch: (cause) => cause,
           }),
+        initialMediaIntent: null,
         intent: { microphone: options.initialMicrophoneEnabled ?? true, camera: options.initialCameraEnabled ?? true },
         episodeEndConfirmed: false,
         activeScope: null,
@@ -319,14 +322,13 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         });
       const waitForSyncLive = (sync: ConnectionSyncClient, timeoutMs: number): Effect.Effect<void, ConnectionLifecycleFailure> =>
         Effect.callback<void, ConnectionLifecycleFailure>((resume) => {
-          if (sync.getSnapshot().connection.phase === "live") {
-            resume(Effect.void);
-            return;
-          }
-          const unsubscribe = sync.subscribe((snapshot) => {
-            if (snapshot.connection.phase === "live") resume(Effect.void);
+          const observe = (snapshot: V1EpisodeSnapshot) => {
+            if (episodeEnded(snapshot)) resume(Effect.fail(lifecycleFailure("episode_ended", false, "The Episode has ended")));
+            else if (snapshot.connection.phase === "live") resume(Effect.void);
             else if (snapshot.connection.phase === "terminal" || snapshot.connection.phase === "stopped") resume(Effect.fail(lifecycleFailure("sync_start_failed", true, "Sync stopped before becoming live")));
-          });
+          };
+          const unsubscribe = sync.subscribe(observe);
+          observe(sync.getSnapshot());
           return Effect.sync(unsubscribe);
         }).pipe(
           Effect.timeout(timeoutMs),
@@ -351,9 +353,12 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           const scope = yield* Scope.make("sequential");
           model.activeScope = scope;
           let stream: MediaStream | null = null;
+          let captureWarning: ConnectionLifecycleFailure | null = null;
           yield* Effect.gen(function* () {
             if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
-            stream = yield* trace("acquire_initial_media", model.initialMedia(model.intent).pipe(Effect.mapError((cause) => captureFailure(cause))));
+            const captured = yield* trace("acquire_initial_media", acquireInitialMedia(model.initialMedia, model.initialMediaIntent?.() ?? model.intent));
+            stream = captured.stream;
+            captureWarning = captured.failure;
             if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
             const grant = yield* trace("access_initialize", access.initialize(reason));
             const media = yield* trace(
@@ -414,6 +419,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                 Effect.gen(function* () {
                   model.syncSnapshot = model.sync?.getSnapshot() ?? null;
                   model.mediaSnapshot = model.media?.getSnapshot() ?? null;
+                  model.failure = captureWarning ? toFailure(captureWarning) : null;
                   yield* transition("live");
                   yield* emitPorts();
                   yield* scheduleRefresh();
@@ -570,14 +576,25 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           if (!isCurrentSyncSnapshot(sync, snapshot)) return;
           model.syncSnapshot = snapshot;
           if (syncSubjectMismatched(access.currentUnsafe()?.subject ?? null, snapshot)) return yield* failForSnapshot(lifecycleFailure("invalid_access", false, "Sync authenticated a different participant subject"));
-          if (episodeEnded(snapshot)) return yield* failForSnapshot(lifecycleFailure("episode_ended", false, "The Episode has ended"));
+          if (episodeEnded(snapshot)) {
+            model.episodeEndConfirmed = true;
+            return yield* finishTerminalSnapshot();
+          }
+          if (snapshot.connection.terminalReason === "participant_inactive") return yield* finishTerminalSnapshot();
           if (syncNeedsRecovery(snapshot)) yield* recover("sync");
           yield* publish();
         });
       const isCurrentSyncSnapshot = (sync: ConnectionSyncClient, snapshot: V1EpisodeSnapshot): boolean => sync === model.sync && snapshot !== model.syncSnapshot;
       const syncSubjectMismatched = (subject: NonNullable<ReturnType<typeof access.currentUnsafe>>["subject"] | null, snapshot: V1EpisodeSnapshot): boolean =>
         subject !== null && snapshot.participantId !== null && (subject.participantId !== snapshot.participantId || subject.participantGeneration !== snapshot.participantGeneration);
-      const episodeEnded = (snapshot: V1EpisodeSnapshot): boolean => snapshot.control?.status === "ended" || snapshot.optimisticControl?.status === "ended";
+      const episodeEnded = (snapshot: V1EpisodeSnapshot): boolean => snapshot.control?.status === "ended" || snapshot.connection.terminalReason === "episode_ended";
+      const finishTerminalSnapshot = (): Effect.Effect<void> =>
+        Effect.gen(function* () {
+          model.failure = null;
+          yield* transition("leaving");
+          yield* stopPorts();
+          yield* transition("left");
+        });
       const syncNeedsRecovery = (snapshot: V1EpisodeSnapshot): boolean => active(model) && snapshot.connection.phase === "terminal";
       const failForSnapshot = (failure: ConnectionLifecycleFailure): Effect.Effect<void> =>
         Effect.gen(function* failForSnapshotEffect() {
@@ -661,9 +678,10 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         },
         getDiagnostics: () => diagnostics.snapshot(),
         getJoinTrace: () => diagnostics.joinTrace(),
-        setInitialMedia: (provider) =>
+        setInitialMedia: (provider, intent) =>
           Effect.sync(() => {
             model.initialMedia = provider;
+            model.initialMediaIntent = intent ?? null;
           }),
         configureJoin: (intent) =>
           Effect.sync(() => {
@@ -724,6 +742,7 @@ function snapshotFor(model: Model, access: ParsedAccessGrant | null): Connection
     episode: episodeFor(access, control),
     connection: Object.freeze({ sync: model.syncSnapshot?.connection.phase === "live" && model.syncNoticeUnresponsive ? "unresponsive" : syncPhase(model.syncSnapshot?.connection.phase), media: mediaPhase(model.mediaSnapshot?.connection.phase) }),
     failure: model.failure ? Object.freeze({ ...model.failure }) : null,
+    episodeEnded: model.episodeEndConfirmed,
   });
 }
 
@@ -758,12 +777,64 @@ function toFailure(value: ConnectionLifecycleFailure): ConnectionFailure {
 }
 
 function accessFailure(value: ConnectionAccessFailure): ConnectionLifecycleFailure {
-  return lifecycleFailure(value.code === "access.invalid" ? "invalid_access" : "access_unavailable", value.code === "access.unavailable", "Access was rejected", value.cause);
+  return lifecycleFailure(value.code === "access.invalid" ? "invalid_access" : "access_unavailable", value.code === "access.unavailable", value.code === "access.invalid" ? "Access was rejected" : "Could not reach the Space. Check your network and try again.", value.cause);
 }
 
 function captureFailure(cause: unknown): ConnectionLifecycleFailure {
-  if (cause instanceof DOMException && cause.name === "NotAllowedError") return lifecycleFailure("permission_denied", true, "Media permission was denied", cause);
-  return lifecycleFailure("unsupported_environment", false, "Browser media capture is unavailable", cause);
+  if (cause instanceof ConnectionError && cause.cause === undefined) return lifecycleFailure(cause.code, cause.recoverable, cause.message, cause);
+  const failure = describeMediaCaptureError(cause instanceof ConnectionError ? cause.cause : cause);
+  // Only the browser adapter can establish that capture itself is unavailable.
+  if (failure.code === "unsupported_environment") return lifecycleFailure("media_capture_failed", true, "Media capture failed. Try again or enter with devices off.", cause);
+  return lifecycleFailure(failure.code, failure.recoverable, failure.message, cause);
+}
+
+function acquireInitialMedia(provider: InitialMedia, intent: Readonly<{ microphone: boolean; camera: boolean }>): Effect.Effect<{ stream: MediaStream; failure: ConnectionLifecycleFailure | null }, ConnectionLifecycleFailure> {
+  return provider(intent).pipe(
+    Effect.map((stream) => ({ stream, failure: null })),
+    Effect.catch((cause) => {
+      const initialFailure = captureFailure(cause);
+      if (!initialFailure.recoverable) return Effect.fail(initialFailure);
+      const tracks = new Set<MediaStreamTrack>();
+      return Effect.gen(function* () {
+        const failures: { source: "microphone" | "camera"; failure: ConnectionLifecycleFailure }[] = [];
+        for (const source of ["microphone", "camera"] as const) {
+          if (!intent[source]) continue;
+          if (!intent.microphone || !intent.camera) {
+            failures.push({ source, failure: initialFailure });
+            continue;
+          }
+          yield* provider({ microphone: source === "microphone", camera: source === "camera" }).pipe(
+            Effect.tap((stream) =>
+              Effect.sync(() => {
+                for (const track of stream.getTracks()) tracks.add(track);
+              }),
+            ),
+            Effect.catch((cause) =>
+              Effect.sync(() => {
+                failures.push({ source, failure: captureFailure(cause) });
+              }),
+            ),
+          );
+        }
+        if (tracks.size === 0) yield* provider({ microphone: false, camera: false }).pipe(Effect.mapError(captureFailure));
+        return { stream: streamFromTracks([...tracks]), failure: initialCaptureWarning(failures) };
+      }).pipe(
+        Effect.onInterrupt(() =>
+          Effect.sync(() => {
+            for (const track of tracks) track.stop();
+          }),
+        ),
+      );
+    }),
+  );
+}
+
+function initialCaptureWarning(failures: readonly { source: "microphone" | "camera"; failure: ConnectionLifecycleFailure }[]): ConnectionLifecycleFailure | null {
+  const first = failures[0];
+  if (!first) return null;
+  const names = failures.length === 2 ? "Microphone and camera" : first.source === "microphone" ? "Microphone" : "Camera";
+  const message = failures.length === 2 && first.failure.code !== failures[1]?.failure.code ? failures.map(({ source, failure }) => `${source === "microphone" ? "Microphone" : "Camera"}: ${failure.message}`).join(" ") : `${names}: ${first.failure.message}`;
+  return lifecycleFailure(first.failure.code, true, message, first.failure.cause);
 }
 
 function failureFromCause(cause: unknown, code: LifecycleFailureCode, message: string): ConnectionLifecycleFailure {

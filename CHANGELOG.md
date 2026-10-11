@@ -14,10 +14,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Normal Episode endings now reach `left` and emit `episodeEnded` once without an `error` callback; React fires `onEpisodeEnded` once and `onLeft` once without `onError`.
+- Participant removal now closes locally in `left` without an Episode-ended or error callback, using the authoritative self-removal event or terminal recovery reason rather than absence from a roster.
+- Joining an already-ended Episode rejects with `episode.ended`, remains `failed`, and reports the ended message; it does not fire joined, left, or Episode-ended callbacks.
+- Connection failures caused by unavailable Access now expose `access.unavailable` in the connection snapshot and error callback. Failed scheduled refreshes keep retrying every five seconds, even after expiry, without changing connection state or emitting an error.
+
 - Updated the Sync HTTP transport and workspace HTTP dependencies to patched releases.
+- Classified `getAccess` HTTP 408, 425, 429, and 5xx responses as recoverable `access.unavailable` failures for scheduled-refresh retry, and clarified initial-join network and timeout failures. Other non-OK responses and malformed grants remain `access.invalid`.
 - Updated the locked undici dependency to 7.29.1 to address GHSA-3wwx-pv8p-q78v.
 - Updated transitive brace-expansion and fast-uri dependencies to their security-fixed releases.
 - Dropped Capture RTP packets when the latest fenced Episode plan no longer authorizes their source, including while provider reconciliation is pending.
+- Kept Space joins available when a camera or microphone is missing, busy, constrained, or permission-denied. Participants enter with working devices and receive one recoverable, device-specific capture error; React shows the warning after entry.
 
 ### Added
 

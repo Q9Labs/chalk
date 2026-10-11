@@ -5,6 +5,7 @@ defmodule ChalkSync.Reliability.PostgresFailoverProfileTest do
   alias ChalkSync.Reliability.TcpFaultProxy
   alias ChalkSync.Reliability.Wire
   alias ChalkSync.SyncPostgres
+  alias ChalkSync.TestProcess
   alias ChalkSync.TestWSClient, as: Client
 
   @moduletag :reliability_topology
@@ -169,9 +170,5 @@ defmodule ChalkSync.Reliability.PostgresFailoverProfileTest do
     end
   end
 
-  defp stop_connection(connection) do
-    if Process.alive?(connection), do: GenServer.stop(connection)
-  catch
-    :exit, _reason -> :ok
-  end
+  defp stop_connection(connection), do: TestProcess.stop(connection)
 end

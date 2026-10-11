@@ -75,7 +75,9 @@ Return the grant with `cache-control: no-store`. Your endpoint owns admission an
 
 ## Create the access callback
 
-`GetAccess` receives `{ space, reason, replaceMediaConnection }`, where reason is `join`, `refresh`, or `retry`. Return the endpoint's `Response` or decoded grant unchanged; Chalk rejects non-OK or malformed responses. Forward the request unchanged to your endpoint and pass it as the final `issueAccess` argument shown above. Chalk selects media replacement for recovery when needed, while ordinary refresh and Sync recovery retain healthy media.
+`GetAccess` receives `{ space, reason, replaceMediaConnection }`, where reason is `join`, `refresh`, or `retry`. Return the endpoint's `Response` or decoded grant unchanged; Chalk classifies non-OK responses and rejects malformed grants. Forward the request unchanged to your endpoint and pass it as the final `issueAccess` argument shown above. Chalk selects media replacement for recovery when needed, while ordinary refresh and Sync recovery retain healthy media.
+
+HTTP 408, 425, 429, and 5xx responses, network failures, and provider timeouts are `access.unavailable` (recoverable). Scheduled refresh retries these failures while retaining the current grant. Other non-OK responses (including 401 and 403) and malformed grants are `access.invalid`. Initial join does not automatically retry unavailable Access: show the failure and let the person check their network and try again. Return the `Response` unchanged so Chalk can classify its status; throwing a generic error for every non-OK response loses that distinction.
 
 ```ts
 // browser/access.ts
@@ -121,6 +123,15 @@ try {
   spaceClient.dispose();
 }
 ```
+
+Missing, busy, permission-denied, or constrained input devices do not prevent
+entry. Chalk enters with working devices and emits one recoverable `onError`
+warning (`media.device_not_found`, `media.device_busy`,
+`media.permission_denied`, `media.device_constraint_invalid`, or
+`media.capture_failed`). The React entrance also uses this recovery, and Chalk
+shows the warning after entry. An unavailable capture API or an insecure browser
+context still rejects capture as `environment.unsupported`. See the
+[join capture error contract](../sdks/typescript/client/README.md#join-capture-errors).
 
 Run `leave()` before disposing an application-owned client so Chalk can finish the durable Leave operation. `dispose()` releases the client after the application is done with it.
 

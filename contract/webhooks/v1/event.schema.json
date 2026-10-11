@@ -104,7 +104,8 @@
         "name": { "type": ["string", "null"] },
         "status": { "enum": ["active", "left"] },
         "joined_at": { "$ref": "#/$defs/timestamp" },
-        "left_at": { "$ref": "#/$defs/nullableTimestamp" }
+        "left_at": { "$ref": "#/$defs/nullableTimestamp" },
+        "reason": { "enum": ["episode_ended"] }
       },
       "additionalProperties": true
     },

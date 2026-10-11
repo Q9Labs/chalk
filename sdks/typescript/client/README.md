@@ -21,7 +21,7 @@ Your backend mints an `AccessGrant` with the server SDK. See the [web quickstart
 client unchanged: it is an opaque signed envelope, so application code does
 not construct or inspect it. `getAccess` may resolve with the fetch `Response`
 that carries the grant or with its decoded JSON; the client validates it and
-fails the join on a non-OK response or a malformed body.
+classifies non-OK responses and rejects malformed bodies.
 
 ```ts
 import { createSpaceClient } from "@q9labsai/chalk-client";
@@ -51,6 +51,8 @@ then pass it as the final `participants.issueAccess` argument alongside the
 server-only state from `getAccessRefreshState`. Chalk selects media replacement
 when recovery needs it and retains healthy media for ordinary refresh and Sync
 recovery. The quickstart shows the endpoint call; no conditional is needed.
+
+HTTP 408, 425, 429, and 5xx responses, network failures, and provider timeouts are `access.unavailable` (recoverable). Scheduled refresh retries these failures while retaining the current grant. Other non-OK responses (including 401 and 403) and malformed grants are `access.invalid`. Initial join does not automatically retry unavailable Access: show the failure and let the person check their network and try again. Return the `Response` unchanged so Chalk can classify its status; throwing a generic error for every non-OK response loses that distinction.
 
 ## Snapshot store
 
@@ -192,6 +194,36 @@ Events are `participantJoined`, `participantLeft`, `episodeEnded`,
 `screenShareStarted`, `screenShareStopped`, and `error`. Public failures use
 stable codes such as `access.invalid`, `episode.ended`, and
 `chat.payload_invalid`.
+
+### Join capture errors
+
+`join()` requests the microphone and camera by default. If both work, capture
+still uses one request. If a requested device fails, Chalk tries the requested
+devices separately and enters with the working devices; the unavailable device
+is off. This also applies to the React entrance, including a device that works
+in preview but fails at entry. A capture warning does not reject `join()`.
+
+Listen to `client.on("error", ({ error }) => ...)` (React: `onError`) for one
+recoverable warning, also available as `connection.lastError`. Its message names
+the failing device or devices. React displays a dismissible warning after entry.
+
+| Capture problem                     | Public error code                 |
+| ----------------------------------- | --------------------------------- |
+| Missing microphone, camera, or both | `media.device_not_found`          |
+| Busy microphone or camera           | `media.device_busy`               |
+| Denied microphone, camera, or both  | `media.permission_denied`         |
+| Unavailable device constraint       | `media.device_constraint_invalid` |
+| Other device capture failure        | `media.capture_failed`            |
+
+When both devices fail for different reasons, the warning uses the microphone's
+code and names both devices. Integrations must allow these codes and must not
+treat a recoverable capture warning as failed entry. Participants can enable a
+device later through `client.media` after resolving the problem.
+
+Only an unavailable capture API or an insecure browser context fails capture
+as nonrecoverable `environment.unsupported`. Joining with both devices explicitly
+off does not require capture. Access, Sync, or media transport failures can still
+reject `join()` independently of capture.
 
 ## Journey telemetry
 

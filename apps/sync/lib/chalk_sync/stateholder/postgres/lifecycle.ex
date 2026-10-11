@@ -542,10 +542,10 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
       Scope.episode(episode) ++ [Scope.uuid(intent.id)]
     )
 
-    Postgrex.query!(connection, SQL.complete_all_episode_participants(), Scope.episode(episode))
-
     case Postgrex.query!(connection, SQL.complete_lifecycle_episode(), Scope.episode(episode)).rows do
       [[id, space_id, status, started_at, ended_at, created_at, updated_at]] ->
+        complete_episode_participants(connection, episode, intent, ended_at)
+
         %{
           id: UUID.load!(id),
           space_id: UUID.load!(space_id),
@@ -559,6 +559,19 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
       [] ->
         Postgrex.rollback(connection, {:error, :invalid_lifecycle_transition})
     end
+  end
+
+  def complete_episode_participants(connection, episode, source, ended_at) do
+    objects =
+      connection
+      |> Postgrex.query!(
+        SQL.complete_all_episode_participants(),
+        Scope.episode(episode) ++ [ended_at]
+      )
+      |> Map.fetch!(:rows)
+      |> Enum.map(&WebhookObservation.participant_object/1)
+
+    WebhookProducer.produce_episode_departures(connection, episode, source, objects)
   end
 
   defp mark_lifecycle_applied(connection, episode, intent_id, event_id, revision) do
