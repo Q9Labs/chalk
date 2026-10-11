@@ -3,6 +3,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
 
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
+  alias ChalkSync.TestProcess
   alias ChalkSync.UUID
 
   @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
@@ -129,7 +130,5 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
   defp restore_env(key, nil), do: Application.delete_env(:chalk_sync, key)
   defp restore_env(key, value), do: Application.put_env(:chalk_sync, key, value)
 
-  defp stop_connection(connection) do
-    if Process.alive?(connection), do: GenServer.stop(connection)
-  end
+  defp stop_connection(connection), do: TestProcess.stop(connection)
 end

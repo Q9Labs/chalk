@@ -3,6 +3,7 @@ defmodule ChalkSync.Stateholder.PostgresMediaPausesTest do
 
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
+  alias ChalkSync.TestProcess
 
   @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
                   System.get_env("CHALK_DATABASE_URL")
@@ -21,7 +22,7 @@ defmodule ChalkSync.Stateholder.PostgresMediaPausesTest do
           else: Application.delete_env(:chalk_sync, :database_connections)
 
         Enum.each(connections, fn connection ->
-          if Process.alive?(connection), do: GenServer.stop(connection)
+          TestProcess.stop(connection)
         end)
       end)
 

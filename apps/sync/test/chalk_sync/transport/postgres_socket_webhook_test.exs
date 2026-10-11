@@ -7,6 +7,7 @@ defmodule ChalkSync.Transport.PostgresSocketV1WebhookTest do
   alias ChalkSync.Operations.Metrics
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
+  alias ChalkSync.TestProcess
   alias ChalkSync.TestWSClient, as: Client
   alias ChalkSync.UUID
 
@@ -316,9 +317,5 @@ defmodule ChalkSync.Transport.PostgresSocketV1WebhookTest do
   defp restore_env(key, nil), do: Application.delete_env(:chalk_sync, key)
   defp restore_env(key, value), do: Application.put_env(:chalk_sync, key, value)
 
-  defp stop_connection(connection) do
-    if Process.alive?(connection), do: GenServer.stop(connection)
-  catch
-    :exit, {:noproc, _details} -> :ok
-  end
+  defp stop_connection(connection), do: TestProcess.stop(connection)
 end

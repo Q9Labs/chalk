@@ -2,6 +2,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
   use ExUnit.Case, async: false
 
   alias ChalkSync.SyncPostgres
+  alias ChalkSync.TestProcess
   alias ChalkSync.UUID
   alias ChalkSync.WhiteboardV1.PostgresRepository
 
@@ -179,11 +180,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
   defp restore_env(key, nil), do: Application.delete_env(:chalk_sync, key)
   defp restore_env(key, value), do: Application.put_env(:chalk_sync, key, value)
 
-  defp stop_connection(connection) do
-    if Process.alive?(connection), do: GenServer.stop(connection)
-  catch
-    :exit, _reason -> :ok
-  end
+  defp stop_connection(connection), do: TestProcess.stop(connection)
 
   defp uuid(value), do: UUID.dump!(value)
 end
