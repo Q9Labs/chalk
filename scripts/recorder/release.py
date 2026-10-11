@@ -155,7 +155,7 @@ class Release:
     def phase_description(self, phase):
         return {
             "plan": "freeze exact source, SSM versions and current-state dispatcher root; require zero drift",
-            "build": "create owned DO builder/key/firewall; detach exact-ID deadline guard; upload one build/cleanup/seal script",
+            "build": "create owned fleet-disk DO builder/key/firewall; detach exact-ID deadline guard; raise CPU and memory only; upload one build/cleanup/seal script",
             "snapshot": "no post-seal SSH; power off, snapshot, validate fleet minimum disk, delete exact builder/key/firewall",
             "qualify": "temporary fleet-size image checks plus required BOOTDIAG executable receipt; clean own resources",
             "publish-pins": "require signed qualification; re-read SSM version/hash; change only image identity and Capture evidence",
@@ -284,13 +284,34 @@ class Release:
         node["cleaned"] = True
         self.save()
 
+    def grow_builder(self, node, size):
+        # The builder starts as a fleet-size Droplet so the snapshot's minimum disk is the fleet's.
+        # Without --resize-disk DigitalOcean changes CPU and memory only.
+        worker = self.config["worker"]
+        if size == worker["size"]:
+            return
+        # First boot must finish before the power cycle; its own exit status is not this step's concern.
+        self.provider.command(["ssh", *self.ssh_options(node), "root@" + node["ip"], "cloud-init status --wait >/dev/null 2>&1; true"], timeout=300)
+        self.provider.do("compute", "droplet-action", "shutdown", node["id"], "--wait", timeout=180)
+        droplet = self.provider.do("compute", "droplet", "get", node["id"])[0]
+        builder_identity(droplet, node)
+        require(droplet["status"] == "off", "builder is not powered off")
+        self.provider.do("compute", "droplet-action", "resize", node["id"], "--size", size, "--wait", timeout=600)
+        self.provider.do("compute", "droplet-action", "power-on", node["id"], "--wait", timeout=180)
+        droplet = self.provider.do("compute", "droplet", "get", node["id"])[0]
+        builder_identity(droplet, node)
+        require(droplet["status"] == "active" and droplet["size_slug"] == size and droplet["disk"] == worker["disk_gb"],
+                "builder resize did not keep the fleet disk")
+        self.await_ssh(node)
+
     def build(self):
         require(self.state.get("pins"), "run plan first")
         builder = self.config["builder"]
         require(builder["region"] == self.config["worker"]["region"], "builder must use the fleet region")
-        node = self.create_node("builder", builder["image"], builder["size"])
+        node = self.create_node("builder", builder["image"], self.config["worker"]["size"])
         try:
             self.await_ssh(node)
+            self.grow_builder(node, builder["size"])
             ca = self.provider.parameter(self.config["bootstrap_ca_parameter"])["Value"]
             ca_path = self.directory / "bootstrap-ca.pem"
             with open(ca_path, "w", opener=lambda name, flags: os.open(name, flags, 0o600)) as output:
