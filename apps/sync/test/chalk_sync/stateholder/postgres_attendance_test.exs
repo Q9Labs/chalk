@@ -5,6 +5,7 @@ defmodule ChalkSync.Stateholder.PostgresAttendanceTest do
   alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
+  alias ChalkSync.TestProcess
   alias ChalkSync.UUID
 
   @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
@@ -22,7 +23,7 @@ defmodule ChalkSync.Stateholder.PostgresAttendanceTest do
           do: Application.put_env(:chalk_sync, :database_connections, previous),
           else: Application.delete_env(:chalk_sync, :database_connections)
 
-        Enum.each(connections, fn pid -> if Process.alive?(pid), do: GenServer.stop(pid) end)
+        Enum.each(connections, &TestProcess.stop/1)
       end)
 
       {:ok, connection: hd(connections)}
