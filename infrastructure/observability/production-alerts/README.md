@@ -29,7 +29,7 @@ over a five-minute window, not a percentage of all requests. Sync counts only re
 Build on the remote test machine from `apps/api` to reuse its pinned pgx version:
 
 ```sh
-go test ../../infrastructure/observability/production-alerts/collector.go ../../infrastructure/observability/production-alerts/collector_test.go
+go test ../../infrastructure/observability/production-alerts/collector.go ../../infrastructure/observability/production-alerts/collector_test.go ../../infrastructure/observability/production-alerts/discord_test.go
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o collector ../../infrastructure/observability/production-alerts/collector.go
 ```
 
@@ -108,8 +108,20 @@ and stops/disables only `chalk-alert-state.timer`; it leaves all app units alone
 Axiom's [custom webhook documentation](https://axiom.co/docs/monitor-data/custom-webhook-notifier)
 exposes Go templates, `Action`, `Value`, `GroupKeys` and `GroupValues`. The
 [notifier API](https://axiom.co/docs/restapi/endpoints/createNotifier) accepts
-`properties.customWebhook.url` and `body`. The template finds fields by key, not
-array order. Its output is Discord JSON with all mentions disabled. Threshold
+`properties.customWebhook.url`, `body`, and `headers`; provisioning explicitly
+sets `Content-Type: application/json`. Axiom joins each result’s group columns
+into one `GroupValues` string: `GroupKeys` and `GroupValues` are not parallel
+arrays. The job and connection queries therefore group on one `alert_message`
+column containing newline-delimited Tenant identity, rule, headline, summary,
+next action, and engineer line. Names have controls removed by the collector;
+the fixed text has no embedded newlines. The template slices at newline byte
+boundaries (preserving Unicode), then JSON-quotes the resulting message.
+Complete result messages are included within a conservative 1,700-byte budget;
+a counted omission notice directs engineers to the monitor for additional groups.
+This stays below Discord’s 2,000-character limit without cutting Unicode or
+silently losing an entire alert batch. Old query groups use fallback wording
+until the queries are switched; the legacy delivery-test group is explicitly
+identified as a notification test. The integer-range operation was also checked against Axiom’s live renderer. Its output is Discord JSON with all mentions disabled. Threshold
 closure is explicitly **not proof of repair**. It says the threshold is no
 longer exceeded and asks an engineer to confirm the earlier outcome. No
 undocumented resolve-suppression flag is used.

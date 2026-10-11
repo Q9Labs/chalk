@@ -1,12 +1,41 @@
-{{- $headline := "The alert system has stopped reporting" -}}{{- $summary := .Description -}}{{- $next := "An engineer must restore the alert collector now; until then job and webhook failures may go unnoticed." -}}{{- $engineers := "For engineers: freshness; `systemctl status chalk-alert-state.timer chalk-alert-state.service`." -}}{{- $rule := "freshness" -}}
-{{- range $i, $key := .GroupKeys -}}
-{{- if eq $key "headline" -}}{{- $headline = index $.GroupValues $i -}}{{- end -}}
-{{- if eq $key "summary" -}}{{- $summary = index $.GroupValues $i -}}{{- end -}}
-{{- if eq $key "next" -}}{{- $next = index $.GroupValues $i -}}{{- end -}}
-{{- if eq $key "engineers" -}}{{- $engineers = index $.GroupValues $i -}}{{- end -}}
-{{- if eq $key "rule" -}}{{- $rule = index $.GroupValues $i -}}{{- end -}}
+{{- $content := "" -}}
+{{- $omitted := "" -}}
+{{- $packed := false -}}{{- range .GroupKeys -}}{{- if eq . "alert_message" -}}{{- $packed = true -}}{{- end -}}{{- end -}}
+{{- if $packed -}}{{- range .GroupValues -}}
+{{- $group := . -}}{{- $start := 0 -}}{{- $field := "tenant" -}}
+{{- $rule := "" -}}{{- $headline := "" -}}{{- $summary := "" -}}{{- $next := "" -}}{{- $engineers := "" -}}
+{{- /* A single group column preserves boundaries: Axiom joins multiple columns with " & ". */ -}}
+{{- range $i := len $group -}}
+{{- if eq (index $group $i) 10 -}}
+{{- if gt $i $start -}}
+{{- $line := slice (slice $group $start $i) 1 -}}
+{{- if eq $field "tenant" -}}{{- $field = "rule" -}}
+{{- else if eq $field "rule" -}}{{- $rule = $line -}}{{- $field = "headline" -}}
+{{- else if eq $field "headline" -}}{{- $headline = $line -}}{{- $field = "summary" -}}
+{{- else if eq $field "summary" -}}{{- $summary = $line -}}{{- $field = "next" -}}
+{{- else if eq $field "next" -}}{{- $next = $line -}}{{- $field = "engineers" -}}
+{{- else if eq $field "engineers" -}}{{- $engineers = $line -}}{{- $field = "done" -}}{{- end -}}
 {{- end -}}
-{{- $count := "" -}}{{- if or (eq $rule "recording") (eq $rule "export") (eq $rule "transcript") (eq $rule "webhook") -}}{{- $count = printf " Affected items: %v." .Value -}}{{- end -}}
-{{- $content := printf "%s\n%s%s\n%s\n%s" $headline $summary $count $next $engineers -}}
-{{- if eq .Action "Closed" -}}{{- $content = printf "This alert has gone quiet\nEarlier alert: %s. %s\nNothing new has crossed the alert level, but that does not prove the earlier failure was fixed. An engineer must still check the earlier message.\n%s" $headline $summary $engineers -}}{{- end -}}
+{{- $start = $i -}}{{- end -}}{{- end -}}
+{{- $count := "" -}}{{- if or (eq $rule "recording") (eq $rule "export") (eq $rule "transcript") (eq $rule "webhook") -}}{{- $count = printf " Affected items: %v." $.Value -}}{{- end -}}
+{{- $message := printf "%s\n%s%s\n%s\n%s" $headline $summary $count $next $engineers -}}
+{{- if eq $.Action "Closed" -}}{{- $message = printf "The alert threshold is no longer exceeded\nEarlier alert: %s. %s\nThis does not prove the earlier failure was fixed. An engineer must check the earlier message and affected records; do not treat this as recovery.\n%s" $headline $summary $engineers -}}{{- end -}}
+{{- $candidate := $message -}}{{- if $content -}}{{- $candidate = printf "%s\n\n%s" $content $message -}}{{- end -}}
+{{- /* Reserve bytes for the omission notice; bytes are a conservative Unicode character limit. */ -}}
+{{- if le (len $candidate) 1700 -}}{{- $content = $candidate -}}{{- else -}}{{- $omitted = printf "%s." $omitted -}}{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if $omitted -}}{{- $content = printf "%s\n\n%d additional alert groups did not fit in this message. An engineer must open the affected Axiom monitor and check every Tenant; these failures are not cleared." $content (len $omitted) -}}{{- end -}}
+{{- if not $packed -}}
+{{- $headline := "The alert system has stopped reporting" -}}{{- $summary := .Description -}}{{- $next := "An engineer must restore the alert collector now; until then job and webhook failures may go unnoticed." -}}{{- $engineers := "For engineers: freshness; `systemctl status chalk-alert-state.timer chalk-alert-state.service`." -}}
+{{- if .GroupKeys -}}{{- $headline = "Chalk reported a job or webhook failure" -}}{{- $next = "An engineer must investigate the affected jobs or webhook deliveries; this notification does not identify the affected Tenant." -}}{{- $engineers = "For engineers: open the affected Axiom monitor and inspect its results." -}}{{- end -}}
+{{- $test := false -}}{{- range .GroupValues -}}
+{{- $group := . -}}{{- if ge (len $group) 16 -}}{{- if eq (slice $group 0 16) "delivery-test & " -}}{{- $test = true -}}{{- end -}}{{- end -}}
+{{- range $i := len $group -}}{{- $rest := slice $group $i -}}{{- if ge (len $rest) 19 -}}{{- if eq (slice $rest 0 19) " & delivery-test & " -}}{{- $test = true -}}{{- end -}}{{- end -}}{{- end -}}
+{{- end -}}{{- if $test -}}
+{{- $headline = "TEST: Chalk alert delivery" -}}{{- $summary = "No customer failure was induced." -}}{{- $next = "This only tests notification delivery; no customer action is needed." -}}{{- $engineers = "For engineers: delivery-test; `pnpm diag trace <32-hex-trace-id>` from the affected journey." -}}
+{{- end -}}
+{{- $content = printf "%s\n%s\n%s\n%s" $headline $summary $next $engineers -}}
+{{- if eq .Action "Closed" -}}{{- $content = printf "The alert threshold is no longer exceeded\nEarlier alert: %s. %s\nThis does not prove the earlier failure was fixed. An engineer must check the earlier message and affected records; do not treat this as recovery.\n%s" $headline $summary $engineers -}}{{- end -}}
+{{- end -}}
 {"content": {{printf "%q" $content}}, "allowed_mentions": {"parse": []}}
