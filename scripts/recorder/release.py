@@ -201,7 +201,7 @@ class Release:
         key_path = self.directory / (label + ".key")
         self.provider.command(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key_path)])
         try:
-            key = self.provider.do("compute", "ssh-key", "import", name, "--public-key", str(key_path) + ".pub")[0]
+            key = self.provider.do("compute", "ssh-key", "import", name, "--public-key-file", str(key_path) + ".pub")[0]
         except Exception:
             key_path.unlink(missing_ok=True)
             Path(str(key_path) + ".pub").unlink(missing_ok=True)

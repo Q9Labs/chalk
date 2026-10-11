@@ -191,6 +191,20 @@ class ReleaseContracts(unittest.TestCase):
             with self.assertRaises(ValueError):
                 release.grow_builder(node, "large")
 
+    def test_builder_key_import_uses_the_flag_doctl_accepts(self):
+        release = Release.__new__(Release)
+        release.state = {}
+        release.provider = Mock()
+        release.provider.do.side_effect = RuntimeError("stop at the key import")
+        with tempfile.TemporaryDirectory() as directory:
+            release.directory = Path(directory)
+            with self.assertRaises(RuntimeError):
+                release.create_node("builder", "test-image", "small")
+            arguments = release.provider.do.call_args.args
+            self.assertEqual(arguments[:3], ("compute", "ssh-key", "import"))
+            self.assertEqual(arguments[4:], ("--public-key-file", str(Path(directory) / "builder.key.pub")))
+        self.assertNotIn("builder", release.state)
+
     def test_qualification_requires_signed_boot_and_exact_identity(self):
         state = {"role": "render", "source_commit": "a" * 40, "release_id": "release-test", "image_id": "123", "image_digest": "sha256:" + "b" * 64,
                  "region": "test1", "size": "test-size"}
