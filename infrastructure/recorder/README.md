@@ -208,7 +208,7 @@ sudo infrastructure/recorder/images/cpu/install.sh \
   --bootstrap-server-name <issuer-server-name>
 ```
 
-The build uses checksum-pinned Go 1.25.13 and Node.js 22.23.2 toolchains plus
+The build uses checksum-pinned Go 1.26.9 and Node.js 22.23.2 toolchains plus
 pnpm 12.8.1. It records the Git commit, a deterministic SHA-256 of the complete
 public source tree and every installed recorder file. The
 installer prints `image_manifest_digest`; this is specifically the SHA-256 of

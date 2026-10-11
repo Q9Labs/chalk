@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const apiRoot = resolve(scriptDir, "..");
-const toolchain = process.env.CHALK_API_GOTOOLCHAIN || "go1.25.11+auto";
+const toolchain = process.env.CHALK_API_GOTOOLCHAIN || "go1.26.9+auto";
 const commandEnv = withGoPath({ ...process.env, GOTOOLCHAIN: toolchain });
 const startupBudgetMs = numberFromEnv("CHALK_API_LIFECYCLE_STARTUP_BUDGET_MS", 3000);
 const shutdownBudgetMs = numberFromEnv("CHALK_API_LIFECYCLE_SHUTDOWN_BUDGET_MS", 3000);
