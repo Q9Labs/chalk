@@ -19,6 +19,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   @hello_timeout_ms 5_000
   @multipart_timeout_ms GeneratedWhiteboardV1.limits()["multipartUpdateTimeoutMs"]
+  @max_pending_snapshots GeneratedWhiteboardV1.limits()["pendingOperationMaxItems"]
 
   @impl true
   def init(options) do
@@ -44,6 +45,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        scene_id: nil,
        revision: 0,
        snapshot: nil,
+       pending_snapshot_requests: [],
        multipart: nil,
        multipart_timer: nil,
        cursor_window_started_at_ms: 0,
@@ -158,6 +160,23 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   def handle_info({:whiteboard_v1_head, _scene_id, _revision}, state), do: {:ok, state}
 
   def handle_info(:whiteboard_drain, state), do: push_next(state)
+
+  def handle_info(
+        :whiteboard_snapshot_next,
+        %{phase: :live, pending_snapshot_requests: [request | remaining]} = state
+      ) do
+    result =
+      handle_frame({:request_snapshot, request}, %{state | pending_snapshot_requests: remaining})
+
+    case result do
+      {:push, _frame, %{phase: :live} = next} -> resume_snapshot_requests(next)
+      _recovering -> :ok
+    end
+
+    result
+  end
+
+  def handle_info(:whiteboard_snapshot_next, state), do: {:ok, state}
 
   defp replay_or_reset(state, identity, scene_id, revision) do
     case Episode.read_after(
@@ -327,9 +346,49 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   defp handle_frame(
+         {:request_snapshot, request},
+         %{phase: :recovering, snapshot: snapshot, pending_snapshot_requests: pending} = state
+       ) do
+    cond do
+      request.request_id == snapshot.request_id or request in pending ->
+        {:ok, state}
+
+      length(pending) < @max_pending_snapshots ->
+        # Published clients may request a snapshot again before acknowledging
+        # the active one. Retain only bounded request IDs, never another scene.
+        {:ok, %{state | pending_snapshot_requests: pending ++ [request]}}
+
+      true ->
+        operation_failure(request.request_id, :request_snapshot, {:retryable, :overloaded}, state)
+    end
+  end
+
+  defp handle_frame({:cursor, _cursor}, %{phase: :recovering} = state), do: {:ok, state}
+
+  defp handle_frame({operation, frame}, %{phase: :recovering} = state)
+       when operation in [
+              :submit_update,
+              :submit_update_part,
+              :clear,
+              :set_draw_permission,
+              :set_presentation
+            ] do
+    operation = if operation == :submit_update_part, do: :submit_update, else: operation
+    # Mutations cannot interleave the immutable snapshot. Existing SDKs retain
+    # these operation IDs and retry overloaded operations after recovery.
+    operation_failure(frame.operation_id, operation, {:retryable, :overloaded}, state)
+  end
+
+  defp handle_frame(
          {:request_snapshot, %{request_id: request_id}},
          %{phase: :live, identity: identity} = state
        ) do
+    state = %{
+      state
+      | pending_snapshot_requests:
+          Enum.reject(state.pending_snapshot_requests, &(&1.request_id == request_id))
+    }
+
     case Episode.snapshot(identity, request_id) do
       {:ok, [first | remaining]} ->
         snapshot = %{
@@ -391,6 +450,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
             attributes: %{transport: :websocket}
           )
 
+          resume_snapshot_requests(next)
           {:ok, next}
       end
     else
@@ -599,6 +659,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   defp cancel_timer(nil), do: :ok
   defp cancel_timer(timer), do: Process.cancel_timer(timer)
+
+  defp resume_snapshot_requests(%{pending_snapshot_requests: []}), do: :ok
+  defp resume_snapshot_requests(_state), do: send(self(), :whiteboard_snapshot_next)
 
   defp enqueue_gap_reset(state, scene_id) do
     enqueue_and_push(state, [
