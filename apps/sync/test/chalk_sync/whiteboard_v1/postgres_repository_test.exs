@@ -1,9 +1,11 @@
 defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
   use ExUnit.Case, async: false
 
+  alias ChalkSync.Contract.GeneratedWhiteboardV1
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
   alias ChalkSync.UUID
+  alias ChalkSync.WhiteboardV1.Episode
   alias ChalkSync.WhiteboardV1.PostgresRepository
 
   @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
@@ -142,6 +144,95 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
 
     assert {:ok, %{scene_id: ^new_scene_id, revision: 0, elements: [], is_presenting: true}} =
              PostgresRepository.snapshot(host)
+  end
+
+  test "large periodic resends retain only scene changes and allow later strokes", %{
+    connection: connection,
+    host: host,
+    participant: participant
+  } do
+    {:ok, %{scene_id: scene_id}} = PostgresRepository.connect(host)
+    elements = Enum.map(1..200, &handwriting_element/1)
+    assert byte_size(JSON.encode!(elements)) > 262_144
+
+    elements
+    |> Enum.chunk_every(20)
+    |> Enum.with_index(1)
+    |> Enum.each(fn {batch, index} ->
+      assert {:ok, %{revision: ^index}} =
+               PostgresRepository.commit_update(host, %{
+                 operation_id: "handwriting-batch-#{index}",
+                 scene_id: scene_id,
+                 elements: batch
+               })
+    end)
+
+    resend = %{operation_id: "handwriting-full-resend", scene_id: scene_id, elements: elements}
+
+    assert {:ok, %{"revision" => "11"}, [empty_frame]} = Episode.submit_update(host, resend)
+    assert empty_frame["elements"] == []
+    assert GeneratedWhiteboardV1.valid_server_frame?(empty_frame)
+    assert {:ok, [^empty_frame]} = Episode.read_after(participant, scene_id, 10)
+
+    assert {:ok, [%{revision: 11, elements: []}]} =
+             PostgresRepository.read_after(participant, scene_id, 10)
+
+    assert [[2]] =
+             Postgrex.query!(
+               connection,
+               """
+               select event_encoded_bytes from sync_whiteboard_operation_receipts
+               where participant_id = $1 and operation_id = $2
+               """,
+               [uuid(host.participant_id), resend.operation_id]
+             ).rows
+
+    assert {:ok, %{outcome: :duplicate, revision: 11}} =
+             PostgresRepository.commit_update(host, resend)
+
+    [first, second | rest] = elements
+    edit = %{first | "version" => 2}
+    deletion = %{second | "version" => 2, "is_deleted" => true}
+    stroke = handwriting_element(201)
+
+    mixed = %{
+      resend
+      | operation_id: "handwriting-mixed-update",
+        elements: [edit, deletion | rest] ++ [stroke]
+    }
+
+    assert {:ok, %{revision: 12}} = PostgresRepository.commit_update(host, mixed)
+
+    assert {:ok, [%{elements: [^edit, ^deletion, ^stroke]}]} =
+             PostgresRepository.read_after(participant, scene_id, 11)
+
+    losing = %{
+      resend
+      | operation_id: "handwriting-losing-update",
+        elements: [first, %{edit | "version_nonce" => 100}]
+    }
+
+    assert {:ok, %{revision: 13}} = PostgresRepository.commit_update(host, losing)
+    assert {:ok, [%{elements: []}]} = PostgresRepository.read_after(participant, scene_id, 12)
+    assert {:ok, %{revision: 13, elements: stored}} = PostgresRepository.snapshot(participant)
+    assert length(stored) == 201
+    assert edit in stored
+    assert deletion in stored
+    assert stroke in stored
+  end
+
+  defp handwriting_element(index) do
+    points = Enum.map(1..150, fn point -> [point / 3, :math.sin(point / 5) * 20] end)
+
+    %{
+      "id" => "handwriting-#{index}",
+      "type" => "freedraw",
+      "version" => 1,
+      "version_nonce" => 20,
+      "index" => "a#{index}",
+      "is_deleted" => false,
+      "payload" => %{"x" => index * 10, "y" => 20, "points" => points}
+    }
   end
 
   defp element(id, version, version_nonce) do

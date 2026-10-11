@@ -411,6 +411,43 @@ func TestWhiteboardPresentedBeforeCaptureReadyWithoutAppStateBuildsObjectAppStat
 	}
 }
 
+func TestWhiteboardEmptyUpdateInPresentationTailPreservesStrokes(t *testing.T) {
+	fixture := newParticipantBuilderFixture(t)
+	setParticipantPlan(t, &fixture.source, 1, []captureplan.ParticipantSnapshot{activeParticipant(fixture.first, "Alex", 1)}, nil)
+	fixture.source.WhiteboardStartRevision = 1
+	fixture.source.WhiteboardOriginRevision = 1
+	stroke := json.RawMessage(`{"id":"stroke-1","type":"freedraw","version":1,"version_nonce":20,"index":"a0","is_deleted":false,"payload":{"points":[[0,0],[10,10]]}}`)
+	fixture.source.InitialWhiteboard = &WhiteboardSnapshotFact{
+		SceneID: "scene-1", Revision: 1, Presenting: true, AppState: []byte(`{}`), Elements: []json.RawMessage{stroke},
+	}
+	fixture.source.WhiteboardTailEvents = []WhiteboardEventFact{{
+		OperationID: "unchanged-resend", Name: "submit_update", SceneID: "scene-1", Revision: 2,
+		Elements: []json.RawMessage{}, CompletedAt: fixture.source.CaptureReadyAt.Add(100 * time.Millisecond),
+	}, {
+		OperationID: "later-stroke", Name: "submit_update", SceneID: "scene-1", Revision: 3,
+		Elements:    []json.RawMessage{json.RawMessage(`{"id":"stroke-2","type":"freedraw","version":1,"version_nonce":20,"index":"a1","is_deleted":false,"payload":{"points":[[20,20],[30,30]]}}`)},
+		CompletedAt: fixture.source.CaptureReadyAt.Add(200 * time.Millisecond),
+	}}
+	built, err := buildPresentation(fixture.source)
+	if err != nil {
+		t.Fatalf("build presentation with empty update: %v", err)
+	}
+	states := make(map[int64]whiteboardStateWire)
+	for _, material := range built.Assets {
+		if material.Asset.Kind != "whiteboard_state" {
+			continue
+		}
+		var state whiteboardStateWire
+		if err := json.Unmarshal(material.Body, &state); err != nil {
+			t.Fatal(err)
+		}
+		states[state.Revision] = state
+	}
+	if len(states[2].Elements) != 1 || states[2].Elements[0].ID != "stroke-1" || len(states[3].Elements) != 2 {
+		t.Fatalf("empty update lost strokes or blocked later writing: %#v", states)
+	}
+}
+
 func TestWhiteboardFallbackDoesNotRestoreDepartedParticipantScreen(t *testing.T) {
 	for _, test := range []struct {
 		name          string
