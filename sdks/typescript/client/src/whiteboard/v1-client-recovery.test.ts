@@ -14,6 +14,67 @@ const files: ChalkWhiteboardV1FileTransport = {
 };
 
 describe("ChalkWhiteboardV1Client recovery summaries", () => {
+  it("shares the active snapshot across callers until all pages arrive", async () => {
+    const { client, sockets } = recoveryClient();
+    const startup = client.startSceneSubscription();
+    await settle();
+    const socket = sockets[0];
+    socket?.open();
+    await settle();
+    socket?.receive(welcome());
+    await settle();
+    const first = client.requestSnapshot();
+    const second = client.requestSnapshot();
+    let completed = false;
+    void first.then(
+      () => {
+        completed = true;
+      },
+      () => undefined,
+    );
+    void second.catch(() => undefined);
+    try {
+      const requests = () => socket?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "request_snapshot") ?? [];
+      expect(requests()).toHaveLength(1);
+      expect(second).toBe(first);
+      socket?.receive({ ...snapshotPage(socket.requestId()), page_count: 2 });
+      await settle();
+      expect(completed).toBe(false);
+      expect(client.requestSnapshot()).toBe(first);
+      socket?.receive({ ...snapshotPage(socket.requestId()), page: 1, page_count: 2 });
+      await Promise.all([startup, first, second]);
+      expect(completed).toBe(true);
+      const next = client.requestSnapshot();
+      expect(next).not.toBe(first);
+      expect(requests()).toHaveLength(2);
+      socket?.receive(snapshotPage(socket.requestId()));
+      await next;
+    } finally {
+      await client.stopSceneSubscription();
+      void startup.catch(() => undefined);
+    }
+  });
+
+  it("rejects shared snapshot callers together and permits a fresh request", async () => {
+    const { client, sockets } = recoveryClient();
+    const startup = client.startSceneSubscription();
+    await acceptSnapshot(sockets);
+    await startup;
+    try {
+      const first = client.requestSnapshot();
+      const second = client.requestSnapshot();
+      const failures = Promise.allSettled([first, second]);
+      expect(second).toBe(first);
+      sockets[0]?.receive({ type: "operation_error", correlation_id: sockets[0]?.requestId(), operation: "request_snapshot", code: "storage_unavailable", recoverable: true, message: "Storage temporarily unavailable." });
+      expect((await failures).map((result) => result.status)).toEqual(["rejected", "rejected"]);
+      const retry = client.requestSnapshot();
+      sockets[0]?.receive(snapshotPage(sockets[0]?.requestId()));
+      await retry;
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
   it("holds cursors until the recovery snapshot is acknowledged", async () => {
     const clock = new TestClock();
     const { client, sockets } = recoveryClient(clock, 100);
@@ -243,7 +304,7 @@ class TestSocket implements SyncSocket {
   }
 
   requestId(): string | undefined {
-    const frame = this.sent.map((value) => Schema.decodeUnknownSync(WhiteboardV1ClientFrameSchema)(JSON.parse(value))).find((value) => value.type === "request_snapshot");
+    const frame = this.sent.map((value) => Schema.decodeUnknownSync(WhiteboardV1ClientFrameSchema)(JSON.parse(value))).findLast((value) => value.type === "request_snapshot");
     return frame?.request_id;
   }
 }
