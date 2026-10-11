@@ -68,5 +68,6 @@ describe("recorded whiteboard export", () => {
       }
     }
     for (const [channel, count] of ink.entries()) expect(count, `stroke ${COLORS[channel]} must be visible`).toBeGreaterThan(100);
-  });
+    // The first render loads the drawing library cold: 2.5 s under coverage on a laptop, over 5 s on a CI runner.
+  }, 30_000);
 });
