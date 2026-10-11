@@ -4,7 +4,8 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"io/fs"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -15,39 +16,44 @@ import (
 // in a package's non-test files, keyed by constant name.
 func statusConstants(t *testing.T, directory string) map[string]string {
 	t.Helper()
-	packages, err := parser.ParseDir(token.NewFileSet(), directory, func(info fs.FileInfo) bool {
-		return !strings.HasSuffix(info.Name(), "_test.go")
-	}, 0)
+	entries, err := os.ReadDir(directory)
 	if err != nil {
 		t.Fatal(err)
 	}
+	fileSet := token.NewFileSet()
 	constants := make(map[string]string)
-	for _, pkg := range packages {
-		for _, file := range pkg.Files {
-			for _, declaration := range file.Decls {
-				general, ok := declaration.(*ast.GenDecl)
-				if !ok || general.Tok != token.CONST {
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(fileSet, filepath.Join(directory, name), nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, declaration := range file.Decls {
+			general, ok := declaration.(*ast.GenDecl)
+			if !ok || general.Tok != token.CONST {
+				continue
+			}
+			for _, spec := range general.Specs {
+				value, ok := spec.(*ast.ValueSpec)
+				if !ok {
 					continue
 				}
-				for _, spec := range general.Specs {
-					value, ok := spec.(*ast.ValueSpec)
-					if !ok {
+				for index, name := range value.Names {
+					if !strings.HasPrefix(name.Name, "Status") || index >= len(value.Values) {
 						continue
 					}
-					for index, name := range value.Names {
-						if !strings.HasPrefix(name.Name, "Status") || index >= len(value.Values) {
-							continue
-						}
-						literal, ok := value.Values[index].(*ast.BasicLit)
-						if !ok || literal.Kind != token.STRING {
-							continue
-						}
-						unquoted, err := strconv.Unquote(literal.Value)
-						if err != nil {
-							t.Fatal(err)
-						}
-						constants[name.Name] = unquoted
+					literal, ok := value.Values[index].(*ast.BasicLit)
+					if !ok || literal.Kind != token.STRING {
+						continue
 					}
+					unquoted, err := strconv.Unquote(literal.Value)
+					if err != nil {
+						t.Fatal(err)
+					}
+					constants[name.Name] = unquoted
 				}
 			}
 		}

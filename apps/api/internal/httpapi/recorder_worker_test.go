@@ -167,7 +167,7 @@ func TestRecorderWorkerCompletionLogsPresentationBuildError(t *testing.T) {
 	body := `{"job_id":"` + workerTestJob + `","attempt_count":1,"fencing_generation":2,"lease_token":"lease","lease_for_seconds":60,"capture_epoch":1,"envelope_digest":"` + workerTestDigest + `"}`
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/jobs/complete", body))
-	if response.Code != http.StatusInternalServerError {
+	if response.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("completion status = %d, body = %s", response.Code, response.Body.String())
 	}
 	if !strings.Contains(logs.String(), "shared screen source does not resolve") || strings.Contains(response.Body.String(), "shared screen") {

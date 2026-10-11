@@ -158,13 +158,11 @@ func (d Diagnostics) HTTPOptions() HTTPOptions {
 	options := HTTPOptions{}
 	options.Middleware = append(options.Middleware, OTelHTTPMiddleware(), JourneyMiddleware)
 	options.JourneyMetrics = d.journeyMetrics
-	if d.config.RequestLogs != RequestLogOff {
-		options.Middleware = append(options.Middleware, RequestMiddleware(d.logger, RequestLogConfig{
-			Mode:          d.config.RequestLogs,
-			SampleRate:    d.config.RequestSampleRate,
-			SlowThreshold: d.config.SlowRequestThreshold,
-		}))
-	}
+	options.Middleware = append(options.Middleware, RequestMiddleware(d.logger, RequestLogConfig{
+		Mode:          d.config.RequestLogs,
+		SampleRate:    d.config.RequestSampleRate,
+		SlowThreshold: d.config.SlowRequestThreshold,
+	}))
 	if d.config.Profiler && d.config.Environment == "local" {
 		options.Profiler = ProfilerHandler()
 	}

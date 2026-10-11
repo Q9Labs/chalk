@@ -5,6 +5,7 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
   alias ChalkSync.Live.ScreenShareLease
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.SyncPostgres
+  alias ChalkSync.TestProcess
   alias ChalkSync.UUID
 
   @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
@@ -343,9 +344,5 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
     end)
   end
 
-  defp stop_connection(connection) do
-    if Process.alive?(connection), do: GenServer.stop(connection)
-  catch
-    :exit, _reason -> :ok
-  end
+  defp stop_connection(connection), do: TestProcess.stop(connection)
 end

@@ -34,6 +34,13 @@ This path is distinct from `CHALK_SYNC_LOCAL_PROOF`: it does not use memory
 state or the development token verifier. `/readyz` checks the Postgres and
 provider-bridge dependencies before the root command reports ready.
 
+## Current media observations
+
+The provider bridge observer requests `media-observations?latest=true`, returning
+one current snapshot instead of the growing Episode observation history. Explicit
+cursor reads retain the paginated history contract. Deploy API support for the
+latest-only read before updating Sync; the response byte bound stays unchanged.
+
 ## Durable architecture
 
 The v1 command path is:

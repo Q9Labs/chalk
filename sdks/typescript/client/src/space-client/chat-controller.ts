@@ -62,6 +62,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
   readonly #offline: OfflineActionsHold | undefined;
   #catchUpRunning = false;
   #catchUpRequested = false;
+  #contiguousSequence: string | null = null;
   #hasOlder = false;
   #historyTruncated = false;
   #initialCatchUpComplete = true;
@@ -268,7 +269,8 @@ class ChatControllerRuntime implements ChatControllerEffects {
     this.#ports = ports;
     if (!ports) return this.#reset();
     this.#status = "ready";
-    this.#initialCatchUpComplete = ports.sync.getCollaborationExtensionState().chatHeadSequence === null;
+    if (this.#contiguousSequence === null && ports.sync.getCollaborationExtensionState().chatHeadSequence === null) this.#contiguousSequence = "0";
+    this.#initialCatchUpComplete = this.#contiguousSequence !== null;
     this.#unsubscribeEvents = ports.sync.subscribeCollaboration((event) => {
       if (event.type === "chat_message") this.#observeMessage(chatMessageFor(event.message), this.#initialCatchUpComplete);
       else if (event.type === "chat_read_receipt") this.#mergeReceipt(chatReceiptFor(event.receipt));
@@ -281,7 +283,13 @@ class ChatControllerRuntime implements ChatControllerEffects {
 
   #scheduleCatchUp(): void {
     const ports = this.#ports;
-    if (!ports || ports.sync.getSnapshot().connection.phase !== "live" || !catchUpRequest(this.#messages.at(-1)?.sequence ?? null, ports)) return;
+    // Sequences belong to the Space, so an empty Episode need not start at 1.
+    const floor = ports?.sync.getCollaborationExtensionState().retainedFloorSequence;
+    if (this.#contiguousSequence === "0" && floor) {
+      this.#contiguousSequence = String(BigInt(floor) - 1n);
+      this.#advanceContiguousSequence();
+    }
+    if (!ports || ports.sync.getSnapshot().connection.phase !== "live" || !catchUpRequest(this.#contiguousSequence, this.#messages.at(-1)?.sequence ?? null, ports)) return;
     if (this.#catchUpRunning) {
       this.#catchUpRequested = true;
       return;
@@ -301,7 +309,6 @@ class ChatControllerRuntime implements ChatControllerEffects {
         Effect.ensuring(
           Effect.sync(() => {
             this.#catchUpRunning = false;
-            this.#initialCatchUpComplete = true;
             if (this.#catchUpRequested) {
               this.#catchUpRequested = false;
               this.#scheduleCatchUp();
@@ -315,17 +322,21 @@ class ChatControllerRuntime implements ChatControllerEffects {
   #catchUp(ports: ConnectionPorts): Effect.Effect<void, unknown> {
     return Effect.suspend(() => {
       if (this.#ports !== ports || ports.sync.getSnapshot().connection.phase !== "live") return Effect.void;
-      const request = catchUpRequest(this.#messages.at(-1)?.sequence ?? null, ports);
+      const request = catchUpRequest(this.#contiguousSequence, this.#messages.at(-1)?.sequence ?? null, ports);
       if (!request) return Effect.void;
       return foreign(() => ports.sync.readChatPage(request.input)).pipe(
         Effect.flatMap((result) => {
           if (this.#ports !== ports) return Effect.void;
           if (result.status === "cursor_reset") return Effect.sync(() => this.#applyCursorReset(result.retainedFloorSequence)).pipe(Effect.andThen(this.#reloadAfterCursorReset(ports)));
           if (request.kind === "initial") {
+            this.#completeInitialPage(ports);
             this.#hasOlder = result.hasOlder;
             this.#publish();
           }
-          return result.hasOlder ? this.#catchUp(ports) : Effect.void;
+          // A higher acknowledgement can arrive while this page is in flight.
+          // Continue from the complete prefix, not from that acknowledgement.
+          const progressed = request.kind === "initial" || this.#contiguousSequence !== request.input.afterSequence;
+          return progressed ? this.#catchUp(ports) : Effect.void;
         }),
       );
     });
@@ -336,11 +347,12 @@ class ChatControllerRuntime implements ChatControllerEffects {
       Effect.tap((result) =>
         Effect.sync(() => {
           if (this.#ports !== ports || result.status === "cursor_reset") return;
+          this.#completeInitialPage(ports);
           this.#hasOlder = result.hasOlder;
           this.#publish();
         }),
       ),
-      Effect.asVoid,
+      Effect.andThen(this.#catchUp(ports)),
     );
   }
 
@@ -357,7 +369,34 @@ class ChatControllerRuntime implements ChatControllerEffects {
     this.#hasOlder = false;
     this.#historyTruncated = true;
     this.#retainedFloorSequence = retainedFloorSequence;
+    this.#messages = Object.freeze(this.#messages.filter((message) => compareChatSequence(message.sequence, retainedFloorSequence) >= 0));
+    this.#contiguousSequence = null;
+    this.#initialCatchUpComplete = false;
     this.#publish();
+  }
+  #completeInitialPage(ports: ConnectionPorts): void {
+    // The initial page intentionally leaves older history unloaded. Its oldest
+    // message establishes the start of the range we promise to keep complete.
+    const floor = this.#messages[0]?.sequence ?? ports.sync.getCollaborationExtensionState().retainedFloorSequence;
+    this.#contiguousSequence = floor === null ? "0" : String(BigInt(floor) - 1n);
+    this.#advanceContiguousSequence();
+    this.#initialCatchUpComplete = true;
+  }
+  #advanceContiguousSequence(message?: ChatMessage): void {
+    if (this.#contiguousSequence === null) return;
+    let sequence = BigInt(this.#contiguousSequence);
+    if (message) {
+      if (BigInt(message.sequence) !== sequence + 1n) return;
+      // A page can repair a gap older than the bounded visible message list.
+      sequence += 1n;
+    }
+    for (const message of this.#messages) {
+      const candidate = BigInt(message.sequence);
+      if (candidate <= sequence) continue;
+      if (candidate !== sequence + 1n) break;
+      sequence = candidate;
+    }
+    this.#contiguousSequence = String(sequence);
   }
   #observeMessage(message: ChatMessage, countUnread: boolean): ChatMessage {
     const existing = this.#messages.find((candidate) => candidate.messageId === message.messageId || candidate.sequence === message.sequence);
@@ -366,11 +405,13 @@ class ChatControllerRuntime implements ChatControllerEffects {
     const unread = this.#unreadCountFor(message, existing, countUnread);
     if (this.#messageStateMatches(next, pendingSends, unread)) return existing ?? message;
     this.#messages = next;
+    this.#advanceContiguousSequence(message);
     this.#pendingSends = Object.freeze(pendingSends);
     this.#unreadCount = unread;
     this.#status = "ready";
     this.#lastError = null;
     this.#publish();
+    if (!this.#catchUpRunning && countUnread) this.#scheduleCatchUp();
     return message;
   }
   #messagesWith(message: ChatMessage, existing: ChatMessage | undefined): readonly ChatMessage[] {
@@ -415,6 +456,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
   }
   #reset(): void {
     this.#catchUpRequested = false;
+    this.#contiguousSequence = null;
     this.#hasOlder = false;
     this.#historyTruncated = false;
     this.#initialCatchUpComplete = true;
@@ -459,11 +501,12 @@ function validateUpload(file: ChatUploadFile, bytes: ArrayBuffer, clientAttachme
 function bytesFor(file: ChatUploadFile): Effect.Effect<ArrayBuffer, unknown> {
   return "fileName" in file ? Effect.succeed(file.bytes) : foreign(() => file.arrayBuffer());
 }
-function catchUpRequest(latestSequence: string | null, ports: ConnectionPorts): { readonly kind: "initial" | "newer"; readonly input: { readonly limit: number; readonly afterSequence?: string } } | null {
+function catchUpRequest(contiguousSequence: string | null, latestSequence: string | null, ports: ConnectionPorts): { readonly kind: "initial" | "newer"; readonly input: { readonly limit: number; readonly afterSequence?: string } } | null {
   const extension = ports.sync.getCollaborationExtensionState();
-  const head = extension.chatHeadSequence;
-  if (!extension.negotiated || head === null || (latestSequence !== null && compareChatSequence(latestSequence, head) >= 0)) return null;
-  return latestSequence === null ? { kind: "initial", input: { limit: MAX_CHAT_PAGE_SIZE } } : { kind: "newer", input: { afterSequence: latestSequence, limit: MAX_CHAT_PAGE_SIZE } };
+  // A page or head hint may precede an already observed acknowledgement.
+  const head = latestSequence !== null && (extension.chatHeadSequence === null || compareChatSequence(latestSequence, extension.chatHeadSequence) > 0) ? latestSequence : extension.chatHeadSequence;
+  if (!extension.negotiated || head === null || (contiguousSequence !== null && compareChatSequence(contiguousSequence, head) >= 0)) return null;
+  return contiguousSequence === null ? { kind: "initial", input: { limit: MAX_CHAT_PAGE_SIZE } } : { kind: "newer", input: { afterSequence: contiguousSequence, limit: MAX_CHAT_PAGE_SIZE } };
 }
 function chatError(message: string): SpaceClientError {
   return new SpaceClientError({ code: "chat.payload_invalid", recoverable: false, message });

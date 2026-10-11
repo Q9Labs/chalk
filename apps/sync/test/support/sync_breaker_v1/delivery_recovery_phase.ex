@@ -7,6 +7,7 @@ defmodule ChalkSync.SyncBreakerV1.DeliveryRecoveryPhase do
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncBreakerV1.DeliveryGateAdapter, as: Gate
   alias ChalkSync.SyncPostgres
+  alias ChalkSync.TestProcess
   alias ChalkSync.TestWSClient, as: Client
   alias ChalkSync.Transport.Router
 
@@ -47,7 +48,7 @@ defmodule ChalkSync.SyncBreakerV1.DeliveryRecoveryPhase do
       }
     after
       Gate.stop()
-      GenServer.stop(listener)
+      TestProcess.stop(listener)
       restore(previous)
       Enum.each(connections, &stop/1)
     end
@@ -343,5 +344,5 @@ defmodule ChalkSync.SyncBreakerV1.DeliveryRecoveryPhase do
         {key, value} -> Application.put_env(:chalk_sync, key, value)
       end)
 
-  defp stop(pid), do: if(Process.alive?(pid), do: GenServer.stop(pid))
+  defp stop(pid), do: TestProcess.stop(pid)
 end
