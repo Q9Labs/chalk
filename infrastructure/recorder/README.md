@@ -192,8 +192,10 @@ Validate the exact snapshot and size in a staging Capture boot before promotion.
 `images/cpu` builds one Ubuntu 24.04 AMD64 release containing both real worker
 daemons, the native Node compositor, and the node bootstrap/renewal
 agent. Build the public artifact on a machine with sufficient CPU, then install
-it on a clean 25-GiB `c-2` builder so the resulting DigitalOcean snapshot can
-launch both `c-2` capture and `c-8` render nodes:
+it on a clean builder whose disk is the fleet's, so the resulting DigitalOcean
+snapshot can launch the fleet's nodes. `pnpm release:recorder build` creates the
+builder at the fleet size and raises only its CPU and memory to the configured
+builder size, because a region may offer no larger size with the fleet's disk:
 
 ```sh
 sudo infrastructure/recorder/images/cpu/build-release.sh \

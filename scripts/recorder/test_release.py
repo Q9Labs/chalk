@@ -156,6 +156,41 @@ class ReleaseContracts(unittest.TestCase):
             with self.assertRaises(ValueError):
                 check_image({**image, **changes}, worker)
 
+    def test_builder_keeps_the_fleet_disk_and_only_gains_cpu_and_memory(self):
+        owned = {"id": 123, "name": "chalk-release-builder-test", "created_at": "test-time"}
+        node = {**owned, "ip": "192.0.2.1", "key_path": "/does-not-exist"}
+        release = Release.__new__(Release)
+        release.config = {"worker": {"size": "small", "region": "test1", "disk_gb": 25}, "builder": {"size": "large", "region": "test1", "image": "test-image"}}
+        release.state = {"pins": {"render": {}}}
+        release.directory = Path("/does-not-exist")
+        release.provider = Mock()
+        release.await_ssh = Mock()
+        release.create_node = Mock(side_effect=RuntimeError("stop after creation"))
+        with self.assertRaises(RuntimeError):
+            release.build()
+        release.create_node.assert_called_once_with("builder", "test-image", "small")
+
+        release.grow_builder(node, "small")
+        release.provider.do.assert_not_called()
+        release.provider.command.assert_not_called()
+
+        stopped = {**owned, "status": "off", "size_slug": "small", "disk": 25}
+        grown = {**owned, "status": "active", "size_slug": "large", "disk": 25}
+        release.provider.do.side_effect = [None, [stopped], None, None, [grown]]
+        release.grow_builder(node, "large")
+        actions = [call.args for call in release.provider.do.call_args_list]
+        self.assertEqual([arguments[:3] for arguments in actions],
+                         [("compute", "droplet-action", "shutdown"), ("compute", "droplet", "get"), ("compute", "droplet-action", "resize"),
+                          ("compute", "droplet-action", "power-on"), ("compute", "droplet", "get")])
+        self.assertEqual(actions[2][3:], (123, "--size", "large", "--wait"))
+        self.assertIn("cloud-init status --wait", release.provider.command.call_args.args[0][-1])
+        release.await_ssh.assert_called_once_with(node)
+
+        for before, after in (({"status": "active"}, {}), ({"id": 456}, {}), ({}, {"disk": 160}), ({}, {"size_slug": "small"}), ({}, {"status": "off"}), ({}, {"id": 456})):
+            release.provider.do.side_effect = [None, [{**stopped, **before}], None, None, [{**grown, **after}]]
+            with self.assertRaises(ValueError):
+                release.grow_builder(node, "large")
+
     def test_qualification_requires_signed_boot_and_exact_identity(self):
         state = {"role": "render", "source_commit": "a" * 40, "release_id": "release-test", "image_id": "123", "image_digest": "sha256:" + "b" * 64,
                  "region": "test1", "size": "test-size"}
