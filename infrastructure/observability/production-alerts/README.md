@@ -21,7 +21,7 @@ IDs and Discord webhook in private configuration, never in this public repo.
 The Capture and Export rules are disjoint: a Render failure only counts as Export. API errors are unsampled in the
 production `errors` request-log mode. Sync exports the same named events as spans;
 its stdout logs are not required. The API count is the 0.05-errors/second threshold
-over a five-minute window, not a percentage of all requests. Sync counts only rejected upgrades and closures explicitly marked `close_kind=abnormal`. Normal leaves, acknowledged class ends and server drains are excluded; unclassified older events are not counted. Install the Sync instrumentation before switching the monitor.
+over a five-minute window, not a percentage of all requests. Sync counts only rejected upgrades and closures explicitly marked `close_kind=abnormal`. Axiom keeps span attributes outside its conventions in the `attributes.custom` map, so the query reads `['attributes.custom']['close_kind']`; `['attributes.close_kind']` is rejected as an invalid field. Normal leaves, acknowledged class ends and server drains are excluded; unclassified older events are not counted. Install the Sync instrumentation before switching the monitor.
 
 ## Read-only state collector
 
