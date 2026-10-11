@@ -4,6 +4,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Transport.SocketWhiteboardV1
+  alias ChalkSync.WhiteboardV1.Episode
 
   @participant_id "20000000-0000-4000-8000-000000000002"
   @scene_id "10000000-0000-4000-8000-000000000001"
@@ -17,7 +18,8 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
          operation_id: operation.operation_id,
          scene_id: operation.scene_id,
          revision: 5,
-         outcome: :committed
+         outcome: Process.get(:whiteboard_commit_outcome, :committed),
+         elements: Process.get(:whiteboard_committed_elements, operation.elements)
        }}
     end
 
@@ -159,6 +161,66 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
 
     assert_received {:committed_update, %{elements: [stored]}}
     assert stored["id"] == "element-1"
+  end
+
+  test "a contiguous ACK prevents replaying the sender's older stroke payload" do
+    state = recovering_state()
+    assert {:ok, live} = receive_frame(snapshot_ack(state), state)
+
+    stroke = %{
+      "type" => "submit_update",
+      "operation_id" => "whiteboard-own-stroke-0001",
+      "scene_id" => @scene_id,
+      "sync_all" => false,
+      "elements" => [element()]
+    }
+
+    assert {:push, {:text, _commit}, acknowledged} = receive_frame(stroke, live)
+    assert acknowledged.revision == 5
+
+    echo = %{
+      "type" => "update",
+      "operation_id" => stroke["operation_id"],
+      "scene_id" => @scene_id,
+      "revision" => "5",
+      "elements" => [element()]
+    }
+
+    assert {:ok, ^acknowledged} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, echo}, acknowledged)
+
+    assert {:ok, ^acknowledged} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_head, @scene_id, 5}, acknowledged)
+  end
+
+  test "an ACK leaves intervening revisions available for replay" do
+    state = recovering_state()
+    assert {:ok, live} = receive_frame(snapshot_ack(state), state)
+
+    stroke = %{
+      "type" => "submit_update",
+      "operation_id" => "whiteboard-gap-stroke-0001",
+      "scene_id" => @scene_id,
+      "sync_all" => false,
+      "elements" => [element()]
+    }
+
+    assert {:push, {:text, _commit}, acknowledged} = receive_frame(stroke, %{live | revision: 2})
+    assert acknowledged.revision == 2
+  end
+
+  test "a duplicate stroke only acknowledges its receipt without broadcasting an empty revision" do
+    Process.put(:whiteboard_commit_outcome, :duplicate)
+    Process.put(:whiteboard_committed_elements, [])
+
+    operation = %{
+      operation_id: "whiteboard-duplicate-0001",
+      scene_id: @scene_id,
+      elements: [element()]
+    }
+
+    assert {:ok, %{"type" => "commit", "outcome" => "duplicate"}, []} =
+             Episode.submit_update(identity(), operation)
   end
 
   test "returns retryable errors for mutations during recovery without discarding the snapshot" do

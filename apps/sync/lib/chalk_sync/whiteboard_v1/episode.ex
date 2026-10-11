@@ -40,16 +40,21 @@ defmodule ChalkSync.WhiteboardV1.Episode do
              "elements" => operation.elements
            }),
          {:ok, commit} <- Repository.commit_update(identity, operation),
-         {:ok, frames} <-
-           Multipart.update_frames(%{
-             "type" => "update",
-             "operation_id" => commit.operation_id,
-             "scene_id" => commit.scene_id,
-             "revision" => Integer.to_string(commit.revision),
-             "elements" => operation.elements
-           }) do
+         {:ok, frames} <- update_frames(commit) do
       {:ok, commit_frame(commit), frames}
     end
+  end
+
+  defp update_frames(%{outcome: :duplicate}), do: {:ok, []}
+
+  defp update_frames(commit) do
+    Multipart.update_frames(%{
+      "type" => "update",
+      "operation_id" => commit.operation_id,
+      "scene_id" => commit.scene_id,
+      "revision" => Integer.to_string(commit.revision),
+      "elements" => commit.elements
+    })
   end
 
   def clear(%Identity{} = identity, operation) do
