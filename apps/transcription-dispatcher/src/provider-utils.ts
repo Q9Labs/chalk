@@ -98,23 +98,50 @@ function optionalFinite(value: unknown, label: string): number | undefined {
   return finite(value, label);
 }
 
-function parseSegments(value: unknown, max: number, maxTextChars: number): ProviderSegment[] {
+function parseSegments(value: unknown, max: number, maxTextChars: number, maxAudioSeconds: number, onTimingRepair: ProviderRequest["onTimingRepair"]): ProviderSegment[] {
   if (!Array.isArray(value) || value.length === 0 || value.length > max) throw providerSchemaError("provider timings are required", "segments", "nonempty bounded array", value);
-  let previousEnd = 0;
-  return value.map((item, index) => {
+  const segments: ProviderSegment[] = [];
+  for (const [index, item] of value.entries()) {
     const row = object(item, `segments[${index}]`);
-    const startSeconds = finite(row.start, `segments[${index}].start`);
-    const endSeconds = finite(row.end, `segments[${index}].end`);
-    if (endSeconds <= startSeconds) throw providerSchemaError("segment timing is invalid", `segments[${index}].end`, "number greater than start", row.end);
-    if (startSeconds < previousEnd) throw providerSchemaError("segment timings are not ordered", `segments[${index}].start`, "number at or after previous end", row.start);
-    previousEnd = endSeconds;
-    return {
+    let startSeconds = finite(row.start, `segments[${index}].start`);
+    let endSeconds = finite(row.end, `segments[${index}].end`);
+    if (endSeconds < startSeconds) {
+      const error = providerSchemaError("segment timing is invalid", `segments[${index}].end`, "number at or after start", row.end);
+      error.schemaFailure = { ...providerSchemaFields(error), startSeconds, endSeconds };
+      throw error;
+    }
+    if (endSeconds > maxAudioSeconds) throw providerSchemaError("provider timing exceeded bound", `segments[${index}].end`, "bounded audio seconds", endSeconds);
+    const zeroLength = endSeconds === startSeconds;
+    if (zeroLength) {
+      onTimingRepair?.({ fieldPath: `segments[${index}].end`, startSeconds, endSeconds });
+      // Extend backward so text at the actual chunk end survives clipping.
+      startSeconds = Math.max(0, startSeconds - 0.001);
+      endSeconds = Math.max(endSeconds, 0.001);
+    }
+    let segment: ProviderSegment = {
       startSeconds,
       endSeconds,
       text: string(row.text, `segments[${index}].text`, maxTextChars),
+      ...(zeroLength ? { useSegmentText: true } : {}),
       ...(row.confidence !== undefined ? { confidence: confidence(row.confidence, `segments[${index}].confidence`) } : {}),
     };
-  });
+    let previous = segments.at(-1);
+    while (previous && segment.startSeconds < previous.endSeconds) {
+      onTimingRepair?.({ fieldPath: `segments[${index}].start`, startSeconds: segment.startSeconds, endSeconds: segment.endSeconds, previousEndSeconds: previous.endSeconds });
+      // Partial word timings cannot account for all text in the union.
+      segment = {
+        startSeconds: Math.min(previous.startSeconds, segment.startSeconds),
+        endSeconds: Math.max(previous.endSeconds, segment.endSeconds),
+        text: string(`${previous.text} ${segment.text}`, `segments[${index}].text`, maxTextChars),
+        useSegmentText: true,
+        ...(previous.confidence === undefined && segment.confidence === undefined ? {} : { confidence: Math.min(previous.confidence ?? 1, segment.confidence ?? 1) }),
+      };
+      segments.pop();
+      previous = segments.at(-1);
+    }
+    segments.push(segment);
+  }
+  return segments;
 }
 
 function parseWords(value: unknown, max: number, maxTextChars: number): ProviderWord[] | undefined {
@@ -145,17 +172,15 @@ export function parseProviderResult(
     maxSegments: number;
     maxWords: number;
     maxAudioSeconds: number;
+    onTimingRepair?: ProviderRequest["onTimingRepair"];
   },
 ): ProviderResult {
   const row = object(value, "$");
   const text = string(row.text, "text", options.maxTextChars);
-  const segments = parseSegments(row.segments, options.maxSegments, options.maxTextChars);
+  const segments = parseSegments(row.segments, options.maxSegments, options.maxTextChars, options.maxAudioSeconds, options.onTimingRepair);
   const words = parseWords(row.words, options.maxWords, options.maxTextChars);
   const durationSeconds = optionalFinite(row.duration, "duration");
   if (durationSeconds !== undefined && durationSeconds > options.maxAudioSeconds) throw providerSchemaError("provider duration exceeded bound", "duration", "bounded audio seconds", row.duration);
-  for (const [index, segment] of segments.entries()) {
-    if (segment.endSeconds > options.maxAudioSeconds) throw providerSchemaError("provider timing exceeded bound", `segments[${index}].end`, "bounded audio seconds", segment.endSeconds);
-  }
   for (const [index, word] of (words ?? []).entries()) {
     if (word.endSeconds > options.maxAudioSeconds) throw providerSchemaError("provider word timing exceeded bound", `words[${index}].end`, "bounded audio seconds", word.endSeconds);
   }

@@ -7,6 +7,7 @@ import { runDispatcher } from "../src/dispatcher.js";
 import { DeepInfraWhisperProvider } from "../src/providers.js";
 import { AssignmentError, ProviderError } from "../src/errors.js";
 import { normalizeTranscriptChunk } from "../src/normalize.js";
+import { parseProviderResult } from "../src/provider-utils.js";
 import { InvocationCircuit, transcribeWithFallback } from "../src/retry.js";
 import { conditionalPutJson } from "../src/storage.js";
 import type { ProviderPolicy, ProviderResult, ReleaseConfig, TranscriptionAssignment, TranscriptionProvider } from "../src/types.js";
@@ -249,8 +250,123 @@ describe("provider sequencing", () => {
   });
 });
 
+describe("provider segment timing contract", () => {
+  const parse = (body: unknown) => parseProviderResult(body, { provider: "deepinfra", model: "openai/whisper-large-v3-turbo", versionContract: "test", maxTextChars: 1024, maxSegments: 100, maxWords: 100, maxAudioSeconds: 900 });
+
+  it.each([false, true])("retains overlapping segment text without repeating words (word timings: %s)", (withWords) => {
+    // Production logged this inequality, but not the actual timestamps.
+    const words = [
+      { start: 0, end: 1, word: "first" },
+      { start: 1.5, end: 2.5, word: "second" },
+    ];
+    const provider = parse({
+      text: "first second",
+      segments: [
+        { start: 0, end: 2, text: "first" },
+        { start: 1.5, end: 3, text: "second" },
+      ],
+      ...(withWords ? { words } : {}),
+    });
+    expect(provider.segments).toEqual([{ startSeconds: 0, endSeconds: 3, text: "first second", useSegmentText: true }]);
+    if (withWords) expect(provider.words).toEqual(words.map((word) => ({ startSeconds: word.start, endSeconds: word.end, word: word.word })));
+    const document = normalizeTranscriptChunk({
+      jobId: assignment.jobId,
+      episodeId: assignment.episodeId,
+      episodeStartMs: assignment.chunk.episodeStartMs,
+      episodeEndMs: assignment.chunk.episodeEndMs,
+      sourceStartMs: assignment.chunk.sourceStartMs,
+      sourceEndMs: assignment.chunk.sourceEndMs,
+      manifest: validateSpeakerTurnManifest(sourceManifest(), assignment),
+      provider,
+      attempt: assignment.attempt,
+      measuredAudioMs: 10_000,
+      sourceIdentity: assignment.chunk.sourceIdentity,
+      sourceTrackClass: assignment.chunk.sourceTrackClass,
+    });
+    expect(document.cues).toEqual([expect.objectContaining({ startMs: 10_000, endMs: 13_000, text: "first second" })]);
+  });
+
+  it.each([0, 2, 900])("retains a zero-length segment at %s seconds with a bounded millisecond range", (time) => {
+    const provider = parse({ text: "brief", segments: [{ start: time, end: time, text: "brief" }] });
+    expect(provider.segments).toEqual([{ startSeconds: time === 0 ? 0 : time - 0.001, endSeconds: time === 0 ? 0.001 : time, text: "brief", useSegmentText: true }]);
+  });
+
+  it("retains zero-length text at the actual chunk end below the policy maximum", () => {
+    const provider = parse({ text: "brief", segments: [{ start: 10, end: 10, text: "brief" }] });
+    const document = normalizeTranscriptChunk({
+      jobId: assignment.jobId,
+      episodeId: assignment.episodeId,
+      episodeStartMs: assignment.chunk.episodeStartMs,
+      episodeEndMs: assignment.chunk.episodeEndMs,
+      sourceStartMs: assignment.chunk.sourceStartMs,
+      sourceEndMs: assignment.chunk.sourceEndMs,
+      manifest: validateSpeakerTurnManifest(sourceManifest(), assignment),
+      provider,
+      attempt: assignment.attempt,
+      measuredAudioMs: 10_000,
+      sourceIdentity: assignment.chunk.sourceIdentity,
+      sourceTrackClass: assignment.chunk.sourceTrackClass,
+    });
+    expect(document.cues).toEqual([expect.objectContaining({ startMs: 19_999, endMs: 20_000, text: "brief" })]);
+  });
+
+  it("retains untimed text alongside partial word timings after a repair", () => {
+    const provider = parse({
+      text: "first second third",
+      segments: [
+        { start: 0, end: 2, text: "first" },
+        { start: 2, end: 2, text: "second" },
+        { start: 3, end: 4, text: "third" },
+      ],
+      words: [
+        { start: 0, end: 1, word: "first" },
+        { start: 3.2, end: 3.8, word: "third" },
+      ],
+    });
+    const document = normalizeTranscriptChunk({
+      jobId: assignment.jobId,
+      episodeId: assignment.episodeId,
+      episodeStartMs: assignment.chunk.episodeStartMs,
+      episodeEndMs: assignment.chunk.episodeEndMs,
+      sourceStartMs: assignment.chunk.sourceStartMs,
+      sourceEndMs: assignment.chunk.sourceEndMs,
+      manifest: validateSpeakerTurnManifest(sourceManifest(), assignment),
+      provider,
+      attempt: assignment.attempt,
+      measuredAudioMs: 10_000,
+      sourceIdentity: assignment.chunk.sourceIdentity,
+      sourceTrackClass: assignment.chunk.sourceTrackClass,
+    });
+    expect(document.cues).toEqual([expect.objectContaining({ startMs: 10_000, endMs: 12_000, text: "first second" }), expect.objectContaining({ startMs: 13_200, endMs: 13_800, text: "third" })]);
+    expect(provider.words).toEqual([
+      { startSeconds: 0, endSeconds: 1, word: "first" },
+      { startSeconds: 3.2, endSeconds: 3.8, word: "third" },
+    ]);
+  });
+
+  it("keeps adjacent segments separate and merges a contained segment", () => {
+    expect(
+      parse({
+        text: "first second third",
+        segments: [
+          { start: 0, end: 2, text: "first" },
+          { start: 1, end: 1, text: "second" },
+          { start: 2, end: 3, text: "third" },
+        ],
+      }).segments,
+    ).toEqual([
+      { startSeconds: 0, endSeconds: 2, text: "first second", useSegmentText: true },
+      { startSeconds: 2, endSeconds: 3, text: "third" },
+    ]);
+  });
+
+  it.each([{ start: -1, end: 1 }, { start: 0, end: Infinity }, { start: 2, end: 1 }, { start: 0 }, { start: 900, end: 901 }])("still rejects malformed segment timestamps: %j", (timing) => {
+    expect(() => parse({ text: "bad", segments: [{ ...timing, text: "bad" }] })).toThrow(ProviderError);
+  });
+});
+
 describe("dispatcher provider schema logging", () => {
-  it("logs only schema metadata and still reports a terminal retry", async () => {
+  it.each(["malformed", "overlap", "zero", "reversed"])("logs private-safe timing diagnostics and completes only repairable answers: %s", async (kind) => {
     const audio = new Uint8Array(4096);
     const audioHash = createHash("sha256").update(audio).digest("hex");
     const manifest = JSON.stringify(sourceManifest(audioHash));
@@ -269,10 +385,21 @@ describe("dispatcher provider schema logging", () => {
       cloudflare: { enabled: false },
       provider: policy,
     };
-    const body = { text: "PRIVATE_TRANSCRIPT", segments: [{ start: 0, end: false, text: "PRIVATE_TRANSCRIPT" }], request_id: "request-123" };
+    const segments =
+      kind === "malformed"
+        ? [{ start: 0, end: false, text: "PRIVATE_TRANSCRIPT" }]
+        : kind === "overlap"
+          ? [
+              { start: 0, end: 2, text: "PRIVATE_FIRST" },
+              { start: 1.5, end: 3, text: "PRIVATE_SECOND" },
+            ]
+          : [{ start: 2, end: kind === "reversed" ? 1 : 2, text: "PRIVATE_TRANSCRIPT" }];
+    const body = { text: "PRIVATE_TRANSCRIPT", segments, request_id: "request-123" };
     const provider = new DeepInfraWhisperProvider({ policy, token: "PRIVATE_TOKEN", fetch: async () => Response.json(body) });
     const warnings: { event: string; fields?: Record<string, string | number | boolean> }[] = [];
     const retries: { errorCode: string; terminal?: boolean }[] = [];
+    let completions = 0;
+    let uploads = 0;
     const result = await runDispatcher(
       { source: "wake" },
       { getRemainingTimeInMillis: () => 30000 },
@@ -283,13 +410,19 @@ describe("dispatcher provider schema logging", () => {
           claim: async () => ({ assignments: [claim] }),
           heartbeat: async () => undefined,
           complete: async () => {
-            throw new Error("invalid response must not complete");
+            completions++;
           },
           retry: async (input) => {
             retries.push(input);
           },
         },
-        fetch: async (url) => (String(url) === claim.chunk.inputUrl ? new Response(audio, { headers: { "content-type": "audio/flac" } }) : new Response(manifest, { headers: { "content-type": "application/json" } })),
+        fetch: async (url, init) => {
+          if (init?.method === "PUT") {
+            uploads++;
+            return new Response(null, { status: 200 });
+          }
+          return String(url) === claim.chunk.inputUrl ? new Response(audio, { headers: { "content-type": "audio/flac" } }) : new Response(manifest, { headers: { "content-type": "application/json" } });
+        },
         logger: {
           info: () => undefined,
           warn: (event, fields) => {
@@ -298,9 +431,27 @@ describe("dispatcher provider schema logging", () => {
         },
       },
     );
-    expect(result).toEqual({ claimed: 1, completed: 0, failed: 1 });
-    expect(warnings).toEqual([{ event: "provider_schema_invalid", fields: { fieldPath: "segments[0].end", expectedType: "finite nonnegative number", actualType: "boolean", responseSizeBytes: Buffer.byteLength(JSON.stringify(body)), providerRequestId: "request-123" } }]);
+    const repairable = kind === "overlap" || kind === "zero";
+    expect(result).toEqual({ claimed: 1, completed: repairable ? 1 : 0, failed: repairable ? 0 : 1 });
+    expect(completions).toBe(repairable ? 1 : 0);
+    expect(uploads).toBe(repairable ? 1 : 0);
+    if (kind === "overlap") expect(warnings).toEqual([{ event: "provider_segment_timing_repaired", fields: { fieldPath: "segments[1].start", startSeconds: 1.5, endSeconds: 3, previousEndSeconds: 2 } }]);
+    else if (kind === "zero") expect(warnings).toEqual([{ event: "provider_segment_timing_repaired", fields: { fieldPath: "segments[0].end", startSeconds: 2, endSeconds: 2 } }]);
+    else
+      expect(warnings).toEqual([
+        {
+          event: "provider_schema_invalid",
+          fields: {
+            fieldPath: "segments[0].end",
+            expectedType: kind === "reversed" ? "number at or after start" : "finite nonnegative number",
+            actualType: kind === "reversed" ? "number" : "boolean",
+            responseSizeBytes: Buffer.byteLength(JSON.stringify(body)),
+            providerRequestId: "request-123",
+            ...(kind === "reversed" ? { startSeconds: 2, endSeconds: 1 } : {}),
+          },
+        },
+      ]);
     expect(JSON.stringify(warnings)).not.toContain("PRIVATE");
-    expect(retries).toEqual([expect.objectContaining({ errorCode: "provider_schema_invalid", terminal: true })]);
+    expect(retries).toEqual(repairable ? [] : [expect.objectContaining({ errorCode: "provider_schema_invalid", terminal: true })]);
   });
 });

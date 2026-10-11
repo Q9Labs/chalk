@@ -27,7 +27,7 @@ export function normalizeTranscriptChunk(input: {
     if (endMs <= startMs) return [];
     const allMatches = input.manifest.turns.filter((turn) => turn.endMs > startMs && turn.startMs < endMs);
     const authoritative = allMatches.filter((turn) => isAuthoritativeTurn(turn, input.sourceIdentity, input.sourceTrackClass));
-    if (input.provider.words && input.provider.words.length > 0) {
+    if (!segment.useSegmentText && input.provider.words && input.provider.words.length > 0) {
       return cuesFromWords(segment, startMs, endMs, authoritative, allMatches, input);
     }
     return cuesFromSegment(segment, startMs, endMs, authoritative, allMatches, input);
