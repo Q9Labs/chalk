@@ -2,6 +2,7 @@ package recordingpresentation
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -373,6 +374,40 @@ func TestPresentationRejectsInitialPlanThatDivergesAtItsControlCursor(t *testing
 				t.Fatalf("divergent plan accepted: %v", err)
 			}
 		})
+	}
+}
+
+func TestWhiteboardPresentedBeforeCaptureReadyWithoutAppStateBuildsObjectAppState(t *testing.T) {
+	fixture := newParticipantBuilderFixture(t)
+	setParticipantPlan(t, &fixture.source, 1, []captureplan.ParticipantSnapshot{
+		activeParticipant(fixture.first, "Alex", 1),
+	}, nil)
+	fixture.source.WhiteboardStartRevision = 1
+	fixture.source.WhiteboardOriginRevision = 1
+	fixture.source.InitialWhiteboard = &WhiteboardSnapshotFact{
+		SceneID: "scene-1", Revision: 1, Presenting: true, AppState: []byte(`null`),
+	}
+
+	built, err := buildPresentation(fixture.source)
+	if err != nil {
+		t.Fatalf("build presentation: %v", err)
+	}
+	var states int
+	for _, material := range built.Assets {
+		if material.Asset.Kind != "whiteboard_state" {
+			continue
+		}
+		states++
+		var wire whiteboardStateWire
+		if err := json.Unmarshal(material.Body, &wire); err != nil {
+			t.Fatalf("decode whiteboard state: %v", err)
+		}
+		if string(wire.AppState) != `{}` {
+			t.Fatalf("whiteboard state appState = %s, want {}", wire.AppState)
+		}
+	}
+	if states != 1 {
+		t.Fatalf("whiteboard state assets = %d, want 1", states)
 	}
 }
 
