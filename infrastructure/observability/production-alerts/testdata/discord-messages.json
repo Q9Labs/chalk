@@ -1,0 +1,82 @@
+[
+  {
+    "rule": "recording",
+    "action": "Open",
+    "content": "A class was not recorded\nTenant: Example school. The Recording stopped before it finished, so there is no complete video for this class. Affected items: 2.\nAn engineer must check immediately whether any retained source can be recovered; a complete video cannot be promised.\nFor engineers: recording; `pnpm diag trace <32-hex-trace-id>` from the affected journey."
+  },
+  {
+    "rule": "export",
+    "action": "Open",
+    "content": "A class video could not be produced\nTenant: Example school. The class was recorded, but turning it into a video file failed or is taking longer than 14 hours. Affected items: 2.\nAn engineer needs to fix the cause and retry the Export before the retained Recording expires; check its source cleanup deadline now. Earliest affected source expires at 2099-01-01T12:00:00Z.\nFor engineers: export; `pnpm diag trace <32-hex-trace-id>` from the affected journey."
+  },
+  {
+    "rule": "transcript",
+    "action": "Open",
+    "content": "A class transcript failed or is taking longer than 30 minutes\nTenant: Example school. The video is not affected. Affected items: 2.\nAn engineer needs to check the source expiry and retry before it expires; a transcript cannot be promised. Earliest affected source expires at 2099-01-01T12:00:00Z.\nFor engineers: transcript; `pnpm diag trace <32-hex-trace-id>` from the affected journey."
+  },
+  {
+    "rule": "webhook",
+    "action": "Open",
+    "content": "A customer's system was not told about a class event\nTenant: Example school. Chalk tried several times to reach the customer's server and gave up, so their attendance or Recording records may be out of date. Affected items: 2.\nAn engineer must check the customer's server now, then redeliver the event; automatic retries have ended.\nFor engineers: webhook; `pnpm diag trace <32-hex-trace-id>` from the affected journey."
+  },
+  {
+    "rule": "api",
+    "action": "Open",
+    "content": "Chalk is returning errors to people in class\nMore than fifteen server errors occurred in five minutes. Joining, loading or starting a Recording may be failing right now. Tenant attribution is not available for these events.\nAn engineer must investigate now; customers may need to reconnect after the cause is fixed.\nFor engineers: api; `pnpm diag trace <32-hex-trace-id>` from an affected response or connection."
+  },
+  {
+    "rule": "sync",
+    "action": "Open",
+    "content": "People are being disconnected from classes or cannot connect right now\nMore than ten failed connections or abnormal drops occurred in five minutes. Normal leaves and server drains are excluded. Tenant attribution is not available for these events.\nAn engineer must investigate now; customers may need to reconnect after the cause is fixed.\nFor engineers: sync; `pnpm diag trace <32-hex-trace-id>` from an affected response or connection."
+  },
+  {
+    "rule": "freshness",
+    "action": "Open",
+    "content": "The alert system has stopped reporting\nChalk may be working, but nobody would be told about a job or webhook failure until this is fixed.\nAn engineer must restore the alert collector now; until then job and webhook failures may go unnoticed.\nFor engineers: freshness; `systemctl status chalk-alert-state.timer chalk-alert-state.service`."
+  },
+  {
+    "rule": "export",
+    "action": "Closed",
+    "content": "The alert threshold is no longer exceeded\nEarlier alert: A class video could not be produced. Tenant: Example school. The class was recorded, but turning it into a video file failed or is taking longer than 14 hours.\nThis does not prove the earlier failure was fixed. An engineer must check the earlier message and affected records; do not treat this as recovery.\nFor engineers: export; `pnpm diag trace <32-hex-trace-id>` from the affected journey."
+  },
+  {
+    "rule": "delivery-test",
+    "action": "Open",
+    "content": "TEST: Chalk alert delivery\nNo customer failure was induced.\nThis only tests notification delivery; no customer action is needed.\nFor engineers: delivery-test; `pnpm diag trace <32-hex-trace-id>` from the affected journey."
+  },
+  {
+    "rule": "recording",
+    "action": "Closed",
+    "content": "The alert threshold is no longer exceeded\nEarlier alert: A class was not recorded. Tenant: Example school. The Recording stopped before it finished, so there is no complete video for this class.\nThis does not prove the earlier failure was fixed. An engineer must check the earlier message and affected records; do not treat this as recovery.\nFor engineers: recording; `pnpm diag trace <32-hex-trace-id>` from the affected journey."
+  },
+  {
+    "rule": "transcript",
+    "action": "Closed",
+    "content": "The alert threshold is no longer exceeded\nEarlier alert: A class transcript failed or is taking longer than 30 minutes. Tenant: Example school. The video is not affected.\nThis does not prove the earlier failure was fixed. An engineer must check the earlier message and affected records; do not treat this as recovery.\nFor engineers: transcript; `pnpm diag trace <32-hex-trace-id>` from the affected journey."
+  },
+  {
+    "rule": "webhook",
+    "action": "Closed",
+    "content": "The alert threshold is no longer exceeded\nEarlier alert: A customer's system was not told about a class event. Tenant: Example school. Chalk tried several times to reach the customer's server and gave up, so their attendance or Recording records may be out of date.\nThis does not prove the earlier failure was fixed. An engineer must check the earlier message and affected records; do not treat this as recovery.\nFor engineers: webhook; `pnpm diag trace <32-hex-trace-id>` from the affected journey."
+  },
+  {
+    "rule": "api",
+    "action": "Closed",
+    "content": "The alert threshold is no longer exceeded\nEarlier alert: Chalk is returning errors to people in class. More than fifteen server errors occurred in five minutes. Joining, loading or starting a Recording may be failing right now. Tenant attribution is not available for these events.\nThis does not prove the earlier failure was fixed. An engineer must check the earlier message and affected records; do not treat this as recovery.\nFor engineers: api; `pnpm diag trace <32-hex-trace-id>` from an affected response or connection."
+  },
+  {
+    "rule": "sync",
+    "action": "Closed",
+    "content": "The alert threshold is no longer exceeded\nEarlier alert: People are being disconnected from classes or cannot connect right now. More than ten failed connections or abnormal drops occurred in five minutes. Normal leaves and server drains are excluded. Tenant attribution is not available for these events.\nThis does not prove the earlier failure was fixed. An engineer must check the earlier message and affected records; do not treat this as recovery.\nFor engineers: sync; `pnpm diag trace <32-hex-trace-id>` from an affected response or connection."
+  },
+  {
+    "rule": "freshness",
+    "action": "Closed",
+    "content": "The alert threshold is no longer exceeded\nEarlier alert: The alert system has stopped reporting. Chalk may be working, but nobody would be told about a job or webhook failure until this is fixed.\nThis does not prove the earlier failure was fixed. An engineer must check the earlier message and affected records; do not treat this as recovery.\nFor engineers: freshness; `systemctl status chalk-alert-state.timer chalk-alert-state.service`."
+  },
+  {
+    "rule": "delivery-test",
+    "action": "Closed",
+    "content": "The alert threshold is no longer exceeded\nEarlier alert: TEST: Chalk alert delivery. No customer failure was induced.\nThis does not prove the earlier failure was fixed. An engineer must check the earlier message and affected records; do not treat this as recovery.\nFor engineers: delivery-test; `pnpm diag trace <32-hex-trace-id>` from the affected journey."
+  }
+]

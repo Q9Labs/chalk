@@ -50,7 +50,7 @@ func TestDiscordTemplateProducesPlainMessagesAndHonestClosure(t *testing.T) {
 	for _, action := range []string{"Open", "Closed"} {
 		headline, summary, next := message("export")
 		var output bytes.Buffer
-		data := map[string]interface{}{"Action": action, "Title": "internal title", "Description": "internal description", "Value": 2, "GroupKeys": []string{"summary", "rule", "headline", "next", "engineers"}, "GroupValues": []string{summary, "export", headline, next, "For engineers: export; trace command."}}
+		data := map[string]interface{}{"Action": action, "Title": "internal title", "Description": "internal description", "Value": 2, "GroupKeys": []string{"alert_message"}, "GroupValues": []string{discordGroup(snapshot{Rule: "export", Headline: headline, Summary: summary, Next: next, Engineers: "For engineers: export; trace command."})}}
 		if err := tmpl.Execute(&output, data); err != nil {
 			t.Fatal(err)
 		}
@@ -88,7 +88,7 @@ func TestTenantNamesCannotBreakDiscordJSON(t *testing.T) {
 			t.Fatal(err)
 		}
 		var output bytes.Buffer
-		if err := tmpl.Execute(&output, map[string]interface{}{"Action": "Open", "Value": 1, "GroupKeys": []string{"rule", "headline", "summary", "next", "engineers"}, "GroupValues": []string{item.Rule, item.Headline, item.Summary, item.Next, "For engineers: recording."}}); err != nil {
+		if err := tmpl.Execute(&output, map[string]interface{}{"Action": "Open", "Value": 1, "GroupKeys": []string{"alert_message"}, "GroupValues": []string{discordGroup(snapshot{Tenant: item.Tenant, Rule: item.Rule, Headline: item.Headline, Summary: item.Summary, Next: item.Next, Engineers: "For engineers: recording."})}}); err != nil {
 			t.Fatal(err)
 		}
 		if !json.Valid(output.Bytes()) {
@@ -252,7 +252,7 @@ func TestClosedMessagesPreserveTenantContext(t *testing.T) {
 		item := snapshot{Rule: "export", Tenant: "synthetic", TenantName: name}
 		formatMessage(&item)
 		var output bytes.Buffer
-		if err := tmpl.Execute(&output, map[string]interface{}{"Action": "Closed", "Value": 0, "GroupKeys": []string{"rule", "headline", "summary", "next", "engineers"}, "GroupValues": []string{item.Rule, item.Headline, item.Summary, item.Next, "For engineers: export."}}); err != nil {
+		if err := tmpl.Execute(&output, map[string]interface{}{"Action": "Closed", "Value": 0, "GroupKeys": []string{"alert_message"}, "GroupValues": []string{discordGroup(snapshot{Tenant: item.Tenant, Rule: item.Rule, Headline: item.Headline, Summary: item.Summary, Next: item.Next, Engineers: "For engineers: export."})}}); err != nil {
 			t.Fatal(err)
 		}
 		var payload struct {
