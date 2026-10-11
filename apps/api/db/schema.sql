@@ -1108,7 +1108,7 @@ create table sync_whiteboard_operation_receipts (
             operation_name = 'submit_update'
             and jsonb_typeof(event_elements) = 'array'
             and event_presenting is null
-            and event_encoded_bytes between 2 and 262144
+            and event_encoded_bytes between 2 and 16777216
         )
         or (
             operation_name = 'set_presentation'

@@ -3,10 +3,15 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
 
   @behaviour ChalkSync.WhiteboardV1.Repository
 
+  alias ChalkSync.Contract.GeneratedWhiteboardV1
   alias ChalkSync.Database
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.UUID
   alias ChalkSync.WhiteboardV1.SQL
+
+  @limits GeneratedWhiteboardV1.limits()
+  @max_replay_items @limits["snapshotPageMaxItems"]
+  @max_replay_bytes @limits["socketQueueMaxBytes"]
 
   @impl true
   def connect(%Identity{} = identity) do
@@ -233,9 +238,29 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
       revision
     ]
 
-    case Postgrex.query(connection, SQL.read_after(), params) do
-      {:ok, %Postgrex.Result{rows: rows}} -> {:ok, Enum.map(rows, &read_after_event/1)}
+    # Check metadata under the scene lock before Postgrex loads any event JSON.
+    with :ok <- read_after_fits?(connection, params),
+         {:ok, %Postgrex.Result{rows: rows}} <-
+           Postgrex.query(connection, SQL.read_after(), params) do
+      {:ok, Enum.map(rows, &read_after_event/1)}
+    else
+      {:error, :cursor_reset_required} = reset -> reset
       {:error, _error} -> {:retryable, :storage_unavailable}
+      other -> other
+    end
+  end
+
+  defp read_after_fits?(connection, params) do
+    case Postgrex.query(connection, SQL.read_after_size(), params) do
+      {:ok, %Postgrex.Result{rows: [[count, bytes]]}}
+      when count <= @max_replay_items and bytes <= @max_replay_bytes ->
+        :ok
+
+      {:ok, _result} ->
+        {:error, :cursor_reset_required}
+
+      {:error, _error} ->
+        {:retryable, :storage_unavailable}
     end
   end
 

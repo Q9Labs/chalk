@@ -95,6 +95,7 @@ defmodule ChalkSync.WhiteboardV1.SQL do
          excluded.version = sync_whiteboard_elements.version
          and excluded.version_nonce < sync_whiteboard_elements.version_nonce
        )
+    returning element_id
     """
   end
 
@@ -204,6 +205,20 @@ defmodule ChalkSync.WhiteboardV1.SQL do
       and operation_name in ('submit_update', 'set_presentation')
     order by revision
     limit 129
+    """
+  end
+
+  def read_after_size do
+    """
+    select count(*), coalesce(sum(event_encoded_bytes), 0)::bigint
+    from (
+      select event_encoded_bytes
+      from sync_whiteboard_operation_receipts
+      where tenant_id = $1 and episode_id = $2 and scene_id = $3 and revision > $4
+        and operation_name in ('submit_update', 'set_presentation')
+      order by revision
+      limit 129
+    ) receipts
     """
   end
 

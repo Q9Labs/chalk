@@ -221,6 +221,55 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
     assert stroke in stored
   end
 
+  test "accepts genuinely changed multipart-sized handwriting events", %{
+    connection: connection,
+    host: host,
+    participant: participant
+  } do
+    {:ok, %{scene_id: scene_id}} = PostgresRepository.connect(host)
+    elements = Enum.map(1..200, &handwriting_element/1)
+    bytes = byte_size(JSON.encode!(elements))
+    assert bytes > 262_144
+    assert bytes < 16_777_216
+
+    update = %{operation_id: "handwriting-large-change", scene_id: scene_id, elements: elements}
+    assert {:ok, %{revision: 1}} = PostgresRepository.commit_update(host, update)
+
+    assert {:ok, [%{elements: ^elements}]} =
+             PostgresRepository.read_after(participant, scene_id, 0)
+
+    assert [[^bytes]] =
+             Postgrex.query!(
+               connection,
+               """
+               select event_encoded_bytes from sync_whiteboard_operation_receipts
+               where participant_id = $1 and operation_id = $2
+               """,
+               [uuid(host.participant_id), update.operation_id]
+             ).rows
+
+    assert bytes * 3 > 2_097_152
+
+    Enum.each(2..3, fn version ->
+      changed = Enum.map(elements, &Map.put(&1, "version", version))
+
+      assert {:ok, %{revision: ^version}} =
+               PostgresRepository.commit_update(host, %{
+                 update
+                 | operation_id: "handwriting-large-change-#{version}",
+                   elements: changed
+               })
+    end)
+
+    assert {:error, :cursor_reset_required} =
+             PostgresRepository.read_after(participant, scene_id, 0)
+
+    assert {:ok, [%{revision: 3}]} = PostgresRepository.read_after(participant, scene_id, 2)
+    assert {:ok, %{revision: 3, elements: stored}} = PostgresRepository.snapshot(participant)
+    assert length(stored) == 200
+    assert Enum.all?(stored, &(&1["version"] == 3))
+  end
+
   defp handwriting_element(index) do
     points = Enum.map(1..150, fn point -> [point / 3, :math.sin(point / 5) * 20] end)
 
