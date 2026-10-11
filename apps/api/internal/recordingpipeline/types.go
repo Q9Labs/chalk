@@ -134,8 +134,9 @@ const (
 // ArtifactState backs the stable recording-artifact read model. Its source
 // expiry is anchored at capture completion and never renewed by export reads.
 type ArtifactState struct {
-	SourceStatus    SourceStatus
-	SourceExpiresAt *time.Time
+	SourceStatus      SourceStatus
+	CaptureStopReason string
+	SourceExpiresAt   *time.Time
 	// TranscriptionPolicy is sealed in the Episode snapshot and defaults to
 	// disabled for legacy or invalid snapshots. It never reflects mutable Space
 	// policy.

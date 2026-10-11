@@ -354,6 +354,22 @@ func (q *Queries) LockRecordingCaptureLifecycleOperation(ctx context.Context, ar
 	return i, err
 }
 
+const setRecordingCaptureDurationLimit = `-- name: SetRecordingCaptureDurationLimit :exec
+update recording_jobs
+set result_metadata = result_metadata || '{"capture_stop_reason":"duration_limit"}'::jsonb
+where id = $1 and tenant_id = $2 and kind = 'capture'
+`
+
+type SetRecordingCaptureDurationLimitParams struct {
+	JobID    pgtype.UUID `json:"job_id"`
+	TenantID pgtype.UUID `json:"tenant_id"`
+}
+
+func (q *Queries) SetRecordingCaptureDurationLimit(ctx context.Context, arg SetRecordingCaptureDurationLimitParams) error {
+	_, err := q.db.Exec(ctx, setRecordingCaptureDurationLimit, arg.JobID, arg.TenantID)
+	return err
+}
+
 const setRecordingCaptureReadyAt = `-- name: SetRecordingCaptureReadyAt :one
 update recording_pipelines
 set capture_ready_at = $1,

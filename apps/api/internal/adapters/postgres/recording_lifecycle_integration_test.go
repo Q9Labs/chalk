@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/config"
@@ -183,6 +184,13 @@ func testRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T, polic
 		if _, err := deadlineService.PublishStopped(ctx, input); !errors.Is(err, recordinglifecycle.ErrAuthorityMismatch) {
 			t.Fatalf("stop before reservation deadline = %v, want authority mismatch", err)
 		}
+		future := input
+		if err := deadlineTx.QueryRow(ctx, `select ends_at from recording_reservations where id=$1`, reservationID.Bytes()).Scan(&future.StoppedAt); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := deadlineService.PublishStopped(ctx, future); !errors.Is(err, recordinglifecycle.ErrDeadlineStopPending) {
+			t.Fatalf("worker clock ahead of API = %v, want retryable deadline stop", err)
+		}
 		deadline := input.StoppedAt.Add(-time.Second).Truncate(time.Microsecond)
 		if _, err := deadlineTx.Exec(ctx, `update recording_reservations set ends_at = $2 where id = $1`, reservationID.Bytes(), deadline); err != nil {
 			t.Fatal(err)
@@ -203,6 +211,14 @@ func testRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T, polic
 		}
 		if err := json.Unmarshal(stopped.Payload, &payload); err != nil || payload.RecordingID != recordingID.String() || payload.DeadlineAtMillis != deadline.UnixMilli() || payload.CaptureEpoch != 1 {
 			t.Fatalf("deadline stopped payload = %s, %v", stopped.Payload, err)
+		}
+		var reason string
+		if err := deadlineTx.QueryRow(ctx, `select result_metadata ->> 'capture_stop_reason' from recording_jobs where id=$1`, jobID.Bytes()).Scan(&reason); err != nil || reason != "duration_limit" {
+			t.Fatalf("durable duration stop reason = %q, %v", reason, err)
+		}
+		states, err := sqlc.New(deadlineTx).ListRecordingDeferredArtifactStates(ctx, sqlc.ListRecordingDeferredArtifactStatesParams{TenantID: uuid(tenantID), RecordingIds: []pgtype.UUID{uuid(recordingID)}})
+		if err != nil || len(states) != 1 || states[0].CaptureStopReason != "duration_limit" {
+			t.Fatalf("public source stop reason = %+v, %v", states, err)
 		}
 		changed := input
 		changed.StoppedAt = input.StoppedAt.Add(-time.Millisecond)

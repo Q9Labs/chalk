@@ -46,6 +46,9 @@ and the [cost-first profile](../infrastructure/recorder/profiles/cost-first.json
 No production enablement, ingress change, secret issuance, paid provider call or
 new cloud resource is authorized by local verification.
 
+See [Recording duration limits](recording/duration-limit.md) for the reserved
+deadline, clean stop behavior and `source.stop_reason`.
+
 ## Architecture
 
 ```mermaid

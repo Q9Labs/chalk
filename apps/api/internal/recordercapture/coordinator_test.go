@@ -614,3 +614,27 @@ func countOperation(operations []captureplane.OperationKind, wanted captureplane
 	}
 	return count
 }
+
+func TestCoordinatorDeadlineAllowsOnlyProviderShutdown(t *testing.T) {
+	authority := newAttempt(t)
+	now := coordinatorNow
+	authority.Lease.ExpiresAt = authority.HardDeadline.Add(time.Minute)
+	signaling := &fakeSignaling{}
+	coordinator := newCoordinator(t, authority, signaling, &fakePeer{}, Config{Now: func() time.Time { return now }})
+	if _, err := coordinator.Bootstrap(context.Background(), newPlan(t, authority, 1, []planTrack{{name: "one"}})); err != nil {
+		t.Fatal(err)
+	}
+	now = authority.HardDeadline
+	if _, err := coordinator.Reconcile(context.Background(), newPlan(t, authority, 2, []planTrack{{name: "two"}})); !errors.Is(err, ErrDeadlineExpired) {
+		t.Fatalf("reconcile at limit = %v", err)
+	}
+	if err := coordinator.Close(context.Background(), true); err != nil {
+		t.Fatalf("shutdown at limit = %v", err)
+	}
+	if err := coordinator.Close(context.Background(), true); err != nil {
+		t.Fatal(err)
+	}
+	if countOperation(signaling.operations, captureplane.OperationCloseCaptureConnection) != 1 {
+		t.Fatalf("shutdown calls = %v", signaling.operations)
+	}
+}

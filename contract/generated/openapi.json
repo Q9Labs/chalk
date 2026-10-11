@@ -19752,6 +19752,10 @@
           "status": {
             "enum": ["pending", "available", "failed", "expired"],
             "type": "string"
+          },
+          "stop_reason": {
+            "enum": ["duration_limit"],
+            "type": "string"
           }
         },
         "required": ["status"],

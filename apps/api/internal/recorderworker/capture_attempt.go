@@ -237,6 +237,7 @@ type CaptureAttemptConfig struct {
 	// often, so native Exports can seek retained video cheaply. Zero turns it off.
 	KeyFrameInterval time.Duration
 	Now              func() time.Time
+	After            func(time.Duration) <-chan time.Time
 }
 
 func (c CaptureAttemptConfig) normalized() CaptureAttemptConfig {
@@ -267,6 +268,9 @@ func (c CaptureAttemptConfig) normalized() CaptureAttemptConfig {
 	}
 	if c.CloseTimeout <= 0 {
 		c.CloseTimeout = defaultCaptureCloseTimeout
+	}
+	if c.After == nil {
+		c.After = time.After
 	}
 	if c.Now == nil {
 		c.Now = func() time.Time { return time.Now().UTC() }
@@ -456,22 +460,47 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 	a.running = true
 	a.mu.Unlock()
 
-	runCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	runCtx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	finish := func(err error, writer *captureBundleWriter) error {
+		// Only the deadline and its cancellation are normal stops. Storage,
+		// lease and provider failures must still fail even at the limit.
+		cause := err
+		// Follow a single causal chain only. A joined storage/provider failure
+		// plus cancellation is still a failure, not a successful limit stop.
+		for errors.Unwrap(cause) != nil {
+			cause = errors.Unwrap(cause)
+		}
+		if cause == recordercapture.ErrDeadlineExpired ||
+			(cause == context.Canceled && errors.Is(context.Cause(runCtx), recordercapture.ErrDeadlineExpired)) {
+			return a.finishStopped(writer, a.authority.HardDeadline, recordingbundle.CloseReasonMaxDuration)
+		}
+		return a.finishFailure(err, writer)
+	}
 
 	plan, err := a.initialPlan(runCtx)
 	if err != nil {
-		return a.finishFailure(err, nil)
+		return finish(err, nil)
 	}
 	snapshot, err := a.coordinator.Bootstrap(runCtx, plan)
 	if err != nil {
-		return a.finishFailure(err, nil)
+		return finish(err, nil)
 	}
 	a.mu.Lock()
 	a.bootstrapped = true
 	a.mu.Unlock()
 
 	writer := newCaptureBundleWriter(a)
+	if !a.authority.HardDeadline.IsZero() {
+		deadline := a.config.After(a.authority.HardDeadline.Sub(a.config.Now().UTC()))
+		go func() {
+			select {
+			case <-deadline:
+				cancel(recordercapture.ErrDeadlineExpired)
+			case <-runCtx.Done():
+			}
+		}()
+	}
 	if plan.StopState() != captureplan.StopStateRunning {
 		return a.finishSuccess(runCtx, writer, plan)
 	}
@@ -482,7 +511,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 		// the recording origin before polling can advance no-RTP checkpoints.
 		readyAt := a.config.Now().UTC()
 		if err := a.emitReadyAt(runCtx, true, readyAt); err != nil {
-			return a.finishFailure(err, writer)
+			return finish(err, writer)
 		}
 		writer.setOrigin(readyAt)
 	}
@@ -491,17 +520,17 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 		var stopped bool
 		readers, plan, stopped, err = a.bindTracksWhileWatchingPlans(runCtx, writer, plan, snapshot, planEvents, nil, nil)
 		if err != nil {
-			return a.finishFailure(err, writer)
+			return finish(err, writer)
 		}
 		if stopped {
-			cancel()
+			cancel(nil)
 			return a.finishSuccess(runCtx, writer, plan)
 		}
 	}
 	if len(readers) == 0 && len(snapshot.Tracks) > 0 {
 		readyAt := a.config.Now().UTC()
 		if err := a.emitReadyAt(runCtx, true, readyAt); err != nil {
-			return a.finishFailure(err, writer)
+			return finish(err, writer)
 		}
 		writer.setOrigin(readyAt)
 	}
@@ -512,14 +541,14 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 	events := make(chan captureRuntimeEvent, 256)
 	readerCancels, readerCancel, startErr := startCaptureReaders(runCtx, a.peer, readers, a.config.RTPReadDeadline, a.config.KeyFrameInterval, events)
 	if startErr != nil {
-		return a.finishFailure(startErr, writer)
+		return finish(startErr, writer)
 	}
 	defer readerCancel()
 
 	for {
 		select {
 		case <-runCtx.Done():
-			return a.finishFailure(runCtx.Err(), writer)
+			return finish(runCtx.Err(), writer)
 		case event := <-events:
 			if !captureRuntimeEventMatchesReaders(event, readers) {
 				continue
@@ -528,18 +557,18 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 				if gapErr := writer.addTerminalGap(a.config.Now()); gapErr != nil {
 					event.err = errors.Join(event.err, gapErr)
 				}
-				cancel()
-				return a.finishFailure(event.err, writer)
+				cancel(nil)
+				return finish(event.err, writer)
 			}
 			if err := a.consumeQueuedPackets(runCtx, writer, event, events, func(next captureRuntimeEvent) bool { return captureRuntimeEventMatchesReaders(next, readers) }); err != nil {
-				cancel()
-				return a.finishFailure(err, writer)
+				cancel(nil)
+				return finish(err, writer)
 			}
 		case event := <-planEvents:
 			if event.checkpointNoRTP {
 				if err := writer.checkpointNoRTP(runCtx, event.at); err != nil {
-					cancel()
-					return a.finishFailure(err, writer)
+					cancel(nil)
+					return finish(err, writer)
 				}
 				continue
 			}
@@ -547,30 +576,30 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 				if errors.Is(event.err, captureplan.ErrNoChange) || errors.Is(event.err, ErrNoChange) || errors.Is(event.err, captureplan.ErrWaitTimeout) {
 					continue
 				}
-				cancel()
-				return a.finishFailure(event.err, writer)
+				cancel(nil)
+				return finish(event.err, writer)
 			}
 			snapshot, err := a.coordinator.Reconcile(runCtx, event.plan)
 			if err != nil {
-				cancel()
-				return a.finishFailure(err, writer)
+				cancel(nil)
+				return finish(err, writer)
 			}
 			if event.plan.StopState() != captureplan.StopStateRunning {
-				cancel()
+				cancel(nil)
 				return a.finishSuccess(runCtx, writer, event.plan)
 			}
 			updatedReaders, appliedPlan, stopped, err := a.bindTracksWhileWatchingPlans(runCtx, writer, event.plan, snapshot, planEvents, events, readers)
 			if err != nil {
-				cancel()
-				return a.finishFailure(err, writer)
+				cancel(nil)
+				return finish(err, writer)
 			}
 			if stopped {
-				cancel()
+				cancel(nil)
 				return a.finishSuccess(runCtx, writer, appliedPlan)
 			}
 			if err := a.applyBoundTracks(runCtx, writer, appliedPlan, updatedReaders, readers, readerCancels, events); err != nil {
-				cancel()
-				return a.finishFailure(err, writer)
+				cancel(nil)
+				return finish(err, writer)
 			}
 			readers = updatedReaders
 		}
@@ -867,6 +896,9 @@ func (a *PionCaptureAttempt) consumeAuthorizedPacket(ctx context.Context, writer
 }
 
 func (a *PionCaptureAttempt) packetAuthority(ctx context.Context) (captureplan.Plan, error) {
+	if !a.authority.HardDeadline.IsZero() && !a.config.Now().UTC().Before(a.authority.HardDeadline) {
+		return captureplan.Plan{}, recordercapture.ErrDeadlineExpired
+	}
 	lease := a.currentLease()
 	authority := captureplan.PlanAuthority{
 		PlanHandle: a.authority.PlanHandle, TenantID: a.authority.TenantID, SpaceID: a.authority.SpaceID,
@@ -947,8 +979,18 @@ func (a *PionCaptureAttempt) finishSuccess(ctx context.Context, writer *captureB
 	// still have tracks when an Episode ends, and the provider contract requires
 	// force for that close. Cleanup uses the same value so a retry preserves the
 	// durable signaling command fingerprint.
+	stoppedAt := a.config.Now().UTC()
+	reason := recordingbundle.CloseReasonFinalStop
+	if !a.authority.HardDeadline.IsZero() && !stoppedAt.Before(a.authority.HardDeadline) {
+		stoppedAt = a.authority.HardDeadline
+		reason = recordingbundle.CloseReasonMaxDuration
+	}
+	return a.finishStopped(writer, stoppedAt, reason)
+}
+
+func (a *PionCaptureAttempt) finishStopped(writer *captureBundleWriter, stoppedAt time.Time, reason recordingbundle.CloseReason) error {
 	closeCtx, cancel := context.WithTimeout(context.Background(), a.config.CloseTimeout)
-	result := a.closeLocal(closeCtx, writer, recordingbundle.CloseReasonFinalStop)
+	result := a.closeLocal(closeCtx, writer, reason)
 	cancel()
 	if result != nil {
 		return result
@@ -956,7 +998,6 @@ func (a *PionCaptureAttempt) finishSuccess(ctx context.Context, writer *captureB
 	callbackCtx, callbackCancel := context.WithTimeout(context.Background(), a.config.CloseTimeout)
 	defer callbackCancel()
 	stopID := captureLifecycleKey("stopped", a.authority.RecordingID.String(), uint64(a.authority.CaptureEpoch))
-	stoppedAt := a.config.Now().UTC()
 	for {
 		lease := a.currentLease()
 		stop := CaptureStoppedEvent{
@@ -1016,7 +1057,11 @@ func (a *PionCaptureAttempt) closeLocal(ctx context.Context, writer *captureBund
 	}
 	result = errors.Join(result, a.peer.Close())
 	if writer != nil {
-		result = errors.Join(result, writer.closeWithContext(ctx, reason, a.config.Now()))
+		endedAt := a.config.Now().UTC()
+		if !a.authority.HardDeadline.IsZero() && (reason == recordingbundle.CloseReasonMaxDuration || endedAt.After(a.authority.HardDeadline)) {
+			endedAt = a.authority.HardDeadline
+		}
+		result = errors.Join(result, writer.closeWithContext(ctx, reason, endedAt))
 		writer.clearTerminalState()
 	}
 	result = errors.Join(result, ctx.Err())

@@ -19739,6 +19739,10 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
             enum: ["pending", "available", "failed", "expired"],
             type: "string",
           },
+          stop_reason: {
+            enum: ["duration_limit"],
+            type: "string",
+          },
         },
         required: ["status"],
         type: "object",
