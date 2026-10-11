@@ -13,6 +13,7 @@ export type ConnectionLifecycleSnapshot = {
   readonly episode: { readonly id: string; readonly startedAt: string | null; readonly deadline: string | null } | null;
   readonly connection: { readonly sync: ConnectionConnectionPhase; readonly media: ConnectionConnectionPhase };
   readonly failure: ConnectionFailure | null;
+  readonly episodeEnded?: boolean;
 };
 
 export type ConnectionPorts = { readonly sync: ConnectionSyncClient; readonly media: ConnectionMediaClient };
