@@ -21,7 +21,7 @@ Your backend mints an `AccessGrant` with the server SDK. See the [web quickstart
 client unchanged: it is an opaque signed envelope, so application code does
 not construct or inspect it. `getAccess` may resolve with the fetch `Response`
 that carries the grant or with its decoded JSON; the client validates it and
-fails the join on a non-OK response or a malformed body.
+classifies non-OK responses and rejects malformed bodies.
 
 ```ts
 import { createSpaceClient } from "@q9labsai/chalk-client";
@@ -42,6 +42,8 @@ await client.join({
 uses it for Entrance freshness, scheduled refresh, wake revalidation, and one
 refresh-and-retry after an access rejection. Keep the callback available for
 the full lifetime of the client.
+
+HTTP 408, 425, 429, and 5xx responses, network failures, and provider timeouts are `access.unavailable` (recoverable). Scheduled refresh retries these failures while retaining the current grant. Other non-OK responses (including 401 and 403) and malformed grants are `access.invalid`. Initial join does not automatically retry unavailable Access: show the failure and let the person check their network and try again. Return the `Response` unchanged so Chalk can classify its status; throwing a generic error for every non-OK response loses that distinction.
 
 ## Snapshot store
 

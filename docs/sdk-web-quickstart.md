@@ -74,7 +74,9 @@ Return the grant with `cache-control: no-store`. Your endpoint owns admission an
 
 ## Create the access callback
 
-`GetAccess` receives `{ space, reason }`, where reason is `join`, `refresh`, or `retry`. Return the endpoint's `Response` or decoded grant unchanged; Chalk rejects non-OK or malformed responses.
+`GetAccess` receives `{ space, reason }`, where reason is `join`, `refresh`, or `retry`. Return the endpoint's `Response` or decoded grant unchanged; Chalk classifies non-OK responses and rejects malformed grants.
+
+HTTP 408, 425, 429, and 5xx responses, network failures, and provider timeouts are `access.unavailable` (recoverable). Scheduled refresh retries these failures while retaining the current grant. Other non-OK responses (including 401 and 403) and malformed grants are `access.invalid`. Initial join does not automatically retry unavailable Access: show the failure and let the person check their network and try again. Return the `Response` unchanged so Chalk can classify its status; throwing a generic error for every non-OK response loses that distinction.
 
 ```ts
 // browser/access.ts
