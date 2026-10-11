@@ -404,7 +404,7 @@ export class ExcalidrawCollabEngine {
     });
 
     this.filesSync.handleRemoteScene(reconciled);
-    if (hasUnsubmittedElements) queueMicrotask(() => this.flushNow());
+    if (args.isSnapshot && hasUnsubmittedElements) queueMicrotask(() => this.flushNow());
   }
 
   private requestSnapshot(): void {
