@@ -1022,6 +1022,18 @@ func (q *Queries) LockWebhookTenantState(ctx context.Context, tenantID pgtype.UU
 	return err
 }
 
+const lockWebhookTenantStateForShare = `-- name: LockWebhookTenantStateForShare :exec
+select tenant_id
+from webhook_tenant_state
+where tenant_id = $1
+for share
+`
+
+func (q *Queries) LockWebhookTenantStateForShare(ctx context.Context, tenantID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, lockWebhookTenantStateForShare, tenantID)
+	return err
+}
+
 const rotateWebhookEndpointSecret = `-- name: RotateWebhookEndpointSecret :one
 update webhook_endpoints
 set previous_secret_ciphertext = case when $1::boolean then null else current_secret_ciphertext end,

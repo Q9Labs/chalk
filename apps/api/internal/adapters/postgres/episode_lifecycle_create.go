@@ -132,7 +132,7 @@ func (r EpisodeLifecycleRepository) CreateEpisode(ctx context.Context, input epi
 }
 
 func resolveArtifactPolicyDocument(ctx context.Context, queries *sqlc.Queries, tenantID utilities.ID, space sqlc.Space) ([]byte, error) {
-	policy, err := queries.LockTenantArtifactPolicyForUpdate(ctx, uuid(tenantID))
+	policy, err := queries.LockTenantArtifactPolicyForShare(ctx, uuid(tenantID))
 	if err != nil {
 		return nil, err
 	}

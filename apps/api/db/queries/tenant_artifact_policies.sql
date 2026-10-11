@@ -1,4 +1,4 @@
--- name: LockTenantArtifactPolicyForUpdate :one
+-- name: LockTenantArtifactPolicyForShare :one
 select
     tenants.id::uuid as tenant_id,
     tenant_artifact_policies.transcription_ceiling,
@@ -10,4 +10,4 @@ select
 from tenants
 join tenant_artifact_policies on tenant_artifact_policies.tenant_id = tenants.id
 where tenants.id = sqlc.arg(tenant_id)
-for update of tenants, tenant_artifact_policies;
+for share of tenants, tenant_artifact_policies;

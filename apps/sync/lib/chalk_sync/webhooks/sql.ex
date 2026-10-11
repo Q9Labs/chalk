@@ -5,8 +5,9 @@ defmodule ChalkSync.Webhooks.SQL do
     "insert into webhook_tenant_state (tenant_id) values ($1) on conflict (tenant_id) do nothing"
   end
 
+  # Endpoint mutations take FOR UPDATE; producers only need stable revisions.
   def lock_tenant_state do
-    "select tenant_id from webhook_tenant_state where tenant_id = $1 for update"
+    "select tenant_id from webhook_tenant_state where tenant_id = $1 for share"
   end
 
   def matching_revisions do

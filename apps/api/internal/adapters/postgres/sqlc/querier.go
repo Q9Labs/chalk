@@ -395,7 +395,7 @@ type Querier interface {
 	LockSpacePublicInvite(ctx context.Context, arg LockSpacePublicInviteParams) (SpacePublicInvite, error)
 	LockSpacePublicInviteByHandle(ctx context.Context, handle []byte) (SpacePublicInvite, error)
 	LockSyncEpisodeControlForUpdate(ctx context.Context, arg LockSyncEpisodeControlForUpdateParams) (SyncEpisodeControl, error)
-	LockTenantArtifactPolicyForUpdate(ctx context.Context, tenantID pgtype.UUID) (LockTenantArtifactPolicyForUpdateRow, error)
+	LockTenantArtifactPolicyForShare(ctx context.Context, tenantID pgtype.UUID) (LockTenantArtifactPolicyForShareRow, error)
 	LockTenantExternalOperationForRequest(ctx context.Context, arg LockTenantExternalOperationForRequestParams) (SyncExternalOperation, error)
 	LockTenantMediaPolicyForEpisode(ctx context.Context, id pgtype.UUID) (LockTenantMediaPolicyForEpisodeRow, error)
 	// Dashboard account-bound Space join primitives. These queries are kept
@@ -405,6 +405,7 @@ type Querier interface {
 	LockTenantSpaceForUpdate(ctx context.Context, arg LockTenantSpaceForUpdateParams) (Space, error)
 	LockTenantTranscriptionForUpdate(ctx context.Context, arg LockTenantTranscriptionForUpdateParams) (Transcription, error)
 	LockWebhookTenantState(ctx context.Context, tenantID pgtype.UUID) error
+	LockWebhookTenantStateForShare(ctx context.Context, tenantID pgtype.UUID) error
 	LookupDiagnosticReferenceHMAC(ctx context.Context, arg LookupDiagnosticReferenceHMACParams) ([]LookupDiagnosticReferenceHMACRow, error)
 	LookupDiagnosticReferenceHMACGlobal(ctx context.Context, arg LookupDiagnosticReferenceHMACGlobalParams) ([]LookupDiagnosticReferenceHMACGlobalRow, error)
 	// Alternate reference resolver.

@@ -1,6 +1,6 @@
 import { access } from "node:fs/promises";
 import { join } from "node:path";
-import { createCanvas, Image, type Canvas, type SKRSContext2D } from "@napi-rs/canvas";
+import { createCanvas, Image, Path2D, type Canvas, type SKRSContext2D } from "@napi-rs/canvas";
 import { loadRecordingWhiteboardFiles, parseRecordingWhiteboardStateV1, recordingWhiteboardSceneAppState } from "@q9labsai/chalk-react/headless";
 import { expandFontFamilies, registerSubsetFamily } from "./fonts.js";
 import type { Rect } from "./scene.js";
@@ -130,13 +130,15 @@ function installDom(): Promise<void> {
       devicePixelRatio: 1,
       FontFace: StubFontFace,
       Image,
+      Path2D,
     });
     for (const [key, value] of globals) {
-      if (key in globalThis && key !== "Image") continue;
+      if (key in globalThis && key !== "Image" && key !== "Path2D") continue;
       Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
     }
     Object.defineProperty(window, "FontFace", { configurable: true, value: StubFontFace });
     Object.defineProperty(window, "Image", { configurable: true, value: Image });
+    Object.defineProperty(window, "Path2D", { configurable: true, value: Path2D });
     Object.defineProperty(window, "EXCALIDRAW_ASSET_PATH", { configurable: true, value: "/" });
   })();
   return domInstalled;
