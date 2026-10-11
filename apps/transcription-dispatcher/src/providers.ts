@@ -82,6 +82,7 @@ export class DeepInfraWhisperProvider implements TranscriptionProvider {
         maxSegments: this.options.policy.maxSegments,
         maxWords: this.options.policy.maxWords,
         maxAudioSeconds: this.options.policy.maxAudioSeconds,
+        ...(request.onTimingRepair === undefined ? {} : { onTimingRepair: request.onTimingRepair }),
       });
       requestIdentity(result, DEEPINFRA_MODEL);
       const observedIdentity = observedDeepInfraIdentity(response, body);
@@ -142,6 +143,7 @@ export class CloudflareWhisperProvider implements TranscriptionProvider {
         maxSegments: this.options.policy.maxSegments,
         maxWords: this.options.policy.maxWords,
         maxAudioSeconds: this.options.policy.maxAudioSeconds,
+        ...(request.onTimingRepair === undefined ? {} : { onTimingRepair: request.onTimingRepair }),
       });
       requestIdentity(result, CLOUDFLARE_MODEL);
       const rootRequestId = root?.request_id ?? root?.requestId;

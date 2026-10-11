@@ -6,6 +6,8 @@ export interface ProviderSchemaFailure {
   actualType: string;
   responseSizeBytes: number;
   providerRequestId: string;
+  startSeconds?: number;
+  endSeconds?: number;
 }
 
 export class ProviderError extends Error {
