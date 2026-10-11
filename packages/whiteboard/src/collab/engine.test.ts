@@ -44,21 +44,47 @@ it.each(["initial snapshot", "recovery snapshot", "remote update"])("submits onl
   const engine = new ExcalidrawCollabEngine({ excalidrawAPI: api, canDraw: true, submitUpdate, sendCursor: vi.fn(), requestSnapshot: async () => undefined, clear: vi.fn(), subscribe: () => () => undefined });
   try {
     if (kind !== "initial snapshot") engine.handleRemoteSnapshot({ sceneId: "scene", elements: [...received, ...old].map(toWireElement) });
-    // There is no user action after the incoming scene; initial debounce has already run.
+    // There is no user action after the incoming scene.
     api.updateScene({ elements: [...received, ...make("edited", 2), ...make("draft")] });
-    if (kind !== "remote update") {
-      engine.handleChange(api.getSceneElementsIncludingDeleted(), restoreAppState({}, null), {});
-      if (kind === "initial snapshot") await vi.advanceTimersByTimeAsync(150);
-    }
+    engine.handleChange(api.getSceneElementsIncludingDeleted(), restoreAppState({}, null), {});
+    if (kind === "initial snapshot") await vi.advanceTimersByTimeAsync(150);
     if (kind === "remote update") engine.handleRemoteData({ sceneId: "scene", syncAll: false, elements: old.map(toWireElement) });
     else engine.handleRemoteSnapshot({ sceneId: "scene", elements: [...received, ...old].map(toWireElement) });
-    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(kind === "remote update" ? 150 : 0);
     expect(submitUpdate).toHaveBeenCalledOnce();
     expect(submitUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ syncAll: false, elements: [expect.objectContaining({ id: "edited", version: 2 }), expect.objectContaining({ id: "draft" })] }));
     engine.handleRemoteSnapshot({ sceneId: "scene", elements: api.getSceneElementsIncludingDeleted().map(toWireElement) });
     engine.handleChange(api.getSceneElementsIncludingDeleted(), restoreAppState({}, null), {});
     await vi.advanceTimersByTimeAsync(150);
     expect(submitUpdate).toHaveBeenCalledOnce();
+  } finally {
+    engine.dispose();
+  }
+});
+
+it("keeps retained local drafts on the existing debounce during incremental remote updates", async () => {
+  const { restoreAppState, restoreElements } = await import("@excalidraw/excalidraw");
+  const { ExcalidrawCollabEngine } = await import("./engine");
+  const { toWireElement } = await import("./wire");
+  vi.useFakeTimers();
+  const api = createCanvas(restoreElements, restoreAppState);
+  const local = restoreElements([{ type: "rectangle", id: "draft", index: "a0", x: 0, y: 0, width: 100, height: 100, version: 1, versionNonce: 1, isDeleted: false }], null);
+  const remote = restoreElements([{ ...local[0], id: "remote", index: "a1" }], null);
+  const submitUpdate = vi.fn(async (input: { sceneId: string }) => ({ operationId: "operation", sceneId: input.sceneId, revision: "2" }));
+  const engine = new ExcalidrawCollabEngine({ excalidrawAPI: api, canDraw: true, submitUpdate, sendCursor: vi.fn(), requestSnapshot: async () => undefined, clear: vi.fn(), subscribe: () => () => undefined });
+  try {
+    engine.handleRemoteSnapshot({ sceneId: "scene", elements: [] });
+    api.updateScene({ elements: local });
+    engine.handleChange(api.getSceneElementsIncludingDeleted(), restoreAppState({}, null), {});
+    await vi.advanceTimersByTimeAsync(50);
+    engine.handleRemoteData({ sceneId: "scene", syncAll: false, elements: remote.map(toWireElement) });
+    await vi.advanceTimersByTimeAsync(50);
+    engine.handleRemoteData({ sceneId: "scene", syncAll: false, elements: remote.map(toWireElement) });
+    await vi.advanceTimersByTimeAsync(49);
+    expect(submitUpdate).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(submitUpdate).toHaveBeenCalledOnce();
+    expect(submitUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ syncAll: false, elements: [expect.objectContaining({ id: "draft" })] }));
   } finally {
     engine.dispose();
   }
