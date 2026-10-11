@@ -145,3 +145,12 @@ limit least($5, 101)`
 	}
 	return items, nil
 }
+
+func (q *providerOperationQueries) LatestProviderObservation(ctx context.Context, arg providerObservationIdentityParams) (providerOperationObservationRow, error) {
+	query := `select ` + providerObservationColumns + `
+from provider_operation_observations
+where tenant_id = $1 and episode_id = $2
+order by incarnation desc, sequence desc
+limit 1`
+	return scanProviderObservation(q.db.QueryRow(ctx, query, arg.TenantID, arg.EpisodeID))
+}

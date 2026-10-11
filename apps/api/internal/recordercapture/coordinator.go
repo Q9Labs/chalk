@@ -271,9 +271,7 @@ func (c *Coordinator) Close(ctx context.Context, force bool) error {
 		c.closed = true
 		return nil
 	}
-	if err := c.checkDeadlineLocked(); err != nil {
-		return err
-	}
+	// The media deadline forbids new capture, not fenced provider cleanup.
 	metadata := c.authority.metadata(c.plan.Revision(), captureplane.OperationCloseCaptureConnection, stableIdempotencyKey(c.authority.CaptureEpoch, c.plan.Revision(), captureplane.OperationCloseCaptureConnection, "connection"))
 	tracks := c.snapshotLocked().Tracks
 	input := captureplane.CloseCaptureConnectionInput{Metadata: metadata, Connection: c.connection.ConnectionReference, Tracks: tracks, Force: force}
@@ -491,8 +489,10 @@ func (c *Coordinator) executeCloseTracks(ctx context.Context, metadata capturepl
 }
 
 func (c *Coordinator) execute(ctx context.Context, operation captureplane.OperationKind, revision captureplane.PlanRevision, key string, input capturesignaling.CommandInput) (capturesignaling.Execution, error) {
-	if err := c.checkDeadlineLocked(); err != nil {
-		return capturesignaling.Execution{}, err
+	if operation != captureplane.OperationCloseCaptureConnection {
+		if err := c.checkDeadlineLocked(); err != nil {
+			return capturesignaling.Execution{}, err
+		}
 	}
 	command := capturesignaling.Command{
 		SignalingHandle: c.authority.SignalingHandle,

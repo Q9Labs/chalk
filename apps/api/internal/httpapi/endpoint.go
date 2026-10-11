@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 )
 
@@ -150,17 +151,25 @@ func (e Endpoint[Request, Response]) RouteContract() APIRouteContract {
 func (e Endpoint[Request, Response]) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	request, err := e.decode(r)
 	if err != nil {
-		writeAPIError(w, e.apiError(err))
+		e.writeFailure(w, r, err)
 		return
 	}
 
 	response, err := e.handle(r.Context(), request)
 	if err != nil {
-		writeAPIError(w, e.apiError(err))
+		e.writeFailure(w, r, err)
 		return
 	}
 
 	e.writeResponse(w, r, response)
+}
+
+func (e Endpoint[Request, Response]) writeFailure(w http.ResponseWriter, r *http.Request, err error) {
+	apiErr := e.apiError(err)
+	if apiErr.Status >= http.StatusInternalServerError {
+		observability.LogHTTPError(r.Context(), e.contract.Method, e.contract.Path, apiErr.Code, err)
+	}
+	writeAPIError(w, apiErr)
 }
 
 func (e Endpoint[Request, Response]) apiError(err error) APIError {

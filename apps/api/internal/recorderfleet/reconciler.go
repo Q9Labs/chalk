@@ -291,6 +291,7 @@ func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes 
 		}
 		needed[providerID] = struct{}{}
 	}
+	healthRefreshed := false
 	for _, providerID := range sortedManagedNodeIDs(state.Nodes) {
 		managed := state.Nodes[providerID]
 		node := nodes[providerID]
@@ -366,9 +367,15 @@ func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes 
 				readyAt := observation.ObservedAt
 				managed.LastReadyAt = &readyAt
 				state.Nodes[providerID] = managed
-				state, err := r.save(ctx, state)
-				return state, Result{Action: ActionNodeReady, ProviderNodeID: providerID}, true, err
+				healthRefreshed = true
 			}
+		}
+	}
+	if healthRefreshed {
+		var err error
+		state, err = r.save(ctx, state)
+		if err != nil {
+			return state, Result{}, true, err
 		}
 	}
 	return state, Result{}, false, nil

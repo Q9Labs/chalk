@@ -2262,11 +2262,13 @@ with selected as (
 			else 'disabled'
 		end::text as transcription_policy,
 		artifacts.recording_id is not null as has_artifact,
-		artifacts.expires_at as artifact_expires_at
+		artifacts.expires_at as artifact_expires_at,
+        coalesce(capture.result_metadata ->> 'capture_stop_reason', '')::text as capture_stop_reason
     from recordings
     left join recording_pipelines pipelines on pipelines.recording_id = recordings.id
     join episodes on episodes.id = recordings.episode_id
     left join recording_artifacts artifacts on artifacts.recording_id = recordings.id
+    left join recording_jobs capture on capture.recording_id = recordings.id and capture.kind = 'capture'
     where recordings.id = any($2::uuid[])
       and recordings.tenant_id = $1
 ), export_job as (
@@ -2289,6 +2291,7 @@ select selected.id as recording_id,
         else 'available'
 	end as source_status,
 	selected.source_expires_at,
+    selected.capture_stop_reason,
 	selected.transcription_policy,
 	case
 		when selected.transcription_policy = 'disabled' then 'none'
@@ -2345,6 +2348,7 @@ type ListRecordingDeferredArtifactStatesRow struct {
 	RecordingID                    pgtype.UUID        `json:"recording_id"`
 	SourceStatus                   string             `json:"source_status"`
 	SourceExpiresAt                pgtype.Timestamptz `json:"source_expires_at"`
+	CaptureStopReason              string             `json:"capture_stop_reason"`
 	TranscriptionPolicy            string             `json:"transcription_policy"`
 	TranscriptionPreparationStatus string             `json:"transcription_preparation_status"`
 	ExportJobID                    pgtype.UUID        `json:"export_job_id"`
@@ -2367,6 +2371,7 @@ func (q *Queries) ListRecordingDeferredArtifactStates(ctx context.Context, arg L
 			&i.RecordingID,
 			&i.SourceStatus,
 			&i.SourceExpiresAt,
+			&i.CaptureStopReason,
 			&i.TranscriptionPolicy,
 			&i.TranscriptionPreparationStatus,
 			&i.ExportJobID,

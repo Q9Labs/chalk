@@ -15,6 +15,7 @@ import (
 var (
 	ErrInvalidRequest        = errors.New("invalid recording capture lifecycle request")
 	ErrAuthorityMismatch     = errors.New("recording capture lifecycle authority mismatch")
+	ErrDeadlineStopPending   = errors.New("recording capture lifecycle deadline stop is pending")
 	ErrEpisodeStopPending    = errors.New("recording capture lifecycle episode stop is pending")
 	ErrRecordingNotFound     = errors.New("recording capture lifecycle recording not found")
 	ErrOperationConflict     = errors.New("recording capture lifecycle operation conflict")

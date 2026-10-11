@@ -317,11 +317,11 @@ func TestRecordingResponseKeepsAvailableSourceWhenExportFailed(t *testing.T) {
 		ID: recordingID, TenantID: recordingID, SpaceID: recordingID, EpisodeID: recordingID,
 		Status: "completed", CreatedAt: sourceExpiresAt, UpdatedAt: sourceExpiresAt,
 	}, recordingpipeline.ArtifactState{
-		SourceStatus: recordingpipeline.SourceStatusAvailable, SourceExpiresAt: &sourceExpiresAt,
+		SourceStatus: recordingpipeline.SourceStatusAvailable, SourceExpiresAt: &sourceExpiresAt, CaptureStopReason: "duration_limit",
 		TranscriptionPolicy: artifactpolicy.TranscriptionOnDemand,
 		ExportStatus:        recordingpipeline.ExportStatusFailed, FailureCode: "render.failed", FailureMessage: "The MP4 export could not be completed.",
 	})
-	if response.Source.Status != string(recordingpipeline.SourceStatusAvailable) || response.Export.Status != string(recordingpipeline.ExportStatusFailed) || response.TranscriptionPolicy != artifactpolicy.TranscriptionOnDemand || response.Export.FailureCode == nil || response.Export.FailureMessage == nil {
+	if response.Source.StopReason != "duration_limit" || response.Source.Status != string(recordingpipeline.SourceStatusAvailable) || response.Export.Status != string(recordingpipeline.ExportStatusFailed) || response.TranscriptionPolicy != artifactpolicy.TranscriptionOnDemand || response.Export.FailureCode == nil || response.Export.FailureMessage == nil {
 		t.Fatalf("source/export state=%+v/%+v", response.Source, response.Export)
 	}
 }

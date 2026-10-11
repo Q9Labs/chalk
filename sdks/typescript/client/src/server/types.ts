@@ -1,3 +1,4 @@
+import type { AccessRefreshRequest } from "./access-refresh.js";
 import type { AccessGrant } from "../access/grant.js";
 
 export type { AccessGrant } from "../access/grant.js";
@@ -330,7 +331,7 @@ export type ChalkServerClient = {
   };
   readonly participants: {
     admit(spaceId: string, episodeId: string, input: AdmitParticipantInput, options?: ChalkIdempotencyOptions): Promise<ParticipantLifecycle>;
-    issueAccess(spaceId: string, episodeId: string, participantId: string, input: IssueAccessGrantInput): Promise<AccessGrant>;
+    issueAccess(spaceId: string, episodeId: string, participantId: string, input: IssueAccessGrantInput, refreshRequest?: AccessRefreshRequest): Promise<AccessGrant>;
     remove(spaceId: string, episodeId: string, participantId: string, input: RemoveParticipantInput, options?: ChalkIdempotencyOptions): Promise<ParticipantRemoval>;
   };
   readonly apiKeys: {

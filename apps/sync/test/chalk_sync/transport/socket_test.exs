@@ -60,6 +60,44 @@ defmodule ChalkSync.Transport.SocketV1Test do
              Client.recv(client)
   end
 
+  test "real class sockets distinguish thirteen normal leaves from twelve TCP drops", %{
+    port: port
+  } do
+    handler = "wire-close-#{System.unique_integer([:positive])}"
+    owner = self()
+
+    :telemetry.attach(
+      handler,
+      [:chalk_sync, :observability, :event],
+      fn _, _, metadata, _ ->
+        if metadata.event == "sync.websocket.closed",
+          do: send(owner, {:wire_closed, metadata.attributes})
+      end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(handler) end)
+    host = identity()
+    participants = for _ <- 1..13, do: %{identity() | episode: host.episode}
+    seed_participants(host, participants)
+    clients = Enum.map(participants, &connect_live(port, &1))
+    on_exit(fn -> Enum.each(clients, &Client.close_tcp/1) end)
+
+    Enum.each(clients, fn client ->
+      Client.close(client)
+      assert_receive {:wire_closed, %{reason: :client_closed, close_kind: :normal}}, 2_000
+    end)
+
+    # Repeat against the real TCP/upgrade transport, not just callback inputs.
+    dropped = Enum.map(Enum.take(participants, 12), &connect_live(port, &1))
+    on_exit(fn -> Enum.each(dropped, &Client.close_tcp/1) end)
+
+    Enum.each(dropped, fn client ->
+      Client.close_tcp(client)
+      assert_receive {:wire_closed, %{reason: :transport_error, close_kind: :abnormal}}, 2_000
+    end)
+  end
+
   defp hello(identity, correlation) do
     token =
       DevTokenVerifier.token(%{

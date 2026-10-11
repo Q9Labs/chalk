@@ -84,10 +84,15 @@ defmodule ChalkSync.Stateholder.Postgres.WebhookObservation do
   def lifecycle(_episode, _lifecycle_intent_id, _decision), do: :ok
 
   defp observe_webhook_production(episode, transition_key, transition) do
+    departure_prefix =
+      if String.ends_with?(transition_key, ":episode.ended"),
+        do: "episode_end:#{episode.episode_id}:participant:",
+        else: ""
+
     case Postgrex.query(
            Database.connection(episode, 1),
            WebhookSQL.production_summary(),
-           [Scope.uuid(episode.tenant_id), transition_key],
+           [Scope.uuid(episode.tenant_id), transition_key, departure_prefix],
            timeout: 1_000
          ) do
       {:ok, %{rows: rows}} ->

@@ -63,7 +63,7 @@ def main():
             raise RuntimeError("DISCORD_WEBHOOK_URL must be a Discord webhook URL")
         notifiers = api("GET", "/v2/notifiers")
         existing = next((item for item in notifiers if item["name"] == "Chalk production Discord"), None)
-        payload = {"name": "Chalk production Discord", "properties": {"discordWebhook": {"discordWebhookUrl": webhook}}}
+        payload = {"name": "Chalk production Discord", "properties": {"customWebhook": {"url": webhook, "body": Path(__file__).with_name("discord-body.tmpl").read_text()}}}
         notifier = api("POST" if existing is None else "PUT", "/v2/notifiers" + ("" if existing is None else "/" + existing["id"]), payload)
         notifier_ids = [notifier["id"]]
     existing_monitors = {item["name"]: item for item in api("GET", "/v2/monitors")}

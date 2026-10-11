@@ -21,7 +21,8 @@ fi
 
 if command -v go >/dev/null 2>&1; then
   # The transitive resolver currently crashes on the Python requirements file.
-  exec go run github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.3.8 "${args[@]}"
+  # Releases before 2.6.0 read only the first document of pnpm-lock.yaml.
+  exec go run github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.6.0 "${args[@]}"
 fi
 
 echo "OSV-Scanner is required. Install osv-scanner or Go, then rerun pnpm run security:osv." >&2

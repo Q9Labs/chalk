@@ -6,7 +6,7 @@ cd "${repository_root}/apps/api"
 if [[ -d /usr/local/go/bin ]]; then
   export PATH="/usr/local/go/bin:${PATH}"
 fi
-export GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN:-go1.25.11+auto}"
+export GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN:-go1.26.9+auto}"
 
 if [[ "${CHALK_EPISODE_SNAPSHOT_REPAIR_PROOF_CHILD:-0}" != "1" ]]; then
   export CHALK_GATE_POSTGRES_MIGRATION_TARGET=20260809160000

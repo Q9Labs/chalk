@@ -22,6 +22,10 @@ overrides:
   "@tanstack/start-server-core": 1.169.16
   "@vitest/browser": ^4.1.11
   "@xmldom/xmldom": ^0.8.15
+  compression: 1.8.2
+  seroval: 1.6.3
+  source-map-js: 1.2.2
+  tinypool: 2.1.2
   browserslist: ^4.28.7
   defu: ^6.1.7
   dompurify: ^3.4.16
@@ -29,7 +33,7 @@ overrides:
   fast-uri: ^3.1.8
   h3: ^2.0.1-rc.18
   h3-v2: npm:h3@^2.0.1-rc.20
-  image-size: 2.0.2
+  image-size: 2.0.3
   immutable: ^4.3.9
   js-yaml: ^4.3.2
   lodash-es: ^4.18.1
@@ -44,8 +48,8 @@ overrides:
   postcss: ^8.5.18
   react: 19.2.7
   react-dom: 19.2.7
-  sharp: ^0.35.4
-  shell-quote: ^1.9.0
+  sharp: 0.35.5
+  shell-quote: 1.11.0
   tar: ^7.5.21
   toml: ^4.2.0
   turbo: ^2.9.14
@@ -56,7 +60,6 @@ overrides:
   ws@>=8.0.0 <8.21.0: ^8.21.0
 
 patchedDependencies:
-  image-size@2.0.2: patches/image-size@2.0.2.patch
   minimatch@3.1.5: patches/minimatch@3.1.5.patch
   minimatch@5.1.9: patches/minimatch@5.1.9.patch
 

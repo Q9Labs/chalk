@@ -122,7 +122,8 @@ func (r RecordingPipelineRepository) GetArtifactStates(ctx context.Context, tena
 func mapDeferredRecordingArtifactState(row sqlc.ListRecordingDeferredArtifactStatesRow) recordingpipeline.ArtifactState {
 	state := recordingpipeline.ArtifactState{
 		SourceStatus: recordingpipeline.SourceStatus(row.SourceStatus), ExportStatus: recordingpipeline.ExportStatus(row.ExportStatus),
-		SourceExpiresAt: nullableTimestamp(row.SourceExpiresAt), Retryable: row.Retryable,
+		CaptureStopReason: row.CaptureStopReason,
+		SourceExpiresAt:   nullableTimestamp(row.SourceExpiresAt), Retryable: row.Retryable,
 		TranscriptionPolicy:            artifactpolicy.TranscriptionMode(row.TranscriptionPolicy),
 		TranscriptionPreparationStatus: recordingpipeline.TranscriptionPreparationStatus(row.TranscriptionPreparationStatus),
 		FailureCode:                    row.FailureCode, FailureMessage: row.FailureMessage,

@@ -1124,6 +1124,7 @@ export type RecordingId = typeof RecordingIdSchema.Type;
 export const RecordingSourceSchema = Schema.Struct({
   expires_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
   status: Schema.Literals(["pending", "available", "failed", "expired"]),
+  stop_reason: Schema.optional(Schema.Literal("duration_limit")),
 });
 export type RecordingSource = typeof RecordingSourceSchema.Type;
 
@@ -4074,6 +4075,25 @@ export const EpisodeCapacityExceededErrorSchema = EpisodeCapacityExceededErrorWi
   }),
 );
 
+export class EpisodeControlBusyError extends Schema.TaggedErrorClass<EpisodeControlBusyError>()("EpisodeControlBusyError", {
+  error: Schema.Struct({
+    code: Schema.Literal("episode.control_busy"),
+    message: Schema.String,
+  }),
+}) {}
+export const EpisodeControlBusyErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("episode.control_busy"),
+    message: Schema.String,
+  }),
+});
+export const EpisodeControlBusyErrorSchema = EpisodeControlBusyErrorWireSchema.pipe(
+  Schema.decodeTo(EpisodeControlBusyError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "EpisodeControlBusyError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class EpisodeInvalidIdError extends Schema.TaggedErrorClass<EpisodeInvalidIdError>()("EpisodeInvalidIdError", {
   error: Schema.Struct({
     code: Schema.Literal("episode.invalid_id"),
@@ -4621,6 +4641,25 @@ export const JourneyLedgerUnavailableErrorWireSchema = Schema.Struct({
 export const JourneyLedgerUnavailableErrorSchema = JourneyLedgerUnavailableErrorWireSchema.pipe(
   Schema.decodeTo(JourneyLedgerUnavailableError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "JourneyLedgerUnavailableError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class MediaConnectionNotFoundError extends Schema.TaggedErrorClass<MediaConnectionNotFoundError>()("MediaConnectionNotFoundError", {
+  error: Schema.Struct({
+    code: Schema.Literal("media.connection_not_found"),
+    message: Schema.String,
+  }),
+}) {}
+export const MediaConnectionNotFoundErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("media.connection_not_found"),
+    message: Schema.String,
+  }),
+});
+export const MediaConnectionNotFoundErrorSchema = MediaConnectionNotFoundErrorWireSchema.pipe(
+  Schema.decodeTo(MediaConnectionNotFoundError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "MediaConnectionNotFoundError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -6340,6 +6379,7 @@ export const AddCloudflareSFUTracksErrorSchema = Schema.Union([
   AccessUnauthenticatedErrorSchema,
   EpisodeInvalidIdErrorSchema,
   EpisodeNotFoundErrorSchema,
+  MediaConnectionNotFoundErrorSchema,
   MediaUnavailableErrorSchema,
   ParticipantInvalidIdErrorSchema,
   RequestInvalidErrorSchema,
@@ -6428,6 +6468,7 @@ export const CloseCloudflareSFUTracksErrorSchema = Schema.Union([
   AccessUnauthenticatedErrorSchema,
   EpisodeInvalidIdErrorSchema,
   EpisodeNotFoundErrorSchema,
+  MediaConnectionNotFoundErrorSchema,
   MediaUnavailableErrorSchema,
   ParticipantInvalidIdErrorSchema,
   RequestInvalidErrorSchema,
@@ -6725,6 +6766,7 @@ export const EndEpisodeErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
   EpisodeCapacityExceededErrorSchema,
+  EpisodeControlBusyErrorSchema,
   EpisodeInvalidIdErrorSchema,
   EpisodeNotActiveErrorSchema,
   EpisodeNotFoundErrorSchema,
@@ -7144,6 +7186,7 @@ export const ListCloudflareSFUPublicationsErrorSchema = Schema.Union([
   AccessUnauthenticatedErrorSchema,
   EpisodeInvalidIdErrorSchema,
   EpisodeNotFoundErrorSchema,
+  MediaConnectionNotFoundErrorSchema,
   MediaUnavailableErrorSchema,
   ParticipantInvalidIdErrorSchema,
   RequestRateLimitedErrorSchema,
@@ -7453,6 +7496,7 @@ export type RegisterError = typeof RegisterErrorSchema.Type;
 export const RemoveEpisodeParticipantErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
+  EpisodeControlBusyErrorSchema,
   EpisodeInvalidIdErrorSchema,
   EpisodeNotActiveErrorSchema,
   EpisodeNotFoundErrorSchema,
@@ -7495,6 +7539,7 @@ export const RenegotiateCloudflareSFUErrorSchema = Schema.Union([
   AccessUnauthenticatedErrorSchema,
   EpisodeInvalidIdErrorSchema,
   EpisodeNotFoundErrorSchema,
+  MediaConnectionNotFoundErrorSchema,
   MediaUnavailableErrorSchema,
   ParticipantInvalidIdErrorSchema,
   RequestInvalidErrorSchema,
@@ -7649,6 +7694,7 @@ export type RotateWebhookEndpointSecretError = typeof RotateWebhookEndpointSecre
 export const SetEpisodeDeadlineErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
+  EpisodeControlBusyErrorSchema,
   EpisodeInvalidIdErrorSchema,
   EpisodeNotActiveErrorSchema,
   EpisodeNotFoundErrorSchema,

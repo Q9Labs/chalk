@@ -1,6 +1,8 @@
 import { Deferred, Effect, Fiber } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { createSpaceClientForPlatform } from "../space-client/space-client";
+
 import { parseParsedAccessGrant } from "../access/grant";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
 import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type ConnectionLifecycleCapability } from "./lifecycle";
@@ -119,7 +121,19 @@ function credential(audience: "chalk-sync" | "chalk-media"): string {
 describe("ConnectionLifecycle self-healing", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it.each(["scheduled", "join", "participant_inactive", "stale_participant_generation", "episode_ended", "recovery", "recovery_with_hung_sync"] as const)("records %s evidence before teardown", async (reason) => {
+  it.each(["participant_inactive", "episode_ended"] as const)("finishes %s in left without failure evidence", async (reason) => {
+    const f = recoveryFixture();
+    const record = vi.fn();
+    f.options.recordReconnect = record;
+    await f.run(async (lifecycle) => {
+      f.failSync(reason);
+      await vi.waitFor(() => expect(lifecycle.getSnapshot().state).toBe("left"));
+      expect(lifecycle.getSnapshot().failure).toBeNull();
+      expect(record).not.toHaveBeenCalledWith(expect.objectContaining({ code: "reconnect.terminal_failure" }));
+    });
+  });
+
+  it.each(["scheduled", "join", "stale_participant_generation", "recovery", "recovery_with_hung_sync"] as const)("records %s evidence before teardown", async (reason) => {
     const f = recoveryFixture();
     const events: string[] = [];
     const record = vi.fn((event: { code: string }) => {
@@ -152,8 +166,8 @@ describe("ConnectionLifecycle self-healing", () => {
         await f.tick(reason === "scheduled" ? 3_600_000 : reason === "recovery" ? 250 : 1_000);
       } else if (reason !== "join") f.failSync(reason);
       await vi.waitFor(() => expect(lifecycle.getSnapshot().state).toBe("failed"));
-      const code = reason === "episode_ended" ? "episode_ended" : "invalid_access";
-      expect(record).toHaveBeenCalledWith(expect.objectContaining({ code: "reconnect.terminal_failure", attributes: { code, terminal_reason: reason === "join" ? "participant_inactive" : ["participant_inactive", "stale_participant_generation", "episode_ended"].includes(reason) ? reason : code } }));
+      const code = "invalid_access";
+      expect(record).toHaveBeenCalledWith(expect.objectContaining({ code: "reconnect.terminal_failure", attributes: { code, terminal_reason: reason === "join" ? "participant_inactive" : reason === "stale_participant_generation" ? reason : code } }));
       const teardownsBeforeTerminal = reason === "recovery_with_hung_sync" || reason === "join" ? 1 : 0;
       expect(events.slice(teardownsBeforeTerminal, teardownsBeforeTerminal + 2)).toEqual(["evidence", "stop"]);
     });
@@ -185,6 +199,44 @@ describe("ConnectionLifecycle self-healing", () => {
     expect(await Effect.runPromise(retained.lifecycle.runPortCommand(operation).pipe(Effect.result))).toMatchObject({ _tag: "Failure", failure: { code: "invalid_state" } });
     expect(operation).not.toHaveBeenCalled();
     expect(f.access).toHaveBeenCalledTimes(calls);
+  });
+
+  it("keeps a live Participant through one HTTP 503 scheduled refresh and emits no error", async () => {
+    const f = recoveryFixture();
+    const access = parseParsedAccessGrant(opaqueAccessGrant(1));
+    const response = () =>
+      new Response(
+        JSON.stringify({
+          ...opaqueAccessGrant(1),
+          sync: { token: access.sync.token, expires_at: new Date(f.clock.now() + 120_000).toISOString() },
+          media: { token: access.media.token, expires_at: new Date(f.clock.now() + 120_000).toISOString(), provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:test" } },
+        }),
+      );
+    const getAccess = vi.fn(async () => response());
+    const client = createSpaceClientForPlatform({ space: "space-1", getAccess }, { ...f.platform, dependencies: f.dependencies });
+    const error = vi.fn();
+    const left = vi.fn();
+    client.on("error", error);
+    client.on("participantLeft", left);
+    try {
+      await client.join({ microphone: false, camera: false });
+      getAccess.mockImplementationOnce(async () => new Response(null, { status: 503 }));
+      await f.wait(60_000);
+      await f.tick(60_000);
+      await vi.waitFor(() => expect(getAccess).toHaveBeenCalledTimes(2));
+      expect(client.getSnapshot().connection.status).toBe("live");
+      expect(error).not.toHaveBeenCalled();
+      expect(left).not.toHaveBeenCalled();
+      await f.wait(5_000);
+      await f.tick(5_000);
+      await vi.waitFor(() => expect(getAccess).toHaveBeenCalledTimes(3));
+      await f.wait(60_000);
+      expect(client.getSnapshot().connection.status).toBe("live");
+      expect(error).not.toHaveBeenCalled();
+      expect(left).not.toHaveBeenCalled();
+    } finally {
+      client.dispose();
+    }
   });
 
   it("backs off scheduled refreshes and resets after success", async () => {

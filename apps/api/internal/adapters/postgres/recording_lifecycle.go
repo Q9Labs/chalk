@@ -98,8 +98,19 @@ func (r RecordingLifecycleRepository) publish(ctx context.Context, authority rec
 	if err != nil {
 		return recordinglifecycle.Publication{}, recordingLifecycleRepositoryError("lock authority", err)
 	}
+	// Worker timers and API wall time may differ slightly. A callback exactly
+	// at the sealed deadline can retry, but must not authorize an early stop.
+	if operationName == recordingCaptureStoppedOperation && !authorityRow.CaptureDeadlineReached && occurredAt.Equal(timestamp(authorityRow.CaptureDeadline)) {
+		return recordinglifecycle.Publication{}, recordinglifecycle.ErrDeadlineStopPending
+	}
 	if operationName == recordingCaptureStoppedOperation && authorityRow.EpisodeStopPending {
 		return recordinglifecycle.Publication{}, recordinglifecycle.ErrEpisodeStopPending
+	}
+	deadlineStop := operationName == recordingCaptureStoppedOperation && authorityRow.CaptureDeadlineReached && !occurredAt.Before(timestamp(authorityRow.CaptureDeadline))
+	if deadlineStop {
+		if err := queries.SetRecordingCaptureDurationLimit(ctx, sqlc.SetRecordingCaptureDurationLimitParams{JobID: ids.jobID, TenantID: ids.tenantID}); err != nil {
+			return recordinglifecycle.Publication{}, recordingLifecycleRepositoryError("record capture duration limit", err)
+		}
 	}
 	// Episode end already publishes the stopped state in Sync. A fresh capture
 	// authority may acknowledge that state without creating another operation.
@@ -126,7 +137,6 @@ func (r RecordingLifecycleRepository) publish(ctx context.Context, authority rec
 		}
 		return publication, nil
 	}
-	deadlineStop := operationName == recordingCaptureStoppedOperation && authorityRow.CaptureDeadlineReached && !occurredAt.Before(timestamp(authorityRow.CaptureDeadline))
 	var payload []byte
 	if deadlineStop {
 		payload, err = json.Marshal(deadlineStoppedPayload{RecordingID: authority.RecordingID, DeadlineAtMillis: timestamp(authorityRow.CaptureDeadline).UnixMilli(), CaptureEpoch: authority.CaptureEpoch})

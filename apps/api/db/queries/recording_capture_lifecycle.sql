@@ -144,3 +144,8 @@ insert into sync_external_operations (
 )
 on conflict (tenant_id, episode_id, operation_name, request_key) do nothing
 returning *;
+
+-- name: SetRecordingCaptureDurationLimit :exec
+update recording_jobs
+set result_metadata = result_metadata || '{"capture_stop_reason":"duration_limit"}'::jsonb
+where id = sqlc.arg(job_id) and tenant_id = sqlc.arg(tenant_id) and kind = 'capture';
