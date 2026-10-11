@@ -383,6 +383,12 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
          {:request_snapshot, %{request_id: request_id}},
          %{phase: :live, identity: identity} = state
        ) do
+    state = %{
+      state
+      | pending_snapshot_requests:
+          Enum.reject(state.pending_snapshot_requests, &(&1.request_id == request_id))
+    }
+
     case Episode.snapshot(identity, request_id) do
       {:ok, [first | remaining]} ->
         snapshot = %{
@@ -394,13 +400,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
         }
 
         next =
-          %{
-            state
-            | phase: :recovering,
-              snapshot: snapshot,
-              pending_snapshot_requests:
-                Enum.reject(state.pending_snapshot_requests, &(&1.request_id == request_id))
-          }
+          %{state | phase: :recovering, snapshot: snapshot}
           |> observe_operation("request_snapshot", "accepted")
 
         Diagnostics.record(:whiteboard_recovery_started, identity,

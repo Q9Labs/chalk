@@ -22,13 +22,14 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     end
 
     def snapshot(_identity) do
-      {:ok,
-       %{
-         scene_id: "10000000-0000-4000-8000-000000000001",
-         revision: 4,
-         elements: [],
-         app_state: nil
-       }}
+      Process.get(:whiteboard_snapshot_failure) ||
+        {:ok,
+         %{
+           scene_id: "10000000-0000-4000-8000-000000000001",
+           revision: 4,
+           elements: [],
+           app_state: nil
+         }}
     end
 
     def read_after(_identity, scene_id, 4) do
@@ -86,6 +87,20 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     assert finished.phase == :live
     assert {:ok, ^finished} = SocketWhiteboardV1.handle_info(:whiteboard_snapshot_next, finished)
     refute_received :whiteboard_snapshot_next
+  end
+
+  test "does not retry a queued request whose live-phase copy already failed" do
+    state = recovering_state()
+    request = %{"type" => "request_snapshot", "request_id" => "snapshot-request-0002"}
+    assert {:ok, queued} = receive_frame(request, state)
+    assert {:ok, between} = receive_frame(snapshot_ack(state), queued)
+    assert_received :whiteboard_snapshot_next
+    Process.put(:whiteboard_snapshot_failure, {:retryable, :storage_unavailable})
+    assert {:push, {:text, encoded}, failed} = receive_frame(request, between)
+    assert JSON.decode!(encoded)["code"] == "storage_unavailable"
+    Process.delete(:whiteboard_snapshot_failure)
+    assert failed.pending_snapshot_requests == []
+    assert {:ok, ^failed} = SocketWhiteboardV1.handle_info(:whiteboard_snapshot_next, failed)
   end
 
   test "bounds deferred snapshots and keeps the active transfer intact at capacity" do
