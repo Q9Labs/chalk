@@ -1,13 +1,48 @@
 package observability
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 )
+
+type requestLoggerContextKey struct{}
+
+// LogHTTPError retains the cause at the HTTP boundary without exposing it in
+// the client response. Transaction-local queries need this even when they do
+// not pass through the instrumented query adapter.
+func LogHTTPError(ctx context.Context, method, route, code string, err error) {
+	logger, _ := ctx.Value(requestLoggerContextKey{}).(*slog.Logger)
+	if logger == nil {
+		logger = slog.Default()
+	}
+	detail := err.Error()
+	var requestErr *url.Error
+	if errors.As(err, &requestErr) {
+		// Transport errors can include credential-bearing URLs.
+		detail = requestErr.Err.Error()
+	}
+	for _, providerErr := range []error{mediaplane.ErrProviderFailed, mediaplane.ErrProviderUnauthorized, mediaplane.ErrProviderRateLimited, mediaplane.ErrEpisodeNotFound} {
+		if errors.Is(err, providerErr) {
+			// Provider response text is untrusted and may echo credentials or
+			// payloads. Keep the typed cause; provider spans retain safe facts.
+			detail = providerErr.Error()
+			break
+		}
+	}
+	if len(detail) > 256 {
+		detail = detail[:256]
+	}
+	logger.ErrorContext(ctx, "http endpoint failed", "event", "http.failure",
+		"method", method, "route", route, "code", code, "error", detail)
+}
 
 type responseRecorder struct {
 	http.ResponseWriter
@@ -29,6 +64,14 @@ func RequestMiddleware(logger *slog.Logger, configs ...RequestLogConfig) func(ht
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := context.WithValue(r.Context(), requestLoggerContextKey{}, logger)
+			// When wrapped around ServeMux, the child chi router would otherwise
+			// create a context only its cloned request can see. Share one so the
+			// outer request log retains the matched pattern after dispatch.
+			if chi.RouteContext(ctx) == nil {
+				ctx = context.WithValue(ctx, chi.RouteCtxKey, chi.NewRouteContext())
+			}
+			r = r.WithContext(ctx)
 			startedAt := time.Now()
 			recorder := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
 

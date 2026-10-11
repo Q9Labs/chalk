@@ -9892,7 +9892,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Conflict",
-            "x-chalk-error-codes": ["episode.not_active", "request.idempotency_conflict"],
+            "x-chalk-error-codes": ["episode.control_busy", "episode.not_active", "request.idempotency_conflict"],
           },
           413: {
             content: {
@@ -10077,7 +10077,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Conflict",
-            "x-chalk-error-codes": ["episode.capacity_exceeded", "episode.not_active", "request.idempotency_conflict"],
+            "x-chalk-error-codes": ["episode.capacity_exceeded", "episode.control_busy", "episode.not_active", "request.idempotency_conflict"],
           },
           429: {
             content: {
@@ -10623,7 +10623,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Not Found",
-            "x-chalk-error-codes": ["episode.not_found"],
+            "x-chalk-error-codes": ["episode.not_found", "media.connection_not_found"],
           },
           429: {
             content: {
@@ -10787,7 +10787,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Not Found",
-            "x-chalk-error-codes": ["episode.not_found"],
+            "x-chalk-error-codes": ["episode.not_found", "media.connection_not_found"],
           },
           413: {
             content: {
@@ -10976,7 +10976,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Not Found",
-            "x-chalk-error-codes": ["episode.not_found"],
+            "x-chalk-error-codes": ["episode.not_found", "media.connection_not_found"],
           },
           413: {
             content: {
@@ -11157,7 +11157,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Not Found",
-            "x-chalk-error-codes": ["episode.not_found"],
+            "x-chalk-error-codes": ["episode.not_found", "media.connection_not_found"],
           },
           413: {
             content: {
@@ -11360,7 +11360,7 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
               },
             },
             description: "Conflict",
-            "x-chalk-error-codes": ["episode.not_active", "participant.generation_mismatch", "participant.not_active", "request.idempotency_conflict"],
+            "x-chalk-error-codes": ["episode.control_busy", "episode.not_active", "participant.generation_mismatch", "participant.not_active", "request.idempotency_conflict"],
           },
           413: {
             content: {
