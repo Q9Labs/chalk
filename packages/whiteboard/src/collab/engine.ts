@@ -381,16 +381,21 @@ export class ExcalidrawCollabEngine {
     if (replacingScene) excalidrawAPI.history.clear();
     const local = replacingScene ? [] : excalidrawAPI.getSceneElementsIncludingDeleted();
     const remoteElements = args.remoteElements as readonly ExcalidrawElement[];
-    const restoredRemote = restoreElements(remoteElements, local);
+    const restoredRemote = restoreElements(remoteElements, null);
     const remoteForReconcile = toReconcileRemoteElements(restoredRemote);
     const reconciled = reconcileElements(local, remoteForReconcile, excalidrawAPI.getAppState());
 
-    // Echo prevention: update before applying so onChange sees it and bails.
-    this.lastBroadcastedOrReceivedElementsHash = hashElementsVersion(reconciled);
-    this.broadcastedElementVersions.clear();
-    for (const el of reconciled) {
-      this.broadcastedElementVersions.set(el.id, el.version);
+    // A reconciled local draft is not evidence that the remote scene received it.
+    if (args.isSnapshot) this.broadcastedElementVersions.clear();
+    const remoteById = new Map(restoredRemote.map((element) => [element.id, element]));
+    for (const element of reconciled) {
+      const remote = remoteById.get(element.id);
+      if (remote?.version === element.version && remote.versionNonce === element.versionNonce) {
+        this.broadcastedElementVersions.set(element.id, element.version);
+      }
     }
+    const hasUnsubmittedElements = reconciled.some((element) => element.version > (this.broadcastedElementVersions.get(element.id) ?? 0));
+    this.lastBroadcastedOrReceivedElementsHash = hasUnsubmittedElements ? 0 : hashElementsVersion(reconciled);
 
     excalidrawAPI.updateScene({
       elements: reconciled,
@@ -399,6 +404,7 @@ export class ExcalidrawCollabEngine {
     });
 
     this.filesSync.handleRemoteScene(reconciled);
+    if (hasUnsubmittedElements) queueMicrotask(() => this.flushNow());
   }
 
   private requestSnapshot(): void {
