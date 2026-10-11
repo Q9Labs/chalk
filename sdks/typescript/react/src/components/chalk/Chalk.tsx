@@ -238,7 +238,7 @@ function SpaceSurface(props: ChalkProps & { readonly feedbackRootRef: React.RefO
   const [settingsInitialSection, setSettingsInitialSection] = useState<"appearance" | undefined>();
   const [infoOpen, setInfoOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [commandError, setCommandError] = useState<string | null>(null);
+  const [commandError, setCommandError] = useState<string | null>(() => (connection.lastError?.recoverable && connection.lastError.code.startsWith("media.") ? connection.lastError.message : null));
   const [settings, setSettings] = useState<SettingsDialogValue>(() => createSettings(self.displayName ?? "", props.layout ?? "focus", props.theme?.skin ?? "classic", props.theme?.palette ?? (props.resolvedColorScheme === "dark" ? "warm-charcoal" : "light"), props.theme?.texture ?? "none"));
   const resolvedSkin: ThemeSkin = props.theme?.skin ?? "classic";
   const resolvedPalette: ThemePalette = props.theme?.palette ?? (props.resolvedColorScheme === "dark" ? "warm-charcoal" : "light");

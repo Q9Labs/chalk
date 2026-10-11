@@ -65,7 +65,10 @@ export const makeMediaController = (connection: ConnectionLifecycleCapability, s
       fork,
       diagnostics,
     );
-    yield* connection.setInitialMedia((intent) => controller.captureInitial(intent));
+    yield* connection.setInitialMedia(
+      (intent) => controller.captureInitial(intent),
+      () => controller.initialIntent(),
+    );
     yield* Effect.addFinalizer(() => Effect.sync(() => controller.dispose()));
     controller.refreshDevicesInBackground();
     return controller;
@@ -169,14 +172,23 @@ class MediaControllerRuntime implements MediaControllerEffects {
     );
   };
 
-  captureInitial(_intent: Readonly<{ microphone: boolean; camera: boolean }>): Effect.Effect<MediaStream, unknown> {
-    if (!this.#intent.microphone && !this.#intent.camera) return Effect.succeed(streamFromTracks([]));
-    return foreign(() => this.#selection.getUserMedia({ audio: this.#intent.microphone, video: this.#intent.camera })).pipe(
+  initialIntent(): Readonly<{ microphone: boolean; camera: boolean }> {
+    return { ...this.#intent };
+  }
+
+  captureInitial(intent: Readonly<{ microphone: boolean; camera: boolean }>): Effect.Effect<MediaStream, unknown> {
+    if (!intent.microphone && !intent.camera) {
+      this.#intent = { microphone: this.#tracks.has("microphone"), camera: this.#tracks.has("camera") };
+      this.#publish();
+      return Effect.succeed(streamFromTracks([...this.#tracks.values()]));
+    }
+    return foreign(() => this.#selection.getUserMedia({ audio: intent.microphone, video: intent.camera })).pipe(
       Effect.flatMap((stream) =>
-        Effect.try({ try: () => selectInitialTracks(stream, this.#intent), catch: (cause) => cause }).pipe(
+        Effect.try({ try: () => selectInitialTracks(stream, intent), catch: (cause) => cause }).pipe(
           Effect.tap((tracks) =>
             Effect.sync(() => {
               for (const [source, track] of tracks) this.#tracks.set(source, track);
+              this.#intent = { microphone: this.#tracks.has("microphone"), camera: this.#tracks.has("camera") };
               this.#publish();
             }),
           ),
