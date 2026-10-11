@@ -898,9 +898,14 @@ func newWhiteboardState(snapshot *WhiteboardSnapshotFact) (*whiteboardState, err
 	if snapshot.SceneID == "" || snapshot.Revision < 0 || len(snapshot.AppState) == 0 {
 		return nil, fmt.Errorf("%w: invalid whiteboard snapshot", ErrInvalidCompletionSource)
 	}
+	appState := append(json.RawMessage(nil), snapshot.AppState...)
+	// A scene that never set shared app state is stored as SQL NULL; the Render accepts only an object.
+	if bytes.Equal(bytes.TrimSpace(appState), []byte("null")) {
+		appState = json.RawMessage(`{}`)
+	}
 	state := &whiteboardState{
 		SceneID: snapshot.SceneID, Revision: snapshot.Revision, Presenting: snapshot.Presenting,
-		AppState: append(json.RawMessage(nil), snapshot.AppState...), Elements: make(map[string]whiteboardElementWire, len(snapshot.Elements)),
+		AppState: appState, Elements: make(map[string]whiteboardElementWire, len(snapshot.Elements)),
 	}
 	for _, raw := range snapshot.Elements {
 		element, err := decodeWhiteboardElement(raw)
