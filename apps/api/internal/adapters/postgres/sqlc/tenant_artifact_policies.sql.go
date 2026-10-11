@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const lockTenantArtifactPolicyForUpdate = `-- name: LockTenantArtifactPolicyForUpdate :one
+const lockTenantArtifactPolicyForShare = `-- name: LockTenantArtifactPolicyForShare :one
 select
     tenants.id::uuid as tenant_id,
     tenant_artifact_policies.transcription_ceiling,
@@ -23,10 +23,10 @@ select
 from tenants
 join tenant_artifact_policies on tenant_artifact_policies.tenant_id = tenants.id
 where tenants.id = $1
-for update of tenants, tenant_artifact_policies
+for share of tenants, tenant_artifact_policies
 `
 
-type LockTenantArtifactPolicyForUpdateRow struct {
+type LockTenantArtifactPolicyForShareRow struct {
 	TenantID                   pgtype.UUID `json:"tenant_id"`
 	TranscriptionCeiling       string      `json:"transcription_ceiling"`
 	TranscriptionDefaultMode   string      `json:"transcription_default_mode"`
@@ -36,9 +36,9 @@ type LockTenantArtifactPolicyForUpdateRow struct {
 	SourceWindowSeconds        int64       `json:"source_window_seconds"`
 }
 
-func (q *Queries) LockTenantArtifactPolicyForUpdate(ctx context.Context, tenantID pgtype.UUID) (LockTenantArtifactPolicyForUpdateRow, error) {
-	row := q.db.QueryRow(ctx, lockTenantArtifactPolicyForUpdate, tenantID)
-	var i LockTenantArtifactPolicyForUpdateRow
+func (q *Queries) LockTenantArtifactPolicyForShare(ctx context.Context, tenantID pgtype.UUID) (LockTenantArtifactPolicyForShareRow, error) {
+	row := q.db.QueryRow(ctx, lockTenantArtifactPolicyForShare, tenantID)
+	var i LockTenantArtifactPolicyForShareRow
 	err := row.Scan(
 		&i.TenantID,
 		&i.TranscriptionCeiling,

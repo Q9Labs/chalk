@@ -35,7 +35,12 @@ func (m webhookCommitMetric) Record(ctx context.Context) {
 func fanoutWebhookEvent(ctx context.Context, tx pgx.Tx, production webhookProduction) (webhookCommitMetric, error) {
 	queries := sqlc.New(tx)
 	tenantID := production.TenantID
-	if err := lockWebhookTenant(ctx, queries, tenantID); err != nil {
+	// Producers only read endpoint revisions. Share their fence with other
+	// producers; endpoint mutations keep the exclusive Tenant lock.
+	if err := queries.EnsureWebhookTenantState(ctx, uuid(tenantID)); err != nil {
+		return webhookCommitMetric{}, err
+	}
+	if err := queries.LockWebhookTenantStateForShare(ctx, uuid(tenantID)); err != nil {
 		return webhookCommitMetric{}, err
 	}
 	targets, err := queries.ListMatchingWebhookTargets(ctx, sqlc.ListMatchingWebhookTargetsParams{TenantID: uuid(tenantID), ApiVersion: webhooks.APIVersion, EventName: production.EventName})
