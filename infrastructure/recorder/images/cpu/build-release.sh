@@ -61,6 +61,7 @@ node "$script_root/relocate-renderer.mjs" "$release_root/renderer" "$source_root
 rm -rf -- "$release_root/renderer/dist"
 install -d "$release_root/renderer/dist"
 cp -a "$source_root/apps/recording-renderer/dist/node" "$release_root/renderer/dist/node"
+node --experimental-import-meta-resolve "$script_root/check-runtime-imports.mjs" "$release_root/renderer"
 jq -cS -n \
   --arg release_id "$release_id" \
   --arg source_commit "$source_commit" \
