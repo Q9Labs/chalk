@@ -212,6 +212,9 @@ export const webhookEventSchemaV1 = {
         left_at: {
           $ref: "#/$defs/nullableTimestamp",
         },
+        reason: {
+          enum: ["episode_ended"],
+        },
       },
       additionalProperties: true,
     },
