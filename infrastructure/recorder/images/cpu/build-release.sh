@@ -29,7 +29,7 @@ fi
 
 script_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 "$script_root/prepare-builder.sh"
-export PATH="/opt/chalk-recorder/toolchains/go-1.25.13/bin:/opt/chalk-recorder/toolchains/node-22.23.2/bin:$PATH"
+export PATH="/opt/chalk-recorder/toolchains/go-1.26.9/bin:/opt/chalk-recorder/toolchains/node-22.23.2/bin:$PATH"
 source_commit="$(git -C "$source_root" rev-parse HEAD)"
 [[ "$source_commit" =~ ^[0-9a-f]{40}$ ]] || { echo "source checkout has no full Git commit identity" >&2; exit 1; }
 source_tree_sha256="$(
@@ -65,7 +65,7 @@ jq -cS -n \
   --arg release_id "$release_id" \
   --arg source_commit "$source_commit" \
   --arg source_tree_sha256 "$source_tree_sha256" \
-  '{schema_version:"chalk_recorder_cpu_build.v1",release_id:$release_id,source_commit:$source_commit,source_tree_sha256:$source_tree_sha256,go_version:"1.25.13",node_version:"22.23.2",pnpm_version:"12.8.1",encoder:"libx264",export_renderer:"native"}' \
+  '{schema_version:"chalk_recorder_cpu_build.v1",release_id:$release_id,source_commit:$source_commit,source_tree_sha256:$source_tree_sha256,go_version:"1.26.9",node_version:"22.23.2",pnpm_version:"12.8.1",encoder:"libx264",export_renderer:"native"}' \
   >"$release_root/build-info.json"
 
 install -d "$(dirname -- "$output_path")"

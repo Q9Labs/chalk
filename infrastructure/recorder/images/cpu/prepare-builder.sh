@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-go_version="1.25.13"
-go_archive_sha256="39042a078ea9ceebe3ecda4a7188f0f5b96e14a071d27923ba7f40b456e85ae3"
+go_version="1.26.9"
+go_archive_sha256="42d158b4d8f7b61ac0a830567c940a86098fb7aac52e467a5ebec03ef5cc2f8d"
 node_version="22.23.2"
 node_archive_sha256="d60acfe00a2932254bb0ad20e01b0d74397a0875595de719654b214f4b03f307"
 pnpm_version="12.8.1"
