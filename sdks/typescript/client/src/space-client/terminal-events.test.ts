@@ -206,14 +206,14 @@ describe("SpaceClient terminal callbacks", () => {
     const ended = vi.fn();
     client.on("error", error);
     client.on("episodeEnded", ended);
-    const retry = async (calls: number) => {
-      await vi.waitFor(() => expect([...timers.values()]).toContain(5_000));
+    const retry = async (calls: number, delay: number) => {
+      await vi.waitFor(() => expect([...timers.values()]).toContain(delay));
       expect(client.getSnapshot().connection.status).toBe("live");
       expect(error).not.toHaveBeenCalled();
-      const timer = [...timers].find(([, delay]) => delay === 5_000)?.[0];
+      const timer = [...timers].find(([, scheduled]) => scheduled === delay)?.[0];
       if (!timer) throw new Error("Expected the refresh retry timer");
       timers.delete(timer);
-      now += 5_000;
+      now += delay;
       timer();
       await vi.waitFor(() => expect(access).toHaveBeenCalledTimes(calls));
     };
@@ -221,8 +221,8 @@ describe("SpaceClient terminal callbacks", () => {
       await client.join({ microphone: false, camera: false });
       now += 301_000;
       foreground();
-      await retry(3);
-      await retry(4);
+      await retry(3, 5_000);
+      await retry(4, 10_000);
       await vi.waitFor(() => expect([...timers.values()]).toContain(240_000));
       expect(client.getSnapshot().connection.status).toBe("live");
       expect(client.getSnapshot().connection.lastError).toBeNull();

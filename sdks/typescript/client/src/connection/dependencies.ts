@@ -40,6 +40,7 @@ export type ConnectionMediaDevices = {
 
 export type ConnectionSyncClient = V1CollaborationClient & {
   readonly start: () => Promise<void>;
+  readonly restartTransport?: () => void;
   readonly stop: () => void;
   readonly getSnapshot: () => V1EpisodeSnapshot;
   readonly subscribe: (listener: (snapshot: V1EpisodeSnapshot) => void) => () => void;

@@ -161,6 +161,47 @@ describe("Cloudflare SFU HTTP signaling", () => {
       vi.useRealTimers();
     }
   });
+  it.each(["incomplete", "discovery"] as const)("backs off %s polling and resets after success", async (mode) => {
+    await withTimedHarness(
+      async (harness) => {
+        vi.spyOn(Math, "random").mockReturnValue(0);
+        const list = vi.spyOn(harness.transport, "listPublications");
+        if (mode === "discovery") list.mockRejectedValue(new CloudflareSFUError("discovery unavailable", "signaling_failed"));
+        await harness.client.start(fakeStream());
+        const snapshot = publicationSnapshot(1, 1, "remote-connection|screen-a");
+        harness.transport.snapshot = { ...snapshot, publications: snapshot.publications.map((publication) => ({ ...publication, source: "screen" })) };
+        harness.transport.omittedRemoteTrackNames.add("screen-a");
+        const attempts = mode === "discovery" ? list : vi.spyOn(harness.transport, "addTracks");
+        await vi.advanceTimersByTimeAsync(0);
+        for (const delay of mode === "discovery" ? [500, 1_000, 2_000, 4_000, 8_000, 15_000, 15_000] : [750, 1_500, 3_000, 6_000, 12_000, 15_000, 15_000]) {
+          const before = attempts.mock.calls.length;
+          await vi.advanceTimersByTimeAsync(delay - 1);
+          expect(attempts).toHaveBeenCalledTimes(before);
+          await vi.advanceTimersByTimeAsync(1);
+          expect(attempts).toHaveBeenCalledTimes(before + 1);
+        }
+        list.mockRestore();
+        harness.transport.omittedRemoteTrackNames.clear();
+        await vi.advanceTimersByTimeAsync(15_000);
+        expect(harness.client.getSnapshot().remoteTracks).toHaveLength(1);
+        if (mode === "discovery") {
+          const failingAgain = vi.spyOn(harness.transport, "listPublications").mockRejectedValue(new CloudflareSFUError("discovery unavailable", "signaling_failed"));
+          await vi.advanceTimersByTimeAsync(15_000);
+          await vi.advanceTimersByTimeAsync(500);
+          expect(failingAgain).toHaveBeenCalledTimes(2);
+          harness.peerConnectionFactory.mockImplementationOnce(() => {
+            expect(harness.client.getSnapshot().connection.phase).toBe("recovering");
+            throw new Error("peer creation failed after disposal");
+          });
+          await expect(harness.client.restart(bootstrap("connection-2"))).rejects.toThrow("peer creation failed");
+          expect(harness.client.getSnapshot().connection.phase).toBe("failed");
+          await harness.client.restart(bootstrap("connection-3"));
+          expect(harness.client.getSnapshot().connection.phase).toBe("live");
+        }
+      },
+      { pollIntervalMs: 15_000 },
+    );
+  });
 });
 
 describe("Cloudflare SFU client", () => {
@@ -1254,6 +1295,11 @@ function createHarness(
 ) {
   const peers: FakePeerConnection[] = [];
   const transport = new FakeTransport(() => peers.at(-1));
+  const peerConnectionFactory = vi.fn(() => {
+    const peer = new FakePeerConnection(options.autoConnect ?? true);
+    peers.push(peer);
+    return peer as unknown as RTCPeerConnection;
+  });
   const client = new CloudflareSFUClient({
     bootstrap: bootstrap("connection-1"),
     participantId: "participant-1",
@@ -1264,13 +1310,9 @@ function createHarness(
     pollIntervalMs: options.pollIntervalMs ?? 60_000,
     onError: options.onError,
     onScreenEnded: options.onScreenEnded,
-    peerConnectionFactory: () => {
-      const peer = new FakePeerConnection(options.autoConnect ?? true);
-      peers.push(peer);
-      return peer as unknown as RTCPeerConnection;
-    },
+    peerConnectionFactory,
   });
-  return { client, peers, transport };
+  return { client, peers, transport, peerConnectionFactory };
 }
 
 class FakeTransport implements CloudflareSFUSignalingTransport {
@@ -1540,5 +1582,17 @@ class FakePeerConnection extends EventTarget {
       transceiver: { value: { mid } },
     });
     this.dispatchEvent(event);
+  }
+}
+
+async function withTimedHarness(exercise: (harness: ReturnType<typeof createHarness>) => Promise<void>, options: Parameters<typeof createHarness>[0] = {}): Promise<void> {
+  vi.useFakeTimers();
+  const harness = createHarness(options);
+  try {
+    await exercise(harness);
+  } finally {
+    harness.client.stop();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
   }
 }

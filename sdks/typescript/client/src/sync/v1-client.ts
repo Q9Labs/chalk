@@ -132,6 +132,10 @@ export class V1SyncClient implements V1CollaborationClient {
     });
   }
 
+  restartTransport(): void {
+    this.#recover("lifecycle transport deadline");
+  }
+
   async start(): Promise<void> {
     if (this.#started) return;
     this.#started = true;

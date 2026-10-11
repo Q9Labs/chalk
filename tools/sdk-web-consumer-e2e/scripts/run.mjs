@@ -1,3 +1,4 @@
+import { forceAndWaitForRecovery } from "./recovery.mjs";
 import { randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
 import { cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -174,14 +175,8 @@ async function verifyScreenShare(alice, bob) {
 
 async function verifyRecovery(alice, bob, baseURL) {
   await Promise.all([waitForAccessRefresh(alice), waitForAccessRefresh(bob)]);
-  await forceAndWaitForRecovery(alice, `${baseURL}/test/force-sync?participant=alice`);
-  await forceAndWaitForRecovery(bob, `${baseURL}/test/force-media?participant=bob`);
-}
-
-async function forceAndWaitForRecovery(page, url) {
-  await post(url);
-  await waitFor(page, (snapshot) => snapshot.state === "reconnecting" || snapshot.state === "live");
-  await waitForState(page, "live");
+  await forceAndWaitForRecovery(alice, `${baseURL}/test/force-sync?participant=alice`, post, waitFor);
+  await forceAndWaitForRecovery(bob, `${baseURL}/test/force-media?participant=bob`, post, waitFor);
 }
 
 async function verifyRemovalAndLeave(alice, bob) {
@@ -335,8 +330,8 @@ async function waitForSettledState(page, predicate, timeout, message) {
   }
 }
 
-async function post(url) {
-  const response = await fetch(url, { method: "POST" });
+async function post(url, signal) {
+  const response = await fetch(url, { method: "POST", signal });
   if (!response.ok) throw new TypeError(`Fixture control request failed with HTTP ${response.status}: ${url}`);
 }
 

@@ -100,6 +100,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #replacementAttemptedGeneration: number | null = null;
   #polling = false;
   #pollAfterCurrent = false;
+  #pollFailures = 0;
+  #pollFailedPull = false;
   #pollTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   #sdpTail: Promise<void> = Promise.resolve();
   #snapshot: CloudflareSFUSnapshot;
@@ -212,24 +214,29 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (!this.#started || this.#stopped || this.#polling) return;
     this.#polling = true;
     const generation = this.#generation;
+    this.#pollFailedPull = false;
     try {
       const transport = this.#requireTransport();
       const authoritative = await traceReconnect(this.#recordReconnect, "list_publications", () => transport.listPublications());
       this.#requireGeneration(generation);
       await this.#reconcileRemotePublications(authoritative, generation);
+      this.#requireGeneration(generation);
+      if (!this.#remotePullIncomplete) this.#pollFailures = 0;
     } catch (error) {
       if (generation === this.#generation && !this.#stopped) this.#reportError(error);
       throw error;
     } finally {
-      if (generation === this.#generation) {
-        this.#polling = false;
-        if (this.#pollAfterCurrent) {
-          this.#pollAfterCurrent = false;
-          this.#clearPoll();
-          this.#schedulePoll(0);
-        }
-      }
+      this.#finishPublicationPoll(generation);
     }
+  }
+
+  #finishPublicationPoll(generation: number): void {
+    if (generation !== this.#generation) return;
+    this.#polling = false;
+    if (!this.#pollAfterCurrent) return;
+    this.#pollAfterCurrent = false;
+    this.#clearPoll();
+    this.#schedulePoll(0);
   }
 
   async setLocalPublicationTarget(target: MediaPlaneTarget): Promise<MediaPlaneResult> {
@@ -371,14 +378,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (options.bootstrap.connectionId !== this.#bootstrap.connectionId) this.#started = false;
     this.#bootstrap = options.bootstrap;
     if (options.transport) this.#transport = options.transport;
-    this.#connection = this.#createPeerConnection(options.bootstrap);
-    this.#observeConnection(this.#connection, generation, connectionEpoch);
+    this.#rebuildPeerConnection(options.bootstrap, generation, connectionEpoch);
     for (const state of this.#localTracks.values()) {
       state.transceiver = null;
       state.enabled = false;
     }
     const enabled = [...this.#localTracks.values()].filter((state) => state.desiredEnabled && state.track.readyState !== "ended");
-    this.#setPhase("recovering", null);
     await this.#activatePreparedTracks(enabled, generation);
   }
 
@@ -656,6 +661,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
 
     const desired = this.#desiredRemotePublications(authoritative, cursor);
     const toPull = this.#pendingRemotePulls(desired);
+    this.#pollFailedPull = true;
     const pulled = await this.#pullWithRecovery(toPull, cursor, generation);
     if (pulled === null) return;
     this.#requireGeneration(generation);
@@ -1066,16 +1072,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#clearRemoteTracks();
     this.#cursor = null;
     this.#bootstrap = bootstrap;
-    this.#connection = this.#createPeerConnection(bootstrap);
+    this.#rebuildPeerConnection(bootstrap, generation, connectionEpoch);
     this.#retiredLocalConnection = null;
     this.#negotiatedGeneration = null;
-    this.#observeConnection(this.#connection, generation, connectionEpoch);
     for (const state of this.#localTracks.values()) {
       state.transceiver = null;
       state.enabled = false;
       state.providerPublicationId = null;
     }
-    this.#setPhase("recovering", null);
     this.remotePublicationsChanged();
   }
 
@@ -1104,7 +1108,18 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     return create({ iceServers: [{ urls: bootstrap.stunServer }], bundlePolicy: "max-bundle" });
   }
 
+  #rebuildPeerConnection(bootstrap: CloudflareSFUBootstrap, generation: number, connectionEpoch: number): void {
+    try {
+      this.#connection = this.#createPeerConnection(bootstrap);
+      this.#observeConnection(this.#connection, generation, connectionEpoch);
+    } catch (error) {
+      this.#setFailure(error, "media_failed");
+      throw error;
+    }
+  }
+
   #disposeConnection(stopSenders: boolean): void {
+    if (!stopSenders) this.#setPhase("recovering", null);
     this.#disposeConnectionObservation?.();
     this.#disposeConnectionObservation = undefined;
     if (stopSenders) {
@@ -1155,17 +1170,30 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         this.#schedulePoll();
         return;
       }
+      let nextDelay = this.#pollIntervalMs;
       try {
         await this.refreshRemotePublications();
+        if (this.#remotePullIncomplete) nextDelay = this.#incompletePullDelay();
       } catch {
-        // Remote discovery reports its own operation-scoped error and retries on the next poll.
+        // Keep the first retry prompt, then return toward the idle polling cadence.
+        if (this.#pollFailedPull && this.#remotePullIncomplete) nextDelay = this.#incompletePullDelay();
+        else {
+          this.#pollFailures = Math.min(this.#pollFailures + 1, 6);
+          nextDelay = Math.min(this.#pollIntervalMs, (500 + Math.random() * 500) * 2 ** (this.#pollFailures - 1));
+        }
       } finally {
-        this.#schedulePoll(this.#remotePullIncomplete ? 750 : this.#pollIntervalMs);
+        this.#schedulePoll(nextDelay);
       }
     }, delayMs);
   }
 
+  #incompletePullDelay(): number {
+    this.#pollFailures = Math.min(this.#pollFailures + 1, 6);
+    return Math.min(this.#pollIntervalMs, 750 * 2 ** (this.#pollFailures - 1));
+  }
+
   #clearPoll(): void {
+    this.#pollFailures = 0;
     if (this.#pollTimer !== undefined) globalThis.clearTimeout(this.#pollTimer);
     this.#pollTimer = undefined;
   }
