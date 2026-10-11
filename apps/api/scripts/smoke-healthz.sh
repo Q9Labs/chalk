@@ -25,7 +25,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "Starting Chalk API on ${addr}..."
-CHALK_API_ADDR="${addr}" GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN:-go1.25.11+auto}" go run ./cmd >"${server_log}" 2>&1 &
+CHALK_API_ADDR="${addr}" GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN:-go1.26.9+auto}" go run ./cmd >"${server_log}" 2>&1 &
 server_pid="$!"
 
 status=""
