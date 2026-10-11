@@ -9,6 +9,12 @@ from webhook_tenant_state
 where tenant_id = sqlc.arg(tenant_id)
 for update;
 
+-- name: LockWebhookTenantStateForShare :exec
+select tenant_id
+from webhook_tenant_state
+where tenant_id = sqlc.arg(tenant_id)
+for share;
+
 -- name: CountWebhookEndpoints :one
 select count(*)::integer
 from webhook_endpoints
