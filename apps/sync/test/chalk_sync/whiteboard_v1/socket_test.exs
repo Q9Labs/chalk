@@ -680,7 +680,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     assert caught_up.missed_head == nil
   end
 
-  test "replays a multipart update whose first part arrived during a snapshot" do
+  test "sends the kept revision before a part that was queued during the snapshot" do
     Process.put(:whiteboard_events_after_four, [update_event(5)])
     state = recovering_state()
 
@@ -730,6 +730,37 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     assert {:push, {:text, encoded}, caught_up} = receive_frame(snapshot_ack(noted), noted)
     assert %{"type" => "update", "revision" => "5"} = JSON.decode!(encoded)
     assert caught_up.revision == 6
+  end
+
+  test "starts a queued snapshot only after the replay has gone out" do
+    Process.put(:whiteboard_events_after_four, [update_event(5), update_event(6)])
+    state = recovering_state()
+    request = %{"type" => "request_snapshot", "request_id" => "snapshot-request-0005"}
+    assert {:ok, queued} = receive_frame(request, state)
+
+    assert {:ok, noted} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_head, @scene_id, 6}, queued)
+
+    assert {:push, {:text, first}, replaying} = receive_frame(snapshot_ack(noted), noted)
+    assert %{"type" => "update", "revision" => "5"} = JSON.decode!(first)
+    assert_received :whiteboard_snapshot_next
+    assert_received :whiteboard_drain
+
+    assert {:ok, ^replaying} =
+             SocketWhiteboardV1.handle_info(:whiteboard_snapshot_next, replaying)
+
+    assert_received :whiteboard_snapshot_next
+
+    assert {:push, {:text, second}, drained} =
+             SocketWhiteboardV1.handle_info(:whiteboard_drain, replaying)
+
+    assert %{"type" => "update", "revision" => "6"} = JSON.decode!(second)
+
+    assert {:push, {:text, page}, recovering} =
+             SocketWhiteboardV1.handle_info(:whiteboard_snapshot_next, drained)
+
+    assert JSON.decode!(page)["request_id"] == request["request_id"]
+    assert recovering.phase == :recovering
   end
 
   test "resets a legacy socket when its replay passes the notified head" do
