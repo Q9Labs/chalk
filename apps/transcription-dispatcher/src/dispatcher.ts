@@ -126,7 +126,7 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
     const transcription = await transcribeWithFallback({
       ...(dependencies.primary === undefined ? {} : { primary: dependencies.primary }),
       ...(dependencies.fallback ? { fallback: dependencies.fallback } : {}),
-      request: { audio: audio.bytes, contentType: audio.contentType, chunkId: assignment.chunk.chunkId },
+      request: { audio: audio.bytes, contentType: audio.contentType, chunkId: assignment.chunk.chunkId, onTimingRepair: (repair) => logger.warn("provider_segment_timing_repaired", { ...repair }) },
       policy: dependencies.config.provider,
       circuit,
       runtime: {

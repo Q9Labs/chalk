@@ -95,6 +95,7 @@ type MediaTrack struct {
 	mid      captureplane.ProviderReference
 	rid      string
 	remote   *webrtc.TrackRemote
+	receiver *webrtc.RTPReceiver
 }
 
 // CaptureTrack returns the identity registered before SDP was applied.
@@ -141,6 +142,22 @@ func (t *MediaTrack) ReadRTP() (*rtp.Packet, interceptor.Attributes, error) {
 		return nil, nil, ErrPeerClosed
 	}
 	return t.remote.ReadRTP()
+}
+
+// ReadRTCP reads the sender's clock reports without consuming RTP media.
+func (t *MediaTrack) ReadRTCP() ([]rtcp.Packet, interceptor.Attributes, error) {
+	if t == nil || t.receiver == nil {
+		return nil, nil, ErrPeerClosed
+	}
+	return t.receiver.ReadRTCP()
+}
+
+// SetRTCPReadDeadline bounds reads independently of the media deadline.
+func (t *MediaTrack) SetRTCPReadDeadline(deadline time.Time) error {
+	if t == nil || t.receiver == nil {
+		return ErrPeerClosed
+	}
+	return t.receiver.SetReadDeadline(deadline)
 }
 
 // Read reads one RTP packet into the caller-provided bounded buffer.
@@ -689,7 +706,7 @@ func (p *Peer) bindTrack(remote *webrtc.TrackRemote, receiver *webrtc.RTPReceive
 		p.signalLocked()
 		return
 	}
-	p.tracks[mid] = &MediaTrack{identity: identity, mid: captureplane.ProviderReference(mid), rid: remote.RID(), remote: remote}
+	p.tracks[mid] = &MediaTrack{identity: identity, mid: captureplane.ProviderReference(mid), rid: remote.RID(), remote: remote, receiver: receiver}
 	p.signalLocked()
 }
 

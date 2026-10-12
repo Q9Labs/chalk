@@ -66,6 +66,68 @@ export function parseRecordingWhiteboardStateV1(value: unknown): RecordingWhiteb
   });
 }
 
+export interface RecordingWhiteboardCursor {
+  readonly at: (revision?: number) => RecordingWhiteboardStateV1;
+}
+
+/** One initial state and winning changes, replayed once in revision order. */
+export function createRecordingWhiteboardCursor(value: unknown): RecordingWhiteboardCursor {
+  if (typeof value !== "object" || value === null || !("schemaVersion" in value)) throw invalidState();
+  if (value.schemaVersion === "recording_whiteboard_state.v1") {
+    const state = parseRecordingWhiteboardStateV1(value);
+    return { at: () => state };
+  }
+  if (value.schemaVersion !== "recording_whiteboard_history.v1" || !hasExactKeys(value, ["schemaVersion", "initial", "updates"]) || !("initial" in value) || !("updates" in value) || !Array.isArray(value.updates)) throw invalidState();
+  const initial = parseRecordingWhiteboardStateV1(value.initial);
+  let previous = initial.revision;
+  const updates = value.updates.map((update: unknown) => {
+    if (
+      typeof update !== "object" ||
+      update === null ||
+      !hasExactKeys(update, ["revision", "elements"]) ||
+      !("revision" in update) ||
+      !("elements" in update) ||
+      !isNonNegativeSafeInteger(update.revision) ||
+      update.revision <= previous ||
+      !Array.isArray(update.elements) ||
+      update.elements.length === 0 ||
+      !update.elements.every(isWhiteboardWireElement)
+    )
+      throw invalidState();
+    previous = update.revision;
+    return { revision: update.revision, elements: update.elements };
+  });
+  const elements = new Map(initial.elements.map((element) => [element.id, element]));
+  let nextUpdate = 0;
+  let lastRevision = initial.revision;
+  let state = initial;
+  return {
+    at(revision = initial.revision) {
+      if (!isNonNegativeSafeInteger(revision) || revision < initial.revision) throw new RangeError("recording whiteboard revision precedes its initial state");
+      if (revision < lastRevision) {
+        elements.clear();
+        for (const element of initial.elements) elements.set(element.id, element);
+        nextUpdate = 0;
+        state = initial;
+      }
+      lastRevision = revision;
+      let changed = false;
+      for (; nextUpdate < updates.length; nextUpdate++) {
+        const update = updates[nextUpdate]!;
+        if (update.revision > revision) break;
+        for (const element of update.elements) elements.set(element.id, element);
+        changed = true;
+      }
+      if (changed) {
+        const ordered = [...elements.values()].sort((a, b) => (a.index < b.index ? -1 : a.index > b.index ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+        state = { ...initial, revision, elements: ordered };
+      }
+      if (state.revision !== revision) state = { ...state, revision };
+      return state;
+    },
+  };
+}
+
 export function recordingWhiteboardFileIds(state: RecordingWhiteboardStateV1): readonly string[] {
   const ids = new Set<string>();
   for (const element of state.elements) {

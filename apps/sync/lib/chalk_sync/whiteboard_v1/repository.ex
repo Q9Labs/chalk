@@ -4,6 +4,7 @@ defmodule ChalkSync.WhiteboardV1.Repository do
   alias ChalkSync.Stateholder.Identity
 
   @type commit :: %{
+          optional(:elements) => [map()],
           operation_id: String.t(),
           outcome: :committed | :duplicate,
           scene_id: String.t(),

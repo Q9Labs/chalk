@@ -3,10 +3,15 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
 
   @behaviour ChalkSync.WhiteboardV1.Repository
 
+  alias ChalkSync.Contract.GeneratedWhiteboardV1
   alias ChalkSync.Database
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.UUID
   alias ChalkSync.WhiteboardV1.SQL
+
+  @limits GeneratedWhiteboardV1.limits()
+  @max_replay_items @limits["snapshotPageMaxItems"]
+  @max_replay_bytes @limits["socketQueueMaxBytes"]
 
   @impl true
   def connect(%Identity{} = identity) do
@@ -28,7 +33,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
            {:ok, scene} <- current_scene(connection, identity),
            :ok <- current_scene?(scene, operation.scene_id),
            :missing <- receipt(connection, identity, operation.operation_id, fingerprint),
-           :ok <- upsert_elements(connection, identity, scene.scene_id, operation.elements),
+           {:ok, changed_elements} <-
+             upsert_elements(connection, identity, scene.scene_id, operation.elements),
            {:ok, revision} <- advance_scene(connection, identity, scene.scene_id),
            :ok <-
              insert_receipt(
@@ -40,15 +46,21 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
                %{
                  scene_id: scene.scene_id,
                  revision: revision,
-                 elements: operation.elements,
+                 elements: changed_elements,
                  presenting: nil
                }
              ),
            :ok <- notify_head(connection, identity, scene.scene_id, revision) do
-        {:ok, commit(operation.operation_id, :committed, scene.scene_id, revision)}
+        {:ok,
+         Map.put(
+           commit(operation.operation_id, :committed, scene.scene_id, revision),
+           :elements,
+           changed_elements
+         )}
       else
         {:duplicate, scene_id, revision, _event_presenting} ->
-          {:ok, commit(operation.operation_id, :duplicate, scene_id, revision)}
+          {:ok,
+           Map.put(commit(operation.operation_id, :duplicate, scene_id, revision), :elements, [])}
 
         other ->
           other
@@ -226,9 +238,29 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
       revision
     ]
 
-    case Postgrex.query(connection, SQL.read_after(), params) do
-      {:ok, %Postgrex.Result{rows: rows}} -> {:ok, Enum.map(rows, &read_after_event/1)}
+    # Check metadata under the scene lock before Postgrex loads any event JSON.
+    with :ok <- read_after_fits?(connection, params),
+         {:ok, %Postgrex.Result{rows: rows}} <-
+           Postgrex.query(connection, SQL.read_after(), params) do
+      {:ok, Enum.map(rows, &read_after_event/1)}
+    else
+      {:error, :cursor_reset_required} = reset -> reset
       {:error, _error} -> {:retryable, :storage_unavailable}
+      other -> other
+    end
+  end
+
+  defp read_after_fits?(connection, params) do
+    case Postgrex.query(connection, SQL.read_after_size(), params) do
+      {:ok, %Postgrex.Result{rows: [[count, bytes]]}}
+      when count <= @max_replay_items and bytes <= @max_replay_bytes ->
+        :ok
+
+      {:ok, _result} ->
+        {:error, :cursor_reset_required}
+
+      {:error, _error} ->
+        {:retryable, :storage_unavailable}
     end
   end
 
@@ -347,28 +379,35 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
   end
 
   defp upsert_elements(connection, identity, scene_id, elements) do
-    Enum.reduce_while(elements, :ok, fn element, :ok ->
-      encoded_bytes = element |> JSON.encode!() |> byte_size()
+    result =
+      Enum.reduce_while(elements, {:ok, []}, fn element, {:ok, changed} ->
+        encoded_bytes = element |> JSON.encode!() |> byte_size()
 
-      params =
-        context(identity) ++
-          [
-            uuid(scene_id),
-            element["id"],
-            element["type"],
-            element["version"],
-            element["version_nonce"],
-            element["index"],
-            element["is_deleted"],
-            element["payload"],
-            encoded_bytes
-          ]
+        params =
+          context(identity) ++
+            [
+              uuid(scene_id),
+              element["id"],
+              element["type"],
+              element["version"],
+              element["version_nonce"],
+              element["index"],
+              element["is_deleted"],
+              element["payload"],
+              encoded_bytes
+            ]
 
-      case Postgrex.query(connection, SQL.upsert_element(), params) do
-        {:ok, _result} -> {:cont, :ok}
-        {:error, _error} -> {:halt, {:retryable, :storage_unavailable}}
-      end
-    end)
+        case Postgrex.query(connection, SQL.upsert_element(), params) do
+          {:ok, %Postgrex.Result{num_rows: 1}} -> {:cont, {:ok, [element | changed]}}
+          {:ok, %Postgrex.Result{num_rows: 0}} -> {:cont, {:ok, changed}}
+          {:error, _error} -> {:halt, {:retryable, :storage_unavailable}}
+        end
+      end)
+
+    case result do
+      {:ok, changed} -> {:ok, Enum.reverse(changed)}
+      other -> other
+    end
   end
 
   defp advance_scene(connection, identity, scene_id) do

@@ -34,10 +34,20 @@ const stamp = (event) => {
 };
 process.once("SIGTERM", () => abort.abort(new Error("terminated")));
 process.once("SIGINT", () => abort.abort(new Error("interrupted")));
+const scenario = process.env.INGRESS_SCENARIO || "events";
+if (!["events", "clean"].includes(scenario)) throw Error("invalid ingress scenario");
 const abArgs = ["--session", session, "--idle-timeout", "1h", "--json"];
+async function agentBrowser(args) {
+  try {
+    const { stdout } = await exec("agent-browser", [...abArgs, ...args], { timeout: 45000, maxBuffer: 2 * 1024 * 1024, signal: abort.signal });
+    return stdout;
+  } catch (error) {
+    await writeFile(out + "/browser-failure.json", JSON.stringify({ stdout: error.stdout, stderr: error.stderr, code: error.code }, null, 2), { mode: 0o600 });
+    throw Error("browser command failed; see private browser-failure.json");
+  }
+}
 async function browser(args) {
-  const { stdout } = await exec("agent-browser", [...abArgs, ...args], { timeout: 45000, maxBuffer: 2 * 1024 * 1024, signal: abort.signal });
-  const result = JSON.parse(stdout);
+  const result = JSON.parse(await agentBrowser(args));
   if (!result.success) throw new Error("browser command failed: " + JSON.stringify(result.error));
   return result.data?.result ?? result.data;
 }
@@ -53,7 +63,13 @@ async function api(method, path, body) {
   return response.json();
 }
 try {
-  const manifest = JSON.parse(await readFile(root + "/.private/chalk-dev/manifest.json", "utf8"));
+  let manifest = JSON.parse(await readFile(root + "/.private/chalk-dev/manifest.json", "utf8"));
+  const stackDeadline = Date.now() + 30000;
+  while (["reloading", "starting"].includes(manifest.state)) {
+    if (Date.now() > stackDeadline) throw Error("development readiness deadline");
+    await delay(250, undefined, { signal: abort.signal });
+    manifest = JSON.parse(await readFile(root + "/.private/chalk-dev/manifest.json", "utf8"));
+  }
   if (manifest.checkout !== root) throw Error("local stack belongs to another checkout");
   if (manifest.urls.api !== "http://127.0.0.1:18080" || manifest.urls.web !== "http://127.0.0.1:13070") throw Error("start local stack with CHALK_DEV_API_PORT=18080 CHALK_DEV_WEB_PORT=13070");
   if (manifest.state !== "ready") throw new Error("documented local stack is not ready: " + manifest.state);
@@ -110,7 +126,7 @@ try {
       contents: `import {controlCamera} from './scripts/capture-ingress/camera-control.mjs';
 window.ingressControlCamera=controlCamera;
 import {createSpaceClientForPlatform} from './sdks/typescript/client/src/effect.ts';
-window.ingressJoin=async()=>{window.ingressClient=createSpaceClientForPlatform({space:${JSON.stringify(space.slug)},baseUrl:'http://127.0.0.1:18080',getAccess:async()=>{const r=await fetch('http://127.0.0.1:13071/access');if(!r.ok)throw Error('access');return r.json();}},{syncUrl:'ws://127.0.0.1:4100/v1/sync'});await window.ingressClient.join({displayName:'Ingress synthetic camera',microphone:false,camera:true});return {state:window.ingressClient.getSnapshot().connection.status,publication:window.ingressPublication,encodings:window.ingressPCs.flatMap(p=>p.getSenders()).filter(s=>s.track?.kind==='video').map(s=>s.getParameters().encodings)}};`,
+window.ingressJoin=async()=>{window.ingressClient=createSpaceClientForPlatform({space:${JSON.stringify(space.slug)},baseUrl:'http://127.0.0.1:18080',getAccess:async()=>{const r=await fetch('http://127.0.0.1:13071/access');if(!r.ok)throw Error('access');return r.json();}},{syncUrl:'ws://127.0.0.1:4100/v1/sync'});await window.ingressClient.join({displayName:'Ingress synthetic camera',microphone:true,camera:true});return {state:window.ingressClient.getSnapshot().connection.status,publication:window.ingressPublication,publications:window.ingressPublications,encodings:window.ingressPCs.flatMap(p=>p.getSenders()).filter(s=>s.track?.kind==='video').map(s=>s.getParameters().encodings)}};`,
       resolveDir: root,
       sourcefile: "ingress.ts",
     },
@@ -129,8 +145,13 @@ window.ingressJoin=async()=>{window.ingressClient=createSpaceClientForPlatform({
   });
   const fixture = `<!doctype html><title>Ingress synthetic camera</title><script>
 window.ingressPCs=[];const PC=window.RTCPeerConnection;window.RTCPeerConnection=class extends PC{constructor(...args){super(...args);window.ingressPCs.push(this)}};
-const nativeFetch=window.fetch;window.fetch=async(input,init)=>{if(String(input).includes('/media/sfu/tracks')&&init?.body){const b=JSON.parse(init.body);const camera=b.tracks?.find(t=>t.location==='local'&&t.trackName?.startsWith('camera-'));if(camera)window.ingressPublication={session:b.connection_id,track:camera.trackName};}return nativeFetch(input,init)};
-navigator.mediaDevices.getUserMedia=async()=>{const canvas=document.createElement('canvas');canvas.width=1280;canvas.height=720;const c=canvas.getContext('2d');let frame=0;window.ingressTimer=setInterval(()=>{c.fillStyle='#1b365d';c.fillRect(0,0,1280,720);c.fillStyle='white';c.font='64px sans-serif';c.fillText('Proof guest 1',60,100);c.fillText('Frame '+frame++,60,200);for(let n=0;n<30;n++){c.fillStyle=\`hsl(\${(frame*7+n*12)%360} 70% 60%)\`;c.fillRect((frame*11+n*61)%1280,250+(n%5)*80,70,60)}},1000/15);return canvas.captureStream(15)};
+const nativeFetch=window.fetch;window.fetch=async(input,init)=>{if(String(input).includes('/media/sfu/tracks')&&init?.body){const b=JSON.parse(init.body);for(const track of b.tracks||[]){if(track.location!=='local')continue;window.ingressPublications??={};const kind=track.trackName.split('-')[0];window.ingressPublications[kind]={session:b.connection_id,track:track.trackName};if(kind==='camera')window.ingressPublication=window.ingressPublications[kind];}}return nativeFetch(input,init)};
+window.ingressOrigin=Date.now();
+function camera(){const canvas=document.createElement('canvas');canvas.width=1280;canvas.height=720;const c=canvas.getContext('2d');let frame=0;const timer=setInterval(()=>{c.fillStyle='#1b365d';c.fillRect(0,0,1280,720);c.fillStyle='white';c.font='64px sans-serif';c.fillText('Synthetic camera',60,100);c.fillText('Frame '+frame++,60,200);c.fillText('Clock '+((Date.now()-window.ingressOrigin)/1000).toFixed(3)+' s',60,280);for(let n=0;n<30;n++){c.fillStyle=\`hsl(\${(frame*7+n*12)%360} 70% 60%)\`;c.fillRect((frame*11+n*61)%1280,330+(n%4)*80,70,60)}},1000/15);window.ingressTimers??=[];window.ingressTimers.push(timer);return canvas.captureStream(15)};
+window.ingressAudio=new AudioContext();const destination=window.ingressAudio.createMediaStreamDestination();const oscillator=window.ingressAudio.createOscillator();const gain=window.ingressAudio.createGain();oscillator.frequency.value=880;gain.gain.value=0;oscillator.connect(gain).connect(destination);oscillator.start();setInterval(()=>{const now=window.ingressAudio.currentTime;gain.gain.setValueAtTime(.3,now);gain.gain.setValueAtTime(0,now+.08)},1000);
+navigator.mediaDevices.getUserMedia=async(constraints)=>{const stream=new MediaStream();if(constraints.video)for(const track of camera().getVideoTracks())stream.addTrack(track);if(constraints.audio)for(const track of destination.stream.getAudioTracks())stream.addTrack(track.clone());return stream};
+navigator.mediaDevices.getDisplayMedia=async()=>camera();
+
 </script><script src='/ingress-bundle.js'></script>`;
   await writeFile(root + "/apps/web/public/ingress-bundle.js", bundle.outputFiles[0].text, { flag: "wx" });
   ownedAssets.push("ingress-bundle.js");
@@ -138,15 +159,26 @@ navigator.mediaDevices.getUserMedia=async()=>{const canvas=document.createElemen
   ownedAssets.push("ingress-fixture.html");
   browserOpened = true;
   await browser(["--args", "--use-fake-ui-for-media-stream,--use-fake-device-for-media-stream,--autoplay-policy=no-user-gesture-required", "open", "http://127.0.0.1:13070/ingress-fixture.html"]);
-  const joined = await evaluate("window.ingressJoin()");
+  const joined = await evaluate("window.ingressJoin().catch(error=>{const causes=[];for(let cause=error;cause&&causes.length<8;cause=cause.cause){causes.push({name:cause.name,message:cause.message,code:cause.code})}return {failed:true,causes}})");
   await writeFile(out + "/publisher.json", JSON.stringify(joined, null, 2), { mode: 0o600 });
+  if (joined.failed) throw Error("SDK join failed; see private publisher.json");
   if (!joined.publication?.session || !joined.publication?.track) throw new Error("SDK camera publication not observed");
   if (joined.encodings?.length !== 1 || joined.encodings[0].map((e) => e.rid).join(",") !== "h,l") throw new Error("SDK h/l simulcast not negotiated");
   await evaluate(
     `(()=>{const s=window.ingressPCs.flatMap(p=>p.getSenders()).find(s=>s.track?.kind==='video');window.ingressLimit=window.ingressControlCamera(s);window.ingressSample=async()=>{const report=await s.getStats();const low=[...report.values()].find(r=>r.type==='outbound-rtp'&&r.rid==='l');const encodings=s.getParameters().encodings;return {at:Date.now(),bytes:low?.bytesSent,encodings}}})()`,
   );
   stamp("publisher-ready");
-  const env = { ...process.env, GOMAXPROCS: "1", CHALK_INGRESS_MEASUREMENT: "1", INGRESS_APP_ID: credential.appId, INGRESS_APP_SECRET: credential.appSecret, INGRESS_PUBLISHER_SESSION: joined.publication.session, INGRESS_TRACK: joined.publication.track, INGRESS_OUTPUT: out };
+  const env = {
+    ...process.env,
+    GOMAXPROCS: "1",
+    CHALK_INGRESS_MEASUREMENT: "1",
+    INGRESS_APP_ID: credential.appId,
+    INGRESS_APP_SECRET: credential.appSecret,
+    INGRESS_PUBLISHER_SESSION: joined.publication.session,
+    INGRESS_TRACK: joined.publication.track,
+    INGRESS_AUDIO_TRACK: joined.publications.microphone?.track,
+    INGRESS_OUTPUT: out,
+  };
   const { open } = await import("node:fs/promises");
   const log = await open(out + "/capture.log", "a", 0o600);
   child = spawn("go", ["test", "-p", "1", "./internal/recorderworker", "-run", "^TestIngressMeasurement$", "-count=1", "-parallel", "2", "-v", "-timeout", "240s"], { cwd: root + "/apps/api", env, stdio: ["ignore", log.fd, log.fd], detached: true });
@@ -169,26 +201,67 @@ navigator.mediaDevices.getUserMedia=async()=>{const canvas=document.createElemen
     await delay(250, undefined, { signal: abort.signal });
   }
   stamp("paired-ready");
-  await delay(60000, undefined, { signal: abort.signal });
-  const limited = await evaluate(`(async()=>{await window.ingressLimit(true);return window.ingressSample()})()`);
-  stamp("bandwidth-limited");
-  const samples = [limited];
-  try {
-    for (let sample = 0; sample < 9; sample++) {
-      await delay(5000, undefined, { signal: abort.signal });
-      const next = await evaluate("window.ingressSample()");
-      const low = next.encodings.find((encoding) => encoding.rid === "l");
-      if (!low?.active || low.maxBitrate !== 80000 || next.encodings.find((encoding) => encoding.rid === "h")?.active || !(next.bytes > samples.at(-1).bytes)) throw Error("forced low layer did not sustain transmission");
-      samples.push(next);
+  const readyAt = Date.now();
+  const until = (seconds) => delay(Math.max(0, readyAt + seconds * 1000 - Date.now()), undefined, { signal: abort.signal });
+  let command = 0;
+  async function pullAdded(number) {
+    try {
+      await readFile(out + `/omitted.command-${number}.done`);
+      await readFile(out + `/explicit.command-${number}.done`);
+      return true;
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+      return false;
     }
-  } finally {
-    await writeFile(out + "/limit.json", JSON.stringify(samples, null, 2), { mode: 0o600 });
   }
-  await evaluate("window.ingressLimit(false)");
-  stamp("bandwidth-restored");
+  async function pull(publication) {
+    command++;
+    await writeFile(out + `/command-${command}.json`, JSON.stringify({ action: "add", ...publication }), { mode: 0o600 });
+    const deadline = Date.now() + 30000;
+    while (!(await pullAdded(command))) {
+      if (child.exitCode !== null) throw Error("Capture exited during track add");
+      if (Date.now() > deadline) throw Error("track-add deadline");
+      await delay(250, undefined, { signal: abort.signal });
+    }
+    stamp("pull-added-" + command);
+  }
+  if (scenario === "events") {
+    await until(20);
+    const screen = await evaluate("(async()=>{await window.ingressClient.media.setScreenShareEnabled(true);return window.ingressPublications.screen})()");
+    if (!screen?.track) throw Error("screen publication not observed");
+    stamp("screen-published");
+    await until(30);
+    await pull(screen);
+    await until(45);
+    await evaluate("window.ingressClient.media.setScreenShareEnabled(false)");
+    stamp("screen-stopped");
+    await until(60);
+    const limited = await evaluate(`(async()=>{await window.ingressLimit(true);return window.ingressSample()})()`);
+    stamp("bandwidth-limited");
+    const samples = [limited];
+    try {
+      for (let sample = 1; sample <= 9; sample++) {
+        await until(60 + sample * 5);
+        const next = await evaluate("window.ingressSample()");
+        const low = next.encodings.find((encoding) => encoding.rid === "l");
+        if (!low?.active || low.maxBitrate !== 80000 || next.encodings.find((encoding) => encoding.rid === "h")?.active || !(next.bytes > samples.at(-1).bytes)) throw Error("forced low layer did not sustain transmission");
+        samples.push(next);
+      }
+    } finally {
+      await writeFile(out + "/limit.json", JSON.stringify(samples, null, 2), { mode: 0o600 });
+    }
+    await evaluate("window.ingressLimit(false)");
+    stamp("bandwidth-restored");
+    await until(125);
+    await evaluate("(()=>{window.ingressCamera=window.ingressPCs.flatMap(p=>p.getSenders()).find(s=>s.track?.kind==='video');window.ingressCameraTrack=window.ingressCamera.track;return window.ingressCamera.replaceTrack(null)})()");
+    stamp("camera-paused");
+    await until(127);
+    await evaluate("window.ingressCamera.replaceTrack(window.ingressCameraTrack)");
+    stamp("camera-restored");
+  }
   const code = await Promise.race([
     done,
-    delay(90000, undefined, { signal: abort.signal }).then(() => {
+    delay(scenario === "clean" ? 210000 : 90000, undefined, { signal: abort.signal }).then(() => {
       throw Error("Capture completion deadline");
     }),
   ]);

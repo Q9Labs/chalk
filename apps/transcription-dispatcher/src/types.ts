@@ -11,6 +11,7 @@ export interface ProviderSegment {
   endSeconds: number;
   text: string;
   confidence?: number;
+  useSegmentText?: true;
 }
 
 export interface ProviderWord {
@@ -45,11 +46,19 @@ export interface ProviderResult {
 
 export type TranscriptProviderSummary = ProviderResult["provider"] | "mixed";
 
+export interface ProviderTimingRepair {
+  fieldPath: string;
+  startSeconds: number;
+  endSeconds: number;
+  previousEndSeconds?: number;
+}
+
 export interface ProviderRequest {
   audio: Uint8Array;
   contentType: string;
   chunkId: string;
   signal?: AbortSignal;
+  onTimingRepair?: (repair: ProviderTimingRepair) => void;
 }
 
 export interface TranscriptionProvider {

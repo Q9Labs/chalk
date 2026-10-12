@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { cn } from "../../utils/cn";
 import { WhiteboardView } from "./WhiteboardView";
-import { parseRecordingWhiteboardStateV1, recordingWhiteboardFileAssetId, recordingWhiteboardFileIds, recordingWhiteboardSceneAppState, type RecordingWhiteboardStateV1 } from "./recording-whiteboard-state";
+import { createRecordingWhiteboardCursor, recordingWhiteboardFileAssetId, recordingWhiteboardFileIds, recordingWhiteboardSceneAppState, type RecordingWhiteboardStateV1 } from "./recording-whiteboard-state";
 
 export { loadRecordingWhiteboardFiles, parseRecordingWhiteboardStateV1, recordingWhiteboardBinaryFile, recordingWhiteboardFileAssetId, recordingWhiteboardFileIds } from "./recording-whiteboard-state";
 export type { RecordingWhiteboardBinaryFileInput, RecordingWhiteboardFileReference, RecordingWhiteboardFileResolver, RecordingWhiteboardStateV1 } from "./recording-whiteboard-state";
@@ -31,7 +31,8 @@ interface ReadyWhiteboard {
 }
 
 export function RecordingWhiteboardView({ state: stateValue, files, expectedSceneId, expectedRevision, theme, excalidrawCssPath, onLoadError, onPresented, className }: RecordingWhiteboardViewProps): React.JSX.Element {
-  const state = useMemo(() => parseRecordingWhiteboardStateV1(stateValue), [stateValue]);
+  const cursor = useMemo(() => createRecordingWhiteboardCursor(stateValue), [stateValue]);
+  const state = useMemo(() => cursor.at(expectedRevision), [cursor, expectedRevision]);
   const elements = useMemo(() => state.elements.map(fromWireElement), [state.elements]);
   const resolvedTheme = theme ?? "light";
   const [ready, setReady] = useState<ReadyWhiteboard | null>(null);

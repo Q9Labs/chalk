@@ -6,19 +6,23 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/pion/interceptor"
+	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/pion/rtp/codecs"
 	"github.com/pion/webrtc/v4"
@@ -27,7 +31,8 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-// This opt-in harness retains headers and salted fingerprints, never media.
+// This opt-in harness retains headers and salted fingerprints by default.
+// Explicit synthetic-media retention is private and never enabled by gates.
 // It runs the production Pion adapter, admission reader and track clock.
 func TestIngressMeasurement(t *testing.T) {
 	if testing.Short() || os.Getenv("CHALK_RUN_LIVE_SFU_CAPTURE_TEST") != "1" || os.Getenv("CHALK_INGRESS_MEASUREMENT") != "1" {
@@ -111,33 +116,38 @@ func ingressRequest(ctx context.Context, method, path string, body interface{}) 
 }
 
 type ingressRow struct {
-	ArrivalNS           int64   `json:"arrival_ns"`
-	ArrivalUnixNS       int64   `json:"arrival_unix_ns"`
-	SSRC                uint32  `json:"ssrc"`
-	RID                 string  `json:"rid"`
-	RepairedRID         string  `json:"repaired_rid"`
-	PayloadType         uint8   `json:"pt"`
-	Sequence            uint16  `json:"sequence"`
-	Timestamp           uint32  `json:"timestamp"`
-	RTXSSRC             *uint32 `json:"rtx_ssrc"`
-	RTXSequence         *uint16 `json:"rtx_sequence"`
-	RTXPayloadType      *uint8  `json:"rtx_pt"`
-	PictureID           *uint16 `json:"picture_id"`
-	Keyframe            bool    `json:"keyframe"`
-	Width               int     `json:"width,omitempty"`
-	Height              int     `json:"height,omitempty"`
-	Fingerprint         string  `json:"fingerprint"`
-	PayloadBytes        int     `json:"payload_bytes"`
-	Padding             bool    `json:"padding"`
-	Outcome             string  `json:"outcome"`
-	Admitted            bool    `json:"admitted"`
-	NormalizedTimestamp *uint32 `json:"normalized_timestamp"`
-	NegativeOffset      bool    `json:"negative_offset"`
+	Kind                captureplane.TrackKind `json:"kind,omitempty"`
+	ArrivalNS           int64                  `json:"arrival_ns"`
+	ArrivalUnixNS       int64                  `json:"arrival_unix_ns"`
+	SSRC                uint32                 `json:"ssrc"`
+	RID                 string                 `json:"rid"`
+	RepairedRID         string                 `json:"repaired_rid"`
+	PayloadType         uint8                  `json:"pt"`
+	Sequence            uint16                 `json:"sequence"`
+	Timestamp           uint32                 `json:"timestamp"`
+	RTXSSRC             *uint32                `json:"rtx_ssrc"`
+	RTXSequence         *uint16                `json:"rtx_sequence"`
+	RTXPayloadType      *uint8                 `json:"rtx_pt"`
+	PictureID           *uint16                `json:"picture_id"`
+	Keyframe            bool                   `json:"keyframe"`
+	Width               int                    `json:"width,omitempty"`
+	Height              int                    `json:"height,omitempty"`
+	Fingerprint         string                 `json:"fingerprint"`
+	PayloadBytes        int                    `json:"payload_bytes"`
+	Marker              bool                   `json:"marker"`
+	MediaMS             *int64                 `json:"media_ms"`
+	Padding             bool                   `json:"padding"`
+	Outcome             string                 `json:"outcome"`
+	Admitted            bool                   `json:"admitted"`
+	NormalizedTimestamp *uint32                `json:"normalized_timestamp"`
+	NegativeOffset      bool                   `json:"negative_offset"`
 }
 
 type ingressObservedTrack struct {
 	CaptureMediaTrack
 	start       time.Time
+	media       *os.File
+	reports     *os.File
 	salt        []byte
 	mu          sync.Mutex
 	rows        []*ingressRow
@@ -157,9 +167,22 @@ func (track *ingressObservedTrack) ReadRTP() (*rtp.Packet, interceptor.Attribute
 	arrival := received.Sub(track.start).Nanoseconds()
 	fingerprint := hmac.New(sha256.New, track.salt)
 	fingerprint.Write(packet.Payload)
-	row := &ingressRow{ArrivalNS: arrival, SSRC: packet.SSRC, RID: track.RID(), PayloadType: packet.PayloadType, Sequence: packet.SequenceNumber, Timestamp: packet.Timestamp, Fingerprint: hex.EncodeToString(fingerprint.Sum(nil))}
+	row := &ingressRow{Kind: track.CaptureTrack().Kind, ArrivalNS: arrival, SSRC: packet.SSRC, RID: track.RID(), PayloadType: packet.PayloadType, Sequence: packet.SequenceNumber, Timestamp: packet.Timestamp, Fingerprint: hex.EncodeToString(fingerprint.Sum(nil))}
 	row.ArrivalUnixNS = received.UnixNano()
 	row.PayloadBytes = len(packet.Payload)
+	row.Marker = packet.Marker
+	if track.media != nil {
+		encoded, err := packet.Marshal()
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := json.NewEncoder(track.media).Encode(struct {
+			ArrivalMS int64  `json:"arrival_ms"`
+			Packet    string `json:"packet"`
+		}{received.Sub(track.start).Milliseconds(), base64.StdEncoding.EncodeToString(encoded)}); err != nil {
+			return nil, nil, err
+		}
+	}
 	row.Padding = packet.Padding
 	if rid := packet.GetExtension(track.ridID); len(rid) > 0 {
 		row.RID = string(rid)
@@ -176,22 +199,24 @@ func (track *ingressObservedTrack) ReadRTP() (*rtp.Packet, interceptor.Attribute
 	if value, ok := attributes[webrtc.AttributeRtxPayloadType].(uint8); ok {
 		row.RTXPayloadType = &value
 	}
-	var descriptor codecs.VP8Packet
-	if payload, decodeErr := descriptor.Unmarshal(packet.Payload); decodeErr == nil {
-		if descriptor.I == 1 {
-			id := descriptor.PictureID
-			row.PictureID = &id
-		}
-		if descriptor.S == 1 && descriptor.PID == 0 && len(payload) >= 10 && payload[0]&1 == 0 && bytes.Equal(payload[3:6], []byte{0x9d, 0x01, 0x2a}) {
-			row.Keyframe = true
-			row.Width = (int(payload[6]) | int(payload[7])<<8) & 0x3fff
-			row.Height = (int(payload[8]) | int(payload[9])<<8) & 0x3fff
+	if row.Kind == captureplane.TrackKindVideo {
+		var descriptor codecs.VP8Packet
+		if payload, decodeErr := descriptor.Unmarshal(packet.Payload); decodeErr == nil {
+			if descriptor.I == 1 {
+				id := descriptor.PictureID
+				row.PictureID = &id
+			}
+			if descriptor.S == 1 && descriptor.PID == 0 && len(payload) >= 10 && payload[0]&1 == 0 && bytes.Equal(payload[3:6], []byte{0x9d, 0x01, 0x2a}) {
+				row.Keyframe = true
+				row.Width = (int(payload[6]) | int(payload[7])<<8) & 0x3fff
+				row.Height = (int(payload[8]) | int(payload[9])<<8) & 0x3fff
+			}
 		}
 	}
 	row.Outcome = "admitted"
 	if !track.window.accept(packet.SSRC, packet.SequenceNumber) {
 		row.Outcome = "window_rejected"
-	} else if !track.replay.accept(packet, packet.SequenceNumber == track.window.sequence.last) {
+	} else if track.CaptureTrack().Kind == captureplane.TrackKindVideo && !track.replay.accept(packet, packet.SequenceNumber == track.window.sequence.last) {
 		row.Outcome = "replay_rejected"
 	}
 	track.mu.Lock()
@@ -206,9 +231,24 @@ func (track *ingressObservedTrack) ReadRTP() (*rtp.Packet, interceptor.Attribute
 	return packet, attributes, nil
 }
 
+type ingressCommand struct {
+	Action  string `json:"action"`
+	Session string `json:"session"`
+	Track   string `json:"track"`
+	Kind    string `json:"kind,omitempty"`
+}
+
 func runIngressMeasurement(t *testing.T, policy string, salt []byte) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 210*time.Second)
+	duration := 180 * time.Second
+	if value := os.Getenv("INGRESS_DURATION_SECONDS"); value != "" {
+		seconds, err := strconv.Atoi(value)
+		if err != nil || seconds < 10 || seconds > 300 {
+			t.Fatal("invalid ingress duration")
+		}
+		duration = time.Duration(seconds) * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), duration+30*time.Second)
 	defer cancel()
 	peer, err := pion.NewPeer(pion.Config{CaptureEpoch: 1})
 	if err != nil {
@@ -219,67 +259,123 @@ func runIngressMeasurement(t *testing.T, policy string, salt []byte) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	subscription := ingressSubscription{Location: "remote", SessionID: os.Getenv("INGRESS_PUBLISHER_SESSION"), TrackName: os.Getenv("INGRESS_TRACK")}
-	if policy == "explicit" {
-		subscription.Simulcast = &ingressPolicy{PreferredRID: "h", PriorityOrdering: "none", RIDNotAvailable: "asciibetical"}
-	}
-	response, err := ingressRequest(ctx, http.MethodPost, "/sessions/"+created.SessionID+"/tracks/new", struct {
-		Tracks []ingressSubscription `json:"tracks"`
-	}{[]ingressSubscription{subscription}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(response.Tracks) != 1 || response.Description == nil {
-		t.Fatal("missing single track/SDP")
-	}
+	output := os.Getenv("INGRESS_OUTPUT")
+	start := time.Now()
+	events := make(chan captureRuntimeEvent, 1024)
+	tracks := make(map[string]*ingressObservedTrack)
+	clocks := make(map[string]*captureTrackClock)
+	var identities []captureplane.PulledCaptureTrack
 	defer func() {
+		if len(identities) == 0 {
+			return
+		}
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cleanupCancel()
+		mids := make([]struct {
+			MID string `json:"mid"`
+		}, len(identities))
+		for i, identity := range identities {
+			mids[i].MID = string(identity.MID)
+		}
 		_, err := ingressRequest(cleanupCtx, http.MethodPut, "/sessions/"+created.SessionID+"/tracks/close", struct {
 			Tracks []struct {
 				MID string `json:"mid"`
 			} `json:"tracks"`
 			Force bool `json:"force"`
-		}{[]struct {
-			MID string `json:"mid"`
-		}{{response.Tracks[0].MID}}, true})
+		}{mids, true})
 		if err != nil {
-			t.Errorf("detach ingress track: %v", err)
+			t.Errorf("detach ingress tracks: %v", err)
 		}
 	}()
-	participant, err := utilities.NewID()
-	if err != nil {
-		t.Fatal(err)
-	}
-	mid := captureplane.ProviderReference(response.Tracks[0].MID)
-	identity := captureplane.PulledCaptureTrack{MID: mid, CaptureTrack: captureplane.CaptureTrack{OwnerReference: "ingress", TrackReference: "synthetic-camera", ParticipantID: participant, ParticipantGeneration: 1, Source: captureplane.TrackSourceCamera, Kind: captureplane.TrackKindVideo, RequestedLayer: captureplane.TrackLayerAuto}}
-	if err := peer.RegisterTracks([]captureplane.PulledCaptureTrack{identity}); err != nil {
-		t.Fatal(err)
-	}
-	answer, err := peer.AnswerRemoteOffer(ctx, captureplane.Negotiation{ID: "ingress", Requirement: captureplane.NegotiationAnswerNeeded, Description: response.Description})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = ingressRequest(ctx, http.MethodPut, "/sessions/"+created.SessionID+"/renegotiate", struct {
-		Description captureplane.Description `json:"sessionDescription"`
-	}{answer})
-	if err != nil {
-		t.Fatal(err)
-	}
-	remote, err := peer.WaitForTrack(ctx, mid)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if remote.Codec() != "vp8" {
-		t.Fatalf("expected VP8, got %s", remote.Codec())
-	}
-	var extensions []string
-	var ridID, repairedRID uint8
-	for _, line := range strings.Split(response.Description.SDP, "\n") {
-		parts := strings.Fields(line)
-		if len(parts) >= 2 {
+	var stops []func()
+	defer func() {
+		for _, stop := range stops {
+			stop()
+		}
+		for name, track := range tracks {
+			file, err := os.OpenFile(filepath.Join(output, policy+"-"+name+".jsonl"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+			if err != nil {
+				t.Error(err)
+				continue
+			}
+			encoder := json.NewEncoder(file)
+			for _, row := range track.rows {
+				if err := encoder.Encode(row); err != nil {
+					t.Error(err)
+					break
+				}
+			}
+			if err := file.Close(); err != nil {
+				t.Error(err)
+			}
+			if track.reports != nil {
+				if err := track.reports.Close(); err != nil {
+					t.Error(err)
+				}
+			}
+			if track.media != nil {
+				if err := track.media.Close(); err != nil {
+					t.Error(err)
+				}
+			}
+		}
+	}()
+	subscribe := func(session, trackName, name string, kind captureplane.TrackKind) {
+		t.Helper()
+		subscription := ingressSubscription{Location: "remote", SessionID: session, TrackName: trackName}
+		if policy == "explicit" && kind == captureplane.TrackKindVideo {
+			subscription.Simulcast = &ingressPolicy{PreferredRID: "h", PriorityOrdering: "none", RIDNotAvailable: "asciibetical"}
+		}
+		response, err := ingressRequest(ctx, http.MethodPost, "/sessions/"+created.SessionID+"/tracks/new", struct {
+			Tracks []ingressSubscription `json:"tracks"`
+		}{[]ingressSubscription{subscription}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(response.Tracks) != 1 || response.Description == nil {
+			t.Fatal("missing single track/SDP")
+		}
+		participant, err := utilities.NewID()
+		if err != nil {
+			t.Fatal(err)
+		}
+		mid := captureplane.ProviderReference(response.Tracks[0].MID)
+		source := captureplane.TrackSourceCamera
+		if kind == captureplane.TrackKindAudio {
+			source = captureplane.TrackSourceMicrophone
+		}
+		identity := captureplane.PulledCaptureTrack{MID: mid, CaptureTrack: captureplane.CaptureTrack{OwnerReference: "ingress", TrackReference: captureplane.ProviderReference(name), ParticipantID: participant, ParticipantGeneration: 1, Source: source, Kind: kind, RequestedLayer: captureplane.TrackLayerAuto}}
+		identities = append(identities, identity)
+		if err := peer.RegisterTracks(identities); err != nil {
+			t.Fatal(err)
+		}
+		answer, err := peer.AnswerRemoteOffer(ctx, captureplane.Negotiation{ID: "ingress", Requirement: captureplane.NegotiationAnswerNeeded, Description: response.Description})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = ingressRequest(ctx, http.MethodPut, "/sessions/"+created.SessionID+"/renegotiate", struct {
+			Description captureplane.Description `json:"sessionDescription"`
+		}{answer})
+		if err != nil {
+			t.Fatal(err)
+		}
+		remote, err := peer.WaitForTrack(ctx, mid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if kind == captureplane.TrackKindVideo && remote.Codec() != "vp8" {
+			t.Fatalf("expected VP8, got %s", remote.Codec())
+		}
+		var extensions []string
+		var ridID, repairedRID uint8
+		for _, line := range strings.Split(response.Description.SDP, "\n") {
+			parts := strings.Fields(line)
+			if len(parts) < 2 {
+				continue
+			}
 			var id uint8
 			if _, err := fmt.Sscanf(parts[0], "a=extmap:%d", &id); err == nil {
+				extensions = append(extensions, strings.TrimSpace(line))
 				if parts[1] == "urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id" {
 					ridID = id
 				}
@@ -288,77 +384,79 @@ func runIngressMeasurement(t *testing.T, policy string, salt []byte) {
 				}
 			}
 		}
-		if strings.HasPrefix(line, "a=extmap:") || strings.HasPrefix(line, "a=ssrc-group:") || strings.HasPrefix(line, "a=rtpmap:") || strings.HasPrefix(line, "a=fmtp:") {
-			extensions = append(extensions, strings.TrimSpace(line))
-		}
-	}
-	var answerExtensions []string
-	for _, line := range strings.Split(answer.SDP, "\n") {
-		if strings.HasPrefix(line, "a=extmap:") || strings.HasPrefix(line, "a=rtpmap:") || strings.HasPrefix(line, "a=fmtp:") || strings.HasPrefix(line, "a=rtcp-fb:") {
-			answerExtensions = append(answerExtensions, strings.TrimSpace(line))
-		}
-	}
-	metadata, err := json.Marshal(struct {
-		Policy           *ingressPolicy `json:"policy"`
-		RID              string         `json:"track_rid"`
-		SDPHeaders       []string       `json:"sdp_headers"`
-		AnswerExtensions []string       `json:"answer_extensions"`
-	}{subscription.Simulcast, remote.RID(), extensions, answerExtensions})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(os.Getenv("INGRESS_OUTPUT"), policy+".metadata.json"), metadata, 0600); err != nil {
-		t.Fatal(err)
-	}
-	start := time.Now()
-	track := &ingressObservedTrack{CaptureMediaTrack: remote, start: start, salt: salt, pending: make(map[*rtp.Packet]*ingressRow), ridID: ridID, repairedRID: repairedRID}
-	defer func() {
-		file, err := os.OpenFile(filepath.Join(os.Getenv("INGRESS_OUTPUT"), policy+".jsonl"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		metadata, err := json.Marshal(struct {
+			Kind       captureplane.TrackKind `json:"kind"`
+			Policy     *ingressPolicy         `json:"policy"`
+			RID        string                 `json:"track_rid"`
+			SDPHeaders []string               `json:"sdp_headers"`
+		}{kind, subscription.Simulcast, remote.RID(), extensions})
 		if err != nil {
-			t.Error(err)
-			return
+			t.Fatal(err)
 		}
-		defer file.Close()
-		encoder := json.NewEncoder(file)
-		for _, row := range track.rows {
-			if err := encoder.Encode(row); err != nil {
-				t.Error(err)
-				return
+		if err := os.WriteFile(filepath.Join(output, policy+"-"+name+".metadata.json"), metadata, 0600); err != nil {
+			t.Fatal(err)
+		}
+		track := &ingressObservedTrack{CaptureMediaTrack: remote, start: start, salt: salt, pending: make(map[*rtp.Packet]*ingressRow), ridID: ridID, repairedRID: repairedRID}
+		if os.Getenv("INGRESS_RETAIN_SYNTHETIC_MEDIA") == "1" {
+			track.media, err = os.OpenFile(filepath.Join(output, policy+"-"+name+".rtp.jsonl"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+			if err != nil {
+				t.Fatal(err)
 			}
 		}
-	}()
-	events := make(chan captureRuntimeEvent, 1024)
-	stop, err := startCaptureReader(ctx, &capturePionPeer{peer}, string(mid), track, 250*time.Millisecond, 10*time.Second, events)
-	if err != nil {
-		t.Fatal(err)
+		track.reports, err = os.OpenFile(filepath.Join(output, policy+"-"+name+".rtcp.jsonl"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tracks[name] = track
+		clocks[name] = new(captureTrackClock)
+		stop, err := startCaptureReader(ctx, &capturePionPeer{peer}, string(mid), track, 250*time.Millisecond, 10*time.Second, events)
+		if err != nil {
+			t.Fatal(err)
+		}
+		stops = append(stops, stop)
+
 	}
-	defer stop()
-	output := os.Getenv("INGRESS_OUTPUT")
+	// Pull audio first so camera's initial subscription cannot hide a change
+	// to an already active microphone clock.
+	if audio := os.Getenv("INGRESS_AUDIO_TRACK"); audio != "" {
+		subscribe(os.Getenv("INGRESS_PUBLISHER_SESSION"), audio, "microphone", captureplane.TrackKindAudio)
+	}
+	subscribe(os.Getenv("INGRESS_PUBLISHER_SESSION"), os.Getenv("INGRESS_TRACK"), "camera", captureplane.TrackKindVideo)
 	if err := os.WriteFile(filepath.Join(output, policy+".ready"), []byte("ready\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	var clock captureTrackClock
-	timer := time.NewTimer(180 * time.Second)
-	defer timer.Stop()
 	consume := func(event captureRuntimeEvent) {
 		if event.err != nil {
 			t.Fatalf("capture reader: %v", event.err)
 		}
+		name := string(event.track.CaptureTrack().TrackReference)
+		if event.report != nil {
+			clocks[name].observeSenderReport(event.report, event.track.CaptureTrack().Kind)
+			return
+		}
 		if event.packet == nil {
 			return
 		}
+		track := tracks[name]
 		track.mu.Lock()
 		defer track.mu.Unlock()
 		row := track.pending[event.packet]
 		if row == nil {
 			t.Fatal("production admission differs from shadow admission")
 		}
+		clock := clocks[name]
 		row.NegativeOffset = clock.started && int32(event.packet.Timestamp-clock.baseTS) < 0
-		_, normalized := clock.normalize(event.packet, captureplane.TrackKindVideo, event.at.Sub(start).Milliseconds())
+		media, normalized := clock.normalize(event.packet, track.CaptureTrack().Kind, event.at.Sub(start).Milliseconds())
+		row.MediaMS = &media
 		row.NormalizedTimestamp = &normalized
 		row.Admitted = true
 		delete(track.pending, event.packet)
 	}
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	command := 1
 collect:
 	for {
 		select {
@@ -368,19 +466,71 @@ collect:
 			break collect
 		case <-ctx.Done():
 			t.Fatal(ctx.Err())
+		case <-ticker.C:
+			data, err := os.ReadFile(filepath.Join(output, fmt.Sprintf("command-%d.json", command)))
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			var action ingressCommand
+			if err := json.Unmarshal(data, &action); err != nil {
+				t.Fatal(err)
+			}
+			if action.Action != "add" {
+				t.Fatal("unsupported ingress command")
+			}
+			kind := captureplane.TrackKindVideo
+			name := fmt.Sprintf("added-%d", command)
+			if action.Kind == "audio" {
+				kind = captureplane.TrackKindAudio
+				name = fmt.Sprintf("added-microphone-%d", command)
+			}
+			subscribe(action.Session, action.Track, name, kind)
+			if err := os.WriteFile(filepath.Join(output, fmt.Sprintf("%s.command-%d.done", policy, command)), []byte("done\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			command++
 		}
 	}
-	stop()
+	for _, stop := range stops {
+		stop()
+	}
+	stops = nil
 	for len(events) > 0 {
 		consume(<-events)
 	}
-	// Cancellation can win sendCaptureRuntimeEvent for the final in-flight
-	// packet. Preserve and label that boundary rather than losing the run.
-	for _, row := range track.pending {
-		if len(track.pending) != 1 || row != track.rows[len(track.rows)-1] {
-			t.Fatalf("%d non-terminal pending admissions", len(track.pending))
+	for name, track := range tracks {
+		for _, row := range track.pending {
+			row.Outcome = "measurement_boundary"
 		}
-		row.Outcome = "measurement_boundary"
+		clock := clocks[name]
+		t.Logf("policy=%s track=%s packets=%d duration=%s largest_correction_ms=%d total_correction_ms=%d", policy, name, len(track.rows), duration, clock.largestCorrectionMS, clock.correctionMS)
 	}
-	t.Logf("policy=%s packets=%d duration=180s", policy, len(track.rows))
+}
+
+func (track *ingressObservedTrack) ReadRTCP() ([]rtcp.Packet, interceptor.Attributes, error) {
+	packets, attributes, err := track.CaptureMediaTrack.(captureSenderReportTrack).ReadRTCP()
+	if err != nil {
+		return packets, attributes, err
+	}
+	for _, packet := range packets {
+		if report, ok := packet.(*rtcp.SenderReport); ok {
+			row := struct {
+				ArrivalNS int64  `json:"arrival_ns"`
+				SSRC      uint32 `json:"ssrc"`
+				NTP       uint64 `json:"ntp"`
+				RTP       uint32 `json:"rtp"`
+			}{time.Since(track.start).Nanoseconds(), report.SSRC, report.NTPTime, report.RTPTime}
+			if err := json.NewEncoder(track.reports).Encode(row); err != nil {
+				return nil, nil, err
+			}
+		}
+	}
+	return packets, attributes, nil
+}
+
+func (track *ingressObservedTrack) SetRTCPReadDeadline(deadline time.Time) error {
+	return track.CaptureMediaTrack.(captureSenderReportTrack).SetRTCPReadDeadline(deadline)
 }

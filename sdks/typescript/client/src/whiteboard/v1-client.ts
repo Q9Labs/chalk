@@ -40,6 +40,7 @@ type OperationEntry = {
 };
 
 type SnapshotAssembly = {
+  readonly promise: Promise<void>;
   readonly requestId: string;
   readonly deferred: Deferred<void>;
   sceneId?: string;
@@ -458,6 +459,8 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #requestSnapshot(): Promise<void> {
+    const active = this.#snapshots.values().next().value;
+    if (active) return active.promise;
     const requestId = this.#nextId();
     const frame = { type: "request_snapshot", request_id: requestId } as const;
     encodeWhiteboardV1ClientFrame(frame);
@@ -465,7 +468,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     const promise = new Promise<void>((resolve, reject) => {
       deferred = { resolve, reject, settled: false };
     });
-    this.#snapshots.set(requestId, { requestId, deferred, pages: new Map() });
+    this.#snapshots.set(requestId, { requestId, deferred, promise, pages: new Map() });
     this.#send(frame);
     return promise;
   }

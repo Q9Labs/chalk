@@ -2,10 +2,12 @@
 import collections
 import json
 import pathlib
+import statistics
 import sys
 
 
 def analyze(path):
+    media_kind = 'audio' if 'microphone' in path.stem else 'video'
     counts = collections.Counter()
     seen = {}
     admitted_seen = set()
@@ -19,8 +21,11 @@ def analyze(path):
     rtx_admitted = collections.defaultdict(set)
     first_arrival = None
     last_arrival = None
+    lag = []
     for line in path.open():
         row = json.loads(line)
+        media_kind = row.get('kind', media_kind)
+        video = media_kind == 'video'
         counts['packets'] += 1
         counts[row['outcome']] += 1
         counts['rtx_packets'] += row['rtx_ssrc'] is not None
@@ -32,6 +37,8 @@ def analyze(path):
         if row['rtx_ssrc'] is None and row['outcome'] != 'measurement_boundary':
             primary[ssrc].add(extended)
         if row['admitted']:
+            if row.get('media_ms') is not None:
+                lag.append(row['arrival_ns'] / 1e6 - row['media_ms'])
             admitted[ssrc].add(extended)
             if row['rtx_ssrc'] is not None:
                 rtx_admitted[ssrc].add(extended)
@@ -40,9 +47,9 @@ def analyze(path):
         if not row['payload_bytes']:
             counts['empty_packets'] += 1
             continue
-        counts['video_packets'] += 1
+        counts[media_kind + '_packets'] += 1
         kind = 'rtx' if row['rtx_ssrc'] is not None else 'primary'
-        counts[kind + '_video_packets'] += 1
+        counts[kind + '_' + media_kind + '_packets'] += 1
         fingerprint = (ssrc, row['fingerprint'])
         counts['ingress_repeats'] += fingerprint in seen
         counts[kind + '_repeats'] += fingerprint in seen
@@ -56,17 +63,17 @@ def analyze(path):
         previous = last.get(ssrc, timestamp)
         counts['ingress_regressions'] += (timestamp - previous + 2**31) % 2**32 - 2**31 < 0
         last[ssrc] = timestamp
-        if row['picture_id'] is not None:
+        if video and row['picture_id'] is not None:
             pictures[(ssrc, timestamp)].add(row['picture_id'])
         if row['admitted']:
-            counts['admitted_video_packets'] += 1
+            counts['admitted_' + media_kind + '_packets'] += 1
             counts['admitted_repeats'] += fingerprint in admitted_seen
             admitted_seen.add(fingerprint)
             previous = admitted_last.get(ssrc, timestamp)
             counts['admitted_regressions'] += (timestamp - previous + 2**31) % 2**32 - 2**31 < 0
             admitted_last[ssrc] = timestamp
             counts['negative_offsets'] += row['negative_offset']
-            if row['picture_id'] is not None:
+            if video and row['picture_id'] is not None:
                 admitted_pictures[(ssrc, timestamp)].add(row['picture_id'])
     counts['conflicting_buckets'] = sum(len(ids) > 1 for ids in pictures.values())
     counts['admitted_conflicting_buckets'] = sum(len(ids) > 1 for ids in admitted_pictures.values())
@@ -78,11 +85,17 @@ def analyze(path):
         counts['rtx_repaired_positions'] += len(gaps & rtx_admitted[ssrc])
         counts['unrepaired_positions'] += len(expected - admitted[ssrc])
     result = dict(counts)
+    result['media_kind'] = media_kind
     result['seconds'] = (last_arrival - first_arrival) / 1e9 if first_arrival is not None else 0
     result['unrepaired_fraction'] = counts['unrepaired_positions'] / counts['primary_sequence_span'] if counts['primary_sequence_span'] else None
+    result['arrival_minus_media_ms'] = {
+        'median': statistics.median(lag), 'largest': max(lag), 'end': lag[-1]
+    } if lag else None
     return result
 
 
 if __name__ == '__main__':
     directory = pathlib.Path(sys.argv[1])
-    print(json.dumps({policy: analyze(directory / (policy + '.jsonl')) for policy in ('omitted', 'explicit')}, indent=2))
+    paths = sorted(path for path in directory.glob('*.jsonl')
+                   if not path.name.endswith(('.rtcp.jsonl', '.rtp.jsonl')))
+    print(json.dumps({path.stem: analyze(path) for path in paths}, indent=2))

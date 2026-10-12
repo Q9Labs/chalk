@@ -35,7 +35,7 @@ export interface PainterOptions {
   /** CSS family list for interface text, from registerSubsetFamily. */
   readonly fontFamilies: string;
   readonly loadAsset: (assetId: string) => Promise<Image>;
-  readonly renderWhiteboard: (stateAssetId: string, colorScheme: Scene["colorScheme"], rect: Rect) => Promise<Canvas>;
+  readonly renderWhiteboard: (stateAssetId: string, colorScheme: Scene["colorScheme"], rect: Rect, revision?: number) => Promise<Canvas>;
 }
 
 export interface Painter {
@@ -102,7 +102,7 @@ export function createPainter(options: PainterOptions): Painter {
   }
 
   async function paintWhiteboardTile(tile: Extract<SceneTile, { kind: "whiteboard" }>, scene: Scene, theme: Theme): Promise<void> {
-    const board = await options.renderWhiteboard(tile.stateAssetId, scene.colorScheme, tile.rect);
+    const board = await options.renderWhiteboard(tile.stateAssetId, scene.colorScheme, tile.rect, tile.revision);
     context.save();
     roundedPath(context, tile.rect, px(TILE_RADIUS));
     context.clip();

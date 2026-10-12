@@ -53,6 +53,23 @@ const STATE = {
 };
 
 describe("recorded whiteboard export", () => {
+  it("paints selected history revisions and loads the history only once", async () => {
+    let loads = 0;
+    const history = { schemaVersion: "recording_whiteboard_history.v1", initial: { ...STATE, revision: 0, elements: [] }, updates: STATE.elements.map((element, index) => ({ revision: index + 1, elements: [element] })) };
+    const render = createWhiteboardRenderer({
+      fontsDirectory: "/unused-synthetic-fonts",
+      loadAsset: async () => {
+        loads++;
+        return { bytes: Buffer.from(JSON.stringify(history)), contentType: "application/json" };
+      },
+    });
+    const rect = { x: 0, y: 0, width: 640, height: 480 };
+    const first = await render("history", "light", rect, 1);
+    const last = await render("history", "light", rect, 3);
+    expect(loads).toBe(1);
+    expect(first.toBuffer("image/png")).not.toEqual(last.toBuffer("image/png"));
+    expect(await render("history", "light", rect, 3)).toBe(last);
+  }, 30_000);
   it("paints every browser freehand stroke instead of silently returning a blank canvas", async () => {
     const render = createWhiteboardRenderer({
       fontsDirectory: "/unused-synthetic-fonts",

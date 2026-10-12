@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pion/interceptor"
+	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/pion"
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
@@ -832,7 +833,7 @@ func (a *PionCaptureAttempt) applyBoundTracks(ctx context.Context, writer *captu
 }
 
 func (a *PionCaptureAttempt) consumePacket(ctx context.Context, writer *captureBundleWriter, event captureRuntimeEvent) error {
-	if event.packet == nil || event.track == nil {
+	if (event.packet == nil && event.report == nil) || event.track == nil {
 		return fmt.Errorf("%w: empty RTP event", ErrInvalidCaptureAttempt)
 	}
 	plan, err := a.packetAuthority(ctx)
@@ -880,10 +881,14 @@ collect:
 }
 
 func (a *PionCaptureAttempt) consumeAuthorizedPacket(ctx context.Context, writer *captureBundleWriter, event captureRuntimeEvent, plan captureplan.Plan) error {
-	if event.packet == nil || event.track == nil {
+	if (event.packet == nil && event.report == nil) || event.track == nil {
 		return fmt.Errorf("%w: empty RTP event", ErrInvalidCaptureAttempt)
 	}
 	if !capturePacketAllowed(plan, event.track.CaptureTrack()) {
+		return nil
+	}
+	if event.report != nil {
+		writer.addSenderReport(event.track, event.report)
 		return nil
 	}
 	if !a.ready {
@@ -1087,6 +1092,7 @@ type captureRuntimeEvent struct {
 	mid    string
 	track  CaptureMediaTrack
 	packet *rtp.Packet
+	report *rtcp.SenderReport
 	at     time.Time
 	err    error
 }
@@ -1123,6 +1129,7 @@ func startCaptureReader(ctx context.Context, peer CapturePeer, mid string, track
 	readerCtx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
 	video := track.CaptureTrack().Kind == captureplane.TrackKindVideo
+	stopReports := startCaptureSenderReports(readerCtx, mid, track, deadline, events)
 	go func() {
 		defer close(done)
 		defer cancel()
@@ -1176,6 +1183,7 @@ func startCaptureReader(ctx context.Context, peer CapturePeer, mid string, track
 	return func() {
 		cancel()
 		<-done
+		stopReports()
 	}, nil
 }
 
@@ -1293,37 +1301,6 @@ func (e *rtpSequenceExtender) Extend(sequence uint16) uint64 {
 		e.last = sequence
 	}
 	return candidate
-}
-
-type captureTrackClock struct {
-	sequence rtpSequenceExtender
-	baseTS   uint32
-	baseMS   int64
-	started  bool
-}
-
-func (c *captureTrackClock) normalize(packet *rtp.Packet, kind captureplane.TrackKind, firstPacketMS int64) (int64, uint32) {
-	rate := captureClockRate(kind)
-	if !c.started {
-		c.started = true
-		c.baseTS = packet.Timestamp
-		c.baseMS = firstPacketMS
-		return c.baseMS, uint32(c.baseMS * rate / 1_000)
-	}
-	delta := int64(int32(packet.Timestamp - c.baseTS))
-	if delta < 0 {
-		delta = 0
-	}
-	media := c.baseMS + delta*1_000/rate
-	timestamp := uint32(c.baseMS*rate/1_000) + uint32(delta)
-	return media, timestamp
-}
-
-func captureClockRate(kind captureplane.TrackKind) int64 {
-	if kind == captureplane.TrackKindAudio {
-		return 48_000
-	}
-	return 90_000
 }
 
 // captureBundleWriter is the runtime's bounded handoff from RTP to the
@@ -1600,6 +1577,21 @@ func (w *captureBundleWriter) ensureAssembler(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (w *captureBundleWriter) addSenderReport(track CaptureMediaTrack, report *rtcp.SenderReport) {
+	identity := track.CaptureTrack()
+	mid := string(identity.MID)
+	if binding, ok := w.bindings[mid]; !ok || binding != identity {
+		return
+	}
+	key := trackClockKey(w.active[mid])
+	clock := w.clocks[key]
+	if clock == nil {
+		clock = new(captureTrackClock)
+		w.clocks[key] = clock
+	}
+	clock.observeSenderReport(report, identity.Kind)
 }
 
 func (w *captureBundleWriter) addPacket(ctx context.Context, track CaptureMediaTrack, packet *rtp.Packet, at time.Time) error {
