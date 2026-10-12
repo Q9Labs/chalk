@@ -632,6 +632,38 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     refute recovering.awaiting_snapshot
   end
 
+  test "reads the log again after the client's snapshot request is rejected" do
+    Process.put(:whiteboard_events_after_four, [])
+    assert {:ok, initial} = SocketWhiteboardV1.init(%{})
+
+    state = %{
+      initial
+      | phase: :live,
+        identity: identity(),
+        scene_id: @scene_id,
+        revision: 4,
+        presentation_negotiated: true
+    }
+
+    assert {:push, {:text, _reset}, waiting} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_head, @scene_id, 5}, state)
+
+    assert waiting.awaiting_snapshot
+
+    Process.put(:whiteboard_snapshot_failure, {:retryable, :storage_unavailable})
+    request = %{"type" => "request_snapshot", "request_id" => "snapshot-request-0004"}
+    assert {:push, {:text, rejected}, retrying} = receive_frame(request, waiting)
+    assert JSON.decode!(rejected)["code"] == "storage_unavailable"
+    refute retrying.awaiting_snapshot
+
+    Process.put(:whiteboard_events_after_four, [update_event(5), update_event(6)])
+
+    assert {:push, {:text, replayed}, _replaying} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_head, @scene_id, 6}, retrying)
+
+    assert %{"type" => "update", "revision" => "5"} = JSON.decode!(replayed)
+  end
+
   test "replays a change that commits while a snapshot is being loaded" do
     Process.put(:whiteboard_events_after_four, [update_event(5)])
     state = recovering_state()
@@ -652,6 +684,27 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
 
     assert %{"type" => "update", "revision" => "5"} = JSON.decode!(encoded)
     assert caught_up.revision == 5
+  end
+
+  test "keeps the newest revision seen in frames and notices during a snapshot" do
+    state = recovering_state()
+
+    frame = %{
+      "type" => "update",
+      "operation_id" => "whiteboard-replay-0006",
+      "scene_id" => @scene_id,
+      "revision" => "6",
+      "elements" => [element()]
+    }
+
+    assert {:ok, noted} = SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, frame}, state)
+    assert noted.missed_head == {@scene_id, 6}
+
+    assert {:ok, ^noted} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_head, @scene_id, 5}, noted)
+
+    assert {:ok, _live} = receive_frame(snapshot_ack(noted), noted)
+    assert_received {:whiteboard_v1_head, @scene_id, 6}
   end
 
   test "resets a legacy socket when its replay passes the notified head" do

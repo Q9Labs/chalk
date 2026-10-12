@@ -128,6 +128,13 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     deliver_frame(state, frame)
   end
 
+  def handle_info(
+        {:whiteboard_v1_frame, %{"scene_id" => scene_id, "revision" => revision}},
+        %{phase: :recovering} = state
+      )
+      when is_binary(revision),
+      do: {:ok, note_missed_head(state, scene_id, String.to_integer(revision))}
+
   def handle_info({:whiteboard_v1_frame, _frame}, state), do: {:ok, state}
 
   def handle_info(
@@ -156,7 +163,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   def handle_info({:whiteboard_v1_head, scene_id, revision}, %{phase: :recovering} = state),
-    do: {:ok, %{state | missed_head: {scene_id, revision}}}
+    do: {:ok, note_missed_head(state, scene_id, revision)}
 
   def handle_info({:whiteboard_v1_head, _scene_id, _revision}, state), do: {:ok, state}
 
@@ -180,7 +187,15 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   def handle_info(:whiteboard_snapshot_next, state), do: {:ok, state}
 
   # A change that commits while the snapshot pages are in flight is not in the
-  # snapshot, and its notice was not handled. Handle the newest notice now.
+  # snapshot, and neither its frame nor its notice was handled. The newest
+  # revision seen is kept, and handled as a head notice after the last page.
+  defp note_missed_head(%{missed_head: {scene_id, seen}} = state, scene_id, revision)
+       when seen >= revision,
+       do: state
+
+  defp note_missed_head(state, scene_id, revision),
+    do: %{state | missed_head: {scene_id, revision}}
+
   defp replay_missed_head(nil), do: :ok
 
   defp replay_missed_head({scene_id, revision}),
@@ -437,7 +452,14 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
         {:push, {:text, Protocol.encode!(first)}, next}
 
       failure ->
-        operation_failure(request_id, :request_snapshot, failure, state)
+        # A rejected request must not leave the socket waiting for a snapshot:
+        # the next frame or notice may then start the recovery again.
+        operation_failure(
+          request_id,
+          :request_snapshot,
+          failure,
+          %{state | awaiting_snapshot: false}
+        )
     end
   end
 
