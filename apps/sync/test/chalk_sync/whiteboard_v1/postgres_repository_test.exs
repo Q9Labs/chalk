@@ -270,6 +270,25 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
     assert Enum.all?(stored, &(&1["version"] == 3))
   end
 
+  test "lists a snapshot in the byte order of the order keys", %{
+    host: host,
+    participant: participant
+  } do
+    {:ok, %{scene_id: scene_id}} = PostgresRepository.connect(host)
+
+    # A database collation such as en_US puts "aa" before "aA". The keys' own
+    # order is byte order, and a client rewrites every key that arrives out of it.
+    elements =
+      for {id, index} <- [{"lower", "aa"}, {"upper", "aA"}, {"next", "ab"}],
+          do: Map.put(element(id, 1, 1), "index", index)
+
+    update = %{operation_id: "order-keys", scene_id: scene_id, elements: elements}
+    assert {:ok, %{revision: 1}} = PostgresRepository.commit_update(host, update)
+
+    assert {:ok, %{elements: stored}} = PostgresRepository.snapshot(participant)
+    assert Enum.map(stored, & &1["index"]) == ["aA", "aa", "ab"]
+  end
+
   defp handwriting_element(index) do
     points = Enum.map(1..150, fn point -> [point / 3, :math.sin(point / 5) * 20] end)
 
