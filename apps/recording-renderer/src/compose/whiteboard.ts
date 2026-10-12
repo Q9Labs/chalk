@@ -40,7 +40,7 @@ type ChalkWhiteboard = typeof import("@q9labsai/chalk-whiteboard");
  */
 export function createWhiteboardRenderer(options: WhiteboardRendererOptions): WhiteboardRenderer {
   let modules: Promise<{ readonly excalidraw: Excalidraw; readonly whiteboard: ChalkWhiteboard }> | undefined;
-  const cursors = new Map<string, Promise<RecordingWhiteboardCursor>>();
+  let current: { readonly assetId: string; readonly cursor: Promise<RecordingWhiteboardCursor> } | undefined;
   let rendered: { readonly key: string; readonly canvas: Promise<Canvas> } | undefined;
 
   async function load(): Promise<{ readonly excalidraw: Excalidraw; readonly whiteboard: ChalkWhiteboard }> {
@@ -56,12 +56,8 @@ export function createWhiteboardRenderer(options: WhiteboardRendererOptions): Wh
   async function render(stateAssetId: string, colorScheme: "light" | "dark", rect: Rect, revision: number): Promise<Canvas> {
     modules ??= load();
     const { excalidraw, whiteboard } = await modules;
-    let cursor = cursors.get(stateAssetId);
-    if (cursor === undefined) {
-      cursor = options.loadAsset(stateAssetId).then((asset) => createRecordingWhiteboardCursor(JSON.parse(asset.bytes.toString("utf8"))));
-      cursors.set(stateAssetId, cursor);
-    }
-    const state = (await cursor).at(revision);
+    if (current?.assetId !== stateAssetId) current = { assetId: stateAssetId, cursor: options.loadAsset(stateAssetId).then((asset) => createRecordingWhiteboardCursor(JSON.parse(asset.bytes.toString("utf8")))) };
+    const state = (await current.cursor).at(revision);
     const files = await loadRecordingWhiteboardFiles(state, async ({ assetId }) => {
       const asset = await options.loadAsset(assetId);
       return { mimeType: asset.contentType, dataURL: `data:${asset.contentType};base64,${asset.bytes.toString("base64")}`, createdAtMs: 0 };

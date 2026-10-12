@@ -1109,17 +1109,30 @@ func scheduleWhiteboardTail(source CompletionSource, state *whiteboardState, _ m
 			return 0, err
 		}
 		changes := make([]whiteboardElementWire, 0, len(fact.Elements))
+		var changeByID map[string]int
+		if len(fact.Elements) > 1 {
+			changeByID = make(map[string]int, len(fact.Elements))
+		}
 		for _, raw := range fact.Elements {
 			element, decodeErr := decodeWhiteboardElement(raw)
 			if decodeErr != nil {
 				return 0, decodeErr
 			}
-			if state == nil {
-				changes = append(changes, element)
+			if index, exists := changeByID[element.ID]; exists {
+				if whiteboardElementWins(element, changes[index]) {
+					changes[index] = element
+				}
 				continue
 			}
-			if existing, exists := state.Elements[element.ID]; !exists || whiteboardElementWins(element, existing) {
+			if state == nil {
 				changes = append(changes, element)
+			} else if existing, exists := state.Elements[element.ID]; !exists || whiteboardElementWins(element, existing) {
+				changes = append(changes, element)
+			} else {
+				continue
+			}
+			if changeByID != nil {
+				changeByID[element.ID] = len(changes) - 1
 			}
 		}
 		before := state

@@ -139,3 +139,36 @@ func TestInitialChatRetainsNewestWindow(t *testing.T) {
 func historyTestStroke(i int) json.RawMessage {
 	return json.RawMessage(fmt.Sprintf(`{"id":"stroke-%d","type":"freedraw","version":1,"version_nonce":20,"index":"a%06d","is_deleted":false,"payload":{"points":[[0,0],[10,10]]}}`, i, i))
 }
+
+func TestWhiteboardHistoryKeepsFinalWinnerInLegacyDuplicateBatch(t *testing.T) {
+	fixture := newParticipantBuilderFixture(t)
+	setParticipantPlan(t, &fixture.source, 1, []captureplan.ParticipantSnapshot{activeParticipant(fixture.first, "Alex", 1)}, nil)
+	fixture.source.WhiteboardStartRevision = 1
+	fixture.source.WhiteboardOriginRevision = 1
+	fixture.source.InitialWhiteboard = &WhiteboardSnapshotFact{SceneID: "scene-1", Revision: 1, Presenting: true, AppState: json.RawMessage(`{}`), Elements: []json.RawMessage{historyTestStroke(0)}}
+	var element whiteboardElementWire
+	if err := json.Unmarshal(historyTestStroke(0), &element); err != nil {
+		t.Fatal(err)
+	}
+	var batch []json.RawMessage
+	for _, version := range []int64{3, 2} {
+		element.Version = version
+		raw, err := json.Marshal(element)
+		if err != nil {
+			t.Fatal(err)
+		}
+		batch = append(batch, raw)
+	}
+	fixture.source.WhiteboardTailEvents = []WhiteboardEventFact{{OperationID: "legacy-duplicate", Name: "submit_update", SceneID: "scene-1", Revision: 2, Elements: batch, CompletedAt: fixture.source.CaptureReadyAt.Add(100 * time.Millisecond)}}
+	built, err := buildPresentation(fixture.source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var history whiteboardHistoryWire
+	if err := json.Unmarshal(built.Assets[0].Body, &history); err != nil {
+		t.Fatal(err)
+	}
+	if len(history.Updates) != 1 || len(history.Updates[0].Elements) != 1 || history.Updates[0].Elements[0].Version != 3 {
+		t.Fatalf("legacy winner regressed: %+v", history)
+	}
+}
