@@ -36,15 +36,16 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
 
     def read_after(_identity, scene_id, 4) do
       {:ok,
-       [
-         %{
-           type: :presentation,
-           operation_id: "whiteboard-presentation-0001",
-           scene_id: scene_id,
-           revision: 5,
-           presenting: true
-         }
-       ]}
+       Process.get(:whiteboard_events_after_four) ||
+         [
+           %{
+             type: :presentation,
+             operation_id: "whiteboard-presentation-0001",
+             scene_id: scene_id,
+             revision: 5,
+             presenting: true
+           }
+         ]}
     end
   end
 
@@ -521,6 +522,91 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
            }
   end
 
+  test "replays both changes when a second one commits before the first head notice" do
+    Process.put(:whiteboard_events_after_four, [update_event(5), update_event(6)])
+    assert {:ok, initial} = SocketWhiteboardV1.init(%{})
+
+    state = %{
+      initial
+      | phase: :live,
+        identity: identity(),
+        scene_id: @scene_id,
+        revision: 4,
+        presentation_negotiated: true
+    }
+
+    assert {:push, {:text, first}, replaying} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_head, @scene_id, 5}, state)
+
+    assert %{"type" => "update", "revision" => "5"} = JSON.decode!(first)
+    assert replaying.revision == 6
+
+    assert {:push, {:text, second}, replayed} =
+             SocketWhiteboardV1.handle_info(:whiteboard_drain, replaying)
+
+    assert %{"type" => "update", "revision" => "6"} = JSON.decode!(second)
+
+    assert {:ok, ^replayed} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_head, @scene_id, 6}, replayed)
+  end
+
+  test "replays the earlier change when a later one arrives first" do
+    Process.put(:whiteboard_events_after_four, [update_event(5), update_event(6)])
+    assert {:ok, initial} = SocketWhiteboardV1.init(%{})
+
+    state = %{
+      initial
+      | phase: :live,
+        identity: identity(),
+        scene_id: @scene_id,
+        revision: 4,
+        presentation_negotiated: true
+    }
+
+    later = %{
+      "type" => "update",
+      "operation_id" => "whiteboard-replay-0006",
+      "scene_id" => @scene_id,
+      "revision" => "6",
+      "elements" => [element()]
+    }
+
+    assert {:push, {:text, first}, replaying} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, later}, state)
+
+    assert %{"type" => "update", "revision" => "5"} = JSON.decode!(first)
+    assert replaying.revision == 6
+
+    assert {:push, {:text, second}, replayed} =
+             SocketWhiteboardV1.handle_info(:whiteboard_drain, replaying)
+
+    assert %{"type" => "update", "revision" => "6"} = JSON.decode!(second)
+
+    earlier = %{later | "operation_id" => "whiteboard-replay-0005", "revision" => "5"}
+
+    assert {:ok, ^replayed} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, earlier}, replayed)
+  end
+
+  test "resets a legacy socket when its replay passes the notified head" do
+    Process.put(:whiteboard_events_after_four, [update_event(5), update_event(6)])
+    assert {:ok, initial} = SocketWhiteboardV1.init(%{})
+
+    legacy = %{
+      initial
+      | phase: :live,
+        identity: identity(),
+        scene_id: @scene_id,
+        revision: 4,
+        presentation_negotiated: false
+    }
+
+    assert {:push, {:text, encoded}, _reset} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_head, @scene_id, 5}, legacy)
+
+    assert %{"type" => "reset_required", "reason" => "gap"} = JSON.decode!(encoded)
+  end
+
   test "keeps a multipart update private until complete and fails an expired assembly" do
     assert {:ok, initial} = SocketWhiteboardV1.init(%{})
 
@@ -579,6 +665,16 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
              "recoverable" => true,
              "message" => "Whiteboard temporarily overloaded"
            }
+  end
+
+  defp update_event(revision) do
+    %{
+      type: :update,
+      operation_id: "whiteboard-replay-000#{revision}",
+      scene_id: @scene_id,
+      revision: revision,
+      elements: [element()]
+    }
   end
 
   defp identity do

@@ -104,9 +104,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
          } = frame},
         %{phase: :live, presentation_negotiated: true, scene_id: scene_id} = state
       ) do
-    if String.to_integer(revision) <= state.revision,
-      do: {:ok, state},
-      else: deliver_frame(state, frame)
+    deliver_in_order(state, frame, scene_id, String.to_integer(revision))
   end
 
   def handle_info(
@@ -121,9 +119,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
         %{phase: :live, scene_id: scene_id} = state
       )
       when type in ["update", "update_part"] and is_binary(revision) do
-    if String.to_integer(revision) <= state.revision,
-      do: {:ok, state},
-      else: deliver_frame(state, frame)
+    deliver_in_order(state, frame, scene_id, String.to_integer(revision))
   end
 
   def handle_info({:whiteboard_v1_frame, frame}, %{phase: :live} = state) do
@@ -178,6 +174,17 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   def handle_info(:whiteboard_snapshot_next, state), do: {:ok, state}
 
+  # The client trusts the order of what it receives. A frame that arrives
+  # ahead of an earlier revision must not move the cursor past that revision,
+  # or the earlier change never reaches this Participant.
+  defp deliver_in_order(state, frame, scene_id, revision) do
+    cond do
+      revision <= state.revision -> {:ok, state}
+      revision == state.revision + 1 -> deliver_frame(state, frame)
+      true -> replay_or_reset(state, state.identity, scene_id, revision)
+    end
+  end
+
   defp replay_or_reset(state, identity, scene_id, revision) do
     case Episode.read_after(
            identity,
@@ -186,8 +193,10 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
            state.presentation_negotiated
          ) do
       {:ok, frames} ->
-        if frames_reach_revision?(frames, revision),
-          do: enqueue_replay(state, scene_id, revision, frames),
+        reached = replayed_revision(frames)
+
+        if replay_reaches_head?(state, reached, revision),
+          do: enqueue_replay(state, scene_id, reached, frames),
           else: enqueue_gap_reset(state, scene_id)
 
       _unavailable ->
@@ -661,14 +670,19 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     end
   end
 
-  defp frames_reach_revision?([], _revision), do: false
+  # Two changes can commit before this socket handles the first head notice.
+  # The durable log then already holds both, and the replay carries both.
+  # A legacy socket gets no presentation frames, so only an exact match proves
+  # that its replay left nothing out.
+  defp replay_reaches_head?(%{presentation_negotiated: true}, reached, revision),
+    do: reached >= revision
 
-  defp frames_reach_revision?(frames, revision) do
-    frames
-    |> List.last()
-    |> Map.get("revision")
-    |> then(&(&1 == Integer.to_string(revision)))
-  end
+  defp replay_reaches_head?(_legacy, reached, revision), do: reached == revision
+
+  defp replayed_revision([]), do: 0
+
+  defp replayed_revision(frames),
+    do: frames |> List.last() |> Map.fetch!("revision") |> String.to_integer()
 
   defp cancel_timer(nil), do: :ok
   defp cancel_timer(timer), do: Process.cancel_timer(timer)
