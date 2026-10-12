@@ -36,15 +36,16 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
 
     def read_after(_identity, scene_id, 4) do
       {:ok,
-       [
-         %{
-           type: :presentation,
-           operation_id: "whiteboard-presentation-0001",
-           scene_id: scene_id,
-           revision: 5,
-           presenting: true
-         }
-       ]}
+       Process.get(:whiteboard_events_after_four) ||
+         [
+           %{
+             type: :presentation,
+             operation_id: "whiteboard-presentation-0001",
+             scene_id: scene_id,
+             revision: 5,
+             presenting: true
+           }
+         ]}
     end
   end
 
@@ -521,6 +522,286 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
            }
   end
 
+  test "replays both changes when a second one commits before the first head notice" do
+    Process.put(:whiteboard_events_after_four, [update_event(5), update_event(6)])
+    assert {:ok, initial} = SocketWhiteboardV1.init(%{})
+
+    state = %{
+      initial
+      | phase: :live,
+        identity: identity(),
+        scene_id: @scene_id,
+        revision: 4,
+        presentation_negotiated: true
+    }
+
+    assert {:push, {:text, first}, replaying} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_head, @scene_id, 5}, state)
+
+    assert %{"type" => "update", "revision" => "5"} = JSON.decode!(first)
+    assert replaying.revision == 6
+
+    assert {:push, {:text, second}, replayed} =
+             SocketWhiteboardV1.handle_info(:whiteboard_drain, replaying)
+
+    assert %{"type" => "update", "revision" => "6"} = JSON.decode!(second)
+
+    assert {:ok, ^replayed} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_head, @scene_id, 6}, replayed)
+  end
+
+  test "replays the earlier change when a later one arrives first" do
+    Process.put(:whiteboard_events_after_four, [update_event(5), update_event(6)])
+    assert {:ok, initial} = SocketWhiteboardV1.init(%{})
+
+    state = %{
+      initial
+      | phase: :live,
+        identity: identity(),
+        scene_id: @scene_id,
+        revision: 4,
+        presentation_negotiated: true
+    }
+
+    later = %{
+      "type" => "update",
+      "operation_id" => "whiteboard-replay-0006",
+      "scene_id" => @scene_id,
+      "revision" => "6",
+      "elements" => [element()]
+    }
+
+    assert {:push, {:text, first}, replaying} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, later}, state)
+
+    assert %{"type" => "update", "revision" => "5"} = JSON.decode!(first)
+    assert replaying.revision == 6
+
+    assert {:push, {:text, second}, replayed} =
+             SocketWhiteboardV1.handle_info(:whiteboard_drain, replaying)
+
+    assert %{"type" => "update", "revision" => "6"} = JSON.decode!(second)
+
+    earlier = %{later | "operation_id" => "whiteboard-replay-0005", "revision" => "5"}
+
+    assert {:ok, ^replayed} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, earlier}, replayed)
+  end
+
+  test "sends one reset and reads the log no more until the client asks for a snapshot" do
+    Process.put(:whiteboard_events_after_four, [])
+    assert {:ok, initial} = SocketWhiteboardV1.init(%{})
+
+    state = %{
+      initial
+      | phase: :live,
+        identity: identity(),
+        scene_id: @scene_id,
+        revision: 4,
+        presentation_negotiated: true
+    }
+
+    assert {:push, {:text, encoded}, waiting} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_head, @scene_id, 5}, state)
+
+    assert %{"type" => "reset_required", "reason" => "gap"} = JSON.decode!(encoded)
+    assert waiting.awaiting_snapshot
+
+    Process.put(:whiteboard_events_after_four, [update_event(5), update_event(6)])
+
+    assert {:ok, ^waiting} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_head, @scene_id, 6}, waiting)
+
+    later = %{
+      "type" => "update",
+      "operation_id" => "whiteboard-replay-0006",
+      "scene_id" => @scene_id,
+      "revision" => "6",
+      "elements" => [element()]
+    }
+
+    assert {:ok, ^waiting} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, later}, waiting)
+
+    assert {:push, {:text, _first_page}, recovering} =
+             receive_frame(
+               %{"type" => "request_snapshot", "request_id" => "snapshot-request-0003"},
+               waiting
+             )
+
+    refute recovering.awaiting_snapshot
+  end
+
+  test "reads the log again after the client's snapshot request is rejected" do
+    Process.put(:whiteboard_events_after_four, [])
+    assert {:ok, initial} = SocketWhiteboardV1.init(%{})
+
+    state = %{
+      initial
+      | phase: :live,
+        identity: identity(),
+        scene_id: @scene_id,
+        revision: 4,
+        presentation_negotiated: true
+    }
+
+    assert {:push, {:text, _reset}, waiting} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_head, @scene_id, 5}, state)
+
+    assert waiting.awaiting_snapshot
+
+    Process.put(:whiteboard_snapshot_failure, {:retryable, :storage_unavailable})
+    request = %{"type" => "request_snapshot", "request_id" => "snapshot-request-0004"}
+    assert {:push, {:text, rejected}, retrying} = receive_frame(request, waiting)
+    assert JSON.decode!(rejected)["code"] == "storage_unavailable"
+    refute retrying.awaiting_snapshot
+
+    Process.put(:whiteboard_events_after_four, [update_event(5), update_event(6)])
+
+    assert {:push, {:text, replayed}, _replaying} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_head, @scene_id, 6}, retrying)
+
+    assert %{"type" => "update", "revision" => "5"} = JSON.decode!(replayed)
+  end
+
+  test "replays a change that commits while a snapshot is being loaded" do
+    Process.put(:whiteboard_events_after_four, [update_event(5)])
+    state = recovering_state()
+
+    assert {:ok, noted} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_head, @scene_id, 5}, state)
+
+    assert noted.missed_head == {@scene_id, 5}
+
+    assert {:push, {:text, encoded}, caught_up} = receive_frame(snapshot_ack(noted), noted)
+    assert %{"type" => "update", "revision" => "5"} = JSON.decode!(encoded)
+    assert caught_up.phase == :live
+    assert caught_up.revision == 5
+    assert caught_up.missed_head == nil
+  end
+
+  test "sends the kept revision before a part that was queued during the snapshot" do
+    Process.put(:whiteboard_events_after_four, [update_event(5)])
+    state = recovering_state()
+
+    part = %{
+      "type" => "update_part",
+      "operation_id" => "whiteboard-replay-0005",
+      "scene_id" => @scene_id,
+      "revision" => "5",
+      "part" => 0,
+      "part_count" => 2,
+      "element_count" => 2,
+      "elements" => [element()]
+    }
+
+    assert {:ok, noted} = SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, part}, state)
+
+    # The replay comes with the last snapshot page, so the queued last part
+    # cannot reach the client without its first part.
+    assert {:push, {:text, encoded}, caught_up} = receive_frame(snapshot_ack(noted), noted)
+    assert %{"type" => "update", "revision" => "5"} = JSON.decode!(encoded)
+
+    assert {:ok, ^caught_up} =
+             SocketWhiteboardV1.handle_info(
+               {:whiteboard_v1_frame, %{part | "part" => 1}},
+               caught_up
+             )
+  end
+
+  test "keeps the newest revision seen in frames and notices during a snapshot" do
+    Process.put(:whiteboard_events_after_four, [update_event(5), update_event(6)])
+    state = recovering_state()
+
+    frame = %{
+      "type" => "update",
+      "operation_id" => "whiteboard-replay-0006",
+      "scene_id" => @scene_id,
+      "revision" => "6",
+      "elements" => [element()]
+    }
+
+    assert {:ok, noted} = SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, frame}, state)
+    assert noted.missed_head == {@scene_id, 6}
+
+    assert {:ok, ^noted} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_head, @scene_id, 5}, noted)
+
+    assert {:push, {:text, encoded}, caught_up} = receive_frame(snapshot_ack(noted), noted)
+    assert %{"type" => "update", "revision" => "5"} = JSON.decode!(encoded)
+    assert caught_up.revision == 6
+  end
+
+  test "starts a queued snapshot only after the replay has gone out" do
+    Process.put(:whiteboard_events_after_four, [update_event(5), update_event(6)])
+    state = recovering_state()
+    request = %{"type" => "request_snapshot", "request_id" => "snapshot-request-0005"}
+    assert {:ok, queued} = receive_frame(request, state)
+
+    assert {:ok, noted} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_head, @scene_id, 6}, queued)
+
+    assert {:push, {:text, first}, replaying} = receive_frame(snapshot_ack(noted), noted)
+    assert %{"type" => "update", "revision" => "5"} = JSON.decode!(first)
+    assert_received :whiteboard_snapshot_next
+    assert_received :whiteboard_drain
+
+    assert {:ok, ^replaying} =
+             SocketWhiteboardV1.handle_info(:whiteboard_snapshot_next, replaying)
+
+    assert_received :whiteboard_snapshot_next
+
+    assert {:push, {:text, second}, drained} =
+             SocketWhiteboardV1.handle_info(:whiteboard_drain, replaying)
+
+    assert %{"type" => "update", "revision" => "6"} = JSON.decode!(second)
+
+    assert {:push, {:text, page}, recovering} =
+             SocketWhiteboardV1.handle_info(:whiteboard_snapshot_next, drained)
+
+    assert JSON.decode!(page)["request_id"] == request["request_id"]
+    assert recovering.phase == :recovering
+  end
+
+  test "a stopping socket does not wait for its outbound queue" do
+    Process.put(:whiteboard_events_after_four, [update_event(5), update_event(6)])
+    state = recovering_state()
+    request = %{"type" => "request_snapshot", "request_id" => "snapshot-request-0006"}
+    assert {:ok, queued} = receive_frame(request, state)
+
+    assert {:ok, noted} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_head, @scene_id, 6}, queued)
+
+    assert {:push, {:text, _first}, replaying} = receive_frame(snapshot_ack(noted), noted)
+    assert_received :whiteboard_snapshot_next
+
+    stopping = %{replaying | terminal: %{close_code: 1012, reason: :delivery_unavailable}}
+
+    assert {:ok, ^stopping} =
+             SocketWhiteboardV1.handle_info(:whiteboard_snapshot_next, stopping)
+
+    refute_received :whiteboard_snapshot_next
+  end
+
+  test "resets a legacy socket when its replay passes the notified head" do
+    Process.put(:whiteboard_events_after_four, [update_event(5), update_event(6)])
+    assert {:ok, initial} = SocketWhiteboardV1.init(%{})
+
+    legacy = %{
+      initial
+      | phase: :live,
+        identity: identity(),
+        scene_id: @scene_id,
+        revision: 4,
+        presentation_negotiated: false
+    }
+
+    assert {:push, {:text, encoded}, _reset} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_head, @scene_id, 5}, legacy)
+
+    assert %{"type" => "reset_required", "reason" => "gap"} = JSON.decode!(encoded)
+  end
+
   test "keeps a multipart update private until complete and fails an expired assembly" do
     assert {:ok, initial} = SocketWhiteboardV1.init(%{})
 
@@ -579,6 +860,16 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
              "recoverable" => true,
              "message" => "Whiteboard temporarily overloaded"
            }
+  end
+
+  defp update_event(revision) do
+    %{
+      type: :update,
+      operation_id: "whiteboard-replay-000#{revision}",
+      scene_id: @scene_id,
+      revision: revision,
+      elements: [element()]
+    }
   end
 
   defp identity do

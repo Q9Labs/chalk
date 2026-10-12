@@ -46,6 +46,8 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        revision: 0,
        snapshot: nil,
        pending_snapshot_requests: [],
+       awaiting_snapshot: false,
+       missed_head: nil,
        multipart: nil,
        multipart_timer: nil,
        cursor_window_started_at_ms: 0,
@@ -104,9 +106,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
          } = frame},
         %{phase: :live, presentation_negotiated: true, scene_id: scene_id} = state
       ) do
-    if String.to_integer(revision) <= state.revision,
-      do: {:ok, state},
-      else: deliver_frame(state, frame)
+    deliver_in_order(state, frame, scene_id, String.to_integer(revision))
   end
 
   def handle_info(
@@ -121,14 +121,19 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
         %{phase: :live, scene_id: scene_id} = state
       )
       when type in ["update", "update_part"] and is_binary(revision) do
-    if String.to_integer(revision) <= state.revision,
-      do: {:ok, state},
-      else: deliver_frame(state, frame)
+    deliver_in_order(state, frame, scene_id, String.to_integer(revision))
   end
 
   def handle_info({:whiteboard_v1_frame, frame}, %{phase: :live} = state) do
     deliver_frame(state, frame)
   end
+
+  def handle_info(
+        {:whiteboard_v1_frame, %{"scene_id" => scene_id, "revision" => revision}},
+        %{phase: :recovering} = state
+      )
+      when is_binary(revision),
+      do: {:ok, note_missed_head(state, scene_id, String.to_integer(revision))}
 
   def handle_info({:whiteboard_v1_frame, _frame}, state), do: {:ok, state}
 
@@ -157,9 +162,33 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     end
   end
 
+  def handle_info({:whiteboard_v1_head, scene_id, revision}, %{phase: :recovering} = state),
+    do: {:ok, note_missed_head(state, scene_id, revision)}
+
   def handle_info({:whiteboard_v1_head, _scene_id, _revision}, state), do: {:ok, state}
 
   def handle_info(:whiteboard_drain, state), do: push_next(state)
+
+  # Frames of a replay are still queued. The next snapshot must not go out
+  # between them, or the client receives older updates after a newer board.
+  # A stopping socket no longer drains its queue, so it must not wait for it.
+  def handle_info(
+        :whiteboard_snapshot_next,
+        %{
+          phase: :live,
+          terminal: nil,
+          pending_snapshot_requests: [_ | _],
+          outbound: %{frame_count: queued}
+        } = state
+      )
+      when queued > 0 do
+    send(self(), :whiteboard_snapshot_next)
+    {:ok, state}
+  end
+
+  def handle_info(:whiteboard_snapshot_next, %{terminal: terminal} = state)
+      when not is_nil(terminal),
+      do: {:ok, state}
 
   def handle_info(
         :whiteboard_snapshot_next,
@@ -178,6 +207,39 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   def handle_info(:whiteboard_snapshot_next, state), do: {:ok, state}
 
+  # A change that commits while the snapshot pages are in flight is not in the
+  # snapshot, and neither its frame nor its notice was handled. The newest
+  # revision seen is kept and handled as a head notice with the last page,
+  # before any frame that is already queued: the queued last part of a
+  # multipart update would otherwise move the cursor past its first part.
+  defp note_missed_head(%{missed_head: {scene_id, seen}} = state, scene_id, revision)
+       when seen >= revision,
+       do: state
+
+  defp note_missed_head(state, scene_id, revision),
+    do: %{state | missed_head: {scene_id, revision}}
+
+  defp catch_up_after_snapshot(state, nil), do: {:ok, state}
+
+  defp catch_up_after_snapshot(state, {scene_id, revision}),
+    do: handle_info({:whiteboard_v1_head, scene_id, revision}, state)
+
+  # The client trusts the order of what it receives. A frame that arrives
+  # ahead of an earlier revision must not move the cursor past that revision,
+  # or the earlier change never reaches this Participant.
+  defp deliver_in_order(state, frame, scene_id, revision) do
+    cond do
+      revision <= state.revision -> {:ok, state}
+      revision == state.revision + 1 -> deliver_frame(state, frame)
+      true -> replay_or_reset(state, state.identity, scene_id, revision)
+    end
+  end
+
+  # The client was told to load a snapshot. Until it asks for one, another
+  # read of the log would only repeat the reset for every frame that arrives.
+  defp replay_or_reset(%{awaiting_snapshot: true} = state, _identity, _scene_id, _revision),
+    do: {:ok, state}
+
   defp replay_or_reset(state, identity, scene_id, revision) do
     case Episode.read_after(
            identity,
@@ -186,8 +248,10 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
            state.presentation_negotiated
          ) do
       {:ok, frames} ->
-        if frames_reach_revision?(frames, revision),
-          do: enqueue_replay(state, scene_id, revision, frames),
+        reached = replayed_revision(frames)
+
+        if replay_reaches_head?(state, reached, revision),
+          do: enqueue_replay(state, scene_id, reached, frames),
           else: enqueue_gap_reset(state, scene_id)
 
       _unavailable ->
@@ -400,7 +464,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
         }
 
         next =
-          %{state | phase: :recovering, snapshot: snapshot}
+          %{state | phase: :recovering, snapshot: snapshot, awaiting_snapshot: false}
           |> observe_operation("request_snapshot", "accepted")
 
         Diagnostics.record(:whiteboard_recovery_started, identity,
@@ -411,7 +475,14 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
         {:push, {:text, Protocol.encode!(first)}, next}
 
       failure ->
-        operation_failure(request_id, :request_snapshot, failure, state)
+        # A rejected request must not leave the socket waiting for a snapshot:
+        # the next frame or notice may then start the recovery again.
+        operation_failure(
+          request_id,
+          :request_snapshot,
+          failure,
+          %{state | awaiting_snapshot: false}
+        )
     end
   end
 
@@ -442,7 +513,8 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
               | phase: :live,
                 snapshot: nil,
                 scene_id: snapshot.scene_id,
-                revision: String.to_integer(snapshot.revision)
+                revision: String.to_integer(snapshot.revision),
+                missed_head: nil
             }
 
           Diagnostics.record(:whiteboard_recovery_succeeded, next.identity,
@@ -451,7 +523,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
           )
 
           resume_snapshot_requests(next)
-          {:ok, next}
+          catch_up_after_snapshot(next, state.missed_head)
       end
     else
       stop(state, 1008, "invalid snapshot acknowledgement", :invalid_acknowledgement)
@@ -661,14 +733,19 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     end
   end
 
-  defp frames_reach_revision?([], _revision), do: false
+  # Two changes can commit before this socket handles the first head notice.
+  # The durable log then already holds both, and the replay carries both.
+  # A legacy socket gets no presentation frames, so only an exact match proves
+  # that its replay left nothing out.
+  defp replay_reaches_head?(%{presentation_negotiated: true}, reached, revision),
+    do: reached >= revision
 
-  defp frames_reach_revision?(frames, revision) do
-    frames
-    |> List.last()
-    |> Map.get("revision")
-    |> then(&(&1 == Integer.to_string(revision)))
-  end
+  defp replay_reaches_head?(_legacy, reached, revision), do: reached == revision
+
+  defp replayed_revision([]), do: 0
+
+  defp replayed_revision(frames),
+    do: frames |> List.last() |> Map.fetch!("revision") |> String.to_integer()
 
   defp cancel_timer(nil), do: :ok
   defp cancel_timer(timer), do: Process.cancel_timer(timer)
@@ -677,7 +754,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   defp resume_snapshot_requests(_state), do: send(self(), :whiteboard_snapshot_next)
 
   defp enqueue_gap_reset(state, scene_id) do
-    enqueue_and_push(state, [
+    enqueue_and_push(%{state | awaiting_snapshot: true}, [
       %{
         "type" => "reset_required",
         "scene_id" => scene_id,
