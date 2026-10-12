@@ -37,15 +37,17 @@ process.once("SIGINT", () => abort.abort(new Error("interrupted")));
 const scenario = process.env.INGRESS_SCENARIO || "events";
 if (!["events", "clean"].includes(scenario)) throw Error("invalid ingress scenario");
 const abArgs = ["--session", session, "--idle-timeout", "1h", "--json"];
-async function browser(args) {
-  let stdout;
+async function agentBrowser(args) {
   try {
-    ({ stdout } = await exec("agent-browser", [...abArgs, ...args], { timeout: 45000, maxBuffer: 2 * 1024 * 1024, signal: abort.signal }));
+    const { stdout } = await exec("agent-browser", [...abArgs, ...args], { timeout: 45000, maxBuffer: 2 * 1024 * 1024, signal: abort.signal });
+    return stdout;
   } catch (error) {
     await writeFile(out + "/browser-failure.json", JSON.stringify({ stdout: error.stdout, stderr: error.stderr, code: error.code }, null, 2), { mode: 0o600 });
     throw Error("browser command failed; see private browser-failure.json");
   }
-  const result = JSON.parse(stdout);
+}
+async function browser(args) {
+  const result = JSON.parse(await agentBrowser(args));
   if (!result.success) throw new Error("browser command failed: " + JSON.stringify(result.error));
   return result.data?.result ?? result.data;
 }
@@ -202,19 +204,22 @@ navigator.mediaDevices.getDisplayMedia=async()=>camera();
   const readyAt = Date.now();
   const until = (seconds) => delay(Math.max(0, readyAt + seconds * 1000 - Date.now()), undefined, { signal: abort.signal });
   let command = 0;
+  async function pullAdded(number) {
+    try {
+      await readFile(out + `/omitted.command-${number}.done`);
+      await readFile(out + `/explicit.command-${number}.done`);
+      return true;
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+      return false;
+    }
+  }
   async function pull(publication) {
     command++;
     await writeFile(out + `/command-${command}.json`, JSON.stringify({ action: "add", ...publication }), { mode: 0o600 });
     const deadline = Date.now() + 30000;
-    for (;;) {
+    while (!(await pullAdded(command))) {
       if (child.exitCode !== null) throw Error("Capture exited during track add");
-      try {
-        await readFile(out + `/omitted.command-${command}.done`);
-        await readFile(out + `/explicit.command-${command}.done`);
-        break;
-      } catch (error) {
-        if (error.code !== "ENOENT") throw error;
-      }
       if (Date.now() > deadline) throw Error("track-add deadline");
       await delay(250, undefined, { signal: abort.signal });
     }
