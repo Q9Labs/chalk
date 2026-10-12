@@ -12,7 +12,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-## [4.1.17] - 2026-10-11
+## [4.1.17] - 2026-10-13
 
 ### Fixed
 
@@ -36,6 +36,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Kept a Recording that reaches its time limit and a Recording whose tracks change while Capture starts.
 - Bounded recorder fleet inventory polling so the provider request limit no longer blocks new Recordings.
 - Moved the API and recorder services to Go 1.26.9 and cleared the open npm advisories.
+- Stopped the whiteboard from uploading the whole board every 20 seconds: each change is sent once, the end of a stroke no longer arrives up to 25 seconds late, and a stroke drawn while the board loads is kept.
+- Kept a writer's whiteboard syncing after one long continuous stroke: an element over the stored size is sent as a smaller copy, and an element that cannot be sent is reported once through `onSubmissionError` without holding back the rest.
+- Kept students receiving the whiteboard through a long handwriting class, and exported its Recording.
+- Delivered whiteboard changes in order when two Participants write at the same moment, instead of reloading every board, and kept every whiteboard connected while a board copy is being sent.
+- Painted freehand whiteboard strokes in Recordings, and exported a Recording whose whiteboard was presented before Capture was ready.
+- Kept a camera's recorded clock true through a stall, so the recorded picture no longer runs ahead of the sound or freezes at the end.
+- Completed Transcripts whose provider segments overlap in time.
+- Started several Episodes of one Tenant at the same moment without a server error.
 
 ### Added
 
