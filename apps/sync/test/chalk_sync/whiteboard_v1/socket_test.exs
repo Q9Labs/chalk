@@ -673,20 +673,44 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
 
     assert noted.missed_head == {@scene_id, 5}
 
-    assert {:ok, live} = receive_frame(snapshot_ack(noted), noted)
-    assert live.phase == :live
-    assert live.revision == 4
-    assert live.missed_head == nil
-    assert_received {:whiteboard_v1_head, @scene_id, 5}
-
-    assert {:push, {:text, encoded}, caught_up} =
-             SocketWhiteboardV1.handle_info({:whiteboard_v1_head, @scene_id, 5}, live)
-
+    assert {:push, {:text, encoded}, caught_up} = receive_frame(snapshot_ack(noted), noted)
     assert %{"type" => "update", "revision" => "5"} = JSON.decode!(encoded)
+    assert caught_up.phase == :live
     assert caught_up.revision == 5
+    assert caught_up.missed_head == nil
+  end
+
+  test "replays a multipart update whose first part arrived during a snapshot" do
+    Process.put(:whiteboard_events_after_four, [update_event(5)])
+    state = recovering_state()
+
+    part = %{
+      "type" => "update_part",
+      "operation_id" => "whiteboard-replay-0005",
+      "scene_id" => @scene_id,
+      "revision" => "5",
+      "part" => 0,
+      "part_count" => 2,
+      "element_count" => 2,
+      "elements" => [element()]
+    }
+
+    assert {:ok, noted} = SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, part}, state)
+
+    # The replay comes with the last snapshot page, so the queued last part
+    # cannot reach the client without its first part.
+    assert {:push, {:text, encoded}, caught_up} = receive_frame(snapshot_ack(noted), noted)
+    assert %{"type" => "update", "revision" => "5"} = JSON.decode!(encoded)
+
+    assert {:ok, ^caught_up} =
+             SocketWhiteboardV1.handle_info(
+               {:whiteboard_v1_frame, %{part | "part" => 1}},
+               caught_up
+             )
   end
 
   test "keeps the newest revision seen in frames and notices during a snapshot" do
+    Process.put(:whiteboard_events_after_four, [update_event(5), update_event(6)])
     state = recovering_state()
 
     frame = %{
@@ -703,8 +727,9 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     assert {:ok, ^noted} =
              SocketWhiteboardV1.handle_info({:whiteboard_v1_head, @scene_id, 5}, noted)
 
-    assert {:ok, _live} = receive_frame(snapshot_ack(noted), noted)
-    assert_received {:whiteboard_v1_head, @scene_id, 6}
+    assert {:push, {:text, encoded}, caught_up} = receive_frame(snapshot_ack(noted), noted)
+    assert %{"type" => "update", "revision" => "5"} = JSON.decode!(encoded)
+    assert caught_up.revision == 6
   end
 
   test "resets a legacy socket when its replay passes the notified head" do

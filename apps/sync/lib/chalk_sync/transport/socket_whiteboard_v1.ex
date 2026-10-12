@@ -188,7 +188,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   # A change that commits while the snapshot pages are in flight is not in the
   # snapshot, and neither its frame nor its notice was handled. The newest
-  # revision seen is kept, and handled as a head notice after the last page.
+  # revision seen is kept and handled as a head notice with the last page,
+  # before any frame that is already queued: the queued last part of a
+  # multipart update would otherwise move the cursor past its first part.
   defp note_missed_head(%{missed_head: {scene_id, seen}} = state, scene_id, revision)
        when seen >= revision,
        do: state
@@ -196,10 +198,10 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   defp note_missed_head(state, scene_id, revision),
     do: %{state | missed_head: {scene_id, revision}}
 
-  defp replay_missed_head(nil), do: :ok
+  defp catch_up_after_snapshot(state, nil), do: {:ok, state}
 
-  defp replay_missed_head({scene_id, revision}),
-    do: send(self(), {:whiteboard_v1_head, scene_id, revision})
+  defp catch_up_after_snapshot(state, {scene_id, revision}),
+    do: handle_info({:whiteboard_v1_head, scene_id, revision}, state)
 
   # The client trusts the order of what it receives. A frame that arrives
   # ahead of an earlier revision must not move the cursor past that revision,
@@ -500,8 +502,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
           )
 
           resume_snapshot_requests(next)
-          replay_missed_head(state.missed_head)
-          {:ok, next}
+          catch_up_after_snapshot(next, state.missed_head)
       end
     else
       stop(state, 1008, "invalid snapshot acknowledgement", :invalid_acknowledgement)
