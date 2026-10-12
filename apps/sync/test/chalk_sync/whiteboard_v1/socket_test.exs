@@ -763,6 +763,26 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     assert recovering.phase == :recovering
   end
 
+  test "a stopping socket does not wait for its outbound queue" do
+    Process.put(:whiteboard_events_after_four, [update_event(5), update_event(6)])
+    state = recovering_state()
+    request = %{"type" => "request_snapshot", "request_id" => "snapshot-request-0006"}
+    assert {:ok, queued} = receive_frame(request, state)
+
+    assert {:ok, noted} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_head, @scene_id, 6}, queued)
+
+    assert {:push, {:text, _first}, replaying} = receive_frame(snapshot_ack(noted), noted)
+    assert_received :whiteboard_snapshot_next
+
+    stopping = %{replaying | terminal: %{close_code: 1012, reason: :delivery_unavailable}}
+
+    assert {:ok, ^stopping} =
+             SocketWhiteboardV1.handle_info(:whiteboard_snapshot_next, stopping)
+
+    refute_received :whiteboard_snapshot_next
+  end
+
   test "resets a legacy socket when its replay passes the notified head" do
     Process.put(:whiteboard_events_after_four, [update_event(5), update_event(6)])
     assert {:ok, initial} = SocketWhiteboardV1.init(%{})

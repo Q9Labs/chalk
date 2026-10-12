@@ -171,14 +171,24 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   # Frames of a replay are still queued. The next snapshot must not go out
   # between them, or the client receives older updates after a newer board.
+  # A stopping socket no longer drains its queue, so it must not wait for it.
   def handle_info(
         :whiteboard_snapshot_next,
-        %{phase: :live, outbound: %{frame_count: queued}} = state
+        %{
+          phase: :live,
+          terminal: nil,
+          pending_snapshot_requests: [_ | _],
+          outbound: %{frame_count: queued}
+        } = state
       )
       when queued > 0 do
     send(self(), :whiteboard_snapshot_next)
     {:ok, state}
   end
+
+  def handle_info(:whiteboard_snapshot_next, %{terminal: terminal} = state)
+      when not is_nil(terminal),
+      do: {:ok, state}
 
   def handle_info(
         :whiteboard_snapshot_next,
