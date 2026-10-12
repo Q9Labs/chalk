@@ -432,19 +432,17 @@ func TestWhiteboardEmptyUpdateInPresentationTailPreservesStrokes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build presentation with empty update: %v", err)
 	}
-	states := make(map[int64]whiteboardStateWire)
+	var history whiteboardHistoryWire
 	for _, material := range built.Assets {
 		if material.Asset.Kind != "whiteboard_state" {
 			continue
 		}
-		var state whiteboardStateWire
-		if err := json.Unmarshal(material.Body, &state); err != nil {
+		if err := json.Unmarshal(material.Body, &history); err != nil {
 			t.Fatal(err)
 		}
-		states[state.Revision] = state
 	}
-	if len(states[2].Elements) != 1 || states[2].Elements[0].ID != "stroke-1" || len(states[3].Elements) != 2 {
-		t.Fatalf("empty update lost strokes or blocked later writing: %#v", states)
+	if len(history.Initial.Elements) != 1 || history.Initial.Elements[0].ID != "stroke-1" || len(history.Updates) != 1 || history.Updates[0].Revision != 3 || history.Updates[0].Elements[0].ID != "stroke-2" {
+		t.Fatalf("empty update lost strokes or blocked later writing: %#v", history)
 	}
 }
 

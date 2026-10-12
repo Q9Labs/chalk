@@ -744,21 +744,21 @@ func appendParticipantMediaState(at int64, participantID string, kind MediaKind,
 }
 
 func buildInitialChat(source CompletionSource, materials *[]assetMaterial, assetByID map[string]int) ([]ChatMessage, error) {
-	messages := make([]ChatMessage, 0, len(source.InitialChatMessages))
+	messages := make([]ChatMessage, 0, min(len(source.InitialChatMessages), MaximumChatMessages))
 	previous := int64(0)
-	for _, fact := range source.InitialChatMessages {
+	for index, fact := range source.InitialChatMessages {
 		if fact.Sequence <= previous || fact.Sequence > source.ChatStartSequence || fact.CreatedAt.After(source.CaptureReadyAt) {
 			return nil, fmt.Errorf("%w: invalid initial chat ordering", ErrInvalidCompletionSource)
+		}
+		previous = fact.Sequence
+		if index < len(source.InitialChatMessages)-MaximumChatMessages {
+			continue
 		}
 		message, err := buildChatMessage(source, fact, 0, materials, assetByID)
 		if err != nil {
 			return nil, err
 		}
 		messages = append(messages, message)
-		previous = fact.Sequence
-	}
-	if len(messages) > MaximumChatMessages {
-		return nil, fmt.Errorf("%w: initial chat exceeds bounds", ErrInvalidCompletionSource)
 	}
 	return messages, nil
 }
@@ -949,7 +949,9 @@ func applyWhiteboardFact(state *whiteboardState, fact WhiteboardEventFact) (*whi
 		if state.SceneID != fact.SceneID || fact.Revision != state.Revision+1 {
 			return nil, fmt.Errorf("%w: whiteboard revision gap", ErrInvalidCompletionSource)
 		}
-		next := cloneWhiteboardState(state)
+		// Replay owns this map; only the scalar presentation state needs a copy.
+		nextValue := *state
+		next := &nextValue
 		next.Revision = fact.Revision
 		if fact.Name == "set_presentation" {
 			if fact.Presenting == nil || len(fact.Elements) != 0 {
@@ -961,6 +963,7 @@ func applyWhiteboardFact(state *whiteboardState, fact WhiteboardEventFact) (*whi
 		if fact.Presenting != nil {
 			return nil, fmt.Errorf("%w: invalid whiteboard update event", ErrInvalidCompletionSource)
 		}
+		changed := false
 		for _, raw := range fact.Elements {
 			element, err := decodeWhiteboardElement(raw)
 			if err != nil {
@@ -968,24 +971,17 @@ func applyWhiteboardFact(state *whiteboardState, fact WhiteboardEventFact) (*whi
 			}
 			if existing, exists := next.Elements[element.ID]; !exists || whiteboardElementWins(element, existing) {
 				next.Elements[element.ID] = element
+				changed = true
 			}
+		}
+		if !changed {
+			state.Revision = fact.Revision
+			return state, nil
 		}
 		return next, nil
 	default:
 		return nil, fmt.Errorf("%w: unknown whiteboard operation", ErrInvalidCompletionSource)
 	}
-}
-
-func cloneWhiteboardState(source *whiteboardState) *whiteboardState {
-	result := &whiteboardState{
-		SceneID: source.SceneID, Revision: source.Revision, Presenting: source.Presenting,
-		AppState: append(json.RawMessage(nil), source.AppState...), Elements: make(map[string]whiteboardElementWire, len(source.Elements)),
-	}
-	for id, element := range source.Elements {
-		element.Payload = append(json.RawMessage(nil), element.Payload...)
-		result.Elements[id] = element
-	}
-	return result
 }
 
 func decodeWhiteboardElement(raw json.RawMessage) (whiteboardElementWire, error) {
@@ -1077,13 +1073,54 @@ func validateWhiteboardFileReferences(elements []whiteboardElementWire, assetByI
 	return nil
 }
 
+type whiteboardUpdateWire struct {
+	Revision int64                   `json:"revision"`
+	Elements []whiteboardElementWire `json:"elements"`
+}
+
+type whiteboardHistoryWire struct {
+	SchemaVersion string                 `json:"schemaVersion"`
+	Initial       whiteboardStateWire    `json:"initial"`
+	Updates       []whiteboardUpdateWire `json:"updates"`
+}
+
 func scheduleWhiteboardTail(source CompletionSource, state *whiteboardState, _ map[string]activeTrack, materials *[]assetMaterial, assetByID map[string]int, appendEvent func(int64, int, Event)) (int64, error) {
 	cursor := source.WhiteboardOriginRevision
-	var err error
+	if len(source.WhiteboardTailEvents) == 0 {
+		return cursor, nil
+	}
+	histories := make(map[string]*whiteboardHistoryWire)
+	replayed := make(map[string]bool)
+	assetIDs := make(map[string]string)
+	for _, material := range *materials {
+		if material.Asset.Kind != "whiteboard_state" {
+			continue
+		}
+		var initial whiteboardStateWire
+		if err := json.Unmarshal(material.Body, &initial); err != nil {
+			return 0, err
+		}
+		assetIDs[initial.SceneID] = material.Asset.ID
+		histories[material.Asset.ID] = &whiteboardHistoryWire{SchemaVersion: "recording_whiteboard_history.v1", Initial: initial, Updates: []whiteboardUpdateWire{}}
+	}
 	for _, fact := range source.WhiteboardTailEvents {
-		at, elapsedErr := elapsedMillis(source, fact.CompletedAt)
-		if elapsedErr != nil {
-			return 0, elapsedErr
+		at, err := elapsedMillis(source, fact.CompletedAt)
+		if err != nil {
+			return 0, err
+		}
+		changes := make([]whiteboardElementWire, 0, len(fact.Elements))
+		for _, raw := range fact.Elements {
+			element, decodeErr := decodeWhiteboardElement(raw)
+			if decodeErr != nil {
+				return 0, decodeErr
+			}
+			if state == nil {
+				changes = append(changes, element)
+				continue
+			}
+			if existing, exists := state.Elements[element.ID]; !exists || whiteboardElementWins(element, existing) {
+				changes = append(changes, element)
+			}
 		}
 		before := state
 		state, err = applyWhiteboardFact(state, fact)
@@ -1096,21 +1133,56 @@ func scheduleWhiteboardTail(source CompletionSource, state *whiteboardState, _ m
 		if state == before || state == nil {
 			continue
 		}
+		assetID := assetIDs[state.SceneID]
+		if assetID != "" && len(changes) > 0 {
+			if err := validateWhiteboardFileReferences(changes, assetByID); err != nil {
+				return 0, err
+			}
+			histories[assetID].Updates = append(histories[assetID].Updates, whiteboardUpdateWire{Revision: state.Revision, Elements: changes})
+		}
 		if state.Presenting {
-			assetID, addErr := addWhiteboardStateAsset(*state, source, materials, assetByID)
-			if addErr != nil {
-				return 0, addErr
+			if assetID == "" {
+				assetID, err = addWhiteboardStateAsset(*state, source, materials, assetByID)
+				if err != nil {
+					return 0, err
+				}
+				var initial whiteboardStateWire
+				if err := json.Unmarshal((*materials)[assetByID[assetID]].Body, &initial); err != nil {
+					return 0, err
+				}
+				assetIDs[state.SceneID] = assetID
+				histories[assetID] = &whiteboardHistoryWire{SchemaVersion: "recording_whiteboard_history.v1", Initial: initial, Updates: []whiteboardUpdateWire{}}
 			}
 			appendEvent(at, 42, &SharedContentChangedEvent{Kind: "shared_content_changed", SharedContent: SharedContent{
 				Kind: "whiteboard", SceneID: state.SceneID, Revision: state.Revision, StateAssetID: assetID,
 			}})
+			replayed[assetID] = state.Revision != histories[assetID].Initial.Revision
 		} else if before != nil && before.Presenting {
-			fallback, fallbackErr := screenSharedAt(source, fact.CompletedAt)
-			if fallbackErr != nil {
-				return 0, fallbackErr
+			fallback, err := screenSharedAt(source, fact.CompletedAt)
+			if err != nil {
+				return 0, err
 			}
 			appendEvent(at, 42, &SharedContentChangedEvent{Kind: "shared_content_changed", SharedContent: fallback})
 		}
+	}
+	for assetID, history := range histories {
+		if len(history.Updates) == 0 && !replayed[assetID] {
+			continue
+		} // Preserve the original format for static states.
+		body, err := json.Marshal(history)
+		if err != nil {
+			return 0, fmt.Errorf("%w: encode whiteboard history", ErrInvalidCompletionSource)
+		}
+		if len(body) > MaximumTimelineSize {
+			return 0, fmt.Errorf("%w: whiteboard history exceeds bounds", ErrInvalidCompletionSource)
+		}
+		digest := sha256.Sum256(body)
+		digestHex := hex.EncodeToString(digest[:])
+		material := &(*materials)[assetByID[assetID]]
+		material.Body = body
+		material.Asset.ByteSize = int64(len(body))
+		material.Asset.SHA256 = digestHex
+		material.Asset.ObjectKey = presentationObjectPrefix(source) + "/assets/whiteboard-state-" + digestHex + ".json"
 	}
 	return cursor, nil
 }
