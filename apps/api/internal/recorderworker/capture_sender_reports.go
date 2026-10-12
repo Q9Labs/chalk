@@ -13,6 +13,9 @@ type captureSenderReportTrack interface {
 	SetRTCPReadDeadline(time.Time) error
 }
 
+// Reports only refine the track clock. A failed report read stops the
+// refinement for that track; an error event here would end the Capture
+// attempt, and the RTP reader already reports a dead track.
 func startCaptureSenderReports(ctx context.Context, mid string, track CaptureMediaTrack, deadline time.Duration, events chan<- captureRuntimeEvent) func() {
 	reader, ok := track.(captureSenderReportTrack)
 	if !ok {
@@ -23,7 +26,6 @@ func startCaptureSenderReports(ctx context.Context, mid string, track CaptureMed
 		defer close(done)
 		for ctx.Err() == nil {
 			if err := reader.SetRTCPReadDeadline(time.Now().Add(deadline)); err != nil {
-				sendCaptureRuntimeEvent(ctx, events, captureRuntimeEvent{mid: mid, track: track, err: err})
 				return
 			}
 			packets, _, err := reader.ReadRTCP()
@@ -31,7 +33,6 @@ func startCaptureSenderReports(ctx context.Context, mid string, track CaptureMed
 				continue
 			}
 			if err != nil {
-				sendCaptureRuntimeEvent(ctx, events, captureRuntimeEvent{mid: mid, track: track, err: err})
 				return
 			}
 			for _, packet := range packets {
