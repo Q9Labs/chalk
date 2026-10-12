@@ -46,6 +46,8 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        revision: 0,
        snapshot: nil,
        pending_snapshot_requests: [],
+       awaiting_snapshot: false,
+       missed_head: nil,
        multipart: nil,
        multipart_timer: nil,
        cursor_window_started_at_ms: 0,
@@ -153,6 +155,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     end
   end
 
+  def handle_info({:whiteboard_v1_head, scene_id, revision}, %{phase: :recovering} = state),
+    do: {:ok, %{state | missed_head: {scene_id, revision}}}
+
   def handle_info({:whiteboard_v1_head, _scene_id, _revision}, state), do: {:ok, state}
 
   def handle_info(:whiteboard_drain, state), do: push_next(state)
@@ -174,6 +179,13 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   def handle_info(:whiteboard_snapshot_next, state), do: {:ok, state}
 
+  # A change that commits while the snapshot pages are in flight is not in the
+  # snapshot, and its notice was not handled. Handle the newest notice now.
+  defp replay_missed_head(nil), do: :ok
+
+  defp replay_missed_head({scene_id, revision}),
+    do: send(self(), {:whiteboard_v1_head, scene_id, revision})
+
   # The client trusts the order of what it receives. A frame that arrives
   # ahead of an earlier revision must not move the cursor past that revision,
   # or the earlier change never reaches this Participant.
@@ -184,6 +196,11 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
       true -> replay_or_reset(state, state.identity, scene_id, revision)
     end
   end
+
+  # The client was told to load a snapshot. Until it asks for one, another
+  # read of the log would only repeat the reset for every frame that arrives.
+  defp replay_or_reset(%{awaiting_snapshot: true} = state, _identity, _scene_id, _revision),
+    do: {:ok, state}
 
   defp replay_or_reset(state, identity, scene_id, revision) do
     case Episode.read_after(
@@ -409,7 +426,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
         }
 
         next =
-          %{state | phase: :recovering, snapshot: snapshot}
+          %{state | phase: :recovering, snapshot: snapshot, awaiting_snapshot: false}
           |> observe_operation("request_snapshot", "accepted")
 
         Diagnostics.record(:whiteboard_recovery_started, identity,
@@ -451,7 +468,8 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
               | phase: :live,
                 snapshot: nil,
                 scene_id: snapshot.scene_id,
-                revision: String.to_integer(snapshot.revision)
+                revision: String.to_integer(snapshot.revision),
+                missed_head: nil
             }
 
           Diagnostics.record(:whiteboard_recovery_succeeded, next.identity,
@@ -460,6 +478,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
           )
 
           resume_snapshot_requests(next)
+          replay_missed_head(state.missed_head)
           {:ok, next}
       end
     else
@@ -691,7 +710,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   defp resume_snapshot_requests(_state), do: send(self(), :whiteboard_snapshot_next)
 
   defp enqueue_gap_reset(state, scene_id) do
-    enqueue_and_push(state, [
+    enqueue_and_push(%{state | awaiting_snapshot: true}, [
       %{
         "type" => "reset_required",
         "scene_id" => scene_id,
