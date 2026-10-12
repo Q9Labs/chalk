@@ -76,6 +76,7 @@ export class ExcalidrawCollabEngine {
   private canDraw = true;
 
   private broadcastedElementVersions = new Map<string, { readonly version: number; readonly versionNonce: number }>();
+  private rejectedElementVersions = new Map<string, { readonly version: number; readonly versionNonce: number }>();
   private deferredRemoteElements = new Map<string, OrderedExcalidrawElement>();
   private submissionInFlight = false;
   private dirtyDuringSubmission = false;
@@ -126,6 +127,7 @@ export class ExcalidrawCollabEngine {
     this.sceneId = commit.sceneId;
     this.sceneGeneration = commit.sceneGeneration ?? null;
     this.broadcastedElementVersions.clear();
+    this.rejectedElementVersions.clear();
     this.deferredRemoteElements.clear();
     this.resetSubmissionRetries();
     this.opts.excalidrawAPI.updateScene({
@@ -271,6 +273,8 @@ export class ExcalidrawCollabEngine {
   }
 
   private isUnsubmitted(element: OrderedExcalidrawElement): boolean {
+    const rejected = this.rejectedElementVersions.get(element.id);
+    if (rejected?.version === element.version && rejected.versionNonce === element.versionNonce) return false;
     const previous = this.broadcastedElementVersions.get(element.id);
     return !previous || isNewerVersion(element, previous);
   }
@@ -329,7 +333,8 @@ export class ExcalidrawCollabEngine {
   }
 
   private submit(sceneId: string, sceneGeneration: string | null, elements: readonly OrderedExcalidrawElement[]): void {
-    const submittedElements = elements.map(toWireElement);
+    const submittedElements = this.toSubmissionElements(elements);
+    if (submittedElements.length === 0) return;
     this.submissionInFlight = true;
     this.dirtyDuringSubmission = false;
     let acknowledged = false;
@@ -375,13 +380,15 @@ export class ExcalidrawCollabEngine {
   }
 
   private submitFinalUpdate(sceneId: string, sceneGeneration: string | null, elements: readonly OrderedExcalidrawElement[]): void {
+    const submittedElements = this.toSubmissionElements(elements);
+    if (submittedElements.length === 0) return;
     let submission: Promise<WhiteboardCommit>;
     try {
       submission = this.opts.submitUpdate({
         sceneId,
         ...(sceneGeneration ? { sceneGeneration } : {}),
         syncAll: false,
-        elements: elements.map(toWireElement),
+        elements: submittedElements,
       });
     } catch (cause) {
       this.opts.onSubmissionError?.(cause);
@@ -389,6 +396,21 @@ export class ExcalidrawCollabEngine {
     }
 
     void submission.catch((cause: unknown) => this.opts.onSubmissionError?.(cause));
+  }
+
+  private toSubmissionElements(elements: readonly OrderedExcalidrawElement[]): WhiteboardWireElement[] {
+    const submitted: WhiteboardWireElement[] = [];
+    for (const element of elements) {
+      try {
+        submitted.push(toWireElement(element));
+        this.rejectedElementVersions.delete(element.id);
+      } catch (cause) {
+        this.rejectedElementVersions.set(element.id, { version: element.version, versionNonce: element.versionNonce });
+        const reason = cause instanceof Error ? cause.message : "Element is not JSON serializable";
+        this.opts.onSubmissionError?.(new Error(`Whiteboard element ${element.id} version ${element.version} could not sync: ${reason}`, { cause }));
+      }
+    }
+    return submitted;
   }
 
   private applyRemoteElements(args: { sceneId: string; sceneGeneration?: string; syncAll: boolean; remoteElements: unknown[]; appState?: SharedWhiteboardAppState; isSnapshot: boolean }) {
@@ -413,6 +435,7 @@ export class ExcalidrawCollabEngine {
       }
     }
     if (replacingScene) {
+      this.rejectedElementVersions.clear();
       this.clearChangeDebounce();
       this.dirtyDuringSubmission = false;
       this.sceneGeneration = null;

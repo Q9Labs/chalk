@@ -3,5 +3,5 @@ export type { ExcalidrawCollabEngineOptions, WhiteboardCollaborationEvent } from
 export type { WhiteboardFileSyncPhase, WhiteboardFileSyncState, WhiteboardFileTransfer } from "./files";
 export { mergeWhiteboardElements } from "./reducer";
 export type { AppState, BinaryFileData, BinaryFiles, Collaborator, CollaboratorPointer, ExcalidrawElement, ExcalidrawImperativeAPI, OrderedExcalidrawElement } from "./types";
-export { fromWireElement, isWireElement, toWireElement } from "./wire";
+export { fromWireElement, isWireElement, toWireElement, WHITEBOARD_ELEMENT_PAYLOAD_LIMIT } from "./wire";
 export type { WhiteboardCommit, WhiteboardJsonValue, WhiteboardUploadInstructions, WhiteboardWireElement } from "./wire";

@@ -600,3 +600,60 @@ function deferredCommit() {
   });
   return { promise, resolve, reject };
 }
+
+it.each(["oversized payload", "unserializable payload"])("isolates an %s and reports its version once, including disposal and snapshots", async (kind) => {
+  const fixture = await createDeliveryFixture();
+  const conversion = vi.spyOn(await import("./wire"), "toWireElement");
+  const [base] = fixture.make("refused", 1);
+  if (!base) throw new Error("Missing refused element fixture");
+  const customData = kind === "oversized payload" ? { note: "界".repeat(16_384) } : { note: Number.NaN };
+  const bad = { ...base, customData };
+  try {
+    fixture.api.updateScene({ elements: [bad, ...fixture.make("first", 1)] });
+    fixture.canvasChange();
+    await vi.advanceTimersByTimeAsync(150);
+    expect(fixture.submitUpdate).toHaveBeenCalledOnce();
+    expect(fixture.submitUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ elements: [expect.objectContaining({ id: "first" })] }));
+    expect(fixture.onSubmissionError).toHaveBeenCalledOnce();
+    fixture.engine.handleRemoteSnapshot({ sceneId: "scene", elements: [] });
+    fixture.draw("later", 1);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(fixture.onSubmissionError).toHaveBeenCalledOnce();
+    expect(conversion.mock.calls.filter(([element]) => element.id === bad.id)).toHaveLength(1);
+    expect(fixture.submitUpdate.mock.calls.flatMap(([input]) => input.elements).some((element) => element.id === "later")).toBe(true);
+    fixture.api.updateScene({ elements: [{ ...bad, version: 2 }, ...fixture.api.getSceneElementsIncludingDeleted().filter((element) => element.id !== bad.id)] });
+    fixture.canvasChange();
+    await vi.advanceTimersByTimeAsync(150);
+    expect(fixture.onSubmissionError).toHaveBeenCalledTimes(2);
+    fixture.api.updateScene({ elements: [{ ...bad, version: 3, customData: {} }, ...fixture.api.getSceneElementsIncludingDeleted().filter((element) => element.id !== bad.id)] });
+    fixture.canvasChange();
+    await vi.advanceTimersByTimeAsync(150);
+    expect(fixture.submitUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ elements: [expect.objectContaining({ id: "refused", version: 3 })] }));
+    fixture.api.updateScene({ elements: [{ ...bad, version: 4 }, ...fixture.make("final", 1)] });
+    fixture.canvasChange();
+    fixture.engine.dispose();
+    expect(fixture.submitUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ elements: [expect.objectContaining({ id: "final" })] }));
+    expect(fixture.onSubmissionError).toHaveBeenCalledTimes(3);
+  } finally {
+    fixture.engine.dispose();
+    conversion.mockRestore();
+  }
+});
+
+it("does not submit or retry a delta with only an unfit element", async () => {
+  const fixture = await createDeliveryFixture();
+  const [base] = fixture.make("refused", 1);
+  if (!base) throw new Error("Missing refused element fixture");
+  try {
+    fixture.api.updateScene({ elements: [{ ...base, customData: { note: "界".repeat(16_384) } }] });
+    fixture.canvasChange();
+    await vi.advanceTimersByTimeAsync(30_000);
+    fixture.pointerUp();
+    fixture.canvasChange();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(fixture.submitUpdate).not.toHaveBeenCalled();
+    expect(fixture.onSubmissionError).toHaveBeenCalledOnce();
+  } finally {
+    fixture.engine.dispose();
+  }
+});
