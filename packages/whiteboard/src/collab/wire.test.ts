@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { beforeAll, expect, it, vi } from "vitest";
-import { toWireElement } from "./wire";
+import { ELEMENT_ENCODED_BYTES_LIMIT, toFittedWireElement, toWireElement } from "./wire";
 
 let restoreElements: typeof import("@excalidraw/excalidraw").restoreElements;
 beforeAll(async () => {
@@ -9,7 +11,7 @@ beforeAll(async () => {
   restoreElements = (await import("@excalidraw/excalidraw")).restoreElements;
 });
 
-const limit = 16_384;
+const limit = ELEMENT_ENCODED_BYTES_LIMIT;
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).byteLength;
 const round = (value: number) => Math.round(value * 100) / 100;
 const stroke = (count: number, withPressure = false) => {
@@ -36,12 +38,17 @@ const stroke = (count: number, withPressure = false) => {
   return element;
 };
 
+it("keeps the engine's element size at the whiteboard-v1 limit less the margin for the server's encoder", () => {
+  const contract = readFileSync(resolve(__dirname, "../../../../contract/schema/whiteboard-v1.json"), "utf8");
+  const contractLimit = Number(/"elementPayloadEncodedBytes":\s*(\d+)/.exec(contract)?.[1]);
+  expect(limit).toBe(contractLimit - 64);
+});
+
 it.each([600, 4000])("fits a %i-point stroke without changing the local element or its version", (count) => {
   const element = stroke(count, true);
   const original = JSON.stringify(element);
   expect(bytes(element)).toBeGreaterThan(limit);
-  const wire = toWireElement(element);
-  expect(bytes(wire.payload)).toBeLessThanOrEqual(limit);
+  const wire = toFittedWireElement(element);
   expect(bytes(wire)).toBeLessThanOrEqual(limit);
   expect(wire.version).toBe(7);
   expect(wire.version_nonce).toBe(42);
@@ -63,27 +70,41 @@ it.each([600, 4000])("fits a %i-point stroke without changing the local element 
 
 it("only rounds when rounding alone fits", () => {
   const element = stroke(600);
-  const wire = toWireElement(element);
-  expect(bytes(element)).toBeGreaterThan(limit);
-  expect(bytes(wire.payload)).toBeLessThanOrEqual(limit);
+  const wire = toFittedWireElement(element);
+  expect(bytes(toWireElement(element))).toBeGreaterThan(limit);
+  expect(bytes(wire)).toBeLessThanOrEqual(limit);
   expect(wire.payload.points).toEqual(element.points.map((point) => point.map(round)));
 });
 
-it("leaves an element under the payload limit byte-for-byte unchanged", () => {
+it("submits an element under the limit exactly as the public conversion gives it", () => {
   const element = stroke(24, true);
-  expect(JSON.stringify(toWireElement(element).payload)).toBe(JSON.stringify(element));
+  expect(toFittedWireElement(element)).toEqual(toWireElement(element));
 });
 
-it("refuses an oversized non-point payload", () => {
-  const element = stroke(2);
-  expect(() => toWireElement({ ...element, customData: { note: "界".repeat(limit) } })).toThrow(/payload/);
+it("keeps the public conversion lossless for a stroke over the limit", () => {
+  const element = stroke(4000, true);
+  const wire = toWireElement(element);
+  expect(bytes(wire)).toBeGreaterThan(limit);
+  expect(wire.payload.points).toEqual(element.points);
+  expect(wire.payload.pressures).toEqual(element.pressures);
 });
 
-it("reserves the envelope bytes when rounding nearly fills the payload budget", () => {
+it("refuses an oversized element that has no points", () => {
+  const [shape] = restoreElements([{ type: "rectangle", id: "large", index: "a0", x: 0, y: 0, width: 10, height: 10, customData: { note: "界".repeat(limit) }, version: 3, versionNonce: 9 }], null);
+  if (!shape) throw new Error("Missing rectangle fixture");
+  expect("points" in shape).toBe(false);
+  expect(() => toFittedWireElement(shape)).toThrow(/exceeds/);
+});
+
+it("refuses a stroke whose other fields alone exceed the limit", () => {
+  expect(() => toFittedWireElement({ ...stroke(2), customData: { note: "界".repeat(limit) } })).toThrow(/exceeds/);
+});
+
+it("counts the envelope when rounding nearly fills the budget", () => {
   const element = stroke(600, true);
   const rounded = { ...element, points: element.points.map((point) => point.map(round)), pressures: element.pressures.map(round), customData: { note: "" } };
   const padded = { ...element, customData: { note: "x".repeat(limit - bytes(rounded) - 32) } };
-  expect(bytes(toWireElement(padded))).toBeLessThanOrEqual(limit);
+  expect(bytes(toFittedWireElement(padded))).toBeLessThanOrEqual(limit);
 });
 
 it("refuses an oversized elbowed arrow rather than invalidating its corners and segment indexes", () => {
@@ -91,6 +112,6 @@ it("refuses an oversized elbowed arrow rather than invalidating its corners and 
   const [arrow] = restoreElements([{ type: "arrow", id: "elbow", index: "a0", x: 0, y: 0, width: 10000, height: 9990, elbowed: true, points, fixedSegments: [{ index: 1900, start: points[1899], end: points[1900] }] }], null);
   if (!arrow) throw new Error("Missing arrow fixture");
   const original = JSON.stringify(arrow);
-  expect(() => toWireElement(arrow)).toThrow(/payload/);
+  expect(() => toFittedWireElement(arrow)).toThrow(/exceeds/);
   expect(JSON.stringify(arrow)).toBe(original);
 });

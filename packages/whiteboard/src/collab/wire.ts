@@ -1,7 +1,8 @@
 import type { OrderedExcalidrawElement } from "./types";
 
-// whiteboard-v1's per-element JSON payload limit; checked against the contract in the React SDK.
-export const WHITEBOARD_ELEMENT_PAYLOAD_LIMIT = 16_384;
+// Sync stores one element, envelope included, in at most 16,384 bytes of JSON (whiteboard-v1).
+// Its encoder writes a few numbers longer than JSON.stringify does (1e-7 becomes 1.0e-7), so the engine keeps a margin.
+export const ELEMENT_ENCODED_BYTES_LIMIT = 16_384 - 64;
 const encoder = new TextEncoder();
 
 export type WhiteboardJsonValue = null | boolean | number | string | readonly WhiteboardJsonValue[] | { readonly [key: string]: WhiteboardJsonValue };
@@ -43,7 +44,7 @@ const wireElementValidators = [
 ] as const;
 
 export function toWireElement(element: OrderedExcalidrawElement): WhiteboardWireElement {
-  const wire = {
+  return {
     id: element.id,
     type: element.type,
     version: element.version,
@@ -52,42 +53,42 @@ export function toWireElement(element: OrderedExcalidrawElement): WhiteboardWire
     is_deleted: element.isDeleted,
     payload: toJsonRecord(element),
   };
-  // Sync persists the complete envelope within the same 16 KiB budget.
-  const payloadLimit = WHITEBOARD_ELEMENT_PAYLOAD_LIMIT - encoder.encode(JSON.stringify({ ...wire, payload: {} })).byteLength + 2;
-  return { ...wire, payload: fitPayload(element, wire.payload, payloadLimit) };
 }
 
-function fitPayload(element: OrderedExcalidrawElement, payload: Readonly<Record<string, WhiteboardJsonValue>>, payloadLimit: number): Readonly<Record<string, WhiteboardJsonValue>> {
-  if (payloadFits(payload, payloadLimit)) return payload;
-  // Elbowed arrows carry segment indexes: thinning their points would corrupt that geometry.
-  if ("points" in element && !(element.type === "arrow" && "elbowed" in element && element.elbowed)) {
-    const rounded = {
-      ...payload,
-      points: element.points.map((point) => point.map(roundCoordinate)),
-      ...(element.type === "freedraw" ? { pressures: element.pressures.map(roundCoordinate) } : {}),
-    };
-    if (payloadFits(rounded, payloadLimit)) return rounded;
-    const sample = (stride: number) => ({
-      ...rounded,
-      points: sampleValues(rounded.points, stride),
-      ...(rounded.pressures ? { pressures: sampleValues(rounded.pressures, stride) } : {}),
-    });
-    const lastStride = Math.max(1, rounded.points.length - 1);
-    const endpoints = sample(lastStride);
-    // If even the endpoints fail, no stride can repair oversized metadata.
-    if (payloadFits(endpoints, payloadLimit)) {
-      for (let stride = 2; stride < lastStride; stride++) {
-        const reduced = sample(stride);
-        if (payloadFits(reduced, payloadLimit)) return reduced;
-      }
-      return endpoints;
-    }
+/**
+ * The element as the engine submits it. It equals `toWireElement` while the element fits the size that Sync stores.
+ * A larger element gets its points rounded and, when that is not enough, thinned. Throws when no copy fits.
+ */
+export function toFittedWireElement(element: OrderedExcalidrawElement): WhiteboardWireElement {
+  const wire = toWireElement(element);
+  if (fits(wire)) return wire;
+  const payload = fitPoints(element, wire);
+  if (!payload) throw new Error("Whiteboard element exceeds the whiteboard-v1 element size");
+  return { ...wire, payload };
+}
+
+function fitPoints(element: OrderedExcalidrawElement, wire: WhiteboardWireElement): WhiteboardWireElement["payload"] | undefined {
+  if (!("points" in element) || isElbowArrow(element)) return undefined;
+  const points = element.points.map((point) => point.map(roundCoordinate));
+  const pressures = element.type === "freedraw" ? element.pressures.map(roundCoordinate) : undefined;
+  const sample = (stride: number) => ({ ...wire.payload, points: sampleValues(points, stride), ...(pressures ? { pressures: sampleValues(pressures, stride) } : {}) });
+  const lastStride = Math.max(1, points.length - 1);
+  // If even the two ends do not fit, no stride can repair oversized metadata.
+  if (!fits({ ...wire, payload: sample(lastStride) })) return undefined;
+  for (let stride = 1; stride < lastStride; stride++) {
+    const reduced = sample(stride);
+    if (fits({ ...wire, payload: reduced })) return reduced;
   }
-  throw new Error(`Whiteboard element payload exceeds ${WHITEBOARD_ELEMENT_PAYLOAD_LIMIT} encoded bytes`);
+  return sample(lastStride);
 }
 
-function payloadFits(payload: Readonly<Record<string, WhiteboardJsonValue>>, payloadLimit: number): boolean {
-  return encoder.encode(JSON.stringify(payload)).byteLength <= payloadLimit;
+// Elbowed arrows carry segment indexes: thinning their points would corrupt that geometry.
+function isElbowArrow(element: OrderedExcalidrawElement): boolean {
+  return element.type === "arrow" && "elbowed" in element && element.elbowed;
+}
+
+function fits(element: WhiteboardWireElement): boolean {
+  return encoder.encode(JSON.stringify(element)).byteLength <= ELEMENT_ENCODED_BYTES_LIMIT;
 }
 
 function roundCoordinate(value: number): number {

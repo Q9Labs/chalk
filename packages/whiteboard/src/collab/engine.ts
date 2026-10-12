@@ -6,7 +6,7 @@ import type { WhiteboardFileSyncState, WhiteboardFileTransferOptions } from "./f
 import { WhiteboardPresence } from "./presence";
 import { filterSyncableElements } from "./syncable";
 import type { AppState, BinaryFiles, ExcalidrawElement, ExcalidrawImperativeAPI, OrderedExcalidrawElement } from "./types";
-import { fromWireElement, toWireElement, type WhiteboardCommit, type WhiteboardWireElement } from "./wire";
+import { fromWireElement, toFittedWireElement, type WhiteboardCommit, type WhiteboardWireElement } from "./wire";
 
 const SUBMISSION_RETRY_DELAY_MS = 1_000;
 const MAX_SUBMISSION_RETRY_DELAY_MS = 16_000;
@@ -402,12 +402,13 @@ export class ExcalidrawCollabEngine {
     const submitted: WhiteboardWireElement[] = [];
     for (const element of elements) {
       try {
-        submitted.push(toWireElement(element));
+        submitted.push(toFittedWireElement(element));
         this.rejectedElementVersions.delete(element.id);
       } catch (cause) {
+        const reported = this.rejectedElementVersions.has(element.id);
         this.rejectedElementVersions.set(element.id, { version: element.version, versionNonce: element.versionNonce });
-        const reason = cause instanceof Error ? cause.message : "Element is not JSON serializable";
-        this.opts.onSubmissionError?.(new Error(`Whiteboard element ${element.id} version ${element.version} could not sync: ${reason}`, { cause }));
+        // The host shows this message to the writer, so it is said once for each element until that element can be sent.
+        if (!reported) this.opts.onSubmissionError?.(new Error("One whiteboard item could not be shared. If it is very large, make it smaller or split it.", { cause }));
       }
     }
     return submitted;

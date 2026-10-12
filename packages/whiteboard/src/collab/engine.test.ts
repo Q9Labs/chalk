@@ -601,9 +601,9 @@ function deferredCommit() {
   return { promise, resolve, reject };
 }
 
-it.each(["oversized payload", "unserializable payload"])("isolates an %s and reports its version once, including disposal and snapshots", async (kind) => {
+it.each(["oversized payload", "unserializable payload"])("isolates an element with an %s and reports it once until it can be sent", async (kind) => {
   const fixture = await createDeliveryFixture();
-  const conversion = vi.spyOn(await import("./wire"), "toWireElement");
+  const conversion = vi.spyOn(await import("./wire"), "toFittedWireElement");
   const [base] = fixture.make("refused", 1);
   if (!base) throw new Error("Missing refused element fixture");
   const customData = kind === "oversized payload" ? { note: "界".repeat(16_384) } : { note: Number.NaN };
@@ -621,10 +621,17 @@ it.each(["oversized payload", "unserializable payload"])("isolates an %s and rep
     expect(fixture.onSubmissionError).toHaveBeenCalledOnce();
     expect(conversion.mock.calls.filter(([element]) => element.id === bad.id)).toHaveLength(1);
     expect(fixture.submitUpdate.mock.calls.flatMap(([input]) => input.elements).some((element) => element.id === "later")).toBe(true);
+    // A new nonce alone is a new version: it is tried again, and the writer is not told again.
+    fixture.api.updateScene({ elements: [{ ...bad, versionNonce: 99 }, ...fixture.api.getSceneElementsIncludingDeleted().filter((element) => element.id !== bad.id)] });
+    fixture.canvasChange();
+    await vi.advanceTimersByTimeAsync(150);
+    expect(conversion.mock.calls.filter(([element]) => element.id === bad.id)).toHaveLength(2);
     fixture.api.updateScene({ elements: [{ ...bad, version: 2 }, ...fixture.api.getSceneElementsIncludingDeleted().filter((element) => element.id !== bad.id)] });
     fixture.canvasChange();
     await vi.advanceTimersByTimeAsync(150);
-    expect(fixture.onSubmissionError).toHaveBeenCalledTimes(2);
+    expect(conversion.mock.calls.filter(([element]) => element.id === bad.id)).toHaveLength(3);
+    expect(fixture.onSubmissionError).toHaveBeenCalledOnce();
+    expect(fixture.onSubmissionError).toHaveBeenLastCalledWith(expect.objectContaining({ message: expect.not.stringContaining(bad.id) }));
     fixture.api.updateScene({ elements: [{ ...bad, version: 3, customData: {} }, ...fixture.api.getSceneElementsIncludingDeleted().filter((element) => element.id !== bad.id)] });
     fixture.canvasChange();
     await vi.advanceTimersByTimeAsync(150);
@@ -633,7 +640,8 @@ it.each(["oversized payload", "unserializable payload"])("isolates an %s and rep
     fixture.canvasChange();
     fixture.engine.dispose();
     expect(fixture.submitUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ elements: [expect.objectContaining({ id: "final" })] }));
-    expect(fixture.onSubmissionError).toHaveBeenCalledTimes(3);
+    // It had become sendable in between, so the new refusal is reported.
+    expect(fixture.onSubmissionError).toHaveBeenCalledTimes(2);
   } finally {
     fixture.engine.dispose();
     conversion.mockRestore();
@@ -653,6 +661,35 @@ it("does not submit or retry a delta with only an unfit element", async () => {
     await vi.advanceTimersByTimeAsync(30_000);
     expect(fixture.submitUpdate).not.toHaveBeenCalled();
     expect(fixture.onSubmissionError).toHaveBeenCalledOnce();
+  } finally {
+    fixture.engine.dispose();
+  }
+});
+
+it("submits a stroke over the element size as a reduced copy and keeps the full stroke on the writer's canvas", async () => {
+  const fixture = await createDeliveryFixture();
+  const [base] = fixture.make("long", 1);
+  if (!base || base.type !== "freedraw") throw new Error("Missing long stroke fixture");
+  const points = Array.from({ length: 4000 }, (_, index) => [index / 10 + 0.123456, Math.sin(index / 50) * 100 + 0.654321] as [number, number]);
+  try {
+    fixture.api.updateScene({ elements: [{ ...base, points, pressures: points.map(() => 0.5), simulatePressure: false }] });
+    fixture.canvasChange();
+    fixture.pointerUp();
+    await vi.advanceTimersByTimeAsync(0);
+    fixture.draw("after", 1);
+    fixture.pointerUp();
+    await vi.advanceTimersByTimeAsync(150);
+    const submitted = fixture.submitUpdate.mock.calls.flatMap(([input]) => input.elements);
+    const long = submitted.find((element) => element.id === "long");
+    const sent = long?.payload.points;
+    if (!Array.isArray(sent)) throw new Error("The long stroke was not submitted");
+    expect(sent.length).toBeGreaterThan(2);
+    expect(sent.length).toBeLessThan(points.length);
+    expect(new TextEncoder().encode(JSON.stringify(long)).byteLength).toBeLessThanOrEqual(16_384 - 64);
+    expect(submitted.some((element) => element.id === "after")).toBe(true);
+    expect(fixture.onSubmissionError).not.toHaveBeenCalled();
+    const local = fixture.api.getSceneElementsIncludingDeleted().find((element) => element.id === "long");
+    expect(local && "points" in local ? local.points : []).toHaveLength(points.length);
   } finally {
     fixture.engine.dispose();
   }
