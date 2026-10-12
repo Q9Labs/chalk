@@ -76,6 +76,14 @@ it("only rounds when rounding alone fits", () => {
   expect(wire.payload.points).toEqual(element.points.map((point) => point.map(round)));
 });
 
+it("counts the two bytes that the server adds to a number such as 1e-7", () => {
+  const element = { ...stroke(2), points: Array.from({ length: 1300 }, () => [1e-7, 2e-7] as [number, number]) };
+  expect(bytes(toWireElement(element))).toBeLessThanOrEqual(limit);
+  const wire = toFittedWireElement(element);
+  // On the server this element is 5,200 bytes larger, so it must not go out as it is.
+  expect(wire.payload.points).toEqual(element.points.map(() => [0, 0]));
+});
+
 it("submits an element under the limit exactly as the public conversion gives it", () => {
   const element = stroke(24, true);
   expect(toFittedWireElement(element)).toEqual(toWireElement(element));

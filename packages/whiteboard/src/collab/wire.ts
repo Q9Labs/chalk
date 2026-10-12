@@ -1,7 +1,7 @@
 import type { OrderedExcalidrawElement } from "./types";
 
-// Sync stores one element, envelope included, in at most 16,384 bytes of JSON (whiteboard-v1).
-// Its encoder writes a few numbers longer than JSON.stringify does (1e-7 becomes 1.0e-7), so the engine keeps a margin.
+// Sync stores one element, envelope included, in at most 16,384 bytes of its own JSON (whiteboard-v1).
+// The engine keeps a margin for differences between that encoder and JSON.stringify that it does not count.
 export const ELEMENT_ENCODED_BYTES_LIMIT = 16_384 - 64;
 const encoder = new TextEncoder();
 
@@ -87,8 +87,12 @@ function isElbowArrow(element: OrderedExcalidrawElement): boolean {
   return element.type === "arrow" && "elbowed" in element && element.elbowed;
 }
 
+// Sync writes a number such as 1e-7 as 1.0e-7: two bytes more for each one.
+const exponentWithoutFraction = /(^|[^\d.])\d[eE][+-]?\d/g;
+
 function fits(element: WhiteboardWireElement): boolean {
-  return encoder.encode(JSON.stringify(element)).byteLength <= ELEMENT_ENCODED_BYTES_LIMIT;
+  const json = JSON.stringify(element);
+  return encoder.encode(json).byteLength + 2 * (json.match(exponentWithoutFraction)?.length ?? 0) <= ELEMENT_ENCODED_BYTES_LIMIT;
 }
 
 function roundCoordinate(value: number): number {
