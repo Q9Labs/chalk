@@ -148,3 +148,360 @@ function createCanvas(restoreElements: typeof import("@excalidraw/excalidraw").r
   };
   return api;
 }
+
+it("acknowledges the submitted version, then delivers final points mutated during the submit", async () => {
+  const fixture = await createDeliveryFixture();
+  const pending = deferredCommit();
+  fixture.submitUpdate.mockImplementationOnce(() => pending.promise);
+  try {
+    fixture.draw("stroke", 1);
+    await vi.advanceTimersByTimeAsync(150);
+    const stroke = fixture.api.getSceneElementsIncludingDeleted()[0];
+    Object.assign(stroke, { version: 2, versionNonce: 2, width: 200 });
+    // Excalidraw mutates existing elements. No further input is needed to flush the final state.
+    pending.resolve({ operationId: "first", sceneId: "scene", revision: "1" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fixture.submitUpdate).toHaveBeenCalledTimes(2);
+    expect(fixture.submitUpdate.mock.calls[0]?.[0].elements[0]?.version).toBe(1);
+    expect(fixture.submitUpdate.mock.calls[1]?.[0].elements[0]?.version).toBe(2);
+    expect(fixture.submitUpdate.mock.calls[1]?.[0].elements[0]?.payload.width).toBe(200);
+  } finally {
+    fixture.engine.dispose();
+  }
+});
+
+it.each(["overloaded", "storage_unavailable"])("retries only unacknowledged changes after %s, without more drawing", async (code) => {
+  const fixture = await createDeliveryFixture();
+  try {
+    fixture.draw("acknowledged", 1);
+    await vi.advanceTimersByTimeAsync(150);
+    fixture.submitUpdate.mockRejectedValueOnce(new Error(code));
+    fixture.draw("pending", 1);
+    await vi.advanceTimersByTimeAsync(150);
+    expect(fixture.onSubmissionError).toHaveBeenCalledWith(expect.objectContaining({ message: code }));
+    await vi.advanceTimersByTimeAsync(999);
+    expect(fixture.submitUpdate).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fixture.submitUpdate).toHaveBeenCalledTimes(3);
+    expect(fixture.submitUpdate.mock.calls[2]?.[0]).toEqual(expect.objectContaining({ syncAll: false, elements: [expect.objectContaining({ id: "pending" })] }));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fixture.submitUpdate).toHaveBeenCalledTimes(3);
+  } finally {
+    fixture.engine.dispose();
+  }
+});
+
+it("bounds failed-submit retries and resumes retained changes after reconnect snapshot", async () => {
+  const fixture = await createDeliveryFixture();
+  try {
+    fixture.submitUpdate.mockRejectedValue(new Error("overloaded"));
+    fixture.draw("offline", 1);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(fixture.submitUpdate).toHaveBeenCalledTimes(4);
+    fixture.submitUpdate.mockImplementation(async (input) => ({ operationId: "reconnected", sceneId: input.sceneId, revision: "2" }));
+    fixture.engine.handleRemoteSnapshot({ sceneId: "scene", elements: [] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fixture.submitUpdate).toHaveBeenCalledTimes(5);
+    expect(fixture.submitUpdate.mock.calls[4]?.[0].elements.map((element) => element.id)).toEqual(["offline"]);
+  } finally {
+    fixture.engine.dispose();
+  }
+});
+
+it("does not let an old acknowledgement downgrade a newer remote version", async () => {
+  const fixture = await createDeliveryFixture();
+  const pending = deferredCommit();
+  fixture.submitUpdate.mockImplementationOnce(() => pending.promise);
+  try {
+    fixture.draw("shared", 2);
+    await vi.advanceTimersByTimeAsync(150);
+    fixture.engine.handleRemoteData({ sceneId: "scene", syncAll: false, elements: fixture.make("shared", 3).map(fixture.toWireElement) });
+    pending.resolve({ operationId: "old", sceneId: "scene", revision: "2" });
+    await vi.advanceTimersByTimeAsync(0);
+    fixture.engine.handleChange(fixture.api.getSceneElementsIncludingDeleted(), fixture.api.getAppState(), {});
+    await vi.advanceTimersByTimeAsync(150);
+    expect(fixture.api.getSceneElementsIncludingDeleted()[0]?.version).toBe(3);
+    expect(fixture.submitUpdate).toHaveBeenCalledOnce();
+  } finally {
+    fixture.engine.dispose();
+  }
+});
+
+it("converges final points when two writers edit the same element with pending acknowledgements", async () => {
+  const first = await createDeliveryFixture();
+  const second = await createDeliveryFixture();
+  const pendingFirst = deferredCommit();
+  const pendingSecond = deferredCommit();
+  first.submitUpdate.mockImplementationOnce(() => pendingFirst.promise);
+  second.submitUpdate.mockImplementationOnce(() => pendingSecond.promise);
+  try {
+    first.draw("shared", 2, 1);
+    second.draw("shared", 2, 2);
+    await vi.advanceTimersByTimeAsync(150);
+    Object.assign(first.api.getSceneElementsIncludingDeleted()[0], {
+      version: 3,
+      versionNonce: 3,
+      points: [
+        [0, 0],
+        [100, 100],
+        [200, 50],
+      ],
+      width: 200,
+    });
+    first.engine.handleChange(first.api.getSceneElementsIncludingDeleted(), first.api.getAppState(), {});
+    const winner = first.submitUpdate.mock.calls[0]?.[0].elements ?? [];
+    const loser = second.submitUpdate.mock.calls[0]?.[0].elements ?? [];
+    first.engine.handleRemoteData({ sceneId: "scene", syncAll: false, elements: loser });
+    second.engine.handleRemoteData({ sceneId: "scene", syncAll: false, elements: winner });
+    pendingFirst.resolve({ operationId: "first", sceneId: "scene", revision: "1" });
+    pendingSecond.resolve({ operationId: "second", sceneId: "scene", revision: "2" });
+    await vi.advanceTimersByTimeAsync(150);
+    expect(first.submitUpdate).toHaveBeenCalledTimes(2);
+    const final = first.submitUpdate.mock.calls[1]?.[0].elements ?? [];
+    second.engine.handleRemoteData({ sceneId: "scene", syncAll: false, elements: final });
+    expect(first.api.getSceneElementsIncludingDeleted()[0]?.version).toBe(3);
+    expect(second.api.getSceneElementsIncludingDeleted()[0]?.version).toBe(3);
+    expect(second.api.getSceneElementsIncludingDeleted()[0]).toEqual(
+      expect.objectContaining({
+        points: [
+          [0, 0],
+          [100, 100],
+          [200, 50],
+        ],
+      }),
+    );
+    expect(second.submitUpdate).toHaveBeenCalledOnce();
+  } finally {
+    first.engine.dispose();
+    second.engine.dispose();
+  }
+});
+
+it("sends nothing for a settled 1,629-stroke board left idle for 60 seconds", async () => {
+  const fixture = await createDeliveryFixture();
+  try {
+    fixture.api.updateScene({ elements: Array.from({ length: 1629 }, (_, index) => fixture.make(`stroke-${index}`, 1)[0]).filter((element) => element !== undefined) });
+    fixture.engine.handleChange(fixture.api.getSceneElementsIncludingDeleted(), fixture.api.getAppState(), {});
+    await vi.advanceTimersByTimeAsync(150);
+    expect(fixture.submitUpdate).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fixture.submitUpdate).toHaveBeenCalledOnce();
+  } finally {
+    fixture.engine.dispose();
+  }
+});
+
+it.each(["writer", "watcher"])("retains complete strokes across a 20-second cut on the %s", async (cutSide) => {
+  const writer = await createDeliveryFixture();
+  const watcher = await createDeliveryFixture();
+  watcher.engine.setCanDraw(false);
+  const pending = deferredCommit();
+  let latest: readonly import("./wire").WhiteboardWireElement[] = [];
+  writer.submitUpdate.mockImplementation(async (input) => {
+    latest = input.elements;
+    if (cutSide === "writer") await pending.promise;
+    if (cutSide !== "watcher") watcher.engine.handleRemoteData({ sceneId: "scene", syncAll: false, elements: latest });
+    return { operationId: "operation", sceneId: "scene", revision: "1" };
+  });
+  try {
+    writer.draw("stroke", 1);
+    await vi.advanceTimersByTimeAsync(150);
+    const stroke = writer.api.getSceneElementsIncludingDeleted()[0];
+    Object.assign(stroke, {
+      version: 2,
+      versionNonce: 2,
+      points: [
+        [0, 0],
+        [100, 100],
+        [200, 50],
+      ],
+      width: 200,
+    });
+    writer.engine.handleChange(writer.api.getSceneElementsIncludingDeleted(), writer.api.getAppState(), {});
+    await vi.advanceTimersByTimeAsync(20_000);
+    pending.resolve({ operationId: "reconnected", sceneId: "scene", revision: "1" });
+    await vi.advanceTimersByTimeAsync(0);
+    watcher.engine.handleRemoteSnapshot({ sceneId: "scene", elements: latest });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(watcher.api.getSceneElementsIncludingDeleted()).toHaveLength(1);
+    expect(watcher.api.getSceneElementsIncludingDeleted()[0]?.version).toBe(2);
+    expect(watcher.api.getSceneElementsIncludingDeleted()[0]).toEqual(
+      expect.objectContaining({
+        points: [
+          [0, 0],
+          [100, 100],
+          [200, 50],
+        ],
+      }),
+    );
+    expect(watcher.submitUpdate).not.toHaveBeenCalled();
+    expect(writer.submitUpdate.mock.calls.every(([input]) => !input.syncAll)).toBe(true);
+  } finally {
+    writer.engine.dispose();
+    watcher.engine.dispose();
+  }
+});
+
+it("keeps ongoing input behind the debounce after an acknowledgement and still sends its final version", async () => {
+  const fixture = await createDeliveryFixture();
+  fixture.submitUpdate.mockImplementation(
+    (input) =>
+      new Promise((resolve) => {
+        setTimeout(() => resolve({ operationId: "delayed", sceneId: input.sceneId, revision: "1" }), 40);
+      }),
+  );
+  try {
+    fixture.draw("drag", 1);
+    await vi.advanceTimersByTimeAsync(150);
+    expect(fixture.submitUpdate).toHaveBeenCalledOnce();
+    for (let version = 2; version <= 21; version++) {
+      fixture.draw("drag", version);
+      await vi.advanceTimersByTimeAsync(20);
+    }
+    expect(fixture.submitUpdate).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(150);
+    expect(fixture.submitUpdate).toHaveBeenCalledTimes(2);
+    expect(fixture.submitUpdate.mock.calls[1]?.[0].elements[0]?.version).toBe(21);
+  } finally {
+    fixture.engine.dispose();
+  }
+});
+
+it.each(["drawing", "resizing"])("applies a winning peer edit once local %s on the same element ends", async (interaction) => {
+  const fixture = await createDeliveryFixture();
+  const getAppState = fixture.api.getAppState;
+  let editing = true;
+  fixture.api.getAppState = () => ({
+    ...getAppState(),
+    newElement: editing && interaction === "drawing" ? (fixture.api.getSceneElementsIncludingDeleted()[0] ?? null) : null,
+    resizingElement: editing && interaction === "resizing" ? (fixture.api.getSceneElementsIncludingDeleted()[0] ?? null) : null,
+  });
+  try {
+    fixture.draw("shared", 1);
+    await vi.advanceTimersByTimeAsync(150);
+    fixture.draw("shared", 2);
+    fixture.engine.handleRemoteData({ sceneId: "scene", syncAll: false, elements: fixture.make("shared", 5).map(fixture.toWireElement) });
+    expect(fixture.api.getSceneElementsIncludingDeleted()[0]?.version).toBe(2);
+    editing = false;
+    fixture.engine.handleChange(fixture.api.getSceneElementsIncludingDeleted(), fixture.api.getAppState(), {});
+    await vi.advanceTimersByTimeAsync(150);
+    expect(fixture.api.getSceneElementsIncludingDeleted()[0]?.version).toBe(5);
+    expect(fixture.submitUpdate).toHaveBeenCalledOnce();
+  } finally {
+    fixture.engine.dispose();
+  }
+});
+
+it("keeps a newer local edit when the deferred peer version is reconciled", async () => {
+  const fixture = await createDeliveryFixture();
+  const getAppState = fixture.api.getAppState;
+  let editing = true;
+  fixture.api.getAppState = () => ({ ...getAppState(), newElement: editing ? (fixture.api.getSceneElementsIncludingDeleted()[0] ?? null) : null });
+  try {
+    fixture.draw("shared", 1);
+    await vi.advanceTimersByTimeAsync(150);
+    fixture.draw("shared", 2);
+    fixture.engine.handleRemoteData({ sceneId: "scene", syncAll: false, elements: fixture.make("shared", 5).map(fixture.toWireElement) });
+    fixture.draw("shared", 9);
+    editing = false;
+    fixture.engine.handleChange(fixture.api.getSceneElementsIncludingDeleted(), fixture.api.getAppState(), {});
+    await vi.advanceTimersByTimeAsync(150);
+    expect(fixture.api.getSceneElementsIncludingDeleted()[0]?.version).toBe(9);
+    expect(fixture.submitUpdate).toHaveBeenCalledTimes(2);
+    expect(fixture.submitUpdate.mock.calls[1]?.[0].elements[0]?.version).toBe(9);
+  } finally {
+    fixture.engine.dispose();
+  }
+});
+
+it("discards deferred peer edits when the scene is cleared", async () => {
+  const fixture = await createDeliveryFixture();
+  const getAppState = fixture.api.getAppState;
+  let editing = true;
+  fixture.api.getAppState = () => ({ ...getAppState(), newElement: editing ? (fixture.api.getSceneElementsIncludingDeleted()[0] ?? null) : null });
+  try {
+    fixture.draw("shared", 1);
+    await vi.advanceTimersByTimeAsync(150);
+    fixture.draw("shared", 2);
+    fixture.engine.handleRemoteData({ sceneId: "scene", syncAll: false, elements: fixture.make("shared", 5).map(fixture.toWireElement) });
+    fixture.engine.handleRemoteSnapshot({ sceneId: "cleared", elements: [] });
+    editing = false;
+    fixture.engine.handleChange(fixture.api.getSceneElementsIncludingDeleted(), fixture.api.getAppState(), {});
+    await vi.advanceTimersByTimeAsync(150);
+    expect(fixture.api.getSceneElementsIncludingDeleted()).toEqual([]);
+    expect(fixture.submitUpdate).toHaveBeenCalledOnce();
+  } finally {
+    fixture.engine.dispose();
+  }
+});
+
+async function createDeliveryFixture() {
+  const { restoreAppState, restoreElements } = await import("@excalidraw/excalidraw");
+  const { ExcalidrawCollabEngine } = await import("./engine");
+  const { toWireElement } = await import("./wire");
+  vi.useFakeTimers();
+  const api = createCanvas(restoreElements, restoreAppState);
+  const make = (id: string, version: number, versionNonce = version) =>
+    restoreElements(
+      [
+        {
+          type: "freedraw",
+          id,
+          index: "a0",
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 100,
+          points: [
+            [0, 0],
+            [100, 100],
+          ],
+          pressures: [],
+          simulatePressure: true,
+          version,
+          versionNonce,
+          isDeleted: false,
+        },
+      ],
+      null,
+    );
+  const submitUpdate = vi.fn(async (input: Parameters<import("./engine").ExcalidrawCollabEngineOptions["submitUpdate"]>[0]) => ({ operationId: "operation", sceneId: input.sceneId, revision: "1" }));
+  const onSubmissionError = vi.fn();
+  const engine = new ExcalidrawCollabEngine({ excalidrawAPI: api, canDraw: true, submitUpdate, sendCursor: vi.fn(), requestSnapshot: async () => undefined, clear: vi.fn(), subscribe: () => () => undefined, onSubmissionError });
+  engine.handleRemoteSnapshot({ sceneId: "scene", elements: [] });
+  const draw = (id: string, version: number, versionNonce = version) => {
+    api.updateScene({ elements: [...api.getSceneElementsIncludingDeleted().filter((element) => element.id !== id), ...make(id, version, versionNonce)] });
+    engine.handleChange(api.getSceneElementsIncludingDeleted(), api.getAppState(), {});
+  };
+  return { api, engine, submitUpdate, onSubmissionError, make, draw, toWireElement };
+}
+
+it("does not back off a new scene when a submission from the previous scene fails", async () => {
+  const fixture = await createDeliveryFixture();
+  const pending = deferredCommit();
+  fixture.submitUpdate.mockImplementationOnce(() => pending.promise);
+  try {
+    fixture.draw("old", 1);
+    await vi.advanceTimersByTimeAsync(150);
+    fixture.engine.handleRemoteSnapshot({ sceneId: "replacement", elements: [] });
+    fixture.draw("new", 1);
+    await vi.advanceTimersByTimeAsync(150);
+    pending.reject(new Error("storage_unavailable"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fixture.submitUpdate).toHaveBeenCalledTimes(2);
+    expect(fixture.submitUpdate.mock.calls[1]?.[0].sceneId).toBe("replacement");
+    expect(fixture.submitUpdate.mock.calls[1]?.[0].elements.map((element) => element.id)).toEqual(["new"]);
+  } finally {
+    fixture.engine.dispose();
+  }
+});
+
+function deferredCommit() {
+  let resolve: (commit: import("./wire").WhiteboardCommit) => void = () => undefined;
+  let reject: (cause: unknown) => void = () => undefined;
+  const promise = new Promise<import("./wire").WhiteboardCommit>((complete, fail) => {
+    resolve = complete;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
