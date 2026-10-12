@@ -433,6 +433,32 @@ it("keeps ongoing input behind the debounce after an acknowledgement and still s
   }
 });
 
+it("leaves a stroke that is still being drawn to its own pointer-up when the canvas never goes quiet", async () => {
+  const fixture = await createDeliveryFixture();
+  const getAppState = fixture.api.getAppState;
+  let drawing = true;
+  fixture.api.getAppState = () => ({
+    ...getAppState(),
+    newElement: drawing ? (fixture.api.getSceneElementsIncludingDeleted().find((element) => element.id === "in-hand") ?? null) : null,
+  });
+  try {
+    fixture.draw("finished", 1);
+    for (let version = 1; version <= 30; version++) {
+      fixture.draw("in-hand", version);
+      await vi.advanceTimersByTimeAsync(100);
+    }
+    expect(fixture.submitUpdate.mock.calls.map((call) => call[0].elements.map((element) => element.id))).toEqual([["finished"]]);
+    drawing = false;
+    fixture.pointerUp();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fixture.submitUpdate).toHaveBeenCalledTimes(2);
+    expect(fixture.submitUpdate.mock.calls[1]?.[0].elements.map((element) => element.id)).toEqual(["in-hand"]);
+    expect(fixture.submitUpdate.mock.calls[1]?.[0].elements[0]?.version).toBeGreaterThanOrEqual(30);
+  } finally {
+    fixture.engine.dispose();
+  }
+});
+
 it.each(["drawing", "resizing"])("applies a winning peer edit once local %s on the same element ends", async (interaction) => {
   const fixture = await createDeliveryFixture();
   const getAppState = fixture.api.getAppState;

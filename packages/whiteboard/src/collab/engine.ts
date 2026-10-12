@@ -166,14 +166,16 @@ export class ExcalidrawCollabEngine {
 
     const now = Date.now();
     const deadline = this.changeDebounceDeadline ?? now + CHANGE_MAX_WAIT_MS;
+    const wait = Math.min(CHANGE_DEBOUNCE_MS, deadline - now);
     this.clearChangeDebounce();
     this.changeDebounceDeadline = deadline;
     this.changeDebounce = setTimeout(
       () => {
         this.clearChangeDebounce();
-        this.flushNow();
+        // The canvas never went quiet. Send what is finished; the element in hand goes out at its own pointer-up.
+        this.flushNow(wait < CHANGE_DEBOUNCE_MS);
       },
-      Math.max(0, Math.min(CHANGE_DEBOUNCE_MS, deadline - now)),
+      Math.max(0, wait),
     );
   }
 
@@ -238,15 +240,16 @@ export class ExcalidrawCollabEngine {
     });
   }
 
-  private flushNow(): void {
+  private flushNow(skipEditing = false): void {
     if (this.disposed || this.submissionRetryTimer !== null) return;
 
     const context = this.submissionContext();
     if (!context) return;
+    const editing = skipEditing ? editingElementIds(this.opts.excalidrawAPI.getAppState()) : [];
     const syncableAll = filterSyncableElements(context.elements);
     const delta: OrderedExcalidrawElement[] = [];
     for (const el of syncableAll) {
-      if (this.isUnsubmitted(el)) delta.push(el);
+      if (this.isUnsubmitted(el) && !editing.includes(el.id)) delta.push(el);
     }
     if (delta.length === 0) return;
 
@@ -364,8 +367,10 @@ export class ExcalidrawCollabEngine {
         this.submissionInFlight = false;
         const shouldFlush = this.dirtyDuringSubmission;
         this.dirtyDuringSubmission = false;
-        // A flush that had to wait for this submission goes out now. Ongoing input stays behind the debounce.
-        if (shouldFlush || (acknowledged && this.changeDebounce === null)) this.flushNow();
+        // A flush that had to wait for this submission goes out now. Ongoing input stays behind the debounce,
+        // and an element still in hand waits for its own pointer-up.
+        if (shouldFlush) this.flushNow();
+        else if (acknowledged && this.changeDebounce === null) this.flushNow(true);
       });
   }
 
