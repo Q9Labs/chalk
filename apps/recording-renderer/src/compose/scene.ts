@@ -28,7 +28,7 @@ export interface SceneVideo {
 export type SceneTile =
   | { readonly kind: "participant"; readonly rect: Rect; readonly participant: SceneParticipant; readonly video?: SceneVideo }
   | { readonly kind: "screen_share"; readonly rect: Rect; readonly participant: SceneParticipant; readonly video?: SceneVideo }
-  | { readonly kind: "whiteboard"; readonly rect: Rect; readonly stateAssetId: string };
+  | { readonly kind: "whiteboard"; readonly rect: Rect; readonly stateAssetId: string; readonly revision: number };
 
 export interface SceneReaction {
   readonly value: string;
@@ -227,7 +227,7 @@ function stageGeometry(items: readonly StageItem[], layout: RecordingPresentatio
 }
 
 function sceneTile(item: StageItem, rect: Rect, sharedContent: RecordingPresentationSnapshotV1["sharedContent"], byId: ReadonlyMap<string, RecordingPresentationParticipantV1>, cameraByParticipant: ReadonlyMap<string, string>, available: (sourceId: string) => boolean): SceneTile | undefined {
-  if (item.kind === "whiteboard") return sharedContent.kind === "whiteboard" ? { kind: "whiteboard", rect, stateAssetId: sharedContent.stateAssetId } : undefined;
+  if (item.kind === "whiteboard") return sharedContent.kind === "whiteboard" ? { kind: "whiteboard", rect, stateAssetId: sharedContent.stateAssetId, revision: sharedContent.revision } : undefined;
   const participant = byId.get(item.participant.id);
   if (participant === undefined) return undefined;
   if (item.kind === "screen-share") return screenShareTile(rect, participant, sharedContent, available);

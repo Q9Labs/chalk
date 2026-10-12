@@ -1,7 +1,7 @@
 import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { createCanvas, Image, Path2D, type Canvas, type SKRSContext2D } from "@napi-rs/canvas";
-import { loadRecordingWhiteboardFiles, parseRecordingWhiteboardStateV1, recordingWhiteboardSceneAppState } from "@q9labsai/chalk-react/headless";
+import { createRecordingWhiteboardCursor, loadRecordingWhiteboardFiles, recordingWhiteboardSceneAppState, type RecordingWhiteboardCursor } from "@q9labsai/chalk-react/headless";
 import { expandFontFamilies, registerSubsetFamily } from "./fonts.js";
 import type { Rect } from "./scene.js";
 
@@ -16,7 +16,7 @@ export interface WhiteboardRendererOptions {
   readonly loadAsset: (assetId: string) => Promise<WhiteboardAsset>;
 }
 
-export type WhiteboardRenderer = (stateAssetId: string, colorScheme: "light" | "dark", rect: Rect) => Promise<Canvas>;
+export type WhiteboardRenderer = (stateAssetId: string, colorScheme: "light" | "dark", rect: Rect, revision?: number) => Promise<Canvas>;
 
 // Folder name → the CSS family Excalidraw asks for. Xiaolai (CJK) is left out: it is large and Latin text never needs it.
 const EXCALIDRAW_FONTS: readonly (readonly [string, string])[] = [
@@ -40,7 +40,8 @@ type ChalkWhiteboard = typeof import("@q9labsai/chalk-whiteboard");
  */
 export function createWhiteboardRenderer(options: WhiteboardRendererOptions): WhiteboardRenderer {
   let modules: Promise<{ readonly excalidraw: Excalidraw; readonly whiteboard: ChalkWhiteboard }> | undefined;
-  const rendered = new Map<string, Promise<Canvas>>();
+  let current: { readonly assetId: string; readonly cursor: Promise<RecordingWhiteboardCursor> } | undefined;
+  let rendered: { readonly key: string; readonly canvas: Promise<Canvas> } | undefined;
 
   async function load(): Promise<{ readonly excalidraw: Excalidraw; readonly whiteboard: ChalkWhiteboard }> {
     await installDom();
@@ -52,10 +53,11 @@ export function createWhiteboardRenderer(options: WhiteboardRendererOptions): Wh
     return { excalidraw, whiteboard };
   }
 
-  async function render(stateAssetId: string, colorScheme: "light" | "dark", rect: Rect): Promise<Canvas> {
+  async function render(stateAssetId: string, colorScheme: "light" | "dark", rect: Rect, revision: number): Promise<Canvas> {
     modules ??= load();
     const { excalidraw, whiteboard } = await modules;
-    const state = parseRecordingWhiteboardStateV1(JSON.parse((await options.loadAsset(stateAssetId)).bytes.toString("utf8")));
+    if (current?.assetId !== stateAssetId) current = { assetId: stateAssetId, cursor: options.loadAsset(stateAssetId).then((asset) => createRecordingWhiteboardCursor(JSON.parse(asset.bytes.toString("utf8")))) };
+    const state = (await current.cursor).at(revision);
     const files = await loadRecordingWhiteboardFiles(state, async ({ assetId }) => {
       const asset = await options.loadAsset(assetId);
       return { mimeType: asset.contentType, dataURL: `data:${asset.contentType};base64,${asset.bytes.toString("base64")}`, createdAtMs: 0 };
@@ -75,14 +77,10 @@ export function createWhiteboardRenderer(options: WhiteboardRendererOptions): Wh
     return canvas;
   }
 
-  return async (stateAssetId, colorScheme, rect) => {
-    const key = `${stateAssetId}:${colorScheme}:${rect.width}x${rect.height}`;
-    let pending = rendered.get(key);
-    if (pending === undefined) {
-      pending = render(stateAssetId, colorScheme, rect);
-      rendered.set(key, pending);
-    }
-    return await pending;
+  return async (stateAssetId, colorScheme, rect, revision = 0) => {
+    const key = `${stateAssetId}:${revision}:${colorScheme}:${rect.width}x${rect.height}`;
+    if (rendered?.key !== key) rendered = { key, canvas: render(stateAssetId, colorScheme, rect, revision) };
+    return await rendered.canvas;
   };
 }
 

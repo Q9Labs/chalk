@@ -493,10 +493,23 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
       {:ok, commit, updates} ->
         Enum.each(updates, &Fanout.broadcast_local(identity.episode, &1))
         state = observe_operation(state, "submit_update", "committed")
+        state = acknowledge_contiguous_commit(state, commit)
         {:push, {:text, Protocol.encode!(commit)}, state}
 
       failure ->
         operation_failure(operation.operation_id, :submit_update, failure, state)
+    end
+  end
+
+  defp acknowledge_contiguous_commit(state, commit) do
+    # The sender already has this mutation. Replaying its payload after the ACK
+    # can replace a newer local draft in published whiteboard clients.
+    # A gap still needs replay; an ACK must not skip other Participants' changes.
+    if commit["scene_id"] == state.scene_id and
+         String.to_integer(commit["revision"]) == state.revision + 1 do
+      advance_cursor(state, commit)
+    else
+      state
     end
   end
 
