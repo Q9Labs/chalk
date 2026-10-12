@@ -115,7 +115,7 @@ it("submits a local version that wins an equal-version reconciliation without ec
   }
 });
 
-function createCanvas(restoreElements: typeof import("@excalidraw/excalidraw").restoreElements, restoreAppState: typeof import("@excalidraw/excalidraw").restoreAppState): ExcalidrawImperativeAPI {
+function createCanvas(restoreElements: typeof import("@excalidraw/excalidraw").restoreElements, restoreAppState: typeof import("@excalidraw/excalidraw").restoreAppState, pointerUps: (() => void)[] = []): ExcalidrawImperativeAPI {
   let elements = restoreElements([], null);
   const api: ExcalidrawImperativeAPI = {
     id: "canvas",
@@ -142,7 +142,10 @@ function createCanvas(restoreElements: typeof import("@excalidraw/excalidraw").r
     updateFrameRendering: vi.fn(),
     onChange: () => () => undefined,
     onPointerDown: () => () => undefined,
-    onPointerUp: () => () => undefined,
+    onPointerUp: (callback) => {
+      pointerUps.push(() => Reflect.apply(callback, undefined, []));
+      return () => undefined;
+    },
     onScrollChange: () => () => undefined,
     onUserFollow: () => () => undefined,
   };
@@ -191,18 +194,81 @@ it.each(["overloaded", "storage_unavailable"])("retries only unacknowledged chan
   }
 });
 
-it("bounds failed-submit retries and resumes retained changes after reconnect snapshot", async () => {
+it("keeps retrying a failed submission at a capped delay and resumes at once after a reconnect snapshot", async () => {
   const fixture = await createDeliveryFixture();
   try {
     fixture.submitUpdate.mockRejectedValue(new Error("overloaded"));
     fixture.draw("offline", 1);
+    // Attempts at 0.15 s, then after 1, 2, 4, 8 and 16 s.
     await vi.advanceTimersByTimeAsync(20_000);
-    expect(fixture.submitUpdate).toHaveBeenCalledTimes(4);
+    expect(fixture.submitUpdate).toHaveBeenCalledTimes(5);
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(fixture.submitUpdate).toHaveBeenCalledTimes(7);
     fixture.submitUpdate.mockImplementation(async (input) => ({ operationId: "reconnected", sceneId: input.sceneId, revision: "2" }));
     fixture.engine.handleRemoteSnapshot({ sceneId: "scene", elements: [] });
     await vi.advanceTimersByTimeAsync(0);
+    expect(fixture.submitUpdate).toHaveBeenCalledTimes(8);
+    expect(fixture.submitUpdate.mock.calls[7]?.[0].elements.map((element) => element.id)).toEqual(["offline"]);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fixture.submitUpdate).toHaveBeenCalledTimes(8);
+  } finally {
+    fixture.engine.dispose();
+  }
+});
+
+it("delivers a failed change without more drawing once the server accepts it again", async () => {
+  const fixture = await createDeliveryFixture();
+  try {
+    fixture.submitUpdate.mockRejectedValue(new Error("storage_unavailable"));
+    fixture.draw("stuck", 1);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fixture.submitUpdate).toHaveBeenCalledTimes(4);
+    fixture.submitUpdate.mockImplementation(async (input) => ({ operationId: "healed", sceneId: input.sceneId, revision: "2" }));
+    await vi.advanceTimersByTimeAsync(6_000);
     expect(fixture.submitUpdate).toHaveBeenCalledTimes(5);
-    expect(fixture.submitUpdate.mock.calls[4]?.[0].elements.map((element) => element.id)).toEqual(["offline"]);
+    expect(fixture.submitUpdate.mock.calls[4]?.[0].elements.map((element) => element.id)).toEqual(["stuck"]);
+  } finally {
+    fixture.engine.dispose();
+  }
+});
+
+it("sends a stroke finished during a submission as soon as it is acknowledged, while a co-writer's cursor keeps the canvas changing", async () => {
+  const fixture = await createDeliveryFixture();
+  const pending = deferredCommit();
+  fixture.submitUpdate.mockImplementationOnce(() => pending.promise);
+  try {
+    fixture.draw("first", 1);
+    fixture.pointerUp();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fixture.submitUpdate).toHaveBeenCalledOnce();
+    fixture.draw("second", 1);
+    fixture.pointerUp();
+    fixture.canvasChange();
+    pending.resolve({ operationId: "first", sceneId: "scene", revision: "1" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fixture.submitUpdate).toHaveBeenCalledTimes(2);
+    expect(fixture.submitUpdate.mock.calls[1]?.[0].elements.map((element) => element.id)).toEqual(["second"]);
+  } finally {
+    fixture.engine.dispose();
+  }
+});
+
+it("sends a change within a second when a co-writer's cursor keeps the canvas changing", async () => {
+  const fixture = await createDeliveryFixture();
+  try {
+    fixture.draw("typed", 1);
+    for (let elapsed = 100; elapsed <= 900; elapsed += 100) {
+      await vi.advanceTimersByTimeAsync(100);
+      fixture.canvasChange();
+    }
+    expect(fixture.submitUpdate).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(fixture.submitUpdate).toHaveBeenCalledOnce();
+    for (let elapsed = 0; elapsed < 3_000; elapsed += 100) {
+      fixture.canvasChange();
+      await vi.advanceTimersByTimeAsync(100);
+    }
+    expect(fixture.submitUpdate).toHaveBeenCalledOnce();
   } finally {
     fixture.engine.dispose();
   }
@@ -440,7 +506,8 @@ async function createDeliveryFixture() {
   const { ExcalidrawCollabEngine } = await import("./engine");
   const { toWireElement } = await import("./wire");
   vi.useFakeTimers();
-  const api = createCanvas(restoreElements, restoreAppState);
+  const pointerUps: (() => void)[] = [];
+  const api = createCanvas(restoreElements, restoreAppState, pointerUps);
   const make = (id: string, version: number, versionNonce = version) =>
     restoreElements(
       [
@@ -473,7 +540,9 @@ async function createDeliveryFixture() {
     api.updateScene({ elements: [...api.getSceneElementsIncludingDeleted().filter((element) => element.id !== id), ...make(id, version, versionNonce)] });
     engine.handleChange(api.getSceneElementsIncludingDeleted(), api.getAppState(), {});
   };
-  return { api, engine, submitUpdate, onSubmissionError, make, draw, toWireElement };
+  const pointerUp = () => pointerUps.forEach((fire) => fire());
+  const canvasChange = () => engine.handleChange(api.getSceneElementsIncludingDeleted(), api.getAppState(), {});
+  return { api, engine, submitUpdate, onSubmissionError, make, draw, pointerUp, canvasChange, toWireElement };
 }
 
 it("does not back off a new scene when a submission from the previous scene fails", async () => {

@@ -9,8 +9,10 @@ import type { AppState, BinaryFiles, ExcalidrawElement, ExcalidrawImperativeAPI,
 import { fromWireElement, toWireElement, type WhiteboardCommit, type WhiteboardWireElement } from "./wire";
 
 const SUBMISSION_RETRY_DELAY_MS = 1_000;
-const MAX_SUBMISSION_RETRIES = 3;
+const MAX_SUBMISSION_RETRY_DELAY_MS = 16_000;
 const CHANGE_DEBOUNCE_MS = 150;
+// Remote cursors change the canvas too, so the debounce alone can be restarted without end.
+const CHANGE_MAX_WAIT_MS = 1_000;
 const CURSOR_THROTTLE_MS = 16;
 const CURSOR_STALE_MS = 10_000;
 
@@ -80,6 +82,7 @@ export class ExcalidrawCollabEngine {
   private disposed = false;
 
   private changeDebounce: ReturnType<typeof setTimeout> | null = null;
+  private changeDebounceDeadline: number | null = null;
   private submissionRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private submissionRetries = 0;
 
@@ -138,8 +141,7 @@ export class ExcalidrawCollabEngine {
     const hasPendingChange = this.changeDebounce !== null || this.dirtyDuringSubmission || this.submissionRetryTimer !== null;
     this.disposed = true;
 
-    if (this.changeDebounce) clearTimeout(this.changeDebounce);
-    this.changeDebounce = null;
+    this.clearChangeDebounce();
 
     if (hasPendingChange) this.flushOnDispose();
 
@@ -162,11 +164,17 @@ export class ExcalidrawCollabEngine {
 
     if (!this.canDraw) return;
 
-    if (this.changeDebounce) clearTimeout(this.changeDebounce);
-    this.changeDebounce = setTimeout(() => {
-      this.changeDebounce = null;
-      this.flushNow();
-    }, CHANGE_DEBOUNCE_MS);
+    const now = Date.now();
+    const deadline = this.changeDebounceDeadline ?? now + CHANGE_MAX_WAIT_MS;
+    this.clearChangeDebounce();
+    this.changeDebounceDeadline = deadline;
+    this.changeDebounce = setTimeout(
+      () => {
+        this.clearChangeDebounce();
+        this.flushNow();
+      },
+      Math.max(0, Math.min(CHANGE_DEBOUNCE_MS, deadline - now)),
+    );
   }
 
   handlePointerUpdate(payload: { pointer: { x: number; y: number } }): void {
@@ -277,6 +285,12 @@ export class ExcalidrawCollabEngine {
     this.applyRemoteElements({ sceneId: this.sceneId, ...(this.sceneGeneration ? { sceneGeneration: this.sceneGeneration } : {}), syncAll: false, remoteElements: elements, isSnapshot: false });
   }
 
+  private clearChangeDebounce(): void {
+    if (this.changeDebounce !== null) clearTimeout(this.changeDebounce);
+    this.changeDebounce = null;
+    this.changeDebounceDeadline = null;
+  }
+
   private resetSubmissionRetries(): void {
     if (this.submissionRetryTimer !== null) clearTimeout(this.submissionRetryTimer);
     this.submissionRetryTimer = null;
@@ -284,8 +298,9 @@ export class ExcalidrawCollabEngine {
   }
 
   private scheduleSubmissionRetry(): void {
-    if (this.disposed || this.submissionRetryTimer !== null || this.submissionRetries >= MAX_SUBMISSION_RETRIES) return;
-    const delay = SUBMISSION_RETRY_DELAY_MS * 2 ** this.submissionRetries++;
+    if (this.disposed || this.submissionRetryTimer !== null) return;
+    const delay = Math.min(SUBMISSION_RETRY_DELAY_MS * 2 ** this.submissionRetries, MAX_SUBMISSION_RETRY_DELAY_MS);
+    this.submissionRetries += 1;
     this.submissionRetryTimer = setTimeout(() => {
       this.submissionRetryTimer = null;
       this.flushNow();
@@ -349,7 +364,8 @@ export class ExcalidrawCollabEngine {
         this.submissionInFlight = false;
         const shouldFlush = this.dirtyDuringSubmission;
         this.dirtyDuringSubmission = false;
-        if ((acknowledged || shouldFlush) && this.changeDebounce === null) this.flushNow();
+        // A flush that had to wait for this submission goes out now. Ongoing input stays behind the debounce.
+        if (shouldFlush || (acknowledged && this.changeDebounce === null)) this.flushNow();
       });
   }
 
@@ -392,8 +408,7 @@ export class ExcalidrawCollabEngine {
       }
     }
     if (replacingScene) {
-      if (this.changeDebounce !== null) clearTimeout(this.changeDebounce);
-      this.changeDebounce = null;
+      this.clearChangeDebounce();
       this.dirtyDuringSubmission = false;
       this.sceneGeneration = null;
       this.deferredRemoteElements.clear();
