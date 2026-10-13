@@ -694,3 +694,27 @@ it("submits a stroke over the element size as a reduced copy and keeps the full 
     fixture.engine.dispose();
   }
 });
+
+it("keeps the order keys of a board that arrives in another order than the keys", async () => {
+  const fixture = await createDeliveryFixture();
+  const keyed = (id: string, index: string) => {
+    const [element] = fixture.make(id, 1);
+    if (!element) throw new Error("Missing keyed fixture");
+    return { ...element, index: index as typeof element.index };
+  };
+  // Sync lists a board by order key in its database's collation: "aa" comes before "aA" there, after it in the keys' own order.
+  const board = [keyed("second", "aa"), keyed("first", "aA"), keyed("third", "ab")];
+  try {
+    fixture.engine.handleRemoteSnapshot({ sceneId: "scene", elements: board.map(fixture.toWireElement) });
+    await vi.advanceTimersByTimeAsync(1_000);
+    const scene = fixture.api.getSceneElementsIncludingDeleted();
+    expect(scene.map((element) => [element.id, element.index, element.version])).toEqual([
+      ["first", "aA", 1],
+      ["second", "aa", 1],
+      ["third", "ab", 1],
+    ]);
+    expect(fixture.submitUpdate).not.toHaveBeenCalled();
+  } finally {
+    fixture.engine.dispose();
+  }
+});

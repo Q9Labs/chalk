@@ -3,6 +3,7 @@ import { CaptureUpdateAction, reconcileElements, restoreElements } from "@excali
 import { withLocalWhiteboardCamera, type SharedWhiteboardAppState } from "./camera";
 import { WhiteboardFilesSync } from "./files";
 import type { WhiteboardFileSyncState, WhiteboardFileTransferOptions } from "./files";
+import { compareElementOrder } from "./order";
 import { WhiteboardPresence } from "./presence";
 import { filterSyncableElements } from "./syncable";
 import type { AppState, BinaryFiles, ExcalidrawElement, ExcalidrawImperativeAPI, OrderedExcalidrawElement } from "./types";
@@ -448,7 +449,9 @@ export class ExcalidrawCollabEngine {
     const excalidrawAPI = this.opts.excalidrawAPI;
     if (replacingScene) excalidrawAPI.history.clear();
     const local = replacingScene ? [] : excalidrawAPI.getSceneElementsIncludingDeleted();
-    const remoteElements = args.remoteElements as readonly ExcalidrawElement[];
+    // Excalidraw takes the order of this list as the order of the elements and rewrites every order key that
+    // disagrees with it. Sync lists a board by order key in its database's collation, not in the keys' own order.
+    const remoteElements = [...(args.remoteElements as readonly ExcalidrawElement[])].sort(compareElementOrder);
     const restoredRemote = restoreElements(remoteElements, null);
     const remoteForReconcile = toReconcileRemoteElements(restoredRemote);
     const appState = excalidrawAPI.getAppState();
