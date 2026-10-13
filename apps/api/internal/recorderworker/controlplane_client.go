@@ -891,6 +891,15 @@ func verifyPlanAuthority(plan captureplan.Plan, input captureplan.WaitInput) err
 }
 
 func (c *ControlPlaneClient) do(ctx context.Context, method, path string, payload any, responseLimit int) ([]byte, int, error) {
+	return c.doRequest(ctx, method, path, payload, responseLimit, false)
+}
+
+// Only replay-safe Render finishing calls can recover an interrupted success body.
+func (c *ControlPlaneClient) doRenderFinish(ctx context.Context, path string, payload any) ([]byte, int, error) {
+	return c.doRequest(ctx, http.MethodPost, path, payload, ControlPlaneResponseLimit, true)
+}
+
+func (c *ControlPlaneClient) doRequest(ctx context.Context, method, path string, payload any, responseLimit int, retryResponseRead bool) ([]byte, int, error) {
 	if c == nil || c.client == nil || c.baseURL == nil {
 		return nil, 0, ErrInvalidControlPlaneClient
 	}
@@ -927,6 +936,9 @@ func (c *ControlPlaneClient) do(ctx context.Context, method, path string, payloa
 	}
 	data, readErr := readBounded(response.Body, responseLimit)
 	if readErr != nil {
+		if retryResponseRead && !errors.Is(readErr, errResponseTooLarge) {
+			return nil, response.StatusCode, TransportError{Err: readErr}
+		}
 		return nil, response.StatusCode, ProtocolError{Err: readErr}
 	}
 	return data, response.StatusCode, nil
@@ -981,13 +993,15 @@ func decodeBoundedJSON(data []byte, destination any, limit int) error {
 	return nil
 }
 
+var errResponseTooLarge = errors.New("response payload is too large")
+
 func readBounded(reader io.Reader, limit int) ([]byte, error) {
 	data, err := io.ReadAll(io.LimitReader(reader, int64(limit)+1))
+	if len(data) > limit {
+		return nil, errResponseTooLarge
+	}
 	if err != nil {
 		return nil, err
-	}
-	if len(data) > limit {
-		return nil, errors.New("response payload is too large")
 	}
 	return data, nil
 }

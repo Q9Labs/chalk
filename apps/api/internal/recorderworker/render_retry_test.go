@@ -8,8 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -115,12 +118,12 @@ func TestRenderRetryHonorsContextDeadline(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	calls := 0
-	_, err := retryRenderCall(ctx, attempt, func(context.Context) (bool, error) { calls++; return true, nil })
+	_, err := retryRenderCall(ctx, attempt, "commit_render", func(context.Context) (bool, error) { calls++; return true, nil })
 	if !errors.Is(err, context.Canceled) || calls != 0 {
 		t.Fatalf("err=%v calls=%d", err, calls)
 	}
 	calls = 0
-	_, err = retryRenderCall(context.Background(), attempt, func(ctx context.Context) (bool, error) {
+	_, err = retryRenderCall(context.Background(), attempt, "commit_render", func(ctx context.Context) (bool, error) {
 		calls++
 		if calls == 1 {
 			if _, ok := ctx.Deadline(); ok {
@@ -145,7 +148,7 @@ func TestRenderRetryCancellationRetainsAPIError(t *testing.T) {
 	defer cancel()
 	attempt.config.RetryWait = func(ctx context.Context, _ time.Duration) error { cancel(); return ctx.Err() }
 	last := HTTPError{Status: http.StatusServiceUnavailable, Code: "service_unavailable", Retryable: true}
-	_, err := retryRenderCall(ctx, attempt, func(context.Context) (bool, error) { return false, last })
+	_, err := retryRenderCall(ctx, attempt, "commit_render", func(context.Context) (bool, error) { return false, last })
 	var httpErr HTTPError
 	if !errors.Is(err, context.Canceled) || !errors.As(err, &httpErr) || httpErr != last {
 		t.Fatalf("lost cancellation evidence: %v", err)
@@ -308,4 +311,175 @@ func retryAttemptForTest(t *testing.T) (*ProductionRenderAttempt, *retryRenderCo
 		return recordingdecode.Result{Index: recordingdecode.Index{Sources: []recordingdecode.Source{{SourceID: "source"}}}}, nil
 	}
 	return attempt, control, compose
+}
+
+// The real daemon must reach RenewLease during the lost-answer wait, while the
+// production attempt keeps the heartbeat callback outside the final commit.
+func TestRenderRetryFinalCommitBlocksDueHeartbeat(t *testing.T) {
+	attempt, control, compose := retryAttemptForTest(t)
+	control.stage, control.failures, control.lostResponse = "render", 1, true
+	tick := make(chan time.Time, 1)
+	renewing := make(chan struct{})
+	wrapped := &renderRetryHeartbeatAttempt{ProductionRenderAttempt: attempt, renewing: renewing}
+	daemonControl := &renderControlPlaneStub{heartbeat: func(recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+		return recordingpipeline.Job{}, HTTPError{Status: http.StatusConflict, Code: "lease.stale", Fenced: true}
+	}}
+	daemon := renderDaemonForTest(t, daemonControl, wrapped, func(time.Duration) <-chan time.Time { return tick })
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	attempt.config.RetryWait = func(ctx context.Context, _ time.Duration) error {
+		if control.commits != 1 || attempt.committed {
+			return errors.New("fake server did not commit before losing the answer")
+		}
+		if attempt.leaseGate.TryLock() {
+			attempt.leaseGate.Unlock()
+			return errors.New("final commit released the heartbeat gate during replay")
+		}
+		tick <- time.Now()
+		select {
+		case <-renewing:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	if err := daemon.runClaim(ctx, attempt.claim); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-renewing:
+	default:
+		t.Fatal("heartbeat was not due during replay")
+	}
+	if !attempt.committed || compose.calls != 1 || control.commits != 1 || control.calls["render"] != 2 || daemonControl.heartbeatCalls != 0 || daemonControl.failed != nil {
+		t.Fatalf("committed=%t renders=%d commits=%d requests=%d heartbeats=%d failure=%v", attempt.committed, compose.calls, control.commits, control.calls["render"], daemonControl.heartbeatCalls, daemonControl.failed)
+	}
+}
+
+type renderRetryHeartbeatAttempt struct {
+	*ProductionRenderAttempt
+	renewing chan struct{}
+}
+
+func (attempt *renderRetryHeartbeatAttempt) RenewLease(renew RenderLeaseRenewal) (recordingpipeline.LeaseInput, error) {
+	close(attempt.renewing)
+	return attempt.ProductionRenderAttempt.RenewLease(renew)
+}
+
+func TestRenderRetryFinishingResponseRead(t *testing.T) {
+	for _, path := range []string{"render-objects/reserve", "render-objects/finalize", "render-objects/commit", "renders/commit"} {
+		for _, partial := range []string{"", `{"allocation_id":`} {
+			t.Run(path+fmt.Sprintf("/bytes_%d", len(partial)), func(t *testing.T) {
+				calls := 0
+				server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					calls++
+					if calls == 1 {
+						w.Header().Set("Content-Length", "100")
+						w.WriteHeader(http.StatusOK)
+						_, _ = io.WriteString(w, partial)
+						return
+					}
+					_, _ = io.WriteString(w, `{}`)
+				}))
+				defer server.Close()
+				client, err := NewControlPlaneClient(server.URL, server.Client())
+				if err != nil {
+					t.Fatal(err)
+				}
+				attempt, _, _ := retryAttemptForTest(t)
+				_, err = retryRenderCall(context.Background(), attempt, "commit_render", func(ctx context.Context) ([]byte, error) {
+					body, _, err := client.doRenderFinish(ctx, "/internal/v1/recorder/"+path, struct{}{})
+					return body, err
+				})
+				if err != nil || calls != 2 {
+					t.Fatalf("err=%v requests=%d", err, calls)
+				}
+			})
+		}
+	}
+}
+
+func TestRenderRetryKeepsCompleteResponseFaultsPermanent(t *testing.T) {
+	for _, body := range []string{strings.Repeat("x", ControlPlaneResponseLimit+1), `{"allocation_id":`, `{"allocation_id":"wrong"}`} {
+		t.Run(fmt.Sprintf("bytes_%d", len(body)), func(t *testing.T) {
+			calls := 0
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				_, _ = io.WriteString(w, body)
+			}))
+			defer server.Close()
+			client, err := NewControlPlaneClient(server.URL, server.Client())
+			if err != nil {
+				t.Fatal(err)
+			}
+			attempt, _, _ := retryAttemptForTest(t)
+			input := recordingrender.ReserveObjectInput{Authority: attempt.currentAuthority(), Purpose: recordingrender.PurposeRecordingVideo, ReservationRequestID: attempt.claim.ClaimRequestID}
+			_, err = retryRenderCall(context.Background(), attempt, "reserve_object", func(ctx context.Context) (recordingrender.ReservedObject, error) {
+				return client.ReserveRenderObject(ctx, input)
+			})
+			if !errors.Is(err, ErrControlPlaneProtocol) || errors.Is(err, ErrControlPlaneRetryable) || calls != 1 {
+				t.Fatalf("err=%v requests=%d", err, calls)
+			}
+		})
+	}
+}
+
+func TestRenderRetryLeavesCaptureResponseReadPermanent(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "100")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, `{"job_id":`)
+	}))
+	defer server.Close()
+	client, err := NewControlPlaneClient(server.URL, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.Complete(context.Background(), testLeaseInput(t))
+	if !errors.Is(err, ErrControlPlaneProtocol) || errors.Is(err, ErrControlPlaneRetryable) {
+		t.Fatalf("Capture response classification changed: %v", err)
+	}
+}
+
+func TestRenderRetryReportsBoundedOutcome(t *testing.T) {
+	previous := slog.Default()
+	defer slog.SetDefault(previous)
+	for _, test := range []struct {
+		name               string
+		failures, requests int
+		outcome            string
+	}{
+		{"healthy", 0, 1, ""},
+		{"recovered", 2, 3, "succeeded"},
+		{"exhausted", renderControlPlaneAttempts, renderControlPlaneAttempts, "gave_up"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var output bytes.Buffer
+			slog.SetDefault(slog.New(slog.NewJSONHandler(&output, nil)))
+			attempt, control, _ := retryAttemptForTest(t)
+			control.stage, control.failures = "render", test.failures
+			err := attempt.Run(context.Background())
+			if (err != nil) != (test.outcome == "gave_up") {
+				t.Fatalf("err=%v", err)
+			}
+			if test.outcome == "" {
+				if output.Len() != 0 {
+					t.Fatalf("healthy request logged a retry: %s", output.String())
+				}
+				return
+			}
+			var signal struct {
+				Message   string `json:"msg"`
+				Operation string `json:"operation"`
+				Requests  int    `json:"requests"`
+				Outcome   string `json:"outcome"`
+			}
+			if err := json.Unmarshal(output.Bytes(), &signal); err != nil {
+				t.Fatal(err)
+			}
+			if signal.Message != "recorder render finishing retry" || signal.Operation != "commit_render" || signal.Requests != test.requests || signal.Outcome != test.outcome {
+				t.Fatalf("unexpected retry signal: %s", output.String())
+			}
+		})
+	}
 }

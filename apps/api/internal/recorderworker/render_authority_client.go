@@ -258,7 +258,7 @@ func (c *ControlPlaneClient) ReserveRenderObject(ctx context.Context, input reco
 		Purpose              string `json:"purpose"`
 		ReservationRequestID string `json:"reservation_request_id"`
 	}{renderAuthorityRequest: renderAuthorityBody(input.Authority), Purpose: string(input.Purpose), ReservationRequestID: input.ReservationRequestID.String()}
-	body, _, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/render-objects/reserve", payload, ControlPlaneResponseLimit)
+	body, _, err := c.doRenderFinish(ctx, "/internal/v1/recorder/render-objects/reserve", payload)
 	if err != nil {
 		return recordingrender.ReservedObject{}, err
 	}
@@ -286,7 +286,7 @@ func (c *ControlPlaneClient) FinalizeRenderObject(ctx context.Context, input rec
 		SHA256         string `json:"sha256"`
 		DurationMillis *int64 `json:"duration_ms"`
 	}{renderAuthorityRequest: renderAuthorityBody(input.Authority), AllocationID: input.AllocationID.String(), Purpose: string(input.Purpose), ContentType: input.ContentType, ByteSize: input.ByteSize, SHA256: hex.EncodeToString(input.SHA256), DurationMillis: input.DurationMillis}
-	body, _, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/render-objects/finalize", payload, ControlPlaneResponseLimit)
+	body, _, err := c.doRenderFinish(ctx, "/internal/v1/recorder/render-objects/finalize", payload)
 	if err != nil {
 		return recordingrender.FinalizedObject{}, err
 	}
@@ -306,7 +306,7 @@ func (c *ControlPlaneClient) CommitRenderObject(ctx context.Context, input recor
 		AllocationID string `json:"allocation_id"`
 		UploadToken  string `json:"upload_token"`
 	}{renderAuthorityRequest: renderAuthorityBody(input.Authority), AllocationID: input.AllocationID.String(), UploadToken: input.UploadToken}
-	body, _, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/render-objects/commit", payload, ControlPlaneResponseLimit)
+	body, _, err := c.doRenderFinish(ctx, "/internal/v1/recorder/render-objects/commit", payload)
 	if err != nil {
 		return recordingrender.CommittedObject{}, err
 	}
@@ -331,7 +331,7 @@ func (c *ControlPlaneClient) CommitRender(ctx context.Context, input recordingre
 		FFprobeFactsDigest:     hex.EncodeToString(input.FFprobeFactsDigest),
 	}
 	payload.TranscriptionSource = renderTranscriptionSourceBody(input.TranscriptionSource)
-	body, _, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/renders/commit", payload, ControlPlaneResponseLimit)
+	body, _, err := c.doRenderFinish(ctx, "/internal/v1/recorder/renders/commit", payload)
 	if err != nil {
 		return recordingrender.CommitResult{}, err
 	}
