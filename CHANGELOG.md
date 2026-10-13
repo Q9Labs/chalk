@@ -12,6 +12,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [4.1.17] - 2026-10-13
+
 ### Fixed
 
 - Normal Episode endings now reach `left` and emit `episodeEnded` once without an `error` callback; React fires `onEpisodeEnded` once and `onLeft` once without `onError`.
@@ -20,17 +22,34 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Connection failures caused by unavailable Access now expose `access.unavailable` in the connection snapshot and error callback. Failed scheduled refreshes keep retrying every five seconds, even after expiry, without changing connection state or emitting an error.
 - Kept transient SDK recovery running in the background without blocking actions or uploads, and healed media failures that occur during Join.
 - Rebuilt expired recovery transports and backed off exhausted recovery, access refresh, and publication discovery retries.
-
 - Updated the Sync HTTP transport and workspace HTTP dependencies to patched releases.
 - Classified `getAccess` HTTP 408, 425, 429, and 5xx responses as recoverable `access.unavailable` failures for scheduled-refresh retry, and clarified initial-join network and timeout failures. Other non-OK responses and malformed grants remain `access.invalid`.
 - Updated the locked undici dependency to 7.29.1 to address GHSA-3wwx-pv8p-q78v.
 - Updated transitive brace-expansion and fast-uri dependencies to their security-fixed releases.
 - Dropped Capture RTP packets when the latest fenced Episode plan no longer authorizes their source, including while provider reconciliation is pending.
 - Kept Space joins available when a camera or microphone is missing, busy, constrained, or permission-denied. Participants enter with working devices and receive one recoverable, device-specific capture error; React shows the warning after entry.
+- Let a Participant muted by a moderator publish again without a reload: the request that `getAccess` receives now carries `replaceMediaConnection`, and `participants.issueAccess` takes that request.
+- Fetched chat messages that arrived out of order, so every Participant sees the same history.
+- Kept media state updating after many media changes in one Episode.
+- Ended an empty Episode after its linger.
+- Exported Recordings that contain whiteboard content, a camera that changes resolution, or a Participant whose media never arrived.
+- Kept a Recording that reaches its time limit and a Recording whose tracks change while Capture starts.
+- Bounded recorder fleet inventory polling so the provider request limit no longer blocks new Recordings.
+- Moved the API and recorder services to Go 1.26.9 and cleared the open npm advisories.
+- Stopped the whiteboard from uploading the whole board every 20 seconds: each change is sent once, the end of a stroke no longer arrives up to 25 seconds late, and a stroke drawn while the board loads is kept.
+- Kept a writer's whiteboard syncing after one long continuous stroke: an element over the stored size is sent as a smaller copy, and an element that cannot be sent is reported once through `onSubmissionError` without holding back the rest.
+- Kept the stacking order of whiteboard elements when a board is loaded: a browser that joined, returned or reconnected no longer gave about a quarter of the elements new order keys and sent them back to the class.
+- Kept students receiving the whiteboard through a long handwriting class, and exported its Recording.
+- Delivered whiteboard changes in order when two Participants write at the same moment, instead of reloading every board, and kept every whiteboard connected while a board copy is being sent.
+- Painted freehand whiteboard strokes in Recordings, and exported a Recording whose whiteboard was presented before Capture was ready.
+- Kept a camera's recorded clock true through a stall, so the recorded picture no longer runs ahead of the sound or freezes at the end.
+- Completed Transcripts whose provider segments overlap in time.
+- Started several Episodes of one Tenant at the same moment without a server error.
 
 ### Added
 
 - Added the managed Cloudflare SFU recording capture runtime with fenced worker leases, Pion RTP capture, KMS envelope encryption, server-owned R2 bundle allocation and verification, durable Sync ready/stopped callbacks, and inspectable journey and trace signals.
+- Added a `participant.left` Event with reason `episode_ended` for every Participant still present when an Episode ends.
 
 ## [4.1.16] - 2026-10-02
 
