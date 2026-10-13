@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -61,6 +62,7 @@ type ProductionRenderAttemptConfig struct {
 	Decode      RecordingDecodeWriter
 	Observer    RenderAttemptObserver
 	Now         func() time.Time
+	RetryWait   func(context.Context, time.Duration) error
 }
 
 type ProductionRenderAttemptFactory struct {
@@ -73,6 +75,9 @@ func NewProductionRenderAttemptFactory(config ProductionRenderAttemptConfig) (*P
 	config.FFmpegPath = strings.TrimSpace(config.FFmpegPath)
 	if config.Decode == nil {
 		config.Decode = recordingdecode.Write
+	}
+	if config.RetryWait == nil {
+		config.RetryWait = waitForCaptureDaemon
 	}
 	if config.Now == nil {
 		config.Now = func() time.Time { return time.Now().UTC() }
@@ -336,7 +341,7 @@ func (attempt *ProductionRenderAttempt) Run(ctx context.Context) error {
 		DurationMillis:     resolved.DurationMillis, Video: video, FFprobeFactsDigest: append([]byte(nil), factsDigest[:]...),
 	}
 	if err := attempt.measure(RenderAttemptStageCommit, func() error {
-		_, commitErr := withRenderAuthority(attempt, func(authority recordingrender.Authority) (recordingrender.CommitResult, error) {
+		_, commitErr := retryRenderAuthority(ctx, attempt, func(ctx context.Context, authority recordingrender.Authority) (recordingrender.CommitResult, error) {
 			commit.Authority = authority
 			digest, digestErr := recordingrender.CommitDigest(commit)
 			if digestErr != nil {
@@ -505,6 +510,54 @@ func (attempt *ProductionRenderAttempt) currentAuthority() recordingrender.Autho
 	authority := attempt.authority
 	authority.EnvelopeDigest = append([]byte(nil), authority.EnvelopeDigest...)
 	return authority
+}
+
+// Ten requests with the claim retry wait absorb a brief outage without starting
+// the render again. Only retries use the capture completion budget: a healthy
+// first upload retains its existing attempt deadline and upload grant lifetime.
+const renderControlPlaneAttempts = 10
+
+func retryRenderCall[T any](ctx context.Context, attempt *ProductionRenderAttempt, call func(context.Context) (T, error)) (T, error) {
+	if attempt.claim.Envelope.Kind != recordingpipeline.JobKindRender {
+		return call(ctx)
+	}
+	var zero T
+	if err := ctx.Err(); err != nil {
+		return zero, err
+	}
+	result, err := call(ctx)
+	retryable := func(err error) bool {
+		return errors.Is(err, ErrControlPlaneRetryable) && !errors.Is(err, ErrControlPlaneFenced) && !errors.Is(err, ErrControlPlaneTerminal)
+	}
+	if !retryable(err) {
+		return result, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, DefaultCompletionRetry)
+	defer cancel()
+	wait := attempt.config.RetryWait
+	if wait == nil {
+		wait = waitForCaptureDaemon
+	}
+	for tries := 1; tries < renderControlPlaneAttempts; tries++ {
+		if waitErr := wait(ctx, DefaultClaimRetryWait); waitErr != nil {
+			return zero, errors.Join(err, waitErr)
+		}
+		if contextErr := ctx.Err(); contextErr != nil {
+			return zero, errors.Join(err, contextErr)
+		}
+		result, err = call(ctx)
+		if !retryable(err) {
+			return result, err
+		}
+	}
+	return result, err
+}
+
+func retryRenderAuthority[T any](ctx context.Context, attempt *ProductionRenderAttempt, call func(context.Context, recordingrender.Authority) (T, error)) (T, error) {
+	return retryRenderCall(ctx, attempt, func(ctx context.Context) (T, error) {
+		// Release the gate after each request, before waiting, so heartbeats can renew.
+		return withRenderAuthority(attempt, func(authority recordingrender.Authority) (T, error) { return call(ctx, authority) })
+	})
 }
 
 func withRenderAuthority[T any](attempt *ProductionRenderAttempt, call func(recordingrender.Authority) (T, error)) (T, error) {
@@ -752,7 +805,7 @@ func (attempt *ProductionRenderAttempt) persistFile(ctx context.Context, purpose
 	}
 	checksum := hash.Sum(nil)
 	authority := attempt.currentAuthority()
-	reserved, err := withRenderAuthority(attempt, func(current recordingrender.Authority) (recordingrender.ReservedObject, error) {
+	reserved, err := retryRenderAuthority(ctx, attempt, func(ctx context.Context, current recordingrender.Authority) (recordingrender.ReservedObject, error) {
 		return attempt.config.Control.ReserveRenderObject(ctx, recordingrender.ReserveObjectInput{
 			Authority: current, Purpose: purpose, ReservationRequestID: deterministicRenderID(authority, "reserve:"+string(purpose)+":"+stableName),
 		})
@@ -763,7 +816,7 @@ func (attempt *ProductionRenderAttempt) persistFile(ctx context.Context, purpose
 	contentType := map[recordingrender.ObjectPurpose]string{
 		recordingrender.PurposeRecordingVideo: "video/mp4", recordingrender.PurposeTranscriptionAudio: "audio/flac", recordingrender.PurposeTranscriptionManifest: "application/json",
 	}[purpose]
-	finalized, err := withRenderAuthority(attempt, func(authority recordingrender.Authority) (recordingrender.FinalizedObject, error) {
+	finalized, err := retryRenderAuthority(ctx, attempt, func(ctx context.Context, authority recordingrender.Authority) (recordingrender.FinalizedObject, error) {
 		return attempt.config.Control.FinalizeRenderObject(ctx, recordingrender.FinalizeObjectInput{
 			Authority: authority, AllocationID: reserved.AllocationID, Purpose: purpose, ContentType: contentType,
 			ByteSize: info.Size(), SHA256: checksum, DurationMillis: duration,
@@ -775,16 +828,29 @@ func (attempt *ProductionRenderAttempt) persistFile(ctx context.Context, purpose
 	if finalized.AllocationID != reserved.AllocationID || finalized.ObjectKey != reserved.ObjectKey || finalized.Purpose != purpose || finalized.AllocationVersion != reserved.AllocationVersion {
 		return recordingrender.CommitObjectReference{}, fmt.Errorf("%w: finalized recording render object changed its reservation", ErrInvalidProductionRenderAttempt)
 	}
-	file, err = os.Open(path)
+	// Conditional PUT cannot overwrite an uploaded object. If a response was lost,
+	// a repeated PUT may return 412; the commit below verifies all stored facts.
+	retriedUpload := false
+	_, err = retryRenderCall(ctx, attempt, func(ctx context.Context) (struct{}, error) {
+		file, openErr := os.Open(path)
+		if openErr != nil {
+			return struct{}{}, openErr
+		}
+		uploadErr := attempt.config.Control.UploadRenderObject(ctx, finalized.Upload, file, info.Size())
+		closeErr := file.Close()
+		var httpErr HTTPError
+		if retriedUpload && errors.As(uploadErr, &httpErr) && httpErr.Status == http.StatusPreconditionFailed {
+			uploadErr = nil
+		}
+		if errors.Is(uploadErr, ErrControlPlaneRetryable) {
+			retriedUpload = true
+		}
+		return struct{}{}, errors.Join(uploadErr, closeErr)
+	})
 	if err != nil {
-		return recordingrender.CommitObjectReference{}, fmt.Errorf("reopen recording render object %s: %w", purpose, err)
-	}
-	uploadErr := attempt.config.Control.UploadRenderObject(ctx, finalized.Upload, file, info.Size())
-	closeErr := file.Close()
-	if err := errors.Join(uploadErr, closeErr); err != nil {
 		return recordingrender.CommitObjectReference{}, fmt.Errorf("upload recording render object %s: %w", purpose, err)
 	}
-	committed, err := withRenderAuthority(attempt, func(authority recordingrender.Authority) (recordingrender.CommittedObject, error) {
+	committed, err := retryRenderAuthority(ctx, attempt, func(ctx context.Context, authority recordingrender.Authority) (recordingrender.CommittedObject, error) {
 		return attempt.config.Control.CommitRenderObject(ctx, recordingrender.CommitObjectInput{Authority: authority, AllocationID: reserved.AllocationID, UploadToken: finalized.UploadToken})
 	})
 	if err != nil {
