@@ -282,7 +282,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
       for {id, index} <- [{"lower", "aa"}, {"upper", "aA"}, {"next", "ab"}],
           do: Map.put(element(id, 1, 1), "index", index)
 
-    update = %{operation_id: "order-keys", scene_id: scene_id, elements: elements}
+    update = %{operation_id: "whiteboard-order-keys", scene_id: scene_id, elements: elements}
     assert {:ok, %{revision: 1}} = PostgresRepository.commit_update(host, update)
 
     assert {:ok, %{elements: stored}} = PostgresRepository.snapshot(participant)

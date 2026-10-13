@@ -18,7 +18,9 @@ function wins(candidate: WhiteboardWireElement, existing: WhiteboardWireElement)
   return candidate.version_nonce < existing.version_nonce;
 }
 
+// Order keys compare as plain strings, code unit by code unit: "aZ" comes before "aa". A locale puts "aa" first.
 function compareElementOrder(left: WhiteboardWireElement, right: WhiteboardWireElement): number {
-  const byIndex = left.index.localeCompare(right.index);
-  return byIndex === 0 ? left.id.localeCompare(right.id) : byIndex;
+  if (left.index !== right.index) return left.index < right.index ? -1 : 1;
+  if (left.id === right.id) return 0;
+  return left.id < right.id ? -1 : 1;
 }
