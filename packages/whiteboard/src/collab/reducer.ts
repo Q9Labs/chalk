@@ -1,3 +1,4 @@
+import { compareElementOrder } from "./order";
 import type { WhiteboardWireElement } from "./wire";
 
 export function mergeWhiteboardElements(current: readonly WhiteboardWireElement[], incoming: readonly WhiteboardWireElement[]): readonly WhiteboardWireElement[] {
@@ -16,9 +17,4 @@ export function mergeWhiteboardElements(current: readonly WhiteboardWireElement[
 function wins(candidate: WhiteboardWireElement, existing: WhiteboardWireElement): boolean {
   if (candidate.version !== existing.version) return candidate.version > existing.version;
   return candidate.version_nonce < existing.version_nonce;
-}
-
-function compareElementOrder(left: WhiteboardWireElement, right: WhiteboardWireElement): number {
-  const byIndex = left.index.localeCompare(right.index);
-  return byIndex === 0 ? left.id.localeCompare(right.id) : byIndex;
 }

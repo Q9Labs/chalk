@@ -192,7 +192,7 @@ defmodule ChalkSync.WhiteboardV1.SQL do
       element_index, is_deleted, payload
     from sync_whiteboard_elements
     where tenant_id = $1 and space_id = $2 and scene_id = $3
-    order by element_index, element_id
+    order by element_index collate "C", element_id collate "C"
     limit 10001
     """
   end
