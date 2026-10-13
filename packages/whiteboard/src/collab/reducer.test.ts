@@ -10,4 +10,10 @@ describe("mergeWhiteboardElements", () => {
 
     expect(merged.map((item) => item.index)).toEqual(["aA", "aZ", "aa", "ab"]);
   });
+
+  it("orders elements with the same order key by the byte order of their ids", () => {
+    const merged = mergeWhiteboardElements([element("a", "ab")], [element("B", "ab")]);
+
+    expect(merged.map((item) => item.id)).toEqual(["B", "a"]);
+  });
 });

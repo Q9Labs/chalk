@@ -7,6 +7,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
   alias ChalkSync.UUID
   alias ChalkSync.WhiteboardV1.Episode
   alias ChalkSync.WhiteboardV1.PostgresRepository
+  alias ChalkSync.WhiteboardV1.SQL
 
   @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
                   System.get_env("CHALK_DATABASE_URL")
@@ -270,23 +271,61 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
     assert Enum.all?(stored, &(&1["version"] == 3))
   end
 
-  test "lists a snapshot in the byte order of the order keys", %{
-    host: host,
-    participant: participant
-  } do
-    {:ok, %{scene_id: scene_id}} = PostgresRepository.connect(host)
-
+  test "lists a snapshot in the byte order of the order keys and ids", %{connection: connection} do
     # A database collation such as en_US puts "aa" before "aA". The keys' own
     # order is byte order, and a client rewrites every key that arrives out of it.
-    elements =
-      for {id, index} <- [{"lower", "aa"}, {"upper", "aA"}, {"next", "ab"}],
-          do: Map.put(element(id, 1, 1), "index", index)
+    # The test database may already sort by bytes, so the query runs against a
+    # copy of the table whose text columns sort the way a language does.
+    scope = Enum.map(1..3, fn _index -> uuid(UUID.generate()) end)
 
-    update = %{operation_id: "whiteboard-order-keys", scene_id: scene_id, elements: elements}
-    assert {:ok, %{revision: 1}} = PostgresRepository.commit_update(host, update)
+    {:ok, {natural, listed}} =
+      Postgrex.transaction(connection, fn pinned ->
+        Postgrex.query!(
+          pinned,
+          """
+          create temporary table sync_whiteboard_elements
+            (like sync_whiteboard_elements including defaults) on commit drop
+          """,
+          []
+        )
 
-    assert {:ok, %{elements: stored}} = PostgresRepository.snapshot(participant)
-    assert Enum.map(stored, & &1["index"]) == ["aA", "aa", "ab"]
+        Postgrex.query!(
+          pinned,
+          """
+          alter table pg_temp.sync_whiteboard_elements
+            alter column element_index type text collate "en-US-x-icu",
+            alter column element_id type text collate "en-US-x-icu"
+          """,
+          []
+        )
+
+        Postgrex.query!(
+          pinned,
+          """
+          insert into pg_temp.sync_whiteboard_elements (
+            tenant_id, space_id, episode_id, scene_id, element_id, element_type,
+            version, version_nonce, element_index, is_deleted, payload, encoded_bytes
+          )
+          select $1::uuid, $2::uuid, $2::uuid, $3::uuid, id, 'rectangle', 1, 1, index, false, '{}'::jsonb, 2
+          from (values ('lower', 'aa'), ('upper', 'aA'), ('a', 'ab'), ('B', 'ab')) as elements(id, index)
+          """,
+          scope
+        )
+
+        natural =
+          Postgrex.query!(
+            pinned,
+            "select element_index, element_id from pg_temp.sync_whiteboard_elements order by 1, 2",
+            []
+          ).rows
+
+        {natural, Postgrex.query!(pinned, SQL.snapshot_elements(), scope).rows}
+      end)
+
+    assert natural == [["aa", "lower"], ["aA", "upper"], ["ab", "a"], ["ab", "B"]]
+
+    assert Enum.map(listed, fn [id, _type, _version, _nonce, index | _rest] -> {index, id} end) ==
+             [{"aA", "upper"}, {"aa", "lower"}, {"ab", "B"}, {"ab", "a"}]
   end
 
   defp handwriting_element(index) do

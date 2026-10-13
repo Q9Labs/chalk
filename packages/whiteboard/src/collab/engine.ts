@@ -3,6 +3,7 @@ import { CaptureUpdateAction, reconcileElements, restoreElements } from "@excali
 import { withLocalWhiteboardCamera, type SharedWhiteboardAppState } from "./camera";
 import { WhiteboardFilesSync } from "./files";
 import type { WhiteboardFileSyncState, WhiteboardFileTransferOptions } from "./files";
+import { compareElementOrder } from "./order";
 import { WhiteboardPresence } from "./presence";
 import { filterSyncableElements } from "./syncable";
 import type { AppState, BinaryFiles, ExcalidrawElement, ExcalidrawImperativeAPI, OrderedExcalidrawElement } from "./types";
@@ -21,13 +22,6 @@ const toReconcileRemoteElements = (elements: readonly OrderedExcalidrawElement[]
 
 const isNewerVersion = (element: Pick<OrderedExcalidrawElement, "version" | "versionNonce">, previous: Pick<OrderedExcalidrawElement, "version" | "versionNonce">): boolean => element.version > previous.version || (element.version === previous.version && element.versionNonce < previous.versionNonce);
 const editingElementIds = (appState: ReturnType<ExcalidrawImperativeAPI["getAppState"]>) => [appState.newElement?.id, appState.resizingElement?.id, appState.editingTextElement?.id];
-// Order keys compare as plain strings, code unit by code unit: "aZ" comes before "aa".
-const byOrderKey = (a: ExcalidrawElement, b: ExcalidrawElement): number => {
-  const left = a.index ?? "";
-  const right = b.index ?? "";
-  if (left === right) return 0;
-  return left < right ? -1 : 1;
-};
 
 type SubmissionContext = {
   readonly sceneId: string;
@@ -457,7 +451,7 @@ export class ExcalidrawCollabEngine {
     const local = replacingScene ? [] : excalidrawAPI.getSceneElementsIncludingDeleted();
     // Excalidraw takes the order of this list as the order of the elements and rewrites every order key that
     // disagrees with it. Sync lists a board by order key in its database's collation, not in the keys' own order.
-    const remoteElements = [...(args.remoteElements as readonly ExcalidrawElement[])].sort(byOrderKey);
+    const remoteElements = [...(args.remoteElements as readonly ExcalidrawElement[])].sort(compareElementOrder);
     const restoredRemote = restoreElements(remoteElements, null);
     const remoteForReconcile = toReconcileRemoteElements(restoredRemote);
     const appState = excalidrawAPI.getAppState();
