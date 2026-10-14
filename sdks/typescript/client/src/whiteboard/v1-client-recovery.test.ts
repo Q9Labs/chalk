@@ -4,7 +4,7 @@ import { Schema } from "effect";
 import { WhiteboardV1ClientFrameSchema } from "../generated/whiteboard-v1";
 import type { SyncSocket } from "../sync/types";
 import { ChalkWhiteboardV1Client } from "./v1-client";
-import type { ChalkWhiteboardSummary, ChalkWhiteboardV1FileTransport } from "./types";
+import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Event, ChalkWhiteboardV1FileTransport } from "./types";
 
 const sceneId = "10000000-0000-4000-8000-000000000001";
 const files: ChalkWhiteboardV1FileTransport = {
@@ -212,6 +212,128 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 });
 
+describe("whiteboard slow-connection watchdog", () => {
+  it("replaces a silent socket within six seconds without waiting for its close event", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = recoveryClient(clock, 100);
+    const startup = client.startSceneSubscription();
+    await acceptSnapshot(sockets);
+    await startup;
+    const oldSocket = sockets[0];
+    if (!oldSocket) throw new Error("missing socket");
+    oldSocket.notifyClose = false;
+    clock.advance(5_999);
+    expect(oldSocket.closeCalls).toEqual([]);
+    clock.advance(1);
+    expect(oldSocket.closeCalls).toEqual([{ code: 4000, reason: "whiteboard connection slow" }]);
+    clock.advance(100);
+    expect(sockets).toHaveLength(2);
+    await client.stopSceneSubscription();
+  });
+
+  it("does not treat a late pong as the healthy reply to a newer ping", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = recoveryClient(clock);
+    const startup = client.startSceneSubscription();
+    await acceptSnapshot(sockets);
+    await startup;
+    clock.advance(4_100);
+    sockets[0]?.receive({ type: "pong" });
+    await settle();
+    clock.advance(1_900);
+    expect(sockets[0]?.closeCalls).toHaveLength(1);
+    await client.stopSceneSubscription();
+  });
+
+  it("accepts normal jitter and one isolated slow sample followed by recovery", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = recoveryClient(clock);
+    const startup = client.startSceneSubscription();
+    await acceptSnapshot(sockets);
+    await startup;
+    for (const rtt of [110, 250, 1_000, 2_100, 250, 110, 1_000]) {
+      const previousPings = sockets[0]?.sent.filter((wire) => JSON.parse(wire).type === "ping").length;
+      while (sockets[0]?.sent.filter((wire) => JSON.parse(wire).type === "ping").length === previousPings) clock.advance(1);
+      clock.advance(rtt);
+      sockets[0]?.receive({ type: "pong" });
+      await settle();
+      // A slow sample overlaps the next ping; answer that probe normally too.
+      if (rtt > 2_000) {
+        sockets[0]?.receive({ type: "pong" });
+        await settle();
+      }
+    }
+    expect(sockets[0]?.closeCalls).toEqual([]);
+    await client.stopSceneSubscription();
+  });
+
+  it("backs off subsequent replacements even after a new welcome", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = recoveryClient(clock, 100);
+    const startup = client.startSceneSubscription();
+    await acceptSnapshot(sockets);
+    await startup;
+    clock.advance(6_100);
+    await acceptSnapshot(sockets, 1);
+    clock.advance(29_899);
+    expect(sockets[1]?.closeCalls).toEqual([]);
+    clock.advance(101);
+    expect(sockets[1]?.closeCalls).toHaveLength(1);
+    await client.stopSceneSubscription();
+  });
+
+  it("catches up through the normal reconnect snapshot and ignores the retired socket", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = recoveryClient(clock, 100);
+    const snapshots: ChalkWhiteboardV1Event[] = [];
+    client.subscribe((event) => {
+      if (event.type === "snapshot") snapshots.push(event);
+    });
+    const startup = client.startSceneSubscription();
+    await acceptSnapshot(sockets);
+    await startup;
+    const oldSocket = sockets[0];
+    if (!oldSocket) throw new Error("missing socket");
+    oldSocket.notifyClose = false;
+    clock.advance(6_100);
+    sockets[1]?.open();
+    await settle();
+    sockets[1]?.receive(welcome());
+    await settle();
+    sockets[1]?.receive({ ...snapshotPage(sockets[1]?.requestId()), revision: "2", elements: [{ id: "rectangle", type: "rectangle", version: 1, version_nonce: 1, index: "a0", is_deleted: false, payload: rectangle().payload }] });
+    await settle();
+    expect(snapshots.at(-1)).toMatchObject({ revision: "2", elements: [{ id: "rectangle" }] });
+    oldSocket.receive(snapshotPage("old-request"));
+    oldSocket.receive({ type: "pong" });
+    oldSocket.onclose?.({ code: 1000 });
+    await settle();
+    expect(snapshots.at(-1)).toMatchObject({ revision: "2" });
+    for (let sample = 0; sample < 20; sample += 1) {
+      clock.advance(2_000);
+      sockets[1]?.receive({ type: "pong" });
+      await settle();
+    }
+    expect(sockets[1]?.closeCalls).toEqual([]);
+    await client.stopSceneSubscription();
+  });
+
+  it("stops a slow socket immediately without waiting for the close handshake or reconnecting", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = recoveryClient(clock);
+    const startup = client.startSceneSubscription();
+    await acceptSnapshot(sockets);
+    await startup;
+    const socket = sockets[0];
+    if (!socket) throw new Error("missing socket");
+    socket.notifyClose = false;
+    clock.advance(4_100);
+    await client.stopSceneSubscription();
+    expect(socket.closeCalls).toEqual([{ code: 1000, reason: "whiteboard subscription stopped" }]);
+    clock.advance(60_000);
+    expect(sockets).toHaveLength(1);
+  });
+});
+
 function rectangle() {
   return { id: "rectangle", type: "rectangle", version: 1, versionNonce: 1, index: "a0", isDeleted: false, payload: { x: 10, y: 10, width: 100, height: 100 } };
 }
@@ -274,8 +396,7 @@ function snapshotPage(requestId: string | undefined): Record<string, unknown> {
 }
 
 async function settle(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let turn = 0; turn < 10; turn += 1) await Promise.resolve();
 }
 
 class TestSocket implements SyncSocket {
@@ -283,6 +404,7 @@ class TestSocket implements SyncSocket {
   onmessage: ((event: { readonly data: unknown }) => void) | null = null;
   onclose: ((event: { readonly code: number }) => void) | null = null;
   onerror: (() => void) | null = null;
+  notifyClose = true;
   readonly sent: string[] = [];
   readonly closeCalls: { readonly code: number; readonly reason?: string }[] = [];
 
@@ -292,7 +414,7 @@ class TestSocket implements SyncSocket {
 
   close(code = 1000, reason?: string): void {
     this.closeCalls.push({ code, reason });
-    this.onclose?.({ code });
+    if (this.notifyClose) this.onclose?.({ code });
   }
 
   open(): void {

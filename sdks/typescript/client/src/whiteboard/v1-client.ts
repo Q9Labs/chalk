@@ -21,8 +21,10 @@ import { compareChalkWhiteboardV1PendingOperations, InMemoryChalkWhiteboardV1Pen
 
 const CLIENT_RESTART_CLOSE_CODE = 4000;
 const DEPENDENCY_UNAVAILABLE_CLOSE_CODE = 1012;
-const HEARTBEAT_INTERVAL_MS = 20_000;
-const MAX_MISSED_HEARTBEATS = 2;
+const HEARTBEAT_INTERVAL_MS = 2_000;
+const SLOW_HEARTBEAT_MS = 2_000;
+const MAX_SLOW_HEARTBEATS = 2;
+const SLOW_CONNECTION_BACKOFF_MS = 30_000;
 const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5_000;
 const encoder = new TextEncoder();
@@ -88,7 +90,9 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #reconnectTimer: unknown;
   #reconnectAttempt = 0;
   #heartbeatTimer: unknown;
-  #missedHeartbeats = 0;
+  readonly #heartbeats: { readonly sentAt: number; slow: boolean }[] = [];
+  #slowHeartbeats = 0;
+  #nextSlowConnectionReplacementAt = 0;
   #lastCursorAt = Number.NEGATIVE_INFINITY;
   #unsubscribeLifecycle: (() => void) | undefined;
   #transportAvailable = true;
@@ -386,7 +390,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
         return;
       case "pong":
         this.#requireLive();
-        this.#missedHeartbeats = 0;
+        this.#receivePong();
         return;
     }
   }
@@ -440,7 +444,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#presentationSupported = "presenting" in frame;
     this.#presenting = "presenting" in frame ? frame.presenting : false;
     this.#publishSummary("loading", null);
-    this.#missedHeartbeats = 0;
+    this.#clearHeartbeat();
     const pendingOperations = [...this.#operations.values()].sort((left, right) => compareChalkWhiteboardV1PendingOperations(left.pending, right.pending));
     this.#awaitingOperationIds.clear();
     this.#waitingForOperations = true;
@@ -759,18 +763,45 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #startHeartbeat(): void {
-    this.#clearHeartbeat();
     this.#heartbeatTimer = this.#clock().setTimeout(() => {
       this.#heartbeatTimer = undefined;
       if (this.#phase !== "live") return;
-      this.#missedHeartbeats += 1;
-      if (this.#missedHeartbeats > MAX_MISSED_HEARTBEATS) {
-        this.#socket?.close(DEPENDENCY_UNAVAILABLE_CLOSE_CODE, "whiteboard heartbeat timeout");
-        return;
+      const now = this.#now();
+      for (const heartbeat of this.#heartbeats) {
+        if (!heartbeat.slow && now - heartbeat.sentAt >= SLOW_HEARTBEAT_MS) {
+          heartbeat.slow = true;
+          this.#slowHeartbeats += 1;
+        }
       }
+      if (this.#replaceSlowConnection()) return;
+      this.#heartbeats.push({ sentAt: now, slow: false });
       this.#send({ type: "ping" });
       this.#startHeartbeat();
     }, HEARTBEAT_INTERVAL_MS);
+  }
+
+  #receivePong(): void {
+    // The protocol has no ping IDs. Ordered WebSocket replies match the oldest ping,
+    // including timed-out pings, so a late reply cannot validate a newer probe.
+    const heartbeat = this.#heartbeats.shift();
+    if (!heartbeat) return;
+    if (this.#now() - heartbeat.sentAt < SLOW_HEARTBEAT_MS) {
+      this.#slowHeartbeats = 0;
+    } else if (!heartbeat.slow) {
+      this.#slowHeartbeats += 1;
+    }
+    this.#replaceSlowConnection();
+  }
+
+  #replaceSlowConnection(): boolean {
+    if (this.#slowHeartbeats < MAX_SLOW_HEARTBEATS || this.#now() < this.#nextSlowConnectionReplacementAt) return false;
+    const socket = this.#socket;
+    if (!socket) return false;
+    this.#nextSlowConnectionReplacementAt = this.#now() + SLOW_CONNECTION_BACKOFF_MS;
+    // Do not wait for a congested socket's closing handshake to reconnect.
+    this.#disconnected(socket, DEPENDENCY_UNAVAILABLE_CLOSE_CODE);
+    socket.close(CLIENT_RESTART_CLOSE_CODE, "whiteboard connection slow");
+    return true;
   }
 
   #rejectSnapshots(value: ChalkWhiteboardV1Failure): void {
@@ -814,6 +845,8 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #clearHeartbeat(): void {
+    this.#heartbeats.length = 0;
+    this.#slowHeartbeats = 0;
     if (this.#heartbeatTimer === undefined) return;
     this.#clock().clearTimeout(this.#heartbeatTimer);
     this.#heartbeatTimer = undefined;
