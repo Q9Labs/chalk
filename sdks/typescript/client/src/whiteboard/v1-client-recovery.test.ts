@@ -283,9 +283,21 @@ describe("whiteboard slow-connection watchdog", () => {
       await acceptSnapshot(sockets, index + 1);
     }
     expect(telemetry.mock.calls.map(([event]) => event.backoffMs)).toEqual([1_000, 2_000, 4_000, 4_000, 4_000]);
+    for (let second = 0; second < 65; second += 1) {
+      clock.advance(1_000);
+      sockets[5]?.receive({ type: "cursor", participant_id: "20000000-0000-4000-8000-000000000002", display_name: "Peer", x: 1, y: 1, occurred_at: "2026-10-15T00:00:00.000Z" });
+      sockets[5]?.receive({ type: "pong" });
+      await settle();
+    }
+    clock.advance(3_000);
+    sockets[5]?.receive({ type: "pong" });
+    await settle();
+    clock.advance(8_100);
+    expect(telemetry.mock.calls.at(-1)?.[0].backoffMs).toBe(4_000);
+    await acceptSnapshot(sockets, 6);
     for (let sample = 0; sample < 16; sample += 1) {
       clock.advance(sample === 0 ? 7_900 : 4_000);
-      sockets[5]?.receive({ type: "pong" });
+      sockets[6]?.receive({ type: "pong" });
       await settle();
     }
     clock.advance(8_000);
@@ -340,6 +352,51 @@ describe("whiteboard slow-connection watchdog", () => {
     }
     expect(sockets[1]?.closeCalls).toEqual([]);
     await client.stopSceneSubscription();
+  });
+
+  it("ages default probes monotonically across a backward wall-clock correction", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "performance", "setTimeout", "clearTimeout"] });
+    const { client, sockets } = recoveryClient(new TestClock(), 100, { clock: undefined });
+    try {
+      const startup = client.startSceneSubscription();
+      await acceptSnapshot(sockets);
+      await startup;
+      vi.advanceTimersByTime(4_000);
+      vi.setSystemTime(new Date(Date.now() - 3_600_000));
+      vi.advanceTimersByTime(4_000);
+      expect(sockets[0]?.closeCalls).toHaveLength(1);
+    } finally {
+      await client.stopSceneSubscription();
+      vi.useRealTimers();
+    }
+  });
+
+  it("removes visibility listeners on restore failure and terminal socket rejection", async () => {
+    const document = new EventTarget();
+    vi.stubGlobal("document", document);
+    const remove = vi.spyOn(document, "removeEventListener");
+    const first = recoveryClient(new TestClock(), undefined, {
+      pendingStore: {
+        load: async () => {
+          throw new Error("store unavailable");
+        },
+        put: async () => {},
+        remove: async () => {},
+      },
+    });
+    let second: ChalkWhiteboardV1Client | undefined;
+    try {
+      await expect(first.client.startSceneSubscription()).rejects.toThrow("Unable to restore");
+      expect(remove).toHaveBeenCalledTimes(1);
+      const connected = await startedRecoveryClient(new TestClock());
+      second = connected.client;
+      connected.sockets[0]?.close(1008);
+      expect(remove).toHaveBeenCalledTimes(2);
+    } finally {
+      await first.client.stopSceneSubscription();
+      await second?.stopSceneSubscription();
+      vi.unstubAllGlobals();
+    }
   });
 
   it("qualifies late timers and pongs after a busy main thread", async () => {

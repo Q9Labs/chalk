@@ -274,7 +274,8 @@ The first stalled path is detached within 8 seconds of its last healthy probe
 cycle, plus reconnect/catch-up. Repeated failures delay the next probe cycle by
 1, 2, then at most 4 seconds, so detection on a new connection stays within
 12 seconds of welcome, plus catch-up. A minute of timely replies resets back-off.
-These bounds require a visible page and timely JavaScript scheduling. Timer drift
+These bounds require a visible page and timely JavaScript scheduling. Default
+watchdog timing uses a monotonic clock; an injected clock must also be monotonic. Timer drift
 above 250 ms, hidden/resumed pages (4-second grace), and whiteboard frames received
 within the last 2 seconds suppress slow samples: replay volume is progress, not
 a stuck path. Catch-up time depends on network and board volume and is not bounded.
