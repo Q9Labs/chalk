@@ -134,6 +134,8 @@ export type ChalkWhiteboardV1ClientOptions = {
   readonly reconnectDelayMs?: number;
   readonly retryDelayMs?: number;
   readonly onSummary?: (summary: ChalkWhiteboardSummary) => void;
+  readonly watchdog?: boolean;
+  readonly onWatchdogReplacement?: (event: { readonly reason: "slow_heartbeat"; readonly roundTripsMs: readonly number[]; readonly outstandingAgesMs: readonly number[]; readonly backoffMs: number }) => void;
 };
 
 export type ChalkWhiteboardSummary = {

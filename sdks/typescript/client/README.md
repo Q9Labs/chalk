@@ -264,3 +264,26 @@ Effect program.
   capacity, retries, timers, and settlement.
 - `V1LiveTargetCoordinator` owns self-media target authorization, adapter
   execution, retries, deadlines, and local target state.
+
+### Whiteboard connection watchdog
+
+The whiteboard-v1 client pings every 4 seconds (at most 225 payload bytes/minute
+when quiet). A probe overdue by 2 seconds triggers an immediate confirmation;
+two slow probes replace the socket through normal reconnect and snapshot catch-up.
+The first stalled path is detached within 8 seconds of its last healthy probe
+cycle, plus reconnect/catch-up. Repeated failures delay the next probe cycle by
+1, 2, then at most 4 seconds, so detection on a new connection stays within
+12 seconds of welcome, plus catch-up. A minute of timely replies resets back-off.
+These bounds require a visible page and timely JavaScript scheduling. Timer drift
+above 250 ms, hidden/resumed pages (4-second grace), and whiteboard frames received
+within the last 2 seconds suppress slow samples: replay volume is progress, not
+a stuck path. Catch-up time depends on network and board volume and is not bounded.
+
+Sync sends one ordered anonymous pong per ping. A missing pong can cause an extra
+replacement; this costs reconnect/catch-up and is intentional. Unsolicited pongs
+are ignored and reset probe evidence. Set `watchdog: false` in
+`ChalkWhiteboardV1ClientOptions` to disable slow-path replacement while retaining
+4-second keepalives. `onWatchdogReplacement` receives one bounded event per
+replacement: reason, up to two measured round trips, up to two outstanding probe
+ages (not RTT estimates), and the next back-off. Consumer telemetry exceptions do
+not prevent recovery. Subscription stop detaches without waiting for socket close.
