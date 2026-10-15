@@ -1295,6 +1295,21 @@
         "success": "fixtures/semantic-events.v1.json#/fixtures/success.whiteboard.disconnect.v1",
         "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.whiteboard.disconnect.v1"
       }
+    },
+    {
+      "operation": "whiteboard.watchdog.replace",
+      "owner": "whiteboard package + client SDK + Sync",
+      "proofId": "diag.v1.whiteboard.watchdog.replace",
+      "status": "pending",
+      "fixtureStatus": "pass",
+      "runtimeStatus": "pending",
+      "proofCommand": "",
+      "proofArtifact": "",
+      "fixturePaths": {
+        "expectation": "fixtures/semantic-events.v1.json#/fixtures/expectation.whiteboard.watchdog.replace.v1",
+        "success": "fixtures/semantic-events.v1.json#/fixtures/success.whiteboard.watchdog.replace.v1",
+        "failure": "fixtures/semantic-events.v1.json#/fixtures/failure.whiteboard.watchdog.replace.v1"
+      }
     }
   ]
 }

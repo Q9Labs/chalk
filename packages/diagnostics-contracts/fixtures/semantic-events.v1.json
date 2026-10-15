@@ -30283,6 +30283,175 @@
           }
         }
       ]
+    },
+    "expectation.whiteboard.watchdog.replace.v1": {
+      "schemaVersion": "EpisodeDiagnosticFixture/v1",
+      "fixtureId": "expectation.whiteboard.watchdog.replace.v1",
+      "operation": "whiteboard.watchdog.replace",
+      "variant": "expectation",
+      "owner": "whiteboard package + client SDK + Sync",
+      "proofId": "diag.v1.whiteboard.watchdog.replace",
+      "expectationVersion": 1,
+      "checkpoints": [
+        {
+          "key": "replacement",
+          "class": "required",
+          "displayOrder": 0,
+          "deadlineAt": "2026-08-04T01:26:02.000Z",
+          "deadlineMilliseconds": 2000
+        }
+      ],
+      "events": [
+        {
+          "version": 1,
+          "eventId": "fixture.whiteboard.watchdog.replace.expectation.0",
+          "producerOperationRef": "fixture.operation.whiteboard.watchdog.replace.expectation",
+          "producerSequence": 0,
+          "occurredAt": "2026-08-04T01:26:00.000Z",
+          "source": "ui",
+          "name": "whiteboard.watchdog.replace",
+          "phase": "intent",
+          "state": "started",
+          "expectation": {
+            "name": "expectation.whiteboard.watchdog.replace.v1",
+            "version": 1,
+            "checkpoint": "replacement",
+            "checkpointClass": "required",
+            "deadlineAt": "2026-08-04T01:26:02.000Z"
+          },
+          "correlation": {
+            "journeyId": "journey.fixture.86",
+            "traceId": "trace.fixture.86",
+            "spanId": "span.fixture.expectation.0",
+            "requestId": "request.fixture.86",
+            "attempt": 0
+          },
+          "release": {
+            "id": "fixture-release-v1",
+            "sourceCommit": "fixture-commit-v1"
+          },
+          "attributes": {
+            "action": "whiteboard.watchdog.replace",
+            "checkpoint": "replacement",
+            "status": "expected",
+            "deadline_ms": 2000,
+            "attempt": 0
+          }
+        }
+      ]
+    },
+    "success.whiteboard.watchdog.replace.v1": {
+      "schemaVersion": "EpisodeDiagnosticFixture/v1",
+      "fixtureId": "success.whiteboard.watchdog.replace.v1",
+      "operation": "whiteboard.watchdog.replace",
+      "variant": "success",
+      "owner": "whiteboard package + client SDK + Sync",
+      "proofId": "diag.v1.whiteboard.watchdog.replace",
+      "expectationVersion": 1,
+      "checkpoints": [
+        {
+          "key": "replacement",
+          "class": "required",
+          "displayOrder": 0,
+          "deadlineAt": "2026-08-04T01:26:02.000Z",
+          "deadlineMilliseconds": 2000
+        }
+      ],
+      "events": [
+        {
+          "version": 1,
+          "eventId": "fixture.whiteboard.watchdog.replace.success.0",
+          "producerOperationRef": "fixture.operation.whiteboard.watchdog.replace.success",
+          "producerSequence": 0,
+          "occurredAt": "2026-08-04T01:26:01.750Z",
+          "source": "ui",
+          "name": "whiteboard.watchdog.replace",
+          "phase": "succeeded",
+          "state": "succeeded",
+          "expectation": {
+            "name": "expectation.whiteboard.watchdog.replace.v1",
+            "version": 1,
+            "checkpoint": "replacement",
+            "checkpointClass": "required",
+            "deadlineAt": "2026-08-04T01:26:02.000Z"
+          },
+          "correlation": {
+            "journeyId": "journey.fixture.86",
+            "traceId": "trace.fixture.86",
+            "spanId": "span.fixture.success.0",
+            "requestId": "request.fixture.86",
+            "attempt": 0
+          },
+          "release": {
+            "id": "fixture-release-v1",
+            "sourceCommit": "fixture-commit-v1"
+          },
+          "attributes": {
+            "action": "whiteboard.watchdog.replace",
+            "checkpoint": "replacement",
+            "status": "succeeded",
+            "deadline_ms": 2000,
+            "attempt": 0
+          }
+        }
+      ]
+    },
+    "failure.whiteboard.watchdog.replace.v1": {
+      "schemaVersion": "EpisodeDiagnosticFixture/v1",
+      "fixtureId": "failure.whiteboard.watchdog.replace.v1",
+      "operation": "whiteboard.watchdog.replace",
+      "variant": "failure_or_gap",
+      "owner": "whiteboard package + client SDK + Sync",
+      "proofId": "diag.v1.whiteboard.watchdog.replace",
+      "expectationVersion": 1,
+      "checkpoints": [
+        {
+          "key": "replacement",
+          "class": "required",
+          "displayOrder": 0,
+          "deadlineAt": "2026-08-04T01:26:02.000Z",
+          "deadlineMilliseconds": 2000
+        }
+      ],
+      "events": [
+        {
+          "version": 1,
+          "eventId": "fixture.whiteboard.watchdog.replace.failure_or_gap.0",
+          "producerOperationRef": "fixture.operation.whiteboard.watchdog.replace.failure_or_gap",
+          "producerSequence": 0,
+          "occurredAt": "2026-08-04T01:26:02.250Z",
+          "source": "ui",
+          "name": "whiteboard.watchdog.replace",
+          "phase": "failed",
+          "state": "failed",
+          "expectation": {
+            "name": "expectation.whiteboard.watchdog.replace.v1",
+            "version": 1,
+            "checkpoint": "replacement",
+            "checkpointClass": "required",
+            "deadlineAt": "2026-08-04T01:26:02.000Z"
+          },
+          "correlation": {
+            "journeyId": "journey.fixture.86",
+            "traceId": "trace.fixture.86",
+            "spanId": "span.fixture.failure_or_gap.0",
+            "requestId": "request.fixture.86",
+            "attempt": 1
+          },
+          "release": {
+            "id": "fixture-release-v1",
+            "sourceCommit": "fixture-commit-v1"
+          },
+          "attributes": {
+            "action": "whiteboard.watchdog.replace",
+            "checkpoint": "replacement",
+            "status": "failed",
+            "deadline_ms": 2000,
+            "attempt": 1,
+            "reason": "checkpoint_deadline"
+          }
+        }
+      ]
     }
   }
 }

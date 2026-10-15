@@ -171,6 +171,7 @@ function createWhiteboardClient(apiBaseURL: string, url: string, input: Connecti
     url,
     token: input.token,
     files,
+    onWatchdogReplacement: input.onWatchdogReplacement,
     onSummary: (summary) => {
       sceneId = summary.sceneId;
       input.onSummary(summary);

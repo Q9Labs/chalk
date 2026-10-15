@@ -70,6 +70,27 @@ export const makeSpaceClientCoreLayer = (options: SpaceClientOptions, platform: 
   const diagnosticSyncClients = new Set<ConnectionSyncClient>();
   const dependencies: ConnectionDependencies = {
     ...baseDependencies,
+    createWhiteboardClient: baseDependencies.createWhiteboardClient
+      ? (input) =>
+          baseDependencies.createWhiteboardClient?.({
+            ...input,
+            onWatchdogReplacement: (event) =>
+              episodeDiagnostics.observe({
+                name: "whiteboard.watchdog.replace",
+                phase: "succeeded",
+                state: "succeeded",
+                checkpoint: "replacement",
+                attributes: {
+                  reason: event.reason,
+                  backoff_ms: event.backoffMs,
+                  ...(event.roundTripsMs[0] !== undefined ? { round_trip_1_ms: event.roundTripsMs[0] } : {}),
+                  ...(event.roundTripsMs[1] !== undefined ? { round_trip_2_ms: event.roundTripsMs[1] } : {}),
+                  ...(event.outstandingAgesMs[0] !== undefined ? { outstanding_age_1_ms: event.outstandingAgesMs[0] } : {}),
+                  ...(event.outstandingAgesMs[1] !== undefined ? { outstanding_age_2_ms: event.outstandingAgesMs[1] } : {}),
+                },
+              }),
+          }) ?? null
+      : undefined,
     createSyncClient: (input) => {
       const syncClient = baseDependencies.createSyncClient(input);
       diagnosticSyncClients.add(syncClient);

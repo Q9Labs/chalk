@@ -87,7 +87,8 @@
     "webhook.exhaust",
     "whiteboard.connect",
     "whiteboard.recover",
-    "whiteboard.disconnect"
+    "whiteboard.disconnect",
+    "whiteboard.watchdog.replace"
   ],
   "missingConfirmation": "first required checkpoint is named",
   "contentCaptured": false

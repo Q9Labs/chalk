@@ -256,6 +256,7 @@ function createWhiteboardClient(apiBaseURL: string, url: string, input: Whiteboa
     files,
     lifecycle,
     webSocket,
+    onWatchdogReplacement: input.onWatchdogReplacement,
     onSummary: (summary) => {
       sceneId = summary.sceneId;
       input.onSummary(summary);

@@ -24,6 +24,7 @@ func conditionalCheckpointCatalog(key, predicate string) checkpointCatalogEntry 
 }
 
 var checkpointCatalogOverrides = map[string][]checkpointCatalogEntry{
+	"whiteboard.watchdog.replace": {{key: "replacement", class: CheckpointRequired}},
 	"chat.send": {
 		{key: "intent", class: CheckpointRequired},
 		{key: "validation", class: CheckpointRequired},
@@ -99,8 +100,8 @@ var checkpointCatalogOverrides = map[string][]checkpointCatalogEntry{
 
 // checkpointCatalog returns the exact semantic family for every operation in
 // ActionOperationKeys. The shared TypeScript catalog uses the same families;
-// the parity test loads its generated semantic fixture and checks all 86
-// operations, so a newly-added action cannot silently fall back to intent and
+// the parity test loads its generated semantic fixture and checks every catalogued
+// operation, so a newly-added action cannot silently fall back to intent and
 // terminal checkpoints.
 func checkpointCatalog(operation string) []checkpointCatalogEntry {
 	if override, ok := checkpointCatalogOverrides[operation]; ok {
