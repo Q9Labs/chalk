@@ -32,6 +32,18 @@ Intake rejects tenant API keys. It accepts verified provider/RealtimeKit partici
 - Add actionable alerts and test their signal source. Test notification delivery separately; a Grafana alert doesn't establish that someone received it.
 - Register new services in `infrastructure/uptime-worker/src/index.ts`, add tests and public status where appropriate, and observe the deployed check fail and recover.
 
+## Whiteboard watchdog replacements
+
+Both web and React Native Space clients send one `whiteboard.watchdog.replace`
+Episode diagnostic per slow-connection replacement, using the existing authenticated
+Episode diagnostics exporter independently of opt-in journey telemetry. The single
+`replacement` checkpoint records the socket replacement, not completed recovery.
+Attributes contain only `reason`, `backoff_ms`, up to two `round_trip_*_ms` samples,
+and up to two `outstanding_age_*_ms` samples when probes have not returned.
+The normal diagnostic event ID makes retries idempotent. Disabled diagnostics remain
+inert. Deploy the API's updated event/attribute allowlist before the SDK to count
+these events; no Sync deployment or telemetry-default change is needed.
+
 ## Sync diagnostics
 
 `/diagnostics/healthz` is separate from general readiness: it returns `200` only when the exporter is configured and healthy, otherwise `503`. Diagnostic delivery failure must not stop collaboration traffic.

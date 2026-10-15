@@ -3,7 +3,7 @@ import type { ClientMediaPlane, CloudflareSFUBootstrap, CloudflareSFURtcSummaryR
 import type { ChalkChatFileTransport } from "../chat-files";
 import type { V1AdmissionPolicy, V1AssignableRole, V1CommandResult, V1EpisodeSnapshot, V1SelfMediaTargetResult } from "../sync";
 import type { V1CollaborationClient, V1DirectedRequest, V1DirectedRequestResult } from "../sync/v1-types";
-import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../whiteboard/types";
+import type { ChalkWhiteboardSummary, ChalkWhiteboardV1ClientOptions, ChalkWhiteboardV1Transport } from "../whiteboard/types";
 import type { ParsedAccessGrant, ParticipantMediaAccess, ParticipantMediaCredential } from "../access/grant";
 import type { JourneyTelemetryContext } from "../telemetry/types";
 import { Context, Layer } from "effect";
@@ -97,6 +97,7 @@ export type ConnectionSyncFactoryInput = {
 };
 
 export type ConnectionWhiteboardFactoryInput = {
+  readonly onWatchdogReplacement?: ChalkWhiteboardV1ClientOptions["onWatchdogReplacement"];
   readonly token: () => Promise<string>;
   readonly onSummary: (summary: ChalkWhiteboardSummary) => void;
 };

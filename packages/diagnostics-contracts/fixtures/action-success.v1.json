@@ -87,7 +87,8 @@
     "webhook.exhaust",
     "whiteboard.connect",
     "whiteboard.recover",
-    "whiteboard.disconnect"
+    "whiteboard.disconnect",
+    "whiteboard.watchdog.replace"
   ],
   "contentCaptured": false
 }

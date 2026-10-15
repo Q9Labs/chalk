@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   ACTION_SET_V1,
+  ALLOWLISTED_ATTRIBUTE_KEYS,
   MAX_DIAGNOSTIC_EVENT_BYTES,
   SAFE_ID_CLASSES,
   acceptDiagnosticEvent,
@@ -72,6 +73,15 @@ describe("references and action coverage", () => {
     expect(Object.fromEntries(registry.classes.map(({ idClass, ...rule }) => [idClass, rule]))).toEqual(SAFE_ID_CLASSES);
   });
 
+  it("keeps published schemas and action catalog in sync with runtime contracts", () => {
+    const schema: { properties: { attributes: { patternProperties: { [pattern: string]: unknown } } }; "x-attribute-allowlist": string[] } = JSON.parse(readFileSync(new URL("../diagnostic-event.v1.schema.json", import.meta.url), "utf8"));
+    const catalog: { groups: { root: string; actions: string[] }[] } = JSON.parse(readFileSync(new URL("../episode-diagnostic-actions.v1.json", import.meta.url), "utf8"));
+    expect(schema["x-attribute-allowlist"]).toEqual(ALLOWLISTED_ATTRIBUTE_KEYS);
+    const patterns = Object.keys(schema.properties.attributes.patternProperties).map((pattern) => new RegExp(pattern));
+    for (const key of ALLOWLISTED_ATTRIBUTE_KEYS) expect(patterns.some((pattern) => pattern.test(key))).toBe(true);
+    expect(catalog.groups.flatMap((group) => group.actions.map((action) => `${group.root}.${action}`))).toEqual(ACTION_SET_V1.map((action) => action.operation));
+  });
+
   it("round-trips focused references and rejects malformed grammar", () => {
     const reference = { version: 1 as const, environment: "development" as const, diagnosticId: "diag01", focus: { kind: "issue" as const, id: "issue01" }, cursor: 9 };
     expect(parseDiagnosticReference(formatDiagnosticReference(reference))).toEqual(reference);
@@ -89,7 +99,7 @@ describe("references and action coverage", () => {
     expect(actionStatus("whiteboard.connect")).toBe("supported");
     expect(actionStatus("whiteboard.recover")).toBe("supported");
     expect(actionStatus("whiteboard.disconnect")).toBe("supported");
-    expect(ACTION_SET_V1.length).toBe(86);
+    expect(ACTION_SET_V1.length).toBe(87);
   });
   it("fingerprints filters canonically", () => {
     const fingerprint = fingerprintDiagnosticFilter({ source: "sdk", state: "failed" });

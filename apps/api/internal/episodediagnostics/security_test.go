@@ -193,3 +193,16 @@ func TestIssueAffectedSubjectIsAuthoritativeAndBranchNeverReopens(t *testing.T) 
 		t.Fatal("post-end callback did not leave a bounded issue")
 	}
 }
+
+func TestWatchdogReplacementTimingAttributes(t *testing.T) {
+	event := draftFixture()
+	event.Name, event.Phase, event.State = "whiteboard.watchdog.replace", "succeeded", EventSucceeded
+	event.Attributes = DiagnosticAttributes{
+		"reason": "slow_heartbeat", "backoff_ms": 1000,
+		"round_trip_1_ms": 2200, "round_trip_2_ms": 2100,
+		"outstanding_age_1_ms": 4000, "outstanding_age_2_ms": 2000,
+	}
+	if err := ValidateDiagnosticEventDraft(event); err != nil {
+		t.Fatalf("watchdog diagnostic rejected: %v", err)
+	}
+}

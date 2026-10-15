@@ -72,6 +72,7 @@ var allowedAttributes = map[string]struct{}{
 	"media_kind": {}, "track_state": {}, "permission": {}, "target_state": {}, "response_class": {}, "delivery_status": {},
 	"storage_state": {}, "object_ref_class": {}, "attachment_type": {}, "size_bucket": {}, "safe_id_class": {}, "visibility": {},
 	"recipient_count": {}, "projection_count": {}, "observable_recipient_count": {}, "attempt": {}, "retryable": {}, "budget_remaining": {},
+	"backoff_ms": {}, "round_trip_1_ms": {}, "round_trip_2_ms": {}, "outstanding_age_1_ms": {}, "outstanding_age_2_ms": {},
 	"duration_ms": {}, "latency_ms": {}, "bytes": {}, "count": {}, "cursor": {}, "sequence": {}, "grace_ms": {}, "deadline_ms": {},
 	"state_version": {}, "policy_version": {}, "release_channel": {}, "close_code": {},
 }
@@ -96,7 +97,7 @@ var ActionOperationKeys = []string{
 	"cleanup.resource.release", "cleanup.fan_in", "cleanup.complete",
 	"artifact.reserve", "artifact.write", "artifact.commit", "artifact.fail",
 	"webhook.enqueue", "webhook.attempt", "webhook.retry", "webhook.deliver", "webhook.exhaust",
-	"whiteboard.connect", "whiteboard.recover", "whiteboard.disconnect",
+	"whiteboard.connect", "whiteboard.recover", "whiteboard.disconnect", "whiteboard.watchdog.replace",
 }
 
 var eventExtraRoots = []string{"coverage.started_late", "coverage.gap", "coverage.rejected", "operation.started", "operation.ended", "checkpoint.observed", "checkpoint.missed", "issue.opened", "issue.resolved", "branch.started", "branch.ended", "diagnostic.created", "diagnostic.ended", "diagnostic.completed", "whiteboard.connect", "whiteboard.recover", "whiteboard.disconnect"}

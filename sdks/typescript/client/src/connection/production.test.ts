@@ -1,6 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { bindConnectionMediaClient } from "./production";
+import { createDefaultConnectionDependencies, bindConnectionMediaClient } from "./production";
+
+const whiteboard = vi.hoisted(() => vi.fn());
+vi.mock("../whiteboard", async (original) => ({ ...(await original<typeof import("../whiteboard")>()), createChalkWhiteboardV1Client: whiteboard }));
+
+describe("production whiteboard adapter", () => {
+  it("forwards the shared core's watchdog recorder", () => {
+    const dependencies = createDefaultConnectionDependencies({ apiBaseURL: "https://api.test", syncURL: "wss://sync.test/v1" });
+    const onWatchdogReplacement = vi.fn();
+    dependencies.createWhiteboardClient?.({ token: async () => "unused", onSummary: vi.fn(), onWatchdogReplacement });
+    expect(whiteboard).toHaveBeenCalledOnce();
+    expect(whiteboard.mock.calls[0]?.[0].onWatchdogReplacement).toBe(onWatchdogReplacement);
+  });
+});
 
 describe("production media adapter", () => {
   it("forwards privacy controls and projection notifications with the source binding", async () => {

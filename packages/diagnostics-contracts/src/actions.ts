@@ -27,10 +27,11 @@ const GROUPS: readonly ActionGroupDefinition[] = [
   { group: "Cleanup", root: "cleanup", owner: "API + worker", proofPrefix: "diag.v1.cleanup", actions: ["resource.release", "fan_in", "complete"] },
   { group: "Artifact", root: "artifact", owner: "API + worker", proofPrefix: "diag.v1.artifact", actions: ["reserve", "write", "commit", "fail"] },
   { group: "Webhook", root: "webhook", owner: "API + worker", proofPrefix: "diag.v1.webhook", actions: ["enqueue", "attempt", "retry", "deliver", "exhaust"] },
-  { group: "Whiteboard", root: "whiteboard", owner: "whiteboard package + client SDK + Sync", proofPrefix: "diag.v1.whiteboard", actions: ["connect", "recover", "disconnect"] },
+  { group: "Whiteboard", root: "whiteboard", owner: "whiteboard package + client SDK + Sync", proofPrefix: "diag.v1.whiteboard", actions: ["connect", "recover", "disconnect", "watchdog.replace"] },
 ];
 
 const CHECKPOINT_OVERRIDES: Readonly<Record<string, readonly ActionCheckpointContract[]>> = {
+  "whiteboard.watchdog.replace": [{ key: "replacement", class: "required", displayOrder: 0 }],
   "whiteboard.connect": [{ key: "transport_live", class: "required", displayOrder: 0 }],
   "whiteboard.recover": [
     { key: "recovery_started", class: "required", displayOrder: 0 },
