@@ -12,6 +12,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [4.1.18] - 2026-10-15
+
+### Fixed
+
+- A whiteboard connection that stays open but stops delivering is now replaced after about 8 seconds, and the board catches up through the normal reconnect path. The client pings every 4 seconds and confirms a late reply at once; timers that fire late, hidden or just-resumed pages, and boards still loading do not count as slow. Repeated slow spells back off 1, 2 and 4 seconds and reset after a healthy minute. Quiet upload rises to about 225 bytes a minute per participant. `onWatchdogReplacement` reports each replacement, and the watchdog can be turned off.
+- Each watchdog replacement is recorded as one bounded `whiteboard.watchdog.replace` Episode diagnostic on web and React Native. The Chalk API must accept this event before clients send it.
+
 ## [4.1.17] - 2026-10-13
 
 ### Fixed
