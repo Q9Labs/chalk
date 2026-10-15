@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Schema } from "effect";
 
 import { WhiteboardV1ClientFrameSchema } from "../generated/whiteboard-v1";
 import type { SyncSocket } from "../sync/types";
 import { ChalkWhiteboardV1Client } from "./v1-client";
-import type { ChalkWhiteboardSummary, ChalkWhiteboardV1FileTransport } from "./types";
+import type { ChalkWhiteboardV1ClientOptions, ChalkWhiteboardSummary, ChalkWhiteboardV1Event, ChalkWhiteboardV1FileTransport } from "./types";
 
 const sceneId = "10000000-0000-4000-8000-000000000001";
 const files: ChalkWhiteboardV1FileTransport = {
@@ -212,11 +212,313 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 });
 
+describe("whiteboard slow-connection watchdog", () => {
+  it("replaces a silent socket within eight seconds without waiting for its close event", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = await startedRecoveryClient(clock, 100);
+    const oldSocket = sockets[0];
+    if (!oldSocket) throw new Error("missing socket");
+    oldSocket.notifyClose = false;
+    clock.advance(7_999);
+    expect(oldSocket.closeCalls).toEqual([]);
+    clock.advance(1);
+    expect(oldSocket.closeCalls).toEqual([{ code: 4000, reason: "whiteboard connection slow" }]);
+    clock.advance(100);
+    expect(sockets).toHaveLength(2);
+    await client.stopSceneSubscription();
+  });
+
+  it("does not treat a late pong as the healthy reply to a newer ping", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = await startedRecoveryClient(clock);
+    clock.advance(6_100);
+    sockets[0]?.receive({ type: "pong" });
+    await settle();
+    clock.advance(1_900);
+    expect(sockets[0]?.closeCalls).toHaveLength(1);
+    await client.stopSceneSubscription();
+  });
+
+  it("accepts normal jitter and one isolated slow sample followed by recovery", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = await startedRecoveryClient(clock);
+    for (const rtt of [110, 250, 1_000, 2_100, 250, 110, 1_000]) {
+      const previousPings = sockets[0]?.sent.filter((wire) => JSON.parse(wire).type === "ping").length;
+      while (sockets[0]?.sent.filter((wire) => JSON.parse(wire).type === "ping").length === previousPings) clock.advance(1);
+      clock.advance(rtt);
+      sockets[0]?.receive({ type: "pong" });
+      await settle();
+      // A slow sample overlaps the next ping; answer that probe normally too.
+      if (rtt > 2_000) {
+        sockets[0]?.receive({ type: "pong" });
+        await settle();
+      }
+    }
+    expect(sockets[0]?.closeCalls).toEqual([]);
+    await client.stopSceneSubscription();
+  });
+
+  it("backs off subsequent replacements even after a new welcome", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = await startedRecoveryClient(clock, 100);
+    clock.advance(8_100);
+    await acceptSnapshot(sockets, 1);
+    clock.advance(8_899);
+    expect(sockets[1]?.closeCalls).toEqual([]);
+    clock.advance(1);
+    expect(sockets[1]?.closeCalls).toHaveLength(1);
+    await client.stopSceneSubscription();
+  });
+
+  it("caps recurrent probe back-off at four seconds and resets after healthy replies", async () => {
+    const clock = new TestClock();
+    const telemetry = vi.fn();
+    const { client, sockets } = await startedRecoveryClient(clock, 100, { onWatchdogReplacement: telemetry });
+    for (const [index, backoff] of [0, 1_000, 2_000, 4_000, 4_000].entries()) {
+      const bound = 8_000 + Math.max(0, backoff - 100);
+      clock.advance(bound - 1);
+      expect(sockets[index]?.closeCalls).toEqual([]);
+      clock.advance(101);
+      expect(sockets[index]?.closeCalls).toHaveLength(1);
+      await acceptSnapshot(sockets, index + 1);
+    }
+    expect(telemetry.mock.calls.map(([event]) => event.backoffMs)).toEqual([1_000, 2_000, 4_000, 4_000, 4_000]);
+    for (let second = 0; second < 65; second += 1) {
+      clock.advance(1_000);
+      sockets[5]?.receive({ type: "cursor", participant_id: "20000000-0000-4000-8000-000000000002", display_name: "Peer", x: 1, y: 1, occurred_at: "2026-10-15T00:00:00.000Z" });
+      sockets[5]?.receive({ type: "pong" });
+      await settle();
+    }
+    clock.advance(3_000);
+    sockets[5]?.receive({ type: "pong" });
+    await settle();
+    clock.advance(8_100);
+    expect(telemetry.mock.calls.at(-1)?.[0].backoffMs).toBe(4_000);
+    await acceptSnapshot(sockets, 6);
+    for (let sample = 0; sample < 16; sample += 1) {
+      clock.advance(sample === 0 ? 7_900 : 4_000);
+      sockets[6]?.receive({ type: "pong" });
+      await settle();
+    }
+    clock.advance(8_000);
+    expect(telemetry.mock.calls.at(-1)?.[0].backoffMs).toBe(1_000);
+    await client.stopSceneSubscription();
+  });
+
+  it("ignores extra pongs without shifting future probes", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = await startedRecoveryClient(clock);
+    clock.advance(4_100);
+    sockets[0]?.receive({ type: "pong" });
+    sockets[0]?.receive({ type: "pong" });
+    await settle();
+    clock.advance(7_999);
+    expect(sockets[0]?.closeCalls).toEqual([]);
+    clock.advance(1);
+    expect(sockets[0]?.closeCalls).toHaveLength(1);
+    await client.stopSceneSubscription();
+  });
+
+  it("catches up through the normal reconnect snapshot and ignores the retired socket", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = recoveryClient(clock, 100);
+    const snapshots: ChalkWhiteboardV1Event[] = [];
+    client.subscribe((event) => {
+      if (event.type === "snapshot") snapshots.push(event);
+    });
+    const startup = client.startSceneSubscription();
+    await acceptSnapshot(sockets);
+    await startup;
+    const oldSocket = sockets[0];
+    if (!oldSocket) throw new Error("missing socket");
+    oldSocket.notifyClose = false;
+    clock.advance(8_100);
+    sockets[1]?.open();
+    await settle();
+    sockets[1]?.receive(welcome());
+    await settle();
+    sockets[1]?.receive({ ...snapshotPage(sockets[1]?.requestId()), revision: "2", elements: [{ id: "rectangle", type: "rectangle", version: 1, version_nonce: 1, index: "a0", is_deleted: false, payload: rectangle().payload }] });
+    await settle();
+    expect(snapshots.at(-1)).toMatchObject({ revision: "2", elements: [{ id: "rectangle" }] });
+    oldSocket.receive(snapshotPage("old-request"));
+    oldSocket.receive({ type: "pong" });
+    oldSocket.onclose?.({ code: 1000 });
+    await settle();
+    expect(snapshots.at(-1)).toMatchObject({ revision: "2" });
+    for (let sample = 0; sample < 20; sample += 1) {
+      clock.advance(sample === 0 ? 5_000 : 4_000);
+      sockets[1]?.receive({ type: "pong" });
+      await settle();
+    }
+    expect(sockets[1]?.closeCalls).toEqual([]);
+    await client.stopSceneSubscription();
+  });
+
+  it("ages default probes monotonically across a backward wall-clock correction", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "performance", "setTimeout", "clearTimeout"] });
+    const { client, sockets } = recoveryClient(new TestClock(), 100, { clock: undefined });
+    try {
+      const startup = client.startSceneSubscription();
+      await acceptSnapshot(sockets);
+      await startup;
+      vi.advanceTimersByTime(4_000);
+      vi.setSystemTime(new Date(Date.now() - 3_600_000));
+      vi.advanceTimersByTime(4_000);
+      expect(sockets[0]?.closeCalls).toHaveLength(1);
+    } finally {
+      await client.stopSceneSubscription();
+      vi.useRealTimers();
+    }
+  });
+
+  it("removes visibility listeners on restore failure and terminal socket rejection", async () => {
+    const document = new EventTarget();
+    vi.stubGlobal("document", document);
+    const remove = vi.spyOn(document, "removeEventListener");
+    const first = recoveryClient(new TestClock(), undefined, {
+      pendingStore: {
+        load: async () => {
+          throw new Error("store unavailable");
+        },
+        put: async () => {},
+        remove: async () => {},
+      },
+    });
+    let second: ChalkWhiteboardV1Client | undefined;
+    try {
+      await expect(first.client.startSceneSubscription()).rejects.toThrow("Unable to restore");
+      expect(remove).toHaveBeenCalledTimes(1);
+      const connected = await startedRecoveryClient(new TestClock());
+      second = connected.client;
+      connected.sockets[0]?.close(1008);
+      expect(remove).toHaveBeenCalledTimes(2);
+    } finally {
+      await first.client.stopSceneSubscription();
+      await second?.stopSceneSubscription();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("qualifies late timers and pongs after a busy main thread", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = await startedRecoveryClient(clock);
+    clock.advance(4_000);
+    clock.stall(2_500);
+    sockets[0]?.receive({ type: "pong" });
+    await settle();
+    clock.advance(4_000);
+    sockets[0]?.receive({ type: "pong" });
+    await settle();
+    expect(sockets[0]?.closeCalls).toEqual([]);
+    await client.stopSceneSubscription();
+  });
+
+  it("does not replace while hidden or just resumed and removes its visibility listener", async () => {
+    const document = new EventTarget();
+    const state = { hidden: false };
+    Object.defineProperty(document, "hidden", { get: () => state.hidden });
+    vi.stubGlobal("document", document);
+    const remove = vi.spyOn(document, "removeEventListener");
+    const clock = new TestClock();
+    const { client, sockets } = recoveryClient(clock);
+    try {
+      const startup = client.startSceneSubscription();
+      await acceptSnapshot(sockets);
+      await startup;
+      clock.advance(4_000);
+      state.hidden = true;
+      document.dispatchEvent(new Event("visibilitychange"));
+      clock.advance(30_000);
+      state.hidden = false;
+      document.dispatchEvent(new Event("visibilitychange"));
+      clock.advance(3_999);
+      expect(sockets[0]?.closeCalls).toEqual([]);
+      await client.stopSceneSubscription();
+      expect(remove).toHaveBeenCalledWith("visibilitychange", expect.any(Function));
+    } finally {
+      await client.stopSceneSubscription();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("counts snapshot pages as progress even with pongs queued behind replay", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = recoveryClient(clock);
+    const startup = client.startSceneSubscription();
+    await settle();
+    sockets[0]?.open();
+    await settle();
+    sockets[0]?.receive(welcome());
+    await settle();
+    for (let page = 0; page < 20; page += 1) {
+      clock.advance(1_000);
+      sockets[0]?.receive({ ...snapshotPage(sockets[0]?.requestId()), page, page_count: 20 });
+      await settle();
+    }
+    await startup;
+    expect(sockets[0]?.closeCalls).toEqual([]);
+    await client.stopSceneSubscription();
+  });
+
+  it("replaces after a dropped pong, then matches the fresh connection normally", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = await startedRecoveryClient(clock, 100);
+    clock.advance(6_100);
+    sockets[0]?.receive({ type: "pong" }); // The first reply is missing; FIFO intentionally reconnects.
+    await settle();
+    clock.advance(2_000);
+    await acceptSnapshot(sockets, 1);
+    for (let index = 0; index < 5; index += 1) {
+      clock.advance(index === 0 ? 5_000 : 4_000);
+      sockets[1]?.receive({ type: "pong" });
+      await settle();
+    }
+    expect(sockets[1]?.closeCalls).toEqual([]);
+    await client.stopSceneSubscription();
+  });
+
+  it("ignores unsolicited pongs and resets probes, and can disable replacements", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = await startedRecoveryClient(clock, undefined, { watchdog: false });
+    sockets[0]?.receive({ type: "pong" });
+    await settle();
+    clock.advance(60_000);
+    expect(sockets[0]?.closeCalls).toEqual([]);
+    expect(sockets[0]?.sent.filter((wire) => JSON.parse(wire).type === "ping")).toHaveLength(15);
+    await client.stopSceneSubscription();
+  });
+
+  it("emits exactly one bounded replacement event", async () => {
+    const clock = new TestClock();
+    const telemetry = vi.fn();
+    const { client, sockets } = await startedRecoveryClient(clock, 100, { onWatchdogReplacement: telemetry });
+    clock.advance(6_200);
+    sockets[0]?.receive({ type: "pong" });
+    await settle();
+    clock.advance(1_800);
+    expect(telemetry).toHaveBeenCalledExactlyOnceWith({ reason: "slow_heartbeat", roundTripsMs: [2_200], outstandingAgesMs: [2_000], backoffMs: 1_000 });
+    await client.stopSceneSubscription();
+  });
+
+  it("stops a slow socket immediately without waiting for the close handshake or reconnecting", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = await startedRecoveryClient(clock);
+    const socket = sockets[0];
+    if (!socket) throw new Error("missing socket");
+    socket.notifyClose = false;
+    clock.advance(4_100);
+    await client.stopSceneSubscription();
+    expect(socket.closeCalls).toEqual([{ code: 1000, reason: "whiteboard subscription stopped" }]);
+    clock.advance(60_000);
+    expect(sockets).toHaveLength(1);
+  });
+});
+
 function rectangle() {
   return { id: "rectangle", type: "rectangle", version: 1, versionNonce: 1, index: "a0", isDeleted: false, payload: { x: 10, y: 10, width: 100, height: 100 } };
 }
 
-function recoveryClient(clock = new TestClock(), reconnectDelayMs?: number) {
+function recoveryClient(clock = new TestClock(), reconnectDelayMs?: number, options: Partial<ChalkWhiteboardV1ClientOptions> = {}) {
   const sockets: TestSocket[] = [];
   const client = new ChalkWhiteboardV1Client({
     url: "ws://sync.test/v1/whiteboard",
@@ -224,6 +526,7 @@ function recoveryClient(clock = new TestClock(), reconnectDelayMs?: number) {
     files,
     clock,
     reconnectDelayMs,
+    ...options,
     webSocket: {
       connect: () => {
         const socket = new TestSocket();
@@ -233,6 +536,14 @@ function recoveryClient(clock = new TestClock(), reconnectDelayMs?: number) {
     },
   });
   return { client, sockets };
+}
+
+async function startedRecoveryClient(clock: TestClock, reconnectDelayMs?: number, options: Partial<ChalkWhiteboardV1ClientOptions> = {}) {
+  const result = recoveryClient(clock, reconnectDelayMs, options);
+  const startup = result.client.startSceneSubscription();
+  await acceptSnapshot(result.sockets);
+  await startup;
+  return result;
 }
 
 async function acceptSnapshot(sockets: readonly TestSocket[], index = 0) {
@@ -274,8 +585,7 @@ function snapshotPage(requestId: string | undefined): Record<string, unknown> {
 }
 
 async function settle(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let turn = 0; turn < 10; turn += 1) await Promise.resolve();
 }
 
 class TestSocket implements SyncSocket {
@@ -283,6 +593,7 @@ class TestSocket implements SyncSocket {
   onmessage: ((event: { readonly data: unknown }) => void) | null = null;
   onclose: ((event: { readonly code: number }) => void) | null = null;
   onerror: (() => void) | null = null;
+  notifyClose = true;
   readonly sent: string[] = [];
   readonly closeCalls: { readonly code: number; readonly reason?: string }[] = [];
 
@@ -292,7 +603,7 @@ class TestSocket implements SyncSocket {
 
   close(code = 1000, reason?: string): void {
     this.closeCalls.push({ code, reason });
-    this.onclose?.({ code });
+    if (this.notifyClose) this.onclose?.({ code });
   }
 
   open(): void {
@@ -326,6 +637,15 @@ class TestClock {
 
   clearTimeout(handle: unknown): void {
     if (typeof handle === "number") this.#timers.delete(handle);
+  }
+
+  stall(milliseconds: number): void {
+    this.#now += milliseconds;
+    const due = [...this.#timers.entries()].filter(([, timer]) => timer.at <= this.#now);
+    for (const [handle, timer] of due) {
+      this.#timers.delete(handle);
+      timer.callback();
+    }
   }
 
   advance(milliseconds: number): void {
