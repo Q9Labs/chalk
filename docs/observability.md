@@ -41,8 +41,10 @@ Episode diagnostics exporter independently of opt-in journey telemetry. The sing
 Attributes contain only `reason`, `backoff_ms`, up to two `round_trip_*_ms` samples,
 and up to two `outstanding_age_*_ms` samples when probes have not returned.
 The normal diagnostic event ID makes retries idempotent. Disabled diagnostics remain
-inert. Deploy the API's updated event/attribute allowlist before the SDK to count
-these events; no Sync deployment or telemetry-default change is needed.
+inert. Deploy the API's updated event/attribute allowlist to every API instance before
+publishing the SDK, and do not roll the API back while that SDK is in use: an older API
+rejects the whole diagnostic batch that carries this event, so other events in the same
+batch are lost too. No Sync deployment or telemetry-default change is needed.
 
 ## Sync diagnostics
 
