@@ -4,7 +4,7 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "check-types": "tsc --noEmit",
+    "check-types": "tsc-rs --noEmit",
     "deploy": "wrangler deploy --keep-vars",
     "deploy:dry-run": "wrangler deploy --dry-run"
   },

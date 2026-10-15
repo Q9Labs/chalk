@@ -220,7 +220,7 @@
     "test:server-package": "pnpm run build && node ./scripts/check-server-package.mjs",
     "test:sync-browser": "pnpm run build && node ./scripts/real-browser-sync.mjs",
     "test:sync-node-restart": "pnpm run build && node ./scripts/real-node-restart-sync.mjs",
-    "check-types": "tsc --project tsconfig.check-types.json --noEmit",
+    "check-types": "tsc-rs --project tsconfig.check-types.json --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --project tsconfig.check-types.json --noEmit",
     "clean": "rm -rf dist"
   },

@@ -23,7 +23,7 @@
     "build:android:release": "pnpm run prepare:native-dependencies && cd android && ./gradlew bundleRelease",
     "build:android:release:production": "pnpm exec tsx ./scripts/run-with-production-mobile-env.ts -- pnpm run build:android:release",
     "with:production-release-env": "pnpm exec tsx ./scripts/run-with-production-mobile-env.ts --",
-    "check-types": "tsc --noEmit",
+    "check-types": "tsc-rs --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit"
   },
   "dependencies": {
