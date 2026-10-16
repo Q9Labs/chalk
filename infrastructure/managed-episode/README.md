@@ -126,9 +126,7 @@ accepts only the controller's healthy `RESULT` record.
 The migration Quadlet explicitly names the historical public-invite repair and
 the nine recording migrations introduced below the pre-recording schema
 version. These checked-in versions may be filled out of order; unrelated gaps
-still fail before migration. `apps/api/scripts/recording-release-migration-test.sh`
-proves upgrading the pre-recording applied migration set, repeat application,
-existing-data preservation, and rejection of an unrelated gap. Runtime rollback
+still fail before migration. The historical one-time migration proofs have been removed. Runtime rollback
 never rolls the database schema back.
 
 Each GitHub Environment must define these variables:

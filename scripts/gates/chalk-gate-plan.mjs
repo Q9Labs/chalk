@@ -80,9 +80,9 @@ function isSyncReliabilityInput(file) {
 function isKnownPath(file, workspaces) {
   if (isGateDefinition(file)) return true;
   if (isDocumentation(file) || workspaces.some((workspace) => startsWithAny(file, [workspace.directory]))) return true;
-  if (startsWithAny(file, ["apps/api", "apps/sync", "contract", "docs", "scripts", "infrastructure/architecture-worker", "infrastructure/recorder"])) return true;
+  if (startsWithAny(file, ["apps/api", "apps/sync", "contract", "docs", "scripts", "infrastructure/recorder"])) return true;
   if (file.startsWith(".github/") || file.startsWith(".agents/") || file.startsWith(".semgrep/")) return true;
-  if (["architecture.html", "CHANGELOG.md", "LICENSE", "README.md", "cspell.json", "lefthook.yml", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "turbo.json"].includes(file)) return true;
+  if (["CHANGELOG.md", "LICENSE", "README.md", "cspell.json", "lefthook.yml", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "turbo.json"].includes(file)) return true;
   return [".gitignore", ".gitleaks.toml", ".npmrc", ".oxfmtrc.json", ".fallowrc.json"].includes(file);
 }
 
@@ -330,7 +330,6 @@ export function createGatePlan(files, options = {}) {
   const api = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/api"]));
   const sync = full || nonDocumentationFiles.some(isSyncReliabilityInput);
   const contracts = full || api || nonDocumentationFiles.some((file) => startsWithAny(file, ["contract", "scripts/codegen", "scripts/contracts", "tools/contract-fixture-proof", "sdks/typescript/client/src/generated"]));
-  const architecture = full || nonDocumentationFiles.some((file) => file === "architecture.html" || startsWithAny(file, ["infrastructure/architecture-worker", "packages/assets/src/logos", "scripts/architecture-worker"]));
   const recorder = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["infrastructure/recorder", "scripts/recorder"]));
   const imageSizePatch = full || nonDocumentationFiles.some((file) => file === "scripts/security/image-size-patch.test.mjs" || file === "patches/image-size@2.0.2.patch");
   const sourceFiles = nonDocumentationFiles.filter((file) => sourceExtensions.has(path.extname(file)) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
@@ -350,9 +349,8 @@ export function createGatePlan(files, options = {}) {
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: scope, GITLEAKS_BASE_REF: base }),
     task("generated", "Generated files are current", true, "always required", ["pnpm", "run", "check:generated"]),
-    task("architecture", "Architecture Worker", architecture, architecture ? "architecture inputs changed" : "no architecture inputs changed", ["pnpm", "run", "architecture:build"]),
     task("format", "Formatting", Boolean(formatCommand), full ? fullReason : `${formattedFiles.length} changed formattable file(s)`, formatCommand),
-    task("fallow", "Changed-code analysis", full || architecture || sourceFiles.length > 0, full ? fullReason : architecture ? "architecture inputs changed" : `${sourceFiles.length} source file(s) changed`, fallowCommand),
+    task("fallow", "Changed-code analysis", full || sourceFiles.length > 0, full ? fullReason : `${sourceFiles.length} source file(s) changed`, fallowCommand),
     task("semgrep", "Static security rules", Boolean(semgrepCommand), full ? fullReason : `${sourceFiles.length} source file(s) changed`, semgrepCommand),
     task("boundaries", "Workspace import boundaries", full || dependencyChange || sourceFiles.some((file) => [".cjs", ".js", ".jsx", ".mjs", ".ts", ".tsx"].includes(path.extname(file))), full ? fullReason : "JavaScript/TypeScript source or dependency inputs changed", [
       "pnpm",
