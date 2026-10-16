@@ -58,7 +58,7 @@
     "prepack": "pnpm run build",
     "test": "pnpm run test:declarations",
     "test:declarations": "node --test scripts/rewrite-declaration-specifiers.node.mjs",
-    "check-types": "tsc --noEmit",
+    "check-types": "tsc-rs --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit"
   },
   "devDependencies": {

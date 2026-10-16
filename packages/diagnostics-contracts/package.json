@@ -43,7 +43,7 @@
   "scripts": {
     "build": "rm -rf ./dist && tsup ./src/index.ts --format esm --out-dir ./dist --platform node --no-splitting && pnpm run build:types",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist",
-    "check-types": "tsc --noEmit",
+    "check-types": "tsc-rs --noEmit",
     "test": "pnpm exec vitest run",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
     "fixtures:generate": "pnpm exec tsx scripts/generate-semantic-fixtures.ts",

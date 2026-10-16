@@ -31,7 +31,7 @@
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist",
     "build:logos": "mkdir -p ./dist && cp -R ./src/logos ./dist/",
     "dev": "pnpm run build:logos && tsup ./src/index.ts --format esm --out-dir ./dist --platform node --watch",
-    "check-types": "tsc --noEmit",
+    "check-types": "tsc-rs --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
     "clean": "rm -rf dist"
   },
