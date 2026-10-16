@@ -89,6 +89,9 @@ Enforce Chalk's 256 KiB body maximum while collecting bytes in a real server, an
 **Express**
 
 ```ts
+import express from "express";
+const app = express();
+
 app.post("/chalk-webhooks", express.raw({ type: "application/json", limit: "256kb" }), async (request, response) => {
   const result = await processor.process({
     rawBody: new Uint8Array(request.body),
@@ -104,6 +107,9 @@ Register this route before a global `express.json()` middleware, or exclude it f
 **Hono**
 
 ```ts
+import { Hono } from "hono";
+const app = new Hono();
+
 app.post("/chalk-webhooks", async (context) => {
   const rawBody = new Uint8Array(await context.req.raw.arrayBuffer());
   return toWebhookResponse(await processor.process({ rawBody, headers: context.req.raw.headers }));

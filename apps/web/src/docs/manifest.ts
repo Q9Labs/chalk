@@ -25,7 +25,6 @@ const WebhookEvents = lazy(() => import("./content/webhook-events.mdx"));
 const PublicAPI = lazy(() => import("./content/public-api.mdx"));
 const ApiErrors = lazy(() => import("./content/api-errors.mdx"));
 const Recovery = lazy(() => import("./content/recovery.mdx"));
-const Diagnostics = lazy(() => import("./content/diagnostics.mdx"));
 const Performance = lazy(() => import("./content/performance.mdx"));
 const Troubleshooting = lazy(() => import("./content/troubleshooting.mdx"));
 
@@ -321,17 +320,6 @@ export const DOCS_PAGES = [
     keywords: ["recovery", "reconnect", "Connection", "refresh", "retry"],
     layout: "article",
     Content: Recovery,
-  },
-  {
-    slug: "diagnostics",
-    href: "/docs/diagnostics",
-    title: "Diagnostics",
-    navLabel: "Diagnostics",
-    description: "Trace Space journeys with bounded, content-safe telemetry.",
-    groupId: "operations",
-    keywords: ["diagnostics", "telemetry", "journey", "traceparent", "W3C"],
-    layout: "article",
-    Content: Diagnostics,
   },
   {
     slug: "performance",

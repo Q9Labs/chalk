@@ -12,9 +12,13 @@ The public contract lists these webhook Event types:
 Create an endpoint with a version, URL, enabled flag, and event list. The management client uses an idempotency key for mutating requests:
 
 ```ts
-const endpoint =
-  yield *
-  chalk.default.createWebhookEndpoint({
+import { Effect, Schema } from "effect";
+import { createChalkEffectClient, TenantIdSchema } from "@q9labsai/chalk-client/effect";
+
+const tenantId = Schema.decodeUnknownSync(TenantIdSchema)("01900000-0000-7000-8000-000000000001");
+const createEndpoint = Effect.gen(function* () {
+  const chalk = yield* createChalkEffectClient({ baseUrl: "https://api.chalkmeet.com" });
+  return yield* chalk.default.createWebhookEndpoint({
     params: { tenant_id: tenantId },
     headers: { "Idempotency-Key": crypto.randomUUID() },
     payload: {
@@ -25,7 +29,10 @@ const endpoint =
       url: "https://hooks.example.com/chalk",
     },
   });
+});
 ```
+
+Run this Effect on your authenticated backend with a server-only API key (pass `auth: { type: "bearer", token: apiKey }` to the client). Never expose that key in browser code.
 
 List deliveries by `state`, `event_type`, `page_size`, and `cursor`. Delivery detail includes each attempt's outcome, HTTP status, timing, latency, and stable error code. A known Event without a typed handler is retryable; an authenticated unknown Event is acknowledged with `200` and `outcome: "ignored"`.
 

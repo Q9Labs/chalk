@@ -1,3 +1,4 @@
+import { checkDocExamples } from "./docs-examples.mjs";
 import { forceAndWaitForRecovery } from "./recovery.mjs";
 import { randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
@@ -19,7 +20,7 @@ const temporaryDirectory = await mkdtemp(join(tmpdir(), "chalk-sdk-web-consumer-
 const archiveDirectory = join(temporaryDirectory, "archives");
 const consumerDirectory = join(temporaryDirectory, "consumer");
 const tenantAPIKey = `chalk_sk_fixture.${randomBytes(32).toString("base64url")}`;
-const packedPackages = ["packages/assets", "packages/facehash", "packages/recording-presentation", "packages/ui", "packages/whiteboard", "sdks/typescript/client", "sdks/typescript/react"];
+const packedPackages = ["packages/assets", "packages/facehash", "packages/recording-presentation", "packages/ui", "packages/whiteboard", "sdks/typescript/client", "sdks/typescript/react", "sdks/typescript/react-native"];
 let serverProcess;
 
 try {
@@ -51,6 +52,11 @@ try {
       "@types/react-dom@19.2.3",
       "esbuild@0.28.1",
       "typescript@5.9.3",
+      "@types/node@22.19.15",
+      "effect@4.0.0-beta.102",
+      "express@5",
+      "@types/express@5",
+      "hono@4",
       "ws@8.18.3",
       "tailwindcss@4.2.2",
       "@tailwindcss/cli@4.2.2",
@@ -59,35 +65,42 @@ try {
     consumerDirectory,
   );
   await assertPackedInstall(consumerDirectory, archiveDirectory, { clientArchive, reactArchive, supportingArchives });
-  await run("pnpm", ["exec", "tsc", "--project", "tsconfig.json"], consumerDirectory);
-  await run(process.execPath, ["build.mjs"], consumerDirectory);
-  await run("pnpm", ["exec", "tailwindcss", "--input", "styles.css", "--output", "dist/bundle.css"], consumerDirectory);
+  const nativeDirectory = join(consumerDirectory, "node_modules/@q9labsai/chalk-react-native");
+  await mkdir(nativeDirectory, { recursive: true });
+  await run("tar", ["-xzf", join(archiveDirectory, requiredArchive(archives, "chalk-react-native")), "--strip-components=1", "-C", nativeDirectory], consumerDirectory);
+  await checkDocExamples(repositoryDirectory, consumerDirectory, run);
 
-  serverProcess = spawn(process.execPath, ["server.mjs"], {
-    cwd: consumerDirectory,
-    env: { ...process.env, CHALK_API_KEY: tenantAPIKey },
-    stdio: ["ignore", "pipe", "inherit"],
-  });
-  const baseURL = await listeningURL(serverProcess);
-  for (const browserName of requestedBrowsers) {
-    const browserType = { chromium, firefox, webkit }[browserName];
-    if (!browserType) throw new TypeError(`Unknown browser: ${browserName}`);
-    try {
-      const executablePath = browserName === "chromium" ? process.env.CHALK_E2E_CHROMIUM_EXECUTABLE : undefined;
-      const browser = await browserType.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
+  if (!arguments_.has("--docs-only")) {
+    await run("pnpm", ["exec", "tsc", "--project", "tsconfig.json"], consumerDirectory);
+    await run(process.execPath, ["build.mjs"], consumerDirectory);
+    await run("pnpm", ["exec", "tailwindcss", "--input", "styles.css", "--output", "dist/bundle.css"], consumerDirectory);
+
+    serverProcess = spawn(process.execPath, ["server.mjs"], {
+      cwd: consumerDirectory,
+      env: { ...process.env, CHALK_API_KEY: tenantAPIKey },
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+    const baseURL = await listeningURL(serverProcess);
+    for (const browserName of requestedBrowsers) {
+      const browserType = { chromium, firefox, webkit }[browserName];
+      if (!browserType) throw new TypeError(`Unknown browser: ${browserName}`);
       try {
-        if (browserName === "chromium") await runChromiumMatrix(browser, baseURL, tenantAPIKey);
-        else await runLaunchSmoke(browser, browserName, baseURL);
-      } finally {
-        await browser.close();
+        const executablePath = browserName === "chromium" ? process.env.CHALK_E2E_CHROMIUM_EXECUTABLE : undefined;
+        const browser = await browserType.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
+        try {
+          if (browserName === "chromium") await runChromiumMatrix(browser, baseURL, tenantAPIKey);
+          else await runLaunchSmoke(browser, browserName, baseURL);
+        } finally {
+          await browser.close();
+        }
+        process.stdout.write(`[packed-e2e] ${browserName}: passed\n`);
+      } catch (error) {
+        if (!process.env.CI && browserUnavailable(error)) {
+          process.stdout.write(`[packed-e2e] ${browserName}: skipped because its local Playwright binary is not installed\n`);
+          continue;
+        }
+        throw error;
       }
-      process.stdout.write(`[packed-e2e] ${browserName}: passed\n`);
-    } catch (error) {
-      if (!process.env.CI && browserUnavailable(error)) {
-        process.stdout.write(`[packed-e2e] ${browserName}: skipped because its local Playwright binary is not installed\n`);
-        continue;
-      }
-      throw error;
     }
   }
 } finally {
@@ -365,7 +378,8 @@ function assertArchiveDependency(packageJSON, packageName, archive) {
 }
 
 function requiredArchive(archives, name) {
-  const archive = archives.find((file) => file.includes(name));
+  const prefix = `q9labsai-${name}-`;
+  const archive = archives.find((file) => file.startsWith(prefix) && /^\d/.test(file.slice(prefix.length)));
   if (!archive) throw new TypeError(`pnpm pack did not produce ${name}`);
   return archive;
 }

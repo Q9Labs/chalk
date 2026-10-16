@@ -51,7 +51,7 @@ application. Chalk will use it without disposing it.
 <Chalk client={spaceClient} entrance={false} />
 ```
 
-`theme` controls palette, texture, color scheme, accent and typed token overrides. Classic is the only interface style.
+`theme` controls color scheme, accent and typed token overrides. Classic is the only interface style.
 
 `colorScheme` accepts `light`, `dark`, or `system`. With `system`, Chalk follows
 the browser preference while keeping explicit token overrides in place.
