@@ -338,7 +338,7 @@ func run() error {
 	var transcriptService transcripts.Service
 	auditLogRepository := postgres.NewAuditLogRepository(operationQueries)
 	auditLogService := auditlogs.NewService(auditLogRepository)
-	episodeDiagnostics, err := newEpisodeDiagnosticsComponents(context.Background(), cfg, auditLogService, logger)
+	episodeDiagnostics, err := newEpisodeDiagnosticsComponents(context.Background(), cfg, logger)
 	if err != nil {
 		return err
 	}
@@ -465,7 +465,6 @@ func run() error {
 		rateLimitOptions.Limiter = redisadapter.NewRateLimiter(redisClient)
 	}
 	episodeDiagnosticsHTTPOptions := episodeDiagnostics.HTTPOptions()
-	episodeDiagnosticsHTTPOptions.AccountAuthorizer = httpapi.NewEpisodeDiagnosticsAccountAuthorizer(accountTenantService, tenantAuthz)
 	// The durable cleanup queue also owns Recording source expiry. Construct it
 	// for Recording-only deployments so turning ASR off cannot strand capture
 	// inputs past their immutable retention deadline.

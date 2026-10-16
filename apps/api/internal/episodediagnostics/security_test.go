@@ -17,20 +17,6 @@ func draftFixture() DiagnosticEventDraft {
 	}
 }
 
-func TestPlainTraceAlternateLookupValidation(t *testing.T) {
-	service := Service{}
-	valid := "0123456789abcdef0123456789abcdef"
-	lookup, version, err := service.alternateLookup("w3c.trace-id", valid)
-	if err != nil || lookup != valid || version != "" {
-		t.Fatalf("plain trace lookup = %q, %q, %v", lookup, version, err)
-	}
-	for _, invalid := range []string{"", "00000000000000000000000000000000", "0123456789ABCDEF0123456789ABCDEF", valid + "_0123456789abcdef"} {
-		if _, _, err := service.alternateLookup("w3c.trace-id", invalid); !errors.Is(err, ErrInvalidReference) {
-			t.Errorf("accepted invalid plain trace %q: %v", invalid, err)
-		}
-	}
-}
-
 func TestReconcileDiagnosticLifecycleCompletesAndStartsRetention(t *testing.T) {
 	started := time.Date(2026, 8, 4, 0, 0, 0, 0, time.UTC)
 	ended := started.Add(time.Hour)
@@ -68,9 +54,6 @@ func TestEnvironmentBindingAndSafeConfigSummary(t *testing.T) {
 	if !errors.Is(ValidateProducerEnvironment(principal, diagnostic), ErrDiagnosticEnvironmentMismatch) {
 		t.Fatal("producer environment mismatch was accepted")
 	}
-	if !errors.Is(ValidateOperatorEnvironment(OperatorPrincipal{Environment: EnvironmentStaging}, diagnostic), ErrDiagnosticEnvironmentMismatch) {
-		t.Fatal("operator environment mismatch was accepted")
-	}
 	raw := []byte(`{"admission_policy":{"mode":"open","message":"private"},"roles":{"owner":["publishAudio","subscribe"],"observer":["subscribe"]},"default_episode_duration_seconds":60,"maximum_episode_duration_seconds":3600,"linger_window_seconds":30,"token":"do-not-copy"}`)
 	summary, err := SummarizeEpisodeConfig(raw)
 	if err != nil {
@@ -103,94 +86,6 @@ func TestEnvironmentBindingAndSafeConfigSummary(t *testing.T) {
 		if _, err := SummarizeEpisodeConfig([]byte(raw)); !errors.Is(err, ErrInvalidConfigSummary) {
 			t.Fatalf("out-of-bounds config %s returned %v", raw, err)
 		}
-	}
-}
-
-func TestIssueAffectedSubjectIsAuthoritativeAndBranchNeverReopens(t *testing.T) {
-	failed := draftFixture()
-	failed.EventID = "failed-participant"
-	failed.Source = SourceSDK
-	failed.State = EventFailed
-	failed.Phase = "finalized"
-	failed.ParticipantID = "participant01"
-	accepted, err := AcceptEvent(failed, "diag01", 1, failed.OccurredAt.Add(time.Second))
-	if err != nil {
-		t.Fatalf("accept failed event: %v", err)
-	}
-	state := NewProjectionState(EpisodeDiagnostic{ID: "diag01", Environment: EnvironmentDevelopment, State: DiagnosticLive, EpisodeStartedAt: failed.OccurredAt})
-	if err := state.Reduce([]AcceptedDiagnosticEvent{accepted}); err != nil {
-		t.Fatalf("reduce failed event: %v", err)
-	}
-	if len(state.Issues) == 0 {
-		t.Fatal("failed event did not create an issue")
-	}
-	for _, issue := range state.Issues {
-		if issue.Affected == nil || issue.Affected.Kind != "participant" || issue.Affected.Identifier.IDClass != "chalk.participant" || issue.Affected.Identifier.Value != "participant01" {
-			t.Fatalf("issue affected subject = %+v", issue.Affected)
-		}
-	}
-
-	branchStart := draftFixture()
-	branchStart.EventID = "branch-start"
-	branchStart.Name = "recording.start"
-	branchStart.Source = SourceWorker
-	branchStart.ProducerOperationRef = "recording-1"
-	branchStart.State = EventStarted
-	branchStart.Phase = "started"
-	terminal, err := AcceptEvent(branchStart, "diag01", 2, branchStart.OccurredAt.Add(time.Second))
-	if err != nil {
-		t.Fatalf("accept branch start: %v", err)
-	}
-	branchDone := branchStart
-	branchDone.EventID = "branch-done"
-	branchDone.State = EventSucceeded
-	branchDone.Phase = "finalized"
-	terminalDone, err := AcceptEvent(branchDone, "diag01", 3, branchDone.OccurredAt.Add(2*time.Second))
-	if err != nil {
-		t.Fatalf("accept branch terminal: %v", err)
-	}
-	late := branchStart
-	late.EventID = "branch-late"
-	late.State = EventStarted
-	late.Phase = "started"
-	terminalLate, err := AcceptEvent(late, "diag01", 4, late.OccurredAt.Add(3*time.Second))
-	if err != nil {
-		t.Fatalf("accept late branch callback: %v", err)
-	}
-	state = NewProjectionState(EpisodeDiagnostic{ID: "diag01", Environment: EnvironmentDevelopment, State: DiagnosticLive, EpisodeStartedAt: branchStart.OccurredAt})
-	if err := state.Reduce([]AcceptedDiagnosticEvent{terminal, terminalDone, terminalLate}); err != nil {
-		t.Fatalf("reduce branch callbacks: %v", err)
-	}
-	branch := state.Branches[branchIDFor(terminal)]
-	if branch.State != BranchSucceeded || branch.LateObservations != 1 {
-		t.Fatalf("late branch callback reopened branch: %+v", branch)
-	}
-
-	postEnd := branchStart
-	postEnd.EventID = "unregistered-post-end"
-	postEnd.ProducerOperationRef = "new-recording-after-end"
-	postEnd.OccurredAt = branchStart.OccurredAt.Add(time.Hour)
-	postEnd.State = EventStarted
-	endedAt := branchStart.OccurredAt.Add(30 * time.Minute)
-	state = NewProjectionState(EpisodeDiagnostic{ID: "diag01", Environment: EnvironmentDevelopment, State: DiagnosticEnded, EpisodeStartedAt: branchStart.OccurredAt, EpisodeEndedAt: &endedAt})
-	acceptedPostEnd, err := AcceptEvent(postEnd, "diag01", 5, postEnd.OccurredAt.Add(time.Second))
-	if err != nil {
-		t.Fatalf("accept post-end branch callback: %v", err)
-	}
-	if err := state.Reduce([]AcceptedDiagnosticEvent{acceptedPostEnd}); err != nil {
-		t.Fatalf("reduce post-end branch callback: %v", err)
-	}
-	if len(state.Branches) != 0 {
-		t.Fatalf("post-end callback minted branch slot: %+v", state.Branches)
-	}
-	foundIssue := false
-	for _, issue := range state.Issues {
-		if issue.Kind == "branch_unregistered" {
-			foundIssue = true
-		}
-	}
-	if !foundIssue {
-		t.Fatal("post-end callback did not leave a bounded issue")
 	}
 }
 

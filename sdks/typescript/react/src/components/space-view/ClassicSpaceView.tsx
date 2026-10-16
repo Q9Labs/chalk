@@ -51,7 +51,6 @@ export function ClassicSpaceView({
   generatedAvatars = true,
   commandError: externalCommandError,
   onDismissCommandError,
-  onOpenDiagnostics,
   onOpenSettings,
   onToggleWhiteboard,
   whiteboard,
@@ -102,7 +101,6 @@ export function ClassicSpaceView({
     ...(feature("handRaise") ? ["handraise" as const] : []),
     ...(feature("reactions") && canSendReaction ? ["reactions" as const] : []),
     ...(feature("whiteboard") && canDrawWhiteboard ? ["whiteboard" as const] : []),
-    ...(onOpenDiagnostics ? ["diagnostics" as const] : []),
     "leave",
   ];
 
@@ -213,7 +211,6 @@ export function ClassicSpaceView({
             onToggleWhiteboard={onToggleWhiteboard}
             onOpenReactions={() => setReactionPickerOpen((current) => !current)}
             onOpenInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
-            onOpenDiagnostics={onOpenDiagnostics}
             onOpenSettings={openSettings}
             onCommandError={setCommandError}
             onLeaveRequest={onLeft ? () => setLeaveDialogOpen(true) : undefined}
@@ -231,7 +228,6 @@ export function ClassicSpaceView({
             onToggleWhiteboard={onToggleWhiteboard}
             onOpenReactions={() => setReactionPickerOpen((current) => !current)}
             onOpenInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
-            onOpenDiagnostics={onOpenDiagnostics}
             onOpenSettings={openSettings}
             onCommandError={setCommandError}
             onLeaveRequest={onLeft ? () => setLeaveDialogOpen(true) : undefined}

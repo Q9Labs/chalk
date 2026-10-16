@@ -106,9 +106,6 @@ api_required=(
   CHALK_SYNC_TOKEN_AUDIENCE CHALK_SYNC_TOKEN_KEY_ID CHALK_SYNC_TOKEN_PRIVATE_KEY
   CHALK_EPISODE_DIAGNOSTICS CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN
   CHALK_EPISODE_DIAGNOSTICS_HMAC_KEY
-  CHALK_EPISODE_DIAGNOSTICS_OPERATOR_ISSUER
-  CHALK_EPISODE_DIAGNOSTICS_OPERATOR_AUDIENCE
-  CHALK_EPISODE_DIAGNOSTICS_OPERATOR_JWKS
   CHALK_EPISODE_DIAGNOSTICS_SERVICE_ISSUER
   CHALK_EPISODE_DIAGNOSTICS_SERVICE_KEY_ID
   CHALK_EPISODE_DIAGNOSTICS_SERVICE_PRIVATE_KEY
@@ -216,11 +213,6 @@ for file in "${api_env}" "${sync_env}"; do
   [[ "$(env_value "${file}" CHALK_EPISODE_DIAGNOSTICS)" == hosted ]] || fail "CHALK_EPISODE_DIAGNOSTICS must be hosted in ${file}"
   [[ "$(env_value "${file}" CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN)" == true ]] || fail "CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN must be true in ${file}"
 done
-[[ "$(env_value "${api_env}" CHALK_EPISODE_DIAGNOSTICS_OPERATOR_AUDIENCE)" == chalk-diagnostics-operator ]] || fail "CHALK_EPISODE_DIAGNOSTICS_OPERATOR_AUDIENCE must use the hosted operator audience"
-operator_issuer="$(env_value "${api_env}" CHALK_EPISODE_DIAGNOSTICS_OPERATOR_ISSUER)"
-[[ "${operator_issuer}" =~ ^https://[^/?#]+/?$ ]] || fail "CHALK_EPISODE_DIAGNOSTICS_OPERATOR_ISSUER must be an HTTPS origin"
-operator_jwks="$(env_value "${api_env}" CHALK_EPISODE_DIAGNOSTICS_OPERATOR_JWKS)"
-jq -e '.keys | type == "array" and length > 0' <<<"${operator_jwks}" >/dev/null 2>&1 || fail "CHALK_EPISODE_DIAGNOSTICS_OPERATOR_JWKS must contain at least one key"
 diagnostics_hmac_key="$(env_value "${api_env}" CHALK_EPISODE_DIAGNOSTICS_HMAC_KEY)"
 diagnostics_hmac_key_bytes="$(LC_ALL=C printf '%s' "${diagnostics_hmac_key}" | LC_ALL=C wc -c | tr -d '[:space:]')"
 (( diagnostics_hmac_key_bytes >= 32 )) || fail "CHALK_EPISODE_DIAGNOSTICS_HMAC_KEY must contain at least 32 bytes"

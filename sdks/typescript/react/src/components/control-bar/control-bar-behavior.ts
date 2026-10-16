@@ -12,7 +12,7 @@ export interface MediaDevice {
   groupId?: string;
 }
 
-export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "transcription" | "handraise" | "reactions" | "whiteboard" | "pip" | "settings" | "diagnostics" | "more" | "info" | "thumbsup" | "leave";
+export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "transcription" | "handraise" | "reactions" | "whiteboard" | "pip" | "settings" | "more" | "info" | "thumbsup" | "leave";
 
 export interface ControlBarSurfaceProps {
   position?: "bottom" | "top";
@@ -58,7 +58,6 @@ export interface ControlBarSurfaceProps {
   onTogglePictureInPicture?: () => Promise<void> | void;
   onOpenReactions?: () => void;
   onOpenSettings?: () => void;
-  onOpenDiagnostics?: () => void;
   onOpenMore?: () => void;
   onOpenInfo?: () => void;
   onLeft?: () => void;
@@ -86,7 +85,6 @@ export interface ControlBarProps {
   readonly onToggleWhiteboard?: () => void;
   readonly onOpenReactions?: () => void;
   readonly onOpenSettings?: () => void;
-  readonly onOpenDiagnostics?: () => void;
   readonly onOpenMore?: () => void;
   readonly onOpenInfo?: () => void;
   readonly onLeaveRequest?: () => void;
@@ -214,9 +212,7 @@ export function useControlBarSurfaceBehavior({
   const effectiveVideoInputDevices = withSelectedDeviceFallback(mergeDevices(videoInputDevices, detectedDevices.videoinput), selectedVideoInput, "Current camera", "videoinput");
   const showLeave = buttonsToRender.includes("leave");
   const mediaButtons = buttonsToRender.filter((button) => button === "mic" || button === "video" || button === "screenshare" || button === "record" || button === "whiteboard" || button === "handraise");
-  const interactionButtons = buttonsToRender.filter(
-    (button) => button === "participants" || button === "chat" || button === "transcription" || button === "thumbsup" || button === "pip" || button === "reactions" || button === "settings" || button === "diagnostics" || button === "more" || button === "info",
-  );
+  const interactionButtons = buttonsToRender.filter((button) => button === "participants" || button === "chat" || button === "transcription" || button === "thumbsup" || button === "pip" || button === "reactions" || button === "settings" || button === "more" || button === "info");
 
   return {
     themeVariables,
@@ -327,7 +323,6 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     onToggleWhiteboard: props.onToggleWhiteboard,
     onOpenReactions: props.onOpenReactions,
     onOpenSettings: props.onOpenSettings,
-    onOpenDiagnostics: props.onOpenDiagnostics,
     onOpenMore: props.onOpenMore,
     onOpenInfo: props.onOpenInfo,
     onLeft: leave,

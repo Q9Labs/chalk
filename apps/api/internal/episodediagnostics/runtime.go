@@ -13,14 +13,9 @@ import (
 )
 
 const (
-	DefaultRuntimeProjectorInterval   = 500 * time.Millisecond
 	DefaultRuntimeReconcileInterval   = time.Second
-	DefaultRuntimeDeadlineInterval    = time.Second
-	DefaultRuntimeExportInterval      = time.Second
 	DefaultRuntimeRetentionInterval   = time.Minute
-	DefaultRuntimeProjectorBatch      = 200
 	DefaultRuntimeReconcileBatch      = 100
-	DefaultRuntimeDeadlineBatch       = 100
 	DefaultRuntimeRetentionBatch      = 10000
 	DefaultRuntimeEnsureQueueCapacity = 256
 )
@@ -30,17 +25,10 @@ var ErrRuntimeNotConfigured = errors.New("episode diagnostics runtime repository
 // RuntimeConfig controls the bounded background work owned by a diagnostic
 // runtime. A zero value uses the production-safe defaults above.
 type RuntimeConfig struct {
-	ProjectorInterval time.Duration
-	ReconcileInterval time.Duration
-	DeadlineInterval  time.Duration
-	ExportInterval    time.Duration
-	RetentionInterval time.Duration
-
-	ProjectorBatch      int
+	ReconcileInterval   time.Duration
+	RetentionInterval   time.Duration
 	ReconcileBatch      int
-	DeadlineBatch       int
 	RetentionBatch      int
-	WorkerID            string
 	EnsureQueueCapacity int
 
 	// Now and Clock are equivalent injection points. Clock is retained as an
@@ -85,35 +73,17 @@ func NewRuntime(service Service, repository Repository, environment Environment,
 }
 
 func normalizeRuntimeConfig(config RuntimeConfig) RuntimeConfig {
-	if config.ProjectorInterval <= 0 {
-		config.ProjectorInterval = DefaultRuntimeProjectorInterval
-	}
 	if config.ReconcileInterval <= 0 {
 		config.ReconcileInterval = DefaultRuntimeReconcileInterval
-	}
-	if config.DeadlineInterval <= 0 {
-		config.DeadlineInterval = DefaultRuntimeDeadlineInterval
-	}
-	if config.ExportInterval <= 0 {
-		config.ExportInterval = DefaultRuntimeExportInterval
 	}
 	if config.RetentionInterval <= 0 {
 		config.RetentionInterval = DefaultRuntimeRetentionInterval
 	}
-	if config.ProjectorBatch <= 0 {
-		config.ProjectorBatch = DefaultRuntimeProjectorBatch
-	}
 	if config.ReconcileBatch <= 0 {
 		config.ReconcileBatch = DefaultRuntimeReconcileBatch
 	}
-	if config.DeadlineBatch <= 0 {
-		config.DeadlineBatch = DefaultRuntimeDeadlineBatch
-	}
 	if config.RetentionBatch <= 0 {
 		config.RetentionBatch = DefaultRuntimeRetentionBatch
-	}
-	if config.WorkerID == "" {
-		config.WorkerID = "episode-diagnostics-runtime"
 	}
 	if config.EnsureQueueCapacity <= 0 {
 		config.EnsureQueueCapacity = DefaultRuntimeEnsureQueueCapacity
@@ -164,7 +134,7 @@ func (r *Runtime) Run(ctx context.Context) error {
 	}
 
 	var workers sync.WaitGroup
-	workers.Add(6)
+	workers.Add(3)
 	go func() {
 		defer workers.Done()
 		r.runEnsure(ctx)
@@ -173,27 +143,6 @@ func (r *Runtime) Run(ctx context.Context) error {
 		defer workers.Done()
 		r.runPeriodic(ctx, "reconcile", r.config.ReconcileInterval, func(ctx context.Context) error {
 			_, err := r.repository.Reconcile(ctx, r.environment, r.now(), r.config.ReconcileBatch)
-			return err
-		})
-	}()
-	go func() {
-		defer workers.Done()
-		r.runPeriodic(ctx, "projector", r.config.ProjectorInterval, func(ctx context.Context) error {
-			_, err := r.repository.Project(ctx, r.config.WorkerID, r.config.ProjectorBatch)
-			return err
-		})
-	}()
-	go func() {
-		defer workers.Done()
-		r.runPeriodic(ctx, "deadline", r.config.DeadlineInterval, func(ctx context.Context) error {
-			_, err := r.repository.ScanDeadlines(ctx, r.now(), r.config.DeadlineBatch)
-			return err
-		})
-	}()
-	go func() {
-		defer workers.Done()
-		r.runPeriodic(ctx, "export", r.config.ExportInterval, func(ctx context.Context) error {
-			_, err := r.repository.RunExport(ctx, r.config.WorkerID)
 			return err
 		})
 	}()

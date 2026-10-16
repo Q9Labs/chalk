@@ -7,7 +7,7 @@ import type { useSpaceViewController } from "./useSpaceViewController";
 
 type Controller = ReturnType<typeof useSpaceViewController>;
 
-export function SpaceActionMenu({ controller, onOpenDiagnostics }: { readonly controller: Controller; readonly onOpenDiagnostics?: () => void }): React.JSX.Element {
+export function SpaceActionMenu({ controller }: { readonly controller: Controller }): React.JSX.Element {
   const theme = useNativeTheme();
   const actions: { label: string; onPress: () => void; disabled?: boolean }[] = [
     ...(controller.canInvite ? [{ label: "Invite participants", onPress: controller.handleInviteParticipants }] : []),
@@ -37,17 +37,6 @@ export function SpaceActionMenu({ controller, onOpenDiagnostics }: { readonly co
         ]
       : []),
     ...(controller.canSettings ? [{ label: "Settings", onPress: () => controller.openPanel("settings") }] : []),
-    ...(onOpenDiagnostics
-      ? [
-          {
-            label: "Diagnostics",
-            onPress: () => {
-              controller.setActionsOpen(false);
-              onOpenDiagnostics();
-            },
-          },
-        ]
-      : []),
     ...(["grid", "focus", "presentation"] as const).map((layout) => ({
       label: `${layout === "grid" ? "Grid" : layout === "focus" ? "Focus" : "Presentation"} layout${controller.layout.layout === layout ? " (selected)" : ""}`,
       onPress: () => {

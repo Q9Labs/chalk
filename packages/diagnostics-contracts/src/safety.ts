@@ -1,6 +1,6 @@
 import { ATTRIBUTE_KEYS, MAX_ATTRIBUTE_COUNT, MAX_ATTRIBUTE_STRING_LENGTH, isAllowedAttributeKey } from "./allowlists.js";
-import { DiagnosticContractError, finishValidation, isBoolean, isFiniteNumber, isRecord, isString, type ValidationIssue, type ValidationResult } from "./runtime.js";
-import type { DiagnosticAttributes, SafeUnknownReason } from "./types.js";
+import { finishValidation, isBoolean, isFiniteNumber, isRecord, isString, type ValidationIssue, type ValidationResult } from "./runtime.js";
+import type { DiagnosticAttributes } from "./types.js";
 
 const FORBIDDEN_KEY = /(?:text|content|body|payload|display.?name|filename|url|uri|token|secret|password|credential|cookie|authorization|exception|stack|sdp|ice|candidate|address|phone|email|webhook)/i;
 const FORBIDDEN_VALUE =
@@ -11,11 +11,6 @@ export type RedactionResult = Readonly<{
   attributes: DiagnosticAttributes;
   redactedKeys: readonly string[];
   rejectedKeys: readonly string[];
-}>;
-
-export type Rejection = Readonly<{
-  path: string;
-  reason: "forbidden_key" | "forbidden_value" | "unknown_key" | "invalid_type" | "oversize";
 }>;
 
 export const isForbiddenDiagnosticKey = (key: string): boolean => FORBIDDEN_KEY.test(key);
@@ -67,12 +62,6 @@ export const validateDiagnosticAttributes = (input: unknown, path = "$.attribute
   return finishValidation(output, issues);
 };
 
-export const assertSafeAttributes = (input: unknown): DiagnosticAttributes => {
-  const result = validateDiagnosticAttributes(input);
-  if (!result.ok) throw new DiagnosticContractError("Diagnostic attributes contain unsafe data", result.issues);
-  return result.value;
-};
-
 export const redactDiagnosticAttributes = (input: unknown): RedactionResult => {
   if (!isRecord(input)) return { attributes: {}, redactedKeys: [], rejectedKeys: ["$"] };
   const attributes: Record<string, SafeAttributeValue> = {};
@@ -92,14 +81,5 @@ export const redactDiagnosticAttributes = (input: unknown): RedactionResult => {
   }
   return { attributes: boundedRedaction(attributes, rejectedKeys), redactedKeys, rejectedKeys };
 };
-
-export const redactAttributes = redactDiagnosticAttributes;
-
-export const rejectUnsafeDiagnosticValue = (value: unknown, path = "$"): void => {
-  if (isString(value) && !isForbiddenDiagnosticValue(value)) return;
-  throw new DiagnosticContractError("Diagnostic value is forbidden", [{ path, message: "content, credentials, payloads, or network identifiers are not retained" }]);
-};
-
-export const safeUnknown = (reason: SafeUnknownReason): Readonly<{ value: undefined; unknownReason: SafeUnknownReason }> => ({ value: undefined, unknownReason: reason });
 
 export const ALLOWLISTED_ATTRIBUTE_KEYS = ATTRIBUTE_KEYS;

@@ -1,5 +1,3 @@
-import type { SafeUnknownReason } from "./types.js";
-
 export type ValidationIssue = Readonly<{
   path: string;
   message: string;
@@ -43,34 +41,6 @@ export const requireString = (value: Record<string, unknown>, key: string, issue
   return candidate;
 };
 
-export const optionalString = (value: Record<string, unknown>, key: string, issues: ValidationIssue[], path = "$"): string | undefined => {
-  if (value[key] === undefined) return undefined;
-  return requireString(value, key, issues, path);
-};
-
-export const requireFiniteNumber = (value: Record<string, unknown>, key: string, issues: ValidationIssue[], path = "$"): number | undefined => {
-  const candidate = value[key];
-  if (!isFiniteNumber(candidate)) {
-    issues.push({ path: `${path}.${key}`, message: "expected a finite number" });
-    return undefined;
-  }
-  return candidate;
-};
-
-export const requireInteger = (value: Record<string, unknown>, key: string, issues: ValidationIssue[], path = "$"): number | undefined => {
-  const candidate = value[key];
-  if (!isInteger(candidate)) {
-    issues.push({ path: `${path}.${key}`, message: "expected an integer" });
-    return undefined;
-  }
-  return candidate;
-};
-
-export const optionalInteger = (value: Record<string, unknown>, key: string, issues: ValidationIssue[], path = "$"): number | undefined => {
-  if (value[key] === undefined) return undefined;
-  return requireInteger(value, key, issues, path);
-};
-
 export const checkEnum = <T extends string>(value: unknown, allowed: readonly T[], path: string, issues: ValidationIssue[]): value is T => {
   if (typeof value === "string" && allowed.includes(value as T)) return true;
   issues.push({ path, message: `expected one of: ${allowed.join(", ")}` });
@@ -89,18 +59,9 @@ export const checkSafeToken = (value: unknown, path: string, issues: ValidationI
   return false;
 };
 
-export const checkUnknownReason = (value: unknown, path: string, issues: ValidationIssue[]): value is SafeUnknownReason => {
-  const allowed: readonly SafeUnknownReason[] = ["not_retained", "not_observable", "redacted", "provider_opaque", "expired", "not_available", "invalid", "diagnostics_disabled", "permission_denied", "unknown"];
-  return checkEnum(value, allowed, path, issues);
-};
-
 export const finishValidation = <T>(value: T, issues: ValidationIssue[]): ValidationResult<T> => (issues.length === 0 ? { ok: true, value } : { ok: false, issues });
 
 export const parseOrThrow = <T>(result: ValidationResult<T>, message = "Diagnostic contract validation failed"): T => {
   if (result.ok) return result.value;
   throw new DiagnosticContractError(message, result.issues);
-};
-
-export const assertNever = (value: never): never => {
-  throw new DiagnosticContractError(`Unexpected diagnostic contract value: ${String(value)}`);
 };

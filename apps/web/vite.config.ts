@@ -6,13 +6,12 @@ import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
 import tailwindcss from "@tailwindcss/vite";
 import viteReact from "@vitejs/plugin-react";
-import { defineConfig, type ProxyOptions } from "vite";
+import { defineConfig } from "vite";
 import { execSync } from "child_process";
 import { fileURLToPath } from "node:url";
 import pkg from "./package.json";
 import sdkReactPkg from "../../sdks/typescript/react/package.json";
 import { accountBoundaryVitePlugin } from "./scripts/account-boundary-vite";
-import { isLoopbackHostname, resolveEpisodeDiagnosticsConfig } from "./src/lib/episode-diagnostics-config";
 
 const commitHash = resolveCommitHash(process.env.CHALK_COMMIT_SHA?.trim() || process.env.GITHUB_SHA?.trim());
 const buildTime = new Date().toISOString();
@@ -20,40 +19,6 @@ const configuredWebPort = process.env.CHALK_DEV_WEB_PORT?.trim();
 const localWebPort = configuredWebPort ? Number(configuredWebPort) : 3070;
 const localWebOrigin = `http://127.0.0.1:${localWebPort}`;
 const localAPIOrigin = process.env.CHALK_DEV_API_ORIGIN?.trim() || "http://127.0.0.1:8080";
-const diagnosticsMode = process.env.CHALK_EPISODE_DIAGNOSTICS?.trim();
-const diagnosticsEnvironment = process.env.CHALK_ENVIRONMENT?.trim() || (diagnosticsMode === "localhost" ? "localhost" : undefined);
-const diagnosticsConfig = resolveEpisodeDiagnosticsConfig(diagnosticsMode, diagnosticsEnvironment, process.env.CHALK_EPISODE_DIAGNOSTICS_GATEWAY, process.env.CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN);
-
-const buildEpisodeDiagnosticsProxy = (environment: NodeJS.ProcessEnv): ProxyOptions | undefined => {
-  const mode = environment.CHALK_EPISODE_DIAGNOSTICS?.trim();
-  const runtimeEnvironment = environment.CHALK_ENVIRONMENT?.trim() || (mode === "localhost" ? "localhost" : undefined);
-  const resolved = resolveEpisodeDiagnosticsConfig(mode, runtimeEnvironment, environment.CHALK_EPISODE_DIAGNOSTICS_GATEWAY, environment.CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN);
-  if (resolved.mode !== "localhost") return undefined;
-
-  const operatorToken = environment.CHALK_EPISODE_DIAGNOSTICS_OPERATOR_TOKEN?.trim();
-  if (!operatorToken) {
-    throw new Error("CHALK_EPISODE_DIAGNOSTICS_OPERATOR_TOKEN is required for the localhost Episode Diagnostics proxy");
-  }
-
-  const target = new URL(environment.CHALK_API_URL?.trim() || "http://127.0.0.1:8080");
-  if ((target.protocol !== "http:" && target.protocol !== "https:") || !isLoopbackHostname(target.hostname)) {
-    throw new Error("The localhost Episode Diagnostics proxy requires a loopback CHALK_API_URL");
-  }
-
-  return {
-    target: target.origin,
-    changeOrigin: true,
-    configure(proxy) {
-      proxy.on("proxyReq", (proxyRequest) => {
-        proxyRequest.setHeader("authorization", `Bearer ${operatorToken}`);
-        proxyRequest.setHeader("origin", localWebOrigin);
-      });
-    },
-  };
-};
-
-const diagnosticsProxy = buildEpisodeDiagnosticsProxy(process.env);
-
 function resolveCommitHash(configuredHash: string | undefined): string {
   const candidate = configuredHash || execSync("git rev-parse HEAD").toString().trim();
   if (!/^[0-9a-f]{40}$/.test(candidate)) {
@@ -69,8 +34,6 @@ const config = defineConfig({
     __APP_VERSION__: JSON.stringify((pkg as any).version || "0.0.0"),
     __WEB_APP_VERSION__: JSON.stringify((pkg as any).version || "0.0.0"),
     __SDK_REACT_VERSION__: JSON.stringify((sdkReactPkg as any).version || "0.0.0"),
-    __EPISODE_DIAGNOSTICS_ROUTE_ENABLED__: JSON.stringify(diagnosticsConfig.enabled),
-    __EPISODE_DIAGNOSTICS_MODE__: JSON.stringify(diagnosticsConfig.mode),
   },
   server: {
     host: "127.0.0.1",
@@ -85,7 +48,6 @@ const config = defineConfig({
           });
         },
       },
-      ...(diagnosticsProxy ? { "/_internal/episode-diagnostics": diagnosticsProxy } : {}),
     },
   },
   resolve: {

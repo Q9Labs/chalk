@@ -1,6 +1,6 @@
 {
   "name": "@q9labsai/diagnostics-contracts",
-  "version": "0.1.1",
+  "version": "1.0.0",
   "description": "Versioned, redaction-safe contracts for Chalk episode diagnostics.",
   "license": "MIT",
   "repository": {
@@ -10,14 +10,12 @@
   },
   "files": [
     "dist",
-    "agent-brief.v1.schema.json",
     "diagnostic-event.v1.schema.json",
     "episode-diagnostic-actions.v1.json",
     "safe-id-classes.v1.json",
     "safe-id-classes.v1.schema.json",
     "fixtures/action-failure.v1.json",
     "fixtures/action-success.v1.json",
-    "fixtures/agent-brief-parity.v1.json",
     "fixtures/redaction-corpus.v1.json",
     "fixtures/semantic-events.v1.json",
     "fixtures/verification-ledger.v1.json"

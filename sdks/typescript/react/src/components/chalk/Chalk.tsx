@@ -59,10 +59,8 @@ export type ChalkProps = SpaceIntegration &
     readonly spaceName?: string;
     readonly inviteLink?: string;
     readonly spaceDescription?: string;
-    readonly diagnosticReference?: string;
     readonly layout?: SpaceLayout;
     readonly onLayoutChange?: (layout: SpaceLayout) => void;
-    readonly onOpenDiagnostics?: () => void;
   };
 
 export function Chalk(props: ChalkProps): React.JSX.Element {
@@ -314,11 +312,10 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
         props.onLayoutChange?.(nextLayout);
       }}
       features={{ ...props.features, sounds: props.features?.sounds !== false && settings.experience.sounds }}
-      onOpenDiagnostics={props.onOpenDiagnostics}
       whiteboard={whiteboard}
       onToggleWhiteboard={canDrawWhiteboard && setWhiteboardPresentation ? () => void runCommand(() => setWhiteboardPresentation(!whiteboardState.engine.presenting)) : undefined}
       infoDialog={
-        props.features?.info !== false && (props.inviteLink || props.diagnosticReference || props.spaceDescription)
+        props.features?.info !== false && (props.inviteLink || props.spaceDescription)
           ? {
               isOpen: infoOpen,
               onOpenChange: setInfoOpen,
@@ -326,8 +323,6 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
               spaceDescription: props.spaceDescription,
               inviteLink: props.inviteLink,
               onCopyLink: props.inviteLink ? () => void navigator.clipboard?.writeText(props.inviteLink!) : undefined,
-              diagnosticReference: props.diagnosticReference,
-              onCopyDiagnosticReference: (reference) => void navigator.clipboard?.writeText(reference),
             }
           : undefined
       }

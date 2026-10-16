@@ -1,10 +1,6 @@
-import type { CheckpointClass, DiagnosticEventSource, DiagnosticEventState, Environment, SafeUnknownReason } from "./types.js";
-
-export const ENVIRONMENTS = ["localhost", "development", "staging", "production"] as const satisfies readonly Environment[];
+import type { DiagnosticEventSource, DiagnosticEventState } from "./types.js";
 export const EVENT_SOURCES = ["ui", "sdk", "api", "sync", "rtc", "provider", "worker"] as const satisfies readonly DiagnosticEventSource[];
 export const EVENT_STATES = ["started", "observed", "succeeded", "failed", "cancelled", "timed_out", "not_observable", "late_observed"] as const satisfies readonly DiagnosticEventState[];
-export const CHECKPOINT_CLASSES = ["required", "conditional", "best_effort"] as const satisfies readonly CheckpointClass[];
-export const UNKNOWN_REASONS = ["not_retained", "not_observable", "redacted", "provider_opaque", "expired", "not_available", "invalid", "diagnostics_disabled", "permission_denied", "unknown"] as const satisfies readonly SafeUnknownReason[];
 
 export const EVENT_PHASES = [
   "intent",
@@ -124,8 +120,6 @@ export const MAX_PHASE_LENGTH = 48;
 export const MAX_ATTRIBUTE_COUNT = 32;
 export const MAX_ATTRIBUTE_KEY_LENGTH = 64;
 export const MAX_ATTRIBUTE_STRING_LENGTH = 256;
-export const MAX_SAFE_IDENTIFIER_LENGTH = 160;
-export const MAX_PAGE_SIZE = 1_000;
 
 export const SAFE_ID_CLASSES = {
   "chalk.request": { storage: "raw", copyable: true, maxLength: 128, alphabet: "token" },
@@ -145,17 +139,6 @@ export const SAFE_ID_CLASSES = {
   event: { storage: "raw", copyable: true, maxLength: 128, alphabet: "token" },
 } as const;
 
-export type SafeIdClass = keyof typeof SAFE_ID_CLASSES | (string & {});
-export type KnownSafeIdClass = keyof typeof SAFE_ID_CLASSES;
-
-export const isEnvironment = (value: unknown): value is Environment => (ENVIRONMENTS as readonly string[]).includes(value as string);
-export const isEventSource = (value: unknown): value is DiagnosticEventSource => (EVENT_SOURCES as readonly string[]).includes(value as string);
-export const isEventState = (value: unknown): value is DiagnosticEventState => (EVENT_STATES as readonly string[]).includes(value as string);
-export const isCheckpointClass = (value: unknown): value is CheckpointClass => (CHECKPOINT_CLASSES as readonly string[]).includes(value as string);
-export const isUnknownReason = (value: unknown): value is SafeUnknownReason => (UNKNOWN_REASONS as readonly string[]).includes(value as string);
-
 export const isAllowedAttributeKey = (key: string): boolean => (ATTRIBUTE_KEYS as readonly string[]).includes(key) && key.length <= MAX_ATTRIBUTE_KEY_LENGTH;
 
 export const isAllowedPhase = (phase: string): boolean => (EVENT_PHASES as readonly string[]).includes(phase) && phase.length <= MAX_PHASE_LENGTH;
-
-export const isSafeIdClass = (idClass: string): idClass is SafeIdClass => /^[a-z][a-z0-9]*(?:\.[a-z0-9_-]+)*$/.test(idClass);

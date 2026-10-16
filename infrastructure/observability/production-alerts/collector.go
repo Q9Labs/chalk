@@ -72,7 +72,7 @@ func run() error {
 	}
 	for i := range snapshots {
 		formatMessage(&snapshots[i])
-		snapshots[i].Engineers = "For engineers: " + snapshots[i].Rule + "; `pnpm diag trace <32-hex-trace-id>` from the affected journey."
+		snapshots[i].Engineers = "For engineers: " + snapshots[i].Rule + "; query structured logs by W3C trace ID from the affected journey."
 		snapshots[i].Time = time.Now().UTC().Format(time.RFC3339Nano)
 		snapshots[i].Stream = "production-state-v2"
 	}

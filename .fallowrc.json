@@ -52,7 +52,8 @@
     "scripts/performance/space-experience/cli.mjs",
     "scripts/performance/space-experience/compare.mjs",
     "scripts/transcription-dispatcher/emit-manifest.mjs",
-    "scripts/transcription-dispatcher/source-state.mjs"
+    "scripts/transcription-dispatcher/source-state.mjs",
+    "scripts/deploy/verify-web-deploy.mjs"
   ],
   "publicPackages": ["@q9labsai/chalk-assets", "@q9labsai/chalk-client", "@q9labsai/chalk-react", "@q9labsai/chalk-react-native", "@q9labsai/chalk-ui", "@q9labsai/chalk-whiteboard", "@q9labsai/facehash"],
   "ignorePatterns": ["scripts/gates/fixtures/package-boundaries/**"],
@@ -95,7 +96,12 @@
     "@tanstack/devtools-vite",
     "typescript-7"
   ],
-  "ignoreExports": [{ "file": "sdks/typescript/client/src/server/types.ts", "exports": ["Recording"] }],
+  "ignoreExports": [
+    {
+      "file": "sdks/typescript/client/src/server/types.ts",
+      "exports": ["Recording"]
+    }
+  ],
   "duplicates": {
     "ignore": [
       "scripts/gates/**",

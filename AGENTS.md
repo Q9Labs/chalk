@@ -9,7 +9,7 @@ The commit hook runs the fast gate lanes. The Gate workflow runs the full root, 
 - Keep product language role-neutral unless an integration needs specific terms.
 - After you change a contract, route, migration, or other generator input, run `pnpm run regen`. `pnpm run check:generated` names every stale output in seconds.
 - For observability or service monitoring changes, read `docs/observability.md`. It also lists where each service's failure evidence is retained.
-- Use `pnpm diag trace <32-hex-trace-id>` for a bounded cross-tool trace brief ([command adapter recipe](https://github.com/Q9Labs/q9stack/blob/main/recipes/diagnostics-command.md)); use `pnpm trace:inspect <chalkdiag:v1:...>` for full Episode evidence and the seven-day retained debugger views.
+- Diagnose affected journeys using structured logs and their W3C trace IDs. Episode Debugger and its CLI are not available.
 
 ## Where things live
 

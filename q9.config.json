@@ -1,6 +1,0 @@
-{
-  "diag": {
-    "adapter": "command",
-    "command": ["node", "tools/episode-diagnostics/src/trace-brief.mjs"]
-  }
-}

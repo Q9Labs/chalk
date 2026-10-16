@@ -3,10 +3,8 @@ package episodediagnostics
 import (
 	"errors"
 	"fmt"
-	"regexp"
-	"time"
 
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"time"
 )
 
 var (
@@ -15,8 +13,6 @@ var (
 	ErrDiagnosticExpired             = errors.New("diagnostic has expired")
 	ErrDiagnosticLifecycleInvalid    = errors.New("diagnostic lifecycle is invalid")
 )
-
-var operatorSubjectHashPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // Short aliases keep the errors usable by adapters without coupling callers
 // to the internal naming used by Service.
@@ -44,56 +40,10 @@ func ValidateProducerEnvironment(principal ProducerPrincipal, diagnostic Episode
 	return validateEnvironment(principal.Environment, diagnostic.Environment)
 }
 
-func ValidateOperatorEnvironment(principal OperatorPrincipal, diagnostic EpisodeDiagnostic) error {
-	return validateEnvironment(principal.Environment, diagnostic.Environment)
-}
-
-func ValidateOperatorPrincipal(principal OperatorPrincipal) error {
-	if principal.SubjectHash == "" {
-		return ErrUnauthenticated
-	}
-	if !operatorSubjectHashPattern.MatchString(principal.SubjectHash) {
-		return ErrForbidden
-	}
-	if principal.Environment == "" {
-		return ErrForbidden
-	}
-	if len(principal.AuthorizedTenantIDs) > MaxOperatorTenantIDs || principal.TenantScopeRequired && len(principal.AuthorizedTenantIDs) == 0 {
-		return ErrForbidden
-	}
-	seenTenantIDs := make(map[string]struct{}, len(principal.AuthorizedTenantIDs))
-	for _, tenantID := range principal.AuthorizedTenantIDs {
-		parsed, err := utilities.ParseID(tenantID)
-		if err != nil || parsed.String() != tenantID {
-			return ErrForbidden
-		}
-		if _, exists := seenTenantIDs[tenantID]; exists {
-			return ErrForbidden
-		}
-		seenTenantIDs[tenantID] = struct{}{}
-	}
-	return nil
-}
-
 // ValidateOperatorTenantScope is deliberately called only after the opaque
 // diagnostic reference has resolved to an authoritative row. A denied tenant
 // always returns ErrForbidden so callers cannot distinguish an unauthorized
 // tenant from any other authorization failure by probing references.
-func ValidateOperatorTenantScope(principal OperatorPrincipal, diagnostic EpisodeDiagnostic) error {
-	if !principal.TenantScopeRequired && len(principal.AuthorizedTenantIDs) == 0 {
-		return nil
-	}
-	tenantID, err := utilities.ParseID(diagnostic.TenantID)
-	if err != nil || tenantID.String() != diagnostic.TenantID {
-		return ErrForbidden
-	}
-	for _, authorizedTenantID := range principal.AuthorizedTenantIDs {
-		if authorizedTenantID == diagnostic.TenantID {
-			return nil
-		}
-	}
-	return ErrForbidden
-}
 
 // DiagnosticIntakeDeadline returns the authoritative hard cutoff. The
 // diagnostic's own expiry, when present, can only shorten the window.
@@ -106,13 +56,6 @@ func DiagnosticIntakeDeadline(diagnostic EpisodeDiagnostic) (time.Time, bool) {
 		deadline = diagnostic.ExpiresAt.UTC()
 	}
 	return deadline, true
-}
-
-func DiagnosticAbsoluteDeadline(diagnostic EpisodeDiagnostic) (time.Time, bool) {
-	if diagnostic.EpisodeEndedAt == nil || diagnostic.EpisodeEndedAt.IsZero() {
-		return time.Time{}, false
-	}
-	return diagnostic.EpisodeEndedAt.UTC().Add(DiagnosticAbsoluteExpiry), true
 }
 
 // ValidateDiagnosticIntake enforces lifecycle admission against authoritative
@@ -159,14 +102,6 @@ func ValidateDiagnosticIntake(diagnostic EpisodeDiagnostic, events []DiagnosticE
 	return nil
 }
 
-func ValidateDiagnosticAppend(diagnostic EpisodeDiagnostic, events []DiagnosticEventDraft, now time.Time) error {
-	return ValidateDiagnosticIntake(diagnostic, events, now)
-}
-
-func (diagnostic EpisodeDiagnostic) IntakeAllowedAt(now time.Time) bool {
-	return ValidateDiagnosticIntake(diagnostic, nil, now) == nil
-}
-
 func terminalBranchState(state BranchState) bool {
 	switch state {
 	case BranchSucceeded, BranchFailed, BranchCancelled, BranchTimedOut:
@@ -189,16 +124,13 @@ func maxTime(current time.Time, candidate *time.Time) time.Time {
 // ReconcileDiagnosticLifecycle performs the normal bounded ended -> complete
 // transition. It never reopens a terminal diagnostic and times out pending
 // branches at the authoritative Episode-end + 24h ceiling.
-func ReconcileDiagnosticLifecycle(diagnostic EpisodeDiagnostic, branches []DiagnosticBranchDetail, now time.Time) (EpisodeDiagnostic, []DiagnosticBranchDetail, error) {
-	return reconcileDiagnosticLifecycle(diagnostic, branches, now, true)
-}
 
-// ReconcileDiagnosticLifecycleObserver advances an authoritative end and
+// ReconcileDiagnosticLifecycle advances an authoritative end and
 // completes only when every branch is already terminal. Deadline workers own
 // timeout transitions through ledger events; reconciliation must not mutate a
 // pending branch behind the projector's back.
-func ReconcileDiagnosticLifecycleObserver(diagnostic EpisodeDiagnostic, branches []DiagnosticBranchDetail, now time.Time) (EpisodeDiagnostic, []DiagnosticBranchDetail, error) {
-	return reconcileDiagnosticLifecycle(diagnostic, branches, now, false)
+func ReconcileDiagnosticLifecycle(diagnostic EpisodeDiagnostic, branches []DiagnosticBranchDetail, now time.Time) (EpisodeDiagnostic, []DiagnosticBranchDetail, error) {
+	return reconcileDiagnosticLifecycle(diagnostic, branches, now, true)
 }
 
 func reconcileDiagnosticLifecycle(diagnostic EpisodeDiagnostic, branches []DiagnosticBranchDetail, now time.Time, timeoutPending bool) (EpisodeDiagnostic, []DiagnosticBranchDetail, error) {
@@ -271,15 +203,5 @@ func reconcileDiagnosticLifecycle(diagnostic EpisodeDiagnostic, branches []Diagn
 // AdvanceDiagnosticLifecycle mutates a caller-owned diagnostic and branch
 // slice, making it convenient for deadline workers while retaining the pure
 // ReconcileDiagnosticLifecycle function for replay/tests.
-func AdvanceDiagnosticLifecycle(diagnostic *EpisodeDiagnostic, branches []DiagnosticBranchDetail, now time.Time) error {
-	if diagnostic == nil {
-		return ErrDiagnosticLifecycleInvalid
-	}
-	next, updated, err := ReconcileDiagnosticLifecycle(*diagnostic, branches, now)
-	if err != nil {
-		return err
-	}
-	*diagnostic = next
-	copy(branches, updated)
-	return nil
-}
+
+func timePtr(value time.Time) *time.Time { value = value.UTC(); return &value }

@@ -63,32 +63,6 @@ export type VerificationLedger = Readonly<{
   entries: readonly VerificationLedgerEntry[];
 }>;
 
-// The action catalog is the only semantic authority. This list is only a
-// coverage sentinel for predicates that must never regress to intent/terminal.
-export const HIGH_RISK_OPERATIONS = [
-  "chat.send",
-  "chat.retry",
-  "chat.page",
-  "chat.read",
-  "chat.attachment.prepare",
-  "chat.attachment.commit",
-  "chat.attachment.fail",
-  "reaction.send",
-  "reaction.dedupe",
-  "reaction.expire",
-  "screen.start",
-  "screen.stop",
-  "screen.unexpected_end",
-  "screen.recover",
-  "moderation.role.change",
-  "moderation.capability.check",
-  "moderation.microphone.disable",
-  "moderation.camera.disable",
-  "moderation.screen.disable",
-  "moderation.remove",
-  "moderation.ban",
-] as const;
-
 const REQUIRED_DEADLINE_MS = 2_000;
 const CONDITIONAL_DEADLINE_MS = 5_000;
 const BEST_EFFORT_DEADLINE_MS = 10_000;
@@ -343,5 +317,3 @@ export const buildVerificationLedger = (actions: readonly ActionContractV1[] = A
     },
   })),
 });
-
-export const isRuntimeProofComplete = (entry: Pick<VerificationLedgerEntry, "runtimeStatus" | "proofCommand" | "proofArtifact">): boolean => entry.runtimeStatus === "pass" && entry.proofCommand.length > 0 && entry.proofArtifact.length > 0;

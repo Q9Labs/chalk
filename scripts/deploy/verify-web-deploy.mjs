@@ -3,8 +3,6 @@ import { pathToFileURL } from "node:url";
 const DEFAULT_DEADLINE_MS = 90_000;
 const DEFAULT_RETRY_DELAY_MS = 5_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
-const DIAGNOSTICS_PROBE_PATH = "/_internal/episode-diagnostics/chalkdiag%3Av1%3Aproduction%3Adiag01";
-const DIAGNOSTICS_DOCUMENT_PROBE_PATH = "/developer/episode-diagnostics/chalk.episode%3A00000000-0000-4000-8000-000000000001";
 
 export async function verifyWebDeploy({ baseURL, expectedSHA, deadlineMs = DEFAULT_DEADLINE_MS, retryDelayMs = DEFAULT_RETRY_DELAY_MS, requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS }) {
   const origin = normalizeBaseURL(baseURL);
@@ -43,8 +41,6 @@ export function parseArguments(arguments_) {
 async function verifyOnce(baseURL, expectedSHA, requestTimeoutMs) {
   await verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs);
   await verifyBoundaryHealth(baseURL, requestTimeoutMs);
-  await verifyDiagnosticsGateway(baseURL, requestTimeoutMs);
-  await verifyDiagnosticsDocument(baseURL, requestTimeoutMs);
 }
 
 async function verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs) {
@@ -66,19 +62,6 @@ async function verifyBoundaryHealth(baseURL, requestTimeoutMs) {
   const { status, dependencies = {} } = health ?? {};
   if (status !== "ok" || dependencies.account_api !== "ok") {
     throw new Error("account boundary health did not report healthy dependencies");
-  }
-}
-
-async function verifyDiagnosticsGateway(baseURL, requestTimeoutMs) {
-  const diagnosticsGateway = await request(endpointURL(baseURL, DIAGNOSTICS_PROBE_PATH), requestTimeoutMs);
-  requireStatus(diagnosticsGateway, 401, "Episode Diagnostics gateway unauthenticated probe");
-}
-
-async function verifyDiagnosticsDocument(baseURL, requestTimeoutMs) {
-  const diagnosticsDocument = await request(endpointURL(baseURL, DIAGNOSTICS_DOCUMENT_PROBE_PATH), requestTimeoutMs, "text/html");
-  requireStatus(diagnosticsDocument, 200, "Episode Diagnostics document deep link");
-  if (!diagnosticsDocument.headers.get("content-type")?.startsWith("text/html")) {
-    throw new Error("Episode Diagnostics document deep link did not return HTML");
   }
 }
 

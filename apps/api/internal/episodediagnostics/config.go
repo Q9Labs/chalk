@@ -33,7 +33,6 @@ type EpisodeConfigSummaryV1 struct {
 }
 
 // EpisodeConfigSummary is kept as a short alias for package consumers.
-type EpisodeConfigSummary = EpisodeConfigSummaryV1
 
 // SummarizeEpisodeConfig parses only the allowlisted Episode policy fields.
 // Unknown fields are deliberately ignored; callers never receive the input
@@ -144,16 +143,6 @@ func SummarizeEpisodeConfigMap(raw map[string]any) (EpisodeConfigSummaryV1, erro
 
 // SafeConfigSummary returns a copy of the bounded summary and is intentionally
 // the only accessor offered to API-facing code.
-func (d EpisodeDiagnostic) SafeConfigSummary() EpisodeConfigSummaryV1 {
-	if d.ConfigSummary != nil {
-		return *d.ConfigSummary
-	}
-	summary, err := SummarizeEpisodeConfigMap(d.ConfigSnapshot)
-	if err != nil {
-		return EpisodeConfigSummaryV1{SchemaVersion: "EpisodeConfigSummary/v1"}
-	}
-	return summary
-}
 
 func sanitizeDiagnosticConfig(diagnostic EpisodeDiagnostic) EpisodeDiagnostic {
 	summary, err := SummarizeEpisodeConfigMap(diagnostic.ConfigSnapshot)

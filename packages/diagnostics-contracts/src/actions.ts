@@ -154,16 +154,11 @@ const makeAction = (group: ActionGroupDefinition, action: string): ActionContrac
 };
 
 export const ACTION_SET_V1: readonly ActionContractV1[] = GROUPS.flatMap((group) => group.actions.map((action) => makeAction(group, action)));
-export const ACTIONS_V1 = ACTION_SET_V1;
-export const ACTION_SET = ACTION_SET_V1;
-export const EPISODE_DIAGNOSTIC_ACTIONS_V1 = ACTION_SET_V1;
 export const ACTION_OPERATION_KEYS: readonly string[] = ACTION_SET_V1.map((action) => action.operation);
-export const ALLOWED_EVENT_ACTION_ROOTS: readonly string[] = [...ACTION_OPERATION_KEYS];
 
 const ACTION_BY_OPERATION = new Map(ACTION_SET_V1.map((action) => [action.operation, action]));
 
 export const getActionContract = (operation: string): ActionContractV1 | undefined => ACTION_BY_OPERATION.get(operation);
-export const isSupportedAction = (operation: string): boolean => ACTION_BY_OPERATION.has(operation);
 
 export const actionStatus = (operation: string): DiagnosticActionStatus => {
   const contract = getActionContract(operation);

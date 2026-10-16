@@ -7,17 +7,15 @@ import type { Copy01IconHandle } from "../../utils/animated-icons";
 import { Copy01Icon } from "../../utils/icons";
 import type { SpaceInfoDialogProps } from "./SpaceInfoDialog";
 
-type CopyTarget = "invite" | "diagnostic" | null;
+type CopyTarget = "invite" | null;
 
-type SpaceInfoContentProps = Pick<SpaceInfoDialogProps, "spaceDescription" | "spaceId" | "inviteLink" | "onCopyLink" | "diagnosticReference" | "onCopyDiagnosticReference" | "stats" | "duration">;
+type SpaceInfoContentProps = Pick<SpaceInfoDialogProps, "spaceDescription" | "spaceId" | "inviteLink" | "onCopyLink" | "stats" | "duration">;
 
 const LABEL_CLASS = "text-[13px] leading-5 text-[var(--chalk-app-text-muted)]";
 const VALUE_CLASS = "min-w-0 text-sm leading-5 text-[var(--chalk-app-text)]";
 const FIELD_CLASS = "flex h-9 min-w-0 flex-1 items-center rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-input)] px-3 font-mono text-[12.5px] text-[var(--chalk-app-text)]";
 const ACCENT_BUTTON_CLASS =
   "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[8px] border border-transparent bg-[var(--chalk-app-control-active)] px-3.5 text-sm font-semibold text-[var(--chalk-app-control-active-text)] transition-colors hover:border-[var(--chalk-app-control-active-line)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]";
-const GHOST_BUTTON_CLASS =
-  "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[7px] px-2.5 text-[13px] font-semibold text-[var(--chalk-app-text-muted)] transition-colors hover:bg-[var(--chalk-app-control-hover)] hover:text-[var(--chalk-app-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]";
 
 function formatDuration(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
@@ -50,11 +48,10 @@ function Row({ label, align = "start", children }: RowProps): React.JSX.Element 
  * Facts about the current Space as one flat label/value list: the invite link first (the one
  * action), then the live state, then the support reference. No nested panels or section copy.
  */
-export function SpaceInfoContent({ spaceDescription, spaceId, inviteLink, onCopyLink, diagnosticReference, onCopyDiagnosticReference, stats, duration }: SpaceInfoContentProps): React.JSX.Element {
+export function SpaceInfoContent({ spaceDescription, spaceId, inviteLink, onCopyLink, stats, duration }: SpaceInfoContentProps): React.JSX.Element {
   const [copied, setCopied] = useState<CopyTarget>(null);
   const confirmationTimer = useRef<number | null>(null);
   const inviteCopyRef = useRef<Copy01IconHandle>(null);
-  const diagnosticCopyRef = useRef<Copy01IconHandle>(null);
 
   useEffect(
     () => () => {
@@ -131,30 +128,6 @@ export function SpaceInfoContent({ spaceDescription, spaceId, inviteLink, onCopy
         ) : null}
 
         <Row label="Security">Media is encrypted in transit</Row>
-
-        {diagnosticReference ? (
-          <Row label="Diagnostic ref" align="center">
-            <div className="flex items-center gap-1.5">
-              <code className="truncate font-mono text-[13px]" title={diagnosticReference}>
-                {diagnosticReference}
-              </code>
-              <button
-                type="button"
-                onClick={() => confirmCopy("diagnostic", () => (onCopyDiagnosticReference ? onCopyDiagnosticReference(diagnosticReference) : void navigator.clipboard?.writeText(diagnosticReference)), diagnosticCopyRef)}
-                onMouseEnter={() => diagnosticCopyRef.current?.startAnimation()}
-                onFocus={() => diagnosticCopyRef.current?.startAnimation()}
-                className={cn(GHOST_BUTTON_CLASS, "h-7 px-2")}
-                aria-label={copied === "diagnostic" ? "Diagnostic reference copied" : "Copy diagnostic reference"}
-              >
-                <Copy01Icon ref={diagnosticCopyRef} size={14} aria-hidden="true" onMouseEnter={() => diagnosticCopyRef.current?.startAnimation()} />
-                {copied === "diagnostic" ? "Copied" : "Copy"}
-              </button>
-            </div>
-            <span className="sr-only" aria-live="polite">
-              {copied === "diagnostic" ? "Diagnostic reference copied to clipboard" : ""}
-            </span>
-          </Row>
-        ) : null}
       </dl>
     </div>
   );
