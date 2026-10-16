@@ -138,7 +138,7 @@ func mapListAccountTenant(row sqlc.ListAccountTenantsRow) tenants.AccountTenant 
 		Tenant: mapTenant(tenantRecord{
 			ID: row.ID, Name: row.Name, DefaultMediaPlane: row.DefaultMediaPlane,
 			MediaPlaneProviderConfig: row.MediaPlaneProviderConfig,
-			StorageProviderConfig: row.StorageProviderConfig, CorsAllowedOrigins: row.CorsAllowedOrigins, LogoKey: row.LogoKey, Website: row.Website,
+			StorageProviderConfig:    row.StorageProviderConfig, CorsAllowedOrigins: row.CorsAllowedOrigins, LogoKey: row.LogoKey, Website: row.Website,
 			TranscriptionCeiling: row.TranscriptionCeiling, TranscriptionDefaultMode: row.TranscriptionDefaultMode,
 			ProviderPolicyVersion: row.ProviderPolicyVersion, RecordingRetentionSeconds: row.RecordingRetentionSeconds,
 			TranscriptRetentionSeconds: row.TranscriptRetentionSeconds, SourceWindowSeconds: row.SourceWindowSeconds,
@@ -157,7 +157,7 @@ func mapOnboardedAccountTenant(row sqlc.GetAccountTenantByOnboardingRow) tenants
 		Tenant: mapTenant(tenantRecord{
 			ID: row.ID, Name: row.Name, DefaultMediaPlane: row.DefaultMediaPlane,
 			MediaPlaneProviderConfig: row.MediaPlaneProviderConfig,
-			StorageProviderConfig: row.StorageProviderConfig, CorsAllowedOrigins: row.CorsAllowedOrigins, LogoKey: row.LogoKey, Website: row.Website,
+			StorageProviderConfig:    row.StorageProviderConfig, CorsAllowedOrigins: row.CorsAllowedOrigins, LogoKey: row.LogoKey, Website: row.Website,
 			TranscriptionCeiling: row.TranscriptionCeiling, TranscriptionDefaultMode: row.TranscriptionDefaultMode,
 			ProviderPolicyVersion: row.ProviderPolicyVersion, RecordingRetentionSeconds: row.RecordingRetentionSeconds,
 			TranscriptRetentionSeconds: row.TranscriptRetentionSeconds, SourceWindowSeconds: row.SourceWindowSeconds,
