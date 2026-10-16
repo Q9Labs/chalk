@@ -18,7 +18,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	logglobal "go.opentelemetry.io/otel/log/global"
 	lognoop "go.opentelemetry.io/otel/log/noop"
-	otelmetric "go.opentelemetry.io/otel/metric"
+
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
@@ -35,13 +35,6 @@ var runtimeMetricsOnce sync.Once
 
 type Runtime struct {
 	shutdown func(context.Context) error
-}
-
-type JourneyMetrics struct {
-	accepted      otelmetric.Int64Counter
-	duplicates    otelmetric.Int64Counter
-	rejected      otelmetric.Int64Counter
-	ledgerFailure otelmetric.Int64Counter
 }
 
 func Start(ctx context.Context, config Config) (Runtime, error) {
@@ -124,32 +117,6 @@ func (r Runtime) Shutdown(ctx context.Context) error {
 		return nil
 	}
 	return r.shutdown(ctx)
-}
-
-func NewJourneyMetrics() JourneyMetrics {
-	meter := otel.Meter("github.com/q9labs/chalk/apps/api/internal/observability")
-	accepted, _ := meter.Int64Counter("chalk.api.journey_events.accepted", otelmetric.WithDescription("Journey events durably accepted by the API ledger"))
-	duplicates, _ := meter.Int64Counter("chalk.api.journey_events.duplicates", otelmetric.WithDescription("Duplicate journey events acknowledged by the API ledger"))
-	rejected, _ := meter.Int64Counter("chalk.api.journey_events.rejected", otelmetric.WithDescription("Journey event intake batches rejected before durable acceptance"))
-	ledgerFailure, _ := meter.Int64Counter("chalk.api.journey_events.ledger_failures", otelmetric.WithDescription("Journey ledger storage failures"))
-	return JourneyMetrics{accepted: accepted, duplicates: duplicates, rejected: rejected, ledgerFailure: ledgerFailure}
-}
-
-func (m JourneyMetrics) RecordJourneyIntake(ctx context.Context, accepted int, duplicates int) {
-	if accepted > 0 {
-		m.accepted.Add(ctx, int64(accepted))
-	}
-	if duplicates > 0 {
-		m.duplicates.Add(ctx, int64(duplicates))
-	}
-}
-
-func (m JourneyMetrics) RecordJourneyRejected(ctx context.Context) {
-	m.rejected.Add(ctx, 1)
-}
-
-func (m JourneyMetrics) RecordJourneyLedgerFailure(ctx context.Context) {
-	m.ledgerFailure.Add(ctx, 1)
 }
 
 func OTelHTTPMiddleware() func(http.Handler) http.Handler {

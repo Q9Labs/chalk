@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 import { PHASES, UNSUPPORTED_ASSERTIONS, createFailureRecorder, failureFrom, readReadyRuntimeManifest, redactProof, runPhase, unsupported } from "./media-smoke-core.mjs";
-import { createParticipantContext, joinParticipant, launchBrowser, leaveParticipant, proveStatsWindow, readTrackerJourneyIDs, stopParticipantCamera, waitForRemoteTracks } from "./media-smoke-browser.mjs";
+import { createParticipantContext, joinParticipant, launchBrowser, leaveParticipant, proveStatsWindow, stopParticipantCamera, waitForRemoteTracks } from "./media-smoke-browser.mjs";
 
 async function writeProof(report, runtime, options) {
   const target = options.proofPath ?? runtime?.proofPath;
@@ -79,7 +79,6 @@ export async function runMediaProof(input, options = {}) {
     await runPhase(report, PHASES.media, () => waitForRemoteTracks([primary, guest], runtime));
     report.stats = await runPhase(report, PHASES.stats, () => proveStatsWindow([primary, guest], runtime));
     report.stopCamera = await runPhase(report, PHASES.stopCamera, () => stopParticipantCamera(primary, guest, runtime));
-    report.journeyIDs = await readTrackerJourneyIDs(participants);
     report.result = "passed";
   } catch (error) {
     const phase = error?.phase ?? report.phases.findLast((candidate) => candidate.status === "failed")?.phase ?? report.phases.findLast((candidate) => candidate.status === "pending")?.phase ?? PHASES.manifest;

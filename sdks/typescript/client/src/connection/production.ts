@@ -4,7 +4,6 @@ import { createV1SyncClient } from "../sync";
 import { createChalkWhiteboardV1Client, createChalkWhiteboardV1FileHttpTransport } from "../whiteboard";
 import { makeConnectionPlatformLayer, type ConnectionChatFileFactoryInput, type ConnectionDependencies, type ConnectionMediaFactoryInput, type ConnectionMediaClient, type ConnectionSyncFactoryInput, type ConnectionWhiteboardFactoryInput } from "./dependencies";
 import { createBrowserMediaDevices } from "./media-devices";
-
 export function createDefaultConnectionDependencies(options: { readonly apiBaseURL: string; readonly syncURL: string; readonly whiteboardURL?: string | null }): ConnectionDependencies {
   return {
     clock: {
@@ -21,16 +20,13 @@ export function createDefaultConnectionDependencies(options: { readonly apiBaseU
     createId: createBrowserId,
   };
 }
-
 /** Production foreign-adapter Layer. Tests replace it with makeFakeConnectionPlatformLayer. */
 export const makeProductionConnectionPlatformLayer = (options: { readonly apiBaseURL: string; readonly syncURL: string; readonly whiteboardURL?: string | null }) => makeConnectionPlatformLayer(createDefaultConnectionDependencies(options));
-
 function createBrowserId(): string {
   const random = globalThis.crypto;
   if (!random?.randomUUID) throw new TypeError("A secure browser identifier source is required");
   return random.randomUUID();
 }
-
 function subscribeBrowserForeground(listener: () => void): () => void {
   const documentTarget = globalThis.document;
   const windowTarget = globalThis.window;
@@ -45,14 +41,12 @@ function subscribeBrowserForeground(listener: () => void): () => void {
     windowTarget.removeEventListener("pageshow", listener);
   };
 }
-
 function createChatFileTransport(apiBaseURL: string, input: ConnectionChatFileFactoryInput) {
   return createChalkChatFileHttpTransport({
     baseUrl: apiBaseURL,
     token: input.token,
   });
 }
-
 function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInput): ConnectionMediaClient {
   if (input.access.media.provider === "cloudflare_rtk") {
     return createRTKConnectionMediaClient(
@@ -78,28 +72,23 @@ function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInpu
       : undefined,
     transport: createCloudflareSFUHTTPTransport({
       apiBaseURL,
-      telemetry: input.telemetry,
       credential: input.credential,
       tenantId: subject.tenantId,
       spaceId: subject.spaceId,
       episodeId: subject.episodeId,
       participantId: subject.participantId,
     }),
-    recordReconnect: input.recordReconnect,
     onError: input.onFailure,
-    ...(input.recordRtcSummary ? { onRtcSummary: input.recordRtcSummary } : {}),
     onScreenEnded: input.onScreenEnded,
   });
   return createSFUConnectionMediaClient(client);
 }
-
 function createRTKConnectionMediaClient(client: CloudflareRTKClient): ConnectionMediaClient {
   return bindConnectionMediaClient(client, (input) => {
     if (!("provider" in input) || input.provider !== "cloudflare_rtk") throw new TypeError("The RealtimeKit adapter requires a Cloudflare RealtimeKit access grant");
     return client.restart(input);
   });
 }
-
 function createSFUConnectionMediaClient(client: CloudflareSFUClient): ConnectionMediaClient {
   return bindConnectionMediaClient(client, (input) => {
     if ("provider" in input) {
@@ -109,7 +98,6 @@ function createSFUConnectionMediaClient(client: CloudflareSFUClient): Connection
     return client.restart(input);
   });
 }
-
 type BoundMediaClient = Pick<
   ConnectionMediaClient,
   | "setLocalPublicationTarget"
@@ -126,7 +114,6 @@ type BoundMediaClient = Pick<
   | "getSnapshot"
   | "subscribe"
 >;
-
 export function bindConnectionMediaClient(client: BoundMediaClient, restart: ConnectionMediaClient["restart"]): ConnectionMediaClient {
   return {
     setLocalPublicationTarget: client.setLocalPublicationTarget.bind(client),
@@ -145,18 +132,14 @@ export function bindConnectionMediaClient(client: BoundMediaClient, restart: Con
     subscribe: client.subscribe.bind(client),
   };
 }
-
 function createSyncClient(syncURL: string, input: ConnectionSyncFactoryInput) {
   return createV1SyncClient({
     url: syncURL,
     token: input.token,
     mediaPlane: input.media,
-    telemetry: input.telemetry,
-    recordReconnect: input.recordReconnect,
     persistenceScope: `${input.access.subject.tenantId}:${input.access.subject.episodeId}:${input.access.subject.participantId}`,
   });
 }
-
 function createWhiteboardClient(apiBaseURL: string, url: string, input: ConnectionWhiteboardFactoryInput) {
   let sceneId: string | null = null;
   const files = createChalkWhiteboardV1FileHttpTransport({
@@ -178,7 +161,6 @@ function createWhiteboardClient(apiBaseURL: string, url: string, input: Connecti
     },
   });
 }
-
 function whiteboardURL(syncURL: string): string {
   const url = new URL(syncURL);
   url.pathname = "/v1/whiteboard";

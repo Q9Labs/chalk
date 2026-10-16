@@ -10,7 +10,6 @@ export type {
   ChalkServerClient,
   ChalkServerClientOptions,
   ChalkServerHeaders,
-  ChalkServerTelemetry,
   CreateAPIKeyInput,
   CreateEpisodeInput,
   CreateRecordingDownloadURLInput,

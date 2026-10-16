@@ -1,4 +1,3 @@
-import type { TelemetryClientOptions } from "../telemetry/client";
 import type { MediaSource } from "../media/plane";
 import type { ChalkChatAttachment, ChalkChatMessage, ChalkChatReadReceipt, ChalkIncomingMediaRequest, ChalkParticipantMediaState, ChalkReaction, ChalkReactionEvent } from "../collaboration/types";
 import type { ChalkWhiteboardV1Failure } from "../whiteboard/types";
@@ -12,9 +11,7 @@ import type { ReactionsControllerEffects } from "./reactions-controller";
 import type { RecordingControllerEffects } from "./recording-controller";
 import type { WhiteboardControllerEffects } from "./whiteboard-controller";
 import type { PromiseController } from "./promise-facade";
-
 export type AccessReason = "join" | "refresh" | "retry";
-
 export type AccessContext = {
   readonly space: string;
   readonly reason: AccessReason;
@@ -22,43 +19,34 @@ export type AccessContext = {
   readonly replaceMediaConnection: boolean;
   readonly signal?: AbortSignal;
 };
-
 /**
  * What `getAccess` resolves with: the server-minted grant returned unchanged, either as the
  * `Response` that carries it or as its decoded JSON. Chalk validates it before use; the
  * application never constructs or inspects a grant.
  */
 export type AccessGrantSource = AccessGrant | Response | object;
-
 export type GetAccess = (context: AccessContext) => Promise<AccessGrantSource>;
-
 export type Logger = {
   readonly debug?: (message: string, attributes?: Readonly<Record<string, unknown>>) => void;
   readonly info?: (message: string, attributes?: Readonly<Record<string, unknown>>) => void;
   readonly warn?: (message: string, attributes?: Readonly<Record<string, unknown>>) => void;
   readonly error?: (message: string, attributes?: Readonly<Record<string, unknown>>) => void;
 };
-
 export type SpaceClientOptions = {
   readonly space: string;
   readonly getAccess: GetAccess;
   readonly baseUrl?: string;
   readonly logger?: Logger;
-  readonly telemetry?: TelemetryClientOptions;
   /** Defaults to browser localStorage. Native consumers can supply a synchronous storage adapter. */
   readonly offlineActionsStorage?: import("./offline-actions-storage").OfflineActionsStorage;
 };
-
 export type JoinOptions = {
   readonly displayName?: string;
   readonly microphone?: boolean;
   readonly camera?: boolean;
 };
-
 export type ConnectionStatus = "idle" | "joining" | "live" | "reconnecting" | "leaving" | "left" | "failed";
-
 export type Capability = V1Capability;
-
 export type ErrorCode =
   | "access.invalid"
   | "access.unavailable"
@@ -88,25 +76,21 @@ export type ErrorCode =
   | "participant.invalid"
   | "reaction.invalid"
   | "whiteboard.unavailable";
-
 export type ClientFailure = {
   readonly code: ErrorCode;
   readonly recoverable: boolean;
   readonly message: string;
 };
-
 export type EpisodeSummary = {
   readonly id: string;
   readonly startedAt: string | null;
   readonly deadline: string | null;
 };
-
 export type ConnectionSlice = {
   readonly status: ConnectionStatus;
   readonly episode: EpisodeSummary | null;
   readonly lastError: ClientFailure | null;
 };
-
 export type SelfSlice = {
   readonly participantId: string | null;
   readonly displayName: string | null;
@@ -115,13 +99,11 @@ export type SelfSlice = {
   readonly handRaised: boolean;
   readonly can: (capability: Capability) => boolean;
 };
-
 export type ParticipantPresence = {
   readonly state: "connected" | "disconnected" | "unknown";
   readonly speaking: boolean;
   readonly activeSpeaker: boolean;
 };
-
 export type Participant = {
   readonly participantId: string;
   readonly displayName: string;
@@ -132,7 +114,6 @@ export type Participant = {
   readonly media: ChalkParticipantMediaState;
   readonly presence: ParticipantPresence;
 };
-
 export type AdmissionRequest = {
   readonly requestId: string;
   readonly participantId: string;
@@ -141,17 +122,26 @@ export type AdmissionRequest = {
   readonly eligibleRoles: readonly string[];
   readonly expiresAt: string;
 };
-
 export type ParticipantsSlice = {
   readonly roster: readonly Participant[];
   readonly admissionQueue: readonly AdmissionRequest[];
 };
-
-export type MediaDevice = { readonly deviceId: string; readonly label: string };
-export type LocalMedia = { readonly source: MediaSource; readonly state: "unavailable" | "requesting" | "enabled" | "disabled" | "failed"; readonly track: MediaStreamTrack | null };
-export type RemoteMedia = { readonly participantId: string; readonly source: MediaSource; readonly publicationId: string; readonly track: MediaStreamTrack };
+export type MediaDevice = {
+  readonly deviceId: string;
+  readonly label: string;
+};
+export type LocalMedia = {
+  readonly source: MediaSource;
+  readonly state: "unavailable" | "requesting" | "enabled" | "disabled" | "failed";
+  readonly track: MediaStreamTrack | null;
+};
+export type RemoteMedia = {
+  readonly participantId: string;
+  readonly source: MediaSource;
+  readonly publicationId: string;
+  readonly track: MediaStreamTrack;
+};
 export type IncomingMediaRequest = ChalkIncomingMediaRequest;
-
 export type MediaSlice = {
   readonly devices: {
     readonly microphones: readonly MediaDevice[];
@@ -168,16 +158,24 @@ export type MediaSlice = {
   readonly screenShare: LocalMedia;
   readonly incomingRequests: readonly IncomingMediaRequest[];
 };
-
 export type ChatAttachment = ChalkChatAttachment;
 export type ChatMessage = ChalkChatMessage;
 export type ChatReadReceipt = ChalkChatReadReceipt;
 export type OfflineActionKind = "chat_message" | "hand_raise" | "hand_lower";
 export type OfflineActionsPolicy = "ask" | "send" | "discard";
-export type OfflineAction = { readonly id: string; readonly kind: OfflineActionKind; readonly text: string | null; readonly queuedAt: number };
+export type OfflineAction = {
+  readonly id: string;
+  readonly kind: OfflineActionKind;
+  readonly text: string | null;
+  readonly queuedAt: number;
+};
 /** Actions taken while reconnecting. `decisionNeeded` is true once the connection is live and the policy is `ask`. */
-export type OfflineSlice = { readonly pending: readonly OfflineAction[]; readonly decisionNeeded: boolean; readonly policy: OfflineActionsPolicy; readonly notice?: string };
-
+export type OfflineSlice = {
+  readonly pending: readonly OfflineAction[];
+  readonly decisionNeeded: boolean;
+  readonly policy: OfflineActionsPolicy;
+  readonly notice?: string;
+};
 export type PendingChatSend = {
   readonly clientMessageId: string;
   readonly text: string;
@@ -185,7 +183,6 @@ export type PendingChatSend = {
   readonly status: "queued" | "sending" | "failed";
   readonly error: ClientFailure | null;
 };
-
 export type ChatSlice = {
   readonly status: "idle" | "loading" | "ready" | "failed";
   readonly messages: readonly ChatMessage[];
@@ -199,19 +196,19 @@ export type ChatSlice = {
   };
   readonly lastError: ClientFailure | null;
 };
-
 export type Reaction = ChalkReaction;
 export type ActiveReaction = ChalkReactionEvent;
-export type ReactionsSlice = { readonly active: readonly ActiveReaction[] };
-
+export type ReactionsSlice = {
+  readonly active: readonly ActiveReaction[];
+};
 export type Recording = {
   readonly recordingId: string;
   readonly status: "starting" | "recording" | "stopping" | "stopped" | "failed";
   readonly failureCode: string | null;
 };
-
-export type RecordingSlice = { readonly current: Recording | null };
-
+export type RecordingSlice = {
+  readonly current: Recording | null;
+};
 export type WhiteboardSlice = {
   readonly open: boolean;
   readonly engine: {
@@ -222,7 +219,6 @@ export type WhiteboardSlice = {
     readonly error: ChalkWhiteboardV1Failure | null;
   };
 };
-
 export type SpaceSnapshot = {
   readonly connection: ConnectionSlice;
   readonly self: SelfSlice;
@@ -234,32 +230,55 @@ export type SpaceSnapshot = {
   readonly whiteboard: WhiteboardSlice;
   readonly offline: OfflineSlice;
 };
-
-export type ChatSendInput = { readonly text: string; readonly attachments?: readonly ChatAttachment[] };
+export type ChatSendInput = {
+  readonly text: string;
+  readonly attachments?: readonly ChatAttachment[];
+};
 export type MediaRequestKind = "microphone" | "camera";
-export type ChatUploadFile = { readonly name: string; readonly type: string; readonly size: number; readonly arrayBuffer: () => Promise<ArrayBuffer> } | { readonly fileName: string; readonly mimeType: string; readonly bytes: ArrayBuffer };
-
+export type ChatUploadFile =
+  | {
+      readonly name: string;
+      readonly type: string;
+      readonly size: number;
+      readonly arrayBuffer: () => Promise<ArrayBuffer>;
+    }
+  | {
+      readonly fileName: string;
+      readonly mimeType: string;
+      readonly bytes: ArrayBuffer;
+    };
 export type MediaController = PromiseController<Omit<MediaControllerEffects, "configure" | "dispose">>;
 export type ChatFilesController = PromiseController<Pick<ChatControllerEffects, "upload" | "url" | "resolveUrl">>;
-export type ChatController = PromiseController<Omit<ChatControllerEffects, "upload" | "url" | "resolveUrl" | "dispose">> & { readonly files: ChatFilesController };
+export type ChatController = PromiseController<Omit<ChatControllerEffects, "upload" | "url" | "resolveUrl" | "dispose">> & {
+  readonly files: ChatFilesController;
+};
 export type OfflineController = PromiseController<Omit<OfflineActionsControllerEffects, "dispose">>;
 export type ParticipantsController = PromiseController<Omit<ParticipantsControllerEffects, "dispose">>;
 export type ReactionsController = PromiseController<Omit<ReactionsControllerEffects, "dispose">>;
 export type RecordingController = PromiseController<Omit<RecordingControllerEffects, "dispose">>;
 export type WhiteboardController = PromiseController<Omit<WhiteboardControllerEffects, "dispose">>;
-
 export type ClientEventMap = {
-  readonly participantJoined: { readonly participant: Participant };
-  readonly participantLeft: { readonly participant: Participant };
-  readonly episodeEnded: { readonly episode: EpisodeSummary | null };
-  readonly screenShareStarted: { readonly participantId: string };
-  readonly screenShareStopped: { readonly participantId: string };
-  readonly error: { readonly error: import("./errors").SpaceClientError };
+  readonly participantJoined: {
+    readonly participant: Participant;
+  };
+  readonly participantLeft: {
+    readonly participant: Participant;
+  };
+  readonly episodeEnded: {
+    readonly episode: EpisodeSummary | null;
+  };
+  readonly screenShareStarted: {
+    readonly participantId: string;
+  };
+  readonly screenShareStopped: {
+    readonly participantId: string;
+  };
+  readonly error: {
+    readonly error: import("./errors").SpaceClientError;
+  };
 };
-
 export type ClientEventName = keyof ClientEventMap;
 export type ClientEventHandler<TEvent extends ClientEventName> = (event: ClientEventMap[TEvent]) => void;
-
 export type SpaceClient = {
   readonly media: MediaController;
   readonly chat: ChatController;

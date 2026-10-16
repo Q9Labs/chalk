@@ -1,18 +1,19 @@
 import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
 import { Chalk, Entrance, type EntranceSettings } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-
 import { createPreparedPublicSpace, createPublicInviteClient, prepareDashboardEntrance, joinDashboardSpace, resumePublicSpace, type AccountSpaceCredential, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
 import { listAllAccountTenants, listSpaces } from "../../lib/account-api";
 import { canonicalSpaceInviteLink, clearDashboardSpaceEntry, dashboardSpaceEntryUsesDevicesOff, hasDashboardSpaceEntry, spaceInviteToken, verifiedSpaceInviteLink } from "../../lib/named-space-route";
 import { createLocalSpaceClient, createLocalSpaceRelease } from "../../lib/local-space-client";
-import { useWebTelemetry } from "../../lib/web-telemetry-context";
-
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
-
-export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistory }: { readonly slug?: string; readonly navigatePublicSpace?: (canonicalSlug: string, inviteLink: string) => Promise<void> } = {}) {
-  const { journey, telemetry } = useWebTelemetry();
-  const client = useMemo(() => createPublicInviteClient(journey), [journey]);
+export function SpacePage({
+  slug,
+  navigatePublicSpace = replacePublicSpaceHistory,
+}: {
+  readonly slug?: string;
+  readonly navigatePublicSpace?: (canonicalSlug: string, inviteLink: string) => Promise<void>;
+} = {}) {
+  const client = useMemo(() => createPublicInviteClient(), []);
   const [reloadMarker] = useState(() => {
     if (!slug) return null;
     try {
@@ -35,7 +36,6 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
   const pendingRef = useRef<PendingArrival | null>(null);
   const cleanupPromise = useRef<Promise<void> | undefined>(undefined);
   const defaultEntranceSettings = useMemo<EntranceSettings>(() => ({ displayName, ...entranceDeviceDefaults }), [displayName, entranceDeviceDefaults]);
-
   useEffect(() => {
     active.current = true;
     return () => {
@@ -44,7 +44,6 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
       if (arrival?.arrival.arrival_handle) void client.leaveSpacePublicInviteArrival(arrival.arrival.arrival_handle).catch(() => undefined);
     };
   }, [client]);
-
   const prepareEntrance = useCallback(async () => {
     const token = spaceInviteToken();
     if (token) {
@@ -59,32 +58,26 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
       const page = await listSpaces({ tenantID, cursor, pageSize: 100 });
       const space = page.spaces.find((candidate) => candidate.slug === slug);
       if (space) {
-        await prepareDashboardEntrance(tenantID, space.id, journey);
+        await prepareDashboardEntrance(tenantID, space.id);
         return;
       }
       cursor = page.pagination.has_more ? (page.pagination.next_cursor ?? undefined) : undefined;
     } while (cursor);
-  }, [client, dashboardEntry, journey, slug]);
-
-  const complete = useCallback(
-    (prepared: SpaceEntryAccess, inviteLink: string | undefined, spaceName: string) => {
-      if (!active.current) {
-        void prepared.finish().catch(() => undefined);
-        return;
-      }
-      try {
-        telemetry.configureApiBaseURL(prepared.credential.apiBaseURL);
-      } catch (cause) {
-        void prepared.finish().catch(() => undefined);
-        throw cause;
-      }
-      pendingRef.current = null;
-      setPending(null);
-      setSpaceAccess({ prepared, inviteLink, spaceName });
-    },
-    [telemetry],
-  );
-
+  }, [client, dashboardEntry, slug]);
+  const complete = useCallback((prepared: SpaceEntryAccess, inviteLink: string | undefined, spaceName: string) => {
+    if (!active.current) {
+      void prepared.finish().catch(() => undefined);
+      return;
+    }
+    try {
+    } catch (cause) {
+      void prepared.finish().catch(() => undefined);
+      throw cause;
+    }
+    pendingRef.current = null;
+    setPending(null);
+    setSpaceAccess({ prepared, inviteLink, spaceName });
+  }, []);
   useEffect(() => {
     if (reloadAttempted.current || !slug || !reloadMarker) return;
     reloadAttempted.current = true;
@@ -92,7 +85,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
     setDisplayName(marker.displayName);
     setEntranceSettings({ displayName: marker.displayName, microphone: marker.microphone, camera: marker.camera });
     setPreparing(true);
-    const recovery = marker.arrivalHandle ? resumePublicSpace(client, marker).then((prepared) => ({ prepared, spaceName: slug })) : prepareDashboardSpace(slug, marker.displayName, journey, marker).then((result) => ({ prepared: result.access, spaceName: result.spaceName }));
+    const recovery = marker.arrivalHandle ? resumePublicSpace(client, marker).then((prepared) => ({ prepared, spaceName: slug })) : prepareDashboardSpace(slug, marker.displayName, marker).then((result) => ({ prepared: result.access, spaceName: result.spaceName }));
     void recovery
       .then((result) => complete(result.prepared, undefined, result.spaceName))
       .catch(() => {
@@ -101,8 +94,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
       .finally(() => {
         if (active.current) setPreparing(false);
       });
-  }, [client, complete, journey, reloadMarker, slug]);
-
+  }, [client, complete, reloadMarker, slug]);
   const start = useCallback(
     (settings: EntranceSettings = defaultEntranceSettings) => {
       const normalizedDisplayName = settings.displayName.trim();
@@ -117,7 +109,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
       }
       setError(null);
       setPreparing(true);
-      const preparation = accountEntry ? prepareDashboardSpace(slug!, normalizedDisplayName, journey) : arrive(client, normalizedDisplayName, slug, inviteToken);
+      const preparation = accountEntry ? prepareDashboardSpace(slug!, normalizedDisplayName) : arrive(client, normalizedDisplayName, slug, inviteToken);
       void preparation
         .then(async (result) => {
           if (result.kind === "dashboard") {
@@ -154,7 +146,6 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
     },
     [client, complete, dashboardEntry, defaultEntranceSettings, navigatePublicSpace, pending, preparing, slug, spaceAccess],
   );
-
   useEffect(() => {
     pendingRef.current = pending;
     if (!pending?.arrival.arrival_handle) return;
@@ -190,7 +181,6 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
       if (timer !== undefined) globalThis.clearTimeout(timer);
     };
   }, [client, complete, displayName, pending]);
-
   const cancel = useCallback(async () => {
     const arrivalHandle = pending?.arrival.arrival_handle;
     if (!arrivalHandle || preparing) return;
@@ -205,7 +195,6 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
       if (active.current) setPreparing(false);
     }
   }, [client, pending, preparing]);
-
   const finish = useCallback(
     (options: SpaceAccessCleanupOptions = {}) => {
       if (cleanupPromise.current) return cleanupPromise.current;
@@ -225,7 +214,6 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
     },
     [spaceAccess],
   );
-
   if (spaceAccess) {
     const settings = entranceSettings ?? defaultEntranceSettings;
     return (
@@ -238,14 +226,12 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
         getAccess={spaceAccess.prepared.getAccess}
         connectionAccess={spaceAccess.prepared.connectionAccess}
         inviteLink={spaceAccess.inviteLink}
-        journey={journey}
         onFinish={finish}
         spaceName={spaceAccess.spaceName}
         spaceDescription={spaceAccess.prepared.spaceDescription}
       />
     );
   }
-
   if (reloadMarker && preparing)
     return (
       <main className="flex h-dvh items-center justify-center" role="status">
@@ -270,26 +256,22 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
     </main>
   );
 }
-
 type JoinedSpaceAccess = {
   readonly prepared: SpaceEntryAccess;
   readonly inviteLink?: string;
   readonly spaceName: string;
 };
-
 type SpaceEntryAccess = Pick<PreparedPublicSpace, "credential" | "getAccess"> & {
   readonly reloadMarker: () => Pick<ReloadRejoinMarker, "episodeId" | "participantId" | "participantGeneration" | "mediaProof" | "arrivalHandle" | "tenantId">;
   readonly connectionAccess?: PreparedPublicSpace["connectionAccess"];
   readonly spaceDescription?: string;
   readonly finish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
 };
-
 type PendingArrival = {
   readonly arrival: Awaited<ReturnType<PublicInviteClient["getSpacePublicInviteArrival"]>>;
   readonly inviteLink: string;
   readonly spaceName: string;
 };
-
 type PublicPreparation = {
   readonly kind: "public";
   readonly arrival: PendingArrival["arrival"];
@@ -298,8 +280,12 @@ type PublicPreparation = {
   readonly spaceName: string;
   readonly prepared?: SpaceEntryAccess;
 };
-type DashboardPreparation = { readonly kind: "dashboard"; readonly access: SpaceEntryAccess; readonly inviteLink?: string; readonly spaceName: string };
-
+type DashboardPreparation = {
+  readonly kind: "dashboard";
+  readonly access: SpaceEntryAccess;
+  readonly inviteLink?: string;
+  readonly spaceName: string;
+};
 async function arrive(client: PublicInviteClient, displayName: string, slug: string | undefined, inviteToken: string | undefined): Promise<PublicPreparation> {
   if (inviteToken) {
     const arrival = await client.arriveBySpacePublicInvite(inviteToken, displayName);
@@ -308,13 +294,11 @@ async function arrive(client: PublicInviteClient, displayName: string, slug: str
     const inviteLink = canonicalSpaceInviteLink(verifiedSlug, inviteToken);
     return { kind: "public", arrival, canonicalSlug: verifiedSlug, inviteLink, spaceName: arrival.space?.name ?? verifiedSlug };
   }
-
   const created = await client.createPublicSpace(displayName);
   const prepared = createPreparedPublicSpace(client, created.arrival);
   const inviteLink = verifiedSpaceInviteLink(created.space.slug, created.invite_link);
   return { kind: "public", arrival: created.arrival, canonicalSlug: created.space.slug, inviteLink, spaceName: created.space.name, prepared };
 }
-
 async function releasePublicPreparation(client: PublicInviteClient, preparation: PublicPreparation): Promise<void> {
   if (preparation.prepared) {
     await preparation.prepared.finish();
@@ -323,19 +307,16 @@ async function releasePublicPreparation(client: PublicInviteClient, preparation:
   const arrivalHandle = preparation.arrival.arrival_handle;
   if (arrivalHandle) await client.leaveSpacePublicInviteArrival(arrivalHandle);
 }
-
 async function replacePublicSpaceHistory(_canonicalSlug: string, inviteLink: string): Promise<void> {
   globalThis.history?.replaceState(globalThis.history.state, "", inviteLink);
 }
-
-async function prepareDashboardSpace(slug: string, displayName: string, journey: ReturnType<typeof useWebTelemetry>["journey"], reload?: ReloadRejoinMarker): Promise<DashboardPreparation> {
+async function prepareDashboardSpace(slug: string, displayName: string, reload?: ReloadRejoinMarker): Promise<DashboardPreparation> {
   const tenantID = reload?.tenantId ?? (await resolveTenantID());
   if (!tenantID) throw new Error(neutralSpaceError);
-  const [access, spaceDescription] = await Promise.all([reload ? joinDashboardSpace(tenantID, slug, displayName, journey, reload) : joinDashboardSpace(tenantID, slug, displayName, journey), findSpaceDescription(tenantID, slug).catch(() => undefined)]);
+  const [access, spaceDescription] = await Promise.all([reload ? joinDashboardSpace(tenantID, slug, displayName, reload) : joinDashboardSpace(tenantID, slug, displayName), findSpaceDescription(tenantID, slug).catch(() => undefined)]);
   clearDashboardSpaceEntry();
   return { kind: "dashboard", access: { credential: access.credential, getAccess: access.getAccess, reloadMarker: access.reloadMarker, spaceDescription, finish: access.leave }, inviteLink: access.inviteLink, spaceName: slug };
 }
-
 async function findSpaceDescription(tenantID: string, slug: string): Promise<string | undefined> {
   let cursor: string | undefined;
   do {
@@ -346,14 +327,12 @@ async function findSpaceDescription(tenantID: string, slug: string): Promise<str
   } while (cursor);
   return undefined;
 }
-
 function descriptionFromMetadata(metadata: unknown): string | undefined {
   if (typeof metadata !== "object" || metadata === null) return undefined;
   const value = Reflect.get(metadata, "description");
   if (typeof value !== "string") return undefined;
   return value.trim() || undefined;
 }
-
 async function resolveTenantID(): Promise<string> {
   let hint: string | undefined;
   try {
@@ -372,19 +351,16 @@ async function resolveTenantID(): Promise<string> {
   }
   return tenantID;
 }
-
 function retryDelay(retryAfter: number | undefined): number {
-  if (typeof retryAfter !== "number" || !Number.isFinite(retryAfter) || retryAfter < 0) return 1_000;
-  return Math.min(Math.max(retryAfter * 1_000, 250), 30_000);
+  if (typeof retryAfter !== "number" || !Number.isFinite(retryAfter) || retryAfter < 0) return 1000;
+  return Math.min(Math.max(retryAfter * 1000, 250), 30000);
 }
-
 async function resumePendingArrival(client: PublicInviteClient, pending: PendingArrival, displayName: string): Promise<Awaited<ReturnType<PublicInviteClient["arriveBySpacePublicInvite"]>>> {
   const inviteToken = spaceInviteToken();
   const arrivalHandle = pending.arrival.arrival_handle;
   if (!inviteToken || !arrivalHandle) throw new Error(neutralSpaceError);
   return client.arriveBySpacePublicInvite(inviteToken, displayName.trim(), { arrivalHandle });
 }
-
 function neutralMessage(cause: unknown): string {
   if (cause && typeof cause === "object" && "status" in cause) {
     if (cause.status === 404 || cause.status === 410) return neutralSpaceError;
@@ -395,7 +371,6 @@ function neutralMessage(cause: unknown): string {
   }
   return "Chalk could not connect. Check your connection and try entering again.";
 }
-
 function LocalSpace({
   reloadMarker,
   credential,
@@ -405,7 +380,6 @@ function LocalSpace({
   getAccess,
   connectionAccess,
   inviteLink,
-  journey,
   onFinish,
   spaceName,
   spaceDescription,
@@ -413,21 +387,23 @@ function LocalSpace({
   readonly reloadMarker: SpaceEntryAccess["reloadMarker"];
   readonly credential: PublicSpaceCredential | AccountSpaceCredential;
   readonly displayName: string;
-  readonly defaults: { readonly microphone: boolean; readonly camera: boolean };
+  readonly defaults: {
+    readonly microphone: boolean;
+    readonly camera: boolean;
+  };
   readonly deviceSelection?: Pick<EntranceSettings, "audioInputDeviceId" | "videoInputDeviceId" | "audioOutputDeviceId">;
   readonly getAccess: PreparedPublicSpace["getAccess"];
   readonly connectionAccess?: PreparedPublicSpace["connectionAccess"];
   readonly inviteLink?: string;
-  readonly journey: ReturnType<typeof useWebTelemetry>["journey"];
   readonly onFinish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
   readonly spaceName: string;
   readonly spaceDescription?: string;
 }) {
   const client = useMemo(() => {
-    const nextClient = createLocalSpaceClient({ credential, getAccess, connectionAccess, journey });
-    selectEntranceDevices(nextClient, deviceSelection, journey);
+    const nextClient = createLocalSpaceClient({ credential, getAccess, connectionAccess });
+    selectEntranceDevices(nextClient, deviceSelection);
     return nextClient;
-  }, [connectionAccess, credential, deviceSelection, getAccess, journey]);
+  }, [connectionAccess, credential, deviceSelection, getAccess]);
   const release = useMemo(() => createLocalSpaceRelease(client, () => onFinish()), [client, onFinish]);
   const connection = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection;
   const pendingRelease = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(undefined);
@@ -441,11 +417,9 @@ function LocalSpace({
     }
     void release().catch(() => undefined);
   }, [release]);
-
   useEffect(() => {
     if (connection.status === "failed") releaseFromLifecycle();
   }, [connection.status, releaseFromLifecycle]);
-
   useEffect(() => {
     if (pendingRelease.current !== undefined) {
       globalThis.clearTimeout(pendingRelease.current);
@@ -458,7 +432,6 @@ function LocalSpace({
       }, 0);
     };
   }, [release]);
-
   useEffect(() => {
     const releaseOnPageHide = (event: PageTransitionEvent) => {
       if (event.persisted || intentionallyLeft.current) return;
@@ -480,15 +453,13 @@ function LocalSpace({
     globalThis.addEventListener("pagehide", releaseOnPageHide);
     return () => globalThis.removeEventListener("pagehide", releaseOnPageHide);
   }, [client, credential.space, displayName, onFinish, reloadMarker]);
-
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
       <Chalk client={client} entrance={false} displayName={displayName} defaults={defaults} logoUrl="/brand/chalk/chalk-logo.svg" spaceName={spaceName} spaceDescription={spaceDescription} inviteLink={inviteLink} onEpisodeEnded={releaseFromLifecycle} onLeft={releaseFromLifecycle} />
     </main>
   );
 }
-
-function selectEntranceDevices(client: ReturnType<typeof createLocalSpaceClient>, selection: Pick<EntranceSettings, "audioInputDeviceId" | "videoInputDeviceId" | "audioOutputDeviceId"> | undefined, journey: ReturnType<typeof useWebTelemetry>["journey"]): void {
+function selectEntranceDevices(client: ReturnType<typeof createLocalSpaceClient>, selection: Pick<EntranceSettings, "audioInputDeviceId" | "videoInputDeviceId" | "audioOutputDeviceId"> | undefined): void {
   const audioInputDeviceId = selection?.audioInputDeviceId;
   const videoInputDeviceId = selection?.videoInputDeviceId;
   const audioOutputDeviceId = selection?.audioOutputDeviceId;
@@ -496,14 +467,18 @@ function selectEntranceDevices(client: ReturnType<typeof createLocalSpaceClient>
     audioInputDeviceId ? { kind: "microphone", select: () => client.media.selectMicrophone(audioInputDeviceId) } : undefined,
     videoInputDeviceId ? { kind: "camera", select: () => client.media.selectCamera(videoInputDeviceId) } : undefined,
     audioOutputDeviceId ? { kind: "speaker", select: () => client.media.selectSpeaker(audioOutputDeviceId) } : undefined,
-  ].filter((item): item is { readonly kind: "microphone" | "camera" | "speaker"; readonly select: () => Promise<void> } => item !== undefined);
+  ].filter(
+    (
+      item,
+    ): item is {
+      readonly kind: "microphone" | "camera" | "speaker";
+      readonly select: () => Promise<void>;
+    } => item !== undefined,
+  );
   for (const item of requested) {
-    void item.select().catch(() => {
-      journey.recordDiagnostic({ category: "device", code: "space.entrance_device_selection_failed", phase: "media", state: "failed", attributes: { device_kind: item.kind } });
-    });
+    void item.select().catch(() => {});
   }
 }
-
 function SpaceArrival({
   displayName,
   error,

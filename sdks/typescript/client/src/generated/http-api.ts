@@ -473,22 +473,6 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
-    HttpApiEndpoint.post("intakeJourneyEvents", "/v1/telemetry/journey-events", {
-      payload: S.IntakeJourneyEventsRequestBodySchema,
-      success: S.IntakeJourneyEventsResponseSchema.pipe(HttpApiSchema.status(202)),
-      error: [
-        S.JourneyInvalidEventErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.JourneyLedgerUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
     HttpApiEndpoint.post("issueAccessGrant", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/participants/:participant_id/access-grant", {
       params: S.IssueAccessGrantPathParamsSchema,
       payload: S.IssueAccessGrantRequestBodySchema,

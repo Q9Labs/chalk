@@ -96,7 +96,7 @@ describe("public Space entry", () => {
     try {
       render(<SpacePage slug="design-lab" />);
       await act(async () => enterName("Ada"));
-      expect(mocks.joinDashboardSpace).toHaveBeenCalledWith("tenant-1", "design-lab", "Ada", mocks.journey);
+      expect(mocks.joinDashboardSpace).toHaveBeenCalledWith("tenant-1", "design-lab", "Ada");
       expect(storage.setItem).toHaveBeenCalledWith("chalk.tenant-hint", "tenant-1");
     } finally {
       vi.unstubAllGlobals();

@@ -4,7 +4,6 @@ import { Alert, Linking, Platform } from "react-native";
 import { mediaDevices } from "@cloudflare/react-native-webrtc";
 import { useSpaceClient } from "../../context/space-client-context";
 import { useChat as useSpaceChat, useMedia as useSpaceMedia, useParticipants as useSpaceParticipants, useReactions as useSpaceReactions, useSelf, useWhiteboard, useRecording, useConnection } from "../../hooks/space-hooks";
-import { getNativeJourneyContext } from "../../telemetry";
 import type { NativeChatMessage, NativeParticipant, NativeReaction } from "../../ui/native-types";
 import { isIosSimulator } from "../../utils/ios-simulator";
 import type { SpaceViewProps } from "../SpaceView";
@@ -29,7 +28,6 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
   const whiteboardSlice = useWhiteboard();
   const recording = useRecording().current;
   const connection = useConnection();
-  const journeyContext = getNativeJourneyContext(client);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
   const [chatDraft, setChatDraft] = useState("");
@@ -205,7 +203,6 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
     onLeave,
     onEndEpisode,
     run,
-    journeyContext,
   });
   const derived = useSpaceViewDerived({ participants, localParticipant, screenShare, isWhiteboardOpen: spacePanels.whiteboard.isOpen });
   useEffect(() => {

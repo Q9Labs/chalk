@@ -632,35 +632,6 @@ export const IssuedTenantInvitationSchema = Schema.Struct({
 });
 export type IssuedTenantInvitation = typeof IssuedTenantInvitationSchema.Type;
 
-export const JourneyEventBatchSchema = Schema.Struct({
-  events: Schema.Array(
-    Schema.Struct({
-      attributes: Schema.optional(Schema.Record(Schema.String, Schema.Union([Schema.String.check(Schema.isMaxLength(1024)), Schema.Number, Schema.Boolean]))),
-      event_id: UUIDSchema,
-      first_observed_layer: Schema.String.check(Schema.isMinLength(1)),
-      journey_id: UUIDSchema,
-      name: Schema.String.check(Schema.isMinLength(1)),
-      occurred_at: DateTimeStringSchema,
-      origin_kind: Schema.String.check(Schema.isMinLength(1)),
-      parent_event_id: Schema.optional(Schema.NullOr(UUIDSchema)),
-      phase: Schema.String.check(Schema.isMinLength(1)),
-      sequence: Schema.Number,
-      span_id: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(16), Schema.isPattern(new RegExp("^(?=.*[1-9a-fA-F])[0-9a-fA-F]{16}$"))))),
-      state: Schema.String.check(Schema.isMinLength(1)),
-      trace_id: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(32), Schema.isMaxLength(32), Schema.isPattern(new RegExp("^(?=.*[1-9a-fA-F])[0-9a-fA-F]{32}$"))))),
-      upstream_visibility: Schema.String.check(Schema.isMinLength(1)),
-    }),
-  ).check(Schema.isMaxLength(100)),
-});
-export type JourneyEventBatch = typeof JourneyEventBatchSchema.Type;
-
-export const JourneyEventIntakeSchema = Schema.Struct({
-  accepted_count: Schema.Number,
-  duplicate_count: Schema.Number,
-  journey_ids: Schema.Array(Schema.String),
-});
-export type JourneyEventIntake = typeof JourneyEventIntakeSchema.Type;
-
 export const LeaveDashboardSpaceSelfRequestSchema = Schema.Struct({
   participant_generation: Schema.Number,
 });
@@ -2188,24 +2159,6 @@ export const InitiateWhiteboardFileUpload429ResponseHeadersSchema = Schema.Struc
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type InitiateWhiteboardFileUpload429ResponseHeaders = typeof InitiateWhiteboardFileUpload429ResponseHeadersSchema.Type;
-
-export const IntakeJourneyEventsRequestBodySchema = JourneyEventBatchSchema;
-export type IntakeJourneyEventsRequestBody = typeof IntakeJourneyEventsRequestBodySchema.Type;
-
-export const IntakeJourneyEventsResponseSchema = JourneyEventIntakeSchema;
-export type IntakeJourneyEventsResponse = typeof IntakeJourneyEventsResponseSchema.Type;
-
-export const IntakeJourneyEvents202ResponseHeadersSchema = Schema.Struct({
-  "x-chalk-journey-id": Schema.optional(Schema.String),
-});
-export type IntakeJourneyEvents202ResponseHeaders = typeof IntakeJourneyEvents202ResponseHeadersSchema.Type;
-
-export const IntakeJourneyEvents429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type IntakeJourneyEvents429ResponseHeaders = typeof IntakeJourneyEvents429ResponseHeadersSchema.Type;
 
 export const IssueAccessGrantPathParamsSchema = Schema.Struct({
   episode_id: EpisodeIdSchema,
@@ -3881,44 +3834,6 @@ export const InvitationWrongAccountErrorWireSchema = Schema.Struct({
 export const InvitationWrongAccountErrorSchema = InvitationWrongAccountErrorWireSchema.pipe(
   Schema.decodeTo(InvitationWrongAccountError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "InvitationWrongAccountError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class JourneyInvalidEventError extends Schema.TaggedErrorClass<JourneyInvalidEventError>()("JourneyInvalidEventError", {
-  error: Schema.Struct({
-    code: Schema.Literal("journey.invalid_event"),
-    message: Schema.String,
-  }),
-}) {}
-export const JourneyInvalidEventErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("journey.invalid_event"),
-    message: Schema.String,
-  }),
-});
-export const JourneyInvalidEventErrorSchema = JourneyInvalidEventErrorWireSchema.pipe(
-  Schema.decodeTo(JourneyInvalidEventError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "JourneyInvalidEventError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class JourneyLedgerUnavailableError extends Schema.TaggedErrorClass<JourneyLedgerUnavailableError>()("JourneyLedgerUnavailableError", {
-  error: Schema.Struct({
-    code: Schema.Literal("journey.ledger_unavailable"),
-    message: Schema.String,
-  }),
-}) {}
-export const JourneyLedgerUnavailableErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("journey.ledger_unavailable"),
-    message: Schema.String,
-  }),
-});
-export const JourneyLedgerUnavailableErrorSchema = JourneyLedgerUnavailableErrorWireSchema.pipe(
-  Schema.decodeTo(JourneyLedgerUnavailableError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "JourneyLedgerUnavailableError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -6209,18 +6124,6 @@ export const InitiateWhiteboardFileUploadErrorSchema = Schema.Union([
 ]);
 export type InitiateWhiteboardFileUploadError = typeof InitiateWhiteboardFileUploadErrorSchema.Type;
 
-export const IntakeJourneyEventsErrorSchema = Schema.Union([
-  AccessUnauthenticatedErrorSchema,
-  JourneyInvalidEventErrorSchema,
-  JourneyLedgerUnavailableErrorSchema,
-  RequestInvalidErrorSchema,
-  RequestPayloadTooLargeErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-]);
-export type IntakeJourneyEventsError = typeof IntakeJourneyEventsErrorSchema.Type;
-
 export const IssueAccessGrantErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -7020,7 +6923,6 @@ export const ChalkOperationPolicies = {
   ingestMonitorResult: { maxBodyBytes: 1048576, rateLimit: { limit: 600, policy: "v1.telemetry.intake", windowSeconds: 60 } },
   initiateChatAttachmentUpload: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   initiateWhiteboardFileUpload: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  intakeJourneyEvents: { maxBodyBytes: 1048576, rateLimit: { limit: 600, policy: "v1.telemetry.intake", windowSeconds: 60 } },
   issueAccessGrant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   issueEpisodeParticipantSyncToken: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   issueRecentAuthProof: { maxBodyBytes: 1048576, rateLimit: { limit: 10, policy: "auth.recent_auth", windowSeconds: 60 } },

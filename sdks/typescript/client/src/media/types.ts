@@ -1,20 +1,12 @@
-import type { JourneyTelemetryContext } from "../telemetry/types";
-import type { ReconnectRecorder } from "../telemetry/reconnect";
 import type { MediaPublication, MediaSource } from "./plane";
-import type { RtcConnectionStateSnapshot, RtcStatsLike } from "../telemetry/rtc";
-
-export type CloudflareSFURtcSummaryRecorder = (connection: RtcConnectionStateSnapshot, stats: Iterable<RtcStatsLike>) => void;
-
 export type CloudflareSFUBootstrap = {
   readonly connectionId: string;
   readonly stunServer: string;
 };
-
 export type CloudflareSFUSessionDescription = {
   readonly type: "offer" | "answer";
   readonly sdp: string;
 };
-
 export type CloudflareSFUTrackRequest = {
   readonly location: "local" | "remote";
   readonly mid?: string;
@@ -28,90 +20,81 @@ export type CloudflareSFUTrackRequest = {
   readonly source?: MediaSource;
   readonly publicationId?: string;
 };
-
 export type CloudflareSFUCloseTrackRequest = {
   readonly mid: string;
   readonly source: MediaSource;
   readonly publicationId: string;
 };
-
 export type CloudflareSFUTracksResponse = {
   readonly sessionDescription?: CloudflareSFUSessionDescription;
   readonly tracks?: readonly CloudflareSFUTrackRequest[];
-  readonly trackErrors?: readonly { readonly connectionId: string; readonly trackName: string; readonly code: string }[];
+  readonly trackErrors?: readonly {
+    readonly connectionId: string;
+    readonly trackName: string;
+    readonly code: string;
+  }[];
   readonly requiresImmediateRenegotiation?: boolean;
 };
-
 export type CloudflareSFUPublication = {
   readonly participantId: string;
   readonly source: MediaSource;
   readonly publicationId: string;
 };
-
 export type CloudflareSFUPublicationSnapshot = {
   readonly incarnation: number;
   readonly sequence: number;
   readonly publications: readonly CloudflareSFUPublication[];
 };
-
 export type CloudflareSFUSignalingTransport = {
   readonly addTracks: (input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUTrackRequest[]; readonly allowPartialRemoteTracks?: boolean }) => Promise<CloudflareSFUTracksResponse>;
   readonly closeTracks: (input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUCloseTrackRequest[]; readonly force: boolean }) => Promise<CloudflareSFUTracksResponse>;
   readonly renegotiate: (input: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }) => Promise<void>;
   readonly listPublications: () => Promise<CloudflareSFUPublicationSnapshot>;
 };
-
 export type CloudflareSFURemoteTrack = CloudflareSFUPublication & {
   readonly track: MediaStreamTrack;
 };
-
 export type CloudflareSFULocalTrack = Pick<MediaPublication, "source" | "enabled" | "publicationId"> & {
   readonly track: MediaStreamTrack;
 };
-
 export type CloudflareSFUErrorCode = "invalid_bootstrap" | "invalid_publication" | "invalid_target" | "signaling_failed" | "signaling_timeout" | "negotiation_timeout" | "media_failed" | "peer_connection_failed" | "ice_connection_failed" | "stale_generation";
-
 export type CloudflareSFUFailureCode = CloudflareSFUErrorCode;
-
 export type CloudflareSFUConnectionPhase = "idle" | "connecting" | "live" | "recovering" | "failed" | "stopped";
-
 export type CloudflareSFUPhase = CloudflareSFUConnectionPhase;
-
 export type CloudflareSFUSnapshot = {
   readonly connection: {
     readonly phase: CloudflareSFUConnectionPhase;
     readonly peerConnectionState: RTCPeerConnectionState | null;
     readonly iceConnectionState: RTCIceConnectionState | null;
   };
-  readonly cursor: { readonly incarnation: number; readonly sequence: number } | null;
+  readonly cursor: {
+    readonly incarnation: number;
+    readonly sequence: number;
+  } | null;
   readonly localTracks: readonly CloudflareSFULocalTrack[];
   readonly remoteTracks: readonly CloudflareSFURemoteTrack[];
-  readonly failure: { readonly code: CloudflareSFUFailureCode; readonly recoverable: boolean } | null;
+  readonly failure: {
+    readonly code: CloudflareSFUFailureCode;
+    readonly recoverable: boolean;
+  } | null;
 };
-
 export type CloudflareSFUClientOptions = {
   readonly bootstrap: CloudflareSFUBootstrap;
   readonly participantId: string;
   readonly transport: CloudflareSFUSignalingTransport;
   readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
-  readonly recordReconnect?: ReconnectRecorder;
-  readonly onRtcSummary?: CloudflareSFURtcSummaryRecorder;
   readonly pollIntervalMs?: number;
   readonly onError?: (error: unknown) => void;
   readonly onRemoteTrack?: (publication: CloudflareSFURemoteTrack) => void;
   readonly onScreenEnded?: () => void;
   readonly peerConnectionFactory?: (configuration: RTCConfiguration) => RTCPeerConnection;
 };
-
 export type CloudflareSFURestartOptions = {
   readonly bootstrap: CloudflareSFUBootstrap;
   readonly transport?: CloudflareSFUSignalingTransport;
 };
-
 export type CloudflareSFUCredentialProvider = (signal?: AbortSignal) => string | Promise<string>;
-
 export type CloudflareSFUHTTPTransportOptions = {
-  readonly telemetry?: JourneyTelemetryContext;
   readonly apiBaseURL: string;
   readonly credential?: CloudflareSFUCredentialProvider;
   /** @deprecated Use credential so refreshed media access is read before every request. */
@@ -124,12 +107,15 @@ export type CloudflareSFUHTTPTransportOptions = {
   readonly fetch?: typeof globalThis.fetch;
   readonly requestTimeoutMs?: number;
 };
-
 export class CloudflareSFUError extends Error {
   constructor(
     message: string,
     readonly code: CloudflareSFUFailureCode,
-    readonly options: { readonly status?: number; readonly retryableConnection?: boolean; readonly providerCode?: string } = {},
+    readonly options: {
+      readonly status?: number;
+      readonly retryableConnection?: boolean;
+      readonly providerCode?: string;
+    } = {},
   ) {
     super(message);
     this.name = "CloudflareSFUError";

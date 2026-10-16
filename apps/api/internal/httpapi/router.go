@@ -66,13 +66,11 @@ type Options struct {
 	APIKeys                    APIKeyService
 	APIKeyAuthentication       APIKeyAuthenticator
 	APIKeyAudits               APIKeyAuditWriter
-	Journeys                   JourneyService
-	JourneyMetrics             JourneyMetricRecorder
-	LocalTelemetry             bool
-	EpisodeCredentials         EpisodeCredentialVerifier
-	MediaPlane                 MediaPlaneResolver
-	MediaPublications          mediapublications.Registry
-	ParticipantMediaIssuer     ParticipantMediaIssuer
+
+	EpisodeCredentials     EpisodeCredentialVerifier
+	MediaPlane             MediaPlaneResolver
+	MediaPublications      mediapublications.Registry
+	ParticipantMediaIssuer ParticipantMediaIssuer
 
 	ParticipantMediaVerify ParticipantMediaVerifier
 	ParticipantMediaActive ActiveParticipantAuthorizer

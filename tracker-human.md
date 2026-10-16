@@ -44,8 +44,8 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
       production.
     - Cut recovery further: restart ICE instead of rebuilding media, overlap SDP
       readiness, and get keyframes sooner after a cut.
-    - Check with production reconnect telemetry whether Postgres restarts and flapping
-      networks recover more slowly in their worst cases.
+    - Check in a real call whether Postgres restarts and flapping networks recover more
+      slowly in their worst cases.
     - Re-record a self-mute that a Sync restart interrupted, so other Participants don't
       see the muted Participant as unmuted.
 

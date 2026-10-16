@@ -45,9 +45,9 @@ type Config struct {
 }
 
 type Diagnostics struct {
-	config          Config
-	logger          *slog.Logger
-	journeyMetrics  JourneyMetrics
+	config Config
+	logger *slog.Logger
+
 	recorderMetrics RecorderMetrics
 }
 
@@ -83,7 +83,6 @@ func New(config Config, output io.Writer) Diagnostics {
 	return Diagnostics{
 		config:          config,
 		logger:          logger,
-		journeyMetrics:  NewJourneyMetrics(),
 		recorderMetrics: NewRecorderMetrics(),
 	}
 }
@@ -132,10 +131,6 @@ func (d Diagnostics) Logger() *slog.Logger {
 	return d.logger
 }
 
-func (d Diagnostics) JourneyMetrics() JourneyMetrics {
-	return d.journeyMetrics
-}
-
 func (d Diagnostics) RecorderMetrics() RecorderMetrics {
 	return d.recorderMetrics
 }
@@ -149,15 +144,15 @@ func (d Diagnostics) Queries(next sqlc.Querier) sqlc.Querier {
 }
 
 type HTTPOptions struct {
-	Middleware     []func(http.Handler) http.Handler
-	JourneyMetrics JourneyMetrics
-	Profiler       http.Handler
+	Middleware []func(http.Handler) http.Handler
+
+	Profiler http.Handler
 }
 
 func (d Diagnostics) HTTPOptions() HTTPOptions {
 	options := HTTPOptions{}
 	options.Middleware = append(options.Middleware, OTelHTTPMiddleware(), JourneyMiddleware)
-	options.JourneyMetrics = d.journeyMetrics
+
 	options.Middleware = append(options.Middleware, RequestMiddleware(d.logger, RequestLogConfig{
 		Mode:          d.config.RequestLogs,
 		SampleRate:    d.config.RequestSampleRate,

@@ -38,8 +38,8 @@ func TestApplyDiagnosticsPreservesExistingHTTPOptions(t *testing.T) {
 	if !existingMiddlewareCalled || !strings.Contains(logs.String(), "database transaction failed") || strings.Contains(logs.String(), `"event":"http.request"`) {
 		t.Fatalf("existing middleware and failure logger must work with request logging off: %s", logs.String())
 	}
-	if options.JourneyMetrics == nil || options.Profiler == nil {
-		t.Fatal("metrics must be installed and existing profiler retained")
+	if options.Profiler == nil {
+		t.Fatal("existing profiler must be retained")
 	}
 	var absent *Options
 	absent.ApplyDiagnostics(diagnostics)

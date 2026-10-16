@@ -1,15 +1,11 @@
-import type { ReconnectRecorder } from "../telemetry/reconnect";
-import type { ClientMediaPlane, CloudflareSFUBootstrap, CloudflareSFURtcSummaryRecorder, ConnectionMediaSnapshot } from "../media";
+import type { ClientMediaPlane, CloudflareSFUBootstrap, ConnectionMediaSnapshot } from "../media";
 import type { ChalkChatFileTransport } from "../chat-files";
 import type { V1AdmissionPolicy, V1AssignableRole, V1CommandResult, V1EpisodeSnapshot, V1SelfMediaTargetResult } from "../sync";
 import type { V1CollaborationClient, V1DirectedRequest, V1DirectedRequestResult } from "../sync/v1-types";
 import type { ChalkWhiteboardSummary, ChalkWhiteboardV1ClientOptions, ChalkWhiteboardV1Transport } from "../whiteboard/types";
 import type { ParsedAccessGrant, ParticipantMediaAccess, ParticipantMediaCredential } from "../access/grant";
-import type { JourneyTelemetryContext } from "../telemetry/types";
 import { Context, Layer } from "effect";
-
 export type ConnectionAccessReason = "join" | "scheduled_refresh" | "sync_recovery" | "media_recovery" | "access_retry";
-
 export type ConnectionAccessRequest = {
   readonly reason: ConnectionAccessReason;
   readonly replaceMediaConnection: boolean;
@@ -17,15 +13,12 @@ export type ConnectionAccessRequest = {
   readonly currentMediaToken?: ParticipantMediaCredential;
   readonly expectedParticipantGeneration?: number;
 };
-
 export type ConnectionAccessProvider = (request?: ConnectionAccessRequest) => ParsedAccessGrant | Promise<ParsedAccessGrant>;
-
 export type ConnectionClock = {
   readonly now: () => number;
   readonly setTimeout: (callback: () => void, milliseconds: number) => unknown;
   readonly clearTimeout: (handle: unknown) => void;
 };
-
 export type ConnectionMediaDevices = {
   readonly getUserMedia: (constraints: MediaStreamConstraints) => Promise<MediaStream>;
   readonly getDisplayMedia: (constraints: DisplayMediaStreamOptions) => Promise<MediaStream>;
@@ -37,7 +30,6 @@ export type ConnectionMediaDevices = {
    */
   readonly selectSpeaker?: (deviceId: string) => Promise<void>;
 };
-
 export type ConnectionSyncClient = V1CollaborationClient & {
   readonly start: () => Promise<void>;
   readonly restartTransport?: () => void;
@@ -58,7 +50,10 @@ export type ConnectionSyncClient = V1CollaborationClient & {
   readonly stopParticipantCamera: (participantId: string) => Promise<V1CommandResult>;
   readonly stopParticipantScreenShare: (participantId: string) => Promise<V1CommandResult>;
   readonly removeParticipant: (participantId: string) => Promise<V1CommandResult>;
-  readonly startRecording: () => Promise<{ readonly recordingId: string; readonly result: V1CommandResult }>;
+  readonly startRecording: () => Promise<{
+    readonly recordingId: string;
+    readonly result: V1CommandResult;
+  }>;
   readonly stopRecording: (recordingId: string) => Promise<V1CommandResult>;
   readonly endEpisode: () => Promise<V1CommandResult>;
   readonly extendEpisode: (minutes: number) => Promise<V1CommandResult>;
@@ -66,7 +61,6 @@ export type ConnectionSyncClient = V1CollaborationClient & {
   readonly requestUnmute: (participantId: string) => Promise<V1DirectedRequestResult>;
   readonly requestStartCamera: (participantId: string) => Promise<V1DirectedRequestResult>;
 };
-
 export type ConnectionMediaClient = ClientMediaPlane & {
   readonly start: (stream: MediaStream) => Promise<void>;
   readonly stop: () => void;
@@ -76,36 +70,26 @@ export type ConnectionMediaClient = ClientMediaPlane & {
   readonly getSnapshot: () => ConnectionMediaSnapshot;
   readonly subscribe: (listener: () => void) => () => void;
 };
-
 export type ConnectionMediaFactoryInput = {
-  readonly telemetry?: JourneyTelemetryContext;
   readonly access: ParsedAccessGrant;
   readonly credential: () => Promise<string>;
   readonly replaceMediaConnection?: () => Promise<ParticipantMediaAccess>;
-  readonly recordReconnect?: ReconnectRecorder;
-  readonly recordRtcSummary?: CloudflareSFURtcSummaryRecorder;
   readonly onFailure: (error: unknown) => void;
   readonly onScreenEnded: () => void;
 };
-
 export type ConnectionSyncFactoryInput = {
   readonly access: ParsedAccessGrant;
   readonly token: () => Promise<string>;
   readonly media: ConnectionMediaClient;
-  readonly recordReconnect?: ReconnectRecorder;
-  readonly telemetry?: JourneyTelemetryContext;
 };
-
 export type ConnectionWhiteboardFactoryInput = {
   readonly onWatchdogReplacement?: ChalkWhiteboardV1ClientOptions["onWatchdogReplacement"];
   readonly token: () => Promise<string>;
   readonly onSummary: (summary: ChalkWhiteboardSummary) => void;
 };
-
 export type ConnectionChatFileFactoryInput = {
   readonly token: () => Promise<string>;
 };
-
 export type ConnectionDependencies = {
   readonly clock: ConnectionClock;
   readonly mediaDevices: ConnectionMediaDevices;
@@ -120,15 +104,12 @@ export type ConnectionDependencies = {
    */
   readonly createId?: () => string;
 };
-
 /**
  * The foreign browser and transport boundary used by Connection. The Layer is
  * deliberately small: all scheduling and state ownership stays in Effect
  * programs above this adapter.
  */
 export class ConnectionPlatformService extends Context.Service<ConnectionPlatformService, ConnectionDependencies>()("@chalk/client/ConnectionPlatform") {}
-
 export const makeConnectionPlatformLayer = (dependencies: ConnectionDependencies) => Layer.succeed(ConnectionPlatformService, dependencies);
-
 /** A named alias makes fake platform Layers self-documenting in tests. */
 export const makeFakeConnectionPlatformLayer = makeConnectionPlatformLayer;

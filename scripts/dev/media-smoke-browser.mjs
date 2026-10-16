@@ -213,8 +213,3 @@ function missingBundledBrowser(error) {
   const message = error instanceof Error ? error.message : String(error);
   return /executable\s+doesn't\s+exist|executable\s+does\s+not\s+exist|please\s+run.*playwright.*install|browser\s+executable/i.test(message);
 }
-
-export async function readTrackerJourneyIDs(participants) {
-  const states = await Promise.all(participants.map((participant) => trackerFrames(participant.page)));
-  return [...new Set(states.flatMap((state) => state.journeyIds))];
-}

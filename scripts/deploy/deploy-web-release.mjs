@@ -193,7 +193,6 @@ async function buildWebArtifact({ build, commandRunner, environment, expectedSHA
     CHALK_COMMIT_SHA: expectedSHA,
     CHALK_ENVIRONMENT: "production",
     VITE_API_URL: "https://api.chalkmeet.com",
-    VITE_CHALK_TELEMETRY_ENABLED: "false",
   };
   await commandRunner(commandSpec("pnpm", ["exec", "turbo", "run", "build", "--filter=web...", "--cache-dir", turboCacheDirectory], rootDirectory, { env: buildEnvironment }));
 }

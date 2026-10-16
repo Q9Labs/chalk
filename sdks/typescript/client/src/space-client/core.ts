@@ -1,4 +1,3 @@
-import type { ReconnectRecorder } from "../telemetry/reconnect";
 import { Clock, Context, Duration, Effect, Layer } from "effect";
 import { requireParsedAccessGrant, type AccessGrant } from "../access/grant";
 import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type ConnectionLifecycleCapability } from "../connection";
@@ -10,8 +9,6 @@ import { normalizeClientError, SpaceClientError } from "./errors";
 import { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore, SpaceStoreService, makeSpaceStoreLayer } from "./store";
 import type { ClientEventHandler, ClientEventMap, ClientEventName, JoinOptions, SpaceClientOptions, SpaceSnapshot } from "./types";
-import type { JourneyTelemetryContext } from "../telemetry/types";
-import type { CloudflareSFURtcSummaryRecorder } from "../media";
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 export type PlatformConnectionAccess = (request?: ConnectionAccessRequest) => AccessGrant | Promise<AccessGrant>;
 export type SpaceClientPlatform = {
@@ -26,9 +23,6 @@ export type SpaceClientPlatform = {
   readonly syncStartupTimeoutMs?: number;
   readonly initialMicrophoneEnabled?: boolean;
   readonly initialCameraEnabled?: boolean;
-  readonly recordReconnect?: ReconnectRecorder;
-  readonly telemetry?: JourneyTelemetryContext;
-  readonly recordRtcSummary?: CloudflareSFURtcSummaryRecorder;
   readonly onConnectionDiagnostic?: (event: ConnectionDiagnostic) => void;
 };
 export class SpaceClientCoreService extends Context.Service<SpaceClientCoreService, SpaceClientCore>()("@chalk/client/SpaceClientCore") {}
@@ -45,9 +39,6 @@ export const makeSpaceClientCoreLayer = (options: SpaceClientOptions, platform: 
     syncStartupTimeoutMs: platform.syncStartupTimeoutMs,
     initialMicrophoneEnabled: platform.initialMicrophoneEnabled,
     initialCameraEnabled: platform.initialCameraEnabled,
-    telemetry: platform.telemetry,
-    recordRtcSummary: platform.recordRtcSummary,
-    recordReconnect: platform.recordReconnect,
     dependencies,
     diagnostics: {
       onEvent: (event) => {
@@ -87,7 +78,6 @@ export const makeSpaceClientCoreLayerFromServices = (options: SpaceClientOptions
       );
     }),
   );
-
 export class SpaceClientCore {
   readonly controllers: ControllerEffects;
   readonly #connection: ConnectionLifecycleCapability;
@@ -127,7 +117,6 @@ export class SpaceClientCore {
       Effect.andThen(this.#connection.configureJoin(options)),
       Effect.andThen(this.#connection.join()),
       Effect.andThen(options.displayName === undefined ? Effect.void : this.controllers.participants.renameSelf(options.displayName)),
-
       Effect.catchTag("ConnectionLifecycleFailure", (failure) => Effect.fail(failure.code === "episode_ended" ? new SpaceClientError({ code: "episode.ended", recoverable: failure.recoverable, message: failure.message }) : failure)),
       Effect.mapError(normalizeClientError),
     );

@@ -64,7 +64,6 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, authEndpoints(nil, SessionCookieOptions{})...)
 	endpoints = append(endpoints, meEndpoints(nil, nil)...)
 	endpoints = append(endpoints, accountTenantEndpoints(nil)...)
-	endpoints = append(endpoints, journeyEndpoints(nil, nil)...)
 	endpoints = append(endpoints, statusEndpoints(nil, nil)...)
 	endpoints = append(endpoints, tenantEndpoints(nil, nil)...)
 	endpoints = append(endpoints, userEndpoints(nil)...)

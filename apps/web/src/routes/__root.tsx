@@ -2,11 +2,8 @@ import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-r
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
 import { THEME_BOOTSTRAP_SCRIPT } from "../lib/theme";
 import { ThemeProvider } from "../lib/theme-context";
-import { WebTelemetryProvider } from "../lib/web-telemetry-context";
 import appCss from "../styles.css?url";
-
 installChunkLoadAutoReload();
-
 export const Route = createRootRoute({
   head: () => ({
     meta: [
@@ -36,7 +33,6 @@ export const Route = createRootRoute({
   shellComponent: RootDocument,
   component: RootComponent,
 });
-
 function RootComponent() {
   return (
     <ThemeProvider>
@@ -44,7 +40,6 @@ function RootComponent() {
     </ThemeProvider>
   );
 }
-
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
     // The bootstrap script writes the theme onto this element before React
@@ -55,7 +50,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
       </head>
       <body>
-        <WebTelemetryProvider>{children}</WebTelemetryProvider>
+        {children}
         <Scripts />
       </body>
     </html>

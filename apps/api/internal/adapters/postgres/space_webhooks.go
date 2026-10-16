@@ -12,7 +12,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
-	"github.com/q9labs/chalk/apps/api/internal/journeys"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
@@ -345,35 +344,6 @@ func persistSpaceLifecycleJourney(ctx context.Context, tx pgx.Tx, name string, o
 	if err != nil {
 		return err
 	}
-	_, err = sqlc.New(tx).InsertJourneyEvent(ctx, insertJourneyEventParams(spaceLifecycleJourneyEvent(journey, eventID, name, occurredAt, attributes)))
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	}
+	_, err = tx.Exec(ctx, `insert into observability_journey_events(event_id,journey_id,sequence,occurred_at,name,phase,state,origin_kind,first_observed_layer,upstream_visibility,parent_event_id,trace_id,span_id,attributes) values($1,$2,1,$3,$4,'terminal','succeeded','server','api','complete',$5,$6,$7,$8) on conflict(event_id) do nothing`, uuid(eventID), uuid(journey.JourneyID), occurredAt, name, uuid(journey.ParentEventID), optionalText(journey.TraceID), optionalText(journey.SpanID), attributes)
 	return err
-}
-
-func spaceLifecycleJourneyEvent(journey lifecycleJourney, eventID utilities.ID, name string, occurredAt time.Time, attributes json.RawMessage) journeys.Event {
-	var traceID, spanID *string
-	if journey.TraceID != "" {
-		traceID = &journey.TraceID
-	}
-	if journey.SpanID != "" {
-		spanID = &journey.SpanID
-	}
-	return journeys.Event{
-		EventID:            eventID,
-		JourneyID:          journey.JourneyID,
-		Sequence:           1,
-		OccurredAt:         occurredAt,
-		Name:               name,
-		Phase:              "terminal",
-		State:              "succeeded",
-		OriginKind:         "server",
-		FirstObservedLayer: "api",
-		UpstreamVisibility: "complete",
-		ParentEventID:      journey.ParentEventID,
-		TraceID:            traceID,
-		SpanID:             spanID,
-		Attributes:         attributes,
-	}
 }

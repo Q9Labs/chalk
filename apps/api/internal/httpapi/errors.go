@@ -113,11 +113,6 @@ var (
 	apiErrorWebhookIdempotencyConflict      = APIError{Status: http.StatusConflict, Code: "webhook.idempotency_conflict", Message: "Idempotency key was used for another request"}
 	apiErrorWebhookIdempotencyExpired       = APIError{Status: http.StatusConflict, Code: "webhook.idempotency_expired", Message: "Idempotency key has expired"}
 
-	apiErrorInvalidJourneyID         = APIError{Status: http.StatusBadRequest, Code: "journey.invalid_id", Message: "Invalid journey id"}
-	apiErrorInvalidJourneyEvent      = APIError{Status: http.StatusBadRequest, Code: "journey.invalid_event", Message: "Invalid journey event"}
-	apiErrorJourneyNotFound          = APIError{Status: http.StatusNotFound, Code: "journey.not_found", Message: "Journey not found"}
-	apiErrorJourneyLedgerUnavailable = APIError{Status: http.StatusServiceUnavailable, Code: "journey.ledger_unavailable", Message: "Journey ledger is unavailable"}
-
 	apiErrorInvalidStatusResult = APIError{Status: http.StatusBadRequest, Code: "status.invalid_result", Message: "Invalid monitor result"}
 	apiErrorStatusUnavailable   = APIError{Status: http.StatusServiceUnavailable, Code: "status.unavailable", Message: "Status is unavailable"}
 )

@@ -1,5 +1,4 @@
 import type { AccessGrant } from "../access/grant.js";
-import type { JourneyTelemetryContext } from "../telemetry/types.js";
 import type {
   ApproveSpacePublicAdmissionRequestError,
   ArriveBySpacePublicInviteError,
@@ -17,9 +16,7 @@ import type {
   RefreshSpacePublicInviteAccessError,
   SpacePublicInviteUnavailableError,
 } from "../generated/schemas.js";
-
 export type ChalkPublicClientRuntime = "browser" | "react-native";
-
 export type ChalkPublicClientOptions = {
   readonly baseUrl: string | URL;
   readonly credentials?: RequestCredentials;
@@ -27,32 +24,25 @@ export type ChalkPublicClientOptions = {
   readonly headers?: Readonly<Record<string, string>>;
   readonly guestCredential?: string;
   readonly runtime?: ChalkPublicClientRuntime;
-  readonly telemetry?: JourneyTelemetryContext;
 };
-
 export type ChalkPublicIdempotencyOptions = {
   readonly idempotencyKey?: string;
 };
-
 export type CreatePublicSpaceInput = {
   readonly displayName: string;
 };
-
 export type ArriveBySpacePublicInviteInput = {
   readonly displayName: string;
   readonly spaceInviteToken: string;
 };
-
 export type PublicArrivalReference = {
   readonly arrivalHandle: string;
   readonly guestCredential?: string;
 };
-
 export type PublicArrivalOptions = ChalkPublicIdempotencyOptions & {
   readonly arrivalHandle?: string;
   readonly guestCredential?: string;
 };
-
 export type PublicRefreshAccessInput = {
   readonly arrivalHandle?: string;
   readonly guestCredential?: string;
@@ -60,27 +50,21 @@ export type PublicRefreshAccessInput = {
   readonly replaceMediaConnection?: boolean;
   readonly signal?: AbortSignal;
 };
-
 export type PublicLeaveOptions = {
   readonly keepalive?: boolean;
 };
-
 export type PublicSpaceArrival = Omit<GeneratedPublicSpaceArrival, "access"> & {
   readonly access?: AccessGrant | null;
 };
-
 export type PublicSpaceCreated = Omit<GeneratedPublicSpaceCreated, "arrival"> & {
   readonly arrival: PublicSpaceArrival;
 };
-
 export type PublicStatus = GetPublicStatusResponse;
-
 export type CreatePublicSpace = (input: CreatePublicSpaceInput, options?: ChalkPublicIdempotencyOptions) => Promise<PublicSpaceCreated>;
 export type ArriveBySpacePublicInvite = (input: ArriveBySpacePublicInviteInput, options?: PublicArrivalOptions) => Promise<PublicSpaceArrival>;
 export type GetSpacePublicInviteArrival = (reference: PublicArrivalReference | string) => Promise<PublicSpaceArrival>;
 export type RefreshSpacePublicInviteAccess = (input: PublicRefreshAccessInput | string, options?: PublicArrivalOptions) => Promise<AccessGrant>;
 export type LeaveSpacePublicInviteArrival = (reference: PublicArrivalReference | string, options?: PublicLeaveOptions) => Promise<void>;
-
 export type ChalkPublicClient = {
   readonly prepareSpaceEntrance: (spaceInviteToken: string) => Promise<void>;
   readonly arrive: ArriveBySpacePublicInvite;
@@ -95,7 +79,6 @@ export type ChalkPublicClient = {
   readonly refreshSpacePublicInviteAccess: RefreshSpacePublicInviteAccess;
   readonly status: GetSpacePublicInviteArrival;
 };
-
 export type ChalkPublicInviteError =
   | PreparePublicSpaceEntranceError
   | ApproveSpacePublicAdmissionRequestError
@@ -109,5 +92,4 @@ export type ChalkPublicInviteError =
   | ArrivalInvalidHandleError
   | ArrivalUnavailableError
   | SpacePublicInviteUnavailableError;
-
 export type PublicSpaceArrivalAccess = PublicSpaceArrival["access"];
