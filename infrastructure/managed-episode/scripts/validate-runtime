@@ -119,7 +119,7 @@ api_required=(
   CHALK_CLOUDFLARE_API_TOKEN CHALK_CLOUDFLARE_REALTIME_APP_ID
   CHALK_CLOUDFLARE_REALTIME_APP_SECRET CHALK_R2_ACCOUNT_ID
   CHALK_R2_ACCESS_KEY_ID CHALK_R2_SECRET_ACCESS_KEY CHALK_R2_BUCKET
-  CHALK_INTEGRATIONS_ENABLED CHALK_RECORDING_ENABLED
+  CHALK_RECORDING_ENABLED
   CHALK_TRANSCRIPTION_ENABLED CHALK_WHITEBOARD_FILES_ENABLED
   CHALK_WEBHOOK_ENCRYPTION_KEY
 )
@@ -162,11 +162,6 @@ ops_ingest_token="$(env_value "${api_env}" CHALK_OPS_INGEST_TOKEN)"
 ops_ingest_token_bytes="$(LC_ALL=C printf '%s' "${ops_ingest_token}" | LC_ALL=C wc -c | tr -d '[:space:]')"
 (( ops_ingest_token_bytes >= 32 )) || fail "CHALK_OPS_INGEST_TOKEN must contain at least 32 bytes"
 
-case "$(env_value "${api_env}" CHALK_INTEGRATIONS_ENABLED)" in
-  true) require_env "${api_env}" CHALK_COMPOSIO_API_KEY ;;
-  false) ;;
-  *) fail "CHALK_INTEGRATIONS_ENABLED must be true or false" ;;
-esac
 case "$(env_value "${api_env}" CHALK_RECORDING_ENABLED)" in
   false) ;;
   true)

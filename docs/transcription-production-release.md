@@ -126,5 +126,5 @@ recorder image while new transcript jobs remain active.
 
 Any missing corpus qualification, private secret comparison, invoke-role policy,
 or required endpoint/configuration is a release blocker. Do not substitute
-Cloudflare, OpenRouter, a VPC/NAT design, optional provider pins, or a rendered
+Cloudflare, a VPC/NAT design, optional provider pins, or a rendered
 MP4 path to bypass it.

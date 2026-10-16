@@ -5,7 +5,6 @@ select
     tenants.default_region,
     tenants.default_media_plane,
     tenants.media_plane_provider_config,
-    tenants.ai_provider_config,
     tenants.storage_provider_config,
     tenants.cors_allowed_origins,
     tenants.logo_key,
@@ -29,7 +28,6 @@ select
     tenants.default_region,
     tenants.default_media_plane,
     tenants.media_plane_provider_config,
-    tenants.ai_provider_config,
     tenants.storage_provider_config,
     tenants.cors_allowed_origins,
     tenants.logo_key,
@@ -63,7 +61,6 @@ insert into tenants (
     default_region,
     default_media_plane,
     media_plane_provider_config,
-    ai_provider_config,
     storage_provider_config,
     cors_allowed_origins,
     logo_key,
@@ -74,7 +71,6 @@ insert into tenants (
     sqlc.narg(default_region),
     sqlc.narg(default_media_plane),
     sqlc.narg(media_plane_provider_config),
-    sqlc.narg(ai_provider_config),
     sqlc.narg(storage_provider_config),
     sqlc.arg(cors_allowed_origins),
     sqlc.narg(logo_key),
@@ -100,7 +96,6 @@ select
     inserted.default_region,
     inserted.default_media_plane,
     inserted.media_plane_provider_config,
-    inserted.ai_provider_config,
     inserted.storage_provider_config,
     inserted.cors_allowed_origins,
     inserted.logo_key,
@@ -135,10 +130,6 @@ set
     media_plane_provider_config = case
         when sqlc.arg(media_plane_provider_config_set)::boolean then sqlc.narg(media_plane_provider_config)::jsonb
         else media_plane_provider_config
-    end,
-    ai_provider_config = case
-        when sqlc.arg(ai_provider_config_set)::boolean then sqlc.narg(ai_provider_config)::jsonb
-        else ai_provider_config
     end,
     storage_provider_config = case
         when sqlc.arg(storage_provider_config_set)::boolean then sqlc.narg(storage_provider_config)::jsonb
@@ -196,7 +187,6 @@ select
     updated_tenant.default_region,
     updated_tenant.default_media_plane,
     updated_tenant.media_plane_provider_config,
-    updated_tenant.ai_provider_config,
     updated_tenant.storage_provider_config,
     updated_tenant.cors_allowed_origins,
     updated_tenant.logo_key,

@@ -234,7 +234,7 @@ func (s Service) Authenticate(ctx context.Context, input AuthenticateInput) (pri
 	if !credentialMatches(input.RawKey, record.KeyHash) || activeAt(record, s.now()) != nil {
 		return authentication.Principal{}, ErrUnauthenticated
 	}
-	scopes, err := validScopes(record.Scopes)
+	scopes, err := validScopes(slices.DeleteFunc(slices.Clone(record.Scopes), retiredScope))
 	if err != nil || record.ID.IsZero() || record.TenantID.IsZero() {
 		return authentication.Principal{}, ErrUnauthenticated
 	}
@@ -257,6 +257,16 @@ func validName(value string) (string, error) {
 		return "", ErrInvalidName
 	}
 	return value, nil
+}
+
+// Old keys may include retired permissions alongside scopes that still grant access.
+func retiredScope(scope authentication.Scope) bool {
+	switch scope {
+	case "integrations:read", "integrations:write", "integrations:delete":
+		return true
+	default:
+		return false
+	}
 }
 
 func validScopes(scopes []authentication.Scope) ([]authentication.Scope, error) {

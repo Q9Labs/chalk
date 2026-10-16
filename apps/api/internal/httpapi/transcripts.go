@@ -2,22 +2,16 @@ package httpapi
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"mime"
 	"net/http"
-	"path"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/q9labs/chalk/apps/api/internal/ai"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
-	"github.com/q9labs/chalk/apps/api/internal/recordings"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -38,10 +32,6 @@ type TranscriptService interface {
 	Get(ctx context.Context, tenantID utilities.ID, transcriptID utilities.ID) (transcripts.Transcript, error)
 	List(ctx context.Context, tenantID utilities.ID, recordingID utilities.ID, page pagination.PageRequest) (transcripts.TranscriptList, error)
 	Update(ctx context.Context, tenantID utilities.ID, transcriptID utilities.ID, input transcripts.UpdateInput) (transcripts.Transcript, error)
-}
-
-type AITranscriptionService interface {
-	Transcribe(ctx context.Context, input ai.TranscribeInput) (ai.Transcription, error)
 }
 
 type RecordingObjectService interface {
@@ -82,11 +72,6 @@ type createTranscriptRequest struct {
 	CompletedAt *time.Time             `json:"completed_at"`
 }
 
-type transcribeRecordingRequest struct {
-	Model    utilities.OptionalString `json:"model"`
-	Language utilities.OptionalString `json:"language"`
-}
-
 type updateTranscriptRequest struct {
 	Status      utilities.OptionalString    `json:"status"`
 	Provider    utilities.OptionalString    `json:"provider"`
@@ -101,12 +86,6 @@ type createTranscriptEndpointRequest struct {
 	TenantID    utilities.ID
 	RecordingID utilities.ID
 	Body        createTranscriptRequest
-}
-
-type transcribeRecordingEndpointRequest struct {
-	TenantID    utilities.ID
-	RecordingID utilities.ID
-	Body        transcribeRecordingRequest
 }
 
 type listTranscriptsRequest struct {
@@ -126,16 +105,15 @@ type updateTranscriptEndpointRequest struct {
 	Body         updateTranscriptRequest
 }
 
-func mountTranscriptRoutes(r chi.Router, service TranscriptService, recordings RecordingService, recordingObjects RecordingObjectService, tenants TenantService, ai AITranscriptionService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	for _, endpoint := range transcriptEndpoints(service, recordings, recordingObjects, tenants, ai, authorizer) {
+func mountTranscriptRoutes(r chi.Router, service TranscriptService, authorizer TenantAuthorizer, limits RateLimitOptions) {
+	for _, endpoint := range transcriptEndpoints(service, authorizer) {
 		endpoint.Mount(r, limits)
 	}
 }
 
-func transcriptEndpoints(service TranscriptService, recordings RecordingService, recordingObjects RecordingObjectService, tenants TenantService, ai AITranscriptionService, authorizer TenantAuthorizer) []RouteEndpoint {
+func transcriptEndpoints(service TranscriptService, authorizer TenantAuthorizer) []RouteEndpoint {
 	return []RouteEndpoint{
 		createTranscriptEndpoint(service, authorizer),
-		transcribeRecordingEndpoint(service, recordings, recordingObjects, tenants, ai, authorizer),
 		listTranscriptsEndpoint(service, authorizer),
 		getTranscriptEndpoint(service, authorizer),
 		updateTranscriptEndpoint(service, authorizer),
@@ -167,95 +145,6 @@ func createTranscriptEndpoint(service TranscriptService, authorizer TenantAuthor
 		RequestBody("CreateTranscriptRequest", createTranscriptRequest{}).
 		Responds(http.StatusCreated, "Transcript", transcriptResponse{}).
 		Errors(transcriptWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRecordingID, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidTranscriptStatus, apiErrorInvalidTranscriptProvider, apiErrorInvalidTranscriptModel, apiErrorInvalidTranscriptLanguages, apiErrorInvalidTranscriptField, apiErrorRecordingNotFound, apiErrorRateLimited)...).
-		MapErrors(transcriptEndpointAPIError)
-}
-
-func transcribeRecordingEndpoint(service TranscriptService, recordingService RecordingService, recordingObjects RecordingObjectService, tenantService TenantService, aiService AITranscriptionService, authorizer TenantAuthorizer) Endpoint[transcribeRecordingEndpointRequest, transcriptResponse] {
-	return Post("/v1/tenants/{tenant_id}/recordings/{recording_id}/transcriptions", "/tenants/{tenant_id}/recordings/{recording_id}/transcriptions", "transcribeRecording", decodeTranscribeRecordingRequest, func(ctx context.Context, request transcribeRecordingEndpointRequest) (transcriptResponse, error) {
-		if service == nil || recordingService == nil || recordingObjects == nil || tenantService == nil || aiService == nil {
-			return transcriptResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeTranscriptsPermission); err != nil {
-			return transcriptResponse{}, err
-		}
-
-		tenant, err := tenantService.GetTenant(ctx, request.TenantID)
-		if err != nil {
-			return transcriptResponse{}, err
-		}
-		recording, err := recordingService.Get(ctx, request.TenantID, request.RecordingID)
-		if err != nil {
-			return transcriptResponse{}, err
-		}
-		if recording.Status != recordings.StatusCompleted {
-			return transcriptResponse{}, apiErrorRecordingNotReady
-		}
-		if recording.StorageKey == nil {
-			return transcriptResponse{}, apiErrorRecordingNotReady
-		}
-		if recording.StorageProvider != recordings.StorageProviderR2 {
-			return transcriptResponse{}, apiErrorInvalidStorageProvider
-		}
-		if !recordings.TenantStorageKey(request.TenantID, recording.StorageKey) {
-			return transcriptResponse{}, apiErrorInvalidStorageKey
-		}
-
-		config, err := ai.ParseConfig(tenant.AIProviderConfig)
-		if err != nil {
-			return transcriptResponse{}, err
-		}
-		model, err := optionalRequestString(request.Body.Model, false)
-		if err != nil {
-			return transcriptResponse{}, err
-		}
-		language, err := optionalRequestString(request.Body.Language, true)
-		if err != nil {
-			return transcriptResponse{}, err
-		}
-		object, err := recordingObjects.GetObject(ctx, *recording.StorageKey)
-		if err != nil {
-			return transcriptResponse{}, err
-		}
-		defer object.Body.Close()
-
-		result, err := aiService.Transcribe(ctx, ai.TranscribeInput{
-			Config:      config,
-			Model:       model,
-			Audio:       object.Body,
-			AudioFormat: recordingAudioFormat(*recording.StorageKey, object.ContentType),
-			Language:    language,
-		})
-		if err != nil {
-			return transcriptResponse{}, err
-		}
-
-		completedAt := time.Now()
-		text := result.Text
-		input := transcripts.CreateInput{
-			TenantID:    request.TenantID,
-			RecordingID: request.RecordingID,
-			SpaceID:     recording.SpaceID,
-			EpisodeID:   recording.EpisodeID,
-			Status:      transcripts.StatusCompleted,
-			Provider:    ai.ProviderOpenRouter,
-			Model:       result.Model,
-			Languages:   transcriptionLanguages(language),
-			Text:        &text,
-			Metadata:    transcriptionMetadata(result),
-			CompletedAt: &completedAt,
-		}
-		transcript, err := service.Create(ctx, input)
-		if err != nil {
-			return transcriptResponse{}, err
-		}
-		return newTranscriptResponse(transcript), nil
-	}).
-		Auth(APIAuthSessionOrBearer).
-		RateLimit(authenticatedWriteRateLimit).
-		Parameters(tenantIDParameter(), recordingIDParameter()).
-		RequestBody("TranscribeRecordingRequest", transcribeRecordingRequest{}).
-		Responds(http.StatusCreated, "Transcript", transcriptResponse{}).
-		Errors(transcriptWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRecordingID, apiErrorRecordingNotFound, apiErrorRecordingNotReady, apiErrorInvalidStorageProvider, apiErrorInvalidStorageKey, apiErrorRecordingArtifactNotFound, apiErrorInvalidAIConfig, apiErrorInvalidAIGateway, apiErrorMissingAICredentials, apiErrorInvalidAIModel, apiErrorInvalidAIAudio, apiErrorAIProviderUnauthorized, apiErrorAIProviderPayment, apiErrorAIProviderRateLimited, apiErrorAIProviderFailed, apiErrorRateLimited)...).
 		MapErrors(transcriptEndpointAPIError)
 }
 
@@ -337,18 +226,6 @@ func decodeCreateTranscriptRequest(r *http.Request) (createTranscriptEndpointReq
 		return createTranscriptEndpointRequest{}, err
 	}
 	return createTranscriptEndpointRequest{TenantID: tenantID, RecordingID: recordingID, Body: body}, nil
-}
-
-func decodeTranscribeRecordingRequest(r *http.Request) (transcribeRecordingEndpointRequest, error) {
-	tenantID, recordingID, err := tenantRecordingIDsRequest(r)
-	if err != nil {
-		return transcribeRecordingEndpointRequest{}, err
-	}
-	body, err := decodeJSONBody[transcribeRecordingRequest](r)
-	if err != nil {
-		return transcribeRecordingEndpointRequest{}, err
-	}
-	return transcribeRecordingEndpointRequest{TenantID: tenantID, RecordingID: recordingID, Body: body}, nil
 }
 
 func decodeListTranscriptsRequest(r *http.Request) (listTranscriptsRequest, error) {
@@ -435,9 +312,6 @@ func transcriptEndpointAPIError(err error) (APIError, bool) {
 	if apiErr, ok := tenantServiceAPIError(err); ok {
 		return apiErr, true
 	}
-	if apiErr, ok := aiServiceAPIError(err); ok {
-		return apiErr, true
-	}
 	return authorizationAPIError(err), true
 }
 
@@ -474,35 +348,6 @@ func transcriptServiceAPIError(err error) (APIError, bool) {
 	}
 }
 
-func aiServiceAPIError(err error) (APIError, bool) {
-	switch {
-	case err == nil:
-		return APIError{}, false
-	case errors.Is(err, ai.ErrInvalidConfig):
-		return apiErrorInvalidAIConfig, true
-	case errors.Is(err, ai.ErrInvalidGateway):
-		return apiErrorInvalidAIGateway, true
-	case errors.Is(err, ai.ErrMissingCredentials):
-		return apiErrorMissingAICredentials, true
-	case errors.Is(err, ai.ErrInvalidModel):
-		return apiErrorInvalidAIModel, true
-	case errors.Is(err, ai.ErrInvalidAudio):
-		return apiErrorInvalidAIAudio, true
-	case errors.Is(err, ai.ErrClientUnavailable):
-		return apiErrorServiceUnavailable, true
-	case errors.Is(err, ai.ErrProviderUnauthorized):
-		return apiErrorAIProviderUnauthorized, true
-	case errors.Is(err, ai.ErrProviderPayment):
-		return apiErrorAIProviderPayment, true
-	case errors.Is(err, ai.ErrProviderRateLimited):
-		return apiErrorAIProviderRateLimited, true
-	case errors.Is(err, ai.ErrProviderFailed):
-		return apiErrorAIProviderFailed, true
-	default:
-		return APIError{}, false
-	}
-}
-
 func newTranscriptListResponse(list transcripts.TranscriptList) (transcriptListResponse, error) {
 	page, err := newPaginationResponse(list.Page)
 	if err != nil {
@@ -533,75 +378,6 @@ func newTranscriptResponse(transcript transcripts.Transcript) transcriptResponse
 		UpdatedAt:   utilities.FormatTimestamp(transcript.UpdatedAt),
 		CreatedAt:   utilities.FormatTimestamp(transcript.CreatedAt),
 	}
-}
-
-func transcriptionLanguages(language string) []string {
-	prepared, err := utilities.RequiredString(language)
-	if err != nil {
-		return []string{ai.LanguageUndetermined}
-	}
-	return []string{prepared}
-}
-
-func transcriptionMetadata(transcription ai.Transcription) json.RawMessage {
-	metadata := map[string]any{
-		"gateway": transcription.Gateway,
-	}
-	if len(transcription.Usage) > 0 {
-		var usage any
-		if err := json.Unmarshal(transcription.Usage, &usage); err == nil {
-			metadata["usage"] = usage
-		}
-	}
-	raw, err := json.Marshal(metadata)
-	if err != nil {
-		return nil
-	}
-	return raw
-}
-
-func recordingAudioFormat(storageKey string, contentType string) string {
-	format := strings.TrimPrefix(strings.ToLower(path.Ext(storageKey)), ".")
-	if format != "" {
-		return format
-	}
-	mediaType, _, err := mime.ParseMediaType(strings.TrimSpace(contentType))
-	if err != nil {
-		mediaType = strings.TrimSpace(contentType)
-	}
-	switch strings.ToLower(mediaType) {
-	case "audio/wav", "audio/x-wav":
-		return "wav"
-	case "audio/mpeg":
-		return "mp3"
-	case "audio/mp4":
-		return "m4a"
-	case "video/mp4":
-		return "mp4"
-	case "audio/ogg":
-		return "ogg"
-	case "audio/webm", "video/webm":
-		return "webm"
-	case "audio/aac":
-		return "aac"
-	case "audio/flac":
-		return "flac"
-	default:
-		return ""
-	}
-}
-
-func optionalRequestString(value utilities.OptionalString, allowNull bool) (string, error) {
-	if !value.Set {
-		return "", nil
-	}
-	if value.Value == nil {
-		if allowNull {
-			return "", nil
-		}
-		return "", apiErrorInvalidRequest
-	}
-	return *value.Value, nil
 }
 
 func (r createTranscriptRequest) toCreateInputValue(tenantID utilities.ID, recordingID utilities.ID) (transcripts.CreateInput, error) {

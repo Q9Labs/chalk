@@ -45,7 +45,6 @@ type tenantResponse struct {
 	DefaultRegion                    *string                          `json:"default_region"`
 	DefaultMediaPlane                *string                          `json:"default_media_plane"`
 	MediaPlaneProviderConfig         any                              `json:"media_plane_provider_config"`
-	AIProviderConfig                 any                              `json:"ai_provider_config"`
 	StorageProviderConfig            any                              `json:"storage_provider_config"`
 	CORSAllowedOrigins               []string                         `json:"cors_allowed_origins"`
 	LogoKey                          *string                          `json:"logo_key"`
@@ -79,7 +78,6 @@ type createTenantRequest struct {
 	DefaultRegion            *string         `json:"default_region"`
 	DefaultMediaPlane        *string         `json:"default_media_plane"`
 	MediaPlaneProviderConfig json.RawMessage `json:"media_plane_provider_config"`
-	AIProviderConfig         json.RawMessage `json:"ai_provider_config"`
 	StorageProviderConfig    json.RawMessage `json:"storage_provider_config"`
 	CORSAllowedOrigins       []string        `json:"cors_allowed_origins,omitempty"`
 	LogoKey                  *string         `json:"logo_key"`
@@ -91,7 +89,6 @@ type updateTenantRequest struct {
 	DefaultRegion                    utilities.OptionalString    `json:"default_region"`
 	DefaultMediaPlane                utilities.OptionalString    `json:"default_media_plane"`
 	MediaPlaneProviderConfig         utilities.OptionalJSON      `json:"media_plane_provider_config"`
-	AIProviderConfig                 utilities.OptionalJSON      `json:"ai_provider_config"`
 	StorageProviderConfig            utilities.OptionalJSON      `json:"storage_provider_config"`
 	CORSAllowedOrigins               tenants.OptionalCORSOrigins `json:"cors_allowed_origins"`
 	LogoKey                          utilities.OptionalString    `json:"logo_key"`
@@ -411,7 +408,6 @@ func newTenantResponse(tenant tenants.Tenant) tenantResponse {
 		DefaultRegion:                    tenant.DefaultRegion,
 		DefaultMediaPlane:                tenant.DefaultMediaPlane,
 		MediaPlaneProviderConfig:         utilities.RedactJSONSecrets(tenant.MediaPlaneProviderConfig),
-		AIProviderConfig:                 utilities.RedactJSONSecrets(tenant.AIProviderConfig),
 		StorageProviderConfig:            utilities.RedactJSONSecrets(tenant.StorageProviderConfig),
 		CORSAllowedOrigins:               append(make([]string, 0, len(tenant.CORSAllowedOrigins)), tenant.CORSAllowedOrigins...),
 		LogoKey:                          tenant.LogoKey,
@@ -433,7 +429,6 @@ func (r createTenantRequest) input() tenants.CreateTenantInput {
 		DefaultRegion:            r.DefaultRegion,
 		DefaultMediaPlane:        r.DefaultMediaPlane,
 		MediaPlaneProviderConfig: r.MediaPlaneProviderConfig,
-		AIProviderConfig:         r.AIProviderConfig,
 		StorageProviderConfig:    r.StorageProviderConfig,
 		CORSAllowedOrigins:       r.CORSAllowedOrigins,
 		LogoKey:                  r.LogoKey,
@@ -447,7 +442,6 @@ func (r updateTenantRequest) input() tenants.UpdateTenantInput {
 		DefaultRegion:            r.DefaultRegion,
 		DefaultMediaPlane:        r.DefaultMediaPlane,
 		MediaPlaneProviderConfig: r.MediaPlaneProviderConfig,
-		AIProviderConfig:         r.AIProviderConfig,
 		StorageProviderConfig:    r.StorageProviderConfig,
 		CORSAllowedOrigins:       r.CORSAllowedOrigins,
 		LogoKey:                  r.LogoKey,

@@ -532,8 +532,6 @@ outcomes:
       - Require member permission and recent authentication for secrets, and show the audit records.
     theory: theory.md#product-memory
     code:
-      - apps/api/internal/integrations/catalog.go
-      - apps/api/internal/httpapi/integrations.go
       - apps/web/src/routes/_app.developer.tsx
   - id: integrations_and_webhooks.delivery_qualification
     title: Webhooks deliver and recover on a deployment

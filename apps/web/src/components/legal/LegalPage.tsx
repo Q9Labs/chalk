@@ -204,9 +204,6 @@ function PrivacyPolicy() {
         <li>
           <strong>DigitalOcean</strong> runs recording workers when recording is enabled.
         </li>
-        <li>
-          <strong>Composio</strong> processes integration connections if your tenant enables integrations.
-        </li>
       </ul>
       <p>We do not sell personal data, and we do not share it with anyone else except when the law requires it.</p>
 

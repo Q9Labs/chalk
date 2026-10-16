@@ -119,12 +119,6 @@ const (
 	ProviderBridgeClientCAFile      = "CHALK_PROVIDER_BRIDGE_CLIENT_CA_FILE"
 	ProviderBridgeSPIFFETrustDomain = "CHALK_PROVIDER_BRIDGE_SPIFFE_TRUST_DOMAIN"
 
-	ComposioAPIKey        = "CHALK_COMPOSIO_API_KEY"
-	ComposioBaseURL       = "CHALK_COMPOSIO_BASE_URL"
-	ComposioTimeoutMS     = "CHALK_COMPOSIO_TIMEOUT_MS"
-	ComposioWebhookSecret = "CHALK_COMPOSIO_WEBHOOK_SECRET"
-	IntegrationsEnabled   = "CHALK_INTEGRATIONS_ENABLED"
-
 	R2AccessKeyID                   = "CHALK_R2_ACCESS_KEY_ID"
 	R2AccountID                     = "CHALK_R2_ACCOUNT_ID"
 	R2Bucket                        = "CHALK_R2_BUCKET"
@@ -175,8 +169,6 @@ const (
 	DefaultLogLevel                              = "info"
 	DefaultOAuthStateTTLMS                       = int64(10 * 60 * 1000)
 	DefaultCloudflareRealtimeRequestTimeoutMS    = int64(6000)
-	DefaultComposioBaseURL                       = "https://backend.composio.dev/api/v3.1"
-	DefaultComposioTimeoutMS                     = int64(10000)
 	DefaultCloudflareRTKPresetContributor        = "contributor"
 	DefaultCloudflareRTKPresetFacilitator        = "facilitator"
 	DefaultRequestLogs                           = "off"
@@ -194,7 +186,6 @@ const (
 
 	DefaultOAuthStateTTL             = time.Duration(DefaultOAuthStateTTLMS) * time.Millisecond
 	DefaultCloudflareRealtimeTimeout = time.Duration(DefaultCloudflareRealtimeRequestTimeoutMS) * time.Millisecond
-	DefaultComposioTimeout           = time.Duration(DefaultComposioTimeoutMS) * time.Millisecond
 	DefaultR2Timeout                 = time.Duration(DefaultR2RequestTimeoutMS) * time.Millisecond
 	DefaultRecordingKMSTimeout       = time.Duration(DefaultRecordingKMSRequestTimeoutMS) * time.Millisecond
 	DefaultResendTimeout             = time.Duration(DefaultResendTimeoutMS) * time.Millisecond
@@ -212,7 +203,6 @@ type APIConfig struct {
 const opsIngestTokenMinLength = 32
 
 type CapabilityConfig struct {
-	Integrations    bool
 	Recording       bool
 	Transcription   bool
 	WhiteboardFiles bool
@@ -248,13 +238,6 @@ type ProviderBridgeConfig struct {
 	ClientCAFile      string
 	SPIFFETrustDomain string
 	Enabled           bool
-}
-
-type ComposioConfig struct {
-	APIKey         string
-	BaseURL        string
-	RequestTimeout time.Duration
-	WebhookSecret  string
 }
 
 type R2Config struct {
@@ -381,7 +364,6 @@ type Config struct {
 	Capabilities             CapabilityConfig
 	CloudflareRealtime       CloudflareRealtimeConfig
 	DefaultMediaPlane        spaces.MediaPlaneProvider
-	Composio                 ComposioConfig
 	Database                 DatabaseConfig
 	DeadlineScheduler        DeadlineSchedulerConfig
 	EpisodeDiagnostics       EpisodeDiagnosticsConfig
@@ -528,17 +510,6 @@ func Load() (Config, error) {
 	if cloudflareRealtimeRequestTimeout <= 0 {
 		return Config{}, fmt.Errorf("%s must be greater than zero", CloudflareRealtimeRequestTimeoutMS)
 	}
-	composioTimeout, err := envMilliseconds(ComposioTimeoutMS, DefaultComposioTimeoutMS)
-	if err != nil {
-		return Config{}, err
-	}
-	if composioTimeout <= 0 {
-		return Config{}, fmt.Errorf("%s must be greater than zero", ComposioTimeoutMS)
-	}
-	composioAPIKey := envOrDefault(ComposioAPIKey, "")
-	if capabilities.Integrations && strings.TrimSpace(composioAPIKey) == "" {
-		return Config{}, fmt.Errorf("%s must be set when %s=true", ComposioAPIKey, IntegrationsEnabled)
-	}
 	localSystemToken := strings.TrimSpace(envOrDefault(APILocalSystemToken, ""))
 	if environment != DefaultEnvironment && localSystemToken != "" {
 		return Config{}, fmt.Errorf("%s is only supported in local environments", APILocalSystemToken)
@@ -670,12 +641,6 @@ func Load() (Config, error) {
 		Capabilities:       capabilities,
 		CloudflareRealtime: cloudflareRealtime,
 		DefaultMediaPlane:  defaultMediaPlane,
-		Composio: ComposioConfig{
-			APIKey:         composioAPIKey,
-			BaseURL:        envOrDefault(ComposioBaseURL, DefaultComposioBaseURL),
-			RequestTimeout: composioTimeout,
-			WebhookSecret:  envOrDefault(ComposioWebhookSecret, ""),
-		},
 		Database: DatabaseConfig{
 			URL:      databaseURL,
 			MaxConns: maxConns,
@@ -807,10 +772,6 @@ func loadRecentAuthSecret(environment string) ([]byte, error) {
 
 func loadCapabilityConfig(environment string) (CapabilityConfig, error) {
 	defaultEnabled := environment != DefaultEnvironment
-	integrations, err := envStrictBool(IntegrationsEnabled, defaultEnabled)
-	if err != nil {
-		return CapabilityConfig{}, err
-	}
 	transcription, err := envStrictBool(TranscriptionEnabled, defaultEnabled)
 	if err != nil {
 		return CapabilityConfig{}, err
@@ -823,7 +784,7 @@ func loadCapabilityConfig(environment string) (CapabilityConfig, error) {
 	if err != nil {
 		return CapabilityConfig{}, err
 	}
-	return CapabilityConfig{Integrations: integrations, Recording: recording, Transcription: transcription, WhiteboardFiles: whiteboardFiles}, nil
+	return CapabilityConfig{Recording: recording, Transcription: transcription, WhiteboardFiles: whiteboardFiles}, nil
 }
 
 const (

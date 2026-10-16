@@ -13,21 +13,21 @@ func (err APIError) Error() string {
 }
 
 var (
-	apiErrorUnauthenticated             = APIError{Status: http.StatusUnauthorized, Code: "access.unauthenticated", Message: "Authentication required"}
-	apiErrorForbidden                   = APIError{Status: http.StatusForbidden, Code: "access.forbidden", Message: "Access denied"}
-	apiErrorServiceUnavailable          = APIError{Status: http.StatusServiceUnavailable, Code: "service.unavailable", Message: "Service is not ready"}
-	apiErrorInvalidRequest              = APIError{Status: http.StatusBadRequest, Code: "request.invalid", Message: "Invalid request body"}
-	apiErrorInvalidPageSize             = APIError{Status: http.StatusBadRequest, Code: "pagination.invalid_page_size", Message: "Invalid page size"}
-	apiErrorInvalidCursor               = APIError{Status: http.StatusBadRequest, Code: "pagination.invalid_cursor", Message: "Invalid cursor"}
-	apiErrorInvalidTenantID             = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_id", Message: "Invalid tenant id"}
-	apiErrorInvalidTenantName           = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_name", Message: "Invalid tenant name"}
-	apiErrorInvalidTenantRegion         = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_region", Message: "Invalid tenant region"}
-	apiErrorInvalidTenantField          = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_field", Message: "Invalid tenant field"}
-	apiErrorInvalidTenantCORSOrigin     = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_cors_origin", Message: "Use up to 32 exact HTTPS origins; HTTP is allowed only for localhost or loopback addresses"}
-	apiErrorTenantNotFound              = APIError{Status: http.StatusNotFound, Code: "tenant.not_found", Message: "Tenant not found"}
-	apiErrorRateLimited                 = APIError{Status: http.StatusTooManyRequests, Code: "request.rate_limited", Message: "Too many requests"}
-	apiErrorPayloadTooLarge             = APIError{Status: http.StatusRequestEntityTooLarge, Code: "request.payload_too_large", Message: "Request body is too large"}
-	apiErrorInternal                    = APIError{Status: http.StatusInternalServerError, Code: "service.internal_error", Message: "Internal server error"}
+	apiErrorUnauthenticated         = APIError{Status: http.StatusUnauthorized, Code: "access.unauthenticated", Message: "Authentication required"}
+	apiErrorForbidden               = APIError{Status: http.StatusForbidden, Code: "access.forbidden", Message: "Access denied"}
+	apiErrorServiceUnavailable      = APIError{Status: http.StatusServiceUnavailable, Code: "service.unavailable", Message: "Service is not ready"}
+	apiErrorInvalidRequest          = APIError{Status: http.StatusBadRequest, Code: "request.invalid", Message: "Invalid request body"}
+	apiErrorInvalidPageSize         = APIError{Status: http.StatusBadRequest, Code: "pagination.invalid_page_size", Message: "Invalid page size"}
+	apiErrorInvalidCursor           = APIError{Status: http.StatusBadRequest, Code: "pagination.invalid_cursor", Message: "Invalid cursor"}
+	apiErrorInvalidTenantID         = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_id", Message: "Invalid tenant id"}
+	apiErrorInvalidTenantName       = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_name", Message: "Invalid tenant name"}
+	apiErrorInvalidTenantRegion     = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_region", Message: "Invalid tenant region"}
+	apiErrorInvalidTenantField      = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_field", Message: "Invalid tenant field"}
+	apiErrorInvalidTenantCORSOrigin = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_cors_origin", Message: "Use up to 32 exact HTTPS origins; HTTP is allowed only for localhost or loopback addresses"}
+	apiErrorTenantNotFound          = APIError{Status: http.StatusNotFound, Code: "tenant.not_found", Message: "Tenant not found"}
+	apiErrorRateLimited             = APIError{Status: http.StatusTooManyRequests, Code: "request.rate_limited", Message: "Too many requests"}
+	apiErrorPayloadTooLarge         = APIError{Status: http.StatusRequestEntityTooLarge, Code: "request.payload_too_large", Message: "Request body is too large"}
+	apiErrorInternal                = APIError{Status: http.StatusInternalServerError, Code: "service.internal_error", Message: "Internal server error"}
 
 	apiErrorInvalidEmail              = APIError{Status: http.StatusBadRequest, Code: "identity.invalid_email", Message: "Invalid email"}
 	apiErrorInvalidPassword           = APIError{Status: http.StatusBadRequest, Code: "access.invalid_password", Message: "Invalid password"}
@@ -93,16 +93,6 @@ var (
 	apiErrorTranscriptNotFound         = APIError{Status: http.StatusNotFound, Code: "transcript.not_found", Message: "Transcript not found"}
 	apiErrorTranscriptNotReady         = APIError{Status: http.StatusConflict, Code: "transcript.not_ready", Message: "Transcript artifact is not ready"}
 
-	apiErrorInvalidAIConfig        = APIError{Status: http.StatusBadRequest, Code: "ai.invalid_config", Message: "Invalid AI config"}
-	apiErrorInvalidAIGateway       = APIError{Status: http.StatusBadRequest, Code: "ai.invalid_gateway", Message: "Invalid AI gateway"}
-	apiErrorMissingAICredentials   = APIError{Status: http.StatusBadRequest, Code: "ai.missing_credentials", Message: "Missing AI credentials"}
-	apiErrorInvalidAIModel         = APIError{Status: http.StatusBadRequest, Code: "ai.invalid_model", Message: "Invalid AI model"}
-	apiErrorInvalidAIAudio         = APIError{Status: http.StatusBadRequest, Code: "ai.invalid_audio", Message: "Invalid AI audio"}
-	apiErrorAIProviderUnauthorized = APIError{Status: http.StatusBadGateway, Code: "ai.provider_unauthorized", Message: "AI provider rejected credentials"}
-	apiErrorAIProviderPayment      = APIError{Status: http.StatusBadGateway, Code: "ai.provider_payment_required", Message: "AI provider requires payment"}
-	apiErrorAIProviderRateLimited  = APIError{Status: http.StatusTooManyRequests, Code: "ai.provider_rate_limited", Message: "AI provider rate limited the request"}
-	apiErrorAIProviderFailed       = APIError{Status: http.StatusBadGateway, Code: "ai.provider_failed", Message: "AI provider request failed"}
-
 	apiErrorInvalidAuditLogID = APIError{Status: http.StatusBadRequest, Code: "audit.invalid_id", Message: "Invalid audit log id"}
 	apiErrorAuditLogNotFound  = APIError{Status: http.StatusNotFound, Code: "audit.not_found", Message: "Audit log not found"}
 
@@ -130,22 +120,6 @@ var (
 
 	apiErrorInvalidStatusResult = APIError{Status: http.StatusBadRequest, Code: "status.invalid_result", Message: "Invalid monitor result"}
 	apiErrorStatusUnavailable   = APIError{Status: http.StatusServiceUnavailable, Code: "status.unavailable", Message: "Status is unavailable"}
-
-	apiErrorInvalidIntegrationCallbackURL       = APIError{Status: http.StatusBadRequest, Code: "integration.invalid_callback_url", Message: "Invalid callback URL"}
-	apiErrorInvalidIntegrationProvider          = APIError{Status: http.StatusBadRequest, Code: "integration.invalid_provider", Message: "Invalid integration provider"}
-	apiErrorInvalidIntegrationService           = APIError{Status: http.StatusBadRequest, Code: "integration.invalid_service", Message: "Invalid integration service"}
-	apiErrorInvalidIntegrationConnectionID      = APIError{Status: http.StatusBadRequest, Code: "integration.invalid_connection_id", Message: "Invalid integration connection id"}
-	apiErrorInvalidIntegrationAction            = APIError{Status: http.StatusBadRequest, Code: "integration.invalid_action", Message: "Invalid integration action"}
-	apiErrorInvalidIntegrationActionInput       = APIError{Status: http.StatusBadRequest, Code: "integration.invalid_action_input", Message: "Use either action arguments or text"}
-	apiErrorInvalidIntegrationActionText        = APIError{Status: http.StatusBadRequest, Code: "integration.invalid_action_text", Message: "Invalid integration action text"}
-	apiErrorIntegrationProviderUnauthorized     = APIError{Status: http.StatusBadGateway, Code: "integration.provider_unauthorized", Message: "Integration provider rejected the request"}
-	apiErrorIntegrationProviderRateLimited      = APIError{Status: http.StatusTooManyRequests, Code: "integration.provider_rate_limited", Message: "Integration provider rate limited the request"}
-	apiErrorIntegrationProviderAuthUnconfigured = APIError{Status: http.StatusServiceUnavailable, Code: "integration.provider_unavailable", Message: "Integration provider auth is not configured"}
-	apiErrorIntegrationProviderUnavailable      = APIError{Status: http.StatusBadGateway, Code: "integration.provider_unavailable", Message: "Integration provider unavailable"}
-	apiErrorIntegrationConnectionNotFound       = APIError{Status: http.StatusNotFound, Code: "integration.connection_not_found", Message: "Integration connection not found"}
-	apiErrorIntegrationConnectionAlreadyExists  = APIError{Status: http.StatusConflict, Code: "integration.connection_already_exists", Message: "Integration connection already exists"}
-	apiErrorIntegrationConnectionNotActive      = APIError{Status: http.StatusConflict, Code: "integration.connection_not_active", Message: "Integration connection is not active"}
-	apiErrorIntegrationActionNotAllowed         = APIError{Status: http.StatusForbidden, Code: "integration.action_not_allowed", Message: "Integration action not allowed"}
 )
 
 func writeAPIError(w http.ResponseWriter, err APIError) {

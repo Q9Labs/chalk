@@ -2,24 +2,6 @@
 // Do not edit by hand.
 import { Schema, SchemaGetter } from "effect";
 
-export const URLStringSchema = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9+.-]*:/i)).pipe(Schema.brand("URLString"));
-export type URLString = typeof URLStringSchema.Type;
-
-export const AIProviderConfigSchema = Schema.StructWithRest(
-  Schema.Struct({
-    allowed_models: Schema.optional(Schema.Array(Schema.String.check(Schema.isMinLength(1))).check(Schema.isMinLength(1))),
-    api_key: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-    base_url: Schema.optional(URLStringSchema),
-    default_model: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-    enabled: Schema.optional(Schema.Boolean),
-    fallback_model: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-    mode: Schema.optional(Schema.Literals(["chalk_managed", "tenant_managed"])),
-    provider: Schema.optional(Schema.Literal("openrouter")),
-  }),
-  [Schema.Record(Schema.String, Schema.Unknown)],
-);
-export type AIProviderConfig = typeof AIProviderConfigSchema.Type;
-
 export const DateTimeStringSchema = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}T/)).pipe(Schema.brand("DateTimeString"));
 export type DateTimeString = typeof DateTimeStringSchema.Type;
 
@@ -158,8 +140,10 @@ export const StorageProviderConfigSchema = Schema.StructWithRest(
 );
 export type StorageProviderConfig = typeof StorageProviderConfigSchema.Type;
 
+export const URLStringSchema = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9+.-]*:/i)).pipe(Schema.brand("URLString"));
+export type URLString = typeof URLStringSchema.Type;
+
 export const TenantSchema = Schema.Struct({
-  ai_provider_config: Schema.NullOr(AIProviderConfigSchema),
   cors_allowed_origins: Schema.Array(
     Schema.String.check(Schema.isMaxLength(2048), Schema.isPattern(new RegExp("^(?:[Hh][Tt][Tt][Pp][Ss]://[^/?#@\\s]+|[Hh][Tt][Tt][Pp]://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127(?:\\.[0-9]+){0,3}|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]+)?)$")), Schema.isPattern(/^[a-z][a-z0-9+.-]*:/i)),
   ).check(Schema.isMaxLength(32)),
@@ -490,7 +474,6 @@ export const CreateSpaceRequestSchema = Schema.Struct({
 export type CreateSpaceRequest = typeof CreateSpaceRequestSchema.Type;
 
 export const CreateTenantRequestSchema = Schema.Struct({
-  ai_provider_config: Schema.optional(Schema.NullOr(AIProviderConfigSchema)),
   cors_allowed_origins: Schema.optional(
     Schema.Array(
       Schema.String.check(Schema.isMaxLength(2048), Schema.isPattern(new RegExp("^(?:[Hh][Tt][Tt][Pp][Ss]://[^/?#@\\s]+|[Hh][Tt][Tt][Pp]://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127(?:\\.[0-9]+){0,3}|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]+)?)$")), Schema.isPattern(/^[a-z][a-z0-9+.-]*:/i)),
@@ -608,13 +591,6 @@ export const ErrorResponseSchema = Schema.Struct({
 });
 export type ErrorResponse = typeof ErrorResponseSchema.Type;
 
-export const ExecuteIntegrationActionRequestSchema = Schema.Struct({
-  action: Schema.String.check(Schema.isMinLength(1)),
-  arguments: Schema.optional(Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown))),
-  text: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
-});
-export type ExecuteIntegrationActionRequest = typeof ExecuteIntegrationActionRequestSchema.Type;
-
 export const InitiateChatAttachmentUploadRequestSchema = Schema.Struct({
   byteLength: Schema.Number,
   clientAttachmentId: Schema.String.check(Schema.isMinLength(1)),
@@ -636,86 +612,8 @@ export type InitiateWhiteboardFileUploadRequest = typeof InitiateWhiteboardFileU
 export const IntegrationActionIdSchema = Schema.String.check(Schema.isMinLength(1)).pipe(Schema.brand("IntegrationActionId"));
 export type IntegrationActionId = typeof IntegrationActionIdSchema.Type;
 
-export const IntegrationConnectionSchema = Schema.Struct({
-  account_email: Schema.NullOr(Schema.String),
-  account_label: Schema.NullOr(Schema.String),
-  connected_at: Schema.NullOr(DateTimeStringSchema),
-  created_at: DateTimeStringSchema,
-  expires_at: Schema.NullOr(DateTimeStringSchema),
-  id: UUIDSchema,
-  last_used_at: Schema.NullOr(DateTimeStringSchema),
-  provider: Schema.String,
-  revoked_at: Schema.NullOr(DateTimeStringSchema),
-  scopes: Schema.Array(Schema.String),
-  service: Schema.String,
-  status: Schema.String,
-  tenant_id: TenantIdSchema,
-  updated_at: DateTimeStringSchema,
-  user_id: UserIdSchema,
-});
-export type IntegrationConnection = typeof IntegrationConnectionSchema.Type;
-
-export const IntegrationActionExecutionSchema = Schema.Struct({
-  action: Schema.Struct({
-    capability_tags: Schema.Array(Schema.String),
-    display_name: Schema.String,
-    id: IntegrationActionIdSchema,
-    risk_tags: Schema.Array(Schema.String),
-  }),
-  connection: IntegrationConnectionSchema,
-  data: Schema.Record(Schema.String, Schema.Unknown),
-  log_id: Schema.optional(UUIDSchema),
-});
-export type IntegrationActionExecution = typeof IntegrationActionExecutionSchema.Type;
-
-export const IntegrationConnectionListSchema = Schema.Struct({
-  connections: Schema.Array(IntegrationConnectionSchema),
-  pagination: PaginationSchema,
-});
-export type IntegrationConnectionList = typeof IntegrationConnectionListSchema.Type;
-
-export const IntegrationConnectionRefreshSchema = Schema.Struct({
-  connect_url: Schema.optional(Schema.NullOr(URLStringSchema)),
-  connection: IntegrationConnectionSchema,
-});
-export type IntegrationConnectionRefresh = typeof IntegrationConnectionRefreshSchema.Type;
-
-export const IntegrationConnectionStartSchema = Schema.Struct({
-  connect_url: URLStringSchema,
-  connection: IntegrationConnectionSchema,
-  expires_at: Schema.NullOr(DateTimeStringSchema),
-});
-export type IntegrationConnectionStart = typeof IntegrationConnectionStartSchema.Type;
-
 export const IntegrationServiceIdSchema = Schema.String.check(Schema.isMinLength(1)).pipe(Schema.brand("IntegrationServiceId"));
 export type IntegrationServiceId = typeof IntegrationServiceIdSchema.Type;
-
-export const IntegrationServicesSchema = Schema.Struct({
-  families: Schema.Array(
-    Schema.Struct({
-      name: Schema.String,
-      services: Schema.Array(
-        Schema.Struct({
-          actions: Schema.Array(
-            Schema.Struct({
-              capability_tags: Schema.Array(Schema.String),
-              display_name: Schema.String,
-              id: IntegrationActionIdSchema,
-              risk_tags: Schema.Array(Schema.String),
-            }),
-          ),
-          capability_tags: Schema.Array(Schema.String),
-          display_name: Schema.String,
-          family: Schema.String,
-          id: IntegrationServiceIdSchema,
-          provider: Schema.String,
-          risk_tags: Schema.Array(Schema.String),
-        }),
-      ),
-    }),
-  ),
-});
-export type IntegrationServices = typeof IntegrationServicesSchema.Type;
 
 export const IssueAccessGrantRequestSchema = Schema.Struct({
   current_media_token: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
@@ -1191,14 +1089,6 @@ export const SpacePublicInviteArrivalRequestSchema = Schema.Struct({
 });
 export type SpacePublicInviteArrivalRequest = typeof SpacePublicInviteArrivalRequestSchema.Type;
 
-export const StartIntegrationConnectionRequestSchema = Schema.Struct({
-  account_alias: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
-  callback_url: Schema.optional(Schema.NullOr(URLStringSchema)),
-  provider: Schema.String.check(Schema.isMinLength(1)),
-  service: Schema.String.check(Schema.isMinLength(1)),
-});
-export type StartIntegrationConnectionRequest = typeof StartIntegrationConnectionRequestSchema.Type;
-
 export const StatusMonitorIdentifierSchema = Schema.String.check(Schema.isMinLength(1)).pipe(Schema.brand("StatusMonitorIdentifier"));
 export type StatusMonitorIdentifier = typeof StatusMonitorIdentifierSchema.Type;
 
@@ -1361,7 +1251,6 @@ export const UpdateSpaceRequestSchema = Schema.Struct({
 export type UpdateSpaceRequest = typeof UpdateSpaceRequestSchema.Type;
 
 export const UpdateTenantRequestSchema = Schema.Struct({
-  ai_provider_config: Schema.optional(Schema.NullOr(AIProviderConfigSchema)),
   cors_allowed_origins: Schema.optional(
     Schema.Array(
       Schema.String.check(Schema.isMaxLength(2048), Schema.isPattern(new RegExp("^(?:[Hh][Tt][Tt][Pp][Ss]://[^/?#@\\s]+|[Hh][Tt][Tt][Pp]://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127(?:\\.[0-9]+){0,3}|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]+)?)$")), Schema.isPattern(/^[a-z][a-z0-9+.-]*:/i)),
@@ -2030,27 +1919,6 @@ export const DenySpacePublicAdmissionRequest429ResponseHeadersSchema = Schema.St
 });
 export type DenySpacePublicAdmissionRequest429ResponseHeaders = typeof DenySpacePublicAdmissionRequest429ResponseHeadersSchema.Type;
 
-export const DisableIntegrationConnectionPathParamsSchema = Schema.Struct({
-  connection_id: UUIDSchema,
-  tenant_id: TenantIdSchema,
-});
-export type DisableIntegrationConnectionPathParams = typeof DisableIntegrationConnectionPathParamsSchema.Type;
-
-export const DisableIntegrationConnectionQueryParamsSchema = Schema.Struct({
-  revoke: Schema.optional(Schema.Boolean),
-});
-export type DisableIntegrationConnectionQueryParams = typeof DisableIntegrationConnectionQueryParamsSchema.Type;
-
-export const DisableIntegrationConnectionResponseSchema = IntegrationConnectionSchema;
-export type DisableIntegrationConnectionResponse = typeof DisableIntegrationConnectionResponseSchema.Type;
-
-export const DisableIntegrationConnection429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type DisableIntegrationConnection429ResponseHeaders = typeof DisableIntegrationConnection429ResponseHeadersSchema.Type;
-
 export const EndEpisodePathParamsSchema = Schema.Struct({
   episode_id: EpisodeIdSchema,
   space_id: SpaceIdSchema,
@@ -2072,25 +1940,6 @@ export const EndEpisode429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type EndEpisode429ResponseHeaders = typeof EndEpisode429ResponseHeadersSchema.Type;
-
-export const ExecuteIntegrationActionPathParamsSchema = Schema.Struct({
-  connection_id: UUIDSchema,
-  tenant_id: TenantIdSchema,
-});
-export type ExecuteIntegrationActionPathParams = typeof ExecuteIntegrationActionPathParamsSchema.Type;
-
-export const ExecuteIntegrationActionRequestBodySchema = ExecuteIntegrationActionRequestSchema;
-export type ExecuteIntegrationActionRequestBody = typeof ExecuteIntegrationActionRequestBodySchema.Type;
-
-export const ExecuteIntegrationActionResponseSchema = IntegrationActionExecutionSchema;
-export type ExecuteIntegrationActionResponse = typeof ExecuteIntegrationActionResponseSchema.Type;
-
-export const ExecuteIntegrationAction429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type ExecuteIntegrationAction429ResponseHeaders = typeof ExecuteIntegrationAction429ResponseHeadersSchema.Type;
 
 export const FinalizeChatAttachmentUploadPathParamsSchema = Schema.Struct({
   uploadId: Schema.String,
@@ -2152,15 +2001,6 @@ export type GetEpisodePathParams = typeof GetEpisodePathParamsSchema.Type;
 
 export const GetEpisodeResponseSchema = EpisodeSchema;
 export type GetEpisodeResponse = typeof GetEpisodeResponseSchema.Type;
-
-export const GetIntegrationConnectionPathParamsSchema = Schema.Struct({
-  connection_id: UUIDSchema,
-  tenant_id: TenantIdSchema,
-});
-export type GetIntegrationConnectionPathParams = typeof GetIntegrationConnectionPathParamsSchema.Type;
-
-export const GetIntegrationConnectionResponseSchema = IntegrationConnectionSchema;
-export type GetIntegrationConnectionResponse = typeof GetIntegrationConnectionResponseSchema.Type;
 
 export const GetMeResponseSchema = AuthUserSchema;
 export type GetMeResponse = typeof GetMeResponseSchema.Type;
@@ -2580,31 +2420,6 @@ export type ListEpisodesQueryParams = typeof ListEpisodesQueryParamsSchema.Type;
 export const ListEpisodesResponseSchema = EpisodeListSchema;
 export type ListEpisodesResponse = typeof ListEpisodesResponseSchema.Type;
 
-export const ListIntegrationConnectionsPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
-export type ListIntegrationConnectionsPathParams = typeof ListIntegrationConnectionsPathParamsSchema.Type;
-
-export const ListIntegrationConnectionsQueryParamsSchema = Schema.Struct({
-  cursor: Schema.optional(Schema.String),
-  page_size: Schema.optional(Schema.NumberFromString),
-  provider: Schema.optional(Schema.String),
-  service: Schema.optional(Schema.String),
-  status: Schema.optional(Schema.String),
-});
-export type ListIntegrationConnectionsQueryParams = typeof ListIntegrationConnectionsQueryParamsSchema.Type;
-
-export const ListIntegrationConnectionsResponseSchema = IntegrationConnectionListSchema;
-export type ListIntegrationConnectionsResponse = typeof ListIntegrationConnectionsResponseSchema.Type;
-
-export const ListIntegrationServicesPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
-export type ListIntegrationServicesPathParams = typeof ListIntegrationServicesPathParamsSchema.Type;
-
-export const ListIntegrationServicesResponseSchema = IntegrationServicesSchema;
-export type ListIntegrationServicesResponse = typeof ListIntegrationServicesResponseSchema.Type;
-
 export const ListMembershipsPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
 });
@@ -2919,22 +2734,6 @@ export const RefreshDashboardSpaceSelfAccess429ResponseHeadersSchema = Schema.St
 });
 export type RefreshDashboardSpaceSelfAccess429ResponseHeaders = typeof RefreshDashboardSpaceSelfAccess429ResponseHeadersSchema.Type;
 
-export const RefreshIntegrationConnectionPathParamsSchema = Schema.Struct({
-  connection_id: UUIDSchema,
-  tenant_id: TenantIdSchema,
-});
-export type RefreshIntegrationConnectionPathParams = typeof RefreshIntegrationConnectionPathParamsSchema.Type;
-
-export const RefreshIntegrationConnectionResponseSchema = IntegrationConnectionRefreshSchema;
-export type RefreshIntegrationConnectionResponse = typeof RefreshIntegrationConnectionResponseSchema.Type;
-
-export const RefreshIntegrationConnection429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type RefreshIntegrationConnection429ResponseHeaders = typeof RefreshIntegrationConnection429ResponseHeadersSchema.Type;
-
 export const RefreshSpacePublicInviteAccessRequestHeadersSchema = Schema.Struct({
   "X-Chalk-Arrival-Handle": Schema.String,
 });
@@ -3236,24 +3035,6 @@ export const StartGoogleSignIn429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type StartGoogleSignIn429ResponseHeaders = typeof StartGoogleSignIn429ResponseHeadersSchema.Type;
-
-export const StartIntegrationConnectionPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
-export type StartIntegrationConnectionPathParams = typeof StartIntegrationConnectionPathParamsSchema.Type;
-
-export const StartIntegrationConnectionRequestBodySchema = StartIntegrationConnectionRequestSchema;
-export type StartIntegrationConnectionRequestBody = typeof StartIntegrationConnectionRequestBodySchema.Type;
-
-export const StartIntegrationConnectionResponseSchema = IntegrationConnectionStartSchema;
-export type StartIntegrationConnectionResponse = typeof StartIntegrationConnectionResponseSchema.Type;
-
-export const StartIntegrationConnection429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type StartIntegrationConnection429ResponseHeaders = typeof StartIntegrationConnection429ResponseHeadersSchema.Type;
 
 export const StartRecentAuthGoogleQueryParamsSchema = Schema.Struct({
   action: Schema.String.check(Schema.isMaxLength(64)),
@@ -4053,272 +3834,6 @@ export const IdentityInvalidEmailErrorWireSchema = Schema.Struct({
 export const IdentityInvalidEmailErrorSchema = IdentityInvalidEmailErrorWireSchema.pipe(
   Schema.decodeTo(IdentityInvalidEmailError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "IdentityInvalidEmailError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class IntegrationActionNotAllowedError extends Schema.TaggedErrorClass<IntegrationActionNotAllowedError>()("IntegrationActionNotAllowedError", {
-  error: Schema.Struct({
-    code: Schema.Literal("integration.action_not_allowed"),
-    message: Schema.String,
-  }),
-}) {}
-export const IntegrationActionNotAllowedErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("integration.action_not_allowed"),
-    message: Schema.String,
-  }),
-});
-export const IntegrationActionNotAllowedErrorSchema = IntegrationActionNotAllowedErrorWireSchema.pipe(
-  Schema.decodeTo(IntegrationActionNotAllowedError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "IntegrationActionNotAllowedError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class IntegrationConnectionAlreadyExistsError extends Schema.TaggedErrorClass<IntegrationConnectionAlreadyExistsError>()("IntegrationConnectionAlreadyExistsError", {
-  error: Schema.Struct({
-    code: Schema.Literal("integration.connection_already_exists"),
-    message: Schema.String,
-  }),
-}) {}
-export const IntegrationConnectionAlreadyExistsErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("integration.connection_already_exists"),
-    message: Schema.String,
-  }),
-});
-export const IntegrationConnectionAlreadyExistsErrorSchema = IntegrationConnectionAlreadyExistsErrorWireSchema.pipe(
-  Schema.decodeTo(IntegrationConnectionAlreadyExistsError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "IntegrationConnectionAlreadyExistsError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class IntegrationConnectionNotActiveError extends Schema.TaggedErrorClass<IntegrationConnectionNotActiveError>()("IntegrationConnectionNotActiveError", {
-  error: Schema.Struct({
-    code: Schema.Literal("integration.connection_not_active"),
-    message: Schema.String,
-  }),
-}) {}
-export const IntegrationConnectionNotActiveErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("integration.connection_not_active"),
-    message: Schema.String,
-  }),
-});
-export const IntegrationConnectionNotActiveErrorSchema = IntegrationConnectionNotActiveErrorWireSchema.pipe(
-  Schema.decodeTo(IntegrationConnectionNotActiveError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "IntegrationConnectionNotActiveError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class IntegrationConnectionNotFoundError extends Schema.TaggedErrorClass<IntegrationConnectionNotFoundError>()("IntegrationConnectionNotFoundError", {
-  error: Schema.Struct({
-    code: Schema.Literal("integration.connection_not_found"),
-    message: Schema.String,
-  }),
-}) {}
-export const IntegrationConnectionNotFoundErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("integration.connection_not_found"),
-    message: Schema.String,
-  }),
-});
-export const IntegrationConnectionNotFoundErrorSchema = IntegrationConnectionNotFoundErrorWireSchema.pipe(
-  Schema.decodeTo(IntegrationConnectionNotFoundError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "IntegrationConnectionNotFoundError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class IntegrationInvalidActionError extends Schema.TaggedErrorClass<IntegrationInvalidActionError>()("IntegrationInvalidActionError", {
-  error: Schema.Struct({
-    code: Schema.Literal("integration.invalid_action"),
-    message: Schema.String,
-  }),
-}) {}
-export const IntegrationInvalidActionErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("integration.invalid_action"),
-    message: Schema.String,
-  }),
-});
-export const IntegrationInvalidActionErrorSchema = IntegrationInvalidActionErrorWireSchema.pipe(
-  Schema.decodeTo(IntegrationInvalidActionError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "IntegrationInvalidActionError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class IntegrationInvalidActionInputError extends Schema.TaggedErrorClass<IntegrationInvalidActionInputError>()("IntegrationInvalidActionInputError", {
-  error: Schema.Struct({
-    code: Schema.Literal("integration.invalid_action_input"),
-    message: Schema.String,
-  }),
-}) {}
-export const IntegrationInvalidActionInputErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("integration.invalid_action_input"),
-    message: Schema.String,
-  }),
-});
-export const IntegrationInvalidActionInputErrorSchema = IntegrationInvalidActionInputErrorWireSchema.pipe(
-  Schema.decodeTo(IntegrationInvalidActionInputError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "IntegrationInvalidActionInputError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class IntegrationInvalidActionTextError extends Schema.TaggedErrorClass<IntegrationInvalidActionTextError>()("IntegrationInvalidActionTextError", {
-  error: Schema.Struct({
-    code: Schema.Literal("integration.invalid_action_text"),
-    message: Schema.String,
-  }),
-}) {}
-export const IntegrationInvalidActionTextErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("integration.invalid_action_text"),
-    message: Schema.String,
-  }),
-});
-export const IntegrationInvalidActionTextErrorSchema = IntegrationInvalidActionTextErrorWireSchema.pipe(
-  Schema.decodeTo(IntegrationInvalidActionTextError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "IntegrationInvalidActionTextError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class IntegrationInvalidCallbackUrlError extends Schema.TaggedErrorClass<IntegrationInvalidCallbackUrlError>()("IntegrationInvalidCallbackUrlError", {
-  error: Schema.Struct({
-    code: Schema.Literal("integration.invalid_callback_url"),
-    message: Schema.String,
-  }),
-}) {}
-export const IntegrationInvalidCallbackUrlErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("integration.invalid_callback_url"),
-    message: Schema.String,
-  }),
-});
-export const IntegrationInvalidCallbackUrlErrorSchema = IntegrationInvalidCallbackUrlErrorWireSchema.pipe(
-  Schema.decodeTo(IntegrationInvalidCallbackUrlError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "IntegrationInvalidCallbackUrlError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class IntegrationInvalidConnectionIdError extends Schema.TaggedErrorClass<IntegrationInvalidConnectionIdError>()("IntegrationInvalidConnectionIdError", {
-  error: Schema.Struct({
-    code: Schema.Literal("integration.invalid_connection_id"),
-    message: Schema.String,
-  }),
-}) {}
-export const IntegrationInvalidConnectionIdErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("integration.invalid_connection_id"),
-    message: Schema.String,
-  }),
-});
-export const IntegrationInvalidConnectionIdErrorSchema = IntegrationInvalidConnectionIdErrorWireSchema.pipe(
-  Schema.decodeTo(IntegrationInvalidConnectionIdError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "IntegrationInvalidConnectionIdError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class IntegrationInvalidProviderError extends Schema.TaggedErrorClass<IntegrationInvalidProviderError>()("IntegrationInvalidProviderError", {
-  error: Schema.Struct({
-    code: Schema.Literal("integration.invalid_provider"),
-    message: Schema.String,
-  }),
-}) {}
-export const IntegrationInvalidProviderErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("integration.invalid_provider"),
-    message: Schema.String,
-  }),
-});
-export const IntegrationInvalidProviderErrorSchema = IntegrationInvalidProviderErrorWireSchema.pipe(
-  Schema.decodeTo(IntegrationInvalidProviderError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "IntegrationInvalidProviderError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class IntegrationInvalidServiceError extends Schema.TaggedErrorClass<IntegrationInvalidServiceError>()("IntegrationInvalidServiceError", {
-  error: Schema.Struct({
-    code: Schema.Literal("integration.invalid_service"),
-    message: Schema.String,
-  }),
-}) {}
-export const IntegrationInvalidServiceErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("integration.invalid_service"),
-    message: Schema.String,
-  }),
-});
-export const IntegrationInvalidServiceErrorSchema = IntegrationInvalidServiceErrorWireSchema.pipe(
-  Schema.decodeTo(IntegrationInvalidServiceError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "IntegrationInvalidServiceError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class IntegrationProviderRateLimitedError extends Schema.TaggedErrorClass<IntegrationProviderRateLimitedError>()("IntegrationProviderRateLimitedError", {
-  error: Schema.Struct({
-    code: Schema.Literal("integration.provider_rate_limited"),
-    message: Schema.String,
-  }),
-}) {}
-export const IntegrationProviderRateLimitedErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("integration.provider_rate_limited"),
-    message: Schema.String,
-  }),
-});
-export const IntegrationProviderRateLimitedErrorSchema = IntegrationProviderRateLimitedErrorWireSchema.pipe(
-  Schema.decodeTo(IntegrationProviderRateLimitedError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "IntegrationProviderRateLimitedError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class IntegrationProviderUnauthorizedError extends Schema.TaggedErrorClass<IntegrationProviderUnauthorizedError>()("IntegrationProviderUnauthorizedError", {
-  error: Schema.Struct({
-    code: Schema.Literal("integration.provider_unauthorized"),
-    message: Schema.String,
-  }),
-}) {}
-export const IntegrationProviderUnauthorizedErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("integration.provider_unauthorized"),
-    message: Schema.String,
-  }),
-});
-export const IntegrationProviderUnauthorizedErrorSchema = IntegrationProviderUnauthorizedErrorWireSchema.pipe(
-  Schema.decodeTo(IntegrationProviderUnauthorizedError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "IntegrationProviderUnauthorizedError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class IntegrationProviderUnavailableError extends Schema.TaggedErrorClass<IntegrationProviderUnavailableError>()("IntegrationProviderUnavailableError", {
-  error: Schema.Struct({
-    code: Schema.Literal("integration.provider_unavailable"),
-    message: Schema.String,
-  }),
-}) {}
-export const IntegrationProviderUnavailableErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("integration.provider_unavailable"),
-    message: Schema.String,
-  }),
-});
-export const IntegrationProviderUnavailableErrorSchema = IntegrationProviderUnavailableErrorWireSchema.pipe(
-  Schema.decodeTo(IntegrationProviderUnavailableError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "IntegrationProviderUnavailableError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -6453,22 +5968,6 @@ export const DenySpacePublicAdmissionRequestErrorSchema = Schema.Union([
 ]);
 export type DenySpacePublicAdmissionRequestError = typeof DenySpacePublicAdmissionRequestErrorSchema.Type;
 
-export const DisableIntegrationConnectionErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  IntegrationConnectionNotActiveErrorSchema,
-  IntegrationConnectionNotFoundErrorSchema,
-  IntegrationInvalidConnectionIdErrorSchema,
-  IntegrationProviderRateLimitedErrorSchema,
-  IntegrationProviderUnauthorizedErrorSchema,
-  IntegrationProviderUnavailableErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type DisableIntegrationConnectionError = typeof DisableIntegrationConnectionErrorSchema.Type;
-
 export const EndEpisodeErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -6486,28 +5985,6 @@ export const EndEpisodeErrorSchema = Schema.Union([
   TenantInvalidIdErrorSchema,
 ]);
 export type EndEpisodeError = typeof EndEpisodeErrorSchema.Type;
-
-export const ExecuteIntegrationActionErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  IntegrationActionNotAllowedErrorSchema,
-  IntegrationConnectionNotActiveErrorSchema,
-  IntegrationConnectionNotFoundErrorSchema,
-  IntegrationInvalidActionErrorSchema,
-  IntegrationInvalidActionInputErrorSchema,
-  IntegrationInvalidActionTextErrorSchema,
-  IntegrationInvalidConnectionIdErrorSchema,
-  IntegrationProviderRateLimitedErrorSchema,
-  IntegrationProviderUnauthorizedErrorSchema,
-  IntegrationProviderUnavailableErrorSchema,
-  RequestInvalidErrorSchema,
-  RequestPayloadTooLargeErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type ExecuteIntegrationActionError = typeof ExecuteIntegrationActionErrorSchema.Type;
 
 export const FinalizeChatAttachmentUploadErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -6575,9 +6052,6 @@ export const GetEpisodeErrorSchema = Schema.Union([
   TenantInvalidIdErrorSchema,
 ]);
 export type GetEpisodeError = typeof GetEpisodeErrorSchema.Type;
-
-export const GetIntegrationConnectionErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, IntegrationConnectionNotFoundErrorSchema, IntegrationInvalidConnectionIdErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
-export type GetIntegrationConnectionError = typeof GetIntegrationConnectionErrorSchema.Type;
 
 export const GetMeErrorSchema = Schema.Union([AccessUnauthenticatedErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
 export type GetMeError = typeof GetMeErrorSchema.Type;
@@ -6918,22 +6392,6 @@ export const ListEpisodesErrorSchema = Schema.Union([
 ]);
 export type ListEpisodesError = typeof ListEpisodesErrorSchema.Type;
 
-export const ListIntegrationConnectionsErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  IntegrationInvalidProviderErrorSchema,
-  IntegrationInvalidServiceErrorSchema,
-  PaginationInvalidCursorErrorSchema,
-  PaginationInvalidPageSizeErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type ListIntegrationConnectionsError = typeof ListIntegrationConnectionsErrorSchema.Type;
-
-export const ListIntegrationServicesErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
-export type ListIntegrationServicesError = typeof ListIntegrationServicesErrorSchema.Type;
-
 export const ListMembershipsErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, PaginationInvalidCursorErrorSchema, PaginationInvalidPageSizeErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
 export type ListMembershipsError = typeof ListMembershipsErrorSchema.Type;
 
@@ -7152,22 +6610,6 @@ export const RefreshDashboardSpaceSelfAccessErrorSchema = Schema.Union([
   TenantInvalidIdErrorSchema,
 ]);
 export type RefreshDashboardSpaceSelfAccessError = typeof RefreshDashboardSpaceSelfAccessErrorSchema.Type;
-
-export const RefreshIntegrationConnectionErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  IntegrationConnectionNotActiveErrorSchema,
-  IntegrationConnectionNotFoundErrorSchema,
-  IntegrationInvalidConnectionIdErrorSchema,
-  IntegrationProviderRateLimitedErrorSchema,
-  IntegrationProviderUnauthorizedErrorSchema,
-  IntegrationProviderUnavailableErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type RefreshIntegrationConnectionError = typeof RefreshIntegrationConnectionErrorSchema.Type;
 
 export const RefreshSpacePublicInviteAccessErrorSchema = Schema.Union([
   AccessMediaProofExpiredErrorSchema,
@@ -7420,23 +6862,6 @@ export type SetEpisodeDeadlineError = typeof SetEpisodeDeadlineErrorSchema.Type;
 export const StartGoogleSignInErrorSchema = Schema.Union([OauthNotConfiguredErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
 export type StartGoogleSignInError = typeof StartGoogleSignInErrorSchema.Type;
 
-export const StartIntegrationConnectionErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  IntegrationConnectionAlreadyExistsErrorSchema,
-  IntegrationInvalidCallbackUrlErrorSchema,
-  IntegrationInvalidProviderErrorSchema,
-  IntegrationInvalidServiceErrorSchema,
-  IntegrationProviderUnavailableErrorSchema,
-  RequestInvalidErrorSchema,
-  RequestPayloadTooLargeErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type StartIntegrationConnectionError = typeof StartIntegrationConnectionErrorSchema.Type;
-
 export const StartRecentAuthGoogleErrorSchema = Schema.Union([AccessUnauthenticatedErrorSchema, OauthNotConfiguredErrorSchema, RequestInvalidErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
 export type StartRecentAuthGoogleError = typeof StartRecentAuthGoogleErrorSchema.Type;
 
@@ -7593,9 +7018,7 @@ export const ChalkOperationPolicies = {
   deleteTranscript: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   deleteWebhookEndpoint: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   denySpacePublicAdmissionRequest: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  disableIntegrationConnection: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   endEpisode: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  executeIntegrationAction: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   finalizeChatAttachmentUpload: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   finalizeWhiteboardFileUpload: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   getEpisode: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
@@ -7628,7 +7051,6 @@ export const ChalkOperationPolicies = {
   prepareSpaceRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   redeliverWebhookDelivery: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   refreshDashboardSpaceSelfAccess: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  refreshIntegrationConnection: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   refreshSpacePublicInviteAccess: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   register: { maxBodyBytes: 1048576, rateLimit: { limit: 5, policy: "auth.register", windowSeconds: 60 } },
   removeEpisodeParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -7645,7 +7067,6 @@ export const ChalkOperationPolicies = {
   rotateWebhookEndpointSecret: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   setEpisodeDeadline: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   startGoogleSignIn: { rateLimit: { limit: 20, policy: "auth.oauth.start", windowSeconds: 60 } },
-  startIntegrationConnection: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   startRecentAuthGoogle: { rateLimit: { limit: 20, policy: "auth.oauth.start", windowSeconds: 60 } },
   testWebhookEndpoint: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

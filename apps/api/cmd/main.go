@@ -22,7 +22,6 @@ import (
 	r2adapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/r2"
 	rtkadapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/rtk"
 	sfuadapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu"
-	composioadapter "github.com/q9labs/chalk/apps/api/internal/adapters/composio"
 	googleadapter "github.com/q9labs/chalk/apps/api/internal/adapters/google"
 	mediaplaneprovideradapter "github.com/q9labs/chalk/apps/api/internal/adapters/mediaplaneproviders"
 	passwordadapter "github.com/q9labs/chalk/apps/api/internal/adapters/password"
@@ -42,7 +41,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/email"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
-	"github.com/q9labs/chalk/apps/api/internal/integrations"
 	"github.com/q9labs/chalk/apps/api/internal/journeys"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
@@ -129,7 +127,6 @@ func run() error {
 	logger.Info("api starting",
 		"event", "api.starting",
 		"address", cfg.API.Address,
-		"integrations_enabled", cfg.Capabilities.Integrations,
 		"log_format", cfg.Observability.LogFormat,
 		"log_level", cfg.Observability.LogLevel,
 		"otlp_endpoint_configured", cfg.Observability.OTLPEndpoint != "",
@@ -455,25 +452,6 @@ func run() error {
 		recordingPreparationService = recordingpreparation.NewService(postgres.NewRecordingPreparationRepository(pool), spaceService)
 	}
 	recorderHealthService := recorderhealth.NewService(recordingPipelineRepository, 2*time.Minute)
-	var integrationService httpapi.IntegrationService
-	if cfg.Capabilities.Integrations {
-		integrationCatalog, err := integrations.DefaultCatalog()
-		if err != nil {
-			return fmt.Errorf("configure integration catalog: %w", err)
-		}
-		integrationRepository := postgres.NewIntegrationRepository(operationQueries, pool)
-		provider, err := composioadapter.NewAdapter(composioadapter.Config{
-			APIKey:         cfg.Composio.APIKey,
-			BaseURL:        cfg.Composio.BaseURL,
-			RequestTimeout: cfg.Composio.RequestTimeout,
-			WebhookSecret:  cfg.Composio.WebhookSecret,
-		})
-		if err != nil {
-			return fmt.Errorf("configure composio: %w", err)
-		}
-		service := integrations.NewService(integrationRepository, provider, integrationCatalog)
-		integrationService = service
-	}
 	webhookProtector, err := webhooks.NewAESGCMKeyring(cfg.Webhooks.CurrentKeyVersion, cfg.Webhooks.EncryptionKeys)
 	if err != nil {
 		return fmt.Errorf("configure webhook encryption: %w", err)
@@ -623,7 +601,6 @@ func run() error {
 	routerOptions := httpapi.Options{
 		RecorderWorkerLogger: logger,
 		Capabilities: httpapi.CapabilityStatus{
-			Integrations:  cfg.Capabilities.Integrations,
 			Recording:     cfg.Capabilities.Recording,
 			Transcription: cfg.Capabilities.Transcription,
 		},
@@ -641,7 +618,6 @@ func run() error {
 		APIKeys:                    apiKeyService,
 		APIKeyAuthentication:       apiKeyService,
 		APIKeyAudits:               auditLogService,
-		Integrations:               integrationService,
 		Journeys:                   journeyService,
 		StatusIngestion:            statusService,
 		StatusSnapshot:             statusService,
@@ -689,7 +665,6 @@ func run() error {
 		// Synchronous application-node provider calls are intentionally absent.
 		// Transcription work is claimed and fenced through the internal worker
 		// boundary after the request transaction commits.
-		AITranscriptions:       nil,
 		Transcripts:            transcriptService,
 		TranscriptArtifacts:    transcriptArtifacts,
 		TranscriptWorker:       transcriptWorker,
@@ -1046,13 +1021,9 @@ func localPublicInvitePrivateKey(tenantID utilities.ID) ed25519.PrivateKey {
 
 func applyCapabilityProfile(options *httpapi.Options, capabilities config.CapabilityConfig) {
 	options.Capabilities = httpapi.CapabilityStatus{
-		Integrations:    capabilities.Integrations,
 		Recording:       capabilities.Recording,
 		Transcription:   capabilities.Transcription,
 		WhiteboardFiles: capabilities.WhiteboardFiles,
-	}
-	if !capabilities.Integrations {
-		options.Integrations = nil
 	}
 	if !capabilities.Recording {
 		options.RecordingDownloads = nil

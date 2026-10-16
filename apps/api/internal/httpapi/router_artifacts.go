@@ -7,7 +7,7 @@ func mountArtifactRoutes(r chi.Router, options Options) {
 	if options.TranscriptArtifacts != nil {
 		mountTranscriptArtifactRoutes(r, options.TranscriptArtifacts, options.RecordingObjects, options.RecordingDownloads, options.TenantAuthz, options.RateLimit)
 	} else {
-		mountTranscriptRoutes(r, options.Transcripts, options.Recordings, options.RecordingObjects, options.Tenants, options.AITranscriptions, options.TenantAuthz, options.RateLimit)
+		mountTranscriptRoutes(r, options.Transcripts, options.TenantAuthz, options.RateLimit)
 	}
 	mountAuditLogRoutes(r, options.AuditLogs, options.TenantAuthz, options.RateLimit)
 }
