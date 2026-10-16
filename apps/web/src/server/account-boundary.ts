@@ -7,7 +7,6 @@ export type AccountBoundaryEnv = {
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 const MAX_BODY_BYTES = 64 * 1024;
-const MAX_FEEDBACK_BODY_BYTES = 1 << 20;
 const IDEMPOTENCY_HEADER = "idempotency-key";
 const RECENT_AUTH_HEADER = "x-chalk-recent-auth";
 const CSRF_HEADER = "x-chalk-csrf";
@@ -179,9 +178,6 @@ function resolveTenantResourceRoute(method: string, pathname: string): BoundaryR
   if (resource === "api-keys") return resolveAPIKeyRoute(method, segments, tenantID);
   if (resource === "recordings") return resolveRecordingRoute(method, segments, tenantID);
   if (resource === "transcripts") return resolveTranscriptRoute(method, segments, tenantID);
-  if (resource === "feedback-reports" && segments.length === 4 && method === "POST") {
-    return { upstreamPath: `/v1/tenants/${tenantID}/feedback-reports`, authenticated: true, mutation: true, maxBodyBytes: MAX_FEEDBACK_BODY_BYTES };
-  }
   return undefined;
 }
 

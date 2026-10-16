@@ -1,17 +1,14 @@
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Logo } from "@q9labsai/chalk-react";
 import { SidebarInset, SidebarProvider, SidebarTrigger, useSidebar } from "@q9labsai/chalk-ui";
 import { useDashboardAccount } from "./DashboardAccount";
 import { DashboardSidebar } from "./DashboardSidebar";
 import { NewSpaceDialog } from "./NewSpaceDialog";
-import { DashboardFeedbackDialog } from "./FeedbackDialog";
 
 export function DashboardShell() {
   const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const feedbackRootRef = useRef<HTMLDivElement>(null);
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const { current } = useDashboardAccount();
 
@@ -27,13 +24,13 @@ export function DashboardShell() {
   }, []);
 
   return (
-    <div ref={feedbackRootRef} data-chalk-feedback-root="dashboard" className="min-h-screen">
+    <div className="min-h-screen">
       <SidebarProvider className="dashboard-shell">
         <a className="dashboard-skip-link" href="#dashboard-content">
           Skip to dashboard content
         </a>
 
-        <DashboardSidebar pathname={pathname} onCreateSpace={() => setCreateOpen(true)} onOpenFeedback={() => setFeedbackOpen(true)} />
+        <DashboardSidebar pathname={pathname} onCreateSpace={() => setCreateOpen(true)} />
 
         <SidebarInset id="dashboard-content">
           <DashboardMobileHeader onCreateSpace={() => setCreateOpen(true)} />
@@ -52,7 +49,6 @@ export function DashboardShell() {
             void navigate({ to: "/spaces" });
           }}
         />
-        <DashboardFeedbackDialog open={feedbackOpen} tenantID={current.tenant.id} captureRootRef={feedbackRootRef} onClose={() => setFeedbackOpen(false)} />
       </SidebarProvider>
     </div>
   );

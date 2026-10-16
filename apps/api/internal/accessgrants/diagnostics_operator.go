@@ -276,7 +276,7 @@ func diagnosticsOperatorCapabilities(values []string) (map[string]struct{}, erro
 	capabilities := make(map[string]struct{}, len(values))
 	for _, value := range values {
 		switch value {
-		case "read", "stream", "export", "feedback.read", "feedback.evidence.read":
+		case "read", "stream", "export":
 			if _, exists := capabilities[value]; exists {
 				return nil, ErrInvalidDiagnosticsOperatorCapabilities
 			}

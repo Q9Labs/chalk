@@ -109,7 +109,6 @@ export const ClassicControlBarSurface = React.memo(
     onOpenReactions,
     onOpenSettings,
     onOpenDiagnostics,
-    onOpenFeedback,
     onOpenMore,
     onOpenInfo,
     onLeft,
@@ -274,9 +273,6 @@ export const ClassicControlBarSurface = React.memo(
             return null;
           }
           return <ControlBarButton key="diagnostics" icon={<InformationCircleIcon size={20} />} label="Diagnostics" onClick={onOpenDiagnostics} showLabel={showLabels} />;
-        case "feedback":
-          if (!onOpenFeedback) return null;
-          return <ControlBarButton key="feedback" icon={<Message01Icon />} label="Feedback" onClick={onOpenFeedback} showLabel={showLabels} />;
         case "more":
           if (!onOpenMore) return null;
           return <ControlBarButton key="more" icon={<MoreHorizontalIcon />} label="More" onClick={onOpenMore} showLabel={showLabels} />;
@@ -410,11 +406,6 @@ export const ClassicControlBarSurface = React.memo(
 
             {/* Group 3: More & Leave */}
             <div className="order-2 flex shrink-0 items-center gap-1 rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] p-1 shadow-[var(--chalk-app-shadow-control)]">
-              {buttonsToRender.includes("feedback") && onOpenFeedback ? (
-                <button type="button" onClick={onOpenFeedback} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="Feedback">
-                  <Message01Icon className="h-5 w-5" />
-                </button>
-              ) : null}
               {buttonsToRender.includes("more") && onOpenMore && (
                 <Tooltip content="More options" position="top">
                   <button type="button" onClick={onOpenMore} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="More options">
@@ -485,8 +476,6 @@ export const ClassicControlBarSurface = React.memo(
             return <FloatingControlBarButton key={type} icon={<Settings01Icon />} label="Settings" onClick={onOpenSettings} />;
           case "diagnostics":
             return onOpenDiagnostics ? <FloatingControlBarButton key={type} icon={<InformationCircleIcon />} label="Diagnostics" onClick={onOpenDiagnostics} /> : null;
-          case "feedback":
-            return onOpenFeedback ? <FloatingControlBarButton key={type} icon={<Message01Icon />} label="Feedback" onClick={onOpenFeedback} /> : null;
           case "more":
             if (!onOpenMore) return null;
             return <FloatingControlBarButton key={type} icon={<MoreHorizontalIcon />} label="More" onClick={onOpenMore} />;

@@ -62,7 +62,6 @@ export interface SpaceViewProps {
   readonly commandError?: string;
   readonly onDismissCommandError?: () => void;
   readonly onOpenDiagnostics?: () => void;
-  readonly onOpenFeedback?: () => void;
   readonly onOpenSettings?: () => void;
   readonly onToggleWhiteboard?: () => void;
   readonly whiteboard?: SpaceViewWhiteboard;

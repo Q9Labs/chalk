@@ -1,6 +1,4 @@
 import type { ActiveReaction, Capability, ChatAttachment, ChatMessage, ChatSendInput, ChatUploadFile, ClientEventHandler, ClientEventName, IncomingMediaRequest, MediaRequestKind, OfflineActionsPolicy, Reaction, SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
-
-import { createPreviewFeedbackController } from "./preview-feedback";
 import { createPreviewMediaDevices } from "./preview-devices";
 
 export { PREVIEW_DEVICE_FIXTURES } from "./preview-devices";
@@ -73,7 +71,6 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
   };
 
   const client = {
-    feedback: createPreviewFeedbackController(),
     media: {
       setMicrophoneEnabled: (enabled: boolean) => dispatch({ type: "setMicrophoneEnabled", enabled }),
       setCameraEnabled: (enabled: boolean) => dispatch({ type: "setCameraEnabled", enabled }),

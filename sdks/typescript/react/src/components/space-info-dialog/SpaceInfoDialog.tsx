@@ -11,7 +11,6 @@ export interface SpaceInfoDialogProps {
   onCopyLink?: () => void;
   diagnosticReference?: string;
   onCopyDiagnosticReference?: (reference: string) => void;
-  onSendFeedback?: (context: Readonly<{ diagnosticReference: string }>) => void;
   isRecording?: boolean;
   isTranscribing?: boolean;
   duration?: number;

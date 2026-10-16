@@ -28,15 +28,6 @@ var (
 	apiErrorRateLimited                 = APIError{Status: http.StatusTooManyRequests, Code: "request.rate_limited", Message: "Too many requests"}
 	apiErrorPayloadTooLarge             = APIError{Status: http.StatusRequestEntityTooLarge, Code: "request.payload_too_large", Message: "Request body is too large"}
 	apiErrorInternal                    = APIError{Status: http.StatusInternalServerError, Code: "service.internal_error", Message: "Internal server error"}
-	apiErrorFeedbackUnauthenticated     = APIError{Status: http.StatusUnauthorized, Code: "request.unauthenticated", Message: "Authentication required"}
-	apiErrorFeedbackForbidden           = APIError{Status: http.StatusForbidden, Code: "request.forbidden", Message: "Access denied"}
-	apiErrorFeedbackInvalidEvidence     = APIError{Status: http.StatusBadRequest, Code: "feedback.invalid_evidence", Message: "Feedback evidence is invalid"}
-	apiErrorFeedbackInvalidScreenshot   = APIError{Status: http.StatusBadRequest, Code: "feedback.invalid_screenshot", Message: "Feedback screenshot is invalid"}
-	apiErrorFeedbackIdempotencyConflict = APIError{Status: http.StatusConflict, Code: "feedback.idempotency_conflict", Message: "Idempotency key was used for another request"}
-	apiErrorFeedbackStorageUnavailable  = APIError{Status: http.StatusServiceUnavailable, Code: "feedback.storage_unavailable", Message: "Feedback storage is unavailable"}
-	apiErrorFeedbackAuditUnavailable    = APIError{Status: http.StatusServiceUnavailable, Code: "feedback.audit_unavailable", Message: "Feedback access audit is unavailable"}
-	apiErrorFeedbackNotFound            = APIError{Status: http.StatusNotFound, Code: "feedback.not_found", Message: "Feedback report was not found"}
-	apiErrorFeedbackInvalidID           = APIError{Status: http.StatusBadRequest, Code: "feedback.invalid_id", Message: "Invalid feedback report id"}
 
 	apiErrorInvalidEmail              = APIError{Status: http.StatusBadRequest, Code: "identity.invalid_email", Message: "Invalid email"}
 	apiErrorInvalidPassword           = APIError{Status: http.StatusBadRequest, Code: "access.invalid_password", Message: "Invalid password"}

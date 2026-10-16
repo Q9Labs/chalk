@@ -12,7 +12,7 @@ export interface MediaDevice {
   groupId?: string;
 }
 
-export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "transcription" | "handraise" | "reactions" | "whiteboard" | "pip" | "settings" | "diagnostics" | "feedback" | "more" | "info" | "thumbsup" | "leave";
+export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "transcription" | "handraise" | "reactions" | "whiteboard" | "pip" | "settings" | "diagnostics" | "more" | "info" | "thumbsup" | "leave";
 
 export interface ControlBarSurfaceProps {
   position?: "bottom" | "top";
@@ -59,7 +59,6 @@ export interface ControlBarSurfaceProps {
   onOpenReactions?: () => void;
   onOpenSettings?: () => void;
   onOpenDiagnostics?: () => void;
-  onOpenFeedback?: () => void;
   onOpenMore?: () => void;
   onOpenInfo?: () => void;
   onLeft?: () => void;
@@ -88,7 +87,6 @@ export interface ControlBarProps {
   readonly onOpenReactions?: () => void;
   readonly onOpenSettings?: () => void;
   readonly onOpenDiagnostics?: () => void;
-  readonly onOpenFeedback?: () => void;
   readonly onOpenMore?: () => void;
   readonly onOpenInfo?: () => void;
   readonly onLeaveRequest?: () => void;
@@ -217,7 +215,7 @@ export function useControlBarSurfaceBehavior({
   const showLeave = buttonsToRender.includes("leave");
   const mediaButtons = buttonsToRender.filter((button) => button === "mic" || button === "video" || button === "screenshare" || button === "record" || button === "whiteboard" || button === "handraise");
   const interactionButtons = buttonsToRender.filter(
-    (button) => button === "participants" || button === "chat" || button === "transcription" || button === "thumbsup" || button === "pip" || button === "reactions" || button === "settings" || button === "diagnostics" || button === "feedback" || button === "more" || button === "info",
+    (button) => button === "participants" || button === "chat" || button === "transcription" || button === "thumbsup" || button === "pip" || button === "reactions" || button === "settings" || button === "diagnostics" || button === "more" || button === "info",
   );
 
   return {
@@ -330,7 +328,6 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     onOpenReactions: props.onOpenReactions,
     onOpenSettings: props.onOpenSettings,
     onOpenDiagnostics: props.onOpenDiagnostics,
-    onOpenFeedback: props.onOpenFeedback,
     onOpenMore: props.onOpenMore,
     onOpenInfo: props.onOpenInfo,
     onLeft: leave,

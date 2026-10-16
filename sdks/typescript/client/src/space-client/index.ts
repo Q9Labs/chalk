@@ -1,6 +1,5 @@
 export { SpaceClientError } from "./errors";
 export { createSpaceClient } from "./space-client";
-export type { FeedbackController } from "../feedback/types";
 export type { AccessGrant } from "../access/grant";
 export type {
   AccessContext,

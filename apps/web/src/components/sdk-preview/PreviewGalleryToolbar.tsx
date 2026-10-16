@@ -27,7 +27,6 @@ const TAB_LABELS: Readonly<Record<PreviewControlTab, string>> = {
 };
 
 const TOGGLE_KEY = "`";
-const COPY_FEEDBACK_MS = 1600;
 
 const headerButtonClassName = "inline-flex size-8 items-center justify-center rounded-lg text-[#555b65] transition-colors hover:bg-[#eceae4] hover:text-[#202329] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#55aac9]/60 disabled:opacity-40";
 const stepButtonClassName = "inline-flex size-7 items-center justify-center rounded-md border border-[#d9d8d2] bg-white text-[#555b65] transition-colors hover:border-[#55aac9] hover:text-[#202329] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#55aac9]/60";

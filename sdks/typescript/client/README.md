@@ -96,26 +96,6 @@ client.dispose();
 `endEpisode` and `extendEpisode` are capability-gated. Use `dispose()` when
 the client will no longer be used; it releases the Connection and its resources.
 
-## Feedback
-
-`SpaceClient.feedback` submits a bug, feature request, or other feedback
-report to Chalk with the current safe diagnostic context. `prepare` gives a
-form one stable idempotency key and captures evidence before the user sends it.
-
-```ts
-const feedback = await client.feedback.prepare();
-
-await feedback.send({
-  category: "bug",
-  message: "The camera control stopped responding.",
-});
-```
-
-The transport uses the short-lived Diagnostic Participant credential already
-carried by the AccessGrant. That credential is never exposed through the public
-Feedback API. Custom screenshot adapters may be passed to `prepare`; a typed
-unavailable result is valid and never blocks a text report.
-
 ## Recording and artifact Events
 
 Use `client.recording.start()` and `client.recording.stop()` inside an Episode, or set the Space's Automatic Recording policy. There is no REST Recording start/stop operation.

@@ -41,7 +41,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/email"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
-	"github.com/q9labs/chalk/apps/api/internal/feedback"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/integrations"
 	"github.com/q9labs/chalk/apps/api/internal/journeys"
@@ -387,8 +386,6 @@ func run() error {
 	var whiteboardFileService httpapi.WhiteboardFileService
 	var whiteboardParticipantVerifier httpapi.WhiteboardParticipantVerifier
 	var whiteboardCleanupScheduler *whiteboardfiles.CleanupScheduler
-	feedbackRepository := postgres.NewFeedbackRepository(operationQueries)
-	var feedbackObjects feedback.ObjectStore
 	if r2Configured(cfg.R2) {
 		store, err := r2adapter.NewStore(cfg.R2)
 		if err != nil {
@@ -396,7 +393,6 @@ func run() error {
 		}
 		storage := objectstorage.NewService(store)
 		recordingStorage = &storage
-		feedbackObjects = feedback.NewObjectStorageAdapter(storage)
 		recordingDownloads = storage
 		recordingObjects = storage
 		transcriptionStorage = &storage
@@ -459,7 +455,6 @@ func run() error {
 		recordingPreparationService = recordingpreparation.NewService(postgres.NewRecordingPreparationRepository(pool), spaceService)
 	}
 	recorderHealthService := recorderhealth.NewService(recordingPipelineRepository, 2*time.Minute)
-	feedbackService := feedback.NewService(feedbackRepository, feedbackObjects).WithTelemetry(observability.NewFeedbackTelemetry(logger))
 	var integrationService httpapi.IntegrationService
 	if cfg.Capabilities.Integrations {
 		integrationCatalog, err := integrations.DefaultCatalog()
@@ -715,7 +710,6 @@ func run() error {
 		PublicInvites:          publicInviteService,
 		PublicInviteAudits:     auditLogService,
 		EpisodeDiagnostics:     episodeDiagnosticsHTTPOptions,
-		Feedback:               httpapi.FeedbackHTTPOptions{Service: feedbackService, ParticipantVerifier: episodeDiagnosticsHTTPOptions.ParticipantVerifier, Operator: episodeDiagnosticsHTTPOptions, Audit: httpapi.NewFeedbackAuditWriter(auditLogService)},
 	}
 	applyCapabilityProfile(&routerOptions, cfg.Capabilities)
 	routerOptions.ApplyDiagnostics(diagnostics)

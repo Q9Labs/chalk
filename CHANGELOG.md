@@ -3,6 +3,7 @@
 ## 5.0.0 (unreleased)
 
 - BREAKING: Classic is the only UI style. Removed the skin option, skin context, hand-drawn rendering helpers and drawing-only primitive props (`seed`, `roughness`, `filled`, `scribble`).
+- BREAKING: Removed feedback report submission, UI, collection helpers and operator endpoints.
 - No packages published. Existing integrations pinned to 4.1.15 remain pinned.
 
 All notable public changes to this project will be documented in this file.

@@ -116,7 +116,6 @@ type Options struct {
 	ChatParticipants           ChatParticipantVerifier
 	WhiteboardFiles            WhiteboardFileService
 	WhiteboardParticipants     WhiteboardParticipantVerifier
-	Feedback                   FeedbackHTTPOptions
 	PublicInvites              PublicInviteService
 	PublicInviteAudits         PublicInviteAuditWriter
 	// EpisodeDiagnostics owns a diagnostics-only internal boundary. Its zero
@@ -143,7 +142,6 @@ func NewRouter(options Options) http.Handler {
 
 	mountWorkerRoutes(r, options)
 	mountEpisodeDiagnosticsRoutes(r, options)
-	mountFeedbackOperatorRoutes(r, options.Feedback)
 	mountV1Routes(r, options)
 	r.Get("/healthz", handleHealth)
 	r.Get("/healthz/recorder/capture", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleCapture))

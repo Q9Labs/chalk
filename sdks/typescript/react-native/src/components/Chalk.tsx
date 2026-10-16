@@ -1,4 +1,4 @@
-import type { ChatUploadFile, ClientEventMap, FeedbackEvidenceInput, GetAccess, SpaceClient } from "@q9labsai/chalk-client";
+import type { ChatUploadFile, ClientEventMap, GetAccess, SpaceClient } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -65,7 +65,6 @@ type ChalkCommonProps = ChalkCallbacks & {
   readonly layout?: SpaceLayout;
   readonly onLayoutChange?: (layout: SpaceLayout) => void;
   readonly onOpenDiagnostics?: () => void;
-  readonly feedbackEvidence?: Partial<FeedbackEvidenceInput>;
 };
 
 export type ChalkProps = ChalkCommonProps &
@@ -274,7 +273,6 @@ function SpaceExperience(props: ChalkProps): React.JSX.Element {
       logoUrl={props.logoUrl}
       onLayoutChange={props.onLayoutChange}
       onOpenDiagnostics={props.onOpenDiagnostics}
-      feedbackEvidence={props.feedbackEvidence}
       pickChatFiles={props.pickChatFiles}
       reconnecting={connection.status === "reconnecting"}
       spaceName={spaceName}
@@ -298,13 +296,12 @@ type NativeSpaceViewProps = {
   readonly logoUrl?: string;
   readonly onLayoutChange?: (layout: SpaceLayout) => void;
   readonly onOpenDiagnostics?: () => void;
-  readonly feedbackEvidence?: Partial<FeedbackEvidenceInput>;
   readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
   readonly reconnecting: boolean;
   readonly spaceName: string;
 };
 
-function NativeSpaceView({ features, inviteLink, layout, logoUrl, onLayoutChange, onOpenDiagnostics, feedbackEvidence, pickChatFiles, reconnecting, spaceName }: NativeSpaceViewProps): React.JSX.Element {
+function NativeSpaceView({ features, inviteLink, layout, logoUrl, onLayoutChange, onOpenDiagnostics, pickChatFiles, reconnecting, spaceName }: NativeSpaceViewProps): React.JSX.Element {
   const client = useSpaceClient();
   const theme = useNativeTheme();
 
@@ -319,7 +316,6 @@ function NativeSpaceView({ features, inviteLink, layout, logoUrl, onLayoutChange
         onLayoutChange={onLayoutChange}
         onLeave={() => client.leave()}
         onOpenDiagnostics={onOpenDiagnostics}
-        feedbackEvidence={feedbackEvidence}
         pickChatFiles={pickChatFiles}
         reconnecting={reconnecting}
         spaceName={spaceName}

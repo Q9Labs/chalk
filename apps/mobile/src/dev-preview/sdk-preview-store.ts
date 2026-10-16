@@ -18,7 +18,6 @@ import type {
   SpaceClient,
   SpaceSnapshot,
 } from "@q9labsai/chalk-client";
-import { createPreviewFeedbackController } from "./preview-feedback";
 
 import type { PreviewSearch, PreviewState } from "./preview-state";
 import { PREVIEW_ADMISSION_REQUESTS, PREVIEW_CHAT_LINES, PREVIEW_DISPLAY_NAME } from "./sdk-preview-fixtures";
@@ -114,7 +113,6 @@ export function createPreviewStore(search: PreviewSearch): SpaceClient {
   };
 
   const store: SpaceClient = {
-    feedback: createPreviewFeedbackController(),
     media: {
       setMicrophoneEnabled: async (enabled) => updateLocalMedia("microphone", enabled ? "enabled" : "disabled"),
       setCameraEnabled: async (enabled) => updateLocalMedia("camera", enabled ? "enabled" : "disabled"),
@@ -259,7 +257,7 @@ export function createPreviewStore(search: PreviewSearch): SpaceClient {
   }
 }
 
-export function createPreviewSnapshot(search: PreviewSearch): SpaceSnapshot {
+function createPreviewSnapshot(search: PreviewSearch): SpaceSnapshot {
   const lifecycle = lifecycleFor(search.state);
   const roster = participantsFor(search.participants, search);
   const admissionQueue: readonly AdmissionRequest[] =

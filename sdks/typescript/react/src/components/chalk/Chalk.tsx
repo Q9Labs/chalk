@@ -1,6 +1,6 @@
 "use client";
 
-import { createSpaceClient, type ChalkWhiteboardV1Transport, type ChatUploadFile, type ClientEventMap, type FeedbackSource, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
+import { createSpaceClient, type ChalkWhiteboardV1Transport, type ChatUploadFile, type ClientEventMap, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 
@@ -15,7 +15,6 @@ import { Entrance } from "../entrance/Entrance";
 import { SpaceView } from "../space-view/SpaceView";
 import { getThemeMode, type ThemePalette, type ThemeTexture } from "../theme";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
-import { FeedbackDialog } from "../feedback/FeedbackDialog";
 import { StatusSurface } from "./StatusSurface";
 
 export type SpaceLayout = "focus" | "grid" | "presentation";
@@ -61,11 +60,9 @@ export type ChalkProps = SpaceIntegration &
     readonly inviteLink?: string;
     readonly spaceDescription?: string;
     readonly diagnosticReference?: string;
-    readonly onSendFeedback?: (context: Readonly<{ diagnosticReference: string }>) => void;
     readonly layout?: SpaceLayout;
     readonly onLayoutChange?: (layout: SpaceLayout) => void;
     readonly onOpenDiagnostics?: () => void;
-    readonly feedbackSource?: FeedbackSource;
   };
 
 export function Chalk(props: ChalkProps): React.JSX.Element {
@@ -85,7 +82,6 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
     return createSpaceClient({ space: props.space, getAccess: getLatestAccess });
   }, [getLatestAccess, props.space, suppliedClient]);
   const client = suppliedClient ?? ownedClient!;
-  const feedbackRootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!ownedClient) return;
@@ -99,16 +95,16 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
 
   return (
     <>
-      <div ref={feedbackRootRef} data-chalk data-chalk-feedback-root data-chalk-theme={colorScheme} data-chalk-palette={props.theme?.palette} data-chalk-texture={props.theme?.texture} className="chalk-root h-full min-h-0 w-full" style={chalkThemeStyle(props.theme, colorScheme)}>
+      <div data-chalk data-chalk-theme={colorScheme} data-chalk-palette={props.theme?.palette} data-chalk-texture={props.theme?.texture} className="chalk-root h-full min-h-0 w-full" style={chalkThemeStyle(props.theme, colorScheme)}>
         <ChalkProvider client={client}>
-          <SpaceExperience {...props} feedbackRootRef={feedbackRootRef} resolvedColorScheme={colorScheme} />
+          <SpaceExperience {...props} resolvedColorScheme={colorScheme} />
         </ChalkProvider>
       </div>
     </>
   );
 }
 
-function SpaceExperience(props: ChalkProps & { readonly feedbackRootRef: React.RefObject<HTMLElement | null>; readonly resolvedColorScheme: Exclude<ChalkColorScheme, "system"> }): React.JSX.Element {
+function SpaceExperience(props: ChalkProps & { readonly resolvedColorScheme: Exclude<ChalkColorScheme, "system"> }): React.JSX.Element {
   const client = useSpaceClient();
   const connection = useConnection();
   const offline = useOffline();
@@ -215,7 +211,7 @@ function SpaceExperience(props: ChalkProps & { readonly feedbackRootRef: React.R
   return <SpaceSurface {...props} spaceName={spaceName} />;
 }
 
-function SpaceSurface(props: ChalkProps & { readonly feedbackRootRef: React.RefObject<HTMLElement | null>; readonly resolvedColorScheme: Exclude<ChalkColorScheme, "system">; readonly spaceName: string }): React.JSX.Element {
+function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclude<ChalkColorScheme, "system">; readonly spaceName: string }): React.JSX.Element {
   const client = useSpaceClient();
   const connection = useConnection();
   const self = useSelf();
@@ -226,7 +222,6 @@ function SpaceSurface(props: ChalkProps & { readonly feedbackRootRef: React.RefO
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState<"appearance" | undefined>();
   const [infoOpen, setInfoOpen] = useState(false);
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(() => (connection.lastError?.recoverable && connection.lastError.code.startsWith("media.") ? connection.lastError.message : null));
   const [settings, setSettings] = useState<SettingsDialogValue>(() => createSettings(self.displayName ?? "", props.layout ?? "focus", props.theme?.palette ?? (props.resolvedColorScheme === "dark" ? "warm-charcoal" : "light"), props.theme?.texture ?? "none"));
 
@@ -320,7 +315,6 @@ function SpaceSurface(props: ChalkProps & { readonly feedbackRootRef: React.RefO
       }}
       features={{ ...props.features, sounds: props.features?.sounds !== false && settings.experience.sounds }}
       onOpenDiagnostics={props.onOpenDiagnostics}
-      onOpenFeedback={() => setFeedbackOpen(true)}
       whiteboard={whiteboard}
       onToggleWhiteboard={canDrawWhiteboard && setWhiteboardPresentation ? () => void runCommand(() => setWhiteboardPresentation(!whiteboardState.engine.presenting)) : undefined}
       infoDialog={
@@ -334,7 +328,6 @@ function SpaceSurface(props: ChalkProps & { readonly feedbackRootRef: React.RefO
               onCopyLink: props.inviteLink ? () => void navigator.clipboard?.writeText(props.inviteLink!) : undefined,
               diagnosticReference: props.diagnosticReference,
               onCopyDiagnosticReference: (reference) => void navigator.clipboard?.writeText(reference),
-              onSendFeedback: props.onSendFeedback,
             }
           : undefined
       }
@@ -400,7 +393,6 @@ function SpaceSurface(props: ChalkProps & { readonly feedbackRootRef: React.RefO
           {media.incomingRequests[0] ? (
             <MediaRequestDialog request={media.incomingRequests[0]} onDecline={() => void runCommand(() => client.media.declineRequest(media.incomingRequests[0]!.requestId))} onAllow={() => void runCommand(() => client.media.acceptRequest(media.incomingRequests[0]!.requestId))} />
           ) : null}
-          <FeedbackDialog isOpen={feedbackOpen} onClose={() => setFeedbackOpen(false)} client={client} source={props.feedbackSource} captureRootRef={props.feedbackRootRef} />
         </>
       }
     />

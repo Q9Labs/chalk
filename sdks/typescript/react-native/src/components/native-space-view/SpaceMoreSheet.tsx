@@ -23,7 +23,7 @@ interface MoreAction {
   readonly onPress: () => void;
 }
 
-export function SpaceMoreSheet({ controller, onOpenSettings, onOpenFeedback }: { readonly controller: SpaceController; readonly onOpenSettings: () => void; readonly onOpenFeedback?: () => void }): React.JSX.Element {
+export function SpaceMoreSheet({ controller, onOpenSettings }: { readonly controller: SpaceController; readonly onOpenSettings: () => void }): React.JSX.Element {
   const close = () => controller.setActionsOpen(false);
   const actions: MoreAction[] = [
     {
@@ -101,19 +101,6 @@ export function SpaceMoreSheet({ controller, onOpenSettings, onOpenFeedback }: {
         onOpenSettings();
       },
     },
-    ...(onOpenFeedback
-      ? [
-          {
-            id: "feedback",
-            label: "Feedback",
-            symbol: "✉",
-            onPress: () => {
-              close();
-              onOpenFeedback();
-            },
-          },
-        ]
-      : []),
   ];
 
   return (

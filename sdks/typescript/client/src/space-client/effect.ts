@@ -5,7 +5,6 @@ import type { ControllerEffects } from "./controller-effects";
 import { SpaceClientCore, SpaceClientCoreService, makeSpaceClientCoreLayer, type SpaceClientPlatform } from "./core";
 import type { SpaceClientError } from "./errors";
 import type { ActiveReaction, ChatAttachment, ChatMessage, ChatReadReceipt, ChatSendInput, ChatUploadFile, ClientEventHandler, ClientEventName, JoinOptions, MediaRequestKind, Reaction, SpaceClientOptions, SpaceSnapshot } from "./types";
-import type { FeedbackController } from "../feedback/types";
 
 type ClientEffect<T> = Effect.Effect<T, SpaceClientError>;
 
@@ -26,7 +25,6 @@ export type EffectReactionsController = ControllerEffects["reactions"];
 export type EffectWhiteboardController = { readonly transport: () => ChalkWhiteboardV1Transport | null };
 
 export type EffectSpaceClient = {
-  readonly feedback: FeedbackController;
   readonly media: EffectMediaController;
   readonly chat: EffectChatController;
   readonly participants: EffectParticipantsController;
@@ -56,7 +54,6 @@ export function createEffectSpaceClient(options: SpaceClientOptions, platform?: 
 
 export function effectClientFromCore(core: SpaceClientCore, dispose: () => Effect.Effect<void, unknown> = () => Effect.sync(() => core.dispose())): EffectSpaceClient {
   return {
-    feedback: core.feedback,
     media: core.controllers.media,
     chat: {
       send: core.controllers.chat.send,
