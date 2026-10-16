@@ -60,23 +60,11 @@ the browser preference while keeping explicit token overrides in place.
 <Chalk
   client={spaceClient}
   theme={{
-    palette: "warm-charcoal",
-    texture: "paper",
     colorScheme: "dark",
     accent: "#4b9bb8",
     tokens: { canvas: "#152127", surface: "#1d2b31" },
   }}
 />
-```
-
-`COSMIC_CHALK_THEME` supplies a midnight palette and slate texture for the Space and Entrance.
-
-```tsx
-import { Chalk, COSMIC_CHALK_THEME, Entrance } from "@q9labsai/chalk-react";
-
-<Chalk client={spaceClient} theme={COSMIC_CHALK_THEME} />;
-
-<Entrance spaceName="Design review" theme={COSMIC_CHALK_THEME} onJoin={(settings) => spaceClient.join(settings)} />;
 ```
 
 ## Custom UI

@@ -1,9 +1,7 @@
 "use client";
-
 import { createSpaceClient, type ChalkWhiteboardV1Transport, type ChatUploadFile, type ClientEventMap, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
-
 import { ChalkProvider } from "../../bindings/context";
 import { useCan, useConnection, useMedia, useOffline, useParticipants, useSelf, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
 import { chalkThemeStyle, type ChalkColorScheme, type ChalkTheme } from "../../theme";
@@ -13,12 +11,9 @@ import { MediaRequestDialog } from "../media-request-dialog/MediaRequestDialog";
 import { SettingsDialog, type SettingsDialogValue } from "../composite/SettingsDialog";
 import { Entrance } from "../entrance/Entrance";
 import { SpaceView } from "../space-view/SpaceView";
-import { getThemeMode, type ThemePalette, type ThemeTexture } from "../theme";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 import { StatusSurface } from "./StatusSurface";
-
 export type SpaceLayout = "focus" | "grid" | "presentation";
-
 export type ChalkFeatures = {
   readonly chat?: boolean;
   readonly participants?: boolean;
@@ -33,9 +28,17 @@ export type ChalkFeatures = {
   /** Join / leave / message / hand-raise / reaction cues. The user can still mute them from Settings. */
   readonly sounds?: boolean;
 };
-
-type SpaceIntegration = { readonly client: SpaceClient; readonly space?: never; readonly getAccess?: never } | { readonly client?: never; readonly space: string; readonly getAccess: GetAccess };
-
+type SpaceIntegration =
+  | {
+      readonly client: SpaceClient;
+      readonly space?: never;
+      readonly getAccess?: never;
+    }
+  | {
+      readonly client?: never;
+      readonly space: string;
+      readonly getAccess: GetAccess;
+    };
 type SpaceEventCallbacks = {
   readonly onJoined?: () => void;
   readonly onLeft?: () => void;
@@ -46,11 +49,13 @@ type SpaceEventCallbacks = {
   readonly onScreenShareStopped?: (event: ClientEventMap["screenShareStopped"]) => void;
   readonly onError?: (event: ClientEventMap["error"]) => void;
 };
-
 export type ChalkProps = SpaceIntegration &
   SpaceEventCallbacks & {
     readonly entrance?: boolean;
-    readonly defaults?: { readonly microphone?: boolean; readonly camera?: boolean };
+    readonly defaults?: {
+      readonly microphone?: boolean;
+      readonly camera?: boolean;
+    };
     readonly displayName?: string;
     readonly features?: ChalkFeatures;
     readonly theme?: ChalkTheme;
@@ -62,10 +67,8 @@ export type ChalkProps = SpaceIntegration &
     readonly layout?: SpaceLayout;
     readonly onLayoutChange?: (layout: SpaceLayout) => void;
   };
-
 export function Chalk(props: ChalkProps): React.JSX.Element {
-  const colorScheme = useResolvedColorScheme(props.theme?.palette ? getThemeMode(props.theme.palette) : props.theme?.colorScheme);
-
+  const colorScheme = useResolvedColorScheme(props.theme?.colorScheme);
   const suppliedClient = props.client;
   const getAccessRef = useRef(props.getAccess);
   getAccessRef.current = props.getAccess;
@@ -80,7 +83,6 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
     return createSpaceClient({ space: props.space, getAccess: getLatestAccess });
   }, [getLatestAccess, props.space, suppliedClient]);
   const client = suppliedClient ?? ownedClient!;
-
   useEffect(() => {
     if (!ownedClient) return;
     return () => {
@@ -90,10 +92,9 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
         .finally(() => ownedClient.dispose());
     };
   }, [ownedClient]);
-
   return (
     <>
-      <div data-chalk data-chalk-theme={colorScheme} data-chalk-palette={props.theme?.palette} data-chalk-texture={props.theme?.texture} className="chalk-root h-full min-h-0 w-full" style={chalkThemeStyle(props.theme, colorScheme)}>
+      <div data-chalk data-chalk-theme={colorScheme} className="chalk-root h-full min-h-0 w-full" style={chalkThemeStyle(props.theme, colorScheme)}>
         <ChalkProvider client={client}>
           <SpaceExperience {...props} resolvedColorScheme={colorScheme} />
         </ChalkProvider>
@@ -101,8 +102,11 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
     </>
   );
 }
-
-function SpaceExperience(props: ChalkProps & { readonly resolvedColorScheme: Exclude<ChalkColorScheme, "system"> }): React.JSX.Element {
+function SpaceExperience(
+  props: ChalkProps & {
+    readonly resolvedColorScheme: Exclude<ChalkColorScheme, "system">;
+  },
+): React.JSX.Element {
   const client = useSpaceClient();
   const connection = useConnection();
   const offline = useOffline();
@@ -120,10 +124,8 @@ function SpaceExperience(props: ChalkProps & { readonly resolvedColorScheme: Exc
   const [endedAt, setEndedAt] = useState<string | null>(null);
   const entrance = props.entrance ?? true;
   const spaceName = props.spaceName ?? props.space ?? "Space";
-
   if (connection.episode) lastEpisode.current = connection.episode;
   if (participants.roster.length > 0) lastParticipantCount.current = participants.roster.length;
-
   if (previousClient.current !== client) {
     previousClient.current = client;
     previousStatus.current = connection.status;
@@ -131,7 +133,6 @@ function SpaceExperience(props: ChalkProps & { readonly resolvedColorScheme: Exc
     hasBeenLive.current = connection.status === "live" || connection.status === "reconnecting";
     autoJoinAttempted.current = false;
   }
-
   useClientEvents(client, props);
   const join = useCallback(
     async (settings: JoinOptions) => {
@@ -149,7 +150,6 @@ function SpaceExperience(props: ChalkProps & { readonly resolvedColorScheme: Exc
     setRetryPending(true);
     void join(defaultJoinOptions(props)).finally(() => setRetryPending(false));
   }, [join, props]);
-
   useEffect(() => setJoinError(null), [client]);
   useEffect(() => {
     setEpisodeEnded(false);
@@ -179,7 +179,6 @@ function SpaceExperience(props: ChalkProps & { readonly resolvedColorScheme: Exc
     if (connection.status === "live" || connection.status === "reconnecting") hasBeenLive.current = true;
     if (connection.status === "left" && previous !== "left") setEndedAt((current) => current ?? new Date().toISOString());
   }, [connection.status, props.onJoined, props.onLeft]);
-
   if (connection.status === "idle") {
     if (!entrance) return <StatusSurface message={joinError ?? `Entering ${spaceName}…`} onRetry={joinError ? retryAutomaticJoin : undefined} retryPending={retryPending} retryError={joinError} />;
     return <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} error={joinError ?? undefined} theme={props.theme} onJoin={join} />;
@@ -208,8 +207,12 @@ function SpaceExperience(props: ChalkProps & { readonly resolvedColorScheme: Exc
     );
   return <SpaceSurface {...props} spaceName={spaceName} />;
 }
-
-function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclude<ChalkColorScheme, "system">; readonly spaceName: string }): React.JSX.Element {
+function SpaceSurface(
+  props: ChalkProps & {
+    readonly resolvedColorScheme: Exclude<ChalkColorScheme, "system">;
+    readonly spaceName: string;
+  },
+): React.JSX.Element {
   const client = useSpaceClient();
   const connection = useConnection();
   const self = useSelf();
@@ -221,14 +224,9 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
   const [settingsInitialSection, setSettingsInitialSection] = useState<"appearance" | undefined>();
   const [infoOpen, setInfoOpen] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(() => (connection.lastError?.recoverable && connection.lastError.code.startsWith("media.") ? connection.lastError.message : null));
-  const [settings, setSettings] = useState<SettingsDialogValue>(() => createSettings(self.displayName ?? "", props.layout ?? "focus", props.theme?.palette ?? (props.resolvedColorScheme === "dark" ? "warm-charcoal" : "light"), props.theme?.texture ?? "none"));
-
-  const resolvedPalette: ThemePalette = props.theme?.palette ?? (props.resolvedColorScheme === "dark" ? "warm-charcoal" : "light");
-  const resolvedTexture: ThemeTexture = props.theme?.texture ?? "none";
-  const appearancePaletteExplicitRef = useRef(props.theme?.palette !== undefined);
+  const [settings, setSettings] = useState<SettingsDialogValue>(() => createSettings(self.displayName ?? "", props.layout ?? "focus", props.resolvedColorScheme));
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
-
   useEffect(() => {
     setSettings((current) => ({
       ...current,
@@ -238,24 +236,6 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
       video: { ...current.video, selectedInput: media.selection.camera ?? undefined },
     }));
   }, [media.local.camera.state, media.local.microphone.state, media.selection.camera, media.selection.microphone, media.selection.speaker, self.displayName]);
-  useEffect(() => {
-    if (!props.theme?.palette && !props.theme?.texture) return;
-    setSettings((current) => ({
-      ...current,
-      appearance: {
-        ...current.appearance,
-        palette: props.theme?.palette ?? current.appearance.palette,
-        texture: props.theme?.texture ?? current.appearance.texture,
-        theme: (props.theme?.palette ?? current.appearance.palette) === "light" ? "light" : "dark",
-      },
-    }));
-  }, [props.theme?.palette, props.theme?.texture]);
-  useEffect(() => {
-    if (props.theme?.palette || appearancePaletteExplicitRef.current) return;
-    const palette: ThemePalette = props.resolvedColorScheme === "dark" ? "warm-charcoal" : "light";
-    setSettings((current) => (current.appearance.palette === palette ? current : { ...current, appearance: { ...current.appearance, palette, theme: palette === "light" ? "light" : "dark" } }));
-  }, [props.resolvedColorScheme, props.theme?.palette, props.theme?.texture]);
-
   const runCommand = useCallback(async (command: () => Promise<unknown>) => {
     try {
       await command();
@@ -294,15 +274,13 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
           },
         }
       : undefined;
-
   return (
     <SpaceView
+      colorScheme={props.resolvedColorScheme}
       spaceName={props.spaceName}
       logoUrl={props.logoUrl}
       inviteLink={props.inviteLink}
       pickChatFiles={props.pickChatFiles}
-      palette={settings.appearance.palette ?? resolvedPalette}
-      texture={settings.appearance.texture ?? resolvedTexture}
       generatedAvatars={settings.appearance.generatedAvatars}
       commandError={commandError ?? undefined}
       onDismissCommandError={() => setCommandError(null)}
@@ -364,7 +342,6 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
               if (updates.selectedInput) runCommand(() => client.media.selectCamera(updates.selectedInput!));
             }}
             onUpdateAppearance={(updates) => {
-              if (updates.palette !== undefined) appearancePaletteExplicitRef.current = true;
               const current = settingsRef.current;
               const next = { ...current, appearance: { ...current.appearance, ...updates } };
               settingsRef.current = next;
@@ -393,18 +370,15 @@ function SpaceSurface(props: ChalkProps & { readonly resolvedColorScheme: Exclud
     />
   );
 }
-
 function bindWhiteboardPresentation(transport: ChalkWhiteboardV1Transport): ((presenting: boolean) => Promise<void>) | undefined {
   const setPresentation = transport.setPresentation;
   if (!setPresentation) return undefined;
   return (presenting) => setPresentation.call(transport, presenting);
 }
-
 function defaultJoinOptions(props: ChalkProps): JoinOptions {
   const displayName = props.displayName?.trim();
   return { ...(displayName ? { displayName } : {}), microphone: props.defaults?.microphone ?? true, camera: props.defaults?.camera ?? true };
 }
-
 function useResolvedColorScheme(requested: ChalkColorScheme = "light"): Exclude<ChalkColorScheme, "system"> {
   const [resolved, setResolved] = useState<Exclude<ChalkColorScheme, "system">>(() => (requested === "system" ? readSystemColorScheme() : requested));
   useEffect(() => {
@@ -418,11 +392,9 @@ function useResolvedColorScheme(requested: ChalkColorScheme = "light"): Exclude<
   }, [requested]);
   return requested === "system" ? resolved : requested;
 }
-
 function readSystemColorScheme(): Exclude<ChalkColorScheme, "system"> {
   return typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
-
 function useClientEvents(client: SpaceClient, callbacks: SpaceEventCallbacks): void {
   useEffect(() => client.on("participantJoined", (event) => callbacks.onParticipantJoined?.(event)), [callbacks.onParticipantJoined, client]);
   useEffect(() => client.on("participantLeft", (event) => callbacks.onParticipantLeft?.(event)), [callbacks.onParticipantLeft, client]);
@@ -431,14 +403,13 @@ function useClientEvents(client: SpaceClient, callbacks: SpaceEventCallbacks): v
   useEffect(() => client.on("screenShareStopped", (event) => callbacks.onScreenShareStopped?.(event)), [callbacks.onScreenShareStopped, client]);
   useEffect(() => client.on("error", (event) => callbacks.onError?.(event)), [callbacks.onError, client]);
 }
-
-function createSettings(displayName: string, layout: SpaceLayout, palette: ThemePalette, texture: ThemeTexture): SettingsDialogValue {
+function createSettings(displayName: string, layout: SpaceLayout, colorScheme: "light" | "dark"): SettingsDialogValue {
   return {
     identity: { displayName },
     join: { videoEnabled: true, audioEnabled: true },
     audio: { outputVolume: 100, noiseSuppression: false, echoCancellation: true, autoGainControl: true },
     video: { quality: "auto" },
-    appearance: { layout, theme: palette === "light" ? "light" : "dark", palette, texture, gradient: "default", showFilmstrip: true, reducedMotion: false, generatedAvatars: true, profileGradient: { mode: "auto" }, ambientBackground: true },
+    appearance: { layout, theme: colorScheme, gradient: "default", showFilmstrip: true, reducedMotion: false, generatedAvatars: true, profileGradient: { mode: "auto" }, ambientBackground: true },
     experience: { captions: false, compactMode: false, showInviteToast: true, defaultOpenChat: false, defaultOpenParticipants: false, defaultOpenTranscription: false, autoOpenPictureInPicture: false, sounds: true },
   };
 }

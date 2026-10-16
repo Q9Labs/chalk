@@ -2,9 +2,8 @@ import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES } from "
 import type { ChatAttachment, ChatReadReceipt, ChatSendInput, ChatUploadFile, SpaceSnapshot } from "@q9labsai/chalk-client";
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useChat, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
-
 import { cn } from "../../utils/cn";
-import { SentIcon, type SentIconHandle } from "../../utils/animated-icons";
+import { SentIcon } from "../../utils/icons";
 import { Cancel01Icon, Message01Icon, Upload01Icon } from "../../utils/icons";
 import { Button } from "@q9labsai/chalk-ui";
 import { MessageBubble } from "./MessageBubble";
@@ -13,9 +12,7 @@ import { uploadChatAttachment } from "./chat-file-upload";
 import { describeChatUploadFile } from "./chat-upload-file";
 import type { ChatMessage } from "./chat-types";
 import type { ChatPanelProps } from "./ChatPanel";
-
 const ALLOWED_ATTACHMENT_MIME_TYPES = new Set<string>(CHALK_CHAT_ATTACHMENT_MIME_TYPES);
-
 export interface ClassicChatPanelSurfaceProps extends ChatPanelProps {
   readonly messages: readonly ChatMessage[];
   readonly pendingMessages?: SpaceSnapshot["chat"]["pendingSends"];
@@ -33,10 +30,7 @@ export interface ClassicChatPanelSurfaceProps extends ChatPanelProps {
   readonly error?: string | null;
   readonly messageDisplayTime?: (message: ChatMessage) => string;
   readonly autoScrollBehavior?: ScrollBehavior;
-  /** Use a solid message surface instead of filter-generated texture for deterministic raster output. */
-  readonly stableTexture?: boolean;
 }
-
 export const ClassicChatPanelSurface = React.memo(
   ({
     messages,
@@ -63,7 +57,6 @@ export const ClassicChatPanelSurface = React.memo(
     error,
     messageDisplayTime,
     autoScrollBehavior,
-    stableTexture = false,
     className,
   }: ClassicChatPanelSurfaceProps) => {
     const [draft, setDraft] = useState("");
@@ -75,18 +68,19 @@ export const ClassicChatPanelSurface = React.memo(
     const endRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const sendIconRef = useRef<SentIconHandle>(null);
     const isAtBottomRef = useRef(true);
     const mountedRef = useRef(false);
     const lastMarkedSequenceRef = useRef<string | null>(localReadThroughSequence);
-    const restoreScrollRef = useRef<{ readonly height: number; readonly top: number; readonly firstMessageId: string | undefined } | null>(null);
+    const restoreScrollRef = useRef<{
+      readonly height: number;
+      readonly top: number;
+      readonly firstMessageId: string | undefined;
+    } | null>(null);
     const grouped = useMemo(() => groupChatMessages(messages), [messages]);
     const latestSequence = messages.at(-1)?.sequence;
-
     useLayoutEffect(() => {
       const scroller = scrollRef.current;
       if (!scroller) return;
-
       const restore = restoreScrollRef.current;
       if (restore) {
         if (messages[0]?.messageId !== restore.firstMessageId) {
@@ -96,14 +90,12 @@ export const ClassicChatPanelSurface = React.memo(
         isAtBottomRef.current = isChatScrollAtBottom(scroller);
         return;
       }
-
       if (!isAtBottomRef.current) return;
       scroller.scrollTop = scroller.scrollHeight;
       endRef.current?.scrollIntoView?.({ behavior: autoScrollBehavior ?? (mountedRef.current ? "smooth" : "auto"), block: "end" });
       if (latestSequence) markChatSequenceRead(latestSequence, lastMarkedSequenceRef, onMarkRead);
       mountedRef.current = true;
     }, [autoScrollBehavior, latestSequence, messages.length, onMarkRead, pendingMessages.length]);
-
     useEffect(() => {
       if (!localReadThroughSequence) return;
       const previous = lastMarkedSequenceRef.current;
@@ -111,14 +103,12 @@ export const ClassicChatPanelSurface = React.memo(
         lastMarkedSequenceRef.current = localReadThroughSequence;
       }
     }, [localReadThroughSequence]);
-
     useEffect(() => {
       const textarea = textareaRef.current;
       if (!textarea) return;
       textarea.style.height = "auto";
       textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
     }, [draft]);
-
     const send = async () => {
       const text = draft.trim();
       if ((!text && stagedFiles.length === 0) || !onSendMessage || disabled || sending || pickingFiles) return;
@@ -136,7 +126,6 @@ export const ClassicChatPanelSurface = React.memo(
         setSending(false);
       }
     };
-
     const selectFiles = (files: FileList | readonly ChatUploadFile[] | null) => {
       if (!files) return;
       const selected = Array.from(files) as ChatUploadFile[];
@@ -159,7 +148,6 @@ export const ClassicChatPanelSurface = React.memo(
       setComposerError(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     };
-
     const chooseFiles = async () => {
       if (disabled || sending || pickingFiles) return;
       if (!pickChatFiles) {
@@ -176,7 +164,6 @@ export const ClassicChatPanelSurface = React.memo(
         setPickingFiles(false);
       }
     };
-
     const loadOlder = async () => {
       const scroller = scrollRef.current;
       if (scroller) restoreScrollRef.current = { height: scroller.scrollHeight, top: scroller.scrollTop, firstMessageId: messages[0]?.messageId };
@@ -187,7 +174,6 @@ export const ClassicChatPanelSurface = React.memo(
         setComposerError(cause instanceof Error ? cause.message : "Earlier messages could not be loaded.");
       }
     };
-
     const scrollWork = useMemo(
       () =>
         createChatScrollWork({
@@ -202,13 +188,11 @@ export const ClassicChatPanelSurface = React.memo(
       [messages, onMarkRead],
     );
     useEffect(() => () => scrollWork.dispose(), [scrollWork]);
-
     const handleScroll = scrollWork.onScroll;
-
     return (
       <div className={cn("relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-transparent text-[var(--chalk-app-text)]", className)} role="complementary" aria-label="Chat panel">
         {variant === "sidebar" ? (
-          <header className="chalk-textured-surface flex items-center justify-between border-b border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] px-5 py-[18px]">
+          <header className=" flex items-center justify-between border-b border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] px-5 py-[18px]">
             <h2 className="text-xl font-semibold tracking-[-0.025em] text-[var(--chalk-app-text)]">{title}</h2>
             {onClose ? (
               <button
@@ -223,7 +207,7 @@ export const ClassicChatPanelSurface = React.memo(
           </header>
         ) : null}
 
-        <div ref={scrollRef} className={cn("flex-1 overflow-y-auto bg-[var(--chalk-app-panel)] px-2 py-5", !stableTexture && "chalk-textured-surface")} aria-label="Chat messages" aria-live="polite" onScroll={handleScroll}>
+        <div ref={scrollRef} className={cn("flex-1 overflow-y-auto bg-[var(--chalk-app-panel)] px-2 py-5")} aria-label="Chat messages" aria-live="polite" onScroll={handleScroll}>
           {hasOlder && onLoadOlder ? (
             <Button variant="ghost" size="sm" className="mx-auto mb-3 flex" disabled={loadingOlder} onClick={() => void loadOlder()}>
               {loadingOlder ? "Loading…" : "Load earlier messages"}
@@ -318,7 +302,7 @@ export const ClassicChatPanelSurface = React.memo(
             ))}
           </div>
         ) : null}
-        <div className="chalk-textured-surface flex items-end gap-2 border-t border-[var(--chalk-app-line)] bg-[var(--chalk-app-chrome)] px-4 py-4">
+        <div className="flex items-end gap-2 border-t border-[var(--chalk-app-line)] bg-[var(--chalk-app-chrome)] px-4 py-4">
           {onUploadAttachment ? (
             <>
               {!pickChatFiles ? <input ref={fileInputRef} type="file" multiple className="sr-only" aria-label="Choose attachments" onChange={(event) => selectFiles(event.target.files)} /> : null}
@@ -348,18 +332,15 @@ export const ClassicChatPanelSurface = React.memo(
             className="h-11 w-11 shrink-0 rounded-[8px] bg-[var(--chalk-app-control-primary)] !text-white hover:bg-[var(--chalk-app-control-primary-hover)]"
             disabled={(!draft.trim() && stagedFiles.length === 0) || disabled || sending || pickingFiles}
             onClick={() => void send()}
-            onMouseEnter={() => sendIconRef.current?.startAnimation()}
-            onFocus={() => sendIconRef.current?.startAnimation()}
             aria-label="Send message"
           >
-            <SentIcon ref={sendIconRef} className="h-5 w-5" />
+            <SentIcon className="h-5 w-5" />
           </Button>
         </div>
       </div>
     );
   },
 );
-
 export const ClassicChatPanel = React.memo((props: ChatPanelProps): React.JSX.Element => {
   const client = useSpaceClient();
   const chat = useChat();
@@ -367,7 +348,6 @@ export const ClassicChatPanel = React.memo((props: ChatPanelProps): React.JSX.El
   const self = useSelf();
   const localParticipantId = self.participantId ?? "local";
   const participantNames = useMemo(() => Object.fromEntries([...participants.roster.map((participant) => [participant.participantId, participant.displayName] as const), [localParticipantId, self.displayName ?? "You"]]), [localParticipantId, participants.roster, self.displayName]);
-
   return (
     <ClassicChatPanelSurface
       {...props}
@@ -393,5 +373,4 @@ export const ClassicChatPanel = React.memo((props: ChatPanelProps): React.JSX.El
     />
   );
 });
-
 ClassicChatPanel.displayName = "ChatPanel";

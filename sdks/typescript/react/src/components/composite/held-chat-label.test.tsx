@@ -2,7 +2,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { MessageBubble } from "./MessageBubble";
-import { ChatPanelSurface } from "./ChatPanel";
+import { ChatPanelPresentation as ChatPanelSurface } from "./ChatPanel";
 import { ClassicChatPanelSurface } from "./ClassicChatPanel";
 import { ClassicMessageBubble } from "./ClassicMessageBubble";
 

@@ -15,135 +15,10 @@ type ChalkAssetVariant = {
   readonly sha256Prefix: string;
 };
 
-type ChalkBackgroundAsset = {
-  readonly description: string;
-  readonly width: number;
-  readonly height: number;
-  readonly avif: ChalkAssetVariant;
-  readonly webp: ChalkAssetVariant;
-};
-
 type ChalkSoundAsset = {
   readonly opus: ChalkAssetVariant;
   readonly mp3: ChalkAssetVariant;
 };
-
-export const CHALK_BACKGROUND_ASSETS = {
-  "bright-creative-studio": {
-    description: "Airy creative studio with soft plaster, plants, and subtle material swatches.",
-    width: 1280,
-    height: 720,
-    avif: {
-      url: "https://assets.chalkmeet.com/ui/backgrounds/bright-creative-studio.7abcfb577656.avif",
-      filename: "bright-creative-studio.7abcfb577656.avif",
-      mimeType: "image/avif",
-      bytes: 32014,
-      sha256Prefix: "7abcfb577656",
-    },
-    webp: {
-      url: "https://assets.chalkmeet.com/ui/backgrounds/bright-creative-studio.fb65d5b296a5.webp",
-      filename: "bright-creative-studio.fb65d5b296a5.webp",
-      mimeType: "image/webp",
-      bytes: 55688,
-      sha256Prefix: "fb65d5b296a5",
-    },
-  },
-  "cozy-evening-lounge": {
-    description: "Warm evening lounge corner with shelves, ceramics, plants, and soft lamps.",
-    width: 1280,
-    height: 720,
-    avif: {
-      url: "https://assets.chalkmeet.com/ui/backgrounds/cozy-evening-lounge.3668f9fb3ae6.avif",
-      filename: "cozy-evening-lounge.3668f9fb3ae6.avif",
-      mimeType: "image/avif",
-      bytes: 15912,
-      sha256Prefix: "3668f9fb3ae6",
-    },
-    webp: {
-      url: "https://assets.chalkmeet.com/ui/backgrounds/cozy-evening-lounge.dc7786d5fdd2.webp",
-      filename: "cozy-evening-lounge.dc7786d5fdd2.webp",
-      mimeType: "image/webp",
-      bytes: 25624,
-      sha256Prefix: "dc7786d5fdd2",
-    },
-  },
-  "garden-terrace-lounge": {
-    description: "Calm indoor-outdoor terrace lounge with linen curtains and blurred greenery.",
-    width: 1280,
-    height: 720,
-    avif: {
-      url: "https://assets.chalkmeet.com/ui/backgrounds/garden-terrace-lounge.ec01ea565f77.avif",
-      filename: "garden-terrace-lounge.ec01ea565f77.avif",
-      mimeType: "image/avif",
-      bytes: 35462,
-      sha256Prefix: "ec01ea565f77",
-    },
-    webp: {
-      url: "https://assets.chalkmeet.com/ui/backgrounds/garden-terrace-lounge.0a6b0d4fdf87.webp",
-      filename: "garden-terrace-lounge.0a6b0d4fdf87.webp",
-      mimeType: "image/webp",
-      bytes: 66532,
-      sha256Prefix: "0a6b0d4fdf87",
-    },
-  },
-  "modern-acoustic-office": {
-    description: "Modern professional office with acoustic panels, plants, and warm wood accents.",
-    width: 1280,
-    height: 720,
-    avif: {
-      url: "https://assets.chalkmeet.com/ui/backgrounds/modern-acoustic-office.38e4bc5acdec.avif",
-      filename: "modern-acoustic-office.38e4bc5acdec.avif",
-      mimeType: "image/avif",
-      bytes: 21467,
-      sha256Prefix: "38e4bc5acdec",
-    },
-    webp: {
-      url: "https://assets.chalkmeet.com/ui/backgrounds/modern-acoustic-office.7e2e3e0b1f83.webp",
-      filename: "modern-acoustic-office.7e2e3e0b1f83.webp",
-      mimeType: "image/webp",
-      bytes: 38384,
-      sha256Prefix: "7e2e3e0b1f83",
-    },
-  },
-  "soft-abstract-glass": {
-    description: "Subtle abstract glass and fabric-like panels with calm layered color.",
-    width: 1280,
-    height: 720,
-    avif: {
-      url: "https://assets.chalkmeet.com/ui/backgrounds/soft-abstract-glass.1bd6ec278f69.avif",
-      filename: "soft-abstract-glass.1bd6ec278f69.avif",
-      mimeType: "image/avif",
-      bytes: 7113,
-      sha256Prefix: "1bd6ec278f69",
-    },
-    webp: {
-      url: "https://assets.chalkmeet.com/ui/backgrounds/soft-abstract-glass.2fd3949e2036.webp",
-      filename: "soft-abstract-glass.2fd3949e2036.webp",
-      mimeType: "image/webp",
-      bytes: 10752,
-      sha256Prefix: "2fd3949e2036",
-    },
-  },
-  "warm-executive-home-office": {
-    description: "Refined home office with built-in shelves, linen curtains, and warm wood.",
-    width: 1280,
-    height: 720,
-    avif: {
-      url: "https://assets.chalkmeet.com/ui/backgrounds/warm-executive-home-office.4845bdfa8d05.avif",
-      filename: "warm-executive-home-office.4845bdfa8d05.avif",
-      mimeType: "image/avif",
-      bytes: 25471,
-      sha256Prefix: "4845bdfa8d05",
-    },
-    webp: {
-      url: "https://assets.chalkmeet.com/ui/backgrounds/warm-executive-home-office.53e4fce337d3.webp",
-      filename: "warm-executive-home-office.53e4fce337d3.webp",
-      mimeType: "image/webp",
-      bytes: 41678,
-      sha256Prefix: "53e4fce337d3",
-    },
-  },
-} as const satisfies Record<string, ChalkBackgroundAsset>;
 
 export const CHALK_SOUND_ASSETS = {
   click: {
@@ -318,7 +193,6 @@ export const chalkAssets = {
   baseUrl: CHALK_ASSET_CDN_BASE_URL,
   manifestUrl: CHALK_ASSET_MANIFEST_URL,
   cachePolicy: CHALK_ASSET_CACHE_POLICY,
-  backgrounds: CHALK_BACKGROUND_ASSETS,
   sounds: CHALK_SOUND_ASSETS,
   logos: CHALK_LOGO_FILES,
 } as const;

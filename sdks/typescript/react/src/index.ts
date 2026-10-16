@@ -23,9 +23,7 @@ export type { RecordingWhiteboardBinaryFileInput, RecordingWhiteboardFileReferen
 export { Entrance } from "./components/entrance/Entrance";
 export type { EntranceProps, EntranceSettings } from "./components/entrance/Entrance";
 export { Logo } from "./components/logo/Logo";
-export type { LogoMotion, LogoProps, LogoVariant } from "./components/logo/Logo";
-export type { ThemeAppearance, ThemeMode, ThemePalette, ThemeTexture } from "./components/theme";
-export { COSMIC_CHALK_THEME } from "./theme";
+export type { LogoProps, LogoVariant } from "./components/logo/Logo";
 export type { ChalkTheme, ChalkThemeTokens } from "./theme";
 export {
   ChalkAlert,

@@ -11,9 +11,8 @@ import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "
 import { Theme } from "../../ui/theme";
 import { CloseButton, IconTile, SheetGrip } from "./SpaceSurfacePrimitives";
 import type { SpaceController } from "./space-progressive-surface-types";
-import { AppearanceSettings } from "./AppearanceSettings";
 
-type SettingsTab = "devices" | "appearance" | "space";
+type SettingsTab = "devices" | "space";
 
 export function SettingsSheet({ controller, isOpen, onClose }: { readonly controller: SpaceController; readonly isOpen: boolean; readonly onClose: () => void }): React.JSX.Element {
   const [tab, setTab] = useState<SettingsTab>("devices");
@@ -33,7 +32,7 @@ export function SettingsSheet({ controller, isOpen, onClose }: { readonly contro
             <CloseButton label="Close Settings" onPress={onClose} />
           </View>
           <View accessibilityRole="tablist" style={styles.tabs}>
-            {(["devices", "appearance", "space"] as const).map((nextTab) => (
+            {(["devices", "space"] as const).map((nextTab) => (
               <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === nextTab }} key={nextTab} onPress={() => setTab(nextTab)} style={({ pressed }) => [styles.tab, tab === nextTab && styles.tabSelected, pressed && styles.pressed]}>
                 <Text style={[styles.tabText, tab === nextTab && styles.tabTextSelected]}>{nextTab[0]!.toUpperCase() + nextTab.slice(1)}</Text>
               </Pressable>
@@ -41,7 +40,6 @@ export function SettingsSheet({ controller, isOpen, onClose }: { readonly contro
           </View>
           <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
             {tab === "devices" ? <DevicesSettings controller={controller} /> : null}
-            {tab === "appearance" ? <AppearanceSettings /> : null}
             {tab === "space" ? <SpaceSettings controller={controller} /> : null}
           </ScrollView>
           <Pressable accessibilityRole="button" onPress={onClose} style={({ pressed }) => [styles.doneButton, pressed && styles.pressed]}>

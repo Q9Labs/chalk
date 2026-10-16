@@ -13,7 +13,7 @@ export function ClassicMediaRequestDialog({ request, onDecline, onAllow, onActio
       aria-modal="true"
       aria-label={request.kind === "unmute" ? "Unmute request" : "Camera request"}
       aria-busy={pendingAction !== null}
-      className="chalk-textured-surface absolute bottom-24 left-1/2 z-50 w-[min(92vw,400px)] -translate-x-1/2 rounded-2xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] p-5 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]"
+      className="absolute bottom-24 left-1/2 z-50 w-[min(92vw,400px)] -translate-x-1/2 rounded-2xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] p-5 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]"
     >
       <div className="flex items-start gap-3">
         <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--chalk-app-control-group)] text-[var(--chalk-app-text)]" aria-hidden="true">

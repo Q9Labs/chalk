@@ -115,7 +115,7 @@ export function ClassicParticipantRow({
             {menuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={onMenuClose} />
-                <div className="chalk-textured-surface absolute right-0 top-full z-20 mt-1 w-60 overflow-hidden rounded-[12px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] p-1.5 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]">
+                <div className="absolute right-0 top-full z-20 mt-1 w-60 overflow-hidden rounded-[12px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] p-1.5 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]">
                   <ParticipantOptionsMenu
                     participant={participant}
                     variant={variant}

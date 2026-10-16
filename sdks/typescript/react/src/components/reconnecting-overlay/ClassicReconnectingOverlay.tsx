@@ -17,7 +17,7 @@ export const ClassicReconnectingOverlay = React.memo<ReconnectingOverlayProps>((
   return (
     <div className={cn("absolute inset-0 z-50 flex items-center justify-center p-4 transition-opacity duration-300", className)} role="alertdialog" aria-modal="true" aria-labelledby="connection-status-title" aria-describedby="connection-status-desc">
       <div aria-hidden="true" className="absolute inset-0 bg-[var(--chalk-app-canvas)] opacity-90 backdrop-blur-[2px]" />
-      <div className="chalk-textured-surface relative flex w-full max-w-sm flex-col items-center justify-center rounded-[12px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] p-8 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]">
+      <div className="relative flex w-full max-w-sm flex-col items-center justify-center rounded-[12px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] p-8 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]">
         {status === "failed" ? (
           <div className="mb-6 rounded-full bg-[var(--chalk-app-danger)]/10 p-4 text-[var(--chalk-app-danger)]">
             <WifiOffIcon size={48} strokeWidth={1.5} />

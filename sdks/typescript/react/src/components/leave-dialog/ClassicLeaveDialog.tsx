@@ -3,10 +3,8 @@ import { CallEnd01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { resolvePortalThemeFromDocument } from "../../utils/theme";
-import { getThemeMode } from "../theme";
 import type { LeaveDialogProps } from "./LeaveDialog";
-
-export const ClassicLeaveDialog = React.memo<LeaveDialogProps>(({ isOpen, onClose, onConfirm, onEndEpisode, canEndEpisode = true, leavePending = false, leaveError, endEpisodePending = false, endEpisodeError, palette, texture = "none", className }: LeaveDialogProps) => {
+export const ClassicLeaveDialog = React.memo<LeaveDialogProps>(({ isOpen, onClose, onConfirm, onEndEpisode, canEndEpisode = true, leavePending = false, leaveError, endEpisodePending = false, endEpisodeError, className }: LeaveDialogProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const portalTheme = resolvePortalThemeFromDocument();
   const modalRef = useRef<HTMLDivElement>(null);
@@ -15,15 +13,12 @@ export const ClassicLeaveDialog = React.memo<LeaveDialogProps>(({ isOpen, onClos
   const canEndEpisodeAction = Boolean(onEndEpisode && canEndEpisode);
   const activeError = confirmingEndEpisode ? endEpisodeError : leaveError;
   const isPending = leavePending || endEpisodePending;
-
   useEffect(() => {
     if (!isOpen) setConfirmingEndEpisode(false);
   }, [isOpen]);
-
   useEffect(() => {
     if (isOpen) initialFocusRef.current?.focus();
   }, [isOpen, confirmingEndEpisode]);
-
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape" && isOpen) {
@@ -33,22 +28,17 @@ export const ClassicLeaveDialog = React.memo<LeaveDialogProps>(({ isOpen, onClos
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
   }, [isOpen, onClose]);
-
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
       onClose();
     }
   };
-
   if (!isOpen) return null;
-  const resolvedTheme = palette ? getThemeMode(palette) : portalTheme;
-
+  const resolvedTheme = portalTheme;
   return (
     <div
       data-chalk
       data-chalk-theme={resolvedTheme}
-      data-chalk-palette={palette}
-      data-chalk-texture={texture}
       className={cn("chalk-root fixed inset-0 z-[100] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[2px]", !prefersReducedMotion && "animate-in fade-in duration-200", className)}
       role="dialog"
       aria-modal="true"
@@ -60,7 +50,7 @@ export const ClassicLeaveDialog = React.memo<LeaveDialogProps>(({ isOpen, onClos
       <div
         ref={modalRef}
         className={cn(
-          "chalk-textured-surface relative w-full max-w-[420px] overflow-hidden rounded-[12px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]",
+          "relative w-full max-w-[420px] overflow-hidden rounded-[12px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]",
           !prefersReducedMotion && "animate-in fade-in zoom-in-[0.97] slide-in-from-bottom-4 duration-200 ease-out",
         )}
         onClick={(e) => e.stopPropagation()}
@@ -140,5 +130,4 @@ export const ClassicLeaveDialog = React.memo<LeaveDialogProps>(({ isOpen, onClos
     </div>
   );
 });
-
 ClassicLeaveDialog.displayName = "LeaveDialog";

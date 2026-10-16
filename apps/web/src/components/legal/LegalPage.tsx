@@ -90,7 +90,7 @@ export function LegalPage({ kind }: { kind: LegalPageKind }) {
     <div className="legal-page">
       <header className="legal-header">
         <a href="/" className="legal-brand" aria-label="Chalk home">
-          <Logo accessibilityLabel={null} color="currentColor" height={30} motion="orbit-burst" variant="wordmark" />
+          <Logo accessibilityLabel={null} color="currentColor" height={30} variant="wordmark" />
         </a>
         <nav className="legal-nav" aria-label="Legal navigation">
           <a href="/privacy" className={kind === "privacy" ? "is-active" : ""}>

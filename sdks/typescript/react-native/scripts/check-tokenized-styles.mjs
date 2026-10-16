@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 
 const sourceRoot = join(process.cwd(), "src");
-const tokenSources = new Set(["ui/theme.ts", "ui/theme-tokens.ts", "ui/appearance.ts", "ui/appearance.test.ts"]);
+const tokenSources = new Set(["ui/theme.ts", "ui/theme-tokens.ts"]);
 const sourceFilePattern = /\.(?:ts|tsx)$/u;
 const styleLiteralPatterns = [
   /\b(?:backgroundColor|borderColor|color|fill|placeholderTextColor|shadowColor|stroke)\s*:\s*["'](?:#[0-9a-f]{3,8}|rgba?\([^)]*\)|white|black|transparent)["']/giu,

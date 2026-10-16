@@ -40,7 +40,7 @@ export function AuthPage({ mode, next }: { mode: "sign-in" | "sign-up"; next?: s
     <main className="account-entry">
       <section className="account-entry-story" aria-label="Chalk introduction">
         <Link to="/" className="account-entry-brand" aria-label="Chalk home">
-          <Logo accessibilityLabel={null} color="currentColor" height={34} motion="orbit-burst" variant="wordmark" />
+          <Logo accessibilityLabel={null} color="currentColor" height={34} variant="wordmark" />
         </Link>
         <div>
           <p className="eyebrow">A place for shared work</p>

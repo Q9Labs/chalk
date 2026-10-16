@@ -1,18 +1,14 @@
 import { Dialog } from "@base-ui/react/dialog";
 import React from "react";
 import { IconButton, Input } from "@q9labsai/chalk-ui";
-
 import { cn } from "../../utils/cn";
 import { ArrowLeft02Icon, Cancel01Icon, PictureInPictureIcon, Search01Icon, Settings01Icon, VolumeHighIcon } from "../../utils/icons";
 import { VolumeSlider } from "../atomic";
-import { THEME_PALETTES, THEME_TEXTURES } from "../theme";
 import { OfflineActionsSetting } from "../offline-actions/OfflineActionsSetting";
 import { ChalkToggle } from "../chalk-ui";
-import { BackgroundEffectsPicker } from "./BackgroundEffectsPicker";
 import { DeviceSelector } from "./DeviceSelector";
 import { NoiseSuppressionToggle } from "./NoiseSuppressionToggle";
 import { SETTINGS_SECTIONS, useSettingsDialogBehavior, type SettingsDialogProps } from "./settings-dialog-behavior";
-
 function SectionCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
   return (
     <section className="rounded-[10px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] p-3.5 shadow-none sm:p-4">
@@ -24,10 +20,8 @@ function SectionCard({ title, description, children }: { title: string; descript
     </section>
   );
 }
-
 function ToggleRow({ title, description, checked, onChange }: { title: string; description: string; checked: boolean; onChange: (checked: boolean) => void }) {
   const titleId = React.useId();
-
   return (
     <div className="flex items-center justify-between gap-4 rounded-[10px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] p-3">
       <div className="min-w-0 flex-1">
@@ -40,7 +34,6 @@ function ToggleRow({ title, description, checked, onChange }: { title: string; d
     </div>
   );
 }
-
 export const ClassicSettingsDialog = React.memo(
   ({
     isOpen,
@@ -56,13 +49,6 @@ export const ClassicSettingsDialog = React.memo(
     isPictureInPictureSupported = false,
     isPictureInPictureActive = false,
     onOpenPictureInPicture,
-    enableBackgroundEffects = false,
-    isBackgroundEffectsSupported = false,
-    isApplyingBackgroundEffect = false,
-    backgroundEffects = [],
-    selectedBackgroundEffectId,
-    onSelectBackgroundEffect,
-    onUploadBackgroundEffect,
     audioInputDevices = [],
     audioOutputDevices = [],
     videoInputDevices = [],
@@ -73,26 +59,17 @@ export const ClassicSettingsDialog = React.memo(
     isDarkMode = false,
     initialSection = "audio-video",
   }: SettingsDialogProps) => {
-    const {
-      disableMotion,
-      isDesktop,
-      resolvedPalette,
-      resolvedTexture,
-      resolvedTheme,
-      usesDarkPalette,
-      activeSection,
-      setActiveSection,
-      isNavOpen,
-      setIsNavOpen,
-      searchQuery,
-      setSearchQuery,
-      effectiveAudioInputDevices,
-      effectiveAudioOutputDevices,
-      effectiveVideoInputDevices,
-      settingsChromeVariables,
-      filteredSections,
-    } = useSettingsDialogBehavior({ isOpen, settings, audioInputDevices, audioOutputDevices, videoInputDevices, reducedMotion, participantColorSeed, isDarkMode, initialSection });
-
+    const { disableMotion, isDesktop, resolvedTheme, activeSection, setActiveSection, isNavOpen, setIsNavOpen, searchQuery, setSearchQuery, effectiveAudioInputDevices, effectiveAudioOutputDevices, effectiveVideoInputDevices, settingsChromeVariables, filteredSections } = useSettingsDialogBehavior({
+      isOpen,
+      settings,
+      audioInputDevices,
+      audioOutputDevices,
+      videoInputDevices,
+      reducedMotion,
+      participantColorSeed,
+      isDarkMode,
+      initialSection,
+    });
     const renderSectionContent = () => {
       switch (activeSection) {
         case "audio-video":
@@ -142,123 +119,16 @@ export const ClassicSettingsDialog = React.memo(
                   participantGradientPreference={settings.appearance.profileGradient}
                 />
               </SectionCard>
-              {enableBackgroundEffects ? (
-                <SectionCard title="Background Effects" description="Blur distractions or swap in a background locally for this browser.">
-                  {isBackgroundEffectsSupported ? (
-                    <BackgroundEffectsPicker
-                      effects={[...backgroundEffects]}
-                      selectedEffectId={selectedBackgroundEffectId}
-                      onSelect={onSelectBackgroundEffect ?? (() => {})}
-                      onCustomUpload={onUploadBackgroundEffect}
-                      disabled={isApplyingBackgroundEffect}
-                      participantColorSeed={participantColorSeed}
-                      participantGradientPreference={settings.appearance.profileGradient}
-                    />
-                  ) : (
-                    <div className="rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] p-4 text-sm text-[var(--chalk-muted-text)]">Background effects are not supported in this browser yet.</div>
-                  )}
-                </SectionCard>
-              ) : null}
             </div>
           );
         case "appearance":
           return (
             <div className="space-y-5">
-              <SectionCard title="Palette" description="Choose a complete color family. Every palette can use any material texture.">
-                {(["light", "dark"] as const).map((mode) => (
-                  <div key={mode} className="space-y-2.5">
-                    <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground/80">{mode} palettes</div>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      {THEME_PALETTES.filter((palette) => palette.mode === mode).map((palette) => {
-                        const isSelected = resolvedPalette === palette.value;
-                        return (
-                          <button
-                            key={palette.value}
-                            type="button"
-                            onClick={() => onUpdateAppearance({ palette: palette.value, theme: palette.mode })}
-                            aria-pressed={isSelected}
-                            className={cn("flex items-center gap-3 rounded-[10px] border p-3 text-left transition-colors", isSelected ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-foreground hover:border-primary/50 hover:bg-muted/50")}
-                          >
-                            <span className="flex shrink-0 overflow-hidden rounded-full border border-black/10 shadow-sm" aria-hidden="true">
-                              {palette.swatch.map((color) => (
-                                <span key={color} className="h-7 w-3" style={{ backgroundColor: color }} />
-                              ))}
-                            </span>
-                            <span className="min-w-0">
-                              <span className="block truncate text-sm font-semibold">{palette.label}</span>
-                              <span className="block text-[11px] opacity-70">{palette.family} family</span>
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
+              <SectionCard title="Avatars" description="Choose generated avatars or plain initials.">
+                <ToggleRow title="Fun avatars" description="Use generated avatars when no photo is set." checked={settings.appearance.generatedAvatars} onChange={(checked) => onUpdateAppearance({ generatedAvatars: checked })} />
               </SectionCard>
-
-              <SectionCard title="Texture" description="Layer a material treatment over the selected palette without changing its colors.">
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  {THEME_TEXTURES.map((texture) => {
-                    const isSelected = resolvedTexture === texture.value;
-                    return (
-                      <button
-                        key={texture.value}
-                        type="button"
-                        onClick={() => onUpdateAppearance({ texture: texture.value })}
-                        aria-label={`Use ${texture.label} texture`}
-                        aria-pressed={isSelected}
-                        className={cn("overflow-hidden rounded-[10px] border text-left transition-colors", isSelected ? "border-primary text-primary" : "border-border text-foreground hover:border-primary/50")}
-                      >
-                        <span data-chalk data-chalk-theme={resolvedTheme} data-chalk-palette={resolvedPalette} data-chalk-texture={texture.value} className="chalk-root chalk-textured-surface block h-12 border-b border-[var(--chalk-app-line)] bg-[var(--chalk-app-stage)]" aria-hidden="true" />
-                        <span className="block bg-[var(--chalk-app-panel)] p-2.5">
-                          <span className="block text-xs font-semibold">{texture.label}</span>
-                          <span className="mt-0.5 block text-[10px] leading-4 text-[var(--chalk-app-text-muted)]">{texture.description}</span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </SectionCard>
-
-              {usesDarkPalette && (
-                <SectionCard title="Background Gradient" description="Adjust the intensity of the background gradient.">
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <button
-                      type="button"
-                      onClick={() => onUpdateAppearance({ gradient: "default" })}
-                      className={cn(
-                        "group relative overflow-hidden rounded-2xl border p-4 text-left transition-colors",
-                        settings.appearance.gradient === "default" ? "border-[var(--chalk-accent)] text-[var(--chalk-accent)]" : "border-[var(--chalk-line)] bg-[var(--chalk-surface)] text-[var(--chalk-text)] hover:border-[var(--chalk-accent)]",
-                      )}
-                    >
-                      {settings.appearance.gradient === "default" && <div className="absolute inset-0 bg-[var(--chalk-accent)]" />}
-                      <div className="absolute inset-0 opacity-20 transition-opacity group-hover:opacity-40" style={{ background: "radial-gradient(ellipse at top left, var(--chalk-accent) 0%, transparent 70%)" }} />
-                      <div className="absolute inset-0 opacity-10 transition-opacity group-hover:opacity-30" style={{ background: "radial-gradient(ellipse at bottom right, var(--chalk-focus) 0%, transparent 70%)" }} />
-                      <div className="relative z-10 text-sm font-semibold">Default</div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onUpdateAppearance({ gradient: "darker" })}
-                      className={cn(
-                        "group relative overflow-hidden rounded-2xl border p-4 text-left transition-colors",
-                        settings.appearance.gradient === "darker" ? "border-[var(--chalk-accent)] text-[var(--chalk-accent)]" : "border-[var(--chalk-line)] bg-[var(--chalk-surface)] text-[var(--chalk-text)] hover:border-[var(--chalk-accent)]",
-                      )}
-                    >
-                      {settings.appearance.gradient === "darker" && <div className="absolute inset-0 bg-[var(--chalk-accent)]" />}
-                      <div className="absolute inset-0 opacity-5 transition-opacity group-hover:opacity-10" style={{ background: "radial-gradient(ellipse at top left, var(--chalk-accent) 0%, transparent 70%)" }} />
-                      <div className="absolute inset-0 opacity-0 transition-opacity group-hover:opacity-5" style={{ background: "radial-gradient(ellipse at bottom right, var(--chalk-focus) 0%, transparent 70%)" }} />
-                      <div className="relative z-10 text-sm font-semibold">Darker</div>
-                    </button>
-                  </div>
-                </SectionCard>
-              )}
-
-              <SectionCard title="Avatars" description="Choose whether participants without photos use generated avatars or plain initials.">
-                <ToggleRow title="Fun avatars" description="Use generated avatars when no photo is set. Turn this off for plain initials." checked={settings.appearance.generatedAvatars} onChange={(checked) => onUpdateAppearance({ generatedAvatars: checked })} />
-              </SectionCard>
-
-              <SectionCard title="Motion" description="Keep movement comfortable and predictable across the interface.">
-                <ToggleRow title="Reduced motion" description="Turn down transitions and ambient motion." checked={settings.appearance.reducedMotion} onChange={(checked) => onUpdateAppearance({ reducedMotion: checked })} />
+              <SectionCard title="Motion" description="Keep movement comfortable.">
+                <ToggleRow title="Reduced motion" description="Turn down transitions." checked={settings.appearance.reducedMotion} onChange={(checked) => onUpdateAppearance({ reducedMotion: checked })} />
               </SectionCard>
             </div>
           );
@@ -360,10 +230,8 @@ export const ClassicSettingsDialog = React.memo(
           );
       }
     };
-
     const showSidebar = isDesktop || isNavOpen;
     const showContent = isDesktop || !isNavOpen;
-
     return (
       <>
         <Dialog.Root
@@ -379,10 +247,8 @@ export const ClassicSettingsDialog = React.memo(
             <Dialog.Popup
               data-chalk
               data-chalk-theme={resolvedTheme}
-              data-chalk-palette={resolvedPalette}
-              data-chalk-texture={resolvedTexture}
               className={cn(
-                "chalk-root chalk-textured-surface",
+                "chalk-root",
                 "fixed inset-4 z-[101] m-auto flex max-h-[min(700px,calc(100dvh-32px))] w-auto max-w-[760px] flex-col overflow-hidden rounded-[14px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-chrome)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-control)] md:inset-0",
                 !disableMotion && "animate-in fade-in duration-300 ease-out",
                 !disableMotion && "slide-in-from-bottom-10 md:zoom-in-95",
@@ -452,7 +318,7 @@ export const ClassicSettingsDialog = React.memo(
                     </div>
                     <IconButton icon={<Cancel01Icon className="h-5 w-5" />} variant="ghost" onClick={onClose} aria-label="Close settings" />
                   </div>
-                  <div className="chalk-textured-surface min-h-0 flex-1 overflow-y-auto bg-[var(--chalk-app-chrome)] px-5 py-5 md:px-6">
+                  <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--chalk-app-chrome)] px-5 py-5 md:px-6">
                     <div className="mx-auto max-w-[560px] pb-10 md:pb-0">{renderSectionContent()}</div>
                   </div>
                 </div>
@@ -464,5 +330,4 @@ export const ClassicSettingsDialog = React.memo(
     );
   },
 );
-
 ClassicSettingsDialog.displayName = "SettingsDialog";

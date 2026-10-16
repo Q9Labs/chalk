@@ -64,7 +64,7 @@ export function Closing() {
           <div className="footer-top">
             <div className="footer-brand">
               <a href="/" className="footer-logo" aria-label="Chalk home">
-                <Logo accessibilityLabel={null} color="currentColor" height={28} motion="orbit-burst" variant="wordmark" />
+                <Logo accessibilityLabel={null} color="currentColor" height={28} variant="wordmark" />
               </a>
               <p className="footer-tagline">A Space that outlasts the call, for your team or for the product you are building.</p>
             </div>

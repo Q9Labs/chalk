@@ -91,7 +91,7 @@ export const ClassicDevicePopover = ({
         size={size}
         className={cn(
           floating
-            ? "chalk-textured-surface h-[52px] w-[52px] !rounded-full !bg-[var(--chalk-app-control-primary)] !text-white shadow-[var(--chalk-app-shadow-control)] hover:-translate-y-0.5 hover:!bg-[var(--chalk-app-control-primary-hover)]"
+            ? "h-[52px] w-[52px] !rounded-full !bg-[var(--chalk-app-control-primary)] !text-white shadow-[var(--chalk-app-shadow-control)] hover:-translate-y-0.5 hover:!bg-[var(--chalk-app-control-primary-hover)]"
             : "rounded-r-none border-r border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)]",
           isOpen && "brightness-110",
         )}
@@ -108,7 +108,7 @@ export const ClassicDevicePopover = ({
           className={cn(
             "chalk-button-tactile flex items-center justify-center transition-all duration-300 ease-out",
             floating
-              ? "chalk-textured-surface absolute -right-1.5 -bottom-1.5 h-7 w-7 rounded-full border-2 border-[var(--chalk-app-chrome)] bg-[var(--chalk-app-control-primary-hover)] p-0 !text-white shadow-sm hover:bg-[var(--chalk-app-line-strong)]"
+              ? "absolute -right-1.5 -bottom-1.5 h-7 w-7 rounded-full border-2 border-[var(--chalk-app-chrome)] bg-[var(--chalk-app-control-primary-hover)] p-0 !text-white shadow-sm hover:bg-[var(--chalk-app-line-strong)]"
               : "rounded-r-full border-l border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] shadow-[var(--chalk-app-shadow-control)] hover:bg-[var(--chalk-app-control-hover)]",
             !floating && "text-[var(--chalk-app-text)]",
             !floating && chevronSizeClass,
@@ -126,7 +126,7 @@ export const ClassicDevicePopover = ({
       {isOpen && (
         <div
           className={cn(
-            "chalk-textured-surface pointer-events-auto absolute z-[70] max-h-[420px] w-[min(340px,calc(100vw-24px))] overflow-y-auto rounded-[14px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] p-2 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)] animate-in fade-in zoom-in-95 duration-150",
+            "pointer-events-auto absolute z-[70] max-h-[420px] w-[min(340px,calc(100vw-24px))] overflow-y-auto rounded-[14px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] p-2 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)] animate-in fade-in zoom-in-95 duration-150",
             orientation === "up" ? "bottom-full mb-3" : "top-full mt-3",
             "left-0",
           )}

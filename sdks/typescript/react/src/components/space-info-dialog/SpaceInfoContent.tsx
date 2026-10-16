@@ -1,40 +1,31 @@
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
 import { QRCodeSVG } from "qrcode.react";
-
 import { cn } from "../../utils/cn";
-import type { Copy01IconHandle } from "../../utils/animated-icons";
 import { Copy01Icon } from "../../utils/icons";
 import type { SpaceInfoDialogProps } from "./SpaceInfoDialog";
-
 type CopyTarget = "invite" | null;
-
 type SpaceInfoContentProps = Pick<SpaceInfoDialogProps, "spaceDescription" | "spaceId" | "inviteLink" | "onCopyLink" | "stats" | "duration">;
-
 const LABEL_CLASS = "text-[13px] leading-5 text-[var(--chalk-app-text-muted)]";
 const VALUE_CLASS = "min-w-0 text-sm leading-5 text-[var(--chalk-app-text)]";
 const FIELD_CLASS = "flex h-9 min-w-0 flex-1 items-center rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-input)] px-3 font-mono text-[12.5px] text-[var(--chalk-app-text)]";
 const ACCENT_BUTTON_CLASS =
   "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[8px] border border-transparent bg-[var(--chalk-app-control-active)] px-3.5 text-sm font-semibold text-[var(--chalk-app-control-active-text)] transition-colors hover:border-[var(--chalk-app-control-active-line)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]";
-
 function formatDuration(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const remainingSeconds = seconds % 60;
   return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${remainingSeconds.toString().padStart(2, "0")}`;
 }
-
 function connectionSummary(stats: NonNullable<SpaceInfoDialogProps["stats"]>): string | null {
   const parts = [stats.resolution, stats.latency === undefined ? undefined : `${stats.latency} ms`, stats.packetLoss === undefined ? undefined : `${stats.packetLoss}% loss`].filter((part): part is string => part !== undefined);
   return parts.length > 0 ? parts.join(" · ") : null;
 }
-
 interface RowProps {
   readonly label: string;
   readonly align?: "start" | "center";
   readonly children: React.ReactNode;
 }
-
 function Row({ label, align = "start", children }: RowProps): React.JSX.Element {
   return (
     <>
@@ -43,7 +34,6 @@ function Row({ label, align = "start", children }: RowProps): React.JSX.Element 
     </>
   );
 }
-
 /**
  * Facts about the current Space as one flat label/value list: the invite link first (the one
  * action), then the live state, then the support reference. No nested panels or section copy.
@@ -51,26 +41,20 @@ function Row({ label, align = "start", children }: RowProps): React.JSX.Element 
 export function SpaceInfoContent({ spaceDescription, spaceId, inviteLink, onCopyLink, stats, duration }: SpaceInfoContentProps): React.JSX.Element {
   const [copied, setCopied] = useState<CopyTarget>(null);
   const confirmationTimer = useRef<number | null>(null);
-  const inviteCopyRef = useRef<Copy01IconHandle>(null);
-
   useEffect(
     () => () => {
       if (confirmationTimer.current !== null) window.clearTimeout(confirmationTimer.current);
     },
     [],
   );
-
-  const confirmCopy = (target: Exclude<CopyTarget, null>, copy: () => void, iconRef: React.RefObject<Copy01IconHandle | null>) => {
+  const confirmCopy = (target: Exclude<CopyTarget, null>, copy: () => void) => {
     copy();
-    iconRef.current?.startAnimation();
     setCopied(target);
     if (confirmationTimer.current !== null) window.clearTimeout(confirmationTimer.current);
-    confirmationTimer.current = window.setTimeout(() => setCopied(null), 2_000);
+    confirmationTimer.current = window.setTimeout(() => setCopied(null), 2000);
   };
-
   const connection = stats ? connectionSummary(stats) : null;
   const showInvite = inviteLink !== undefined && onCopyLink !== undefined;
-
   return (
     <div className="px-6 pb-6 pt-5">
       {spaceDescription ? <p className="mb-5 text-sm leading-6 text-[var(--chalk-app-text)]">{spaceDescription}</p> : null}
@@ -82,15 +66,8 @@ export function SpaceInfoContent({ spaceDescription, spaceId, inviteLink, onCopy
               <p className={FIELD_CLASS} title={inviteLink}>
                 <span className="truncate">{inviteLink}</span>
               </p>
-              <button
-                type="button"
-                onClick={() => confirmCopy("invite", onCopyLink, inviteCopyRef)}
-                onMouseEnter={() => inviteCopyRef.current?.startAnimation()}
-                onFocus={() => inviteCopyRef.current?.startAnimation()}
-                className={ACCENT_BUTTON_CLASS}
-                aria-label={copied === "invite" ? "Space link copied" : "Copy space link"}
-              >
-                <Copy01Icon ref={inviteCopyRef} size={16} aria-hidden="true" onMouseEnter={() => inviteCopyRef.current?.startAnimation()} />
+              <button type="button" onClick={() => confirmCopy("invite", onCopyLink)} className={ACCENT_BUTTON_CLASS} aria-label={copied === "invite" ? "Space link copied" : "Copy space link"}>
+                <Copy01Icon size={16} aria-hidden="true" />
                 {copied === "invite" ? "Copied" : "Copy link"}
               </button>
             </div>

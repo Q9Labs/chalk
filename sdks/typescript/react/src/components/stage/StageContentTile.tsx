@@ -81,7 +81,7 @@ export const StageContentTileSurface = React.memo(function StageContentTileSurfa
     >
       {mediaVisible ? <div className="relative z-10 block h-full w-full overflow-hidden bg-[var(--chalk-app-tile-base)] [&>*]:h-full [&>*]:w-full [&>*]:object-contain">{media}</div> : null}
       {!mediaVisible && (
-        <div className="chalk-participant-wash chalk-textured-surface absolute inset-0 z-10 flex items-center justify-center text-[var(--chalk-app-text-muted)]">
+        <div className="chalk-participant-wash absolute inset-0 z-10 flex items-center justify-center text-[var(--chalk-app-text-muted)]">
           <Icon size={32} />
         </div>
       )}

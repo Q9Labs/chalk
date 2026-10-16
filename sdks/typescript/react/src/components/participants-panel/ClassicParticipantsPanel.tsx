@@ -181,7 +181,7 @@ const ParticipantsPanelSurface = React.memo(
     // Mobile variant - fills container, no header (the parent provides it)
     if (variant === "mobile") {
       return (
-        <div className={cn("chalk-textured-surface relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-app-panel)] font-sans", className)} style={themeVariables as React.CSSProperties} data-tour="participants-panel" role="complementary" aria-label="Participants list">
+        <div className={cn("relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-app-panel)] font-sans", className)} style={themeVariables as React.CSSProperties} data-tour="participants-panel" role="complementary" aria-label="Participants list">
           <div className="flex-1 overflow-y-auto px-4 py-4">
             {onAddPeople && (
               <Button onClick={onAddPeople} className="mb-4 min-h-[48px] w-full rounded-full bg-[var(--chalk-app-control-primary)] px-4 py-3 !text-white shadow-[var(--chalk-app-shadow-control)] hover:bg-[var(--chalk-app-control-primary-hover)]">
@@ -209,7 +209,7 @@ const ParticipantsPanelSurface = React.memo(
 
     if (variant === "sidebar") {
       return (
-        <div className={cn("chalk-textured-surface relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-app-panel)] font-sans", className)} style={themeVariables as React.CSSProperties} data-tour="participants-panel" role="complementary" aria-label="Participants list">
+        <div className={cn("relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-app-panel)] font-sans", className)} style={themeVariables as React.CSSProperties} data-tour="participants-panel" role="complementary" aria-label="Participants list">
           <div className="flex items-center justify-between border-b border-[var(--chalk-app-line)] px-5 py-[18px]">
             <div className="flex items-center gap-2">
               <h2 className="text-base font-semibold tracking-[-0.02em] text-[var(--chalk-app-text)]">{title}</h2>
@@ -260,7 +260,7 @@ const ParticipantsPanelSurface = React.memo(
     // Default rendering (preserving exact existing structure/classes)
     return (
       <div
-        className={cn("chalk-textured-surface flex h-full w-80 flex-col border-l border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] shadow-xl", !prefersReducedMotion && "chalk-animate-slide-right", className)}
+        className={cn("flex h-full w-80 flex-col border-l border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] shadow-xl", !prefersReducedMotion && "chalk-animate-slide-right", className)}
         style={themeVariables as React.CSSProperties}
         data-tour="participants-panel"
         role="complementary"
