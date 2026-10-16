@@ -1,5 +1,4 @@
 import { FailureKind, failure } from "./model.mjs";
-import { runChecked } from "./chalk-resources.mjs";
 
 export async function bootstrapLocalSpace({ apiOrigin, systemToken, runtimeId, fixtureMarker, fetchImpl = fetch, fresh = false } = {}) {
   if (!apiOrigin || !systemToken || !runtimeId) throw failure(FailureKind.CONFIG, "API bootstrap requires origin, system token, and runtime id", { stage: "bootstrap" });
@@ -66,25 +65,6 @@ export async function retireLocalFixture({ apiOrigin, systemToken, marker, runti
       body: { name: `${tenantName} retired ${runtimeId.slice(0, 8)}` },
     });
   return { retired: true, marker, tenantId: tenant.id, spaceId: space?.id };
-}
-
-export async function runSfuProbe({ root, appId, appSecret, runner = runChecked } = {}) {
-  if (!appId || !appSecret) throw failure(FailureKind.CONFIG, "Cloudflare SFU credentials are missing", { stage: "provider" });
-  const result = await runner("go", ["run", "./cmd/dev-sfu-probe"], {
-    cwd: `${root}/apps/api`,
-    env: {
-      CHALK_CLOUDFLARE_REALTIME_APP_ID: appId,
-      CHALK_CLOUDFLARE_REALTIME_APP_SECRET: appSecret,
-    },
-  });
-  let parsed;
-  try {
-    parsed = JSON.parse(result.stdout);
-  } catch (error) {
-    throw failure(FailureKind.STARTUP, "Cloudflare SFU probe returned invalid output", { stage: "provider", cause: error });
-  }
-  if (parsed.status !== "ok" || parsed.verified !== true) throw failure(FailureKind.STARTUP, "Cloudflare SFU probe did not verify a real connection", { stage: "provider" });
-  return { status: "ok", verified: true };
 }
 
 function runtimeMarker(runtimeId) {
