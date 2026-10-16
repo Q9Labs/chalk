@@ -68,7 +68,7 @@ export default defineGate({
     source: [".go", ".ex", ".exs", ".sql"],
     dependency: ["go.mod", "go.sum", "mix.exs", "mix.lock"],
     infra: ["infrastructure/"],
-    contract: ["contract/", "packages/diagnostics-contracts/"],
+    contract: ["contract/"],
   },
   concurrency: 1,
   lanes: [emptyScopeLane, ...chalkLanes, lanes.depcruise({ config: ".dependency-cruiser.cjs", source: "." })],

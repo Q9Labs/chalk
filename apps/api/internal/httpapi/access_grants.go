@@ -17,10 +17,6 @@ type ParticipantMediaIssuer interface {
 	Issue(context.Context, accessgrants.Subject) (accessgrants.MediaCredential, error)
 }
 
-type ParticipantDiagnosticsIssuer interface {
-	Issue(context.Context, accessgrants.DiagnosticsSubject) (accessgrants.DiagnosticsCredential, error)
-}
-
 type ParticipantGenerationAuthorizer interface {
 	AuthorizeActiveParticipantGeneration(context.Context, synctokens.SubjectKey, int64) (bool, error)
 }
@@ -45,19 +41,11 @@ type accessGrantMediaResponse struct {
 	ClientPayload map[string]any `json:"client_payload"`
 }
 
-type accessGrantDiagnosticsResponse struct {
-	Token      string `json:"token"`
-	ExpiresAt  string `json:"expires_at"`
-	Generation int64  `json:"generation"`
-	IntakePath string `json:"intake_path"`
-}
-
 type accessGrantResponse struct {
-	EpisodeStartedAt *string                         `json:"episode_started_at,omitempty"`
-	Subject          accessGrantSubjectResponse      `json:"subject"`
-	Sync             accessGrantTokenResponse        `json:"sync"`
-	Media            accessGrantMediaResponse        `json:"media"`
-	Diagnostics      *accessGrantDiagnosticsResponse `json:"diagnostics,omitempty"`
+	EpisodeStartedAt *string                    `json:"episode_started_at,omitempty"`
+	Subject          accessGrantSubjectResponse `json:"subject"`
+	Sync             accessGrantTokenResponse   `json:"sync"`
+	Media            accessGrantMediaResponse   `json:"media"`
 }
 
 type issueAccessGrantBody struct {
@@ -77,7 +65,7 @@ type issueAccessGrantRequest struct {
 func issueAccessGrantEndpoint(
 	refresh SyncTokenRefreshIssuer,
 	mediaIssuer ParticipantMediaIssuer,
-	diagnosticsIssuer ParticipantDiagnosticsIssuer,
+
 	mediaVerifier ParticipantMediaVerifier,
 	active ActiveParticipantAuthorizer,
 	generations ParticipantGenerationAuthorizer,
@@ -160,7 +148,7 @@ func issueAccessGrantEndpoint(
 				return accessGrantResponse{}, err
 			}
 			response := newAccessGrantResponse(subject, syncCredential, mediaCredential, join)
-			attachDiagnosticsCredential(ctx, &response, diagnosticsIssuer, subject)
+
 			return response, nil
 		},
 	).
@@ -292,23 +280,6 @@ func episodeStartedAt(value *time.Time) *string {
 	}
 	formatted := value.UTC().Format(time.RFC3339Nano)
 	return &formatted
-}
-
-func attachDiagnosticsCredential(ctx context.Context, response *accessGrantResponse, issuer ParticipantDiagnosticsIssuer, subject accessgrants.Subject) {
-	if response == nil || issuer == nil {
-		return
-	}
-	credential, err := issuer.Issue(ctx, accessgrants.DiagnosticsSubject{
-		TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID,
-		ParticipantGeneration: subject.ParticipantGeneration, Capability: accessgrants.DiagnosticsCapability,
-	})
-	if err != nil {
-		return
-	}
-	response.Diagnostics = &accessGrantDiagnosticsResponse{
-		Token: credential.Token, ExpiresAt: credential.ExpiresAt.UTC().Format(time.RFC3339),
-		Generation: credential.Generation, IntakePath: credential.IntakePath,
-	}
 }
 
 func accessGrantRefreshError(err error) error {

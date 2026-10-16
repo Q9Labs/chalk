@@ -22,14 +22,6 @@ window.proofJoin=async(space,baseUrl,displayName)=>{
     write: false,
     format: "iife",
     platform: "browser",
-    plugins: [
-      {
-        name: "proof-workspace-source",
-        setup(builder) {
-          builder.onResolve({ filter: /^@q9labsai\/diagnostics-contracts$/ }, () => ({ path: new URL("../../packages/diagnostics-contracts/src/index.ts", import.meta.url).pathname }));
-        },
-      },
-    ],
   });
   return result.outputFiles[0].text;
 }

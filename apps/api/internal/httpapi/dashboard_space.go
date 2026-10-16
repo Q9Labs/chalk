@@ -54,15 +54,15 @@ const (
 	dashboardJoinCleanupTimeout       = 5 * time.Second
 )
 
-func dashboardSpaceSelfEndpoints(service DashboardSpaceJoinService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, diagnosticsTokens ParticipantDiagnosticsIssuer, mediaVerifier ParticipantMediaVerifier, active ActiveParticipantAuthorizer, generations ParticipantGenerationAuthorizer, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, authorizer TenantAuthorizer) []RouteEndpoint {
+func dashboardSpaceSelfEndpoints(service DashboardSpaceJoinService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, mediaVerifier ParticipantMediaVerifier, active ActiveParticipantAuthorizer, generations ParticipantGenerationAuthorizer, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, authorizer TenantAuthorizer) []RouteEndpoint {
 	return []RouteEndpoint{
-		dashboardSpaceSelfJoinEndpoint(service, tokens, refresh, mediaTokens, diagnosticsTokens, spacesService, tenantsService, resolver, authorizer),
-		dashboardSpaceSelfAccessEndpoint(service, refresh, mediaTokens, diagnosticsTokens, mediaVerifier, active, generations, spacesService, tenantsService, resolver, authorizer),
+		dashboardSpaceSelfJoinEndpoint(service, tokens, refresh, mediaTokens, spacesService, tenantsService, resolver, authorizer),
+		dashboardSpaceSelfAccessEndpoint(service, refresh, mediaTokens, mediaVerifier, active, generations, spacesService, tenantsService, resolver, authorizer),
 		dashboardSpaceSelfLeaveEndpoint(service, authorizer),
 	}
 }
 
-func dashboardSpaceSelfJoinEndpoint(service DashboardSpaceJoinService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, diagnosticsTokens ParticipantDiagnosticsIssuer, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, authorizer TenantAuthorizer) Endpoint[dashboardSpaceSelfJoinRequest, accessGrantResponse] {
+func dashboardSpaceSelfJoinEndpoint(service DashboardSpaceJoinService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, authorizer TenantAuthorizer) Endpoint[dashboardSpaceSelfJoinRequest, accessGrantResponse] {
 	return Post("/v1/tenants/{tenant_id}/spaces/by-slug/{space_slug}/participants/self", "/tenants/{tenant_id}/spaces/by-slug/{space_slug}/participants/self", "joinDashboardSpaceSelf", decodeDashboardSpaceSelfJoinRequest, func(ctx context.Context, request dashboardSpaceSelfJoinRequest) (accessGrantResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeEpisodesPermission); err != nil {
 			return accessGrantResponse{}, err
@@ -120,7 +120,7 @@ func dashboardSpaceSelfJoinEndpoint(service DashboardSpaceJoinService, tokens Sy
 			return accessGrantResponse{}, cleanupFailedJoin(err)
 		}
 		response := newAccessGrantResponse(subject, syncCredential, mediaCredential, join)
-		attachDiagnosticsCredential(ctx, &response, diagnosticsTokens, subject)
+
 		return response, nil
 	}).UserAuth().RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceSlugParameter(), idempotencyKeyParameter()).RequestBody("DashboardSpaceSelfJoinRequest", dashboardSpaceSelfJoinBody{}).
@@ -133,7 +133,7 @@ func dashboardJoinCleanupRequestKey(requestKey string) string {
 	return dashboardJoinCleanupRequestPrefix + hex.EncodeToString(digest[:])
 }
 
-func dashboardSpaceSelfAccessEndpoint(service DashboardSpaceJoinService, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, diagnosticsTokens ParticipantDiagnosticsIssuer, mediaVerifier ParticipantMediaVerifier, active ActiveParticipantAuthorizer, generations ParticipantGenerationAuthorizer, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, authorizer TenantAuthorizer) Endpoint[dashboardSpaceSelfAccessRequest, accessGrantResponse] {
+func dashboardSpaceSelfAccessEndpoint(service DashboardSpaceJoinService, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, mediaVerifier ParticipantMediaVerifier, active ActiveParticipantAuthorizer, generations ParticipantGenerationAuthorizer, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, authorizer TenantAuthorizer) Endpoint[dashboardSpaceSelfAccessRequest, accessGrantResponse] {
 	return Post("/v1/tenants/{tenant_id}/spaces/by-slug/{space_slug}/participants/self/access-grants", "/tenants/{tenant_id}/spaces/by-slug/{space_slug}/participants/self/access-grants", "refreshDashboardSpaceSelfAccess", decodeDashboardSpaceSelfAccessRequest, func(ctx context.Context, request dashboardSpaceSelfAccessRequest) (accessGrantResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeEpisodesPermission); err != nil {
 			return accessGrantResponse{}, err
@@ -208,7 +208,7 @@ func dashboardSpaceSelfAccessEndpoint(service DashboardSpaceJoinService, refresh
 			return accessGrantResponse{}, err
 		}
 		response := newAccessGrantResponse(subject, syncCredential, mediaCredential, join)
-		attachDiagnosticsCredential(ctx, &response, diagnosticsTokens, subject)
+
 		return response, nil
 	}).UserAuth().RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceSlugParameter()).RequestBody("IssueAccessGrantRequest", issueAccessGrantBody{}).

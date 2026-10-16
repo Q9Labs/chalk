@@ -12,20 +12,23 @@ import { stopStream, streamFromTracks } from "./media-devices";
 import { describeMediaCaptureError } from "../media/capture-error";
 import { createDefaultConnectionDependencies } from "./production";
 import { ConnectionError, type ConnectionConnectionPhase, type ConnectionFailure, type ConnectionState } from "./types";
-
 // SFU negotiation can take 35s; the lifecycle waiting budget must not cancel its ownership.
-const MEDIA_RECOVERY_TIMEOUT_MS = 60_000;
-type SyncRecoveryAttempt = { client: ConnectionSyncClient | null; expiresAt: number | null; started: boolean };
-type MediaRecoveryAttempt = { expiresAt: number | null };
-
-const START_TIMEOUT_MS = 10_000;
-const LEAVE_TIMEOUT_MS = 5_000;
-const RECOVERY_BUDGET_MS = 10_000;
+const MEDIA_RECOVERY_TIMEOUT_MS = 60000;
+type SyncRecoveryAttempt = {
+  client: ConnectionSyncClient | null;
+  expiresAt: number | null;
+  started: boolean;
+};
+type MediaRecoveryAttempt = {
+  expiresAt: number | null;
+};
+const START_TIMEOUT_MS = 10000;
+const LEAVE_TIMEOUT_MS = 5000;
+const RECOVERY_BUDGET_MS = 10000;
 const MAX_RECOVERY_ATTEMPTS = 3;
-const REFRESH_RETRY_MS = 5_000;
+const REFRESH_RETRY_MS = 5000;
 const RECONNECT_GRACE_MS = 250;
-const BACKGROUND_RETRY_MAX_MS = 60_000;
-
+const BACKGROUND_RETRY_MAX_MS = 60000;
 type RecoveryKind = "sync" | "media";
 type EpisodeControl = NonNullable<V1EpisodeSnapshot["control"]>;
 type RecoveryPlan = {
@@ -34,16 +37,19 @@ type RecoveryPlan = {
   readonly attempts: number;
   readonly delays: readonly number[];
 };
-type InitialMedia = (intent: Readonly<{ microphone: boolean; camera: boolean }>) => Effect.Effect<MediaStream, unknown>;
+type InitialMedia = (
+  intent: Readonly<{
+    microphone: boolean;
+    camera: boolean;
+  }>,
+) => Effect.Effect<MediaStream, unknown>;
 type LifecycleFailureCode = ConnectionFailure["code"];
-
 export class ConnectionLifecycleFailure extends Data.TaggedError("ConnectionLifecycleFailure")<{
   readonly code: LifecycleFailureCode;
   readonly recoverable: boolean;
   readonly message: string;
   readonly cause?: unknown;
 }> {}
-
 export type ConnectionLifecycleCapability = {
   readonly snapshotRef: SubscriptionRef.SubscriptionRef<ConnectionLifecycleSnapshot>;
   readonly changes: typeof SubscriptionRef.changes<ConnectionLifecycleSnapshot>;
@@ -53,8 +59,19 @@ export type ConnectionLifecycleCapability = {
   readonly subscribeScreenEnded: (listener: () => void) => () => void;
   readonly getDiagnostics: () => readonly ConnectionDiagnostic[];
   readonly getJoinTrace: () => readonly ConnectionJoinTraceEvent[];
-  readonly setInitialMedia: (provider: InitialMedia, intent?: () => Readonly<{ microphone: boolean; camera: boolean }>) => Effect.Effect<void>;
-  readonly configureJoin: (intent: Readonly<{ microphone?: boolean; camera?: boolean }>) => Effect.Effect<void, ConnectionLifecycleFailure>;
+  readonly setInitialMedia: (
+    provider: InitialMedia,
+    intent?: () => Readonly<{
+      microphone: boolean;
+      camera: boolean;
+    }>,
+  ) => Effect.Effect<void>;
+  readonly configureJoin: (
+    intent: Readonly<{
+      microphone?: boolean;
+      camera?: boolean;
+    }>,
+  ) => Effect.Effect<void, ConnectionLifecycleFailure>;
   readonly getSyncToken: () => Effect.Effect<string, ConnectionLifecycleFailure>;
   readonly confirmEpisodeEnded: Effect.Effect<void>;
   readonly join: () => Effect.Effect<void, ConnectionLifecycleFailure>;
@@ -66,9 +83,7 @@ export type ConnectionLifecycleCapability = {
   readonly cancelScheduleUnsafe: (handle: unknown) => void;
   readonly createId: () => string;
 };
-
 export class ConnectionLifecycleService extends Context.Service<ConnectionLifecycleService, ConnectionLifecycleCapability>()("@chalk/client/ConnectionLifecycle") {}
-
 type Model = {
   state: ConnectionState;
   sync: ConnectionSyncClient | null;
@@ -78,8 +93,16 @@ type Model = {
   mediaSnapshot: ConnectionMediaSnapshot | null;
   failure: ConnectionFailure | null;
   initialMedia: InitialMedia;
-  initialMediaIntent: (() => Readonly<{ microphone: boolean; camera: boolean }>) | null;
-  intent: { microphone: boolean; camera: boolean };
+  initialMediaIntent:
+    | (() => Readonly<{
+        microphone: boolean;
+        camera: boolean;
+      }>)
+    | null;
+  intent: {
+    microphone: boolean;
+    camera: boolean;
+  };
   episodeEndConfirmed: boolean;
   activeScope: Scope.Closeable | null;
   syncBindingCleanup: (() => void) | null;
@@ -92,13 +115,11 @@ type Model = {
   closed: boolean;
   epoch: number;
 };
-
 type Work = {
   readonly effect: Effect.Effect<unknown, unknown>;
   readonly deferred: Deferred.Deferred<unknown, unknown>;
   readonly join: boolean;
 };
-
 /**
  * Effect-owned lifecycle actor. All mutable lifecycle state changes on its
  * Queue; browser/media/sync callbacks only enqueue work back into the actor.
@@ -117,8 +138,8 @@ export const makeConnectionLifecycleLayer = (options: ConnectionOptions) => {
   const clock = Layer.succeed(Clock.Clock, {
     currentTimeMillisUnsafe: platform.clock.now,
     currentTimeMillis: Effect.sync(platform.clock.now),
-    currentTimeNanosUnsafe: () => BigInt(platform.clock.now()) * 1_000_000n,
-    currentTimeNanos: Effect.sync(() => BigInt(platform.clock.now()) * 1_000_000n),
+    currentTimeNanosUnsafe: () => BigInt(platform.clock.now()) * 1000000n,
+    currentTimeNanos: Effect.sync(() => BigInt(platform.clock.now()) * 1000000n),
     sleep: (duration) =>
       Effect.callback((resume) => {
         const handle = platform.clock.setTimeout(() => resume(Effect.void), Duration.toMillis(duration));
@@ -132,9 +153,7 @@ export const makeConnectionLifecycleLayer = (options: ConnectionOptions) => {
   // though the reference remains in the conditional Layer requirement type.
   return lifecycle as Layer.Layer<ConnectionLifecycleService, never>;
 };
-
 export const makeFakeConnectionLifecycleLayer = makeConnectionLifecycleLayer;
-
 export const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOptions, "access" | "dependencies">) =>
   Layer.effect(
     ConnectionLifecycleService,
@@ -182,7 +201,6 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         closed: false,
         epoch: 0,
       };
-
       const mediaAttempt: MediaRecoveryAttempt = { expiresAt: null };
       const foreign = <A>(operation: () => Promise<A>, code: LifecycleFailureCode = "internal_error", message = "A browser transport operation failed"): Effect.Effect<A, ConnectionLifecycleFailure> =>
         Effect.tryPromise({ try: operation, catch: (cause) => lifecycleFailure(code, true, message, cause) });
@@ -453,7 +471,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                   "start_media",
                   foreign(() => media.start(stream!), "media_start_failed", "The media layer could not start"),
                 ),
-                trace("start_sync", foreign(() => sync.start(), "sync_start_failed", "The sync layer could not start").pipe(Effect.andThen(trace("wait_for_sync_live", waitForSyncLive(sync, boundedInteger(options.syncStartupTimeoutMs, START_TIMEOUT_MS, 1, 60_000)))))),
+                trace("start_sync", foreign(() => sync.start(), "sync_start_failed", "The sync layer could not start").pipe(Effect.andThen(trace("wait_for_sync_live", waitForSyncLive(sync, boundedInteger(options.syncStartupTimeoutMs, START_TIMEOUT_MS, 1, 60000)))))),
               ],
               { concurrency: "unbounded", discard: true },
             );
@@ -625,7 +643,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         Clock.currentTimeMillis.pipe(
           Effect.map((now) => ({
             kind,
-            deadline: now + boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60_000),
+            deadline: now + boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60000),
             attempts: boundedInteger(options.recovery?.maxAttempts, MAX_RECOVERY_ATTEMPTS, 1, 10),
             delays: options.recovery?.backoffMs?.length ? options.recovery.backoffMs : [100, 250, 500],
           })),
@@ -764,9 +782,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           if ((attempt.started || snapshot.connection.phase !== "idle") && (yield* syncNeedsReplacement(snapshot))) return yield* restartSync(attempt);
           // V1 Sync owns reconnect and durable receipts; only custom terminal or
           // unsuccessful replacement transports need a new client.
-          yield* waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60_000));
+          yield* waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60000));
         });
-
       const restartSync = (attempt: SyncRecoveryAttempt): Effect.Effect<void, ConnectionLifecycleFailure> =>
         Effect.gen(function* () {
           const epoch = model.epoch;
@@ -809,9 +826,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               ),
             ),
           );
-          yield* waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60_000));
+          yield* waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60000));
         });
-
       const handleSyncSnapshot = (sync: ConnectionSyncClient, snapshot: V1EpisodeSnapshot): Effect.Effect<void> =>
         Effect.gen(function* handleSyncSnapshotEffect() {
           if (!isCurrentSyncSnapshot(sync, snapshot)) return;
@@ -944,7 +960,6 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           yield* performLeave().pipe(Effect.ignore);
         }),
       );
-
       return {
         snapshotRef,
         changes: SubscriptionRef.changes,
@@ -1022,11 +1037,9 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       } satisfies ConnectionLifecycleCapability;
     }),
   );
-
 function idleSnapshot(): ConnectionLifecycleSnapshot {
   return Object.freeze({ state: "idle", subject: null, episode: null, connection: Object.freeze({ sync: "idle", media: "idle" }), failure: null });
 }
-
 function snapshotFor(model: Model, access: ParsedAccessGrant | null): ConnectionLifecycleSnapshot {
   const control = model.syncSnapshot?.optimisticControl ?? model.syncSnapshot?.control;
   return Object.freeze({
@@ -1038,12 +1051,10 @@ function snapshotFor(model: Model, access: ParsedAccessGrant | null): Connection
     episodeEnded: model.episodeEndConfirmed,
   });
 }
-
 function subjectFor(access: ParsedAccessGrant | null): ConnectionLifecycleSnapshot["subject"] {
   if (!access) return null;
   return Object.freeze({ ...access.subject });
 }
-
 function episodeFor(access: ParsedAccessGrant | null, control: EpisodeControl | null | undefined): ConnectionLifecycleSnapshot["episode"] {
   if (!access) return null;
   return Object.freeze({
@@ -1052,27 +1063,21 @@ function episodeFor(access: ParsedAccessGrant | null, control: EpisodeControl | 
     deadline: control ? new Date(control.deadlineAtMs).toISOString() : null,
   });
 }
-
 function portsFor(model: Model): ConnectionPorts | null {
   return model.sync && model.media ? { sync: model.sync, media: model.media } : null;
 }
-
 function active(model: Model): boolean {
   return !model.closed && (model.state === "live" || model.state === "reconnecting");
 }
-
 function lifecycleFailure(code: LifecycleFailureCode, recoverable: boolean, message: string, cause?: unknown): ConnectionLifecycleFailure {
   return new ConnectionLifecycleFailure({ code, recoverable, message, ...(cause === undefined ? {} : { cause }) });
 }
-
 function toFailure(value: ConnectionLifecycleFailure): ConnectionFailure {
   return Object.freeze({ code: value.code, action: null, recoverable: value.recoverable, message: value.message });
 }
-
 function accessFailure(value: ConnectionAccessFailure): ConnectionLifecycleFailure {
   return lifecycleFailure(value.code === "access.invalid" ? "invalid_access" : "access_unavailable", value.code === "access.unavailable", value.code === "access.invalid" ? "Access was rejected" : "Could not reach the Space. Check your network and try again.", value.cause);
 }
-
 function captureFailure(cause: unknown): ConnectionLifecycleFailure {
   if (cause instanceof ConnectionError && cause.cause === undefined) return lifecycleFailure(cause.code, cause.recoverable, cause.message, cause);
   const failure = describeMediaCaptureError(cause instanceof ConnectionError ? cause.cause : cause);
@@ -1080,8 +1085,19 @@ function captureFailure(cause: unknown): ConnectionLifecycleFailure {
   if (failure.code === "unsupported_environment") return lifecycleFailure("media_capture_failed", true, "Media capture failed. Try again or enter with devices off.", cause);
   return lifecycleFailure(failure.code, failure.recoverable, failure.message, cause);
 }
-
-function acquireInitialMedia(provider: InitialMedia, intent: Readonly<{ microphone: boolean; camera: boolean }>): Effect.Effect<{ stream: MediaStream; failure: ConnectionLifecycleFailure | null }, ConnectionLifecycleFailure> {
+function acquireInitialMedia(
+  provider: InitialMedia,
+  intent: Readonly<{
+    microphone: boolean;
+    camera: boolean;
+  }>,
+): Effect.Effect<
+  {
+    stream: MediaStream;
+    failure: ConnectionLifecycleFailure | null;
+  },
+  ConnectionLifecycleFailure
+> {
   return provider(intent).pipe(
     Effect.map((stream) => ({ stream, failure: null })),
     Effect.catch((cause) => {
@@ -1089,7 +1105,10 @@ function acquireInitialMedia(provider: InitialMedia, intent: Readonly<{ micropho
       if (!initialFailure.recoverable) return Effect.fail(initialFailure);
       const tracks = new Set<MediaStreamTrack>();
       return Effect.gen(function* () {
-        const failures: { source: "microphone" | "camera"; failure: ConnectionLifecycleFailure }[] = [];
+        const failures: {
+          source: "microphone" | "camera";
+          failure: ConnectionLifecycleFailure;
+        }[] = [];
         for (const source of ["microphone", "camera"] as const) {
           if (!intent[source]) continue;
           if (!intent.microphone || !intent.camera) {
@@ -1121,15 +1140,18 @@ function acquireInitialMedia(provider: InitialMedia, intent: Readonly<{ micropho
     }),
   );
 }
-
-function initialCaptureWarning(failures: readonly { source: "microphone" | "camera"; failure: ConnectionLifecycleFailure }[]): ConnectionLifecycleFailure | null {
+function initialCaptureWarning(
+  failures: readonly {
+    source: "microphone" | "camera";
+    failure: ConnectionLifecycleFailure;
+  }[],
+): ConnectionLifecycleFailure | null {
   const first = failures[0];
   if (!first) return null;
   const names = failures.length === 2 ? "Microphone and camera" : first.source === "microphone" ? "Microphone" : "Camera";
   const message = failures.length === 2 && first.failure.code !== failures[1]?.failure.code ? failures.map(({ source, failure }) => `${source === "microphone" ? "Microphone" : "Camera"}: ${failure.message}`).join(" ") : `${names}: ${first.failure.message}`;
   return lifecycleFailure(first.failure.code, true, message, first.failure.cause);
 }
-
 function failureFromCause(cause: unknown, code: LifecycleFailureCode, message: string): ConnectionLifecycleFailure {
   if (cause instanceof ConnectionLifecycleFailure) return cause;
   if (cause instanceof ConnectionAccessFailure) return accessFailure(cause);
@@ -1138,17 +1160,23 @@ function failureFromCause(cause: unknown, code: LifecycleFailureCode, message: s
   if (cause instanceof DOMException && cause.name === "NotAllowedError") return lifecycleFailure("permission_denied", true, "Media permission was denied", cause);
   return lifecycleFailure(code, true, message, cause);
 }
-
 function accessRejected(cause: unknown): boolean {
-  return cause instanceof ConnectionError ? cause.code === "invalid_access" : typeof cause === "object" && cause !== null && "code" in cause && (cause as { readonly code?: unknown }).code === "access.invalid";
+  return cause instanceof ConnectionError
+    ? cause.code === "invalid_access"
+    : typeof cause === "object" &&
+        cause !== null &&
+        "code" in cause &&
+        (
+          cause as {
+            readonly code?: unknown;
+          }
+        ).code === "access.invalid";
 }
-
 function boundedInteger(value: number | undefined, fallback: number, minimum: number, maximum: number): number {
   const result = value ?? fallback;
   if (!Number.isSafeInteger(result) || result < minimum || result > maximum) throw new TypeError(`Expected an integer between ${minimum} and ${maximum}`);
   return result;
 }
-
 function syncPhase(phase: V1EpisodeSnapshot["connection"]["phase"] | undefined): ConnectionConnectionPhase {
   if (phase === "live") return "healthy";
   if (phase === "recovering") return "recovering";
@@ -1157,7 +1185,6 @@ function syncPhase(phase: V1EpisodeSnapshot["connection"]["phase"] | undefined):
   if (phase === "connecting") return "connecting";
   return "idle";
 }
-
 function mediaPhase(phase: ConnectionMediaSnapshot["connection"]["phase"] | undefined): ConnectionConnectionPhase {
   if (phase === "live") return "healthy";
   if (phase === "recovering") return "recovering";
@@ -1166,7 +1193,6 @@ function mediaPhase(phase: ConnectionMediaSnapshot["connection"]["phase"] | unde
   if (phase === "connecting") return "connecting";
   return "idle";
 }
-
 function syncTerminalFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFailure {
   const reason = snapshot.connection.terminalReason;
   if (reason === "episode_ended") return lifecycleFailure("episode_ended", false, "The Episode has ended");

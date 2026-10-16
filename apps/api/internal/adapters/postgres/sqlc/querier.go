@@ -15,7 +15,6 @@ type Querier interface {
 	AcceptTranscriptionChunkResult(ctx context.Context, arg AcceptTranscriptionChunkResultParams) (TranscriptionChunkResult, error)
 	AcquireRecordingTranscriptionSourceLease(ctx context.Context, arg AcquireRecordingTranscriptionSourceLeaseParams) (RecordingTranscriptionSource, error)
 	ActivateRecordingFleetBootstrap(ctx context.Context, arg ActivateRecordingFleetBootstrapParams) (RecordingFleetNode, error)
-	AdvanceDiagnosticCursorHead(ctx context.Context, arg AdvanceDiagnosticCursorHeadParams) (AdvanceDiagnosticCursorHeadRow, error)
 	AdvanceRecordingCaptureCommandSequence(ctx context.Context, arg AdvanceRecordingCaptureCommandSequenceParams) (int64, error)
 	ApplyRecordingCaptureConnectionProjection(ctx context.Context, arg ApplyRecordingCaptureConnectionProjectionParams) (RecordingCaptureConnection, error)
 	ArchiveTenantSpace(ctx context.Context, arg ArchiveTenantSpaceParams) (Space, error)
@@ -34,8 +33,6 @@ type Querier interface {
 	ClaimChatAttachmentUploadFinalize(ctx context.Context, arg ClaimChatAttachmentUploadFinalizeParams) (ClaimChatAttachmentUploadFinalizeRow, error)
 	ClaimDueEpisodeDeadlines(ctx context.Context, batchSize int32) ([]ClaimDueEpisodeDeadlinesRow, error)
 	ClaimEmptyEpisodeLingers(ctx context.Context, batchSize int32) ([]ClaimEmptyEpisodeLingersRow, error)
-	// Alternate reference resolver.
-	ClaimExpiredDiagnostics(ctx context.Context, arg ClaimExpiredDiagnosticsParams) ([]EpisodeDiagnostic, error)
 	ClaimRecordingCaptureCommand(ctx context.Context, arg ClaimRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
 	ClaimRecordingJob(ctx context.Context, arg ClaimRecordingJobParams) (ClaimRecordingJobRow, error)
 	ClaimTranscriptionCleanupJob(ctx context.Context, arg ClaimTranscriptionCleanupJobParams) (TranscriptionCleanupJob, error)
@@ -106,20 +103,11 @@ type Querier interface {
 	CreateTranscriptionCleanupJob(ctx context.Context, arg CreateTranscriptionCleanupJobParams) (TranscriptionCleanupJob, error)
 	CreateTranscriptionFinalizerJobIfReady(ctx context.Context, arg CreateTranscriptionFinalizerJobIfReadyParams) (ArtifactJob, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
-	DeleteDiagnosticEventBatch(ctx context.Context, arg DeleteDiagnosticEventBatchParams) (int64, error)
-	DeleteDiagnosticProjectionChanges(ctx context.Context, arg DeleteDiagnosticProjectionChangesParams) (int64, error)
-	DeleteDiagnosticProjectorState(ctx context.Context, arg DeleteDiagnosticProjectorStateParams) (int64, error)
-	DeleteDiagnosticReferences(ctx context.Context, arg DeleteDiagnosticReferencesParams) (int64, error)
-	DeleteDiagnosticRoot(ctx context.Context, arg DeleteDiagnosticRootParams) (EpisodeDiagnostic, error)
 	DeleteSpaceMember(ctx context.Context, arg DeleteSpaceMemberParams) error
 	DeleteTenantTranscription(ctx context.Context, arg DeleteTenantTranscriptionParams) (Transcription, error)
 	DeleteWebhookEndpoint(ctx context.Context, arg DeleteWebhookEndpointParams) (pgtype.UUID, error)
 	DestroyOldWebhookTargetURLs(ctx context.Context, arg DestroyOldWebhookTargetURLsParams) (int64, error)
 	DestroyWebhookEndpointURLs(ctx context.Context, arg DestroyWebhookEndpointURLsParams) (int64, error)
-	EnsureDiagnosticAuxiliaryRows(ctx context.Context, arg EnsureDiagnosticAuxiliaryRowsParams) error
-	// Episode Diagnostic roots and reconciliation.
-	EnsureDiagnosticEnvironmentOwnership(ctx context.Context, environment string) (string, error)
-	EnsureEpisodeDiagnostic(ctx context.Context, arg EnsureEpisodeDiagnosticParams) (EpisodeDiagnostic, error)
 	EnsureWebhookTenantState(ctx context.Context, tenantID pgtype.UUID) error
 	// Discovery uses an earlier snapshot. Recheck occupancy, clock and window key
 	// after locking the Episode, which serializes all admission paths.
@@ -135,8 +123,6 @@ type Querier interface {
 	FinalizeRecordingBundleAllocation(ctx context.Context, arg FinalizeRecordingBundleAllocationParams) (RecordingBundleAllocation, error)
 	FinalizeRecordingRenderObject(ctx context.Context, arg FinalizeRecordingRenderObjectParams) (RecordingRenderObjectAllocation, error)
 	FinalizeTranscription(ctx context.Context, arg FinalizeTranscriptionParams) (Transcription, error)
-	FindEventByID(ctx context.Context, arg FindEventByIDParams) (DiagnosticEvent, error)
-	FindEventsByIDs(ctx context.Context, arg FindEventsByIDsParams) ([]DiagnosticEvent, error)
 	FinishTranscriptionAttempt(ctx context.Context, arg FinishTranscriptionAttemptParams) (TranscriptionAttempt, error)
 	GetAPIKeyMutation(ctx context.Context, arg GetAPIKeyMutationParams) (ApiKeyMutationRequest, error)
 	GetAccountPasswordHash(ctx context.Context, accountID pgtype.UUID) (pgtype.Text, error)
@@ -149,9 +135,7 @@ type Querier interface {
 	GetChatAttachmentByClientID(ctx context.Context, arg GetChatAttachmentByClientIDParams) (GetChatAttachmentByClientIDRow, error)
 	GetChatAttachmentByUploadID(ctx context.Context, arg GetChatAttachmentByUploadIDParams) (GetChatAttachmentByUploadIDRow, error)
 	GetCompletedCaptureRecordingJob(ctx context.Context, arg GetCompletedCaptureRecordingJobParams) (RecordingJob, error)
-	GetDiagnosticParticipant(ctx context.Context, arg GetDiagnosticParticipantParams) (GetDiagnosticParticipantRow, error)
 	GetEpisodeCreateRequest(ctx context.Context, arg GetEpisodeCreateRequestParams) (EpisodeCreateRequest, error)
-	GetEpisodeDiagnosticByEpisode(ctx context.Context, arg GetEpisodeDiagnosticByEpisodeParams) (EpisodeDiagnostic, error)
 	GetFirstOpenRecordingCaptureCommand(ctx context.Context, arg GetFirstOpenRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
 	GetJourneyTerminalState(ctx context.Context, journeyID pgtype.UUID) (string, error)
 	GetLatestRecordingCapturePlan(ctx context.Context, planHandle pgtype.UUID) (RecordingCapturePlan, error)
@@ -233,7 +217,6 @@ type Querier interface {
 	HeartbeatArtifactJob(ctx context.Context, arg HeartbeatArtifactJobParams) (ArtifactJob, error)
 	HeartbeatRecordingJob(ctx context.Context, arg HeartbeatRecordingJobParams) (RecordingJob, error)
 	InsertActiveRecordingPresentationReaction(ctx context.Context, arg InsertActiveRecordingPresentationReactionParams) (RecordingPresentationReaction, error)
-	InsertDiagnosticEvent(ctx context.Context, arg InsertDiagnosticEventParams) (DiagnosticEvent, error)
 	InsertJourneyEvent(ctx context.Context, arg InsertJourneyEventParams) (pgtype.UUID, error)
 	InsertRecordingBundle(ctx context.Context, arg InsertRecordingBundleParams) (InsertRecordingBundleRow, error)
 	InsertRecordingBundleAllocation(ctx context.Context, arg InsertRecordingBundleAllocationParams) (RecordingBundleAllocation, error)
@@ -255,14 +238,9 @@ type Querier interface {
 	InsertWebhookEvent(ctx context.Context, arg InsertWebhookEventParams) (WebhookEvent, error)
 	LinkAPIKeyMutation(ctx context.Context, arg LinkAPIKeyMutationParams) error
 	ListAccountTenants(ctx context.Context, arg ListAccountTenantsParams) ([]ListAccountTenantsRow, error)
-	ListDiagnosticBranchesAfter(ctx context.Context, arg ListDiagnosticBranchesAfterParams) ([]DiagnosticBranch, error)
-	// Existing roots created before Episode references were introduced need the
-	// same bounded, idempotent reference as newly observed Episodes.
-	ListDiagnosticLifecycleDrift(ctx context.Context, arg ListDiagnosticLifecycleDriftParams) ([]ListDiagnosticLifecycleDriftRow, error)
 	ListDueAutoSpaceLifecycles(ctx context.Context, arg ListDueAutoSpaceLifecyclesParams) ([]AutoSpaceLifecycle, error)
 	ListJourneyEvents(ctx context.Context, journeyID pgtype.UUID) ([]ObservabilityJourneyEvent, error)
 	ListMatchingWebhookTargets(ctx context.Context, arg ListMatchingWebhookTargetsParams) ([]ListMatchingWebhookTargetsRow, error)
-	ListMissingEpisodeDiagnosticsGlobal(ctx context.Context, arg ListMissingEpisodeDiagnosticsGlobalParams) ([]Episode, error)
 	ListPendingSpacePublicAdmissionRequests(ctx context.Context, arg ListPendingSpacePublicAdmissionRequestsParams) ([]SpacePublicAdmissionRequest, error)
 	ListRecordingCompletionRecoveryBundles(ctx context.Context, arg ListRecordingCompletionRecoveryBundlesParams) ([]ListRecordingCompletionRecoveryBundlesRow, error)
 	ListRecordingDeadLetters(ctx context.Context, arg ListRecordingDeadLettersParams) ([]RecordingJob, error)
@@ -301,8 +279,6 @@ type Querier interface {
 	LockDashboardJoinIntentForUpdate(ctx context.Context, arg LockDashboardJoinIntentForUpdateParams) (SyncLifecycleIntent, error)
 	LockDashboardParticipantForUpdate(ctx context.Context, arg LockDashboardParticipantForUpdateParams) (Participant, error)
 	LockDeadlineEpisodeForUpdate(ctx context.Context, arg LockDeadlineEpisodeForUpdateParams) (Episode, error)
-	// Cursor-head locking and durable append.
-	LockDiagnosticAppendState(ctx context.Context, arg LockDiagnosticAppendStateParams) (LockDiagnosticAppendStateRow, error)
 	LockEpisodeEndLifecycleIntentForUpdate(ctx context.Context, arg LockEpisodeEndLifecycleIntentForUpdateParams) (SyncLifecycleIntent, error)
 	LockLatestDashboardParticipantForUpdate(ctx context.Context, arg LockLatestDashboardParticipantForUpdateParams) (Participant, error)
 	LockLatestEpisodeForUpdate(ctx context.Context, arg LockLatestEpisodeForUpdateParams) (Episode, error)
@@ -402,7 +378,6 @@ type Querier interface {
 	SetRecordingCaptureReadyAt(ctx context.Context, arg SetRecordingCaptureReadyAtParams) (pgtype.Timestamptz, error)
 	StorePasswordReset(ctx context.Context, arg StorePasswordResetParams) error
 	TouchActiveAPIKeyLastUsed(ctx context.Context, arg TouchActiveAPIKeyLastUsedParams) error
-	UpdateEpisodeDiagnosticLifecycle(ctx context.Context, arg UpdateEpisodeDiagnosticLifecycleParams) (EpisodeDiagnostic, error)
 	UpdateSpacePublicAdmissionRequest(ctx context.Context, arg UpdateSpacePublicAdmissionRequestParams) (SpacePublicAdmissionRequest, error)
 	UpdateSpacePublicArrivalState(ctx context.Context, arg UpdateSpacePublicArrivalStateParams) (SpacePublicArrival, error)
 	UpdateSpacePublicInviteEnabled(ctx context.Context, arg UpdateSpacePublicInviteEnabledParams) (SpacePublicInvite, error)
@@ -414,7 +389,6 @@ type Querier interface {
 	UpdateTenantSpace(ctx context.Context, arg UpdateTenantSpaceParams) (Space, error)
 	UpdateTenantTranscription(ctx context.Context, arg UpdateTenantTranscriptionParams) (Transcription, error)
 	UpdateWebhookEndpoint(ctx context.Context, arg UpdateWebhookEndpointParams) (WebhookEndpoint, error)
-	UpsertDiagnosticBranch(ctx context.Context, arg UpsertDiagnosticBranchParams) (DiagnosticBranch, error)
 	UpsertRecordingPoolHealth(ctx context.Context, arg UpsertRecordingPoolHealthParams) (UpsertRecordingPoolHealthRow, error)
 	UpsertStatusMonitorCurrent(ctx context.Context, arg UpsertStatusMonitorCurrentParams) (StatusMonitorCurrent, error)
 }

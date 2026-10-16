@@ -1,20 +1,16 @@
 defmodule ChalkSync.Chat do
   @moduledoc "Durable Space chat commands and collaboration_v1 negotiation."
-
   alias ChalkSync.Chat.Repository.Message
   alias ChalkSync.Chat.Repository.Postgres, as: PostgresRepository
-  alias ChalkSync.Diagnostics
   alias ChalkSync.Fanout.Collaboration
   alias ChalkSync.Fanout.Collaboration.PostgresNotifications
   alias ChalkSync.Stateholder.Identity
-
   @extension "collaboration_v1"
-
   @type options :: [repository: module(), fanout: GenServer.server(), observability: term()]
-
   @spec negotiate(Identity.t(), map(), pid()) :: {:ok, map()} | {:error, atom()}
-  def negotiate(%Identity{} = identity, chat_cursor, socket) when is_pid(socket),
-    do: negotiate(identity, chat_cursor, socket, [])
+  def negotiate(%Identity{} = identity, chat_cursor, socket) when is_pid(socket) do
+    negotiate(identity, chat_cursor, socket, [])
+  end
 
   @spec negotiate(Identity.t(), map(), pid(), options()) :: {:ok, map()} | {:error, atom()}
   def negotiate(%Identity{} = identity, negotiation, socket, options)
@@ -48,7 +44,9 @@ defmodule ChalkSync.Chat do
   end
 
   @spec send_chat(Identity.t(), map()) :: {:ok, map()}
-  def send_chat(%Identity{} = identity, input), do: send_chat(identity, input, [])
+  def send_chat(%Identity{} = identity, input) do
+    send_chat(identity, input, [])
+  end
 
   @spec send_chat(Identity.t(), map(), options()) :: {:ok, map()}
   def send_chat(
@@ -60,19 +58,14 @@ defmodule ChalkSync.Chat do
     repository = repository(options)
     attachment_ids = Map.get(input, :attachment_ids, [])
 
-    {append_input, attachment_marker} =
-      attachment_observation(input, identity, client_message_id, attachment_ids, options)
-
     append_result =
       repository.append(
         identity,
-        append_input
+        input
         |> Map.put(:client_message_id, client_message_id)
         |> Map.put(:text, text)
         |> Map.put(:attachment_ids, attachment_ids)
       )
-
-    attachment_attempted? = attachment_attempted?(attachment_marker)
 
     case append_result do
       {:ok, %{outcome: outcome, message: message}} ->
@@ -81,18 +74,6 @@ defmodule ChalkSync.Chat do
             head_sequence: message.sequence,
             retained_floor_sequence: retained_floor(repository, identity)
           })
-
-          diagnose_chat_commit(identity, client_message_id, outcome, options)
-
-          diagnose_attachment_success(
-            attachment_attempted?,
-            identity,
-            client_message_id,
-            attachment_ids,
-            options
-          )
-        else
-          diagnose_chat_commit(identity, client_message_id, outcome, options)
         end
 
         {:ok,
@@ -104,31 +85,25 @@ defmodule ChalkSync.Chat do
          }}
 
       {:error, reason} ->
-        diagnose_chat_rejection(identity, client_message_id, reason, options)
-
-        if attachment_attempted?,
-          do:
-            diagnose_attachment(
-              :failed,
-              identity,
-              client_message_id,
-              attachment_ids,
-              reason,
-              options
-            )
-
         {:ok, rejected_chat(client_message_id, reason)}
     end
   end
 
   def send_chat(%Identity{}, input, _options) do
-    client_message_id = if is_map(input), do: Map.get(input, :client_message_id, ""), else: ""
+    client_message_id =
+      if is_map(input) do
+        Map.get(input, :client_message_id, "")
+      else
+        ""
+      end
+
     {:ok, rejected_chat(client_message_id, :invalid_payload)}
   end
 
   @spec read_chat_page(Identity.t(), map()) :: {:ok, map()} | {:error, atom()}
-  def read_chat_page(%Identity{} = identity, input),
-    do: read_chat_page(identity, input, [])
+  def read_chat_page(%Identity{} = identity, input) do
+    read_chat_page(identity, input, [])
+  end
 
   @spec read_chat_page(Identity.t(), map(), options()) :: {:ok, map()} | {:error, atom()}
   def read_chat_page(
@@ -157,7 +132,9 @@ defmodule ChalkSync.Chat do
     end
   end
 
-  def read_chat_page(%Identity{}, _input, _options), do: {:error, :invalid_payload}
+  def read_chat_page(%Identity{}, _input, _options) do
+    {:error, :invalid_payload}
+  end
 
   @spec mark_chat_read(Identity.t(), map(), options()) :: {:ok, map()}
   def mark_chat_read(identity, input, options \\ [])
@@ -174,8 +151,9 @@ defmodule ChalkSync.Chat do
          {:ok, result} <- repository.mark_read(identity, sequence) do
       receipt = receipt_frame(result.receipt)
 
-      if result.outcome == :advanced,
-        do: Collaboration.publish_chat_read_receipt(fanout(options), identity.episode, receipt)
+      if result.outcome == :advanced do
+        Collaboration.publish_chat_read_receipt(fanout(options), identity.episode, receipt)
+      end
 
       {:ok,
        receipt
@@ -195,7 +173,12 @@ defmodule ChalkSync.Chat do
   end
 
   def mark_chat_read(%Identity{}, input, _options) do
-    request_id = if is_map(input), do: Map.get(input, :request_id, ""), else: ""
+    request_id =
+      if is_map(input) do
+        Map.get(input, :request_id, "")
+      else
+        ""
+      end
 
     {:ok,
      %{
@@ -207,13 +190,15 @@ defmodule ChalkSync.Chat do
   end
 
   @spec unsubscribe(Identity.t(), pid()) :: :ok
-  def unsubscribe(%Identity{} = identity, socket) when is_pid(socket),
-    do: Collaboration.unsubscribe(Collaboration, identity.episode, socket)
+  def unsubscribe(%Identity{} = identity, socket) when is_pid(socket) do
+    Collaboration.unsubscribe(Collaboration, identity.episode, socket)
+  end
 
   @spec unsubscribe(Identity.t(), pid(), options()) :: :ok
   def unsubscribe(%Identity{} = identity, socket, options)
-      when is_pid(socket) and is_list(options),
-      do: Collaboration.unsubscribe(fanout(options), identity.episode, socket)
+      when is_pid(socket) and is_list(options) do
+    Collaboration.unsubscribe(fanout(options), identity.episode, socket)
+  end
 
   @spec handle_fanout_notification(String.t(), binary()) :: :ok | {:error, :invalid_payload}
   def handle_fanout_notification(channel, payload) do
@@ -235,21 +220,23 @@ defmodule ChalkSync.Chat do
     }
   end
 
-  defp cursor_reset_page(request_id, floor),
-    do: %{
+  defp cursor_reset_page(request_id, floor) do
+    %{
       "type" => "chat_page",
       "request_id" => request_id,
       "outcome" => "cursor_reset",
       "retained_floor_sequence" => floor
     }
+  end
 
-  defp rejected_chat(client_message_id, reason),
-    do: %{
+  defp rejected_chat(client_message_id, reason) do
+    %{
       "type" => "chat_send_result",
       "client_message_id" => client_message_id,
       "outcome" => "rejected",
       "error_code" => error_code(reason)
     }
+  end
 
   defp error_code(reason)
        when reason in [
@@ -265,42 +252,75 @@ defmodule ChalkSync.Chat do
               :attachment_already_claimed,
               :attachment_quota_exceeded,
               :dependency_unavailable
-            ],
-       do: Atom.to_string(reason)
+            ] do
+    Atom.to_string(reason)
+  end
 
-  defp error_code(_reason), do: "dependency_unavailable"
+  defp error_code(_reason) do
+    "dependency_unavailable"
+  end
 
   defp valid_chat_cursor(%{after_sequence: after_sequence, retained_floor_sequence: floor})
-       when is_nil(after_sequence) or is_binary(after_sequence),
-       do: if(is_nil(floor) or is_binary(floor), do: :ok, else: {:error, :invalid_payload})
+       when is_nil(after_sequence) or is_binary(after_sequence) do
+    if is_nil(floor) or is_binary(floor) do
+      :ok
+    else
+      {:error, :invalid_payload}
+    end
+  end
 
-  defp valid_chat_cursor(_cursor), do: {:error, :invalid_payload}
+  defp valid_chat_cursor(_cursor) do
+    {:error, :invalid_payload}
+  end
 
-  defp validate_operation_id(value),
-    do: if(byte_size(value) in 16..64, do: :ok, else: {:error, :invalid_payload})
+  defp validate_operation_id(value) do
+    if byte_size(value) in 16..64 do
+      :ok
+    else
+      {:error, :invalid_payload}
+    end
+  end
 
-  defp normalize_direction("older"), do: :older
-  defp normalize_direction("newer"), do: :newer
-  defp normalize_direction(direction) when direction in [:older, :newer], do: direction
-  defp normalize_direction(_direction), do: :invalid
+  defp normalize_direction("older") do
+    :older
+  end
 
-  defp negotiation(%{extension: @extension} = cursor),
-    do: {@extension, Map.delete(cursor, :extension)}
+  defp normalize_direction("newer") do
+    :newer
+  end
 
-  defp negotiation(cursor), do: {@extension, cursor}
+  defp normalize_direction(direction) when direction in [:older, :newer] do
+    direction
+  end
 
-  defp negotiated_receipts(repository, identity, @extension),
-    do: repository.read_receipts(identity.episode)
+  defp normalize_direction(_direction) do
+    :invalid
+  end
 
-  defp maybe_put_receipts(extension, @extension, receipts),
-    do: Map.put(extension, "read_receipts", Enum.map(receipts, &receipt_body/1))
+  defp negotiation(%{extension: @extension} = cursor) do
+    {@extension, Map.delete(cursor, :extension)}
+  end
 
-  defp receipt_frame(receipt), do: Map.put(receipt_body(receipt), "type", "chat_read_receipt")
+  defp negotiation(cursor) do
+    {@extension, cursor}
+  end
 
-  defp receipt_body(receipt),
-    do:
-      Map.take(receipt, [:participant_id, :participant_generation, :sequence, :read_at])
-      |> Map.new(fn {key, value} -> {Atom.to_string(key), value} end)
+  defp negotiated_receipts(repository, identity, @extension) do
+    repository.read_receipts(identity.episode)
+  end
+
+  defp maybe_put_receipts(extension, @extension, receipts) do
+    Map.put(extension, "read_receipts", Enum.map(receipts, &receipt_body/1))
+  end
+
+  defp receipt_frame(receipt) do
+    Map.put(receipt_body(receipt), "type", "chat_read_receipt")
+  end
+
+  defp receipt_body(receipt) do
+    Map.take(receipt, [:participant_id, :participant_generation, :sequence, :read_at])
+    |> Map.new(fn {key, value} -> {Atom.to_string(key), value} end)
+  end
 
   defp retained_floor(repository, identity) do
     case repository.head(identity.episode) do
@@ -309,164 +329,19 @@ defmodule ChalkSync.Chat do
     end
   end
 
-  defp diagnose_chat_commit(identity, client_message_id, :committed, options) do
-    Diagnostics.record(:chat_send_committed, identity,
-      observability: Keyword.get(options, :observability),
-      command_id: client_message_id,
-      operation_ref: client_message_id,
-      attributes: %{result: :committed}
+  defp repository(options) do
+    Keyword.get(
+      options,
+      :repository,
+      Application.get_env(:chalk_sync, :chat_repository, PostgresRepository)
     )
   end
 
-  defp diagnose_chat_commit(identity, client_message_id, :duplicate, options) do
-    Diagnostics.record(:chat_retry_deduped, identity,
-      observability: Keyword.get(options, :observability),
-      command_id: client_message_id,
-      retry_group_ref: client_message_id,
-      operation_ref: child_operation_ref(client_message_id, "retry"),
-      attributes: %{result: :duplicate}
+  defp fanout(options) do
+    Keyword.get(
+      options,
+      :fanout,
+      Application.get_env(:chalk_sync, :collaboration_fanout, Collaboration)
     )
   end
-
-  defp diagnose_chat_commit(_identity, _client_message_id, _outcome, _options), do: :ok
-
-  defp diagnose_chat_rejection(identity, client_message_id, reason, options) do
-    Diagnostics.record(:chat_send_rejected, identity,
-      observability: Keyword.get(options, :observability),
-      command_id: client_message_id,
-      operation_ref: client_message_id,
-      attributes: %{reason: diagnostic_reason(reason)}
-    )
-  end
-
-  defp diagnose_attachment_success(
-         true,
-         identity,
-         client_message_id,
-         attachment_ids,
-         options
-       ),
-       do:
-         diagnose_attachment(
-           :succeeded,
-           identity,
-           client_message_id,
-           attachment_ids,
-           nil,
-           options
-         )
-
-  defp diagnose_attachment_success(
-         false,
-         _identity,
-         _client_message_id,
-         _attachment_ids,
-         _options
-       ),
-       do: :ok
-
-  defp attachment_observation(
-         input,
-         identity,
-         client_message_id,
-         attachment_ids,
-         options
-       )
-       when is_list(attachment_ids) and attachment_ids != [] do
-    marker = {__MODULE__, make_ref()}
-    Process.put(marker, false)
-
-    observer = fn ->
-      unless Process.get(marker, false) do
-        Process.put(marker, true)
-
-        diagnose_attachment(
-          :started,
-          identity,
-          client_message_id,
-          attachment_ids,
-          nil,
-          options
-        )
-      end
-    end
-
-    {Map.put(input, :attachment_commit_observer, observer), marker}
-  end
-
-  defp attachment_observation(input, _identity, _client_message_id, _attachment_ids, _options),
-    do: {input, nil}
-
-  defp attachment_attempted?(nil), do: false
-  defp attachment_attempted?(marker), do: Process.delete(marker) == true
-
-  defp diagnose_attachment(
-         _stage,
-         _identity,
-         _client_message_id,
-         attachment_ids,
-         _reason,
-         _options
-       )
-       when not is_list(attachment_ids),
-       do: :ok
-
-  defp diagnose_attachment(_stage, _identity, _client_message_id, [], _reason, _options),
-    do: :ok
-
-  defp diagnose_attachment(stage, identity, client_message_id, attachment_ids, reason, options) do
-    constructor =
-      case stage do
-        :started -> :chat_attachment_commit_started
-        :succeeded -> :chat_attachment_commit_succeeded
-        :failed -> :chat_attachment_failed
-      end
-
-    attributes =
-      %{count: length(attachment_ids), attachment_type: :unknown}
-      |> maybe_put_reason(reason)
-
-    Diagnostics.record(constructor, identity,
-      observability: Keyword.get(options, :observability),
-      command_id: client_message_id,
-      retry_group_ref: client_message_id,
-      operation_ref: child_operation_ref(client_message_id, "attachment"),
-      attributes: attributes
-    )
-  end
-
-  defp maybe_put_reason(attributes, nil), do: attributes
-
-  defp maybe_put_reason(attributes, reason),
-    do: Map.put(attributes, :reason, diagnostic_reason(reason))
-
-  defp diagnostic_reason(reason)
-       when reason in [
-              :capability_denied,
-              :episode_ended,
-              :dependency_unavailable,
-              :overloaded,
-              :command_id_conflict
-            ],
-       do: reason
-
-  defp diagnostic_reason(:client_message_id_conflict), do: :command_id_conflict
-  defp diagnostic_reason(_reason), do: :invalid_contract
-  defp child_operation_ref(operation_ref, kind), do: operation_ref <> "." <> kind
-
-  defp repository(options),
-    do:
-      Keyword.get(
-        options,
-        :repository,
-        Application.get_env(:chalk_sync, :chat_repository, PostgresRepository)
-      )
-
-  defp fanout(options),
-    do:
-      Keyword.get(
-        options,
-        :fanout,
-        Application.get_env(:chalk_sync, :collaboration_fanout, Collaboration)
-      )
 end

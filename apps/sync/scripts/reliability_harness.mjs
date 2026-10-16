@@ -28,7 +28,6 @@ export function createProfilePlan(profile, runDirectory) {
   if (!profiles.has(profile)) throw new Error(`unknown reliability profile: ${profile}`);
 
   const correctness = [
-    step("diagnostics_contracts_build", ["pnpm", "--dir", "packages/diagnostics-contracts", "run", "build"]),
     step("sync_full_gate", ["apps/sync/scripts/gate.sh", "run"]),
     step("sync_v1_breaker", ["mix", "sync.breaker.v1", "--output", path.join(runDirectory, "sync-breaker-v1.json")], { cwd: syncDirectory, env: { MIX_ENV: "test", TSX_TSCONFIG_PATH: diagnosticsContractsTsconfig } }),
     step("sync_v1_replay", ["mix", "sync.breaker.v1", "--replay", path.join(runDirectory, "sync-breaker-v1.json")], { cwd: syncDirectory, env: { MIX_ENV: "test", TSX_TSCONFIG_PATH: diagnosticsContractsTsconfig } }),

@@ -13,7 +13,6 @@ test("the release set contains seven synchronized Chalk packages and independent
     releasePackages.filter(({ version }) => version === chalkReleaseVersion).map(({ name }) => name),
     synchronizedPackages,
   );
-  assert.equal(releasePackages.find(({ name }) => name === "@q9labsai/diagnostics-contracts")?.version, "0.1.1");
   assert.equal(releasePackages.filter(({ version }) => version === chalkReleaseVersion).length, synchronizedPackages.length);
 });
 
@@ -76,7 +75,6 @@ test("bump plan updates release versions, every consumer range, and the client r
     ["packages/ui/package.json", JSON.stringify({ name: "@q9labsai/chalk-ui", version: "4.1.16" }, null, 2)],
     ["apps/recording-renderer/package.json", JSON.stringify({ name: "recording-renderer", version: "0.0.0", dependencies: { "@q9labsai/chalk-react": "workspace:^4.1.16" } }, null, 2)],
     ["packages/recording-presentation/package.json", JSON.stringify({ name: "@q9labsai/recording-presentation", version: "0.1.0" }, null, 2)],
-    ["packages/diagnostics-contracts/package.json", JSON.stringify({ name: "@q9labsai/diagnostics-contracts", version: "0.1.1" }, null, 2)],
     ["apps/unrelated/package.json", JSON.stringify({ name: "unrelated", version: "4.1.16" }, null, 2)],
     [clientSource, 'release: { id: "chalk-client@4.1.16" }'],
   ]);

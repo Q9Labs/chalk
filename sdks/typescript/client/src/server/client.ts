@@ -34,17 +34,14 @@ import type {
   UpdateSpaceInput,
   UpdateSpacePublicInviteInput,
 } from "./types.js";
-
 export function createChalkServerClient(options: ChalkServerClientOptions): ChalkServerClient {
   const apiKey = required(options.apiKey, "apiKey");
   const tenantId = required(options.tenantId, "tenantId");
   const apiBaseURL = normalizedBaseURL(options.apiBaseURL);
   const fetchImplementation = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
   if (typeof fetchImplementation !== "function") throw new TypeError("A fetch implementation is required");
-
   const tenantPath = `/v1/tenants/${segment(tenantId)}`;
   const request = createServerRequester(options, apiKey, apiBaseURL, fetchImplementation);
-
   return {
     spaces: {
       archive: (spaceId) =>
@@ -264,7 +261,6 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
     },
   };
 }
-
 function createSpaceRequest(input: CreateSpaceInput): Record<string, unknown> {
   return {
     default_episode_duration_seconds: input.defaultEpisodeDurationSeconds,
@@ -280,21 +276,18 @@ function createSpaceRequest(input: CreateSpaceInput): Record<string, unknown> {
     ...(input.transcriptionPolicy === undefined ? {} : { transcription_policy: input.transcriptionPolicy }),
   };
 }
-
 function spaceUpdateRequest(input: UpdateSpaceInput): Record<string, unknown> {
   return {
     ...(input.recordingPolicy === undefined ? {} : { recording_policy: input.recordingPolicy }),
     ...(input.transcriptionPolicy === undefined ? {} : { transcription_policy: input.transcriptionPolicy }),
   };
 }
-
 function createEpisodeRequest(input: CreateEpisodeInput): Record<string, unknown> {
   return {
     ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
     ...(input.startedAt === undefined ? {} : { started_at: input.startedAt }),
   };
 }
-
 function participantAdmissionRequest(input: AdmitParticipantInput): Record<string, unknown> {
   return {
     name: input.name,
@@ -304,7 +297,6 @@ function participantAdmissionRequest(input: AdmitParticipantInput): Record<strin
     ...(input.participantId === undefined ? {} : { participant_id: input.participantId }),
   };
 }
-
 function accessGrantRequest(input: IssueAccessGrantInput): Record<string, unknown> {
   return {
     participant_generation: input.participantGeneration,
@@ -312,19 +304,15 @@ function accessGrantRequest(input: IssueAccessGrantInput): Record<string, unknow
     ...(input.currentMediaToken ? { current_media_token: input.currentMediaToken } : {}),
   };
 }
-
 function participantRemovalRequest(input: RemoveParticipantInput): Record<string, unknown> {
   return { participant_generation: input.participantGeneration };
 }
-
 function apiKeyCreateRequest(input: CreateAPIKeyInput): Record<string, unknown> {
   return { expires_at: input.expiresAt, name: input.name, scopes: [...input.scopes] };
 }
-
 function publicInviteUpdateRequest(input: UpdateSpacePublicInviteInput): Record<string, unknown> {
   return { enabled: input.enabled };
 }
-
 function spaceQuery(input: ListSpacesInput | undefined): string {
   const query = new URLSearchParams();
   setQueryValue(query, "archived", input?.archived);
@@ -332,14 +320,12 @@ function spaceQuery(input: ListSpacesInput | undefined): string {
   setQueryValue(query, "page_size", input?.pageSize);
   return prefixedQuery(query.toString());
 }
-
 function apiKeyQuery(input: ListAPIKeysInput | undefined): string {
   const query = new URLSearchParams();
   setQueryValue(query, "cursor", input?.cursor);
   setQueryValue(query, "page_size", input?.pageSize);
   return prefixedQuery(query.toString());
 }
-
 function recordingQuery(input: ListRecordingsInput | undefined): string {
   const query = new URLSearchParams();
   setQueryValue(query, "cursor", input?.cursor);
@@ -348,28 +334,23 @@ function recordingQuery(input: ListRecordingsInput | undefined): string {
   setQueryValue(query, "space_id", input?.spaceId);
   return prefixedQuery(query.toString());
 }
-
 function publicAdmissionRequestQuery(input: ListPublicAdmissionRequestsInput | undefined): string {
   const query = new URLSearchParams();
   setQueryValue(query, "state", input?.state);
   return prefixedQuery(query.toString());
 }
-
 function setQueryValue(query: URLSearchParams, name: string, value: boolean | number | string | undefined): void {
   if (value !== undefined) query.set(name, String(value));
 }
-
 function prefixedQuery(value: string): string {
   if (value === "") return "";
   return `?${value}`;
 }
-
 function required(value: string, name: string): string {
   const normalized = value.trim();
   if (!normalized) throw new TypeError(`${name} is required`);
   return normalized;
 }
-
 function normalizedBaseURL(value: string | URL): string {
   const url = new URL(value);
   url.pathname = `${url.pathname.replace(/\/+$/u, "")}/`;
@@ -377,11 +358,9 @@ function normalizedBaseURL(value: string | URL): string {
   url.hash = "";
   return url.toString();
 }
-
 function segment(value: string): string {
   return encodeURIComponent(required(value, "identifier"));
 }
-
 type AccessGrantWire = {
   readonly episode_started_at?: string | null;
   readonly subject: {
@@ -391,7 +370,10 @@ type AccessGrantWire = {
     readonly participant_id: string;
     readonly participant_generation: number;
   };
-  readonly sync: { readonly token: string; readonly expires_at: string };
+  readonly sync: {
+    readonly token: string;
+    readonly expires_at: string;
+  };
   readonly media: {
     readonly token: string;
     readonly expires_at: string;
@@ -405,17 +387,14 @@ type AccessGrantWire = {
     readonly intake_path: string;
   } | null;
 };
-
 type ParticipantLifecycleWire = Omit<ParticipantLifecycle, "access"> & {
   readonly access?: AccessGrantWire | null;
 };
-
 function participantLifecycle(value: ParticipantLifecycleWire): ParticipantLifecycle {
   const { access, ...lifecycle } = value;
   if (access === undefined) return lifecycle;
   return { ...lifecycle, access: access === null ? null : accessGrant(access) };
 }
-
 function accessGrant(value: AccessGrantWire): AccessGrant {
   const payload = mediaClientPayload(value.media);
   return parseAccessGrant({
@@ -437,7 +416,6 @@ function accessGrant(value: AccessGrantWire): AccessGrant {
     diagnostics: value.diagnostics,
   });
 }
-
 function mediaClientPayload(media: AccessGrantWire["media"]): Readonly<Record<string, string>> {
   switch (media.provider) {
     case "cloudflare_sfu": {
@@ -454,12 +432,10 @@ function mediaClientPayload(media: AccessGrantWire["media"]): Readonly<Record<st
       throw invalidResponse(201);
   }
 }
-
 function requiredResponseID(value: string | undefined): string {
   if (!value) throw invalidResponse(201);
   return value;
 }
-
 function invalidResponse(status: number): ChalkAPIError {
   return new ChalkAPIError({ code: "invalid_response", retryable: false, status });
 }

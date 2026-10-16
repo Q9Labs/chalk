@@ -8,9 +8,7 @@
     "emitDeclarationOnly": true,
     "noEmit": false,
     "composite": true,
-    "paths": {
-      "@q9labsai/diagnostics-contracts": ["../../../packages/diagnostics-contracts/dist/index.d.ts"]
-    },
+    "paths": {},
     "lib": ["ESNext", "DOM", "DOM.Iterable"]
   },
   "include": ["src/**/*"],

@@ -4,7 +4,6 @@ import type { ChalkChatFileTransport } from "../chat-files";
 import type { ConnectionLifecycleCapability } from "../connection";
 import type { ConnectionDependencies } from "../connection/dependencies";
 import { makeChatController, type ChatControllerEffects } from "./chat-controller";
-import type { EpisodeDiagnosticRuntime } from "./episode-diagnostic-runtime";
 import { normalizeClientError, SpaceClientError } from "./errors";
 import { makeMediaController, type MediaControllerEffects } from "./media-controller";
 import type { MediaDeviceSelection } from "./media-device-selection";
@@ -15,7 +14,6 @@ import { makeRecordingController, type RecordingControllerEffects } from "./reco
 import { SpaceStore } from "./store";
 import type { ActiveReaction, ChatAttachment, ChatMessage, ChatReadReceipt, ChatSendInput, ChatUploadFile, MediaRequestKind, Reaction } from "./types";
 import { makeWhiteboardController, type WhiteboardControllerEffects } from "./whiteboard-controller";
-
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 export type ControllerEffects = {
   readonly media: MediaControllerEffects;
@@ -27,7 +25,6 @@ export type ControllerEffects = {
   readonly whiteboard: WhiteboardControllerEffects;
 };
 export class ControllerEffectsService extends Context.Service<ControllerEffectsService, ControllerEffects>()("@chalk/client/ControllerEffects") {}
-
 /** Native controller composition: no Promise controller wrapper remains. */
 export const makeControllerEffects = (input: {
   readonly offlineActionsStorage?: import("./offline-actions-storage").OfflineActionsStorage;
@@ -38,24 +35,27 @@ export const makeControllerEffects = (input: {
   readonly mediaDeviceSelection: MediaDeviceSelection;
   readonly featureFactories?: Pick<ConnectionDependencies, "createChatFileTransport" | "createWhiteboardClient">;
   readonly fetch?: typeof globalThis.fetch;
-  /** Private semantic diagnostics owner; never exposed through the public controller surface. */
-  readonly episodeDiagnostics?: EpisodeDiagnosticRuntime;
 }): Effect.Effect<ControllerEffects, never, import("effect").Clock.Clock | import("effect").Scope.Scope> =>
   Effect.gen(function* () {
     const offlineActions = yield* makeOfflineActions({ connection: input.connection, store: input.store, storage: input.offlineActionsStorage, storageKey: input.offlineActionsStorageKey });
-    const media = yield* makeMediaController(input.connection, input.store, input.mediaDeviceSelection, input.episodeDiagnostics);
-    const chat = yield* makeChatController({ connection: input.connection, store: input.store, createTransport: input.featureFactories?.createChatFileTransport, apiBaseUrl: input.apiBaseUrl, fetch: input.fetch, episodeDiagnostics: input.episodeDiagnostics, offline: offlineActions });
-    const participants = yield* makeParticipantsController(input.connection, input.store, input.episodeDiagnostics, offlineActions);
-    const reactions = yield* makeReactionsController(input.connection, input.store, input.episodeDiagnostics);
-    const recording = yield* makeRecordingController(input.connection, input.store, input.episodeDiagnostics);
+    const media = yield* makeMediaController(input.connection, input.store, input.mediaDeviceSelection);
+    const chat = yield* makeChatController({ connection: input.connection, store: input.store, createTransport: input.featureFactories?.createChatFileTransport, apiBaseUrl: input.apiBaseUrl, fetch: input.fetch, offline: offlineActions });
+    const participants = yield* makeParticipantsController(input.connection, input.store, offlineActions);
+    const reactions = yield* makeReactionsController(input.connection, input.store);
+    const recording = yield* makeRecordingController(input.connection, input.store);
     const whiteboard = yield* makeWhiteboardController(input.connection, input.store, input.featureFactories?.createWhiteboardClient);
     return { media, offline: offlineActions, chat, participants, reactions, recording, whiteboard };
   });
-
 export const makeControllerEffectsLayer = (input: Parameters<typeof makeControllerEffects>[0]) => Layer.effect(ControllerEffectsService, makeControllerEffects(input));
-
 /** Standalone native upload effect for custom native controller assembly. */
-export function uploadFileEffect(file: ChatUploadFile, input: { readonly connection: ConnectionLifecycleCapability; readonly chatFiles: ChalkChatFileTransport | null; readonly fetch: typeof globalThis.fetch }): ClientEffect<ChatAttachment> {
+export function uploadFileEffect(
+  file: ChatUploadFile,
+  input: {
+    readonly connection: ConnectionLifecycleCapability;
+    readonly chatFiles: ChalkChatFileTransport | null;
+    readonly fetch: typeof globalThis.fetch;
+  },
+): ClientEffect<ChatAttachment> {
   const { fetch } = input;
   if (!input.chatFiles) return Effect.fail(new SpaceClientError({ code: "collaboration.unavailable", recoverable: false, message: "Chat file upload is unavailable" }));
   return bytesFor(file).pipe(
@@ -77,12 +77,10 @@ export function uploadFileEffect(file: ChatUploadFile, input: { readonly connect
     Effect.mapError(normalizeClientError),
   );
 }
-
 function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
   return Effect.tryPromise({ try: operation, catch: (cause) => cause });
 }
 function bytesFor(file: ChatUploadFile): Effect.Effect<ArrayBuffer, unknown> {
   return "fileName" in file ? Effect.succeed(file.bytes) : foreign(() => file.arrayBuffer());
 }
-
 export type { ActiveReaction, ChatAttachment, ChatMessage, ChatReadReceipt, ChatSendInput, MediaRequestKind, Reaction };

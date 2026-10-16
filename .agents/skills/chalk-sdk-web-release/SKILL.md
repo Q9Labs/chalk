@@ -60,9 +60,8 @@ the app deployed.
    - Internal `workspace:` ranges that point to those packages.
    - The SDK runtime release identifier and its focused test when the client version changes.
    - `scripts/npm-release.mjs`, `pnpm-lock.yaml`, and `CHANGELOG.md`.
-6. Keep `@q9labsai/diagnostics-contracts` at its independent version unless its contract actually changed.
-7. Reject unrelated lockfile churn. A patch release should change only the affected workspace specifiers, not third-party resolutions.
-8. Run the cheap release checks before the gate:
+6. Reject unrelated lockfile churn. A patch release should change only the affected workspace specifiers, not third-party resolutions.
+7. Run the cheap release checks before the gate:
 
 ```bash
 git diff --check

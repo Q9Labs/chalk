@@ -8,7 +8,6 @@ apps/api/internal/adapters/postgres/sqlc/** linguist-generated merge=generated
 apps/sync/lib/chalk_sync/contract/generated.ex linguist-generated merge=generated
 apps/sync/lib/chalk_sync/contract/generated_whiteboard_v1.ex linguist-generated merge=generated
 contract/generated/** linguist-generated merge=generated
-packages/diagnostics-contracts/fixtures/*.json linguist-generated merge=generated
 sdks/typescript/client/src/generated/** linguist-generated merge=generated
 tracker-human.html linguist-generated merge=generated
 tracker-human.md linguist-generated merge=generated

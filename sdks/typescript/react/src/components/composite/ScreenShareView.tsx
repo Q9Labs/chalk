@@ -5,8 +5,6 @@ import { ParticipantTile } from "../atomic";
 import { ChalkBadge, ChalkButton, ChalkControlGroup, ChalkDivider, ChalkEmptyState, ChalkIconButton, ChalkPanel, ChalkSpinner } from "../chalk-ui";
 import { ClassicScreenShareView } from "./ClassicScreenShareView";
 import type { Participant } from "../participant-grid/ParticipantGrid";
-import { observeFirstRenderedFrame } from "../../internal/episode-diagnostic-render-observer";
-
 export interface ScreenShareViewProps {
   onStopShare?: () => void;
   showThumbnails?: boolean;
@@ -14,20 +12,17 @@ export interface ScreenShareViewProps {
   enableZoom?: boolean;
   className?: string;
 }
-
 export interface ScreenShareViewSurfaceProps extends ScreenShareViewProps {
   readonly screenShareTrack: MediaStreamTrack;
   readonly sharedByName: string;
   readonly participants: Participant[];
 }
-
 export interface ScreenSharePresentationProps {
   readonly sharedByName: string;
   readonly media: React.ReactNode;
   readonly mediaVisible: boolean;
   readonly className?: string;
 }
-
 /** Shared-content viewport for data-driven rendering without MediaStreamTrack effects. */
 export function ScreenSharePresentation({ sharedByName, media, mediaVisible, className }: ScreenSharePresentationProps): React.JSX.Element {
   const viewport = (
@@ -43,7 +38,6 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, cla
       </ChalkBadge>
     </div>
   );
-
   return <div className={cn("h-full w-full overflow-hidden rounded-2xl bg-[var(--chalk-text)]", className)}>{viewport}</div>;
   return (
     <ChalkPanel tone="neutral" className={cn("relative h-full w-full overflow-hidden rounded-2xl p-0 [&>div]:h-full [&>div]:w-full", className)}>
@@ -51,11 +45,9 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, cla
     </ChalkPanel>
   );
 }
-
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.5;
-
 const getContainedSize = (containerWidth: number, containerHeight: number, videoWidth: number, videoHeight: number) => {
   if (!containerWidth || !containerHeight || !videoWidth || !videoHeight) {
     return {
@@ -63,54 +55,42 @@ const getContainedSize = (containerWidth: number, containerHeight: number, video
       height: containerHeight,
     };
   }
-
   const containerRatio = containerWidth / containerHeight;
   const videoRatio = videoWidth / videoHeight;
-
   if (videoRatio > containerRatio) {
     return {
       width: containerWidth,
       height: containerWidth / videoRatio,
     };
   }
-
   return {
     width: containerHeight * videoRatio,
     height: containerHeight,
   };
 };
-
 export const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByName, participants, onStopShare, showThumbnails = true, thumbnailPosition = "bottom", enableZoom = true, className }: ScreenShareViewSurfaceProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-
   // Loading state
   const [isLoading, setIsLoading] = useState(true);
-
   // Sidebar/Thumbnails state
   const [isThumbnailsOpen, setIsThumbnailsOpen] = useState(true);
-
   // Rotation state
   const [rotation, setRotation] = useState(0);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [videoSize, setVideoSize] = useState({ width: 0, height: 0 });
-
   // Zoom state
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
-
   useEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl || !screenShareTrack) return;
-
     if (screenShareTrack.readyState === "ended") {
       return;
     }
-
     setIsLoading(true);
-
     try {
       const stream = new MediaStream([screenShareTrack]);
       videoEl.srcObject = stream;
@@ -120,71 +100,56 @@ export const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByNa
     } catch {
       // Failed to create MediaStream
     }
-
     return () => {
       videoEl.srcObject = null;
     };
   }, [screenShareTrack]);
-
   useEffect(() => {
     const element = containerRef.current;
     if (!element) {
       return;
     }
-
     const updateSize = () => {
       const rect = element.getBoundingClientRect();
       setContainerSize({ width: rect.width, height: rect.height });
     };
-
     updateSize();
-
     const observer = new ResizeObserver(updateSize);
     observer.observe(element);
-
     return () => observer.disconnect();
   }, []);
-
   const handleVideoLoaded = useCallback(() => {
     setIsLoading(false);
     if (videoRef.current) {
-      observeFirstRenderedFrame(videoRef.current, screenShareTrack);
       setVideoSize({
         width: videoRef.current.videoWidth,
         height: videoRef.current.videoHeight,
       });
     }
   }, [screenShareTrack]);
-
   // Reset pan when zoom resets
   useEffect(() => {
     if (zoom === 1) {
       setPan({ x: 0, y: 0 });
     }
   }, [zoom]);
-
   const handleZoomIn = useCallback(() => {
     setZoom((z) => Math.min(z + ZOOM_STEP, MAX_ZOOM));
   }, []);
-
   const handleZoomOut = useCallback(() => {
     setZoom((z) => Math.max(z - ZOOM_STEP, MIN_ZOOM));
   }, []);
-
   const handleResetZoom = useCallback(() => {
     setZoom(1);
     setPan({ x: 0, y: 0 });
     setRotation(0);
   }, []);
-
   const toggleRotation = useCallback(() => {
     setRotation((prev) => (prev - 90) % 360);
     setZoom(1);
     setPan({ x: 0, y: 0 });
   }, []);
-
   const stageSize = useMemo(() => getContainedSize(containerSize.width, containerSize.height, videoSize.width, videoSize.height), [containerSize.height, containerSize.width, videoSize.height, videoSize.width]);
-
   const stageStyle = useMemo(
     () => ({
       width: stageSize.width || containerSize.width,
@@ -194,7 +159,6 @@ export const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByNa
     }),
     [containerSize.height, containerSize.width, pan.x, pan.y, rotation, stageSize.height, stageSize.width, zoom],
   );
-
   // Mouse wheel zoom
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
@@ -205,14 +169,12 @@ export const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByNa
     },
     [enableZoom],
   );
-
   // Pan handlers
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       if (e.target !== e.currentTarget && e.target !== videoRef.current) {
         return;
       }
-
       if (zoom <= 1) return;
       setIsDragging(true);
       dragStart.current = {
@@ -224,14 +186,11 @@ export const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByNa
     },
     [zoom, pan],
   );
-
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
       if (!isDragging || zoom <= 1) return;
-
       const dx = e.clientX - dragStart.current.x;
       const dy = e.clientY - dragStart.current.y;
-
       const maxPanX = (stageSize.width * (zoom - 1)) / 2;
       const maxPanY = (stageSize.height * (zoom - 1)) / 2;
       setPan({
@@ -241,19 +200,15 @@ export const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByNa
     },
     [isDragging, stageSize.height, stageSize.width, zoom],
   );
-
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);
   }, []);
-
   const handleMouseLeave = useCallback(() => {
     setIsDragging(false);
   }, []);
-
   const toggleThumbnails = useCallback(() => {
     setIsThumbnailsOpen((prev) => !prev);
   }, []);
-
   return (
     <div className={cn("flex h-full w-full gap-2 transition-all duration-500", thumbnailPosition === "bottom" ? "flex-col" : "flex-row", className)}>
       <ChalkPanel tone="neutral" className="relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl p-0 [&>div]:h-full [&>div]:w-full">
@@ -379,9 +334,7 @@ export const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByNa
     </div>
   );
 });
-
 export function ScreenShareView(props: ScreenShareViewProps): React.JSX.Element {
   return <ClassicScreenShareView {...props} />;
 }
-
 ScreenShareView.displayName = "ScreenShareView";

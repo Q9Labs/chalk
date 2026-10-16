@@ -19,7 +19,7 @@ const temporaryDirectory = await mkdtemp(join(tmpdir(), "chalk-sdk-web-consumer-
 const archiveDirectory = join(temporaryDirectory, "archives");
 const consumerDirectory = join(temporaryDirectory, "consumer");
 const tenantAPIKey = `chalk_sk_fixture.${randomBytes(32).toString("base64url")}`;
-const packedPackages = ["packages/assets", "packages/diagnostics-contracts", "packages/facehash", "packages/recording-presentation", "packages/ui", "packages/whiteboard", "sdks/typescript/client", "sdks/typescript/react"];
+const packedPackages = ["packages/assets", "packages/facehash", "packages/recording-presentation", "packages/ui", "packages/whiteboard", "sdks/typescript/client", "sdks/typescript/react"];
 let serverProcess;
 
 try {
@@ -32,11 +32,11 @@ try {
   const archives = (await readdir(archiveDirectory)).filter((file) => file.endsWith(".tgz"));
   const clientArchive = requiredArchive(archives, "chalk-client");
   const reactArchive = requiredArchive(archives, "chalk-react");
-  const diagnosticsArchive = requiredArchive(archives, "diagnostics-contracts");
+
   const supportingArchives = [requiredArchive(archives, "chalk-assets"), requiredArchive(archives, "facehash"), requiredArchive(archives, "recording-presentation"), requiredArchive(archives, "chalk-ui"), requiredArchive(archives, "chalk-whiteboard")];
 
   await writeFile(join(consumerDirectory, "package.json"), `${JSON.stringify({ name: "chalk-packed-web-consumer", private: true, type: "module", packageManager: "pnpm@12.8.1" }, null, 2)}\n`);
-  await writeFile(join(consumerDirectory, "pnpm-workspace.yaml"), workspacePolicy(archiveDirectory, { clientArchive, reactArchive, diagnosticsArchive, supportingArchives }));
+  await writeFile(join(consumerDirectory, "pnpm-workspace.yaml"), workspacePolicy(archiveDirectory, { clientArchive, reactArchive, supportingArchives }));
   await run(
     "pnpm",
     [
@@ -58,7 +58,7 @@ try {
     ],
     consumerDirectory,
   );
-  await assertPackedInstall(consumerDirectory, archiveDirectory, { clientArchive, reactArchive, diagnosticsArchive, supportingArchives });
+  await assertPackedInstall(consumerDirectory, archiveDirectory, { clientArchive, reactArchive, supportingArchives });
   await run("pnpm", ["exec", "tsc", "--project", "tsconfig.json"], consumerDirectory);
   await run(process.execPath, ["build.mjs"], consumerDirectory);
   await run("pnpm", ["exec", "tailwindcss", "--input", "styles.css", "--output", "dist/bundle.css"], consumerDirectory);
@@ -337,7 +337,7 @@ async function post(url, signal) {
 
 async function assertPackedInstall(directory, archiveDirectory_, archives) {
   const packageJSON = JSON.parse(await readFile(join(directory, "package.json"), "utf8"));
-  if (packageJSON.dependencies?.["@q9labsai/diagnostics-contracts"] !== undefined) throw new TypeError("The clean consumer must not directly install @q9labsai/diagnostics-contracts");
+
   const packages = [
     ["@q9labsai/chalk-client", archives.clientArchive],
     ["@q9labsai/chalk-react", archives.reactArchive],
@@ -348,24 +348,15 @@ async function assertPackedInstall(directory, archiveDirectory_, archives) {
     ["@q9labsai/chalk-whiteboard", archives.supportingArchives[4]],
   ];
   for (const [packageName, archive] of packages) assertArchiveDependency(packageJSON, packageName, archive);
-  const clientManifest = JSON.parse(await readArchiveManifest(join(archiveDirectory_, archives.clientArchive)));
-  const diagnosticsManifest = JSON.parse(await readArchiveManifest(join(archiveDirectory_, archives.diagnosticsArchive)));
-  assertClientDiagnosticsDependency(clientManifest, diagnosticsManifest);
+
   await run(
     process.execPath,
     [
       "-e",
-      'const { createRequire } = require("node:module"); const { readFileSync } = require("node:fs"); const { dirname, join } = require("node:path"); for (const name of ["@q9labsai/chalk-client", "@q9labsai/chalk-client/effect", "@q9labsai/chalk-react", "@q9labsai/chalk-react/preview", "@q9labsai/recording-presentation"]) { const path = require.resolve(name); if (!path.includes("node_modules") || path.includes("/src/")) throw new Error(`${name} did not resolve to a built artifact from the clean install`); } const clientPath = require.resolve("@q9labsai/chalk-client"); const diagnosticsPath = createRequire(clientPath).resolve("@q9labsai/diagnostics-contracts"); if (!diagnosticsPath.includes("node_modules")) throw new Error("@q9labsai/diagnostics-contracts did not resolve from the packed client dependency"); const manifest = JSON.parse(readFileSync(join(dirname(dirname(diagnosticsPath)), "package.json"), "utf8")); if (manifest.version !== process.argv[1]) throw new Error(`Unexpected diagnostics contracts version: ${manifest.version}`);',
-      diagnosticsManifest.version,
+      'const { createRequire } = require("node:module"); const { readFileSync } = require("node:fs"); const { dirname, join } = require("node:path"); for (const name of ["@q9labsai/chalk-client", "@q9labsai/chalk-client/effect", "@q9labsai/chalk-react", "@q9labsai/chalk-react/preview", "@q9labsai/recording-presentation"]) { const path = require.resolve(name); if (!path.includes("node_modules") || path.includes("/src/")) throw new Error(`${name} did not resolve to a built artifact from the clean install`); }',
     ],
     directory,
   );
-}
-
-function assertClientDiagnosticsDependency(clientManifest, diagnosticsManifest) {
-  const expected = `^${diagnosticsManifest.version}`;
-  const declared = clientManifest.dependencies?.["@q9labsai/diagnostics-contracts"];
-  if (declared !== expected) throw new TypeError(`The packed client must declare @q9labsai/diagnostics-contracts as ${expected}; found ${String(declared)}`);
 }
 
 function assertArchiveDependency(packageJSON, packageName, archive) {
@@ -388,7 +379,6 @@ function workspacePolicy(archiveDirectory_, archives) {
     "@q9labsai/chalk-whiteboard": archives.supportingArchives.find((archive) => archive.includes("chalk-whiteboard")),
     "@q9labsai/chalk-client": archives.clientArchive,
     "@q9labsai/chalk-react": archives.reactArchive,
-    "@q9labsai/diagnostics-contracts": archives.diagnosticsArchive,
   };
   const overrides = Object.entries(byPackage).map(([name, archive]) => `  "${name}": "file:${join(archiveDirectory_, archive)}"`);
   return [

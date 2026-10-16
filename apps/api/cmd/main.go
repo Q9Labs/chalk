@@ -217,7 +217,7 @@ func run() error {
 	var syncTokenService httpapi.SyncTokenIssuer
 	var syncTokenRefresh httpapi.SyncTokenRefreshIssuer
 	var participantMediaIssuer httpapi.ParticipantMediaIssuer
-	var participantDiagnosticsIssuer httpapi.ParticipantDiagnosticsIssuer
+
 	var participantMediaVerifier httpapi.ParticipantMediaVerifier
 	var participantMediaRecoveryVerifier publicinviteapp.MediaProofRecoveryVerifier
 	var syncParticipantVerifier synctokens.Verifier
@@ -338,20 +338,7 @@ func run() error {
 	var transcriptService transcripts.Service
 	auditLogRepository := postgres.NewAuditLogRepository(operationQueries)
 	auditLogService := auditlogs.NewService(auditLogRepository)
-	episodeDiagnostics, err := newEpisodeDiagnosticsComponents(context.Background(), cfg, logger)
-	if err != nil {
-		return err
-	}
-	if episodeDiagnostics != nil {
-		defer episodeDiagnostics.Close()
-		episodeService = episodeService.WithCommitObserver(episodeDiagnostics.runtime)
-		participantDiagnosticsIssuer = episodeDiagnostics.issuer
-		logger.Info("Episode Diagnostics enabled",
-			"event", "episode_diagnostics.enabled",
-			"mode", cfg.EpisodeDiagnostics.Mode,
-			"environment", cfg.EpisodeDiagnostics.Environment,
-		)
-	}
+
 	journeyRepository := postgres.NewJourneyRepository(pool)
 	journeyService := journeys.NewService(journeyRepository)
 	statusRepository := postgres.NewStatusRepository(pool)
@@ -464,7 +451,7 @@ func run() error {
 	if cfg.Observability.Environment != config.DefaultEnvironment {
 		rateLimitOptions.Limiter = redisadapter.NewRateLimiter(redisClient)
 	}
-	episodeDiagnosticsHTTPOptions := episodeDiagnostics.HTTPOptions()
+
 	// The durable cleanup queue also owns Recording source expiry. Construct it
 	// for Recording-only deployments so turning ASR off cannot strand capture
 	// inputs past their immutable retention deadline.
@@ -567,7 +554,6 @@ func run() error {
 			MediaTokens:        participantMediaIssuer,
 			MediaProof:         participantMediaVerifier,
 			MediaProofRecovery: participantMediaRecoveryVerifier,
-			Diagnostics:        participantDiagnosticsIssuer,
 		})
 		if err != nil {
 			return fmt.Errorf("configure public invite access port: %w", err)
@@ -607,25 +593,25 @@ func run() error {
 			AllowedOrigins: cfg.API.CORSAllowedOrigins,
 			TenantOrigins:  tenantService,
 		},
-		LocalSystemToken:           cfg.API.LocalSystemToken,
-		OpsIngestToken:             cfg.API.OpsIngestToken,
-		RateLimit:                  rateLimitOptions,
-		Readiness:                  postgres.Readiness{Pool: pool, RequiredMigration: migrations.LatestVersion},
-		Authentication:             authenticationService,
-		RecentAuth:                 recentAuthService,
-		AccountTenants:             accountTenantService,
-		APIKeys:                    apiKeyService,
-		APIKeyAuthentication:       apiKeyService,
-		APIKeyAudits:               auditLogService,
-		Journeys:                   journeyService,
-		StatusIngestion:            statusService,
-		StatusSnapshot:             statusService,
-		LocalTelemetry:             cfg.Observability.Environment == config.DefaultEnvironment,
-		EpisodeCredentials:         episodeCredentials,
-		MediaPlane:                 mediaPlaneRegistry,
-		MediaPublications:          mediaPublicationService,
-		ParticipantMediaIssuer:     participantMediaIssuer,
-		ParticipantDiagnostics:     participantDiagnosticsIssuer,
+		LocalSystemToken:       cfg.API.LocalSystemToken,
+		OpsIngestToken:         cfg.API.OpsIngestToken,
+		RateLimit:              rateLimitOptions,
+		Readiness:              postgres.Readiness{Pool: pool, RequiredMigration: migrations.LatestVersion},
+		Authentication:         authenticationService,
+		RecentAuth:             recentAuthService,
+		AccountTenants:         accountTenantService,
+		APIKeys:                apiKeyService,
+		APIKeyAuthentication:   apiKeyService,
+		APIKeyAudits:           auditLogService,
+		Journeys:               journeyService,
+		StatusIngestion:        statusService,
+		StatusSnapshot:         statusService,
+		LocalTelemetry:         cfg.Observability.Environment == config.DefaultEnvironment,
+		EpisodeCredentials:     episodeCredentials,
+		MediaPlane:             mediaPlaneRegistry,
+		MediaPublications:      mediaPublicationService,
+		ParticipantMediaIssuer: participantMediaIssuer,
+
 		ParticipantMediaVerify:     participantMediaVerifier,
 		ParticipantMediaActive:     participantActiveAuthorizer,
 		ParticipantGeneration:      participantActiveAuthorizer,
@@ -683,7 +669,6 @@ func run() error {
 		WhiteboardParticipants: whiteboardParticipantVerifier,
 		PublicInvites:          publicInviteService,
 		PublicInviteAudits:     auditLogService,
-		EpisodeDiagnostics:     episodeDiagnosticsHTTPOptions,
 	}
 	applyCapabilityProfile(&routerOptions, cfg.Capabilities)
 	routerOptions.ApplyDiagnostics(diagnostics)
@@ -736,12 +721,7 @@ func run() error {
 			maintenanceErr <- recordingPipelineService.RunMaintenance(signalCtx, recordingpipeline.DefaultMaintenanceInterval)
 		}()
 	}
-	var episodeDiagnosticsRuntimeErr <-chan error
-	if episodeDiagnostics != nil {
-		runtimeErr := make(chan error, 1)
-		episodeDiagnosticsRuntimeErr = runtimeErr
-		go func() { runtimeErr <- episodeDiagnostics.runtime.Run(signalCtx) }()
-	}
+
 	var whiteboardCleanupErr <-chan error
 	if whiteboardCleanupScheduler != nil {
 		cleanupErr := make(chan error, 1)
@@ -795,7 +775,7 @@ func run() error {
 	chatCleanupResultReceived := false
 	recordingSourceCleanupResultReceived := false
 	publicInviteLifecycleResultReceived := false
-	episodeDiagnosticsRuntimeResultReceived := false
+
 	whiteboardCleanupResultReceived := false
 	recordingMaintenanceResultReceived := false
 	select {
@@ -820,10 +800,7 @@ func run() error {
 		runErr = err
 		recordingMaintenanceResultReceived = true
 		stop()
-	case err := <-episodeDiagnosticsRuntimeErr:
-		runErr = err
-		episodeDiagnosticsRuntimeResultReceived = true
-		stop()
+
 	case err := <-whiteboardCleanupErr:
 		runErr = err
 		whiteboardCleanupResultReceived = true
@@ -897,11 +874,7 @@ func run() error {
 			runErr = err
 		}
 	}
-	if episodeDiagnosticsRuntimeErr != nil && !episodeDiagnosticsRuntimeResultReceived {
-		if err := <-episodeDiagnosticsRuntimeErr; runErr == nil {
-			runErr = err
-		}
-	}
+
 	if recordingMaintenanceErr != nil && !recordingMaintenanceResultReceived {
 		if err := <-recordingMaintenanceErr; runErr == nil {
 			runErr = err

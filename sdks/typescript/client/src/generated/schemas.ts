@@ -85,16 +85,6 @@ export const SpaceIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.
 export type SpaceId = typeof SpaceIdSchema.Type;
 
 export const AccessGrantSchema = Schema.Struct({
-  diagnostics: Schema.optional(
-    Schema.NullOr(
-      Schema.Struct({
-        expires_at: DateTimeStringSchema,
-        generation: Schema.Number,
-        intake_path: Schema.String,
-        token: Schema.String,
-      }),
-    ),
-  ),
   episode_started_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
   media: Schema.Struct({
     client_payload: Schema.Record(Schema.String, Schema.Unknown),

@@ -63,28 +63,8 @@ const (
 	DeadlineSchedulerIntervalMS = "CHALK_DEADLINE_SCHEDULER_INTERVAL_MS"
 	DeadlineSchedulerBatch      = "CHALK_DEADLINE_SCHEDULER_BATCH"
 
-	EpisodeDiagnosticsMode                    = "CHALK_EPISODE_DIAGNOSTICS"
-	EpisodeDiagnosticsProductionOptIn         = "CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN"
-	EpisodeDiagnosticsProducerToken           = "CHALK_EPISODE_DIAGNOSTICS_PRODUCER_TOKEN"
-	EpisodeDiagnosticsServiceIssuer           = "CHALK_EPISODE_DIAGNOSTICS_SERVICE_ISSUER"
-	EpisodeDiagnosticsServiceKeyID            = "CHALK_EPISODE_DIAGNOSTICS_SERVICE_KEY_ID"
-	EpisodeDiagnosticsServicePrivateKey       = "CHALK_EPISODE_DIAGNOSTICS_SERVICE_PRIVATE_KEY"
-	EpisodeDiagnosticsServiceVerificationKeys = "CHALK_EPISODE_DIAGNOSTICS_SERVICE_VERIFICATION_KEYS"
-	EpisodeDiagnosticsHMACKey                 = "CHALK_EPISODE_DIAGNOSTICS_HMAC_KEY"
-	EpisodeDiagnosticsAppendDatabaseMaxConns  = "CHALK_EPISODE_DIAGNOSTICS_APPEND_DB_MAX_CONNS"
-	EpisodeDiagnosticsQueryDatabaseMaxConns   = "CHALK_EPISODE_DIAGNOSTICS_QUERY_DB_MAX_CONNS"
-	EpisodeDiagnosticsReconcileIntervalMS     = "CHALK_EPISODE_DIAGNOSTICS_RECONCILE_INTERVAL_MS"
-	EpisodeDiagnosticsReconcileBatch          = "CHALK_EPISODE_DIAGNOSTICS_RECONCILE_BATCH"
-	EpisodeDiagnosticsRetentionIntervalMS     = "CHALK_EPISODE_DIAGNOSTICS_RETENTION_INTERVAL_MS"
-	EpisodeDiagnosticsRetentionBatch          = "CHALK_EPISODE_DIAGNOSTICS_RETENTION_BATCH"
-
 	// Short aliases keep pool names concise at call sites while preserving the
 	// explicit Database wording in the canonical constants above.
-	EpisodeDiagnosticsAppendMaxConns = EpisodeDiagnosticsAppendDatabaseMaxConns
-	EpisodeDiagnosticsQueryMaxConns  = EpisodeDiagnosticsQueryDatabaseMaxConns
-	EpisodeDiagnosticsModeOff        = "off"
-	EpisodeDiagnosticsModeLocalhost  = "localhost"
-	EpisodeDiagnosticsModeHosted     = "hosted"
 
 	GoogleOAuthClientID                    = "CHALK_GOOGLE_OAUTH_CLIENT_ID"
 	GoogleOAuthClientSecret                = "CHALK_GOOGLE_OAUTH_CLIENT_SECRET"
@@ -136,41 +116,36 @@ const (
 	WebhookEncryptionKeyring        = "CHALK_WEBHOOK_ENCRYPTION_KEYRING"
 	WebhookEncryptionCurrentVersion = "CHALK_WEBHOOK_ENCRYPTION_CURRENT_VERSION"
 
-	DefaultAPIAddress                            = ":8080"
-	DefaultDatabaseURL                           = "postgres://postgres:postgres@127.0.0.1:5432/chalk?sslmode=disable"
-	DefaultDBMaxConns                            = int32(10)
-	DefaultDBMinConns                            = int32(0)
-	DefaultDeadlineSchedulerIntervalMS           = int64(1000)
-	DefaultDeadlineSchedulerBatch                = int32(50)
-	DefaultPublicInviteSchedulerIntervalMS       = int64(60 * 1000)
-	DefaultPublicInviteSchedulerBatch            = int32(50)
-	DefaultPublicInviteAutoLifecycleSeconds      = int32(60 * 60)
-	DefaultEpisodeDiagnosticsAppendDBMaxConns    = int32(5)
-	DefaultEpisodeDiagnosticsQueryDBMaxConns     = int32(5)
-	DefaultEpisodeDiagnosticsReconcileIntervalMS = int64(1000)
-	DefaultEpisodeDiagnosticsReconcileBatch      = int32(100)
-	DefaultEpisodeDiagnosticsRetentionIntervalMS = int64(60 * 1000)
-	DefaultEpisodeDiagnosticsRetentionBatch      = int32(10000)
-	DefaultEnvironment                           = "local"
-	DefaultGoogleRedirectURL                     = "http://127.0.0.1:3070/api/auth/google/callback"
-	DefaultLogFormat                             = "json"
-	DefaultLogLevel                              = "info"
-	DefaultOAuthStateTTLMS                       = int64(10 * 60 * 1000)
-	DefaultCloudflareRealtimeRequestTimeoutMS    = int64(6000)
-	DefaultCloudflareRTKPresetContributor        = "contributor"
-	DefaultCloudflareRTKPresetFacilitator        = "facilitator"
-	DefaultRequestLogs                           = "off"
-	DefaultRequestSampleRate                     = 0.01
-	DefaultR2RequestTimeoutMS                    = int64(10000)
-	DefaultRecordingKMSRequestTimeoutMS          = int64(10000)
-	DefaultTranscriptionControlAudience          = "chalk-control-api"
-	DefaultRedisURL                              = "redis://127.0.0.1:6379/0"
-	DefaultResendTimeoutMS                       = int64(10000)
-	DefaultSessionTTLMS                          = int64(30 * 24 * 60 * 60 * 1000)
-	DefaultRecentAuthSecret                      = "chalk-local-recent-auth-key-32!!"
-	DefaultServiceName                           = "chalk-api"
-	DefaultSlowRequestMS                         = int64(250)
-	DefaultVersion                               = "dev"
+	DefaultAPIAddress                       = ":8080"
+	DefaultDatabaseURL                      = "postgres://postgres:postgres@127.0.0.1:5432/chalk?sslmode=disable"
+	DefaultDBMaxConns                       = int32(10)
+	DefaultDBMinConns                       = int32(0)
+	DefaultDeadlineSchedulerIntervalMS      = int64(1000)
+	DefaultDeadlineSchedulerBatch           = int32(50)
+	DefaultPublicInviteSchedulerIntervalMS  = int64(60 * 1000)
+	DefaultPublicInviteSchedulerBatch       = int32(50)
+	DefaultPublicInviteAutoLifecycleSeconds = int32(60 * 60)
+
+	DefaultEnvironment                        = "local"
+	DefaultGoogleRedirectURL                  = "http://127.0.0.1:3070/api/auth/google/callback"
+	DefaultLogFormat                          = "json"
+	DefaultLogLevel                           = "info"
+	DefaultOAuthStateTTLMS                    = int64(10 * 60 * 1000)
+	DefaultCloudflareRealtimeRequestTimeoutMS = int64(6000)
+	DefaultCloudflareRTKPresetContributor     = "contributor"
+	DefaultCloudflareRTKPresetFacilitator     = "facilitator"
+	DefaultRequestLogs                        = "off"
+	DefaultRequestSampleRate                  = 0.01
+	DefaultR2RequestTimeoutMS                 = int64(10000)
+	DefaultRecordingKMSRequestTimeoutMS       = int64(10000)
+	DefaultTranscriptionControlAudience       = "chalk-control-api"
+	DefaultRedisURL                           = "redis://127.0.0.1:6379/0"
+	DefaultResendTimeoutMS                    = int64(10000)
+	DefaultSessionTTLMS                       = int64(30 * 24 * 60 * 60 * 1000)
+	DefaultRecentAuthSecret                   = "chalk-local-recent-auth-key-32!!"
+	DefaultServiceName                        = "chalk-api"
+	DefaultSlowRequestMS                      = int64(250)
+	DefaultVersion                            = "dev"
 
 	DefaultOAuthStateTTL             = time.Duration(DefaultOAuthStateTTLMS) * time.Millisecond
 	DefaultCloudflareRealtimeTimeout = time.Duration(DefaultCloudflareRealtimeRequestTimeoutMS) * time.Millisecond
@@ -317,36 +292,15 @@ type DeadlineSchedulerConfig struct {
 	Batch    int32
 }
 
-type EpisodeDiagnosticsConfig struct {
-	Mode              string
-	Environment       string
-	ProducerToken     string
-	ServiceToken      EpisodeDiagnosticsServiceTokenConfig
-	HMACKey           []byte
-	AppendDatabase    DatabaseConfig
-	QueryDatabase     DatabaseConfig
-	ReconcileInterval time.Duration
-	RetentionInterval time.Duration
-	ReconcileBatch    int32
-	RetentionBatch    int32
-}
-
-type EpisodeDiagnosticsServiceTokenConfig struct {
-	Issuer           string
-	KeyID            string
-	PrivateKey       ed25519.PrivateKey
-	VerificationKeys map[string]ed25519.PublicKey
-}
-
 type Config struct {
-	API                      APIConfig
-	Auth                     AuthConfig
-	Capabilities             CapabilityConfig
-	CloudflareRealtime       CloudflareRealtimeConfig
-	DefaultMediaPlane        spaces.MediaPlaneProvider
-	Database                 DatabaseConfig
-	DeadlineScheduler        DeadlineSchedulerConfig
-	EpisodeDiagnostics       EpisodeDiagnosticsConfig
+	API                APIConfig
+	Auth               AuthConfig
+	Capabilities       CapabilityConfig
+	CloudflareRealtime CloudflareRealtimeConfig
+	DefaultMediaPlane  spaces.MediaPlaneProvider
+	Database           DatabaseConfig
+	DeadlineScheduler  DeadlineSchedulerConfig
+
 	GoogleOAuth              GoogleOAuthConfig
 	Observability            ObservabilityConfig
 	PublicInvite             PublicInviteConfig
@@ -400,10 +354,7 @@ func Load() (Config, error) {
 	if err := validateDatabaseURL(environment, databaseURL); err != nil {
 		return Config{}, err
 	}
-	episodeDiagnostics, err := loadEpisodeDiagnosticsConfig(environment, databaseURL)
-	if err != nil {
-		return Config{}, err
-	}
+
 	capabilities, err := loadCapabilityConfig(environment)
 	if err != nil {
 		return Config{}, err
@@ -626,9 +577,9 @@ func Load() (Config, error) {
 			MaxConns: maxConns,
 			MinConns: minConns,
 		},
-		DeadlineScheduler:  DeadlineSchedulerConfig{Interval: deadlineSchedulerInterval, Batch: deadlineSchedulerBatch},
-		EpisodeDiagnostics: episodeDiagnostics,
-		GoogleOAuth:        googleOAuth,
+		DeadlineScheduler: DeadlineSchedulerConfig{Interval: deadlineSchedulerInterval, Batch: deadlineSchedulerBatch},
+
+		GoogleOAuth: googleOAuth,
 		Observability: ObservabilityConfig{
 			Environment:          environment,
 			LogFormat:            logFormat,
@@ -765,154 +716,6 @@ func loadCapabilityConfig(environment string) (CapabilityConfig, error) {
 		return CapabilityConfig{}, err
 	}
 	return CapabilityConfig{Recording: recording, Transcription: transcription, WhiteboardFiles: whiteboardFiles}, nil
-}
-
-const (
-	episodeDiagnosticsMinSecretLength   = 32
-	episodeDiagnosticsMaxPoolConns      = int32(100)
-	episodeDiagnosticsMaxIntervalMS     = int64(24 * 60 * 60 * 1000)
-	episodeDiagnosticsMaxReconcileBatch = int32(1000)
-	episodeDiagnosticsMaxRetentionBatch = int32(10000)
-)
-
-func loadEpisodeDiagnosticsConfig(environment string, databaseURL string) (EpisodeDiagnosticsConfig, error) {
-	mode, err := envEnum(EpisodeDiagnosticsMode, EpisodeDiagnosticsModeOff, EpisodeDiagnosticsModeOff, EpisodeDiagnosticsModeLocalhost, EpisodeDiagnosticsModeHosted)
-	if err != nil {
-		return EpisodeDiagnosticsConfig{}, err
-	}
-
-	producerToken := strings.TrimSpace(envOrDefault(EpisodeDiagnosticsProducerToken, ""))
-	hmacKey := strings.TrimSpace(envOrDefault(EpisodeDiagnosticsHMACKey, ""))
-	productionOptIn := envOrDefault(EpisodeDiagnosticsProductionOptIn, "") == "true"
-	serviceToken, err := loadEpisodeDiagnosticsServiceTokenConfig()
-	if err != nil {
-		return EpisodeDiagnosticsConfig{}, err
-	}
-	if err := validateEpisodeDiagnosticsAuth(environment, mode, productionOptIn, producerToken, hmacKey, serviceToken); err != nil {
-		return EpisodeDiagnosticsConfig{}, err
-	}
-
-	appendMaxConns, err := envBoundedInt32(EpisodeDiagnosticsAppendDatabaseMaxConns, DefaultEpisodeDiagnosticsAppendDBMaxConns, 1, episodeDiagnosticsMaxPoolConns)
-	if err != nil {
-		return EpisodeDiagnosticsConfig{}, err
-	}
-	queryMaxConns, err := envBoundedInt32(EpisodeDiagnosticsQueryDatabaseMaxConns, DefaultEpisodeDiagnosticsQueryDBMaxConns, 1, episodeDiagnosticsMaxPoolConns)
-	if err != nil {
-		return EpisodeDiagnosticsConfig{}, err
-	}
-	reconcileInterval, err := envBoundedMilliseconds(EpisodeDiagnosticsReconcileIntervalMS, DefaultEpisodeDiagnosticsReconcileIntervalMS, 1, episodeDiagnosticsMaxIntervalMS)
-	if err != nil {
-		return EpisodeDiagnosticsConfig{}, err
-	}
-	reconcileBatch, err := envBoundedInt32(EpisodeDiagnosticsReconcileBatch, DefaultEpisodeDiagnosticsReconcileBatch, 1, episodeDiagnosticsMaxReconcileBatch)
-	if err != nil {
-		return EpisodeDiagnosticsConfig{}, err
-	}
-	retentionInterval, err := envBoundedMilliseconds(EpisodeDiagnosticsRetentionIntervalMS, DefaultEpisodeDiagnosticsRetentionIntervalMS, 1, episodeDiagnosticsMaxIntervalMS)
-	if err != nil {
-		return EpisodeDiagnosticsConfig{}, err
-	}
-	retentionBatch, err := envBoundedInt32(EpisodeDiagnosticsRetentionBatch, DefaultEpisodeDiagnosticsRetentionBatch, 1, episodeDiagnosticsMaxRetentionBatch)
-	if err != nil {
-		return EpisodeDiagnosticsConfig{}, err
-	}
-
-	return EpisodeDiagnosticsConfig{
-		Mode:              mode,
-		Environment:       episodeDiagnosticsEnvironment(environment),
-		ProducerToken:     producerToken,
-		ServiceToken:      serviceToken,
-		HMACKey:           []byte(hmacKey),
-		AppendDatabase:    DatabaseConfig{URL: databaseURL, MaxConns: appendMaxConns},
-		QueryDatabase:     DatabaseConfig{URL: databaseURL, MaxConns: queryMaxConns},
-		ReconcileInterval: reconcileInterval,
-		RetentionInterval: retentionInterval,
-		ReconcileBatch:    reconcileBatch,
-		RetentionBatch:    retentionBatch,
-	}, nil
-}
-
-func validateEpisodeDiagnosticsAuth(environment string, mode string, productionOptIn bool, producerToken string, hmacKey string, serviceToken EpisodeDiagnosticsServiceTokenConfig) error {
-	serviceConfigured := serviceToken.Issuer != ""
-	switch mode {
-	case EpisodeDiagnosticsModeOff:
-		if producerToken != "" || hmacKey != "" || serviceConfigured {
-			return fmt.Errorf("episode diagnostics credentials must be empty when %s=off", EpisodeDiagnosticsMode)
-		}
-	case EpisodeDiagnosticsModeLocalhost:
-		if environment != DefaultEnvironment {
-			return fmt.Errorf("%s=localhost requires %s=local", EpisodeDiagnosticsMode, APIEnvironment)
-		}
-		if producerToken == "" || len(hmacKey) < episodeDiagnosticsMinSecretLength {
-			return fmt.Errorf("localhost diagnostics require a producer token and an HMAC key of at least %d bytes", episodeDiagnosticsMinSecretLength)
-		}
-		if serviceConfigured {
-			return fmt.Errorf("%s is only supported when %s=hosted", EpisodeDiagnosticsServiceIssuer, EpisodeDiagnosticsMode)
-		}
-	case EpisodeDiagnosticsModeHosted:
-		if environment != "development" && environment != "staging" && !(environment == "production" && productionOptIn) {
-			return fmt.Errorf("%s=hosted requires development, staging, or production opt-in", EpisodeDiagnosticsMode)
-		}
-		if len(hmacKey) < episodeDiagnosticsMinSecretLength || !serviceConfigured {
-			return fmt.Errorf("hosted diagnostics require an HMAC key of at least %d bytes and dedicated service signing configuration", episodeDiagnosticsMinSecretLength)
-		}
-		if producerToken != "" {
-			return fmt.Errorf("%s is only supported when %s=localhost", EpisodeDiagnosticsProducerToken, EpisodeDiagnosticsMode)
-		}
-		issuerURL, err := url.Parse(serviceToken.Issuer)
-		if err != nil || issuerURL.Scheme != "https" || issuerURL.Host == "" || issuerURL.User != nil || issuerURL.RawQuery != "" || issuerURL.Fragment != "" {
-			return fmt.Errorf("%s must be an absolute HTTPS URL without credentials, query, or fragment", EpisodeDiagnosticsServiceIssuer)
-		}
-	}
-	return nil
-}
-
-func loadEpisodeDiagnosticsServiceTokenConfig() (EpisodeDiagnosticsServiceTokenConfig, error) {
-	config := EpisodeDiagnosticsServiceTokenConfig{
-		Issuer: strings.TrimSpace(envOrDefault(EpisodeDiagnosticsServiceIssuer, "")),
-		KeyID:  strings.TrimSpace(envOrDefault(EpisodeDiagnosticsServiceKeyID, "")),
-	}
-	encodedPrivateKey := strings.TrimSpace(envOrDefault(EpisodeDiagnosticsServicePrivateKey, ""))
-	encodedVerificationKeys := strings.TrimSpace(envOrDefault(EpisodeDiagnosticsServiceVerificationKeys, ""))
-	if config.Issuer == "" && config.KeyID == "" && encodedPrivateKey == "" && encodedVerificationKeys == "" {
-		return config, nil
-	}
-	if config.Issuer == "" || config.KeyID == "" || encodedPrivateKey == "" {
-		return EpisodeDiagnosticsServiceTokenConfig{}, fmt.Errorf("%s, %s, and %s must be set together", EpisodeDiagnosticsServiceIssuer, EpisodeDiagnosticsServiceKeyID, EpisodeDiagnosticsServicePrivateKey)
-	}
-	privateKey, err := base64.RawURLEncoding.DecodeString(encodedPrivateKey)
-	if err != nil || len(privateKey) != ed25519.PrivateKeySize {
-		return EpisodeDiagnosticsServiceTokenConfig{}, fmt.Errorf("%s must be an unpadded base64url Ed25519 private key", EpisodeDiagnosticsServicePrivateKey)
-	}
-	config.PrivateKey = append(ed25519.PrivateKey(nil), privateKey...)
-	currentPublicKey := append(ed25519.PublicKey(nil), config.PrivateKey.Public().(ed25519.PublicKey)...)
-	config.VerificationKeys = map[string]ed25519.PublicKey{config.KeyID: currentPublicKey}
-	if encodedVerificationKeys == "" {
-		return config, nil
-	}
-	var keyring map[string]string
-	if err := json.Unmarshal([]byte(encodedVerificationKeys), &keyring); err != nil || len(keyring) == 0 {
-		return EpisodeDiagnosticsServiceTokenConfig{}, fmt.Errorf("%s must be a non-empty JSON object of key IDs to unpadded base64url Ed25519 public keys", EpisodeDiagnosticsServiceVerificationKeys)
-	}
-	for keyID, encoded := range keyring {
-		keyID = strings.TrimSpace(keyID)
-		publicKey, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(encoded))
-		if keyID == "" || err != nil || len(publicKey) != ed25519.PublicKeySize {
-			return EpisodeDiagnosticsServiceTokenConfig{}, fmt.Errorf("%s contains an invalid Ed25519 public key", EpisodeDiagnosticsServiceVerificationKeys)
-		}
-		config.VerificationKeys[keyID] = ed25519.PublicKey(publicKey)
-	}
-	if configuredCurrent, ok := config.VerificationKeys[config.KeyID]; !ok || !configuredCurrent.Equal(currentPublicKey) {
-		return EpisodeDiagnosticsServiceTokenConfig{}, fmt.Errorf("%s must contain the current %s public key", EpisodeDiagnosticsServiceVerificationKeys, EpisodeDiagnosticsServiceKeyID)
-	}
-	return config, nil
-}
-
-func episodeDiagnosticsEnvironment(environment string) string {
-	if environment == DefaultEnvironment {
-		return "localhost"
-	}
-	return environment
 }
 
 func envBoundedInt32(name string, fallback int32, minimum int32, maximum int32) (int32, error) {

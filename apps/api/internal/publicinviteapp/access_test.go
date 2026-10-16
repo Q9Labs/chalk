@@ -51,24 +51,6 @@ func TestApprovedArrivalRejectsChangedParticipantGeneration(t *testing.T) {
 	}
 }
 
-func TestRefreshReplacementIssuesDiagnostics(t *testing.T) {
-	fixture := newAccessFixture(t)
-	access, err := publicinviteapp.NewAccessPort(fixture.config())
-	if err != nil {
-		t.Fatal(err)
-	}
-	grant, err := access.RefreshPublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: fixture.arrival, MediaProof: "expired-proof", ReplaceMediaConnection: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if grant.Diagnostics == nil || grant.Diagnostics.Token != "diagnostic-token" {
-		t.Fatalf("diagnostics = %#v, want issued credential", grant.Diagnostics)
-	}
-	if fixture.plane.createCalls != 1 {
-		t.Fatalf("create joins = %d, want one replacement", fixture.plane.createCalls)
-	}
-}
-
 func TestRefreshReplacementRejectsMissingOrStaleProof(t *testing.T) {
 	fixture := newAccessFixture(t)
 	access, err := publicinviteapp.NewAccessPort(fixture.config())
@@ -88,20 +70,6 @@ func TestRefreshReplacementRejectsMissingOrStaleProof(t *testing.T) {
 	_, err = access.RefreshPublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: fixture.arrival, MediaProof: "stale-proof", ReplaceMediaConnection: true})
 	if !errors.Is(err, publicinvites.ErrMediaProofRejected) {
 		t.Fatalf("stale proof error = %v, want %v", err, publicinvites.ErrMediaProofRejected)
-	}
-}
-
-func TestRefreshReplacementPropagatesDiagnosticsIssuerFailure(t *testing.T) {
-	fixture := newAccessFixture(t)
-	config := fixture.config()
-	config.Diagnostics = failingDiagnosticsIssuer{}
-	access, err := publicinviteapp.NewAccessPort(config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = access.RefreshPublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: fixture.arrival, MediaProof: "proof", ReplaceMediaConnection: true})
-	if !errors.Is(err, publicinvites.ErrAccessUnavailable) {
-		t.Fatalf("issuer error = %v, want %v", err, publicinvites.ErrAccessUnavailable)
 	}
 }
 
@@ -154,7 +122,7 @@ func (f *accessFixture) config() publicinviteapp.AccessConfig {
 	return publicinviteapp.AccessConfig{
 		Episodes: publicJoinStub{result: f.result}, Spaces: publicSpaceStub{tenantID: f.tenant, spaceID: f.space}, Tenants: publicTenantStub{id: f.tenant},
 		MediaResolver: mediaResolverStub{service: &service},
-		SyncTokens:    syncIssuerStub{}, MediaTokens: mediaIssuerStub{}, MediaProofRecovery: f.recovery, Diagnostics: diagnosticsIssuerStub{},
+		SyncTokens:    syncIssuerStub{}, MediaTokens: mediaIssuerStub{}, MediaProofRecovery: f.recovery,
 	}
 }
 
@@ -210,18 +178,6 @@ func (s *proofVerifierStub) Verify(context.Context, string) (accessgrants.Subjec
 }
 func (s *proofVerifierStub) VerifyForRecovery(context.Context, string) (accessgrants.Subject, error) {
 	return s.subject, nil
-}
-
-type diagnosticsIssuerStub struct{}
-
-func (diagnosticsIssuerStub) Issue(context.Context, accessgrants.DiagnosticsSubject) (accessgrants.DiagnosticsCredential, error) {
-	return accessgrants.DiagnosticsCredential{Token: "diagnostic-token", ExpiresAt: time.Now().Add(time.Minute), Generation: 1, IntakePath: "/_internal/episode-diagnostic-events"}, nil
-}
-
-type failingDiagnosticsIssuer struct{}
-
-func (failingDiagnosticsIssuer) Issue(context.Context, accessgrants.DiagnosticsSubject) (accessgrants.DiagnosticsCredential, error) {
-	return accessgrants.DiagnosticsCredential{}, errors.New("diagnostics issuer unavailable")
 }
 
 type mediaPlaneStub struct {

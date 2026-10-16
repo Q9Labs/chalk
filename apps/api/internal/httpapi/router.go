@@ -73,51 +73,51 @@ type Options struct {
 	MediaPlane                 MediaPlaneResolver
 	MediaPublications          mediapublications.Registry
 	ParticipantMediaIssuer     ParticipantMediaIssuer
-	ParticipantDiagnostics     ParticipantDiagnosticsIssuer
-	ParticipantMediaVerify     ParticipantMediaVerifier
-	ParticipantMediaActive     ActiveParticipantAuthorizer
-	ParticipantGeneration      ParticipantGenerationAuthorizer
-	People                     PeopleService
-	Memberships                MembershipService
-	AuditLogs                  AuditLogService
-	RecordingDownloads         RecordingDownloadService
-	RecordingExports           RecordingExportService
-	RecordingObjects           RecordingObjectService
-	Recordings                 RecordingService
-	RecordingPreparations      RecordingPreparationService
-	RecordingEntrance          RecordingEntrancePreparer
-	EntranceInvites            EntranceInviteResolver
-	StatusIngestion            StatusIngestionService
-	StatusSnapshot             StatusSnapshotService
-	Spaces                     SpaceService
-	Episodes                   EpisodeLifecycleService
-	SyncTokens                 SyncTokenIssuer
-	SyncTokenRefresh           SyncTokenRefreshIssuer
-	SessionCookie              SessionCookieOptions
-	TenantAuthz                TenantAuthorizer
-	Tenants                    TenantService
-	Transcripts                TranscriptService
-	TranscriptArtifacts        TranscriptArtifactService
-	TranscriptWorker           TranscriptWorkerService
-	WorkloadAuthorizer         WorkloadAuthorizer
-	ChunkAuthority             ChunkAuthority
-	ManifestAuthority          ManifestAuthority
-	ResultAuthority            ResultAuthority
-	CleanupWorker              CleanupWorkerService
-	CleanupDeleteAuthority     CleanupDeleteAuthority
-	FinalizerWorker            TranscriptFinalizerWorkerService
-	FinalizerAuthority         FinalizerAuthority
-	Users                      UserService
-	Webhooks                   WebhookService
-	ChatAttachments            ChatAttachmentService
-	ChatParticipants           ChatParticipantVerifier
-	WhiteboardFiles            WhiteboardFileService
-	WhiteboardParticipants     WhiteboardParticipantVerifier
-	PublicInvites              PublicInviteService
-	PublicInviteAudits         PublicInviteAuditWriter
+
+	ParticipantMediaVerify ParticipantMediaVerifier
+	ParticipantMediaActive ActiveParticipantAuthorizer
+	ParticipantGeneration  ParticipantGenerationAuthorizer
+	People                 PeopleService
+	Memberships            MembershipService
+	AuditLogs              AuditLogService
+	RecordingDownloads     RecordingDownloadService
+	RecordingExports       RecordingExportService
+	RecordingObjects       RecordingObjectService
+	Recordings             RecordingService
+	RecordingPreparations  RecordingPreparationService
+	RecordingEntrance      RecordingEntrancePreparer
+	EntranceInvites        EntranceInviteResolver
+	StatusIngestion        StatusIngestionService
+	StatusSnapshot         StatusSnapshotService
+	Spaces                 SpaceService
+	Episodes               EpisodeLifecycleService
+	SyncTokens             SyncTokenIssuer
+	SyncTokenRefresh       SyncTokenRefreshIssuer
+	SessionCookie          SessionCookieOptions
+	TenantAuthz            TenantAuthorizer
+	Tenants                TenantService
+	Transcripts            TranscriptService
+	TranscriptArtifacts    TranscriptArtifactService
+	TranscriptWorker       TranscriptWorkerService
+	WorkloadAuthorizer     WorkloadAuthorizer
+	ChunkAuthority         ChunkAuthority
+	ManifestAuthority      ManifestAuthority
+	ResultAuthority        ResultAuthority
+	CleanupWorker          CleanupWorkerService
+	CleanupDeleteAuthority CleanupDeleteAuthority
+	FinalizerWorker        TranscriptFinalizerWorkerService
+	FinalizerAuthority     FinalizerAuthority
+	Users                  UserService
+	Webhooks               WebhookService
+	ChatAttachments        ChatAttachmentService
+	ChatParticipants       ChatParticipantVerifier
+	WhiteboardFiles        WhiteboardFileService
+	WhiteboardParticipants WhiteboardParticipantVerifier
+	PublicInvites          PublicInviteService
+	PublicInviteAudits     PublicInviteAuditWriter
 	// EpisodeDiagnostics owns a diagnostics-only internal boundary. Its zero
 	// value is disabled and therefore does not mount any /_internal route.
-	EpisodeDiagnostics EpisodeDiagnosticsHTTPOptions
+
 }
 
 func NewRouter(options Options) http.Handler {
@@ -138,7 +138,7 @@ func NewRouter(options Options) http.Handler {
 	})
 
 	mountWorkerRoutes(r, options)
-	mountEpisodeDiagnosticsRoutes(r, options)
+
 	mountV1Routes(r, options)
 	r.Get("/healthz", handleHealth)
 	r.Get("/healthz/recorder/capture", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleCapture))
@@ -227,9 +227,6 @@ func enabledStatus(enabled bool) string {
 	return "disabled"
 }
 
-// requireSessionAuthentication keeps tenant API keys out of routes without an
-// explicit tenant-and-scope authorization decision. Recognized API-key values
-// never fall through to user login authentication.
 func requireSessionAuthentication(service AuthenticationService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return rejectTenantAPIKeyCredential(requireAuthentication(service)(next))

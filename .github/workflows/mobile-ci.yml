@@ -10,7 +10,6 @@ on:
       - sdks/typescript/client/**
       - packages/facehash/**
       - packages/whiteboard/**
-      - packages/diagnostics-contracts/**
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
       - package.json
@@ -25,7 +24,6 @@ on:
       - sdks/typescript/client/**
       - packages/facehash/**
       - packages/whiteboard/**
-      - packages/diagnostics-contracts/**
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
       - package.json
