@@ -10,8 +10,6 @@ const checks = [
   { name: "sqlc", command: ["bash", "apps/api/scripts/db-generate.sh", "check"] },
   { name: "Migration LatestVersion", command: ["node", "scripts/codegen/migration-latest-version.mjs"] },
   { name: "Tracker views", command: ["pnpm", "run", "check:tracker"] },
-  // A reviewed baseline, not generated output: `regen` never touches it. It runs here because it is fast.
-  { name: "Language ratchet", command: ["pnpm", "run", "language:ratchet"], fix: "pnpm run language:ratchet:update after review" },
 ];
 
 function run({ name, command, fix }) {

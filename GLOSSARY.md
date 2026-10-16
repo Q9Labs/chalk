@@ -11,10 +11,10 @@ Provenance: the rulings behind every entry, with reasoning and rejected
 candidates, are in git history:
 `git show 3f6d94f9:scratchpad/history/2026-W32.md`. The
 superseded `sdks/ubiquitous-language.md` is deleted; its UI shape catalog
-remains in git history as input for the React-wave design sheet. A CI
-ratchet (per-surface banned-term counts that may only decrease) enforces this
-glossary. Until a count reaches zero the glossary states the target, not the
-present.
+remains in git history as input for the React-wave design sheet. Space and Episode remain the names used in code, API contracts and UI.
+Everyday words such as call, meeting, host, room, lobby and session are allowed
+in user-facing copy when they help people understand the product. There is no
+CI word ban or banned-term baseline.
 
 ## The model
 
@@ -51,7 +51,7 @@ Tenant access until that storage rename wave lands.
 
 ### Space
 
-The durable place where collaboration happens. Replaces Room.
+The durable place where collaboration happens. Its canonical product name is Space.
 
 - Identity: Chalk-minted id plus a slug unique per tenant. Join links target
   the slug and nothing else.
@@ -61,11 +61,11 @@ The durable place where collaboration happens. Replaces Room.
   dormant Space is readable data; nobody is "in" it.
 - Relations: has at most one live Episode at any time. Parallel tracks are
   separate Spaces, never parallel Episodes.
-- Not: a Room, a meeting, a call, a channel.
+- Space is the durable resource; a call or meeting describes activity inside it.
 
 ### Episode
 
-One bounded run of live activity inside a Space. Replaces Session.
+One bounded run of live activity inside a Space. Its canonical product name is Episode.
 
 - Identity: Chalk-minted id, belongs to exactly one Space. Never a join
   target: joining targets the Space, and "join an episode" is never uttered.
@@ -295,8 +295,7 @@ adapter (`CloudflareMediaPlaneAdapter`), reached through the HTTPS API at
 
 ## The internal "sessions", resolved
 
-The four internal abstractions that shared the banned word each have a
-ruled true name:
+These internal abstractions have distinct names so their responsibilities stay clear:
 
 | Old name                      | True name                                                                  |
 | ----------------------------- | -------------------------------------------------------------------------- |
@@ -323,8 +322,8 @@ run, continued across a blip-rejoin within the linger window.
    prerequisite.
 4. **Chalk mirrors identity, never owns it.** Registered identities reference
    the customer's `external_id`; Chalk mints its own primary keys.
-5. **Names go all the way down.** No legacy vocabulary survives at any layer.
-   The only exception is vendored standards at adapter seams.
+5. **Domain names stay consistent.** Space and Episode name those concepts in
+   code, API and UI. Everyday language in surrounding copy is unrestricted.
 
 ## Naming grammar
 
@@ -351,25 +350,18 @@ Every name is a domain root crossed with a layer shape:
   v3 renumbered; legacy v1 and the never-shipped "v2" are deleted), and
   `state_schema_version` is 1.
 
-## Banned terms
+## Legacy domain names
 
-| Term                        | Status                                                                           |
-| --------------------------- | -------------------------------------------------------------------------------- |
-| meeting                     | Dead everywhere: code, infra, docs, and marketing copy                           |
-| room                        | Replaced by Space                                                                |
-| session                     | Replaced by Episode; the five internal "session" abstractions are resolved above |
-| call, conference            | Banned as domain nouns; the platform speaks Space/Episode                        |
-| host, admin                 | Banned as built-in roles; fine as customer-defined role names                    |
-| bot, assistant, AI          | Banned as domain nouns; the identity kind is Agent                               |
-| attendee, peer, actor       | Banned roster nouns; the word is Participant                                     |
-| signal (for availability)   | Banned; the word is Presence                                                     |
-| VideoConference             | Replaced by `<Chalk />`                                                          |
-| pre-join, lobby, green room | Banned; the place is the Entrance                                                |
-| breakout, huddle            | Banned; the branch-off concept is a Spinoff                                      |
-| ring (as a summons)         | Banned as a domain word; the summons is a Buzz                                   |
-| ParticipantAccess           | Replaced by AccessGrant                                                          |
-| ChalkSession                | Replaced by SpaceClient                                                          |
+| Term                      | Status                                             |
+| ------------------------- | -------------------------------------------------- |
+| bot, assistant, AI        | Banned as domain nouns; the identity kind is Agent |
+| attendee, peer, actor     | Banned roster nouns; the word is Participant       |
+| signal (for availability) | Banned; the word is Presence                       |
+| VideoConference           | Replaced by `<Chalk />`                            |
+| breakout, huddle          | Banned; the branch-off concept is a Spinoff        |
+| ring (as a summons)       | Banned as a domain word; the summons is a Buzz     |
+| ParticipantAccess         | Replaced by AccessGrant                            |
+| ChalkSession              | Replaced by SpaceClient                            |
 
-Product-layer names built on top of the platform (a future floor-control
-feature, a future activity aggregate) may carry their own names, but the
-platform vocabulary itself has zero exceptions.
+These mappings describe domain concepts, not forbidden words in user-facing
+copy. Product-layer features may carry their own names.

@@ -15,7 +15,7 @@ fi
 if [[ "${1:-}" == "--fast" ]]; then
   shift
   pnpm run check:tracker
-  exec q9gate run --lane scope --lane format --lane hygiene --lane secrets --lane language-ratchet --lane generated "$@"
+  exec q9gate run --lane scope --lane format --lane hygiene --lane secrets --lane generated "$@"
 fi
 
 pnpm run check:tracker
