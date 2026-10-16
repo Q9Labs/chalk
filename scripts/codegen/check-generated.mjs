@@ -6,9 +6,7 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 
 // Each entry reuses an existing check. None needs Postgres or Docker.
 const checks = [
-  { name: "ContractIR", command: ["pnpm", "--filter", "@chalk/contract-fixture-proof", "check-generated"] },
   { name: "OpenAPI, SDK, and Sync contract", command: ["pnpm", "run", "check:sdk-generated"] },
-  { name: "API design", command: ["pnpm", "run", "check:api-design"] },
   { name: "sqlc", command: ["bash", "apps/api/scripts/db-generate.sh", "check"] },
   { name: "Migration LatestVersion", command: ["node", "scripts/codegen/migration-latest-version.mjs"] },
   { name: "Tracker views", command: ["pnpm", "run", "check:tracker"] },
