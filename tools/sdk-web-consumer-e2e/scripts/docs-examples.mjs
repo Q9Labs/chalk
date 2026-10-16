@@ -98,16 +98,7 @@ export declare const request: { body: Parameters<ChalkServerClient["participants
       if (!["ts", "tsx", "typescript"].includes(language)) continue;
       const source = match[2];
       const ast = ts.createSourceFile("example.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-      const declared = new Set();
-      for (const statement of ast.statements) {
-        if (ts.isImportDeclaration(statement)) {
-          const clause = statement.importClause;
-          if (clause?.name) declared.add(clause.name.text);
-          if (clause?.namedBindings && ts.isNamedImports(clause.namedBindings)) for (const element of clause.namedBindings.elements) declared.add(element.name.text);
-        } else if (ts.isVariableStatement(statement)) {
-          for (const declaration of statement.declarationList.declarations) if (ts.isIdentifier(declaration.name)) declared.add(declaration.name.text);
-        } else if (statement.name && ts.isIdentifier(statement.name)) declared.add(statement.name.text);
-      }
+      const declared = new Set(ast.statements.flatMap((statement) => statementBindings(ts, statement)));
       const imports = bindings.filter((name) => !declared.has(name));
       const code = `import { ${imports.join(", ")} } from "./inputs";\n${source}`;
       const name = `${path.replaceAll("/", "_").replace(/\.[^.]+$/, "")}-${block}.tsx`;
@@ -118,4 +109,18 @@ export declare const request: { body: Parameters<ChalkServerClient["participants
   await writeFile(join(consumer, "docs-tsconfig.json"), JSON.stringify({ extends: "./tsconfig.json", include: ["docs-examples/**/*.ts", "docs-examples/**/*.tsx"] }));
   await run("pnpm", ["exec", "tsc", "--project", "docs-tsconfig.json"], consumer);
   process.stdout.write(`[packed-docs] ${count} TypeScript/TSX examples from ${paths.length} public docs files passed against packed SDKs\n`);
+}
+
+function statementBindings(ts, statement) {
+  if (ts.isImportDeclaration(statement)) {
+    const clause = statement.importClause;
+    const names = clause?.name ? [clause.name.text] : [];
+    const named = clause?.namedBindings;
+    if (named && ts.isNamedImports(named)) names.push(...named.elements.map((element) => element.name.text));
+    return names;
+  }
+  if (ts.isVariableStatement(statement)) {
+    return statement.declarationList.declarations.flatMap((declaration) => (ts.isIdentifier(declaration.name) ? [declaration.name.text] : []));
+  }
+  return statement.name && ts.isIdentifier(statement.name) ? [statement.name.text] : [];
 }
