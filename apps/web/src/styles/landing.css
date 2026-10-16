@@ -65,28 +65,6 @@ body:has(.site) {
   text-align: center;
 }
 
-/* Scoped, unlike the rest of this file: `.eyebrow` is also a dashboard class,
-   and dashboard.css is imported after this one. Without the `.site` prefix the
-   app's small-caps mono label wins on both surfaces. */
-.site .eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 20px;
-  padding: 6px 14px 6px 11px;
-  border-radius: var(--radius-pill);
-  background: var(--brand-wash);
-  color: var(--brand-ink);
-  font-size: 13.5px;
-  font-weight: 700;
-  letter-spacing: -0.005em;
-}
-
-.site .eyebrow svg {
-  flex: none;
-  color: var(--brand-ink);
-}
-
 .sec-head h2 {
   font-size: clamp(32px, 3.6vw, 46px);
   letter-spacing: -0.035em;
@@ -238,42 +216,6 @@ body:has(.site) {
   text-align: center;
 }
 
-/* The one link above the headline. It is a real destination, not an ornament,
-   so it is sized and coloured as something you are meant to click. */
-.hero-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px 6px 16px;
-  border: 1px solid var(--site-line);
-  border-radius: var(--radius-pill);
-  background: var(--site-paper);
-  box-shadow: 0 1px 2px rgba(10, 13, 12, 0.05);
-  color: var(--site-ink-2);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.hero-badge b {
-  color: var(--brand-ink);
-  font-weight: 700;
-}
-
-.hero-badge span {
-  display: grid;
-  width: 22px;
-  height: 22px;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--site-paper-2);
-  color: var(--site-ink-2);
-  transition: transform 160ms var(--ease-out);
-}
-
-.hero-badge:hover span {
-  transform: translateX(2px);
-}
-
 .hero h1 {
   max-width: 15ch;
   margin: 26px auto 0;
@@ -297,30 +239,6 @@ body:has(.site) {
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 30px;
-}
-
-.hero-proof {
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 10px 28px;
-  margin: 28px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.hero-proof li {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--site-ink-2);
-  font-size: 14.5px;
-  font-weight: 600;
-}
-
-.hero-proof svg {
-  flex: none;
-  color: var(--brand-ink);
 }
 
 /* ===== the hero illustration ============================================= */

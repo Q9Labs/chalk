@@ -33,7 +33,11 @@ export function durationLabel(episode: DashboardEpisode): string {
   if (!episode.ended_at) return "History";
   const duration = Math.max(0, new Date(episode.ended_at).getTime() - new Date(episode.started_at).getTime());
   const minutes = Math.round(duration / 60000);
-  return minutes < 1 ? "Less than a minute" : `${minutes} min`;
+  if (minutes < 1) return "Less than a minute";
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours} h ${rest} min` : `${hours} h`;
 }
 
 export function humanizeReason(value: string): string {

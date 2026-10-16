@@ -234,8 +234,6 @@ export function EpisodesPage({
       <header className="dashboard-page-header resource-heading episodes-page-header">
         <div>
           <h1>Episodes</h1>
-          <p>Tenant-wide history of the bounded runs that move work forward.</p>
-          <p className="episodes-prerequisite-note">Starting an Episode is optional. Joining a Space can begin one automatically.</p>
         </div>
         <button className="dashboard-button primary episodes-start-button" type="button" onClick={openCreate} disabled={activeSpaces.length === 0 || listState === "loading"}>
           <Icon name="plus" />
@@ -264,7 +262,6 @@ export function EpisodesPage({
             <option value="ended">Ended</option>
           </select>
         </label>
-        <span className="episodes-filter-summary">{spaceFilter ? "Space history · pagination" : "Tenant-wide history"}</span>
       </div>
 
       {listState === "loading" ? <EpisodeListLoading /> : null}
@@ -273,10 +270,6 @@ export function EpisodesPage({
       {listState === "ready" && spaces.length > 0 && visibleEpisodes.length === 0 ? <EpisodeEmptyState filtered={statusFilter !== "all" || Boolean(spaceFilter) || activeSpaces.length === 0} onStart={openCreate} /> : null}
       {listState === "ready" && visibleEpisodes.length > 0 ? (
         <section className="episode-list-panel" aria-label="Episodes">
-          <div className="episode-list-heading">
-            <span>{spaceFilter ? "Episodes in this Space" : "All Spaces"}</span>
-            <span>{visibleEpisodes.length} shown</span>
-          </div>
           <div className="episode-table-scroll">
             <table className="episode-table">
               <thead>
@@ -284,7 +277,7 @@ export function EpisodesPage({
                   <th scope="col">Space</th>
                   <th scope="col">Started</th>
                   <th scope="col">Status</th>
-                  <th scope="col">Timing</th>
+                  <th scope="col">Length</th>
                   <th scope="col">
                     <span className="sr-only">Actions</span>
                   </th>
@@ -297,11 +290,7 @@ export function EpisodesPage({
                     <tr className={`episode-status-${episode.status} ${episode.id === selectedEpisodeID ? "is-selected" : ""}`} key={episode.id}>
                       <th scope="row">
                         <button className="episode-name-button" type="button" onClick={() => selectEpisode(episode)} aria-label={`View details for ${space?.name ?? "Space"} Episode`}>
-                          <span className="episode-status-mark" aria-hidden="true" />
-                          <span>
-                            <strong>{space?.name ?? "Space"}</strong>
-                            <code>{space?.slug ?? "Space slug unavailable"}</code>
-                          </span>
+                          <strong>{space?.name ?? "Space"}</strong>
                         </button>
                       </th>
                       <td>
@@ -316,12 +305,9 @@ export function EpisodesPage({
                       <td>{episode.status === "active" ? `Ends ${formatDateTime(episode.deadline_at)}` : episode.end_reason ? humanizeReason(episode.end_reason) : durationLabel(episode)}</td>
                       <td>
                         <div className="episode-row-actions">
-                          <button className="dashboard-button secondary" type="button" onClick={() => selectEpisode(episode)}>
-                            View details
-                          </button>
-                          {space && !space.archived ? (
-                            <a className="dashboard-button primary" href={spaceHrefBuilder(space)}>
-                              Join Space
+                          {space && !space.archived && episode.status === "active" ? (
+                            <a className="dashboard-button secondary" href={spaceHrefBuilder(space)} aria-label={`Join ${space.name}`}>
+                              Join
                             </a>
                           ) : null}
                         </div>

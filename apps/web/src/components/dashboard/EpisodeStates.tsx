@@ -1,13 +1,10 @@
-import { Icon } from "./DashboardShell";
+import { openNewSpaceDialog } from "./DashboardShell";
 import type { DashboardPagination } from "../../lib/dashboard-api";
 
 export function EpisodeListLoading() {
   return (
     <section className="episode-list-panel episode-list-loading" aria-live="polite" aria-busy="true">
-      <div className="episode-list-heading">
-        <span>Loading Episodes</span>
-        <span>One moment</span>
-      </div>
+      <span className="sr-only">Loading Episodes…</span>
       <div className="episode-loading-row" />
       <div className="episode-loading-row" />
       <div className="episode-loading-row" />
@@ -18,11 +15,7 @@ export function EpisodeListLoading() {
 export function EpisodeErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <section className="episode-state episode-state-error" role="alert">
-      <span className="episode-state-icon" aria-hidden="true">
-        <Icon name="activity" />
-      </span>
-      <p className="eyebrow">Could not load history</p>
-      <h2>Episodes are temporarily unavailable.</h2>
+      <h2>Episodes could not load.</h2>
       <p>{message}</p>
       <button className="dashboard-button secondary" type="button" onClick={onRetry}>
         Try again
@@ -34,15 +27,11 @@ export function EpisodeErrorState({ message, onRetry }: { message: string; onRet
 export function NoSpacesState() {
   return (
     <section className="episode-state episode-state-empty">
-      <span className="episode-state-icon" aria-hidden="true">
-        <Icon name="spaces" />
-      </span>
-      <p className="eyebrow">No Spaces yet</p>
-      <h2>Create a Space before starting an Episode.</h2>
-      <p>Episodes belong to a Space and capture the configuration that was active when the run began.</p>
-      <a className="dashboard-button primary" href="/spaces">
-        Create a Space
-      </a>
+      <h2>No Spaces yet.</h2>
+      <p>An Episode starts when someone joins a Space. Create a Space first.</p>
+      <button className="dashboard-button primary" type="button" onClick={openNewSpaceDialog}>
+        New Space
+      </button>
     </section>
   );
 }
@@ -50,12 +39,8 @@ export function NoSpacesState() {
 export function EpisodeEmptyState({ filtered, onStart }: { filtered: boolean; onStart: () => void }) {
   return (
     <section className="episode-state episode-state-empty">
-      <span className="episode-state-icon" aria-hidden="true">
-        <Icon name="episodes" />
-      </span>
-      <p className="eyebrow">{filtered ? "No matching history" : "No Episodes yet"}</p>
-      <h2>{filtered ? "Try another filter." : "Your first Episode starts with a Space."}</h2>
-      <p>{filtered ? "Nothing in the current history matches those filters. The Episode itself is never edited after it ends." : "Starting is optional—someone joining an authorized Space can begin an Episode automatically."}</p>
+      <h2>{filtered ? "No Episodes match these filters." : "No Episodes yet."}</h2>
+      <p>{filtered ? "Change the Space or status filter to see more." : "An Episode starts when someone joins a Space, and it appears here."}</p>
       {!filtered ? (
         <button className="dashboard-button secondary" type="button" onClick={onStart}>
           Start and join

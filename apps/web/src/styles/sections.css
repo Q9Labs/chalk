@@ -203,18 +203,6 @@
   text-align: center;
 }
 
-.point-icon {
-  display: inline-grid;
-  width: 42px;
-  height: 42px;
-  place-items: center;
-  border: 1px solid var(--site-line);
-  border-radius: var(--radius-md);
-  background: var(--site-paper);
-  box-shadow: 0 1px 2px rgba(10, 13, 12, 0.04);
-  color: var(--brand-ink);
-}
-
 .point h3 {
   margin-top: 16px;
   font-size: 17px;
@@ -242,32 +230,6 @@
 
 .speed-stat {
   padding: clamp(24px, 2.6vw, 32px);
-}
-
-.speed-stat-icon {
-  display: grid;
-  width: 40px;
-  height: 40px;
-  place-items: center;
-  border-radius: var(--radius-md);
-}
-
-/* The tint is the only thing separating the three cards, so it carries a real
-   difference: three budgets on three different planes, not one number printed
-   three times. */
-.speed-stat-blue .speed-stat-icon {
-  background: #e2eefb;
-  color: #2f5f8c;
-}
-
-.speed-stat-green .speed-stat-icon {
-  background: var(--brand-wash-strong);
-  color: var(--brand);
-}
-
-.speed-stat-yellow .speed-stat-icon {
-  background: #fbf0d5;
-  color: #7d6218;
 }
 
 .speed-stat strong {
@@ -386,16 +348,6 @@
 
 .capability-group {
   padding: clamp(20px, 2vw, 26px);
-}
-
-.capability-icon {
-  display: grid;
-  width: 40px;
-  height: 40px;
-  place-items: center;
-  border-radius: var(--radius-md);
-  background: var(--brand-wash);
-  color: var(--brand-ink);
 }
 
 .capability-group h3 {

@@ -1,4 +1,3 @@
-import ServerStack01Icon from "@hugeicons/core-free-icons/ServerStack01Icon";
 import Tick02Icon from "@hugeicons/core-free-icons/Tick02Icon";
 
 import { Icon } from "./Icon";
@@ -15,10 +14,6 @@ export function SelfHost() {
     <section className="band band-tint" id="self-host">
       <div className="container">
         <header className="sec-head">
-          <span className="eyebrow">
-            <Icon glyph={ServerStack01Icon} size={15} weight={2} />
-            Portability
-          </span>
           <h2>
             The parts you would want to replace <span className="muted">are the parts we made replaceable.</span>
           </h2>

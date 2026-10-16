@@ -1,6 +1,5 @@
 import ArrowRight02Icon from "@hugeicons/core-free-icons/ArrowRight02Icon";
 import DashboardSquare01Icon from "@hugeicons/core-free-icons/DashboardSquare01Icon";
-import DoorIcon from "@hugeicons/core-free-icons/DoorIcon";
 import SourceCodeIcon from "@hugeicons/core-free-icons/SourceCodeIcon";
 
 import { Icon } from "./Icon";
@@ -101,10 +100,6 @@ export function FrontDoors() {
     <section className="band" id="product">
       <div className="container">
         <header className="sec-head">
-          <span className="eyebrow">
-            <Icon glyph={DoorIcon} size={15} weight={2} />
-            Two ways in
-          </span>
           <h2>
             Sign in, <span className="muted">or npm install.</span>
           </h2>
@@ -149,7 +144,7 @@ export function FrontDoors() {
               <h3>Drop a Space into your own product.</h3> <p>One component renders the whole surface. When you want a different shape, the same client gives you hooks for participants, chat, media, and capabilities.</p>
             </div>
             <div className="bento-actions">
-              <a href="/sdk-preview" className="btn btn-primary">
+              <a href="/docs" className="btn btn-primary">
                 Explore the SDK
                 <Icon glyph={ArrowRight02Icon} size={16} weight={2.2} />
               </a>

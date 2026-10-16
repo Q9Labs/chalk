@@ -7,6 +7,13 @@ import { DashboardSidebar } from "./DashboardSidebar";
 import { NewSpaceDialog } from "./NewSpaceDialog";
 import { DashboardFeedbackDialog } from "./FeedbackDialog";
 
+const newSpaceEvent = "chalk:new-space";
+
+/** Opens the shell's New Space dialog from any dashboard page. */
+export function openNewSpaceDialog() {
+  window.dispatchEvent(new Event(newSpaceEvent));
+}
+
 export function DashboardShell() {
   const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
@@ -22,8 +29,13 @@ export function DashboardShell() {
       event.preventDefault();
       setCreateOpen(true);
     };
+    const openFromPage = () => setCreateOpen(true);
     window.addEventListener("keydown", openCreateDialog);
-    return () => window.removeEventListener("keydown", openCreateDialog);
+    window.addEventListener(newSpaceEvent, openFromPage);
+    return () => {
+      window.removeEventListener("keydown", openCreateDialog);
+      window.removeEventListener(newSpaceEvent, openFromPage);
+    };
   }, []);
 
   return (
@@ -36,7 +48,7 @@ export function DashboardShell() {
         <DashboardSidebar pathname={pathname} onCreateSpace={() => setCreateOpen(true)} onOpenFeedback={() => setFeedbackOpen(true)} />
 
         <SidebarInset id="dashboard-content">
-          <DashboardMobileHeader onCreateSpace={() => setCreateOpen(true)} />
+          <DashboardMobileHeader />
           <Outlet />
         </SidebarInset>
 
@@ -59,7 +71,7 @@ export function DashboardShell() {
 }
 
 /** Only mounts below the sidebar's drawer breakpoint, where the rail is unavailable. */
-function DashboardMobileHeader({ onCreateSpace }: { onCreateSpace: () => void }) {
+function DashboardMobileHeader() {
   const { isMobile } = useSidebar();
   if (!isMobile) return null;
 
@@ -70,19 +82,16 @@ function DashboardMobileHeader({ onCreateSpace }: { onCreateSpace: () => void })
         <Logo accessibilityLabel={null} color="currentColor" height={22} motion="orbit-burst" variant="mark" />
         <span>Chalk</span>
       </Link>
-      <button className="dashboard-mobile-create" type="button" onClick={onCreateSpace}>
-        New Space
-      </button>
     </header>
   );
 }
 
-export function ResourcePageHeader({ title, description, actionLabel, onAction }: { title: string; description: string; actionLabel: string; onAction: () => void }) {
+export function ResourcePageHeader({ title, description, actionLabel, onAction }: { title: string; description?: string; actionLabel: string; onAction: () => void }) {
   return (
     <header className="dashboard-page-header resource-heading">
       <div>
         <h1>{title}</h1>
-        <p>{description}</p>
+        {description ? <p>{description}</p> : null}
       </div>
       <button className="dashboard-button primary" type="button" onClick={onAction}>
         <Icon name="plus" />

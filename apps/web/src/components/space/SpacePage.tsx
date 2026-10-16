@@ -26,6 +26,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
   const initialDisplayName = useMemo(() => new URLSearchParams(globalThis.location?.search ?? "").get("name") ?? "", []);
   const entranceDeviceDefaults = useMemo(() => (dashboardSpaceEntryUsesDevicesOff() ? { microphone: false, camera: false } : { microphone: true, camera: true }), []);
   const [displayName, setDisplayName] = useState(reloadMarker?.displayName ?? initialDisplayName);
+  const [dashboardSpaceName, setDashboardSpaceName] = useState<string>();
   const [entranceSettings, setEntranceSettings] = useState<EntranceSettings | null>(reloadMarker ? { displayName: reloadMarker.displayName, microphone: reloadMarker.microphone, camera: reloadMarker.camera } : null);
   const [spaceAccess, setSpaceAccess] = useState<JoinedSpaceAccess | null>(null);
   const [pending, setPending] = useState<PendingArrival | null>(null);
@@ -60,6 +61,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
       const page = await listSpaces({ tenantID, cursor, pageSize: 100 });
       const space = page.spaces.find((candidate) => candidate.slug === slug);
       if (space) {
+        setDashboardSpaceName(space.name);
         await prepareDashboardEntrance(tenantID, space.id, journey);
         return;
       }
@@ -257,7 +259,7 @@ export function SpacePage({ slug, navigatePublicSpace = replacePublicSpaceHistor
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
       <Entrance
-        spaceName={slug ?? "Space"}
+        spaceName={dashboardSpaceName ?? slug ?? "Space"}
         defaultDisplayName={displayName}
         defaults={entranceSettings ?? defaultEntranceSettings}
         selectedAudioInput={entranceSettings?.audioInputDeviceId}
@@ -332,17 +334,17 @@ async function replacePublicSpaceHistory(_canonicalSlug: string, inviteLink: str
 async function prepareDashboardSpace(slug: string, displayName: string, journey: ReturnType<typeof useWebTelemetry>["journey"], reload?: ReloadRejoinMarker): Promise<DashboardPreparation> {
   const tenantID = reload?.tenantId ?? (await resolveTenantID());
   if (!tenantID) throw new Error(neutralSpaceError);
-  const [access, spaceDescription] = await Promise.all([reload ? joinDashboardSpace(tenantID, slug, displayName, journey, reload) : joinDashboardSpace(tenantID, slug, displayName, journey), findSpaceDescription(tenantID, slug).catch(() => undefined)]);
+  const [access, space] = await Promise.all([reload ? joinDashboardSpace(tenantID, slug, displayName, journey, reload) : joinDashboardSpace(tenantID, slug, displayName, journey), findDashboardSpace(tenantID, slug).catch(() => undefined)]);
   clearDashboardSpaceEntry();
-  return { kind: "dashboard", access: { credential: access.credential, getAccess: access.getAccess, reloadMarker: access.reloadMarker, spaceDescription, finish: access.leave }, inviteLink: access.inviteLink, spaceName: slug };
+  return { kind: "dashboard", access: { credential: access.credential, getAccess: access.getAccess, reloadMarker: access.reloadMarker, spaceDescription: space?.description, finish: access.leave }, inviteLink: access.inviteLink, spaceName: space?.name ?? slug };
 }
 
-async function findSpaceDescription(tenantID: string, slug: string): Promise<string | undefined> {
+async function findDashboardSpace(tenantID: string, slug: string): Promise<{ readonly name: string; readonly description?: string } | undefined> {
   let cursor: string | undefined;
   do {
     const page = await listSpaces({ tenantID, cursor, pageSize: 100 });
     const space = page.spaces.find((candidate) => candidate.slug === slug);
-    if (space) return descriptionFromMetadata(space.metadata);
+    if (space) return { name: space.name, description: descriptionFromMetadata(space.metadata) };
     cursor = page.pagination.has_more ? (page.pagination.next_cursor ?? undefined) : undefined;
   } while (cursor);
   return undefined;

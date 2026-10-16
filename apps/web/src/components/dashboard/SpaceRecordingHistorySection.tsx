@@ -276,13 +276,10 @@ export function SpaceRecordingHistorySection({ tenantID, spaceID, client = defau
 
   return (
     <section className="space-detail-episodes" aria-labelledby="space-artifact-history-heading">
-      <div className="space-detail-section-heading">
-        <div>
-          <p className="eyebrow">Episode history</p>
-          <h2 id="space-artifact-history-heading">Captures, transcripts, and video</h2>
-          <p>Read a completed transcript independently. Video is prepared only when you watch or download it.</p>
-        </div>
-      </div>
+      <h2 className="sr-only" id="space-artifact-history-heading">
+        Recordings
+      </h2>
+      <p className="space-detail-recordings-note">Video is prepared only when you watch or download it.</p>
       {actionError ? (
         <p className="space-detail-inline-error" role="alert">
           {actionError}

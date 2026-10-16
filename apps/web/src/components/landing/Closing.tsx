@@ -20,7 +20,6 @@ const FOOTER_COLUMNS = [
     title: "Developers",
     links: [
       { href: "/docs", label: "Documentation" },
-      { href: "/sdk-preview", label: "SDK preview" },
       { href: "#self-host", label: "Self-host" },
       { href: "/status", label: "Status" },
     ],
@@ -52,7 +51,7 @@ export function Closing() {
                 Create an account
                 <Icon glyph={ArrowRight02Icon} size={17} weight={2.2} />
               </a>
-              <a href="/sdk-preview" className="btn btn-secondary btn-lg">
+              <a href="/docs" className="btn btn-secondary btn-lg">
                 Explore the SDK
               </a>
             </div>

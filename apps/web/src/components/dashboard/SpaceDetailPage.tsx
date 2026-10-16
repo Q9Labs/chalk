@@ -22,7 +22,7 @@ import { SpaceDialogActions, SpaceDialogError, SpaceDialogFrame, useModalDialog 
 import { SpaceLifecycleDialog } from "./SpaceLifecycleDialog";
 import { SpaceRecordingHistorySection } from "./SpaceRecordingHistorySection";
 import { defaultSpaceHrefBuilder, episodeHistoryHref, publicSpaceHrefBuilder } from "./space-links";
-import { formatDateTime, formatJSON, statusLabel } from "./episode-utils";
+import { formatDateTime, statusLabel } from "./episode-utils";
 
 export type SpaceDetailClient = {
   getSpace: (input: { tenantID: string; spaceID: string }) => Promise<Space>;
@@ -264,34 +264,20 @@ export function SpaceDetailPage({ tenantID, spaceID, transcriptionCeiling, clien
   const admissionMode = readAdmissionMode(space.admission_policy);
   return (
     <div className="dashboard-page resource-page space-detail-page">
-      <nav className="space-detail-breadcrumb" aria-label="Breadcrumb">
-        <a href="/spaces">Spaces</a>
-        <span aria-hidden="true">/</span>
-        <span aria-current="page">{space.name}</span>
-      </nav>
+      <a className="space-detail-back" href="/spaces">
+        <span aria-hidden="true">←</span> Spaces
+      </a>
 
       <header className="space-detail-header">
         <div className="space-detail-title">
           <h1>{space.name}</h1>
-          <div className="space-detail-identity">
-            <code>{space.slug}</code>
-            <span className={`space-detail-status ${archived ? "is-archived" : "is-active"}`}>
-              <span aria-hidden="true" />
-              {archived ? "Archived" : "Active"}
-            </span>
-          </div>
-          <p className="space-detail-status-copy">{archived ? "New joins are paused. History remains readable." : "Ready to join. Participants can enter this Space."}</p>
+          {archived ? <p className="space-detail-status-copy">Archived. Nobody can join until you restore it.</p> : null}
         </div>
         <div className="space-detail-actions" aria-label="Space actions">
           {!archived ? (
-            <>
-              <a className="dashboard-button primary" href={defaultSpaceHrefBuilder(space)}>
-                Join Space
-              </a>
-              <a className="dashboard-button secondary" href={`/space/${encodeURIComponent(space.slug)}?entry=dashboard&devices=off`}>
-                Join with mic and camera off
-              </a>
-            </>
+            <a className="dashboard-button primary" href={defaultSpaceHrefBuilder(space)}>
+              Join Space
+            </a>
           ) : null}
           <button className="dashboard-button secondary" type="button" onClick={() => setEditOpen(true)}>
             Edit
@@ -301,22 +287,6 @@ export function SpaceDetailPage({ tenantID, spaceID, transcriptionCeiling, clien
           </button>
         </div>
       </header>
-
-      <section className="space-detail-overview" aria-labelledby="space-overview-heading">
-        <div className="space-detail-section-heading">
-          <div>
-            <h2 id="space-overview-heading">Space overview</h2>
-          </div>
-          <span className="space-detail-slug-label">/{space.slug}</span>
-        </div>
-        <dl className="space-detail-definition-grid">
-          <DefinitionCard label="Admission mode" value={admissionLabel(space.admission_policy)} />
-          <DefinitionCard label="Media plane" value={mediaPlaneLabel(space.media_plane)} />
-          <DefinitionCard label="Default Episode duration" value={durationLabel(space.default_episode_duration_seconds)} />
-          <DefinitionCard label="Maximum Episode duration" value={durationLabel(space.maximum_episode_duration_seconds)} />
-          <DefinitionCard label="Linger window" value={durationLabel(space.linger_window_seconds, true)} />
-        </dl>
-      </section>
 
       <PublicInvitePanel
         state={publicInviteState}
@@ -357,14 +327,6 @@ export function SpaceDetailPage({ tenantID, spaceID, transcriptionCeiling, clien
       </section>
 
       <SpaceRecordingHistorySection spaceID={spaceID} tenantID={tenantID} />
-
-      <details className="space-detail-advanced">
-        <summary>Advanced configuration</summary>
-        <div className="space-detail-advanced-body">
-          <p>Raw policies and metadata are kept here for troubleshooting. Expand only when you need the underlying values.</p>
-          <pre>{formatJSON({ metadata: space.metadata, recurring_policy: space.recurring_policy, admission_policy: space.admission_policy, roles: space.roles })}</pre>
-        </div>
-      </details>
 
       <EditSpaceDialog open={editOpen} tenantID={tenantID} transcriptionCeiling={transcriptionCeiling} space={space} onClose={() => setEditOpen(false)} onSaved={replaceSpace} />
       <SpaceLifecycleDialog open={lifecycle !== null} tenantID={tenantID} space={space} action={lifecycle ?? "archive"} onClose={() => setLifecycle(null)} onChanged={replaceSpace} />
@@ -467,7 +429,7 @@ function PublicInvitePanel({
       <PanelStateMessages
         headingID="space-public-link-heading"
         heading="Public link"
-        description="Share this link with people outside your Tenant when you want them to enter this Space."
+        description="Anyone with this link can join this Space."
         state={state}
         loadingMessage="Loading public link…"
         archivedMessage="Public links are unavailable while this Space is archived."
@@ -482,7 +444,9 @@ function PublicInvitePanel({
         <div className="space-detail-public-invite-body">
           {publicInviteURL(invite) ? (
             <div className="space-detail-public-link-field">
-              <label htmlFor="space-public-link">Public URL</label>
+              <label className="sr-only" htmlFor="space-public-link">
+                Public link
+              </label>
               <div className="space-detail-public-link-controls">
                 <input id="space-public-link" readOnly value={publicInviteURL(invite)} />
                 <button
@@ -500,28 +464,27 @@ function PublicInvitePanel({
               </div>
             </div>
           ) : (
-            <p className="space-detail-inline-state">The server has not materialized a public URL for this Space yet.</p>
+            <p className="space-detail-inline-state">This Space has no public link yet.</p>
           )}
 
-          <div className="space-detail-public-invite-meta">
-            <span className={`space-detail-public-invite-status ${invite?.enabled ? "is-enabled" : "is-disabled"}`} role="status">
-              {invite?.enabled ? "Enabled" : "Disabled"}
-            </span>
-            {invite?.generation ? <span>Generation {invite.generation}</span> : null}
-          </div>
+          {invite?.enabled ? null : (
+            <p className="space-detail-inline-state" role="status">
+              This link is turned off. Nobody can join with it until you turn it on.
+            </p>
+          )}
 
           <div className="space-detail-public-invite-actions" aria-label="Public link actions">
             {invite?.enabled ? (
               <button className="dashboard-button secondary" type="button" onClick={onDisable} disabled={mutation !== null}>
-                {mutation === "disable" ? "Disabling…" : "Disable link"}
+                {mutation === "disable" ? "Turning off…" : "Turn off link"}
               </button>
             ) : (
               <button className="dashboard-button secondary" type="button" onClick={onEnable} disabled={mutation !== null}>
-                {mutation === "enable" ? "Re-enabling…" : "Re-enable link"}
+                {mutation === "enable" ? "Turning on…" : "Turn on link"}
               </button>
             )}
             <button className="dashboard-button secondary" type="button" onClick={onRotate} disabled={mutation !== null}>
-              Rotate link
+              Reset link
             </button>
           </div>
 
@@ -624,12 +587,12 @@ function RotatePublicInviteDialog({ open, spaceName, busy, error, onClose, onCon
         onConfirm();
       }}
     >
-      <h2>Rotate public link?</h2>
-      <p className="dialog-intro">The current link will stop working as soon as you rotate it. Anyone using the old link must receive the new one.</p>
+      <h2>Reset public link?</h2>
+      <p className="dialog-intro">The current link stops working right away. Send the new link to anyone who still needs to join.</p>
       <p className="fixture-note">
         <strong>{spaceName}</strong>
       </p>
-      <SpaceDialogActions onClose={onClose} disabled={busy} busyLabel={busy ? "Rotating…" : undefined} submitLabel="Rotate link" />
+      <SpaceDialogActions onClose={onClose} disabled={busy} busyLabel={busy ? "Resetting…" : undefined} submitLabel="Reset link" />
       <SpaceDialogError message={error} />
     </SpaceDialogFrame>
   );
@@ -671,20 +634,6 @@ function RecentEpisodesTable({ episodes }: { episodes: DashboardEpisode[] }) {
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function DefinitionCard({ label, value, detail }: { label: string; value: string; detail?: string }) {
-  return (
-    <div className="space-detail-definition-card">
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-      {detail ? (
-        <small>
-          <code>{detail}</code>
-        </small>
-      ) : null}
     </div>
   );
 }
@@ -744,28 +693,4 @@ function readAdmissionMode(value: unknown): "open" | "knock" | "members_only" | 
   if (!value || typeof value !== "object" || !("mode" in value)) return undefined;
   const mode = value.mode;
   return mode === "open" || mode === "knock" || mode === "members_only" ? mode : undefined;
-}
-
-function admissionLabel(value: unknown): string {
-  const mode = value && typeof value === "object" && "mode" in value ? (value as { mode?: unknown }).mode : undefined;
-  if (mode === "knock") return "Ask to join";
-  if (mode === "members_only") return "Members only";
-  if (mode === "open") return "Tenant access";
-  return value === null || value === undefined ? "Default" : "Custom";
-}
-
-function mediaPlaneLabel(value: string): string {
-  if (value === "cf_rtk") return "Cloudflare RealtimeKit";
-  if (value === "cf_sfu") return "Cloudflare Realtime SFU";
-  return value || "Not configured";
-}
-
-function durationLabel(value: number | null | undefined, zeroAsNone = false): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "Not set";
-  if (value === 0 && zeroAsNone) return "None";
-  if (value < 60) return `${value} seconds`;
-  if (value % 86_400 === 0) return `${value / 86_400} day${value === 86_400 ? "" : "s"}`;
-  if (value % 3_600 === 0) return `${value / 3_600} hour${value === 3_600 ? "" : "s"}`;
-  if (value % 60 === 0) return `${value / 60} minutes`;
-  return `${value} seconds`;
 }

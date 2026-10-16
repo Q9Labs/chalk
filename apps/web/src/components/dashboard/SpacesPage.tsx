@@ -58,7 +58,7 @@ export function SpacesPage({ tenantID, transcriptionCeiling, transcriptionDefaul
       })
       .catch((cause: unknown) => {
         if (!active) return;
-        setError(cause instanceof DashboardAPIError ? cause.message : "The Spaces inventory could not load.");
+        setError(cause instanceof DashboardAPIError ? cause.message : "Your Spaces could not load.");
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -109,12 +109,7 @@ export function SpacesPage({ tenantID, transcriptionCeiling, transcriptionDefaul
     return (
       <div className="dashboard-page resource-page">
         <div className="contract-state">
-          <span>
-            <Icon name="spaces" />
-          </span>
-          <p className="eyebrow">Tenant context needed</p>
-          <h1>Select a Tenant to see its Spaces.</h1>
-          <p>Space identity and access are always scoped to the selected Tenant.</p>
+          <h1>Choose a workspace to see its Spaces.</h1>
         </div>
       </div>
     );
@@ -122,7 +117,7 @@ export function SpacesPage({ tenantID, transcriptionCeiling, transcriptionDefaul
 
   return (
     <div className="dashboard-page resource-page">
-      <ResourcePageHeader title="Spaces" description="Places for recurring Episodes, Members, and shared context." actionLabel="New Space" onAction={() => setCreateOpen(true)} />
+      <ResourcePageHeader title="Spaces" actionLabel="New Space" onAction={() => setCreateOpen(true)} />
 
       {createdSpace ? (
         <div className="space-created-notice" role="status">
@@ -159,12 +154,12 @@ export function SpacesPage({ tenantID, transcriptionCeiling, transcriptionDefaul
 
       {loading ? <SpaceListState label="Loading Spaces…" /> : null}
       {!loading && error ? <SpaceErrorState message={error} onRetry={() => setReloadNonce((current) => current + 1)} /> : null}
-      {!loading && !error && visibleSpaces.length === 0 ? <SpaceEmptyState archived={filter === "archived"} searching={Boolean(query.trim())} hasMore={hasMore} loadingMore={loadingMore} onCreate={() => setCreateOpen(true)} onLoadMore={() => void loadMore()} /> : null}
+      {!loading && !error && visibleSpaces.length === 0 ? <SpaceEmptyState archived={filter === "archived"} searching={Boolean(query.trim())} hasMore={hasMore} loadingMore={loadingMore} onLoadMore={() => void loadMore()} /> : null}
       {!loading && !error && visibleSpaces.length > 0 ? (
         <>
           <div className="space-list" aria-live="polite">
-            {visibleSpaces.map((space, index) => (
-              <SpaceListItem key={space.id} space={space} accent={accentFor(index)} spaceHrefBuilder={spaceHrefBuilder} onEdit={() => setEditSpace(space)} onArchive={() => setLifecycle({ space, action: "archive" })} onRestore={() => setLifecycle({ space, action: "restore" })} />
+            {visibleSpaces.map((space) => (
+              <SpaceListItem key={space.id} space={space} spaceHrefBuilder={spaceHrefBuilder} onEdit={() => setEditSpace(space)} onArchive={() => setLifecycle({ space, action: "archive" })} onRestore={() => setLifecycle({ space, action: "restore" })} />
             ))}
           </div>
           <SpaceLoadMoreButton hasMore={hasMore} loadingMore={loadingMore} onLoadMore={() => void loadMore()} />
@@ -188,33 +183,23 @@ export function SpacesPage({ tenantID, transcriptionCeiling, transcriptionDefaul
   );
 }
 
-function SpaceListItem({ space, accent, spaceHrefBuilder, onEdit, onArchive, onRestore }: { space: Space; accent: "green" | "blue" | "yellow" | "pink"; spaceHrefBuilder: SpaceHrefBuilder; onEdit: () => void; onArchive: () => void; onRestore: () => void }) {
+function SpaceListItem({ space, spaceHrefBuilder, onEdit, onArchive, onRestore }: { space: Space; spaceHrefBuilder: SpaceHrefBuilder; onEdit: () => void; onArchive: () => void; onRestore: () => void }) {
   const archived = space.archived;
   return (
-    <article className={`space-list-item accent-${accent} ${archived ? "is-archived" : ""}`}>
-      <a className="space-list-primary-link" href={dashboardSpaceHref(space)} aria-label={`View details for ${space.name}`}>
-        <span className="space-glyph" aria-hidden="true">
-          {space.name.slice(0, 1).toUpperCase()}
-        </span>
+    <article className={`space-list-item ${archived ? "is-archived" : ""}`}>
+      <a className="space-list-primary-link" href={dashboardSpaceHref(space)}>
         <span className="space-list-copy">
           <h2>{space.name}</h2>
-          <code>{space.slug}</code>
         </span>
       </a>
-      <div className="space-list-state">
-        <span className={archived ? "status-idle" : "status-live"}>{archived ? "Archived" : "Ready to join"}</span>
-        <small>{archived ? "New joins paused" : "Dormant until an Episode starts"}</small>
-      </div>
+      <div className="space-list-state">{archived ? <span>Archived</span> : null}</div>
       <time dateTime={space.updated_at}>{relativeDate(space.updated_at)}</time>
       <div className="space-row-actions">
         {!archived ? (
-          <a className="dashboard-button primary" href={spaceHrefBuilder(space)}>
-            Join Space
+          <a className="dashboard-button secondary" href={spaceHrefBuilder(space)} aria-label={`Join ${space.name}`}>
+            Join
           </a>
         ) : null}
-        <a className="dashboard-button secondary" href={dashboardSpaceHref(space)}>
-          View details
-        </a>
         <details className="space-row-menu">
           <summary aria-label={`More actions for ${space.name}`}>
             <Icon name="dots" />
@@ -242,9 +227,6 @@ function SpaceListItem({ space, accent, spaceHrefBuilder, onEdit, onArchive, onR
 function SpaceListState({ label }: { label: string }) {
   return (
     <div className="contract-state" role="status">
-      <span>
-        <Icon name="spaces" />
-      </span>
       <p>{label}</p>
     </div>
   );
@@ -253,11 +235,7 @@ function SpaceListState({ label }: { label: string }) {
 function SpaceErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <div className="contract-state" role="alert">
-      <span>
-        <Icon name="activity" />
-      </span>
-      <p className="eyebrow">Spaces unavailable</p>
-      <h2>We could not load your Spaces.</h2>
+      <h2>Your Spaces could not load.</h2>
       <p>{message}</p>
       <button type="button" className="dashboard-button secondary" onClick={onRetry}>
         Try again
@@ -266,16 +244,12 @@ function SpaceErrorState({ message, onRetry }: { message: string; onRetry: () =>
   );
 }
 
-function SpaceEmptyState({ archived, searching, hasMore, loadingMore, onCreate, onLoadMore }: { archived: boolean; searching: boolean; hasMore: boolean; loadingMore: boolean; onCreate: () => void; onLoadMore: () => void }) {
+function SpaceEmptyState({ archived, searching, hasMore, loadingMore, onLoadMore }: { archived: boolean; searching: boolean; hasMore: boolean; loadingMore: boolean; onLoadMore: () => void }) {
   if (searching) {
     return (
       <div className="contract-state">
-        <span>
-          <Icon name="spaces" />
-        </span>
-        <p className="eyebrow">{hasMore ? "More Spaces available" : "No matching Spaces"}</p>
-        <h2>{hasMore ? "No match on this page." : "Try another search."}</h2>
-        <p>{hasMore ? "Load the next page to keep searching this Tenant." : "No Space name or slug matches this search."}</p>
+        <h2>{hasMore ? "No match on this page." : "No Spaces match this search."}</h2>
+        {hasMore ? <p>Load more Spaces to keep searching.</p> : null}
         <SpaceLoadMoreButton hasMore={hasMore} loadingMore={loadingMore} onLoadMore={onLoadMore} />
       </div>
     );
@@ -283,17 +257,8 @@ function SpaceEmptyState({ archived, searching, hasMore, loadingMore, onCreate, 
 
   return (
     <div className="contract-state">
-      <span>
-        <Icon name="spaces" />
-      </span>
-      <p className="eyebrow">{archived ? "No archived Spaces" : "A calm place to start"}</p>
-      <h2>{archived ? "Nothing is archived." : "Create your first Space."}</h2>
-      <p>{archived ? "Archived Spaces remain readable and can be restored whenever the work returns." : "Spaces are durable homes for Episodes and the people who carry them forward."}</p>
-      {!archived ? (
-        <button type="button" className="dashboard-button primary" onClick={onCreate}>
-          Create a Space
-        </button>
-      ) : null}
+      <h2>{archived ? "No archived Spaces." : "No Spaces yet."}</h2>
+      <p>{archived ? "Spaces you archive appear here, and you can restore them at any time." : "A Space gives you one link that people use to join."}</p>
     </div>
   );
 }
@@ -305,10 +270,6 @@ function SpaceLoadMoreButton({ hasMore, loadingMore, onLoadMore }: { hasMore: bo
       {loadingMore ? "Loading…" : "Load more Spaces"}
     </button>
   );
-}
-
-function accentFor(index: number): "green" | "blue" | "yellow" | "pink" {
-  return (["green", "blue", "yellow", "pink"] as const)[index % 4]!;
 }
 
 function relativeDate(value: string): string {

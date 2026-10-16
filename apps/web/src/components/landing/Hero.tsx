@@ -1,18 +1,9 @@
 import ArrowRight02Icon from "@hugeicons/core-free-icons/ArrowRight02Icon";
-import Link01Icon from "@hugeicons/core-free-icons/Link01Icon";
-import PackageIcon from "@hugeicons/core-free-icons/PackageIcon";
-import ServerStack01Icon from "@hugeicons/core-free-icons/ServerStack01Icon";
 import { useState, type FormEvent } from "react";
 
 import { Icon } from "./Icon";
 import { Illustration } from "./Illustration";
 import { resolveSpaceInviteLink } from "./invite-link";
-
-const PROOF = [
-  { id: "link", icon: Link01Icon, label: "One link that never expires" },
-  { id: "self-host", icon: ServerStack01Icon, label: "Self-host the whole thing" },
-  { id: "sdk", icon: PackageIcon, label: "React and React Native SDK" },
-] as const;
 
 // React and React Native share one mark, and one mark is what they get: the
 // same logo drawn twice reads as a mistake, not as two platforms.
@@ -74,19 +65,11 @@ export function Hero() {
     <>
       <section className="hero">
         <div className="container">
-          <a className="hero-badge" href="/sdk-preview">
-            <b>New</b>
-            Put a Space inside your own product
-            <span>
-              <Icon glyph={ArrowRight02Icon} size={14} weight={2.2} />
-            </span>
-          </a>
-
           <h1>
             Every call ends. <span className="muted">The Space doesn&rsquo;t.</span>
           </h1>
 
-          <p className="hero-sub">Chalk gives a team, or a product you are building, a space that outlasts the call. Video, chat, whiteboard, and files stay put between calls — on our infrastructure or on yours.</p>
+          <p className="hero-sub">Chalk gives a team, or a product you are building, a space that outlasts the call. Video, chat, whiteboard, and files stay put between calls, on our infrastructure or on yours.</p>
 
           <div className="hero-ctas">
             <a href="/space" className="btn btn-primary btn-lg">
@@ -97,15 +80,6 @@ export function Hero() {
               See how it works
             </a>
           </div>
-
-          <ul className="hero-proof">
-            {PROOF.map((proof) => (
-              <li key={proof.id}>
-                <Icon glyph={proof.icon} size={17} weight={2} />
-                {proof.label}
-              </li>
-            ))}
-          </ul>
 
           <div className="hero-stage">
             <div className="hero-frame">
