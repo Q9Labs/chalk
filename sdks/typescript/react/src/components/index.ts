@@ -44,5 +44,5 @@ export { Entrance } from "./entrance/Entrance";
 export type { EntranceProps, EntranceSettings } from "./entrance/Entrance";
 export { Logo } from "./logo/Logo";
 export type { LogoMotion, LogoProps, LogoVariant } from "./logo/Logo";
-export type { ThemeAppearance, ThemeMode, ThemePalette, ThemeSkin, ThemeTexture } from "./theme";
+export type { ThemeAppearance, ThemeMode, ThemePalette, ThemeTexture } from "./theme";
 export { COSMIC_CHALK_THEME } from "../theme";

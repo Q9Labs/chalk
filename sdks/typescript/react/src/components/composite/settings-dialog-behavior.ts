@@ -5,8 +5,7 @@ import { useMediaQuery, usePrefersReducedMotion } from "../../internal/useMediaQ
 import { getParticipantThemeVariables } from "../../utils/colorGenerator";
 import { Message01Icon, Microphone01Icon, Monitor01Icon } from "../../utils/icons";
 import { resolvePortalThemeFromDocument } from "../../utils/theme";
-import { getThemeMode, isDarkThemePalette, type ThemeMode, type ThemePalette, type ThemeSkin, type ThemeTexture } from "../theme";
-import { useSkin } from "../skin-context";
+import { getThemeMode, isDarkThemePalette, type ThemeMode, type ThemePalette, type ThemeTexture } from "../theme";
 import type { BackgroundEffect } from "./BackgroundEffectsPicker";
 
 export type SettingsSectionId = "audio-video" | "audio" | "video" | "appearance" | "experience";
@@ -34,7 +33,7 @@ export interface SettingsDialogValue {
   appearance: {
     layout: string;
     theme: "light" | "dark" | "system";
-    skin?: ThemeSkin;
+
     palette?: ThemePalette;
     texture?: ThemeTexture;
     gradient: "default" | "darker";
@@ -114,9 +113,9 @@ export const SETTINGS_SECTIONS = [
   {
     id: "appearance",
     label: "Appearance",
-    description: "Skin, palette, texture, avatars",
+    description: "Palette, texture, avatars",
     icon: Monitor01Icon,
-    keywords: ["theme", "skin", "classic", "chalk", "palette", "texture", "paper", "slate", "motion", "dark", "light", "color", "avatar", "facehash", "generated", "initials", "fun"],
+    keywords: ["theme", "palette", "texture", "paper", "slate", "motion", "dark", "light", "color", "avatar", "facehash", "generated", "initials", "fun"],
   },
   {
     id: "experience",
@@ -173,7 +172,7 @@ interface SettingsDialogBehaviorOptions {
 interface SettingsDialogBehavior {
   readonly disableMotion: boolean;
   readonly isDesktop: boolean;
-  readonly resolvedSkin: ThemeSkin;
+
   readonly resolvedPalette: ThemePalette;
   readonly resolvedTexture: ThemeTexture;
   readonly resolvedTheme: ThemeMode;
@@ -197,8 +196,7 @@ export function useSettingsDialogBehavior({ isOpen, settings, audioInputDevices,
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const disableMotion = prefersReducedMotion || reducedMotion;
   const fallbackPalette: ThemePalette = settings.appearance.theme === "dark" || (settings.appearance.theme === "system" && portalTheme === "dark") ? "warm-charcoal" : "light";
-  const inheritedSkin = useSkin();
-  const resolvedSkin = settings.appearance.skin ?? inheritedSkin;
+
   const resolvedPalette = settings.appearance.palette ?? fallbackPalette;
   const resolvedTexture = settings.appearance.texture ?? "none";
   const resolvedTheme = getThemeMode(resolvedPalette);
@@ -268,7 +266,6 @@ export function useSettingsDialogBehavior({ isOpen, settings, audioInputDevices,
   return {
     disableMotion,
     isDesktop,
-    resolvedSkin,
     resolvedPalette,
     resolvedTexture,
     resolvedTheme,

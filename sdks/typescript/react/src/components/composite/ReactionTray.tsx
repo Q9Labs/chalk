@@ -3,8 +3,6 @@ import React, { useCallback, useEffect, useRef } from "react";
 import { useHaptics } from "../../internal/useHaptics";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
-import { ChalkPanel } from "../chalk-ui";
-import { useSkin } from "../skin-context";
 
 export interface ReactionTrayProps {
   readonly reactions: readonly string[];
@@ -19,7 +17,6 @@ export interface ReactionTrayProps {
  * emojis, Home/End jump, Escape and clicking outside close. Focus lands on the first emoji.
  */
 export function ReactionTray({ reactions, onSelect, onClose, position = "top", className }: ReactionTrayProps): React.JSX.Element {
-  const skin = useSkin();
   const prefersReducedMotion = usePrefersReducedMotion();
   const { trigger } = useHaptics();
   const listRef = useRef<HTMLDivElement>(null);
@@ -62,7 +59,7 @@ export function ReactionTray({ reactions, onSelect, onClose, position = "top", c
       onClick={() => handleSelect(emoji)}
       className={cn(
         "grid h-11 w-11 shrink-0 place-items-center rounded-full text-[26px] leading-none transition-transform duration-150 ease-out focus-visible:outline-none active:scale-95",
-        skin === "classic" ? "hover:bg-[var(--chalk-app-control-hover)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]" : "hover:bg-[var(--chalk-app-control-hover)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]",
+        "hover:bg-[var(--chalk-app-control-hover)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]",
         !prefersReducedMotion && "hover:-translate-y-1 hover:scale-125 focus-visible:-translate-y-1 focus-visible:scale-125",
       )}
       aria-label={`React with ${emoji}`}
@@ -76,7 +73,7 @@ export function ReactionTray({ reactions, onSelect, onClose, position = "top", c
   return (
     <>
       <div className="fixed inset-0 z-20" onClick={onClose} aria-hidden="true" />
-      {skin === "classic" ? (
+      {
         <div
           ref={listRef}
           className={cn(trayClassName, "flex items-center gap-0.5 rounded-full bg-[var(--chalk-app-panel)] p-1.5 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-control)] ring-1 ring-[var(--chalk-app-line)]")}
@@ -86,11 +83,7 @@ export function ReactionTray({ reactions, onSelect, onClose, position = "top", c
         >
           {buttons}
         </div>
-      ) : (
-        <ChalkPanel ref={listRef} filled className={cn(trayClassName, "rounded-full")} contentClassName="flex items-center gap-0.5 p-1.5" role="toolbar" aria-label="Reactions" onKeyDown={handleKeyDown} seed="reaction-tray">
-          {buttons}
-        </ChalkPanel>
-      )}
+      }
     </>
   );
 }

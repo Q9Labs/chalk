@@ -1,10 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { useCan, useParticipants, useSpaceClient } from "../../bindings/hooks";
 import { Cancel01Icon, UserAdd01Icon } from "../../utils/icons";
 import { Avatar } from "../atomic";
 import { cn } from "../../utils/cn";
 import { ChalkBadge, ChalkButton, ChalkIconButton, ChalkPanel, ChalkSpinner } from "../chalk-ui";
-import { useSkin } from "../skin-context";
 import { ClassicAdmissionPanel } from "./ClassicAdmissionPanel";
 
 export interface AdmissionParticipant {
@@ -131,31 +129,8 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
 
 AdmissionPanelSurface.displayName = "AdmissionPanelSurface";
 
-function ChalkAdmissionPanel(props: AdmissionPanelProps): React.JSX.Element {
-  const client = useSpaceClient();
-  const participantsSlice = useParticipants();
-  const canManageAdmission = useCan("manageAdmission");
-  const participants = canManageAdmission ? participantsSlice.admissionQueue.map((request) => ({ id: request.requestId, displayName: request.displayName })) : [];
-
-  return (
-    <AdmissionPanelSurface
-      {...props}
-      participants={participants}
-      onAdmit={(requestId) => void client.participants.admit(requestId)}
-      onDeny={(requestId) => void client.participants.deny(requestId)}
-      onAdmitAll={() => {
-        for (const participant of participants) void client.participants.admit(participant.id);
-      }}
-      onDenyAll={() => {
-        for (const participant of participants) void client.participants.deny(participant.id);
-      }}
-    />
-  );
-}
-
 export function AdmissionPanel(props: AdmissionPanelProps): React.JSX.Element {
-  const skin = useSkin();
-  return skin === "classic" ? <ClassicAdmissionPanel {...props} /> : <ChalkAdmissionPanel {...props} />;
+  return <ClassicAdmissionPanel {...props} />;
 }
 
 AdmissionPanel.displayName = "AdmissionPanel";

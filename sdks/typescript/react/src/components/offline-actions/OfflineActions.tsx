@@ -6,7 +6,6 @@ import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
 import { WifiOffIcon } from "../../utils/icons";
 import { ChalkBackdrop, ChalkButton, ChalkCheckbox, ChalkDialogPanel } from "../chalk-ui";
-import { useSkin } from "../skin-context";
 import { useOfflineActionsPolicy } from "./offline-actions-policy";
 
 const ACTION_LABELS = { hand_raise: "Raise hand", hand_lower: "Lower hand" } as const;
@@ -42,7 +41,7 @@ export function OfflineNotice({ pendingCount }: { readonly pendingCount: number 
 /** Asks whether to send or discard the actions that waited while the user was offline. */
 export function OfflineDecisionDialog({ actions, now, onSend, onDiscard }: { readonly actions: readonly OfflineAction[]; readonly now: number; readonly onSend: (remember: boolean) => void; readonly onDiscard: (remember: boolean) => void }): React.JSX.Element {
   const prefersReducedMotion = usePrefersReducedMotion();
-  const skin = useSkin();
+
   const [remember, setRemember] = useState(false);
   const sendRef = useRef<HTMLButtonElement>(null);
 
@@ -80,7 +79,7 @@ export function OfflineDecisionDialog({ actions, now, onSend, onDiscard }: { rea
           <ChalkButton variant="outline" className="!h-11 flex-1" onClick={() => onDiscard(remember)}>
             Discard actions
           </ChalkButton>
-          <ChalkButton ref={sendRef} variant="solid" tone="accent" className={cn("!h-11 flex-1", skin === "classic" && "!text-[var(--chalk-accent-text,#fff)]")} onClick={() => onSend(remember)}>
+          <ChalkButton ref={sendRef} variant="solid" tone="accent" className={cn("!h-11 flex-1", "!text-[var(--chalk-accent-text,#fff)]")} onClick={() => onSend(remember)}>
             Send actions
           </ChalkButton>
         </div>

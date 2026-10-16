@@ -3,12 +3,10 @@
 import type { ReactNode } from "react";
 
 import { cn } from "../../utils/cn";
-import { ChalkPanel } from "../chalk-ui";
 import { SpaceHeader, type SpaceHeaderProps } from "../space-header/SpaceHeader";
-import { getThemeMode, type ThemePalette, type ThemeSkin, type ThemeTexture } from "../theme";
+import { getThemeMode, type ThemePalette, type ThemeTexture } from "../theme";
 
 export interface SpacePresentationProps {
-  readonly skin: ThemeSkin;
   readonly palette: ThemePalette;
   readonly texture: ThemeTexture;
   readonly stageBackground: boolean;
@@ -30,24 +28,16 @@ export interface SpacePresentationProps {
  * Presentation-only Space chrome shared by the live controller and deterministic
  * Recording projection. Networking, device effects and commands stay in callers.
  */
-export function SpacePresentation({ skin, palette, texture, stageBackground, header, stage, controls, compactControls, stageOverlay, sidebar, mediaOutput, overlays, dialogs, renderToken, interactive = true, className }: SpacePresentationProps): React.JSX.Element {
-  const stageSurface =
-    skin === "classic" ? (
-      <section className={cn("min-h-0 min-w-0 flex-1 overflow-hidden rounded-[10px]", stageBackground ? "chalk-textured-surface bg-[var(--chalk-app-stage)]" : "bg-transparent")} aria-label="Space stage">
-        {stage}
-      </section>
-    ) : (
-      <section className="min-h-0 min-w-0 flex-1 overflow-hidden" aria-label="Space stage">
-        <ChalkPanel filled={stageBackground} className={cn("h-full min-h-0 rounded-none p-0", stageBackground ? "bg-[var(--chalk-app-stage)]" : "bg-transparent")} contentClassName="h-full min-h-0" seed="space-stage-shell">
-          {stage}
-        </ChalkPanel>
-      </section>
-    );
+export function SpacePresentation({ palette, texture, stageBackground, header, stage, controls, compactControls, stageOverlay, sidebar, mediaOutput, overlays, dialogs, renderToken, interactive = true, className }: SpacePresentationProps): React.JSX.Element {
+  const stageSurface = (
+    <section className={cn("min-h-0 min-w-0 flex-1 overflow-hidden rounded-[10px]", stageBackground ? "chalk-textured-surface bg-[var(--chalk-app-stage)]" : "bg-transparent")} aria-label="Space stage">
+      {stage}
+    </section>
+  );
 
   return (
     <main
       data-chalk
-      data-chalk-skin={skin}
       data-chalk-theme={getThemeMode(palette)}
       data-chalk-palette={palette}
       data-chalk-texture={texture}

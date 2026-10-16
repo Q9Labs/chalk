@@ -6,7 +6,6 @@ import type { EpisodeSummary } from "@q9labsai/chalk-client";
 
 import { CheckmarkCircle02Icon, Clock01Icon, Radio01Icon, UserGroupIcon } from "../../utils/icons";
 import { ChalkBadge, ChalkButton, ChalkPanel } from "../chalk-ui";
-import { useSkin } from "../skin-context";
 
 export type StatusSurfacePhase = "leaving" | "left" | "episode-ended" | "failed";
 
@@ -27,7 +26,6 @@ export interface StatusSurfaceProps {
 
 /** The shared lifecycle status surface used by Chalk and its preview adapter. */
 export function StatusSurface({ message, onRetry, phase = "failed", spaceName, episode, endedAt, durationSeconds, participantCount, retryPending = false, retryError }: StatusSurfaceProps): React.JSX.Element {
-  const skin = useSkin();
   const isExitSummary = phase === "left" || phase === "episode-ended";
   const title = phase === "left" ? "You left this Space" : phase === "episode-ended" ? "Episode ended" : null;
   const canShowEpisodeDetails = isExitSummary && Boolean(episode?.id || episode?.startedAt || endedAt || (durationSeconds !== undefined && durationSeconds !== null) || (participantCount !== undefined && participantCount !== null));
@@ -35,7 +33,7 @@ export function StatusSurface({ message, onRetry, phase = "failed", spaceName, e
   const retryLabel = "Try again";
 
   return (
-    <main data-chalk-skin={skin} data-chalk-status={phase} className="grid h-full min-h-0 place-items-center bg-[var(--chalk-canvas)] p-6 text-[var(--chalk-text)]">
+    <main data-chalk-status={phase} className="grid h-full min-h-0 place-items-center bg-[var(--chalk-canvas)] p-6 text-[var(--chalk-text)]">
       <ChalkPanel className="w-full max-w-lg text-center" contentClassName="grid justify-items-center gap-5">
         {isExitSummary ? (
           <ChalkBadge tone={phase === "episode-ended" ? "accent" : "success"} className="!h-14 !w-14 !rounded-full !p-0 text-[var(--chalk-accent-text)]">

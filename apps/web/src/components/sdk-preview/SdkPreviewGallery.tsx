@@ -18,7 +18,6 @@ import {
   type SettingsDialogValue,
   type SpaceLayout,
   type ThemePalette,
-  type ThemeSkin,
   type ThemeTexture,
   type Toast,
 } from "@q9labsai/chalk-react/preview";
@@ -42,11 +41,10 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
   const [diagnosticsToastVisible, setDiagnosticsToastVisible] = useState(false);
   const searchRef = useRef(search);
   searchRef.current = search;
-  const skin: ThemeSkin = search.skin;
   const mappedPalette: ThemePalette = productionPalette(search.palette);
   const mappedTexture: ThemeTexture = productionTexture(search.texture);
-  const entranceTheme = mappedPalette === "cosmic-chalk" ? { ...COSMIC_CHALK_THEME, skin, palette: mappedPalette, texture: mappedTexture } : { skin, palette: mappedPalette, texture: mappedTexture };
-  const [settings, setSettings] = useState<SettingsDialogValue>(() => ({ ...INITIAL_SETTINGS, appearance: { ...INITIAL_SETTINGS.appearance, layout: search.layout, skin, palette: mappedPalette, texture: mappedTexture } }));
+  const entranceTheme = mappedPalette === "cosmic-chalk" ? { ...COSMIC_CHALK_THEME, palette: mappedPalette, texture: mappedTexture } : { palette: mappedPalette, texture: mappedTexture };
+  const [settings, setSettings] = useState<SettingsDialogValue>(() => ({ ...INITIAL_SETTINGS, appearance: { ...INITIAL_SETTINGS.appearance, layout: search.layout, palette: mappedPalette, texture: mappedTexture } }));
   const participants = useMemo(() => participantsForCount(search.participants, search), [search]);
   const panel = panelFor(search);
   const effectiveLayout: SpaceLayout = search.stage === "whiteboard" ? "focus" : search.layout;
@@ -152,10 +150,10 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
 
   useEffect(() => {
     setSettings((current) => {
-      if (current.appearance.layout === search.layout && current.appearance.skin === skin && current.appearance.palette === mappedPalette && current.appearance.texture === mappedTexture) return current;
-      return { ...current, appearance: { ...current.appearance, layout: search.layout, skin, palette: mappedPalette, texture: mappedTexture } };
+      if (current.appearance.layout === search.layout && current.appearance.palette === mappedPalette && current.appearance.texture === mappedTexture) return current;
+      return { ...current, appearance: { ...current.appearance, layout: search.layout, palette: mappedPalette, texture: mappedTexture } };
     });
-  }, [mappedPalette, mappedTexture, search.layout, skin]);
+  }, [mappedPalette, mappedTexture, search.layout]);
   useEffect(() => {
     if (search.dialog !== "settings") setKeepAppearanceOpen(false);
   }, [search.dialog]);
@@ -170,10 +168,8 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
   };
   const updateAppearance = (updates: Partial<SettingsDialogValue["appearance"]>) => {
     updateSettings("appearance", updates);
-    if (updates.skin) setKeepAppearanceOpen(true);
     patch({
       ...(updates.layout === "focus" || updates.layout === "grid" || updates.layout === "presentation" ? { layout: updates.layout } : {}),
-      ...(updates.skin === "classic" || updates.skin === "chalk" ? { skin: updates.skin } : {}),
       ...(updates.palette ? { palette: updates.palette } : {}),
       ...(updates.texture ? { texture: updates.texture } : {}),
     });
@@ -254,7 +250,6 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
         client={previewClient}
         spaceName={SPACE_NAME}
         logoUrl="/brand/chalk/chalk-logo.svg"
-        skin={skin}
         palette={mappedPalette}
         texture={mappedTexture}
         stageBackground={search.stageBackground}

@@ -127,7 +127,7 @@ async function main(): Promise<void> {
         locale: "en",
         timeZone: "UTC",
         fontAssetIds: [],
-        theme: { colorScheme: args.colorScheme, skin: "classic", palette: args.colorScheme === "dark" ? "warm-charcoal" : "light", texture: "none", stageBackground: true, generatedAvatars: true },
+        theme: { skin: "classic", colorScheme: args.colorScheme, palette: args.colorScheme === "dark" ? "warm-charcoal" : "light", texture: "none", stageBackground: true, generatedAvatars: true },
       },
       space: { id: SPACE_ID, name: "Weekly design review" },
       view: { layout: "grid", sidebar: "chat" },

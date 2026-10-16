@@ -1,5 +1,3 @@
-export { ChalkChrome } from "./ChalkChrome";
-export type { ChalkChromeProps } from "./ChalkChrome";
 export { ChalkButton } from "./ChalkButton";
 export type { ChalkButtonProps } from "./ChalkButton";
 export { ChalkIconButton } from "./ChalkIconButton";
@@ -40,4 +38,4 @@ export { ChalkEmptyState } from "./ChalkEmptyState";
 export type { ChalkEmptyStateProps } from "./ChalkEmptyState";
 export { ChalkSpinner } from "./ChalkSpinner";
 export type { ChalkSpinnerProps } from "./ChalkSpinner";
-export type { ChalkButtonVariant, ChalkSeed, ChalkTone } from "./common";
+export type { ChalkButtonVariant, ChalkTone } from "./common";

@@ -10,7 +10,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent
 
 import { PREVIEW_CONTROL_TABS, readPreviewControlTab, readPreviewDockSide, storePreviewControlTab, storePreviewDockSide, type PreviewControlTab, type PreviewDockSide } from "./preview-chrome-preferences";
 import { AccessSection, LookSection, MediaSection, SpaceSection, StatesSection } from "./preview-control-sections";
-import { paletteLabel, skinLabel, stateLabel, viewLabel } from "./preview-labels";
+import { paletteLabel, stateLabel, viewLabel } from "./preview-labels";
 import { createPreviewHref, DEFAULT_PREVIEW_SEARCH, ENTRANCE_STATES, SPACE_STATES, type PreviewSearch, type PreviewSearchPatch, type PreviewState } from "./preview-state";
 
 interface PreviewGalleryToolbarProps {
@@ -160,7 +160,7 @@ export function PreviewGalleryToolbar({ search, onChange }: PreviewGalleryToolba
 
   const previousState = stepState(search, -1);
   const nextState = stepState(search, 1);
-  const summary = `${search.participants} participants · ${search.layout} · ${skinLabel(search.skin)} · ${paletteLabel(search.palette)}`;
+  const summary = `${search.participants} participants · ${search.layout} · ${paletteLabel(search.palette)}`;
 
   return (
     <div className={`${wrapperClassName} pointer-events-none`}>

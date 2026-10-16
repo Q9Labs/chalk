@@ -1,7 +1,6 @@
 # Third-party notices
 
-Parts of the deterministic rough-path and chalk-texture implementation are
-adapted from Drawably/Chalkably.
+Some UI primitives were adapted from Drawably/Chalkably.
 
 MIT License
 

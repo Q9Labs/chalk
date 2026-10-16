@@ -4,7 +4,6 @@ import { Loading01Icon, Microphone01Icon, MicrophoneOff01Icon, Video01Icon, Vide
 import { cn } from "../../utils/cn";
 import { ControlBarButton } from "../atomic";
 import { useHaptics } from "../../internal/useHaptics";
-import { useSkin } from "../skin-context";
 import type { DevicePopoverProps } from "./DevicePopover";
 
 export const ClassicDevicePopover = ({
@@ -25,7 +24,6 @@ export const ClassicDevicePopover = ({
   size = "md",
   appearance = "default",
 }: DevicePopoverProps) => {
-  const skin = useSkin();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const { trigger } = useHaptics({
@@ -81,7 +79,7 @@ export const ClassicDevicePopover = ({
   const floating = appearance === "floating";
 
   return (
-    <div data-chalk-skin={skin} className={cn("relative z-10 flex items-center pointer-events-auto", isOpen && "z-[60]", className)} ref={containerRef}>
+    <div className={cn("relative z-10 flex items-center pointer-events-auto", isOpen && "z-[60]", className)} ref={containerRef}>
       {/* Main Toggle Button */}
       <ControlBarButton
         icon={busy ? <Loading01Icon className="motion-safe:animate-spin" /> : icon}

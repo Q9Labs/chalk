@@ -65,7 +65,6 @@ export const StageContentTileSurface = React.memo(function StageContentTileSurfa
     <TileShell
       label={contentTileLabel(item)}
       accentColor={accentColor}
-      seed={`content:${item.id}`}
       pinned={pinned}
       onClick={onClick}
       onDoubleClick={onDoubleClick}

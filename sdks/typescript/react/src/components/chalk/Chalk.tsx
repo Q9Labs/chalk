@@ -13,8 +13,7 @@ import { MediaRequestDialog } from "../media-request-dialog/MediaRequestDialog";
 import { SettingsDialog, type SettingsDialogValue } from "../composite/SettingsDialog";
 import { Entrance } from "../entrance/Entrance";
 import { SpaceView } from "../space-view/SpaceView";
-import { SkinProvider } from "../skin-context";
-import { getThemeMode, type ThemePalette, type ThemeSkin, type ThemeTexture } from "../theme";
+import { getThemeMode, type ThemePalette, type ThemeTexture } from "../theme";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 import { FeedbackDialog } from "../feedback/FeedbackDialog";
 import { StatusSurface } from "./StatusSurface";
@@ -71,7 +70,7 @@ export type ChalkProps = SpaceIntegration &
 
 export function Chalk(props: ChalkProps): React.JSX.Element {
   const colorScheme = useResolvedColorScheme(props.theme?.palette ? getThemeMode(props.theme.palette) : props.theme?.colorScheme);
-  const skin = props.theme?.skin ?? "classic";
+
   const suppliedClient = props.client;
   const getAccessRef = useRef(props.getAccess);
   getAccessRef.current = props.getAccess;
@@ -99,23 +98,13 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
   }, [ownedClient]);
 
   return (
-    <SkinProvider skin={skin}>
-      <div
-        ref={feedbackRootRef}
-        data-chalk
-        data-chalk-feedback-root
-        data-chalk-theme={colorScheme}
-        data-chalk-palette={props.theme?.palette}
-        data-chalk-texture={props.theme?.texture}
-        data-chalk-skin={skin}
-        className="chalk-root h-full min-h-0 w-full"
-        style={chalkThemeStyle(props.theme, colorScheme)}
-      >
+    <>
+      <div ref={feedbackRootRef} data-chalk data-chalk-feedback-root data-chalk-theme={colorScheme} data-chalk-palette={props.theme?.palette} data-chalk-texture={props.theme?.texture} className="chalk-root h-full min-h-0 w-full" style={chalkThemeStyle(props.theme, colorScheme)}>
         <ChalkProvider client={client}>
           <SpaceExperience {...props} feedbackRootRef={feedbackRootRef} resolvedColorScheme={colorScheme} />
         </ChalkProvider>
       </div>
-    </SkinProvider>
+    </>
   );
 }
 
@@ -239,8 +228,8 @@ function SpaceSurface(props: ChalkProps & { readonly feedbackRootRef: React.RefO
   const [infoOpen, setInfoOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(() => (connection.lastError?.recoverable && connection.lastError.code.startsWith("media.") ? connection.lastError.message : null));
-  const [settings, setSettings] = useState<SettingsDialogValue>(() => createSettings(self.displayName ?? "", props.layout ?? "focus", props.theme?.skin ?? "classic", props.theme?.palette ?? (props.resolvedColorScheme === "dark" ? "warm-charcoal" : "light"), props.theme?.texture ?? "none"));
-  const resolvedSkin: ThemeSkin = props.theme?.skin ?? "classic";
+  const [settings, setSettings] = useState<SettingsDialogValue>(() => createSettings(self.displayName ?? "", props.layout ?? "focus", props.theme?.palette ?? (props.resolvedColorScheme === "dark" ? "warm-charcoal" : "light"), props.theme?.texture ?? "none"));
+
   const resolvedPalette: ThemePalette = props.theme?.palette ?? (props.resolvedColorScheme === "dark" ? "warm-charcoal" : "light");
   const resolvedTexture: ThemeTexture = props.theme?.texture ?? "none";
   const appearancePaletteExplicitRef = useRef(props.theme?.palette !== undefined);
@@ -257,18 +246,17 @@ function SpaceSurface(props: ChalkProps & { readonly feedbackRootRef: React.RefO
     }));
   }, [media.local.camera.state, media.local.microphone.state, media.selection.camera, media.selection.microphone, media.selection.speaker, self.displayName]);
   useEffect(() => {
-    if (!props.theme?.skin && !props.theme?.palette && !props.theme?.texture) return;
+    if (!props.theme?.palette && !props.theme?.texture) return;
     setSettings((current) => ({
       ...current,
       appearance: {
         ...current.appearance,
-        skin: props.theme?.skin ?? current.appearance.skin,
         palette: props.theme?.palette ?? current.appearance.palette,
         texture: props.theme?.texture ?? current.appearance.texture,
         theme: (props.theme?.palette ?? current.appearance.palette) === "light" ? "light" : "dark",
       },
     }));
-  }, [props.theme?.palette, props.theme?.skin, props.theme?.texture]);
+  }, [props.theme?.palette, props.theme?.texture]);
   useEffect(() => {
     if (props.theme?.palette || appearancePaletteExplicitRef.current) return;
     const palette: ThemePalette = props.resolvedColorScheme === "dark" ? "warm-charcoal" : "light";
@@ -320,7 +308,6 @@ function SpaceSurface(props: ChalkProps & { readonly feedbackRootRef: React.RefO
       logoUrl={props.logoUrl}
       inviteLink={props.inviteLink}
       pickChatFiles={props.pickChatFiles}
-      skin={settings.appearance.skin ?? resolvedSkin}
       palette={settings.appearance.palette ?? resolvedPalette}
       texture={settings.appearance.texture ?? resolvedTexture}
       generatedAvatars={settings.appearance.generatedAvatars}
@@ -391,7 +378,6 @@ function SpaceSurface(props: ChalkProps & { readonly feedbackRootRef: React.RefO
             onUpdateAppearance={(updates) => {
               if (updates.palette !== undefined) appearancePaletteExplicitRef.current = true;
               const current = settingsRef.current;
-              if (updates.skin !== undefined && updates.skin !== current.appearance.skin) setSettingsInitialSection("appearance");
               const next = { ...current, appearance: { ...current.appearance, ...updates } };
               settingsRef.current = next;
               setSettings(next);
@@ -459,13 +445,13 @@ function useClientEvents(client: SpaceClient, callbacks: SpaceEventCallbacks): v
   useEffect(() => client.on("error", (event) => callbacks.onError?.(event)), [callbacks.onError, client]);
 }
 
-function createSettings(displayName: string, layout: SpaceLayout, skin: ThemeSkin, palette: ThemePalette, texture: ThemeTexture): SettingsDialogValue {
+function createSettings(displayName: string, layout: SpaceLayout, palette: ThemePalette, texture: ThemeTexture): SettingsDialogValue {
   return {
     identity: { displayName },
     join: { videoEnabled: true, audioEnabled: true },
     audio: { outputVolume: 100, noiseSuppression: false, echoCancellation: true, autoGainControl: true },
     video: { quality: "auto" },
-    appearance: { layout, theme: palette === "light" ? "light" : "dark", skin, palette, texture, gradient: "default", showFilmstrip: true, reducedMotion: false, generatedAvatars: true, profileGradient: { mode: "auto" }, ambientBackground: true },
+    appearance: { layout, theme: palette === "light" ? "light" : "dark", palette, texture, gradient: "default", showFilmstrip: true, reducedMotion: false, generatedAvatars: true, profileGradient: { mode: "auto" }, ambientBackground: true },
     experience: { captions: false, compactMode: false, showInviteToast: true, defaultOpenChat: false, defaultOpenParticipants: false, defaultOpenTranscription: false, autoOpenPictureInPicture: false, sounds: true },
   };
 }

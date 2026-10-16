@@ -62,11 +62,7 @@ other feedback directly to Chalk. Screenshot failure never blocks the message.
 Embedded products should keep the default `feedbackSource="embedded"`. Chalk's
 first-party web surface sets `feedbackSource="chalk_web"`.
 
-`theme` is the only styling door. `skin` defaults to `"classic"`; choose
-`"chalk"` when you want the hand-drawn Chalk skin. Palette and texture are
-independent from the skin, so the same palette and texture can compose with
-either choice. Chalk emits the closed token-key set as CSS custom properties
-scoped to its root. Size and place Chalk with its parent element.
+`theme` controls palette, texture, color scheme, accent and typed token overrides. Classic is the only interface style.
 
 `colorScheme` accepts `light`, `dark`, or `system`. With `system`, Chalk follows
 the browser preference while keeping explicit token overrides in place.
@@ -75,7 +71,6 @@ the browser preference while keeping explicit token overrides in place.
 <Chalk
   client={spaceClient}
   theme={{
-    skin: "chalk",
     palette: "warm-charcoal",
     texture: "paper",
     colorScheme: "dark",
@@ -85,9 +80,7 @@ the browser preference while keeping explicit token overrides in place.
 />
 ```
 
-`COSMIC_CHALK_THEME` is a ready-made Chalk-skin theme with a midnight board,
-moon-white text, comet-blue focus states, and a slate grain. The preset selects
-`skin: "chalk"`; it works on the full Space and the standalone Entrance.
+`COSMIC_CHALK_THEME` supplies a midnight palette and slate texture for the Space and Entrance.
 
 ```tsx
 import { Chalk, COSMIC_CHALK_THEME, Entrance } from "@q9labsai/chalk-react";
@@ -95,31 +88,6 @@ import { Chalk, COSMIC_CHALK_THEME, Entrance } from "@q9labsai/chalk-react";
 <Chalk client={spaceClient} theme={COSMIC_CHALK_THEME} />;
 
 <Entrance spaceName="Design review" theme={COSMIC_CHALK_THEME} onJoin={(settings) => spaceClient.join(settings)} />;
-```
-
-## Hand-drawn UI
-
-The `chalk` skin uses the SDK's chalk-drawn controls throughout. Its rough SVG
-edges, powder passes, and focus marks are deterministic, while buttons, inputs,
-toggles, dialogs, menus, and sliders remain native accessible controls. The
-default `classic` skin keeps the same typed palette and texture choices without
-the hand-drawn treatment.
-
-The same pieces are public for custom panels. Each accepts a stable `seed` when
-you want a specific stroke to stay identical across renders.
-Directly imported `Chalk*` primitives keep their hand-drawn identity; the skin
-switch belongs to the turnkey `<Chalk />` and standalone `Entrance` surfaces.
-
-```tsx
-import { ChalkButton, ChalkInput, ChalkPanel, ChalkToggle } from "@q9labsai/chalk-react";
-
-<ChalkPanel seed="participant-settings">
-  <ChalkInput aria-label="Display name" defaultValue="Hasan" seed="display-name" />
-  <ChalkToggle aria-label="Noise suppression" defaultPressed seed="noise-suppression" />
-  <ChalkButton tone="accent" variant="solid" seed="save-settings">
-    Save settings
-  </ChalkButton>
-</ChalkPanel>;
 ```
 
 ## Custom UI
@@ -165,8 +133,7 @@ returns it unchanged, and `SpaceClient` handles refresh and recovery.
 
 `transcript-panel-behavior.ts`, `settings-dialog-behavior.ts`, and
 `control-bar-behavior.ts` own the shared contracts, state, and commands for their
-components. Their `Classic*.tsx` and Chalk-skin `*.tsx` counterparts own
-skin-specific rendering; keep behavior out of those paired renderers.
+components. Classic renderers own presentation.
 
 The SDK-owned `@q9labsai/chalk-react/preview` dev-tool entrypoint exposes the
 preview contract used by the first-party gallery. Application previews should

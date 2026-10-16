@@ -89,7 +89,7 @@ export function RecordingHistoryPanel({
   className,
 }: RecordingHistoryPanelProps): React.JSX.Element {
   return (
-    <ChalkPanel className={cn("h-full min-h-0 w-full overflow-hidden bg-[var(--chalk-app-panel)] p-0", className)} contentClassName="flex h-full min-h-0 flex-col" role="region" aria-label="Recording history" seed="recording-history-panel">
+    <ChalkPanel className={cn("h-full min-h-0 w-full overflow-hidden bg-[var(--chalk-app-panel)] p-0", className)} contentClassName="flex h-full min-h-0 flex-col" role="region" aria-label="Recording history">
       <header className="flex items-center justify-between gap-3 border-b border-[var(--chalk-app-line)] px-4 py-3">
         <div>
           <h2 className="text-base font-semibold">Recordings</h2>
@@ -100,7 +100,7 @@ export function RecordingHistoryPanel({
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {error ? (
-          <ChalkEmptyState title="Recordings could not be loaded" description={error} tone="danger" seed="recording-history-error">
+          <ChalkEmptyState title="Recordings could not be loaded" description={error} tone="danger">
             {onRetry ? (
               <ChalkButton className="mt-4" onClick={onRetry} tone="danger">
                 <RefreshIcon className="size-4" />
@@ -109,7 +109,7 @@ export function RecordingHistoryPanel({
             ) : null}
           </ChalkEmptyState>
         ) : recordings.length === 0 && !isLoading ? (
-          <ChalkEmptyState title="No recordings yet" description="Captured Episode activity will appear here." seed="recording-history-empty">
+          <ChalkEmptyState title="No recordings yet" description="Captured Episode activity will appear here.">
             <Video01Icon className="mx-auto mt-4 size-8 text-[var(--chalk-app-text-muted)]" aria-hidden="true" />
           </ChalkEmptyState>
         ) : (
@@ -164,14 +164,14 @@ interface RecordingHistoryRowProps {
 function RecordingHistoryRow({ downloading, onDownload, onReadTranscript, onRefreshExport, onRequestExport, onRequestTranscript, onWatch, readingTranscript, recording, refreshingExport, requestingExport, requestingTranscript }: RecordingHistoryRowProps): React.JSX.Element {
   return (
     <li>
-      <ChalkPanel className="p-3" contentClassName="flex items-start gap-3" seed={`recording-${recording.id}`}>
+      <ChalkPanel className="p-3" contentClassName="flex items-start gap-3">
         <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--chalk-app-control)] text-[var(--chalk-app-text-muted)]" aria-hidden="true">
           <Video01Icon className="size-5" />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="truncate text-sm font-medium">Episode {shortId(recording.episode_id)}</span>
-            {recording.export ? null : <StatusBadge label={legacyStatusLabel(recording.status)} tone={legacyStatusTone(recording.status)} seed={`recording-status-${recording.id}`} />}
+            {recording.export ? null : <StatusBadge label={legacyStatusLabel(recording.status)} tone={legacyStatusTone(recording.status)} />}
           </div>
           <p className="mt-1 text-xs text-[var(--chalk-app-text-muted)]">
             <time dateTime={recording.created_at}>{formatTimestamp(recording.created_at)}</time>
@@ -221,10 +221,10 @@ function RecordingArtifactStatus({ downloading, onDownload, onReadTranscript, on
   const transcriptStatus = recording.transcript?.status === "none" && recording.transcript.requestable ? "requestable" : recording.transcript?.status;
   return (
     <div className="mt-3 grid gap-2 border-t border-[var(--chalk-app-line)] pt-3">
-      {recording.source ? <ArtifactStatus icon={<Video01Icon className="size-4" />} label="Capture" detail={sourceDetail(recording.source)} status={sourceLabel(recording.source.status)} tone={sourceTone(recording.source.status)} seed={`capture-${recording.id}`} /> : null}
-      {transcriptStatus ? <ArtifactStatus icon={<FileTextIcon className="size-4" />} label="Transcript" detail={transcriptDetail(transcriptStatus)} status={transcriptLabel(transcriptStatus)} tone={transcriptTone(transcriptStatus)} seed={`transcript-${recording.id}`} /> : null}
+      {recording.source ? <ArtifactStatus icon={<Video01Icon className="size-4" />} label="Capture" detail={sourceDetail(recording.source)} status={sourceLabel(recording.source.status)} tone={sourceTone(recording.source.status)} /> : null}
+      {transcriptStatus ? <ArtifactStatus icon={<FileTextIcon className="size-4" />} label="Transcript" detail={transcriptDetail(transcriptStatus)} status={transcriptLabel(transcriptStatus)} tone={transcriptTone(transcriptStatus)} /> : null}
       {recording.transcript ? <TranscriptContent onReadTranscript={onReadTranscript} onRequestTranscript={onRequestTranscript} reading={readingTranscript} recording={recording} requestingTranscript={requestingTranscript} /> : null}
-      <ArtifactStatus icon={<Video01Icon className="size-4" />} label="Video" detail={exportDetail(video)} status={exportLabel(video.status)} tone={exportTone(video.status)} seed={`video-${recording.id}`} />
+      <ArtifactStatus icon={<Video01Icon className="size-4" />} label="Video" detail={exportDetail(video)} status={exportLabel(video.status)} tone={exportTone(video.status)} />
       {video.status === "ready" ? <ReadyVideoActions downloading={downloading} onDownload={onDownload} onWatch={onWatch} recording={recording} /> : null}
       {video.status === "pending" ? <PendingVideoActions onRefreshExport={onRefreshExport} recording={recording} refreshingExport={refreshingExport} requestingExport={requestingExport} /> : null}
       {canRequestExport(video) ? <RequestedVideoActions onRequestExport={onRequestExport} recording={recording} requestingExport={requestingExport} /> : null}
@@ -277,12 +277,11 @@ interface ArtifactStatusProps {
   readonly detail: string;
   readonly icon: React.ReactNode;
   readonly label: string;
-  readonly seed: string;
   readonly status: string;
   readonly tone: ChalkTone;
 }
 
-function ArtifactStatus({ detail, icon, label, seed, status, tone }: ArtifactStatusProps): React.JSX.Element {
+function ArtifactStatus({ detail, icon, label, status, tone }: ArtifactStatusProps): React.JSX.Element {
   return (
     <div className="flex items-start gap-2 text-xs">
       <span className="mt-0.5 text-[var(--chalk-app-text-muted)]" aria-hidden="true">
@@ -291,7 +290,7 @@ function ArtifactStatus({ detail, icon, label, seed, status, tone }: ArtifactSta
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{label}</span>
-          <StatusBadge label={status} tone={tone} seed={seed} />
+          <StatusBadge label={status} tone={tone} />
         </div>
         <p className="mt-0.5 text-[var(--chalk-app-text-muted)]">{detail}</p>
       </div>
@@ -301,16 +300,11 @@ function ArtifactStatus({ detail, icon, label, seed, status, tone }: ArtifactSta
 
 interface StatusBadgeProps {
   readonly label: string;
-  readonly seed: string;
   readonly tone: ChalkTone;
 }
 
-function StatusBadge({ label, seed, tone }: StatusBadgeProps): React.JSX.Element {
-  return (
-    <ChalkBadge tone={tone} seed={seed}>
-      {label}
-    </ChalkBadge>
-  );
+function StatusBadge({ label, tone }: StatusBadgeProps): React.JSX.Element {
+  return <ChalkBadge tone={tone}>{label}</ChalkBadge>;
 }
 
 interface ReadyVideoActionsProps {

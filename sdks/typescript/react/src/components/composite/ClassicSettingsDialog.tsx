@@ -5,9 +5,8 @@ import { IconButton, Input } from "@q9labsai/chalk-ui";
 import { cn } from "../../utils/cn";
 import { ArrowLeft02Icon, Cancel01Icon, PictureInPictureIcon, Search01Icon, Settings01Icon, VolumeHighIcon } from "../../utils/icons";
 import { VolumeSlider } from "../atomic";
-import { THEME_PALETTES, THEME_SKINS, THEME_TEXTURES } from "../theme";
+import { THEME_PALETTES, THEME_TEXTURES } from "../theme";
 import { OfflineActionsSetting } from "../offline-actions/OfflineActionsSetting";
-import { SkinProvider } from "../skin-context";
 import { ChalkToggle } from "../chalk-ui";
 import { BackgroundEffectsPicker } from "./BackgroundEffectsPicker";
 import { DeviceSelector } from "./DeviceSelector";
@@ -77,7 +76,6 @@ export const ClassicSettingsDialog = React.memo(
     const {
       disableMotion,
       isDesktop,
-      resolvedSkin,
       resolvedPalette,
       resolvedTexture,
       resolvedTheme,
@@ -166,33 +164,6 @@ export const ClassicSettingsDialog = React.memo(
         case "appearance":
           return (
             <div className="space-y-5">
-              <SectionCard title="Skin" description="Choose the shape and finish of the interface. Every skin can use any palette or texture.">
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {THEME_SKINS.map((skin) => {
-                    const isSelected = resolvedSkin === skin.value;
-                    return (
-                      <button
-                        key={skin.value}
-                        type="button"
-                        onClick={() => onUpdateAppearance({ skin: skin.value })}
-                        aria-pressed={isSelected}
-                        className={cn(
-                          "flex w-full items-start rounded-[10px] border p-3 text-left transition-colors",
-                          isSelected
-                            ? "border-[var(--chalk-app-control-active-line)] bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)]"
-                            : "border-[var(--chalk-line)] bg-[var(--chalk-surface)] text-[var(--chalk-text)] hover:border-[var(--chalk-app-control-active-line)]",
-                        )}
-                      >
-                        <span className="min-w-0">
-                          <span className="block text-sm font-semibold">{skin.label}</span>
-                          <span className="mt-0.5 block text-[11px] leading-4 opacity-70">{skin.description}</span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </SectionCard>
-
               <SectionCard title="Palette" description="Choose a complete color family. Every palette can use any material texture.">
                 {(["light", "dark"] as const).map((mode) => (
                   <div key={mode} className="space-y-2.5">
@@ -394,7 +365,7 @@ export const ClassicSettingsDialog = React.memo(
     const showContent = isDesktop || !isNavOpen;
 
     return (
-      <SkinProvider skin={resolvedSkin}>
+      <>
         <Dialog.Root
           open={isOpen}
           onOpenChange={(open) => {
@@ -404,10 +375,9 @@ export const ClassicSettingsDialog = React.memo(
           }}
         >
           <Dialog.Portal>
-            <Dialog.Backdrop data-chalk-skin={resolvedSkin} className={cn("fixed inset-0 z-[100] bg-[var(--chalk-stage)] backdrop-blur-[1px]", !disableMotion && "animate-in fade-in duration-200")} />
+            <Dialog.Backdrop className={cn("fixed inset-0 z-[100] bg-[var(--chalk-stage)] backdrop-blur-[1px]", !disableMotion && "animate-in fade-in duration-200")} />
             <Dialog.Popup
               data-chalk
-              data-chalk-skin={resolvedSkin}
               data-chalk-theme={resolvedTheme}
               data-chalk-palette={resolvedPalette}
               data-chalk-texture={resolvedTexture}
@@ -490,7 +460,7 @@ export const ClassicSettingsDialog = React.memo(
             </Dialog.Popup>
           </Dialog.Portal>
         </Dialog.Root>
-      </SkinProvider>
+      </>
     );
   },
 );

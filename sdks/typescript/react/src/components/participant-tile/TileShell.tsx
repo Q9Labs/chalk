@@ -1,8 +1,6 @@
 import React, { useCallback, type CSSProperties, type ReactNode } from "react";
 
 import { cn } from "../../utils/cn";
-import { ChalkChrome, ChalkPanel } from "../chalk-ui";
-import { useSkin } from "../skin-context";
 
 export interface TileShellProps {
   /** Accessible name of the whole tile, e.g. "Video tile for Nora". */
@@ -18,7 +16,6 @@ export interface TileShellProps {
   /** Off-screen tiles stay mounted but leave the accessibility tree and tab order. */
   readonly hidden?: boolean;
   /** Stable content identity for deterministic Chalk chrome across projection seeks. */
-  readonly seed?: number | string;
   /** Lower-left chip: name plus status; omitted when null. Rendered inside a `min-w-0` flex row so a `truncate` name shrinks to the tile. */
   readonly chip?: ReactNode;
   /** Top-right slot (connection warning, pin marker). */
@@ -37,8 +34,7 @@ interface TileVars extends CSSProperties {
  * The shell is a `@container`, so the chip picks its size from the tile width (`@[240px]:` variants).
  * Speaking is shown in the chip and on the avatar, never as a frame.
  */
-export function TileShell({ label, accentColor, pinned = false, onClick, onDoubleClick, className, style, dataTour, hidden = false, seed, chip, corner, children }: TileShellProps): React.JSX.Element {
-  const skin = useSkin();
+export function TileShell({ label, accentColor, pinned = false, onClick, onDoubleClick, className, style, dataTour, hidden = false, chip, corner, children }: TileShellProps): React.JSX.Element {
   const vars: TileVars = {
     ...style,
     "--chalk-participant-color": accentColor,
@@ -75,28 +71,10 @@ export function TileShell({ label, accentColor, pinned = false, onClick, onDoubl
       {corner}
       {chip ? (
         <div className="pointer-events-none absolute right-1.5 bottom-1.5 left-1.5 z-20 flex @[240px]:right-2 @[240px]:bottom-2 @[240px]:left-2">
-          {skin === "classic" ? (
-            <div className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md bg-[rgba(12,14,18,0.62)] px-1.5 py-0.5 text-white shadow-[0_1px_2px_rgba(0,0,0,0.35)] ring-1 ring-white/10 backdrop-blur-md @[240px]:gap-2 @[240px]:px-2 @[240px]:py-1">{chip}</div>
-          ) : (
-            <ChalkPanel tone="neutral" filled seed={childSeed(seed, "chip")} className="inline-flex min-w-0 max-w-full items-center rounded-md" contentClassName="flex min-w-0 max-w-full items-center gap-1.5 px-1.5 py-0.5 @[240px]:gap-2 @[240px]:px-2 @[240px]:py-1">
-              {chip}
-            </ChalkPanel>
-          )}
+          {<div className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md bg-[rgba(12,14,18,0.62)] px-1.5 py-0.5 text-white shadow-[0_1px_2px_rgba(0,0,0,0.35)] ring-1 ring-white/10 backdrop-blur-md @[240px]:gap-2 @[240px]:px-2 @[240px]:py-1">{chip}</div>}
         </div>
       ) : null}
-      <ChalkChrome
-        className="pointer-events-none absolute inset-0 z-20 h-full w-full"
-        focusStroke="var(--chalk-focus, var(--chalk-app-control-active-line, currentColor))"
-        radius={8}
-        roughness={0.9}
-        seed={childSeed(seed, "frame")}
-        stroke="var(--chalk-app-line-strong, currentColor)"
-        part="participant-tile"
-      />
+      {null}
     </div>
   );
-}
-
-function childSeed(seed: number | string | undefined, part: string): string | undefined {
-  return seed === undefined ? undefined : `${seed}:${part}`;
 }

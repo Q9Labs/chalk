@@ -1,17 +1,14 @@
 import type React from "react";
 import { Microphone01Icon, Video01Icon } from "../../utils/icons";
-import { useSkin } from "../skin-context";
 import type { MediaRequestDialogProps } from "./MediaRequestDialog";
 import { useMediaRequestDialogState } from "./media-request-dialog-state";
 
 export function ClassicMediaRequestDialog({ request, onDecline, onAllow, onActionError }: MediaRequestDialogProps): React.JSX.Element {
-  const skin = useSkin();
   const { isExpired, expiryLabel, pendingAction, errorMessage, runAction } = useMediaRequestDialogState({ request, onDecline, onAllow, onActionError });
   const RequestIcon = request.kind === "unmute" ? Microphone01Icon : Video01Icon;
 
   return (
     <div
-      data-chalk-skin={skin}
       role="dialog"
       aria-modal="true"
       aria-label={request.kind === "unmute" ? "Unmute request" : "Camera request"}

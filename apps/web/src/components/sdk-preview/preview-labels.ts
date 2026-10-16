@@ -1,4 +1,4 @@
-import { THEME_PALETTES, THEME_SKINS, THEME_TEXTURES } from "@q9labsai/chalk-react/preview";
+import { THEME_PALETTES, THEME_TEXTURES } from "@q9labsai/chalk-react/preview";
 
 import type { PreviewFeatureKey, PreviewSearch, PreviewState } from "./preview-state";
 
@@ -35,14 +35,6 @@ export function stateLabel(state: PreviewState): string {
 
 export function viewLabel(view: PreviewSearch["view"]): string {
   return valueLabel(view);
-}
-
-export function skinLabel(skin: PreviewSearch["skin"]): string {
-  return THEME_SKINS.find((option) => option.value === skin)?.label ?? valueLabel(skin);
-}
-
-export function skinDescription(skin: PreviewSearch["skin"]): string | undefined {
-  return THEME_SKINS.find((option) => option.value === skin)?.description;
 }
 
 export function paletteLabel(palette: PreviewSearch["palette"]): string {

@@ -2,7 +2,6 @@ import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
 
 import { cn } from "../../utils/cn";
 import { ChalkBackdrop } from "../chalk-ui";
-import { useSkin } from "../skin-context";
 import type { DrawerState } from "./useDrawerPresence";
 
 export interface SpaceDrawerProps {
@@ -18,7 +17,6 @@ export interface SpaceDrawerProps {
  * where it came from. Panels keep their own landmarks, so the drawer itself carries no role.
  */
 export function SpaceDrawer({ state, onClose, interactive = true, children }: SpaceDrawerProps) {
-  const skin = useSkin();
   const drawerRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
 
@@ -49,7 +47,7 @@ export function SpaceDrawer({ state, onClose, interactive = true, children }: Sp
     <>
       <ChalkBackdrop className="chalk-drawer-scrim !bg-[color-mix(in_srgb,var(--chalk-app-canvas)_55%,transparent)]" onClick={interactive ? onClose : undefined} />
       <div ref={drawerRef} tabIndex={interactive ? -1 : undefined} data-state={state} data-chalk-drawer onKeyDown={interactive ? handleKeyDown : undefined} aria-disabled={interactive ? undefined : true} className="chalk-drawer min-h-0 outline-none focus-visible:outline-none">
-        <div className={cn("chalk-drawer-content chalk-textured-surface flex min-h-0 flex-col overflow-hidden bg-[var(--chalk-app-panel)] text-[var(--chalk-app-text)]", skin === "classic" ? "shadow-[var(--chalk-app-shadow-xs)]" : "border border-[var(--chalk-app-line)]")}>{children}</div>
+        <div className={cn("chalk-drawer-content chalk-textured-surface flex min-h-0 flex-col overflow-hidden bg-[var(--chalk-app-panel)] text-[var(--chalk-app-text)]", "shadow-[var(--chalk-app-shadow-xs)]")}>{children}</div>
       </div>
     </>
   );

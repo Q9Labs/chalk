@@ -6,7 +6,6 @@ import { Cancel01Icon, RefreshIcon } from "../../utils/icons";
 import { captureFeedbackScreenshot, collectBrowserFeedbackEvidence } from "../../utils/feedback";
 import { cn } from "../../utils/cn";
 import { ChalkBackdrop, ChalkButton, ChalkDialogPanel, ChalkIconButton, ChalkTextarea } from "../chalk-ui";
-import { useSkin } from "../skin-context";
 
 export interface FeedbackDialogProps {
   readonly isOpen: boolean;
@@ -23,7 +22,6 @@ const CATEGORIES: readonly { value: FeedbackCategory; label: string }[] = [
 ];
 
 export function FeedbackDialog({ isOpen, onClose, client, source = "embedded", captureRootRef }: FeedbackDialogProps): React.JSX.Element | null {
-  const skin = useSkin();
   const [category, setCategory] = useState<FeedbackCategory>("bug");
   const [message, setMessage] = useState("");
   const [prepared, setPrepared] = useState<FeedbackPrepared | null>(null);
@@ -36,7 +34,7 @@ export function FeedbackDialog({ isOpen, onClose, client, source = "embedded", c
   const [submitted, setSubmitted] = useState(false);
   const openedRef = useRef(false);
   const preparationRef = useRef(0);
-  const primaryText = skin === "classic" ? "!text-white" : "!text-[var(--chalk-accent-text)]";
+  const primaryText = "!text-white";
 
   const prepareFeedback = useCallback(
     async (includeScreenshot: boolean): Promise<void> => {
@@ -131,7 +129,7 @@ export function FeedbackDialog({ isOpen, onClose, client, source = "embedded", c
   };
 
   return (
-    <div data-chalk-feedback-private data-chalk-skin={skin} className="fixed inset-0 z-[70]" onMouseDown={onClose}>
+    <div data-chalk-feedback-private className="fixed inset-0 z-[70]" onMouseDown={onClose}>
       <ChalkBackdrop className="z-0 !bg-[color-mix(in_srgb,var(--chalk-app-canvas)_90%,transparent)] !backdrop-blur-[1px]" />
       <div className="relative z-10 grid h-full place-items-center p-4">
         <ChalkDialogPanel

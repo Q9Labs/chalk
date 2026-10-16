@@ -4,11 +4,9 @@ import { Input } from "@q9labsai/chalk-ui";
 import { Cancel01Icon, Copy01Icon, Mail01Icon, Calendar01Icon, Link01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
-import { useSkin } from "../skin-context";
 import type { InviteDialogProps } from "./InviteDialog";
 
 export const ClassicInviteDialog = React.memo<InviteDialogProps>(({ isOpen, onClose, inviteLink, spaceId, onCopyLink, onShareEmail, onShareCalendar, className }: InviteDialogProps) => {
-  const skin = useSkin();
   const prefersReducedMotion = usePrefersReducedMotion();
   const modalRef = useRef<HTMLDivElement>(null);
   const copyResetTimeoutRef = useRef<number | null>(null);
@@ -51,7 +49,7 @@ export const ClassicInviteDialog = React.memo<InviteDialogProps>(({ isOpen, onCl
   if (!isOpen) return null;
 
   return (
-    <div data-chalk-skin={skin} className={cn("fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4 backdrop-blur-[2px]", className)} role="dialog" aria-modal="true" aria-labelledby="invite-modal-title">
+    <div className={cn("fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4 backdrop-blur-[2px]", className)} role="dialog" aria-modal="true" aria-labelledby="invite-modal-title">
       <div
         ref={modalRef}
         className={cn(

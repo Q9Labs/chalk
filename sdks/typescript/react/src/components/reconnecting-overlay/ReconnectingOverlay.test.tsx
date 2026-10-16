@@ -2,22 +2,21 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SkinProvider } from "../skin-context";
 import { RECONNECTING_NOTICE_MS, ReconnectingOverlay, type ReconnectingOverlayProps } from "./ReconnectingOverlay";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-describe.each(["classic", "chalk"] as const)("ReconnectingOverlay in the %s skin", (skin) => {
+describe("ReconnectingOverlay", () => {
   let container: HTMLDivElement;
   let root: Root;
 
   const render = (props: ReconnectingOverlayProps) =>
     act(async () =>
       root.render(
-        <SkinProvider skin={skin}>
+        <>
           <button type="button">Mute</button>
           <ReconnectingOverlay {...props} />
-        </SkinProvider>,
+        </>,
       ),
     );
 
