@@ -12,11 +12,9 @@ The server entry point requires Node.js 22 or later. Never import `@q9labsai/cha
 
 ## Prepare your Tenant and API key
 
-Sign in to the hosted dashboard and create a Tenant or select one where you have Owner access. Copy its ID from Tenant settings. Create a key on the Developer page, complete the recent-authentication prompt, and save the one-time secret on your backend. Grant `spaces:read`, `spaces:write`, `episodes:read`, and `episodes:write` for the setup below; add artifact and webhook scopes only when needed.
+With an authenticated account session, create a Tenant with `POST /v1/me/tenants` and an `Idempotency-Key`, or list your accessible Tenants with `GET /v1/me/tenants`. Retain the returned Tenant ID. An Owner can create a key through `POST /v1/tenants/{tenant_id}/api-keys`; complete recent authentication when requested and save the one-time secret on your backend. Grant `spaces:read`, `spaces:write`, `episodes:read`, and `episodes:write` for the setup below; add artifact and webhook scopes only when needed.
 
-The raw provisioning routes are system-only; use the dashboard for Tenant setup.
-
-For a local frontend, add its exact origin (for example `http://localhost:5173`) in Tenant settings before joining. Keep the key, Tenant ID, and Space/Participant mappings on your backend.
+For a local frontend, configure its exact origin (for example `http://localhost:5173`) through the Tenant update API's `cors_allowed_origins`. Keep the key, Tenant ID, and Space/Participant mappings on your backend.
 
 ## Create the Space and initial Participant access on your server
 

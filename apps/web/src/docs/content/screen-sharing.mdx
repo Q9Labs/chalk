@@ -20,4 +20,4 @@ const stop = client.on("screenShareStarted", ({ participantId }) => {
 
 The browser or native platform may reject capture, and a server capability check may reject publication. Surface the returned `SpaceClientError` and leave the control available for a later attempt. Do not assume a local track means the remote publication is ready: render confirmed remote media from the snapshot.
 
-See [Diagnostics](/docs/diagnostics) for the bounded media observations that help explain a failed first frame.
+Use the connection snapshot and [Troubleshooting](/docs/troubleshooting) to inspect safe error codes when sharing fails.
