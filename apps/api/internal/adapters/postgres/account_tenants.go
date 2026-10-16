@@ -127,7 +127,7 @@ func (r AccountTenantRepository) OnboardTenant(ctx context.Context, input tenant
 
 func createAccountTenantParams(input tenants.CreateTenantInput) sqlc.CreateTenantParams {
 	return sqlc.CreateTenantParams{
-		ID: uuid(input.ID), Name: input.Name, DefaultRegion: text(input.DefaultRegion), DefaultMediaPlane: text(input.DefaultMediaPlane),
+		ID: uuid(input.ID), Name: input.Name, DefaultMediaPlane: text(input.DefaultMediaPlane),
 		MediaPlaneProviderConfig: jsonBytes(input.MediaPlaneProviderConfig),
 		StorageProviderConfig:    jsonBytes(input.StorageProviderConfig), CorsAllowedOrigins: input.CORSAllowedOrigins, LogoKey: text(input.LogoKey), Website: text(input.Website),
 	}
@@ -136,7 +136,7 @@ func createAccountTenantParams(input tenants.CreateTenantInput) sqlc.CreateTenan
 func mapListAccountTenant(row sqlc.ListAccountTenantsRow) tenants.AccountTenant {
 	return tenants.AccountTenant{
 		Tenant: mapTenant(tenantRecord{
-			ID: row.ID, Name: row.Name, DefaultRegion: row.DefaultRegion, DefaultMediaPlane: row.DefaultMediaPlane,
+			ID: row.ID, Name: row.Name, DefaultMediaPlane: row.DefaultMediaPlane,
 			StorageProviderConfig: row.StorageProviderConfig, CorsAllowedOrigins: row.CorsAllowedOrigins, LogoKey: row.LogoKey, Website: row.Website,
 			TranscriptionCeiling: row.TranscriptionCeiling, TranscriptionDefaultMode: row.TranscriptionDefaultMode,
 			ProviderPolicyVersion: row.ProviderPolicyVersion, RecordingRetentionSeconds: row.RecordingRetentionSeconds,
@@ -154,7 +154,7 @@ func mapListAccountTenant(row sqlc.ListAccountTenantsRow) tenants.AccountTenant 
 func mapOnboardedAccountTenant(row sqlc.GetAccountTenantByOnboardingRow) tenants.AccountTenant {
 	return tenants.AccountTenant{
 		Tenant: mapTenant(tenantRecord{
-			ID: row.ID, Name: row.Name, DefaultRegion: row.DefaultRegion, DefaultMediaPlane: row.DefaultMediaPlane,
+			ID: row.ID, Name: row.Name, DefaultMediaPlane: row.DefaultMediaPlane,
 			StorageProviderConfig: row.StorageProviderConfig, CorsAllowedOrigins: row.CorsAllowedOrigins, LogoKey: row.LogoKey, Website: row.Website,
 			TranscriptionCeiling: row.TranscriptionCeiling, TranscriptionDefaultMode: row.TranscriptionDefaultMode,
 			ProviderPolicyVersion: row.ProviderPolicyVersion, RecordingRetentionSeconds: row.RecordingRetentionSeconds,

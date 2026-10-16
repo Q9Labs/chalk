@@ -27,13 +27,6 @@ func OperationQueries(next sqlc.Querier, logger *slog.Logger) sqlc.Querier {
 	}
 }
 
-func (q operationQuerier) CreateAuditLog(ctx context.Context, arg sqlc.CreateAuditLogParams) (sqlc.AuditLog, error) {
-	startedAt := time.Now()
-	log, err := q.next.CreateAuditLog(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "CreateAuditLog", startedAt, err)
-	return log, err
-}
-
 func (q operationQuerier) CreateTenant(ctx context.Context, arg sqlc.CreateTenantParams) (sqlc.CreateTenantRow, error) {
 	startedAt := time.Now()
 	tenant, err := q.next.CreateTenant(ctx, arg)
@@ -59,13 +52,6 @@ func (q operationQuerier) CreatePasswordUser(ctx context.Context, arg sqlc.Creat
 	startedAt := time.Now()
 	user, err := q.next.CreatePasswordUser(ctx, arg)
 	LogOperation(ctx, q.logger, "db.query", "CreatePasswordUser", startedAt, err)
-	return user, err
-}
-
-func (q operationQuerier) CreateUser(ctx context.Context, arg sqlc.CreateUserParams) (sqlc.User, error) {
-	startedAt := time.Now()
-	user, err := q.next.CreateUser(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "CreateUser", startedAt, err)
 	return user, err
 }
 
@@ -130,20 +116,6 @@ func (q operationQuerier) GetTenantCORSAllowedOrigins(ctx context.Context, id pg
 	origins, err := q.next.GetTenantCORSAllowedOrigins(ctx, id)
 	LogOperation(ctx, q.logger, "db.query", "GetTenantCORSAllowedOrigins", startedAt, err)
 	return origins, err
-}
-
-func (q operationQuerier) GetTenantAuditLog(ctx context.Context, arg sqlc.GetTenantAuditLogParams) (sqlc.AuditLog, error) {
-	startedAt := time.Now()
-	log, err := q.next.GetTenantAuditLog(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "GetTenantAuditLog", startedAt, err)
-	return log, err
-}
-
-func (q operationQuerier) GetUser(ctx context.Context, id pgtype.UUID) (sqlc.User, error) {
-	startedAt := time.Now()
-	user, err := q.next.GetUser(ctx, id)
-	LogOperation(ctx, q.logger, "db.query", "GetUser", startedAt, err)
-	return user, err
 }
 
 func (q operationQuerier) GetAccountTenantByOnboarding(ctx context.Context, arg sqlc.GetAccountTenantByOnboardingParams) (sqlc.GetAccountTenantByOnboardingRow, error) {
@@ -244,13 +216,6 @@ func (q operationQuerier) ListTenantMemberships(ctx context.Context, arg sqlc.Li
 	return memberships, err
 }
 
-func (q operationQuerier) ListTenantAuditLogs(ctx context.Context, arg sqlc.ListTenantAuditLogsParams) ([]sqlc.AuditLog, error) {
-	startedAt := time.Now()
-	logs, err := q.next.ListTenantAuditLogs(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "ListTenantAuditLogs", startedAt, err)
-	return logs, err
-}
-
 func (q operationQuerier) ListTenantRecordings(ctx context.Context, arg sqlc.ListTenantRecordingsParams) ([]sqlc.Recording, error) {
 	startedAt := time.Now()
 	recordings, err := q.next.ListTenantRecordings(ctx, arg)
@@ -291,13 +256,6 @@ func (q operationQuerier) ListTenants(ctx context.Context, arg sqlc.ListTenantsP
 	tenants, err := q.next.ListTenants(ctx, arg)
 	LogOperation(ctx, q.logger, "db.query", "ListTenants", startedAt, err)
 	return tenants, err
-}
-
-func (q operationQuerier) ListUsers(ctx context.Context, arg sqlc.ListUsersParams) ([]sqlc.User, error) {
-	startedAt := time.Now()
-	users, err := q.next.ListUsers(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "ListUsers", startedAt, err)
-	return users, err
 }
 
 func (q operationQuerier) UpdateTenant(ctx context.Context, id sqlc.UpdateTenantParams) (sqlc.UpdateTenantRow, error) {

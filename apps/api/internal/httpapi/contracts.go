@@ -64,9 +64,9 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, meEndpoints(nil, nil)...)
 	endpoints = append(endpoints, accountTenantEndpoints(nil)...)
 	endpoints = append(endpoints, tenantEndpoints(nil, nil)...)
-	endpoints = append(endpoints, userEndpoints(nil)...)
+
 	endpoints = append(endpoints, membershipEndpoints(nil, nil)...)
-	endpoints = append(endpoints, peopleEndpoints(nil, nil)...)
+
 	endpoints = append(endpoints, spaceEndpoints(nil, nil)...)
 	endpoints = append(endpoints, recordingPreparationEndpoints(nil, nil)...)
 	endpoints = append(endpoints, recordingEntranceEndpoints(nil, nil, nil, nil)...)
@@ -81,7 +81,7 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, whiteboardFileEndpoints(nil, nil)...)
 	endpoints = append(endpoints, recordingEndpoints(nil, nil, nil, nil)...)
 	endpoints = append(endpoints, transcriptArtifactEndpoints(nil, nil, nil, nil)...)
-	endpoints = append(endpoints, auditLogEndpoints(nil, nil)...)
+
 	endpoints = append(endpoints, webhookEndpoints(nil, nil)...)
 	endpoints = append(endpoints, publicInviteEndpoints(nil, nil)...)
 	return routeContracts(endpoints)

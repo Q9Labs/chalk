@@ -15,7 +15,6 @@ const getAccountTenantByOnboarding = `-- name: GetAccountTenantByOnboarding :one
 select
     tenants.id,
     tenants.name,
-    tenants.default_region,
     tenants.default_media_plane,
     tenants.media_plane_provider_config,
     tenants.storage_provider_config,
@@ -51,7 +50,6 @@ type GetAccountTenantByOnboardingParams struct {
 type GetAccountTenantByOnboardingRow struct {
 	ID                         pgtype.UUID        `json:"id"`
 	Name                       string             `json:"name"`
-	DefaultRegion              pgtype.Text        `json:"default_region"`
 	DefaultMediaPlane          pgtype.Text        `json:"default_media_plane"`
 	MediaPlaneProviderConfig   []byte             `json:"media_plane_provider_config"`
 	StorageProviderConfig      []byte             `json:"storage_provider_config"`
@@ -79,7 +77,6 @@ func (q *Queries) GetAccountTenantByOnboarding(ctx context.Context, arg GetAccou
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
-		&i.DefaultRegion,
 		&i.DefaultMediaPlane,
 		&i.MediaPlaneProviderConfig,
 		&i.StorageProviderConfig,
@@ -133,7 +130,6 @@ const listAccountTenants = `-- name: ListAccountTenants :many
 select
     tenants.id,
     tenants.name,
-    tenants.default_region,
     tenants.default_media_plane,
     tenants.media_plane_provider_config,
     tenants.storage_provider_config,
@@ -179,7 +175,6 @@ type ListAccountTenantsParams struct {
 type ListAccountTenantsRow struct {
 	ID                         pgtype.UUID        `json:"id"`
 	Name                       string             `json:"name"`
-	DefaultRegion              pgtype.Text        `json:"default_region"`
 	DefaultMediaPlane          pgtype.Text        `json:"default_media_plane"`
 	MediaPlaneProviderConfig   []byte             `json:"media_plane_provider_config"`
 	StorageProviderConfig      []byte             `json:"storage_provider_config"`
@@ -219,7 +214,6 @@ func (q *Queries) ListAccountTenants(ctx context.Context, arg ListAccountTenants
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
-			&i.DefaultRegion,
 			&i.DefaultMediaPlane,
 			&i.MediaPlaneProviderConfig,
 			&i.StorageProviderConfig,

@@ -178,3 +178,29 @@ func membershipWithUser(id, tenantID, userID pgtype.UUID, role, userName, userEm
 }
 
 var _ memberships.MembershipRepository = MembershipRepository{}
+
+func lockMembershipTenant(ctx context.Context, tx pgx.Tx, id utilities.ID) error {
+	var locked pgtype.UUID
+	return tx.QueryRow(ctx, `select id from tenants where id=$1 for update`, uuid(id)).Scan(&locked)
+}
+func protectLastOwner(ctx context.Context, tx pgx.Tx, tenant, id utilities.ID) error {
+	var role string
+	err := tx.QueryRow(ctx, `select role from memberships where tenant_id=$1 and id=$2`, uuid(tenant), uuid(id)).Scan(&role)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return memberships.ErrMembershipNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if role != "owner" {
+		return nil
+	}
+	var count int
+	if err = tx.QueryRow(ctx, `select count(*) from memberships where tenant_id=$1 and role='owner'`, uuid(tenant)).Scan(&count); err != nil {
+		return err
+	}
+	if count <= 1 {
+		return memberships.ErrLastOwner
+	}
+	return nil
+}

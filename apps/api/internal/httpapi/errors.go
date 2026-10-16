@@ -13,15 +13,15 @@ func (err APIError) Error() string {
 }
 
 var (
-	apiErrorUnauthenticated         = APIError{Status: http.StatusUnauthorized, Code: "access.unauthenticated", Message: "Authentication required"}
-	apiErrorForbidden               = APIError{Status: http.StatusForbidden, Code: "access.forbidden", Message: "Access denied"}
-	apiErrorServiceUnavailable      = APIError{Status: http.StatusServiceUnavailable, Code: "service.unavailable", Message: "Service is not ready"}
-	apiErrorInvalidRequest          = APIError{Status: http.StatusBadRequest, Code: "request.invalid", Message: "Invalid request body"}
-	apiErrorInvalidPageSize         = APIError{Status: http.StatusBadRequest, Code: "pagination.invalid_page_size", Message: "Invalid page size"}
-	apiErrorInvalidCursor           = APIError{Status: http.StatusBadRequest, Code: "pagination.invalid_cursor", Message: "Invalid cursor"}
-	apiErrorInvalidTenantID         = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_id", Message: "Invalid tenant id"}
-	apiErrorInvalidTenantName       = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_name", Message: "Invalid tenant name"}
-	apiErrorInvalidTenantRegion     = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_region", Message: "Invalid tenant region"}
+	apiErrorUnauthenticated    = APIError{Status: http.StatusUnauthorized, Code: "access.unauthenticated", Message: "Authentication required"}
+	apiErrorForbidden          = APIError{Status: http.StatusForbidden, Code: "access.forbidden", Message: "Access denied"}
+	apiErrorServiceUnavailable = APIError{Status: http.StatusServiceUnavailable, Code: "service.unavailable", Message: "Service is not ready"}
+	apiErrorInvalidRequest     = APIError{Status: http.StatusBadRequest, Code: "request.invalid", Message: "Invalid request body"}
+	apiErrorInvalidPageSize    = APIError{Status: http.StatusBadRequest, Code: "pagination.invalid_page_size", Message: "Invalid page size"}
+	apiErrorInvalidCursor      = APIError{Status: http.StatusBadRequest, Code: "pagination.invalid_cursor", Message: "Invalid cursor"}
+	apiErrorInvalidTenantID    = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_id", Message: "Invalid tenant id"}
+	apiErrorInvalidTenantName  = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_name", Message: "Invalid tenant name"}
+
 	apiErrorInvalidTenantField      = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_field", Message: "Invalid tenant field"}
 	apiErrorInvalidTenantCORSOrigin = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_cors_origin", Message: "Use up to 32 exact HTTPS origins; HTTP is allowed only for localhost or loopback addresses"}
 	apiErrorTenantNotFound          = APIError{Status: http.StatusNotFound, Code: "tenant.not_found", Message: "Tenant not found"}
@@ -33,7 +33,6 @@ var (
 	apiErrorInvalidPassword           = APIError{Status: http.StatusBadRequest, Code: "access.invalid_password", Message: "Invalid password"}
 	apiErrorInvalidUserID             = APIError{Status: http.StatusBadRequest, Code: "user.invalid_id", Message: "Invalid user id"}
 	apiErrorInvalidUserName           = APIError{Status: http.StatusBadRequest, Code: "user.invalid_name", Message: "Invalid user name"}
-	apiErrorInvalidUserEmail          = APIError{Status: http.StatusBadRequest, Code: "user.invalid_email", Message: "Invalid user email"}
 	apiErrorEmailAlreadyRegistered    = APIError{Status: http.StatusConflict, Code: "identity.email_registered", Message: "Email already registered"}
 	apiErrorEmailVerificationRequired = APIError{Status: http.StatusForbidden, Code: "identity.email_verification_required", Message: "Email verification is required"}
 	apiErrorInvalidCredentials        = APIError{Status: http.StatusUnauthorized, Code: "access.invalid_credentials", Message: "Invalid email or password"}
@@ -42,7 +41,6 @@ var (
 	apiErrorInvalidOAuthState         = APIError{Status: http.StatusBadRequest, Code: "oauth.invalid_state", Message: "Invalid OAuth state"}
 	apiErrorOAuthEmailConflict        = APIError{Status: http.StatusConflict, Code: "oauth.email_conflict", Message: "Email is already registered with another sign-in method"}
 	apiErrorOAuthEmailNotVerified     = APIError{Status: http.StatusUnauthorized, Code: "oauth.email_not_verified", Message: "Google email is not verified"}
-	apiErrorUserNotFound              = APIError{Status: http.StatusNotFound, Code: "user.not_found", Message: "User not found"}
 
 	apiErrorInvalidMembershipID   = APIError{Status: http.StatusBadRequest, Code: "membership.invalid_id", Message: "Invalid membership id"}
 	apiErrorInvalidMembershipRole = APIError{Status: http.StatusBadRequest, Code: "membership.invalid_role", Message: "Invalid membership role"}
@@ -92,9 +90,6 @@ var (
 	apiErrorTranscriptAlreadyExists    = APIError{Status: http.StatusConflict, Code: "transcript.already_exists", Message: "A Transcript already exists for this Recording"}
 	apiErrorTranscriptNotFound         = APIError{Status: http.StatusNotFound, Code: "transcript.not_found", Message: "Transcript not found"}
 	apiErrorTranscriptNotReady         = APIError{Status: http.StatusConflict, Code: "transcript.not_ready", Message: "Transcript artifact is not ready"}
-
-	apiErrorInvalidAuditLogID = APIError{Status: http.StatusBadRequest, Code: "audit.invalid_id", Message: "Invalid audit log id"}
-	apiErrorAuditLogNotFound  = APIError{Status: http.StatusNotFound, Code: "audit.not_found", Message: "Audit log not found"}
 
 	apiErrorInvalidWebhookEndpointID        = APIError{Status: http.StatusBadRequest, Code: "webhook.invalid_endpoint_id", Message: "Invalid webhook endpoint id"}
 	apiErrorInvalidWebhookDeliveryID        = APIError{Status: http.StatusBadRequest, Code: "webhook.invalid_delivery_id", Message: "Invalid webhook delivery id"}

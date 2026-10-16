@@ -2,7 +2,7 @@ package httpapi
 
 import (
 	"context"
-	"encoding/json"
+
 	"errors"
 	"net/http"
 	"strings"
@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/apikeys"
-	"github.com/q9labs/chalk/apps/api/internal/auditlogs"
+
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
@@ -52,10 +52,6 @@ var (
 	}
 )
 
-// APIKeyRecentAuthVerifier is deliberately small so the API-key domain does
-// not own password or login policy. Implementations must bind proof to the
-// authenticated Dashboard Account, action, and resource, and must reject
-// API-key principals.
 type APIKeyRecentAuthVerifier interface {
 	Verify(context.Context, string, utilities.ID, string, utilities.ID) error
 }
@@ -70,10 +66,6 @@ type APIKeyService interface {
 	List(context.Context, utilities.ID, pagination.PageRequest) (apikeys.KeyList, error)
 	Rotate(context.Context, utilities.ID, utilities.ID, apikeys.RotateInput) (apikeys.RotateResult, error)
 	Revoke(context.Context, utilities.ID, utilities.ID) error
-}
-
-type APIKeyAuditWriter interface {
-	Create(context.Context, auditlogs.CreateInput) (auditlogs.AuditLog, error)
 }
 
 type apiKeyResponse struct {
@@ -135,26 +127,26 @@ type rotateAPIKeyRequest struct {
 	Body       rotateAPIKeyBody
 }
 
-func mountAPIKeyRoutesWithOptions(r chi.Router, service APIKeyService, authorizer TenantAuthorizer, audits APIKeyAuditWriter, options APIKeyRouteOptions, limits RateLimitOptions) {
-	for _, endpoint := range apiKeyEndpoints(service, authorizer, audits, options.RecentAuth) {
+func mountAPIKeyRoutesWithOptions(r chi.Router, service APIKeyService, authorizer TenantAuthorizer, options APIKeyRouteOptions, limits RateLimitOptions) {
+	for _, endpoint := range apiKeyEndpoints(service, authorizer, options.RecentAuth) {
 		endpoint.Mount(r, limits)
 	}
 }
 
-func apiKeyEndpoints(service APIKeyService, authorizer TenantAuthorizer, audits APIKeyAuditWriter, recentAuth ...APIKeyRecentAuthVerifier) []RouteEndpoint {
+func apiKeyEndpoints(service APIKeyService, authorizer TenantAuthorizer, recentAuth ...APIKeyRecentAuthVerifier) []RouteEndpoint {
 	var verifier APIKeyRecentAuthVerifier
 	if len(recentAuth) > 0 {
 		verifier = recentAuth[0]
 	}
 	return []RouteEndpoint{
-		createAPIKeyEndpoint(service, authorizer, audits, verifier),
+		createAPIKeyEndpoint(service, authorizer, verifier),
 		listAPIKeysEndpoint(service, authorizer),
-		rotateAPIKeyEndpoint(service, authorizer, audits, verifier),
-		revokeAPIKeyEndpoint(service, authorizer, audits, verifier),
+		rotateAPIKeyEndpoint(service, authorizer, verifier),
+		revokeAPIKeyEndpoint(service, authorizer, verifier),
 	}
 }
 
-func createAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer, audits APIKeyAuditWriter, recentAuth APIKeyRecentAuthVerifier) Endpoint[createAPIKeyRequest, apiKeyWithSecretResponse] {
+func createAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer, recentAuth APIKeyRecentAuthVerifier) Endpoint[createAPIKeyRequest, apiKeyWithSecretResponse] {
 	return Post("/v1/tenants/{tenant_id}/api-keys", "/tenants/{tenant_id}/api-keys", "createAPIKey", decodeCreateAPIKeyRequest, func(ctx context.Context, request createAPIKeyRequest) (apiKeyWithSecretResponse, error) {
 		if service == nil {
 			return apiKeyWithSecretResponse{}, apiErrorServiceUnavailable
@@ -163,11 +155,11 @@ func createAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer, au
 			return apiKeyWithSecretResponse{}, err
 		}
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeAPIKeysPermission); err != nil {
-			auditAPIKeyAuthorizationFailure(ctx, audits, request.TenantID, "api_key.created", utilities.ID{}, err)
+
 			return apiKeyWithSecretResponse{}, err
 		}
 		if err := preventAPIKeyScopeEscalation(ctx, request.Body.Scopes); err != nil {
-			auditAPIKeyAuthorizationFailure(ctx, audits, request.TenantID, "api_key.created", utilities.ID{}, err)
+
 			return apiKeyWithSecretResponse{}, err
 		}
 
@@ -220,7 +212,7 @@ func listAPIKeysEndpoint(service APIKeyService, authorizer TenantAuthorizer) End
 		MapErrors(apiKeyAPIError)
 }
 
-func rotateAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer, audits APIKeyAuditWriter, recentAuth APIKeyRecentAuthVerifier) Endpoint[rotateAPIKeyRequest, apiKeyWithSecretResponse] {
+func rotateAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer, recentAuth APIKeyRecentAuthVerifier) Endpoint[rotateAPIKeyRequest, apiKeyWithSecretResponse] {
 	return Post("/v1/tenants/{tenant_id}/api-keys/{api_key_id}/rotate", "/tenants/{tenant_id}/api-keys/{api_key_id}/rotate", "rotateAPIKey", decodeRotateAPIKeyRequest, func(ctx context.Context, request rotateAPIKeyRequest) (apiKeyWithSecretResponse, error) {
 		if service == nil {
 			return apiKeyWithSecretResponse{}, apiErrorServiceUnavailable
@@ -229,11 +221,11 @@ func rotateAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer, au
 			return apiKeyWithSecretResponse{}, err
 		}
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeAPIKeysPermission); err != nil {
-			auditAPIKeyAuthorizationFailure(ctx, audits, request.TenantID, "api_key.rotated", request.APIKeyID, err)
+
 			return apiKeyWithSecretResponse{}, err
 		}
 		if err := preventAPIKeyTargetEscalation(ctx, service, request.apiKeyIDsRequest); err != nil {
-			auditAPIKeyAuthorizationFailure(ctx, audits, request.TenantID, "api_key.rotated", request.APIKeyID, err)
+
 			return apiKeyWithSecretResponse{}, err
 		}
 
@@ -256,7 +248,7 @@ func rotateAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer, au
 		MapErrors(apiKeyAPIError)
 }
 
-func revokeAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer, audits APIKeyAuditWriter, recentAuth APIKeyRecentAuthVerifier) Endpoint[apiKeyIDsRequest, noResponse] {
+func revokeAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer, recentAuth APIKeyRecentAuthVerifier) Endpoint[apiKeyIDsRequest, noResponse] {
 	return Delete("/v1/tenants/{tenant_id}/api-keys/{api_key_id}", "/tenants/{tenant_id}/api-keys/{api_key_id}", "revokeAPIKey", decodeAPIKeyIDsRequest, func(ctx context.Context, request apiKeyIDsRequest) (noResponse, error) {
 		if service == nil {
 			return noResponse{}, apiErrorServiceUnavailable
@@ -265,11 +257,11 @@ func revokeAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer, au
 			return noResponse{}, err
 		}
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, deleteAPIKeysPermission); err != nil {
-			auditAPIKeyAuthorizationFailure(ctx, audits, request.TenantID, "api_key.revoked", request.APIKeyID, err)
+
 			return noResponse{}, err
 		}
 		if err := preventAPIKeyTargetEscalation(ctx, service, request); err != nil {
-			auditAPIKeyAuthorizationFailure(ctx, audits, request.TenantID, "api_key.revoked", request.APIKeyID, err)
+
 			return noResponse{}, err
 		}
 		return noResponse{}, service.Revoke(ctx, request.TenantID, request.APIKeyID)
@@ -359,30 +351,6 @@ func preventAPIKeyScopeEscalation(ctx context.Context, scopes []authentication.S
 		}
 	}
 	return nil
-}
-
-func auditAPIKeyAuthorizationFailure(ctx context.Context, audits APIKeyAuditWriter, tenantID utilities.ID, action string, resourceID utilities.ID, authErr error) {
-	if audits == nil || authorizationAPIError(authErr).Code != apiErrorForbidden.Code {
-		return
-	}
-	principal, ok := authentication.PrincipalFromContext(ctx)
-	if !ok {
-		return
-	}
-	actorType, actorUserID := auditlogs.PrincipalActor(principal)
-	details := json.RawMessage(`{}`)
-	if principal.Kind == authentication.PrincipalAPIKey {
-		details, _ = json.Marshal(struct {
-			ActorAPIKeyID string `json:"actor_api_key_id"`
-		}{ActorAPIKeyID: principal.APIKeyID.String()})
-	}
-	resourceType := "api_key"
-	errorCode := apiErrorForbidden.Code
-	_, _ = audits.Create(ctx, auditlogs.CreateInput{
-		TenantID: tenantID, ActorUserID: actorUserID, ActorType: actorType,
-		Action: action, ResourceType: &resourceType, ResourceID: resourceID,
-		Details: details, Outcome: auditlogs.OutcomeFailure, ErrorCode: &errorCode,
-	})
 }
 
 func apiKeyIDParameter() APIParameterContract {

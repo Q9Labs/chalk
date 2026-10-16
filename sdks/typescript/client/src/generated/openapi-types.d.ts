@@ -174,23 +174,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/v1/invitations/accept": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Accept tenant invitation */
-    post: operations["acceptTenantInvitation"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   "/v1/me": {
     parameters: {
       query?: never;
@@ -363,23 +346,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/v1/regions": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** List regions */
-    get: operations["listRegions"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   "/v1/tenants": {
     parameters: {
       query?: never;
@@ -468,92 +434,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/v1/tenants/{tenant_id}/audit-logs": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** List audit logs */
-    get: operations["listAuditLogs"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/v1/tenants/{tenant_id}/audit-logs/{audit_log_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Get audit log */
-    get: operations["getAuditLog"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/v1/tenants/{tenant_id}/invitations": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** List tenant invitations */
-    get: operations["listTenantInvitations"];
-    put?: never;
-    /** Issue tenant invitation */
-    post: operations["issueTenantInvitation"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/v1/tenants/{tenant_id}/invitations/{invitation_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post?: never;
-    /** Revoke tenant invitation */
-    delete: operations["revokeTenantInvitation"];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/v1/tenants/{tenant_id}/membership": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post?: never;
-    /** Leave tenant */
-    delete: operations["leaveTenant"];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   "/v1/tenants/{tenant_id}/memberships": {
     parameters: {
       query?: never;
@@ -582,8 +462,7 @@ export interface paths {
     get?: never;
     put?: never;
     post?: never;
-    /** Remove membership */
-    delete: operations["removeMembership"];
+    delete?: never;
     options?: never;
     head?: never;
     /** Update membership */
@@ -1314,41 +1193,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/v1/users": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** List users */
-    get: operations["listUsers"];
-    put?: never;
-    /** Create user */
-    post: operations["createUser"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/v1/users/{user_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Get user */
-    get: operations["getUser"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   "/v1/whiteboard/files/uploads": {
     parameters: {
       query?: never;
@@ -1437,17 +1281,6 @@ export interface components {
       replayed: boolean;
       secret: string;
     };
-    AcceptTenantInvitationRequest: {
-      token: string;
-    };
-    AcceptedTenantInvitation: {
-      created_at: components["schemas"]["DateTimeString"];
-      id: components["schemas"]["UUID"];
-      role: string;
-      tenant_id: components["schemas"]["TenantId"];
-      updated_at: components["schemas"]["DateTimeString"];
-      user_id: components["schemas"]["UserId"];
-    };
     AccessGrant: {
       episode_started_at?: components["schemas"]["DateTimeString"] | null;
       media: {
@@ -1519,53 +1352,8 @@ export interface components {
       participant_id?: components["schemas"]["ParticipantId"];
       role: string;
     };
-    AuditLog: {
-      action: string;
-      actor_type: string;
-      actor_user_id: components["schemas"]["UserId"] | null;
-      after:
-        | {
-            [key: string]: unknown;
-          }
-        | unknown[]
-        | string
-        | number
-        | boolean
-        | null;
-      before:
-        | {
-            [key: string]: unknown;
-          }
-        | unknown[]
-        | string
-        | number
-        | boolean
-        | null;
-      created_at: components["schemas"]["DateTimeString"];
-      details:
-        | {
-            [key: string]: unknown;
-          }
-        | unknown[]
-        | string
-        | number
-        | boolean
-        | null;
-      error_code: string | null;
-      error_message: string | null;
-      id: components["schemas"]["AuditLogId"];
-      outcome: string;
-      resource_id: components["schemas"]["UUID"] | null;
-      resource_type: string | null;
-      tenant_id: components["schemas"]["TenantId"];
-      updated_at: components["schemas"]["DateTimeString"];
-    };
     /** Format: uuid */
     AuditLogId: string;
-    AuditLogList: {
-      audit_logs: components["schemas"]["AuditLog"][];
-      pagination: components["schemas"]["Pagination"];
-    };
     Auth: {
       expires_at: components["schemas"]["DateTimeString"];
       session_token: string;
@@ -1759,7 +1547,6 @@ export interface components {
     CreateTenantRequest: {
       cors_allowed_origins?: string[];
       default_media_plane?: string | null;
-      default_region?: string | null;
       logo_key?: string | null;
       media_plane_provider_config?: components["schemas"]["MediaPlaneProviderConfig"] | null;
       name: string;
@@ -1768,10 +1555,6 @@ export interface components {
     };
     CreateTranscriptDownloadURLRequest: {
       expires_in_seconds: number;
-    };
-    CreateUserRequest: {
-      email: components["schemas"]["Email"];
-      name: string;
     };
     CreateWebhookEndpointRequest: {
       api_version: number;
@@ -1888,22 +1671,6 @@ export interface components {
       participant_generation: number;
       replace_media_connection: boolean;
     };
-    IssueTenantInvitationRequest: {
-      email: components["schemas"]["Email"];
-      role: string;
-    };
-    IssuedTenantInvitation: {
-      accept_link: string;
-      email_delivered: boolean;
-      invitation: {
-        created_at: components["schemas"]["DateTimeString"];
-        email: components["schemas"]["Email"];
-        expires_at: components["schemas"]["DateTimeString"];
-        id: components["schemas"]["UUID"];
-        role: string;
-        tenant_id: components["schemas"]["TenantId"];
-      };
-    };
     LeaveDashboardSpaceSelfRequest: {
       participant_generation: number;
     };
@@ -1939,7 +1706,6 @@ export interface components {
       pagination: components["schemas"]["Pagination"];
     };
     OnboardTenantRequest: {
-      default_region?: string | null;
       name: string;
     };
     Pagination: {
@@ -2023,9 +1789,6 @@ export interface components {
     };
     PasswordResetRequest: {
       email: components["schemas"]["Email"];
-    };
-    PeopleMutation: {
-      success: boolean;
     };
     PrepareRecordingRequest: {
       expected_revision: number;
@@ -2162,12 +1925,6 @@ export interface components {
       media_proof: string;
       replace_media_connection: boolean;
     };
-    Regions: {
-      regions: {
-        code: string;
-        name: string;
-      }[];
-    };
     RegisterRequest: {
       email: components["schemas"]["Email"];
       name: string;
@@ -2292,7 +2049,6 @@ export interface components {
       cors_allowed_origins: string[];
       created_at: components["schemas"]["DateTimeString"];
       default_media_plane: string | null;
-      default_region: string | null;
       id: components["schemas"]["TenantId"];
       logo_key: string | null;
       media_plane_provider_config: components["schemas"]["MediaPlaneProviderConfig"] | null;
@@ -2309,16 +2065,6 @@ export interface components {
     };
     /** Format: uuid */
     TenantId: string;
-    TenantInvitationList: {
-      invitations: {
-        created_at: components["schemas"]["DateTimeString"];
-        email: components["schemas"]["Email"];
-        expires_at: components["schemas"]["DateTimeString"];
-        id: components["schemas"]["UUID"];
-        role: string;
-        tenant_id: components["schemas"]["TenantId"];
-      }[];
-    };
     TenantList: {
       pagination: components["schemas"]["Pagination"];
       tenants: components["schemas"]["Tenant"][];
@@ -2442,7 +2188,6 @@ export interface components {
     UpdateTenantRequest: {
       cors_allowed_origins?: string[];
       default_media_plane?: string | null;
-      default_region?: string | null;
       logo_key?: string | null;
       media_plane_provider_config?: components["schemas"]["MediaPlaneProviderConfig"] | null;
       name?: string;
@@ -2477,19 +2222,8 @@ export interface components {
       name?: string;
       url?: string;
     };
-    User: {
-      created_at: components["schemas"]["DateTimeString"];
-      email: components["schemas"]["Email"];
-      id: components["schemas"]["UserId"];
-      name: string;
-      updated_at: components["schemas"]["DateTimeString"];
-    };
     /** Format: uuid */
     UserId: string;
-    UserList: {
-      pagination: components["schemas"]["Pagination"];
-      users: components["schemas"]["User"][];
-    };
     WebhookDeliveryCreated: {
       delivery_id: components["schemas"]["UUID"];
       endpoint_id: components["schemas"]["UUID"];
@@ -3432,123 +3166,6 @@ export interface operations {
       };
       /** @description Bad Gateway */
       502: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-    };
-  };
-  acceptTenantInvitation: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["AcceptTenantInvitationRequest"];
-      };
-    };
-    responses: {
-      /** @description OK */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["AcceptedTenantInvitation"];
-        };
-      };
-      /** @description Bad Request */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Conflict */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Gone */
-      410: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Request Entity Too Large */
-      413: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Too Many Requests */
-      429: {
-        headers: {
-          "Retry-After": number;
-          "X-RateLimit-Limit": number;
-          "X-RateLimit-Remaining": number;
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Internal Server Error */
-      500: {
         headers: {
           [name: string]: unknown;
         };
@@ -4523,53 +4140,6 @@ export interface operations {
       };
     };
   };
-  listRegions: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description OK */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Regions"];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Internal Server Error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-    };
-  };
   listTenants: {
     parameters: {
       query?: {
@@ -5327,591 +4897,6 @@ export interface operations {
       };
     };
   };
-  listAuditLogs: {
-    parameters: {
-      query?: {
-        page_size?: number;
-        cursor?: string;
-      };
-      header?: never;
-      path: {
-        tenant_id: components["schemas"]["TenantId"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description OK */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["AuditLogList"];
-        };
-      };
-      /** @description Bad Request */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Internal Server Error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-    };
-  };
-  getAuditLog: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        tenant_id: components["schemas"]["TenantId"];
-        audit_log_id: components["schemas"]["AuditLogId"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description OK */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["AuditLog"];
-        };
-      };
-      /** @description Bad Request */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Internal Server Error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-    };
-  };
-  listTenantInvitations: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        tenant_id: components["schemas"]["TenantId"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description OK */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["TenantInvitationList"];
-        };
-      };
-      /** @description Bad Request */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Conflict */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Gone */
-      410: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Too Many Requests */
-      429: {
-        headers: {
-          "Retry-After": number;
-          "X-RateLimit-Limit": number;
-          "X-RateLimit-Remaining": number;
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Internal Server Error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-    };
-  };
-  issueTenantInvitation: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        tenant_id: components["schemas"]["TenantId"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["IssueTenantInvitationRequest"];
-      };
-    };
-    responses: {
-      /** @description Created */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["IssuedTenantInvitation"];
-        };
-      };
-      /** @description Bad Request */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Conflict */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Gone */
-      410: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Request Entity Too Large */
-      413: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Too Many Requests */
-      429: {
-        headers: {
-          "Retry-After": number;
-          "X-RateLimit-Limit": number;
-          "X-RateLimit-Remaining": number;
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Internal Server Error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-    };
-  };
-  revokeTenantInvitation: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        tenant_id: components["schemas"]["TenantId"];
-        invitation_id: components["schemas"]["UUID"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description OK */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["PeopleMutation"];
-        };
-      };
-      /** @description Bad Request */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Conflict */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Gone */
-      410: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Too Many Requests */
-      429: {
-        headers: {
-          "Retry-After": number;
-          "X-RateLimit-Limit": number;
-          "X-RateLimit-Remaining": number;
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Internal Server Error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-    };
-  };
-  leaveTenant: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        tenant_id: components["schemas"]["TenantId"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description OK */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["PeopleMutation"];
-        };
-      };
-      /** @description Bad Request */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Conflict */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Gone */
-      410: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Too Many Requests */
-      429: {
-        headers: {
-          "Retry-After": number;
-          "X-RateLimit-Limit": number;
-          "X-RateLimit-Remaining": number;
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Internal Server Error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-    };
-  };
   listMemberships: {
     parameters: {
       query?: {
@@ -6035,113 +5020,6 @@ export interface operations {
       };
       /** @description Request Entity Too Large */
       413: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Too Many Requests */
-      429: {
-        headers: {
-          "Retry-After": number;
-          "X-RateLimit-Limit": number;
-          "X-RateLimit-Remaining": number;
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Internal Server Error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-    };
-  };
-  removeMembership: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        tenant_id: components["schemas"]["TenantId"];
-        membership_id: components["schemas"]["MembershipId"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description OK */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["PeopleMutation"];
-        };
-      };
-      /** @description Bad Request */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Conflict */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Gone */
-      410: {
         headers: {
           [name: string]: unknown;
         };
@@ -11520,240 +10398,6 @@ export interface operations {
           "Retry-After": number;
           "X-RateLimit-Limit": number;
           "X-RateLimit-Remaining": number;
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Internal Server Error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-    };
-  };
-  listUsers: {
-    parameters: {
-      query?: {
-        page_size?: number;
-        cursor?: string;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description OK */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["UserList"];
-        };
-      };
-      /** @description Bad Request */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Internal Server Error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-    };
-  };
-  createUser: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CreateUserRequest"];
-      };
-    };
-    responses: {
-      /** @description Created */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["User"];
-        };
-      };
-      /** @description Bad Request */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Request Entity Too Large */
-      413: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Too Many Requests */
-      429: {
-        headers: {
-          "Retry-After": number;
-          "X-RateLimit-Limit": number;
-          "X-RateLimit-Remaining": number;
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Internal Server Error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-    };
-  };
-  getUser: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        user_id: components["schemas"]["UserId"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description OK */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["User"];
-        };
-      };
-      /** @description Bad Request */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
           [name: string]: unknown;
         };
         content: {

@@ -2,7 +2,6 @@
 select
     tenants.id::uuid as id,
     tenants.name,
-    tenants.default_region,
     tenants.default_media_plane,
     tenants.media_plane_provider_config,
     tenants.storage_provider_config,
@@ -25,7 +24,6 @@ where tenants.id = $1;
 select
     tenants.id::uuid as id,
     tenants.name,
-    tenants.default_region,
     tenants.default_media_plane,
     tenants.media_plane_provider_config,
     tenants.storage_provider_config,
@@ -58,7 +56,6 @@ with inserted as (
 insert into tenants (
     id,
     name,
-    default_region,
     default_media_plane,
     media_plane_provider_config,
     storage_provider_config,
@@ -68,7 +65,6 @@ insert into tenants (
 ) values (
     sqlc.arg(id),
     sqlc.arg(name),
-    sqlc.narg(default_region),
     sqlc.narg(default_media_plane),
     sqlc.narg(media_plane_provider_config),
     sqlc.narg(storage_provider_config),
@@ -93,7 +89,6 @@ returning *
 select
     inserted.id::uuid as id,
     inserted.name,
-    inserted.default_region,
     inserted.default_media_plane,
     inserted.media_plane_provider_config,
     inserted.storage_provider_config,
@@ -118,10 +113,6 @@ set
     name = case
         when sqlc.arg(name_set)::boolean then sqlc.arg(name)::text
         else name
-    end,
-    default_region = case
-        when sqlc.arg(default_region_set)::boolean then sqlc.narg(default_region)::text
-        else default_region
     end,
     default_media_plane = case
         when sqlc.arg(default_media_plane_set)::boolean then sqlc.narg(default_media_plane)::text
@@ -184,7 +175,6 @@ returning *
 select
     updated_tenant.id::uuid as id,
     updated_tenant.name,
-    updated_tenant.default_region,
     updated_tenant.default_media_plane,
     updated_tenant.media_plane_provider_config,
     updated_tenant.storage_provider_config,

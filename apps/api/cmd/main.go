@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
+
 	"net/http"
 	"os"
 	"os/signal"
@@ -29,7 +29,7 @@ import (
 	redisadapter "github.com/q9labs/chalk/apps/api/internal/adapters/redis"
 	resendadapter "github.com/q9labs/chalk/apps/api/internal/adapters/resend"
 	"github.com/q9labs/chalk/apps/api/internal/apikeys"
-	"github.com/q9labs/chalk/apps/api/internal/auditlogs"
+
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
@@ -69,7 +69,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
-	"github.com/q9labs/chalk/apps/api/internal/users"
+
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
 	"github.com/q9labs/chalk/apps/api/internal/whiteboardfiles"
@@ -190,8 +190,7 @@ func run() error {
 	tenantService := tenants.NewService(tenantRepository)
 	accountTenantRepository := postgres.NewAccountTenantRepository(operationQueries, pool, diagnostics.Queries)
 	accountTenantService := tenants.NewAccountService(accountTenantRepository)
-	userRepository := postgres.NewUserRepository(operationQueries)
-	userService := users.NewService(userRepository)
+
 	membershipRepository := postgres.NewMembershipRepository(operationQueries, pool, diagnostics.Queries)
 	membershipService := memberships.NewService(membershipRepository)
 	var invitationSender email.Sender
@@ -203,11 +202,11 @@ func run() error {
 		invitationSender = email.NewService(sender)
 		authenticationService = authenticationService.WithEmailSender(invitationSender)
 	}
-	var peopleLogger *slog.Logger
+
 	if cfg.Observability.OperationLogs {
-		peopleLogger = diagnostics.Logger()
+
 	}
-	peopleService := memberships.NewPeopleService(postgres.NewPeopleRepository(pool, peopleLogger), invitationSender, cfg.InvitationFrom, cfg.InvitationWebOrigin)
+
 	spaceRepository := postgres.NewSpaceRepository(operationQueries, pool)
 	spaceService := spaces.NewServiceWithDefaultProvider(spaceRepository, cfg.DefaultMediaPlane)
 	episodeMediaBindingResolver := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{ProcessConfig: cfg.CloudflareRealtime, DefaultProvider: cfg.DefaultMediaPlane})
@@ -335,8 +334,6 @@ func run() error {
 		recorderCaptureSignaling = observability.NewObservedCaptureSignalingExecutor(captureSignalingService)
 	}
 	var transcriptService transcripts.Service
-	auditLogRepository := postgres.NewAuditLogRepository(operationQueries)
-	auditLogService := auditlogs.NewService(auditLogRepository)
 
 	mediaPlaneRegistry := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{
 		ProcessConfig:   cfg.CloudflareRealtime,
@@ -589,18 +586,16 @@ func run() error {
 		AccountTenants:       accountTenantService,
 		APIKeys:              apiKeyService,
 		APIKeyAuthentication: apiKeyService,
-		APIKeyAudits:         auditLogService,
 
 		MediaPlane:             mediaPlaneRegistry,
 		MediaPublications:      mediaPublicationService,
 		ParticipantMediaIssuer: participantMediaIssuer,
 
-		ParticipantMediaVerify:     participantMediaVerifier,
-		ParticipantMediaActive:     participantActiveAuthorizer,
-		ParticipantGeneration:      participantActiveAuthorizer,
-		Memberships:                membershipService,
-		People:                     peopleService,
-		AuditLogs:                  auditLogService,
+		ParticipantMediaVerify: participantMediaVerifier,
+		ParticipantMediaActive: participantActiveAuthorizer,
+		ParticipantGeneration:  participantActiveAuthorizer,
+		Memberships:            membershipService,
+
 		RecordingDownloads:         recordingDownloads,
 		RecordingObjects:           recordingObjects,
 		RecorderHealth:             recorderHealthService,
@@ -644,14 +639,13 @@ func run() error {
 		CleanupDeleteAuthority: transcriptionAuthority,
 		FinalizerWorker:        transcriptService,
 		FinalizerAuthority:     transcriptionAuthority,
-		Users:                  userService,
+
 		Webhooks:               webhookService,
 		ChatAttachments:        chatAttachmentService,
 		ChatParticipants:       chatParticipantVerifier,
 		WhiteboardFiles:        whiteboardFileService,
 		WhiteboardParticipants: whiteboardParticipantVerifier,
 		PublicInvites:          publicInviteService,
-		PublicInviteAudits:     auditLogService,
 	}
 	applyCapabilityProfile(&routerOptions, cfg.Capabilities)
 	routerOptions.ApplyDiagnostics(diagnostics)

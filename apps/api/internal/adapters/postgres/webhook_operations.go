@@ -89,9 +89,7 @@ func (r WebhookRepository) Test(ctx context.Context, tenantID, endpointID utilit
 		return webhooks.DeliveryResult{}, err
 	}
 	result := deliveryResult(delivery)
-	if err := insertWebhookAudit(ctx, tx, tenantID, "webhook_endpoint.test", "webhook_delivery", deliveryID, map[string]any{"endpoint_revision": result.EndpointRevision}); err != nil {
-		return webhooks.DeliveryResult{}, err
-	}
+
 	if err := r.storeIdempotency(ctx, tx, tenantID, "endpoint.test", key, hash, 201, deliveryID, webhookIdempotencyResponse{Delivery: cacheDelivery(result)}); err != nil {
 		return webhooks.DeliveryResult{}, err
 	}
@@ -213,9 +211,7 @@ func (r WebhookRepository) Redeliver(ctx context.Context, tenantID, endpointID, 
 		return webhooks.DeliveryResult{}, err
 	}
 	result := deliveryResult(created)
-	if err := insertWebhookAudit(ctx, tx, tenantID, "webhook_delivery.redeliver", "webhook_delivery", newID, map[string]any{"endpoint_revision": result.EndpointRevision, "original_delivery_id": deliveryID.String()}); err != nil {
-		return webhooks.DeliveryResult{}, err
-	}
+
 	if err := r.storeIdempotency(ctx, tx, tenantID, "delivery.redeliver", key, hash, 201, newID, webhookIdempotencyResponse{Delivery: cacheDelivery(result)}); err != nil {
 		return webhooks.DeliveryResult{}, err
 	}

@@ -49,7 +49,7 @@ func TestAuthenticatePreservesSurvivingScopesOnLegacyKeys(t *testing.T) {
 	service := newService(repository, nil)
 	created := createKey(t, service, testNow.Add(time.Hour))
 	record := repository.records[created.Key.ID.String()]
-	record.Scopes = append(slices.Clone(authentication.AllScopes), "integrations:read", "integrations:write", "integrations:delete")
+	record.Scopes = append(slices.Clone(authentication.AllScopes), "integrations:read", "integrations:write", "integrations:delete", "users:read", "users:write", "users:delete", "audit_logs:read")
 	repository.records[created.Key.ID.String()] = record
 
 	principal, err := service.Authenticate(context.Background(), apikeys.AuthenticateInput{RawKey: created.RawKey})

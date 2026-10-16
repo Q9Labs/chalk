@@ -457,12 +457,12 @@ wishlist:
     area: identity_and_tenancy
     state: planned
     summary: >-
-      The API supports Tenant membership, Roles and invitations. There is no member-management
-      UI after the dashboard removal.
+      The API supports Tenant membership and Roles. Invitations and the dashboard are removed;
+      people management has no current user journey.
     priority: P1
     size: M
     remaining:
-      - Build member and invitation management on the existing API.
+      - Design people management only when a real user journey requires it.
       - >-
         Verify that denied Roles cannot change membership and that expired or revoked invitations
         show a way forward.

@@ -14,7 +14,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
-	"github.com/q9labs/chalk/apps/api/internal/regions"
+
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -23,9 +23,9 @@ import (
 )
 
 var (
-	ErrInvalidTenantID       = errors.New("invalid tenant id")
-	ErrInvalidTenantName     = errors.New("invalid tenant name")
-	ErrInvalidTenantRegion   = errors.New("invalid tenant region")
+	ErrInvalidTenantID   = errors.New("invalid tenant id")
+	ErrInvalidTenantName = errors.New("invalid tenant name")
+
 	ErrInvalidTenantField    = errors.New("invalid tenant field")
 	ErrInvalidCORSOrigin     = errors.New("invalid tenant CORS origin")
 	ErrTenantNotFound        = errors.New("tenant not found")
@@ -49,9 +49,9 @@ var (
 )
 
 type Tenant struct {
-	ID                       utilities.ID
-	Name                     string
-	DefaultRegion            *string
+	ID   utilities.ID
+	Name string
+
 	DefaultMediaPlane        *string
 	MediaPlaneProviderConfig json.RawMessage
 	StorageProviderConfig    json.RawMessage
@@ -76,9 +76,9 @@ type Service struct {
 }
 
 type CreateTenantInput struct {
-	ID                       utilities.ID
-	Name                     string
-	DefaultRegion            *string
+	ID   utilities.ID
+	Name string
+
 	DefaultMediaPlane        *string
 	MediaPlaneProviderConfig json.RawMessage
 	StorageProviderConfig    json.RawMessage
@@ -88,8 +88,8 @@ type CreateTenantInput struct {
 }
 
 type UpdateTenantInput struct {
-	Name                     utilities.OptionalString
-	DefaultRegion            utilities.OptionalString
+	Name utilities.OptionalString
+
 	DefaultMediaPlane        utilities.OptionalString
 	MediaPlaneProviderConfig utilities.OptionalJSON
 	StorageProviderConfig    utilities.OptionalJSON
@@ -162,10 +162,9 @@ type AccountService struct {
 }
 
 type OnboardTenantInput struct {
-	AccountID     utilities.ID
-	RequestKey    string
-	Name          string
-	DefaultRegion *string
+	AccountID  utilities.ID
+	RequestKey string
+	Name       string
 }
 
 type OnboardTenantRecordInput struct {
@@ -218,9 +217,9 @@ func (s AccountService) OnboardTenant(ctx context.Context, input OnboardTenantIn
 	}
 	defaultMediaPlane := defaultOnboardedTenantMediaPlane
 	tenantInput := CreateTenantInput{
-		ID:                       tenantID,
-		Name:                     input.Name,
-		DefaultRegion:            input.DefaultRegion,
+		ID:   tenantID,
+		Name: input.Name,
+
 		DefaultMediaPlane:        &defaultMediaPlane,
 		MediaPlaneProviderConfig: json.RawMessage(defaultOnboardedTenantProviderConfig),
 	}
@@ -228,9 +227,8 @@ func (s AccountService) OnboardTenant(ctx context.Context, input OnboardTenantIn
 		return OnboardTenantResult{}, err
 	}
 	fingerprintPayload, err := json.Marshal(struct {
-		Name          string  `json:"name"`
-		DefaultRegion *string `json:"default_region"`
-	}{Name: tenantInput.Name, DefaultRegion: tenantInput.DefaultRegion})
+		Name string `json:"name"`
+	}{Name: tenantInput.Name})
 	if err != nil {
 		return OnboardTenantResult{}, fmt.Errorf("fingerprint tenant onboarding: %w", err)
 	}
@@ -250,7 +248,7 @@ func startAccountTenantOperation(ctx context.Context, operation string) (context
 		if err != nil {
 			outcome = "failed"
 			logLevel = slog.LevelError
-			if errors.Is(err, ErrInvalidAccountID) || errors.Is(err, ErrInvalidRequestKey) || errors.Is(err, ErrIdempotencyConflict) || errors.Is(err, ErrInvalidTenantName) || errors.Is(err, ErrInvalidTenantRegion) {
+			if errors.Is(err, ErrInvalidAccountID) || errors.Is(err, ErrInvalidRequestKey) || errors.Is(err, ErrIdempotencyConflict) || errors.Is(err, ErrInvalidTenantName) {
 				outcome = "rejected"
 				logLevel = slog.LevelWarn
 			}
@@ -324,10 +322,6 @@ func (s Service) AllowsOrigin(ctx context.Context, id utilities.ID, origin strin
 	return false, nil
 }
 
-func (Service) AvailableRegions(ctx context.Context) ([]regions.Region, error) {
-	return regions.Available(), nil
-}
-
 func prepareCreateTenantInput(input *CreateTenantInput) error {
 	name, err := utilities.RequiredString(input.Name)
 	if err != nil {
@@ -335,14 +329,6 @@ func prepareCreateTenantInput(input *CreateTenantInput) error {
 	}
 	input.Name = name
 
-	defaultRegion, err := utilities.NullableString(input.DefaultRegion)
-	if err != nil {
-		return ErrInvalidTenantRegion
-	}
-	if defaultRegion != nil && !regions.Contains(*defaultRegion) {
-		return ErrInvalidTenantRegion
-	}
-	input.DefaultRegion = defaultRegion
 	input.CORSAllowedOrigins, err = CORSOrigins(input.CORSAllowedOrigins)
 	if err != nil {
 		return err
@@ -399,14 +385,6 @@ func prepareUpdateTenantInput(input *UpdateTenantInput) error {
 		input.Name.Value = &name
 	}
 
-	defaultRegion, err := utilities.OptionalNullableString(input.DefaultRegion)
-	if err != nil {
-		return ErrInvalidTenantRegion
-	}
-	if defaultRegion.Set && defaultRegion.Value != nil && !regions.Contains(*defaultRegion.Value) {
-		return ErrInvalidTenantRegion
-	}
-	input.DefaultRegion = defaultRegion
 	if input.CORSAllowedOrigins.Set {
 		origins, originsErr := CORSOrigins(input.CORSAllowedOrigins.Value)
 		if originsErr != nil {

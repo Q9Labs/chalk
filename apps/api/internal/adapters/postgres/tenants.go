@@ -34,9 +34,9 @@ func NewTenantRepository(queries tenantQuerier) TenantRepository {
 
 func (s TenantRepository) CreateTenant(ctx context.Context, input tenants.CreateTenantInput) (tenants.Tenant, error) {
 	tenant, err := s.queries.CreateTenant(ctx, sqlc.CreateTenantParams{
-		ID:                       pgtype.UUID{Bytes: input.ID.Bytes(), Valid: true},
-		Name:                     input.Name,
-		DefaultRegion:            text(input.DefaultRegion),
+		ID:   pgtype.UUID{Bytes: input.ID.Bytes(), Valid: true},
+		Name: input.Name,
+
 		DefaultMediaPlane:        text(input.DefaultMediaPlane),
 		MediaPlaneProviderConfig: jsonBytes(input.MediaPlaneProviderConfig),
 		StorageProviderConfig:    jsonBytes(input.StorageProviderConfig),
@@ -110,11 +110,10 @@ func (s TenantRepository) ListTenants(ctx context.Context, page pagination.PageR
 
 func (s TenantRepository) UpdateTenant(ctx context.Context, id utilities.ID, input tenants.UpdateTenantInput) (tenants.Tenant, error) {
 	tenant, err := s.queries.UpdateTenant(ctx, sqlc.UpdateTenantParams{
-		ID:                            pgtype.UUID{Bytes: id.Bytes(), Valid: true},
-		NameSet:                       input.Name.Set,
-		Name:                          requiredText(input.Name),
-		DefaultRegionSet:              input.DefaultRegion.Set,
-		DefaultRegion:                 text(input.DefaultRegion.Value),
+		ID:      pgtype.UUID{Bytes: id.Bytes(), Valid: true},
+		NameSet: input.Name.Set,
+		Name:    requiredText(input.Name),
+
 		DefaultMediaPlaneSet:          input.DefaultMediaPlane.Set,
 		DefaultMediaPlane:             text(input.DefaultMediaPlane.Value),
 		MediaPlaneProviderConfigSet:   input.MediaPlaneProviderConfig.Set,
@@ -171,9 +170,9 @@ func listTenantsParams(page pagination.PageRequest) sqlc.ListTenantsParams {
 func mapTenant(tenant tenantRecord) tenants.Tenant {
 	policy := tenantArtifactPolicy(tenant)
 	return tenants.Tenant{
-		ID:                       utilities.IDFromBytes(tenant.ID.Bytes),
-		Name:                     tenant.Name,
-		DefaultRegion:            nullableText(tenant.DefaultRegion),
+		ID:   utilities.IDFromBytes(tenant.ID.Bytes),
+		Name: tenant.Name,
+
 		DefaultMediaPlane:        nullableText(tenant.DefaultMediaPlane),
 		MediaPlaneProviderConfig: jsonRaw(tenant.MediaPlaneProviderConfig),
 		StorageProviderConfig:    jsonRaw(tenant.StorageProviderConfig),
@@ -187,9 +186,9 @@ func mapTenant(tenant tenantRecord) tenants.Tenant {
 }
 
 type tenantRecord struct {
-	ID                         pgtype.UUID
-	Name                       string
-	DefaultRegion              pgtype.Text
+	ID   pgtype.UUID
+	Name string
+
 	DefaultMediaPlane          pgtype.Text
 	MediaPlaneProviderConfig   []byte
 	StorageProviderConfig      []byte
@@ -227,9 +226,9 @@ func tenantArtifactPolicy(tenant tenantRecord) artifactpolicy.TenantPolicy {
 
 func createTenantRecord(row sqlc.CreateTenantRow) tenantRecord {
 	return tenantRecord{
-		ID:                         row.ID,
-		Name:                       row.Name,
-		DefaultRegion:              row.DefaultRegion,
+		ID:   row.ID,
+		Name: row.Name,
+
 		DefaultMediaPlane:          row.DefaultMediaPlane,
 		MediaPlaneProviderConfig:   row.MediaPlaneProviderConfig,
 		StorageProviderConfig:      row.StorageProviderConfig,
@@ -249,9 +248,9 @@ func createTenantRecord(row sqlc.CreateTenantRow) tenantRecord {
 
 func getTenantRecord(row sqlc.GetTenantRow) tenantRecord {
 	return tenantRecord{
-		ID:                         row.ID,
-		Name:                       row.Name,
-		DefaultRegion:              row.DefaultRegion,
+		ID:   row.ID,
+		Name: row.Name,
+
 		DefaultMediaPlane:          row.DefaultMediaPlane,
 		MediaPlaneProviderConfig:   row.MediaPlaneProviderConfig,
 		StorageProviderConfig:      row.StorageProviderConfig,
@@ -271,9 +270,9 @@ func getTenantRecord(row sqlc.GetTenantRow) tenantRecord {
 
 func listTenantRecord(row sqlc.ListTenantsRow) tenantRecord {
 	return tenantRecord{
-		ID:                         row.ID,
-		Name:                       row.Name,
-		DefaultRegion:              row.DefaultRegion,
+		ID:   row.ID,
+		Name: row.Name,
+
 		DefaultMediaPlane:          row.DefaultMediaPlane,
 		MediaPlaneProviderConfig:   row.MediaPlaneProviderConfig,
 		StorageProviderConfig:      row.StorageProviderConfig,
@@ -293,9 +292,9 @@ func listTenantRecord(row sqlc.ListTenantsRow) tenantRecord {
 
 func updateTenantRecord(row sqlc.UpdateTenantRow) tenantRecord {
 	return tenantRecord{
-		ID:                         row.ID,
-		Name:                       row.Name,
-		DefaultRegion:              row.DefaultRegion,
+		ID:   row.ID,
+		Name: row.Name,
+
 		DefaultMediaPlane:          row.DefaultMediaPlane,
 		MediaPlaneProviderConfig:   row.MediaPlaneProviderConfig,
 		StorageProviderConfig:      row.StorageProviderConfig,

@@ -3,39 +3,6 @@
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 import * as S from "./schemas";
 
-const auditLogsGroup = HttpApiGroup.make("auditLogs")
-  .add(
-    HttpApiEndpoint.get("getAuditLog", "/v1/tenants/:tenant_id/audit-logs/:audit_log_id", {
-      params: S.GetAuditLogPathParamsSchema,
-      success: S.GetAuditLogResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.AuditInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.AuditNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.get("listAuditLogs", "/v1/tenants/:tenant_id/audit-logs", {
-      params: S.ListAuditLogsPathParamsSchema,
-      query: S.ListAuditLogsQueryParamsSchema,
-      success: S.ListAuditLogsResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.PaginationInvalidCursorErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.PaginationInvalidPageSizeErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  );
-
 const authGroup = HttpApiGroup.make("auth")
   .add(
     HttpApiEndpoint.get("completeGoogleSignIn", "/v1/auth/google/callback", {
@@ -1022,28 +989,6 @@ const membershipsGroup = HttpApiGroup.make("memberships")
     }),
   )
   .add(
-    HttpApiEndpoint.delete("removeMembership", "/v1/tenants/:tenant_id/memberships/:membership_id", {
-      params: S.RemoveMembershipPathParamsSchema,
-      success: S.RemoveMembershipResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.InvitationInvalidEmailErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.MembershipInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.MembershipInvalidRoleErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.InvitationWrongAccountErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.MembershipNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.MembershipLastOwnerErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.InvitationUnavailableErrorSchema.pipe(HttpApiSchema.status(410)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
     HttpApiEndpoint.patch("updateMembership", "/v1/tenants/:tenant_id/memberships/:membership_id", {
       params: S.UpdateMembershipPathParamsSchema,
       payload: S.UpdateMembershipRequestBodySchema,
@@ -1143,13 +1088,6 @@ const recordingsGroup = HttpApiGroup.make("recordings")
       ],
     }),
   );
-
-const regionsGroup = HttpApiGroup.make("regions").add(
-  HttpApiEndpoint.get("listRegions", "/v1/regions", {
-    success: S.ListRegionsResponseSchema.pipe(HttpApiSchema.status(200)),
-    error: [S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)), S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)), S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503))],
-  }),
-);
 
 const spacesGroup = HttpApiGroup.make("spaces")
   .add(
@@ -1650,29 +1588,6 @@ const spacesGroup = HttpApiGroup.make("spaces")
 
 const tenantsGroup = HttpApiGroup.make("tenants")
   .add(
-    HttpApiEndpoint.post("acceptTenantInvitation", "/v1/invitations/accept", {
-      payload: S.AcceptTenantInvitationRequestBodySchema,
-      success: S.AcceptTenantInvitationResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.InvitationInvalidEmailErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.MembershipInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.MembershipInvalidRoleErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.InvitationWrongAccountErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.MembershipNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.MembershipLastOwnerErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.InvitationUnavailableErrorSchema.pipe(HttpApiSchema.status(410)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
     HttpApiEndpoint.post("createTenant", "/v1/tenants", {
       payload: S.CreateTenantRequestBodySchema,
       success: S.CreateTenantResponseSchema.pipe(HttpApiSchema.status(201)),
@@ -1681,7 +1596,6 @@ const tenantsGroup = HttpApiGroup.make("tenants")
         S.TenantInvalidCorsOriginErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidFieldErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidNameErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidRegionErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
@@ -1706,52 +1620,6 @@ const tenantsGroup = HttpApiGroup.make("tenants")
     }),
   )
   .add(
-    HttpApiEndpoint.post("issueTenantInvitation", "/v1/tenants/:tenant_id/invitations", {
-      params: S.IssueTenantInvitationPathParamsSchema,
-      payload: S.IssueTenantInvitationRequestBodySchema,
-      success: S.IssueTenantInvitationResponseSchema.pipe(HttpApiSchema.status(201)),
-      error: [
-        S.InvitationInvalidEmailErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.MembershipInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.MembershipInvalidRoleErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.InvitationWrongAccountErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.MembershipNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.MembershipLastOwnerErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.InvitationUnavailableErrorSchema.pipe(HttpApiSchema.status(410)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.delete("leaveTenant", "/v1/tenants/:tenant_id/membership", {
-      params: S.LeaveTenantPathParamsSchema,
-      success: S.LeaveTenantResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.InvitationInvalidEmailErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.MembershipInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.MembershipInvalidRoleErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.InvitationWrongAccountErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.MembershipNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.MembershipLastOwnerErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.InvitationUnavailableErrorSchema.pipe(HttpApiSchema.status(410)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
     HttpApiEndpoint.get("listMyTenants", "/v1/me/tenants", {
       query: S.ListMyTenantsQueryParamsSchema,
       success: S.ListMyTenantsResponseSchema.pipe(HttpApiSchema.status(200)),
@@ -1759,28 +1627,6 @@ const tenantsGroup = HttpApiGroup.make("tenants")
         S.PaginationInvalidCursorErrorSchema.pipe(HttpApiSchema.status(400)),
         S.PaginationInvalidPageSizeErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.get("listTenantInvitations", "/v1/tenants/:tenant_id/invitations", {
-      params: S.ListTenantInvitationsPathParamsSchema,
-      success: S.ListTenantInvitationsResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.InvitationInvalidEmailErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.MembershipInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.MembershipInvalidRoleErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.InvitationWrongAccountErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.MembershipNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.MembershipLastOwnerErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.InvitationUnavailableErrorSchema.pipe(HttpApiSchema.status(410)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
@@ -1809,33 +1655,10 @@ const tenantsGroup = HttpApiGroup.make("tenants")
         S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
         S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidNameErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidRegionErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.TenantNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.delete("revokeTenantInvitation", "/v1/tenants/:tenant_id/invitations/:invitation_id", {
-      params: S.RevokeTenantInvitationPathParamsSchema,
-      success: S.RevokeTenantInvitationResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.InvitationInvalidEmailErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.MembershipInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.MembershipInvalidRoleErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.InvitationWrongAccountErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.MembershipNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.MembershipLastOwnerErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.InvitationUnavailableErrorSchema.pipe(HttpApiSchema.status(410)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
@@ -1854,7 +1677,6 @@ const tenantsGroup = HttpApiGroup.make("tenants")
         S.TenantInvalidFieldErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidNameErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidRegionErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.TenantNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
@@ -1976,51 +1798,4 @@ const transcriptsGroup = HttpApiGroup.make("transcripts")
     }),
   );
 
-const usersGroup = HttpApiGroup.make("users")
-  .add(
-    HttpApiEndpoint.post("createUser", "/v1/users", {
-      payload: S.CreateUserRequestBodySchema,
-      success: S.CreateUserResponseSchema.pipe(HttpApiSchema.status(201)),
-      error: [
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.UserInvalidEmailErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.UserInvalidNameErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.get("getUser", "/v1/users/:user_id", {
-      params: S.GetUserPathParamsSchema,
-      success: S.GetUserResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.UserInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.UserNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.get("listUsers", "/v1/users", {
-      query: S.ListUsersQueryParamsSchema,
-      success: S.ListUsersResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.PaginationInvalidCursorErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.PaginationInvalidPageSizeErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  );
-
-export class ChalkApi extends HttpApi.make("ChalkApi").add(auditLogsGroup).add(authGroup).add(defaultGroup).add(episodesGroup).add(meGroup).add(membershipsGroup).add(recordingsGroup).add(regionsGroup).add(spacesGroup).add(tenantsGroup).add(transcriptsGroup).add(usersGroup) {}
+export class ChalkApi extends HttpApi.make("ChalkApi").add(authGroup).add(defaultGroup).add(episodesGroup).add(meGroup).add(membershipsGroup).add(recordingsGroup).add(spacesGroup).add(tenantsGroup).add(transcriptsGroup) {}

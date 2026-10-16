@@ -6,7 +6,7 @@ middleware, and domain packages under `internal/*`. Follow
 `MediaPlane` / `SyncEngine` ports, provider details in adapters, public REST
 routes under one `/v1` boundary while operational routes like `/healthz` stay
 unversioned. Existing domains include identity, tenancy, Spaces, Episode
-lifecycle, recordings, transcripts, integrations, audit logs, and webhooks.
+lifecycle, recordings, transcripts, and webhooks.
 
 ## Development
 
@@ -14,7 +14,6 @@ lifecycle, recordings, transcripts, integrations, audit logs, and webhooks.
 - Read `apps/api/docs/route-workflow.md` before adding a new route.
 - Read `apps/api/docs/database-workflow.md` when doing database work.
 - Run the gate before committing: `scripts/gate.sh`.
-- Add a trace-harness scenario when it helps test or explain the change.
 
 ## Media plane providers
 

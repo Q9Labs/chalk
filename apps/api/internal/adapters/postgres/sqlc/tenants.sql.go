@@ -16,7 +16,6 @@ with inserted as (
 insert into tenants (
     id,
     name,
-    default_region,
     default_media_plane,
     media_plane_provider_config,
     storage_provider_config,
@@ -31,8 +30,7 @@ insert into tenants (
     $5,
     $6,
     $7,
-    $8,
-    $9
+    $8
 )
 returning id, name, default_region, default_media_plane, media_plane_provider_config, ai_provider_config, storage_provider_config, cors_allowed_origins, logo_key, website, updated_at, created_at
 ), seeded as (
@@ -51,7 +49,6 @@ returning id, name, default_region, default_media_plane, media_plane_provider_co
 select
     inserted.id::uuid as id,
     inserted.name,
-    inserted.default_region,
     inserted.default_media_plane,
     inserted.media_plane_provider_config,
     inserted.storage_provider_config,
@@ -73,7 +70,6 @@ join seeded on seeded.tenant_id = inserted.id
 type CreateTenantParams struct {
 	ID                       pgtype.UUID `json:"id"`
 	Name                     string      `json:"name"`
-	DefaultRegion            pgtype.Text `json:"default_region"`
 	DefaultMediaPlane        pgtype.Text `json:"default_media_plane"`
 	MediaPlaneProviderConfig []byte      `json:"media_plane_provider_config"`
 	StorageProviderConfig    []byte      `json:"storage_provider_config"`
@@ -85,7 +81,6 @@ type CreateTenantParams struct {
 type CreateTenantRow struct {
 	ID                         pgtype.UUID        `json:"id"`
 	Name                       string             `json:"name"`
-	DefaultRegion              pgtype.Text        `json:"default_region"`
 	DefaultMediaPlane          pgtype.Text        `json:"default_media_plane"`
 	MediaPlaneProviderConfig   []byte             `json:"media_plane_provider_config"`
 	StorageProviderConfig      []byte             `json:"storage_provider_config"`
@@ -106,7 +101,6 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Cre
 	row := q.db.QueryRow(ctx, createTenant,
 		arg.ID,
 		arg.Name,
-		arg.DefaultRegion,
 		arg.DefaultMediaPlane,
 		arg.MediaPlaneProviderConfig,
 		arg.StorageProviderConfig,
@@ -118,7 +112,6 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Cre
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
-		&i.DefaultRegion,
 		&i.DefaultMediaPlane,
 		&i.MediaPlaneProviderConfig,
 		&i.StorageProviderConfig,
@@ -141,7 +134,6 @@ const getTenant = `-- name: GetTenant :one
 select
     tenants.id::uuid as id,
     tenants.name,
-    tenants.default_region,
     tenants.default_media_plane,
     tenants.media_plane_provider_config,
     tenants.storage_provider_config,
@@ -164,7 +156,6 @@ where tenants.id = $1
 type GetTenantRow struct {
 	ID                         pgtype.UUID        `json:"id"`
 	Name                       string             `json:"name"`
-	DefaultRegion              pgtype.Text        `json:"default_region"`
 	DefaultMediaPlane          pgtype.Text        `json:"default_media_plane"`
 	MediaPlaneProviderConfig   []byte             `json:"media_plane_provider_config"`
 	StorageProviderConfig      []byte             `json:"storage_provider_config"`
@@ -187,7 +178,6 @@ func (q *Queries) GetTenant(ctx context.Context, id pgtype.UUID) (GetTenantRow, 
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
-		&i.DefaultRegion,
 		&i.DefaultMediaPlane,
 		&i.MediaPlaneProviderConfig,
 		&i.StorageProviderConfig,
@@ -223,7 +213,6 @@ const listTenants = `-- name: ListTenants :many
 select
     tenants.id::uuid as id,
     tenants.name,
-    tenants.default_region,
     tenants.default_media_plane,
     tenants.media_plane_provider_config,
     tenants.storage_provider_config,
@@ -262,7 +251,6 @@ type ListTenantsParams struct {
 type ListTenantsRow struct {
 	ID                         pgtype.UUID        `json:"id"`
 	Name                       string             `json:"name"`
-	DefaultRegion              pgtype.Text        `json:"default_region"`
 	DefaultMediaPlane          pgtype.Text        `json:"default_media_plane"`
 	MediaPlaneProviderConfig   []byte             `json:"media_plane_provider_config"`
 	StorageProviderConfig      []byte             `json:"storage_provider_config"`
@@ -296,7 +284,6 @@ func (q *Queries) ListTenants(ctx context.Context, arg ListTenantsParams) ([]Lis
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
-			&i.DefaultRegion,
 			&i.DefaultMediaPlane,
 			&i.MediaPlaneProviderConfig,
 			&i.StorageProviderConfig,
@@ -330,62 +317,58 @@ set
         when $1::boolean then $2::text
         else name
     end,
-    default_region = case
-        when $3::boolean then $4::text
-        else default_region
-    end,
     default_media_plane = case
-        when $5::boolean then $6::text
+        when $3::boolean then $4::text
         else default_media_plane
     end,
     media_plane_provider_config = case
-        when $7::boolean then $8::jsonb
+        when $5::boolean then $6::jsonb
         else media_plane_provider_config
     end,
     storage_provider_config = case
-        when $9::boolean then $10::jsonb
+        when $7::boolean then $8::jsonb
         else storage_provider_config
     end,
     cors_allowed_origins = case
-        when $11::boolean then $12::text[]
+        when $9::boolean then $10::text[]
         else cors_allowed_origins
     end,
     logo_key = case
-        when $13::boolean then $14::text
+        when $11::boolean then $12::text
         else logo_key
     end,
     website = case
-        when $15::boolean then $16::text
+        when $13::boolean then $14::text
         else website
     end,
     updated_at = now()
-where id = $17
+where id = $15
 returning id, name, default_region, default_media_plane, media_plane_provider_config, ai_provider_config, storage_provider_config, cors_allowed_origins, logo_key, website, updated_at, created_at
 ), updated_policy as (
 update tenant_artifact_policies
 set
     transcription_ceiling = case
-        when $18::boolean then $19::text
+        when $16::boolean then $17::text
         else transcription_ceiling
     end,
     transcription_default_mode = case
-        when $20::boolean then $21::text
+        when $18::boolean then $19::text
         else transcription_default_mode
     end,
     provider_policy_version = case
-        when $22::boolean then $23::text
+        when $20::boolean then $21::text
         else provider_policy_version
     end,
     recording_retention_seconds = case
-        when $24::boolean then $25::bigint
+        when $22::boolean then $23::bigint
         else recording_retention_seconds
     end,
     transcript_retention_seconds = case
-        when $26::boolean then $27::bigint
+        when $24::boolean then $25::bigint
         else transcript_retention_seconds
     end,
     source_window_seconds = case
-        when $28::boolean then $29::bigint
+        when $26::boolean then $27::bigint
         else source_window_seconds
     end,
     updated_at = now()
@@ -395,7 +378,6 @@ returning tenant_id, transcription_ceiling, transcription_default_mode, provider
 select
     updated_tenant.id::uuid as id,
     updated_tenant.name,
-    updated_tenant.default_region,
     updated_tenant.default_media_plane,
     updated_tenant.media_plane_provider_config,
     updated_tenant.storage_provider_config,
@@ -417,8 +399,6 @@ join updated_policy on updated_policy.tenant_id = updated_tenant.id
 type UpdateTenantParams struct {
 	NameSet                       bool        `json:"name_set"`
 	Name                          string      `json:"name"`
-	DefaultRegionSet              bool        `json:"default_region_set"`
-	DefaultRegion                 pgtype.Text `json:"default_region"`
 	DefaultMediaPlaneSet          bool        `json:"default_media_plane_set"`
 	DefaultMediaPlane             pgtype.Text `json:"default_media_plane"`
 	MediaPlaneProviderConfigSet   bool        `json:"media_plane_provider_config_set"`
@@ -449,7 +429,6 @@ type UpdateTenantParams struct {
 type UpdateTenantRow struct {
 	ID                         pgtype.UUID        `json:"id"`
 	Name                       string             `json:"name"`
-	DefaultRegion              pgtype.Text        `json:"default_region"`
 	DefaultMediaPlane          pgtype.Text        `json:"default_media_plane"`
 	MediaPlaneProviderConfig   []byte             `json:"media_plane_provider_config"`
 	StorageProviderConfig      []byte             `json:"storage_provider_config"`
@@ -470,8 +449,6 @@ func (q *Queries) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Upd
 	row := q.db.QueryRow(ctx, updateTenant,
 		arg.NameSet,
 		arg.Name,
-		arg.DefaultRegionSet,
-		arg.DefaultRegion,
 		arg.DefaultMediaPlaneSet,
 		arg.DefaultMediaPlane,
 		arg.MediaPlaneProviderConfigSet,
@@ -502,7 +479,6 @@ func (q *Queries) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Upd
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
-		&i.DefaultRegion,
 		&i.DefaultMediaPlane,
 		&i.MediaPlaneProviderConfig,
 		&i.StorageProviderConfig,

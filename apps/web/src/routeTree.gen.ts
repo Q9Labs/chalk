@@ -21,7 +21,6 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as SpaceIndexRouteImport } from './routes/space.index'
 import { Route as DocsIndexRouteImport } from './routes/docs.index'
 import { Route as SpaceSlugRouteImport } from './routes/space.$slug'
-import { Route as InvitationsAcceptRouteImport } from './routes/invitations.accept'
 import { Route as DocsSlugRouteImport } from './routes/docs.$slug'
 
 const TermsRoute = TermsRouteImport.update({
@@ -84,11 +83,6 @@ const SpaceSlugRoute = SpaceSlugRouteImport.update({
   path: '/$slug',
   getParentRoute: () => SpaceRoute,
 } as any)
-const InvitationsAcceptRoute = InvitationsAcceptRouteImport.update({
-  id: '/invitations/accept',
-  path: '/invitations/accept',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const DocsSlugRoute = DocsSlugRouteImport.update({
   id: '/$slug',
   path: '/$slug',
@@ -106,7 +100,6 @@ export interface FileRoutesByFullPath {
   '/space': typeof SpaceRouteWithChildren
   '/terms': typeof TermsRoute
   '/docs/$slug': typeof DocsSlugRoute
-  '/invitations/accept': typeof InvitationsAcceptRoute
   '/space/$slug': typeof SpaceSlugRoute
   '/docs/': typeof DocsIndexRoute
   '/space/': typeof SpaceIndexRoute
@@ -120,7 +113,6 @@ export interface FileRoutesByTo {
   '/sign-up': typeof SignUpRoute
   '/terms': typeof TermsRoute
   '/docs/$slug': typeof DocsSlugRoute
-  '/invitations/accept': typeof InvitationsAcceptRoute
   '/space/$slug': typeof SpaceSlugRoute
   '/docs': typeof DocsIndexRoute
   '/space': typeof SpaceIndexRoute
@@ -137,7 +129,6 @@ export interface FileRoutesById {
   '/space': typeof SpaceRouteWithChildren
   '/terms': typeof TermsRoute
   '/docs/$slug': typeof DocsSlugRoute
-  '/invitations/accept': typeof InvitationsAcceptRoute
   '/space/$slug': typeof SpaceSlugRoute
   '/docs/': typeof DocsIndexRoute
   '/space/': typeof SpaceIndexRoute
@@ -155,7 +146,6 @@ export interface FileRouteTypes {
     | '/space'
     | '/terms'
     | '/docs/$slug'
-    | '/invitations/accept'
     | '/space/$slug'
     | '/docs/'
     | '/space/'
@@ -169,7 +159,6 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/terms'
     | '/docs/$slug'
-    | '/invitations/accept'
     | '/space/$slug'
     | '/docs'
     | '/space'
@@ -185,7 +174,6 @@ export interface FileRouteTypes {
     | '/space'
     | '/terms'
     | '/docs/$slug'
-    | '/invitations/accept'
     | '/space/$slug'
     | '/docs/'
     | '/space/'
@@ -201,7 +189,6 @@ export interface RootRouteChildren {
   SignUpRoute: typeof SignUpRoute
   SpaceRoute: typeof SpaceRouteWithChildren
   TermsRoute: typeof TermsRoute
-  InvitationsAcceptRoute: typeof InvitationsAcceptRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -290,13 +277,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SpaceSlugRouteImport
       parentRoute: typeof SpaceRoute
     }
-    '/invitations/accept': {
-      id: '/invitations/accept'
-      path: '/invitations/accept'
-      fullPath: '/invitations/accept'
-      preLoaderRoute: typeof InvitationsAcceptRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/docs/$slug': {
       id: '/docs/$slug'
       path: '/$slug'
@@ -341,7 +321,6 @@ const rootRouteChildren: RootRouteChildren = {
   SignUpRoute: SignUpRoute,
   SpaceRoute: SpaceRouteWithChildren,
   TermsRoute: TermsRoute,
-  InvitationsAcceptRoute: InvitationsAcceptRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

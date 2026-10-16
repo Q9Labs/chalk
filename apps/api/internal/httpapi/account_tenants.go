@@ -48,10 +48,10 @@ type listAccountTenantsRequest struct {
 }
 
 type onboardTenantRequest struct {
-	Name          string       `json:"name"`
-	DefaultRegion *string      `json:"default_region"`
-	AccountID     utilities.ID `json:"-"`
-	RequestKey    string       `json:"-"`
+	Name string `json:"name"`
+
+	AccountID  utilities.ID `json:"-"`
+	RequestKey string       `json:"-"`
 }
 
 func mountAccountTenantRoutes(r chi.Router, service AccountTenantService, limits RateLimitOptions) {
@@ -88,7 +88,7 @@ func onboardTenantEndpoint(service AccountTenantService) Endpoint[onboardTenantR
 			return onboardTenantResponse{}, apiErrorServiceUnavailable
 		}
 		result, err := service.OnboardTenant(ctx, tenants.OnboardTenantInput{
-			AccountID: request.AccountID, RequestKey: request.RequestKey, Name: request.Name, DefaultRegion: request.DefaultRegion,
+			AccountID: request.AccountID, RequestKey: request.RequestKey, Name: request.Name,
 		})
 		if err != nil {
 			return onboardTenantResponse{}, err
@@ -101,7 +101,7 @@ func onboardTenantEndpoint(service AccountTenantService) Endpoint[onboardTenantR
 		Parameters(idempotencyKeyParameter()).
 		RequestBody("OnboardTenantRequest", onboardTenantRequest{}).
 		Responds(http.StatusCreated, "AccountTenantOnboardingResponse", onboardTenantResponse{}).
-		Errors(apiErrorUnauthenticated, apiErrorServiceUnavailable, apiErrorInvalidRequest, apiErrorInvalidRequestKey, apiErrorInvalidTenantName, apiErrorInvalidTenantRegion, apiErrorIdempotencyConflict, apiErrorTenantNotFound, apiErrorRateLimited, apiErrorInternal).
+		Errors(apiErrorUnauthenticated, apiErrorServiceUnavailable, apiErrorInvalidRequest, apiErrorInvalidRequestKey, apiErrorInvalidTenantName, apiErrorIdempotencyConflict, apiErrorTenantNotFound, apiErrorRateLimited, apiErrorInternal).
 		MapErrors(accountTenantAPIError)
 }
 

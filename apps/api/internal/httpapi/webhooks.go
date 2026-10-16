@@ -31,7 +31,6 @@ type WebhookService interface {
 	ListDeliveries(context.Context, utilities.ID, utilities.ID, webhooks.DeliveryFilters, pagination.PageRequest) (webhooks.DeliveryList, error)
 	GetDelivery(context.Context, utilities.ID, utilities.ID, utilities.ID) (webhooks.DeliveryDetail, error)
 	Redeliver(context.Context, utilities.ID, utilities.ID, utilities.ID, string) (webhooks.DeliveryResult, error)
-	AuditFailure(context.Context, webhooks.FailureAuditInput)
 }
 
 type webhookEndpointResponse struct {

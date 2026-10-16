@@ -15,7 +15,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/q9labs/chalk/apps/api/internal/authentication"
+
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
 )
@@ -487,132 +487,11 @@ func TestWebhookTargetReplacementAndDeleteFenceQueuedDeliveries(t *testing.T) {
 	}
 }
 
-func TestWebhookOperationAuditsCoverSuccessAndBoundedFailureOutcomes(t *testing.T) {
-	pool := webhookIntegrationPool(t)
-	tenantID := webhookIntegrationID(t)
-	ctx := authentication.ContextWithPrincipal(context.Background(), authentication.Principal{Kind: authentication.PrincipalAPIKey, APIKeyID: webhookIntegrationID(t), TenantID: tenantID})
-	if _, err := pool.Exec(ctx, `insert into tenants(id,name) values($1,'Webhook audit matrix test')`, uuid(tenantID)); err != nil {
-		t.Fatal(err)
-	}
-	cleanupWebhookTenant(t, pool, tenantID)
-	protector, _ := webhooks.NewAESGCMProtector(make([]byte, 32))
-	repository := NewWebhookRepository(pool, protector)
-	created, err := repository.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "Audit", URL: "https://example.com/private", Enabled: true, APIVersion: 1, EventTypes: []string{"space.created"}, IdempotencyKey: "audit-create-0001"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	name := "Audit updated"
-	updated, err := repository.Patch(ctx, tenantID, created.Endpoint.ID, webhooks.PatchInput{Name: &name, ExpectedRevision: 1, IdempotencyKey: "audit-update-0001"}, "", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := repository.RotateSecret(ctx, tenantID, created.Endpoint.ID, false, "audit-rotate-0001"); err != nil {
-		t.Fatal(err)
-	}
-	testDelivery, err := repository.Test(ctx, tenantID, created.Endpoint.ID, "audit-test-0000001", webhooks.EventMetadata{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := pool.Exec(ctx, `update webhook_deliveries set next_attempt_at='2099-01-01T00:00:00Z' where tenant_id=$1 and id=$2`, uuid(tenantID), uuid(testDelivery.DeliveryID)); err != nil {
-		t.Fatal(err)
-	}
-	resourceID := webhookIntegrationID(t)
-	tx, _ := pool.Begin(ctx)
-	body := []byte(`{"event":"space.created"}`)
-	if _, err := fanoutWebhookEvent(ctx, tx, webhookProduction{TenantID: tenantID, EventName: "space.created", SemanticKey: "audit-space-created", ResourceType: "space", ResourceID: resourceID, OccurredAt: time.Now().UTC(), Body: func(webhooks.EventMetadata) ([]byte, [32]byte, error) { return body, sha256.Sum256(body), nil }}); err != nil {
-		t.Fatal(err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		t.Fatal(err)
-	}
-	var deliveryUUID pgtype.UUID
-	if err := pool.QueryRow(ctx, `select d.id from webhook_deliveries d join webhook_events e on e.tenant_id=d.tenant_id and e.id=d.event_id where d.tenant_id=$1 and e.semantic_transition_key='audit-space-created'`, uuid(tenantID)).Scan(&deliveryUUID); err != nil {
-		t.Fatal(err)
-	}
-	deliveryID := id(deliveryUUID)
-	if _, err := pool.Exec(ctx, `update webhook_deliveries set next_attempt_at='1998-01-01T00:00:00Z' where tenant_id=$1 and id=$2`, uuid(tenantID), uuid(deliveryID)); err != nil {
-		t.Fatal(err)
-	}
-	dispatch := NewWebhookDispatchRepository(pool)
-	claims, err := dispatch.Claim(ctx, "audit-worker", 1, time.Minute)
-	if err != nil || len(claims) != 1 || claims[0].DeliveryID != deliveryID {
-		t.Fatalf("audit delivery claim=%#v error=%v", claims, err)
-	}
-	if err := dispatch.Complete(ctx, claims[0], webhooks.AttemptResult{Success: true, HTTPStatus: 204, FinishedAt: time.Now().UTC()}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := repository.Redeliver(ctx, tenantID, created.Endpoint.ID, deliveryID, "audit-redeliver-01"); err != nil {
-		t.Fatal(err)
-	}
-	enabled := false
-	disabled, err := repository.Patch(ctx, tenantID, created.Endpoint.ID, webhooks.PatchInput{Enabled: &enabled, ExpectedRevision: updated.Revision, IdempotencyKey: "audit-disable-0001"}, "", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := repository.Delete(ctx, tenantID, created.Endpoint.ID, disabled.Revision, "audit-delete-00001"); err != nil {
-		t.Fatal(err)
-	}
-	service := webhooks.NewService(repository, protector)
-	invalidName := ""
-	disableAgain := false
-	_, _ = service.Create(ctx, webhooks.CreateInput{TenantID: tenantID, Name: "", URL: "https://example.com/failure", Enabled: true, APIVersion: 1, EventTypes: []string{"space.created"}, IdempotencyKey: "audit-fail-create-01"})
-	_, _ = service.Patch(ctx, tenantID, created.Endpoint.ID, webhooks.PatchInput{Name: &invalidName, ExpectedRevision: 0, IdempotencyKey: "audit-fail-update-01"})
-	_, _ = service.Patch(ctx, tenantID, created.Endpoint.ID, webhooks.PatchInput{Enabled: &disableAgain, ExpectedRevision: 0, IdempotencyKey: "audit-fail-disable-1"})
-	_ = service.Delete(ctx, tenantID, created.Endpoint.ID, 0, "audit-fail-delete-01")
-	_, _ = service.RotateSecret(ctx, tenantID, created.Endpoint.ID, true, "short")
-	_, _ = service.Test(ctx, tenantID, created.Endpoint.ID, "short", webhooks.EventMetadata{})
-	_, _ = service.Redeliver(ctx, tenantID, created.Endpoint.ID, utilities.ID{}, "audit-fail-redeliver")
-	failureCodes := map[string]string{
-		"webhook_endpoint.create":        "invalid_request",
-		"webhook_endpoint.update":        "revision_conflict",
-		"webhook_endpoint.disable":       "revision_conflict",
-		"webhook_endpoint.delete":        "revision_conflict",
-		"webhook_endpoint.rotate_secret": "idempotency_key_required",
-		"webhook_endpoint.test":          "idempotency_key_required",
-		"webhook_delivery.redeliver":     "invalid_request",
-	}
-	rows, err := pool.Query(ctx, `select action,outcome,coalesce(error_code,''),details::text from audit_logs where tenant_id=$1`, uuid(tenantID))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	success := make(map[string]bool)
-	failures := make(map[string]string)
-	for rows.Next() {
-		var action, outcome, errorCode, details string
-		if err := rows.Scan(&action, &outcome, &errorCode, &details); err != nil {
-			t.Fatal(err)
-		}
-		if strings.Contains(details, "example.com") || strings.Contains(details, "whsec_") || strings.Contains(details, "private") {
-			t.Fatalf("audit exposed content: %s", details)
-		}
-		if outcome == "success" {
-			success[action] = true
-		}
-		if outcome == "failure" {
-			failures[action] = errorCode
-		}
-	}
-	for _, action := range []string{"webhook_endpoint.create", "webhook_endpoint.update", "webhook_endpoint.rotate_secret", "webhook_endpoint.test", "webhook_delivery.redeliver", "webhook_endpoint.disable", "webhook_endpoint.delete"} {
-		if !success[action] {
-			t.Fatalf("missing successful audit action %q: %#v", action, success)
-		}
-	}
-	for action, errorCode := range failureCodes {
-		if failures[action] != errorCode {
-			t.Fatalf("failure audit %q error_code=%q, want %q; all=%#v", action, failures[action], errorCode, failures)
-		}
-	}
-}
-
 func cleanupWebhookTenant(t *testing.T, pool *pgxpool.Pool, tenantID utilities.ID) {
 	t.Helper()
 	t.Cleanup(func() {
 		ctx := context.Background()
-		if _, err := pool.Exec(ctx, `delete from audit_logs where tenant_id=$1`, uuid(tenantID)); err != nil {
-			t.Errorf("delete webhook tenant audit logs: %v", err)
-			return
-		}
+
 		if _, err := pool.Exec(ctx, `delete from tenants where id=$1`, uuid(tenantID)); err != nil {
 			t.Errorf("delete webhook tenant: %v", err)
 		}

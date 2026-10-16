@@ -25,7 +25,6 @@ where account_id = sqlc.arg(account_id)
 select
     tenants.id,
     tenants.name,
-    tenants.default_region,
     tenants.default_media_plane,
     tenants.media_plane_provider_config,
     tenants.storage_provider_config,
@@ -56,7 +55,6 @@ where tenant_onboarding_requests.account_id = sqlc.arg(account_id)
 select
     tenants.id,
     tenants.name,
-    tenants.default_region,
     tenants.default_media_plane,
     tenants.media_plane_provider_config,
     tenants.storage_provider_config,

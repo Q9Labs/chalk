@@ -305,3 +305,5 @@ func (r updateMembershipRequest) input() memberships.UpdateMembershipInput {
 		Role: r.Role,
 	}
 }
+
+var apiErrorLastOwner = APIError{Status: 409, Code: "membership.last_owner", Message: memberships.ErrLastOwner.Error()}
