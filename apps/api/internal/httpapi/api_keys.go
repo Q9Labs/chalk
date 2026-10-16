@@ -334,7 +334,11 @@ func preventAPIKeyTargetEscalation(ctx context.Context, service APIKeyService, r
 	if err != nil {
 		return err
 	}
-	return preventAPIKeyScopeEscalation(ctx, key.Scopes)
+	scopes, err := apikeys.EffectiveScopes(key.Scopes)
+	if err != nil {
+		return apiErrorForbidden
+	}
+	return preventAPIKeyScopeEscalation(ctx, scopes)
 }
 
 func preventAPIKeyScopeEscalation(ctx context.Context, scopes []authentication.Scope) error {
