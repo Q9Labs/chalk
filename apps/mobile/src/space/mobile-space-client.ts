@@ -20,7 +20,6 @@ export function createMobileSpaceClient({ apiBaseURL, defaults, getAccess, space
     microphone: defaults.microphone,
     space,
     storage: AsyncStorage,
-    feedbackSource: "chalk_mobile",
   });
 }
 

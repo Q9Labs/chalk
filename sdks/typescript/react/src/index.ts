@@ -20,8 +20,6 @@ export type {
 } from "./components/recording-history/RecordingHistoryPanel";
 export { RecordingWhiteboardView, loadRecordingWhiteboardFiles, parseRecordingWhiteboardStateV1, recordingWhiteboardBinaryFile, recordingWhiteboardFileAssetId, recordingWhiteboardFileIds } from "./components/whiteboard-view/RecordingWhiteboardView";
 export type { RecordingWhiteboardBinaryFileInput, RecordingWhiteboardFileReference, RecordingWhiteboardFileResolver, RecordingWhiteboardStateV1, RecordingWhiteboardViewProps } from "./components/whiteboard-view/RecordingWhiteboardView";
-export { FeedbackDialog } from "./components/feedback/FeedbackDialog";
-export type { FeedbackDialogProps } from "./components/feedback/FeedbackDialog";
 export { Entrance } from "./components/entrance/Entrance";
 export type { EntranceProps, EntranceSettings } from "./components/entrance/Entrance";
 export { Logo } from "./components/logo/Logo";

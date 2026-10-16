@@ -7,11 +7,11 @@ import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import type { InviteDialogProps } from "./InviteDialog";
 
 export const ClassicInviteDialog = React.memo<InviteDialogProps>(({ isOpen, onClose, inviteLink, spaceId, onCopyLink, onShareEmail, onShareCalendar, className }: InviteDialogProps) => {
+  const [isCopyFeedbackVisible, setIsCopyFeedbackVisible] = useState(false);
   const prefersReducedMotion = usePrefersReducedMotion();
   const modalRef = useRef<HTMLDivElement>(null);
   const copyResetTimeoutRef = useRef<number | null>(null);
   const copyIconRef = useRef<Copy01IconHandle>(null);
-  const [isCopyFeedbackVisible, setIsCopyFeedbackVisible] = useState(false);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -84,10 +84,8 @@ export const ClassicInviteDialog = React.memo<InviteDialogProps>(({ isOpen, onCl
                 className={cn("flex h-11 w-full items-center justify-center gap-2 rounded-[8px] bg-[var(--chalk-app-control-primary)] text-sm font-semibold text-white transition-colors hover:bg-[var(--chalk-app-control-primary-hover)]", isCopyFeedbackVisible && "cursor-default bg-[#49645d]")}
               >
                 <Copy01Icon ref={copyIconRef} size={18} aria-hidden="true" onMouseEnter={() => copyIconRef.current?.startAnimation()} />
-                {isCopyFeedbackVisible ? "Copied" : "Copy Link"}
-                <span className="sr-only" aria-live="polite">
-                  {isCopyFeedbackVisible ? "Copied space link to clipboard" : ""}
-                </span>
+
+                <span className="sr-only" aria-live="polite"></span>
               </button>
             )}
           </div>

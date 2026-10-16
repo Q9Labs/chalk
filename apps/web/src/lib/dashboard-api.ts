@@ -1,5 +1,4 @@
 import { Effect, Schema, SchemaIssue } from "effect";
-import type { FeedbackReportReceiptV1, FeedbackReportRequestV1 } from "@q9labsai/chalk-client";
 import {
   createChalkEffectClient,
   type APIKeyList,
@@ -152,14 +151,6 @@ export async function logoutAccount(): Promise<void> {
   await dashboardRequest("/api/auth/logout", { method: "POST", body: {} });
   csrfToken = undefined;
   csrfExpiresAt = 0;
-}
-
-export function submitFeedbackReport(tenantID: string, input: FeedbackReportRequestV1, idempotencyKey: string): Promise<FeedbackReportReceiptV1> {
-  return dashboardRequest<FeedbackReportReceiptV1>(`/api/tenants/${tenantID}/feedback-reports`, {
-    method: "POST",
-    headers: { "Idempotency-Key": idempotencyKey },
-    body: input,
-  });
 }
 
 export function getAccount(): Promise<DashboardAccount> {

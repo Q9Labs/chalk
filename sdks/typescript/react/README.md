@@ -51,17 +51,6 @@ application. Chalk will use it without disposing it.
 <Chalk client={spaceClient} entrance={false} />
 ```
 
-### Feedback
-
-The live surface includes a Feedback action. Opening it captures the Chalk
-surface, bounded Journey and trace context, recent safe diagnostics, and only
-the documented Chalk local-state and cookie fields. The Participant can review,
-refresh, or remove the screenshot before sending a bug, feature request, or
-other feedback directly to Chalk. Screenshot failure never blocks the message.
-
-Embedded products should keep the default `feedbackSource="embedded"`. Chalk's
-first-party web surface sets `feedbackSource="chalk_web"`.
-
 `theme` controls palette, texture, color scheme, accent and typed token overrides. Classic is the only interface style.
 
 `colorScheme` accepts `light`, `dark`, or `system`. With `system`, Chalk follows

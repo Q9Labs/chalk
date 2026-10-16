@@ -5,7 +5,6 @@ import ComputerIcon from "@hugeicons/core-free-icons/ComputerIcon";
 import DashboardSquare01Icon from "@hugeicons/core-free-icons/DashboardSquare01Icon";
 import Home01Icon from "@hugeicons/core-free-icons/Home01Icon";
 import Logout03Icon from "@hugeicons/core-free-icons/Logout03Icon";
-import Message01Icon from "@hugeicons/core-free-icons/Message01Icon";
 import Moon02Icon from "@hugeicons/core-free-icons/Moon02Icon";
 import MoreHorizontalIcon from "@hugeicons/core-free-icons/MoreHorizontalIcon";
 import PlayCircleIcon from "@hugeicons/core-free-icons/PlayCircleIcon";
@@ -65,7 +64,7 @@ const utilityNavigation = [{ to: "/developer", label: "Developer", icon: SourceC
 /** Text that folds away when the sidebar collapses to its icon rail. */
 const collapsedHidden = "group-data-[collapsible=icon]:hidden";
 
-export function DashboardSidebar({ pathname, onCreateSpace, onOpenFeedback }: { pathname: string; onCreateSpace: () => void; onOpenFeedback?: () => void }) {
+export function DashboardSidebar({ pathname, onCreateSpace }: { pathname: string; onCreateSpace: () => void }) {
   const { account, current, tenants, selectTenant, signOut } = useDashboardAccount();
   const initials = account.name
     .split(/\s+/)
@@ -100,7 +99,7 @@ export function DashboardSidebar({ pathname, onCreateSpace, onOpenFeedback }: { 
 
       <SidebarContent>
         <NavigationGroup label="Workspace" items={primaryNavigation} pathname={pathname} />
-        <NavigationGroup label="Tools" items={utilityNavigation} pathname={pathname} action={onOpenFeedback ? { label: "Feedback", icon: Message01Icon, onClick: onOpenFeedback } : undefined} />
+        <NavigationGroup label="Tools" items={utilityNavigation} pathname={pathname} />
       </SidebarContent>
 
       <SidebarFooter>

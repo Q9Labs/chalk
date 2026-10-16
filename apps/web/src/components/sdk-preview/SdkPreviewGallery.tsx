@@ -277,7 +277,6 @@ export function SdkPreviewGallery({ search, onSearchChange }: SdkPreviewGalleryP
                 },
                 diagnosticReference: DIAGNOSTIC_REFERENCE,
                 onCopyDiagnosticReference: (reference) => void navigator.clipboard?.writeText(reference),
-                onSendFeedback: () => setDiagnosticsToastVisible(true),
                 duration: episodeDuration,
                 stats: { resolution: "1080p · 30fps", latency: 28, packetLoss: 0.1, region: "Frankfurt, DE" },
               }

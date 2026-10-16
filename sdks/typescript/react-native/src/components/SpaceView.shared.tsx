@@ -1,7 +1,4 @@
-import { useRef, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
-
-import { useSpaceClient } from "../context/space-client-context";
 import { Theme } from "../ui/theme";
 import { useNativeTheme } from "../ui/native-theme";
 import { getIosSimulatorMediaMessage } from "../utils/ios-simulator";
@@ -10,8 +7,6 @@ import type { SpaceViewProps } from "./SpaceView";
 import { SpaceGridAndroid } from "./native-space-view/SpaceGrid.android";
 import { SpaceBottomDockAndroid } from "./native-space-view/SpaceBottomDock.android";
 import { SpaceActionMenu, selectSpaceReaction } from "./native-space-view/SpaceActionMenu";
-import { FeedbackSheet } from "./native-space-view/FeedbackSheet";
-import type { FeedbackCaptureSize } from "../feedback/native-capture";
 import { SpaceStageAndroid } from "./native-space-view/SpaceStage.android";
 import { SpaceTopBarAndroid } from "./native-space-view/SpaceTopBar.android";
 import { SpaceWhiteboardSurface } from "./native-space-view/SpaceWhiteboardSurface";
@@ -21,11 +16,7 @@ import { useSpaceViewController } from "./native-space-view/useSpaceViewControll
 
 export function SpaceViewShared(props: SpaceViewProps): React.JSX.Element {
   const controller = useSpaceViewController(props);
-  const client = useSpaceClient();
   const theme = useNativeTheme();
-  const captureTarget = useRef<View>(null);
-  const [captureSize, setCaptureSize] = useState<FeedbackCaptureSize>({ width: 0, height: 0 });
-  const [feedbackRequested, setFeedbackRequested] = useState(false);
   const toggleMedia = (action: () => void) => {
     if (controller.simulatorMediaDisabled) {
       Alert.alert("Media unavailable", getIosSimulatorMediaMessage());
@@ -36,7 +27,7 @@ export function SpaceViewShared(props: SpaceViewProps): React.JSX.Element {
 
   return (
     <>
-      <View collapsable={false} onLayout={(event) => setCaptureSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })} ref={captureTarget} style={[styles.space, { backgroundColor: theme.colors.darkCanvas }]}>
+      <View style={[styles.space, { backgroundColor: theme.colors.darkCanvas }]}>
         <SpaceTopBarAndroid recording={controller.recording} formattedDuration={controller.formattedDuration} logoUrl={props.logoUrl} participantCount={controller.participantCount} spaceName={controller.spaceName} />
         {props.reconnecting ? (
           <View accessibilityLiveRegion="polite" style={[styles.recovery, { backgroundColor: theme.colors.primary }]}>
@@ -81,11 +72,10 @@ export function SpaceViewShared(props: SpaceViewProps): React.JSX.Element {
           simulatorMediaDisabled={controller.simulatorMediaDisabled}
           unreadChatCount={controller.chat.unreadCount}
         />
-        <SpaceActionMenu controller={controller} onOpenDiagnostics={props.onOpenDiagnostics} onOpenFeedback={() => setFeedbackRequested(true)} />
+        <SpaceActionMenu controller={controller} onOpenDiagnostics={props.onOpenDiagnostics} />
         {controller.panel === "settings" ? <SettingsSheet controller={controller} isOpen onClose={controller.closePanel} /> : <SpacePanelSheet controller={controller} />}
         <ReactionPicker isOpen={controller.reactionPickerOpen} onClose={() => controller.setReactionPickerOpen(false)} onSelect={(reaction) => selectSpaceReaction(controller, reaction)} />
       </View>
-      <FeedbackSheet client={client} captureSize={captureSize} captureTarget={captureTarget} feedbackEvidence={props.feedbackEvidence} onClose={() => setFeedbackRequested(false)} requested={feedbackRequested} />
     </>
   );
 }

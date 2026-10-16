@@ -9,7 +9,7 @@ import type { SpaceInfoDialogProps } from "./SpaceInfoDialog";
 
 type CopyTarget = "invite" | "diagnostic" | null;
 
-type SpaceInfoContentProps = Pick<SpaceInfoDialogProps, "spaceDescription" | "spaceId" | "inviteLink" | "onCopyLink" | "diagnosticReference" | "onCopyDiagnosticReference" | "onSendFeedback" | "stats" | "duration">;
+type SpaceInfoContentProps = Pick<SpaceInfoDialogProps, "spaceDescription" | "spaceId" | "inviteLink" | "onCopyLink" | "diagnosticReference" | "onCopyDiagnosticReference" | "stats" | "duration">;
 
 const LABEL_CLASS = "text-[13px] leading-5 text-[var(--chalk-app-text-muted)]";
 const VALUE_CLASS = "min-w-0 text-sm leading-5 text-[var(--chalk-app-text)]";
@@ -50,7 +50,7 @@ function Row({ label, align = "start", children }: RowProps): React.JSX.Element 
  * Facts about the current Space as one flat label/value list: the invite link first (the one
  * action), then the live state, then the support reference. No nested panels or section copy.
  */
-export function SpaceInfoContent({ spaceDescription, spaceId, inviteLink, onCopyLink, diagnosticReference, onCopyDiagnosticReference, onSendFeedback, stats, duration }: SpaceInfoContentProps): React.JSX.Element {
+export function SpaceInfoContent({ spaceDescription, spaceId, inviteLink, onCopyLink, diagnosticReference, onCopyDiagnosticReference, stats, duration }: SpaceInfoContentProps): React.JSX.Element {
   const [copied, setCopied] = useState<CopyTarget>(null);
   const confirmationTimer = useRef<number | null>(null);
   const inviteCopyRef = useRef<Copy01IconHandle>(null);
@@ -156,15 +156,6 @@ export function SpaceInfoContent({ spaceDescription, spaceId, inviteLink, onCopy
           </Row>
         ) : null}
       </dl>
-
-      {onSendFeedback && diagnosticReference ? (
-        <div className="mt-5 flex items-center justify-between gap-3 border-t border-[var(--chalk-app-line)] pt-4">
-          <span className="text-[13px] text-[var(--chalk-app-text-muted)]">Having trouble in this Space?</span>
-          <button type="button" onClick={() => onSendFeedback({ diagnosticReference })} className={GHOST_BUTTON_CLASS}>
-            Send feedback
-          </button>
-        </div>
-      ) : null}
     </div>
   );
 }

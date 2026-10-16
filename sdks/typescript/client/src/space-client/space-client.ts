@@ -4,7 +4,6 @@ import { toPromiseController } from "./promise-facade";
 import type { ClientEventHandler, ClientEventName, SpaceClient, SpaceClientOptions } from "./types";
 
 class PromiseSpaceClient implements SpaceClient {
-  readonly feedback;
   readonly media;
   readonly chat;
   readonly participants;
@@ -20,7 +19,6 @@ class PromiseSpaceClient implements SpaceClient {
     this.#runtime = ManagedRuntime.make(makeSpaceClientCoreLayer(options, platform));
     this.#core = this.#runtime.runSync(Effect.service(SpaceClientCoreService));
     const controllers = this.#core.controllers;
-    this.feedback = this.#core.feedback;
     this.media = toPromiseController(this.#runtime, controllers.media);
     const chat = toPromiseController(this.#runtime, controllers.chat);
     const { upload, url, resolveUrl, ...chatCommands } = chat;

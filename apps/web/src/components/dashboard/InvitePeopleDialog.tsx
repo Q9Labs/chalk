@@ -41,7 +41,7 @@ export function InvitePeopleDialog({ tenantID, onClose, onIssued }: { tenantID: 
   }
 
   return (
-    <SpaceDialogFrame dialogRef={dialogRef} onClose={onClose} onSubmit={(event) => void submit(event)} ariaLabel="Invite people" dataFeedbackPrivate>
+    <SpaceDialogFrame dialogRef={dialogRef} onClose={onClose} onSubmit={(event) => void submit(event)} ariaLabel="Invite people">
       {issued ? (
         <>
           <SpaceDialogHeading

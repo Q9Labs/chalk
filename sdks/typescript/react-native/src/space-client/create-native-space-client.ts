@@ -16,7 +16,6 @@ import {
   type ReactNativeAsyncStorage,
 } from "@q9labsai/chalk-client";
 import { createSpaceClientForPlatform, type SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
-import type { FeedbackSource } from "@q9labsai/chalk-client";
 import type { SpaceClient } from "@q9labsai/chalk-client";
 import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc";
 import { AppState } from "react-native";
@@ -42,7 +41,6 @@ export type NativeSpaceClientOptions = {
   readonly syncStartupTimeoutMs?: number;
   readonly storage?: ReactNativeAsyncStorage;
   readonly telemetry?: TelemetryJourney;
-  readonly feedbackSource?: FeedbackSource;
 };
 
 export function createNativeSpaceClient(options: NativeSpaceClientOptions): SpaceClient {
@@ -89,7 +87,6 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
       initialCameraEnabled: options.camera,
       onConnectionDiagnostic: (event) => journey?.recordDiagnostic(connectionDiagnostic(event)),
       ...(journey ? { recordReconnect: (observation) => journey.recordDiagnostic(observation) } : {}),
-      feedbackSource: options.feedbackSource ?? "embedded",
     },
   );
   bindNativeAuthenticatedTelemetry(client, journey);

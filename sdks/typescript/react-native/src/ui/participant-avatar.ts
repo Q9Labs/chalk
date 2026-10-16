@@ -9,7 +9,7 @@ export interface ParticipantColor {
   readonly surface: string;
 }
 
-export const PARTICIPANT_AVATAR_PALETTE = palettes.map(([primary, , surface]) => ({ primary, surface })) as readonly { readonly primary: string; readonly surface: string }[];
+export const PARTICIPANT_AVATAR_PALETTE = palettes.map(([primary, surface]) => ({ primary, surface })) as readonly { readonly primary: string; readonly surface: string }[];
 
 export function getParticipantInitials(name?: string): string {
   const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);

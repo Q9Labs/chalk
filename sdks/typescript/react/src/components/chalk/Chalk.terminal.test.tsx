@@ -10,7 +10,6 @@ import { Chalk } from "./Chalk";
 vi.mock("../space-view/SpaceView", () => ({ SpaceView: () => <div>Live Space</div> }));
 vi.mock("../entrance/Entrance", () => ({ Entrance: () => <div>Entrance</div> }));
 vi.mock("../composite/SettingsDialog", () => ({ SettingsDialog: () => null }));
-vi.mock("../feedback/FeedbackDialog", () => ({ FeedbackDialog: () => null }));
 vi.mock("../media-request-dialog/MediaRequestDialog", () => ({ MediaRequestDialog: () => null }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
