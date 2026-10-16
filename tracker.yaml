@@ -6,24 +6,6 @@ sizing: >-
   Size is the work left. S is one focused change, M is several connected changes, L must be split
   before starting, and Unknown needs investigation first.
 outcomes:
-  - id: identity_and_tenancy.people_management
-    title: Manage Tenant members and invitations
-    area: identity_and_tenancy
-    state: planned
-    summary: >-
-      The API can list members, add them and change their Role, but it has no invitations or
-      removal. The People page is still a placeholder.
-    priority: P1
-    size: M
-    remaining:
-      - Add invitation (issue, accept, expire, revoke) and member removal to the API.
-      - Build the People page on the existing and new operations.
-      - >-
-        Verify that denied Roles cannot change membership and that expired or revoked invitations
-        show a way forward.
-    theory: theory.md#identity-and-membership
-    code:
-      - apps/api/internal/httpapi/memberships.go
   - id: media.real_network_qualification
     title: Media works on real networks and devices
     area: media
@@ -49,44 +31,6 @@ outcomes:
       - tools/sdk-web-consumer-e2e/README.md
       - sdks/typescript/react-native/src/space-client/create-native-space-client.ts
       - apps/mobile/MOBILE_ENV_CONTRACT.md
-  - id: media.usage_metering
-    title: Measure media usage per Tenant and Episode
-    area: media
-    state: planned
-    summary: >-
-      The Usage type has egress and Participant-minute fields, but both Cloudflare adapters always
-      report zero, so media cost cannot be measured or limited.
-    priority: P2
-    size: M
-    remaining:
-      - Collect usage in both Cloudflare adapters and attribute it to Tenant and Episode.
-      - Reconcile one live Episode against the provider bill, then expose usage to policy limits.
-    theory: theory.md#constraints
-    code:
-      - apps/api/internal/mediaplane/service.go
-      - apps/api/internal/adapters/cloudflare/sfu/adapter.go
-      - apps/api/internal/adapters/cloudflare/rtk/plane.go
-  - id: media.custom_sfu
-    title: Custom SFU
-    area: media
-    state: unknown
-    summary: >-
-      Media runs only on Cloudflare SFU and RTK. A custom SFU removes that dependency. It is one
-      task in two parts: the SFU itself, then its integration into Chalk.
-    priority: P1
-    size: XL
-    remaining:
-      - >-
-        Part 1, the SFU: build the server that receives and forwards audio, video and screen share.
-      - >-
-        Part 2, the integration: add a MediaPlane adapter, web and native clients, credential
-        renewal and Recording capture on top of it.
-    uncertainty: The SFU design and scope are not defined yet.
-    theory: theory.md#constraints
-    code:
-      - apps/api/internal/mediaplane/service.go
-      - sdks/typescript/client/src/media
-      - sdks/typescript/react-native/src/space-client/create-native-space-client.ts
   - id: realtime_sync.failover_qualification
     title: Sync survives node and database failure
     area: realtime_sync
@@ -166,21 +110,6 @@ outcomes:
       - apps/api/internal/chatattachments/service.go
       - apps/api/internal/chatattachments/cleanup.go
       - apps/api/internal/httpapi/chat_attachments.go
-  - id: collaboration.sound_packs
-    title: Selectable sound packs
-    area: collaboration
-    state: planned
-    summary: Chalk has one set of sounds. There are no packs and no way for a Tenant to choose one.
-    priority: P3
-    size: M
-    remaining:
-      - >-
-        Define packs and a Tenant setting, wire them into web and native events, and respect mute
-        and accessibility settings.
-    theory: theory.md#product-goals
-    code:
-      - docs/redesign/sound-design.md
-      - sdks/typescript/react/src/components/chalk/Chalk.tsx
   - id: recording.export
     title: Download a Recording as MP4
     area: recording
@@ -324,45 +253,6 @@ outcomes:
     theory: theory.md#product-memory
     code:
       - apps/transcription-dispatcher/src/providers.ts
-  - id: transcription.live_captions
-    title: Live captions in a Space
-    area: transcription
-    state: planned
-    summary: >-
-      Captions are off in Chalk and no live caption path exists. The Transcript panel only shows
-      finished Transcripts.
-    priority: P3
-    size: L
-    remaining:
-      - Deliver live partial and final captions with consent, capability checks and cleanup.
-      - Verify latency, reconnect, language handling and privacy.
-    theory: theory.md#product-memory
-    code:
-      - sdks/typescript/react/src/components/chalk/Chalk.tsx
-      - sdks/typescript/react/src/components/transcript-panel/TranscriptPanel.tsx
-  - id: security_and_compliance.chat_retention
-    title: Tenant-set chat retention
-    area: security_and_compliance
-    state: planned
-    summary: >-
-      Tenants can set retention for Recordings and Transcripts but not for chat, and Sync has no
-      chat purge.
-    priority: P2
-    size: M
-    remaining:
-      - >-
-        Add chat retention to Tenant policy and purge expired messages and their attachments without
-        breaking Sync recovery.
-      - >-
-        Check that hard delete overrides retention and purged messages never return through replay
-        or snapshots.
-      - >-
-        Clear unsent offline chat held in browser storage when the Participant leaves or signs out,
-        so it doesn't stay on a shared computer for up to 24 hours.
-    theory: theory.md#constraints
-    code:
-      - apps/api/internal/artifactpolicy/policy.go
-      - apps/sync/lib/chalk_sync/chat/postgres.ex
   - id: sdk_and_embedding.packed_consumer
     title: Published packages work in a fresh app
     area: sdk_and_embedding
@@ -402,23 +292,6 @@ outcomes:
     code:
       - sdks/typescript/react/src/components/chalk/Chalk.tsx
       - sdks/typescript/react-native/src/components/Chalk.tsx
-  - id: sdk_and_embedding.app_identity
-    title: SDK app name in server telemetry
-    area: sdk_and_embedding
-    state: planned
-    summary: No appName option exists on the client, SpaceClient, Chalk or AccessGrant request.
-    priority: P1
-    size: S
-    remaining:
-      - >-
-        Add appName with the bounds from theory.md and carry it on HTTP and WebSocket requests into
-        spans and logs.
-      - Check omitted and oversized values and that appName never affects authorization.
-    theory: theory.md#identity-and-membership
-    code:
-      - sdks/typescript/client/src/client.ts
-      - sdks/typescript/client/src/space-client/types.ts
-      - apps/api/internal/httpapi/access_grants.go
   - id: sdk_and_embedding.api_contract_parity
     title: Every public endpoint is in the generated client
     area: sdk_and_embedding
@@ -439,97 +312,6 @@ outcomes:
       - contract/generated/openapi.json
       - sdks/typescript/client/src/generated/http-api.ts
       - apps/api/internal/httpapi/router.go
-  - id: sdk_and_embedding.swift_sdk
-    title: Swift SDK
-    area: sdk_and_embedding
-    state: planned
-    summary: Only TypeScript SDKs exist.
-    priority: P2
-    size: XL
-    remaining:
-      - >-
-        Define the supported surface, generate or write the package, and ship it with an independent
-        consumer build and contract fixtures.
-    theory: theory.md#product-goals
-    code:
-      - contract/generated/openapi.json
-  - id: sdk_and_embedding.kotlin_sdk
-    title: Kotlin SDK
-    area: sdk_and_embedding
-    state: planned
-    summary: Only TypeScript SDKs exist.
-    priority: P2
-    size: XL
-    remaining:
-      - >-
-        Define the supported surface, generate or write the package, and ship it with an independent
-        consumer build and contract fixtures.
-    theory: theory.md#product-goals
-    code:
-      - contract/generated/openapi.json
-  - id: sdk_and_embedding.python_sdk
-    title: Python SDK
-    area: sdk_and_embedding
-    state: planned
-    summary: Only TypeScript SDKs exist.
-    priority: P2
-    size: XL
-    remaining:
-      - >-
-        Define the supported surface, generate or write the package, and ship it with an independent
-        consumer build and contract fixtures.
-    theory: theory.md#product-goals
-    code:
-      - contract/generated/openapi.json
-  - id: sdk_and_embedding.go_sdk
-    title: Go SDK
-    area: sdk_and_embedding
-    state: planned
-    summary: Only TypeScript SDKs exist.
-    priority: P2
-    size: XL
-    remaining:
-      - >-
-        Define the supported surface, generate or write the package, and ship it with an independent
-        consumer build and contract fixtures.
-    theory: theory.md#product-goals
-    code:
-      - contract/generated/openapi.json
-  - id: sdk_and_embedding.iframe_embed
-    title: Embed a Space in an iframe
-    area: sdk_and_embedding
-    state: planned
-    summary: >-
-      The SDK can be embedded, but there is no supported iframe contract for origins, access handoff
-      or lifecycle messages.
-    priority: P2
-    size: L
-    remaining:
-      - Define the iframe entry, access handoff, allowed origins and lifecycle messages.
-      - >-
-        Check camera and microphone permission, resize, teardown and expired access from another
-        origin.
-    theory: theory.md#product-goals
-    code:
-      - apps/web/src/routes/space.tsx
-      - sdks/typescript/react/src/components/chalk/Chalk.tsx
-  - id: integrations_and_webhooks.management_ui
-    title: Connect third-party apps in the dashboard
-    area: integrations_and_webhooks
-    state: planned
-    summary: >-
-      The API can connect a Tenant to third-party apps through Composio, such as Gmail, Google
-      Calendar, Drive, Docs and GitHub. The dashboard has no page to browse, connect or disconnect
-      them.
-    priority: P2
-    size: M
-    remaining:
-      - >-
-        Build a page to browse the app catalog, connect, refresh and disconnect an app, and show
-        clear errors.
-      - Require member permission and recent authentication for secrets, and show the audit records.
-    theory: theory.md#product-memory
-    code: []
   - id: integrations_and_webhooks.delivery_qualification
     title: Webhooks deliver and recover on a deployment
     area: integrations_and_webhooks
@@ -654,6 +436,239 @@ outcomes:
       - gate.config.ts
       - scripts/gates/chalk-gate-plan.mjs
       - sdks/typescript/client/src/media/cloudflare-sfu.test.ts
+  - id: product_delivery.mcp_server
+    title: Chalk MCP server
+    area: product_delivery
+    state: planned
+    summary: Chalk has no MCP server, so AI tools cannot use Chalk directly.
+    priority: P3
+    size: L
+    remaining:
+      - >-
+        Decide which Space, Episode, Recording and Transcript operations to expose, then ship an MCP
+        server on the public API.
+    theory: theory.md#product-goals
+    code:
+      - sdks/typescript/client/src
+
+# Ideas without a current user journey; not planned work.
+wishlist:
+  - id: identity_and_tenancy.people_management
+    title: Manage Tenant members and invitations
+    area: identity_and_tenancy
+    state: planned
+    summary: >-
+      The API supports Tenant membership, Roles and invitations. There is no member-management
+      UI after the dashboard removal.
+    priority: P1
+    size: M
+    remaining:
+      - Build member and invitation management on the existing API.
+      - >-
+        Verify that denied Roles cannot change membership and that expired or revoked invitations
+        show a way forward.
+    theory: theory.md#identity-and-membership
+    code:
+      - apps/api/internal/httpapi/memberships.go
+  - id: media.usage_metering
+    title: Measure media usage per Tenant and Episode
+    area: media
+    state: planned
+    summary: >-
+      The Usage type has egress and Participant-minute fields, but both Cloudflare adapters always
+      report zero, so media cost cannot be measured or limited.
+    priority: P2
+    size: M
+    remaining:
+      - Collect usage in both Cloudflare adapters and attribute it to Tenant and Episode.
+      - Reconcile one live Episode against the provider bill, then expose usage to policy limits.
+    theory: theory.md#constraints
+    code:
+      - apps/api/internal/mediaplane/service.go
+      - apps/api/internal/adapters/cloudflare/sfu/adapter.go
+      - apps/api/internal/adapters/cloudflare/rtk/plane.go
+  - id: media.custom_sfu
+    title: Custom SFU
+    area: media
+    state: unknown
+    summary: >-
+      Media runs only on Cloudflare SFU and RTK. A custom SFU removes that dependency. It is one
+      task in two parts: the SFU itself, then its integration into Chalk.
+    priority: P1
+    size: XL
+    remaining:
+      - >-
+        Part 1, the SFU: build the server that receives and forwards audio, video and screen share.
+      - >-
+        Part 2, the integration: add a MediaPlane adapter, web and native clients, credential
+        renewal and Recording capture on top of it.
+    uncertainty: The SFU design and scope are not defined yet.
+    theory: theory.md#constraints
+    code:
+      - apps/api/internal/mediaplane/service.go
+      - sdks/typescript/client/src/media
+      - sdks/typescript/react-native/src/space-client/create-native-space-client.ts
+  - id: collaboration.sound_packs
+    title: Selectable sound packs
+    area: collaboration
+    state: planned
+    summary: Chalk has one set of sounds. There are no packs and no way for a Tenant to choose one.
+    priority: P3
+    size: M
+    remaining:
+      - >-
+        Define packs and a Tenant setting, wire them into web and native events, and respect mute
+        and accessibility settings.
+    theory: theory.md#product-goals
+    code:
+      - docs/redesign/sound-design.md
+      - sdks/typescript/react/src/components/chalk/Chalk.tsx
+  - id: transcription.live_captions
+    title: Live captions in a Space
+    area: transcription
+    state: planned
+    summary: >-
+      Captions are off in Chalk and no live caption path exists. The Transcript panel only shows
+      finished Transcripts.
+    priority: P3
+    size: L
+    remaining:
+      - Deliver live partial and final captions with consent, capability checks and cleanup.
+      - Verify latency, reconnect, language handling and privacy.
+    theory: theory.md#product-memory
+    code:
+      - sdks/typescript/react/src/components/chalk/Chalk.tsx
+      - sdks/typescript/react/src/components/transcript-panel/TranscriptPanel.tsx
+  - id: security_and_compliance.chat_retention
+    title: Tenant-set chat retention
+    area: security_and_compliance
+    state: planned
+    summary: >-
+      Tenants can set retention for Recordings and Transcripts but not for chat, and Sync has no
+      chat purge.
+    priority: P2
+    size: M
+    remaining:
+      - >-
+        Add chat retention to Tenant policy and purge expired messages and their attachments without
+        breaking Sync recovery.
+      - >-
+        Check that hard delete overrides retention and purged messages never return through replay
+        or snapshots.
+      - >-
+        Clear unsent offline chat held in browser storage when the Participant leaves or signs out,
+        so it doesn't stay on a shared computer for up to 24 hours.
+    theory: theory.md#constraints
+    code:
+      - apps/api/internal/artifactpolicy/policy.go
+      - apps/sync/lib/chalk_sync/chat/postgres.ex
+  - id: sdk_and_embedding.app_identity
+    title: SDK app name in server telemetry
+    area: sdk_and_embedding
+    state: planned
+    summary: No appName option exists on the client, SpaceClient, Chalk or AccessGrant request.
+    priority: P1
+    size: S
+    remaining:
+      - >-
+        Add appName with the bounds from theory.md and carry it on HTTP and WebSocket requests into
+        spans and logs.
+      - Check omitted and oversized values and that appName never affects authorization.
+    theory: theory.md#identity-and-membership
+    code:
+      - sdks/typescript/client/src/client.ts
+      - sdks/typescript/client/src/space-client/types.ts
+      - apps/api/internal/httpapi/access_grants.go
+  - id: sdk_and_embedding.swift_sdk
+    title: Swift SDK
+    area: sdk_and_embedding
+    state: planned
+    summary: Only TypeScript SDKs exist.
+    priority: P2
+    size: XL
+    remaining:
+      - >-
+        Define the supported surface, generate or write the package, and ship it with an independent
+        consumer build and contract fixtures.
+    theory: theory.md#product-goals
+    code:
+      - contract/generated/openapi.json
+  - id: sdk_and_embedding.kotlin_sdk
+    title: Kotlin SDK
+    area: sdk_and_embedding
+    state: planned
+    summary: Only TypeScript SDKs exist.
+    priority: P2
+    size: XL
+    remaining:
+      - >-
+        Define the supported surface, generate or write the package, and ship it with an independent
+        consumer build and contract fixtures.
+    theory: theory.md#product-goals
+    code:
+      - contract/generated/openapi.json
+  - id: sdk_and_embedding.python_sdk
+    title: Python SDK
+    area: sdk_and_embedding
+    state: planned
+    summary: Only TypeScript SDKs exist.
+    priority: P2
+    size: XL
+    remaining:
+      - >-
+        Define the supported surface, generate or write the package, and ship it with an independent
+        consumer build and contract fixtures.
+    theory: theory.md#product-goals
+    code:
+      - contract/generated/openapi.json
+  - id: sdk_and_embedding.go_sdk
+    title: Go SDK
+    area: sdk_and_embedding
+    state: planned
+    summary: Only TypeScript SDKs exist.
+    priority: P2
+    size: XL
+    remaining:
+      - >-
+        Define the supported surface, generate or write the package, and ship it with an independent
+        consumer build and contract fixtures.
+    theory: theory.md#product-goals
+    code:
+      - contract/generated/openapi.json
+  - id: sdk_and_embedding.iframe_embed
+    title: Embed a Space in an iframe
+    area: sdk_and_embedding
+    state: planned
+    summary: >-
+      The SDK can be embedded, but there is no supported iframe contract for origins, access handoff
+      or lifecycle messages.
+    priority: P2
+    size: L
+    remaining:
+      - Define the iframe entry, access handoff, allowed origins and lifecycle messages.
+      - >-
+        Check camera and microphone permission, resize, teardown and expired access from another
+        origin.
+    theory: theory.md#product-goals
+    code:
+      - apps/web/src/routes/space.tsx
+      - sdks/typescript/react/src/components/chalk/Chalk.tsx
+  - id: integrations_and_webhooks.management_ui
+    title: Connect third-party apps
+    area: integrations_and_webhooks
+    state: planned
+    summary: >-
+      Composio integrations and their management UI have been removed. Future integrations need
+      a concrete user journey before implementation.
+    priority: P2
+    size: M
+    remaining:
+      - >-
+        Build a page to browse the app catalog, connect, refresh and disconnect an app, and show
+        clear errors.
+      - Require member permission and recent authentication for secrets, and show the audit records.
+    theory: theory.md#product-memory
+    code: []
   - id: product_delivery.parallel_dev_stacks
     title: Run several local stacks at once
     area: product_delivery
@@ -704,17 +719,3 @@ outcomes:
     code:
       - apps
       - sdks/typescript
-  - id: product_delivery.mcp_server
-    title: Chalk MCP server
-    area: product_delivery
-    state: planned
-    summary: Chalk has no MCP server, so AI tools cannot use Chalk directly.
-    priority: P3
-    size: L
-    remaining:
-      - >-
-        Decide which Space, Episode, Recording and Transcript operations to expose, then ship an MCP
-        server on the public API.
-    theory: theory.md#product-goals
-    code:
-      - sdks/typescript/client/src

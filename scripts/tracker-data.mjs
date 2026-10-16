@@ -3,13 +3,13 @@ import path from "node:path";
 import { load } from "js-yaml";
 
 export const repoRoot = path.resolve(import.meta.dirname, "..");
-export const states = {
+const states = {
   unknown: "Unknown",
   planned: "Planned",
   in_progress: "In progress",
   blocked: "Blocked",
 };
-export const areas = {
+const areas = {
   episode_core: "Spaces and Episodes",
   identity_and_tenancy: "Identity and Tenants",
   media: "Media",
@@ -61,7 +61,7 @@ const strings = (value, label, required = true) => {
   });
   assertUniqueList(value, label);
 };
-const trackerFields = ["schema_version", "principle", "sizing", "outcomes"];
+const trackerFields = ["schema_version", "principle", "sizing", "outcomes", "wishlist"];
 const outcomeFields = ["id", "title", "area", "state", "summary", "priority", "size", "remaining", "uncertainty", "blocked_by", "theory", "code"];
 const validateIdentifier = (item, ids) => {
   string(item.id, "outcome.id");
@@ -123,6 +123,12 @@ const validateOutcome = (item, ids) => {
   strings(item.code, `${item.id}.code`, false);
 };
 
+const validateWishlist = (wishlist, ids) => {
+  if (wishlist === undefined) return;
+  if (!Array.isArray(wishlist)) fail("wishlist", "expected a list");
+  wishlist.forEach((item) => validateOutcome(item, ids));
+};
+
 export const validateTracker = (tracker) => {
   object(tracker, "tracker.yaml", trackerFields);
   if (tracker.schema_version !== 7) fail("schema_version", "expected 7");
@@ -132,6 +138,7 @@ export const validateTracker = (tracker) => {
   assertRequiredList(tracker.outcomes, "outcomes");
   const ids = new Set();
   tracker.outcomes.forEach((item) => validateOutcome(item, ids));
+  validateWishlist(tracker.wishlist, ids);
   return tracker;
 };
 
@@ -190,7 +197,7 @@ export const readTracker = async (root = repoRoot) => {
   await checkReference(root, "tracker.yaml");
   const source = await readFile(path.join(root, "tracker.yaml"), "utf8");
   const tracker = validateTracker(load(source));
-  const references = new Set(tracker.outcomes.flatMap(outcomeReferences));
+  const references = new Set([...tracker.outcomes, ...(tracker.wishlist ?? [])].flatMap(outcomeReferences));
   await Promise.all([...references].map((reference) => checkReference(root, reference)));
   return tracker;
 };

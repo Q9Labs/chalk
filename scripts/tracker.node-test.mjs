@@ -41,6 +41,18 @@ const tracker = (...outcomes) => ({
 });
 const another = (id) => outcome({ id, priority: undefined });
 
+it("keeps wishlist ideas outside active outcomes and validates their identities", () => {
+  const data = { ...tracker(outcome()), wishlist: [another("product_delivery.desktop_application")] };
+  validateTracker(data);
+  assert.equal(groupOutcomes(data).flatMap((group) => group.items).length, 1);
+  assert.match(renderMarkdown(data), /## Wishlist/);
+  assert.match(renderHtml(data), /Wishlist · 1 ideas/);
+  assert.equal((renderHtml(data).match(/class="item"/g) ?? []).length, 1);
+  assert.equal((renderHtml(data).match(/class="wish"/g) ?? []).length, 1);
+  assert.throws(() => validateTracker({ ...data, wishlist: [outcome()] }), /duplicate outcome ID/);
+  assert.throws(() => validateTracker({ ...data, wishlist: {} }), /wishlist: expected a list/);
+});
+
 it("requires a size, allows an empty owner priority, and rejects finished work", () => {
   for (const size of [undefined, "XS", "XXL", "2 days", null]) {
     assert.throws(() => validateTracker(tracker(outcome({ size }))), /size must/);
