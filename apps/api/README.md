@@ -300,12 +300,6 @@ spans. It propagates W3C `traceparent` and mirrors or creates the lowercase
 `x-chalk-journey-id` response header. Request bodies and operation content are
 never included in traces or logs.
 
-Authenticated runtimes can acknowledge at-least-once journey events through
-`POST /v1/telemetry/journey-events`. Event identifiers, journey identifiers,
-and parent event identifiers are RFC 4122 UUIDs. The local, system-principal
-ledger query route is `GET /v1/telemetry/journeys/{journey_id}`; it is not
-mounted outside local environments.
-
 `CHALK_API_REQUEST_LOGS` accepts `off`, `errors`, `slow`, `sampled`, or `all`.
 Successful request logs are off by default; startup, shutdown, and error logs
 still use the shared logger. `sampled` uses `CHALK_API_REQUEST_SAMPLE_RATE`
