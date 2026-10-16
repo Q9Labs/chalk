@@ -523,7 +523,7 @@ function oauthReturnCookieName(url: URL): string {
 }
 
 function safeReturnPath(value: string | null | undefined): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return "/home";
+  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return "/";
   return value;
 }
 

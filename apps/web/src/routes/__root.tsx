@@ -8,7 +8,6 @@ import appCss from "../styles.css?url";
 installChunkLoadAutoReload();
 
 export const Route = createRootRoute({
-  notFoundComponent: BlankPage,
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -61,8 +60,4 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </body>
     </html>
   );
-}
-
-function BlankPage() {
-  return null;
 }

@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DashboardAPIError } from "../../lib/dashboard-api";
+import { AccountAPIError } from "../../lib/account-api";
 import { AuthPage } from "./AuthPage";
 
 const mocks = vi.hoisted(() => ({ register: vi.fn(), login: vi.fn(), tenants: vi.fn(), navigate: vi.fn() }));
@@ -12,8 +12,8 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mocks.navigate,
 }));
 vi.mock("@q9labsai/chalk-react", () => ({ Logo: () => null }));
-vi.mock("../../lib/dashboard-api", async () => {
-  const actual = await vi.importActual("../../lib/dashboard-api");
+vi.mock("../../lib/account-api", async () => {
+  const actual = await vi.importActual("../../lib/account-api");
   return { ...actual, registerAccount: mocks.register, loginAccount: mocks.login, listAllAccountTenants: mocks.tenants };
 });
 
@@ -43,7 +43,7 @@ describe("Account entry feedback", () => {
   });
 
   it("announces how to correct a rejected password", async () => {
-    mocks.register.mockRejectedValue(new DashboardAPIError(400, "access.invalid_password", "Invalid password"));
+    mocks.register.mockRejectedValue(new AccountAPIError(400, "access.invalid_password", "Invalid password"));
     submit("sign-up");
     expect((await screen.findByRole("alert")).textContent).toContain("try a shorter one");
   });

@@ -24,8 +24,6 @@ outcomes:
     theory: theory.md#identity-and-membership
     code:
       - apps/api/internal/httpapi/memberships.go
-      - apps/web/src/routes/_app.people.tsx
-      - apps/web/src/components/dashboard/ContractPage.tsx
   - id: media.real_network_qualification
     title: Media works on real networks and devices
     area: media
@@ -531,8 +529,7 @@ outcomes:
         clear errors.
       - Require member permission and recent authentication for secrets, and show the audit records.
     theory: theory.md#product-memory
-    code:
-      - apps/web/src/routes/_app.developer.tsx
+    code: []
   - id: integrations_and_webhooks.delivery_qualification
     title: Webhooks deliver and recover on a deployment
     area: integrations_and_webhooks

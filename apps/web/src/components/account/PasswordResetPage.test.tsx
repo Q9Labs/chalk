@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DashboardAPIError } from "../../lib/dashboard-api";
+import { AccountAPIError } from "../../lib/account-api";
 import { CompletePasswordResetPage, RequestPasswordResetPage } from "./PasswordResetPage";
 
 const mocks = vi.hoisted(() => ({ request: vi.fn(), complete: vi.fn(), navigate: vi.fn() }));
@@ -12,8 +12,8 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mocks.navigate,
 }));
 vi.mock("@q9labsai/chalk-react", () => ({ Logo: () => null }));
-vi.mock("../../lib/dashboard-api", async () => {
-  const actual = await vi.importActual("../../lib/dashboard-api");
+vi.mock("../../lib/account-api", async () => {
+  const actual = await vi.importActual("../../lib/account-api");
   return { ...actual, requestPasswordReset: mocks.request, completePasswordReset: mocks.complete };
 });
 
@@ -38,7 +38,7 @@ describe("password reset", () => {
   });
 
   it.each([429, 403, 503])("allows retry after a request is rejected with %s", async (status) => {
-    mocks.request.mockRejectedValue(new DashboardAPIError(status, "request.failed", "Unavailable"));
+    mocks.request.mockRejectedValue(new AccountAPIError(status, "request.failed", "Unavailable"));
     render(<RequestPasswordResetPage />);
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "ada@example.com" } });
     fireEvent.submit(screen.getByRole("button", { name: "Send reset link" }).closest("form")!);
@@ -63,7 +63,7 @@ describe("password reset", () => {
   });
 
   it("keeps API reset errors actionable", async () => {
-    mocks.complete.mockRejectedValue(new DashboardAPIError(400, "auth.invalid_reset_token", "This reset link could not be used. Request a new link."));
+    mocks.complete.mockRejectedValue(new AccountAPIError(400, "auth.invalid_reset_token", "This reset link could not be used. Request a new link."));
     render(<CompletePasswordResetPage token="reset-token" />);
     fireEvent.change(screen.getByLabelText("New password", { exact: false }), { target: { value: "replacement-password" } });
     fireEvent.submit(screen.getByRole("button", { name: "Reset password" }).closest("form")!);

@@ -1,10 +1,10 @@
 # Chalk web
 
-This Vite, React 19, and TanStack Router app serves three roles:
+This Vite, React 19, and TanStack Router app serves:
 
-- the public marketing shell at `/`;
-- a production-capable public-SDK consumer Space at `/space`;
-- a compact public-surface preview at `/sdk-preview`.
+- the landing page at `/`, docs, legal and status pages;
+- the public-SDK consumer Space at `/space`;
+- account sign-in, sign-up, password recovery and invitation acceptance.
 
 Implementation status lives in the root [human tracker](../../tracker-human.md), generated from [tracker.yaml](../../tracker.yaml). Route names and this integration guide are not release-readiness evidence.
 

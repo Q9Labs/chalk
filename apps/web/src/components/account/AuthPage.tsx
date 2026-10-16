@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Logo } from "@q9labsai/chalk-react";
 import { useState, type FormEvent } from "react";
-import { DashboardAPIError, listAllAccountTenants, loginAccount, registerAccount } from "../../lib/dashboard-api";
+import { AccountAPIError, loginAccount, registerAccount } from "../../lib/account-api";
 
 export function AuthPage({ mode, next }: { mode: "sign-in" | "sign-up"; next?: string }) {
   const navigate = useNavigate();
@@ -24,13 +24,12 @@ export function AuthPage({ mode, next }: { mode: "sign-in" | "sign-up"; next?: s
         await navigate({ href: next, replace: true });
         return;
       }
-      const tenants = await listAllAccountTenants();
-      await navigate({ to: tenants.length === 0 ? "/onboarding" : "/home", replace: true });
+      await navigate({ to: "/", replace: true });
     } catch (cause) {
-      if (cause instanceof DashboardAPIError && cause.code === "access.invalid_password") {
+      if (cause instanceof AccountAPIError && cause.code === "access.invalid_password") {
         setError("Use at least 8 characters. If your password is long, try a shorter one.");
       } else {
-        setError(cause instanceof DashboardAPIError ? cause.message : signingUp ? "Your Account could not be created. Try again." : "Chalk could not sign you in. Try again.");
+        setError(cause instanceof AccountAPIError ? cause.message : signingUp ? "Your Account could not be created. Try again." : "Chalk could not sign you in. Try again.");
       }
     } finally {
       setBusy(false);
@@ -54,7 +53,7 @@ export function AuthPage({ mode, next }: { mode: "sign-in" | "sign-up"; next?: s
         <form className="account-entry-form" onSubmit={submit}>
           <p className="eyebrow">{signingUp ? "Create your Account" : "Welcome back"}</p>
           <h2>{signingUp ? "Bring the work into focus." : "Sign in to Chalk."}</h2>
-          <a className="google-auth-button" href={`/api/auth/google/start?return_to=${encodeURIComponent(next ?? "/home")}`}>
+          <a className="google-auth-button" href={`/api/auth/google/start?return_to=${encodeURIComponent(next ?? "/")}`}>
             Continue with Google
           </a>
           <div className="auth-divider">
@@ -85,7 +84,7 @@ export function AuthPage({ mode, next }: { mode: "sign-in" | "sign-up"; next?: s
               {error}
             </p>
           ) : null}
-          <button className="dashboard-button primary" type="submit" disabled={busy}>
+          <button className="account-button primary" type="submit" disabled={busy}>
             {busy ? (signingUp ? "Creating Account…" : "Signing in…") : signingUp ? "Create Account" : "Sign in"}
           </button>
           <p className="auth-switch">

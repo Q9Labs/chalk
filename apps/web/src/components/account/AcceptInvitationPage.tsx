@@ -1,7 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { acceptTenantInvitation, DashboardAPIError, getAccount, logoutAccount } from "../../lib/dashboard-api";
-import { tenantHintKey } from "./DashboardAccount";
+import { acceptTenantInvitation, AccountAPIError, getAccount, logoutAccount } from "../../lib/account-api";
 
 const TOKEN_STORAGE_KEY = "chalk.invitation-token";
 const ACCEPT_PATH = "/invitations/accept";
@@ -36,12 +35,11 @@ export function AcceptInvitationPage() {
     void (async () => {
       try {
         await getAccount();
-        const membership = await acceptTenantInvitation(token);
+        await acceptTenantInvitation(token);
         window.sessionStorage.removeItem(TOKEN_STORAGE_KEY);
-        window.localStorage.setItem(tenantHintKey, membership.tenant_id);
-        await navigate({ to: "/home", replace: true });
+        await navigate({ to: "/", replace: true });
       } catch (cause: unknown) {
-        if (!(cause instanceof DashboardAPIError)) {
+        if (!(cause instanceof AccountAPIError)) {
           setState({ kind: "failed", message: "Chalk could not reach the invitation service. Try again." });
         } else if (cause.status === 401) {
           await navigate({ to: "/sign-in", search: { next: ACCEPT_PATH }, replace: true });
@@ -97,7 +95,7 @@ export function AcceptInvitationPage() {
           <h1>This invitation is for another email.</h1>
           <p>{state.message}</p>
           <p>Sign out, then sign in or sign up with the email address the invitation was sent to.</p>
-          <button type="button" className="dashboard-button primary" onClick={() => void switchAccount()} disabled={signingOut}>
+          <button type="button" className="account-button primary" onClick={() => void switchAccount()} disabled={signingOut}>
             {signingOut ? "Signing out…" : "Sign out and switch Account"}
           </button>
         </>
@@ -107,7 +105,7 @@ export function AcceptInvitationPage() {
           <p className="eyebrow">Invitation</p>
           <h1>We could not accept this invitation.</h1>
           <p role="alert">{state.message}</p>
-          <button type="button" className="dashboard-button secondary" onClick={() => window.location.reload()}>
+          <button type="button" className="account-button secondary" onClick={() => window.location.reload()}>
             Try again
           </button>
         </>

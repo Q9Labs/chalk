@@ -30,49 +30,10 @@
 /space*
   X-Robots-Tag: noindex, nofollow, noarchive
 
-/home*
-  X-Robots-Tag: noindex, nofollow, noarchive
-
-/spaces*
-  X-Robots-Tag: noindex, nofollow, noarchive
-
-/episodes*
-  X-Robots-Tag: noindex, nofollow, noarchive
-
-/artifacts*
-  X-Robots-Tag: noindex, nofollow, noarchive
-
-/people*
-  X-Robots-Tag: noindex, nofollow, noarchive
-
-/activity*
-  X-Robots-Tag: noindex, nofollow, noarchive
-
-/developer*
-  X-Robots-Tag: noindex, nofollow, noarchive
-
-/tenant*
-  X-Robots-Tag: noindex, nofollow, noarchive
-
-/account*
-  X-Robots-Tag: noindex, nofollow, noarchive
-
 /sign-in
   X-Robots-Tag: noindex, nofollow, noarchive
 
 /sign-up
-  X-Robots-Tag: noindex, nofollow, noarchive
-
-/onboarding
-  X-Robots-Tag: noindex, nofollow, noarchive
-
-/new
-  X-Robots-Tag: noindex, nofollow, noarchive
-
-/sdk-preview
-  X-Robots-Tag: noindex, nofollow, noarchive
-
-/whiteboard
   X-Robots-Tag: noindex, nofollow, noarchive
 
 /*

@@ -9,95 +9,25 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as WhiteboardRouteImport } from './routes/whiteboard'
-import { Route as TermsRouteImport } from './routes/terms'
-import { Route as StatusRouteImport } from './routes/status'
-import { Route as SpaceRouteImport } from './routes/space'
-import { Route as SignUpRouteImport } from './routes/sign-up'
-import { Route as SignInRouteImport } from './routes/sign-in'
-import { Route as SdkPreviewRouteImport } from './routes/sdk-preview'
-import { Route as ResetPasswordRouteImport } from './routes/reset-password'
-import { Route as PrivacyRouteImport } from './routes/privacy'
-import { Route as OnboardingRouteImport } from './routes/onboarding'
-import { Route as NewRouteImport } from './routes/new'
-import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
-import { Route as DocsRouteImport } from './routes/docs'
-import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as SpaceIndexRouteImport } from './routes/space.index'
+import { Route as DocsRouteImport } from './routes/docs'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as SignInRouteImport } from './routes/sign-in'
+import { Route as SignUpRouteImport } from './routes/sign-up'
+import { Route as SpaceRouteImport } from './routes/space'
+import { Route as StatusRouteImport } from './routes/status'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as DocsIndexRouteImport } from './routes/docs.index'
-import { Route as SpaceSlugRouteImport } from './routes/space.$slug'
-import { Route as InvitationsAcceptRouteImport } from './routes/invitations.accept'
 import { Route as DocsSlugRouteImport } from './routes/docs.$slug'
-import { Route as AppTenantRouteImport } from './routes/_app.tenant'
-import { Route as AppSpacesRouteImport } from './routes/_app.spaces'
-import { Route as AppPeopleRouteImport } from './routes/_app.people'
-import { Route as AppHomeRouteImport } from './routes/_app.home'
-import { Route as AppEpisodesRouteImport } from './routes/_app.episodes'
-import { Route as AppDeveloperRouteImport } from './routes/_app.developer'
-import { Route as AppArtifactsRouteImport } from './routes/_app.artifacts'
-import { Route as AppActivityRouteImport } from './routes/_app.activity'
-import { Route as AppAccountRouteImport } from './routes/_app.account'
-import { Route as AppSpacesSpaceIdRouteImport } from './routes/_app.spaces_.$spaceId'
+import { Route as InvitationsAcceptRouteImport } from './routes/invitations.accept'
+import { Route as SpaceIndexRouteImport } from './routes/space.index'
+import { Route as SpaceSlugRouteImport } from './routes/space.$slug'
 
-const WhiteboardRoute = WhiteboardRouteImport.update({
-  id: '/whiteboard',
-  path: '/whiteboard',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TermsRoute = TermsRouteImport.update({
-  id: '/terms',
-  path: '/terms',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const StatusRoute = StatusRouteImport.update({
-  id: '/status',
-  path: '/status',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SpaceRoute = SpaceRouteImport.update({
-  id: '/space',
-  path: '/space',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SignUpRoute = SignUpRouteImport.update({
-  id: '/sign-up',
-  path: '/sign-up',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SignInRoute = SignInRouteImport.update({
-  id: '/sign-in',
-  path: '/sign-in',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SdkPreviewRoute = SdkPreviewRouteImport.update({
-  id: '/sdk-preview',
-  path: '/sdk-preview',
-  getParentRoute: () => rootRouteImport,
-} as any).lazy(() => import('./routes/sdk-preview.lazy').then((d) => d.Route))
-const ResetPasswordRoute = ResetPasswordRouteImport.update({
-  id: '/reset-password',
-  path: '/reset-password',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PrivacyRoute = PrivacyRouteImport.update({
-  id: '/privacy',
-  path: '/privacy',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OnboardingRoute = OnboardingRouteImport.update({
-  id: '/onboarding',
-  path: '/onboarding',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const NewRoute = NewRouteImport.update({
-  id: '/new',
-  path: '/new',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
-  id: '/forgot-password',
-  path: '/forgot-password',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DocsRoute = DocsRouteImport.update({
@@ -105,13 +35,59 @@ const DocsRoute = DocsRouteImport.update({
   path: '/docs',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppRoute = AppRouteImport.update({
-  id: '/_app',
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignInRoute = SignInRouteImport.update({
+  id: '/sign-in',
+  path: '/sign-in',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignUpRoute = SignUpRouteImport.update({
+  id: '/sign-up',
+  path: '/sign-up',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SpaceRoute = SpaceRouteImport.update({
+  id: '/space',
+  path: '/space',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StatusRoute = StatusRouteImport.update({
+  id: '/status',
+  path: '/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsIndexRoute = DocsIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => DocsRoute,
+} as any)
+const DocsSlugRoute = DocsSlugRouteImport.update({
+  id: '/$slug',
+  path: '/$slug',
+  getParentRoute: () => DocsRoute,
+} as any)
+const InvitationsAcceptRoute = InvitationsAcceptRouteImport.update({
+  id: '/invitations/accept',
+  path: '/invitations/accept',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SpaceIndexRoute = SpaceIndexRouteImport.update({
@@ -119,169 +95,61 @@ const SpaceIndexRoute = SpaceIndexRouteImport.update({
   path: '/',
   getParentRoute: () => SpaceRoute,
 } as any)
-const DocsIndexRoute = DocsIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => DocsRoute,
-} as any)
 const SpaceSlugRoute = SpaceSlugRouteImport.update({
   id: '/$slug',
   path: '/$slug',
   getParentRoute: () => SpaceRoute,
-} as any)
-const InvitationsAcceptRoute = InvitationsAcceptRouteImport.update({
-  id: '/invitations/accept',
-  path: '/invitations/accept',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DocsSlugRoute = DocsSlugRouteImport.update({
-  id: '/$slug',
-  path: '/$slug',
-  getParentRoute: () => DocsRoute,
-} as any)
-const AppTenantRoute = AppTenantRouteImport.update({
-  id: '/tenant',
-  path: '/tenant',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppSpacesRoute = AppSpacesRouteImport.update({
-  id: '/spaces',
-  path: '/spaces',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppPeopleRoute = AppPeopleRouteImport.update({
-  id: '/people',
-  path: '/people',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppHomeRoute = AppHomeRouteImport.update({
-  id: '/home',
-  path: '/home',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppEpisodesRoute = AppEpisodesRouteImport.update({
-  id: '/episodes',
-  path: '/episodes',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppDeveloperRoute = AppDeveloperRouteImport.update({
-  id: '/developer',
-  path: '/developer',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppArtifactsRoute = AppArtifactsRouteImport.update({
-  id: '/artifacts',
-  path: '/artifacts',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppActivityRoute = AppActivityRouteImport.update({
-  id: '/activity',
-  path: '/activity',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppAccountRoute = AppAccountRouteImport.update({
-  id: '/account',
-  path: '/account',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppSpacesSpaceIdRoute = AppSpacesSpaceIdRouteImport.update({
-  id: '/spaces_/$spaceId',
-  path: '/spaces/$spaceId',
-  getParentRoute: () => AppRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/docs': typeof DocsRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
-  '/new': typeof NewRoute
-  '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/sdk-preview': typeof SdkPreviewRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
   '/space': typeof SpaceRouteWithChildren
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
-  '/whiteboard': typeof WhiteboardRoute
-  '/account': typeof AppAccountRoute
-  '/activity': typeof AppActivityRoute
-  '/artifacts': typeof AppArtifactsRoute
-  '/developer': typeof AppDeveloperRoute
-  '/episodes': typeof AppEpisodesRoute
-  '/home': typeof AppHomeRoute
-  '/people': typeof AppPeopleRoute
-  '/spaces': typeof AppSpacesRoute
-  '/tenant': typeof AppTenantRoute
   '/docs/$slug': typeof DocsSlugRoute
   '/invitations/accept': typeof InvitationsAcceptRoute
   '/space/$slug': typeof SpaceSlugRoute
   '/docs/': typeof DocsIndexRoute
   '/space/': typeof SpaceIndexRoute
-  '/spaces/$spaceId': typeof AppSpacesSpaceIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/forgot-password': typeof ForgotPasswordRoute
-  '/new': typeof NewRoute
-  '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/sdk-preview': typeof SdkPreviewRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
-  '/whiteboard': typeof WhiteboardRoute
-  '/account': typeof AppAccountRoute
-  '/activity': typeof AppActivityRoute
-  '/artifacts': typeof AppArtifactsRoute
-  '/developer': typeof AppDeveloperRoute
-  '/episodes': typeof AppEpisodesRoute
-  '/home': typeof AppHomeRoute
-  '/people': typeof AppPeopleRoute
-  '/spaces': typeof AppSpacesRoute
-  '/tenant': typeof AppTenantRoute
   '/docs/$slug': typeof DocsSlugRoute
   '/invitations/accept': typeof InvitationsAcceptRoute
   '/space/$slug': typeof SpaceSlugRoute
   '/docs': typeof DocsIndexRoute
   '/space': typeof SpaceIndexRoute
-  '/spaces/$spaceId': typeof AppSpacesSpaceIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/_app': typeof AppRouteWithChildren
   '/docs': typeof DocsRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
-  '/new': typeof NewRoute
-  '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/sdk-preview': typeof SdkPreviewRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
   '/space': typeof SpaceRouteWithChildren
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
-  '/whiteboard': typeof WhiteboardRoute
-  '/_app/account': typeof AppAccountRoute
-  '/_app/activity': typeof AppActivityRoute
-  '/_app/artifacts': typeof AppArtifactsRoute
-  '/_app/developer': typeof AppDeveloperRoute
-  '/_app/episodes': typeof AppEpisodesRoute
-  '/_app/home': typeof AppHomeRoute
-  '/_app/people': typeof AppPeopleRoute
-  '/_app/spaces': typeof AppSpacesRoute
-  '/_app/tenant': typeof AppTenantRoute
   '/docs/$slug': typeof DocsSlugRoute
   '/invitations/accept': typeof InvitationsAcceptRoute
   '/space/$slug': typeof SpaceSlugRoute
   '/docs/': typeof DocsIndexRoute
   '/space/': typeof SpaceIndexRoute
-  '/_app/spaces_/$spaceId': typeof AppSpacesSpaceIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -289,198 +157,73 @@ export interface FileRouteTypes {
     | '/'
     | '/docs'
     | '/forgot-password'
-    | '/new'
-    | '/onboarding'
     | '/privacy'
     | '/reset-password'
-    | '/sdk-preview'
     | '/sign-in'
     | '/sign-up'
     | '/space'
     | '/status'
     | '/terms'
-    | '/whiteboard'
-    | '/account'
-    | '/activity'
-    | '/artifacts'
-    | '/developer'
-    | '/episodes'
-    | '/home'
-    | '/people'
-    | '/spaces'
-    | '/tenant'
     | '/docs/$slug'
     | '/invitations/accept'
     | '/space/$slug'
     | '/docs/'
     | '/space/'
-    | '/spaces/$spaceId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/forgot-password'
-    | '/new'
-    | '/onboarding'
     | '/privacy'
     | '/reset-password'
-    | '/sdk-preview'
     | '/sign-in'
     | '/sign-up'
     | '/status'
     | '/terms'
-    | '/whiteboard'
-    | '/account'
-    | '/activity'
-    | '/artifacts'
-    | '/developer'
-    | '/episodes'
-    | '/home'
-    | '/people'
-    | '/spaces'
-    | '/tenant'
     | '/docs/$slug'
     | '/invitations/accept'
     | '/space/$slug'
     | '/docs'
     | '/space'
-    | '/spaces/$spaceId'
   id:
     | '__root__'
     | '/'
-    | '/_app'
     | '/docs'
     | '/forgot-password'
-    | '/new'
-    | '/onboarding'
     | '/privacy'
     | '/reset-password'
-    | '/sdk-preview'
     | '/sign-in'
     | '/sign-up'
     | '/space'
     | '/status'
     | '/terms'
-    | '/whiteboard'
-    | '/_app/account'
-    | '/_app/activity'
-    | '/_app/artifacts'
-    | '/_app/developer'
-    | '/_app/episodes'
-    | '/_app/home'
-    | '/_app/people'
-    | '/_app/spaces'
-    | '/_app/tenant'
     | '/docs/$slug'
     | '/invitations/accept'
     | '/space/$slug'
     | '/docs/'
     | '/space/'
-    | '/_app/spaces_/$spaceId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AppRoute: typeof AppRouteWithChildren
   DocsRoute: typeof DocsRouteWithChildren
   ForgotPasswordRoute: typeof ForgotPasswordRoute
-  NewRoute: typeof NewRoute
-  OnboardingRoute: typeof OnboardingRoute
   PrivacyRoute: typeof PrivacyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
-  SdkPreviewRoute: typeof SdkPreviewRoute
   SignInRoute: typeof SignInRoute
   SignUpRoute: typeof SignUpRoute
   SpaceRoute: typeof SpaceRouteWithChildren
   StatusRoute: typeof StatusRoute
   TermsRoute: typeof TermsRoute
-  WhiteboardRoute: typeof WhiteboardRoute
   InvitationsAcceptRoute: typeof InvitationsAcceptRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/whiteboard': {
-      id: '/whiteboard'
-      path: '/whiteboard'
-      fullPath: '/whiteboard'
-      preLoaderRoute: typeof WhiteboardRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/terms': {
-      id: '/terms'
-      path: '/terms'
-      fullPath: '/terms'
-      preLoaderRoute: typeof TermsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/status': {
-      id: '/status'
-      path: '/status'
-      fullPath: '/status'
-      preLoaderRoute: typeof StatusRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/space': {
-      id: '/space'
-      path: '/space'
-      fullPath: '/space'
-      preLoaderRoute: typeof SpaceRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/sign-up': {
-      id: '/sign-up'
-      path: '/sign-up'
-      fullPath: '/sign-up'
-      preLoaderRoute: typeof SignUpRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/sign-in': {
-      id: '/sign-in'
-      path: '/sign-in'
-      fullPath: '/sign-in'
-      preLoaderRoute: typeof SignInRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/sdk-preview': {
-      id: '/sdk-preview'
-      path: '/sdk-preview'
-      fullPath: '/sdk-preview'
-      preLoaderRoute: typeof SdkPreviewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/reset-password': {
-      id: '/reset-password'
-      path: '/reset-password'
-      fullPath: '/reset-password'
-      preLoaderRoute: typeof ResetPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/privacy': {
-      id: '/privacy'
-      path: '/privacy'
-      fullPath: '/privacy'
-      preLoaderRoute: typeof PrivacyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/onboarding': {
-      id: '/onboarding'
-      path: '/onboarding'
-      fullPath: '/onboarding'
-      preLoaderRoute: typeof OnboardingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/new': {
-      id: '/new'
-      path: '/new'
-      fullPath: '/new'
-      preLoaderRoute: typeof NewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/forgot-password': {
-      id: '/forgot-password'
-      path: '/forgot-password'
-      fullPath: '/forgot-password'
-      preLoaderRoute: typeof ForgotPasswordRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/docs': {
@@ -490,18 +233,81 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_app': {
-      id: '/_app'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AppRouteImport
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-in': {
+      id: '/sign-in'
+      path: '/sign-in'
+      fullPath: '/sign-in'
+      preLoaderRoute: typeof SignInRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-up': {
+      id: '/sign-up'
+      path: '/sign-up'
+      fullPath: '/sign-up'
+      preLoaderRoute: typeof SignUpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/space': {
+      id: '/space'
+      path: '/space'
+      fullPath: '/space'
+      preLoaderRoute: typeof SpaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/status': {
+      id: '/status'
+      path: '/status'
+      fullPath: '/status'
+      preLoaderRoute: typeof StatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs/': {
+      id: '/docs/'
       path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+      fullPath: '/docs/'
+      preLoaderRoute: typeof DocsIndexRouteImport
+      parentRoute: typeof DocsRoute
+    }
+    '/docs/$slug': {
+      id: '/docs/$slug'
+      path: '/$slug'
+      fullPath: '/docs/$slug'
+      preLoaderRoute: typeof DocsSlugRouteImport
+      parentRoute: typeof DocsRoute
+    }
+    '/invitations/accept': {
+      id: '/invitations/accept'
+      path: '/invitations/accept'
+      fullPath: '/invitations/accept'
+      preLoaderRoute: typeof InvitationsAcceptRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/space/': {
@@ -511,13 +317,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SpaceIndexRouteImport
       parentRoute: typeof SpaceRoute
     }
-    '/docs/': {
-      id: '/docs/'
-      path: '/'
-      fullPath: '/docs/'
-      preLoaderRoute: typeof DocsIndexRouteImport
-      parentRoute: typeof DocsRoute
-    }
     '/space/$slug': {
       id: '/space/$slug'
       path: '/$slug'
@@ -525,120 +324,8 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SpaceSlugRouteImport
       parentRoute: typeof SpaceRoute
     }
-    '/invitations/accept': {
-      id: '/invitations/accept'
-      path: '/invitations/accept'
-      fullPath: '/invitations/accept'
-      preLoaderRoute: typeof InvitationsAcceptRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/docs/$slug': {
-      id: '/docs/$slug'
-      path: '/$slug'
-      fullPath: '/docs/$slug'
-      preLoaderRoute: typeof DocsSlugRouteImport
-      parentRoute: typeof DocsRoute
-    }
-    '/_app/tenant': {
-      id: '/_app/tenant'
-      path: '/tenant'
-      fullPath: '/tenant'
-      preLoaderRoute: typeof AppTenantRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/spaces': {
-      id: '/_app/spaces'
-      path: '/spaces'
-      fullPath: '/spaces'
-      preLoaderRoute: typeof AppSpacesRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/people': {
-      id: '/_app/people'
-      path: '/people'
-      fullPath: '/people'
-      preLoaderRoute: typeof AppPeopleRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/home': {
-      id: '/_app/home'
-      path: '/home'
-      fullPath: '/home'
-      preLoaderRoute: typeof AppHomeRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/episodes': {
-      id: '/_app/episodes'
-      path: '/episodes'
-      fullPath: '/episodes'
-      preLoaderRoute: typeof AppEpisodesRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/developer': {
-      id: '/_app/developer'
-      path: '/developer'
-      fullPath: '/developer'
-      preLoaderRoute: typeof AppDeveloperRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/artifacts': {
-      id: '/_app/artifacts'
-      path: '/artifacts'
-      fullPath: '/artifacts'
-      preLoaderRoute: typeof AppArtifactsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/activity': {
-      id: '/_app/activity'
-      path: '/activity'
-      fullPath: '/activity'
-      preLoaderRoute: typeof AppActivityRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/account': {
-      id: '/_app/account'
-      path: '/account'
-      fullPath: '/account'
-      preLoaderRoute: typeof AppAccountRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/spaces_/$spaceId': {
-      id: '/_app/spaces_/$spaceId'
-      path: '/spaces/$spaceId'
-      fullPath: '/spaces/$spaceId'
-      preLoaderRoute: typeof AppSpacesSpaceIdRouteImport
-      parentRoute: typeof AppRoute
-    }
   }
 }
-
-interface AppRouteChildren {
-  AppAccountRoute: typeof AppAccountRoute
-  AppActivityRoute: typeof AppActivityRoute
-  AppArtifactsRoute: typeof AppArtifactsRoute
-  AppDeveloperRoute: typeof AppDeveloperRoute
-  AppEpisodesRoute: typeof AppEpisodesRoute
-  AppHomeRoute: typeof AppHomeRoute
-  AppPeopleRoute: typeof AppPeopleRoute
-  AppSpacesRoute: typeof AppSpacesRoute
-  AppTenantRoute: typeof AppTenantRoute
-  AppSpacesSpaceIdRoute: typeof AppSpacesSpaceIdRoute
-}
-
-const AppRouteChildren: AppRouteChildren = {
-  AppAccountRoute: AppAccountRoute,
-  AppActivityRoute: AppActivityRoute,
-  AppArtifactsRoute: AppArtifactsRoute,
-  AppDeveloperRoute: AppDeveloperRoute,
-  AppEpisodesRoute: AppEpisodesRoute,
-  AppHomeRoute: AppHomeRoute,
-  AppPeopleRoute: AppPeopleRoute,
-  AppSpacesRoute: AppSpacesRoute,
-  AppTenantRoute: AppTenantRoute,
-  AppSpacesSpaceIdRoute: AppSpacesSpaceIdRoute,
-}
-
-const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 interface DocsRouteChildren {
   DocsSlugRoute: typeof DocsSlugRoute
@@ -666,20 +353,15 @@ const SpaceRouteWithChildren = SpaceRoute._addFileChildren(SpaceRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AppRoute: AppRouteWithChildren,
   DocsRoute: DocsRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,
-  NewRoute: NewRoute,
-  OnboardingRoute: OnboardingRoute,
   PrivacyRoute: PrivacyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
-  SdkPreviewRoute: SdkPreviewRoute,
   SignInRoute: SignInRoute,
   SignUpRoute: SignUpRoute,
   SpaceRoute: SpaceRouteWithChildren,
   StatusRoute: StatusRoute,
   TermsRoute: TermsRoute,
-  WhiteboardRoute: WhiteboardRoute,
   InvitationsAcceptRoute: InvitationsAcceptRoute,
 }
 export const routeTree = rootRouteImport

@@ -1,9 +1,7 @@
 export type ThemePreference = "system" | "light" | "dark";
 export type ThemeMode = "light" | "dark";
 
-export const THEME_PREFERENCES = ["system", "light", "dark"] as const;
-
-export const THEME_COOKIE_NAME = "chalk_theme";
+const THEME_COOKIE_NAME = "chalk_theme";
 const THEME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 const THEME_COOKIE_PATTERN = new RegExp(`(?:^|;\\s*)${THEME_COOKIE_NAME}=([^;]*)`);
 const SYSTEM_DARK_QUERY = "(prefers-color-scheme: dark)";
@@ -12,9 +10,9 @@ const SYSTEM_DARK_QUERY = "(prefers-color-scheme: dark)";
  * Routes that wear the app chrome. Everything else — landing, legal, status — is
  * drawn on the paper palette alone and stays light whatever the preference says.
  */
-export const THEMED_ROUTE_PREFIXES = ["/home", "/spaces", "/episodes", "/artifacts", "/people", "/activity", "/developer", "/tenant", "/account", "/space"] as const;
+const THEMED_ROUTE_PREFIXES = ["/space"] as const;
 
-export function parseThemePreference(value: string | null | undefined): ThemePreference {
+function parseThemePreference(value: string | null | undefined): ThemePreference {
   return value === "light" || value === "dark" || value === "system" ? value : "system";
 }
 
@@ -42,7 +40,7 @@ export function watchSystemThemeMode(onChange: (mode: ThemeMode) => void): () =>
   return () => query.removeEventListener("change", handleChange);
 }
 
-export function isThemedRoute(pathname: string): boolean {
+function isThemedRoute(pathname: string): boolean {
   return THEMED_ROUTE_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 
 import { useEpisodeDiagnosticsAvailability } from "../../features/episode-debugger/EpisodeDiagnosticsDeveloperLink";
 import { createPreparedPublicSpace, createPublicInviteClient, prepareDashboardEntrance, joinDashboardSpace, resumePublicSpace, type AccountSpaceCredential, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
-import { listAllAccountTenants, listSpaces } from "../../lib/dashboard-api";
+import { listAllAccountTenants, listSpaces } from "../../lib/account-api";
 import { canonicalSpaceInviteLink, clearDashboardSpaceEntry, dashboardSpaceEntryUsesDevicesOff, hasDashboardSpaceEntry, spaceInviteToken, verifiedSpaceInviteLink } from "../../lib/named-space-route";
 import { createLocalSpaceClient, createLocalSpaceRelease } from "../../lib/local-space-client";
 import { useWebTelemetry } from "../../lib/web-telemetry-context";

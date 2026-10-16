@@ -7,7 +7,7 @@ function boundaryTask(files, options = {}) {
 }
 
 test("application and SDK source changes select the package boundary check", () => {
-  for (const file of ["apps/web/src/components/sdk-preview/SdkPreviewGallery.tsx", "sdks/typescript/client/src/sync/v1-client.ts"]) {
+  for (const file of ["apps/web/src/components/space/SpacePage.tsx", "sdks/typescript/client/src/sync/v1-client.ts"]) {
     assert.equal(boundaryTask([file])?.selected, true, file);
   }
 });
