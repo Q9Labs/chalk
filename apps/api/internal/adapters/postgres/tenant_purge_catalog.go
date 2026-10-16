@@ -155,8 +155,7 @@ func (c purgeCatalog) predicates() (map[string]string, error) {
 	}
 	selected["tenants"] = `id=any($1::uuid[])`
 	exclusive := `select u.id from public.users u where exists(select 1 from public.memberships m where m.user_id=u.id and m.tenant_id=any($1::uuid[])) and not exists(select 1 from public.memberships m where m.user_id=u.id and not(m.tenant_id=any($1::uuid[])))`
-	// An owner-only showcase registry follows its account, but no other global
-	// user-owned resource is assumed to be disposable.
+	// Global user-owned resources are retained unless their ownership proves exclusivity.
 	for _, fk := range c.FKs {
 		if fk.Parent != "users" || len(fk.ChildColumns) != 1 || slices.Contains([]string{"memberships", "auth_identities", "login_sessions", "password_resets"}, fk.Child) {
 			continue
@@ -169,18 +168,12 @@ func (c purgeCatalog) predicates() (map[string]string, error) {
 		if t.has("tenant_id") {
 			condition = `tenant_id is null or not(tenant_id=any($1::uuid[]))`
 		}
-		if fk.Child == "showcase_dataset_registries" {
-			condition = `product<>'chalk'`
-		}
 		// A null-filtered anti-set preserves NOT EXISTS semantics while allowing
 		// one hashed scan, instead of rescanning unindexed audit rows per user.
 		column := purgeQuote(fk.ChildColumns[0])
 		exclusive += ` and u.id not in(select ` + column + ` from ` + purgeName(fk.Child) + ` where ` + column + ` is not null and (` + condition + `))`
 	}
 	selected["users"] = `id in (` + exclusive + `)`
-	if _, ok := c.table("showcase_dataset_registries"); ok {
-		selected["showcase_dataset_registries"] = `product='chalk' and owner_user_id in (` + exclusive + `)`
-	}
 	for {
 		changed := false
 		for _, table := range c.Tables {
