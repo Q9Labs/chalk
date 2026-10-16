@@ -13,10 +13,6 @@ const (
 	ScopeMembershipsWrite  Scope = "memberships:write"
 	ScopeMembershipsDelete Scope = "memberships:delete"
 
-	ScopeUsersRead   Scope = "users:read"
-	ScopeUsersWrite  Scope = "users:write"
-	ScopeUsersDelete Scope = "users:delete"
-
 	ScopeSpacesRead   Scope = "spaces:read"
 	ScopeSpacesWrite  Scope = "spaces:write"
 	ScopeSpacesDelete Scope = "spaces:delete"
@@ -33,8 +29,6 @@ const (
 	ScopeTranscriptionsWrite  Scope = "transcriptions:write"
 	ScopeTranscriptionsDelete Scope = "transcriptions:delete"
 
-	ScopeAuditLogsRead Scope = "audit_logs:read"
-
 	ScopeSigningKeysRead   Scope = "signing_keys:read"
 	ScopeSigningKeysWrite  Scope = "signing_keys:write"
 	ScopeSigningKeysDelete Scope = "signing_keys:delete"
@@ -48,8 +42,6 @@ const (
 	ScopeWebhooksDelete Scope = "webhooks:delete"
 )
 
-// AllScopes is explicit by design: API keys must be granted concrete scopes,
-// not wildcard permissions that become surprising as resources are added.
 var AllScopes = []Scope{
 	ScopeTenantsRead,
 	ScopeTenantsWrite,
@@ -57,9 +49,6 @@ var AllScopes = []Scope{
 	ScopeMembershipsRead,
 	ScopeMembershipsWrite,
 	ScopeMembershipsDelete,
-	ScopeUsersRead,
-	ScopeUsersWrite,
-	ScopeUsersDelete,
 	ScopeSpacesRead,
 	ScopeSpacesWrite,
 	ScopeSpacesDelete,
@@ -72,7 +61,6 @@ var AllScopes = []Scope{
 	ScopeTranscriptionsRead,
 	ScopeTranscriptionsWrite,
 	ScopeTranscriptionsDelete,
-	ScopeAuditLogsRead,
 	ScopeSigningKeysRead,
 	ScopeSigningKeysWrite,
 	ScopeSigningKeysDelete,

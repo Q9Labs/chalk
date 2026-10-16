@@ -16,8 +16,8 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/email"
 )
 
-func TestSenderUsesResendSDKForResetAndInvitation(t *testing.T) {
-	for _, key := range []string{"", "invitation-id"} {
+func TestSenderUsesResendSDKForAuthMessages(t *testing.T) {
+	for _, key := range []string{"", "message-id"} {
 		t.Run("idempotency="+key, func(t *testing.T) {
 			for _, status := range []int{http.StatusOK, http.StatusBadRequest, http.StatusTooManyRequests} {
 				t.Run(http.StatusText(status), func(t *testing.T) {
@@ -61,7 +61,7 @@ func TestSenderUsesResendSDKForResetAndInvitation(t *testing.T) {
 					if !errors.Is(err, want) || !strings.Contains(logs.String(), "email.delivery.failed") {
 						t.Fatalf("provider failure error=%v logs=%s", err, &logs)
 					}
-					for _, private := range []string{"private@example.test", "private-token", "sender@example.test", "test-key", "invitation-id"} {
+					for _, private := range []string{"private@example.test", "private-token", "sender@example.test", "test-key", "message-id"} {
 						if strings.Contains(logs.String(), private) {
 							t.Fatalf("email failure log leaked private input")
 						}

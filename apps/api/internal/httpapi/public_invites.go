@@ -2,7 +2,7 @@ package httpapi
 
 import (
 	"context"
-	"encoding/json"
+
 	"errors"
 	"log/slog"
 	"net/http"
@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/q9labs/chalk/apps/api/internal/auditlogs"
+
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
@@ -44,27 +44,6 @@ const (
 	publicGuestCookiePrefix = "__Host-chalk_space_guest_"
 )
 
-// PublicInviteAuditWriter is the durable Tenant audit boundary used by the
-// management routes. Implementations must keep audit writes best-effort so a
-// telemetry dependency cannot change the invite mutation response.
-type PublicInviteAuditWriter interface {
-	Create(context.Context, auditlogs.CreateInput) (auditlogs.AuditLog, error)
-}
-
-type publicInviteAuditInput struct {
-	tenantID     utilities.ID
-	spaceID      utilities.ID
-	resourceID   utilities.ID
-	resourceType string
-	action       string
-	decision     string
-	outcome      string
-	err          error
-}
-
-// PublicInviteService is the HTTP boundary for public-invite behavior. The
-// application composes the domain Runtime behind this interface so the HTTP
-// package does not know about persistence, token signing, or media issuance.
 type PublicInviteService interface {
 	GetInvite(context.Context, utilities.ID, utilities.ID) (publicinvites.ManagedInvite, error)
 	UpdateInvite(context.Context, publicinvites.UpdateSpacePublicInviteInput) (publicinvites.ManagedInvite, error)
@@ -205,13 +184,10 @@ type publicInviteLeaveRequest struct {
 }
 
 func mountPublicInviteRoutes(r chi.Router, options Options) {
-	audits := options.PublicInviteAudits
-	if audits == nil {
-		audits = options.APIKeyAudits
-	}
+
 	r.Group(func(r chi.Router) {
 		r.Use(requireTenantAuthentication(options.Authentication, options.APIKeyAuthentication, options.RateLimit.ClientIP))
-		for _, endpoint := range publicInviteManagementEndpoints(options.PublicInvites, options.TenantAuthz, audits, requirePublicOrigin(options.CORS.AllowedOrigins)) {
+		for _, endpoint := range publicInviteManagementEndpoints(options.PublicInvites, options.TenantAuthz, requirePublicOrigin(options.CORS.AllowedOrigins)) {
 			endpoint.Mount(r, options.RateLimit)
 		}
 	})
@@ -228,17 +204,17 @@ func mountPublicInviteRoutes(r chi.Router, options Options) {
 }
 
 func publicInviteEndpoints(service PublicInviteService, authorizer TenantAuthorizer) []RouteEndpoint {
-	return append(publicInviteManagementEndpoints(service, authorizer, nil, nil), publicInvitePublicEndpoints(service, nil)...)
+	return append(publicInviteManagementEndpoints(service, authorizer, nil), publicInvitePublicEndpoints(service, nil)...)
 }
 
-func publicInviteManagementEndpoints(service PublicInviteService, authorizer TenantAuthorizer, audits PublicInviteAuditWriter, origin func(http.Handler) http.Handler) []RouteEndpoint {
+func publicInviteManagementEndpoints(service PublicInviteService, authorizer TenantAuthorizer, origin func(http.Handler) http.Handler) []RouteEndpoint {
 	return []RouteEndpoint{
 		getSpacePublicInviteEndpoint(service, authorizer),
-		updateSpacePublicInviteEndpoint(service, authorizer, audits, origin),
-		rotateSpacePublicInviteEndpoint(service, authorizer, audits, origin),
+		updateSpacePublicInviteEndpoint(service, authorizer, origin),
+		rotateSpacePublicInviteEndpoint(service, authorizer, origin),
 		listPublicAdmissionRequestsEndpoint(service, authorizer),
-		approvePublicAdmissionRequestEndpoint(service, authorizer, audits, origin),
-		denyPublicAdmissionRequestEndpoint(service, authorizer, audits, origin),
+		approvePublicAdmissionRequestEndpoint(service, authorizer, origin),
+		denyPublicAdmissionRequestEndpoint(service, authorizer, origin),
 	}
 }
 
@@ -270,22 +246,21 @@ func getSpacePublicInviteEndpoint(service PublicInviteService, authorizer Tenant
 		Errors(publicInviteManagementErrors()...).MapErrors(publicInviteEndpointAPIError).Middleware(noStoreResponses, publicInviteTelemetry("management.get"))
 }
 
-func updateSpacePublicInviteEndpoint(service PublicInviteService, authorizer TenantAuthorizer, audits PublicInviteAuditWriter, origin func(http.Handler) http.Handler) Endpoint[updatePublicInviteRequest, publicInviteResponse] {
+func updateSpacePublicInviteEndpoint(service PublicInviteService, authorizer TenantAuthorizer, origin func(http.Handler) http.Handler) Endpoint[updatePublicInviteRequest, publicInviteResponse] {
 	endpoint := Patch("/v1/tenants/{tenant_id}/spaces/{space_id}/public-invite", "/tenants/{tenant_id}/spaces/{space_id}/public-invite", "updateSpacePublicInvite", decodeUpdatePublicInviteRequest, func(ctx context.Context, request updatePublicInviteRequest) (publicInviteResponse, error) {
 		if service == nil {
 			return publicInviteResponse{}, apiErrorServiceUnavailable
 		}
-		action := publicInviteEnableAction(request.Body.Enabled)
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeSpacesPermission); err != nil {
-			recordPublicInviteAudit(ctx, audits, publicInviteAuditInput{tenantID: request.TenantID, spaceID: request.SpaceID, resourceID: request.SpaceID, resourceType: "space_public_invite", action: action, outcome: auditlogs.OutcomeFailure, err: err})
+
 			return publicInviteResponse{}, err
 		}
 		invite, err := service.UpdateInvite(ctx, publicinvites.UpdateSpacePublicInviteInput{TenantID: request.TenantID, SpaceID: request.SpaceID, Enabled: request.Body.Enabled, ActorID: principalUserID(ctx)})
 		if err != nil {
-			recordPublicInviteAudit(ctx, audits, publicInviteAuditInput{tenantID: request.TenantID, spaceID: request.SpaceID, resourceID: request.SpaceID, resourceType: "space_public_invite", action: action, outcome: auditlogs.OutcomeFailure, err: err})
+
 			return publicInviteResponse{}, err
 		}
-		recordPublicInviteAudit(ctx, audits, publicInviteAuditInput{tenantID: request.TenantID, spaceID: request.SpaceID, resourceID: request.SpaceID, resourceType: "space_public_invite", action: action, outcome: auditlogs.OutcomeSuccess})
+
 		return newPublicInviteResponse(invite), nil
 	}).UserAuth().RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).RequestBody("UpdateSpacePublicInviteRequest", struct {
@@ -298,21 +273,21 @@ func updateSpacePublicInviteEndpoint(service PublicInviteService, authorizer Ten
 	return endpoint
 }
 
-func rotateSpacePublicInviteEndpoint(service PublicInviteService, authorizer TenantAuthorizer, audits PublicInviteAuditWriter, origin func(http.Handler) http.Handler) Endpoint[rotatePublicInviteRequest, publicInviteResponse] {
+func rotateSpacePublicInviteEndpoint(service PublicInviteService, authorizer TenantAuthorizer, origin func(http.Handler) http.Handler) Endpoint[rotatePublicInviteRequest, publicInviteResponse] {
 	endpoint := Post("/v1/tenants/{tenant_id}/spaces/{space_id}/public-invite/rotations", "/tenants/{tenant_id}/spaces/{space_id}/public-invite/rotations", "rotateSpacePublicInvite", decodeRotatePublicInviteRequest, func(ctx context.Context, request rotatePublicInviteRequest) (publicInviteResponse, error) {
 		if service == nil {
 			return publicInviteResponse{}, apiErrorServiceUnavailable
 		}
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeSpacesPermission); err != nil {
-			recordPublicInviteAudit(ctx, audits, publicInviteAuditInput{tenantID: request.TenantID, spaceID: request.SpaceID, resourceID: request.SpaceID, resourceType: "space_public_invite", action: "space_public_invite.rotated", outcome: auditlogs.OutcomeFailure, err: err})
+
 			return publicInviteResponse{}, err
 		}
 		invite, err := service.RotateInvite(ctx, publicinvites.RotateSpacePublicInviteInput{TenantID: request.TenantID, SpaceID: request.SpaceID, ActorID: principalUserID(ctx), RequestKey: request.RequestKey})
 		if err != nil {
-			recordPublicInviteAudit(ctx, audits, publicInviteAuditInput{tenantID: request.TenantID, spaceID: request.SpaceID, resourceID: request.SpaceID, resourceType: "space_public_invite", action: "space_public_invite.rotated", outcome: auditlogs.OutcomeFailure, err: err})
+
 			return publicInviteResponse{}, err
 		}
-		recordPublicInviteAudit(ctx, audits, publicInviteAuditInput{tenantID: request.TenantID, spaceID: request.SpaceID, resourceID: request.SpaceID, resourceType: "space_public_invite", action: "space_public_invite.rotated", outcome: auditlogs.OutcomeSuccess})
+
 		return newPublicInviteResponse(invite), nil
 	}).UserAuth().RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), idempotencyKeyParameter()).Responds(http.StatusCreated, "SpacePublicInvite", publicInviteResponse{}).
@@ -342,23 +317,21 @@ func listPublicAdmissionRequestsEndpoint(service PublicInviteService, authorizer
 		Errors(publicInviteManagementErrors()...).MapErrors(publicInviteEndpointAPIError).Middleware(noStoreResponses, publicInviteTelemetry("management.admission_list"))
 }
 
-func approvePublicAdmissionRequestEndpoint(service PublicInviteService, authorizer TenantAuthorizer, audits PublicInviteAuditWriter, origin func(http.Handler) http.Handler) Endpoint[decidePublicAdmissionRequestRequest, publicAdmissionRequestResponse] {
-	return decidePublicAdmissionRequestEndpoint(service, authorizer, audits, origin, "approval", "approveSpacePublicAdmissionRequest", publicinvites.DecisionApprove)
+func approvePublicAdmissionRequestEndpoint(service PublicInviteService, authorizer TenantAuthorizer, origin func(http.Handler) http.Handler) Endpoint[decidePublicAdmissionRequestRequest, publicAdmissionRequestResponse] {
+	return decidePublicAdmissionRequestEndpoint(service, authorizer, origin, "approval", "approveSpacePublicAdmissionRequest", publicinvites.DecisionApprove)
 }
 
-func denyPublicAdmissionRequestEndpoint(service PublicInviteService, authorizer TenantAuthorizer, audits PublicInviteAuditWriter, origin func(http.Handler) http.Handler) Endpoint[decidePublicAdmissionRequestRequest, publicAdmissionRequestResponse] {
-	return decidePublicAdmissionRequestEndpoint(service, authorizer, audits, origin, "denial", "denySpacePublicAdmissionRequest", publicinvites.DecisionDeny)
+func denyPublicAdmissionRequestEndpoint(service PublicInviteService, authorizer TenantAuthorizer, origin func(http.Handler) http.Handler) Endpoint[decidePublicAdmissionRequestRequest, publicAdmissionRequestResponse] {
+	return decidePublicAdmissionRequestEndpoint(service, authorizer, origin, "denial", "denySpacePublicAdmissionRequest", publicinvites.DecisionDeny)
 }
 
-func decidePublicAdmissionRequestEndpoint(service PublicInviteService, authorizer TenantAuthorizer, audits PublicInviteAuditWriter, origin func(http.Handler) http.Handler, action, operationID string, decision publicinvites.AdmissionDecision) Endpoint[decidePublicAdmissionRequestRequest, publicAdmissionRequestResponse] {
+func decidePublicAdmissionRequestEndpoint(service PublicInviteService, authorizer TenantAuthorizer, origin func(http.Handler) http.Handler, action, operationID string, decision publicinvites.AdmissionDecision) Endpoint[decidePublicAdmissionRequestRequest, publicAdmissionRequestResponse] {
 	endpoint := Post("/v1/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests/{request_handle}/"+action, "/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests/{request_handle}/"+action, operationID, decodeDecidePublicAdmissionRequest, func(ctx context.Context, request decidePublicAdmissionRequestRequest) (publicAdmissionRequestResponse, error) {
 		if service == nil {
 			return publicAdmissionRequestResponse{}, apiErrorServiceUnavailable
 		}
-		auditAction := publicInviteAdmissionAction(decision)
-		requestID := publicInviteRequestID(request.RequestHandle)
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, publicInviteWriteEpisodesPermission); err != nil {
-			recordPublicInviteAudit(ctx, audits, publicInviteAuditInput{tenantID: request.TenantID, spaceID: request.SpaceID, resourceID: requestID, resourceType: "public_admission_request", action: auditAction, decision: string(decision), outcome: auditlogs.OutcomeFailure, err: err})
+
 			return publicAdmissionRequestResponse{}, err
 		}
 		input := publicinvites.DecidePublicAdmissionRequestInput{TenantID: request.TenantID, SpaceID: request.SpaceID, RequestHandle: request.RequestHandle, RequestKey: request.RequestKey, ActorID: principalUserID(ctx)}
@@ -372,10 +345,10 @@ func decidePublicAdmissionRequestEndpoint(service PublicInviteService, authorize
 			admission, err = service.DenyAdmissionRequest(ctx, input)
 		}
 		if err != nil {
-			recordPublicInviteAudit(ctx, audits, publicInviteAuditInput{tenantID: request.TenantID, spaceID: request.SpaceID, resourceID: requestID, resourceType: "public_admission_request", action: auditAction, decision: string(decision), outcome: auditlogs.OutcomeFailure, err: err})
+
 			return publicAdmissionRequestResponse{}, err
 		}
-		recordPublicInviteAudit(ctx, audits, publicInviteAuditInput{tenantID: request.TenantID, spaceID: request.SpaceID, resourceID: requestID, resourceType: "public_admission_request", action: auditAction, decision: string(decision), outcome: auditlogs.OutcomeSuccess})
+
 		return newPublicAdmissionRequestResponse(admission), nil
 	}).UserAuth().RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), requestHandleParameter(), idempotencyKeyParameter()).Responds(http.StatusOK, "PublicAdmissionRequest", publicAdmissionRequestResponse{}).
@@ -684,71 +657,6 @@ func publicInviteEndpointAPIError(err error) (APIError, bool) {
 		return apiErrorInvalidRequest, true
 	default:
 		return authorizationAPIError(err), true
-	}
-}
-
-func publicInviteEnableAction(enabled bool) string {
-	if enabled {
-		return "space_public_invite.enabled"
-	}
-	return "space_public_invite.disabled"
-}
-
-func publicInviteAdmissionAction(decision publicinvites.AdmissionDecision) string {
-	if decision == publicinvites.DecisionApprove {
-		return "space_public_admission_request.approved"
-	}
-	return "space_public_admission_request.denied"
-}
-
-func publicInviteRequestID(value string) utilities.ID {
-	id, err := utilities.ParseID(strings.TrimSpace(value))
-	if err != nil {
-		return utilities.ID{}
-	}
-	return id
-}
-
-func recordPublicInviteAudit(ctx context.Context, audits PublicInviteAuditWriter, input publicInviteAuditInput) {
-	if audits == nil || input.tenantID.IsZero() || input.resourceType == "" || input.action == "" || input.outcome == "" {
-		return
-	}
-	principal, ok := authentication.PrincipalFromContext(ctx)
-	if !ok || !principal.IsAuthenticated() {
-		return
-	}
-	actorType, actorUserID := auditlogs.PrincipalActor(principal)
-	details := map[string]string{}
-	if !input.spaceID.IsZero() {
-		details["space_id"] = input.spaceID.String()
-	}
-	if input.decision != "" {
-		details["decision"] = input.decision
-	}
-	if principal.Kind == authentication.PrincipalAPIKey && !principal.APIKeyID.IsZero() {
-		details["actor_api_key_id"] = principal.APIKeyID.String()
-	}
-	encodedDetails, err := json.Marshal(details)
-	if err != nil {
-		return
-	}
-	auditInput := auditlogs.CreateInput{
-		TenantID: input.tenantID, ActorUserID: actorUserID, ActorType: actorType,
-		Action: input.action, ResourceType: &input.resourceType, ResourceID: input.resourceID,
-		Details: encodedDetails, Outcome: input.outcome,
-	}
-	if input.err != nil {
-		apiErr, _ := publicInviteEndpointAPIError(input.err)
-		if apiErr.Code != "" {
-			errorCode := apiErr.Code
-			auditInput.ErrorCode = &errorCode
-		}
-	}
-	if _, err := audits.Create(ctx, auditInput); err != nil {
-		slog.WarnContext(ctx, "public invite audit write failed",
-			"event", "public_invite.audit_failure",
-			"operation", input.action,
-		)
 	}
 }
 

@@ -13,7 +13,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
-	"github.com/q9labs/chalk/apps/api/internal/regions"
+
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -32,7 +32,6 @@ var (
 )
 
 type TenantService interface {
-	AvailableRegions(ctx context.Context) ([]regions.Region, error)
 	CreateTenant(ctx context.Context, input tenants.CreateTenantInput) (tenants.Tenant, error)
 	GetTenant(ctx context.Context, id utilities.ID) (tenants.Tenant, error)
 	ListTenants(ctx context.Context, page pagination.PageRequest) (tenants.TenantList, error)
@@ -40,9 +39,9 @@ type TenantService interface {
 }
 
 type tenantResponse struct {
-	ID                               string                           `json:"id"`
-	Name                             string                           `json:"name"`
-	DefaultRegion                    *string                          `json:"default_region"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+
 	DefaultMediaPlane                *string                          `json:"default_media_plane"`
 	MediaPlaneProviderConfig         any                              `json:"media_plane_provider_config"`
 	StorageProviderConfig            any                              `json:"storage_provider_config"`
@@ -59,23 +58,14 @@ type tenantResponse struct {
 	CreatedAt                        string                           `json:"created_at"`
 }
 
-type regionResponse struct {
-	Code string `json:"code"`
-	Name string `json:"name"`
-}
-
 type tenantListResponse struct {
 	Tenants    []tenantResponse   `json:"tenants"`
 	Pagination paginationResponse `json:"pagination"`
 }
 
-type regionsResponse struct {
-	Regions []regionResponse `json:"regions"`
-}
-
 type createTenantRequest struct {
-	Name                     string          `json:"name"`
-	DefaultRegion            *string         `json:"default_region"`
+	Name string `json:"name"`
+
 	DefaultMediaPlane        *string         `json:"default_media_plane"`
 	MediaPlaneProviderConfig json.RawMessage `json:"media_plane_provider_config"`
 	StorageProviderConfig    json.RawMessage `json:"storage_provider_config"`
@@ -85,8 +75,8 @@ type createTenantRequest struct {
 }
 
 type updateTenantRequest struct {
-	Name                             utilities.OptionalString    `json:"name"`
-	DefaultRegion                    utilities.OptionalString    `json:"default_region"`
+	Name utilities.OptionalString `json:"name"`
+
 	DefaultMediaPlane                utilities.OptionalString    `json:"default_media_plane"`
 	MediaPlaneProviderConfig         utilities.OptionalJSON      `json:"media_plane_provider_config"`
 	StorageProviderConfig            utilities.OptionalJSON      `json:"storage_provider_config"`
@@ -126,7 +116,6 @@ func tenantEndpoints(service TenantService, authorizer TenantAuthorizer) []Route
 		listTenantsEndpoint(service),
 		getTenantEndpoint(service, authorizer),
 		updateTenantEndpoint(service, authorizer),
-		listRegionsEndpoint(service),
 	}
 }
 
@@ -155,7 +144,6 @@ func createTenantEndpoint(service TenantService) Endpoint[createTenantRequest, t
 			apiErrorServiceUnavailable,
 			apiErrorInvalidRequest,
 			apiErrorInvalidTenantName,
-			apiErrorInvalidTenantRegion,
 			apiErrorInvalidTenantField,
 			apiErrorInvalidTenantCORSOrigin,
 			apiErrorRateLimited,
@@ -263,7 +251,6 @@ func updateTenantEndpoint(service TenantService, authorizer TenantAuthorizer) En
 			apiErrorInvalidRequest,
 			apiErrorInvalidTenantID,
 			apiErrorInvalidTenantName,
-			apiErrorInvalidTenantRegion,
 			apiErrorInvalidTenantField,
 			apiErrorInvalidTenantCORSOrigin,
 			apiErrorTenantNotFound,
@@ -273,39 +260,6 @@ func updateTenantEndpoint(service TenantService, authorizer TenantAuthorizer) En
 			apiErrorInternal,
 		).
 		MapErrors(tenantEndpointAPIError)
-}
-
-func listRegionsEndpoint(service TenantService) Endpoint[noRequest, regionsResponse] {
-	return Get("/v1/regions", "/regions", "listRegions", decodeNoRequest, func(ctx context.Context, request noRequest) (regionsResponse, error) {
-		_ = request
-		if service == nil {
-			return regionsResponse{}, apiErrorServiceUnavailable
-		}
-
-		regions, err := service.AvailableRegions(ctx)
-		if err != nil {
-			return regionsResponse{}, err
-		}
-
-		response := regionsResponse{
-			Regions: make([]regionResponse, 0, len(regions)),
-		}
-		for _, region := range regions {
-			response.Regions = append(response.Regions, regionResponse{
-				Code: region.Code,
-				Name: region.Name,
-			})
-		}
-
-		return response, nil
-	}).
-		Auth(APIAuthSessionOrBearer).
-		Responds(http.StatusOK, "Regions", regionsResponse{}).
-		Errors(
-			apiErrorUnauthenticated,
-			apiErrorServiceUnavailable,
-			apiErrorInternal,
-		)
 }
 
 func decodeListTenantsRequest(r *http.Request) (listTenantsRequest, error) {
@@ -362,8 +316,6 @@ func tenantServiceAPIError(err error) (APIError, bool) {
 		return apiErrorInvalidTenantID, true
 	case errors.Is(err, tenants.ErrInvalidTenantName):
 		return apiErrorInvalidTenantName, true
-	case errors.Is(err, tenants.ErrInvalidTenantRegion):
-		return apiErrorInvalidTenantRegion, true
 	case errors.Is(err, tenants.ErrInvalidTenantField):
 		return apiErrorInvalidTenantField, true
 	case errors.Is(err, tenants.ErrInvalidCORSOrigin):
@@ -403,9 +355,9 @@ func newTenantListResponse(list tenants.TenantList) (tenantListResponse, error) 
 
 func newTenantResponse(tenant tenants.Tenant) tenantResponse {
 	return tenantResponse{
-		ID:                               tenant.ID.String(),
-		Name:                             tenant.Name,
-		DefaultRegion:                    tenant.DefaultRegion,
+		ID:   tenant.ID.String(),
+		Name: tenant.Name,
+
 		DefaultMediaPlane:                tenant.DefaultMediaPlane,
 		MediaPlaneProviderConfig:         utilities.RedactJSONSecrets(tenant.MediaPlaneProviderConfig),
 		StorageProviderConfig:            utilities.RedactJSONSecrets(tenant.StorageProviderConfig),
@@ -425,8 +377,8 @@ func newTenantResponse(tenant tenants.Tenant) tenantResponse {
 
 func (r createTenantRequest) input() tenants.CreateTenantInput {
 	return tenants.CreateTenantInput{
-		Name:                     r.Name,
-		DefaultRegion:            r.DefaultRegion,
+		Name: r.Name,
+
 		DefaultMediaPlane:        r.DefaultMediaPlane,
 		MediaPlaneProviderConfig: r.MediaPlaneProviderConfig,
 		StorageProviderConfig:    r.StorageProviderConfig,
@@ -438,8 +390,8 @@ func (r createTenantRequest) input() tenants.CreateTenantInput {
 
 func (r updateTenantRequest) input() tenants.UpdateTenantInput {
 	return tenants.UpdateTenantInput{
-		Name:                     r.Name,
-		DefaultRegion:            r.DefaultRegion,
+		Name: r.Name,
+
 		DefaultMediaPlane:        r.DefaultMediaPlane,
 		MediaPlaneProviderConfig: r.MediaPlaneProviderConfig,
 		StorageProviderConfig:    r.StorageProviderConfig,

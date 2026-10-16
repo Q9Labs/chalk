@@ -6,7 +6,8 @@ import { SpacePage } from "../components/space/SpacePage";
 export const Route = createFileRoute("/space")({ component: SpaceRoute });
 
 function SpaceRoute() {
-  const slug = useMatch({ from: "/space/$slug", shouldThrow: false, select: (match) => match.params.slug });
+  const match = useMatch({ from: "/space/$slug", shouldThrow: false });
+  const slug = match?.params.slug;
   const navigate = Route.useNavigate();
   const navigatePublicSpace = useCallback(
     async (canonicalSlug: string, inviteLink: string) => {

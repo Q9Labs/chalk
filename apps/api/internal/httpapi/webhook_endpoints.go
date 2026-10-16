@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
 )
 
@@ -16,7 +15,6 @@ func createWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) 
 			return webhookEndpointWithSecretResponse{}, apiErrorServiceUnavailable
 		}
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeWebhooksPermission); err != nil {
-			auditWebhookAuthorizationFailure(ctx, service, request.TenantID, "webhook_endpoint.create", "webhook_endpoint", utilities.ID{})
 			return webhookEndpointWithSecretResponse{}, err
 		}
 		result, err := service.Create(ctx, webhooks.CreateInput{TenantID: request.TenantID, Name: request.Body.Name, URL: request.Body.URL, Enabled: *request.Body.Enabled.Value, APIVersion: request.Body.APIVersion, EventTypes: request.Body.EventTypes, CreatedByUserID: createdByUserID(ctx), IdempotencyKey: request.Key})
@@ -70,11 +68,6 @@ func patchWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) E
 			return webhookEndpointResponse{}, apiErrorServiceUnavailable
 		}
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeWebhooksPermission); err != nil {
-			action := "webhook_endpoint.update"
-			if request.Body.Enabled.Set && request.Body.Enabled.Value != nil && !*request.Body.Enabled.Value {
-				action = "webhook_endpoint.disable"
-			}
-			auditWebhookAuthorizationFailure(ctx, service, request.TenantID, action, "webhook_endpoint", request.EndpointID)
 			return webhookEndpointResponse{}, err
 		}
 		value, err := service.Patch(ctx, request.TenantID, request.EndpointID, request.Body.toInput(request.Revision, request.Key))
@@ -88,7 +81,6 @@ func deleteWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) 
 			return noResponse{}, apiErrorServiceUnavailable
 		}
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, deleteWebhooksPermission); err != nil {
-			auditWebhookAuthorizationFailure(ctx, service, request.TenantID, "webhook_endpoint.delete", "webhook_endpoint", request.EndpointID)
 			return noResponse{}, err
 		}
 		return noResponse{}, service.Delete(ctx, request.TenantID, request.EndpointID, request.Revision, request.Key)
@@ -101,7 +93,6 @@ func rotateWebhookSecretEndpoint(service WebhookService, authorizer TenantAuthor
 			return rotateWebhookSecretResponse{}, apiErrorServiceUnavailable
 		}
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeWebhooksPermission); err != nil {
-			auditWebhookAuthorizationFailure(ctx, service, request.TenantID, "webhook_endpoint.rotate_secret", "webhook_endpoint", request.EndpointID)
 			return rotateWebhookSecretResponse{}, err
 		}
 		value, err := service.RotateSecret(ctx, request.TenantID, request.EndpointID, *request.Body.RevokePreviousImmediately.Value, request.Key)
@@ -115,7 +106,6 @@ func testWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) En
 			return webhookDeliveryCreatedResponse{}, apiErrorServiceUnavailable
 		}
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeWebhooksPermission); err != nil {
-			auditWebhookAuthorizationFailure(ctx, service, request.TenantID, "webhook_endpoint.test", "webhook_endpoint", request.EndpointID)
 			return webhookDeliveryCreatedResponse{}, err
 		}
 		value, err := service.Test(ctx, request.TenantID, request.EndpointID, request.Key, webhooks.EventMetadata{})
@@ -169,14 +159,9 @@ func redeliverWebhookEndpoint(service WebhookService, authorizer TenantAuthorize
 			return webhookDeliveryCreatedResponse{}, apiErrorServiceUnavailable
 		}
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeWebhooksPermission); err != nil {
-			auditWebhookAuthorizationFailure(ctx, service, request.TenantID, "webhook_delivery.redeliver", "webhook_delivery", request.DeliveryID)
 			return webhookDeliveryCreatedResponse{}, err
 		}
 		value, err := service.Redeliver(ctx, request.TenantID, request.EndpointID, request.DeliveryID, request.Key)
 		return newWebhookDeliveryCreatedResponse(value), err
 	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), webhookDeliveryIDParameter(), idempotencyKeyParameter()).Responds(http.StatusCreated, "WebhookDeliveryCreated", webhookDeliveryCreatedResponse{}).Errors(webhookWriteErrors()...).MapErrors(webhookAPIError)
-}
-
-func auditWebhookAuthorizationFailure(ctx context.Context, service WebhookService, tenantID utilities.ID, action, resourceType string, resourceID utilities.ID) {
-	service.AuditFailure(ctx, webhooks.FailureAuditInput{TenantID: tenantID, Action: action, ResourceType: resourceType, ResourceID: resourceID, ErrorCode: "access.forbidden"})
 }

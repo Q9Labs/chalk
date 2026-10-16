@@ -3,11 +3,9 @@ package httpapi
 import "github.com/go-chi/chi/v5"
 
 func mountIdentityTenancyRoutes(r chi.Router, options Options) {
-	mountAPIKeyRoutesWithOptions(r, options.APIKeys, options.TenantAuthz, options.APIKeyAudits, APIKeyRouteOptions{RecentAuth: options.RecentAuth}, options.RateLimit)
+	mountAPIKeyRoutesWithOptions(r, options.APIKeys, options.TenantAuthz, APIKeyRouteOptions{RecentAuth: options.RecentAuth}, options.RateLimit)
 	mountTenantRoutes(r, options.Tenants, options.TenantAuthz, options.RateLimit)
-	mountUserRoutes(r, options.Users, options.RateLimit)
+
 	mountMembershipRoutes(r, options.Memberships, options.TenantAuthz, options.RateLimit)
-	for _, endpoint := range peopleEndpoints(options.People, options.TenantAuthz) {
-		endpoint.Mount(r, options.RateLimit)
-	}
+
 }

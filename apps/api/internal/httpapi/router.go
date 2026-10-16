@@ -27,8 +27,6 @@ type TenantAuthorizer interface {
 	AuthorizeTenant(ctx context.Context, principal authentication.Principal, tenantID utilities.ID, permission authorization.TenantPermission) error
 }
 
-
-
 type CapabilityStatus struct {
 	Recording       bool
 	Transcription   bool
@@ -63,7 +61,6 @@ type Options struct {
 	AccountTenants             AccountTenantService
 	APIKeys                    APIKeyService
 	APIKeyAuthentication       APIKeyAuthenticator
-	APIKeyAudits               APIKeyAuditWriter
 
 	MediaPlane             MediaPlaneResolver
 	MediaPublications      mediapublications.Registry
@@ -72,16 +69,16 @@ type Options struct {
 	ParticipantMediaVerify ParticipantMediaVerifier
 	ParticipantMediaActive ActiveParticipantAuthorizer
 	ParticipantGeneration  ParticipantGenerationAuthorizer
-	People                 PeopleService
-	Memberships            MembershipService
-	AuditLogs              AuditLogService
-	RecordingDownloads     RecordingDownloadService
-	RecordingExports       RecordingExportService
-	RecordingObjects       RecordingObjectService
-	Recordings             RecordingService
-	RecordingPreparations  RecordingPreparationService
-	RecordingEntrance      RecordingEntrancePreparer
-	EntranceInvites        EntranceInviteResolver
+
+	Memberships MembershipService
+
+	RecordingDownloads    RecordingDownloadService
+	RecordingExports      RecordingExportService
+	RecordingObjects      RecordingObjectService
+	Recordings            RecordingService
+	RecordingPreparations RecordingPreparationService
+	RecordingEntrance     RecordingEntrancePreparer
+	EntranceInvites       EntranceInviteResolver
 
 	Spaces                 SpaceService
 	Episodes               EpisodeLifecycleService
@@ -101,14 +98,14 @@ type Options struct {
 	CleanupDeleteAuthority CleanupDeleteAuthority
 	FinalizerWorker        TranscriptFinalizerWorkerService
 	FinalizerAuthority     FinalizerAuthority
-	Users                  UserService
+
 	Webhooks               WebhookService
 	ChatAttachments        ChatAttachmentService
 	ChatParticipants       ChatParticipantVerifier
 	WhiteboardFiles        WhiteboardFileService
 	WhiteboardParticipants WhiteboardParticipantVerifier
 	PublicInvites          PublicInviteService
-	PublicInviteAudits     PublicInviteAuditWriter
+
 	// EpisodeDiagnostics owns a diagnostics-only internal boundary. Its zero
 	// value is disabled and therefore does not mount any /_internal route.
 

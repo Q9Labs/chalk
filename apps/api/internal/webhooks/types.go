@@ -147,18 +147,6 @@ type DeliveryFilters struct {
 	EventTypes []string
 }
 
-type FailureAuditInput struct {
-	TenantID     utilities.ID
-	Action       string
-	ResourceType string
-	ResourceID   utilities.ID
-	ErrorCode    string
-}
-
-type FailureAuditor interface {
-	RecordWebhookFailure(context.Context, FailureAuditInput) error
-}
-
 type Repository interface {
 	Create(context.Context, CreateInput) (CreateResult, error)
 	Get(context.Context, utilities.ID, utilities.ID) (Endpoint, error)

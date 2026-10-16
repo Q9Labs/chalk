@@ -136,3 +136,5 @@ func validRole(role Role) bool {
 		return false
 	}
 }
+
+var ErrLastOwner = errors.New("the last Owner cannot leave, be removed or change Role; add another Owner first")

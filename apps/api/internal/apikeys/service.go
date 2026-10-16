@@ -262,7 +262,7 @@ func validName(value string) (string, error) {
 // Old keys may include retired permissions alongside scopes that still grant access.
 func retiredScope(scope authentication.Scope) bool {
 	switch scope {
-	case "integrations:read", "integrations:write", "integrations:delete":
+	case "integrations:read", "integrations:write", "integrations:delete", "users:read", "users:write", "users:delete", "audit_logs:read":
 		return true
 	default:
 		return false

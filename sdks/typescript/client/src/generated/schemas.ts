@@ -60,21 +60,6 @@ export const APIKeyWithSecretSchema = Schema.Struct({
 });
 export type APIKeyWithSecret = typeof APIKeyWithSecretSchema.Type;
 
-export const AcceptTenantInvitationRequestSchema = Schema.Struct({
-  token: Schema.String.check(Schema.isMinLength(1)),
-});
-export type AcceptTenantInvitationRequest = typeof AcceptTenantInvitationRequestSchema.Type;
-
-export const AcceptedTenantInvitationSchema = Schema.Struct({
-  created_at: DateTimeStringSchema,
-  id: UUIDSchema,
-  role: Schema.String,
-  tenant_id: TenantIdSchema,
-  updated_at: DateTimeStringSchema,
-  user_id: UserIdSchema,
-});
-export type AcceptedTenantInvitation = typeof AcceptedTenantInvitationSchema.Type;
-
 export const EpisodeIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("EpisodeId"));
 export type EpisodeId = typeof EpisodeIdSchema.Type;
 
@@ -139,7 +124,6 @@ export const TenantSchema = Schema.Struct({
   ).check(Schema.isMaxLength(32)),
   created_at: DateTimeStringSchema,
   default_media_plane: Schema.NullOr(Schema.String),
-  default_region: Schema.NullOr(Schema.String),
   id: TenantIdSchema,
   logo_key: Schema.NullOr(Schema.String),
   media_plane_provider_config: Schema.NullOr(MediaPlaneProviderConfigSchema),
@@ -199,31 +183,6 @@ export type AdmitEpisodeParticipantRequest = typeof AdmitEpisodeParticipantReque
 
 export const AuditLogIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("AuditLogId"));
 export type AuditLogId = typeof AuditLogIdSchema.Type;
-
-export const AuditLogSchema = Schema.Struct({
-  action: Schema.String,
-  actor_type: Schema.String,
-  actor_user_id: Schema.NullOr(UserIdSchema),
-  after: Schema.Unknown,
-  before: Schema.Unknown,
-  created_at: DateTimeStringSchema,
-  details: Schema.Unknown,
-  error_code: Schema.NullOr(Schema.String),
-  error_message: Schema.NullOr(Schema.String),
-  id: AuditLogIdSchema,
-  outcome: Schema.String,
-  resource_id: Schema.NullOr(UUIDSchema),
-  resource_type: Schema.NullOr(Schema.String),
-  tenant_id: TenantIdSchema,
-  updated_at: DateTimeStringSchema,
-});
-export type AuditLog = typeof AuditLogSchema.Type;
-
-export const AuditLogListSchema = Schema.Struct({
-  audit_logs: Schema.Array(AuditLogSchema),
-  pagination: PaginationSchema,
-});
-export type AuditLogList = typeof AuditLogListSchema.Type;
 
 export const EmailSchema = Schema.String.check(Schema.isPattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)).pipe(Schema.brand("Email"));
 export type Email = typeof EmailSchema.Type;
@@ -470,7 +429,6 @@ export const CreateTenantRequestSchema = Schema.Struct({
     ).check(Schema.isMaxLength(32)),
   ),
   default_media_plane: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
-  default_region: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   logo_key: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   media_plane_provider_config: Schema.optional(Schema.NullOr(MediaPlaneProviderConfigSchema)),
   name: Schema.String.check(Schema.isMinLength(1)),
@@ -483,12 +441,6 @@ export const CreateTranscriptDownloadURLRequestSchema = Schema.Struct({
   expires_in_seconds: Schema.Number,
 });
 export type CreateTranscriptDownloadURLRequest = typeof CreateTranscriptDownloadURLRequestSchema.Type;
-
-export const CreateUserRequestSchema = Schema.Struct({
-  email: EmailSchema,
-  name: Schema.String.check(Schema.isMinLength(1)),
-});
-export type CreateUserRequest = typeof CreateUserRequestSchema.Type;
 
 export const CreateWebhookEndpointRequestSchema = Schema.Struct({
   api_version: Schema.Number,
@@ -612,26 +564,6 @@ export const IssueAccessGrantRequestSchema = Schema.Struct({
 });
 export type IssueAccessGrantRequest = typeof IssueAccessGrantRequestSchema.Type;
 
-export const IssueTenantInvitationRequestSchema = Schema.Struct({
-  email: EmailSchema,
-  role: Schema.String.check(Schema.isMinLength(1)),
-});
-export type IssueTenantInvitationRequest = typeof IssueTenantInvitationRequestSchema.Type;
-
-export const IssuedTenantInvitationSchema = Schema.Struct({
-  accept_link: Schema.String,
-  email_delivered: Schema.Boolean,
-  invitation: Schema.Struct({
-    created_at: DateTimeStringSchema,
-    email: EmailSchema,
-    expires_at: DateTimeStringSchema,
-    id: UUIDSchema,
-    role: Schema.String,
-    tenant_id: TenantIdSchema,
-  }),
-});
-export type IssuedTenantInvitation = typeof IssuedTenantInvitationSchema.Type;
-
 export const LeaveDashboardSpaceSelfRequestSchema = Schema.Struct({
   participant_generation: Schema.Number,
 });
@@ -665,7 +597,6 @@ export const MembershipListSchema = Schema.Struct({
 export type MembershipList = typeof MembershipListSchema.Type;
 
 export const OnboardTenantRequestSchema = Schema.Struct({
-  default_region: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   name: Schema.String.check(Schema.isMinLength(1)),
 });
 export type OnboardTenantRequest = typeof OnboardTenantRequestSchema.Type;
@@ -757,11 +688,6 @@ export const PasswordResetRequestSchema = Schema.Struct({
   email: EmailSchema,
 });
 export type PasswordResetRequest = typeof PasswordResetRequestSchema.Type;
-
-export const PeopleMutationSchema = Schema.Struct({
-  success: Schema.Boolean,
-});
-export type PeopleMutation = typeof PeopleMutationSchema.Type;
 
 export const PrepareRecordingRequestSchema = Schema.Struct({
   expected_revision: Schema.Number,
@@ -920,16 +846,6 @@ export const RefreshSpacePublicInviteAccessRequestSchema = Schema.Struct({
 });
 export type RefreshSpacePublicInviteAccessRequest = typeof RefreshSpacePublicInviteAccessRequestSchema.Type;
 
-export const RegionsSchema = Schema.Struct({
-  regions: Schema.Array(
-    Schema.Struct({
-      code: Schema.String,
-      name: Schema.String,
-    }),
-  ),
-});
-export type Regions = typeof RegionsSchema.Type;
-
 export const RegisterRequestSchema = Schema.Struct({
   email: EmailSchema,
   name: Schema.String.check(Schema.isMinLength(1)),
@@ -1035,20 +951,6 @@ export const SyncTokenSchema = Schema.Struct({
   sync_token: Schema.String,
 });
 export type SyncToken = typeof SyncTokenSchema.Type;
-
-export const TenantInvitationListSchema = Schema.Struct({
-  invitations: Schema.Array(
-    Schema.Struct({
-      created_at: DateTimeStringSchema,
-      email: EmailSchema,
-      expires_at: DateTimeStringSchema,
-      id: UUIDSchema,
-      role: Schema.String,
-      tenant_id: TenantIdSchema,
-    }),
-  ),
-});
-export type TenantInvitationList = typeof TenantInvitationListSchema.Type;
 
 export const TenantListSchema = Schema.Struct({
   pagination: PaginationSchema,
@@ -1170,7 +1072,6 @@ export const UpdateTenantRequestSchema = Schema.Struct({
     ).check(Schema.isMaxLength(32)),
   ),
   default_media_plane: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
-  default_region: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   logo_key: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   media_plane_provider_config: Schema.optional(Schema.NullOr(MediaPlaneProviderConfigSchema)),
   name: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
@@ -1212,21 +1113,6 @@ export const UpdateWebhookEndpointRequestSchema = Schema.Struct({
   url: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
 });
 export type UpdateWebhookEndpointRequest = typeof UpdateWebhookEndpointRequestSchema.Type;
-
-export const UserSchema = Schema.Struct({
-  created_at: DateTimeStringSchema,
-  email: EmailSchema,
-  id: UserIdSchema,
-  name: Schema.String,
-  updated_at: DateTimeStringSchema,
-});
-export type User = typeof UserSchema.Type;
-
-export const UserListSchema = Schema.Struct({
-  pagination: PaginationSchema,
-  users: Schema.Array(UserSchema),
-});
-export type UserList = typeof UserListSchema.Type;
 
 export const WebhookDeliveryCreatedSchema = Schema.Struct({
   delivery_id: UUIDSchema,
@@ -1384,19 +1270,6 @@ export type RateLimitRemainingHeader = typeof RateLimitRemainingHeaderSchema.Typ
 
 export const RetryAfterHeaderSchema = Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1));
 export type RetryAfterHeader = typeof RetryAfterHeaderSchema.Type;
-
-export const AcceptTenantInvitationRequestBodySchema = AcceptTenantInvitationRequestSchema;
-export type AcceptTenantInvitationRequestBody = typeof AcceptTenantInvitationRequestBodySchema.Type;
-
-export const AcceptTenantInvitationResponseSchema = AcceptedTenantInvitationSchema;
-export type AcceptTenantInvitationResponse = typeof AcceptTenantInvitationResponseSchema.Type;
-
-export const AcceptTenantInvitation429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type AcceptTenantInvitation429ResponseHeaders = typeof AcceptTenantInvitation429ResponseHeadersSchema.Type;
 
 export const AddCloudflareSFUTracksPathParamsSchema = Schema.Struct({
   episode_id: EpisodeIdSchema,
@@ -1742,19 +1615,6 @@ export type CreateTranscriptDownloadURLRequestBody = typeof CreateTranscriptDown
 export const CreateTranscriptDownloadURLResponseSchema = TranscriptDownloadURLSchema;
 export type CreateTranscriptDownloadURLResponse = typeof CreateTranscriptDownloadURLResponseSchema.Type;
 
-export const CreateUserRequestBodySchema = CreateUserRequestSchema;
-export type CreateUserRequestBody = typeof CreateUserRequestBodySchema.Type;
-
-export const CreateUserResponseSchema = UserSchema;
-export type CreateUserResponse = typeof CreateUserResponseSchema.Type;
-
-export const CreateUser429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type CreateUser429ResponseHeaders = typeof CreateUser429ResponseHeadersSchema.Type;
-
 export const CreateWebhookEndpointPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
 });
@@ -1881,15 +1741,6 @@ export const FinalizeWhiteboardFileUpload429ResponseHeadersSchema = Schema.Struc
 });
 export type FinalizeWhiteboardFileUpload429ResponseHeaders = typeof FinalizeWhiteboardFileUpload429ResponseHeadersSchema.Type;
 
-export const GetAuditLogPathParamsSchema = Schema.Struct({
-  audit_log_id: AuditLogIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type GetAuditLogPathParams = typeof GetAuditLogPathParamsSchema.Type;
-
-export const GetAuditLogResponseSchema = AuditLogSchema;
-export type GetAuditLogResponse = typeof GetAuditLogResponseSchema.Type;
-
 export const GetChatAttachmentDownloadPathParamsSchema = Schema.Struct({
   attachmentId: Schema.String,
 });
@@ -2008,14 +1859,6 @@ export type GetTranscriptDocumentPathParams = typeof GetTranscriptDocumentPathPa
 
 export const GetTranscriptDocumentResponseSchema = TranscriptDocumentSchema;
 export type GetTranscriptDocumentResponse = typeof GetTranscriptDocumentResponseSchema.Type;
-
-export const GetUserPathParamsSchema = Schema.Struct({
-  user_id: UserIdSchema,
-});
-export type GetUserPathParams = typeof GetUserPathParamsSchema.Type;
-
-export const GetUserResponseSchema = UserSchema;
-export type GetUserResponse = typeof GetUserResponseSchema.Type;
 
 export const GetWebhookDeliveryPathParamsSchema = Schema.Struct({
   delivery_id: UUIDSchema,
@@ -2143,24 +1986,6 @@ export const IssueRecentAuthProof429ResponseHeadersSchema = Schema.Struct({
 });
 export type IssueRecentAuthProof429ResponseHeaders = typeof IssueRecentAuthProof429ResponseHeadersSchema.Type;
 
-export const IssueTenantInvitationPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
-export type IssueTenantInvitationPathParams = typeof IssueTenantInvitationPathParamsSchema.Type;
-
-export const IssueTenantInvitationRequestBodySchema = IssueTenantInvitationRequestSchema;
-export type IssueTenantInvitationRequestBody = typeof IssueTenantInvitationRequestBodySchema.Type;
-
-export const IssueTenantInvitationResponseSchema = IssuedTenantInvitationSchema;
-export type IssueTenantInvitationResponse = typeof IssueTenantInvitationResponseSchema.Type;
-
-export const IssueTenantInvitation429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type IssueTenantInvitation429ResponseHeaders = typeof IssueTenantInvitation429ResponseHeadersSchema.Type;
-
 export const JoinDashboardSpaceSelfPathParamsSchema = Schema.Struct({
   space_slug: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"))),
   tenant_id: TenantIdSchema,
@@ -2218,21 +2043,6 @@ export const LeaveSpacePublicInviteArrival429ResponseHeadersSchema = Schema.Stru
 });
 export type LeaveSpacePublicInviteArrival429ResponseHeaders = typeof LeaveSpacePublicInviteArrival429ResponseHeadersSchema.Type;
 
-export const LeaveTenantPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
-export type LeaveTenantPathParams = typeof LeaveTenantPathParamsSchema.Type;
-
-export const LeaveTenantResponseSchema = PeopleMutationSchema;
-export type LeaveTenantResponse = typeof LeaveTenantResponseSchema.Type;
-
-export const LeaveTenant429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type LeaveTenant429ResponseHeaders = typeof LeaveTenant429ResponseHeadersSchema.Type;
-
 export const ListAPIKeysPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
 });
@@ -2246,20 +2056,6 @@ export type ListAPIKeysQueryParams = typeof ListAPIKeysQueryParamsSchema.Type;
 
 export const ListAPIKeysResponseSchema = APIKeyListSchema;
 export type ListAPIKeysResponse = typeof ListAPIKeysResponseSchema.Type;
-
-export const ListAuditLogsPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
-export type ListAuditLogsPathParams = typeof ListAuditLogsPathParamsSchema.Type;
-
-export const ListAuditLogsQueryParamsSchema = Schema.Struct({
-  cursor: Schema.optional(Schema.String),
-  page_size: Schema.optional(Schema.NumberFromString),
-});
-export type ListAuditLogsQueryParams = typeof ListAuditLogsQueryParamsSchema.Type;
-
-export const ListAuditLogsResponseSchema = AuditLogListSchema;
-export type ListAuditLogsResponse = typeof ListAuditLogsResponseSchema.Type;
 
 export const ListCloudflareSFUPublicationsPathParamsSchema = Schema.Struct({
   episode_id: EpisodeIdSchema,
@@ -2333,9 +2129,6 @@ export type ListRecordingsQueryParams = typeof ListRecordingsQueryParamsSchema.T
 export const ListRecordingsResponseSchema = RecordingListSchema;
 export type ListRecordingsResponse = typeof ListRecordingsResponseSchema.Type;
 
-export const ListRegionsResponseSchema = RegionsSchema;
-export type ListRegionsResponse = typeof ListRegionsResponseSchema.Type;
-
 export const ListSpacePublicAdmissionRequestsPathParamsSchema = Schema.Struct({
   space_id: SpaceIdSchema,
   tenant_id: TenantIdSchema,
@@ -2372,21 +2165,6 @@ export type ListSpacesQueryParams = typeof ListSpacesQueryParamsSchema.Type;
 export const ListSpacesResponseSchema = SpaceListSchema;
 export type ListSpacesResponse = typeof ListSpacesResponseSchema.Type;
 
-export const ListTenantInvitationsPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
-export type ListTenantInvitationsPathParams = typeof ListTenantInvitationsPathParamsSchema.Type;
-
-export const ListTenantInvitationsResponseSchema = TenantInvitationListSchema;
-export type ListTenantInvitationsResponse = typeof ListTenantInvitationsResponseSchema.Type;
-
-export const ListTenantInvitations429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type ListTenantInvitations429ResponseHeaders = typeof ListTenantInvitations429ResponseHeadersSchema.Type;
-
 export const ListTenantsQueryParamsSchema = Schema.Struct({
   cursor: Schema.optional(Schema.String),
   page_size: Schema.optional(Schema.NumberFromString),
@@ -2410,15 +2188,6 @@ export type ListTranscriptsQueryParams = typeof ListTranscriptsQueryParamsSchema
 
 export const ListTranscriptsResponseSchema = TranscriptListSchema;
 export type ListTranscriptsResponse = typeof ListTranscriptsResponseSchema.Type;
-
-export const ListUsersQueryParamsSchema = Schema.Struct({
-  cursor: Schema.optional(Schema.String),
-  page_size: Schema.optional(Schema.NumberFromString),
-});
-export type ListUsersQueryParams = typeof ListUsersQueryParamsSchema.Type;
-
-export const ListUsersResponseSchema = UserListSchema;
-export type ListUsersResponse = typeof ListUsersResponseSchema.Type;
 
 export const ListWebhookDeliveriesPathParamsSchema = Schema.Struct({
   endpoint_id: UUIDSchema,
@@ -2665,22 +2434,6 @@ export const RemoveEpisodeParticipant429ResponseHeadersSchema = Schema.Struct({
 });
 export type RemoveEpisodeParticipant429ResponseHeaders = typeof RemoveEpisodeParticipant429ResponseHeadersSchema.Type;
 
-export const RemoveMembershipPathParamsSchema = Schema.Struct({
-  membership_id: MembershipIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type RemoveMembershipPathParams = typeof RemoveMembershipPathParamsSchema.Type;
-
-export const RemoveMembershipResponseSchema = PeopleMutationSchema;
-export type RemoveMembershipResponse = typeof RemoveMembershipResponseSchema.Type;
-
-export const RemoveMembership429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type RemoveMembership429ResponseHeaders = typeof RemoveMembership429ResponseHeadersSchema.Type;
-
 export const RenegotiateCloudflareSFUPathParamsSchema = Schema.Struct({
   episode_id: EpisodeIdSchema,
   participant_id: ParticipantIdSchema,
@@ -2786,22 +2539,6 @@ export const RevokeAPIKey429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type RevokeAPIKey429ResponseHeaders = typeof RevokeAPIKey429ResponseHeadersSchema.Type;
-
-export const RevokeTenantInvitationPathParamsSchema = Schema.Struct({
-  invitation_id: UUIDSchema,
-  tenant_id: TenantIdSchema,
-});
-export type RevokeTenantInvitationPathParams = typeof RevokeTenantInvitationPathParamsSchema.Type;
-
-export const RevokeTenantInvitationResponseSchema = PeopleMutationSchema;
-export type RevokeTenantInvitationResponse = typeof RevokeTenantInvitationResponseSchema.Type;
-
-export const RevokeTenantInvitation429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type RevokeTenantInvitation429ResponseHeaders = typeof RevokeTenantInvitation429ResponseHeadersSchema.Type;
 
 export const RotateAPIKeyPathParamsSchema = Schema.Struct({
   api_key_id: UUIDSchema,
@@ -3332,44 +3069,6 @@ export const ArrivalUnavailableErrorSchema = ArrivalUnavailableErrorWireSchema.p
   }),
 );
 
-export class AuditInvalidIdError extends Schema.TaggedErrorClass<AuditInvalidIdError>()("AuditInvalidIdError", {
-  error: Schema.Struct({
-    code: Schema.Literal("audit.invalid_id"),
-    message: Schema.String,
-  }),
-}) {}
-export const AuditInvalidIdErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("audit.invalid_id"),
-    message: Schema.String,
-  }),
-});
-export const AuditInvalidIdErrorSchema = AuditInvalidIdErrorWireSchema.pipe(
-  Schema.decodeTo(AuditInvalidIdError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "AuditInvalidIdError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class AuditNotFoundError extends Schema.TaggedErrorClass<AuditNotFoundError>()("AuditNotFoundError", {
-  error: Schema.Struct({
-    code: Schema.Literal("audit.not_found"),
-    message: Schema.String,
-  }),
-}) {}
-export const AuditNotFoundErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("audit.not_found"),
-    message: Schema.String,
-  }),
-});
-export const AuditNotFoundErrorSchema = AuditNotFoundErrorWireSchema.pipe(
-  Schema.decodeTo(AuditNotFoundError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "AuditNotFoundError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
 export class AuthInvalidRecentAuthError extends Schema.TaggedErrorClass<AuthInvalidRecentAuthError>()("AuthInvalidRecentAuthError", {
   error: Schema.Struct({
     code: Schema.Literal("auth.invalid_recent_auth"),
@@ -3708,63 +3407,6 @@ export const IdentityInvalidEmailErrorWireSchema = Schema.Struct({
 export const IdentityInvalidEmailErrorSchema = IdentityInvalidEmailErrorWireSchema.pipe(
   Schema.decodeTo(IdentityInvalidEmailError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "IdentityInvalidEmailError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class InvitationInvalidEmailError extends Schema.TaggedErrorClass<InvitationInvalidEmailError>()("InvitationInvalidEmailError", {
-  error: Schema.Struct({
-    code: Schema.Literal("invitation.invalid_email"),
-    message: Schema.String,
-  }),
-}) {}
-export const InvitationInvalidEmailErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("invitation.invalid_email"),
-    message: Schema.String,
-  }),
-});
-export const InvitationInvalidEmailErrorSchema = InvitationInvalidEmailErrorWireSchema.pipe(
-  Schema.decodeTo(InvitationInvalidEmailError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "InvitationInvalidEmailError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class InvitationUnavailableError extends Schema.TaggedErrorClass<InvitationUnavailableError>()("InvitationUnavailableError", {
-  error: Schema.Struct({
-    code: Schema.Literal("invitation.unavailable"),
-    message: Schema.String,
-  }),
-}) {}
-export const InvitationUnavailableErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("invitation.unavailable"),
-    message: Schema.String,
-  }),
-});
-export const InvitationUnavailableErrorSchema = InvitationUnavailableErrorWireSchema.pipe(
-  Schema.decodeTo(InvitationUnavailableError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "InvitationUnavailableError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class InvitationWrongAccountError extends Schema.TaggedErrorClass<InvitationWrongAccountError>()("InvitationWrongAccountError", {
-  error: Schema.Struct({
-    code: Schema.Literal("invitation.wrong_account"),
-    message: Schema.String,
-  }),
-}) {}
-export const InvitationWrongAccountErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("invitation.wrong_account"),
-    message: Schema.String,
-  }),
-});
-export const InvitationWrongAccountErrorSchema = InvitationWrongAccountErrorWireSchema.pipe(
-  Schema.decodeTo(InvitationWrongAccountError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "InvitationWrongAccountError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -4681,25 +4323,6 @@ export const TenantInvalidNameErrorSchema = TenantInvalidNameErrorWireSchema.pip
   }),
 );
 
-export class TenantInvalidRegionError extends Schema.TaggedErrorClass<TenantInvalidRegionError>()("TenantInvalidRegionError", {
-  error: Schema.Struct({
-    code: Schema.Literal("tenant.invalid_region"),
-    message: Schema.String,
-  }),
-}) {}
-export const TenantInvalidRegionErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("tenant.invalid_region"),
-    message: Schema.String,
-  }),
-});
-export const TenantInvalidRegionErrorSchema = TenantInvalidRegionErrorWireSchema.pipe(
-  Schema.decodeTo(TenantInvalidRegionError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "TenantInvalidRegionError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
 export class TenantNotFoundError extends Schema.TaggedErrorClass<TenantNotFoundError>()("TenantNotFoundError", {
   error: Schema.Struct({
     code: Schema.Literal("tenant.not_found"),
@@ -4852,25 +4475,6 @@ export const UrlInvalidExpirationErrorSchema = UrlInvalidExpirationErrorWireSche
   }),
 );
 
-export class UserInvalidEmailError extends Schema.TaggedErrorClass<UserInvalidEmailError>()("UserInvalidEmailError", {
-  error: Schema.Struct({
-    code: Schema.Literal("user.invalid_email"),
-    message: Schema.String,
-  }),
-}) {}
-export const UserInvalidEmailErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("user.invalid_email"),
-    message: Schema.String,
-  }),
-});
-export const UserInvalidEmailErrorSchema = UserInvalidEmailErrorWireSchema.pipe(
-  Schema.decodeTo(UserInvalidEmailError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "UserInvalidEmailError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
 export class UserInvalidIdError extends Schema.TaggedErrorClass<UserInvalidIdError>()("UserInvalidIdError", {
   error: Schema.Struct({
     code: Schema.Literal("user.invalid_id"),
@@ -4905,25 +4509,6 @@ export const UserInvalidNameErrorWireSchema = Schema.Struct({
 export const UserInvalidNameErrorSchema = UserInvalidNameErrorWireSchema.pipe(
   Schema.decodeTo(UserInvalidNameError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "UserInvalidNameError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class UserNotFoundError extends Schema.TaggedErrorClass<UserNotFoundError>()("UserNotFoundError", {
-  error: Schema.Struct({
-    code: Schema.Literal("user.not_found"),
-    message: Schema.String,
-  }),
-}) {}
-export const UserNotFoundErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("user.not_found"),
-    message: Schema.String,
-  }),
-});
-export const UserNotFoundErrorSchema = UserNotFoundErrorWireSchema.pipe(
-  Schema.decodeTo(UserNotFoundError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "UserNotFoundError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -5403,25 +4988,6 @@ export const WhiteboardUploadNotReadyErrorSchema = WhiteboardUploadNotReadyError
   }),
 );
 
-export const AcceptTenantInvitationErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  InvitationInvalidEmailErrorSchema,
-  InvitationUnavailableErrorSchema,
-  InvitationWrongAccountErrorSchema,
-  MembershipInvalidIdErrorSchema,
-  MembershipInvalidRoleErrorSchema,
-  MembershipLastOwnerErrorSchema,
-  MembershipNotFoundErrorSchema,
-  RequestInvalidErrorSchema,
-  RequestPayloadTooLargeErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type AcceptTenantInvitationError = typeof AcceptTenantInvitationErrorSchema.Type;
-
 export const AddCloudflareSFUTracksErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -5649,7 +5215,6 @@ export const CreateTenantErrorSchema = Schema.Union([
   TenantInvalidCorsOriginErrorSchema,
   TenantInvalidFieldErrorSchema,
   TenantInvalidNameErrorSchema,
-  TenantInvalidRegionErrorSchema,
 ]);
 export type CreateTenantError = typeof CreateTenantErrorSchema.Type;
 
@@ -5665,19 +5230,6 @@ export const CreateTranscriptDownloadURLErrorSchema = Schema.Union([
   UrlInvalidExpirationErrorSchema,
 ]);
 export type CreateTranscriptDownloadURLError = typeof CreateTranscriptDownloadURLErrorSchema.Type;
-
-export const CreateUserErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  RequestInvalidErrorSchema,
-  RequestPayloadTooLargeErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  UserInvalidEmailErrorSchema,
-  UserInvalidNameErrorSchema,
-]);
-export type CreateUserError = typeof CreateUserErrorSchema.Type;
 
 export const CreateWebhookEndpointErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -5818,9 +5370,6 @@ export const FinalizeWhiteboardFileUploadErrorSchema = Schema.Union([
 ]);
 export type FinalizeWhiteboardFileUploadError = typeof FinalizeWhiteboardFileUploadErrorSchema.Type;
 
-export const GetAuditLogErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, AuditInvalidIdErrorSchema, AuditNotFoundErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
-export type GetAuditLogError = typeof GetAuditLogErrorSchema.Type;
-
 export const GetChatAttachmentDownloadErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -5920,9 +5469,6 @@ export type GetTranscriptDocumentError = typeof GetTranscriptDocumentErrorSchema
 
 export const GetTranscriptErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema, TranscriptInvalidIdErrorSchema, TranscriptNotFoundErrorSchema]);
 export type GetTranscriptError = typeof GetTranscriptErrorSchema.Type;
-
-export const GetUserErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, UserInvalidIdErrorSchema, UserNotFoundErrorSchema]);
-export type GetUserError = typeof GetUserErrorSchema.Type;
 
 export const GetWebhookDeliveryErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -6046,25 +5592,6 @@ export type IssueEpisodeParticipantSyncTokenError = typeof IssueEpisodeParticipa
 export const IssueRecentAuthProofErrorSchema = Schema.Union([AccessUnauthenticatedErrorSchema, AuthInvalidRecentAuthErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
 export type IssueRecentAuthProofError = typeof IssueRecentAuthProofErrorSchema.Type;
 
-export const IssueTenantInvitationErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  InvitationInvalidEmailErrorSchema,
-  InvitationUnavailableErrorSchema,
-  InvitationWrongAccountErrorSchema,
-  MembershipInvalidIdErrorSchema,
-  MembershipInvalidRoleErrorSchema,
-  MembershipLastOwnerErrorSchema,
-  MembershipNotFoundErrorSchema,
-  RequestInvalidErrorSchema,
-  RequestPayloadTooLargeErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type IssueTenantInvitationError = typeof IssueTenantInvitationErrorSchema.Type;
-
 export const JoinDashboardSpaceSelfErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -6118,29 +5645,8 @@ export const LeaveSpacePublicInviteArrivalErrorSchema = Schema.Union([
 ]);
 export type LeaveSpacePublicInviteArrivalError = typeof LeaveSpacePublicInviteArrivalErrorSchema.Type;
 
-export const LeaveTenantErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  InvitationInvalidEmailErrorSchema,
-  InvitationUnavailableErrorSchema,
-  InvitationWrongAccountErrorSchema,
-  MembershipInvalidIdErrorSchema,
-  MembershipInvalidRoleErrorSchema,
-  MembershipLastOwnerErrorSchema,
-  MembershipNotFoundErrorSchema,
-  RequestInvalidErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type LeaveTenantError = typeof LeaveTenantErrorSchema.Type;
-
 export const ListAPIKeysErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, PaginationInvalidCursorErrorSchema, PaginationInvalidPageSizeErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
 export type ListAPIKeysError = typeof ListAPIKeysErrorSchema.Type;
-
-export const ListAuditLogsErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, PaginationInvalidCursorErrorSchema, PaginationInvalidPageSizeErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
-export type ListAuditLogsError = typeof ListAuditLogsErrorSchema.Type;
 
 export const ListCloudflareSFUPublicationsErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -6191,9 +5697,6 @@ export const ListRecordingsErrorSchema = Schema.Union([
 ]);
 export type ListRecordingsError = typeof ListRecordingsErrorSchema.Type;
 
-export const ListRegionsErrorSchema = Schema.Union([AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
-export type ListRegionsError = typeof ListRegionsErrorSchema.Type;
-
 export const ListSpacePublicAdmissionRequestsErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -6222,24 +5725,6 @@ export const ListSpacesErrorSchema = Schema.Union([
 ]);
 export type ListSpacesError = typeof ListSpacesErrorSchema.Type;
 
-export const ListTenantInvitationsErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  InvitationInvalidEmailErrorSchema,
-  InvitationUnavailableErrorSchema,
-  InvitationWrongAccountErrorSchema,
-  MembershipInvalidIdErrorSchema,
-  MembershipInvalidRoleErrorSchema,
-  MembershipLastOwnerErrorSchema,
-  MembershipNotFoundErrorSchema,
-  RequestInvalidErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type ListTenantInvitationsError = typeof ListTenantInvitationsErrorSchema.Type;
-
 export const ListTenantsErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, PaginationInvalidCursorErrorSchema, PaginationInvalidPageSizeErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
 export type ListTenantsError = typeof ListTenantsErrorSchema.Type;
 
@@ -6254,9 +5739,6 @@ export const ListTranscriptsErrorSchema = Schema.Union([
   TenantInvalidIdErrorSchema,
 ]);
 export type ListTranscriptsError = typeof ListTranscriptsErrorSchema.Type;
-
-export const ListUsersErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, PaginationInvalidCursorErrorSchema, PaginationInvalidPageSizeErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
-export type ListUsersError = typeof ListUsersErrorSchema.Type;
 
 export const ListWebhookDeliveriesErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -6317,7 +5799,6 @@ export const OnboardTenantErrorSchema = Schema.Union([
   ServiceInternalErrorSchema,
   ServiceUnavailableErrorSchema,
   TenantInvalidNameErrorSchema,
-  TenantInvalidRegionErrorSchema,
   TenantNotFoundErrorSchema,
 ]);
 export type OnboardTenantError = typeof OnboardTenantErrorSchema.Type;
@@ -6445,24 +5926,6 @@ export const RemoveEpisodeParticipantErrorSchema = Schema.Union([
 ]);
 export type RemoveEpisodeParticipantError = typeof RemoveEpisodeParticipantErrorSchema.Type;
 
-export const RemoveMembershipErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  InvitationInvalidEmailErrorSchema,
-  InvitationUnavailableErrorSchema,
-  InvitationWrongAccountErrorSchema,
-  MembershipInvalidIdErrorSchema,
-  MembershipInvalidRoleErrorSchema,
-  MembershipLastOwnerErrorSchema,
-  MembershipNotFoundErrorSchema,
-  RequestInvalidErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type RemoveMembershipError = typeof RemoveMembershipErrorSchema.Type;
-
 export const RenegotiateCloudflareSFUErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -6535,24 +5998,6 @@ export const RevokeAPIKeyErrorSchema = Schema.Union([
   TenantInvalidIdErrorSchema,
 ]);
 export type RevokeAPIKeyError = typeof RevokeAPIKeyErrorSchema.Type;
-
-export const RevokeTenantInvitationErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  InvitationInvalidEmailErrorSchema,
-  InvitationUnavailableErrorSchema,
-  InvitationWrongAccountErrorSchema,
-  MembershipInvalidIdErrorSchema,
-  MembershipInvalidRoleErrorSchema,
-  MembershipLastOwnerErrorSchema,
-  MembershipNotFoundErrorSchema,
-  RequestInvalidErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type RevokeTenantInvitationError = typeof RevokeTenantInvitationErrorSchema.Type;
 
 export const RotateAPIKeyErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -6738,7 +6183,6 @@ export const UpdateTenantErrorSchema = Schema.Union([
   TenantInvalidFieldErrorSchema,
   TenantInvalidIdErrorSchema,
   TenantInvalidNameErrorSchema,
-  TenantInvalidRegionErrorSchema,
   TenantNotFoundErrorSchema,
 ]);
 export type UpdateTenantError = typeof UpdateTenantErrorSchema.Type;
@@ -6774,7 +6218,6 @@ export const UpdateWebhookEndpointErrorSchema = Schema.Union([
 export type UpdateWebhookEndpointError = typeof UpdateWebhookEndpointErrorSchema.Type;
 
 export const ChalkOperationPolicies = {
-  acceptTenantInvitation: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   addCloudflareSFUTracks: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   admitEpisodeParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   approveSpacePublicAdmissionRequest: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -6793,7 +6236,6 @@ export const ChalkOperationPolicies = {
   createSpace: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createTenant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createTranscriptDownloadURL: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  createUser: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createWebhookEndpoint: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   deleteTranscript: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   deleteWebhookEndpoint: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -6812,14 +6254,11 @@ export const ChalkOperationPolicies = {
   issueAccessGrant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   issueEpisodeParticipantSyncToken: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   issueRecentAuthProof: { maxBodyBytes: 1048576, rateLimit: { limit: 10, policy: "auth.recent_auth", windowSeconds: 60 } },
-  issueTenantInvitation: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   joinDashboardSpaceSelf: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   leaveDashboardSpaceSelf: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   leaveSpacePublicInviteArrival: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  leaveTenant: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   listEpisodes: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   listSpacePublicAdmissionRequests: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  listTenantInvitations: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   listWebhookDeliveries: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   listWebhookEndpoints: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   login: { maxBodyBytes: 1048576, rateLimit: { limit: 10, policy: "auth.login", windowSeconds: 60 } },
@@ -6832,14 +6271,12 @@ export const ChalkOperationPolicies = {
   refreshSpacePublicInviteAccess: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   register: { maxBodyBytes: 1048576, rateLimit: { limit: 5, policy: "auth.register", windowSeconds: 60 } },
   removeEpisodeParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  removeMembership: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   renegotiateCloudflareSFU: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   requestPasswordReset: { maxBodyBytes: 1048576, rateLimit: { limit: 5, policy: "auth.password_reset", windowSeconds: 60 } },
   requestRecordingExport: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   requestTranscript: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   restoreSpace: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   revokeAPIKey: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  revokeTenantInvitation: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   rotateAPIKey: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   rotateSpacePublicInvite: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   rotateWebhookEndpointSecret: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

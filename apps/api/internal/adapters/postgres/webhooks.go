@@ -89,9 +89,7 @@ func (r WebhookRepository) Create(ctx context.Context, input webhooks.CreateInpu
 		return webhooks.CreateResult{}, fmt.Errorf("insert webhook endpoint revision: %w", err)
 	}
 	result := webhooks.CreateResult{Endpoint: mapWebhookEndpoint(row, revision.UrlRedacted, revision.ApiVersion, revision.EventTypes), Secret: secret}
-	if err := insertWebhookAudit(ctx, tx, input.TenantID, "webhook_endpoint.create", "webhook_endpoint", endpointID, map[string]any{"api_version": input.APIVersion, "enabled": input.Enabled, "event_type_count": len(input.EventTypes), "revision": 1}); err != nil {
-		return webhooks.CreateResult{}, err
-	}
+
 	if err := r.storeIdempotency(ctx, tx, input.TenantID, "endpoint.create", input.IdempotencyKey, hash, 201, result.Endpoint.ID, webhookIdempotencyResponse{Endpoint: cacheEndpoint(result.Endpoint), Secret: secret}); err != nil {
 		return webhooks.CreateResult{}, err
 	}
@@ -252,13 +250,7 @@ func (r WebhookRepository) Patch(ctx context.Context, tenantID, endpointID utili
 		return webhooks.Endpoint{}, err
 	}
 	result := mapGetWebhookEndpoint(finalRow)
-	auditAction := "webhook_endpoint.update"
-	if current.Enabled && !enabled {
-		auditAction = "webhook_endpoint.disable"
-	}
-	if err := insertWebhookAudit(ctx, tx, tenantID, auditAction, "webhook_endpoint", endpointID, map[string]any{"enabled": enabled, "enabled_changed": current.Enabled != enabled, "revision": result.Revision, "target_changed": targetChanged}); err != nil {
-		return webhooks.Endpoint{}, err
-	}
+
 	if err := r.storeIdempotency(ctx, tx, tenantID, "endpoint.patch", input.IdempotencyKey, hash, 200, endpointID, webhookIdempotencyResponse{Endpoint: cacheEndpoint(result)}); err != nil {
 		return webhooks.Endpoint{}, err
 	}
@@ -310,8 +302,6 @@ func (r WebhookRepository) deleteWebhookEndpointTx(ctx context.Context, tx pgx.T
 	return canceledCount, nil
 }
 
-// eraseWebhookEndpointTx shares payload destruction without creating a new
-// encrypted API-idempotency response during an operator hard-delete.
 func eraseWebhookEndpointTx(ctx context.Context, tx pgx.Tx, tenantID, endpointID utilities.ID, revision int) (int64, error) {
 	queries := sqlc.New(tx)
 	var currentRevision int32
@@ -341,9 +331,7 @@ func eraseWebhookEndpointTx(ctx context.Context, tx pgx.Tx, tenantID, endpointID
 	if err != nil {
 		return 0, err
 	}
-	if err := insertWebhookAudit(ctx, tx, tenantID, "webhook_endpoint.delete", "webhook_endpoint", endpointID, map[string]any{"revision": revision + 1}); err != nil {
-		return 0, err
-	}
+
 	return canceledCount, nil
 }
 
@@ -392,9 +380,7 @@ func (r WebhookRepository) RotateSecret(ctx context.Context, tenantID, endpointI
 		}
 	}
 	result := webhooks.RotateResult{EndpointID: id(row.ID), Revision: int(row.Revision), Secret: secret, PreviousSecretExpiresAt: nullableTimestamp(row.PreviousSecretExpiresAt)}
-	if err := insertWebhookAudit(ctx, tx, tenantID, "webhook_endpoint.rotate_secret", "webhook_endpoint", endpointID, map[string]any{"previous_revoked_immediately": immediate, "revision": result.Revision}); err != nil {
-		return webhooks.RotateResult{}, err
-	}
+
 	if err := r.storeIdempotency(ctx, tx, tenantID, "endpoint.rotate_secret", key, hash, 200, endpointID, webhookIdempotencyResponse{Rotation: &webhookRotationCache{EndpointID: result.EndpointID.String(), Revision: result.Revision, Secret: result.Secret, PreviousSecretExpiresAt: result.PreviousSecretExpiresAt}}); err != nil {
 		return webhooks.RotateResult{}, err
 	}

@@ -52,12 +52,6 @@ export async function completePasswordReset(input: { token: string; password: st
   await dashboardRequest("/api/auth/password-reset/complete", { method: "POST", body: input });
 }
 
-export async function logoutAccount(): Promise<void> {
-  await dashboardRequest("/api/auth/logout", { method: "POST", body: {} });
-  csrfToken = undefined;
-  csrfExpiresAt = 0;
-}
-
 export function getAccount(): Promise<AccountUser> {
   return generatedRequest((client) => client.me.getMe());
 }
@@ -88,10 +82,6 @@ export function listSpaces(input: { tenantID: string; cursor?: string; pageSize?
       query: { cursor: input.cursor, page_size: input.pageSize, archived: input.archived },
     }),
   );
-}
-
-export function acceptTenantInvitation(token: string) {
-  return generatedRequest((client) => client.tenants.acceptTenantInvitation({ payload: { token } }));
 }
 
 type AccountRequestOptions = {

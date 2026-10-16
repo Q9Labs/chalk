@@ -3,10 +3,12 @@
 ## 5.0.0 (unreleased)
 
 - BREAKING: removes Episode diagnostics producers, credentials, backend, CLI and the diagnostics-contracts package.
-- Remove Episode Debugger launch and diagnostic-reference UI props from the React SDK. Shared diagnostic intake and recording instrumentation remain.
+- Remove Episode Debugger launch and diagnostic-reference UI props from the React SDK. Local connection diagnostics and recording instrumentation remain.
 
 - BREAKING: Classic is the only UI style. Removed the skin option, skin context, hand-drawn rendering helpers and drawing-only primitive props (`seed`, `roughness`, `filled`, `scribble`).
 - BREAKING: Removed feedback report submission, UI, collection helpers and operator endpoints.
+- BREAKING: removes client telemetry, preset palettes, textures, background-effect controls and icon animations. Light/dark mode, custom tokens and fun avatars remain.
+- BREAKING: removes RealtimeKit, public status, Tenant invitations, audit-log and Users API operations and the regions catalog.
 - No packages published. Existing integrations pinned to 4.1.15 remain pinned.
 
 All notable public changes to this project will be documented in this file.

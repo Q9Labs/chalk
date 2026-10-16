@@ -3,7 +3,7 @@ package postgres
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+
 	"errors"
 	"fmt"
 	"net/netip"
@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/apikeys"
-	"github.com/q9labs/chalk/apps/api/internal/auditlogs"
+
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -38,7 +38,7 @@ type apiKeyTransactor interface {
 
 type apiKeyMutationQuerier interface {
 	CreateAPIKey(context.Context, sqlc.CreateAPIKeyParams) (sqlc.CreateAPIKeyRow, error)
-	CreateAuditLog(context.Context, sqlc.CreateAuditLogParams) (sqlc.AuditLog, error)
+
 	GetAPIKeyMutation(context.Context, sqlc.GetAPIKeyMutationParams) (sqlc.ApiKeyMutationRequest, error)
 	GetTenantAPIKey(context.Context, sqlc.GetTenantAPIKeyParams) (sqlc.GetTenantAPIKeyRow, error)
 	LinkAPIKeyMutation(context.Context, sqlc.LinkAPIKeyMutationParams) error
@@ -78,9 +78,7 @@ func (r APIKeyRepository) Create(ctx context.Context, input apikeys.CreateRecord
 	if err != nil {
 		return apikeys.Record{}, fmt.Errorf("create api key: %w", err)
 	}
-	if err := createAPIKeyAudit(ctx, queries, input.TenantID, input.ID, "api_key.created"); err != nil {
-		return apikeys.Record{}, err
-	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return apikeys.Record{}, fmt.Errorf("commit api key creation: %w", err)
 	}
@@ -88,9 +86,6 @@ func (r APIKeyRepository) Create(ctx context.Context, input apikeys.CreateRecord
 	return mapAPIKeyRow(sqlc.GetTenantAPIKeyRow(row)), nil
 }
 
-// CreateIdempotent reserves the request before creating the key. The
-// reservation stores a fingerprint and resource id only; a replay returns the
-// existing metadata with no credential material.
 func (r APIKeyRepository) CreateIdempotent(ctx context.Context, input apikeys.CreateRecordInput) (apikeys.Record, bool, error) {
 	tx, queries, err := r.beginMutation(ctx)
 	if err != nil {
@@ -147,9 +142,7 @@ func (r APIKeyRepository) CreateIdempotent(ctx context.Context, input apikeys.Cr
 	if err := queries.LinkAPIKeyMutation(ctx, sqlc.LinkAPIKeyMutationParams{ApiKeyID: uuid(input.ID), TenantID: uuid(input.TenantID), Operation: "create", RequestKey: input.RequestKey}); err != nil {
 		return apikeys.Record{}, false, fmt.Errorf("link api key create request: %w", err)
 	}
-	if err := createAPIKeyAudit(ctx, queries, input.TenantID, input.ID, "api_key.created"); err != nil {
-		return apikeys.Record{}, false, err
-	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return apikeys.Record{}, false, fmt.Errorf("commit idempotent api key creation: %w", err)
 	}
@@ -234,9 +227,7 @@ func (r APIKeyRepository) Rotate(ctx context.Context, input apikeys.RotateRecord
 	if err != nil {
 		return apikeys.Record{}, fmt.Errorf("rotate api key: %w", err)
 	}
-	if err := createAPIKeyAudit(ctx, queries, input.TenantID, input.ID, "api_key.rotated"); err != nil {
-		return apikeys.Record{}, err
-	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return apikeys.Record{}, fmt.Errorf("commit api key rotation: %w", err)
 	}
@@ -244,7 +235,6 @@ func (r APIKeyRepository) Rotate(ctx context.Context, input apikeys.RotateRecord
 	return mapAPIKeyRow(sqlc.GetTenantAPIKeyRow(row)), nil
 }
 
-// RotateIdempotent applies the same metadata-only replay rule to rotations.
 func (r APIKeyRepository) RotateIdempotent(ctx context.Context, input apikeys.RotateRecordInput) (apikeys.Record, bool, error) {
 	tx, queries, err := r.beginMutation(ctx)
 	if err != nil {
@@ -292,9 +282,7 @@ func (r APIKeyRepository) RotateIdempotent(ctx context.Context, input apikeys.Ro
 	if err := queries.LinkAPIKeyMutation(ctx, sqlc.LinkAPIKeyMutationParams{ApiKeyID: uuid(input.ID), TenantID: uuid(input.TenantID), Operation: "rotate", RequestKey: input.RequestKey}); err != nil {
 		return apikeys.Record{}, false, fmt.Errorf("link api key rotate request: %w", err)
 	}
-	if err := createAPIKeyAudit(ctx, queries, input.TenantID, input.ID, "api_key.rotated"); err != nil {
-		return apikeys.Record{}, false, err
-	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return apikeys.Record{}, false, fmt.Errorf("commit idempotent api key rotation: %w", err)
 	}
@@ -340,9 +328,7 @@ func (r APIKeyRepository) Revoke(ctx context.Context, tenantID, id utilities.ID,
 	if err != nil {
 		return fmt.Errorf("revoke api key: %w", err)
 	}
-	if err := createAPIKeyAudit(ctx, queries, tenantID, id, "api_key.revoked"); err != nil {
-		return err
-	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit api key revocation: %w", err)
 	}
@@ -430,45 +416,6 @@ func (r APIKeyRepository) beginMutation(ctx context.Context) (pgx.Tx, apiKeyMuta
 		queries = r.decorate(queries)
 	}
 	return tx, queries, nil
-}
-
-func createAPIKeyAudit(ctx context.Context, queries apiKeyMutationQuerier, tenantID, keyID utilities.ID, action string) error {
-	auditID, err := utilities.NewID()
-	if err != nil {
-		return fmt.Errorf("create api key audit id: %w", err)
-	}
-	actorType, actorUserID, details := apiKeyAuditActor(ctx)
-	encodedDetails, err := json.Marshal(details)
-	if err != nil {
-		return fmt.Errorf("marshal api key audit details: %w", err)
-	}
-	_, err = queries.CreateAuditLog(ctx, sqlc.CreateAuditLogParams{
-		ID:           uuid(auditID),
-		TenantID:     uuid(tenantID),
-		ActorUserID:  nullableUUID(actorUserID),
-		ActorType:    actorType,
-		Action:       action,
-		ResourceType: pgtype.Text{String: "api_key", Valid: true},
-		ResourceID:   uuid(keyID),
-		Details:      encodedDetails,
-		Outcome:      auditlogs.OutcomeSuccess,
-	})
-	if err != nil {
-		return fmt.Errorf("create api key audit log: %w", err)
-	}
-	return nil
-}
-
-func apiKeyAuditActor(ctx context.Context) (string, utilities.ID, map[string]string) {
-	principal, ok := authentication.PrincipalFromContext(ctx)
-	if !ok {
-		return auditlogs.ActorSystem, utilities.ID{}, map[string]string{}
-	}
-	actorType, actorUserID := auditlogs.PrincipalActor(principal)
-	if principal.Kind == authentication.PrincipalAPIKey {
-		return actorType, actorUserID, map[string]string{"actor_api_key_id": principal.APIKeyID.String()}
-	}
-	return actorType, actorUserID, map[string]string{}
 }
 
 var _ apikeys.Repository = APIKeyRepository{}

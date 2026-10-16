@@ -33,10 +33,6 @@ func tenantIDRequest(r *http.Request) (utilities.ID, error) {
 	return routeID(r, "tenant_id", apiErrorInvalidTenantID)
 }
 
-func userIDRequest(r *http.Request) (utilities.ID, error) {
-	return routeID(r, "user_id", apiErrorInvalidUserID)
-}
-
 func membershipIDRequest(r *http.Request) (utilities.ID, error) {
 	return routeID(r, "membership_id", apiErrorInvalidMembershipID)
 }
@@ -70,10 +66,6 @@ func transcriptIDRequest(r *http.Request) (utilities.ID, error) {
 	return routeID(r, "transcript_id", apiErrorInvalidTranscriptID)
 }
 
-func auditLogIDRequest(r *http.Request) (utilities.ID, error) {
-	return routeID(r, "audit_log_id", apiErrorInvalidAuditLogID)
-}
-
 func paginationParameters() []APIParameterContract {
 	return []APIParameterContract{
 		{Name: "page_size", In: "query", Type: "integer", Required: false},
@@ -83,10 +75,6 @@ func paginationParameters() []APIParameterContract {
 
 func tenantIDParameter() APIParameterContract {
 	return APIParameterContract{Name: "tenant_id", In: "path", Type: "string", Required: true}
-}
-
-func userIDParameter() APIParameterContract {
-	return APIParameterContract{Name: "user_id", In: "path", Type: "string", Required: true}
 }
 
 func membershipIDParameter() APIParameterContract {
@@ -107,10 +95,6 @@ func recordingIDParameter() APIParameterContract {
 
 func transcriptIDParameter() APIParameterContract {
 	return APIParameterContract{Name: "transcript_id", In: "path", Type: "string", Required: true}
-}
-
-func auditLogIDParameter() APIParameterContract {
-	return APIParameterContract{Name: "audit_log_id", In: "path", Type: "string", Required: true}
 }
 
 func recordingIDQueryParameter() APIParameterContract {

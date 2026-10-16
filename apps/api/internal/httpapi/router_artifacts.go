@@ -9,5 +9,5 @@ func mountArtifactRoutes(r chi.Router, options Options) {
 	} else {
 		mountTranscriptRoutes(r, options.Transcripts, options.TenantAuthz, options.RateLimit)
 	}
-	mountAuditLogRoutes(r, options.AuditLogs, options.TenantAuthz, options.RateLimit)
+
 }

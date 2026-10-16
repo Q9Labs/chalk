@@ -25,9 +25,6 @@ func NewService(repository Repository, protector SecretProtector) Service {
 }
 
 func (s Service) Create(ctx context.Context, input CreateInput) (result CreateResult, resultErr error) {
-	defer func() {
-		s.auditFailure(ctx, input.TenantID, "webhook_endpoint.create", "webhook_endpoint", utilities.ID{}, resultErr)
-	}()
 	if err := validateCreateInput(&input); err != nil {
 		return CreateResult{}, err
 	}
@@ -52,13 +49,6 @@ func (s Service) List(ctx context.Context, tenantID utilities.ID, page paginatio
 }
 
 func (s Service) Patch(ctx context.Context, tenantID, endpointID utilities.ID, input PatchInput) (result Endpoint, resultErr error) {
-	defer func() {
-		action := "webhook_endpoint.update"
-		if input.Enabled != nil && !*input.Enabled {
-			action = "webhook_endpoint.disable"
-		}
-		s.auditFailure(ctx, tenantID, action, "webhook_endpoint", endpointID, resultErr)
-	}()
 	if tenantID.IsZero() {
 		return Endpoint{}, ErrInvalidTenantID
 	}
@@ -106,9 +96,6 @@ func (s Service) Patch(ctx context.Context, tenantID, endpointID utilities.ID, i
 }
 
 func (s Service) Delete(ctx context.Context, tenantID, endpointID utilities.ID, revision int, key string) (resultErr error) {
-	defer func() {
-		s.auditFailure(ctx, tenantID, "webhook_endpoint.delete", "webhook_endpoint", endpointID, resultErr)
-	}()
 	if tenantID.IsZero() {
 		return ErrInvalidTenantID
 	}
@@ -125,9 +112,6 @@ func (s Service) Delete(ctx context.Context, tenantID, endpointID utilities.ID, 
 }
 
 func (s Service) RotateSecret(ctx context.Context, tenantID, endpointID utilities.ID, immediate bool, key string) (result RotateResult, resultErr error) {
-	defer func() {
-		s.auditFailure(ctx, tenantID, "webhook_endpoint.rotate_secret", "webhook_endpoint", endpointID, resultErr)
-	}()
 	if tenantID.IsZero() {
 		return RotateResult{}, ErrInvalidTenantID
 	}
@@ -141,9 +125,6 @@ func (s Service) RotateSecret(ctx context.Context, tenantID, endpointID utilitie
 }
 
 func (s Service) Test(ctx context.Context, tenantID, endpointID utilities.ID, key string, metadata EventMetadata) (result DeliveryResult, resultErr error) {
-	defer func() {
-		s.auditFailure(ctx, tenantID, "webhook_endpoint.test", "webhook_endpoint", endpointID, resultErr)
-	}()
 	if tenantID.IsZero() {
 		return DeliveryResult{}, ErrInvalidTenantID
 	}
@@ -182,9 +163,6 @@ func (s Service) GetDelivery(ctx context.Context, tenantID, endpointID, delivery
 }
 func (s Service) Redeliver(ctx context.Context, tenantID, endpointID, deliveryID utilities.ID, key string) (result DeliveryResult, resultErr error) {
 	defer func() { RecordRedeliveryResult(ctx, redeliveryMetricOutcome(resultErr)) }()
-	defer func() {
-		s.auditFailure(ctx, tenantID, "webhook_delivery.redeliver", "webhook_delivery", deliveryID, resultErr)
-	}()
 	if tenantID.IsZero() {
 		return DeliveryResult{}, ErrInvalidTenantID
 	}
@@ -198,45 +176,6 @@ func (s Service) Redeliver(ctx context.Context, tenantID, endpointID, deliveryID
 		return DeliveryResult{}, ErrIdempotencyKeyRequired
 	}
 	return s.repository.Redeliver(ctx, tenantID, endpointID, deliveryID, key)
-}
-
-func (s Service) AuditFailure(ctx context.Context, input FailureAuditInput) {
-	if input.TenantID.IsZero() || input.ErrorCode == "" {
-		return
-	}
-	if auditor, ok := s.repository.(FailureAuditor); ok {
-		_ = auditor.RecordWebhookFailure(ctx, input)
-	}
-}
-
-func (s Service) auditFailure(ctx context.Context, tenantID utilities.ID, action, resourceType string, resourceID utilities.ID, err error) {
-	if err == nil {
-		return
-	}
-	s.AuditFailure(ctx, FailureAuditInput{TenantID: tenantID, Action: action, ResourceType: resourceType, ResourceID: resourceID, ErrorCode: webhookAuditErrorCode(err)})
-}
-
-func webhookAuditErrorCode(err error) string {
-	switch {
-	case errors.Is(err, ErrRevisionConflict):
-		return "revision_conflict"
-	case errors.Is(err, ErrIdempotencyKeyConflict):
-		return "idempotency_key_conflict"
-	case errors.Is(err, ErrIdempotencyKeyExpired):
-		return "idempotency_key_expired"
-	case errors.Is(err, ErrIdempotencyKeyRequired):
-		return "idempotency_key_required"
-	case errors.Is(err, ErrEndpointNotFound), errors.Is(err, ErrDeliveryNotFound):
-		return "not_found"
-	case errors.Is(err, ErrDeliveryNotRedeliverable):
-		return "not_redeliverable"
-	case errors.Is(err, ErrEventErased):
-		return "event_erased"
-	case errors.Is(err, ErrEncryptionUnavailable):
-		return "encryption_unavailable"
-	default:
-		return "invalid_request"
-	}
 }
 
 func redeliveryMetricOutcome(err error) string {
