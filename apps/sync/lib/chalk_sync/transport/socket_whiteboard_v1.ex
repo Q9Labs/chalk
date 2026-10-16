@@ -1,12 +1,9 @@
 defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   @moduledoc "Independent whiteboard-v1 WebSocket transport."
-
   @behaviour WebSock
-
   alias ChalkSync.Auth.Claims
   alias ChalkSync.Auth.TokenVerifier
   alias ChalkSync.Contract.GeneratedWhiteboardV1
-  alias ChalkSync.Diagnostics
   alias ChalkSync.Observability
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
@@ -16,11 +13,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   alias ChalkSync.WhiteboardV1.Multipart
   alias ChalkSync.WhiteboardV1.OutboundQueue
   alias ChalkSync.WhiteboardV1.Protocol
-
-  @hello_timeout_ms 5_000
+  @hello_timeout_ms 5000
   @multipart_timeout_ms GeneratedWhiteboardV1.limits()["multipartUpdateTimeoutMs"]
   @max_pending_snapshots GeneratedWhiteboardV1.limits()["pendingOperationMaxItems"]
-
   @impl true
   def init(options) do
     timer = Process.send_after(self(), :hello_timeout, @hello_timeout_ms)
@@ -59,21 +54,25 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   @impl true
-  def handle_in({text, [opcode: :text]}, state) do
+  def handle_in({text, opcode: :text}, state) do
     case Protocol.decode(text) do
       {:ok, frame} -> handle_frame(frame, state)
       {:error, reason} -> stop(state, 1009, close_reason(reason), :protocol_error)
     end
   end
 
-  def handle_in({_payload, _options}, state),
-    do: stop(state, 1009, "text frames only", :protocol_error)
+  def handle_in({_payload, _options}, state) do
+    stop(state, 1009, "text frames only", :protocol_error)
+  end
 
   @impl true
-  def handle_info(:hello_timeout, %{phase: :awaiting_hello} = state),
-    do: stop(state, 1008, "hello timeout", :hello_timeout)
+  def handle_info(:hello_timeout, %{phase: :awaiting_hello} = state) do
+    stop(state, 1008, "hello timeout", :hello_timeout)
+  end
 
-  def handle_info(:hello_timeout, state), do: {:ok, state}
+  def handle_info(:hello_timeout, state) do
+    {:ok, state}
+  end
 
   def handle_info(
         {:whiteboard_multipart_timeout, operation_id},
@@ -83,27 +82,28 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     operation_failure(operation_id, :submit_update, {:retryable, :overloaded}, state)
   end
 
-  def handle_info({:whiteboard_multipart_timeout, _operation_id}, state), do: {:ok, state}
+  def handle_info({:whiteboard_multipart_timeout, _operation_id}, state) do
+    {:ok, state}
+  end
 
   def handle_info(
         {:whiteboard_v1_frame, %{"type" => "cursor", "participant_id" => participant_id}},
         %{identity: %Identity{participant_id: participant_id}} = state
-      ),
-      do: {:ok, state}
+      ) do
+    {:ok, state}
+  end
 
   def handle_info(
         {:whiteboard_v1_frame, %{"type" => "presentation_updated"}},
         %{phase: :live, presentation_negotiated: false} = state
-      ),
-      do: {:ok, state}
+      ) do
+    {:ok, state}
+  end
 
   def handle_info(
         {:whiteboard_v1_frame,
-         %{
-           "type" => "presentation_updated",
-           "scene_id" => scene_id,
-           "revision" => revision
-         } = frame},
+         %{"type" => "presentation_updated", "scene_id" => scene_id, "revision" => revision} =
+           frame},
         %{phase: :live, presentation_negotiated: true, scene_id: scene_id} = state
       ) do
     deliver_in_order(state, frame, scene_id, String.to_integer(revision))
@@ -112,8 +112,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   def handle_info(
         {:whiteboard_v1_frame, %{"type" => "presentation_updated"}},
         %{phase: :live} = state
-      ),
-      do: {:ok, state}
+      ) do
+    {:ok, state}
+  end
 
   def handle_info(
         {:whiteboard_v1_frame,
@@ -132,10 +133,13 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
         {:whiteboard_v1_frame, %{"scene_id" => scene_id, "revision" => revision}},
         %{phase: :recovering} = state
       )
-      when is_binary(revision),
-      do: {:ok, note_missed_head(state, scene_id, String.to_integer(revision))}
+      when is_binary(revision) do
+    {:ok, note_missed_head(state, scene_id, String.to_integer(revision))}
+  end
 
-  def handle_info({:whiteboard_v1_frame, _frame}, state), do: {:ok, state}
+  def handle_info({:whiteboard_v1_frame, _frame}, state) do
+    {:ok, state}
+  end
 
   def handle_info(
         {:whiteboard_v1_head, scene_id, revision},
@@ -145,13 +149,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
       scene_id != state.scene_id ->
         enqueue_and_push(
           %{state | scene_id: scene_id, revision: revision},
-          [
-            %{
-              "type" => "reset_required",
-              "scene_id" => scene_id,
-              "reason" => "scene_changed"
-            }
-          ]
+          [%{"type" => "reset_required", "scene_id" => scene_id, "reason" => "scene_changed"}]
         )
 
       revision <= state.revision ->
@@ -162,16 +160,18 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     end
   end
 
-  def handle_info({:whiteboard_v1_head, scene_id, revision}, %{phase: :recovering} = state),
-    do: {:ok, note_missed_head(state, scene_id, revision)}
+  def handle_info({:whiteboard_v1_head, scene_id, revision}, %{phase: :recovering} = state) do
+    {:ok, note_missed_head(state, scene_id, revision)}
+  end
 
-  def handle_info({:whiteboard_v1_head, _scene_id, _revision}, state), do: {:ok, state}
+  def handle_info({:whiteboard_v1_head, _scene_id, _revision}, state) do
+    {:ok, state}
+  end
 
-  def handle_info(:whiteboard_drain, state), do: push_next(state)
+  def handle_info(:whiteboard_drain, state) do
+    push_next(state)
+  end
 
-  # Frames of a replay are still queued. The next snapshot must not go out
-  # between them, or the client receives older updates after a newer board.
-  # A stopping socket no longer drains its queue, so it must not wait for it.
   def handle_info(
         :whiteboard_snapshot_next,
         %{
@@ -187,8 +187,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   def handle_info(:whiteboard_snapshot_next, %{terminal: terminal} = state)
-      when not is_nil(terminal),
-      do: {:ok, state}
+      when not is_nil(terminal) do
+    {:ok, state}
+  end
 
   def handle_info(
         :whiteboard_snapshot_next,
@@ -205,28 +206,27 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     result
   end
 
-  def handle_info(:whiteboard_snapshot_next, state), do: {:ok, state}
+  def handle_info(:whiteboard_snapshot_next, state) do
+    {:ok, state}
+  end
 
-  # A change that commits while the snapshot pages are in flight is not in the
-  # snapshot, and neither its frame nor its notice was handled. The newest
-  # revision seen is kept and handled as a head notice with the last page,
-  # before any frame that is already queued: the queued last part of a
-  # multipart update would otherwise move the cursor past its first part.
   defp note_missed_head(%{missed_head: {scene_id, seen}} = state, scene_id, revision)
-       when seen >= revision,
-       do: state
+       when seen >= revision do
+    state
+  end
 
-  defp note_missed_head(state, scene_id, revision),
-    do: %{state | missed_head: {scene_id, revision}}
+  defp note_missed_head(state, scene_id, revision) do
+    %{state | missed_head: {scene_id, revision}}
+  end
 
-  defp catch_up_after_snapshot(state, nil), do: {:ok, state}
+  defp catch_up_after_snapshot(state, nil) do
+    {:ok, state}
+  end
 
-  defp catch_up_after_snapshot(state, {scene_id, revision}),
-    do: handle_info({:whiteboard_v1_head, scene_id, revision}, state)
+  defp catch_up_after_snapshot(state, {scene_id, revision}) do
+    handle_info({:whiteboard_v1_head, scene_id, revision}, state)
+  end
 
-  # The client trusts the order of what it receives. A frame that arrives
-  # ahead of an earlier revision must not move the cursor past that revision,
-  # or the earlier change never reaches this Participant.
   defp deliver_in_order(state, frame, scene_id, revision) do
     cond do
       revision <= state.revision -> {:ok, state}
@@ -235,10 +235,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     end
   end
 
-  # The client was told to load a snapshot. Until it asks for one, another
-  # read of the log would only repeat the reset for every frame that arrives.
-  defp replay_or_reset(%{awaiting_snapshot: true} = state, _identity, _scene_id, _revision),
-    do: {:ok, state}
+  defp replay_or_reset(%{awaiting_snapshot: true} = state, _identity, _scene_id, _revision) do
+    {:ok, state}
+  end
 
   defp replay_or_reset(state, identity, scene_id, revision) do
     case Episode.read_after(
@@ -250,9 +249,11 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
       {:ok, frames} ->
         reached = replayed_revision(frames)
 
-        if replay_reaches_head?(state, reached, revision),
-          do: enqueue_replay(state, scene_id, reached, frames),
-          else: enqueue_gap_reset(state, scene_id)
+        if replay_reaches_head?(state, reached, revision) do
+          enqueue_replay(state, scene_id, reached, frames)
+        else
+          enqueue_gap_reset(state, scene_id)
+        end
 
       _unavailable ->
         enqueue_gap_reset(state, scene_id)
@@ -275,15 +276,20 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
          {:hello, %{token: token, extensions: extensions}},
          %{phase: :awaiting_hello} = state
        ) do
-    presentation_negotiated =
-      Enum.any?(extensions, &(&1["name"] == "presentation_v1"))
+    presentation_negotiated = Enum.any?(extensions, &(&1["name"] == "presentation_v1"))
 
     with {:ok, claims} <- TokenVerifier.verify(token),
          {:ok, identity} <- identity(claims),
-         {:ok, welcome} <- observe_connect_result(Episode.connect(identity), identity, state) do
+         {:ok, welcome} <- Episode.connect(identity) do
       Process.cancel_timer(state.hello_timer)
       Fanout.subscribe(identity.episode)
-      welcome = if presentation_negotiated, do: welcome, else: Map.delete(welcome, "presenting")
+
+      welcome =
+        if presentation_negotiated do
+          welcome
+        else
+          Map.delete(welcome, "presenting")
+        end
 
       next =
         %{
@@ -298,11 +304,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
         }
         |> observe_operation("connect", "accepted")
 
-      Diagnostics.record(:whiteboard_connect_succeeded, identity,
-        observability: next.observability,
-        attributes: %{transport: :websocket}
-      )
-
+      nil
       {:push, {:text, Protocol.encode!(welcome)}, next}
     else
       {:error, :invalid_token} -> stop(state, 1008, "invalid token", :invalid_token)
@@ -312,19 +314,15 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     end
   end
 
-  defp handle_frame({:hello, _hello}, state),
-    do: stop(state, 1008, "already authenticated", :protocol_error)
+  defp handle_frame({:hello, _hello}, state) do
+    stop(state, 1008, "already authenticated", :protocol_error)
+  end
 
   defp handle_frame({:submit_update, operation}, %{phase: :live, identity: identity} = state) do
     if is_nil(state.multipart) do
       submit_update(identity, operation, state)
     else
-      operation_failure(
-        operation.operation_id,
-        :submit_update,
-        {:retryable, :overloaded},
-        state
-      )
+      operation_failure(operation.operation_id, :submit_update, {:retryable, :overloaded}, state)
     end
   end
 
@@ -418,8 +416,6 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
         {:ok, state}
 
       length(pending) < @max_pending_snapshots ->
-        # Published clients may request a snapshot again before acknowledging
-        # the active one. Retain only bounded request IDs, never another scene.
         {:ok, %{state | pending_snapshot_requests: pending ++ [request]}}
 
       true ->
@@ -427,7 +423,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     end
   end
 
-  defp handle_frame({:cursor, _cursor}, %{phase: :recovering} = state), do: {:ok, state}
+  defp handle_frame({:cursor, _cursor}, %{phase: :recovering} = state) do
+    {:ok, state}
+  end
 
   defp handle_frame({operation, frame}, %{phase: :recovering} = state)
        when operation in [
@@ -437,9 +435,13 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
               :set_draw_permission,
               :set_presentation
             ] do
-    operation = if operation == :submit_update_part, do: :submit_update, else: operation
-    # Mutations cannot interleave the immutable snapshot. Existing SDKs retain
-    # these operation IDs and retry overloaded operations after recovery.
+    operation =
+      if operation == :submit_update_part do
+        :submit_update
+      else
+        operation
+      end
+
     operation_failure(frame.operation_id, operation, {:retryable, :overloaded}, state)
   end
 
@@ -467,16 +469,10 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
           %{state | phase: :recovering, snapshot: snapshot, awaiting_snapshot: false}
           |> observe_operation("request_snapshot", "accepted")
 
-        Diagnostics.record(:whiteboard_recovery_started, identity,
-          observability: next.observability,
-          attributes: %{transport: :websocket}
-        )
-
+        nil
         {:push, {:text, Protocol.encode!(first)}, next}
 
       failure ->
-        # A rejected request must not leave the socket waiting for a snapshot:
-        # the next frame or notice may then start the recovery again.
         operation_failure(
           request_id,
           :request_snapshot,
@@ -494,34 +490,23 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
     if acknowledgement.request_id == snapshot.request_id and
          acknowledgement.scene_id == snapshot.scene_id and
-         acknowledgement.revision == snapshot.revision and
-         acknowledgement.page == expected_page do
+         acknowledgement.revision == snapshot.revision and acknowledgement.page == expected_page do
       case snapshot.remaining do
         [next | remaining] ->
-          next_snapshot = %{
-            snapshot
-            | acknowledged_page: expected_page,
-              remaining: remaining
-          }
-
+          next_snapshot = %{snapshot | acknowledged_page: expected_page, remaining: remaining}
           {:push, {:text, Protocol.encode!(next)}, %{state | snapshot: next_snapshot}}
 
         [] ->
-          next =
-            %{
-              state
-              | phase: :live,
-                snapshot: nil,
-                scene_id: snapshot.scene_id,
-                revision: String.to_integer(snapshot.revision),
-                missed_head: nil
-            }
+          next = %{
+            state
+            | phase: :live,
+              snapshot: nil,
+              scene_id: snapshot.scene_id,
+              revision: String.to_integer(snapshot.revision),
+              missed_head: nil
+          }
 
-          Diagnostics.record(:whiteboard_recovery_succeeded, next.identity,
-            observability: next.observability,
-            attributes: %{transport: :websocket}
-          )
-
+          nil
           resume_snapshot_requests(next)
           catch_up_after_snapshot(next, state.missed_head)
       end
@@ -554,11 +539,13 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     end
   end
 
-  defp handle_frame({:ping, _ping}, state),
-    do: {:push, {:text, Protocol.pong()}, state}
+  defp handle_frame({:ping, _ping}, state) do
+    {:push, {:text, Protocol.pong()}, state}
+  end
 
-  defp handle_frame(_frame, state),
-    do: stop(state, 1008, "operation not available in this phase", :protocol_error)
+  defp handle_frame(_frame, state) do
+    stop(state, 1008, "operation not available in this phase", :protocol_error)
+  end
 
   defp submit_update(identity, operation, state) do
     case Episode.submit_update(identity, operation) do
@@ -574,9 +561,6 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   defp acknowledge_contiguous_commit(state, commit) do
-    # The sender already has this mutation. Replaying its payload after the ACK
-    # can replace a newer local draft in published whiteboard clients.
-    # A gap still needs replay; an ACK must not skip other Participants' changes.
     if commit["scene_id"] == state.scene_id and
          String.to_integer(commit["revision"]) == state.revision + 1 do
       advance_cursor(state, commit)
@@ -624,7 +608,10 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   defp push_next(state) do
     case OutboundQueue.pop(state.outbound, System.monotonic_time(:millisecond)) do
       {:ok, frame, queue} ->
-        if queue.frame_count > 0, do: send(self(), :whiteboard_drain)
+        if queue.frame_count > 0 do
+          send(self(), :whiteboard_drain)
+        end
+
         {:push, {:text, Protocol.encode!(frame)}, %{state | outbound: queue}}
 
       :empty ->
@@ -659,7 +646,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     %{state | scene_id: scene_id, revision: 0}
   end
 
-  defp advance_cursor(state, _frame), do: state
+  defp advance_cursor(state, _frame) do
+    state
+  end
 
   defp identity(
          %Claims{
@@ -674,11 +663,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
               is_binary(participant_id) and is_integer(generation) and generation > 0 do
     {:ok,
      %Identity{
-       episode: %EpisodeKey{
-         tenant_id: tenant_id,
-         space_id: space_id,
-         episode_id: episode_id
-       },
+       episode: %EpisodeKey{tenant_id: tenant_id, space_id: space_id, episode_id: episode_id},
        participant_id: participant_id,
        participant_generation: generation,
        admission_lifecycle_intent_id: claims.admission_lifecycle_intent_id,
@@ -687,7 +672,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
      }}
   end
 
-  defp identity(_claims), do: {:error, :invalid_identity}
+  defp identity(_claims) do
+    {:error, :invalid_identity}
+  end
 
   defp normalize_error(code)
        when code in [
@@ -698,81 +685,114 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
               :rate_limited,
               :overloaded,
               :storage_unavailable
-            ],
-       do: code
+            ] do
+    code
+  end
 
-  defp normalize_error(_code), do: :unavailable
+  defp normalize_error(_code) do
+    :unavailable
+  end
 
-  defp error_message(:permission_denied), do: "Whiteboard permission denied"
-  defp error_message(:invalid_payload), do: "Invalid whiteboard payload"
-  defp error_message(:stale_scene), do: "Whiteboard scene changed"
-  defp error_message(:cursor_reset_required), do: "Whiteboard snapshot required"
-  defp error_message(:rate_limited), do: "Whiteboard cursor rate exceeded"
-  defp error_message(:overloaded), do: "Whiteboard temporarily overloaded"
-  defp error_message(:storage_unavailable), do: "Whiteboard storage unavailable"
-  defp error_message(:unavailable), do: "Whiteboard unavailable"
+  defp error_message(:permission_denied) do
+    "Whiteboard permission denied"
+  end
 
-  defp close_reason(:frame_too_large), do: "frame too large"
-  defp close_reason(:invalid_json), do: "invalid JSON"
-  defp close_reason(_reason), do: "invalid whiteboard frame"
+  defp error_message(:invalid_payload) do
+    "Invalid whiteboard payload"
+  end
+
+  defp error_message(:stale_scene) do
+    "Whiteboard scene changed"
+  end
+
+  defp error_message(:cursor_reset_required) do
+    "Whiteboard snapshot required"
+  end
+
+  defp error_message(:rate_limited) do
+    "Whiteboard cursor rate exceeded"
+  end
+
+  defp error_message(:overloaded) do
+    "Whiteboard temporarily overloaded"
+  end
+
+  defp error_message(:storage_unavailable) do
+    "Whiteboard storage unavailable"
+  end
+
+  defp error_message(:unavailable) do
+    "Whiteboard unavailable"
+  end
+
+  defp close_reason(:frame_too_large) do
+    "frame too large"
+  end
+
+  defp close_reason(:invalid_json) do
+    "invalid JSON"
+  end
+
+  defp close_reason(_reason) do
+    "invalid whiteboard frame"
+  end
 
   defp admit_cursor(state) do
     now_ms = System.monotonic_time(:millisecond)
 
-    if now_ms - state.cursor_window_started_at_ms >= 1_000 do
-      {:ok,
-       %{
-         state
-         | cursor_window_started_at_ms: now_ms,
-           cursor_window_count: 1
-       }}
+    if now_ms - state.cursor_window_started_at_ms >= 1000 do
+      {:ok, %{state | cursor_window_started_at_ms: now_ms, cursor_window_count: 1}}
     else
-      if state.cursor_window_count < 60,
-        do: {:ok, %{state | cursor_window_count: state.cursor_window_count + 1}},
-        else: :rate_limited
+      if state.cursor_window_count < 60 do
+        {:ok, %{state | cursor_window_count: state.cursor_window_count + 1}}
+      else
+        :rate_limited
+      end
     end
   end
 
-  # Two changes can commit before this socket handles the first head notice.
-  # The durable log then already holds both, and the replay carries both.
-  # A legacy socket gets no presentation frames, so only an exact match proves
-  # that its replay left nothing out.
-  defp replay_reaches_head?(%{presentation_negotiated: true}, reached, revision),
-    do: reached >= revision
+  defp replay_reaches_head?(%{presentation_negotiated: true}, reached, revision) do
+    reached >= revision
+  end
 
-  defp replay_reaches_head?(_legacy, reached, revision), do: reached == revision
+  defp replay_reaches_head?(_legacy, reached, revision) do
+    reached == revision
+  end
 
-  defp replayed_revision([]), do: 0
+  defp replayed_revision([]) do
+    0
+  end
 
-  defp replayed_revision(frames),
-    do: frames |> List.last() |> Map.fetch!("revision") |> String.to_integer()
+  defp replayed_revision(frames) do
+    frames |> List.last() |> Map.fetch!("revision") |> String.to_integer()
+  end
 
-  defp cancel_timer(nil), do: :ok
-  defp cancel_timer(timer), do: Process.cancel_timer(timer)
+  defp cancel_timer(nil) do
+    :ok
+  end
 
-  defp resume_snapshot_requests(%{pending_snapshot_requests: []}), do: :ok
-  defp resume_snapshot_requests(_state), do: send(self(), :whiteboard_snapshot_next)
+  defp cancel_timer(timer) do
+    Process.cancel_timer(timer)
+  end
+
+  defp resume_snapshot_requests(%{pending_snapshot_requests: []}) do
+    :ok
+  end
+
+  defp resume_snapshot_requests(_state) do
+    send(self(), :whiteboard_snapshot_next)
+  end
 
   defp enqueue_gap_reset(state, scene_id) do
     enqueue_and_push(%{state | awaiting_snapshot: true}, [
-      %{
-        "type" => "reset_required",
-        "scene_id" => scene_id,
-        "reason" => "gap"
-      }
+      %{"type" => "reset_required", "scene_id" => scene_id, "reason" => "gap"}
     ])
   end
 
   defp enqueue_replay(state, scene_id, revision, frames) do
     case enqueue_frames(state.outbound, frames) do
-      {:ok, queue} ->
-        push_next(%{state | outbound: queue, revision: revision})
-
-      {:error, _reason} ->
-        # A valid multipart revision may intentionally exceed the ordinary
-        # per-socket replay queue. Keep the socket alive and move the client to
-        # paged snapshot recovery instead of exposing only a prefix.
-        enqueue_gap_reset(state, scene_id)
+      {:ok, queue} -> push_next(%{state | outbound: queue, revision: revision})
+      {:error, _reason} -> enqueue_gap_reset(state, scene_id)
     end
   end
 
@@ -786,29 +806,6 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
       end
     end)
   end
-
-  defp observe_connect_result({:ok, _welcome} = result, _identity, _state), do: result
-
-  defp observe_connect_result({:error, reason} = result, identity, state) do
-    Diagnostics.record(:whiteboard_connect_failed, identity,
-      observability: state.observability,
-      attributes: %{transport: :websocket, reason: connect_failure_reason(reason)}
-    )
-
-    result
-  end
-
-  defp observe_connect_result(result, identity, state) do
-    Diagnostics.record(:whiteboard_connect_failed, identity,
-      observability: state.observability,
-      attributes: %{transport: :websocket, reason: :dependency_unavailable}
-    )
-
-    result
-  end
-
-  defp connect_failure_reason(:permission_denied), do: :permission_denied
-  defp connect_failure_reason(_reason), do: :dependency_unavailable
 
   defp observe_operation(state, operation, outcome) do
     observability =
@@ -826,8 +823,6 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   defp observe_terminal(state, terminate_reason) do
-    terminal_attributes = state.terminal || %{reason: terminal_reason(terminate_reason)}
-
     Observability.terminal(
       state.observability,
       "sync.websocket.closed",
@@ -835,26 +830,13 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
       |> Map.merge(%{protocol: "whiteboard-v1", phase: state.phase})
       |> put_scene_id(state.scene_id)
     )
-
-    if state.identity do
-      Diagnostics.record(:whiteboard_disconnect_observed, state.identity,
-        observability: state.observability,
-        attributes: Map.put(terminal_attributes, :transport, :websocket)
-      )
-    end
   end
 
-  # The transport callback does not forward its close frame code. Only closes
-  # chosen by this socket have an observed code; do not infer one from the reason.
-  defp terminal_reason(:normal), do: :normal
-  defp terminal_reason(:remote), do: :client_closed
-  defp terminal_reason(:timeout), do: :timeout
-  defp terminal_reason(:shutdown), do: :server_shutdown
-  defp terminal_reason({:shutdown, _detail}), do: :server_shutdown
-  defp terminal_reason(_reason), do: :transport_error
+  defp put_scene_id(attributes, scene_id) when is_binary(scene_id) do
+    Map.put(attributes, :scene_id, scene_id)
+  end
 
-  defp put_scene_id(attributes, scene_id) when is_binary(scene_id),
-    do: Map.put(attributes, :scene_id, scene_id)
-
-  defp put_scene_id(attributes, _scene_id), do: attributes
+  defp put_scene_id(attributes, _scene_id) do
+    attributes
+  end
 end

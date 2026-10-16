@@ -4,14 +4,12 @@ import { describeMediaCaptureError } from "../media/capture-error";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import { requireDisplayVideoTrack, stopStream, streamFromTracks } from "../connection/media-devices";
 import { ConnectionError } from "../connection/types";
-import type { EpisodeDiagnosticRuntime } from "./episode-diagnostic-runtime";
 import type { V1DirectedRequest } from "../sync";
 import { V1SyncError } from "../sync/v1-error";
 import { normalizeClientError, SpaceClientError } from "./errors";
 import type { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore } from "./store";
 import type { IncomingMediaRequest, MediaSlice } from "./types";
-
 const MEDIA_SOURCES = ["microphone", "camera", "screen"] as const;
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 type Fork = (effect: Effect.Effect<void, unknown, Clock.Clock>) => void;
@@ -27,9 +25,13 @@ type CaptureRollback = {
   readonly source: MediaSource;
   readonly track: MediaStreamTrack | null;
 };
-
 export type MediaControllerEffects = {
-  readonly configure: (intent: Readonly<{ microphone?: boolean; camera?: boolean }>) => void;
+  readonly configure: (
+    intent: Readonly<{
+      microphone?: boolean;
+      camera?: boolean;
+    }>,
+  ) => void;
   readonly setMicrophoneEnabled: (enabled: boolean) => ClientEffect<void>;
   readonly setCameraEnabled: (enabled: boolean) => ClientEffect<void>;
   readonly setScreenShareEnabled: (enabled: boolean) => ClientEffect<void>;
@@ -41,9 +43,8 @@ export type MediaControllerEffects = {
   readonly dispose: () => void;
 };
 export class MediaControllerService extends Context.Service<MediaControllerService, MediaControllerEffects>()("@chalk/client/MediaController") {}
-
 /** Scoped media controller: all source work is serialized with Effect semaphores. */
-export const makeMediaController = (connection: ConnectionLifecycleCapability, store: SpaceStore, selection: MediaDeviceSelection, diagnostics?: EpisodeDiagnosticRuntime): Effect.Effect<MediaControllerEffects, never, Clock.Clock | Scope.Scope> =>
+export const makeMediaController = (connection: ConnectionLifecycleCapability, store: SpaceStore, selection: MediaDeviceSelection): Effect.Effect<MediaControllerEffects, never, Clock.Clock | Scope.Scope> =>
   Effect.gen(function* () {
     const [microphone, camera, screen] = yield* Effect.all([Semaphore.make(1), Semaphore.make(1), Semaphore.make(1)]);
     const clock = yield* Clock.Clock;
@@ -63,7 +64,6 @@ export const makeMediaController = (connection: ConnectionLifecycleCapability, s
       ]),
       clock.currentTimeMillisUnsafe,
       fork,
-      diagnostics,
     );
     yield* connection.setInitialMedia(
       (intent) => controller.captureInitial(intent),
@@ -73,9 +73,7 @@ export const makeMediaController = (connection: ConnectionLifecycleCapability, s
     controller.refreshDevicesInBackground();
     return controller;
   });
-
-export const makeMediaControllerLayer = (connection: ConnectionLifecycleCapability, store: SpaceStore, selection: MediaDeviceSelection, diagnostics?: EpisodeDiagnosticRuntime) => Layer.effect(MediaControllerService, makeMediaController(connection, store, selection, diagnostics));
-
+export const makeMediaControllerLayer = (connection: ConnectionLifecycleCapability, store: SpaceStore, selection: MediaDeviceSelection) => Layer.effect(MediaControllerService, makeMediaController(connection, store, selection));
 class MediaControllerRuntime implements MediaControllerEffects {
   readonly #connection: ConnectionLifecycleCapability;
   readonly #selection: MediaDeviceSelection;
@@ -83,7 +81,6 @@ class MediaControllerRuntime implements MediaControllerEffects {
   readonly #gates: ReadonlyMap<MediaSource, Semaphore.Semaphore>;
   readonly #now: () => number;
   readonly #fork: Fork;
-  readonly #diagnostics: EpisodeDiagnosticRuntime | undefined;
   readonly #tracks = new Map<MediaSource, MediaStreamTrack>();
   readonly #observedPublicationIds = new Map<MediaSource, string>();
   readonly #intentRevisions = new Map<MediaSource, number>();
@@ -100,21 +97,23 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #unsubscribeConnection: (() => void) | null = null;
   #unsubscribeScreenEnded: (() => void) | null = null;
   #unsubscribePorts: (() => void) | null = null;
-
-  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, selection: MediaDeviceSelection, gates: ReadonlyMap<MediaSource, Semaphore.Semaphore>, now: () => number, fork: Fork, diagnostics?: EpisodeDiagnosticRuntime) {
+  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, selection: MediaDeviceSelection, gates: ReadonlyMap<MediaSource, Semaphore.Semaphore>, now: () => number, fork: Fork) {
     this.#connection = connection;
     this.#store = store;
     this.#selection = selection;
     this.#gates = gates;
     this.#now = now;
     this.#fork = fork;
-    this.#diagnostics = diagnostics;
     this.#unsubscribeConnection = connection.subscribe(() => this.#handleConnectionChange());
     this.#unsubscribeScreenEnded = connection.subscribeScreenEnded(() => this.#handleScreenEnded());
     this.#unsubscribePorts = connection.subscribePorts((ports) => this.#bind(ports));
   }
-
-  configure(intent: Readonly<{ microphone?: boolean; camera?: boolean }>): void {
+  configure(
+    intent: Readonly<{
+      microphone?: boolean;
+      camera?: boolean;
+    }>,
+  ): void {
     if (intent.microphone !== undefined) this.#intent.microphone = intent.microphone;
     if (intent.camera !== undefined) this.#intent.camera = intent.camera;
   }
@@ -137,46 +136,35 @@ class MediaControllerRuntime implements MediaControllerEffects {
       Effect.mapError(normalizeClientError),
     );
   acceptRequest = (requestId: string): ClientEffect<void> => {
-    const operation = this.#diagnostics?.startOperation("media_request.accept");
     return Effect.suspend(() => {
       const request = this.#requests.find((candidate) => candidate.requestId === requestId);
       if (!request) return Effect.fail(new SpaceClientError({ code: "media.request_invalid", recoverable: false, message: "The media request is no longer active" }));
-      operation?.observe("observed", "capability_decision");
       return (request.kind === "unmute" ? this.#set("microphone", true) : this.#set("camera", true)).pipe(
         Effect.tap(() =>
           Effect.sync(() => {
             this.#removeRequest(requestId);
-            operation?.observe("observed", "command_commit");
-            operation?.observe("observed", "target_result");
-            operation?.succeed();
           }),
         ),
-        Effect.tapError(() => Effect.sync(() => operation?.fail("accept_failed"))),
       );
-    }).pipe(
-      Effect.mapError(normalizeClientError),
-      Effect.tapError(() => Effect.sync(() => operation?.fail("accept_failed"))),
-    );
+    }).pipe(Effect.mapError(normalizeClientError));
   };
   declineRequest = (requestId: string): ClientEffect<void> => {
-    const operation = this.#diagnostics?.startOperation("media_request.decline");
     return Effect.sync(() => {
-      operation?.observe("observed", "capability_decision");
       this.#removeRequest(requestId);
-      operation?.notObservable("command_commit", "decline_is_local_only");
-      operation?.observe("observed", "target_result");
-      operation?.succeed();
-    }).pipe(
-      Effect.mapError(normalizeClientError),
-      Effect.tapError(() => Effect.sync(() => operation?.fail("decline_failed"))),
-    );
+    }).pipe(Effect.mapError(normalizeClientError));
   };
-
-  initialIntent(): Readonly<{ microphone: boolean; camera: boolean }> {
+  initialIntent(): Readonly<{
+    microphone: boolean;
+    camera: boolean;
+  }> {
     return { ...this.#intent };
   }
-
-  captureInitial(intent: Readonly<{ microphone: boolean; camera: boolean }>): Effect.Effect<MediaStream, unknown> {
+  captureInitial(
+    intent: Readonly<{
+      microphone: boolean;
+      camera: boolean;
+    }>,
+  ): Effect.Effect<MediaStream, unknown> {
     if (!intent.microphone && !intent.camera) {
       this.#intent = { microphone: this.#tracks.has("microphone"), camera: this.#tracks.has("camera") };
       this.#publish();
@@ -205,7 +193,6 @@ class MediaControllerRuntime implements MediaControllerEffects {
       Effect.catch((cause) => Effect.fail(cause instanceof ConnectionError ? cause : captureError(cause, "join", "Camera or microphone permission was denied"))),
     );
   }
-
   refreshDevicesInBackground(): void {
     this.#fork(this.#refreshDevices().pipe(Effect.ignore));
   }
@@ -228,10 +215,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#clearRequests();
     this.#publish();
   }
-
   #set(source: "microphone" | "camera", enabled: boolean): ClientEffect<void> {
-    const operation = this.#diagnostics?.startOperation(`${source}.${enabled ? "publish" : "unpublish"}`);
-    operation?.observe("observed", "intent");
     let previousIntent = this.#intent[source];
     let intentRevision = 0;
     let earlyPause: Promise<void> | null = null;
@@ -263,10 +247,9 @@ class MediaControllerRuntime implements MediaControllerEffects {
                         paused = true;
                       }),
                     ),
-                    Effect.tap(() => Effect.sync(() => operation?.observe("observed", "local_track_state"))),
+
                     Effect.andThen(source === "microphone" ? foreign(() => ports.sync.setMicrophoneEnabled(false)) : foreign(() => ports.sync.setCameraEnabled(false))),
-                    Effect.tap(() => Effect.sync(() => operation?.observe("observed", "sync_commit"))),
-                    Effect.tap(() => Effect.sync(() => operation?.succeed())),
+
                     Effect.asVoid,
                     Effect.catch((cause) => {
                       if ((paused && !isSyncRejection(cause)) || this.#intentRevisions.get(source) !== intentRevision) return Effect.fail(cause);
@@ -294,7 +277,6 @@ class MediaControllerRuntime implements MediaControllerEffects {
                             this.#tracks.set(source, track);
                             ports.media.prepareLocalTrack(source, track);
                             prepared = true;
-                            operation?.observe("observed", "local_track_state");
                             this.#publish();
                           }),
                         ),
@@ -302,16 +284,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
                     : Effect.void;
                 return acquire.pipe(
                   Effect.asVoid,
-                  Effect.tap(() => Effect.sync(() => operation?.observe("observed", "local_track_state"))),
+
                   Effect.andThen(source === "microphone" ? foreign(() => ports.sync.setMicrophoneEnabled(enabled)) : foreign(() => ports.sync.setCameraEnabled(enabled))),
-                  Effect.tap(() => Effect.sync(() => operation?.observe("observed", "sync_commit"))),
+
                   Effect.tap(() => Effect.sync(() => this.#assertActivePorts(ports, action))),
-                  Effect.tap(() =>
-                    Effect.sync(() => {
-                      operation?.observe("observed", "sfu_publication");
-                      operation?.succeed();
-                    }),
-                  ),
+
                   Effect.asVoid,
                   Effect.catch((cause) =>
                     this.#rollbackCapture({
@@ -336,7 +313,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       )
       .pipe(
         Effect.mapError(normalizeClientError),
-        Effect.tapError(() => Effect.sync(() => operation?.fail("media_failed"))),
+
         Effect.ensuring(
           Effect.sync(() => {
             if (this.#pendingEnables.get(source) === intentRevision) this.#pendingEnables.delete(source);
@@ -344,9 +321,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         ),
       );
   }
-
   #startScreen(): ClientEffect<void> {
-    const operation = this.#diagnostics?.startOperation("screen.start");
     let intentRevision = 0;
     return Effect.sync(() => {
       intentRevision = (this.#intentRevisions.get("screen") ?? 0) + 1;
@@ -364,15 +339,9 @@ class MediaControllerRuntime implements MediaControllerEffects {
               let prepared = false;
               return Effect.suspend(() => {
                 if (this.#tracks.has("screen")) {
-                  operation?.notObservable("permission", "already_active");
-                  operation?.notObservable("track_acquisition", "already_active");
-                  operation?.notObservable("sync_commit", "already_active");
-                  operation?.notObservable("sfu_publication", "already_active");
-                  operation?.succeed();
                   return Effect.void;
                 }
                 return foreign(() => this.#selection.getDisplayMedia({ video: true, audio: false })).pipe(
-                  Effect.tap(() => Effect.sync(() => operation?.observe("observed", "permission"))),
                   Effect.tap((captured) =>
                     Effect.sync(() => {
                       stream = captured;
@@ -381,21 +350,15 @@ class MediaControllerRuntime implements MediaControllerEffects {
                       this.#tracks.set("screen", track);
                       ports.media.prepareLocalTrack("screen", track);
                       prepared = true;
-                      operation?.observe("observed", "track_acquisition");
                       track.addEventListener("ended", () => this.#handleScreenEnded(track!));
                       this.#screenEndedPending = false;
                       this.#publish();
                     }),
                   ),
                   Effect.andThen(foreign(() => ports.sync.setScreenShareEnabled(true))),
-                  Effect.tap(() => Effect.sync(() => operation?.observe("observed", "sync_commit"))),
+
                   Effect.tap(() => Effect.sync(() => this.#assertActivePorts(ports, "startScreenShare"))),
-                  Effect.tap(() =>
-                    Effect.sync(() => {
-                      operation?.observe("observed", "sfu_publication");
-                      operation?.succeed();
-                    }),
-                  ),
+
                   Effect.asVoid,
                   Effect.catch((cause) => this.#rollbackCapture({ action: "startScreenShare", cause, fallback: Effect.sync(() => stopStream(stream)), media: ports.media, permissionMessage: "Screen sharing permission was denied", prepared, source: "screen", track })),
                 );
@@ -406,7 +369,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       )
       .pipe(
         Effect.mapError(normalizeClientError),
-        Effect.tapError(() => Effect.sync(() => operation?.fail("screen_start_failed"))),
+
         Effect.ensuring(
           Effect.sync(() => {
             if (this.#pendingEnables.get("screen") === intentRevision) this.#pendingEnables.delete("screen");
@@ -414,9 +377,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         ),
       );
   }
-
   #stopScreen(): ClientEffect<void> {
-    const operation = this.#diagnostics?.startOperation("screen.stop");
     let intentRevision = 0;
     let earlyPause: Promise<void> | null = null;
     const localPause = Effect.suspend(() => {
@@ -451,8 +412,6 @@ class MediaControllerRuntime implements MediaControllerEffects {
                       track?.stop();
                       this.#screenEndedPending = false;
                       this.#publish();
-                      operation?.observe("observed", "stop_confirmation");
-                      operation?.succeed();
                     }),
                   ),
                   Effect.asVoid,
@@ -471,19 +430,14 @@ class MediaControllerRuntime implements MediaControllerEffects {
           ),
         ),
       )
-      .pipe(
-        Effect.mapError(normalizeClientError),
-        Effect.tapError(() => Effect.sync(() => operation?.fail("screen_stop_failed"))),
-      );
+      .pipe(Effect.mapError(normalizeClientError));
   }
-
   #beginLocalPause(ports: ConnectionPorts, source: MediaSource): Promise<void> {
     const pause = Effect.runPromise(this.#localTarget(ports, source, false));
     // The command gate awaits and propagates this error; observe it meanwhile.
     void pause.catch(() => undefined);
     return pause;
   }
-
   #serialize<A>(source: MediaSource, effect: Effect.Effect<A, unknown>): Effect.Effect<A, unknown> {
     return this.#gates.get(source)!.withPermit(
       Effect.sync(() => {
@@ -685,15 +639,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       this.#screenEndedPending = true;
       return;
     }
-    const operation = this.#diagnostics?.startOperation("screen.unexpected_end");
-    operation?.observe("observed", "track_end");
-    this.#fork(
-      this.#stopScreen().pipe(
-        Effect.tap(() => Effect.sync(() => operation?.succeed())),
-        Effect.tapError(() => Effect.sync(() => operation?.fail("screen_stop_failed"))),
-        Effect.ignore,
-      ),
-    );
+    this.#fork(this.#stopScreen().pipe(Effect.ignore));
   }
   #publish(): void {
     const current = this.#store.getSnapshot();
@@ -709,7 +655,6 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (!sameMediaSlice(current.media, media)) this.#store.updateMedia(media);
   }
 }
-
 function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
   return Effect.tryPromise({ try: operation, catch: (cause) => cause });
 }
@@ -804,12 +749,28 @@ function isPermissionDenied(cause: unknown): boolean {
   return describeMediaCaptureError(cause).code === "permission_denied";
 }
 function isAccessInvalid(cause: unknown): boolean {
-  return typeof cause === "object" && cause !== null && "code" in cause && ((cause as { readonly code?: unknown }).code === "access.invalid" || (cause as { readonly code?: unknown }).code === "invalid_access");
+  return (
+    typeof cause === "object" &&
+    cause !== null &&
+    "code" in cause &&
+    ((
+      cause as {
+        readonly code?: unknown;
+      }
+    ).code === "access.invalid" ||
+      (
+        cause as {
+          readonly code?: unknown;
+        }
+      ).code === "invalid_access")
+  );
 }
 function isSyncRejection(cause: unknown): boolean {
   return isAccessInvalid(cause) || (cause instanceof V1SyncError && cause.code === "terminal_failure");
 }
-
-function canApplyForcedMediaState(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]>): snapshot is ReturnType<ConnectionPorts["sync"]["getSnapshot"]> & { media: NonNullable<ReturnType<ConnectionPorts["sync"]["getSnapshot"]>["media"]>; participantId: string } {
+function canApplyForcedMediaState(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]>): snapshot is ReturnType<ConnectionPorts["sync"]["getSnapshot"]> & {
+  media: NonNullable<ReturnType<ConnectionPorts["sync"]["getSnapshot"]>["media"]>;
+  participantId: string;
+} {
   return !!snapshot.media && !!snapshot.participantId && snapshot.control?.status !== "ended" && snapshot.connection.phase !== "terminal";
 }

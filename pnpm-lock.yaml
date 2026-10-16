@@ -466,9 +466,6 @@ importers:
       '@q9labsai/chalk-ui':
         specifier: workspace:^5.0.0
         version: link:../../packages/ui
-      '@q9labsai/diagnostics-contracts':
-        specifier: workspace:^1.0.0
-        version: link:../../packages/diagnostics-contracts
       '@tanstack/react-router':
         specifier: 1.170.41
         version: 1.170.41(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -559,19 +556,6 @@ importers:
         version: 5.9.3
 
   packages/assets:
-    devDependencies:
-      '@types/node':
-        specifier: ^24.10.1
-        version: 24.12.0
-      typescript:
-        specifier: ^5.7.2
-        version: 5.9.3
-
-  packages/diagnostics-contracts:
-    dependencies:
-      '@noble/hashes':
-        specifier: 2.3.0
-        version: 2.3.0
     devDependencies:
       '@types/node':
         specifier: ^24.10.1
@@ -702,9 +686,6 @@ importers:
       '@noble/hashes':
         specifier: 2.3.0
         version: 2.3.0
-      '@q9labsai/diagnostics-contracts':
-        specifier: workspace:^1.0.0
-        version: link:../../../packages/diagnostics-contracts
       effect:
         specifier: 4.0.0-beta.102
         version: 4.0.0-beta.102

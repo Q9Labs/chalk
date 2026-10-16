@@ -2,7 +2,6 @@ import type { ChatSendInput, Reaction } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Linking, Platform } from "react-native";
 import { mediaDevices } from "@cloudflare/react-native-webrtc";
-
 import { useSpaceClient } from "../../context/space-client-context";
 import { useChat as useSpaceChat, useMedia as useSpaceMedia, useParticipants as useSpaceParticipants, useReactions as useSpaceReactions, useSelf, useWhiteboard, useRecording, useConnection } from "../../hooks/space-hooks";
 import { getNativeJourneyContext } from "../../telemetry";
@@ -14,9 +13,7 @@ import { useSpaceViewDerived } from "./useSpaceViewDerived";
 import { useSpaceViewPanels } from "./useSpaceViewPanels";
 import { resolveNativeScreenShareAvailability } from "./screen-share-availability";
 import { normalizeChatFileDrafts, uploadAndSendNativeChatAttachments, type NativeChatFileDraft } from "./space-chat-attachments";
-
 const spaceReactions = new Set<Reaction>(["👍", "❤️", "😂", "😮", "😢", "🎉"]);
-
 /**
  * The native Space UI consumes the canonical SpaceClient snapshot directly.
  * This keeps the mature native renderer intact without re-projecting client
@@ -32,7 +29,6 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
   const whiteboardSlice = useWhiteboard();
   const recording = useRecording().current;
   const connection = useConnection();
-
   const journeyContext = getNativeJourneyContext(client);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
@@ -41,7 +37,6 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
   const [chatAttachmentError, setChatAttachmentError] = useState<string | null>(null);
   const [chatAttachmentPicking, setChatAttachmentPicking] = useState(false);
   const [chatAttachmentUploading, setChatAttachmentUploading] = useState(false);
-
   const run = useCallback(async (action: () => unknown | Promise<unknown>) => {
     try {
       await action();
@@ -49,7 +44,6 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
       Alert.alert("Action failed", cause instanceof Error ? cause.message : "Chalk could not complete the action.");
     }
   }, []);
-
   const localParticipantId = self.participantId;
   const participants = useMemo(
     () =>
@@ -82,7 +76,6 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
     }),
     [client.participants, localParticipant, localParticipantId, participants],
   );
-
   const isLocalSharing = media.screenShare.state === "enabled" || media.screenShare.state === "requesting";
   const remoteScreenShare = useMemo(() => media.remote.find((publication) => publication.source === "screen") ?? null, [media.remote]);
   const screenShare = useMemo(
@@ -106,7 +99,6 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
     }),
     [client.media, isLocalSharing, localParticipantId, media.screenShare.state, media.screenShare.track, remoteScreenShare],
   );
-
   const interactionState = useMemo(() => {
     const raisedHands = participantSlice.roster.filter((participant) => participant.handRaised).map((participant) => participant.participantId);
     const activeReactions: NativeReaction[] = reactionSlice.active.map((reaction) => ({
@@ -127,7 +119,6 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
       sendReaction: (reaction: Reaction) => client.reactions.send(reaction),
     };
   }, [client.participants, client.reactions, participantSlice.roster, reactionSlice.active, self]);
-
   const chat = useMemo(() => {
     const messages: NativeChatMessage[] = chatSlice.messages.map((message) => ({
       id: message.messageId,
@@ -173,7 +164,6 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
       getMessage: (id: string) => messages.find((message) => message.id === id),
     };
   }, [chatSlice, client.chat, localParticipantId, participantSlice.roster, self]);
-
   const canWhiteboard = features?.whiteboard !== false && whiteboardSlice.engine.status !== "unsubscribed";
   const canDraw = canWhiteboard && self.can("drawWhiteboard");
   const canClear = canWhiteboard && self.can("manageWhiteboard");
@@ -202,7 +192,6 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
     }),
     [canEndEpisode, canWhiteboard, features?.admission, features?.chat, features?.handRaise, features?.info, features?.participants, features?.reactions, features?.settings, inviteLink, screenShareAvailability, self],
   );
-
   const spacePanels = useSpaceViewPanels({
     spaceName,
     inviteLink,
@@ -219,7 +208,6 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
     journeyContext,
   });
   const derived = useSpaceViewDerived({ participants, localParticipant, screenShare, isWhiteboardOpen: spacePanels.whiteboard.isOpen });
-
   useEffect(() => {
     const request = media.incomingRequests[0];
     if (!request) return;
@@ -228,7 +216,6 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
       { text: "Allow", onPress: () => void run(() => client.media.acceptRequest(request.requestId)) },
     ]);
   }, [client.media, media.incomingRequests, run]);
-
   const spaceDiagnostics = useMemo(
     () =>
       buildSpaceViewDiagnosticsSnapshot({
@@ -253,7 +240,6 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
     [capabilities, chat.unreadCount, interactionState.raisedHandCount, spaceParticipants.participantCount, screenShare.isActive, screenShare.isLocalSharing, screenShare.sharerParticipantId, screenShareAvailability],
   );
   useEffect(() => onDiagnosticsChange?.(spaceDiagnostics), [onDiagnosticsChange, spaceDiagnostics]);
-
   const pickChatFiles = useCallback(async () => {
     if (!pickChatFilesInput) return;
     setChatAttachmentPicking(true);
@@ -276,12 +262,10 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
       setChatAttachmentPicking(false);
     }
   }, [chatAttachments, pickChatFilesInput]);
-
   const removeChatAttachment = useCallback((index: number) => {
     setChatAttachments((current) => current.filter((_, currentIndex) => currentIndex !== index));
     setChatAttachmentError(null);
   }, []);
-
   const sendChatMessage = useCallback(() => {
     const text = chatDraft.trim();
     if (!text && chatAttachments.length === 0) return;
@@ -300,7 +284,6 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
       }
     });
   }, [chat, chatAttachments, chatDraft, client.chat.files, run]);
-
   const resolveChatAttachmentUrl = useCallback(
     async (attachmentId: string) => {
       const attachment = chatSlice.messages.flatMap((message) => message.attachments).find((candidate) => candidate.attachmentId === attachmentId);
@@ -308,7 +291,6 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
     },
     [chatSlice.messages, client.chat.files],
   );
-
   return {
     recording,
     canManageRecording: self.can("manageRecording"),
@@ -408,7 +390,6 @@ export function useSpaceViewController({ spaceName, inviteLink, layout: controll
     stopParticipantScreenShare: (participantId: string) => void run(() => client.participants.stopScreenShare(participantId)),
   };
 }
-
 function sequenceAtOrAfter(value: string, floor: string): boolean {
   const normalizedValue = value.replace(/^0+(?=\d)/, "");
   const normalizedFloor = floor.replace(/^0+(?=\d)/, "");

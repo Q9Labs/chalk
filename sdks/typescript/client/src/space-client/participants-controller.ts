@@ -2,23 +2,25 @@ import { Context, Effect, Layer } from "effect";
 import type { OfflineActionsHold } from "./offline-actions";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import type { ChalkParticipantMediaState } from "../collaboration/types";
-import type { EpisodeDiagnosticRuntime } from "./episode-diagnostic-runtime";
 import { normalizeClientError, SpaceClientError } from "./errors";
 import { SpaceStore } from "./store";
 import { V1_CAPABILITIES } from "../sync/v1-types";
 import type { Capability, MediaRequestKind, Participant, ParticipantPresence, ParticipantsSlice, SelfSlice } from "./types";
-
 export const CAPABILITIES = new Set<Capability>(V1_CAPABILITIES);
 const EMPTY_PARTICIPANTS: ParticipantsSlice = Object.freeze({ roster: Object.freeze([]), admissionQueue: Object.freeze([]) });
-
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
-
 export type ParticipantsControllerEffects = {
   readonly assignRole: (participantId: string, roleName: string) => ClientEffect<void>;
   readonly mute: (participantId: string) => ClientEffect<void>;
   readonly stopVideo: (participantId: string) => ClientEffect<void>;
   readonly stopScreenShare: (participantId: string) => ClientEffect<void>;
-  readonly requestMedia: (participantId: string, kind: MediaRequestKind) => ClientEffect<{ readonly status: "delivered" | "expired" | "rate_limited" | "rejected" | "target_unavailable"; readonly requestId: string }>;
+  readonly requestMedia: (
+    participantId: string,
+    kind: MediaRequestKind,
+  ) => ClientEffect<{
+    readonly status: "delivered" | "expired" | "rate_limited" | "rejected" | "target_unavailable";
+    readonly requestId: string;
+  }>;
   readonly remove: (participantId: string) => ClientEffect<void>;
   readonly admit: (requestId: string) => ClientEffect<void>;
   readonly deny: (requestId: string) => ClientEffect<void>;
@@ -27,129 +29,102 @@ export type ParticipantsControllerEffects = {
   readonly renameSelf: (displayName: string) => ClientEffect<void>;
   readonly dispose: () => void;
 };
-
 export class ParticipantsControllerService extends Context.Service<ParticipantsControllerService, ParticipantsControllerEffects>()("@chalk/client/ParticipantsController") {}
-
 /** Scoped owner of participant subscriptions and native port commands. */
-export const makeParticipantsController = (connection: ConnectionLifecycleCapability, store: SpaceStore, diagnostics?: EpisodeDiagnosticRuntime, offline?: OfflineActionsHold): Effect.Effect<ParticipantsControllerEffects, never, import("effect").Scope.Scope> =>
+export const makeParticipantsController = (connection: ConnectionLifecycleCapability, store: SpaceStore, offline?: OfflineActionsHold): Effect.Effect<ParticipantsControllerEffects, never, import("effect").Scope.Scope> =>
   Effect.acquireRelease(
-    Effect.sync(() => new ParticipantsControllerRuntime(connection, store, diagnostics, offline)),
+    Effect.sync(() => new ParticipantsControllerRuntime(connection, store, offline)),
     (controller) => Effect.sync(() => controller.dispose()),
   );
-
-export const makeParticipantsControllerLayer = (connection: ConnectionLifecycleCapability, store: SpaceStore, diagnostics?: EpisodeDiagnosticRuntime) => Layer.effect(ParticipantsControllerService, makeParticipantsController(connection, store, diagnostics));
-
+export const makeParticipantsControllerLayer = (connection: ConnectionLifecycleCapability, store: SpaceStore) => Layer.effect(ParticipantsControllerService, makeParticipantsController(connection, store));
 class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
   readonly #connection: ConnectionLifecycleCapability;
   readonly #store: SpaceStore;
-  readonly #diagnostics: EpisodeDiagnosticRuntime | undefined;
   readonly #offline: OfflineActionsHold | undefined;
   #unsubscribePorts: (() => void) | null = null;
   #unsubscribe: (() => void) | null = null;
-
-  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, diagnostics?: EpisodeDiagnosticRuntime, offline?: OfflineActionsHold) {
+  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, offline?: OfflineActionsHold) {
     this.#offline = offline;
     this.#connection = connection;
     this.#store = store;
-    this.#diagnostics = diagnostics;
     this.#unsubscribePorts = connection.subscribePorts((ports) => this.#bind(ports));
   }
-
   assignRole = (participantId: string, roleName: string): ClientEffect<void> =>
-    this.#command("moderation.role.change", ["capability_decision", "command_commit"], () => {
+    this.#command(() => {
       assertIdentifier(participantId, "participant ID");
       assertName(roleName, "role");
       return ({ sync }) => foreign(() => sync.assignRole(participantId, roleName));
     });
-
   mute = (participantId: string): ClientEffect<void> =>
-    this.#command("moderation.microphone.disable", ["capability_decision", "command_commit", "target_delivery"], () => {
+    this.#command(() => {
       assertIdentifier(participantId, "participant ID");
       return ({ sync }) => foreign(() => sync.muteParticipant(participantId));
     });
-
   stopVideo = (participantId: string): ClientEffect<void> =>
-    this.#command("moderation.camera.disable", ["capability_decision", "command_commit", "target_delivery"], () => {
+    this.#command(() => {
       assertIdentifier(participantId, "participant ID");
       return ({ sync }) => foreign(() => sync.stopParticipantCamera(participantId));
     });
-
   stopScreenShare = (participantId: string): ClientEffect<void> =>
-    this.#command("moderation.screen.disable", ["capability_decision", "command_commit", "target_delivery"], () => {
+    this.#command(() => {
       assertIdentifier(participantId, "participant ID");
       return ({ sync }) => foreign(() => sync.stopParticipantScreenShare(participantId));
     });
-
-  requestMedia = (participantId: string, kind: MediaRequestKind): ClientEffect<{ readonly status: "delivered" | "expired" | "rate_limited" | "rejected" | "target_unavailable"; readonly requestId: string }> =>
-    this.#command("media_request.request", ["capability_decision", "command_commit", "target_result"], () => {
+  requestMedia = (
+    participantId: string,
+    kind: MediaRequestKind,
+  ): ClientEffect<{
+    readonly status: "delivered" | "expired" | "rate_limited" | "rejected" | "target_unavailable";
+    readonly requestId: string;
+  }> =>
+    this.#command(() => {
       assertIdentifier(participantId, "participant ID");
       if (kind !== "microphone" && kind !== "camera") throw invalid("Media requests must target a microphone or camera");
       return ({ sync }) => (kind === "microphone" ? foreign(() => sync.requestUnmute(participantId)) : foreign(() => sync.requestStartCamera(participantId))).pipe(Effect.map(directed));
     });
-
   remove = (participantId: string): ClientEffect<void> =>
-    this.#command("moderation.remove", ["capability_decision", "command_commit", "target_delivery"], () => {
+    this.#command(() => {
       assertIdentifier(participantId, "participant ID");
       return ({ sync }) => foreign(() => sync.removeParticipant(participantId));
     });
-
   admit = (requestId: string): ClientEffect<void> =>
-    this.#command("admission.admit", ["policy_decision", "authoritative_commit", "participant_result"], () => {
+    this.#command(() => {
       assertIdentifier(requestId, "admission request ID");
       return ({ sync }) => foreign(() => sync.admit(requestId));
     });
-
   deny = (requestId: string): ClientEffect<void> =>
-    this.#command("admission.deny", ["policy_decision", "authoritative_commit", "participant_result"], () => {
+    this.#command(() => {
       assertIdentifier(requestId, "admission request ID");
       return ({ sync }) => foreign(() => sync.deny(requestId));
     });
-
   raiseHand = (): ClientEffect<void> => this.#setHandRaised(true);
   lowerHand = (): ClientEffect<void> => this.#setHandRaised(false);
-
   #setHandRaised(raised: boolean): ClientEffect<void> {
     const send = () =>
       this.#command(
-        "participant.raised_hand.set",
-        ["membership_transition", "participant_result"],
         () =>
           ({ sync }) =>
             foreign(() => sync.setHandRaised(raised)),
       );
     return this.#offline?.hold({ kind: raised ? "hand_raise" : "hand_lower" }, send) ?? send();
   }
-
   renameSelf = (displayName: string): ClientEffect<void> =>
-    this.#command("participant.rename", ["membership_transition", "participant_result"], () => {
+    this.#command(() => {
       assertName(displayName, "display name");
       return ({ sync }) => foreign(() => sync.setDisplayName(displayName));
     });
-
   dispose(): void {
     this.#unsubscribePorts?.();
     this.#unsubscribe?.();
     this.#unsubscribePorts = null;
     this.#unsubscribe = null;
   }
-
-  #command<A>(name: string, checkpoints: readonly string[], operation: () => (ports: ConnectionPorts) => Effect.Effect<A, unknown>): ClientEffect<A> {
-    const diagnostic = this.#diagnostics?.startOperation(name);
+  #command<A>(operation: () => (ports: ConnectionPorts) => Effect.Effect<A, unknown>): ClientEffect<A> {
     return Effect.try({ try: operation, catch: normalizeClientError }).pipe(
-      Effect.tap(() => Effect.sync(() => diagnostic?.observe("observed", checkpoints[0]!))),
       Effect.flatMap((run) => this.#connection.runCommand(run)),
       Effect.mapError(normalizeClientError),
-      Effect.tap(() =>
-        Effect.sync(() => {
-          for (const checkpoint of checkpoints.slice(1)) diagnostic?.observe("observed", checkpoint);
-          if (name.startsWith("moderation.")) diagnostic?.notObservable("target_application", "target_projection_is_conditional");
-          diagnostic?.succeed();
-        }),
-      ),
-      Effect.tapError(() => Effect.sync(() => diagnostic?.fail("command_failed"))),
     );
   }
-
   #bind(ports: ConnectionPorts | null): void {
     this.#unsubscribe?.();
     this.#unsubscribe = null;
@@ -160,7 +135,6 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
     this.#unsubscribe = ports.sync.subscribe((snapshot) => this.#publish(snapshot, ports.sync.getParticipantCollaborationCapabilities()));
     this.#publish(ports.sync.getSnapshot(), ports.sync.getParticipantCollaborationCapabilities());
   }
-
   #publish(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | null, collaborationCapabilities: Readonly<Record<string, readonly string[]>>): void {
     const participants = participantsFor(snapshot, collaborationCapabilities);
     const self = selfFor(snapshot, participants.roster);
@@ -169,11 +143,9 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
     if (!sameSelf(current.self, self)) this.#store.updateSelf(self);
   }
 }
-
 function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
   return Effect.tryPromise({ try: operation, catch: (cause) => cause });
 }
-
 function assertIdentifier(value: string, label: string): void {
   if (typeof value !== "string" || value.trim().length === 0) throw invalid(`A non-empty ${label} is required`);
 }

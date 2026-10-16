@@ -1,13 +1,13 @@
-import { parseEpisodeDiagnosticCredential, type EpisodeDiagnosticCredential } from "./episode-diagnostic-credential";
 import { decodeBase64Url } from "./base64-url";
-
 declare const syncCredentialBrand: unique symbol;
 declare const mediaCredentialBrand: unique symbol;
 const accessGrantBrand: unique symbol = Symbol("AccessGrant");
-
-export type ParticipantSyncCredential = string & { readonly [syncCredentialBrand]: "chalk-sync" };
-export type ParticipantMediaCredential = string & { readonly [mediaCredentialBrand]: "chalk-media" };
-
+export type ParticipantSyncCredential = string & {
+  readonly [syncCredentialBrand]: "chalk-sync";
+};
+export type ParticipantMediaCredential = string & {
+  readonly [mediaCredentialBrand]: "chalk-media";
+};
 export type AccessSubject = {
   readonly tenantId: string;
   readonly spaceId: string;
@@ -15,12 +15,10 @@ export type AccessSubject = {
   readonly participantId: string;
   readonly participantGeneration: number;
 };
-
 export type ParticipantSyncAccess = {
   readonly token: ParticipantSyncCredential;
   readonly expiresAt: string;
 };
-
 export type ParticipantMediaAccess =
   | {
       readonly token: ParticipantMediaCredential;
@@ -40,63 +38,51 @@ export type ParticipantMediaAccess =
         readonly token: string;
       };
     };
-
 export type ParsedAccessGrant = {
   readonly subject: AccessSubject;
   readonly episodeStartedAt?: string | null;
   readonly sync: ParticipantSyncAccess;
   readonly media: ParticipantMediaAccess;
-  readonly diagnostics?: EpisodeDiagnosticCredential | null;
 };
-
 /** Opaque signed envelope minted by the server SDK and consumed by SpaceClient. */
-export type AccessGrant = { readonly [accessGrantBrand]: "AccessGrant" };
-
+export type AccessGrant = {
+  readonly [accessGrantBrand]: "AccessGrant";
+};
 export type AccessGrantProvider = () => ParsedAccessGrant | Promise<ParsedAccessGrant>;
-
 export class AccessGrantError extends TypeError {
   readonly code = "access.invalid" as const;
-
   constructor(message = "Access grant is invalid") {
     super(message);
     this.name = "AccessGrantError";
   }
 }
-
 class AccessUnavailableError extends Error {
   readonly code = "access.unavailable" as const;
-
   constructor(status: number) {
     super(`Access grant request failed with HTTP ${status}`);
     this.name = "AccessUnavailableError";
   }
 }
-
 function requireSuccessfulResponse(response: Response): void {
   if (response.ok) return;
   const status = response.status;
   if (status === 408 || status === 425 || status === 429 || status >= 500) throw new AccessUnavailableError(status);
   throw new AccessGrantError(`Access grant request failed with HTTP ${status}`);
 }
-
 export function parseParsedAccessGrant(value: unknown): ParsedAccessGrant {
   if (!isRecord(value)) throw new AccessGrantError();
   const subject = parseSubject(value.subject);
   const episodeStartedAt = parseOptionalDateTime(value.episode_started_at);
-  const diagnostics = parseEpisodeDiagnosticCredential(value.diagnostics);
   return {
     subject,
     episodeStartedAt,
     sync: parseSyncAccess(value.sync),
     media: parseMediaAccess(value.media),
-    diagnostics: diagnostics?.generation === subject.participantGeneration ? diagnostics : null,
   };
 }
-
 export function parseAccessGrant(value: unknown): AccessGrant {
   return accessGrantFromParsed(parseParsedAccessGrant(value));
 }
-
 export function accessGrantFromParsed(value: ParsedAccessGrant): AccessGrant {
   return Object.freeze({
     subject: {
@@ -114,20 +100,9 @@ export function accessGrantFromParsed(value: ParsedAccessGrant): AccessGrant {
       provider: value.media.provider,
       client_payload: mediaClientPayload(value.media),
     },
-    ...(value.diagnostics
-      ? {
-          diagnostics: {
-            token: value.diagnostics.token,
-            expires_at: value.diagnostics.expiresAt,
-            generation: value.diagnostics.generation,
-            intake_path: value.diagnostics.intakePath,
-          },
-        }
-      : {}),
     [accessGrantBrand]: "AccessGrant" as const,
   });
 }
-
 export async function requireParsedAccessGrant(value: unknown): Promise<ParsedAccessGrant> {
   if (typeof Response !== "undefined" && value instanceof Response) {
     requireSuccessfulResponse(value);
@@ -140,7 +115,6 @@ export async function requireParsedAccessGrant(value: unknown): Promise<ParsedAc
   }
   return parseParsedAccessGrant(value);
 }
-
 export async function requireAccessGrant(value: unknown): Promise<AccessGrant> {
   if (typeof Response !== "undefined" && value instanceof Response) {
     requireSuccessfulResponse(value);
@@ -153,7 +127,6 @@ export async function requireAccessGrant(value: unknown): Promise<AccessGrant> {
   }
   return parseAccessGrant(value);
 }
-
 export function isParsedAccessGrant(value: unknown): value is ParsedAccessGrant {
   try {
     parseParsedAccessGrant(value);
@@ -162,7 +135,6 @@ export function isParsedAccessGrant(value: unknown): value is ParsedAccessGrant 
     return false;
   }
 }
-
 function parseSubject(value: unknown): AccessSubject {
   if (!isRecord(value)) throw new AccessGrantError();
   return {
@@ -173,12 +145,10 @@ function parseSubject(value: unknown): AccessSubject {
     participantGeneration: requirePositiveInteger(value.participant_generation),
   };
 }
-
 function requirePositiveInteger(value: unknown): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) throw new AccessGrantError();
   return value;
 }
-
 function parseSyncAccess(value: unknown): ParticipantSyncAccess {
   if (!isRecord(value)) throw new AccessGrantError();
   return {
@@ -186,7 +156,6 @@ function parseSyncAccess(value: unknown): ParticipantSyncAccess {
     expiresAt: requireDateTime(value.expires_at ?? value.expiresAt),
   };
 }
-
 function parseMediaAccess(value: unknown): ParticipantMediaAccess {
   if (!isRecord(value)) throw new AccessGrantError();
   const payload = value.client_payload ?? value.clientPayload;
@@ -218,7 +187,6 @@ function parseMediaAccess(value: unknown): ParticipantMediaAccess {
       throw new AccessGrantError();
   }
 }
-
 function mediaClientPayload(value: ParticipantMediaAccess): Readonly<Record<string, string>> {
   switch (value.provider) {
     case "cloudflare_sfu":
@@ -227,12 +195,10 @@ function mediaClientPayload(value: ParticipantMediaAccess): Readonly<Record<stri
       return { provider_subject: value.clientPayload.providerSubject, token: value.clientPayload.token };
   }
 }
-
 function requireCredential(value: unknown, audience: "chalk-sync" | "chalk-media"): string {
   const token = requireNonEmptyString(value);
   const segments = token.split(".");
   if (segments.length !== 3) throw new AccessGrantError();
-
   let payload: unknown;
   try {
     payload = JSON.parse(decodeBase64Url(segments[1] ?? ""));
@@ -242,23 +208,19 @@ function requireCredential(value: unknown, audience: "chalk-sync" | "chalk-media
   if (!isRecord(payload) || payload.aud !== audience) throw new AccessGrantError();
   return token;
 }
-
 function requireDateTime(value: unknown): string {
   const dateTime = requireNonEmptyString(value);
   if (!Number.isFinite(Date.parse(dateTime))) throw new AccessGrantError();
   return dateTime;
 }
-
 function parseOptionalDateTime(value: unknown): string | null {
   if (typeof value !== "string" || value.trim() === "" || !Number.isFinite(Date.parse(value))) return null;
   return value;
 }
-
 function requireNonEmptyString(value: unknown): string {
   if (typeof value !== "string" || value.trim().length === 0) throw new AccessGrantError();
   return value;
 }
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -1,43 +1,36 @@
 defmodule ChalkSync.Transport.Router do
-  @moduledoc """
-  HTTP surface. Operational routes stay unversioned; the sync WebSocket lives
-  under the `/v1/sync` boundary. Whiteboard collaboration uses the independent
-  `/v1/whiteboard` WebSocket.
-  """
-
+  @moduledoc "HTTP surface. Operational routes stay unversioned; the sync WebSocket lives\nunder the `/v1/sync` boundary. Whiteboard collaboration uses the independent\n`/v1/whiteboard` WebSocket.\n"
   use Plug.Router
-
   plug(:match)
   plug(:dispatch)
-
-  alias ChalkSync.Diagnostics.Exporter, as: DiagnosticsExporter
   alias ChalkSync.Operations
   alias ChalkSync.Operations.Metrics
   alias ChalkSync.Operations.Readiness
 
-  get "/healthz" do
+  get("/healthz") do
     conn
     |> put_resp_content_type("application/json")
     |> send_resp(200, JSON.encode!(%{"status" => "ok"}))
   end
 
-  get "/readyz" do
+  get("/readyz") do
     health = Readiness.health()
-    status = if Readiness.ready?(), do: 200, else: 503
+
+    status =
+      if Readiness.ready?() do
+        200
+      else
+        503
+      end
+
     send_json(conn, status, health)
   end
 
-  get "/metrics" do
+  get("/metrics") do
     send_json(conn, 200, Metrics.snapshot())
   end
 
-  get "/diagnostics/healthz" do
-    health = diagnostics_health()
-    status = if health.status == :healthy, do: 200, else: 503
-    send_json(conn, status, health)
-  end
-
-  get "/v1/sync" do
+  get("/v1/sync") do
     if Operations.accepting_connections?() do
       case WebSockAdapter.UpgradeValidation.validate_upgrade(conn) do
         :ok ->
@@ -59,7 +52,7 @@ defmodule ChalkSync.Transport.Router do
     end
   end
 
-  get "/v1/whiteboard" do
+  get("/v1/whiteboard") do
     if Operations.accepting_connections?() do
       observability = ChalkSync.Observability.context(conn.req_headers)
 
@@ -75,7 +68,7 @@ defmodule ChalkSync.Transport.Router do
     end
   end
 
-  match _ do
+  match(_) do
     not_found(conn)
   end
 
@@ -107,9 +100,7 @@ defmodule ChalkSync.Transport.Router do
   end
 
   defp upgrade_requested?(conn) do
-    conn
-    |> get_req_header("connection")
-    |> Enum.any?(&connection_upgrade?/1)
+    conn |> get_req_header("connection") |> Enum.any?(&connection_upgrade?/1)
   end
 
   defp connection_upgrade?(value) do
@@ -133,19 +124,15 @@ defmodule ChalkSync.Transport.Router do
     end)
   end
 
-  defp maybe_put_upgrade_header(conn, 426), do: put_resp_header(conn, "upgrade", "websocket")
-  defp maybe_put_upgrade_header(conn, _status), do: conn
-
-  defp send_json(conn, status, body) do
-    conn
-    |> put_resp_content_type("application/json")
-    |> send_resp(status, JSON.encode!(body))
+  defp maybe_put_upgrade_header(conn, 426) do
+    put_resp_header(conn, "upgrade", "websocket")
   end
 
-  defp diagnostics_health do
-    case Application.get_env(:chalk_sync, :episode_diagnostics, %{mode: :off}) do
-      %{mode: :off} -> %{status: :disabled}
-      _enabled -> DiagnosticsExporter.health()
-    end
+  defp maybe_put_upgrade_header(conn, _status) do
+    conn
+  end
+
+  defp send_json(conn, status, body) do
+    conn |> put_resp_content_type("application/json") |> send_resp(status, JSON.encode!(body))
   end
 end

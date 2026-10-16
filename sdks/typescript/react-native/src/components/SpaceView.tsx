@@ -6,7 +6,6 @@ import { SpaceViewIosPad } from "./SpaceView.ios-pad";
 import { SpaceViewIosPhone } from "./SpaceView.ios-phone";
 import { SpaceViewMacos } from "./SpaceView.macos";
 import type { SpaceViewDiagnosticsSnapshot } from "./native-space-view/diagnostics";
-
 export interface SpaceViewFeatures {
   chat?: boolean;
   participants?: boolean;
@@ -18,7 +17,6 @@ export interface SpaceViewFeatures {
   info?: boolean;
   settings?: boolean;
 }
-
 export interface SpaceViewProps {
   spaceName?: string;
   inviteLink?: string;
@@ -33,9 +31,7 @@ export interface SpaceViewProps {
   /** Selects files; the SDK owns bounds, upload, and send sequencing. */
   pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
 }
-
 export type { SpaceViewDiagnosticsSnapshot };
-
 export function SpaceView(props: SpaceViewProps): React.JSX.Element {
   switch (resolvePlatformVariant()) {
     case "ios-pad":

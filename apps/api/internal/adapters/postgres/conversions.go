@@ -8,6 +8,20 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
+func idString(value pgtype.UUID) string {
+	if !value.Valid {
+		return ""
+	}
+	return utilities.IDFromBytes(value.Bytes).String()
+}
+
+func nullableString(value pgtype.Text) string {
+	if !value.Valid {
+		return ""
+	}
+	return value.String
+}
+
 // nullableText is the read-side mirror of text: sqlc exposes nullable text
 // as pgtype.Text, while the domain/API model represents nullable strings with
 // *string so JSON can naturally encode them as null.

@@ -55,7 +55,6 @@ const config = defineConfig({
       { find: /^@q9labsai\/chalk-client\/telemetry$/, replacement: fileURLToPath(new URL("../../sdks/typescript/client/src/telemetry/index.ts", import.meta.url)) },
       { find: /^@q9labsai\/chalk-client\/effect$/, replacement: fileURLToPath(new URL("../../sdks/typescript/client/src/effect.ts", import.meta.url)) },
       { find: /^@q9labsai\/chalk-client$/, replacement: fileURLToPath(new URL("../../sdks/typescript/client/src/index.ts", import.meta.url)) },
-      { find: /^@q9labsai\/diagnostics-contracts$/, replacement: fileURLToPath(new URL("../../packages/diagnostics-contracts/src/index.ts", import.meta.url)) },
       { find: /^@q9labsai\/chalk-react\/ui$/, replacement: fileURLToPath(new URL("../../sdks/typescript/react/src/components/ui/index.ts", import.meta.url)) },
       { find: /^@q9labsai\/chalk-react\/utils$/, replacement: fileURLToPath(new URL("../../sdks/typescript/react/src/utils/index.ts", import.meta.url)) },
       { find: /^@q9labsai\/chalk-react\/preview$/, replacement: fileURLToPath(new URL("../../sdks/typescript/react/src/test-support/index.ts", import.meta.url)) },

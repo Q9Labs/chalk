@@ -3,15 +3,12 @@ import type { ChalkChatFileTransport } from "../chat-files";
 import type { ChalkChatPageResult } from "../collaboration/types";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import { chatDigest, chatMessageFor, chatReceiptFor, compareChatSequence, MAX_CHAT_PAGE_SIZE, MAX_LOADED_CHAT_MESSAGES, mergeChatMessage, validateChatMessage, validateChatUpload } from "./chat-controller-helpers";
-import type { EpisodeDiagnosticRuntime } from "./episode-diagnostic-runtime";
 import { failureFromError, normalizeClientError, SpaceClientError } from "./errors";
 import type { OfflineActionsHold } from "./offline-actions";
 import { SpaceStore } from "./store";
 import type { ChatAttachment, ChatMessage, ChatReadReceipt, ChatSendInput, ChatSlice, ChatUploadFile, PendingChatSend } from "./types";
-
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 type Fork = (effect: Effect.Effect<void, unknown>) => void;
-
 export type ChatControllerEffects = {
   readonly send: (input: ChatSendInput) => ClientEffect<ChatMessage>;
   readonly loadOlder: () => ClientEffect<ChalkChatPageResult>;
@@ -22,7 +19,6 @@ export type ChatControllerEffects = {
   readonly dispose: () => void;
 };
 export class ChatControllerService extends Context.Service<ChatControllerService, ChatControllerEffects>()("@chalk/client/ChatController") {}
-
 /** Scoped owner of chat subscriptions and catch-up fibers. */
 export const makeChatController = (input: {
   readonly connection: ConnectionLifecycleCapability;
@@ -30,7 +26,6 @@ export const makeChatController = (input: {
   readonly createTransport?: (input: { readonly token: () => Promise<string> }) => ChalkChatFileTransport | null;
   readonly apiBaseUrl?: string;
   readonly fetch?: typeof globalThis.fetch;
-  readonly episodeDiagnostics?: EpisodeDiagnosticRuntime;
   readonly offline?: OfflineActionsHold;
 }): Effect.Effect<ChatControllerEffects, never, Scope.Scope> =>
   Effect.gen(function* () {
@@ -42,15 +37,13 @@ export const makeChatController = (input: {
     const controller = yield* Effect.sync(() => {
       let instance: ChatControllerRuntime | null = null;
       const transport = input.createTransport?.({ token: () => Effect.runPromiseWith(context)(input.connection.getSyncToken()) }) ?? null;
-      instance = new ChatControllerRuntime(input.connection, input.store, transport, input.apiBaseUrl ?? "https://api.chalkmeet.com", input.fetch ?? globalThis.fetch, fork, input.episodeDiagnostics, input.offline);
+      instance = new ChatControllerRuntime(input.connection, input.store, transport, input.apiBaseUrl ?? "https://api.chalkmeet.com", input.fetch ?? globalThis.fetch, fork, input.offline);
       return instance;
     });
     yield* Effect.addFinalizer(() => Effect.sync(() => controller.dispose()));
     return controller;
   });
-
 export const makeChatControllerLayer = (input: Parameters<typeof makeChatController>[0]) => Layer.effect(ChatControllerService, makeChatController(input));
-
 class ChatControllerRuntime implements ChatControllerEffects {
   readonly #apiBaseUrl: string;
   readonly #connection: ConnectionLifecycleCapability;
@@ -58,7 +51,6 @@ class ChatControllerRuntime implements ChatControllerEffects {
   readonly #transport: ChalkChatFileTransport | null;
   readonly #fetch: typeof globalThis.fetch;
   readonly #fork: Fork;
-  readonly #diagnostics: EpisodeDiagnosticRuntime | undefined;
   readonly #offline: OfflineActionsHold | undefined;
   #catchUpRunning = false;
   #catchUpRequested = false;
@@ -78,8 +70,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
   #unsubscribeConnection: (() => void) | null = null;
   #unsubscribeEvents: (() => void) | null = null;
   #unsubscribeSnapshot: (() => void) | null = null;
-
-  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, transport: ChalkChatFileTransport | null, apiBaseUrl: string, fetch: typeof globalThis.fetch, fork: Fork, diagnostics?: EpisodeDiagnosticRuntime, offline?: OfflineActionsHold) {
+  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, transport: ChalkChatFileTransport | null, apiBaseUrl: string, fetch: typeof globalThis.fetch, fork: Fork, offline?: OfflineActionsHold) {
     this.#offline = offline;
     this.#apiBaseUrl = apiBaseUrl.replace(/\/+$/u, "");
     this.#connection = connection;
@@ -87,49 +78,34 @@ class ChatControllerRuntime implements ChatControllerEffects {
     this.#transport = transport;
     this.#fetch = fetch;
     this.#fork = fork;
-    this.#diagnostics = diagnostics;
     this.#unsubscribeConnection = connection.subscribePorts((ports) => this.#bind(ports));
   }
-
   send = (input: ChatSendInput): ClientEffect<ChatMessage> => {
-    const operation = this.#diagnostics?.startOperation("chat.send");
     return Effect.try({ try: () => validate(input), catch: normalizeClientError }).pipe(
-      Effect.tap(() => Effect.sync(() => operation?.observe("observed", "validation"))),
       Effect.map((attachments) => ({ clientMessageId: this.#connection.createId(), attachments })),
       Effect.flatMap(({ clientMessageId, attachments }) => {
         const command = this.#connection.runCommand(({ sync }) => foreign(() => sync.sendChatMessage({ text: input.text, attachments, clientMessageId })));
         const sendNow = () => Effect.sync(() => this.#upsertPending(clientMessageId, input.text, attachments, "sending", null)).pipe(Effect.andThen(command));
         const held = this.#offline?.hold({ kind: "chat_message", text: input.text, clientMessageId, attachments }, sendNow);
         if (held) this.#upsertPending(clientMessageId, input.text, attachments, "queued", null);
-        operation?.observe("observed", "authorization");
-        return (held ?? sendNow()).pipe(Effect.tap(() => Effect.sync(() => operation?.observe("observed", "durable_commit")))).pipe(
+        return (held ?? sendNow()).pipe(Effect.tap(() => Effect.void)).pipe(
           Effect.map(chatMessageFor),
           Effect.tap(() => Effect.sync(() => this.#removePending(clientMessageId))),
           Effect.map((message) => this.#observeMessage(message, false)),
-          Effect.tap(() =>
-            Effect.sync(() => {
-              operation?.observe("observed", "paging_visibility");
-              operation?.notObservable("recipient_projection", "recipient_projection_is_conditional");
-              operation?.succeed();
-            }),
-          ),
+
           Effect.catch((cause) => {
             const error = normalizeClientError(cause, "chat.payload_invalid");
             return Effect.sync(() => {
               if (error.code === "offline.discarded") this.#removePending(clientMessageId);
               else this.#upsertPending(clientMessageId, input.text, attachments, "failed", failureFromError(error));
-              operation?.fail("send_failed");
             }).pipe(Effect.andThen(Effect.fail(error)));
           }),
         );
       }),
       Effect.mapError(normalizeClientError),
-      Effect.tapError(() => Effect.sync(() => operation?.fail("send_failed"))),
     );
   };
-
   loadOlder = (): ClientEffect<ChalkChatPageResult> => {
-    const operation = this.#diagnostics?.startOperation("chat.page");
     this.#status = "loading";
     this.#lastError = null;
     this.#publish();
@@ -139,8 +115,6 @@ class ChatControllerRuntime implements ChatControllerEffects {
         Effect.tap((result) =>
           Effect.sync(() => {
             this.#applyPage(result);
-            operation?.observe("observed", "page_visibility");
-            operation?.succeed();
           }),
         ),
         Effect.mapError((cause) => {
@@ -150,77 +124,51 @@ class ChatControllerRuntime implements ChatControllerEffects {
           this.#publish();
           return error;
         }),
-        Effect.tapError(() => Effect.sync(() => operation?.fail("page_failed"))),
       );
   };
-
   markRead = (messageId: string): ClientEffect<ChatReadReceipt | null> => {
-    const operation = this.#diagnostics?.startOperation("chat.read");
     return Effect.suspend(() => {
       const message = this.#messages.find((candidate) => candidate.messageId === messageId);
       if (!message) {
-        operation?.notObservable("read_commit", "message_not_found");
-        operation?.succeed();
         return Effect.succeed(null);
       }
       this.#applyLocalReadThrough(message.sequence);
       const ports = this.#ports;
       if (!ports || ports.sync.getCollaborationExtensionState().version !== 1) {
-        operation?.notObservable("read_commit", "collaboration_extension_unavailable");
-        operation?.succeed();
         return Effect.succeed(null);
       }
-      operation?.observe("observed", "read_commit");
       return this.#connection
         .runCommand(({ sync }) => foreign(() => sync.markChatRead(message.sequence)))
         .pipe(
           Effect.map(chatReceiptFor),
           Effect.tap((receipt) => Effect.sync(() => this.#mergeReceipt(receipt))),
-          Effect.tap(() => Effect.sync(() => operation?.succeed())),
+
           Effect.mapError(normalizeClientError),
-          Effect.tapError(() => Effect.sync(() => operation?.fail("read_failed"))),
         );
     });
   };
-
   upload = (file: ChatUploadFile): ClientEffect<ChatAttachment> => {
     const fetch = this.#fetch;
-    const prepareOperation = this.#diagnostics?.startOperation("chat.attachment.prepare");
     return Effect.suspend(() => {
       if (!this.#transport) {
-        prepareOperation?.fail("transport_unavailable");
         return Effect.fail(new SpaceClientError({ code: "collaboration.unavailable", recoverable: false, message: "Chat file upload is unavailable" }));
       }
       return bytesFor(file).pipe(
         Effect.flatMap((bytes) => {
           const clientAttachmentId = this.#connection.createId();
           return Effect.try({ try: () => validateUpload(file, bytes, clientAttachmentId), catch: normalizeClientError }).pipe(
-            Effect.tap(() => Effect.sync(() => prepareOperation?.observe("observed", "validation"))),
             Effect.flatMap((uploadFile) =>
               this.#connection.runPortCommand(() =>
                 foreign(() => this.#transport!.initiateUpload({ clientAttachmentId, fileName: uploadFile.fileName, mimeType: uploadFile.mimeType, byteLength: bytes.byteLength, sha256: chatDigest(bytes) })).pipe(
                   Effect.flatMap((upload) =>
-                    Effect.sync(() => {
-                      prepareOperation?.observe("observed", "storage_prepare");
-                      prepareOperation?.succeed();
-                    }).pipe(
+                    Effect.void.pipe(
                       Effect.andThen(
                         foreign(() => fetch(upload.uploadUrl, { method: upload.method, headers: upload.headers, body: bytes })).pipe(
                           Effect.flatMap((response) => {
-                            const commitOperation = this.#diagnostics?.startOperation("chat.attachment.commit");
                             if (!response.ok) {
-                              commitOperation?.fail("storage_rejected");
                               return Effect.fail(new SpaceClientError({ code: "command.rejected", recoverable: response.status >= 500, message: `Attachment upload failed with HTTP ${response.status}` }));
                             }
-                            return foreign(() => this.#transport!.finalizeUpload(upload.uploadId)).pipe(
-                              Effect.tap(() =>
-                                Effect.sync(() => {
-                                  commitOperation?.observe("observed", "storage_commit");
-                                  commitOperation?.succeed();
-                                }),
-                              ),
-                              Effect.tapError(() => Effect.sync(() => commitOperation?.fail("storage_commit_failed"))),
-                            );
+                            return foreign(() => this.#transport!.finalizeUpload(upload.uploadId)).pipe();
                           }),
                         ),
                       ),
@@ -232,25 +180,15 @@ class ChatControllerRuntime implements ChatControllerEffects {
           );
         }),
         Effect.mapError(normalizeClientError),
-        Effect.tapError(() =>
-          Effect.sync(() => {
-            prepareOperation?.fail("upload_failed");
-            const failureOperation = this.#diagnostics?.startOperation("chat.attachment.fail");
-            failureOperation?.observe("observed", "failure");
-            failureOperation?.succeed();
-          }),
-        ),
       );
     });
   };
-
   url = (attachment: ChatAttachment): string => `${this.#apiBaseUrl}/v1/chat/attachments/${encodeURIComponent(attachment.attachmentId)}/download`;
   resolveUrl = (attachment: ChatAttachment): ClientEffect<string> =>
     Effect.suspend(() => {
       if (!this.#transport) return Effect.fail(new SpaceClientError({ code: "collaboration.unavailable", recoverable: false, message: "Chat file download is unavailable" }));
       return this.#connection.runPortCommand(() => foreign(() => this.#transport!.getDownloadUrl(attachment.attachmentId)).pipe(Effect.map((descriptor) => descriptor.downloadUrl))).pipe(Effect.mapError(normalizeClientError));
     });
-
   dispose(): void {
     this.#unsubscribeConnection?.();
     this.#unsubscribeConnection = null;
@@ -260,7 +198,6 @@ class ChatControllerRuntime implements ChatControllerEffects {
     this.#unsubscribeSnapshot = null;
     this.#ports = null;
   }
-
   #bind(ports: ConnectionPorts | null): void {
     this.#unsubscribeEvents?.();
     this.#unsubscribeSnapshot?.();
@@ -280,7 +217,6 @@ class ChatControllerRuntime implements ChatControllerEffects {
     this.#scheduleCatchUp();
     this.#publish();
   }
-
   #scheduleCatchUp(): void {
     const ports = this.#ports;
     // Sequences belong to the Space, so an empty Episode need not start at 1.
@@ -318,7 +254,6 @@ class ChatControllerRuntime implements ChatControllerEffects {
       ),
     );
   }
-
   #catchUp(ports: ConnectionPorts): Effect.Effect<void, unknown> {
     return Effect.suspend(() => {
       if (this.#ports !== ports || ports.sync.getSnapshot().connection.phase !== "live") return Effect.void;
@@ -341,7 +276,6 @@ class ChatControllerRuntime implements ChatControllerEffects {
       );
     });
   }
-
   #reloadAfterCursorReset(ports: ConnectionPorts): Effect.Effect<void, unknown> {
     return foreign(() => ports.sync.readChatPage({ limit: MAX_CHAT_PAGE_SIZE })).pipe(
       Effect.tap((result) =>
@@ -355,7 +289,6 @@ class ChatControllerRuntime implements ChatControllerEffects {
       Effect.andThen(this.#catchUp(ports)),
     );
   }
-
   #applyPage(result: ChalkChatPageResult): void {
     this.#status = "ready";
     if (result.status === "cursor_reset") this.#applyCursorReset(result.retainedFloorSequence);
@@ -484,7 +417,6 @@ class ChatControllerRuntime implements ChatControllerEffects {
     );
   }
 }
-
 function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
   return Effect.tryPromise({ try: operation, catch: (cause) => cause });
 }
@@ -501,7 +433,17 @@ function validateUpload(file: ChatUploadFile, bytes: ArrayBuffer, clientAttachme
 function bytesFor(file: ChatUploadFile): Effect.Effect<ArrayBuffer, unknown> {
   return "fileName" in file ? Effect.succeed(file.bytes) : foreign(() => file.arrayBuffer());
 }
-function catchUpRequest(contiguousSequence: string | null, latestSequence: string | null, ports: ConnectionPorts): { readonly kind: "initial" | "newer"; readonly input: { readonly limit: number; readonly afterSequence?: string } } | null {
+function catchUpRequest(
+  contiguousSequence: string | null,
+  latestSequence: string | null,
+  ports: ConnectionPorts,
+): {
+  readonly kind: "initial" | "newer";
+  readonly input: {
+    readonly limit: number;
+    readonly afterSequence?: string;
+  };
+} | null {
   const extension = ports.sync.getCollaborationExtensionState();
   // A page or head hint may precede an already observed acknowledgement.
   const head = latestSequence !== null && (extension.chatHeadSequence === null || compareChatSequence(latestSequence, extension.chatHeadSequence) > 0) ? latestSequence : extension.chatHeadSequence;

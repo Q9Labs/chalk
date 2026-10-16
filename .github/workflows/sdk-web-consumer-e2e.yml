@@ -5,7 +5,6 @@ on:
     paths:
       - ".github/workflows/sdk-web-consumer-e2e.yml"
       - "packages/assets/**"
-      - "packages/diagnostics-contracts/**"
       - "packages/facehash/**"
       - "packages/recording-presentation/**"
       - "packages/ui/**"
@@ -18,7 +17,6 @@ on:
     paths:
       - ".github/workflows/sdk-web-consumer-e2e.yml"
       - "packages/assets/**"
-      - "packages/diagnostics-contracts/**"
       - "packages/facehash/**"
       - "packages/recording-presentation/**"
       - "packages/ui/**"

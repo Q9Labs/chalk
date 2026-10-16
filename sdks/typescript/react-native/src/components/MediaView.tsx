@@ -1,6 +1,6 @@
 import type { NativeParticipant as Participant } from "../ui/native-types";
 import { createNativeMediaStream, type NativeMediaStreamTrack } from "../media/native-webrtc";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import { Theme } from "../ui/theme";
 import { useNativeTheme } from "../ui/native-theme";
@@ -8,8 +8,6 @@ import { shouldRenderNativeMediaTrack } from "./native-media-visibility";
 import { FaceAvatar } from "./FaceAvatar";
 import { GradientSurface } from "./GradientSurface";
 import { hasRtcVideoView, RtcVideoView } from "./RtcVideoView";
-import { observeNativeFrameNotObservable } from "./episode-diagnostic-render-observer";
-
 export interface MediaViewProps {
   participant: Participant | null;
   track: MediaStreamTrack | NativeMediaStreamTrack | null | undefined;
@@ -20,7 +18,6 @@ export interface MediaViewProps {
   emphasizeMuted?: boolean;
   zOrder?: number;
 }
-
 export function MediaView({ participant, track, mediaKind = "camera", label, mirror = false, objectFit = "cover", zOrder = 0 }: MediaViewProps): React.JSX.Element {
   const theme = useNativeTheme();
   const shouldRenderVideo = shouldRenderNativeMediaTrack({ participant, track, mediaKind });
@@ -29,18 +26,11 @@ export function MediaView({ participant, track, mediaKind = "camera", label, mir
     if (!shouldRenderVideo || !track) {
       return null;
     }
-
     return createNativeMediaStream(track);
   }, [shouldRenderVideo, track]);
-
   const name = participant?.displayName?.trim() || label || "Participant";
   const showStream = Boolean(stream && canRenderPreview);
   const streamURL = showStream && stream ? stream.toURL() : null;
-
-  useEffect(() => {
-    if (shouldRenderVideo && track) observeNativeFrameNotObservable(track);
-  }, [shouldRenderVideo, track]);
-
   return (
     <View style={[styles.surface, { backgroundColor: theme.colors.stageBackground }]}>
       {streamURL ? <RtcVideoView mirror={mirror} objectFit={objectFit} streamURL={streamURL} style={StyleSheet.absoluteFillObject} zOrder={Math.max(1, zOrder)} /> : null}
@@ -54,7 +44,6 @@ export function MediaView({ participant, track, mediaKind = "camera", label, mir
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   surface: {
     flex: 1,

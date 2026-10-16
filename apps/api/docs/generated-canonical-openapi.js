@@ -15248,12 +15248,6 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
         name: "X-Ops-Ingest-Token",
         type: "apiKey",
       },
-      participantDiagnosticsBearer: {
-        bearerFormat: "JWT",
-        description: "Short-lived Episode Diagnostic participant credential bound to one Tenant, Space, Episode, participant generation, and environment.",
-        scheme: "bearer",
-        type: "http",
-      },
       participantMediaBearer: {
         bearerFormat: "JWT",
         description: "Short-lived participant media credential bound to one live participant generation and media-provider connection.",
@@ -15466,25 +15460,6 @@ globalThis.CHALK_API_DESIGN_OPENAPI = {
       AccessGrant: {
         additionalProperties: false,
         properties: {
-          diagnostics: {
-            additionalProperties: false,
-            properties: {
-              expires_at: {
-                $ref: "#/components/schemas/DateTimeString",
-              },
-              generation: {
-                type: "integer",
-              },
-              intake_path: {
-                type: "string",
-              },
-              token: {
-                type: "string",
-              },
-            },
-            required: ["expires_at", "generation", "intake_path", "token"],
-            type: ["object", "null"],
-          },
           episode_started_at: {
             anyOf: [
               {

@@ -1500,12 +1500,6 @@ export interface components {
       user_id: components["schemas"]["UserId"];
     };
     AccessGrant: {
-      diagnostics?: {
-        expires_at: components["schemas"]["DateTimeString"];
-        generation: number;
-        intake_path: string;
-        token: string;
-      } | null;
       episode_started_at?: components["schemas"]["DateTimeString"] | null;
       media: {
         client_payload: {

@@ -1,7 +1,6 @@
 import type { AccessGrant } from "./index";
 import type { ConnectionMediaClient, ConnectionSyncClient } from "../connection/dependencies";
 import type { SpaceClientPlatform } from "./core";
-
 export type CoreTestMediaSnapshot = ReturnType<ConnectionMediaClient["getSnapshot"]>;
 export type CoreTestPlatform = SpaceClientPlatform & {
   readonly media: {
@@ -11,7 +10,6 @@ export type CoreTestPlatform = SpaceClientPlatform & {
   readonly sync: ConnectionSyncClient;
   readonly emitSync: (snapshot: ReturnType<ConnectionSyncClient["getSnapshot"]>) => void;
 };
-
 export function createCoreTestPlatform(): CoreTestPlatform {
   let mediaSnapshot: CoreTestMediaSnapshot = {
     connection: { phase: "idle", peerConnectionState: null, iceConnectionState: null },
@@ -69,7 +67,6 @@ export function createCoreTestPlatform(): CoreTestPlatform {
     getParticipantCollaborationCapabilities: () => ({}),
     onDirectedRequest: () => () => undefined,
   } as unknown as ConnectionSyncClient;
-
   return {
     whiteboardUrl: null,
     dependencies: {
@@ -92,19 +89,15 @@ export function createCoreTestPlatform(): CoreTestPlatform {
     },
   };
 }
-
 export function opaqueAccessGrant(value: string | number, suffix = String(value), connectionId = "connection-1"): AccessGrant {
-  const generation = typeof value === "number" ? value : undefined;
-  const expiresAt = new Date(Date.now() + 300_000).toISOString();
+  const expiresAt = new Date(Date.now() + 300000).toISOString();
   return {
     subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: "participant-1", participant_generation: 1 },
     sync: { token: credential("chalk-sync", suffix), expires_at: expiresAt },
     media: { token: credential("chalk-media", suffix), expires_at: expiresAt, provider: "cloudflare_sfu", client_payload: { connectionId, stunServer: "stun:stun.cloudflare.com:3478" } },
-    ...(generation === undefined ? {} : { diagnostics: { token: credential("chalk-diagnostics", suffix), expires_at: expiresAt, generation, intake_path: "/_internal/episode-diagnostic-events" } }),
   } as unknown as AccessGrant;
 }
-
-function credential(audience: "chalk-sync" | "chalk-media" | "chalk-diagnostics", suffix: string): string {
+function credential(audience: "chalk-sync" | "chalk-media", suffix: string): string {
   const encode = (value: unknown) => btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
   return `${encode({ alg: "EdDSA" })}.${encode({ aud: audience })}.${suffix}`;
 }

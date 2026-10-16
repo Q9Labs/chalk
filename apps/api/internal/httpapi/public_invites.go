@@ -1048,12 +1048,7 @@ func newPublicAccessGrantResponse(grant publicinvites.PublicAccessGrant) publicA
 		Sync:  accessGrantTokenResponse{Token: grant.SyncToken, ExpiresAt: expiresAt},
 		Media: accessGrantMediaResponse{Token: grant.MediaToken, ExpiresAt: expiresAt, Provider: grant.Provider, ClientPayload: publicAccessClientPayload(grant)},
 	}
-	if grant.Diagnostics != nil {
-		response.Diagnostics = &accessGrantDiagnosticsResponse{
-			Token: grant.Diagnostics.Token, ExpiresAt: grant.Diagnostics.ExpiresAt.UTC().Format(time.RFC3339),
-			Generation: grant.Diagnostics.Generation, IntakePath: grant.Diagnostics.IntakePath,
-		}
-	}
+
 	return response
 }
 

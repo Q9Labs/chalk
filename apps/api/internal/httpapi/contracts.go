@@ -5,12 +5,11 @@ import "github.com/q9labs/chalk/apps/api/internal/ratelimit"
 type APIAuth string
 
 const (
-	APIAuthCookieOrBearer         APIAuth = "session_or_bearer"
-	APIAuthSessionOrBearer                = APIAuthCookieOrBearer
-	APIAuthParticipantMedia       APIAuth = "participant_media"
-	APIAuthParticipantSync        APIAuth = "participant_sync"
-	APIAuthParticipantDiagnostics APIAuth = "participant_diagnostics"
-	APIAuthOpsToken               APIAuth = "ops_token"
+	APIAuthCookieOrBearer   APIAuth = "session_or_bearer"
+	APIAuthSessionOrBearer          = APIAuthCookieOrBearer
+	APIAuthParticipantMedia APIAuth = "participant_media"
+	APIAuthParticipantSync  APIAuth = "participant_sync"
+	APIAuthOpsToken         APIAuth = "ops_token"
 )
 
 func accountRouteAuth() APIAuth {
@@ -75,11 +74,11 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, recordingPreparationEndpoints(nil, nil)...)
 	endpoints = append(endpoints, recordingEntranceEndpoints(nil, nil, nil, nil)...)
 	endpoints = append(endpoints, apiKeyEndpoints(nil, nil, nil)...)
-	endpoints = append(endpoints, episodeLifecycleEndpoints(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)...)
+	endpoints = append(endpoints, episodeLifecycleEndpoints(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)...)
 	// Account-bound Dashboard Space routes are mounted when the concrete
 	// lifecycle service supports the self-join seam. Include their contracts
 	// here even with nil services so generated previews remain complete.
-	endpoints = append(endpoints, dashboardSpaceSelfEndpoints(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)...)
+	endpoints = append(endpoints, dashboardSpaceSelfEndpoints(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)...)
 	endpoints = append(endpoints, sfuSignalingEndpoints(nil, nil, nil, nil, nil)...)
 	endpoints = append(endpoints, chatAttachmentEndpoints(nil, nil)...)
 	endpoints = append(endpoints, whiteboardFileEndpoints(nil, nil)...)

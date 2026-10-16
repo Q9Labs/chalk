@@ -1,14 +1,6 @@
 defmodule ChalkSync.Operations.Metrics do
-  @moduledoc """
-  Bounded in-node aggregate metrics for the production sync runtime.
-
-  Telemetry handlers update a fixed-shape ETS counter table directly, so metric
-  traffic cannot create one process message per command or event.
-  """
-
+  @moduledoc "Bounded in-node aggregate metrics for the production sync runtime.\n\nTelemetry handlers update a fixed-shape ETS counter table directly, so metric\ntraffic cannot create one process message per command or event.\n"
   use GenServer
-
-  alias ChalkSync.Diagnostics.Exporter
   alias ChalkSync.Episodes.CommandIntake
 
   @events [
@@ -25,11 +17,8 @@ defmodule ChalkSync.Operations.Metrics do
     [:chalk, :sync, :external_operation, :poll],
     [:chalk, :sync, :webhook, :production],
     [:chalk, :sync, :webhook, :fanout],
-    [:chalk, :sync, :retention, :cleanup],
-    [:chalk, :sync, :diagnostics, :buffer],
-    [:chalk, :sync, :diagnostics, :export]
+    [:chalk, :sync, :retention, :cleanup]
   ]
-
   @outcomes ~w(
     accepted overloaded server_draining released committed duplicate rejected retryable error
     snapshot replay up_to_date terminal valid malformed event_limit byte_limit age_limit
@@ -43,14 +32,15 @@ defmodule ChalkSync.Operations.Metrics do
     start_recording stop_recording
   )
   @handler_id __MODULE__
-
   def start_link(options \\ []) do
     name = Keyword.get(options, :name, __MODULE__)
     GenServer.start_link(__MODULE__, options, name: name)
   end
 
   @spec snapshot(GenServer.server()) :: map()
-  def snapshot(server \\ __MODULE__), do: GenServer.call(server, :snapshot, 500)
+  def snapshot(server \\ __MODULE__) do
+    GenServer.call(server, :snapshot, 500)
+  end
 
   @doc false
   def handle_event(event, measurements, metadata, table) do
@@ -76,7 +66,6 @@ defmodule ChalkSync.Operations.Metrics do
   def init(_options) do
     table = :ets.new(__MODULE__, [:set, :public, write_concurrency: true])
     :telemetry.detach(@handler_id)
-
     :ok = :telemetry.attach_many(@handler_id, @events, &__MODULE__.handle_event/4, table)
     {:ok, %{table: table}}
   end
@@ -109,53 +98,73 @@ defmodule ChalkSync.Operations.Metrics do
       admitted_command_bytes: admission.node_bytes,
       admitted_commands: admission.node_commands,
       command_intake_draining: admission.draining?,
-      local_episode_coordinators: supervisor.active,
-      episode_diagnostics_exporter: diagnostics_health()
+      local_episode_coordinators: supervisor.active
     }
   catch
     :exit, _reason -> %{"status" => "unavailable"}
   end
 
-  defp diagnostics_health do
-    case Application.get_env(:chalk_sync, :episode_diagnostics, %{mode: :off}) do
-      %{mode: :off} -> %{status: :disabled}
-      _enabled -> Exporter.health()
-    end
+  defp normalize_outcome(outcome) when is_atom(outcome) do
+    outcome |> Atom.to_string() |> normalize_outcome()
   end
 
-  defp normalize_outcome(outcome) when is_atom(outcome),
-    do: outcome |> Atom.to_string() |> normalize_outcome()
+  defp normalize_outcome(outcome) when outcome in @outcomes do
+    outcome
+  end
 
-  defp normalize_outcome(outcome) when outcome in @outcomes, do: outcome
-  defp normalize_outcome(_outcome), do: "other"
+  defp normalize_outcome(_outcome) do
+    "other"
+  end
 
   defp metric_labels(
          event,
          %{event_name: event_name, api_version: api_version}
        )
-       when event in [
-              [:chalk, :sync, :webhook, :production],
-              [:chalk, :sync, :webhook, :fanout]
-            ] and event_name in ["participant.joined", "participant.left", "episode.ended"] and
-              api_version == 1,
-       do: [String.replace(event_name, ".", "_"), "v1"]
+       when event in [[:chalk, :sync, :webhook, :production], [:chalk, :sync, :webhook, :fanout]] and
+              event_name in ["participant.joined", "participant.left", "episode.ended"] and
+              api_version == 1 do
+    [String.replace(event_name, ".", "_"), "v1"]
+  end
 
   defp metric_labels(
          [:chalk, :sync, :external_operation, :execution],
          %{operation: operation}
        ) do
-    operation = if is_atom(operation), do: Atom.to_string(operation), else: operation
-    if operation in @external_operations, do: [operation], else: ["other"]
+    operation =
+      if is_atom(operation) do
+        Atom.to_string(operation)
+      else
+        operation
+      end
+
+    if operation in @external_operations do
+      [operation]
+    else
+      ["other"]
+    end
   end
 
-  defp metric_labels(_event, _metadata), do: []
+  defp metric_labels(_event, _metadata) do
+    []
+  end
 
-  defp metric_name(event, outcome, labels),
-    do: Enum.join(Enum.map(event, &Atom.to_string/1) ++ [outcome | labels], ".")
+  defp metric_name(event, outcome, labels) do
+    Enum.join(Enum.map(event, &Atom.to_string/1) ++ [outcome | labels], ".")
+  end
 
-  defp bounded_count(value) when is_integer(value) and value >= 0, do: value
-  defp bounded_count(_value), do: 1
+  defp bounded_count(value) when is_integer(value) and value >= 0 do
+    value
+  end
 
-  defp bounded_integer(value) when is_integer(value) and value >= 0, do: value
-  defp bounded_integer(_value), do: 0
+  defp bounded_count(_value) do
+    1
+  end
+
+  defp bounded_integer(value) when is_integer(value) and value >= 0 do
+    value
+  end
+
+  defp bounded_integer(_value) do
+    0
+  end
 end

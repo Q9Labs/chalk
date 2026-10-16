@@ -264,9 +264,6 @@ type DecideAdmissionRequestInput struct {
 	RequestKey    string
 }
 
-// PublicSpace is the minimum Space projection required by the public runtime.
-// Space adapters can carry richer fields without leaking them into this
-// package.
 type PublicSpace struct {
 	TenantID      utilities.ID
 	SpaceID       utilities.ID
@@ -281,8 +278,6 @@ type ManagedInvite struct {
 	CanonicalURL string
 }
 
-// Space is the application boundary for creating and reading Spaces. The
-// public-invites domain does not depend on a concrete Space implementation.
 type Space interface {
 	CreatePublicSpace(context.Context, CreatePublicSpaceInput) (PublicSpace, error)
 	GetPublicSpace(context.Context, utilities.ID, utilities.ID) (PublicSpace, error)
@@ -292,9 +287,6 @@ type Links interface {
 	SpaceInviteURL(string, string) (string, error)
 }
 
-// Access is the application boundary for issuing and revoking grants after an
-// arrival has been admitted. Access tokens and provider details stay at this
-// port rather than in the public-invites domain.
 type Access interface {
 	GrantPublicAccess(context.Context, PublicAccessInput) (PublicAccessGrant, error)
 	RefreshPublicAccess(context.Context, PublicAccessInput) (PublicAccessGrant, error)
@@ -302,16 +294,10 @@ type Access interface {
 	DiscardPublicAccess(context.Context, PublicAccessGrant) error
 }
 
-// Accounts authorizes a presented account capability for a tenant after the
-// invite capability has resolved that tenant. A false result means the
-// account is missing or forbidden and must be treated as a guest arrival;
-// non-nil errors are operational failures and must propagate.
 type Accounts interface {
 	AuthorizePublicAccount(context.Context, utilities.ID, utilities.ID) (bool, error)
 }
 
-// Port aliases make the dependency direction explicit at composition seams
-// while keeping the short domain names convenient inside this package.
 type SpacePort = Space
 type LifecyclePort = Lifecycle
 type AccessPort = Access
@@ -323,7 +309,6 @@ type PublicAccessInput struct {
 	ReplaceMediaConnection bool
 }
 
-// PublicSpaceCreated is the result of creating an auto-lifecycle public Space.
 type PublicSpaceCreated struct {
 	Presentation   PublicSpacePresentation
 	InviteLink     string
@@ -363,19 +348,8 @@ type PublicAccessGrant struct {
 	Provider              string
 	ProviderSubject       string
 	ClientPayload         PublicAccessClientPayload
-	Diagnostics           *PublicAccessDiagnostics
 }
 
-type PublicAccessDiagnostics struct {
-	Token      string
-	ExpiresAt  time.Time
-	Generation int64
-	IntakePath string
-}
-
-// PublicAccessClientPayload is returned to the client but is never part of an
-// Arrival or UpdateArrivalStateInput. Its fields are provider-specific: SFU
-// uses ConnectionID and StunServer, while RTK uses ProviderSubject and Token.
 type PublicAccessClientPayload struct {
 	ConnectionID    string
 	StunServer      string
@@ -383,8 +357,6 @@ type PublicAccessClientPayload struct {
 	Token           string
 }
 
-// Compatibility aliases keep the public application seam readable at HTTP
-// composition points while the domain uses its shorter core names internally.
 type SpacePublicInvite = ManagedInvite
 type PublicAdmissionRequestPage = AdmissionRequestPage
 type CreatePublicSpaceResult = PublicSpaceCreated

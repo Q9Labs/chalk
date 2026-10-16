@@ -57,10 +57,6 @@ type MediaProofRecoveryVerifier interface {
 	VerifyForRecovery(context.Context, string) (accessgrants.Subject, error)
 }
 
-type DiagnosticsIssuer interface {
-	Issue(context.Context, accessgrants.DiagnosticsSubject) (accessgrants.DiagnosticsCredential, error)
-}
-
 type AccessConfig struct {
 	Episodes           PublicJoinService
 	Spaces             SpaceLookup
@@ -70,9 +66,9 @@ type AccessConfig struct {
 	MediaTokens        MediaIssuer
 	MediaProof         MediaProofVerifier
 	MediaProofRecovery MediaProofRecoveryVerifier
-	Diagnostics        DiagnosticsIssuer
-	ReadyTimeout       time.Duration
-	PollInterval       time.Duration
+
+	ReadyTimeout time.Duration
+	PollInterval time.Duration
 }
 
 type accessPort struct {
@@ -84,9 +80,9 @@ type accessPort struct {
 	mediaTokens        MediaIssuer
 	mediaProof         MediaProofVerifier
 	mediaProofRecovery MediaProofRecoveryVerifier
-	diagnostics        DiagnosticsIssuer
-	readyTimeout       time.Duration
-	pollInterval       time.Duration
+
+	readyTimeout time.Duration
+	pollInterval time.Duration
 }
 
 func NewAccessPort(config AccessConfig) (publicinvites.Access, error) {
@@ -110,8 +106,8 @@ func NewAccessPort(config AccessConfig) (publicinvites.Access, error) {
 	return accessPort{
 		episodes: config.Episodes, spaces: config.Spaces, tenants: config.Tenants, mediaResolver: config.MediaResolver,
 		syncTokens: config.SyncTokens, mediaTokens: config.MediaTokens, mediaProof: config.MediaProof,
-		mediaProofRecovery: config.MediaProofRecovery, diagnostics: config.Diagnostics,
-		readyTimeout: config.ReadyTimeout, pollInterval: config.PollInterval,
+		mediaProofRecovery: config.MediaProofRecovery,
+		readyTimeout:       config.ReadyTimeout, pollInterval: config.PollInterval,
 	}, nil
 }
 
@@ -318,25 +314,12 @@ func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, re
 	if !mediaToken.ExpiresAt.IsZero() && mediaToken.ExpiresAt.Before(expiresAt) {
 		expiresAt = mediaToken.ExpiresAt
 	}
-	var diagnostics *publicinvites.PublicAccessDiagnostics
-	if a.diagnostics != nil {
-		credential, err := a.diagnostics.Issue(ctx, accessgrants.DiagnosticsSubject{
-			TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, EpisodeID: result.Episode.ID,
-			ParticipantID: result.Participant.ID, ParticipantGeneration: result.Participant.Generation,
-			Capability: accessgrants.DiagnosticsCapability,
-		})
-		if err != nil {
-			return publicinvites.PublicAccessGrant{}, fmt.Errorf("%w: issue participant diagnostics credential: %v", ErrAccessUnavailable, err)
-		}
-		diagnostics = &publicinvites.PublicAccessDiagnostics{
-			Token: credential.Token, ExpiresAt: credential.ExpiresAt, Generation: credential.Generation, IntakePath: credential.IntakePath,
-		}
-	}
+
 	return publicinvites.PublicAccessGrant{
 		SyncToken: syncToken.Value, MediaToken: mediaToken.Token, ExpiresAt: expiresAt,
 		TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, EpisodeID: result.Episode.ID, StartedAt: syncToken.StartedAt,
 		ParticipantID: result.Participant.ID, ParticipantGeneration: result.Participant.Generation,
-		Provider: provider, ProviderSubject: providerSubject, ClientPayload: clientPayload, Diagnostics: diagnostics,
+		Provider: provider, ProviderSubject: providerSubject, ClientPayload: clientPayload,
 	}, nil
 }
 

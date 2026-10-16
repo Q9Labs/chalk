@@ -3,7 +3,6 @@ defmodule ChalkSync.Operations.ProductionConfigTest do
 
   setup do
     values = %{
-      "CHALK_EPISODE_DIAGNOSTICS" => "off",
       "CHALK_SYNC_LOCAL_PROOF" => "false",
       "CHALK_SYNC_LOCAL_PARITY" => "false",
       "CHALK_DATABASE_URL" => "postgresql://localhost/chalk_test",
