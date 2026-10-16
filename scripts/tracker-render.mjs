@@ -49,9 +49,12 @@ const markdownItem = (item) => [
   "",
 ];
 
+const wishlistMarkdown = (wishlist = []) => (wishlist.length ? ["## Wishlist", "", "Ideas without a current user journey. These are not planned work.", "", ...numberedGroups({ outcomes: wishlist }).flatMap((group) => [`### ${group.title}`, "", ...group.items.flatMap(markdownItem)])] : []);
+
 export const renderMarkdown = (tracker) => {
   const lines = ["# Chalk tracker", "", ...textLines(tracker.principle), "", ...textLines(tracker.sizing), "", "Generated from tracker.yaml; run pnpm generate:tracker after editing it.", ""];
   for (const group of numberedGroups(tracker)) lines.push(`## ${group.title}`, "", ...group.items.flatMap(markdownItem));
+  lines.push(...wishlistMarkdown(tracker.wishlist));
   return `${lines.join("\n").trimEnd()}\n`;
 };
 
@@ -123,6 +126,13 @@ input[type=search]::placeholder{color:var(--muted)}
 </div>
 ${numberedGroups(tracker).map(groupHtml).join("\n")}
 <p class="intro" id="empty" hidden>No outcomes match. Clear the search or pick another state.</p>
+${
+  tracker.wishlist?.length
+    ? `<details><summary>Wishlist · ${tracker.wishlist.length} ideas</summary><p class="intro">Ideas without a current user journey. These are not planned work and are excluded from the outcome filters.</p>${numberedGroups({ outcomes: tracker.wishlist })
+        .map((group) => `<h2>${html(group.title)}</h2><ol class="items">${group.items.map((item) => itemHtml(item).replace('class="item"', 'class="wish"')).join("\n")}</ol>`)
+        .join("\n")}</details>`
+    : ""
+}
 </main>
 <script type="module">
 const search=document.getElementById('search');

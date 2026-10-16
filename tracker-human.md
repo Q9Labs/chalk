@@ -8,19 +8,9 @@ be split before starting, and Unknown needs investigation first.
 
 Generated from tracker.yaml; run pnpm generate:tracker after editing it.
 
-## Identity and Tenants
-
-1. **Manage Tenant members and invitations** (Not started · size M · P1)
-    The API can list members, add them and change their Role, but it has no invitations
-    or removal. The People page is still a placeholder.
-    - Add invitation (issue, accept, expire, revoke) and member removal to the API.
-    - Build the People page on the existing and new operations.
-    - Verify that denied Roles cannot change membership and that expired or revoked
-      invitations show a way forward.
-
 ## Media
 
-2. **Media works on real networks and devices** (Unclear · size M · P1)
+1. **Media works on real networks and devices** (Unclear · size M · P1)
     Web and native media are implemented, but every automated run uses mocked signaling.
     No two-party call has been checked on real browsers or physical phones.
     Open question: No real-network or physical-device observation exists.
@@ -35,25 +25,9 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Check camera simulcast on physical Safari and phones; Firefox publishes one camera
       layer.
 
-3. **Measure media usage per Tenant and Episode** (Not started · size M · P2)
-    The Usage type has egress and Participant-minute fields, but both Cloudflare
-    adapters always report zero, so media cost cannot be measured or limited.
-    - Collect usage in both Cloudflare adapters and attribute it to Tenant and Episode.
-    - Reconcile one live Episode against the provider bill, then expose usage to policy
-      limits.
-
-4. **Custom SFU** (Unclear · size XL · P1)
-    Media runs only on Cloudflare SFU and RTK. A custom SFU removes that dependency. It
-    is one task in two parts: the SFU itself, then its integration into Chalk.
-    Open question: The SFU design and scope are not defined yet.
-    - Part 1, the SFU: build the server that receives and forwards audio, video and
-      screen share.
-    - Part 2, the integration: add a MediaPlane adapter, web and native clients,
-      credential renewal and Recording capture on top of it.
-
 ## Sync
 
-5. **Sync survives node and database failure** (Partly working · size M · P1)
+2. **Sync survives node and database failure** (Partly working · size M · P1)
     Local checks cover repeated Sync restarts and chat queued during reconnects,
     alongside database outages and slow clients. Recovery on a production-like topology
     remains unqualified, and production has no database standby.
@@ -62,7 +36,7 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
       original database coming back after an outage.
     - Decide whether production needs a database standby once there are users.
 
-6. **Reconnect heals on rocky networks** (Not started · size M)
+3. **Reconnect heals on rocky networks** (Not started · size M)
     Clients rejoin after a page reload, hold offline actions, show a non-blocking
     reconnecting bar, and recover media in about 2.6 seconds after a 30-second cut. The
     owner's target is recovery as fast as possible on every path.
@@ -77,7 +51,7 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
 
 ## Collaboration
 
-7. **Whiteboard works across web and mobile** (Unclear · size S · P1)
+4. **Whiteboard works across web and mobile** (Unclear · size S · P1)
     The whiteboard is wired into both the web and native Space, but no live Episode has
     used it across several clients or a phone.
     Open question: No live whiteboard Episode across clients has been observed.
@@ -85,7 +59,7 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
       transfer, reconnect and snapshot recovery.
     - Check math, touch and keyboard input and viewport resizing.
 
-8. **Keep whiteboard connections steady** (Unclear · size Unknown)
+5. **Keep whiteboard connections steady** (Unclear · size Unknown)
     Drawings survive reconnects, but the cause of unexpected whiteboard reconnects is
     not known.
     Open question: The reconnect trigger needs investigation before a fix can be scoped.
@@ -93,7 +67,7 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Find and fix the cause without weakening recovery after a real connection cut.
     - Confirm the board stays connected during normal drawing and sharing.
 
-9. **Chat attachments stay isolated and get deleted** (Unclear · size S · P1)
+6. **Chat attachments stay isolated and get deleted** (Unclear · size S · P1)
     Upload, download, expiry and cleanup exist, but only local storage has been tested.
     Isolation between Tenants and real object deletion are unproved.
     Open question: Only local storage has been exercised.
@@ -102,15 +76,9 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Check that expired and abandoned uploads are deleted from real storage, cleanup
       survives interruption, and stale grants fail.
 
-10. **Selectable sound packs** (Not started · size M · P3)
-    Chalk has one set of sounds. There are no packs and no way for a Tenant to choose
-    one.
-    - Define packs and a Tenant setting, wire them into web and native events, and
-      respect mute and accessibility settings.
-
 ## Recording
 
-11. **Download a Recording as MP4** (Partly working · size M)
+7. **Download a Recording as MP4** (Partly working · size M)
     Export renders an MP4 on request with the native compositor on an s-1vcpu-1gb worker
     in production. When a camera's video is damaged, the Export holds the last good
     frame and is marked degraded instead of failing. A camera can still freeze for
@@ -121,7 +89,7 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Report Capture's packet and repeat counts for each Recording in production.
     - Download one Export twice to confirm the second download reuses the file.
 
-12. **Long Recordings stay in sync** (Not started · size Unknown)
+8. **Long Recordings stay in sync** (Not started · size Unknown)
     Capture bundles now share one recording clock, which fixed the skew that failed a
     332-second run. Senders whose clocks really drift apart are still unhandled.
     Open question: Whether the remaining drift comes from the headless sender or the
@@ -129,7 +97,7 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Handle sender clock divergence and pass a one-hour Recording.
     - Prove recorder restart continuity and TLS peer rejection on the managed hosts.
 
-13. **Capture starts fast and costs little** (Partly working · size M)
+9. **Capture starts fast and costs little** (Partly working · size M)
     Capture runs on the lean Debian image on s-1vcpu-1gb. A cold worker is ready about
     46 seconds after record, and anything said before it is ready is missing from the
     Recording. Automatic Spaces pre-warm Capture when someone opens the Entrance. SFU
@@ -143,14 +111,14 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Experiment, only if UDP loss damages Recordings: compare Capture over TURN on TCP
       with UDP in one Recording. Cloudflare's SFU has no direct TCP receiver.
 
-14. **Scheduled Recordings in a real integration** (Partly working · size M · P1)
+10. **Scheduled Recordings in a real integration** (Partly working · size M · P1)
     Scheduled preparation works in production: the 2026-09-20 canary started from a
     ready preparation. No first-party integration uses it yet, and reschedule, cancel,
     no-show and expiry have not run live.
     - Use the contract in a first-party integration and exercise reschedule, cancel,
       no-show and expiry live.
 
-15. **Recordings and Transcripts on mobile** (Partly working · size M · P2)
+11. **Recordings and Transcripts on mobile** (Partly working · size M · P2)
     Mobile Participants with manageRecording can start and stop a Recording and see its
     status. There is no disclosure or consent step and no way to open the finished
     Recording or Transcript.
@@ -160,7 +128,7 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
 
 ## Transcription
 
-16. **Recordings produce a Transcript in production** (Partly working · size M · P1)
+12. **Recordings produce a Transcript in production** (Partly working · size M · P1)
     Production Recordings produce a Transcript through the direct DeepInfra adapter, and
     every Tenant allows on-demand Transcripts. Who can read a production Transcript and
     how the new path handles failure are not checked.
@@ -169,7 +137,7 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Check that provider failure, retry, cancellation and Artifact Policy limits behave
       on the new path.
 
-17. **Transcripts for mixed-language Recordings** (Not started · size M · P2)
+13. **Transcripts for mixed-language Recordings** (Not started · size M · P2)
     Whisper expects one language per Recording, so speech that switches between
     languages, such as Urdu and English or Arabic and English, transcribes badly. The
     hard part is finding a model that handles it at an acceptable cost.
@@ -179,28 +147,9 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
       automatic routing that sends mixed-language audio to it and single-language audio
       to the cheaper model.
 
-18. **Live captions in a Space** (Not started · size L · P3)
-    Captions are off in Chalk and no live caption path exists. The Transcript panel only
-    shows finished Transcripts.
-    - Deliver live partial and final captions with consent, capability checks and
-      cleanup.
-    - Verify latency, reconnect, language handling and privacy.
-
-## Security and compliance
-
-19. **Tenant-set chat retention** (Not started · size M · P2)
-    Tenants can set retention for Recordings and Transcripts but not for chat, and Sync
-    has no chat purge.
-    - Add chat retention to Tenant policy and purge expired messages and their
-      attachments without breaking Sync recovery.
-    - Check that hard delete overrides retention and purged messages never return
-      through replay or snapshots.
-    - Clear unsent offline chat held in browser storage when the Participant leaves or
-      signs out, so it doesn't stay on a shared computer for up to 24 hours.
-
 ## SDK and embedding
 
-20. **Published packages work in a fresh app** (Unclear · size S · P1)
+14. **Published packages work in a fresh app** (Unclear · size S · P1)
     A packed-archive browser test covers recovery and attachments on three browsers
     against mocked signaling. Type consumption, a React Native release app and the
     server-only package are unchecked.
@@ -210,7 +159,7 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Build a React Native release app from the packages and check that server-only
       imports pull in no browser or native code.
 
-21. **Same Chalk props on web and mobile** (Not started · size M · P1)
+15. **Same Chalk props on web and mobile** (Not started · size M · P1)
     Native Chalk lacks the recording and sounds features and four web props, and it
     names its feedback prop differently. The hooks already match.
     - Add the missing native features and props, or document each as an OS or rendering
@@ -218,13 +167,7 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Unify the feedback prop and add a type check that fails when the two prop types
       drift.
 
-22. **SDK app name in server telemetry** (Not started · size S · P1)
-    No appName option exists on the client, SpaceClient, Chalk or AccessGrant request.
-    - Add appName with the bounds from theory.md and carry it on HTTP and WebSocket
-      requests into spans and logs.
-    - Check omitted and oversized values and that appName never affects authorization.
-
-23. **Every public endpoint is in the generated client** (Unclear · size S · P1)
+16. **Every public endpoint is in the generated client** (Unclear · size S · P1)
     OpenAPI and the generated client cover integrations, API keys, status and
     attachments, but nobody has compared every public route against them.
     Open question: No full route comparison has been made.
@@ -233,45 +176,9 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Call one Tenant-scoped integration route and one attachment route through the
       public client.
 
-24. **Swift SDK** (Not started · size XL · P2)
-    Only TypeScript SDKs exist.
-    - Define the supported surface, generate or write the package, and ship it with an
-      independent consumer build and contract fixtures.
-
-25. **Kotlin SDK** (Not started · size XL · P2)
-    Only TypeScript SDKs exist.
-    - Define the supported surface, generate or write the package, and ship it with an
-      independent consumer build and contract fixtures.
-
-26. **Python SDK** (Not started · size XL · P2)
-    Only TypeScript SDKs exist.
-    - Define the supported surface, generate or write the package, and ship it with an
-      independent consumer build and contract fixtures.
-
-27. **Go SDK** (Not started · size XL · P2)
-    Only TypeScript SDKs exist.
-    - Define the supported surface, generate or write the package, and ship it with an
-      independent consumer build and contract fixtures.
-
-28. **Embed a Space in an iframe** (Not started · size L · P2)
-    The SDK can be embedded, but there is no supported iframe contract for origins,
-    access handoff or lifecycle messages.
-    - Define the iframe entry, access handoff, allowed origins and lifecycle messages.
-    - Check camera and microphone permission, resize, teardown and expired access from
-      another origin.
-
 ## Integrations and webhooks
 
-29. **Connect third-party apps in the dashboard** (Not started · size M · P2)
-    The API can connect a Tenant to third-party apps through Composio, such as Gmail,
-    Google Calendar, Drive, Docs and GitHub. The dashboard has no page to browse,
-    connect or disconnect them.
-    - Build a page to browse the app catalog, connect, refresh and disconnect an app,
-      and show clear errors.
-    - Require member permission and recent authentication for secrets, and show the
-      audit records.
-
-30. **Webhooks deliver and recover on a deployment** (Unclear · size S · P1)
+17. **Webhooks deliver and recover on a deployment** (Unclear · size S · P1)
     Signing, rotation and idempotency are implemented and unit-tested, but no deployed
     delivery or outage recovery has been observed.
     Open question: No deployed delivery has been observed.
@@ -281,21 +188,21 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
 
 ## Operations
 
-31. **Alerts fire and service recovers from failure** (Partly working · size M · P1)
+18. **Alerts fire and service recovers from failure** (Partly working · size M · P1)
     Production alerts for Recording, Export, Transcript, API and Sync failures reach
     Discord, and a test alert arrived. No failure has been injected and recovered from.
     Open question: No failure drill has been observed.
     - Inject one scoped service failure, confirm the alert and public status change,
       then recover and confirm healthy state.
 
-32. **Customer-operated app tier runs** (Unclear · size M · P1)
+19. **Customer-operated app tier runs** (Unclear · size M · P1)
     The API, Sync and Postgres are meant to run on a customer app tier, but no
     self-hosted revision has been deployed and validated.
     Open question: No self-hosted deployment has been observed.
     - Deploy a named revision on a customer-style app tier with a configured media
       adapter and pass validate-runtime and a web join.
 
-33. **Join an Episode faster** (Not started · size M · P1)
+20. **Join an Episode faster** (Not started · size M · P1)
     Seeing the other Participant takes about 4 seconds after clicking join. About 2
     seconds of that is Cloudflare SFU track setup and the browser handshake, which
     Chalk's code can't shorten; only starting them earlier can.
@@ -308,7 +215,7 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Consider pushing chat message bodies over Sync instead of a head signal plus a
       fetch.
 
-34. **Tests and gate catch real bugs** (Not started · size M)
+21. **Tests and gate catch real bugs** (Not started · size M)
     The gate passed while real media and reconnect bugs shipped, because tests fake
     Cloudflare SFU and the gate skips server checks for SDK-only changes. Many tests
     kill no mutation.
@@ -322,7 +229,119 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
 
 ## Other products
 
-35. **Run several local stacks at once** (Not started · size S)
+22. **Chalk MCP server** (Not started · size L · P3)
+    Chalk has no MCP server, so AI tools cannot use Chalk directly.
+    - Decide which Space, Episode, Recording and Transcript operations to expose, then
+      ship an MCP server on the public API.
+
+## Wishlist
+
+Ideas without a current user journey. These are not planned work.
+
+### Identity and Tenants
+
+1. **Manage Tenant members and invitations** (Not started · size M · P1)
+    The API supports Tenant membership, Roles and invitations. There is no
+    member-management UI after the dashboard removal.
+    - Build member and invitation management on the existing API.
+    - Verify that denied Roles cannot change membership and that expired or revoked
+      invitations show a way forward.
+
+### Media
+
+2. **Measure media usage per Tenant and Episode** (Not started · size M · P2)
+    The Usage type has egress and Participant-minute fields, but both Cloudflare
+    adapters always report zero, so media cost cannot be measured or limited.
+    - Collect usage in both Cloudflare adapters and attribute it to Tenant and Episode.
+    - Reconcile one live Episode against the provider bill, then expose usage to policy
+      limits.
+
+3. **Custom SFU** (Unclear · size XL · P1)
+    Media runs only on Cloudflare SFU and RTK. A custom SFU removes that dependency. It
+    is one task in two parts: the SFU itself, then its integration into Chalk.
+    Open question: The SFU design and scope are not defined yet.
+    - Part 1, the SFU: build the server that receives and forwards audio, video and
+      screen share.
+    - Part 2, the integration: add a MediaPlane adapter, web and native clients,
+      credential renewal and Recording capture on top of it.
+
+### Collaboration
+
+4. **Selectable sound packs** (Not started · size M · P3)
+    Chalk has one set of sounds. There are no packs and no way for a Tenant to choose
+    one.
+    - Define packs and a Tenant setting, wire them into web and native events, and
+      respect mute and accessibility settings.
+
+### Transcription
+
+5. **Live captions in a Space** (Not started · size L · P3)
+    Captions are off in Chalk and no live caption path exists. The Transcript panel only
+    shows finished Transcripts.
+    - Deliver live partial and final captions with consent, capability checks and
+      cleanup.
+    - Verify latency, reconnect, language handling and privacy.
+
+### Security and compliance
+
+6. **Tenant-set chat retention** (Not started · size M · P2)
+    Tenants can set retention for Recordings and Transcripts but not for chat, and Sync
+    has no chat purge.
+    - Add chat retention to Tenant policy and purge expired messages and their
+      attachments without breaking Sync recovery.
+    - Check that hard delete overrides retention and purged messages never return
+      through replay or snapshots.
+    - Clear unsent offline chat held in browser storage when the Participant leaves or
+      signs out, so it doesn't stay on a shared computer for up to 24 hours.
+
+### SDK and embedding
+
+7. **SDK app name in server telemetry** (Not started · size S · P1)
+    No appName option exists on the client, SpaceClient, Chalk or AccessGrant request.
+    - Add appName with the bounds from theory.md and carry it on HTTP and WebSocket
+      requests into spans and logs.
+    - Check omitted and oversized values and that appName never affects authorization.
+
+8. **Swift SDK** (Not started · size XL · P2)
+    Only TypeScript SDKs exist.
+    - Define the supported surface, generate or write the package, and ship it with an
+      independent consumer build and contract fixtures.
+
+9. **Kotlin SDK** (Not started · size XL · P2)
+    Only TypeScript SDKs exist.
+    - Define the supported surface, generate or write the package, and ship it with an
+      independent consumer build and contract fixtures.
+
+10. **Python SDK** (Not started · size XL · P2)
+    Only TypeScript SDKs exist.
+    - Define the supported surface, generate or write the package, and ship it with an
+      independent consumer build and contract fixtures.
+
+11. **Go SDK** (Not started · size XL · P2)
+    Only TypeScript SDKs exist.
+    - Define the supported surface, generate or write the package, and ship it with an
+      independent consumer build and contract fixtures.
+
+12. **Embed a Space in an iframe** (Not started · size L · P2)
+    The SDK can be embedded, but there is no supported iframe contract for origins,
+    access handoff or lifecycle messages.
+    - Define the iframe entry, access handoff, allowed origins and lifecycle messages.
+    - Check camera and microphone permission, resize, teardown and expired access from
+      another origin.
+
+### Integrations and webhooks
+
+13. **Connect third-party apps** (Not started · size M · P2)
+    Composio integrations and their management UI have been removed. Future integrations
+    need a concrete user journey before implementation.
+    - Build a page to browse the app catalog, connect, refresh and disconnect an app,
+      and show clear errors.
+    - Require member permission and recent authentication for secrets, and show the
+      audit records.
+
+### Other products
+
+14. **Run several local stacks at once** (Not started · size S)
     The local stack allows one runtime per machine, fixes its container and database
     names, and its stop command fails its own ownership check, so parallel agents
     collide.
@@ -330,12 +349,12 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Make stopping the stack work after a rebase or a supervisor restart.
     - Stop the local unused-code check from failing on untracked scratchpad scripts.
 
-36. **Desktop app** (Not started · size XL · P3)
+15. **Desktop app** (Not started · size XL · P3)
     No desktop app exists; the browser is the desktop surface.
     - Decide scope and distribution, then build with native integration, updates and a
       release proof.
 
-37. **Bring your own agents** (Unclear · size XL · P3)
+16. **Bring your own agents** (Unclear · size XL · P3)
     People bring their own agents into a Space, as an assistant beside them or acting on
     their behalf. Agents can already join as Participants, but nothing lets a person
     bring, authorize or direct one.
@@ -343,8 +362,3 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Define how a person brings an agent, what it may do alone or on their behalf, and
       how others see it.
     - Build the agent join, authority and consent flow on the existing Agent identity.
-
-38. **Chalk MCP server** (Not started · size L · P3)
-    Chalk has no MCP server, so AI tools cannot use Chalk directly.
-    - Decide which Space, Episode, Recording and Transcript operations to expose, then
-      ship an MCP server on the public API.
