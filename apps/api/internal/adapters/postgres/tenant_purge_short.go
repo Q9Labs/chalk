@@ -287,9 +287,6 @@ func shortBoundaryQueries(catalog purgeCatalog) []string {
 		}
 		checks = append(checks, `select exists(select 1 from `+purgeName(fk.Child)+` c join `+shortTemp(fk.Parent)+` p on `+fk.join("c", "p")+` where `+outside+`)`)
 	}
-	if _, ok := catalog.table("feedback_reports"); ok {
-		checks = append(checks, `select exists(select 1 from public.feedback_reports c where not exists(select 1 from `+shortTemp("feedback_reports")+` s where s.id=c.id) and (space_id in(select id from `+shortTemp("spaces")+`) or episode_id in(select id from `+shortTemp("episodes")+`)))`)
-	}
 	if _, ok := catalog.table("observability_journey_events"); ok {
 		for _, table := range catalog.Tables {
 			for _, column := range table.Columns {
