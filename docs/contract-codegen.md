@@ -17,7 +17,7 @@ pnpm run contract:generate # also fixture proof and API design artifacts
 pnpm run contract:check    # non-mutating drift and contract checks
 ```
 
-`pnpm run regen` runs every generator in dependency order: contract, SDK, OpenAPI, API design, Sync contract, sqlc, migration `LatestVersion`, diagnostics fixtures, and tracker views. `pnpm run check:generated` verifies all of them in seconds without Postgres or Docker. Run `pnpm run hooks:install` once so rebases keep one side of generated files without conflicts; then run `pnpm run regen` to rebuild them. Toolchain versions live in `.tool-versions` (Node, Erlang, Elixir, OpenTofu), `apps/api/go.mod` (Go), and `packageManager` (pnpm). The language ratchet baseline is a reviewed baseline, not generated output: `check:generated` runs it but `regen` never rewrites it.
+`pnpm run regen` runs every generator in dependency order: SDK, OpenAPI, Sync contract, sqlc, migration `LatestVersion`, and tracker views. `pnpm run check:generated` verifies all of them in seconds without Postgres or Docker. Run `pnpm run hooks:install` once so rebases keep one side of generated files without conflicts; then run `pnpm run regen` to rebuild them. Toolchain versions live in `.tool-versions` (Node, Erlang, Elixir, OpenTofu), `apps/api/go.mod` (Go), and `packageManager` (pnpm). The language ratchet baseline is a reviewed baseline, not generated output: `check:generated` runs it but `regen` never rewrites it.
 
 The root gate includes contract checks. For endpoint declarations, see [the API route guide](../apps/api/docs/route-workflow.md).
 
@@ -31,9 +31,3 @@ The root gate includes contract checks. For endpoint declarations, see [the API 
 - Breaking changes need an explicit version decision and compatibility report. Test changed generated bindings against their runtime and SDK consumers, not just a successful generator exit.
 
 The default TypeScript client is Promise-based; Effect is an optional subpath. Keep framework/Effect dependencies out of the default consumer graph. Do not add empty language-SDK shells before a working client exists.
-
-## Frontend fixture proof
-
-`tools/contract-fixture-proof` compares TypeSpec and Chalk-native JSON on a representative fixture through `ContractIR`. The [generated report](../contract/generated/frontend-proof.report.md) records coverage, diagnostics, dependency cost, deterministic output, and the unresolved frontend decision.
-
-Fixture parity is not universal contract equivalence. Production emitters remain independent of that selection. Keep source-language/compiler objects out of the shared IR; do not turn the proof's old migration plan or scoring rubric into instructions for routine SDK changes.
