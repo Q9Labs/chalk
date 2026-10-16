@@ -137,6 +137,7 @@ func mapListAccountTenant(row sqlc.ListAccountTenantsRow) tenants.AccountTenant 
 	return tenants.AccountTenant{
 		Tenant: mapTenant(tenantRecord{
 			ID: row.ID, Name: row.Name, DefaultMediaPlane: row.DefaultMediaPlane,
+			MediaPlaneProviderConfig: row.MediaPlaneProviderConfig,
 			StorageProviderConfig: row.StorageProviderConfig, CorsAllowedOrigins: row.CorsAllowedOrigins, LogoKey: row.LogoKey, Website: row.Website,
 			TranscriptionCeiling: row.TranscriptionCeiling, TranscriptionDefaultMode: row.TranscriptionDefaultMode,
 			ProviderPolicyVersion: row.ProviderPolicyVersion, RecordingRetentionSeconds: row.RecordingRetentionSeconds,
@@ -155,6 +156,7 @@ func mapOnboardedAccountTenant(row sqlc.GetAccountTenantByOnboardingRow) tenants
 	return tenants.AccountTenant{
 		Tenant: mapTenant(tenantRecord{
 			ID: row.ID, Name: row.Name, DefaultMediaPlane: row.DefaultMediaPlane,
+			MediaPlaneProviderConfig: row.MediaPlaneProviderConfig,
 			StorageProviderConfig: row.StorageProviderConfig, CorsAllowedOrigins: row.CorsAllowedOrigins, LogoKey: row.LogoKey, Website: row.Website,
 			TranscriptionCeiling: row.TranscriptionCeiling, TranscriptionDefaultMode: row.TranscriptionDefaultMode,
 			ProviderPolicyVersion: row.ProviderPolicyVersion, RecordingRetentionSeconds: row.RecordingRetentionSeconds,
