@@ -39,7 +39,7 @@ func TestWebhookProducerDoesNotBlockAnotherEpisodeStart(t *testing.T) {
 	if _, err := pool.Exec(ctx, `insert into tenant_artifact_policies(tenant_id) values($1)`, uuid(tenantID)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `insert into spaces(id,tenant_id,name,slug,media_plane) values($1,$2,'Concurrent Episode',$3,'cf_rtk')`, uuid(spaceID), uuid(tenantID), spaceID.String()); err != nil {
+	if _, err := pool.Exec(ctx, `insert into spaces(id,tenant_id,name,slug,media_plane) values($1,$2,'Concurrent Episode',$3,'cf_sfu')`, uuid(spaceID), uuid(tenantID), spaceID.String()); err != nil {
 		t.Fatal(err)
 	}
 	for _, role := range spaces.DefaultRoles() {

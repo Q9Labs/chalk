@@ -22,7 +22,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       userInterfaceStyle: "automatic",
       assetBundlePatterns: ["**/*"],
       experiments: { tsconfigPaths: false },
-      plugins: ["expo-secure-store", ["@cloudflare/realtimekit-react-native", { microphonePermission: "Chalk uses your microphone so participants can hear you in a Space.", cameraPermission: "Chalk uses your camera so participants can see you in a Space.", libraryPermission: false }]],
+      plugins: ["expo-secure-store"],
       splash: { image: "./assets/splash-logo.png", resizeMode: "contain", backgroundColor: "#F7F6F2" },
       ios: {
         jsEngine: "jsc",

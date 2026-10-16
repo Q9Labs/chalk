@@ -27,9 +27,7 @@ type TenantAuthorizer interface {
 	AuthorizeTenant(ctx context.Context, principal authentication.Principal, tenantID utilities.ID, permission authorization.TenantPermission) error
 }
 
-type EpisodeCredentialVerifier interface {
-	Verify(ctx context.Context, credential string) error
-}
+
 
 type CapabilityStatus struct {
 	Recording       bool
@@ -67,7 +65,6 @@ type Options struct {
 	APIKeyAuthentication       APIKeyAuthenticator
 	APIKeyAudits               APIKeyAuditWriter
 
-	EpisodeCredentials     EpisodeCredentialVerifier
 	MediaPlane             MediaPlaneResolver
 	MediaPublications      mediapublications.Registry
 	ParticipantMediaIssuer ParticipantMediaIssuer

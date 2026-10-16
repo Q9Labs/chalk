@@ -1916,7 +1916,7 @@ export interface components {
       enabled?: boolean;
       /** @enum {string} */
       mode?: "chalk_managed" | "tenant_managed";
-      /** @description Known values include cf_sfu and cf_rtk. */
+      /** @description The supported provider is cf_sfu. */
       provider?: string;
     } & {
       [key: string]: unknown;

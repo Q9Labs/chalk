@@ -73,7 +73,7 @@ func TestResolvePreservesConfigurationPrecedenceAndTelemetry(t *testing.T) {
 	})
 
 	t.Run("space selection overrides tenant default", func(t *testing.T) {
-		tenantDefault := string(spaces.MediaPlaneProviderCloudflareRTK)
+		tenantDefault := string(spaces.MediaPlaneProviderCloudflareSFU)
 		provider, err := selectedProvider(
 			tenants.Tenant{DefaultMediaPlane: &tenantDefault},
 			spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderCloudflareSFU)},
@@ -129,7 +129,7 @@ func TestResolvePreservesContractErrorIdentity(t *testing.T) {
 		},
 		{
 			name:         "selected provider lacks deployment config",
-			registry:     NewRegistry(Config{DefaultProvider: spaces.MediaPlaneProviderCloudflareRTK}),
+			registry:     NewRegistry(Config{DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU}),
 			space:        spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderCloudflareSFU)},
 			wantError:    providercontracts.ErrAdapterUnavailable,
 			failureClass: "adapter_unavailable",

@@ -10,7 +10,7 @@ insert into tenants (id, name)
 values (:'tenant_id', 'Sync launch-cardinality fixture');
 
 insert into spaces (id, name, tenant_id, slug, media_plane)
-values (:'space_id', 'Sync launch-cardinality fixture', :'tenant_id', 'sync-launch-cardinality-fixture', 'cf_rtk');
+values (:'space_id', 'Sync launch-cardinality fixture', :'tenant_id', 'sync-launch-cardinality-fixture', 'cf_sfu');
 
 insert into episodes (
     id, status, space_id, tenant_id, started_at, config_snapshot

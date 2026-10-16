@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	rtkadapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/rtk"
 	sfuadapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu"
 	runtimeconfig "github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
@@ -38,16 +37,10 @@ type providerConfig struct {
 }
 
 type cloudflareConfig struct {
-	AccountID string               `json:"account_id"`
-	APIToken  string               `json:"api_token"`
-	RTK       *cloudflareRTKConfig `json:"rtk"`
-	SFU       *cloudflareSFUConfig `json:"sfu"`
-}
+	AccountID string `json:"account_id"`
+	APIToken  string `json:"api_token"`
 
-type cloudflareRTKConfig struct {
-	AppID             string `json:"app_id"`
-	HostPreset        string `json:"host_preset"`
-	ParticipantPreset string `json:"participant_preset"`
+	SFU *cloudflareSFUConfig `json:"sfu"`
 }
 
 type cloudflareSFUConfig struct {
@@ -216,8 +209,7 @@ func parseProviderConfig(raw json.RawMessage) (providerConfig, error) {
 
 func providerForName(name spaces.MediaPlaneProvider) (mediaplane.Provider, error) {
 	switch name {
-	case spaces.MediaPlaneProviderCloudflareRTK:
-		return mediaplane.ProviderCloudflareRTK, nil
+
 	case spaces.MediaPlaneProviderCloudflareSFU:
 		return mediaplane.ProviderCloudflareSFU, nil
 	default:
@@ -235,15 +227,7 @@ func (r Registry) tenantManagedConfig(providerName spaces.MediaPlaneProvider, pr
 	resolved.RealtimeBaseURL = r.processConfig.RealtimeBaseURL
 	resolved.AccountID = providerConfig.Cloudflare.AccountID
 	resolved.APIToken = providerConfig.Cloudflare.APIToken
-	if providerName == spaces.MediaPlaneProviderCloudflareRTK {
-		if providerConfig.Cloudflare.RTK == nil {
-			return runtimeconfig.CloudflareRealtimeConfig{}, providercontracts.ErrMissingProviderConfig
-		}
-		resolved.RTKAppID = providerConfig.Cloudflare.RTK.AppID
-		resolved.RTKPresetFacilitator = providerConfig.Cloudflare.RTK.HostPreset
-		resolved.RTKPresetContributor = providerConfig.Cloudflare.RTK.ParticipantPreset
-		return resolved, nil
-	}
+
 	if providerName == spaces.MediaPlaneProviderCloudflareSFU {
 		if providerConfig.Cloudflare.SFU == nil {
 			return runtimeconfig.CloudflareRealtimeConfig{}, providercontracts.ErrMissingProviderConfig
@@ -259,12 +243,7 @@ func (r Registry) tenantManagedConfig(providerName spaces.MediaPlaneProvider, pr
 func (r Registry) newService(provider mediaplane.Provider, providerConfig runtimeconfig.CloudflareRealtimeConfig) (*mediaplane.Service, error) {
 	var plane mediaplane.Plane
 	switch provider {
-	case mediaplane.ProviderCloudflareRTK:
-		configured, err := rtkadapter.NewPlane(providerConfig)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %v", providercontracts.ErrAdapterUnavailable, err)
-		}
-		plane = configured
+
 	case mediaplane.ProviderCloudflareSFU:
 		configured, err := sfuadapter.NewAdapter(providerConfig)
 		if err != nil {

@@ -16475,7 +16475,7 @@
             "type": "string"
           },
           "provider": {
-            "description": "Known values include cf_sfu and cf_rtk.",
+            "description": "The supported provider is cf_sfu.",
             "type": "string"
           }
         },

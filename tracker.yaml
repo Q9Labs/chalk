@@ -485,7 +485,6 @@ wishlist:
     code:
       - apps/api/internal/mediaplane/service.go
       - apps/api/internal/adapters/cloudflare/sfu/adapter.go
-      - apps/api/internal/adapters/cloudflare/rtk/plane.go
   - id: media.custom_sfu
     title: Custom SFU
     area: media

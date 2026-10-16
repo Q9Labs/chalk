@@ -413,7 +413,6 @@ function accessGrant(value: AccessGrantWire): AccessGrant {
       provider: value.media.provider,
       client_payload: payload,
     },
-    diagnostics: value.diagnostics,
   });
 }
 function mediaClientPayload(media: AccessGrantWire["media"]): Readonly<Record<string, string>> {
@@ -422,11 +421,6 @@ function mediaClientPayload(media: AccessGrantWire["media"]): Readonly<Record<st
       const { connectionId, stunServer } = media.client_payload;
       if (typeof connectionId !== "string" || typeof stunServer !== "string") throw invalidResponse(201);
       return { connectionId, stunServer };
-    }
-    case "cloudflare_rtk": {
-      const { provider_subject, token } = media.client_payload;
-      if (typeof provider_subject !== "string" || typeof token !== "string") throw invalidResponse(201);
-      return { provider_subject, token };
     }
     default:
       throw invalidResponse(201);

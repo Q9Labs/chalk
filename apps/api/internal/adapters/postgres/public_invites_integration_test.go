@@ -82,7 +82,7 @@ func TestPublicInviteLifecycleWaitsForActiveEpisodeParticipants(t *testing.T) {
 	if _, err := pool.Exec(ctx, `insert into tenants (id, name) values ($1, $2)`, uuid(tenantID), "Public invite participant due integration"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `insert into spaces (id, tenant_id, name, slug, media_plane) values ($1, $2, $3, $4, 'cf_rtk')`, uuid(spaceID), uuid(tenantID), "Public invite participant due integration", slug); err != nil {
+	if _, err := pool.Exec(ctx, `insert into spaces (id, tenant_id, name, slug, media_plane) values ($1, $2, $3, $4, 'cf_sfu')`, uuid(spaceID), uuid(tenantID), "Public invite participant due integration", slug); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(ctx, `insert into space_public_invites (tenant_id, space_id, handle, generation, state_epoch, enabled, public_role, admission_mode) values ($1, $2, $3, 1, 1, true, 'collaborator', 'open')`, uuid(tenantID), uuid(spaceID), inviteHandle); err != nil {
@@ -105,7 +105,7 @@ values ($1, $2, '{publishAudio,publishVideo,subscribe}'::text[], $3, $4, $5, 1, 
 	state, episode_id, participant_id, participant_generation, provider, provider_subject, expires_at,
 	terminal_reason, terminal_at
 ) values ($1, $2, $3, $4, 1, 1, 'guest', 'Creator', $5, 'creator-participant-due', $6,
-          'left', $7, $8, 1, 'cf_rtk', 'creator-subject', $9, 'participant_left', $10)`,
+          'left', $7, $8, 1, 'cf_sfu', 'creator-subject', $9, 'participant_left', $10)`,
 		uuid(creatorArrivalID), uuid(tenantID), uuid(spaceID), inviteHandle, credentialHash, repeatedBytes(0xa1, 32),
 		uuid(episodeID), uuid(creatorParticipantID), deadline, now.Add(-time.Second)); err != nil {
 		t.Fatal(err)
@@ -169,15 +169,15 @@ func provePublicArrivalBindingCompareAndSwap(
 	identity_mode, display_name, guest_credential_hash, idempotency_key, idempotency_fingerprint,
 	state, episode_id, participant_id, participant_generation, provider, provider_subject, expires_at
 ) values ($1, $2, $3, $4, 1, 1, 'guest', 'Replacement', $5, 'replacement-binding-cas', $6,
-	'admitted', $7, $8, 1, 'cloudflare_rtk', 'provider-1', $9)`,
+	'admitted', $7, $8, 1, 'cloudflare_sfu', 'provider-1', $9)`,
 		uuid(arrivalID), uuid(tenantID), uuid(spaceID), inviteHandle, repeatedBytes(0xb1, 32), repeatedBytes(0xc1, 32), uuid(episodeID), uuid(participantID), expiresAt); err != nil {
 		t.Fatal(err)
 	}
 	update := publicinvites.UpdateArrivalStateInput{
 		TenantID: tenantID, ArrivalHandle: arrivalID, State: publicinvites.ArrivalAdmitted,
 		EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 1,
-		Provider: publicinvites.PublicProviderCloudflareRTK, ProviderSubject: "provider-2",
-		MatchProviderBinding: true, ExpectedProvider: publicinvites.PublicProviderCloudflareRTK, ExpectedProviderSubject: "provider-1",
+		Provider: publicinvites.PublicProviderCloudflareSFU, ProviderSubject: "provider-2",
+		MatchProviderBinding: true, ExpectedProvider: publicinvites.PublicProviderCloudflareSFU, ExpectedProviderSubject: "provider-1",
 	}
 	if _, err := repository.UpdateArrivalState(ctx, update); err != nil {
 		t.Fatalf("first provider binding replacement: %v", err)

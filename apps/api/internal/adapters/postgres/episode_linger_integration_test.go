@@ -34,7 +34,7 @@ func TestEmptyEpisodeLinger(t *testing.T) {
 		args []any
 	}{
 		{`insert into tenants(id,name) values($1,'Linger test')`, []any{tenant.Bytes()}},
-		{`insert into spaces(id,name,tenant_id,slug,media_plane) values($1,'Linger test',$2,$3,'cf_rtk')`, []any{space.Bytes(), tenant.Bytes(), space.String()}},
+		{`insert into spaces(id,name,tenant_id,slug,media_plane) values($1,'Linger test',$2,$3,'cf_sfu')`, []any{space.Bytes(), tenant.Bytes(), space.String()}},
 		{`insert into episodes(id,status,space_id,tenant_id,config_snapshot,deadline_at) values($1,'active',$2,$3,'{"linger_window_seconds":60}',now()+interval '1 hour')`, []any{episode.Bytes(), space.Bytes(), tenant.Bytes()}},
 		{`insert into sync_episode_control(tenant_id,space_id,episode_id,folded_state,state_schema_version,state_digest,snapshot_bytes) values($1,$2,$3,'{}',1,decode(repeat('00',32),'hex'),2)`, []any{tenant.Bytes(), space.Bytes(), episode.Bytes()}},
 		{`insert into participants(id,tenant_id,space_id,episode_id,generation,status,role,capabilities,joined_at,left_at) values($1,$2,$3,$4,1,'left','observer','{subscribe}',now()-interval '2 minutes',now()-interval '59 seconds')`, []any{participant.Bytes(), tenant.Bytes(), space.Bytes(), episode.Bytes()}},

@@ -181,11 +181,7 @@ func subjectFromClaims(claims jwtClaims) (Subject, error) {
 			return Subject{}, ErrInvalidSubject
 		}
 		subject.CloudflareConnectionID = claims.CloudflareConnectionID
-	case ProviderCloudflareRTK:
-		if !validProviderSubject(claims.ProviderSubject) {
-			return Subject{}, ErrInvalidSubject
-		}
-		subject.ProviderSubject = claims.ProviderSubject
+
 	default:
 		return Subject{}, ErrInvalidSubject
 	}
@@ -219,8 +215,7 @@ func validSubject(subject Subject) bool {
 	switch subject.Provider {
 	case ProviderCloudflareSFU:
 		return subject.ProviderSubject == "" && validConnectionID(subject.CloudflareConnectionID)
-	case ProviderCloudflareRTK:
-		return subject.CloudflareConnectionID == "" && validProviderSubject(subject.ProviderSubject)
+
 	default:
 		return false
 	}
@@ -237,18 +232,6 @@ func validTokenID(value string) bool {
 }
 
 func validConnectionID(value string) bool {
-	if value == "" || len(value) > maxConnectionIDLength || strings.TrimSpace(value) != value || !utf8.ValidString(value) {
-		return false
-	}
-	for _, character := range value {
-		if unicode.IsControl(character) {
-			return false
-		}
-	}
-	return true
-}
-
-func validProviderSubject(value string) bool {
 	if value == "" || len(value) > maxConnectionIDLength || strings.TrimSpace(value) != value || !utf8.ValidString(value) {
 		return false
 	}

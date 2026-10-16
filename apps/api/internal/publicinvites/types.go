@@ -64,10 +64,9 @@ const (
 )
 
 const (
-	PublicProviderCloudflareRTK = "cloudflare_rtk"
 	PublicProviderCloudflareSFU = "cloudflare_sfu"
-	ProviderCloudflareRTK       = PublicProviderCloudflareRTK
-	ProviderCloudflareSFU       = PublicProviderCloudflareSFU
+
+	ProviderCloudflareSFU = PublicProviderCloudflareSFU
 )
 
 type AdmissionMode string

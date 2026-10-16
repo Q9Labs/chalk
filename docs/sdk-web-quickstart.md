@@ -34,7 +34,7 @@ const chalk = createChalkServerClient({
 const space = await chalk.spaces.create({
   name: "Design review",
   slug: "design-review",
-  mediaPlane: "cf_rtk",
+  mediaPlane: "cf_sfu",
   defaultEpisodeDurationSeconds: 3600,
   maximumEpisodeDurationSeconds: 3600,
   lingerWindowSeconds: 60,
@@ -51,7 +51,7 @@ if (!admission.access) throw new Error("Participant admission did not return acc
 // Retain admission.participant.id and generation on your backend.
 ```
 
-The media plane must be configured for your Tenant. `cf_rtk` selects Chalk's RealtimeKit adapter; use your deployment's configured media plane when self-hosting. Create a second Participant for a second application user. Reuse the existing Space and live Episode rather than creating them on every HTTP request.
+The media plane must be configured for your Tenant. `cf_sfu` selects Chalk's Cloudflare SFU adapter; use your deployment's configured media plane when self-hosting. Create a second Participant for a second application user. Reuse the existing Space and live Episode rather than creating them on every HTTP request.
 
 Retain the Space, Episode, and Participant IDs on your backend. After admission and every refresh, store the typed refresh state under that authenticated application user's Participant:
 

@@ -1059,11 +1059,7 @@ func publicAccessClientPayload(grant publicinvites.PublicAccessGrant) map[string
 			"connectionId": grant.ClientPayload.ConnectionID,
 			"stunServer":   grant.ClientPayload.StunServer,
 		}
-	case publicinvites.PublicProviderCloudflareRTK:
-		return map[string]any{
-			"provider_subject": grant.ClientPayload.ProviderSubject,
-			"token":            grant.ClientPayload.Token,
-		}
+
 	default:
 		return map[string]any{}
 	}

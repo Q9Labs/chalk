@@ -105,8 +105,6 @@ func newGenerator(routes []httpapi.APIRouteContract) *generator {
 						"bearerFormat": "JWT",
 						"description":  "Short-lived Sync participant credential bound to one Space Episode and participant generation.",
 					},
-
-
 				},
 				Schemas: make(map[string]map[string]any),
 			},
@@ -833,7 +831,7 @@ func providerConfigSchemas() map[string]map[string]any {
 			"additionalProperties": true,
 			"properties": map[string]any{
 				"enabled":  map[string]any{"type": "boolean"},
-				"provider": map[string]any{"type": "string", "description": "Known values include cf_sfu and cf_rtk."},
+				"provider": map[string]any{"type": "string", "description": "The supported provider is cf_sfu."},
 				"mode":     providerModeSchema(),
 			},
 		},
@@ -867,12 +865,12 @@ func secretCapableStringSchema() map[string]any {
 
 func scalarSchemas() map[string]map[string]any {
 	schemas := map[string]map[string]any{
-		"UUID":                    brandedStringSchema("UUID", "uuid", 36, 36),
-		"Email":                   brandedStringSchema("Email", "email", 0, 0),
-		"URLString":               brandedStringSchema("URLString", "uri", 0, 0),
-		"DateTimeString":          brandedStringSchema("DateTimeString", "date-time", 0, 0),
-		"IntegrationServiceId":    brandedStringSchema("IntegrationServiceId", "", 1, 0),
-		"IntegrationActionId":     brandedStringSchema("IntegrationActionId", "", 1, 0),
+		"UUID":                 brandedStringSchema("UUID", "uuid", 36, 36),
+		"Email":                brandedStringSchema("Email", "email", 0, 0),
+		"URLString":            brandedStringSchema("URLString", "uri", 0, 0),
+		"DateTimeString":       brandedStringSchema("DateTimeString", "date-time", 0, 0),
+		"IntegrationServiceId": brandedStringSchema("IntegrationServiceId", "", 1, 0),
+		"IntegrationActionId":  brandedStringSchema("IntegrationActionId", "", 1, 0),
 	}
 	for _, name := range idSchemaNames() {
 		schemas[name] = brandedStringSchema(name, "uuid", 36, 36)

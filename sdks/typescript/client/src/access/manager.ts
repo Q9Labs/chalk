@@ -1,18 +1,14 @@
 import { Clock, Context, Data, Effect, Layer, SynchronizedRef } from "effect";
 import type { ParsedAccessGrant, ParticipantMediaCredential, ParticipantSyncCredential } from "./grant";
 import type { ConnectionAccessReason, ConnectionAccessRequest } from "../connection/dependencies";
-
-const DEFAULT_REFRESH_WINDOW_MS = 60_000;
-const ACCESS_PROVIDER_TIMEOUT_MS = 7_000;
-
+const DEFAULT_REFRESH_WINDOW_MS = 60000;
+const ACCESS_PROVIDER_TIMEOUT_MS = 7000;
 export class ConnectionAccessFailure extends Data.TaggedError("ConnectionAccessFailure")<{
   readonly code: "access.invalid" | "access.unavailable";
   readonly cause: unknown;
 }> {}
-
 export type ConnectionAccessEffectProvider = (request: ConnectionAccessRequest) => Effect.Effect<ParsedAccessGrant, ConnectionAccessFailure>;
 export type AutomaticMediaReplacementListener = (access: ParsedAccessGrant) => void;
-
 export type ConnectionAccessEffectService = {
   readonly current: Effect.Effect<ParsedAccessGrant | null>;
   readonly currentUnsafe: () => ParsedAccessGrant | null;
@@ -27,11 +23,14 @@ export type ConnectionAccessEffectService = {
   readonly millisecondsUntilRefresh: Effect.Effect<number | null>;
   readonly clear: Effect.Effect<void>;
 };
-
 export class ConnectionAccessService extends Context.Service<ConnectionAccessService, ConnectionAccessEffectService>()("@chalk/client/ConnectionAccess") {}
-
-type AccessState = { readonly access: ParsedAccessGrant | null };
-type FetchResult = { readonly access: ParsedAccessGrant; readonly automaticMediaReplacement: boolean };
+type AccessState = {
+  readonly access: ParsedAccessGrant | null;
+};
+type FetchResult = {
+  readonly access: ParsedAccessGrant;
+  readonly automaticMediaReplacement: boolean;
+};
 type FetchInput = {
   readonly current: AccessState;
   readonly reason: ConnectionAccessReason;
@@ -39,7 +38,6 @@ type FetchInput = {
   readonly force: boolean;
   readonly refreshWindowMs: number;
 };
-
 /**
  * The sole R1 owner. SynchronizedRef keeps a refresh and its state commit
  * indivisible, while Clock keeps expiry decisions deterministic in tests.
@@ -63,7 +61,6 @@ export const makeConnectionAccessLayer = (provider: ConnectionAccessEffectProvid
         return millisecondsUntil(access.access, yield* Clock.currentTimeMillis, refreshWindowMs);
       });
       const ensureFresh = (reason: ConnectionAccessReason = "scheduled_refresh") => fetch(reason, false, false);
-
       return {
         current: SynchronizedRef.get(state).pipe(Effect.map((value) => value.access)),
         currentUnsafe: () => SynchronizedRef.getUnsafe(state).access,
@@ -84,9 +81,7 @@ export const makeConnectionAccessLayer = (provider: ConnectionAccessEffectProvid
       } satisfies ConnectionAccessEffectService;
     }),
   );
-
 export const makeFakeConnectionAccessLayer = makeConnectionAccessLayer;
-
 function fetchAccessGrant(provider: ConnectionAccessEffectProvider, input: FetchInput) {
   return Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
@@ -107,7 +102,6 @@ function fetchAccessGrant(provider: ConnectionAccessEffectProvider, input: Fetch
     return [{ access: next, automaticMediaReplacement: mediaExpired && !input.replaceMediaConnection }, { access: next }] as const;
   });
 }
-
 function connectionAccessRequest(input: FetchInput, replaceMediaConnection: boolean): Readonly<ConnectionAccessRequest> {
   return Object.freeze({
     reason: input.reason,
@@ -120,12 +114,10 @@ function connectionAccessRequest(input: FetchInput, replaceMediaConnection: bool
       : {}),
   });
 }
-
 function validateFetchedAccess(previous: ParsedAccessGrant | null, next: ParsedAccessGrant, now: number, replaceMediaConnection: boolean): void {
   validateExpiration(next, now);
   if (previous) validateRefresh(previous, next, replaceMediaConnection);
 }
-
 function notifyAutomaticMediaReplacement(listeners: ReadonlySet<AutomaticMediaReplacementListener>, result: FetchResult): void {
   if (!result.automaticMediaReplacement) return;
   for (const listener of listeners) {
@@ -136,38 +128,29 @@ function notifyAutomaticMediaReplacement(listeners: ReadonlySet<AutomaticMediaRe
     }
   }
 }
-
 function millisecondsUntil(access: ParsedAccessGrant, now: number, refreshWindowMs: number): number {
   return Math.max(0, Math.min(expiresAt(access.sync.expiresAt), expiresAt(access.media.expiresAt)) - now - refreshWindowMs);
 }
-
 function validateExpiration(access: ParsedAccessGrant, now: number): void {
   if (expiresAt(access.sync.expiresAt) <= now || expiresAt(access.media.expiresAt) <= now) throw new TypeError("Access grant is expired");
 }
-
 function validateRefresh(previous: ParsedAccessGrant, next: ParsedAccessGrant, replaceMediaConnection: boolean): void {
   if (!hasSameSubject(previous, next)) throw new TypeError("Access grant refresh changed its subject");
-
   const mediaConnectionChanged = previous.media.provider !== next.media.provider || mediaBinding(previous) !== mediaBinding(next);
   if (replaceMediaConnection === mediaConnectionChanged) return;
   throw new TypeError(replaceMediaConnection ? "Access grant replacement did not change its media binding" : "Access grant refresh unexpectedly replaced its media connection");
 }
-
 function hasSameSubject(previous: ParsedAccessGrant, next: ParsedAccessGrant): boolean {
   const left = previous.subject;
   const right = next.subject;
   return left.tenantId === right.tenantId && left.spaceId === right.spaceId && left.episodeId === right.episodeId && left.participantId === right.participantId && left.participantGeneration === right.participantGeneration;
 }
-
 function mediaBinding(access: ParsedAccessGrant): string {
   switch (access.media.provider) {
     case "cloudflare_sfu":
       return access.media.clientPayload.connectionId;
-    case "cloudflare_rtk":
-      return access.media.clientPayload.providerSubject;
   }
 }
-
 function expiresAt(value: string): number {
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) throw new TypeError("Access grant expiration is invalid");

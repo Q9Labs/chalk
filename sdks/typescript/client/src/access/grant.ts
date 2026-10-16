@@ -19,25 +19,15 @@ export type ParticipantSyncAccess = {
   readonly token: ParticipantSyncCredential;
   readonly expiresAt: string;
 };
-export type ParticipantMediaAccess =
-  | {
-      readonly token: ParticipantMediaCredential;
-      readonly expiresAt: string;
-      readonly provider: "cloudflare_sfu";
-      readonly clientPayload: {
-        readonly connectionId: string;
-        readonly stunServer: string;
-      };
-    }
-  | {
-      readonly token: ParticipantMediaCredential;
-      readonly expiresAt: string;
-      readonly provider: "cloudflare_rtk";
-      readonly clientPayload: {
-        readonly providerSubject: string;
-        readonly token: string;
-      };
-    };
+export type ParticipantMediaAccess = {
+  readonly token: ParticipantMediaCredential;
+  readonly expiresAt: string;
+  readonly provider: "cloudflare_sfu";
+  readonly clientPayload: {
+    readonly connectionId: string;
+    readonly stunServer: string;
+  };
+};
 export type ParsedAccessGrant = {
   readonly subject: AccessSubject;
   readonly episodeStartedAt?: string | null;
@@ -173,16 +163,6 @@ function parseMediaAccess(value: unknown): ParticipantMediaAccess {
           stunServer: requireNonEmptyString(payload.stunServer),
         },
       };
-    case "cloudflare_rtk":
-      return {
-        token,
-        expiresAt,
-        provider: value.provider,
-        clientPayload: {
-          providerSubject: requireNonEmptyString(payload.provider_subject ?? payload.providerSubject),
-          token: requireNonEmptyString(payload.token),
-        },
-      };
     default:
       throw new AccessGrantError();
   }
@@ -191,8 +171,6 @@ function mediaClientPayload(value: ParticipantMediaAccess): Readonly<Record<stri
   switch (value.provider) {
     case "cloudflare_sfu":
       return { connectionId: value.clientPayload.connectionId, stunServer: value.clientPayload.stunServer };
-    case "cloudflare_rtk":
-      return { provider_subject: value.clientPayload.providerSubject, token: value.clientPayload.token };
   }
 }
 function requireCredential(value: unknown, audience: "chalk-sync" | "chalk-media"): string {

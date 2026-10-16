@@ -2,7 +2,6 @@ package mediaplaneproviders
 
 import (
 	"encoding/json"
-	"errors"
 	"testing"
 
 	runtimeconfig "github.com/q9labs/chalk/apps/api/internal/config"
@@ -40,10 +39,6 @@ func TestBindingResolutionMatchesLiveProviderSelection(t *testing.T) {
 	fromTenant, err := registry.ResolveBinding(tenant, spaces.Space{})
 	if err != nil || fromTenant == nil || fromTenant.Provider != provider {
 		t.Fatalf("tenant default was not selected: %#v %v", fromTenant, err)
-	}
-	_, err = registry.ResolveBinding(tenant, spaces.Space{MediaPlane: providercontracts.SpaceProviderCloudflareRTK})
-	if !errors.Is(err, providercontracts.ErrAdapterUnavailable) {
-		t.Fatalf("Space override must not silently fall back to deployment SFU: %v", err)
 	}
 	tenant.MediaPlaneProviderConfig = json.RawMessage(`{"enabled":false}`)
 	disabled, err := registry.ResolveBinding(tenant, spaces.Space{})
