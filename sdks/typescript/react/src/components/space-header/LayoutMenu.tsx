@@ -3,7 +3,6 @@ import React, { type RefObject } from "react";
 
 import { cn } from "../../utils/cn";
 import { ArrowDown01Icon, LayoutGridIcon, Maximize01Icon, Monitor01Icon } from "../../utils/icons";
-import { ChalkIconButton } from "../chalk-ui";
 import type { SpaceHeaderProps } from "./space-header-contract";
 
 export type StageLayoutValue = NonNullable<SpaceHeaderProps["layout"]>;
@@ -23,7 +22,6 @@ export interface LayoutMenuProps {
   readonly onLayoutChange: (layout: StageLayoutValue) => void;
   /** Element inside the Chalk root that hosts the popup so it inherits the theme tokens. */
   readonly container: RefObject<HTMLElement | null>;
-  readonly skin: "classic" | "chalk";
 }
 
 const CLASSIC_TRIGGER =
@@ -33,23 +31,18 @@ const POPUP =
 const ITEM = "relative z-10 flex h-[54px] cursor-pointer items-center gap-3 rounded-[8px] px-2.5 text-sm outline-none select-none";
 
 /** Single header button showing the current stage layout; opens a menu with the three layouts. */
-export function LayoutMenu({ layout, onLayoutChange, container, skin }: LayoutMenuProps): React.JSX.Element {
+export function LayoutMenu({ layout, onLayoutChange, container }: LayoutMenuProps): React.JSX.Element {
   const current = LAYOUT_OPTIONS.find((option) => option.value === layout) ?? LAYOUT_OPTIONS[0];
   const selectedIndex = LAYOUT_OPTIONS.findIndex((option) => option.value === current.value);
   const label = `Layout: ${current.label}`;
   return (
     <Menu.Root>
-      {skin === "classic" ? (
+      {
         <Menu.Trigger className={CLASSIC_TRIGGER} aria-label={label} title={label}>
           <current.Icon size={17} />
           <ArrowDown01Icon size={12} className="opacity-70" />
         </Menu.Trigger>
-      ) : (
-        <Menu.Trigger render={<ChalkIconButton aria-label={label} className="w-auto gap-0.5 px-2 text-[var(--chalk-app-text-muted)] hover:text-[var(--chalk-app-text)]" seed="space-header-layout" size="sm" title={label} />}>
-          <current.Icon size={16} />
-          <ArrowDown01Icon size={12} className="opacity-70" />
-        </Menu.Trigger>
-      )}
+      }
       <Menu.Portal container={container}>
         <Menu.Positioner side="bottom" align="end" sideOffset={6} className="z-50">
           <Menu.Popup className={POPUP}>

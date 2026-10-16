@@ -1,17 +1,14 @@
 import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES } from "@q9labsai/chalk-client";
 import type { ChatAttachment, ChatMessage, ChatReadReceipt, ChatSendInput, ChatUploadFile, SpaceSnapshot } from "@q9labsai/chalk-client";
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useChat, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 
 import { cn } from "../../utils/cn";
 import { SentIcon, type SentIconHandle } from "../../utils/animated-icons";
 import { Cancel01Icon, Message01Icon, Upload01Icon } from "../../utils/icons";
-import { ChalkAlert, ChalkBadge, ChalkButton, ChalkChrome, ChalkDivider, ChalkEmptyState, ChalkIconButton, ChalkPanel, ChalkSpinner, ChalkTextarea } from "../chalk-ui";
-import { useSkin } from "../skin-context";
+import { ChalkAlert, ChalkBadge, ChalkButton, ChalkDivider, ChalkEmptyState, ChalkIconButton, ChalkPanel, ChalkSpinner, ChalkTextarea } from "../chalk-ui";
 import { ClassicChatPanel, ClassicChatPanelSurface } from "./ClassicChatPanel";
 import { MessageBubble } from "./MessageBubble";
 import { compareChatSequence, createChatScrollWork, groupChatMessages, isChatScrollAtBottom, markChatSequenceRead, receiptsForChatMessage } from "./chat-panel-model";
-import { uploadChatAttachment } from "./chat-file-upload";
 import { describeChatUploadFile } from "./chat-upload-file";
 
 export type { ChatMessage } from "./chat-types";
@@ -223,7 +220,7 @@ export const ChatPanelSurface = React.memo(
         <div className="flex h-full min-h-0 w-full flex-col">
           {variant === "sidebar" ? (
             <header className="group relative flex items-center justify-between bg-[var(--chalk-app-panel)] px-5 py-[18px]">
-              <ChalkChrome className="absolute inset-0 h-full w-full" filled fill="var(--chalk-surface, var(--chalk-app-panel))" part="chat-header" />
+              {null}
               <div className="relative z-[1] flex w-full items-center justify-between">
                 <h2 className="text-xl font-semibold tracking-[-0.025em] text-[var(--chalk-app-text)]">{title}</h2>
                 {onClose ? (
@@ -338,7 +335,7 @@ export const ChatPanelSurface = React.memo(
             </div>
           ) : null}
           <div className="group relative flex items-end gap-2 bg-[var(--chalk-app-chrome)] px-4 py-4">
-            <ChalkChrome className="absolute inset-0 h-full w-full" filled fill="var(--chalk-surface, var(--chalk-app-chrome))" part="chat-composer" />
+            {null}
             {onUploadAttachment ? (
               <>
                 {!pickChatFiles ? <input ref={fileInputRef} type="file" multiple className="sr-only" aria-label="Choose attachments" onChange={(event) => selectFiles(event.target.files)} /> : null}
@@ -383,49 +380,13 @@ export const ChatPanelSurface = React.memo(
   },
 );
 
-const ChalkChatPanel = React.memo((props: ChatPanelProps): React.JSX.Element => {
-  const client = useSpaceClient();
-  const chat = useChat();
-  const participants = useParticipants();
-  const self = useSelf();
-  const localParticipantId = self.participantId ?? "local";
-  const participantNames = useMemo(() => Object.fromEntries([...participants.roster.map((participant) => [participant.participantId, participant.displayName] as const), [localParticipantId, self.displayName ?? "You"]]), [localParticipantId, participants.roster, self.displayName]);
-
-  return (
-    <ChatPanelSurface
-      {...props}
-      messages={chat.messages}
-      pendingMessages={chat.pendingSends}
-      readReceipts={chat.readReceipts}
-      participantNames={participantNames}
-      localParticipantId={localParticipantId}
-      hasOlder={chat.pagination.hasOlder}
-      onSendMessage={(input) => client.chat.send(input).then(() => undefined)}
-      onUploadAttachment={(file) => uploadChatAttachment(file, client.chat.files)}
-      onResolveAttachmentUrl={async (attachmentId) => {
-        const attachment = [...chat.messages, ...chat.pendingSends].flatMap((message) => message.attachments).find((candidate) => candidate.attachmentId === attachmentId);
-        if (!attachment) throw new Error("The chat attachment is no longer available.");
-        return client.chat.files.resolveUrl(attachment);
-      }}
-      onMarkRead={(sequence) => {
-        const message = chat.messages.find((candidate) => candidate.sequence === sequence);
-        return message ? client.chat.markRead(message.messageId) : undefined;
-      }}
-      onLoadOlder={() => client.chat.loadOlder().then(() => undefined)}
-      error={chat.lastError?.message ?? null}
-    />
-  );
-});
-
 export const ChatPanel = React.memo((props: ChatPanelProps): React.JSX.Element => {
-  const skin = useSkin();
-  return skin === "classic" ? <ClassicChatPanel {...props} /> : <ChalkChatPanel {...props} />;
+  return <ClassicChatPanel {...props} />;
 });
 
 /** Data-driven chat presentation without a Space client or bindings provider. */
 export const ChatPanelPresentation = React.memo((props: ChatPanelSurfaceProps): React.JSX.Element => {
-  const skin = useSkin();
-  return skin === "classic" ? <ClassicChatPanelSurface {...props} /> : <ChatPanelSurface {...props} />;
+  return <ClassicChatPanelSurface {...props} />;
 });
 
 ChatPanel.displayName = "ChatPanel";

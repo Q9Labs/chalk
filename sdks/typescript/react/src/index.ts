@@ -26,7 +26,7 @@ export { Entrance } from "./components/entrance/Entrance";
 export type { EntranceProps, EntranceSettings } from "./components/entrance/Entrance";
 export { Logo } from "./components/logo/Logo";
 export type { LogoMotion, LogoProps, LogoVariant } from "./components/logo/Logo";
-export type { ThemeAppearance, ThemeMode, ThemePalette, ThemeSkin, ThemeTexture } from "./components/theme";
+export type { ThemeAppearance, ThemeMode, ThemePalette, ThemeTexture } from "./components/theme";
 export { COSMIC_CHALK_THEME } from "./theme";
 export type { ChalkTheme, ChalkThemeTokens } from "./theme";
 export {
@@ -35,7 +35,6 @@ export {
   ChalkBadge,
   ChalkButton,
   ChalkCheckbox,
-  ChalkChrome,
   ChalkControlGroup,
   ChalkDialogPanel,
   ChalkDivider,
@@ -60,7 +59,6 @@ export type {
   ChalkButtonProps,
   ChalkButtonVariant,
   ChalkCheckboxProps,
-  ChalkChromeProps,
   ChalkControlGroupProps,
   ChalkDialogPanelProps,
   ChalkDividerProps,
@@ -71,7 +69,6 @@ export type {
   ChalkMenuProps,
   ChalkPanelProps,
   ChalkRadioProps,
-  ChalkSeed,
   ChalkSelectProps,
   ChalkSliderProps,
   ChalkSpinnerProps,

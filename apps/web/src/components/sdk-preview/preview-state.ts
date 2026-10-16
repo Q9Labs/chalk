@@ -6,7 +6,7 @@
  */
 
 import type { Capability } from "@q9labsai/chalk-client";
-import { THEME_PALETTES, THEME_SKINS, THEME_TEXTURES, type SpaceViewFeatures, type ThemePalette, type ThemeSkin, type ThemeTexture } from "@q9labsai/chalk-react/preview";
+import { THEME_PALETTES, THEME_TEXTURES, type SpaceViewFeatures, type ThemePalette, type ThemeTexture } from "@q9labsai/chalk-react/preview";
 
 const PREVIEW_VIEWS = ["entrance", "space"] as const;
 export type PreviewView = (typeof PREVIEW_VIEWS)[number];
@@ -38,9 +38,6 @@ export type PreviewPalette = ThemePalette;
 
 export const PREVIEW_TEXTURES: readonly ThemeTexture[] = THEME_TEXTURES.map((texture) => texture.value);
 export type PreviewTexture = ThemeTexture;
-
-export const PREVIEW_SKINS: readonly ThemeSkin[] = THEME_SKINS.map((skin) => skin.value);
-export type PreviewSkin = ThemeSkin;
 
 export const PREVIEW_MEDIA_STATES = ["unavailable", "requesting", "enabled", "disabled", "failed"] as const;
 export type PreviewMediaState = (typeof PREVIEW_MEDIA_STATES)[number];
@@ -138,7 +135,7 @@ export interface PreviewSearch {
   readonly stage: PreviewStage;
   readonly stageBackground: boolean;
   readonly dialog: PreviewDialog;
-  readonly skin: PreviewSkin;
+
   readonly palette: PreviewPalette;
   readonly texture: PreviewTexture;
   readonly chrome: PreviewChrome;
@@ -183,7 +180,7 @@ export interface PreviewSearchInput {
   readonly stage?: PreviewQueryValue;
   readonly stageBackground?: PreviewQueryValue;
   readonly dialog?: PreviewQueryValue;
-  readonly skin?: PreviewQueryValue;
+
   readonly palette?: PreviewQueryValue;
   readonly texture?: PreviewQueryValue;
   readonly chrome?: PreviewQueryValue;
@@ -242,7 +239,6 @@ export const DEFAULT_PREVIEW_SEARCH: PreviewSearch = {
   stage: "people",
   stageBackground: true,
   dialog: "none",
-  skin: "classic",
   palette: "light",
   texture: "none",
   chrome: "hidden",
@@ -278,7 +274,6 @@ const SEARCH_KEYS = [
   "stage",
   "stageBackground",
   "dialog",
-  "skin",
   "palette",
   "texture",
   "chrome",
@@ -456,7 +451,6 @@ export function normalizePreviewSearch(source: PreviewSearchLike = {}): PreviewS
     stage: enumValue(sourceValue(source, "stage"), PREVIEW_STAGES, DEFAULT_PREVIEW_SEARCH.stage),
     stageBackground: booleanValue(sourceValue(source, "stageBackground"), DEFAULT_PREVIEW_SEARCH.stageBackground),
     dialog: enumValue(sourceValue(source, "dialog"), PREVIEW_DIALOGS, DEFAULT_PREVIEW_SEARCH.dialog),
-    skin: enumValue(sourceValue(source, "skin"), PREVIEW_SKINS, DEFAULT_PREVIEW_SEARCH.skin),
     palette: paletteValue(sourceValue(source, "palette")),
     texture: textureValue(sourceValue(source, "texture")),
     chrome: enumValue(sourceValue(source, "chrome"), PREVIEW_CHROME, DEFAULT_PREVIEW_SEARCH.chrome),

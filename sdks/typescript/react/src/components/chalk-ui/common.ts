@@ -1,21 +1,13 @@
 import type { CSSProperties } from "react";
 
 export type ChalkTone = "neutral" | "accent" | "danger" | "success";
-export type ChalkButtonVariant = "outline" | "solid" | "scribble" | "ghost";
-export type ChalkSeed = number | string;
+export type ChalkButtonVariant = "outline" | "solid" | "ghost";
 
 export const TONE_STROKES: Record<ChalkTone, string> = {
   neutral: "var(--chalk-line, var(--chalk-app-line-strong, currentColor))",
   accent: "var(--chalk-accent, var(--chalk-app-control-active-line, currentColor))",
   danger: "var(--chalk-danger, var(--chalk-app-danger))",
   success: "var(--chalk-positive, var(--chalk-app-success))",
-};
-
-export const TONE_FILLS: Record<ChalkTone, string> = {
-  neutral: "var(--chalk-surface, var(--chalk-app-control, currentColor))",
-  accent: "var(--chalk-accent, var(--chalk-app-control-primary, currentColor))",
-  danger: "var(--chalk-danger-surface, var(--chalk-app-danger-surface))",
-  success: "var(--chalk-positive, var(--chalk-app-control-primary))",
 };
 
 export const CLASSIC_SURFACE_CLASSES = "border border-[var(--chalk-app-line,var(--chalk-line))] bg-[var(--chalk-app-control,var(--chalk-surface))]";
@@ -79,7 +71,6 @@ function createClassicButtonClasses(toneClasses: ClassicToneClasses): ClassicBut
   return {
     outline: `border ${toneClasses.border} ${toneClasses.background} ${toneClasses.text} hover:bg-[var(--chalk-app-control-hover,var(--chalk-stage))]`,
     solid: `border ${toneClasses.solidBorder} ${toneClasses.solidBackground} ${toneClasses.solidText} ${toneClasses.solidHover}`,
-    scribble: `border ${toneClasses.border} ${toneClasses.background} ${toneClasses.text} hover:bg-[var(--chalk-app-control-hover,var(--chalk-stage))]`,
     ghost: `border border-transparent bg-transparent ${toneClasses.text} hover:bg-[var(--chalk-app-control-hover,var(--chalk-stage))]`,
   };
 }

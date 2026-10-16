@@ -56,7 +56,6 @@ export function ClassicEntranceSurface({
   return (
     <main
       data-chalk
-      data-chalk-skin="classic"
       data-chalk-theme={colorScheme}
       data-chalk-palette={theme?.palette}
       data-chalk-texture={theme?.texture}

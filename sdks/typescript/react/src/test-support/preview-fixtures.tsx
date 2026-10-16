@@ -13,10 +13,9 @@ import { LeaveDialog } from "../components/leave-dialog/LeaveDialog";
 import { SpaceView, type SpacePanel, type SpaceViewProps } from "../components/space-view/SpaceView";
 import { ChalkProvider } from "../bindings/context";
 import { chalkThemeStyle, type ChalkTheme } from "../theme";
-import { SkinProvider } from "../components/skin-context";
 import { StatusSurface } from "../components/chalk/StatusSurface";
 import { createPreviewClient } from "./preview-client";
-import { getThemeMode, THEME_PALETTES, THEME_SKINS, THEME_TEXTURES, type ThemeAppearance, type ThemeMode, type ThemePalette, type ThemeSkin, type ThemeTexture } from "../components/theme";
+import { getThemeMode, THEME_PALETTES, THEME_TEXTURES, type ThemeAppearance, type ThemeMode, type ThemePalette, type ThemeTexture } from "../components/theme";
 
 /**
  * DEV-only adapter for the URL-addressable SDK gallery. It deliberately lives
@@ -139,16 +138,15 @@ export interface PreviewStatusSurfaceProps {
 
 /** DEV-only adapter for post-live lifecycle states that use Chalk's status surface. */
 export function PreviewStatusSurface({ state, spaceName, error, theme, onRetry }: PreviewStatusSurfaceProps): React.JSX.Element {
-  const skin = theme?.skin ?? "classic";
   const colorScheme = theme?.palette ? getThemeMode(theme.palette) : theme?.colorScheme === "dark" ? "dark" : "light";
   const message = state === "leaving" ? `Leaving ${spaceName}…` : state === "left" ? "You have left this Space." : (error ?? "This Space is unavailable.");
 
   return (
-    <SkinProvider skin={skin}>
-      <div data-chalk data-chalk-theme={colorScheme} data-chalk-palette={theme?.palette} data-chalk-texture={theme?.texture} data-chalk-skin={skin} className="chalk-root h-full min-h-0 w-full" style={chalkThemeStyle(theme, colorScheme)}>
+    <>
+      <div data-chalk data-chalk-theme={colorScheme} data-chalk-palette={theme?.palette} data-chalk-texture={theme?.texture} className="chalk-root h-full min-h-0 w-full" style={chalkThemeStyle(theme, colorScheme)}>
         <StatusSurface message={message} onRetry={state === "leaving" ? undefined : onRetry} />
       </div>
-    </SkinProvider>
+    </>
   );
 }
 
@@ -210,5 +208,5 @@ export function PreviewEpisodeEnded({ spaceName, duration, participantCount, onR
   );
 }
 
-export { CommandErrorAlert, JoinFailedScreen, LeaveDialog, getThemeMode, THEME_PALETTES, THEME_SKINS, THEME_TEXTURES };
-export type { EntranceSettings, SpaceLayout, SpacePanel, SpaceViewProps, ThemeAppearance, ThemeMode, ThemePalette, ThemeSkin, ThemeTexture };
+export { CommandErrorAlert, JoinFailedScreen, LeaveDialog, getThemeMode, THEME_PALETTES, THEME_TEXTURES };
+export type { EntranceSettings, SpaceLayout, SpacePanel, SpaceViewProps, ThemeAppearance, ThemeMode, ThemePalette, ThemeTexture };

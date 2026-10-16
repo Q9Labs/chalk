@@ -92,7 +92,6 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
     <TileShell
       label={`Video tile for ${participant.displayName}`}
       accentColor={colors.primary}
-      seed={`participant:${participant.id}`}
       pinned={pinned}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
@@ -102,7 +101,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       hidden={hidden}
       corner={
         showStatus && hasPoorConnection ? (
-          <ChalkBadge tone="danger" seed={`participant:${participant.id}:connection`} className="pointer-events-none absolute top-2 right-2 z-20 min-h-0 min-w-0 p-1" role="status" aria-label={`${participant.displayName} has a poor connection`}>
+          <ChalkBadge tone="danger" className="pointer-events-none absolute top-2 right-2 z-20 min-h-0 min-w-0 p-1" role="status" aria-label={`${participant.displayName} has a poor connection`}>
             <WifiOffIcon size={12} className="text-[var(--chalk-danger)]" />
           </ChalkBadge>
         ) : null
@@ -110,9 +109,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       chip={
         showName || showStatus ? (
           <>
-            {!mediaVisible && showAvatar && (
-              <Avatar name={participant.displayName} src={participant.avatarUrl} size="xs" generated={generatedAvatars} animated={animatedAvatars} gradientPreference={gradientPreference} seed={`participant:${participant.id}:chip-avatar`} className="hidden shrink-0 @[240px]:flex" />
-            )}
+            {!mediaVisible && showAvatar && <Avatar name={participant.displayName} src={participant.avatarUrl} size="xs" generated={generatedAvatars} animated={animatedAvatars} gradientPreference={gradientPreference} className="hidden shrink-0 @[240px]:flex" />}
             {showName && (
               <span className="min-w-0 truncate text-[11px] leading-4 font-medium tracking-[-0.01em] text-white @[240px]:text-[13px] @[240px]:leading-5" title={participant.displayName}>
                 {participant.displayName}
@@ -144,9 +141,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       <div className={cn("relative z-10 block h-full w-full overflow-hidden transition-opacity duration-300 [&>*]:h-full [&>*]:w-full [&>*]:object-cover", mirrored && "scale-x-[-1]", mediaVisible ? "opacity-100" : "opacity-0")}>{media}</div>
       {!mediaVisible && showAvatar && (
         <div className="chalk-participant-wash chalk-textured-surface absolute inset-0 z-10 flex items-center justify-center">
-          <span className={cn("relative grid place-items-center rounded-full", participant.isSpeaking && !participant.isMuted && "chalk-voice-halo")}>
-            <Avatar name={participant.displayName} src={participant.avatarUrl} size="xl" generated={generatedAvatars} animated={animatedAvatars} className="opacity-90" gradientPreference={gradientPreference} seed={`participant:${participant.id}:main-avatar`} />
-          </span>
+          <span className={cn("relative grid place-items-center rounded-full", participant.isSpeaking && !participant.isMuted && "chalk-voice-halo")}></span>
         </div>
       )}
       {children}

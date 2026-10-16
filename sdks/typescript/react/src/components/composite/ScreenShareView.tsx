@@ -1,14 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
 import { ArrowDown01Icon, ArrowLeft01Icon, ArrowRight01Icon, ArrowUp01Icon, Maximize01Icon, Monitor01Icon, RefreshIcon, ZoomInIcon, ZoomOutIcon } from "../../utils/icons";
 import { ParticipantTile } from "../atomic";
 import { ChalkBadge, ChalkButton, ChalkControlGroup, ChalkDivider, ChalkEmptyState, ChalkIconButton, ChalkPanel, ChalkSpinner } from "../chalk-ui";
-import { useSkin } from "../skin-context";
 import { ClassicScreenShareView } from "./ClassicScreenShareView";
 import type { Participant } from "../participant-grid/ParticipantGrid";
 import { observeFirstRenderedFrame } from "../../internal/episode-diagnostic-render-observer";
-import { toVideoParticipants } from "../../selectors/space-selectors";
 
 export interface ScreenShareViewProps {
   onStopShare?: () => void;
@@ -33,7 +30,6 @@ export interface ScreenSharePresentationProps {
 
 /** Shared-content viewport for data-driven rendering without MediaStreamTrack effects. */
 export function ScreenSharePresentation({ sharedByName, media, mediaVisible, className }: ScreenSharePresentationProps): React.JSX.Element {
-  const skin = useSkin();
   const viewport = (
     <div className="relative h-full min-h-0 min-w-0 overflow-hidden bg-[var(--chalk-text)]">
       {mediaVisible ? <div className="absolute inset-0 [&>*]:h-full [&>*]:w-full [&>*]:object-contain">{media}</div> : null}
@@ -48,9 +44,9 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, cla
     </div>
   );
 
-  if (skin === "classic") return <div className={cn("h-full w-full overflow-hidden rounded-2xl bg-[var(--chalk-text)]", className)}>{viewport}</div>;
+  return <div className={cn("h-full w-full overflow-hidden rounded-2xl bg-[var(--chalk-text)]", className)}>{viewport}</div>;
   return (
-    <ChalkPanel tone="neutral" filled className={cn("relative h-full w-full overflow-hidden rounded-2xl p-0 [&>div]:h-full [&>div]:w-full", className)}>
+    <ChalkPanel tone="neutral" className={cn("relative h-full w-full overflow-hidden rounded-2xl p-0 [&>div]:h-full [&>div]:w-full", className)}>
       {viewport}
     </ChalkPanel>
   );
@@ -260,7 +256,7 @@ export const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByNa
 
   return (
     <div className={cn("flex h-full w-full gap-2 transition-all duration-500", thumbnailPosition === "bottom" ? "flex-col" : "flex-row", className)}>
-      <ChalkPanel tone="neutral" filled className="relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl p-0 [&>div]:h-full [&>div]:w-full">
+      <ChalkPanel tone="neutral" className="relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl p-0 [&>div]:h-full [&>div]:w-full">
         <div ref={containerRef} className="group relative h-full min-h-0 min-w-0 overflow-hidden bg-[var(--chalk-text)]" onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseLeave}>
           {/* Loading State */}
           {isLoading && (
@@ -352,7 +348,6 @@ export const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByNa
       {showThumbnails && participants.length > 0 && (
         <ChalkPanel
           tone="neutral"
-          filled
           className={cn("p-1 transition-all duration-500 ease-in-out [&>div]:h-full [&>div]:w-full", !isThumbnailsOpen && (thumbnailPosition === "bottom" ? "h-0 opacity-0" : "w-0 opacity-0 px-0"), isThumbnailsOpen && (thumbnailPosition === "bottom" ? "h-36 w-full" : "w-56 h-full"))}
         >
           <ChalkControlGroup orientation={thumbnailPosition === "bottom" ? "horizontal" : "vertical"} className={cn("h-full w-full gap-2", thumbnailPosition === "bottom" ? "items-center overflow-auto px-1" : "overflow-y-auto overflow-x-hidden py-1")} role="presentation">
@@ -386,34 +381,7 @@ export const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByNa
 });
 
 export function ScreenShareView(props: ScreenShareViewProps): React.JSX.Element {
-  const skin = useSkin();
-  return skin === "classic" ? <ClassicScreenShareView {...props} /> : <ChalkScreenShareView {...props} />;
+  return <ClassicScreenShareView {...props} />;
 }
-
-function ChalkScreenShareView(props: ScreenShareViewProps): React.JSX.Element {
-  const client = useSpaceClient();
-  const self = useSelf();
-  const participantsSlice = useParticipants();
-  const media = useMedia();
-  const localId = self.participantId ?? "local";
-  const participants = useMemo(() => toVideoParticipants(participantsSlice.roster, media.remote, localId, self.displayName ?? "You", media.local), [localId, media.local, media.remote, participantsSlice.roster, self.displayName]);
-  const active = participants.find((participant) => participant.isScreenSharing && participant.screenShareTrack);
-
-  if (!active?.screenShareTrack) {
-    return <ChalkEmptyState className="grid h-full place-items-center text-sm text-[var(--chalk-app-text-muted)]" title="No active screen share" />;
-  }
-
-  return (
-    <ScreenShareViewSurface
-      {...props}
-      screenShareTrack={active.screenShareTrack}
-      sharedByName={active.displayName}
-      participants={participants}
-      onStopShare={props.onStopShare ?? (() => void (active.isLocal ? client.media.setScreenShareEnabled(false) : client.participants.stopScreenShare(active.id)))}
-    />
-  );
-}
-
-ChalkScreenShareView.displayName = "ChalkScreenShareView";
 
 ScreenShareView.displayName = "ScreenShareView";

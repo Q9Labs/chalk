@@ -6,7 +6,6 @@ import type React from "react";
 import { cn } from "../../utils/cn";
 import { ArrowDown01Icon, Microphone01Icon, Video01Icon, VolumeHighIcon } from "../../utils/icons";
 import { ChalkButton, ChalkIconButton, ChalkSelect } from "../chalk-ui";
-import { useSkin } from "../skin-context";
 import type { EntranceDevice, EntranceDeviceOptions } from "./types";
 
 type DeviceControl = "microphone" | "camera";
@@ -81,10 +80,10 @@ function DeviceControlRow({
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   const generatedId = useId();
-  const skin = useSkin();
+
   const selectorId = `chalk-entrance-${kind}-devices-${generatedId}`;
-  const toggleVariant = skin === "chalk" && enabled ? "solid" : "outline";
-  const toggleTone = skin === "chalk" ? (enabled ? "success" : "danger") : "neutral";
+  const toggleVariant = false ? "solid" : "outline";
+  const toggleTone = "neutral";
 
   return (
     <div className="grid min-w-0 gap-2" data-chalk-entrance-device-control={kind}>
@@ -98,7 +97,7 @@ function DeviceControlRow({
         </ChalkButton>
 
         {hasDevices ? (
-          <ChalkIconButton type="button" aria-controls={selectorId} aria-expanded={selectorOpen} aria-label={`Choose ${label.toLowerCase()} devices`} disabled={disabled} onClick={onToggleSelector} seed={`entrance-${kind}-devices`} tone="neutral" className="min-h-11 w-11 shrink-0">
+          <ChalkIconButton type="button" aria-controls={selectorId} aria-expanded={selectorOpen} aria-label={`Choose ${label.toLowerCase()} devices`} disabled={disabled} onClick={onToggleSelector} tone="neutral" className="min-h-11 w-11 shrink-0">
             <ArrowDown01Icon aria-hidden="true" size={16} className={cn("transition-transform", selectorOpen && "rotate-180")} />
           </ChalkIconButton>
         ) : null}

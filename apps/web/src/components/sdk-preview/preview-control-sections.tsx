@@ -1,7 +1,7 @@
 import type { MouseEvent } from "react";
 
 import { ChipGroup, Field, SelectField, SwitchField, ToggleChip } from "./preview-control-fields";
-import { featureLabel, paletteLabel, paletteMode, skinDescription, skinLabel, stateLabel, textureDescription, textureLabel, valueLabel } from "./preview-labels";
+import { featureLabel, paletteLabel, paletteMode, stateLabel, textureDescription, textureLabel, valueLabel } from "./preview-labels";
 import {
   createPreviewHref,
   ENTRANCE_STATES,
@@ -20,7 +20,6 @@ import {
   PREVIEW_PALETTES,
   PREVIEW_ROLE_PRESETS,
   PREVIEW_SCREEN_SHARES,
-  PREVIEW_SKINS,
   PREVIEW_STAGES,
   PREVIEW_TEXTURES,
   PREVIEW_TOASTS,
@@ -123,7 +122,6 @@ export function AccessSection({ search, onChange }: PreviewControlSectionProps) 
 export function LookSection({ search, onChange }: PreviewControlSectionProps) {
   return (
     <div className="space-y-5">
-      <ChipGroup label="Skin" value={search.skin} options={PREVIEW_SKINS} format={skinLabel} describe={skinDescription} onChange={(skin) => onChange({ skin })} />
       <SelectField label="Palette" value={search.palette} options={PREVIEW_PALETTES} format={paletteLabel} groupBy={(palette) => (paletteMode(palette) === "dark" ? "Dark" : "Light")} onChange={(palette) => onChange({ palette })} />
       <ChipGroup label="Texture" value={search.texture} options={PREVIEW_TEXTURES} format={textureLabel} describe={textureDescription} onChange={(texture) => onChange({ texture })} />
     </div>

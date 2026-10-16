@@ -4,11 +4,10 @@ import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 import { ChalkProvider } from "../../bindings/context";
 import { createPreviewClient, createSnapshot } from "../../test-support/preview-client";
-import { SkinProvider } from "../skin-context";
 import { ControlBar } from "./ControlBar";
 
 describe("compact screen sharing", () => {
-  it.each(["classic", "chalk"] as const)("starts and stops screen sharing in the %s skin", async (skin) => {
+  it("starts and stops screen sharing", async () => {
     const onCommand = vi.fn();
     const client = createPreviewClient(undefined, { onCommand });
     const container = document.createElement("div");
@@ -17,11 +16,11 @@ describe("compact screen sharing", () => {
     try {
       await act(async () =>
         root.render(
-          <SkinProvider skin={skin}>
+          <>
             <ChalkProvider client={client}>
               <ControlBar placement="floating" density="compact" buttons={["screenshare"]} />
             </ChalkProvider>
-          </SkinProvider>,
+          </>,
         ),
       );
       expect(container.querySelector('[data-tour="controls-screenshare"]')).toBeNull();

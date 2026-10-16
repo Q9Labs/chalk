@@ -4,11 +4,9 @@ import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { resolvePortalThemeFromDocument } from "../../utils/theme";
 import { getThemeMode } from "../theme";
-import { useSkin } from "../skin-context";
 import type { LeaveDialogProps } from "./LeaveDialog";
 
 export const ClassicLeaveDialog = React.memo<LeaveDialogProps>(({ isOpen, onClose, onConfirm, onEndEpisode, canEndEpisode = true, leavePending = false, leaveError, endEpisodePending = false, endEpisodeError, palette, texture = "none", className }: LeaveDialogProps) => {
-  const skin = useSkin();
   const prefersReducedMotion = usePrefersReducedMotion();
   const portalTheme = resolvePortalThemeFromDocument();
   const modalRef = useRef<HTMLDivElement>(null);
@@ -48,7 +46,6 @@ export const ClassicLeaveDialog = React.memo<LeaveDialogProps>(({ isOpen, onClos
   return (
     <div
       data-chalk
-      data-chalk-skin={skin}
       data-chalk-theme={resolvedTheme}
       data-chalk-palette={palette}
       data-chalk-texture={texture}

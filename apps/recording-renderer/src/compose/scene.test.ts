@@ -37,7 +37,7 @@ function timeline(events: readonly RecordingPresentationEventV1[] = []): Recordi
         locale: "en",
         timeZone: "UTC",
         fontAssetIds: [],
-        theme: { colorScheme: "light", skin: "classic", palette: "light", texture: "none", stageBackground: true, generatedAvatars: true },
+        theme: { skin: "classic", colorScheme: "light", palette: "light", texture: "none", stageBackground: true, generatedAvatars: true },
       },
       space: { id: "space", name: "Review" },
       view: { layout: "grid", sidebar: "chat" },

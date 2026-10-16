@@ -189,7 +189,6 @@ export function ClassicSpaceView({
   return (
     <ParticipantVolumeProvider>
       <SpacePresentation
-        skin="classic"
         palette={palette}
         texture={texture}
         stageBackground={stageBackground}

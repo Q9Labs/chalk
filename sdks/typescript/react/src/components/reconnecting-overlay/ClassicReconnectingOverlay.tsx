@@ -2,11 +2,9 @@ import React from "react";
 import { Spinner } from "@q9labsai/chalk-ui";
 import { WifiOffIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
-import { useSkin } from "../skin-context";
 import type { ReconnectingOverlayProps } from "./ReconnectingOverlay";
 
 export const ClassicReconnectingOverlay = React.memo<ReconnectingOverlayProps>(({ isVisible, status, onRetry, onLeft, message, supportCode, className }) => {
-  const skin = useSkin();
   if (!isVisible) return null;
 
   const titles = { connecting: "Connecting", reconnecting: "Reconnecting", failed: "Connection Failed" };
@@ -17,7 +15,7 @@ export const ClassicReconnectingOverlay = React.memo<ReconnectingOverlayProps>((
   };
 
   return (
-    <div data-chalk-skin={skin} className={cn("absolute inset-0 z-50 flex items-center justify-center p-4 transition-opacity duration-300", className)} role="alertdialog" aria-modal="true" aria-labelledby="connection-status-title" aria-describedby="connection-status-desc">
+    <div className={cn("absolute inset-0 z-50 flex items-center justify-center p-4 transition-opacity duration-300", className)} role="alertdialog" aria-modal="true" aria-labelledby="connection-status-title" aria-describedby="connection-status-desc">
       <div aria-hidden="true" className="absolute inset-0 bg-[var(--chalk-app-canvas)] opacity-90 backdrop-blur-[2px]" />
       <div className="chalk-textured-surface relative flex w-full max-w-sm flex-col items-center justify-center rounded-[12px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] p-8 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]">
         {status === "failed" ? (

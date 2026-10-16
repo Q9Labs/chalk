@@ -11,7 +11,6 @@ import { ControlBarPresentation, type ControlBarButtonName } from "../control-ba
 import { ParticipantTileSurface } from "../participant-tile/ParticipantTile";
 import type { Participant } from "../participant-grid/ParticipantGrid";
 import { QuietSpace } from "../participant-grid/ParticipantGrid";
-import { SkinProvider } from "../skin-context";
 import { Stage, type StageItem } from "../stage/Stage";
 import { StageContentTileSurface } from "../stage/StageContentTile";
 import { screenShareItemId, WHITEBOARD_ITEM_ID } from "../stage/stage-items";
@@ -136,9 +135,8 @@ export function RecordingSpaceView({ frame, resolveMedia, resolveAssetUrl, rende
   };
 
   return (
-    <SkinProvider skin={frame.profile.theme.skin}>
+    <>
       <SpacePresentation
-        skin={frame.profile.theme.skin}
         palette={frame.profile.theme.palette}
         texture={frame.profile.theme.texture}
         stageBackground={frame.profile.theme.stageBackground}
@@ -206,7 +204,7 @@ export function RecordingSpaceView({ frame, resolveMedia, resolveAssetUrl, rende
         interactive={false}
         className={className}
       />
-    </SkinProvider>
+    </>
   );
 }
 

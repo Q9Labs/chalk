@@ -32,7 +32,7 @@ export const ClassicSpaceHeader = React.memo<SpaceHeaderProps>(({ spaceName, log
             <UserGroupIcon size={17} />
           </button>
         )}
-        {onLayoutChange && <LayoutMenu layout={layout} onLayoutChange={onLayoutChange} container={menuHost} skin="classic" />}
+        {onLayoutChange && <LayoutMenu layout={layout} onLayoutChange={onLayoutChange} container={menuHost} />}
         {onInfo && (
           <button type="button" onClick={onInfo} className={GHOST_BUTTON} aria-label="Space information" title="Space information">
             <InformationCircleIcon size={17} />

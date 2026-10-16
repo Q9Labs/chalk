@@ -44,7 +44,7 @@ export const INITIAL_SETTINGS: SettingsDialogValue = {
   join: { videoEnabled: true, audioEnabled: true },
   audio: { selectedInput: "preview-microphone", selectedOutput: "preview-speaker", outputVolume: 68, noiseSuppression: true, echoCancellation: true, autoGainControl: true },
   video: { selectedInput: "preview-camera", quality: "auto" },
-  appearance: { layout: "focus", theme: "dark", skin: "classic", palette: "warm-charcoal", texture: "paper", gradient: "default", showFilmstrip: true, reducedMotion: false, generatedAvatars: true, profileGradient: { mode: "auto" }, ambientBackground: false },
+  appearance: { layout: "focus", theme: "dark", palette: "warm-charcoal", texture: "paper", gradient: "default", showFilmstrip: true, reducedMotion: false, generatedAvatars: true, profileGradient: { mode: "auto" }, ambientBackground: false },
   experience: { captions: false, compactMode: false, showInviteToast: false, defaultOpenChat: false, defaultOpenParticipants: false, defaultOpenTranscription: false, autoOpenPictureInPicture: false, sounds: true },
 };
 

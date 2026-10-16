@@ -51,7 +51,7 @@ export const ClassicSpaceInfoDialog = React.memo<SpaceInfoDialogProps>(({ isOpen
   };
 
   return (
-    <div data-chalk-skin className="fixed inset-0 z-50 grid place-items-center bg-[color-mix(in_srgb,var(--chalk-app-canvas)_88%,transparent)] p-4 backdrop-blur-[1px]" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-50 grid place-items-center bg-[color-mix(in_srgb,var(--chalk-app-canvas)_88%,transparent)] p-4 backdrop-blur-[1px]" onMouseDown={onClose}>
       <section
         ref={panelRef}
         role="dialog"
