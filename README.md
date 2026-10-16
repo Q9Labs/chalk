@@ -24,7 +24,7 @@ pnpm dev
 ```
 
 This starts Postgres, Redis, migrations, the Go API, Postgres-backed Sync, SDK
-watchers, the web app, and local observability. It waits for readiness and
+watchers and the web app. It waits for readiness and
 verifies a real no-track
 connection through the Cloudflare SFU before it prints the summary. All Chalk
 listeners use `127.0.0.1`; this command is for local development and never
@@ -49,13 +49,12 @@ items stop startup.
 
 The ready summary uses these localhost endpoints:
 
-| Service | URL                                                                  |
-| ------- | -------------------------------------------------------------------- |
-| Web     | `http://127.0.0.1:3070`                                              |
-| API     | `http://127.0.0.1:8080`                                              |
-| Sync    | `ws://127.0.0.1:4100/v1/sync`                                        |
-| Grafana | `http://127.0.0.1:3000/d/chalk-observability-v1/chalk-observability` |
-| Logs    | `.logs/dev-server.log`                                               |
+| Service | URL                           |
+| ------- | ----------------------------- |
+| Web     | `http://127.0.0.1:3070`       |
+| API     | `http://127.0.0.1:8080`       |
+| Sync    | `ws://127.0.0.1:4100/v1/sync` |
+| Logs    | `.logs/dev-server.log`        |
 
 Use the small command surface for inspection and cleanup:
 
@@ -71,8 +70,7 @@ pnpm dev:reset -- --yes       # skip only the confirmation prompt
 ```
 
 `pnpm dev` also creates a local Tenant and Space with the `cf_sfu` media plane and
-prints their ids in the ready summary. Use that Space for local end-to-end runs;
-the `seed:dataset` showcase Spaces use `cf_rtk`.
+prints their ids in the ready summary. Use that Space for local end-to-end runs.
 
 `--fresh` replaces only this checkout's tenant and Space fixture. It leaves
 backing services, unrelated rows, and caches in place.
@@ -81,11 +79,10 @@ The core uses a dedicated `chalk_dev` database inside the shared
 `chalk-postgres` container. A normal stop keeps that database and its volume.
 
 `Ctrl-C` and `pnpm dev:stop` stop only processes and containers owned by the
-runtime. They preserve Postgres and Redis volumes, observability data, package
+runtime. They preserve Postgres and Redis volumes, package
 caches, and other reusable local state. `dev:reset` is the destructive path:
 it lists the owned containers, volumes, Worker state, and private runtime
-directory, then drops and recreates only `chalk_dev`. It removes the Redis and
-observability state while preserving the shared `chalk-postgres` container and
+directory, then drops and recreates only `chalk_dev`. It removes Redis state while preserving the shared `chalk-postgres` container and
 `chalk-postgres` volume. It acts only after the runtime has stopped. Run the
 normal command again to restore the stack.
 

@@ -22,15 +22,6 @@ const defaultPorts = Object.freeze({
   web: 3070,
   postgres: 5432,
   redis: 6380,
-  grafana: 3000,
-  loki: 3100,
-  tempo: 3200,
-  pyroscope: 4040,
-  otlpGrpc: 4317,
-  otlpHttp: 4318,
-  prometheus: 9090,
-  collector: 13133,
-  observabilityPostgres: 55433,
   providerBridge: 8444,
 });
 const toolByProfile = Object.freeze({
@@ -134,15 +125,6 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
     web: numberFromEnv(env, "CHALK_DEV_WEB_PORT", defaultPorts.web),
     postgres: numberFromEnv(env, "CHALK_DEV_POSTGRES_PORT", defaultPorts.postgres),
     redis: redisPort,
-    grafana: numberFromEnv(env, "CHALK_DEV_GRAFANA_PORT", defaultPorts.grafana),
-    loki: defaultPorts.loki,
-    tempo: defaultPorts.tempo,
-    pyroscope: defaultPorts.pyroscope,
-    otlpGrpc: defaultPorts.otlpGrpc,
-    otlpHttp: defaultPorts.otlpHttp,
-    prometheus: defaultPorts.prometheus,
-    collector: defaultPorts.collector,
-    observabilityPostgres: defaultPorts.observabilityPostgres,
     providerBridge: numberFromEnv(env, "CHALK_DEV_PROVIDER_BRIDGE_PORT", defaultPorts.providerBridge),
   };
   const sourceRoots = [join(checkoutRoot, "apps", "api"), join(checkoutRoot, "apps", "sync")];
@@ -168,7 +150,6 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
       environment: env.CHALK_API_ENV || "local",
     },
     secretResolver,
-    observabilityEnabled: env.CHALK_DEV_OBSERVABILITY !== "disabled",
     databaseName: "chalk_dev",
     redis: {
       port: redisPort,
