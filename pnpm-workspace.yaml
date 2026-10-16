@@ -19,7 +19,7 @@ overrides:
   "@q9labsai/diagnostics": https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz
   "@q9labsai/gates": https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz
   "@babel/core": ^7.29.7
-  "@tanstack/start-server-core": 1.169.16
+  "@tanstack/start-server-core": 1.169.39
   "@vitest/browser": ^4.1.11
   "@xmldom/xmldom": ^0.8.15
   compression: 1.8.2
