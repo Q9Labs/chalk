@@ -1,7 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 const sources = [
-  ["@q9labsai/chalk-client/telemetry", "../client/src/telemetry/index.ts"],
   ["@q9labsai/chalk-client/effect", "../client/src/effect.ts"],
   ["@q9labsai/chalk-client", "../client/src/index.ts"],
   ["@q9labsai/chalk-ui/reactions", "../../../packages/ui/src/reactions.ts"],

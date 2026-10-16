@@ -1,11 +1,8 @@
-import { journeyHeaders } from "../telemetry/trace";
 import type { MediaSource } from "./plane";
 import { CloudflareSFUError } from "./types";
 import type { CloudflareSFUCredentialProvider, CloudflareSFUHTTPTransportOptions, CloudflareSFUPublicationSnapshot, CloudflareSFUSignalingTransport, CloudflareSFUTracksResponse } from "./types";
-
-const SIGNALING_TIMEOUT_MS = 8_000;
-const CREDENTIAL_TIMEOUT_MS = 7_000;
-
+const SIGNALING_TIMEOUT_MS = 8000;
+const CREDENTIAL_TIMEOUT_MS = 7000;
 export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTransportOptions): CloudflareSFUSignalingTransport {
   const fetch = options.fetch ?? globalThis.fetch;
   const credential = requireCredential(options);
@@ -20,7 +17,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
       const response = await fetch(`${mediaPath}/${path}`, {
         ...init,
         signal,
-        headers: { ...(options.telemetry ? journeyHeaders(options.telemetry) : {}), Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...init?.headers },
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...init?.headers },
       });
       if (!response.ok) {
         throw new CloudflareSFUError(`Chalk SFU signaling failed with HTTP ${response.status}`, "signaling_failed", {
@@ -36,7 +33,9 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
       const path = input.allowPartialRemoteTracks ? "tracks?allow_partial_remote_tracks=true" : "tracks";
       const response = await request<{
         readonly sessionDescription?: CloudflareSFUTracksResponse["sessionDescription"];
-        readonly tracks?: readonly (Omit<NonNullable<CloudflareSFUTracksResponse["tracks"]>[number], "publicationId"> & { readonly publication_id?: string })[];
+        readonly tracks?: readonly (Omit<NonNullable<CloudflareSFUTracksResponse["tracks"]>[number], "publicationId"> & {
+          readonly publication_id?: string;
+        })[];
         readonly requiresImmediateRenegotiation?: boolean;
       }>(path, {
         method: "POST",
@@ -67,7 +66,12 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
       const response = await request<{
         incarnation: number;
         sequence: number;
-        publications: readonly { participant_id?: string; participant_session_id?: string; source: MediaSource; publication_id: string }[];
+        publications: readonly {
+          participant_id?: string;
+          participant_session_id?: string;
+          source: MediaSource;
+          publication_id: string;
+        }[];
       }>("publications");
       return {
         incarnation: response.incarnation,
@@ -81,7 +85,6 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
     },
   };
 }
-
 async function withDeadline<T>(timeoutMs: number, operation: (signal: AbortSignal) => T | Promise<T>): Promise<T> {
   const controller = new AbortController();
   const timeout = new CloudflareSFUError("Cloudflare SFU signaling timed out. Try again.", "signaling_timeout");
@@ -101,7 +104,6 @@ async function withDeadline<T>(timeoutMs: number, operation: (signal: AbortSigna
     if (timer !== undefined) globalThis.clearTimeout(timer);
   }
 }
-
 function requireCredential(options: CloudflareSFUHTTPTransportOptions): CloudflareSFUCredentialProvider {
   if (options.credential) return options.credential;
   if (options.bearerToken !== undefined) return () => options.bearerToken ?? "";

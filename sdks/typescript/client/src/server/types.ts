@@ -1,31 +1,19 @@
 import type { AccessRefreshRequest } from "./access-refresh.js";
 import type { AccessGrant } from "../access/grant.js";
-
 export type { AccessGrant } from "../access/grant.js";
-
 export type ChalkServerHeaders = Readonly<Record<string, string>>;
-
-export type ChalkServerTelemetry = {
-  readonly journeyId: string;
-  readonly rootJourneyId: string;
-  readonly traceparent: string;
-  readonly tracestate?: string;
-};
-
 export type ChalkServerClientOptions = {
   readonly apiKey: string;
   readonly tenantId: string;
   readonly apiBaseURL: string | URL;
   readonly fetch?: typeof globalThis.fetch;
   readonly headers?: ChalkServerHeaders;
-  readonly telemetry?: ChalkServerTelemetry;
 };
-
-export type ChalkIdempotencyOptions = { readonly idempotencyKey?: string };
-
+export type ChalkIdempotencyOptions = {
+  readonly idempotencyKey?: string;
+};
 export type RecordingPolicy = "disabled" | "manual" | "automatic";
 export type TranscriptionPolicy = "disabled" | "on_demand" | "automatic";
-
 export type CreateSpaceInput = {
   readonly admissionPolicy?: unknown;
   readonly defaultEpisodeDurationSeconds: number;
@@ -39,12 +27,10 @@ export type CreateSpaceInput = {
   readonly slug: string;
   readonly transcriptionPolicy?: TranscriptionPolicy;
 };
-
 export type UpdateSpaceInput = {
   readonly recordingPolicy?: RecordingPolicy;
   readonly transcriptionPolicy?: TranscriptionPolicy;
 };
-
 export type Space = {
   readonly admission_policy: unknown;
   readonly archived: boolean;
@@ -70,7 +56,6 @@ export type Space = {
   readonly transcription_policy: TranscriptionPolicy;
   readonly updated_at: string;
 };
-
 export type SpaceList = {
   readonly spaces: readonly Space[];
   readonly pagination: {
@@ -79,18 +64,15 @@ export type SpaceList = {
     readonly page_size: number;
   };
 };
-
 export type ListSpacesInput = {
   readonly archived?: boolean;
   readonly cursor?: string;
   readonly pageSize?: number;
 };
-
 export type CreateEpisodeInput = {
   readonly metadata?: unknown;
   readonly startedAt?: string | null;
 };
-
 export type Episode = {
   readonly config_snapshot: unknown;
   readonly created_at: string;
@@ -106,7 +88,6 @@ export type Episode = {
   readonly tenant_id: string;
   readonly updated_at: string;
 };
-
 type ExternalOperation = {
   readonly created_at: string;
   readonly deadline_generation?: number | null;
@@ -117,13 +98,11 @@ type ExternalOperation = {
   readonly target_participant_generation?: number | null;
   readonly target_participant_id?: string | null;
 };
-
 export type EpisodeEnd = {
   readonly episode_id: string;
   readonly external_operation: ExternalOperation;
   readonly status: string;
 };
-
 export type AdmitParticipantInput = {
   readonly identityId?: string;
   readonly metadata?: unknown;
@@ -131,7 +110,6 @@ export type AdmitParticipantInput = {
   readonly participantId?: string;
   readonly role: string;
 };
-
 type Participant = {
   readonly capabilities: readonly string[];
   readonly episode_id: string;
@@ -143,7 +121,6 @@ type Participant = {
   readonly status: string;
   readonly tenant_id: string;
 };
-
 export type ParticipantLifecycle = {
   readonly access?: AccessGrant | null;
   readonly admission_request?: {
@@ -168,14 +145,13 @@ export type ParticipantLifecycle = {
   readonly participant: Participant;
   readonly sync_token?: string;
 };
-
-export type RemoveParticipantInput = { readonly participantGeneration: number };
-
+export type RemoveParticipantInput = {
+  readonly participantGeneration: number;
+};
 export type ParticipantRemoval = {
   readonly external_operation: ExternalOperation;
   readonly participant: Participant;
 };
-
 export type IssueAccessGrantInput =
   | {
       readonly participantGeneration: number;
@@ -187,7 +163,6 @@ export type IssueAccessGrantInput =
       readonly currentMediaToken?: never;
       readonly replaceMediaConnection: true;
     };
-
 export type APIKey = {
   readonly created_at: string;
   readonly created_by_user_id: string | null;
@@ -201,7 +176,6 @@ export type APIKey = {
   readonly tenant_id: string;
   readonly updated_at: string;
 };
-
 export type APIKeyList = {
   readonly api_keys: readonly APIKey[];
   readonly pagination: {
@@ -210,16 +184,22 @@ export type APIKeyList = {
     readonly page_size: number;
   };
 };
-
-export type APIKeyWithSecret = { readonly api_key: APIKey; readonly secret: string };
+export type APIKeyWithSecret = {
+  readonly api_key: APIKey;
+  readonly secret: string;
+};
 export type CreateAPIKeyInput = {
   readonly expiresAt: string;
   readonly name: string;
   readonly scopes: readonly string[];
 };
-export type ListAPIKeysInput = { readonly cursor?: string; readonly pageSize?: number };
-export type RotateAPIKeyInput = { readonly expiresAt?: string | null };
-
+export type ListAPIKeysInput = {
+  readonly cursor?: string;
+  readonly pageSize?: number;
+};
+export type RotateAPIKeyInput = {
+  readonly expiresAt?: string | null;
+};
 export type SpacePublicInvite = {
   readonly admission_mode: string;
   readonly canonical_url: string;
@@ -234,7 +214,6 @@ export type SpacePublicInvite = {
   readonly tenant_id: string;
   readonly updated_at: string;
 };
-
 export type PublicAdmissionRequest = {
   readonly display_name: string;
   readonly expires_at: string;
@@ -242,23 +221,21 @@ export type PublicAdmissionRequest = {
   readonly requested_at: string;
   readonly state: string;
 };
-
 export type PublicAdmissionRequestPage = {
   readonly requests: readonly PublicAdmissionRequest[];
 };
-
-export type UpdateSpacePublicInviteInput = { readonly enabled: boolean };
-export type ListPublicAdmissionRequestsInput = { readonly state?: "pending" };
-
+export type UpdateSpacePublicInviteInput = {
+  readonly enabled: boolean;
+};
+export type ListPublicAdmissionRequestsInput = {
+  readonly state?: "pending";
+};
 export type RecordingSourceStatus = "pending" | "available" | "failed" | "expired";
-
 export type RecordingSource = {
   readonly expires_at?: string | null;
   readonly status: RecordingSourceStatus;
 };
-
 export type RecordingExportStatus = "none" | "pending" | "ready" | "failed" | "unavailable";
-
 export type RecordingExport = {
   readonly failure_code?: string | null;
   readonly failure_message?: string | null;
@@ -267,7 +244,6 @@ export type RecordingExport = {
   readonly source_expires_at?: string | null;
   readonly status: RecordingExportStatus;
 };
-
 export type Recording = {
   readonly created_at: string;
   readonly episode_id: string;
@@ -282,7 +258,6 @@ export type Recording = {
   readonly tenant_id: string;
   readonly updated_at: string;
 };
-
 export type RecordingDownloadURL = {
   readonly expires_at: string;
   readonly method: string;
@@ -290,12 +265,10 @@ export type RecordingDownloadURL = {
   readonly signed_headers: Readonly<Record<string, readonly string[]>>;
   readonly url: string;
 };
-
 export type RecordingExportRequestAcceptedResponse = {
   readonly export: RecordingExport;
   readonly recording: Recording;
 };
-
 export type RecordingList = {
   readonly pagination: {
     readonly has_more: boolean;
@@ -304,7 +277,6 @@ export type RecordingList = {
   };
   readonly recordings: readonly Recording[];
 };
-
 export type ListRecordingsInput = {
   readonly cursor?: string;
   readonly episodeId?: string;
@@ -315,7 +287,6 @@ export type CreateRecordingDownloadURLInput = {
   readonly expiresInSeconds: number;
   readonly download?: boolean;
 };
-
 export type ChalkServerClient = {
   readonly spaces: {
     archive(spaceId: string): Promise<Space>;

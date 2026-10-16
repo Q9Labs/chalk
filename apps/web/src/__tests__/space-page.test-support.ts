@@ -1,6 +1,5 @@
-import { createElement, useEffect, useState, type ChangeEvent, type ReactNode } from "react";
+import { createElement, useEffect, useState, type ChangeEvent } from "react";
 import { vi } from "vitest";
-
 function MockEntrance({
   defaultDisplayName = "",
   joining = false,
@@ -10,7 +9,10 @@ function MockEntrance({
   onPrepare,
 }: {
   readonly defaultDisplayName?: string;
-  readonly defaults?: { readonly microphone?: boolean; readonly camera?: boolean };
+  readonly defaults?: {
+    readonly microphone?: boolean;
+    readonly camera?: boolean;
+  };
   readonly joining?: boolean;
   readonly error?: string;
   readonly onPrepare?: () => Promise<void>;
@@ -33,11 +35,11 @@ function MockEntrance({
     createElement("button", { type: "button", onClick: () => void onJoin({ displayName: displayName.trim(), microphone, camera }), disabled: joining || !displayName.trim() }, joining ? "Joining…" : "Continue"),
   );
 }
-
 const spacePageTestMocks = vi.hoisted(() => {
-  const holder: { chalkProps?: Record<string, unknown>; entranceProps?: Record<string, unknown> } = {};
-  const journey = { headers: {}, recordDiagnostic: vi.fn(), recordHttpRequest: vi.fn(), recordRtcSummary: vi.fn() };
-  const telemetry = { configureApiBaseURL: vi.fn() };
+  const holder: {
+    chalkProps?: Record<string, unknown>;
+    entranceProps?: Record<string, unknown>;
+  } = {};
   const clientSnapshot = { self: { displayName: "Ada" }, media: { local: { microphone: { state: "disabled" }, camera: { state: "enabled" } } }, connection: { status: "live", episode: { id: "33333333-3333-4333-8333-333333333333" } } };
   const client = { getSnapshot: vi.fn(() => clientSnapshot), subscribe: vi.fn(() => () => undefined), media: {}, leave: vi.fn(async () => undefined), dispose: vi.fn() };
   const finish = vi.fn(async (_options?: { readonly keepalive?: boolean }) => undefined);
@@ -59,8 +61,6 @@ const spacePageTestMocks = vi.hoisted(() => {
   };
   return {
     holder,
-    journey,
-    telemetry,
     client,
     publicClient,
     prepared,
@@ -80,7 +80,6 @@ const spacePageTestMocks = vi.hoisted(() => {
     resumePublicSpace: vi.fn(),
   };
 });
-
 vi.mock("@q9labsai/chalk-react", () => ({
   Chalk: getSpacePageTestMocks().Chalk,
   Entrance: (props: Record<string, unknown>) => {
@@ -100,15 +99,9 @@ vi.mock("../lib/local-space-client", () => ({
   createLocalSpaceClient: getSpacePageTestMocks().createLocalSpaceClient,
   createLocalSpaceRelease: getSpacePageTestMocks().createLocalSpaceRelease,
 }));
-vi.mock("../lib/web-telemetry-context", () => ({
-  WebTelemetryProvider: ({ children }: { readonly children: ReactNode }) => children,
-  useWebTelemetry: () => ({ journey: getSpacePageTestMocks().journey, telemetry: getSpacePageTestMocks().telemetry }),
-}));
-
 export function getSpacePageTestMocks(): typeof spacePageTestMocks {
   return spacePageTestMocks;
 }
-
 export const spacePageTestToken = "cspi1.test-capability";
 export const spacePageTestArrival = {
   state: "admitted",
@@ -117,7 +110,6 @@ export const spacePageTestArrival = {
   space: { admission_mode: "open", name: "Design Lab", slug: "design-lab" },
   access: { subject: {}, sync: { token: "sync" }, media: { token: "media" } },
 };
-
 export function resetSpacePageTestMocks(): void {
   spacePageTestMocks.publicClient.prepareSpaceEntrance.mockClear();
   spacePageTestMocks.prepareDashboardEntrance.mockClear();
@@ -138,7 +130,6 @@ export function resetSpacePageTestMocks(): void {
   spacePageTestMocks.createLocalSpaceRelease.mockReset().mockImplementation((_client: unknown, cleanup: () => Promise<void>) => makeRelease(cleanup));
   spacePageTestMocks.Chalk.mockClear();
 }
-
 function makeRelease(cleanup: () => Promise<void>): ReturnType<typeof vi.fn> {
   let releasePromise: Promise<void> | undefined;
   return vi.fn(() => {

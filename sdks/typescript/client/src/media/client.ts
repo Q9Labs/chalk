@@ -1,4 +1,3 @@
-import { recordReconnect, traceReconnect } from "../telemetry/reconnect";
 import type { ClientMediaPlane, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaSource } from "./plane";
 import { CameraUplinkPolicy, cameraUplinkBitrate } from "./camera-uplink";
 import { subscribeSnapshot } from "./observers";
@@ -21,8 +20,6 @@ import type {
   CloudflareSFUTracksResponse,
 } from "./types";
 import type { PublicationCursor } from "./tracks";
-import type { RtcConnectionStateSnapshot, RtcStatsLike } from "../telemetry/rtc";
-
 type LocalTrackState = {
   readonly source: MediaSource;
   readonly track: MediaStreamTrack;
@@ -34,47 +31,22 @@ type LocalTrackState = {
   enabled: boolean;
   endedListener: (() => void) | null;
 };
-
-type TrafficProgress = {
-  count: number;
-  lastProgress: number;
-  stalled: boolean;
-};
-
-type TrafficSample = {
-  count: number;
-  now: number;
-  direction: string;
-  kind: string;
-  unit: "packet" | "frame";
-  existed: boolean;
-};
-
-type RecoveryTraffic = {
-  packets: TrafficProgress;
-  frames: TrafficProgress;
-};
-
 type PendingLocalPublication = {
   readonly state: LocalTrackState;
   transceiver: RTCRtpTransceiver;
   readonly trackName: string;
   readonly reusedTransceiver: boolean;
 };
-
 const EMPTY_LOCAL: readonly CloudflareSFULocalTrack[] = Object.freeze([]);
 const EMPTY_REMOTE: readonly CloudflareSFURemoteTrack[] = Object.freeze([]);
 const INVALID_PUBLICATION_SIGNATURE = "\u0000invalid";
-const CONNECTION_TIMEOUT_MS = 8_000;
-const NEGOTIATION_TIMEOUT_MS = 35_000;
-const PEER_OPERATION_TIMEOUT_MS = 8_000;
-
+const CONNECTION_TIMEOUT_MS = 8000;
+const NEGOTIATION_TIMEOUT_MS = 35000;
+const PEER_OPERATION_TIMEOUT_MS = 8000;
 export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #localListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #onError: ((error: unknown) => void) | undefined;
   readonly #onRemoteTrack: ((publication: CloudflareSFURemoteTrack) => void) | undefined;
-  readonly #recordReconnect: CloudflareSFUClientOptions["recordReconnect"];
-  readonly #onRtcSummary: CloudflareSFUClientOptions["onRtcSummary"];
   readonly #onScreenEnded: (() => void) | undefined;
   readonly #participantId: string;
   readonly #peerConnectionFactory: ((configuration: RTCConfiguration) => RTCPeerConnection) | undefined;
@@ -108,18 +80,15 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #started = false;
   #stopped = false;
   #transport: CloudflareSFUSignalingTransport | undefined;
-
   constructor(options: CloudflareSFUClientOptions) {
     validateClientOptions(options);
     this.#participantId = options.participantId;
     this.#bootstrap = options.bootstrap;
     this.#transport = options.transport;
-    this.#pollIntervalMs = options.pollIntervalMs ?? 15_000;
+    this.#pollIntervalMs = options.pollIntervalMs ?? 15000;
     this.#replaceMediaConnection = options.replaceMediaConnection;
     this.#onError = options.onError;
     this.#onRemoteTrack = options.onRemoteTrack;
-    this.#onRtcSummary = options.onRtcSummary;
-    this.#recordReconnect = options.recordReconnect;
     this.#onScreenEnded = options.onScreenEnded;
     this.#peerConnectionFactory = options.peerConnectionFactory;
     this.#connection = this.#createPeerConnection(options.bootstrap);
@@ -132,22 +101,17 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     });
     this.#observeConnection(this.#connection, this.#generation, this.#connectionEpoch);
   }
-
   getSnapshot(): CloudflareSFUSnapshot {
     return this.#snapshot;
   }
-
   subscribe(listener: () => void): () => void {
     return subscribeSnapshot(this.#snapshotListeners, listener);
   }
-
   remotePublicationResumed(publicationId: string): void {
     this.#remotePullRetryAfter.delete(publicationId);
     this.remotePublicationsChanged();
   }
-
   remotePublicationsChanged(): void {
-    recordReconnect(this.#recordReconnect, "remote_publications_changed");
     if (this.#polling) {
       this.#pollAfterCurrent = true;
       return;
@@ -155,7 +119,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#clearPoll();
     this.#schedulePoll(0);
   }
-
   prepareLocalTrack(source: MediaSource, track: MediaStreamTrack): void {
     this.#requireActive();
     validateTrackSource(source, track);
@@ -183,7 +146,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#publishSnapshot();
     this.#emitLocal();
   }
-
   async clearPreparedLocalTrack(source: MediaSource): Promise<void> {
     const state = this.#localTracks.get(source);
     if (!state) return;
@@ -195,13 +157,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#publishSnapshot();
     this.#emitLocal();
   }
-
   async start(localMedia: MediaStream): Promise<void> {
     if (this.#started) return;
     this.#requireActive();
     const tracks = localMedia.getTracks().filter((track) => track.kind === "audio" || track.kind === "video");
     for (const track of tracks) this.prepareLocalTrack(track.kind === "audio" ? "microphone" : "camera", track);
-
     const generation = this.#generation;
     this.#setPhase("connecting", null);
     await this.#activatePreparedTracks(
@@ -209,7 +169,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       generation,
     );
   }
-
   async refreshRemotePublications(): Promise<void> {
     if (!this.#started || this.#stopped || this.#polling) return;
     this.#polling = true;
@@ -217,7 +176,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#pollFailedPull = false;
     try {
       const transport = this.#requireTransport();
-      const authoritative = await traceReconnect(this.#recordReconnect, "list_publications", () => transport.listPublications());
+      const authoritative = await (() => transport.listPublications())();
       this.#requireGeneration(generation);
       await this.#reconcileRemotePublications(authoritative, generation);
       this.#requireGeneration(generation);
@@ -229,7 +188,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#finishPublicationPoll(generation);
     }
   }
-
   #finishPublicationPoll(generation: number): void {
     if (generation !== this.#generation) return;
     this.#polling = false;
@@ -238,7 +196,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#clearPoll();
     this.#schedulePoll(0);
   }
-
   async setLocalPublicationTarget(target: MediaPlaneTarget): Promise<MediaPlaneResult> {
     const resolved = resolveMediaTarget(this.#participantId, this.#stopped, this.#localTracks, target);
     if (resolved.kind === "result") return resolved.result;
@@ -255,11 +212,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return mediaTargetFailure(error);
     }
   }
-
   #pausedTarget(target: MediaPlaneTarget): boolean {
     return target.enabled && this.#locallyPausedSources.has(target.source);
   }
-
   setLocalSourceIntent(source: MediaSource, enabled: boolean): void {
     if (enabled) {
       this.#locallyPausedSources.delete(source);
@@ -271,7 +226,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     state.desiredEnabled = false;
     state.track.enabled = false;
   }
-
   async closeForcedLocalPublication(source: MediaSource): Promise<void> {
     this.setLocalSourceIntent(source, false);
     await this.#retireLocalPublication(source);
@@ -290,17 +244,15 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#setPhase("live", null);
     });
   }
-
   async #retireUnavailableLocalPublication(state: LocalTrackState): Promise<void> {
     const publicationId = state.providerPublicationId;
     if (!publicationId) return;
-    const authoritative = await traceReconnect(this.#recordReconnect, "list_publications", () => this.#requireTransport().listPublications());
+    const authoritative = await (() => this.#requireTransport().listPublications())();
     if (authoritative.publications.some((publication) => publication.publicationId === publicationId)) return;
     // An authorized on target can precede the old forced-off projection.
     // Never satisfy it from a browser slot whose provider track is gone.
     if (state.providerPublicationId === publicationId) await this.#retireLocalPublication(state.source);
   }
-
   async #retireLocalPublication(source: MediaSource): Promise<void> {
     const state = this.#localTracks.get(source);
     const transceiver = state?.transceiver ?? this.#reusableLocalTransceivers.get(source);
@@ -325,8 +277,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       const mid = requireTransceiverMid(transceiver);
       await this.#boundPeerOperation(transceiver.sender.replaceTrack(null));
       transceiver.stop();
-      const offer = await traceReconnect(this.#recordReconnect, "create_offer", () => connection.createOffer());
-      await traceReconnect(this.#recordReconnect, "set_local_description", () => connection.setLocalDescription(offer));
+      const offer = await (() => connection.createOffer())();
+      await (() => connection.setLocalDescription(offer))();
       try {
         const response = await this.#requireTransport().closeTracks({
           connectionId,
@@ -342,24 +294,20 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       }
     });
   }
-
   observeLocalPublications(listener: (publications: readonly MediaPublication[]) => void): () => void {
     this.#localListeners.add(listener);
     this.#invokeListener(() => listener(this.#projectLocalPublications()));
     return () => this.#localListeners.delete(listener);
   }
-
   observeRemotePublications(listener: (publications: readonly MediaPublication[]) => void): () => void {
     this.#remoteListeners.add(listener);
     this.#invokeListener(() => listener(this.#projectRemotePublications()));
     return () => this.#remoteListeners.delete(listener);
   }
-
   async restart(input: CloudflareSFUBootstrap | CloudflareSFURestartOptions): Promise<void> {
     this.#requireActive();
     const options: CloudflareSFURestartOptions = "connectionId" in input ? { bootstrap: input } : input;
     validateBootstrap(options.bootstrap);
-    recordReconnect(this.#recordReconnect, "media_rebuild_start");
     const generation = ++this.#generation;
     const connectionEpoch = ++this.#connectionEpoch;
     this.#polling = false;
@@ -386,7 +334,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const enabled = [...this.#localTracks.values()].filter((state) => state.desiredEnabled && state.track.readyState !== "ended");
     await this.#activatePreparedTracks(enabled, generation);
   }
-
   async #activatePreparedTracks(states: readonly LocalTrackState[], generation: number): Promise<void> {
     try {
       await this.#publishPreparedTracks(states, generation);
@@ -399,7 +346,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       throw error;
     }
   }
-
   stop(): void {
     if (this.#stopped) return;
     this.#stopped = true;
@@ -425,12 +371,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#remoteListeners.clear();
     this.#snapshotListeners.clear();
   }
-
   async #setPreparedTrackEnabled(state: LocalTrackState, enabled: boolean, operationId?: string): Promise<void> {
     if (enabled) return this.#enablePreparedTrack(state, operationId);
     return this.#disablePreparedTrack(state);
   }
-
   async #enablePreparedTrack(state: LocalTrackState, operationId?: string): Promise<void> {
     if (state.providerPublicationId && state.transceiver) {
       state.desiredEnabled = true;
@@ -466,7 +410,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       throw error;
     }
   }
-
   async #disablePreparedTrack(state: LocalTrackState): Promise<void> {
     const transceiver = state.transceiver;
     state.desiredEnabled = false;
@@ -480,7 +423,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#emitLocal();
     await detach;
   }
-
   async #publishPreparedTracks(states: readonly LocalTrackState[], generation: number): Promise<void> {
     if (states.length === 0) return;
     await this.#serializeSDP(async () => {
@@ -500,7 +442,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       }
     });
   }
-
   async #prepareConnectionForPublication(states: readonly LocalTrackState[], generation: number): Promise<readonly LocalTrackState[]> {
     if (this.#retiredLocalConnection !== this.#connection || !this.#replaceMediaConnection) {
       await this.#replaceDormantConnectionBeforeNegotiation(generation);
@@ -508,13 +449,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     // Retiring the bundled sender can expire the Cloudflare SFU connection.
     // Rebuild before publishing, retaining only other provider-authorized sources.
-    const authoritative = await traceReconnect(this.#recordReconnect, "list_publications", () => this.#requireTransport().listPublications());
+    const authoritative = await (() => this.#requireTransport().listPublications())();
     this.#pauseUnavailableOtherSources(authoritative.publications, states);
     this.#replacementAttemptedGeneration = null;
     await this.#replaceMediaConnectionForRecovery(generation);
     return [...this.#localTracks.values()].filter((state) => (state.desiredEnabled || states.includes(state)) && state.track.readyState !== "ended");
   }
-
   #pauseUnavailableOtherSources(publications: readonly CloudflareSFUPublication[], states: readonly LocalTrackState[]): void {
     for (const state of this.#localTracks.values()) {
       if (states.includes(state) || !state.providerPublicationId) continue;
@@ -523,7 +463,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       state.track.enabled = false;
     }
   }
-
   async #publishPreparedTracksSerialized(states: readonly LocalTrackState[], generation: number, connection: RTCPeerConnection, connectionId: string): Promise<void> {
     this.#requireGeneration(generation);
     const pendingStates = states.filter((state) => !state.enabled);
@@ -547,7 +486,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       throw error;
     }
   }
-
   async #prepareLocalPublication(connection: RTCPeerConnection, state: LocalTrackState, generation: number): Promise<PendingLocalPublication> {
     const reusedTransceiver = state.transceiver !== null;
     const transceiver = state.transceiver ?? this.#addLocalTransceiver(connection, state);
@@ -556,15 +494,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     state.transceiver = transceiver;
     return { state, transceiver, trackName: state.pendingTrackName ?? `${state.source}-${globalThis.crypto.randomUUID()}`, reusedTransceiver };
   }
-
   #addLocalTransceiver(connection: RTCPeerConnection, state: LocalTrackState): RTCRtpTransceiver {
     if (state.source !== "camera" || firefoxCameraSimulcastUnsupported()) return connection.addTransceiver(state.track, { direction: "sendonly" });
     // 720p and 360p have a 4:1 pixel ratio; budget about 4:1 bandwidth.
     // Match a single-stream camera's temporal mode so h does not spend
     // its constrained uplink budget on extra temporal-layer overhead.
     const sendEncodings = [
-      { rid: "h", scaleResolutionDownBy: 1, maxBitrate: 2_500_000, scalabilityMode: "L1T1" },
-      { rid: "l", scaleResolutionDownBy: 2, maxBitrate: 650_000, scalabilityMode: "L1T1" },
+      { rid: "h", scaleResolutionDownBy: 1, maxBitrate: 2500000, scalabilityMode: "L1T1" },
+      { rid: "l", scaleResolutionDownBy: 2, maxBitrate: 650000, scalabilityMode: "L1T1" },
     ];
     try {
       return connection.addTransceiver(state.track, {
@@ -576,12 +513,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return connection.addTransceiver(state.track, { direction: "sendonly" });
     }
   }
-
   async #negotiateLocalPublications(connection: RTCPeerConnection, connectionId: string, publications: readonly PendingLocalPublication[], generation: number): Promise<CloudflareSFUTracksResponse> {
     let offer: Parameters<RTCPeerConnection["setRemoteDescription"]>[0];
     try {
-      offer = await traceReconnect(this.#recordReconnect, "create_offer", () => connection.createOffer());
-      await traceReconnect(this.#recordReconnect, "set_local_description", () => connection.setLocalDescription(offer));
+      offer = await (() => connection.createOffer())();
+      await (() => connection.setLocalDescription(offer))();
     } catch (error) {
       const cameras = publications.filter(({ state, transceiver }) => state.source === "camera" && transceiver.sender.getParameters().encodings.length > 1);
       if (!simulcastUnsupported(error) || cameras.length === 0) throw error;
@@ -593,8 +529,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         publication.transceiver = connection.addTransceiver(publication.state.track, { direction: "sendonly" });
         publication.state.transceiver = publication.transceiver;
       }
-      offer = await traceReconnect(this.#recordReconnect, "create_offer", () => connection.createOffer());
-      await traceReconnect(this.#recordReconnect, "set_local_description", () => connection.setLocalDescription(offer));
+      offer = await (() => connection.createOffer())();
+      await (() => connection.setLocalDescription(offer))();
     }
     const tracks = publications.map(
       ({ state, transceiver, trackName }): CloudflareSFUTrackRequest => ({
@@ -604,12 +540,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         source: state.source,
       }),
     );
-    const response = await traceReconnect(this.#recordReconnect, "publish_tracks", () => this.#requireTransport().addTracks({ connectionId, ...providerDescription(requireDescription(offer)), tracks }));
+    const response = await (() => this.#requireTransport().addTracks({ connectionId, ...providerDescription(requireDescription(offer)), tracks }))();
     this.#requireGeneration(generation);
     await this.#applyProviderDescription(response, connection);
     return response;
   }
-
   #confirmLocalPublications(publications: readonly PendingLocalPublication[], tracks: readonly CloudflareSFUTrackRequest[] | undefined): void {
     for (const { state, transceiver } of publications) {
       const authoritative = tracks?.find((track) => track.location === "local" && track.mid === transceiver.mid && track.source === state.source);
@@ -624,7 +559,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       state.pendingTrackName = null;
     }
   }
-
   async #discardLocalPublications(publications: readonly PendingLocalPublication[]): Promise<void> {
     for (const { state, transceiver, reusedTransceiver } of publications) {
       if (reusedTransceiver) {
@@ -643,7 +577,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       if (state.transceiver === transceiver) state.transceiver = null;
     }
   }
-
   async #rollbackLocalOffer(connection: RTCPeerConnection): Promise<void> {
     if (connection.signalingState !== "have-local-offer") return;
     try {
@@ -652,13 +585,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#reportError(error);
     }
   }
-
   async #reconcileRemotePublications(authoritative: CloudflareSFUPublicationSnapshot, generation: number): Promise<void> {
     const cursor = this.#validatedRemotePublicationCursor(authoritative);
     if (cursor === null) return;
     const ordering = comparePublicationCursor(this.#cursor, cursor);
     if (ordering === "stale" || (ordering === "same" && !this.#remotePullIncomplete)) return;
-
     const desired = this.#desiredRemotePublications(authoritative, cursor);
     const toPull = this.#pendingRemotePulls(desired);
     this.#pollFailedPull = true;
@@ -675,7 +606,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#publishSnapshot();
     this.#emitRemote();
   }
-
   #pendingRemotePulls(desired: ReadonlyMap<string, CloudflareSFUPublication>): CloudflareSFUPublication[] {
     const desiredIds = new Set([...desired.values()].map((publication) => publication.publicationId));
     for (const publicationId of this.#remotePullRetryAfter.keys()) {
@@ -686,12 +616,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       .filter(([key, publication]) => {
         if (this.#remoteTracks.get(key)?.publicationId === publication.publicationId) return false;
         const remaining = (this.#remotePullRetryAfter.get(publication.publicationId) ?? 0) - now;
-        if (remaining > 0) recordReconnect(this.#recordReconnect, "remote_pull_deferred", { remaining_ms: remaining, source: publication.source });
         return remaining <= 0;
       })
       .map(([, publication]) => publication);
   }
-
   #validatedRemotePublicationCursor(authoritative: CloudflareSFUPublicationSnapshot): PublicationCursor | null {
     if (this.#cursor?.signature === INVALID_PUBLICATION_SIGNATURE && this.#cursor.incarnation === authoritative.incarnation && this.#cursor.sequence === authoritative.sequence) return null;
     try {
@@ -701,7 +629,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       throw error;
     }
   }
-
   #desiredRemotePublications(authoritative: CloudflareSFUPublicationSnapshot, cursor: PublicationCursor): ReturnType<typeof desiredRemotePublications> {
     try {
       return desiredRemotePublications(authoritative.publications, this.#participantId);
@@ -710,7 +637,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       throw error;
     }
   }
-
   async #pullWithRecovery(publications: readonly CloudflareSFUPublication[], cursor: PublicationCursor, generation: number): Promise<readonly CloudflareSFURemoteTrack[] | null> {
     try {
       return await this.#pull(publications, generation);
@@ -723,15 +649,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return this.#retryRemotePullOnReplacement(publications, cursor, generation);
     }
   }
-
   #canReplaceConnectionAfterRemotePull(error: unknown, generation: number): boolean {
     return error instanceof CloudflareSFUError && error.code === "signaling_failed" && !this.#hasLiveRemoteTracks() && this.#replaceMediaConnection !== undefined && this.#replacementAttemptedGeneration !== generation;
   }
-
   #hasLiveRemoteTracks(): boolean {
     return [...this.#remoteTracks.values()].some((publication) => publication.track.readyState === "live");
   }
-
   async #retryRemotePullOnReplacement(publications: readonly CloudflareSFUPublication[], cursor: PublicationCursor, generation: number): Promise<readonly CloudflareSFURemoteTrack[] | null> {
     try {
       await this.#replaceMediaConnectionForRecovery(generation);
@@ -743,7 +666,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       throw error;
     }
   }
-
   async #pull(publications: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFURemoteTrack[] | null> {
     if (publications.length === 0) return [];
     return this.#serializeSDP(async () => {
@@ -768,7 +690,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       connection.addEventListener("track", onTrack);
       try {
         this.#requireGeneration(generation);
-        const response = await traceReconnect(this.#recordReconnect, "pull_tracks", () => this.#requireTransport().addTracks({ connectionId, tracks: requested, allowPartialRemoteTracks: true }));
+        const response = await (() => this.#requireTransport().addTracks({ connectionId, tracks: requested, allowPartialRemoteTracks: true }))();
         this.#requireGeneration(generation);
         this.#recordRemotePullErrors(publications, response.trackErrors ?? []);
         const responseTracks = response.tracks ?? [];
@@ -778,7 +700,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         if (matched.length === 0) return [];
         await this.#waitForConnection(connection, generation);
         this.#negotiatedGeneration = generation;
-        await traceReconnect(this.#recordReconnect, "remote_track_arrival", () => waitFor(() => responseTracks.every((track) => track.mid !== undefined && received.has(track.mid)), 5_000));
+        await (() => waitFor(() => responseTracks.every((track) => track.mid !== undefined && received.has(track.mid)), 5000))();
         this.#requireGeneration(generation);
         return matched.map(({ publication, mid }) => {
           const track = received.get(mid);
@@ -793,7 +715,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       }
     });
   }
-
   #recordRemotePullErrors(publications: readonly CloudflareSFUPublication[], failures: NonNullable<CloudflareSFUTracksResponse["trackErrors"]>): void {
     const requested = new Map(
       publications.map((publication) => {
@@ -806,27 +727,22 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       if (!publication) throw new CloudflareSFUError("Cloudflare SFU returned an unrequested remote track error", "invalid_publication");
       const delay = 750;
       this.#remotePullRetryAfter.set(publication.publicationId, Date.now() + delay);
-      recordReconnect(this.#recordReconnect, "remote_pull_backoff", { delay_ms: delay, retry_kind: failure.code === "empty_track_error" ? "empty_track" : "provider_error", source: publication.source });
       this.#reportError(new CloudflareSFUError(`Cloudflare SFU remote track failed: ${failure.code}`, "media_failed", { providerCode: failure.code }));
     }
   }
-
   async #completeRenegotiation(response: CloudflareSFUTracksResponse, connection: RTCPeerConnection, connectionId: string, generation: number): Promise<void> {
     if (!response.requiresImmediateRenegotiation) return;
     await this.#applyProviderDescription(response, connection);
-    const answer = await traceReconnect(this.#recordReconnect, "create_answer", () => connection.createAnswer());
-    await traceReconnect(this.#recordReconnect, "set_local_answer", () => connection.setLocalDescription(answer));
-    await traceReconnect(this.#recordReconnect, "renegotiate", () => this.#requireTransport().renegotiate({ connectionId, ...providerDescription(requireDescription(answer)) }));
+    const answer = await (() => connection.createAnswer())();
+    await (() => connection.setLocalDescription(answer))();
+    await (() => this.#requireTransport().renegotiate({ connectionId, ...providerDescription(requireDescription(answer)) }))();
     this.#requireGeneration(generation);
   }
-
   async #applyProviderDescription(response: CloudflareSFUTracksResponse, connection = this.#connection): Promise<void> {
-    await traceReconnect(this.#recordReconnect, "set_remote_description", () => connection.setRemoteDescription(requireSFUDescription(response.sessionDescription)));
+    await (() => connection.setRemoteDescription(requireSFUDescription(response.sessionDescription)))();
   }
-
   #serializeSDP<T>(operation: () => Promise<T>): Promise<T> {
     const generation = this.#generation;
-    const queuedAt = performance.now();
     let expired = false;
     let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
     const timeout = new CloudflareSFUError("Cloudflare SFU negotiation timed out. Try again.", "negotiation_timeout");
@@ -839,7 +755,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     });
     const run = () => {
       if (expired || generation !== this.#generation) throw timeout;
-      recordReconnect(this.#recordReconnect, "sdp_queue", { duration_ms: performance.now() - queuedAt });
       return operation();
     };
     const pending = this.#sdpTail.then(run, run);
@@ -857,7 +772,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     );
     return result;
   }
-
   async #boundPeerOperation(operation: Promise<void>): Promise<void> {
     const generation = this.#generation;
     let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
@@ -874,7 +788,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       if (timer !== undefined) globalThis.clearTimeout(timer);
     }
   }
-
   #expireNegotiation(error: CloudflareSFUError): void {
     this.#generation++;
     this.#connectionEpoch++;
@@ -883,9 +796,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#disposeConnection(false);
     this.#setFailure(error, "media_failed");
   }
-
   #waitForConnection(connection: RTCPeerConnection, generation: number): Promise<void> {
-    return traceReconnect(this.#recordReconnect, "connection_ready", () =>
+    return (() =>
       waitFor(
         () => {
           this.#requireGeneration(generation);
@@ -893,17 +805,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         },
         CONNECTION_TIMEOUT_MS,
         "Timed out waiting for the Cloudflare SFU peer connection",
-      ),
-    );
+      ))();
   }
-
   #cameraSimulcastSender(state: LocalTrackState | undefined): RTCRtpSender | undefined {
     if (!state?.enabled) return undefined;
     const sender = state.transceiver?.sender;
     if (!sender?.track || sender.getParameters().encodings.length < 2) return undefined;
     return sender;
   }
-
   async #applyCameraUplink(sender: RTCRtpSender, report: RTCStatsReport, policy: CameraUplinkPolicy): Promise<void> {
     const parameters = sender.getParameters();
     const low = parameters.encodings.find((encoding) => encoding.rid === "l");
@@ -916,7 +825,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     parameters.degradationPreference = "maintain-framerate";
     await sender.setParameters(parameters);
   }
-
   #observeConnection(connection: RTCPeerConnection, generation: number, connectionEpoch: number): void {
     this.#disposeConnectionObservation?.();
     let disposed = false;
@@ -944,7 +852,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         // Stats and optional sender controls must never break publication.
         cameraPolicy.reset();
       } finally {
-        if (current()) cameraTimer = globalThis.setTimeout(adaptCamera, 1_000);
+        if (current()) cameraTimer = globalThis.setTimeout(adaptCamera, 1000);
       }
     };
     const dispose = () => {
@@ -963,95 +871,20 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     };
     const capture = () => {
       if (disposed || generation !== this.#generation || connectionEpoch !== this.#connectionEpoch || this.#stopped) return;
-      recordReconnect(this.#recordReconnect, "rtc_state", { connection_state: connection.connectionState, ice_connection_state: connection.iceConnectionState, signaling_state: connection.signalingState });
       observe();
-      const recorder = this.#onRtcSummary;
-      if (recorder) {
-        let stats: Promise<RTCStatsReport>;
-        try {
-          stats = Promise.resolve(connection.getStats());
-        } catch {
-          stats = Promise.reject(new Error("RTC stats are unavailable"));
-        }
-        void stats
-          .then((report) => {
-            if (disposed || generation !== this.#generation || connectionEpoch !== this.#connectionEpoch || this.#stopped) return;
-            recorder(rtcConnectionState(connection), rtcStats(report));
-          })
-          .catch(() => undefined);
-      }
       if (connection.connectionState === "closed") dispose();
     };
     this.#disposeConnectionObservation = dispose;
-    cameraTimer = globalThis.setTimeout(adaptCamera, 1_000);
-    if (this.#recordReconnect) this.#sampleRecoveryTraffic(connection, generation, connectionEpoch);
+    cameraTimer = globalThis.setTimeout(adaptCamera, 1000);
     connection.addEventListener("connectionstatechange", capture);
     connection.addEventListener("iceconnectionstatechange", capture);
     connection.addEventListener("signalingstatechange", capture);
     capture();
   }
-
-  #sampleRecoveryTraffic(connection: RTCPeerConnection, generation: number, connectionEpoch: number): void {
-    const traffic = new Map<string, RecoveryTraffic>();
-    let dtlsState: string | undefined;
-    const current = () => generation === this.#generation && connectionEpoch === this.#connectionEpoch && !this.#stopped && connection.connectionState !== "closed" && connection.connectionState !== "failed";
-    const sample = async () => {
-      if (!current()) return;
-      try {
-        const report = await connection.getStats();
-        if (!current()) return;
-        const now = performance.now();
-        report.forEach((entry) => {
-          if (entry.type === "transport") {
-            const nextState = rtcString(entry, "dtlsState");
-            if (nextState !== dtlsState) recordReconnect(this.#recordReconnect, "dtls_state", { dtls_state: nextState ?? "unknown" });
-            dtlsState = nextState;
-          }
-          this.#observeRecoveryTraffic(entry, traffic, now);
-        });
-      } catch {
-        if (current()) recordReconnect(this.#recordReconnect, "rtc_stats_unavailable");
-      }
-      if (current()) globalThis.setTimeout(() => void sample(), 250);
-    };
-    void sample();
-  }
-
-  #observeRecoveryTraffic(entry: RTCStats, traffic: Map<string, RecoveryTraffic>, now: number): void {
-    if (entry.type !== "inbound-rtp" && entry.type !== "outbound-rtp") return;
-    const direction = entry.type === "inbound-rtp" ? "inbound" : "outbound";
-    const kind = rtcString(entry, "kind") ?? "unknown";
-    const previous = traffic.get(entry.id);
-    const next = previous ?? {
-      packets: { count: 0, lastProgress: now, stalled: false },
-      frames: { count: 0, lastProgress: now, stalled: false },
-    };
-    const packets = recoveryTrafficCount(entry, direction, "packet");
-    const frames = recoveryTrafficCount(entry, direction, "frame");
-    this.#observeTrafficCounter(next.packets, { count: packets, now, direction, kind, unit: "packet", existed: previous !== undefined });
-    this.#observeTrafficCounter(next.frames, { count: frames, now, direction, kind, unit: "frame", existed: previous !== undefined });
-    traffic.set(entry.id, next);
-  }
-
-  #observeTrafficCounter(progress: TrafficProgress, sample: TrafficSample): void {
-    const attributes = { direction: sample.direction, kind: sample.kind };
-    if (sample.count > progress.count) {
-      if (progress.count === 0) recordReconnect(this.#recordReconnect, `first_${sample.unit}`, attributes);
-      else if (progress.stalled) recordReconnect(this.#recordReconnect, sample.unit === "packet" ? "rtp_resumed" : "frame_resumed", attributes);
-      progress.lastProgress = sample.now;
-      progress.stalled = false;
-    } else if (trafficStalled(progress, sample)) {
-      progress.stalled = true;
-      recordReconnect(this.#recordReconnect, sample.unit === "packet" ? "rtp_stall" : "frame_stall", attributes);
-    }
-    progress.count = sample.count;
-  }
-
   async #replaceDormantConnectionBeforeNegotiation(generation: number): Promise<void> {
     if (!this.#started || this.#negotiatedGeneration === generation || this.#replacementAttemptedGeneration === generation || !this.#replaceMediaConnection) return;
     await this.#replaceMediaConnectionForRecovery(generation);
   }
-
   async #replaceMediaConnectionForRecovery(generation: number): Promise<void> {
     this.#requireGeneration(generation);
     if (!this.#replaceMediaConnection || this.#replacementAttemptedGeneration === generation) {
@@ -1059,7 +892,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     this.#replacementAttemptedGeneration = generation;
     const replaceMediaConnection = this.#replaceMediaConnection;
-    const bootstrap = await traceReconnect(this.#recordReconnect, "replace_access", replaceMediaConnection);
+    const bootstrap = await replaceMediaConnection();
     this.#requireGeneration(generation);
     validateBootstrap(bootstrap);
     if (bootstrap.connectionId === this.#bootstrap.connectionId) {
@@ -1082,32 +915,26 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     this.remotePublicationsChanged();
   }
-
   async #republishPreparedTracksAfterRecovery(generation: number): Promise<void> {
     const enabled = [...this.#localTracks.values()].filter((state) => state.desiredEnabled && state.track.readyState !== "ended");
     await this.#publishPreparedTracks(enabled, generation);
   }
-
   #observeRemotePublicationCursor(cursor: PublicationCursor, pullIncomplete = false): void {
     this.#cursor = cursor;
     this.#remotePullIncomplete = pullIncomplete;
     this.#publishSnapshot();
   }
-
   #quarantineInvalidRemotePublicationCursor(authoritative: CloudflareSFUPublicationSnapshot): void {
     if (!Number.isSafeInteger(authoritative.incarnation) || authoritative.incarnation < 0 || !Number.isSafeInteger(authoritative.sequence) || authoritative.sequence < 0) return;
     this.#observeRemotePublicationCursor({ incarnation: authoritative.incarnation, sequence: authoritative.sequence, signature: INVALID_PUBLICATION_SIGNATURE });
   }
-
   #isRetryableConnectionFailure(error: unknown): boolean {
     return error instanceof CloudflareSFUError && error.code === "signaling_failed" && error.options.retryableConnection === true;
   }
-
   #createPeerConnection(bootstrap: CloudflareSFUBootstrap): RTCPeerConnection {
     const create = this.#peerConnectionFactory ?? ((configuration: RTCConfiguration) => new RTCPeerConnection(configuration));
     return create({ iceServers: [{ urls: bootstrap.stunServer }], bundlePolicy: "max-bundle" });
   }
-
   #rebuildPeerConnection(bootstrap: CloudflareSFUBootstrap, generation: number, connectionEpoch: number): void {
     try {
       this.#connection = this.#createPeerConnection(bootstrap);
@@ -1117,7 +944,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       throw error;
     }
   }
-
   #disposeConnection(stopSenders: boolean): void {
     if (!stopSenders) this.#setPhase("recovering", null);
     this.#disposeConnectionObservation?.();
@@ -1140,7 +966,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#reportError(error);
     }
   }
-
   #removeOwnedLocalTrack(state: LocalTrackState): void {
     if (state.endedListener) state.track.removeEventListener("ended", state.endedListener);
     safeStopTrack(state.track, this.#reportError.bind(this));
@@ -1152,14 +977,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     state.pendingTrackName = null;
     state.endedListener = null;
   }
-
   #clearRemoteTracks(): void {
     for (const publication of this.#remoteTracks.values()) safeStopTrack(publication.track, this.#reportError.bind(this));
     this.#remoteTracks.clear();
     this.#publishSnapshot();
     this.#emitRemote();
   }
-
   #schedulePoll(delayMs = this.#pollIntervalMs): void {
     if (this.#stopped || !this.#started || this.#pollTimer !== undefined) return;
     this.#pollTimer = globalThis.setTimeout(async () => {
@@ -1186,18 +1009,15 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       }
     }, delayMs);
   }
-
   #incompletePullDelay(): number {
     this.#pollFailures = Math.min(this.#pollFailures + 1, 6);
     return Math.min(this.#pollIntervalMs, 750 * 2 ** (this.#pollFailures - 1));
   }
-
   #clearPoll(): void {
     this.#pollFailures = 0;
     if (this.#pollTimer !== undefined) globalThis.clearTimeout(this.#pollTimer);
     this.#pollTimer = undefined;
   }
-
   #projectLocalPublications(): readonly MediaPublication[] {
     return [...this.#localTracks.values()].map((state) => ({
       participantId: this.#participantId,
@@ -1206,11 +1026,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       publicationId: state.providerPublicationId,
     }));
   }
-
   #projectRemotePublications(): readonly MediaPublication[] {
     return [...this.#remoteTracks.values()].map(({ participantId, source, publicationId }) => ({ participantId, source, publicationId, enabled: true }));
   }
-
   #publishSnapshot(phase = this.#snapshot.connection.phase, failure = this.#snapshot.failure): void {
     const next = freezeSnapshot({
       connection: {
@@ -1236,27 +1054,22 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#snapshot = next;
     for (const listener of this.#snapshotListeners) this.#invokeListener(listener);
   }
-
   #setPhase(phase: CloudflareSFUSnapshot["connection"]["phase"], failure: CloudflareSFUSnapshot["failure"]): void {
     this.#publishSnapshot(phase, failure);
   }
-
   #setFailure(error: unknown, fallback: CloudflareSFUFailureCode): void {
     const code = error instanceof CloudflareSFUError ? error.code : fallback;
     this.#publishSnapshot("failed", { code, recoverable: code !== "invalid_bootstrap" && code !== "invalid_target" && code !== "invalid_publication" });
     this.#reportError(error);
   }
-
   #emitLocal(): void {
     const publications = this.#projectLocalPublications();
     for (const listener of this.#localListeners) this.#invokeListener(() => listener(publications));
   }
-
   #emitRemote(): void {
     const publications = this.#projectRemotePublications();
     for (const listener of this.#remoteListeners) this.#invokeListener(() => listener(publications));
   }
-
   #invokeListener(listener: () => void): void {
     try {
       listener();
@@ -1264,7 +1077,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#reportError(error);
     }
   }
-
   #reportError(error: unknown): void {
     try {
       this.#onError?.(error);
@@ -1272,21 +1084,17 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       // Consumer callbacks cannot prevent SFU cleanup or state reconciliation.
     }
   }
-
   #requireGeneration(generation: number): void {
     if (generation !== this.#generation || this.#stopped) throw new CloudflareSFUError("Cloudflare SFU operation belongs to a stale connection generation", "stale_generation");
   }
-
   #requireActive(): void {
     if (this.#stopped) throw new CloudflareSFUError("Cloudflare SFU client is stopped", "media_failed");
   }
-
   #requireTransport(): CloudflareSFUSignalingTransport {
     if (!this.#transport) throw new CloudflareSFUError("Cloudflare SFU signaling transport is unavailable", "signaling_failed");
     return this.#transport;
   }
 }
-
 function validateClientOptions(options: CloudflareSFUClientOptions): void {
   validateBootstrap(options.bootstrap);
   if (!options.participantId.trim()) throw new CloudflareSFUError("Cloudflare SFU participant is missing", "invalid_bootstrap");
@@ -1294,93 +1102,16 @@ function validateClientOptions(options: CloudflareSFUClientOptions): void {
     throw new CloudflareSFUError("Cloudflare SFU polling interval is invalid", "invalid_bootstrap");
   }
 }
-
-function rtcConnectionState(connection: RTCPeerConnection): RtcConnectionStateSnapshot {
-  return {
-    connectionState: connection.connectionState,
-    iceConnectionState: connection.iceConnectionState,
-    signalingState: connection.signalingState,
-  };
-}
-
-function rtcStats(report: RTCStatsReport): readonly RtcStatsLike[] {
-  const entries: RtcStatsLike[] = [];
-  report.forEach((entry) => {
-    if (typeof entry.type !== "string") return;
-    entries.push({ type: entry.type, ...rtcTrafficStats(entry), ...rtcQualityStats(entry), ...rtcTransportStats(entry) });
-  });
-  return entries;
-}
-
-function rtcTrafficStats(entry: object): RtcStatsLike {
-  const bytesReceived = rtcNumber(entry, "bytesReceived");
-  const bytesSent = rtcNumber(entry, "bytesSent");
-  const packetsReceived = rtcNumber(entry, "packetsReceived");
-  const packetsSent = rtcNumber(entry, "packetsSent");
-  return {
-    ...(bytesReceived !== undefined ? { bytesReceived } : {}),
-    ...(bytesSent !== undefined ? { bytesSent } : {}),
-    ...(packetsReceived !== undefined ? { packetsReceived } : {}),
-    ...(packetsSent !== undefined ? { packetsSent } : {}),
-  };
-}
-
-function rtcQualityStats(entry: object): RtcStatsLike {
-  const kind = rtcString(entry, "kind");
-  const framesDropped = rtcNumber(entry, "framesDropped");
-  const jitter = rtcNumber(entry, "jitter");
-  const packetsLost = rtcNumber(entry, "packetsLost");
-  const roundTripTime = rtcNumber(entry, "roundTripTime");
-  return {
-    ...(kind !== undefined ? { kind } : {}),
-    ...(framesDropped !== undefined ? { framesDropped } : {}),
-    ...(jitter !== undefined ? { jitter } : {}),
-    ...(packetsLost !== undefined ? { packetsLost } : {}),
-    ...(roundTripTime !== undefined ? { roundTripTime } : {}),
-  };
-}
-
-function rtcTransportStats(entry: object): RtcStatsLike {
-  const state = rtcString(entry, "state");
-  const selected = rtcBoolean(entry, "selected");
-  const nominated = rtcBoolean(entry, "nominated");
-  const dtlsState = rtcString(entry, "dtlsState");
-  return {
-    ...(state !== undefined ? { state } : {}),
-    ...(selected !== undefined ? { selected } : {}),
-    ...(nominated !== undefined ? { nominated } : {}),
-    ...(dtlsState !== undefined ? { dtlsState } : {}),
-  };
-}
-
-function rtcString(value: object, property: string): string | undefined {
-  const candidate: unknown = Reflect.get(value, property);
-  return typeof candidate === "string" ? candidate : undefined;
-}
-
-function rtcNumber(value: object, property: string): number | undefined {
-  const candidate: unknown = Reflect.get(value, property);
-  return typeof candidate === "number" ? candidate : undefined;
-}
-
-function rtcBoolean(value: object, property: string): boolean | undefined {
-  const candidate: unknown = Reflect.get(value, property);
-  return typeof candidate === "boolean" ? candidate : undefined;
-}
-
 function validateBootstrap(bootstrap: CloudflareSFUBootstrap): void {
   if (!bootstrap.connectionId.trim() || !bootstrap.stunServer.trim()) throw new CloudflareSFUError("Cloudflare SFU bootstrap is incomplete", "invalid_bootstrap");
 }
-
 function validateTrackSource(source: MediaSource, track: MediaStreamTrack): void {
   const valid = source === "microphone" ? track.kind === "audio" : track.kind === "video";
   if (!valid) throw new CloudflareSFUError(`The prepared ${source} track has an incompatible kind`, "media_failed");
 }
-
 function desiredRemotePublications(publications: readonly CloudflareSFUPublication[], participantId: string): Map<string, CloudflareSFUPublication> {
   return new Map(publications.filter((publication) => publication.participantId !== participantId).map((publication) => [publicationKey(publication), publication]));
 }
-
 function reconcileRemoteTracks(desired: ReadonlyMap<string, CloudflareSFUPublication>, pulled: readonly CloudflareSFURemoteTrack[], current: ReadonlyMap<string, CloudflareSFURemoteTrack>): Map<string, CloudflareSFURemoteTrack> {
   const pulledByKey = new Map(pulled.map((publication) => [publicationKey(publication), publication]));
   return new Map(
@@ -1391,30 +1122,33 @@ function reconcileRemoteTracks(desired: ReadonlyMap<string, CloudflareSFUPublica
     }),
   );
 }
-
 function stopReplacedRemoteTracks(current: ReadonlyMap<string, CloudflareSFURemoteTrack>, next: ReadonlyMap<string, CloudflareSFURemoteTrack>, onError: (error: unknown) => void): void {
   for (const [key, previous] of current) {
     if (next.get(key) !== previous) safeStopTrack(previous.track, onError);
   }
 }
-
-function observeConnectionState(peerState: RTCPeerConnectionState, iceState: RTCIceConnectionState, started: boolean): (Pick<CloudflareSFUSnapshot, "failure"> & { readonly phase: CloudflareSFUSnapshot["connection"]["phase"] }) | null {
+function observeConnectionState(
+  peerState: RTCPeerConnectionState,
+  iceState: RTCIceConnectionState,
+  started: boolean,
+):
+  | (Pick<CloudflareSFUSnapshot, "failure"> & {
+      readonly phase: CloudflareSFUSnapshot["connection"]["phase"];
+    })
+  | null {
   if (peerState === "failed") return { phase: "failed", failure: { code: "peer_connection_failed", recoverable: true } };
   if (iceState === "failed") return { phase: "failed", failure: { code: "ice_connection_failed", recoverable: true } };
   if (peerState === "disconnected" || iceState === "disconnected") return { phase: "recovering", failure: null };
   if (started && peerState === "connected" && (iceState === "connected" || iceState === "completed")) return { phase: "live", failure: null };
   return null;
 }
-
 function connectionIsLive(connection: RTCPeerConnection): boolean {
   return connection.connectionState === "connected" && (connection.iceConnectionState === "connected" || connection.iceConnectionState === "completed");
 }
-
 function requireTransceiverMid(transceiver: RTCRtpTransceiver): string {
   if (transceiver.mid === null) throw new CloudflareSFUError("Browser did not assign a media section", "media_failed");
   return transceiver.mid;
 }
-
 function safeStopTrack(track: MediaStreamTrack, onError: (error: unknown) => void): void {
   try {
     track.stop();
@@ -1422,7 +1156,6 @@ function safeStopTrack(track: MediaStreamTrack, onError: (error: unknown) => voi
     onError(error);
   }
 }
-
 function freezeSnapshot(snapshot: CloudflareSFUSnapshot): CloudflareSFUSnapshot {
   const failure = snapshot.failure ? Object.freeze(snapshot.failure) : null;
   return Object.freeze({
@@ -1434,65 +1167,46 @@ function freezeSnapshot(snapshot: CloudflareSFUSnapshot): CloudflareSFUSnapshot 
     failure,
   });
 }
-
 function snapshotEqual(left: CloudflareSFUSnapshot, right: CloudflareSFUSnapshot): boolean {
   return snapshotMetadataEqual(left, right) && left.localTracks.every((publication, index) => publicationEqual(publication, right.localTracks[index])) && left.remoteTracks.every((publication, index) => remotePublicationEqual(publication, right.remoteTracks[index]));
 }
-
 function snapshotMetadataEqual(left: CloudflareSFUSnapshot, right: CloudflareSFUSnapshot): boolean {
   return connectionEqual(left.connection, right.connection) && cursorEqual(left.cursor, right.cursor) && failureEqual(left.failure, right.failure) && left.localTracks.length === right.localTracks.length && left.remoteTracks.length === right.remoteTracks.length;
 }
-
 function connectionEqual(left: CloudflareSFUSnapshot["connection"], right: CloudflareSFUSnapshot["connection"]): boolean {
   return left.phase === right.phase && left.peerConnectionState === right.peerConnectionState && left.iceConnectionState === right.iceConnectionState;
 }
-
 function cursorEqual(left: CloudflareSFUSnapshot["cursor"], right: CloudflareSFUSnapshot["cursor"]): boolean {
   return left?.incarnation === right?.incarnation && left?.sequence === right?.sequence;
 }
-
 function failureEqual(left: CloudflareSFUSnapshot["failure"], right: CloudflareSFUSnapshot["failure"]): boolean {
   return left?.code === right?.code && left?.recoverable === right?.recoverable;
 }
-
 function publicationEqual(left: CloudflareSFULocalTrack, right: CloudflareSFULocalTrack | undefined): boolean {
   return right !== undefined && left.source === right.source && left.enabled === right.enabled && left.publicationId === right.publicationId && left.track === right.track;
 }
-
 function remotePublicationEqual(left: CloudflareSFURemoteTrack, right: CloudflareSFURemoteTrack | undefined): boolean {
   return right !== undefined && left.participantId === right.participantId && left.source === right.source && left.publicationId === right.publicationId && left.track === right.track;
 }
-
-function providerDescription(description: ReturnType<typeof requireDescription>): { readonly sessionDescription: ReturnType<typeof requireDescription> } {
+function providerDescription(description: ReturnType<typeof requireDescription>): {
+  readonly sessionDescription: ReturnType<typeof requireDescription>;
+} {
   return { sessionDescription: description };
 }
-
 function retryableRemotePull(error: unknown): boolean {
   return error instanceof CloudflareSFUError && ["signaling_failed", "signaling_timeout", "media_failed", "negotiation_timeout"].includes(error.code);
 }
-
 function firefoxCameraSimulcastUnsupported(): boolean {
   // Firefox accepts RID encodings but can pause 720p h on an unthrottled link.
   // Capabilities do not expose that allocation policy. Preserve the single-
   // camera path for Gecko Firefox; FxiOS uses WebKit and is not matched.
   return typeof navigator !== "undefined" && /\bFirefox\/\d+/i.test(navigator.userAgent);
 }
-
 function simulcastUnsupported(error: unknown): boolean {
   return error instanceof Error && ["NotSupportedError", "OperationError", "TypeError"].includes(error.name);
 }
-
 function mediaTargetFailure(error: unknown): MediaPlaneResult {
   const code = error instanceof CloudflareSFUError ? error.code : "media_failed";
   const ambiguous = code === "signaling_timeout" || code === "negotiation_timeout";
   return { outcome: ambiguous ? "ambiguous" : "retryable_failure", errorCode: code };
-}
-
-function recoveryTrafficCount(entry: RTCStats, direction: string, unit: "packet" | "frame"): number {
-  const property = unit === "packet" ? (direction === "inbound" ? "packetsReceived" : "packetsSent") : direction === "inbound" ? "framesDecoded" : "framesEncoded";
-  return rtcNumber(entry, property) ?? 0;
-}
-
-function trafficStalled(progress: TrafficProgress, sample: TrafficSample): boolean {
-  return sample.existed && !progress.stalled && sample.now - progress.lastProgress >= 1000 && (sample.unit === "packet" || progress.count > 0);
 }

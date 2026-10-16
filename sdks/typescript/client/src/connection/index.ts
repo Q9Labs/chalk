@@ -1,10 +1,7 @@
-import type { ReconnectRecorder } from "../telemetry/reconnect";
 import type { AccessSubject } from "../access/grant";
-import type { CloudflareSFURtcSummaryRecorder } from "../media";
 import type { ConnectionDiagnostic } from "./diagnostics";
 import type { ConnectionAccessProvider, ConnectionDependencies, ConnectionMediaClient, ConnectionSyncClient } from "./dependencies";
 import type { ConnectionConnectionPhase, ConnectionFailure, ConnectionState } from "./types";
-import type { JourneyTelemetryContext } from "../telemetry/types";
 /** Public lifecycle data contracts. Runtime ownership lives in ConnectionLifecycleService. */
 export type ConnectionLifecycleSnapshot = {
   readonly state: ConnectionState;
@@ -32,9 +29,6 @@ export type ConnectionOptions = {
   readonly syncStartupTimeoutMs?: number;
   readonly initialMicrophoneEnabled?: boolean;
   readonly initialCameraEnabled?: boolean;
-  readonly recordReconnect?: ReconnectRecorder;
-  readonly telemetry?: JourneyTelemetryContext;
-  readonly recordRtcSummary?: CloudflareSFURtcSummaryRecorder;
   readonly accessRefreshWindowMs?: number;
   readonly recovery?: {
     readonly maxAttempts?: number;

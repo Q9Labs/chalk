@@ -330,7 +330,6 @@ outcomes:
     code:
       - sdks/typescript/client/src/webhooks/verify.ts
       - sdks/typescript/client/src/webhooks/processor.ts
-      - infrastructure/observability/scripts/e2e-webhook.mjs
   - id: observability_and_operations.failure_recovery
     title: Alerts fire and service recovers from failure
     area: observability_and_operations
@@ -406,7 +405,7 @@ outcomes:
         Cut recovery further: restart ICE instead of rebuilding media, overlap SDP readiness, and
         get keyframes sooner after a cut.
       - >-
-        Check with production reconnect telemetry whether Postgres restarts and flapping networks
+        Check in a real call whether Postgres restarts and flapping networks
         recover more slowly in their worst cases.
       - >-
         Re-record a self-mute that a Sync restart interrupted, so other Participants don't see the

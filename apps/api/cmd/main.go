@@ -41,7 +41,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/email"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
-	"github.com/q9labs/chalk/apps/api/internal/journeys"
+
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
@@ -339,8 +339,6 @@ func run() error {
 	auditLogRepository := postgres.NewAuditLogRepository(operationQueries)
 	auditLogService := auditlogs.NewService(auditLogRepository)
 
-	journeyRepository := postgres.NewJourneyRepository(pool)
-	journeyService := journeys.NewService(journeyRepository)
 	statusRepository := postgres.NewStatusRepository(pool)
 	statusService := statusdomain.NewService(statusRepository, statusdomain.Config{})
 	var episodeCredentials httpapi.EpisodeCredentialVerifier
@@ -593,20 +591,20 @@ func run() error {
 			AllowedOrigins: cfg.API.CORSAllowedOrigins,
 			TenantOrigins:  tenantService,
 		},
-		LocalSystemToken:       cfg.API.LocalSystemToken,
-		OpsIngestToken:         cfg.API.OpsIngestToken,
-		RateLimit:              rateLimitOptions,
-		Readiness:              postgres.Readiness{Pool: pool, RequiredMigration: migrations.LatestVersion},
-		Authentication:         authenticationService,
-		RecentAuth:             recentAuthService,
-		AccountTenants:         accountTenantService,
-		APIKeys:                apiKeyService,
-		APIKeyAuthentication:   apiKeyService,
-		APIKeyAudits:           auditLogService,
-		Journeys:               journeyService,
-		StatusIngestion:        statusService,
-		StatusSnapshot:         statusService,
-		LocalTelemetry:         cfg.Observability.Environment == config.DefaultEnvironment,
+		LocalSystemToken:     cfg.API.LocalSystemToken,
+		OpsIngestToken:       cfg.API.OpsIngestToken,
+		RateLimit:            rateLimitOptions,
+		Readiness:            postgres.Readiness{Pool: pool, RequiredMigration: migrations.LatestVersion},
+		Authentication:       authenticationService,
+		RecentAuth:           recentAuthService,
+		AccountTenants:       accountTenantService,
+		APIKeys:              apiKeyService,
+		APIKeyAuthentication: apiKeyService,
+		APIKeyAudits:         auditLogService,
+
+		StatusIngestion: statusService,
+		StatusSnapshot:  statusService,
+
 		EpisodeCredentials:     episodeCredentials,
 		MediaPlane:             mediaPlaneRegistry,
 		MediaPublications:      mediaPublicationService,

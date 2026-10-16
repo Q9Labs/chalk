@@ -18,7 +18,6 @@ An arrival can be admitted immediately or return `pending`. Pending arrivals pol
 
 `pnpm --dir apps/web dev` binds Vite to `127.0.0.1:3070` and proxies `/v1` to `http://127.0.0.1:8080` by default. Set `CHALK_DEV_API_ORIGIN` to use another API origin. Production builds set `VITE_API_URL` to the public API origin.
 
-Browser journey telemetry is opt-in through `VITE_CHALK_TELEMETRY_ENABLED=true` and the same journey context is passed to the public SDK and Chalk client.
 
 ## Commands
 

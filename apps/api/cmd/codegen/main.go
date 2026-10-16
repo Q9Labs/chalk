@@ -13,7 +13,6 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
-	"github.com/q9labs/chalk/apps/api/internal/journeys"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
@@ -496,9 +495,6 @@ func (g *generator) fieldSchema(schemaName string, fieldName string, field refle
 	if fieldName == "pagination" {
 		return schemaReference("Pagination")
 	}
-	if (schemaName == "JourneyEventBatch" || schemaName == "JourneyLedger") && fieldName == "attributes" {
-		return journeyAttributesSchema()
-	}
 	if fieldName == "trace_id" {
 		return nullableSchema(traceIdentifierSchema(32))
 	}
@@ -583,20 +579,6 @@ func recordingArtifactSchemas() map[string]map[string]any {
 	}
 }
 
-func journeyAttributesSchema() map[string]any {
-	return map[string]any{
-		"type":          "object",
-		"maxProperties": journeys.MaxAttributes,
-		"additionalProperties": map[string]any{
-			"anyOf": []map[string]any{
-				{"type": "string", "maxLength": journeys.MaxAttributeText},
-				{"type": "number"},
-				{"type": "boolean"},
-			},
-		},
-	}
-}
-
 func traceIdentifierSchema(length int) map[string]any {
 	return map[string]any{
 		"type":      "string",
@@ -644,9 +626,6 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 			items["maxLength"] = tenants.MaxCORSOriginBytes
 			items["pattern"] = tenants.CORSOriginPattern
 		}
-	}
-	if schemaName == "JourneyEventBatch" && fieldName == "events" {
-		schema["maxItems"] = journeys.MaxEventsPerBatch
 	}
 	if schemaName == "UpdateTenantRequest" {
 		switch fieldName {

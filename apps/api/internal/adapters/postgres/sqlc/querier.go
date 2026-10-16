@@ -137,7 +137,6 @@ type Querier interface {
 	GetCompletedCaptureRecordingJob(ctx context.Context, arg GetCompletedCaptureRecordingJobParams) (RecordingJob, error)
 	GetEpisodeCreateRequest(ctx context.Context, arg GetEpisodeCreateRequestParams) (EpisodeCreateRequest, error)
 	GetFirstOpenRecordingCaptureCommand(ctx context.Context, arg GetFirstOpenRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
-	GetJourneyTerminalState(ctx context.Context, journeyID pgtype.UUID) (string, error)
 	GetLatestRecordingCapturePlan(ctx context.Context, planHandle pgtype.UUID) (RecordingCapturePlan, error)
 	GetLoginSessionByTokenHash(ctx context.Context, tokenHash string) (GetLoginSessionByTokenHashRow, error)
 	GetPasswordIdentityByEmail(ctx context.Context, email string) (GetPasswordIdentityByEmailRow, error)
@@ -217,7 +216,6 @@ type Querier interface {
 	HeartbeatArtifactJob(ctx context.Context, arg HeartbeatArtifactJobParams) (ArtifactJob, error)
 	HeartbeatRecordingJob(ctx context.Context, arg HeartbeatRecordingJobParams) (RecordingJob, error)
 	InsertActiveRecordingPresentationReaction(ctx context.Context, arg InsertActiveRecordingPresentationReactionParams) (RecordingPresentationReaction, error)
-	InsertJourneyEvent(ctx context.Context, arg InsertJourneyEventParams) (pgtype.UUID, error)
 	InsertRecordingBundle(ctx context.Context, arg InsertRecordingBundleParams) (InsertRecordingBundleRow, error)
 	InsertRecordingBundleAllocation(ctx context.Context, arg InsertRecordingBundleAllocationParams) (RecordingBundleAllocation, error)
 	InsertRecordingCaptureCommand(ctx context.Context, arg InsertRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
@@ -239,7 +237,6 @@ type Querier interface {
 	LinkAPIKeyMutation(ctx context.Context, arg LinkAPIKeyMutationParams) error
 	ListAccountTenants(ctx context.Context, arg ListAccountTenantsParams) ([]ListAccountTenantsRow, error)
 	ListDueAutoSpaceLifecycles(ctx context.Context, arg ListDueAutoSpaceLifecyclesParams) ([]AutoSpaceLifecycle, error)
-	ListJourneyEvents(ctx context.Context, journeyID pgtype.UUID) ([]ObservabilityJourneyEvent, error)
 	ListMatchingWebhookTargets(ctx context.Context, arg ListMatchingWebhookTargetsParams) ([]ListMatchingWebhookTargetsRow, error)
 	ListPendingSpacePublicAdmissionRequests(ctx context.Context, arg ListPendingSpacePublicAdmissionRequestsParams) ([]SpacePublicAdmissionRequest, error)
 	ListRecordingCompletionRecoveryBundles(ctx context.Context, arg ListRecordingCompletionRecoveryBundlesParams) ([]ListRecordingCompletionRecoveryBundlesRow, error)

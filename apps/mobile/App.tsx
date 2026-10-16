@@ -6,7 +6,6 @@ import { StatusBar } from "expo-status-bar";
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-
 import { AppBootstrapScreen } from "./src/components/AppBootstrapScreen";
 import { DevDiagnosticsSheet } from "./src/components/DevDiagnosticsSheet";
 import { DevSdkPreviewScreen } from "./src/dev-preview";
@@ -15,17 +14,19 @@ import { DEFAULT_PREVIEW_SEARCH, patchPreviewSearch, type PreviewSearch, type Pr
 import { parsePreviewRoute } from "./src/dev-preview/preview-route";
 import { getDeviceInfo } from "@q9labsai/chalk-react-native/runtime";
 import { clearSpaceContext, parseSpaceLink, type MobileRoute, type SpaceOperationObserver } from "./src/lib/spaces";
-import { getApiBaseURL, isMobileTelemetryEnabled } from "./src/lib/mobile-config";
+import { getApiBaseURL } from "./src/lib/mobile-config";
 import { MobileSpaceScreen } from "./src/space/MobileSpaceScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { OnboardingScreen } from "./src/screens/OnboardingScreen";
 import { loadOnboardingState, resolveOnboardingLaunchSurface } from "./src/screens/onboarding-store";
-
-type AppRoute = MobileRoute | { readonly kind: "sdk-preview"; readonly preview: PreviewSearch };
-
+type AppRoute =
+  | MobileRoute
+  | {
+      readonly kind: "sdk-preview";
+      readonly preview: PreviewSearch;
+    };
 export default function App(): React.JSX.Element {
   const apiBaseURL = useMemo(() => getApiBaseURL(), []);
-  const telemetryEnabled = useMemo(() => isMobileTelemetryEnabled(), []);
   const diagnosticsMode = useMemo(() => resolveDevDiagnosticsMode({ isDevRuntime: __DEV__, apiBaseURL }), [apiBaseURL]);
   const diagnosticsEnabled = diagnosticsMode.enabled;
   const [route, setRoute] = useState<AppRoute>({ kind: "home" });
@@ -34,11 +35,9 @@ export default function App(): React.JSX.Element {
   const [defaultDisplayName, setDefaultDisplayName] = useState<string | null>(null);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const routeRef = useRef<AppRoute>({ kind: "home" });
-
   const syncStaticDiagnostics = useCallback(() => {
     if (diagnosticsEnabled) setDevDiagnosticsDevice(getDeviceInfo());
   }, [diagnosticsEnabled]);
-
   const openDiagnosticsForFailure = useCallback(
     (source: string, message: string) => {
       if (!diagnosticsEnabled) return;
@@ -53,11 +52,9 @@ export default function App(): React.JSX.Element {
     },
     [diagnosticsEnabled],
   );
-
   useEffect(() => {
     routeRef.current = route;
   }, [route]);
-
   useEffect(() => {
     if (!diagnosticsEnabled || route.kind === "sdk-preview") return;
     recordDevDiagnosticsLifecycleEvent("navigation", `App route: ${route.kind}`, route.kind === "space" ? `Space: ${route.space}` : undefined);
@@ -70,11 +67,9 @@ export default function App(): React.JSX.Element {
     });
     syncStaticDiagnostics();
   }, [apiBaseURL, diagnosticsEnabled, diagnosticsMode.buildProfile, route, syncStaticDiagnostics]);
-
   useEffect(() => {
     if (route.kind === "home") setDevDiagnosticsConnection(null);
   }, [route.kind]);
-
   useEffect(() => {
     let mounted = true;
     const openURL = (url: string | null) => {
@@ -95,7 +90,6 @@ export default function App(): React.JSX.Element {
       subscription.remove();
     };
   }, []);
-
   useEffect(() => {
     let mounted = true;
     void loadOnboardingState()
@@ -111,7 +105,6 @@ export default function App(): React.JSX.Element {
       mounted = false;
     };
   }, []);
-
   const goHome = useCallback(async () => {
     if (routeRef.current.kind === "space") await clearSpaceContext(routeRef.current);
     setRoute({ kind: "home" });
@@ -142,9 +135,7 @@ export default function App(): React.JSX.Element {
   const openSdkPreview = useCallback(() => {
     setRoute({ kind: "sdk-preview", preview: DEFAULT_PREVIEW_SEARCH });
   }, []);
-
   const showDeveloperControls = __DEV__ && onboardingStatus === "complete";
-
   return (
     <SafeAreaProvider>
       <View style={styles.appShell}>
@@ -165,7 +156,6 @@ export default function App(): React.JSX.Element {
           onPreviewSearchChange: handlePreviewSearchChange,
           route,
           onboardingStatus,
-          telemetryEnabled,
         })}
         {showDeveloperControls ? (
           <>
@@ -188,7 +178,6 @@ export default function App(): React.JSX.Element {
     </SafeAreaProvider>
   );
 }
-
 function renderContent({
   apiBaseURL,
   defaultDisplayName,
@@ -202,7 +191,6 @@ function renderContent({
   onPreviewSearchChange,
   onboardingStatus,
   route,
-  telemetryEnabled,
 }: {
   readonly apiBaseURL: string;
   readonly defaultDisplayName: string | null;
@@ -216,27 +204,14 @@ function renderContent({
   readonly onPreviewSearchChange: (patch: PreviewSearchPatch) => void;
   readonly onboardingStatus: "loading" | "required" | "complete";
   readonly route: AppRoute;
-  readonly telemetryEnabled: boolean;
 }): ReactElement {
   if (isBooting) return <AppBootstrapScreen label="Starting Chalk…" />;
   if (route.kind === "sdk-preview") return <DevSdkPreviewScreen onClose={onClose} onSearchChange={onPreviewSearchChange} search={route.preview} />;
   if (onboardingStatus === "loading") return <AppBootstrapScreen label="Starting Chalk…" />;
   if (onboardingStatus === "required") return <OnboardingScreen onComplete={onOnboardingComplete} />;
   if (route.kind === "home") return <HomeScreen apiBaseURL={apiBaseURL} onError={(message) => onDiagnosticsFailure("public-space-create", message)} onNavigate={onNavigate} onOperation={onOperation} />;
-  return (
-    <MobileSpaceScreen
-      apiBaseURL={apiBaseURL}
-      defaultDisplayName={defaultDisplayName}
-      onClose={onClose}
-      onDiagnosticsConnection={onDiagnosticsConnection}
-      onDiagnosticsFailure={(error) => onDiagnosticsFailure("space-error", error.message)}
-      onOperation={onOperation}
-      route={route}
-      telemetryEnabled={telemetryEnabled}
-    />
-  );
+  return <MobileSpaceScreen apiBaseURL={apiBaseURL} defaultDisplayName={defaultDisplayName} onClose={onClose} onDiagnosticsConnection={onDiagnosticsConnection} onDiagnosticsFailure={(error) => onDiagnosticsFailure("space-error", error.message)} onOperation={onOperation} route={route} />;
 }
-
 const styles = StyleSheet.create({
   appShell: { flex: 1, backgroundColor: Theme.colors.background },
   devPreviewButton: { alignItems: "center", backgroundColor: Theme.colors.card, borderColor: Theme.colors.border, borderRadius: 18, borderWidth: 1, height: 36, justifyContent: "center", minWidth: 36, paddingHorizontal: 8, position: "absolute", right: 16, top: 64 },

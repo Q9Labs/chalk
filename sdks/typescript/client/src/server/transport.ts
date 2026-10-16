@@ -101,7 +101,6 @@ function serializedBody(body: unknown): { readonly body?: string } {
 function requestHeaders(options: ChalkServerClientOptions, apiKey: string, hasBody: boolean, idempotencyKeyValue: string | undefined): Headers {
   const headers = new Headers(options.headers);
   setContentType(headers, hasBody);
-  setTelemetryHeaders(headers, options);
   setOptionalHeader(headers, "idempotency-key", idempotencyKeyValue);
   headers.set("authorization", `Bearer ${apiKey}`);
   return headers;
@@ -109,13 +108,6 @@ function requestHeaders(options: ChalkServerClientOptions, apiKey: string, hasBo
 
 function setContentType(headers: Headers, hasBody: boolean): void {
   if (hasBody) headers.set("content-type", "application/json");
-}
-
-function setTelemetryHeaders(headers: Headers, options: ChalkServerClientOptions): void {
-  if (!options.telemetry) return;
-  headers.set("x-chalk-journey-id", options.telemetry.journeyId);
-  headers.set("traceparent", options.telemetry.traceparent);
-  setOptionalHeader(headers, "tracestate", options.telemetry.tracestate);
 }
 
 function setOptionalHeader(headers: Headers, name: string, value: string | undefined): void {

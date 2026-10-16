@@ -1,16 +1,12 @@
 import type { ChalkWhiteboardV1Transport } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Alert, type AlertButton, Share } from "react-native";
-
 import { useLayout, type UseLayoutReturn } from "../../hooks/useLayout";
-import type { NativeJourneyContext, WhiteboardMetric } from "../../telemetry";
 import type { SpaceViewProps } from "../SpaceView";
 import { formatSpaceDuration } from "./format-space-duration";
 import type { SpaceViewActionRunner, SpacePanelName } from "./types";
-
 const emptyElements: readonly unknown[] = Object.freeze([]);
 const emptyParticipants: readonly string[] = Object.freeze([]);
-
 export interface SpaceWhiteboardState {
   readonly isOpen: boolean;
   readonly canDraw: boolean;
@@ -21,14 +17,12 @@ export interface SpaceWhiteboardState {
   readonly journeyId: string;
   readonly traceparent?: string;
   readonly tracestate?: string;
-  readonly onMetric?: (metric: WhiteboardMetric) => void;
   readonly open: () => void;
   readonly close: () => void;
   readonly toggle: () => void;
   readonly requestSync: () => void;
   readonly clear: () => void;
 }
-
 export interface SpaceViewPanels {
   readonly layout: UseLayoutReturn;
   readonly panel: SpacePanelName | null;
@@ -45,7 +39,6 @@ export interface SpaceViewPanels {
   readonly closePanel: () => void;
   readonly handleInviteParticipants: () => void;
 }
-
 interface UseSpaceViewPanelsOptions {
   readonly spaceName?: string;
   readonly inviteLink?: string;
@@ -59,13 +52,11 @@ interface UseSpaceViewPanelsOptions {
   readonly onLeave: SpaceViewProps["onLeave"];
   readonly onEndEpisode: SpaceViewProps["onEndEpisode"];
   readonly run: SpaceViewActionRunner;
-  readonly journeyContext?: NativeJourneyContext;
   /** Test-fixture state only; SpaceView does not expose controlled panel state publicly. */
   readonly initialState?: SpaceViewFixtureState;
   /** Test-fixture state only; SpaceView does not expose controlled panel state publicly. */
   readonly controlledState?: SpaceViewFixtureState;
 }
-
 type SpaceViewFixtureState = {
   readonly layout?: SpaceViewProps["layout"];
   readonly panel?: SpacePanelName | null;
@@ -75,8 +66,7 @@ type SpaceViewFixtureState = {
   readonly durationSeconds?: number;
   readonly whiteboardOpen?: boolean;
 };
-
-export function useSpaceViewPanels({ spaceName, inviteLink, layout: controlledLayout, onLayoutChange, canWhiteboard, canDraw, canClear, canEndEpisode, transport, onLeave, onEndEpisode, run, journeyContext, initialState, controlledState }: UseSpaceViewPanelsOptions): SpaceViewPanels {
+export function useSpaceViewPanels({ spaceName, inviteLink, layout: controlledLayout, onLayoutChange, canWhiteboard, canDraw, canClear, canEndEpisode, transport, onLeave, onEndEpisode, run, initialState, controlledState }: UseSpaceViewPanelsOptions): SpaceViewPanels {
   const fixtureLayout = controlledState?.layout ?? initialState?.layout ?? controlledLayout;
   const layout = useLayout({ layout: fixtureLayout, onLayoutChange });
   const [panel, setPanel] = useState<SpacePanelName | null>(initialState?.panel ?? null);
@@ -86,16 +76,14 @@ export function useSpaceViewPanels({ spaceName, inviteLink, layout: controlledLa
   const [settingsOpen, setSettingsOpen] = useState(initialState?.settingsOpen ?? false);
   const [whiteboardOpen, setWhiteboardOpen] = useState(initialState?.whiteboardOpen ?? false);
   const generatedJourneyId = useRef(globalThis.crypto?.randomUUID?.() ?? `native-whiteboard-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-
   useEffect(() => {
     const durationSeconds = Math.max(0, Math.floor(controlledState?.durationSeconds ?? initialState?.durationSeconds ?? 0));
-    const startedAt = Date.now() - durationSeconds * 1_000;
-    const update = () => setSecondsElapsed(Math.max(0, Math.floor((Date.now() - startedAt) / 1_000)));
+    const startedAt = Date.now() - durationSeconds * 1000;
+    const update = () => setSecondsElapsed(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
     update();
-    const timer = globalThis.setInterval(update, 1_000);
+    const timer = globalThis.setInterval(update, 1000);
     return () => globalThis.clearInterval(timer);
   }, [controlledState?.durationSeconds, initialState?.durationSeconds]);
-
   useEffect(() => {
     if (controlledState?.panel !== undefined) setPanel(controlledState.panel ?? null);
     if (controlledState?.actionsOpen !== undefined) setActionsOpen(controlledState.actionsOpen);
@@ -103,7 +91,6 @@ export function useSpaceViewPanels({ spaceName, inviteLink, layout: controlledLa
     if (controlledState?.settingsOpen !== undefined) setSettingsOpen(controlledState.settingsOpen);
     if (controlledState?.whiteboardOpen !== undefined) setWhiteboardOpen(controlledState.whiteboardOpen);
   }, [controlledState]);
-
   const whiteboard = useMemo<SpaceWhiteboardState>(
     () => ({
       isOpen: canWhiteboard && whiteboardOpen,
@@ -112,19 +99,15 @@ export function useSpaceViewPanels({ spaceName, inviteLink, layout: controlledLa
       elements: emptyElements,
       openParticipants: emptyParticipants,
       transport,
-      journeyId: journeyContext?.journeyId ?? generatedJourneyId.current,
-      ...(journeyContext?.traceparent ? { traceparent: journeyContext.traceparent } : {}),
-      ...(journeyContext?.tracestate ? { tracestate: journeyContext.tracestate } : {}),
-      ...(journeyContext ? { onMetric: journeyContext.recordWhiteboardMetric } : {}),
+      journeyId: generatedJourneyId.current,
       open: () => canWhiteboard && setWhiteboardOpen(true),
       close: () => setWhiteboardOpen(false),
       toggle: () => canWhiteboard && setWhiteboardOpen((value) => !value),
       requestSync: () => void run(() => transport?.requestSnapshot()),
       clear: () => void run(() => transport?.clear()),
     }),
-    [canClear, canDraw, canWhiteboard, journeyContext, run, transport, whiteboardOpen],
+    [canClear, canDraw, canWhiteboard, run, transport, whiteboardOpen],
   );
-
   const handleLeave = useCallback(() => {
     const buttons: AlertButton[] = [
       { text: "Cancel", style: "cancel" },
@@ -139,14 +122,12 @@ export function useSpaceViewPanels({ spaceName, inviteLink, layout: controlledLa
     }
     Alert.alert("Leave Space?", "Choose how you want to leave.", buttons);
   }, [canEndEpisode, onEndEpisode, onLeave, run]);
-
   const handleInviteParticipants = useCallback(() => {
     void run(async () => {
       if (!inviteLink) throw new Error("The Space invite is not ready yet.");
       await Share.share({ message: inviteLink, title: spaceName || "Chalk Space", url: inviteLink });
     });
   }, [inviteLink, run, spaceName]);
-
   return {
     layout,
     panel,
