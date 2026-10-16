@@ -106,12 +106,7 @@ func newGenerator(routes []httpapi.APIRouteContract) *generator {
 						"description":  "Short-lived Sync participant credential bound to one Space Episode and participant generation.",
 					},
 
-					"opsIngestToken": map[string]any{
-						"type":        "apiKey",
-						"in":          "header",
-						"name":        "X-Ops-Ingest-Token",
-						"description": "Private monitor-result ingestion token.",
-					},
+
 				},
 				Schemas: make(map[string]map[string]any),
 			},
@@ -170,10 +165,6 @@ func (g *generator) addRoute(route httpapi.APIRouteContract) {
 	case httpapi.APIAuthParticipantSync:
 		operation["security"] = []map[string][]string{
 			{"participantSyncBearer": {}},
-		}
-	case httpapi.APIAuthOpsToken:
-		operation["security"] = []map[string][]string{
-			{"opsIngestToken": {}},
 		}
 	default:
 		operation["security"] = []map[string][]string{}
@@ -882,8 +873,6 @@ func scalarSchemas() map[string]map[string]any {
 		"DateTimeString":          brandedStringSchema("DateTimeString", "date-time", 0, 0),
 		"IntegrationServiceId":    brandedStringSchema("IntegrationServiceId", "", 1, 0),
 		"IntegrationActionId":     brandedStringSchema("IntegrationActionId", "", 1, 0),
-		"StatusComponentId":       brandedStringSchema("StatusComponentId", "", 1, 0),
-		"StatusMonitorIdentifier": brandedStringSchema("StatusMonitorIdentifier", "", 1, 0),
 	}
 	for _, name := range idSchemaNames() {
 		schemas[name] = brandedStringSchema(name, "uuid", 36, 36)

@@ -14,8 +14,6 @@ const indexPath = resolve(clientDir, "index.html");
 const fallback404Path = resolve(clientDir, "404.html");
 const spaceDirPath = resolve(clientDir, "space");
 const spaceIndexPath = resolve(spaceDirPath, "index.html");
-const statusDirPath = resolve(clientDir, "status");
-const statusIndexPath = resolve(statusDirPath, "index.html");
 const privacyIndexPath = resolve(clientDir, "privacy", "index.html");
 const termsIndexPath = resolve(clientDir, "terms", "index.html");
 const serviceWorkerPath = resolve(clientDir, "sw.js");
@@ -33,7 +31,7 @@ if (!existsSync(shellPath)) {
   throw new Error(`missing ${shellPath}; expected TanStack Start SPA build output to include _shell.html`);
 }
 
-for (const publicPagePath of [indexPath, statusIndexPath, privacyIndexPath, termsIndexPath]) {
+for (const publicPagePath of [indexPath, privacyIndexPath, termsIndexPath]) {
   if (!existsSync(publicPagePath)) {
     throw new Error(`missing ${publicPagePath}; expected TanStack Start to prerender every public web page`);
   }

@@ -57,48 +57,12 @@ describe("account boundary", () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       const headers = new Headers(init?.headers);
-      if (url.endsWith("/v1/status")) {
-        expect(Object.fromEntries(headers)).toEqual({
-          traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-          tracestate: "chalk=web",
-          "x-chalk-journey-id": "11111111-1111-4111-8111-111111111111",
-        });
-        return Response.json({
-          schema_version: 1,
-          generated_at: "2026-08-08T12:00:00Z",
-          overall: "degraded",
-          components: [{ id: "api", name: "API", description: "Control plane", state: "degraded", checked_at: "2026-08-08T11:59:00Z", last_changed_at: "2026-08-08T11:58:00Z", monitor_key: "private", target_url: "https://private.example", error_message: "secret" }],
-        });
-      }
-
       expect(url).toBe("https://api.chalk.test/v1/me");
       expect(headers.get("authorization")).toBe("Bearer private-token");
       expect(headers.get("traceparent")).toBeNull();
       expect(headers.get("tracestate")).toBe("chalk=web");
       return Response.json({ refresh_token: "root-secret", profile: { name: "Ada", token: "nested-secret", details: { access_token: "nested-access", safe: true } } });
     });
-    const response = await handleAccountBoundary(
-      new Request(`${secureOrigin}/api/status`, {
-        headers: {
-          Cookie: "__Host-chalk_account=private-token",
-          Authorization: "Bearer browser-token",
-          "X-Chalk-Journey-ID": "11111111-1111-4111-8111-111111111111",
-          Traceparent: "00-4BF92F3577B34DA6A3CE929D0E0E4736-00F067AA0BA902B7-01",
-          Tracestate: "chalk=web",
-        },
-      }),
-      upstream,
-      fetcher,
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      schema_version: 1,
-      generated_at: "2026-08-08T12:00:00Z",
-      overall: "degraded",
-      components: [{ id: "api", name: "API", description: "Control plane", state: "degraded", checked_at: "2026-08-08T11:59:00Z", last_changed_at: "2026-08-08T11:58:00Z" }],
-    });
-
     const nestedResponse = await handleAccountBoundary(
       new Request(`${secureOrigin}/api/me`, {
         headers: { Cookie: "__Host-chalk_account=private-token", Traceparent: "not-a-traceparent", Tracestate: "chalk=web" },

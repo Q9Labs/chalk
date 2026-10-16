@@ -341,7 +341,7 @@ outcomes:
     size: M
     remaining:
       - >-
-        Inject one scoped service failure, confirm the alert and public status change, then recover
+        Inject one scoped service failure, confirm the Discord alert, then recover
         and confirm healthy state.
     uncertainty: No failure drill has been observed.
     theory: theory.md#product-memory

@@ -2,7 +2,7 @@
 
 This Vite, React 19, and TanStack Router app serves:
 
-- the landing page at `/`, docs, legal and status pages;
+- the landing page at `/`, docs and legal pages;
 - the public-SDK consumer Space at `/space`;
 - account sign-in, sign-up, password recovery and invitation acceptance.
 
@@ -17,7 +17,6 @@ The `/space` route uses `createChalkPublicClient` from the TypeScript SDK. The i
 An arrival can be admitted immediately or return `pending`. Pending arrivals poll `getSpacePublicInviteArrival` until they are admitted, and Cancel calls `leaveSpacePublicInviteArrival`. The browser client includes its cookie on every request, refreshes media access through `refreshSpacePublicInviteAccess`, and releases the arrival when the Participant leaves or the page unloads.
 
 `pnpm --dir apps/web dev` binds Vite to `127.0.0.1:3070` and proxies `/v1` to `http://127.0.0.1:8080` by default. Set `CHALK_DEV_API_ORIGIN` to use another API origin. Production builds set `VITE_API_URL` to the public API origin.
-
 
 ## Commands
 

@@ -65,7 +65,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordingrender"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
-	statusdomain "github.com/q9labs/chalk/apps/api/internal/status"
+
 	"github.com/q9labs/chalk/apps/api/internal/syncidentity"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
@@ -339,8 +339,6 @@ func run() error {
 	auditLogRepository := postgres.NewAuditLogRepository(operationQueries)
 	auditLogService := auditlogs.NewService(auditLogRepository)
 
-	statusRepository := postgres.NewStatusRepository(pool)
-	statusService := statusdomain.NewService(statusRepository, statusdomain.Config{})
 	var episodeCredentials httpapi.EpisodeCredentialVerifier
 	if cfg.CloudflareRealtime.RTKTokenOrgID != "" {
 		verifier, err := rtkadapter.NewCredentialVerifier(cfg.CloudflareRealtime)
@@ -591,8 +589,8 @@ func run() error {
 			AllowedOrigins: cfg.API.CORSAllowedOrigins,
 			TenantOrigins:  tenantService,
 		},
-		LocalSystemToken:     cfg.API.LocalSystemToken,
-		OpsIngestToken:       cfg.API.OpsIngestToken,
+		LocalSystemToken: cfg.API.LocalSystemToken,
+
 		RateLimit:            rateLimitOptions,
 		Readiness:            postgres.Readiness{Pool: pool, RequiredMigration: migrations.LatestVersion},
 		Authentication:       authenticationService,
@@ -601,9 +599,6 @@ func run() error {
 		APIKeys:              apiKeyService,
 		APIKeyAuthentication: apiKeyService,
 		APIKeyAudits:         auditLogService,
-
-		StatusIngestion: statusService,
-		StatusSnapshot:  statusService,
 
 		EpisodeCredentials:     episodeCredentials,
 		MediaPlane:             mediaPlaneRegistry,

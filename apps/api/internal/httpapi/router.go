@@ -38,11 +38,11 @@ type CapabilityStatus struct {
 }
 
 type Options struct {
-	RecorderWorkerLogger       *slog.Logger
-	Capabilities               CapabilityStatus
-	CORS                       CORSOptions
-	LocalSystemToken           string
-	OpsIngestToken             string
+	RecorderWorkerLogger *slog.Logger
+	Capabilities         CapabilityStatus
+	CORS                 CORSOptions
+	LocalSystemToken     string
+
 	Middleware                 []func(http.Handler) http.Handler
 	Profiler                   http.Handler
 	RateLimit                  RateLimitOptions
@@ -85,8 +85,7 @@ type Options struct {
 	RecordingPreparations  RecordingPreparationService
 	RecordingEntrance      RecordingEntrancePreparer
 	EntranceInvites        EntranceInviteResolver
-	StatusIngestion        StatusIngestionService
-	StatusSnapshot         StatusSnapshotService
+
 	Spaces                 SpaceService
 	Episodes               EpisodeLifecycleService
 	SyncTokens             SyncTokenIssuer

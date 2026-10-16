@@ -85,7 +85,6 @@ const config = defineConfig({
       },
       pages: [
         { path: "/", prerender: { outputPath: "/index.html" } },
-        { path: "/status", prerender: { outputPath: "/status/index.html" } },
         { path: "/privacy", prerender: { outputPath: "/privacy/index.html" } },
         { path: "/terms", prerender: { outputPath: "/terms/index.html" } },
       ],

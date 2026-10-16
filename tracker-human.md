@@ -192,8 +192,8 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     Production alerts for Recording, Export, Transcript, API and Sync failures reach
     Discord, and a test alert arrived. No failure has been injected and recovered from.
     Open question: No failure drill has been observed.
-    - Inject one scoped service failure, confirm the alert and public status change,
-      then recover and confirm healthy state.
+    - Inject one scoped service failure, confirm the Discord alert, then recover and
+      confirm healthy state.
 
 19. **Customer-operated app tier runs** (Unclear · size M · P1)
     The API, Sync and Postgres are meant to run on a customer app tier, but no
