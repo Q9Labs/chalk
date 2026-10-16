@@ -1,12 +1,9 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { join } from "node:path";
 
 // Resolve every SDK reference from the installed tarballs, never workspace sources.
 // Ambient values stand only for application-owned inputs omitted by the prose.
 export async function checkDocExamples(repository, consumer, run) {
-  const require = createRequire(join(consumer, "package.json"));
-  const ts = require("typescript");
   const directory = join(consumer, "docs-examples");
   await mkdir(directory);
   const content = "apps/web/src/docs/content";
@@ -88,6 +85,11 @@ export declare const request: { body: Parameters<ChalkServerClient["participants
 `,
   );
   await writeFile(join(directory, "access.ts"), 'export { getAccess } from "./inputs";\n');
+  const globals = bindings
+    .filter((name) => name !== "stop")
+    .map((name) => `const ${name}: typeof import("./inputs").${name};`)
+    .join("\n");
+  await writeFile(join(directory, "application.d.ts"), `export {};\ndeclare global {\n${globals}\nfunction stop(): void;\n}\n`);
   let count = 0;
   for (const path of paths) {
     const markdown = await readFile(join(repository, path), "utf8");
@@ -97,10 +99,7 @@ export declare const request: { body: Parameters<ChalkServerClient["participants
       const language = match[1].trim();
       if (!["ts", "tsx", "typescript"].includes(language)) continue;
       const source = match[2];
-      const ast = ts.createSourceFile("example.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-      const declared = new Set(ast.statements.flatMap((statement) => statementBindings(ts, statement)));
-      const imports = bindings.filter((name) => !declared.has(name));
-      const code = `import { ${imports.join(", ")} } from "./inputs";\n${source}`;
+      const code = `export {};\n${source}`;
       const name = `${path.replaceAll("/", "_").replace(/\.[^.]+$/, "")}-${block}.tsx`;
       await writeFile(join(directory, name), code);
       count++;
@@ -109,18 +108,4 @@ export declare const request: { body: Parameters<ChalkServerClient["participants
   await writeFile(join(consumer, "docs-tsconfig.json"), JSON.stringify({ extends: "./tsconfig.json", include: ["docs-examples/**/*.ts", "docs-examples/**/*.tsx"] }));
   await run("pnpm", ["exec", "tsc", "--project", "docs-tsconfig.json"], consumer);
   process.stdout.write(`[packed-docs] ${count} TypeScript/TSX examples from ${paths.length} public docs files passed against packed SDKs\n`);
-}
-
-function statementBindings(ts, statement) {
-  if (ts.isImportDeclaration(statement)) {
-    const clause = statement.importClause;
-    const names = clause?.name ? [clause.name.text] : [];
-    const named = clause?.namedBindings;
-    if (named && ts.isNamedImports(named)) names.push(...named.elements.map((element) => element.name.text));
-    return names;
-  }
-  if (ts.isVariableStatement(statement)) {
-    return statement.declarationList.declarations.flatMap((declaration) => (ts.isIdentifier(declaration.name) ? [declaration.name.text] : []));
-  }
-  return statement.name && ts.isIdentifier(statement.name) ? [statement.name.text] : [];
 }
