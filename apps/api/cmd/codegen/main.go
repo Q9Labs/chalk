@@ -857,8 +857,6 @@ func providerConfigSchemaName(fieldName string) (string, bool) {
 	switch fieldName {
 	case "media_plane_provider_config":
 		return "MediaPlaneProviderConfig", true
-	case "ai_provider_config":
-		return "AIProviderConfig", true
 	case "storage_provider_config":
 		return "StorageProviderConfig", true
 	default:
@@ -876,24 +874,6 @@ func providerConfigSchemas() map[string]map[string]any {
 				"enabled":  map[string]any{"type": "boolean"},
 				"provider": map[string]any{"type": "string", "description": "Known values include cf_sfu and cf_rtk."},
 				"mode":     providerModeSchema(),
-			},
-		},
-		"AIProviderConfig": {
-			"type":                 "object",
-			"additionalProperties": true,
-			"properties": map[string]any{
-				"enabled":        map[string]any{"type": "boolean"},
-				"provider":       map[string]any{"type": "string", "enum": []string{"openrouter"}},
-				"mode":           providerModeSchema(),
-				"api_key":        secretCapableStringSchema(),
-				"base_url":       schemaReference("URLString"),
-				"default_model":  nonEmptyStringSchema(),
-				"fallback_model": nonEmptyStringSchema(),
-				"allowed_models": map[string]any{
-					"type":     "array",
-					"minItems": 1,
-					"items":    nonEmptyStringSchema(),
-				},
 			},
 		},
 		"StorageProviderConfig": {

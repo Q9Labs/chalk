@@ -71,7 +71,6 @@ the triplet. Managed production requires it and requires the redirect URL to be
 
 Integrations, recording, and transcription are explicit runtime capabilities:
 
-- `CHALK_INTEGRATIONS_ENABLED=true|false`
 - `CHALK_RECORDING_ENABLED=true|false`
 - `CHALK_TRANSCRIPTION_ENABLED=true|false`
 
@@ -81,7 +80,6 @@ deployment must set its flag to `false`; omitting provider credentials never
 disables a capability implicitly.
 
 ```bash
-CHALK_INTEGRATIONS_ENABLED=false
 CHALK_RECORDING_ENABLED=false
 CHALK_TRANSCRIPTION_ENABLED=false
 ```
@@ -94,8 +92,7 @@ both ready and dependency-failure responses. The `api.starting` structured log
 records the same capability booleans without logging credentials or provider
 config.
 
-When integrations are enabled, startup requires `CHALK_COMPOSIO_API_KEY`. When
-transcription is enabled, startup requires a workload secret of at least 32
+When transcription is enabled, startup requires a workload secret of at least 32
 bytes, a dispatcher Lambda function name, and complete R2 credentials. Invalid
 or non-boolean capability flag values are rejected.
 

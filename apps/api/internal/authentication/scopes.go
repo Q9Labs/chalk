@@ -43,10 +43,6 @@ const (
 	ScopeAPIKeysWrite  Scope = "api_keys:write"
 	ScopeAPIKeysDelete Scope = "api_keys:delete"
 
-	ScopeIntegrationsRead   Scope = "integrations:read"
-	ScopeIntegrationsWrite  Scope = "integrations:write"
-	ScopeIntegrationsDelete Scope = "integrations:delete"
-
 	ScopeWebhooksRead   Scope = "webhooks:read"
 	ScopeWebhooksWrite  Scope = "webhooks:write"
 	ScopeWebhooksDelete Scope = "webhooks:delete"
@@ -83,9 +79,6 @@ var AllScopes = []Scope{
 	ScopeAPIKeysRead,
 	ScopeAPIKeysWrite,
 	ScopeAPIKeysDelete,
-	ScopeIntegrationsRead,
-	ScopeIntegrationsWrite,
-	ScopeIntegrationsDelete,
 	ScopeWebhooksRead,
 	ScopeWebhooksWrite,
 	ScopeWebhooksDelete,

@@ -86,7 +86,6 @@ const (
 func ScenarioNames() []string {
 	return []string{
 		CreateTenantScenario,
-		ExecuteIntegrationActionScenario,
 		RouteAuthRegisterScenario,
 		RouteAuthLoginScenario,
 		RouteAuthLogoutScenario,

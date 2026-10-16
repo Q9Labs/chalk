@@ -44,6 +44,32 @@ func TestAuthenticateBuildsTenantPrincipalAndAttributesUsage(t *testing.T) {
 	}
 }
 
+func TestAuthenticatePreservesSurvivingScopesOnLegacyKeys(t *testing.T) {
+	repository := newRepository()
+	service := newService(repository, nil)
+	created := createKey(t, service, testNow.Add(time.Hour))
+	record := repository.records[created.Key.ID.String()]
+	record.Scopes = append(slices.Clone(authentication.AllScopes), "integrations:read", "integrations:write", "integrations:delete")
+	repository.records[created.Key.ID.String()] = record
+
+	principal, err := service.Authenticate(context.Background(), apikeys.AuthenticateInput{RawKey: created.RawKey})
+	if err != nil {
+		t.Fatalf("authenticate legacy key: %v", err)
+	}
+	want := slices.Clone(authentication.AllScopes)
+	slices.Sort(want)
+	if !slices.Equal(principal.Scopes, want) {
+		t.Fatalf("scopes = %v, want surviving permissions %v", principal.Scopes, want)
+	}
+
+	_, err = service.Create(context.Background(), apikeys.CreateInput{
+		TenantID: tenantID, Name: "Retired scope", Scopes: []authentication.Scope{authentication.ScopeSpacesRead, "integrations:read"}, ExpiresAt: testNow.Add(time.Hour),
+	})
+	if !errors.Is(err, apikeys.ErrInvalidScopes) {
+		t.Fatalf("create retired scope: %v, want invalid scopes", err)
+	}
+}
+
 func TestAuthenticateUsesOneGenericErrorForRejectedKeys(t *testing.T) {
 	tests := []struct {
 		name   string

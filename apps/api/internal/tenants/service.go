@@ -54,7 +54,6 @@ type Tenant struct {
 	DefaultRegion            *string
 	DefaultMediaPlane        *string
 	MediaPlaneProviderConfig json.RawMessage
-	AIProviderConfig         json.RawMessage
 	StorageProviderConfig    json.RawMessage
 	CORSAllowedOrigins       []string
 	LogoKey                  *string
@@ -82,7 +81,6 @@ type CreateTenantInput struct {
 	DefaultRegion            *string
 	DefaultMediaPlane        *string
 	MediaPlaneProviderConfig json.RawMessage
-	AIProviderConfig         json.RawMessage
 	StorageProviderConfig    json.RawMessage
 	CORSAllowedOrigins       []string
 	LogoKey                  *string
@@ -94,7 +92,6 @@ type UpdateTenantInput struct {
 	DefaultRegion            utilities.OptionalString
 	DefaultMediaPlane        utilities.OptionalString
 	MediaPlaneProviderConfig utilities.OptionalJSON
-	AIProviderConfig         utilities.OptionalJSON
 	StorageProviderConfig    utilities.OptionalJSON
 	CORSAllowedOrigins       OptionalCORSOrigins
 	LogoKey                  utilities.OptionalString
@@ -371,11 +368,6 @@ func prepareCreateNullableFields(input *CreateTenantInput) error {
 		return ErrInvalidTenantField
 	}
 
-	input.AIProviderConfig, err = utilities.JSON(input.AIProviderConfig)
-	if err != nil {
-		return ErrInvalidTenantField
-	}
-
 	input.StorageProviderConfig, err = utilities.JSON(input.StorageProviderConfig)
 	if err != nil {
 		return ErrInvalidTenantField
@@ -500,11 +492,6 @@ func prepareUpdateNullableFields(input *UpdateTenantInput) error {
 	}
 
 	input.MediaPlaneProviderConfig, err = utilities.OptionalNullableJSON(input.MediaPlaneProviderConfig)
-	if err != nil {
-		return ErrInvalidTenantField
-	}
-
-	input.AIProviderConfig, err = utilities.OptionalNullableJSON(input.AIProviderConfig)
 	if err != nil {
 		return ErrInvalidTenantField
 	}

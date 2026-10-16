@@ -32,7 +32,6 @@ type EpisodeCredentialVerifier interface {
 }
 
 type CapabilityStatus struct {
-	Integrations    bool
 	Recording       bool
 	Transcription   bool
 	WhiteboardFiles bool
@@ -67,7 +66,6 @@ type Options struct {
 	APIKeys                    APIKeyService
 	APIKeyAuthentication       APIKeyAuthenticator
 	APIKeyAudits               APIKeyAuditWriter
-	Integrations               IntegrationService
 	Journeys                   JourneyService
 	JourneyMetrics             JourneyMetricRecorder
 	LocalTelemetry             bool
@@ -98,7 +96,6 @@ type Options struct {
 	SessionCookie              SessionCookieOptions
 	TenantAuthz                TenantAuthorizer
 	Tenants                    TenantService
-	AITranscriptions           AITranscriptionService
 	Transcripts                TranscriptService
 	TranscriptArtifacts        TranscriptArtifactService
 	TranscriptWorker           TranscriptWorkerService
@@ -217,7 +214,6 @@ func writeReadinessError(w http.ResponseWriter, capabilities CapabilityStatus, d
 
 func capabilityReadiness(capabilities CapabilityStatus) map[string]string {
 	return map[string]string{
-		"integrations":     enabledStatus(capabilities.Integrations),
 		"recording":        enabledStatus(capabilities.Recording),
 		"transcription":    enabledStatus(capabilities.Transcription),
 		"whiteboard_files": enabledStatus(capabilities.WhiteboardFiles),

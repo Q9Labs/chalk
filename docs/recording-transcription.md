@@ -151,7 +151,7 @@ optional identity pins fail closed when evidence is missing or mismatched.
 `providerReportedCostUsd` is recorded only when returned by the provider. A
 final transcript sums it only when every chunk reports it. This excludes
 unobserved failed/retried calls and is not an invoice or a fabricated billed
-audio-duration claim. No OpenRouter routing guarantee is claimed.
+audio-duration claim.
 
 Prices below are public list prices checked on 2026-09-10. They are an
 incremental artifact-pipeline estimate, not a total Chalk or SFU bill.

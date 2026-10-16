@@ -18,7 +18,6 @@ select
     tenants.default_region,
     tenants.default_media_plane,
     tenants.media_plane_provider_config,
-    tenants.ai_provider_config,
     tenants.storage_provider_config,
     tenants.cors_allowed_origins,
     tenants.logo_key,
@@ -55,7 +54,6 @@ type GetAccountTenantByOnboardingRow struct {
 	DefaultRegion              pgtype.Text        `json:"default_region"`
 	DefaultMediaPlane          pgtype.Text        `json:"default_media_plane"`
 	MediaPlaneProviderConfig   []byte             `json:"media_plane_provider_config"`
-	AiProviderConfig           []byte             `json:"ai_provider_config"`
 	StorageProviderConfig      []byte             `json:"storage_provider_config"`
 	CorsAllowedOrigins         []string           `json:"cors_allowed_origins"`
 	LogoKey                    pgtype.Text        `json:"logo_key"`
@@ -84,7 +82,6 @@ func (q *Queries) GetAccountTenantByOnboarding(ctx context.Context, arg GetAccou
 		&i.DefaultRegion,
 		&i.DefaultMediaPlane,
 		&i.MediaPlaneProviderConfig,
-		&i.AiProviderConfig,
 		&i.StorageProviderConfig,
 		&i.CorsAllowedOrigins,
 		&i.LogoKey,
@@ -139,7 +136,6 @@ select
     tenants.default_region,
     tenants.default_media_plane,
     tenants.media_plane_provider_config,
-    tenants.ai_provider_config,
     tenants.storage_provider_config,
     tenants.cors_allowed_origins,
     tenants.logo_key,
@@ -186,7 +182,6 @@ type ListAccountTenantsRow struct {
 	DefaultRegion              pgtype.Text        `json:"default_region"`
 	DefaultMediaPlane          pgtype.Text        `json:"default_media_plane"`
 	MediaPlaneProviderConfig   []byte             `json:"media_plane_provider_config"`
-	AiProviderConfig           []byte             `json:"ai_provider_config"`
 	StorageProviderConfig      []byte             `json:"storage_provider_config"`
 	CorsAllowedOrigins         []string           `json:"cors_allowed_origins"`
 	LogoKey                    pgtype.Text        `json:"logo_key"`
@@ -227,7 +222,6 @@ func (q *Queries) ListAccountTenants(ctx context.Context, arg ListAccountTenants
 			&i.DefaultRegion,
 			&i.DefaultMediaPlane,
 			&i.MediaPlaneProviderConfig,
-			&i.AiProviderConfig,
 			&i.StorageProviderConfig,
 			&i.CorsAllowedOrigins,
 			&i.LogoKey,

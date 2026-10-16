@@ -1086,7 +1086,6 @@
         "Public product surfaces": ["Public create-Space, iframe embed, status, privacy, terms, and product documentation routes are not implemented.", "The local Space route and deployable seams do not establish hosted end-to-end or production proof."],
         "Embedding & generated SDK coverage": ["Layered React components are not a turnkey React web provider or join flow; not all public API routes are generated.", "Swift, Kotlin, Python, and Go SDKs are not present in this repository."],
         "Mobile app": ["Invite-link joining is implemented, but Space creation is not enabled consistently in release builds.", "Real-device native media end-to-end proof is not present in the repository; this card does not claim a release-ready mobile product."],
-        Integrations: ["The API catalog, connection lifecycle, action policy, and audit path exist, but there is no complete first-party integration UI.", "A managed Composio connection and action flow has not yet been proven end to end in a release environment."],
         "Media plane": ["The Cloudflare SFU adapter is implemented; native RealtimeKit parity and its observability contract remain incomplete.", "Production provider-account, usage, and egress visibility still requires deployment proof."],
         "RealtimeKit path": ["The React Native RealtimeKit adapter and lifecycle are implemented, but real-device native media end-to-end proof is not present.", "Opaque provider SDK background work remains an explicit observability blind spot."],
         "Real-network browser media suite": ["The local Space path and Cloudflare adapter exist, but no real-network browser media end-to-end suite is implemented in the repository.", "Network failure, provider-account, and recovery evidence remain outstanding."],
@@ -1206,7 +1205,7 @@
           y: 130,
           tagline: "Go HTTP service for tenancy, Spaces, admission, artifacts, providers, and webhooks.",
           source: "apps/api",
-          detail: "The Go service owns the durable product/control plane. Thin HTTP adapters call domain services behind ports, while Postgres, Redis, Cloudflare, R2, Composio, and worker integrations remain adapters.",
+          detail: "The Go service owns the durable product/control plane. Thin HTTP adapters call domain services behind ports, while Postgres, Redis, Cloudflare, R2, and worker integrations remain adapters.",
           rules: ["Public REST lives under /v1; /healthz and /readyz remain operational.", "Config is environment-only and non-local startup fails closed when required dependencies or secrets are absent.", "Every capability propagates journey and W3C trace context."],
           components: [
             { name: "Identity & tenancy", status: "built", desc: "Users, memberships, tenant roots, API keys, auth sessions, signing keys, and authorization.", rules: ["Tenant is the isolation and billing root.", "User identity stays separate from per-Episode participation."] },
@@ -1235,7 +1234,6 @@
               desc: "Encrypted endpoints, immutable events, delivery leases, attempts, redelivery, rotation, cleanup, and erasure fencing.",
               rules: ["The business transaction stores the event and initial delivery branches.", "Customer payloads never expose internal journey IDs."],
             },
-            { name: "Integrations", status: "partial", desc: "Tenant integration connections and audited Composio-backed catalog surfaces.", rules: ["Provider credentials remain outside domain types.", "Connection state is tenant scoped."] },
             {
               name: "Tenant management & enterprise identity",
               status: "partial",
