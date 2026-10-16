@@ -7,7 +7,7 @@ import { identityEnvironment } from "./identity.mjs";
 import { waitForFileReady, waitForHTTPReady } from "./process.mjs";
 import { RuntimeState, FailureKind, failure } from "./model.mjs";
 import { createResourceManager, runChecked } from "./chalk-resources.mjs";
-import { bootstrapLocalSpace, retireLocalFixture, runSfuProbe } from "./chalk-bootstrap.mjs";
+import { bootstrapLocalSpace, retireLocalFixture } from "./chalk-bootstrap.mjs";
 import { writeJsonAtomic } from "./ownership.mjs";
 
 export function createChalkSupervisor(inputConfig, { adapters = {}, output = console.log, serviceSpecs, hooks = {} } = {}) {
@@ -64,7 +64,6 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
       if (spec.readiness?.filePath) await waitForFileReady(spec, { timeoutMs: config.timeouts.readinessMs });
       else if (spec.readiness?.url) await waitForHTTPReady(spec, { timeoutMs: config.timeouts.readinessMs, fetchImpl: adapters.fetchImpl });
       if (spec.id === "api") {
-        await runSfuProbe({ root: config.root, appId: provider?.appId, appSecret: provider?.appSecret, runner: adapters.runner });
         const runtimeId = context.runtime.runtimeId || "local";
         const stableMarker = stableFixtureMarker(config.root);
         if (config.fresh) await retireLocalFixture({ apiOrigin: config.urls.api, systemToken, runtimeId, marker: stableMarker, fetchImpl: adapters.fetchImpl });
