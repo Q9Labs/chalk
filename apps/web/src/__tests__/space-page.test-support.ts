@@ -57,13 +57,6 @@ const spacePageTestMocks = vi.hoisted(() => {
     connectionAccess: vi.fn(),
     finish,
   };
-  const useEpisodeDiagnosticsAvailability = vi.fn(() => ({
-    path: "/developer/episode-diagnostics/chalk.episode:33333333-3333-4333-8333-333333333333",
-    reference: "chalk.episode:33333333-3333-4333-8333-333333333333",
-    status: "available",
-    supported: true,
-    retry: vi.fn(),
-  }));
   return {
     holder,
     journey,
@@ -72,7 +65,6 @@ const spacePageTestMocks = vi.hoisted(() => {
     publicClient,
     prepared,
     finish,
-    useEpisodeDiagnosticsAvailability,
     createPublicInviteClient: vi.fn(() => publicClient),
     createPreparedPublicSpace: vi.fn(() => prepared),
     createLocalSpaceClient: vi.fn(() => client),
@@ -112,7 +104,6 @@ vi.mock("../lib/web-telemetry-context", () => ({
   WebTelemetryProvider: ({ children }: { readonly children: ReactNode }) => children,
   useWebTelemetry: () => ({ journey: getSpacePageTestMocks().journey, telemetry: getSpacePageTestMocks().telemetry }),
 }));
-vi.mock("../features/episode-debugger/EpisodeDiagnosticsDeveloperLink", () => ({ useEpisodeDiagnosticsAvailability: getSpacePageTestMocks().useEpisodeDiagnosticsAvailability }));
 
 export function getSpacePageTestMocks(): typeof spacePageTestMocks {
   return spacePageTestMocks;
@@ -145,13 +136,6 @@ export function resetSpacePageTestMocks(): void {
   spacePageTestMocks.prepared.finish.mockReset().mockResolvedValue(undefined);
   spacePageTestMocks.createLocalSpaceClient.mockReset().mockReturnValue(spacePageTestMocks.client);
   spacePageTestMocks.createLocalSpaceRelease.mockReset().mockImplementation((_client: unknown, cleanup: () => Promise<void>) => makeRelease(cleanup));
-  spacePageTestMocks.useEpisodeDiagnosticsAvailability.mockReset().mockReturnValue({
-    path: "/developer/episode-diagnostics/chalk.episode:33333333-3333-4333-8333-333333333333",
-    reference: "chalk.episode:33333333-3333-4333-8333-333333333333",
-    status: "available",
-    supported: true,
-    retry: vi.fn(),
-  });
   spacePageTestMocks.Chalk.mockClear();
 }
 

@@ -13,24 +13,6 @@ const outputs = [
   { fileName: "action-success.v1.json", value: { schemaVersion: "EpisodeDiagnosticFixture/v1", kind: "success", operations: actionOperations, contentCaptured: false } },
   { fileName: "action-failure.v1.json", value: { schemaVersion: "EpisodeDiagnosticFixture/v1", kind: "failure_or_gap", operations: actionOperations, missingConfirmation: "first required checkpoint is named", contentCaptured: false } },
   {
-    fileName: "agent-brief-parity.v1.json",
-    value: {
-      schemaVersion: "AgentBrief/v1",
-      version: 1,
-      reference: "chalkdiag:v1:development:diag01@7",
-      focusedReference: "chalkdiag:v1:development:diag01:issue:issue01@7",
-      captureTime: "2026-08-04T00:00:00.000Z",
-      selectedCursor: 7,
-      observedSummary: "Chat send stalled at sender receipt.",
-      environment: "development",
-      resolverCommand: "pnpm trace:inspect chalkdiag:v1:development:diag01:issue:issue01@7 --format agent",
-      releaseCommits: [{ release: "dev-2026.08.04", sourceCommit: "abc123" }],
-      visibleGaps: [{ kind: "checkpoint", summary: "Sender receipt was not observable.", reason: "not_observable", firstCursor: 6 }],
-      counts: { events: 7, operations: 1, issues: 1 },
-      omissions: ["raw chat text", "raw provider payloads"],
-    },
-  },
-  {
     fileName: "redaction-corpus.v1.json",
     value: {
       safe: { status: "committed", bytes: 64, retryable: false, size_bucket: "small" },

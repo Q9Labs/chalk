@@ -30,15 +30,13 @@ const (
 )
 
 var (
-	safeTokenPattern        = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:@+/=-]*$`)
-	safeOpaquePattern       = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
-	safeClassPattern        = regexp.MustCompile(`^[a-z][a-z0-9]*(?:\.[a-z0-9_-]+)*$`)
-	eventNamePattern        = regexp.MustCompile(`^[a-z][a-z0-9_.-]*$`)
-	phasePattern            = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
-	participantLabelPattern = regexp.MustCompile(`^Participant [0-9]{1,4}$`)
-	printableASCII          = regexp.MustCompile(`^[\x20-\x7e]+$`)
-	forbiddenKeyPattern     = regexp.MustCompile(`(?i)(?:text|content|body|payload|display.?name|filename|url|uri|token|secret|password|credential|cookie|authorization|exception|stack|sdp|ice|candidate|address|phone|email|webhook)`)
-	forbiddenValuePattern   = regexp.MustCompile(`(?i)(?:https?://|wss?://|bearer\s+[a-z0-9._~+/=-]+|-----begin|candidate:|v=0\r?\n|\b(?:\d{1,3}\.){3}\d{1,3}\b|[\w.+-]+@[\w.-]+\.[a-z]{2,})`)
+	safeTokenPattern      = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:@+/=-]*$`)
+	safeOpaquePattern     = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
+	eventNamePattern      = regexp.MustCompile(`^[a-z][a-z0-9_.-]*$`)
+	phasePattern          = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+	printableASCII        = regexp.MustCompile(`^[\x20-\x7e]+$`)
+	forbiddenKeyPattern   = regexp.MustCompile(`(?i)(?:text|content|body|payload|display.?name|filename|url|uri|token|secret|password|credential|cookie|authorization|exception|stack|sdp|ice|candidate|address|phone|email|webhook)`)
+	forbiddenValuePattern = regexp.MustCompile(`(?i)(?:https?://|wss?://|bearer\s+[a-z0-9._~+/=-]+|-----begin|candidate:|v=0\r?\n|\b(?:\d{1,3}\.){3}\d{1,3}\b|[\w.+-]+@[\w.-]+\.[a-z]{2,})`)
 )
 
 var allowedPhases = map[string]struct{}{
@@ -62,11 +60,6 @@ var allowedCheckpointClasses = map[CheckpointClass]struct{}{
 	CheckpointRequired: {}, CheckpointConditional: {}, CheckpointBestEffort: {},
 }
 
-var allowedUnknownReasons = map[UnknownReason]struct{}{
-	UnknownNotRetained: {}, UnknownNotObservable: {}, UnknownRedacted: {}, UnknownProviderOpaque: {}, UnknownExpired: {},
-	UnknownNotAvailable: {}, UnknownInvalid: {}, UnknownDiagnosticsOff: {}, UnknownPermissionDenied: {}, UnknownReasonUnknown: {},
-}
-
 var allowedAttributes = map[string]struct{}{
 	"action": {}, "checkpoint": {}, "reason": {}, "result": {}, "status": {}, "kind": {}, "direction": {}, "transport": {},
 	"media_kind": {}, "track_state": {}, "permission": {}, "target_state": {}, "response_class": {}, "delivery_status": {},
@@ -77,8 +70,6 @@ var allowedAttributes = map[string]struct{}{
 	"state_version": {}, "policy_version": {}, "release_channel": {}, "close_code": {},
 }
 
-// ActionOperationKeys is the closed v1 action catalog. Event names may append
-// a boundary suffix to one of these roots (for example chat.send.receipt).
 var ActionOperationKeys = []string{
 	"episode.emerge", "episode.start", "episode.end.natural", "episode.end.authorized", "episode.end.linger", "episode.end.deadline", "episode.deadline.extend",
 	"access.request", "access.approve", "access.deny", "access.refresh",
@@ -120,17 +111,6 @@ type ValidationIssue struct {
 
 type ValidationError struct {
 	Issues []ValidationIssue
-}
-
-func (e *ValidationError) Error() string {
-	if len(e.Issues) == 0 {
-		return "diagnostic contract validation failed"
-	}
-	parts := make([]string, 0, len(e.Issues))
-	for _, issue := range e.Issues {
-		parts = append(parts, issue.Path+": "+issue.Message)
-	}
-	return "diagnostic contract validation failed: " + strings.Join(parts, "; ")
 }
 
 type ValidatedEvent struct {
@@ -245,92 +225,6 @@ func validateAttributes(attributes DiagnosticAttributes, path string) []Validati
 	return issues
 }
 
-// ValidateAttributes validates the scalar allowlist without accepting any
-// content-bearing key or value.
-func ValidateAttributes(attributes DiagnosticAttributes) error {
-	issues := validateAttributes(attributes, "$.attributes")
-	if len(issues) > 0 {
-		return &ValidationError{Issues: issues}
-	}
-	return nil
-}
-
-type RedactionResult struct {
-	Attributes   DiagnosticAttributes
-	RedactedKeys []string
-	RejectedKeys []string
-}
-
-// RedactAttributes is deliberately conservative: unknown and content-bearing
-// fields are removed, while malformed scalar values are reported separately.
-func RedactAttributes(attributes DiagnosticAttributes) RedactionResult {
-	result := RedactionResult{Attributes: make(DiagnosticAttributes)}
-	for key, value := range attributes {
-		if _, allowed := allowedAttributes[key]; !allowed || forbiddenKeyPattern.MatchString(key) {
-			result.RedactedKeys = append(result.RedactedKeys, key)
-			continue
-		}
-		if scalarSafe(value) {
-			result.Attributes[key] = value
-		} else {
-			result.RejectedKeys = append(result.RejectedKeys, key)
-		}
-	}
-	sort.Strings(result.RedactedKeys)
-	sort.Strings(result.RejectedKeys)
-	if len(result.Attributes) > MaxAttributeCount {
-		keys := make([]string, 0, len(result.Attributes))
-		for key := range result.Attributes {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		for _, key := range keys[MaxAttributeCount:] {
-			delete(result.Attributes, key)
-			result.RejectedKeys = append(result.RejectedKeys, key)
-		}
-		sort.Strings(result.RejectedKeys)
-	}
-	return result
-}
-
-func scalarSafe(value any) bool {
-	switch typed := value.(type) {
-	case bool:
-		return true
-	case string:
-		return len(typed) <= MaxAttributeStringLength && printableASCII.MatchString(typed) && !forbiddenValuePattern.MatchString(typed)
-	case float32:
-		return !math.IsNaN(float64(typed)) && !math.IsInf(float64(typed), 0) && math.Abs(float64(typed)) <= float64(MaxCursor)
-	case float64:
-		return !math.IsNaN(typed) && !math.IsInf(typed, 0) && math.Abs(typed) <= float64(MaxCursor)
-	case int:
-		return math.Abs(float64(typed)) <= float64(MaxCursor)
-	case int8:
-		return math.Abs(float64(typed)) <= float64(MaxCursor)
-	case int16:
-		return math.Abs(float64(typed)) <= float64(MaxCursor)
-	case int32:
-		return math.Abs(float64(typed)) <= float64(MaxCursor)
-	case int64:
-		return math.Abs(float64(typed)) <= float64(MaxCursor)
-	case uint:
-		return float64(typed) <= float64(MaxCursor)
-	case uint8:
-		return float64(typed) <= float64(MaxCursor)
-	case uint16:
-		return float64(typed) <= float64(MaxCursor)
-	case uint32:
-		return float64(typed) <= float64(MaxCursor)
-	case uint64:
-		return float64(typed) <= float64(MaxCursor)
-	case json.Number:
-		number, err := typed.Float64()
-		return err == nil && !math.IsNaN(number) && !math.IsInf(number, 0) && math.Abs(number) <= float64(MaxCursor)
-	default:
-		return false
-	}
-}
-
 func validateExpectation(expectation *DiagnosticEventExpectation, issues *[]ValidationIssue) {
 	if expectation == nil {
 		return
@@ -417,8 +311,6 @@ func validateDraft(event DiagnosticEventDraft) []ValidationIssue {
 	return issues
 }
 
-// ValidateDraft performs the complete v1 intake validation and returns the
-// exact bytes used for idempotency and the named fingerprint.
 func ValidateDraft(event DiagnosticEventDraft) (ValidatedEvent, error) {
 	issues := validateDraft(event)
 	if len(issues) > 0 {
@@ -439,7 +331,6 @@ func ValidateDiagnosticEventDraft(event DiagnosticEventDraft) error {
 	_, err := ValidateDraft(event)
 	return err
 }
-func ValidateEventDraft(event DiagnosticEventDraft) error { return ValidateDiagnosticEventDraft(event) }
 
 func eventMap(event DiagnosticEventDraft) map[string]any {
 	value := map[string]any{"version": event.Version, "eventId": event.EventID, "producerSequence": event.ProducerSequence, "occurredAt": event.OccurredAt.UTC().Format(time.RFC3339Nano), "source": string(event.Source), "name": event.Name, "phase": event.Phase, "state": string(event.State)}
@@ -485,94 +376,11 @@ func canonicalEvent(event DiagnosticEventDraft) ([]byte, error) {
 	return CanonicalJSON(eventMap(event))
 }
 
-// CanonicalEvent returns key-sorted JSON after validating the draft.
-func CanonicalEvent(event DiagnosticEventDraft) ([]byte, error) {
-	validated, err := ValidateDraft(event)
-	if err != nil {
-		return nil, err
-	}
-	return validated.Canonical, nil
-}
-func EncodeDiagnosticEvent(event DiagnosticEventDraft) ([]byte, error) { return CanonicalEvent(event) }
-func FingerprintEvent(event DiagnosticEventDraft) (string, error) {
-	validated, err := ValidateDraft(event)
-	if err != nil {
-		return "", err
-	}
-	return validated.Fingerprint, nil
-}
-func FingerprintDiagnosticEvent(event DiagnosticEventDraft) (string, error) {
-	return FingerprintEvent(event)
-}
-
 func FingerprintBytes(value []byte) string {
 	digest := sha256.Sum256(value)
 	return "sha256:" + hex.EncodeToString(digest[:])
 }
 
-func AcceptEvent(event DiagnosticEventDraft, diagnosticID string, cursor int64, receivedAt time.Time) (AcceptedDiagnosticEvent, error) {
-	validated, err := ValidateDraft(event)
-	if err != nil {
-		return AcceptedDiagnosticEvent{}, err
-	}
-	if !validToken(diagnosticID, 128) {
-		return AcceptedDiagnosticEvent{}, &ValidationError{Issues: []ValidationIssue{issue("$.diagnosticId", "diagnosticId is not a safe token")}}
-	}
-	if cursor < 0 || cursor > MaxCursor {
-		return AcceptedDiagnosticEvent{}, &ValidationError{Issues: []ValidationIssue{issue("$.cursor", "cursor must be a safe non-negative integer")}}
-	}
-	if !validDate(receivedAt) {
-		return AcceptedDiagnosticEvent{}, &ValidationError{Issues: []ValidationIssue{issue("$.receivedAt", "receivedAt must be a valid date-time")}}
-	}
-	accepted := AcceptedDiagnosticEvent{DiagnosticEventDraft: validated.Event, DiagnosticID: diagnosticID, Cursor: cursor, ReceivedAt: receivedAt.UTC(), Fingerprint: validated.Fingerprint}
-	encoded, err := canonicalAcceptedEvent(accepted)
-	if err != nil {
-		return AcceptedDiagnosticEvent{}, err
-	}
-	if len(encoded) > MaxDiagnosticEventBytes {
-		return AcceptedDiagnosticEvent{}, &ValidationError{Issues: []ValidationIssue{issue("$", "encoded accepted event exceeds 2 KiB")}}
-	}
-	return accepted, nil
-}
-
-func AcceptDiagnosticEvent(event DiagnosticEventDraft, diagnosticID string, cursor int64, receivedAt time.Time) (AcceptedDiagnosticEvent, error) {
-	return AcceptEvent(event, diagnosticID, cursor, receivedAt)
-}
-
-func acceptedEventMap(event AcceptedDiagnosticEvent) map[string]any {
-	value := eventMap(event.DiagnosticEventDraft)
-	value["diagnosticId"] = event.DiagnosticID
-	value["cursor"] = event.Cursor
-	value["receivedAt"] = event.ReceivedAt.UTC().Format(time.RFC3339Nano)
-	value["fingerprint"] = event.Fingerprint
-	return value
-}
-func canonicalAcceptedEvent(event AcceptedDiagnosticEvent) ([]byte, error) {
-	return CanonicalJSON(acceptedEventMap(event))
-}
-
-func ValidateAcceptedEvent(event AcceptedDiagnosticEvent) error {
-	validated, err := ValidateDraft(event.DiagnosticEventDraft)
-	if err != nil {
-		return err
-	}
-	if !validToken(event.DiagnosticID, 128) || event.Cursor < 0 || event.Cursor > MaxCursor || !validDate(event.ReceivedAt) {
-		return errors.New("accepted event envelope is invalid")
-	}
-	if event.Fingerprint != validated.Fingerprint {
-		return errors.New("fingerprint does not match canonical event")
-	}
-	encoded, err := canonicalAcceptedEvent(event)
-	if err != nil {
-		return err
-	}
-	if len(encoded) > MaxDiagnosticEventBytes {
-		return errors.New("encoded accepted event exceeds 2 KiB")
-	}
-	return nil
-}
-
-// CanonicalJSON recursively sorts object keys and preserves JSON numbers.
 func CanonicalJSON(value any) ([]byte, error) {
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -632,12 +440,9 @@ func encodeCanonicalValue(value any) ([]byte, error) {
 	}
 }
 
-var referencePattern = regexp.MustCompile(`^chalkdiag:v1:([a-z]+):([A-Za-z0-9][A-Za-z0-9_-]{0,127})(?::(op|issue|event):([A-Za-z0-9][A-Za-z0-9_-]{0,127}))?(?:@([0-9]+))?$`)
-
 func validEnvironment(environment Environment) bool {
 	return environment == EnvironmentLocalhost || environment == EnvironmentDevelopment || environment == EnvironmentStaging || environment == EnvironmentProduction
 }
-func ValidEnvironment(environment Environment) bool { return validEnvironment(environment) }
 
 func FormatReference(reference DiagnosticReference) (string, error) {
 	if reference.Version != ContractVersion || !validEnvironment(reference.Environment) || !safeOpaquePattern.MatchString(reference.DiagnosticID) {
@@ -657,141 +462,6 @@ func FormatReference(reference DiagnosticReference) (string, error) {
 		formatted += "@" + strconv.FormatInt(*reference.Cursor, 10)
 	}
 	return formatted, nil
-}
-
-func FormatDiagnosticReference(reference DiagnosticReference) (string, error) {
-	return FormatReference(reference)
-}
-
-func ParseReference(input string) (DiagnosticReference, error) {
-	match := referencePattern.FindStringSubmatch(input)
-	if match == nil {
-		return DiagnosticReference{}, errors.New("malformed diagnostic reference")
-	}
-	environment := Environment(match[1])
-	if !validEnvironment(environment) {
-		return DiagnosticReference{}, errors.New("diagnostic environment is not enabled")
-	}
-	reference := DiagnosticReference{Version: ContractVersion, Environment: environment, DiagnosticID: match[2]}
-	if match[3] != "" {
-		reference.Focus = &DiagnosticReferenceFocus{Kind: ReferenceFocusKind(match[3]), ID: match[4]}
-	}
-	if match[5] != "" {
-		if len(match[5]) > 1 && strings.HasPrefix(match[5], "0") {
-			return DiagnosticReference{}, errors.New("diagnostic cursor has leading zero")
-		}
-		cursor, err := strconv.ParseInt(match[5], 10, 64)
-		if err != nil || cursor > MaxCursor {
-			return DiagnosticReference{}, errors.New("diagnostic cursor is out of bounds")
-		}
-		reference.Cursor = int64Ptr(cursor)
-	}
-	return reference, nil
-}
-
-func ParseDiagnosticReference(input string) (DiagnosticReference, error) {
-	return ParseReference(input)
-}
-
-func SafeOpaqueID(value string) bool { return safeOpaquePattern.MatchString(value) }
-
-// FilterFingerprint is stable across struct field order and only includes the
-// v1 filter fields that are present.
-func FilterFingerprint(filter DiagnosticFilterV1) string {
-	if filter.SchemaVersion == "" {
-		filter.SchemaVersion = "DiagnosticFilter/v1"
-	}
-	value := map[string]any{"schemaVersion": filter.SchemaVersion}
-	if filter.ParticipantID != "" {
-		value["participantId"] = filter.ParticipantID
-	}
-	if filter.Source != "" {
-		value["source"] = string(filter.Source)
-	}
-	if filter.OperationKind != "" {
-		value["operationKind"] = filter.OperationKind
-	}
-	if filter.State != "" {
-		value["state"] = filter.State
-	}
-	if filter.IssueState != "" {
-		value["issueState"] = string(filter.IssueState)
-	}
-	if filter.ReleaseID != "" {
-		value["releaseId"] = filter.ReleaseID
-	}
-	if filter.JourneyID != "" {
-		value["journeyId"] = filter.JourneyID
-	}
-	if filter.TraceID != "" {
-		value["traceId"] = filter.TraceID
-	}
-	if filter.SpanID != "" {
-		value["spanId"] = filter.SpanID
-	}
-	if filter.RequestID != "" {
-		value["requestId"] = filter.RequestID
-	}
-	if filter.CommandID != "" {
-		value["commandId"] = filter.CommandID
-	}
-	if filter.ProviderID != "" {
-		value["providerId"] = filter.ProviderID
-	}
-	if filter.FromCursor != nil {
-		value["fromCursor"] = *filter.FromCursor
-	}
-	if filter.ToCursor != nil {
-		value["toCursor"] = *filter.ToCursor
-	}
-	if !filter.FromTime.IsZero() {
-		value["fromTime"] = filter.FromTime.UTC().Format(time.RFC3339Nano)
-	}
-	if !filter.ToTime.IsZero() {
-		value["toTime"] = filter.ToTime.UTC().Format(time.RFC3339Nano)
-	}
-	canonical, _ := CanonicalJSON(value)
-	return FingerprintBytes(canonical)
-}
-
-func FingerprintDiagnosticFilter(filter DiagnosticFilterV1) string { return FilterFingerprint(filter) }
-func ValidateFilter(filter DiagnosticFilterV1) error {
-	if filter.SchemaVersion != "" && filter.SchemaVersion != "DiagnosticFilter/v1" {
-		return errors.New("unsupported DiagnosticFilter/v1 schema")
-	}
-	for key, value := range map[string]string{"participantId": filter.ParticipantID, "operationKind": filter.OperationKind, "releaseId": filter.ReleaseID, "journeyId": filter.JourneyID, "traceId": filter.TraceID} {
-		if value != "" && !validToken(value, 160) {
-			return fmt.Errorf("%s is not safe", key)
-		}
-	}
-	if filter.SpanID != "" && filter.TraceID == "" {
-		return errors.New("spanId requires traceId")
-	}
-	for key, value := range map[string]string{"spanId": filter.SpanID, "requestId": filter.RequestID, "commandId": filter.CommandID, "providerId": filter.ProviderID} {
-		if value != "" && !validToken(value, 160) {
-			return fmt.Errorf("%s is not safe", key)
-		}
-	}
-	if filter.Source != "" {
-		if _, ok := allowedSources[filter.Source]; !ok {
-			return errors.New("source is not allowlisted")
-		}
-	}
-	if filter.IssueState != "" && filter.IssueState != IssueOpen && filter.IssueState != IssueResolved {
-		return errors.New("issue state is not allowlisted")
-	}
-	for _, cursor := range []*int64{filter.FromCursor, filter.ToCursor} {
-		if cursor != nil && (*cursor < 0 || *cursor > MaxCursor) {
-			return errors.New("cursor filter is out of bounds")
-		}
-	}
-	if !filter.FromTime.IsZero() && !validDate(filter.FromTime) || !filter.ToTime.IsZero() && !validDate(filter.ToTime) {
-		return errors.New("time filter is invalid")
-	}
-	if filter.FromCursor != nil && filter.ToCursor != nil && *filter.FromCursor > *filter.ToCursor {
-		return errors.New("cursor filter range is inverted")
-	}
-	return nil
 }
 
 func ValidateAppendRequest(request AppendDiagnosticEventsRequest) error {
@@ -819,266 +489,13 @@ func ValidateAppendRequest(request AppendDiagnosticEventsRequest) error {
 	return nil
 }
 
-func ValidateReference(reference DiagnosticReference) error {
-	_, err := FormatReference(reference)
-	return err
-}
-func ValidateDiagnosticReferenceString(value string) error {
-	_, err := ParseReference(value)
-	return err
-}
-
-func ValidateCheckpoint(checkpoint DiagnosticCheckpointDetail) error {
-	if !validToken(checkpoint.Key, 96) {
-		return errors.New("checkpoint key is not safe")
+func (e *ValidationError) Error() string {
+	if len(e.Issues) == 0 {
+		return "diagnostic contract validation failed"
 	}
-	if _, ok := allowedCheckpointClasses[checkpoint.Class]; !ok {
-		return errors.New("checkpoint class is not allowlisted")
+	parts := make([]string, 0, len(e.Issues))
+	for _, issue := range e.Issues {
+		parts = append(parts, issue.Path+": "+issue.Message)
 	}
-	if checkpoint.DisplayOrder < 0 || checkpoint.DisplayOrder > MaxPageSize {
-		return errors.New("checkpoint display order is out of bounds")
-	}
-	if checkpoint.State != CheckpointPending && checkpoint.State != CheckpointObserved && checkpoint.State != CheckpointMissed && checkpoint.State != CheckpointNotObservable && checkpoint.State != CheckpointLateObserved {
-		return errors.New("checkpoint state is not allowlisted")
-	}
-	if checkpoint.DeadlineAt != nil && !validDate(*checkpoint.DeadlineAt) {
-		return errors.New("checkpoint deadline is invalid")
-	}
-	if checkpoint.EvidenceCursor < 0 || checkpoint.EvidenceCursor > MaxCursor {
-		return errors.New("checkpoint evidence cursor is out of bounds")
-	}
-	if checkpoint.UnknownReason != "" {
-		if _, ok := allowedUnknownReasons[checkpoint.UnknownReason]; !ok {
-			return errors.New("checkpoint unknown reason is not allowlisted")
-		}
-	}
-	return nil
-}
-func ValidateDiagnosticCheckpoint(checkpoint DiagnosticCheckpointDetail) error {
-	return ValidateCheckpoint(checkpoint)
-}
-
-func ValidateOperation(operation DiagnosticOperationDetail) error {
-	if !validToken(operation.ID, 128) || !validToken(operation.Kind, 128) {
-		return errors.New("operation identity is not safe")
-	}
-	if operation.ExpectationVersion < 1 || operation.Attempt < 0 || !validDate(operation.StartedAt) {
-		return errors.New("operation contract metadata is invalid")
-	}
-	if _, ok := allowedSources[operation.Source]; !ok {
-		return errors.New("operation source is not allowlisted")
-	}
-	allowedStates := map[OperationState]struct{}{OperationRunning: {}, OperationRetrying: {}, OperationSucceeded: {}, OperationFailed: {}, OperationStalled: {}, OperationCancelled: {}, OperationTimedOut: {}}
-	if _, ok := allowedStates[operation.State]; !ok {
-		return errors.New("operation state is not allowlisted")
-	}
-	for _, checkpoint := range operation.Checkpoints {
-		if err := ValidateCheckpoint(checkpoint); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-func ValidateDiagnosticOperation(operation DiagnosticOperationDetail) error {
-	return ValidateOperation(operation)
-}
-
-func ValidateIssue(value DiagnosticIssueDetail) error {
-	if !validToken(value.ID, 128) || !validToken(value.Kind, 96) || value.Summary == "" || len(value.Summary) > 256 || !validDate(value.FirstObservedAt) {
-		return errors.New("issue fields are invalid")
-	}
-	if value.Severity != IssueInfo && value.Severity != IssueWarning && value.Severity != IssueError && value.Severity != IssueCritical {
-		return errors.New("issue severity is not allowlisted")
-	}
-	if value.State != IssueOpen && value.State != IssueResolved {
-		return errors.New("issue state is not allowlisted")
-	}
-	if value.UnknownReason != "" {
-		if _, ok := allowedUnknownReasons[value.UnknownReason]; !ok {
-			return errors.New("issue unknown reason is not allowlisted")
-		}
-	}
-	return nil
-}
-func ValidateDiagnosticIssue(value DiagnosticIssueDetail) error { return ValidateIssue(value) }
-
-func ValidateBranch(branch DiagnosticBranchDetail) error {
-	if !validToken(branch.ID, 128) || !validDate(branch.LeaseEndsAt) || branch.Attempts < 0 {
-		return errors.New("branch fields are invalid")
-	}
-	if branch.Kind != BranchCleanup && branch.Kind != BranchRecording && branch.Kind != BranchTranscription && branch.Kind != BranchArtifact && branch.Kind != BranchWebhook {
-		return errors.New("branch kind is not allowlisted")
-	}
-	if branch.State != BranchPending && branch.State != BranchRunning && branch.State != BranchSucceeded && branch.State != BranchFailed && branch.State != BranchCancelled && branch.State != BranchTimedOut {
-		return errors.New("branch state is not allowlisted")
-	}
-	return nil
-}
-func ValidateDiagnosticBranch(branch DiagnosticBranchDetail) error { return ValidateBranch(branch) }
-
-func ValidateParticipantProjection(participant ParticipantProjectionV1) error {
-	if participant.SchemaVersion != "ParticipantProjection/v1" || !validToken(participant.ParticipantID, 128) || !participantLabelPattern.MatchString(participant.AnonymousLabel) {
-		return errors.New("participant projection identity is invalid")
-	}
-	if participant.IdentityKind != "user" && participant.IdentityKind != "agent" && participant.IdentityKind != "guest" && participant.IdentityKind != "unknown" {
-		return errors.New("participant projection identity kind is not allowlisted")
-	}
-	if participant.State != "joined" && participant.State != "reconnecting" && participant.State != "left" && participant.State != "unknown" {
-		return errors.New("participant projection state is not allowlisted")
-	}
-	if participant.JoinedAt != nil && !validDate(*participant.JoinedAt) || participant.LeftAt != nil && !validDate(*participant.LeftAt) {
-		return errors.New("participant projection timestamp is invalid")
-	}
-	if participant.Visibility != "observable" && participant.Visibility != "not_observable" && participant.Visibility != "disconnected" {
-		return errors.New("participant projection visibility is not allowlisted")
-	}
-	if len(participant.VisibilityGaps) > MaxPageSize {
-		return errors.New("participant projection visibility gaps are unbounded")
-	}
-	for _, gap := range participant.VisibilityGaps {
-		if len(gap) > 160 || !printableASCII.MatchString(gap) || forbiddenValuePattern.MatchString(gap) {
-			return errors.New("participant projection visibility gap is unsafe")
-		}
-	}
-	if participant.OperationCount < 0 || participant.IssueCount < 0 {
-		return errors.New("participant projection counts are invalid")
-	}
-	if participant.Display.Label.Value == "" && participant.Display.Label.UnknownReason == "" {
-		return errors.New("participant projection label is unavailable")
-	}
-	if participant.Display.Label.Value != "" && !participantLabelPattern.MatchString(participant.Display.Label.Value) {
-		return errors.New("participant projection display label is invalid")
-	}
-	if participant.Display.RawIdentity.Value != "" {
-		return errors.New("participant projection raw identity is retained")
-	}
-	for _, reason := range []UnknownReason{participant.Display.Label.UnknownReason, participant.Display.RawIdentity.UnknownReason} {
-		if reason != "" {
-			if _, ok := allowedUnknownReasons[reason]; !ok {
-				return errors.New("participant projection unknown reason is not allowlisted")
-			}
-		}
-	}
-	if participant.Display.RawIdentity.UnknownReason == "" {
-		return errors.New("participant projection raw identity reason is unavailable")
-	}
-	return nil
-}
-
-func ValidateSnapshot(snapshot DiagnosticSnapshotV1) error {
-	if snapshot.SchemaVersion != "DiagnosticSnapshot/v1" || snapshot.Reference == "" || !validEnvironment(snapshot.Environment) || snapshot.CommittedCursor < 0 || snapshot.ProjectedCursor < 0 || snapshot.ProjectedCursor > snapshot.CommittedCursor {
-		return errors.New("snapshot envelope is invalid")
-	}
-	if err := ValidateDiagnosticReferenceString(snapshot.Reference); err != nil {
-		return err
-	}
-	if len(snapshot.Operations) > MaxPageSize || len(snapshot.Issues) > MaxPageSize || len(snapshot.Branches) > MaxPageSize || len(snapshot.Participants) > MaxPageSize {
-		return errors.New("snapshot projection is unbounded")
-	}
-	for _, operation := range snapshot.Operations {
-		if err := ValidateOperation(operation); err != nil {
-			return err
-		}
-	}
-	for _, issue := range snapshot.Issues {
-		if err := ValidateIssue(issue); err != nil {
-			return err
-		}
-	}
-	for _, branch := range snapshot.Branches {
-		if err := ValidateBranch(branch); err != nil {
-			return err
-		}
-	}
-	for _, participant := range snapshot.Participants {
-		if err := ValidateParticipantProjection(participant); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-func ValidateDiagnosticSnapshot(snapshot DiagnosticSnapshotV1) error {
-	return ValidateSnapshot(snapshot)
-}
-
-func ValidateAgentBrief(brief AgentBriefV1) error {
-	if brief.SchemaVersion != "AgentBrief/v1" || brief.Version != 1 || !validEnvironment(brief.Environment) || !validDate(brief.CaptureTime) || brief.ObservedSummary == "" || len(brief.ObservedSummary) > 512 || !strings.HasPrefix(brief.ResolverCommand, "pnpm trace:inspect ") {
-		return errors.New("agent brief envelope is invalid")
-	}
-	if err := ValidateDiagnosticReferenceString(brief.Reference); err != nil {
-		return err
-	}
-	if brief.FocusedReference != "" {
-		if err := ValidateDiagnosticReferenceString(brief.FocusedReference); err != nil {
-			return err
-		}
-	}
-	if len(brief.ReleaseCommits) > 128 || len(brief.VisibleGaps) > MaxPageSize || len(brief.Omissions) > MaxPageSize {
-		return errors.New("agent brief is unbounded")
-	}
-	for key, count := range brief.Counts {
-		if !regexp.MustCompile(`^[a-z][A-Za-z0-9_]{0,63}$`).MatchString(key) || count < 0 {
-			return errors.New("agent brief count is unsafe")
-		}
-	}
-	return nil
-}
-func ValidateAgentBriefV1(brief AgentBriefV1) error { return ValidateAgentBrief(brief) }
-
-func ValidateExportManifest(manifest DiagnosticExportManifestV1) error {
-	if manifest.SchemaVersion != "DiagnosticBundle/v1" || manifest.CursorFrom < 0 || manifest.CursorTo < manifest.CursorFrom || manifest.EventCount < 0 || manifest.OmissionCount < 0 {
-		return errors.New("export manifest envelope is invalid")
-	}
-	if err := ValidateDiagnosticReferenceString(manifest.Reference); err != nil {
-		return err
-	}
-	if len(manifest.Checksums) > MaxPageSize {
-		return errors.New("export checksums are unbounded")
-	}
-	for key, value := range manifest.Checksums {
-		if !regexp.MustCompile(`^[A-Za-z0-9_.-]{1,128}$`).MatchString(key) || value == "" || len(value) > 256 {
-			return errors.New("export checksum is unsafe")
-		}
-	}
-	if manifest.SplitParts < 0 {
-		return errors.New("export split parts is invalid")
-	}
-	return nil
-}
-func ValidateDiagnosticExportManifest(manifest DiagnosticExportManifestV1) error {
-	return ValidateExportManifest(manifest)
-}
-
-func ValidateExportJob(job DiagnosticExportJob) error {
-	if job.SchemaVersion != "ExportJob/v1" || !validToken(job.JobID, 128) || !validDate(job.CreatedAt) || !validDate(job.LeaseEndsAt) || job.CursorFrom < 0 || job.CursorTo < 0 {
-		return errors.New("export job envelope is invalid")
-	}
-	if err := ValidateDiagnosticReferenceString(job.Reference); err != nil {
-		return err
-	}
-	switch job.State {
-	case ExportQueued, ExportRunning, ExportSucceeded, ExportFailed, ExportCancelled, ExportExpired:
-	default:
-		return errors.New("export job state is not allowlisted")
-	}
-	if job.Manifest != nil {
-		if err := ValidateExportManifest(*job.Manifest); err != nil {
-			return err
-		}
-	}
-	if job.Progress != nil && (job.Progress.ProcessedEvents < 0 || job.Progress.TotalEvents < 0 || job.Progress.CurrentCursor < 0 || job.Progress.Percent < 0 || job.Progress.Percent > 100) {
-		return errors.New("export job progress is invalid")
-	}
-	if job.DownloadURL != "" && !strings.HasPrefix(job.DownloadURL, "/_internal/") {
-		return errors.New("download URL is not internal")
-	}
-	return nil
-}
-func ValidateDiagnosticExportJob(job DiagnosticExportJob) error { return ValidateExportJob(job) }
-
-func CanonicalTime(value time.Time) string {
-	if value.IsZero() {
-		return ""
-	}
-	return value.UTC().Format(time.RFC3339Nano)
+	return "diagnostic contract validation failed: " + strings.Join(parts, "; ")
 }

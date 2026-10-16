@@ -56,7 +56,6 @@ const (
 	RouteRecordingTranscribeScenario      = "route:recording-transcribe"
 	RouteJourneyEventIntakeScenario       = "route:telemetry-journey-event-intake"
 	RouteStatusMonitorIngestScenario      = "route:status-monitor-ingest"
-	ServiceEpisodeDiagnosticsScenario     = "service:episode-diagnostics"
 	ServiceDashboardSpaceJoinScenario     = "service:dashboard-space-join"
 	ServicePublicInviteLifecycleScenario  = "service:public-invite-lifecycle"
 
@@ -115,7 +114,6 @@ func ScenarioNames() []string {
 		RouteRecordingTranscribeScenario,
 		RouteJourneyEventIntakeScenario,
 		RouteStatusMonitorIngestScenario,
-		ServiceEpisodeDiagnosticsScenario,
 		ServiceDashboardSpaceJoinScenario,
 		ServicePublicInviteLifecycleScenario,
 		RouteChatAttachmentUploadScenario,

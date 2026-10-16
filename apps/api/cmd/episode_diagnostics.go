@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
-	"github.com/q9labs/chalk/apps/api/internal/auditlogs"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/episodediagnostics"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
@@ -27,14 +26,12 @@ type episodeDiagnosticsComponents struct {
 	serviceIssuer     accessgrants.DiagnosticsServiceIssuer
 	serviceVerifier   httpapi.EpisodeDiagnosticsServiceVerifier
 	servicePrincipals map[accessgrants.DiagnosticsServiceSource]accessgrants.DiagnosticsServiceSubject
-	operatorVerifier  httpapi.EpisodeDiagnosticsOperatorVerifier
 	mode              string
 	environment       episodediagnostics.Environment
 	producerToken     string
-	operatorToken     string
 }
 
-func newEpisodeDiagnosticsComponents(ctx context.Context, cfg config.Config, audits auditlogs.Service, logger *slog.Logger) (*episodeDiagnosticsComponents, error) {
+func newEpisodeDiagnosticsComponents(ctx context.Context, cfg config.Config, logger *slog.Logger) (*episodeDiagnosticsComponents, error) {
 	diagnosticsConfig := cfg.EpisodeDiagnostics
 	if diagnosticsConfig.Mode == config.EpisodeDiagnosticsModeOff {
 		return nil, nil
@@ -97,22 +94,6 @@ func newEpisodeDiagnosticsComponents(ctx context.Context, cfg config.Config, aud
 		}
 		serviceVerifier = configuredVerifier
 	}
-	var operatorVerifier httpapi.EpisodeDiagnosticsOperatorVerifier
-	if diagnosticsConfig.Mode == config.EpisodeDiagnosticsModeHosted {
-		verifier, verifierErr := accessgrants.NewDiagnosticsOperatorVerifier(accessgrants.DiagnosticsOperatorVerifierConfig{
-			Issuer:      diagnosticsConfig.OperatorIssuer,
-			Audience:    diagnosticsConfig.OperatorAudience,
-			JWKS:        diagnosticsConfig.OperatorJWKS,
-			Environment: string(environment),
-		})
-		if verifierErr != nil {
-			queryPool.Close()
-			appendPool.Close()
-			return nil, fmt.Errorf("configure Episode Diagnostics operator verifier: %w", verifierErr)
-		}
-		operatorVerifier = verifier
-	}
-
 	repository := postgres.NewEpisodeDiagnosticsRepository(appendPool, queryPool)
 	if err := repository.EnsureDiagnosticEnvironmentOwnership(ctx, environment); err != nil {
 		queryPool.Close()
@@ -124,7 +105,6 @@ func newEpisodeDiagnosticsComponents(ctx context.Context, cfg config.Config, aud
 		repository,
 		environment,
 		diagnosticsConfig.HMACKey,
-		episodediagnostics.NewAuditLogWriter(audits),
 		telemetry,
 	)
 	workerID, err := utilities.NewID()
@@ -167,15 +147,10 @@ func newEpisodeDiagnosticsComponents(ctx context.Context, cfg config.Config, aud
 		}
 	}
 	runtime := episodediagnostics.NewRuntime(service, repository, environment, episodediagnostics.RuntimeConfig{
-		ProjectorInterval: diagnosticsConfig.ProjectorInterval,
 		ReconcileInterval: diagnosticsConfig.ReconcileInterval,
-		DeadlineInterval:  diagnosticsConfig.DeadlineInterval,
 		RetentionInterval: diagnosticsConfig.RetentionInterval,
-		ProjectorBatch:    int(diagnosticsConfig.ProjectorBatch),
 		ReconcileBatch:    int(diagnosticsConfig.ReconcileBatch),
-		DeadlineBatch:     int(diagnosticsConfig.DeadlineBatch),
 		RetentionBatch:    int(diagnosticsConfig.RetentionBatch),
-		WorkerID:          workerID.String(),
 	}, logger)
 	return &episodeDiagnosticsComponents{
 		appendPool:        appendPool,
@@ -187,11 +162,9 @@ func newEpisodeDiagnosticsComponents(ctx context.Context, cfg config.Config, aud
 		serviceIssuer:     serviceIssuer,
 		serviceVerifier:   serviceVerifier,
 		servicePrincipals: servicePrincipals,
-		operatorVerifier:  operatorVerifier,
 		mode:              diagnosticsConfig.Mode,
 		environment:       environment,
 		producerToken:     diagnosticsConfig.ProducerToken,
-		operatorToken:     diagnosticsConfig.OperatorToken,
 	}, nil
 }
 
@@ -227,8 +200,6 @@ func (c *episodeDiagnosticsComponents) HTTPOptions() httpapi.EpisodeDiagnosticsH
 		Environment:         c.environment,
 		Service:             c.service,
 		ProducerToken:       c.producerToken,
-		OperatorToken:       c.operatorToken,
-		OperatorVerifier:    c.operatorVerifier,
 		ParticipantVerifier: c.verifier,
 		ServiceVerifier:     c.serviceVerifier,
 	}

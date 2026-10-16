@@ -367,7 +367,7 @@ groups:
         for: 1m
         annotations:
           description: One or more webhook Deliveries exhausted their retry window in the last 15 minutes. Receiver availability is a customer dependency, so correlate by Event and Delivery IDs before assigning cause.
-          summary: A customer did not receive a webhook after Chalk exhausted retries; start with `pnpm diag trace <32-hex-trace-id>` from the Delivery Attempt.
+          summary: A customer did not receive a webhook after Chalk exhausted retries; start with query structured logs by W3C trace ID from the Delivery Attempt.
         labels:
           service: chalk-api
           severity: warning
@@ -592,7 +592,7 @@ groups:
         for: 1m
         annotations:
           description: A user saw a Recording fail during Capture or Render.
-          summary: A user saw a Recording fail during Capture or Render; start with `pnpm diag trace <32-hex-trace-id>` using the job journey ID.
+          summary: A user saw a Recording fail during Capture or Render; start with query structured logs by W3C trace ID using the job journey ID.
         labels:
           service: chalk-api
           severity: critical
@@ -633,7 +633,7 @@ groups:
         for: 1m
         annotations:
           description: A user saw an Export fail or remain unavailable past the 14-hour Render budget.
-          summary: A user saw an Export fail or remain unavailable past the 14-hour Render budget; start with `pnpm diag trace <32-hex-trace-id>` using the render job journey ID.
+          summary: A user saw an Export fail or remain unavailable past the 14-hour Render budget; start with query structured logs by W3C trace ID using the render job journey ID.
         labels:
           service: chalk-api
           severity: critical
@@ -674,7 +674,7 @@ groups:
         for: 1m
         annotations:
           description: A user saw a Transcript fail or remain unavailable past 30 minutes.
-          summary: A user saw a Transcript fail or remain unavailable past 30 minutes; start with `pnpm diag trace <32-hex-trace-id>` using the Transcript journey ID.
+          summary: A user saw a Transcript fail or remain unavailable past 30 minutes; start with query structured logs by W3C trace ID using the Transcript journey ID.
         labels:
           service: chalk-api
           severity: critical
@@ -717,7 +717,7 @@ groups:
         for: 5m
         annotations:
           description: The API has returned more than 0.05 server errors per second for five minutes.
-          summary: Users are seeing API requests fail; start with `pnpm diag trace <32-hex-trace-id>` from a failing response.
+          summary: Users are seeing API requests fail; start with query structured logs by W3C trace ID from a failing response.
         labels:
           service: chalk-api
           severity: critical
@@ -760,7 +760,7 @@ groups:
         for: 5m
         annotations:
           description: More than ten Sync upgrade rejections or WebSocket closures occurred in five minutes for five consecutive minutes.
-          summary: Users are failing to connect or repeatedly reconnecting to a Space; start with `pnpm diag trace <32-hex-trace-id>` from an affected connection.
+          summary: Users are failing to connect or repeatedly reconnecting to a Space; start with query structured logs by W3C trace ID from an affected connection.
         labels:
           service: chalk-sync
           severity: critical

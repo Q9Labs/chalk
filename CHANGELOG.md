@@ -2,6 +2,9 @@
 
 ## 5.0.0 (unreleased)
 
+- BREAKING: diagnostics-contracts 1.0 removes debugger-only projection, stream, resolver, brief and export contracts. Event intake, redaction and action contracts remain.
+- Remove Episode Debugger launch and diagnostic-reference UI props from the React SDK. Shared diagnostic intake and recording instrumentation remain.
+
 - BREAKING: Classic is the only UI style. Removed the skin option, skin context, hand-drawn rendering helpers and drawing-only primitive props (`seed`, `roughness`, `filled`, `scribble`).
 - BREAKING: Removed feedback report submission, UI, collection helpers and operator endpoints.
 - No packages published. Existing integrations pinned to 4.1.15 remain pinned.

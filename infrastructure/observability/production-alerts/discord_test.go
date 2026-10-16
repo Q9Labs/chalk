@@ -89,7 +89,7 @@ func TestDiscordFinalTextForEveryRuleAndClosure(t *testing.T) {
 					item.ExpiresAt = &expires
 				}
 				formatMessage(&item)
-				item.Engineers = fmt.Sprintf("For engineers: %s; `pnpm diag trace <32-hex-trace-id>` from the affected journey.", fixture.Rule)
+				item.Engineers = fmt.Sprintf("For engineers: %s; query structured logs by W3C trace ID from the affected journey.", fixture.Rule)
 			default:
 				lines := strings.Split(openText[fixture.Rule], "\n")
 				item.Tenant = ""
@@ -135,7 +135,7 @@ func TestDiscordBatchesFitAndDiscloseOmittedGroups(t *testing.T) {
 	for i := 0; i < 8; i++ {
 		item := snapshot{Rule: "export", Tenant: fmt.Sprintf("synthetic-%d", i), TenantName: fmt.Sprintf("Example school %d", i), Value: 2}
 		formatMessage(&item)
-		item.Engineers = "For engineers: export; `pnpm diag trace <32-hex-trace-id>` from the affected journey."
+		item.Engineers = "For engineers: export; query structured logs by W3C trace ID from the affected journey."
 		groups = append(groups, discordGroup(item))
 	}
 	data := map[string]interface{}{"Action": "Open", "Value": 2, "Description": "", "GroupKeys": []string{"alert_message"}, "GroupValues": groups}

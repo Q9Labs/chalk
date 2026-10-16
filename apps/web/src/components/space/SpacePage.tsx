@@ -2,7 +2,6 @@ import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, type Reloa
 import { Chalk, Entrance, type EntranceSettings } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
-import { useEpisodeDiagnosticsAvailability } from "../../features/episode-debugger/EpisodeDiagnosticsDeveloperLink";
 import { createPreparedPublicSpace, createPublicInviteClient, prepareDashboardEntrance, joinDashboardSpace, resumePublicSpace, type AccountSpaceCredential, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
 import { listAllAccountTenants, listSpaces } from "../../lib/account-api";
 import { canonicalSpaceInviteLink, clearDashboardSpaceEntry, dashboardSpaceEntryUsesDevicesOff, hasDashboardSpaceEntry, spaceInviteToken, verifiedSpaceInviteLink } from "../../lib/named-space-route";
@@ -431,12 +430,7 @@ function LocalSpace({
   }, [connectionAccess, credential, deviceSelection, getAccess, journey]);
   const release = useMemo(() => createLocalSpaceRelease(client, () => onFinish()), [client, onFinish]);
   const connection = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection;
-  const episodeID = connection.episode?.id;
-  const diagnostics = useEpisodeDiagnosticsAvailability({ diagnosticReference: episodeID ? `chalk.episode:${episodeID}` : undefined });
   const pendingRelease = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(undefined);
-  const openDiagnostics = useCallback(() => {
-    if (diagnostics.path) globalThis.open(diagnostics.path, "_blank", "noopener");
-  }, [diagnostics.path]);
   const intentionallyLeft = useRef(false);
   const releaseFromLifecycle = useCallback(() => {
     intentionallyLeft.current = true;
@@ -489,20 +483,7 @@ function LocalSpace({
 
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
-      <Chalk
-        client={client}
-        entrance={false}
-        displayName={displayName}
-        defaults={defaults}
-        logoUrl="/brand/chalk/chalk-logo.svg"
-        spaceName={spaceName}
-        spaceDescription={spaceDescription}
-        inviteLink={inviteLink}
-        diagnosticReference={diagnostics.reference}
-        onEpisodeEnded={releaseFromLifecycle}
-        onLeft={releaseFromLifecycle}
-        onOpenDiagnostics={diagnostics.path ? openDiagnostics : undefined}
-      />
+      <Chalk client={client} entrance={false} displayName={displayName} defaults={defaults} logoUrl="/brand/chalk/chalk-logo.svg" spaceName={spaceName} spaceDescription={spaceDescription} inviteLink={inviteLink} onEpisodeEnded={releaseFromLifecycle} onLeft={releaseFromLifecycle} />
     </main>
   );
 }

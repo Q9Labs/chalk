@@ -192,9 +192,6 @@ async function buildWebArtifact({ build, commandRunner, environment, expectedSHA
     ...environment,
     CHALK_COMMIT_SHA: expectedSHA,
     CHALK_ENVIRONMENT: "production",
-    CHALK_EPISODE_DIAGNOSTICS: "hosted",
-    CHALK_EPISODE_DIAGNOSTICS_PRODUCTION_OPT_IN: "true",
-    CHALK_EPISODE_DIAGNOSTICS_GATEWAY: "verified",
     VITE_API_URL: "https://api.chalkmeet.com",
     VITE_CHALK_TELEMETRY_ENABLED: "false",
   };

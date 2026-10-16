@@ -30,8 +30,6 @@ type ExpectedChalkProps =
   | "inviteLink"
   | "layout"
   | "onLayoutChange"
-  | "onOpenDiagnostics"
-  | "diagnosticReference"
   | "onJoined"
   | "onLeft"
   | "onEpisodeEnded"

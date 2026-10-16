@@ -108,7 +108,6 @@ export const ClassicControlBarSurface = React.memo(
     onTogglePictureInPicture,
     onOpenReactions,
     onOpenSettings,
-    onOpenDiagnostics,
     onOpenMore,
     onOpenInfo,
     onLeft,
@@ -268,11 +267,6 @@ export const ClassicControlBarSurface = React.memo(
         case "settings":
           if (!onOpenSettings) return null;
           return <ControlBarButton key="settings" icon={<Settings01Icon size={20} />} label="Settings" onClick={onOpenSettings} showLabel={showLabels} />;
-        case "diagnostics":
-          if (!onOpenDiagnostics) {
-            return null;
-          }
-          return <ControlBarButton key="diagnostics" icon={<InformationCircleIcon size={20} />} label="Diagnostics" onClick={onOpenDiagnostics} showLabel={showLabels} />;
         case "more":
           if (!onOpenMore) return null;
           return <ControlBarButton key="more" icon={<MoreHorizontalIcon />} label="More" onClick={onOpenMore} showLabel={showLabels} />;
@@ -474,8 +468,6 @@ export const ClassicControlBarSurface = React.memo(
           case "settings":
             if (!onOpenSettings) return null;
             return <FloatingControlBarButton key={type} icon={<Settings01Icon />} label="Settings" onClick={onOpenSettings} />;
-          case "diagnostics":
-            return onOpenDiagnostics ? <FloatingControlBarButton key={type} icon={<InformationCircleIcon />} label="Diagnostics" onClick={onOpenDiagnostics} /> : null;
           case "more":
             if (!onOpenMore) return null;
             return <FloatingControlBarButton key={type} icon={<MoreHorizontalIcon />} label="More" onClick={onOpenMore} />;

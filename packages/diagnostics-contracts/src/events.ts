@@ -1,7 +1,7 @@
 import { sha256 } from "@noble/hashes/sha2.js";
-import { EVENT_NAME_EXTRA_ROOTS, EVENT_PHASES, EVENT_SOURCES, EVENT_STATES, MAX_DIAGNOSTIC_EVENT_BYTES, MAX_EVENT_ID_LENGTH, MAX_EVENT_NAME_LENGTH, MAX_OPERATION_REF_LENGTH, MAX_PHASE_LENGTH, isAllowedPhase } from "./allowlists.js";
+import { EVENT_NAME_EXTRA_ROOTS, EVENT_SOURCES, EVENT_STATES, MAX_DIAGNOSTIC_EVENT_BYTES, MAX_EVENT_ID_LENGTH, MAX_EVENT_NAME_LENGTH, MAX_OPERATION_REF_LENGTH, MAX_PHASE_LENGTH, isAllowedPhase } from "./allowlists.js";
 import { ACTION_OPERATION_KEYS } from "./actions.js";
-import { redactDiagnosticAttributes, validateDiagnosticAttributes } from "./safety.js";
+import { validateDiagnosticAttributes } from "./safety.js";
 import { checkDateTime, checkEnum, checkSafeToken, finishValidation, isInteger, isNonNegativeInteger, isRecord, isString, parseOrThrow, pushUnknownKeys, requireString, type ValidationIssue, type ValidationResult } from "./runtime.js";
 import type { AcceptedDiagnosticEvent, DiagnosticEventCorrelation, DiagnosticEventDraft, DiagnosticEventExpectation, DiagnosticRelease } from "./types.js";
 
@@ -9,15 +9,11 @@ const DRAFT_KEYS = ["version", "eventId", "producerOperationRef", "parentProduce
 const EXPECTATION_KEYS = ["name", "version", "checkpoint", "checkpointClass", "deadlineAt"] as const;
 const CORRELATION_KEYS = ["journeyId", "traceId", "spanId", "requestId", "commandId", "providerId", "retryGroupRef", "attempt"] as const;
 const RELEASE_KEYS = ["id", "sourceCommit"] as const;
-const ACCEPTED_KEYS = [...DRAFT_KEYS, "diagnosticId", "cursor", "receivedAt", "fingerprint"] as const;
 
 export const isAllowedDiagnosticEventName = (name: string): boolean => {
   const roots = [...ACTION_OPERATION_KEYS, ...EVENT_NAME_EXTRA_ROOTS];
   return roots.some((root) => name === root || name.startsWith(`${root}.`));
 };
-
-export const ALLOWED_EVENT_NAMES: readonly string[] = [...ACTION_OPERATION_KEYS, ...EVENT_NAME_EXTRA_ROOTS];
-export const ALLOWED_EVENT_PHASES = EVENT_PHASES;
 
 type ExpectationBase = Readonly<{ name?: string; version: unknown; checkpoint: string; checkpointClass: DiagnosticEventExpectation["checkpointClass"] }>;
 
@@ -177,9 +173,6 @@ export const validateDiagnosticEventDraft = (input: unknown): ValidationResult<D
 };
 
 export const parseDiagnosticEventDraft = (input: unknown): DiagnosticEventDraft => parseOrThrow(validateDiagnosticEventDraft(input), "Invalid DiagnosticEventDraft");
-export const validateEventDraft = validateDiagnosticEventDraft;
-export const parseEventDraft = parseDiagnosticEventDraft;
-export const parseDiagnosticEvent = parseDiagnosticEventDraft;
 
 const canonicalize = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(canonicalize);
@@ -194,7 +187,6 @@ const canonicalize = (value: unknown): unknown => {
 
 export const encodeDiagnosticEvent = (event: DiagnosticEventDraft | AcceptedDiagnosticEvent): string => JSON.stringify(canonicalize(event));
 export const encodedEventSize = (event: DiagnosticEventDraft | AcceptedDiagnosticEvent): number => new TextEncoder().encode(encodeDiagnosticEvent(event)).byteLength;
-export const isDiagnosticEventWithinLimit = (event: DiagnosticEventDraft | AcceptedDiagnosticEvent): boolean => encodedEventSize(event) <= MAX_DIAGNOSTIC_EVENT_BYTES;
 export const assertEventSize = (event: DiagnosticEventDraft | AcceptedDiagnosticEvent): void => {
   const size = encodedEventSize(event);
   if (size > MAX_DIAGNOSTIC_EVENT_BYTES) throw new Error(`Diagnostic event exceeds ${MAX_DIAGNOSTIC_EVENT_BYTES} encoded bytes (${size})`);
@@ -225,29 +217,3 @@ export const acceptDiagnosticEvent = (input: unknown, context: Readonly<{ diagno
   assertEventSize(accepted);
   return accepted;
 };
-
-export const validateAcceptedDiagnosticEvent = (input: unknown): ValidationResult<AcceptedDiagnosticEvent> => {
-  if (!isRecord(input)) return { ok: false, issues: [{ path: "$", message: "expected an accepted event object" }] };
-  const draftInput: Record<string, unknown> = {};
-  for (const key of DRAFT_KEYS) draftInput[key] = input[key];
-  const draftResult = validateDiagnosticEventDraft(draftInput);
-  const issues: ValidationIssue[] = draftResult.ok ? [] : [...draftResult.issues];
-  pushUnknownKeys(input, ACCEPTED_KEYS, issues, "$");
-  const diagnosticId = requireString(input, "diagnosticId", issues);
-  if (diagnosticId !== undefined) checkSafeToken(diagnosticId, "$.diagnosticId", issues, 128);
-  const cursor = input.cursor;
-  if (!isNonNegativeInteger(cursor)) issues.push({ path: "$.cursor", message: "cursor must be a non-negative integer" });
-  const receivedAt = input.receivedAt;
-  checkDateTime(receivedAt, "$.receivedAt", issues);
-  const fingerprint = requireString(input, "fingerprint", issues);
-  if (fingerprint !== undefined && !/^sha256:[0-9a-f]{64}$/.test(fingerprint)) issues.push({ path: "$.fingerprint", message: "unsupported event fingerprint" });
-  if (!draftResult.ok || !diagnosticId || !isNonNegativeInteger(cursor) || !receivedAt || !fingerprint) return { ok: false, issues };
-  const event = { ...draftResult.value, diagnosticId, cursor, receivedAt: receivedAt as string, fingerprint } satisfies AcceptedDiagnosticEvent;
-  if (fingerprintDiagnosticEvent(draftResult.value) !== fingerprint) issues.push({ path: "$.fingerprint", message: "fingerprint does not match canonical event" });
-  if (encodedEventSize(event) > MAX_DIAGNOSTIC_EVENT_BYTES) issues.push({ path: "$", message: "encoded accepted event exceeds 2 KiB" });
-  return finishValidation(event, issues);
-};
-
-export const parseAcceptedDiagnosticEvent = (input: unknown): AcceptedDiagnosticEvent => parseOrThrow(validateAcceptedDiagnosticEvent(input), "Invalid accepted DiagnosticEvent");
-export const parseAcceptedEvent = parseAcceptedDiagnosticEvent;
-export const redactEventAttributes = redactDiagnosticAttributes;

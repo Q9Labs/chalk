@@ -9,8 +9,6 @@ export interface SpaceInfoDialogProps {
   spaceId?: string;
   inviteLink?: string;
   onCopyLink?: () => void;
-  diagnosticReference?: string;
-  onCopyDiagnosticReference?: (reference: string) => void;
   isRecording?: boolean;
   isTranscribing?: boolean;
   duration?: number;

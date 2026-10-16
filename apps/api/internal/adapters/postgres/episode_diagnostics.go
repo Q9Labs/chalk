@@ -5,12 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
-	"strings"
-	"sync"
+	"github.com/jackc/pgx/v5"
+
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
@@ -20,33 +18,23 @@ import (
 )
 
 const (
-	diagnosticProjectorLeaseSeconds = 30
-	diagnosticExportLeaseSeconds    = int32(30 * 60)
 	diagnosticRetentionClaimSeconds = int32(5 * 60)
 )
 
-// EpisodeDiagnosticsRepository is the Postgres adapter for the bounded
-// Episode Diagnostic ledger. Writes use appendPool so intake cannot contend
-// with viewer queries; projector, query, export, and retention work use the
-// query pool.
 type EpisodeDiagnosticsRepository struct {
-	appendPool        *pgxpool.Pool
-	queryPool         *pgxpool.Pool
-	referenceBackfill episodeReferenceBackfillState
+	appendPool *pgxpool.Pool
+	queryPool  *pgxpool.Pool
 }
 
 func NewEpisodeDiagnosticsRepository(appendPool, queryPool *pgxpool.Pool) *EpisodeDiagnosticsRepository {
 	if queryPool == nil {
 		queryPool = appendPool
 	}
-	return &EpisodeDiagnosticsRepository{appendPool: appendPool, queryPool: queryPool, referenceBackfill: newEpisodeReferenceBackfillState()}
+	return &EpisodeDiagnosticsRepository{appendPool: appendPool, queryPool: queryPool}
 }
 
 var _ episodediagnostics.Repository = (*EpisodeDiagnosticsRepository)(nil)
 
-// EnsureDiagnosticEnvironmentOwnership claims the database for one
-// deployment environment. A second environment fails closed instead of
-// sharing global reconciliation, deadline, export, or retention scans.
 func (r *EpisodeDiagnosticsRepository) EnsureDiagnosticEnvironmentOwnership(ctx context.Context, environment episodediagnostics.Environment) error {
 	if r.queryPool == nil {
 		return errDiagnosticsUnavailable
@@ -102,9 +90,6 @@ func (r *EpisodeDiagnosticsRepository) Ensure(ctx context.Context, authoritative
 		if err := queries.EnsureDiagnosticAuxiliaryRows(ctx, sqlc.EnsureDiagnosticAuxiliaryRowsParams{TenantID: row.TenantID, DiagnosticID: row.ID}); err != nil {
 			return fmt.Errorf("ensure diagnostic auxiliary rows: %w", err)
 		}
-		if err := insertDiagnosticReference(ctx, queries, row.TenantID, row.ID, 0, "", "chalk.episode", episode.ID.String(), "", true, ""); err != nil {
-			return fmt.Errorf("ensure diagnostic Episode reference: %w", err)
-		}
 
 		// The observer can see the authoritative Episode end after the initial
 		// diagnostic row was created. Advance only live rows; a completed or
@@ -152,9 +137,6 @@ func (r *EpisodeDiagnosticsRepository) Reconcile(ctx context.Context, environmen
 		}
 		result = append(result, diagnostic)
 	}
-	if err := r.reconcileEpisodeReferenceBackfill(ctx, environment, limit); err != nil {
-		return result, err
-	}
 	// Repair roots whose authoritative Episode ended after the observer created
 	// the diagnostic. This path is bounded and does not trust client Events to
 	// close the lifecycle.
@@ -200,7 +182,7 @@ func (r *EpisodeDiagnosticsRepository) Reconcile(ctx context.Context, environmen
 		for _, branch := range branchRows {
 			branches = append(branches, mapDiagnosticBranch(branch, diagnostic))
 		}
-		next, updatedBranches, lifecycleErr := episodediagnostics.ReconcileDiagnosticLifecycleObserver(diagnostic, branches, now)
+		next, updatedBranches, lifecycleErr := episodediagnostics.ReconcileDiagnosticLifecycle(diagnostic, branches, now)
 		if lifecycleErr != nil {
 			return result, fmt.Errorf("reconcile diagnostic lifecycle: %w", lifecycleErr)
 		}
@@ -227,58 +209,6 @@ func (r *EpisodeDiagnosticsRepository) Reconcile(ctx context.Context, environmen
 		result = append(result, next)
 	}
 	return result, nil
-}
-
-func (r *EpisodeDiagnosticsRepository) reconcileEpisodeReferenceBackfill(ctx context.Context, environment episodediagnostics.Environment, limit int) error {
-	queries := sqlc.New(r.queryPool)
-	return r.referenceBackfill.run(ctx, environment, limit,
-		func(ctx context.Context, params sqlc.ListEpisodeDiagnosticsMissingEpisodeReferenceParams) ([]sqlc.ListEpisodeDiagnosticsMissingEpisodeReferenceRow, error) {
-			return queries.ListEpisodeDiagnosticsMissingEpisodeReference(ctx, params)
-		},
-		func(ctx context.Context, row sqlc.ListEpisodeDiagnosticsMissingEpisodeReferenceRow) error {
-			return insertDiagnosticReference(ctx, queries, row.TenantID, row.DiagnosticID, 0, "", "chalk.episode", idString(row.EpisodeID), "", true, "")
-		},
-	)
-}
-
-type episodeReferenceBackfillState struct {
-	mu       sync.Mutex
-	complete map[episodediagnostics.Environment]struct{}
-}
-
-func newEpisodeReferenceBackfillState() episodeReferenceBackfillState {
-	return episodeReferenceBackfillState{complete: make(map[episodediagnostics.Environment]struct{})}
-}
-
-func (s *episodeReferenceBackfillState) run(
-	ctx context.Context,
-	environment episodediagnostics.Environment,
-	limit int,
-	list func(context.Context, sqlc.ListEpisodeDiagnosticsMissingEpisodeReferenceParams) ([]sqlc.ListEpisodeDiagnosticsMissingEpisodeReferenceRow, error),
-	insert func(context.Context, sqlc.ListEpisodeDiagnosticsMissingEpisodeReferenceRow) error,
-) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if _, ok := s.complete[environment]; ok {
-		return nil
-	}
-	rows, err := list(ctx, sqlc.ListEpisodeDiagnosticsMissingEpisodeReferenceParams{Environment: string(environment), PageLimit: int32(limit)})
-	if err != nil {
-		return fmt.Errorf("list diagnostics missing Episode reference: %w", err)
-	}
-	for _, row := range rows {
-		if err := insert(ctx, row); err != nil {
-			return fmt.Errorf("backfill diagnostic Episode reference: %w", err)
-		}
-	}
-	if len(rows) == 0 {
-		if s.complete == nil {
-			s.complete = make(map[episodediagnostics.Environment]struct{})
-		}
-		s.complete[environment] = struct{}{}
-	}
-	return nil
 }
 
 func (r *EpisodeDiagnosticsRepository) ResolveScope(ctx context.Context, scope episodediagnostics.AppendScope, participantGeneration int64) (episodediagnostics.EpisodeDiagnostic, error) {
@@ -332,13 +262,10 @@ func (r *EpisodeDiagnosticsRepository) ResolveScope(ctx context.Context, scope e
 }
 
 func (r *EpisodeDiagnosticsRepository) Append(ctx context.Context, diagnostic episodediagnostics.EpisodeDiagnostic, participantID *utilities.ID, events []episodediagnostics.ValidatedEvent) (episodediagnostics.AppendDiagnosticEventsResult, error) {
-	return r.appendAt(ctx, diagnostic, participantID, events, time.Now().UTC(), false)
+	return r.appendAt(ctx, diagnostic, participantID, events, time.Now().UTC())
 }
 
-// appendAt is shared by normal intake and the deadline worker. The worker
-// supplies its scan timestamp so synthetic events are deterministic in tests
-// and can land exactly on the configured epilogue boundary.
-func (r *EpisodeDiagnosticsRepository) appendAt(ctx context.Context, diagnostic episodediagnostics.EpisodeDiagnostic, participantID *utilities.ID, events []episodediagnostics.ValidatedEvent, now time.Time, synthetic bool) (episodediagnostics.AppendDiagnosticEventsResult, error) {
+func (r *EpisodeDiagnosticsRepository) appendAt(ctx context.Context, diagnostic episodediagnostics.EpisodeDiagnostic, participantID *utilities.ID, events []episodediagnostics.ValidatedEvent, now time.Time) (episodediagnostics.AppendDiagnosticEventsResult, error) {
 	result := episodediagnostics.AppendDiagnosticEventsResult{DiagnosticReference: diagnosticReference(diagnostic)}
 	if len(events) == 0 {
 		result.CommittedCursor = diagnostic.CommittedCursor
@@ -383,7 +310,6 @@ func (r *EpisodeDiagnosticsRepository) appendAt(ctx context.Context, diagnostic 
 		}
 
 		now = now.UTC()
-		deadlineEvent := synthetic && allSyntheticDeadlineEvents(events)
 		if head.Environment != string(diagnostic.Environment) {
 			return episodediagnostics.ErrEnvironmentMismatch
 		}
@@ -393,7 +319,7 @@ func (r *EpisodeDiagnosticsRepository) appendAt(ctx context.Context, diagnostic 
 		if head.State == string(episodediagnostics.DiagnosticExpired) || head.ExpiresAt.Valid && !head.ExpiresAt.Time.After(now) {
 			return episodediagnostics.ErrDiagnosticExpired
 		}
-		if head.State == string(episodediagnostics.DiagnosticEnded) && (!head.EpisodeEndedAt.Valid || !head.EpisodeEndedAt.Time.Add(episodediagnostics.MaximumEpilogueLease).After(now)) && !deadlineEvent {
+		if head.State == string(episodediagnostics.DiagnosticEnded) && (!head.EpisodeEndedAt.Valid || !head.EpisodeEndedAt.Time.Add(episodediagnostics.MaximumEpilogueLease).After(now)) {
 			return episodediagnostics.ErrIntakeClosed
 		}
 		cursor := head.CommittedCursor
@@ -429,7 +355,7 @@ func (r *EpisodeDiagnosticsRepository) appendAt(ctx context.Context, diagnostic 
 			if head.EpisodeStartedAt.Valid && input.event.Event.OccurredAt.Before(head.EpisodeStartedAt.Time) || input.event.Event.OccurredAt.After(now) {
 				return episodediagnostics.ErrIntakeClosed
 			}
-			if head.EpisodeEndedAt.Valid && input.event.Event.OccurredAt.After(head.EpisodeEndedAt.Time.Add(episodediagnostics.EndedDiagnosticIntakeGrace)) && !deadlineEvent {
+			if head.EpisodeEndedAt.Valid && input.event.Event.OccurredAt.After(head.EpisodeEndedAt.Time.Add(episodediagnostics.EndedDiagnosticIntakeGrace)) {
 				return episodediagnostics.ErrIntakeClosed
 			}
 			candidateCursor := cursor + 1
@@ -453,19 +379,8 @@ func (r *EpisodeDiagnosticsRepository) appendAt(ctx context.Context, diagnostic 
 			if insertErr != nil {
 				return fmt.Errorf("insert diagnostic event: %w", insertErr)
 			}
-			if input.participantID != nil {
-				if err := queries.UpsertDiagnosticParticipantProjection(ctx, sqlc.UpsertDiagnosticParticipantProjectionParams{
-					TenantID:      uuid(tenantID),
-					DiagnosticID:  uuid(diagnosticID),
-					ParticipantID: uuid(*input.participantID),
-					Cursor:        candidateCursor,
-				}); err != nil {
-					return fmt.Errorf("upsert diagnostic participant projection: %w", err)
-				}
-			}
 			cursor = candidateCursor
-			accepted := mapDiagnosticEventForProjection(row)
-			result.Accepted = append(result.Accepted, episodediagnostics.AppendEventReceipt{EventID: accepted.EventID, Cursor: accepted.Cursor})
+			result.Accepted = append(result.Accepted, episodediagnostics.AppendEventReceipt{EventID: row.EventID, Cursor: row.Cursor})
 		}
 		acceptedByID := make(map[string]episodediagnostics.AppendEventReceipt, len(result.Accepted)+len(seen))
 		for eventID, receipt := range seen {
@@ -500,23 +415,6 @@ func (r *EpisodeDiagnosticsRepository) appendAt(ctx context.Context, diagnostic 
 type appendEventInput struct {
 	event         episodediagnostics.ValidatedEvent
 	participantID *utilities.ID
-}
-
-func allSyntheticDeadlineEvents(events []episodediagnostics.ValidatedEvent) bool {
-	if len(events) == 0 {
-		return false
-	}
-	for _, item := range events {
-		event := item.Event
-		if event.Source != episodediagnostics.SourceWorker || event.State != episodediagnostics.EventTimedOut || event.Phase != "timed_out" {
-			return false
-		}
-		reason, ok := event.Attributes["reason"].(string)
-		if !ok || reason != "deadline" || event.Name != "operation.ended" && event.Name != "checkpoint.missed" && !strings.HasSuffix(event.Name, ".ended") {
-			return false
-		}
-	}
-	return true
 }
 
 func insertDiagnosticEventParams(tenantID, diagnosticID utilities.ID, cursor int64, input appendEventInput) sqlc.InsertDiagnosticEventParams {
@@ -566,585 +464,8 @@ func insertDiagnosticEventParams(tenantID, diagnosticID utilities.ID, cursor int
 	return params
 }
 
-func (r *EpisodeDiagnosticsRepository) Resolve(ctx context.Context, reference episodediagnostics.DiagnosticReference) (episodediagnostics.EpisodeDiagnostic, error) {
-	if r.queryPool == nil {
-		return episodediagnostics.EpisodeDiagnostic{}, errDiagnosticsUnavailable
-	}
-	diagnosticID, err := utilities.ParseID(reference.DiagnosticID)
-	if err != nil {
-		return episodediagnostics.EpisodeDiagnostic{}, episodediagnostics.ErrNotFound
-	}
-	row, err := sqlc.New(r.queryPool).GetEpisodeDiagnosticByOpaqueIDGlobal(ctx, uuid(diagnosticID))
-	if errors.Is(err, pgx.ErrNoRows) {
-		return episodediagnostics.EpisodeDiagnostic{}, episodediagnostics.ErrNotFound
-	}
-	if err != nil {
-		return episodediagnostics.EpisodeDiagnostic{}, fmt.Errorf("resolve diagnostic reference: %w", err)
-	}
-	if row.Environment != string(reference.Environment) || row.State == string(episodediagnostics.DiagnosticExpired) {
-		return episodediagnostics.EpisodeDiagnostic{}, episodediagnostics.ErrNotFound
-	}
-	return mapEpisodeDiagnostic(row), nil
-}
-
-func (r *EpisodeDiagnosticsRepository) ResolveAlternate(ctx context.Context, idClass, lookup, version string) (episodediagnostics.DiagnosticReference, error) {
-	if r.queryPool == nil {
-		return episodediagnostics.DiagnosticReference{}, errDiagnosticsUnavailable
-	}
-	if idClass == "w3c.trace-id" {
-		var diagnosticID pgtype.UUID
-		var environment, state string
-		const query = `
-select d.id, d.environment, d.state
-from episode_diagnostics d
-join (
-    select tenant_id, diagnostic_id from diagnostic_events where trace_id = $1
-    union
-    select tenant_id, diagnostic_id from diagnostic_operations where trace_id = $1
-) evidence on evidence.tenant_id = d.tenant_id and evidence.diagnostic_id = d.id
-order by d.id
-limit 1`
-		err := r.queryPool.QueryRow(ctx, query, lookup).Scan(&diagnosticID, &environment, &state)
-		if errors.Is(err, pgx.ErrNoRows) || state == string(episodediagnostics.DiagnosticExpired) {
-			return episodediagnostics.DiagnosticReference{}, episodediagnostics.ErrNotFound
-		}
-		if err != nil {
-			return episodediagnostics.DiagnosticReference{}, fmt.Errorf("lookup diagnostic trace: %w", err)
-		}
-		return episodediagnostics.DiagnosticReference{
-			Version:      episodediagnostics.ContractVersion,
-			Environment:  episodediagnostics.Environment(environment),
-			DiagnosticID: utilities.IDFromBytes(diagnosticID.Bytes).String(),
-		}, nil
-	}
-	var rowTenant, rowDiagnostic, rowReference pgtype.UUID
-	var environment, state string
-	var rawValue, hmacVersion, valueHMAC pgtype.Text
-	var eventCursor pgtype.Int8
-	var operationID pgtype.UUID
-	if version == "" {
-		rows, err := sqlc.New(r.queryPool).LookupDiagnosticReferenceRawGlobal(ctx, sqlc.LookupDiagnosticReferenceRawGlobalParams{IDClass: idClass, RawValue: diagnosticText(lookup), PageLimit: 1})
-		if err != nil {
-			return episodediagnostics.DiagnosticReference{}, fmt.Errorf("lookup diagnostic reference: %w", err)
-		}
-		if len(rows) == 0 {
-			return episodediagnostics.DiagnosticReference{}, episodediagnostics.ErrNotFound
-		}
-		row := rows[0]
-		rowTenant, rowDiagnostic, rowReference, rawValue, hmacVersion, valueHMAC, eventCursor, operationID, environment, state = row.TenantID, row.DiagnosticID, row.ReferenceID, row.RawValue, row.HmacVersion, row.ValueHmac, row.EventCursor, row.OperationID, row.Environment, row.State
-	} else {
-		rows, err := sqlc.New(r.queryPool).LookupDiagnosticReferenceHMACGlobal(ctx, sqlc.LookupDiagnosticReferenceHMACGlobalParams{IDClass: idClass, HmacVersion: diagnosticText(version), ValueHmac: diagnosticText(lookup), PageLimit: 1})
-		if err != nil {
-			return episodediagnostics.DiagnosticReference{}, fmt.Errorf("lookup diagnostic HMAC reference: %w", err)
-		}
-		if len(rows) == 0 {
-			return episodediagnostics.DiagnosticReference{}, episodediagnostics.ErrNotFound
-		}
-		row := rows[0]
-		rowTenant, rowDiagnostic, rowReference, rawValue, hmacVersion, valueHMAC, eventCursor, operationID, environment, state = row.TenantID, row.DiagnosticID, row.ReferenceID, row.RawValue, row.HmacVersion, row.ValueHmac, row.EventCursor, row.OperationID, row.Environment, row.State
-	}
-	if state == string(episodediagnostics.DiagnosticExpired) {
-		return episodediagnostics.DiagnosticReference{}, episodediagnostics.ErrNotFound
-	}
-	parsedDiagnosticID := utilities.IDFromBytes(rowDiagnostic.Bytes)
-	result := episodediagnostics.DiagnosticReference{Version: episodediagnostics.ContractVersion, Environment: episodediagnostics.Environment(environment), DiagnosticID: parsedDiagnosticID.String()}
-	if operationID.Valid {
-		operationOpaqueID := utilities.IDFromBytes(operationID.Bytes).String()
-		result.Focus = &episodediagnostics.DiagnosticReferenceFocus{Kind: episodediagnostics.ReferenceFocusOperation, ID: operationOpaqueID}
-	} else if eventCursor.Valid {
-		cursor := eventCursor.Int64
-		result.Focus = &episodediagnostics.DiagnosticReferenceFocus{Kind: episodediagnostics.ReferenceFocusEvent, ID: strconv.FormatInt(cursor, 10)}
-		result.Cursor = &cursor
-	}
-	_ = rowTenant
-	_ = rowReference
-	_ = rawValue
-	_ = hmacVersion
-	_ = valueHMAC
-	return result, nil
-}
-
-func (r *EpisodeDiagnosticsRepository) ReadSnapshot(ctx context.Context, diagnostic episodediagnostics.EpisodeDiagnostic, filter episodediagnostics.DiagnosticFilterV1, limit int) (episodediagnostics.DiagnosticSnapshotV1, error) {
-	if r.queryPool == nil {
-		return episodediagnostics.DiagnosticSnapshotV1{}, errDiagnosticsUnavailable
-	}
-	if limit <= 0 {
-		limit = episodediagnostics.MaxSnapshotOperations
-	}
-	queries := sqlc.New(r.queryPool)
-	if err := episodediagnostics.ValidateFilter(filter); err != nil {
-		return episodediagnostics.DiagnosticSnapshotV1{}, err
-	}
-	state, counts, err := r.loadProjectionState(ctx, queries, diagnostic, filter, limit, episodediagnostics.MaxSnapshotIssues, episodediagnostics.MaxSnapshotBranches)
-	if err != nil {
-		return episodediagnostics.DiagnosticSnapshotV1{}, err
-	}
-	snapshot := state.Snapshot(diagnosticReference(diagnostic), time.Now().UTC())
-	snapshot.Summary.EventCount = counts.eventCount
-	snapshot.Summary.OperationCount = counts.operationCount
-	snapshot.Summary.IssueCount = counts.issueCount
-	snapshot.Summary.OpenIssueCount = counts.openIssueCount
-	snapshot.Summary.ParticipantCount = counts.participantCount
-	snapshot.CommittedCursor = counts.committedCursor
-	snapshot.ProjectedCursor = counts.projectedCursor
-	snapshot.RunEndCursor = diagnosticNullableInt64Ptr(counts.runEndCursor)
-	if diagnosticFilterPresent(filter) {
-		participant, parseErr := parseOptionalID(filter.ParticipantID)
-		if parseErr != nil {
-			return episodediagnostics.DiagnosticSnapshotV1{}, parseErr
-		}
-		filteredCount, countErr := queries.CountDiagnosticEventsFiltered(ctx, sqlc.CountDiagnosticEventsFilteredParams{
-			TenantID: requiredUUID(diagnostic.TenantID), DiagnosticID: requiredUUID(diagnostic.ID), ParticipantID: participant,
-			FromCursor: diagnosticOptionalInt8(filter.FromCursor), ToCursor: diagnosticOptionalInt8(filter.ToCursor),
-			Source: diagnosticText(string(filter.Source)), OperationKind: diagnosticText(filter.OperationKind), State: diagnosticText(filter.State),
-			ReleaseID: diagnosticText(filter.ReleaseID), RequestID: diagnosticText(filter.RequestID), CommandID: diagnosticText(filter.CommandID), ProviderID: diagnosticText(filter.ProviderID), JourneyID: diagnosticText(filter.JourneyID), TraceID: diagnosticText(filter.TraceID), SpanID: diagnosticText(filter.SpanID), FromTime: optionalTime(filter.FromTime), ToTime: optionalTime(filter.ToTime),
-		})
-		if countErr != nil {
-			return episodediagnostics.DiagnosticSnapshotV1{}, fmt.Errorf("count filtered diagnostic events: %w", countErr)
-		}
-		operationCount, operationCountErr := queries.CountDiagnosticOperationsFiltered(ctx, sqlc.CountDiagnosticOperationsFilteredParams{TenantID: requiredUUID(diagnostic.TenantID), DiagnosticID: requiredUUID(diagnostic.ID), OperationKind: diagnosticText(filter.OperationKind), State: diagnosticText(filter.State), Source: diagnosticText(string(filter.Source)), ReleaseID: diagnosticText(filter.ReleaseID), RequestID: diagnosticText(filter.RequestID), CommandID: diagnosticText(filter.CommandID), ProviderID: diagnosticText(filter.ProviderID), JourneyID: diagnosticText(filter.JourneyID), TraceID: diagnosticText(filter.TraceID), SpanID: diagnosticText(filter.SpanID), FromTime: optionalTime(filter.FromTime), ToTime: optionalTime(filter.ToTime)})
-		if operationCountErr != nil {
-			return episodediagnostics.DiagnosticSnapshotV1{}, fmt.Errorf("count filtered diagnostic operations: %w", operationCountErr)
-		}
-		issueCounts, issueCountErr := queries.CountDiagnosticIssuesFiltered(ctx, sqlc.CountDiagnosticIssuesFilteredParams{TenantID: requiredUUID(diagnostic.TenantID), DiagnosticID: requiredUUID(diagnostic.ID), ParticipantID: participant, IssueState: diagnosticText(string(filter.IssueState)), OperationKind: diagnosticText(filter.OperationKind), Source: diagnosticText(string(filter.Source)), ReleaseID: diagnosticText(filter.ReleaseID), RequestID: diagnosticText(filter.RequestID), CommandID: diagnosticText(filter.CommandID), ProviderID: diagnosticText(filter.ProviderID), JourneyID: diagnosticText(filter.JourneyID), TraceID: diagnosticText(filter.TraceID), SpanID: diagnosticText(filter.SpanID), FromTime: optionalTime(filter.FromTime), ToTime: optionalTime(filter.ToTime)})
-		if issueCountErr != nil {
-			return episodediagnostics.DiagnosticSnapshotV1{}, fmt.Errorf("count filtered diagnostic issues: %w", issueCountErr)
-		}
-		branchCount, branchCountErr := queries.CountDiagnosticBranchesFiltered(ctx, sqlc.CountDiagnosticBranchesFilteredParams{TenantID: requiredUUID(diagnostic.TenantID), DiagnosticID: requiredUUID(diagnostic.ID), ParticipantID: participant, OperationKind: diagnosticText(filter.OperationKind), State: diagnosticText(filter.State), Source: diagnosticText(string(filter.Source)), ReleaseID: diagnosticText(filter.ReleaseID), RequestID: diagnosticText(filter.RequestID), CommandID: diagnosticText(filter.CommandID), ProviderID: diagnosticText(filter.ProviderID), JourneyID: diagnosticText(filter.JourneyID), TraceID: diagnosticText(filter.TraceID), SpanID: diagnosticText(filter.SpanID), FromTime: optionalTime(filter.FromTime), ToTime: optionalTime(filter.ToTime)})
-		if branchCountErr != nil {
-			return episodediagnostics.DiagnosticSnapshotV1{}, fmt.Errorf("count filtered diagnostic branches: %w", branchCountErr)
-		}
-		participantCount, participantCountErr := queries.CountDiagnosticParticipantsFiltered(ctx, sqlc.CountDiagnosticParticipantsFilteredParams{TenantID: requiredUUID(diagnostic.TenantID), DiagnosticID: requiredUUID(diagnostic.ID), ParticipantID: participant, FromCursor: diagnosticOptionalInt8(filter.FromCursor), ToCursor: diagnosticOptionalInt8(filter.ToCursor), Source: diagnosticText(string(filter.Source)), OperationKind: diagnosticText(filter.OperationKind), State: diagnosticText(filter.State), ReleaseID: diagnosticText(filter.ReleaseID), RequestID: diagnosticText(filter.RequestID), CommandID: diagnosticText(filter.CommandID), ProviderID: diagnosticText(filter.ProviderID), JourneyID: diagnosticText(filter.JourneyID), TraceID: diagnosticText(filter.TraceID), SpanID: diagnosticText(filter.SpanID), FromTime: optionalTime(filter.FromTime), ToTime: optionalTime(filter.ToTime)})
-		if participantCountErr != nil {
-			return episodediagnostics.DiagnosticSnapshotV1{}, fmt.Errorf("count filtered diagnostic participants: %w", participantCountErr)
-		}
-		snapshot.Summary.EventCount = filteredCount
-		snapshot.Summary.OperationCount = operationCount
-		snapshot.Summary.IssueCount = issueCounts.IssueCount
-		snapshot.Summary.ParticipantCount = participantCount
-		snapshot.Summary.OpenIssueCount = issueCounts.OpenIssueCount
-		if branchCount > int64(len(snapshot.Branches)) {
-			snapshot.Omissions = append(snapshot.Omissions, "branches_truncated")
-		}
-	}
-	if !diagnosticFilterPresent(filter) && counts.operationCount > int64(len(snapshot.Operations)) {
-		snapshot.Omissions = append(snapshot.Omissions, "operations_truncated")
-	}
-	if !diagnosticFilterPresent(filter) && counts.issueCount > int64(len(snapshot.Issues)) {
-		snapshot.Omissions = append(snapshot.Omissions, "issues_truncated")
-	}
-	if !diagnosticFilterPresent(filter) && counts.branchCount > int64(len(snapshot.Branches)) {
-		snapshot.Omissions = append(snapshot.Omissions, "branches_truncated")
-	}
-	return snapshot, nil
-}
-
-func (r *EpisodeDiagnosticsRepository) PageEvents(ctx context.Context, diagnostic episodediagnostics.EpisodeDiagnostic, filter episodediagnostics.DiagnosticFilterV1, after, before *int64, limit int) (episodediagnostics.DiagnosticEventPageV1, error) {
-	if r.queryPool == nil {
-		return episodediagnostics.DiagnosticEventPageV1{}, errDiagnosticsUnavailable
-	}
-	if err := episodediagnostics.ValidateFilter(filter); err != nil {
-		return episodediagnostics.DiagnosticEventPageV1{}, err
-	}
-	if limit <= 0 {
-		limit = episodediagnostics.DefaultPageSize
-	}
-	if limit > episodediagnostics.MaxPageSize {
-		limit = episodediagnostics.MaxPageSize
-	}
-	afterValue, beforeValue := optionalCursor(after), optionalCursor(before)
-	if afterValue == nil && filter.FromCursor != nil {
-		value := *filter.FromCursor - 1
-		afterValue = optionalCursor(&value)
-	}
-	if beforeValue == nil && filter.ToCursor != nil && *filter.ToCursor < episodediagnostics.MaxCursor {
-		value := *filter.ToCursor + 1
-		beforeValue = optionalCursor(&value)
-	}
-	participant, err := parseOptionalID(filter.ParticipantID)
-	if err != nil {
-		return episodediagnostics.DiagnosticEventPageV1{}, err
-	}
-	rows, err := sqlc.New(r.queryPool).PageEvents(ctx, sqlc.PageEventsParams{
-		TenantID:      requiredUUID(diagnostic.TenantID),
-		DiagnosticID:  requiredUUID(diagnostic.ID),
-		AfterCursor:   diagnosticOptionalInt8(afterValue),
-		BeforeCursor:  diagnosticOptionalInt8(beforeValue),
-		ParticipantID: participant,
-		Source:        diagnosticText(string(filter.Source)),
-		OperationKind: diagnosticText(filter.OperationKind),
-		State:         diagnosticText(filter.State),
-		ReleaseID:     diagnosticText(filter.ReleaseID),
-		RequestID:     diagnosticText(filter.RequestID),
-		CommandID:     diagnosticText(filter.CommandID),
-		ProviderID:    diagnosticText(filter.ProviderID),
-		JourneyID:     diagnosticText(filter.JourneyID),
-		TraceID:       diagnosticText(filter.TraceID),
-		SpanID:        diagnosticText(filter.SpanID),
-		FromTime:      optionalTime(filter.FromTime),
-		ToTime:        optionalTime(filter.ToTime),
-		PageLimit:     int32(limit + 1),
-	})
-	if err != nil {
-		return episodediagnostics.DiagnosticEventPageV1{}, fmt.Errorf("page diagnostic events: %w", err)
-	}
-	hasMore := len(rows) > limit
-	if hasMore {
-		rows = rows[:limit]
-	}
-	events := make([]episodediagnostics.AcceptedDiagnosticEvent, 0, len(rows))
-	for _, row := range rows {
-		events = append(events, mapDiagnosticEventForOperator(row))
-	}
-	committed, projected := r.diagnosticCursors(ctx, diagnostic, sqlc.New(r.queryPool))
-	page := episodediagnostics.DiagnosticEventPageV1{SchemaVersion: "DiagnosticEventPage/v1", Reference: diagnosticReference(diagnostic), Events: events, CommittedCursor: committed, ProjectedCursor: projected, AfterCursor: after, BeforeCursor: before, HasMore: hasMore, FilterFingerprint: episodediagnostics.FilterFingerprint(filter)}
-	if hasMore && len(events) > 0 {
-		cursor := events[len(events)-1].Cursor
-		page.NextCursor = &cursor
-	}
-	return page, nil
-}
-
-func (r *EpisodeDiagnosticsRepository) PageOperations(ctx context.Context, diagnostic episodediagnostics.EpisodeDiagnostic, filter episodediagnostics.DiagnosticFilterV1, after *int64, limit int) (episodediagnostics.DiagnosticOperationPageV1, error) {
-	if r.queryPool == nil {
-		return episodediagnostics.DiagnosticOperationPageV1{}, errDiagnosticsUnavailable
-	}
-	if err := episodediagnostics.ValidateFilter(filter); err != nil {
-		return episodediagnostics.DiagnosticOperationPageV1{}, err
-	}
-	if limit <= 0 {
-		limit = episodediagnostics.DefaultPageSize
-	}
-	if limit > episodediagnostics.MaxPageSize {
-		limit = episodediagnostics.MaxPageSize
-	}
-	rows, err := sqlc.New(r.queryPool).ListDiagnosticOperations(ctx, listDiagnosticOperationsParams(diagnostic, filter, after, int32(limit+1)))
-	if err != nil {
-		return episodediagnostics.DiagnosticOperationPageV1{}, fmt.Errorf("page diagnostic operations: %w", err)
-	}
-	hasMore := len(rows) > limit
-	if hasMore {
-		rows = rows[:limit]
-	}
-	operations := make([]episodediagnostics.DiagnosticOperationDetail, 0, len(rows))
-	queries := sqlc.New(r.queryPool)
-	for _, row := range rows {
-		detail := mapDiagnosticOperation(row, diagnostic)
-		checkpoints, checkpointErr := queries.ListDiagnosticCheckpoints(ctx, sqlc.ListDiagnosticCheckpointsParams{TenantID: row.TenantID, DiagnosticID: row.DiagnosticID, OperationID: row.ID})
-		if checkpointErr != nil {
-			return episodediagnostics.DiagnosticOperationPageV1{}, fmt.Errorf("list diagnostic checkpoints: %w", checkpointErr)
-		}
-		for _, checkpoint := range checkpoints {
-			detail.Checkpoints = append(detail.Checkpoints, mapDiagnosticCheckpoint(checkpoint))
-		}
-		operations = append(operations, detail)
-	}
-	committed, projected := r.diagnosticCursors(ctx, diagnostic, queries)
-	page := episodediagnostics.DiagnosticOperationPageV1{SchemaVersion: "DiagnosticOperationPage/v1", Reference: diagnosticReference(diagnostic), Operations: operations, CommittedCursor: committed, ProjectedCursor: projected, HasMore: hasMore, FilterFingerprint: episodediagnostics.FilterFingerprint(filter)}
-	if hasMore {
-		cursor := rows[len(rows)-1].FirstEvidenceCursor
-		if cursor <= 0 && rows[len(rows)-1].LastEvidenceCursor.Valid {
-			cursor = rows[len(rows)-1].LastEvidenceCursor.Int64
-		}
-		page.NextCursor = &cursor
-	}
-	return page, nil
-}
-
-func (r *EpisodeDiagnosticsRepository) ListProjectionChanges(ctx context.Context, diagnostic episodediagnostics.EpisodeDiagnostic, after int64, limit int) ([]episodediagnostics.ProjectionChange, error) {
-	if r.queryPool == nil {
-		return nil, errDiagnosticsUnavailable
-	}
-	if limit <= 0 {
-		limit = episodediagnostics.DefaultPageSize
-	}
-	if limit > episodediagnostics.MaxPageSize {
-		limit = episodediagnostics.MaxPageSize
-	}
-	tenantID, err := utilities.ParseID(diagnostic.TenantID)
-	if err != nil {
-		return nil, episodediagnostics.ErrNotFound
-	}
-	diagnosticID, err := utilities.ParseID(diagnostic.ID)
-	if err != nil {
-		return nil, episodediagnostics.ErrNotFound
-	}
-	rows, err := sqlc.New(r.queryPool).ListProjectionChangesAfterCursor(ctx, sqlc.ListProjectionChangesAfterCursorParams{TenantID: uuid(tenantID), DiagnosticID: uuid(diagnosticID), AfterCursor: after, PageLimit: int32(limit)})
-	if err != nil {
-		return nil, fmt.Errorf("list diagnostic projection changes: %w", err)
-	}
-	changes := make([]episodediagnostics.ProjectionChange, 0, len(rows))
-	for _, row := range rows {
-		changes = append(changes, episodediagnostics.ProjectionChange{Cursor: row.Cursor, Ordinal: int(row.Ordinal), Kind: episodediagnostics.StreamDeltaKind(row.Kind), Payload: append(json.RawMessage(nil), row.Payload...)})
-	}
-	return changes, nil
-}
-
-type snapshotCounts struct {
-	committedCursor  int64
-	projectedCursor  int64
-	runEndCursor     pgtype.Int8
-	eventCount       int64
-	operationCount   int64
-	issueCount       int64
-	openIssueCount   int64
-	participantCount int64
-	branchCount      int64
-}
-
-func (r *EpisodeDiagnosticsRepository) loadProjectionState(ctx context.Context, queries *sqlc.Queries, diagnostic episodediagnostics.EpisodeDiagnostic, filter episodediagnostics.DiagnosticFilterV1, operationLimit, issueLimit, branchLimit int, targetedOperationIDs ...[]string) (episodediagnostics.ProjectionState, snapshotCounts, error) {
-	tenantID, err := utilities.ParseID(diagnostic.TenantID)
-	if err != nil {
-		return episodediagnostics.ProjectionState{}, snapshotCounts{}, episodediagnostics.ErrNotFound
-	}
-	diagnosticID, err := utilities.ParseID(diagnostic.ID)
-	if err != nil {
-		return episodediagnostics.ProjectionState{}, snapshotCounts{}, episodediagnostics.ErrNotFound
-	}
-	row, err := queries.GetDiagnosticSnapshot(ctx, sqlc.GetDiagnosticSnapshotParams{TenantID: uuid(tenantID), DiagnosticID: uuid(diagnosticID)})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return episodediagnostics.ProjectionState{}, snapshotCounts{}, episodediagnostics.ErrNotFound
-	}
-	if err != nil {
-		return episodediagnostics.ProjectionState{}, snapshotCounts{}, fmt.Errorf("get diagnostic snapshot: %w", err)
-	}
-	root := mapEpisodeDiagnosticSnapshot(row)
-	state := episodediagnostics.NewProjectionState(root)
-	state.Events = make(map[string]episodediagnostics.AcceptedDiagnosticEvent)
-	counts := snapshotCounts{committedCursor: row.CommittedCursor, projectedCursor: row.ProjectedCursor, runEndCursor: row.RunEndCursor, eventCount: row.EventCount, operationCount: row.OperationCount, issueCount: row.IssueCount, openIssueCount: row.OpenIssueCount, participantCount: row.ParticipantCount, branchCount: row.BranchCount}
-	participantFilter, participantErr := parseOptionalID(filter.ParticipantID)
-	if participantErr != nil {
-		return state, counts, participantErr
-	}
-	participants, participantErr := loadDiagnosticParticipantProjections(ctx, queries, uuid(tenantID), uuid(diagnosticID), participantFilter, int32(minInt(branchLimit, 100)))
-	if participantErr != nil {
-		return state, counts, fmt.Errorf("list diagnostic participants: %w", participantErr)
-	}
-	for _, participant := range participants {
-		state.Participants[participant.ParticipantID] = participant
-	}
-	var operations []sqlc.DiagnosticOperation
-	var targetIDs []string
-	if len(targetedOperationIDs) > 0 {
-		targetIDs = targetedOperationIDs[0]
-	}
-	if len(targetIDs) > 0 {
-		operationUUIDs := diagnosticUUIDs(targetIDs)
-		if len(operationUUIDs) > 0 {
-			operations, err = queries.ListDiagnosticOperationsByIDs(ctx, sqlc.ListDiagnosticOperationsByIDsParams{TenantID: uuid(tenantID), DiagnosticID: uuid(diagnosticID), OperationIds: operationUUIDs})
-		}
-		if err != nil {
-			return state, counts, fmt.Errorf("list targeted diagnostic operations: %w", err)
-		}
-		// Parent operation state is required to resolve producer references while
-		// reducing a child event; pull the bounded dependency closure as well.
-		for depth := 0; depth < 4; depth++ {
-			known := make(map[[16]byte]struct{}, len(operations))
-			parents := make([]pgtype.UUID, 0)
-			for _, operation := range operations {
-				known[operation.ID.Bytes] = struct{}{}
-			}
-			for _, operation := range operations {
-				if operation.ParentID.Valid {
-					if _, exists := known[operation.ParentID.Bytes]; !exists {
-						parents = append(parents, operation.ParentID)
-					}
-				}
-			}
-			if len(parents) == 0 {
-				break
-			}
-			parentRows, parentErr := queries.ListDiagnosticOperationsByIDs(ctx, sqlc.ListDiagnosticOperationsByIDsParams{TenantID: uuid(tenantID), DiagnosticID: uuid(diagnosticID), OperationIds: parents})
-			if parentErr != nil {
-				return state, counts, fmt.Errorf("list targeted parent operations: %w", parentErr)
-			}
-			operations = append(operations, parentRows...)
-		}
-	} else if operationLimit <= 0 {
-		var after *int64
-		for {
-			page, pageErr := queries.ListDiagnosticOperations(ctx, listDiagnosticOperationsParams(root, filter, after, 1000))
-			if pageErr != nil {
-				return state, counts, fmt.Errorf("list diagnostic operations: %w", pageErr)
-			}
-			operations = append(operations, page...)
-			if len(page) < 1000 {
-				break
-			}
-			last := page[len(page)-1].FirstEvidenceCursor
-			if after != nil && last <= *after {
-				break
-			}
-			after = &last
-		}
-	} else {
-		operations, err = queries.ListDiagnosticOperations(ctx, listDiagnosticOperationsParams(root, filter, nil, int32(operationLimit)))
-		if err != nil {
-			return state, counts, fmt.Errorf("list diagnostic operations: %w", err)
-		}
-	}
-	for _, row := range operations {
-		detail := mapDiagnosticOperation(row, root)
-		checkpoints, checkpointErr := queries.ListDiagnosticCheckpoints(ctx, sqlc.ListDiagnosticCheckpointsParams{TenantID: row.TenantID, DiagnosticID: row.DiagnosticID, OperationID: row.ID})
-		if checkpointErr != nil {
-			return state, counts, fmt.Errorf("list diagnostic checkpoints: %w", checkpointErr)
-		}
-		for _, checkpoint := range checkpoints {
-			detail.Checkpoints = append(detail.Checkpoints, mapDiagnosticCheckpoint(checkpoint))
-		}
-		state.Operations[detail.ID] = detail
-		if value := nullableText(row.ProducerOperationRef); value != nil {
-			state.OperationRefs[*value] = detail.ID
-		}
-		if value := nullableText(row.ParentProducerOperationRef); value != nil {
-			state.ParentRefs[detail.ID] = *value
-		}
-	}
-	if len(targetIDs) > 0 {
-		targetIDs = targetIDs[:0]
-		for _, operation := range operations {
-			targetIDs = append(targetIDs, idString(operation.ID))
-		}
-	}
-	issueState := pgtype.Text{}
-	if filter.IssueState != "" {
-		issueState = diagnosticText(string(filter.IssueState))
-	}
-	var issues []sqlc.DiagnosticIssue
-	if len(targetIDs) > 0 {
-		operationUUIDs := diagnosticUUIDs(targetIDs)
-		if len(operationUUIDs) > 0 {
-			issues, err = queries.ListDiagnosticIssuesByOperationIDs(ctx, sqlc.ListDiagnosticIssuesByOperationIDsParams{TenantID: uuid(tenantID), DiagnosticID: uuid(diagnosticID), OperationIds: operationUUIDs})
-		}
-		if err != nil {
-			return state, counts, fmt.Errorf("list targeted diagnostic issues: %w", err)
-		}
-	} else if issueLimit <= 0 {
-		var afterAt *time.Time
-		var afterID pgtype.UUID
-		for {
-			page, pageErr := queries.ListDiagnosticIssuesAfter(ctx, sqlc.ListDiagnosticIssuesAfterParams{TenantID: uuid(tenantID), DiagnosticID: uuid(diagnosticID), State: issueState, AfterObservedAt: optionalTimePtr(afterAt), AfterIssueID: afterID, PageLimit: 1000})
-			if pageErr != nil {
-				return state, counts, fmt.Errorf("list diagnostic issues: %w", pageErr)
-			}
-			issues = append(issues, page...)
-			if len(page) < 1000 {
-				break
-			}
-			last := page[len(page)-1]
-			lastAt := timestamp(last.FirstObservedAt).UTC()
-			if afterAt != nil && !lastAt.After(*afterAt) && last.ID.Bytes == afterID.Bytes {
-				break
-			}
-			afterAt, afterID = &lastAt, last.ID
-		}
-	} else {
-		issues, err = queries.ListDiagnosticIssues(ctx, sqlc.ListDiagnosticIssuesParams{TenantID: uuid(tenantID), DiagnosticID: uuid(diagnosticID), State: issueState, PageLimit: int32(issueLimit)})
-		if err != nil {
-			return state, counts, fmt.Errorf("list diagnostic issues: %w", err)
-		}
-	}
-	for _, row := range issues {
-		issue := mapDiagnosticIssue(row, root)
-		state.Issues[issue.ID] = issue
-	}
-	branches, err := queries.ListDiagnosticBranches(ctx, sqlc.ListDiagnosticBranchesParams{TenantID: uuid(tenantID), DiagnosticID: uuid(diagnosticID), PageLimit: int32(branchLimit)})
-	if err != nil {
-		return state, counts, fmt.Errorf("list diagnostic branches: %w", err)
-	}
-	for _, row := range branches {
-		branch := mapDiagnosticBranch(row, root)
-		state.Branches[branch.ID] = branch
-	}
-	if diagnosticFilterPresent(filter) {
-		// Issues and branches are projections of filtered operations. Keep the
-		// entity sets congruent with the event/operation predicate.
-		for id, issue := range state.Issues {
-			if issue.OperationID != "" {
-				if _, ok := state.Operations[issue.OperationID]; !ok {
-					delete(state.Issues, id)
-				}
-			}
-		}
-		branchIDs := make(map[string]struct{})
-		for _, operation := range state.Operations {
-			if operation.BranchID != "" {
-				branchIDs[operation.BranchID] = struct{}{}
-			}
-		}
-		for id := range state.Branches {
-			if _, ok := branchIDs[id]; !ok {
-				delete(state.Branches, id)
-			}
-		}
-		// The materialized participant table is bounded; use indexed event
-		// existence checks to honor every event filter without ledger scans.
-		for id := range state.Participants {
-			participantFilter := filter
-			participantFilter.ParticipantID = id
-			participantID, parseErr := parseOptionalID(id)
-			if parseErr != nil {
-				delete(state.Participants, id)
-				continue
-			}
-			participantAfter, participantBefore := diagnosticFilterCursors(participantFilter)
-			eventRows, pageErr := queries.PageEvents(ctx, sqlc.PageEventsParams{TenantID: uuid(tenantID), DiagnosticID: uuid(diagnosticID), AfterCursor: diagnosticOptionalInt8(participantAfter), BeforeCursor: diagnosticOptionalInt8(participantBefore), ParticipantID: participantID, Source: diagnosticText(string(participantFilter.Source)), OperationKind: diagnosticText(participantFilter.OperationKind), State: diagnosticText(participantFilter.State), ReleaseID: diagnosticText(participantFilter.ReleaseID), RequestID: diagnosticText(participantFilter.RequestID), CommandID: diagnosticText(participantFilter.CommandID), ProviderID: diagnosticText(participantFilter.ProviderID), JourneyID: diagnosticText(participantFilter.JourneyID), TraceID: diagnosticText(participantFilter.TraceID), SpanID: diagnosticText(participantFilter.SpanID), FromTime: optionalTime(participantFilter.FromTime), ToTime: optionalTime(participantFilter.ToTime), PageLimit: 1})
-			if pageErr != nil || len(eventRows) == 0 {
-				delete(state.Participants, id)
-			}
-		}
-	}
-	return state, counts, nil
-}
-
-func diagnosticFilterPresent(filter episodediagnostics.DiagnosticFilterV1) bool {
-	return filter.ParticipantID != "" || filter.Source != "" || filter.OperationKind != "" || filter.State != "" || filter.IssueState != "" || filter.ReleaseID != "" || filter.JourneyID != "" || filter.TraceID != "" || filter.SpanID != "" || filter.RequestID != "" || filter.CommandID != "" || filter.ProviderID != "" || filter.FromCursor != nil || filter.ToCursor != nil || !filter.FromTime.IsZero() || !filter.ToTime.IsZero()
-}
-
-func diagnosticFilterCursors(filter episodediagnostics.DiagnosticFilterV1) (*int64, *int64) {
-	var after, before *int64
-	if filter.FromCursor != nil {
-		value := *filter.FromCursor - 1
-		after = &value
-	}
-	if filter.ToCursor != nil && *filter.ToCursor < episodediagnostics.MaxCursor {
-		value := *filter.ToCursor + 1
-		before = &value
-	}
-	return after, before
-}
-
-func diagnosticUUIDs(values []string) []pgtype.UUID {
-	result := make([]pgtype.UUID, 0, len(values))
-	seen := make(map[string]struct{}, len(values))
-	for _, value := range values {
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		parsed, err := utilities.ParseID(value)
-		if err != nil {
-			continue
-		}
-		seen[value] = struct{}{}
-		result = append(result, uuid(parsed))
-	}
-	return result
-}
-
-func listDiagnosticOperationsParams(diagnostic episodediagnostics.EpisodeDiagnostic, filter episodediagnostics.DiagnosticFilterV1, afterEvidenceCursor *int64, pageLimit int32) sqlc.ListDiagnosticOperationsParams {
-	params := sqlc.ListDiagnosticOperationsParams{TenantID: requiredUUID(diagnostic.TenantID), DiagnosticID: requiredUUID(diagnostic.ID), OperationKind: diagnosticText(filter.OperationKind), State: diagnosticText(filter.State), Source: diagnosticText(string(filter.Source)), ReleaseID: diagnosticText(filter.ReleaseID), RequestID: diagnosticText(filter.RequestID), CommandID: diagnosticText(filter.CommandID), ProviderID: diagnosticText(filter.ProviderID), JourneyID: diagnosticText(filter.JourneyID), TraceID: diagnosticText(filter.TraceID), SpanID: diagnosticText(filter.SpanID), FromTime: optionalTime(filter.FromTime), ToTime: optionalTime(filter.ToTime), PageLimit: pageLimit}
-	if afterEvidenceCursor != nil {
-		params.AfterEvidenceCursor = diagnosticOptionalInt8(afterEvidenceCursor)
-	}
-	return params
-}
-
 func mapEpisodeDiagnostic(row sqlc.EpisodeDiagnostic) episodediagnostics.EpisodeDiagnostic {
 	return episodediagnostics.EpisodeDiagnostic{SchemaVersion: "EpisodeDiagnostic/v1", ID: idString(row.ID), TenantID: idString(row.TenantID), SpaceID: idString(row.SpaceID), EpisodeID: idString(row.EpisodeID), Environment: episodediagnostics.Environment(row.Environment), State: episodediagnostics.DiagnosticState(row.State), EpisodeStartedAt: timestamp(row.EpisodeStartedAt).UTC(), EpisodeEndedAt: nullableTimestampUTC(row.EpisodeEndedAt), EpilogueCompletedAt: nullableTimestampUTC(row.EpilogueCompletedAt), ExpiresAt: nullableTimestampUTC(row.ExpiresAt), RunEndCursor: diagnosticNullableInt64Ptr(row.RunEndCursor), CommittedCursor: row.CommittedCursor, ConfigSummary: diagnosticConfigSummary(row.ConfigSnapshot)}
-}
-
-func mapEpisodeDiagnosticSnapshot(row sqlc.GetDiagnosticSnapshotRow) episodediagnostics.EpisodeDiagnostic {
-	return episodediagnostics.EpisodeDiagnostic{SchemaVersion: "EpisodeDiagnostic/v1", ID: idString(row.ID), TenantID: idString(row.TenantID), SpaceID: idString(row.SpaceID), EpisodeID: idString(row.EpisodeID), Environment: episodediagnostics.Environment(row.Environment), State: episodediagnostics.DiagnosticState(row.State), EpisodeStartedAt: timestamp(row.EpisodeStartedAt).UTC(), EpisodeEndedAt: nullableTimestampUTC(row.EpisodeEndedAt), EpilogueCompletedAt: nullableTimestampUTC(row.EpilogueCompletedAt), ExpiresAt: nullableTimestampUTC(row.ExpiresAt), RunEndCursor: diagnosticNullableInt64Ptr(row.RunEndCursor), CommittedCursor: row.CommittedCursor, ProjectedCursor: row.ProjectedCursor, ConfigSummary: diagnosticConfigSummary(row.ConfigSnapshot)}
 }
 
 func diagnosticConfigSummary(raw []byte) *episodediagnostics.EpisodeConfigSummaryV1 {
@@ -1159,162 +480,8 @@ func diagnosticConfigSummary(raw []byte) *episodediagnostics.EpisodeConfigSummar
 	return &summary
 }
 
-func mapDiagnosticEvent(row sqlc.DiagnosticEvent, exposeProvider bool) episodediagnostics.AcceptedDiagnosticEvent {
-	draft := episodediagnostics.DiagnosticEventDraft{Version: int(row.EventVersion), EventID: row.EventID, OperationID: idStringOrEmpty(row.OperationID), ParticipantID: idStringOrEmpty(row.ParticipantID), ProducerOperationRef: nullableString(row.ProducerOperationRef), ParentProducerOperationRef: nullableString(row.ParentProducerOperationRef), ProducerSequence: row.ProducerSequence, OccurredAt: timestamp(row.OccurredAt).UTC(), Source: episodediagnostics.EventSource(row.Source), Name: row.Name, Phase: row.Phase, State: episodediagnostics.EventState(row.State), Attributes: decodeAttributes(row.SafeAttributes)}
-	if row.ExpectationName.Valid {
-		draft.Expectation = &episodediagnostics.DiagnosticEventExpectation{Name: row.ExpectationName.String, Version: int(row.ExpectationVersion.Int32), Checkpoint: row.CheckpointKey.String, CheckpointClass: episodediagnostics.CheckpointClass(row.CheckpointClass.String), DeadlineAt: nullableTimestampUTC(row.DeadlineAt)}
-	}
-	if correlationPresent(row, exposeProvider) {
-		draft.Correlation = &episodediagnostics.DiagnosticEventCorrelation{JourneyID: nullableString(row.JourneyID), TraceID: nullableString(row.TraceID), SpanID: nullableString(row.SpanID), RequestID: nullableString(row.RequestID), CommandID: nullableString(row.CommandID), ProviderID: providerValue(row.ProviderID, exposeProvider), RetryGroupRef: nullableString(row.RetryGroupRef), Attempt: int64(row.Attempt.Int32)}
-	}
-	if row.ReleaseID.Valid {
-		draft.Release = &episodediagnostics.DiagnosticRelease{ID: row.ReleaseID.String, SourceCommit: nullableString(row.SourceCommit)}
-	}
-	return episodediagnostics.AcceptedDiagnosticEvent{DiagnosticEventDraft: draft, DiagnosticID: idString(row.DiagnosticID), Cursor: row.Cursor, ReceivedAt: timestamp(row.ReceivedAt).UTC(), Fingerprint: row.EventFingerprint}
-}
-
-// mapDiagnosticEventForProjection retains the stored provider HMAC only while
-// reducing an internal projection. It must never be used for an operator
-// response or an exported artifact.
-func mapDiagnosticEventForProjection(row sqlc.DiagnosticEvent) episodediagnostics.AcceptedDiagnosticEvent {
-	return mapDiagnosticEvent(row, true)
-}
-
-// mapDiagnosticEventForOperator is the public boundary mapper. Provider IDs
-// are HMAC-only storage values, so the operator contract receives an explicit
-// omission while indexed filtering continues to use the stored HMAC.
-func mapDiagnosticEventForOperator(row sqlc.DiagnosticEvent) episodediagnostics.AcceptedDiagnosticEvent {
-	return mapDiagnosticEvent(row, false)
-}
-
-func mapDiagnosticOperation(row sqlc.DiagnosticOperation, diagnostic episodediagnostics.EpisodeDiagnostic) episodediagnostics.DiagnosticOperationDetail {
-	detail := episodediagnostics.DiagnosticOperationDetail{SchemaVersion: "OperationDetail/v1", ID: idString(row.ID), ParentID: idStringOrEmpty(row.ParentID), BranchID: idStringOrEmpty(row.BranchID), Kind: row.Kind, ExpectationVersion: int(row.ExpectationVersion), State: episodediagnostics.OperationState(row.State), Attempt: int(row.Attempt), StartedAt: timestamp(row.StartedAt).UTC(), FirstEvidenceCursor: row.FirstEvidenceCursor, DeadlineAt: nullableTimestampUTC(row.DeadlineAt), GraceEndsAt: nullableTimestampUTC(row.GraceEndsAt), EndedAt: nullableTimestampUTC(row.EndedAt), ErrorClass: nullableString(row.ErrorClass), Source: episodediagnostics.EventSource(row.Source), ReleaseID: nullableString(row.ReleaseID), SourceCommit: nullableString(row.SourceCommit), ClockUncertainty: nullableString(row.ClockUncertainty), VisibilityGaps: decodeStringSlice(row.VisibilityGaps)}
-	detail.ProviderLookupID = nullableString(row.ProviderID)
-	if value := nullableText(row.ProducerOperationRef); value != nil {
-		detail.Reference = valueString(value)
-	}
-	detail.DiagnosticReference = diagnosticReference(diagnostic)
-	detail.RetryGroup = episodediagnostics.SafeIdentifierFor("chalk.retry", nullableString(row.RetryGroupRef))
-	detail.RequestID = episodediagnostics.SafeIdentifierFor("chalk.request", nullableString(row.RequestID))
-	detail.CommandID = episodediagnostics.SafeIdentifierFor("chalk.command", nullableString(row.CommandID))
-	detail.ProviderID = episodediagnostics.SafeIdentifierFor("provider", nullableString(row.ProviderID))
-	detail.JourneyID = episodediagnostics.SafeIdentifierFor("chalk.journey", nullableString(row.JourneyID))
-	detail.TraceID = episodediagnostics.SafeIdentifierFor("w3c.trace", nullableString(row.TraceID))
-	detail.SpanID = episodediagnostics.SafeIdentifierFor("w3c.span", nullableString(row.SpanID))
-	detail.DurationMilliseconds = operationDuration(detail.StartedAt, detail.EndedAt)
-	if detail.ID != "" {
-		if reference, err := episodediagnostics.FormatReference(episodediagnostics.DiagnosticReference{Version: episodediagnostics.ContractVersion, Environment: diagnostic.Environment, DiagnosticID: diagnostic.ID, Focus: &episodediagnostics.DiagnosticReferenceFocus{Kind: episodediagnostics.ReferenceFocusOperation, ID: detail.ID}}); err == nil {
-			detail.Reference = reference
-		}
-	}
-	return detail
-}
-
-func mapDiagnosticCheckpoint(row sqlc.DiagnosticCheckpoint) episodediagnostics.DiagnosticCheckpointDetail {
-	return episodediagnostics.DiagnosticCheckpointDetail{Key: row.CheckpointKey, Class: episodediagnostics.CheckpointClass(row.Class), DisplayOrder: int(row.DisplayOrder), State: episodediagnostics.CheckpointState(row.State), DeadlineAt: nullableTimestampUTC(row.DeadlineAt), EvidenceCursor: nullableInt64(row.EvidenceCursor), UnknownReason: episodediagnostics.UnknownReason(nullableString(row.UnknownReason)), Predicate: nullableString(row.Predicate)}
-}
-
-func mapDiagnosticIssue(row sqlc.DiagnosticIssue, diagnostic episodediagnostics.EpisodeDiagnostic) episodediagnostics.DiagnosticIssueDetail {
-	detail := episodediagnostics.DiagnosticIssueDetail{SchemaVersion: "IssueDetail/v1", ID: idString(row.ID), OperationID: idStringOrEmpty(row.OperationID), Kind: row.Kind, Severity: episodediagnostics.IssueSeverity(row.Severity), State: episodediagnostics.IssueState(row.State), Summary: row.Summary, FirstObservedAt: timestamp(row.FirstObservedAt).UTC(), LastObservedAt: nullableTimestampUTC(row.LastObservedAt), ResolvedAt: nullableTimestampUTC(row.ResolvedAt), LastConfirmedCheckpoint: nullableString(row.LastConfirmedCheckpoint), MissingCheckpoint: nullableString(row.MissingCheckpoint), RetryState: nullableString(row.RetryState), UnknownReason: episodediagnostics.UnknownReason(nullableString(row.UnknownReason)), DiagnosticReference: diagnosticReference(diagnostic)}
-	if row.AffectedKind.Valid {
-		detail.Affected = &episodediagnostics.DiagnosticAffectedSubject{Kind: row.AffectedKind.String, Identifier: projectedSafeIdentifier(nullableString(row.AffectedIDClass), nullableString(row.AffectedIDValue))}
-	}
-	if detail.ID != "" {
-		if reference, err := episodediagnostics.FormatReference(episodediagnostics.DiagnosticReference{Version: episodediagnostics.ContractVersion, Environment: diagnostic.Environment, DiagnosticID: diagnostic.ID, Focus: &episodediagnostics.DiagnosticReferenceFocus{Kind: episodediagnostics.ReferenceFocusIssue, ID: detail.ID}}); err == nil {
-			detail.Reference = reference
-		}
-	}
-	return detail
-}
-
 func mapDiagnosticBranch(row sqlc.DiagnosticBranch, _ episodediagnostics.EpisodeDiagnostic) episodediagnostics.DiagnosticBranchDetail {
 	return episodediagnostics.DiagnosticBranchDetail{SchemaVersion: "BranchDetail/v1", ID: idString(row.ID), Kind: episodediagnostics.BranchKind(row.Kind), State: episodediagnostics.BranchState(row.State), LeaseEndsAt: timestamp(row.LeaseEndsAt).UTC(), StartedAt: nullableTimestampUTC(row.StartedAt), TerminalAt: nullableTimestampUTC(row.TerminalAt), TerminalCursor: nullableInt64(row.TerminalCursor), Attempts: int(row.Attempts), FanInChildren: decodeStringSlice(row.FanInChildren), UnknownReason: episodediagnostics.UnknownReason(nullableString(row.UnknownReason))}
-}
-
-func mapDiagnosticParticipant(row sqlc.ListDiagnosticParticipantsRow, ordinal int) episodediagnostics.ParticipantProjectionV1 {
-	participantID := idString(row.ParticipantID)
-	state := "unknown"
-	switch row.LatestLifecycleName {
-	case "participant.join", "participant.rejoin":
-		state = "joined"
-	case "participant.reconnect":
-		switch episodediagnostics.EventState(row.LatestLifecycleState) {
-		case episodediagnostics.EventStarted:
-			state = "reconnecting"
-		case episodediagnostics.EventObserved, episodediagnostics.EventSucceeded, episodediagnostics.EventLateObserved:
-			state = "joined"
-		}
-	case "participant.leave":
-		state = "left"
-	}
-	label := fmt.Sprintf("Participant %d", ordinal)
-	return episodediagnostics.ParticipantProjectionV1{
-		SchemaVersion:  "ParticipantProjection/v1",
-		ParticipantID:  participantID,
-		AnonymousLabel: label,
-		IdentityKind:   "unknown",
-		State:          state,
-		JoinedAt:       nullableTimestampUTC(row.JoinedAt),
-		LeftAt:         nullableTimestampUTC(row.LeftAt),
-		Visibility:     "not_observable",
-		VisibilityGaps: []string{"identity_redacted"},
-		OperationCount: row.OperationCount,
-		IssueCount:     row.IssueCount,
-		Display: episodediagnostics.ParticipantDisplay{
-			Label:       episodediagnostics.DisplayValue{Value: label},
-			RawIdentity: episodediagnostics.DisplayValue{UnknownReason: episodediagnostics.UnknownRedacted},
-		},
-	}
-}
-
-func mapDiagnosticParticipantProjection(row sqlc.GetDiagnosticParticipantProjectionRow) episodediagnostics.ParticipantProjectionV1 {
-	return mapDiagnosticParticipant(sqlc.ListDiagnosticParticipantsRow{
-		ParticipantID:        row.ParticipantID,
-		JoinedAt:             row.JoinedAt,
-		LeftAt:               row.LeftAt,
-		LatestLifecycleName:  row.LatestLifecycleName,
-		LatestLifecycleState: row.LatestLifecycleState,
-		OperationCount:       row.OperationCount,
-		IssueCount:           row.IssueCount,
-		FirstObservedAt:      row.FirstObservedAt,
-		LastObservedAt:       row.LastObservedAt,
-	}, int(row.Ordinal))
-}
-
-func mapDiagnosticParticipantAfter(row sqlc.ListDiagnosticParticipantsAfterRow, ordinal int) episodediagnostics.ParticipantProjectionV1 {
-	return mapDiagnosticParticipant(sqlc.ListDiagnosticParticipantsRow(row), ordinal)
-}
-
-type diagnosticParticipantQuerier interface {
-	ListDiagnosticParticipants(context.Context, sqlc.ListDiagnosticParticipantsParams) ([]sqlc.ListDiagnosticParticipantsRow, error)
-	GetDiagnosticParticipantProjection(context.Context, sqlc.GetDiagnosticParticipantProjectionParams) (sqlc.GetDiagnosticParticipantProjectionRow, error)
-}
-
-func loadDiagnosticParticipantProjections(ctx context.Context, queries diagnosticParticipantQuerier, tenantID, diagnosticID, participantFilter pgtype.UUID, pageLimit int32) ([]episodediagnostics.ParticipantProjectionV1, error) {
-	if !participantFilter.Valid {
-		rows, err := queries.ListDiagnosticParticipants(ctx, sqlc.ListDiagnosticParticipantsParams{PageLimit: pageLimit, TenantID: tenantID, DiagnosticID: diagnosticID})
-		if err != nil {
-			return nil, err
-		}
-		participants := make([]episodediagnostics.ParticipantProjectionV1, 0, len(rows))
-		for index, row := range rows {
-			participants = append(participants, mapDiagnosticParticipant(row, index+1))
-		}
-		return participants, nil
-	}
-
-	row, err := queries.GetDiagnosticParticipantProjection(ctx, sqlc.GetDiagnosticParticipantProjectionParams{
-		TenantID:      tenantID,
-		DiagnosticID:  diagnosticID,
-		ParticipantID: participantFilter,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return []episodediagnostics.ParticipantProjectionV1{mapDiagnosticParticipantProjection(row)}, nil
 }
 
 func diagnosticLifecycleForEpisode(episode episodes.Episode) (string, pgtype.Timestamptz) {
@@ -1360,38 +527,6 @@ func diagnosticText(value string) pgtype.Text {
 	return pgtype.Text{String: value, Valid: true}
 }
 
-func optionalTime(value time.Time) pgtype.Timestamptz {
-	if value.IsZero() {
-		return pgtype.Timestamptz{}
-	}
-	return timestamptz(&value)
-}
-
-func optionalCursor(value *int64) *int64 { return value }
-
-func diagnosticOptionalInt8(value *int64) pgtype.Int8 {
-	if value == nil {
-		return pgtype.Int8{}
-	}
-	return pgtype.Int8{Int64: *value, Valid: true}
-}
-
-func parseOptionalID(value string) (pgtype.UUID, error) {
-	if value == "" {
-		return pgtype.UUID{}, nil
-	}
-	id, err := utilities.ParseID(value)
-	if err != nil {
-		return pgtype.UUID{}, episodediagnostics.ErrInvalidScope
-	}
-	return uuid(id), nil
-}
-
-func requiredUUID(value string) pgtype.UUID {
-	id, _ := utilities.ParseID(value)
-	return uuid(id)
-}
-
 func uuidOrZero(value *utilities.ID) pgtype.UUID {
 	if value == nil {
 		return pgtype.UUID{}
@@ -1422,21 +557,11 @@ func idString(value pgtype.UUID) string {
 	return utilities.IDFromBytes(value.Bytes).String()
 }
 
-func idStringOrEmpty(value pgtype.UUID) string { return idString(value) }
-
 func nullableString(value pgtype.Text) string {
 	if !value.Valid {
 		return ""
 	}
 	return value.String
-}
-
-func decodeAttributes(value []byte) episodediagnostics.DiagnosticAttributes {
-	result := episodediagnostics.DiagnosticAttributes{}
-	if len(value) == 0 || json.Unmarshal(value, &result) != nil || result == nil {
-		return result
-	}
-	return result
 }
 
 func decodeStringSlice(value []byte) []string {
@@ -1457,36 +582,6 @@ func mustJSON(value any) []byte {
 
 func diagnosticBytes(value []byte) []byte { return append([]byte(nil), value...) }
 
-func providerValue(value pgtype.Text, expose bool) string {
-	if !expose || !value.Valid {
-		return ""
-	}
-	return value.String
-}
-
-func correlationPresent(row sqlc.DiagnosticEvent, exposeProvider bool) bool {
-	return row.JourneyID.Valid || row.TraceID.Valid || row.SpanID.Valid || row.RequestID.Valid || row.CommandID.Valid || (exposeProvider && row.ProviderID.Valid) || row.RetryGroupRef.Valid || row.Attempt.Valid
-}
-
-func projectedSafeIdentifier(idClass, value string) episodediagnostics.SafeIdentifier {
-	identifier, ok := episodediagnostics.SafeIdentifierFor(idClass, value).(episodediagnostics.SafeIdentifier)
-	if ok && episodediagnostics.ValidateSafeIdentifier(identifier) == nil {
-		return identifier
-	}
-	fallback := episodediagnostics.SafeIdentifier{IDClass: idClass, Copyable: false, UnknownReason: episodediagnostics.UnknownInvalid}
-	if episodediagnostics.ValidateSafeIdentifier(fallback) == nil {
-		return fallback
-	}
-	return episodediagnostics.SafeIdentifier{IDClass: "unknown", Copyable: false, UnknownReason: episodediagnostics.UnknownProviderOpaque}
-}
-
-func operationDuration(start time.Time, end *time.Time) int64 {
-	if end == nil || start.IsZero() || end.Before(start) {
-		return 0
-	}
-	return end.Sub(start).Milliseconds()
-}
-
 func nonZeroTimePtr(value time.Time) *time.Time {
 	if value.IsZero() {
 		return nil
@@ -1494,34 +589,4 @@ func nonZeroTimePtr(value time.Time) *time.Time {
 	return &value
 }
 
-func valueString(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
-func minInt(left, right int) int {
-	if left < right {
-		return left
-	}
-	return right
-}
-
-func (r *EpisodeDiagnosticsRepository) diagnosticCursors(ctx context.Context, diagnostic episodediagnostics.EpisodeDiagnostic, queries *sqlc.Queries) (int64, int64) {
-	tenantID, err := utilities.ParseID(diagnostic.TenantID)
-	if err != nil {
-		return diagnostic.CommittedCursor, diagnostic.ProjectedCursor
-	}
-	diagnosticID, err := utilities.ParseID(diagnostic.ID)
-	if err != nil {
-		return diagnostic.CommittedCursor, diagnostic.ProjectedCursor
-	}
-	row, err := queries.GetDiagnosticSnapshot(ctx, sqlc.GetDiagnosticSnapshotParams{TenantID: uuid(tenantID), DiagnosticID: uuid(diagnosticID)})
-	if err != nil {
-		return diagnostic.CommittedCursor, diagnostic.ProjectedCursor
-	}
-	return row.CommittedCursor, row.ProjectedCursor
-}
-
-// Keep deterministic import use when build tags omit projection files.
+func requiredUUID(value string) pgtype.UUID { id, _ := utilities.ParseID(value); return uuid(id) }

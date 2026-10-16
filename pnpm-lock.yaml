@@ -232,15 +232,9 @@ importers:
       '@arethetypeswrong/cli':
         specifier: ^0.18.3
         version: 0.18.3
-      '@q9labsai/cli':
-        specifier: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-cli-0.3.0.tgz
-        version: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-cli-0.3.0.tgz
       '@q9labsai/config-depcruise':
         specifier: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz
         version: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz(dependency-cruiser@18.2.0)
-      '@q9labsai/diagnostics':
-        specifier: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz
-        version: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz
       '@q9labsai/gates':
         specifier: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz
         version: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz
@@ -473,7 +467,7 @@ importers:
         specifier: workspace:^5.0.0
         version: link:../../packages/ui
       '@q9labsai/diagnostics-contracts':
-        specifier: workspace:^0.1.1
+        specifier: workspace:^1.0.0
         version: link:../../packages/diagnostics-contracts
       '@tanstack/react-router':
         specifier: 1.170.41
@@ -709,7 +703,7 @@ importers:
         specifier: 2.3.0
         version: 2.3.0
       '@q9labsai/diagnostics-contracts':
-        specifier: workspace:^0.1.1
+        specifier: workspace:^1.0.0
         version: link:../../../packages/diagnostics-contracts
       effect:
         specifier: 4.0.0-beta.102
@@ -840,19 +834,6 @@ importers:
       '@typespec/http':
         specifier: 1.17.0
         version: 1.17.0(@typespec/compiler@1.17.0(@types/node@24.12.0))
-
-  tools/episode-diagnostics:
-    dependencies:
-      '@q9labsai/diagnostics':
-        specifier: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz
-        version: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz
-      '@q9labsai/diagnostics-contracts':
-        specifier: workspace:^0.1.1
-        version: link:../../packages/diagnostics-contracts
-    devDependencies:
-      playwright:
-        specifier: ^1.62.1
-        version: 1.62.1
 
   tools/language-ratchet: {}
 
@@ -3068,23 +3049,12 @@ packages:
     resolution: {integrity: sha512-HDVTWq3H0uTXiU0eeSQntcVUTPP3GamzeXI41+x7uU9J65JgWQh3qWZHblR1i0npXfFtF+mxBiU2nJH8znxWnQ==}
     engines: {node: '>=18'}
 
-  '@q9labsai/cli@https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-cli-0.3.0.tgz':
-    resolution: {integrity: sha512-GWQNqxvw9y0Q3EjzNNSJdieqAJ5gjKllbaOYwRDPnxUtWYrxGM5Y5S+HuHtWrRQhwpu6XRJYcUcUdcdUUuKAJQ==, tarball: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-cli-0.3.0.tgz}
-    version: 0.3.0
-    engines: {node: '>=24'}
-    hasBin: true
-
   '@q9labsai/config-depcruise@https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz':
     resolution: {integrity: sha512-ka7JIpkHwXqD+aCdohV+hNSflKBE3bmeHLsWr/eR0CuTC35kwmZ6/5xQGgLShkP+RlPRp5nLFfhooXaIdUqwNQ==, tarball: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz}
     version: 0.3.0
     engines: {node: '>=24'}
     peerDependencies:
       dependency-cruiser: ^18.2.0
-
-  '@q9labsai/diagnostics@https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz':
-    resolution: {integrity: sha512-IreEAehhVgjqAKBvKcbe62VPRNsSMfUWoTTuDEenbLW1V4qE7LPSNH15D4Pm6cWF2oZf7KXZUtCzxkG4P5t/Rg==, tarball: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz}
-    version: 0.3.0
-    engines: {node: '>=24'}
 
   '@q9labsai/gates@https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz':
     resolution: {integrity: sha512-rPDbhzhuBHIEr2XT/lq+1CxtUBwXKcbNsoH2DtnW2Y4h0v0FEkGXIA67AIxsfomPDrHk6MiojAl5v7b8oQEb4g==, tarball: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz}
@@ -11758,21 +11728,9 @@ snapshots:
 
   '@publint/pack@0.1.4': {}
 
-  '@q9labsai/cli@https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-cli-0.3.0.tgz':
-    dependencies:
-      '@q9labsai/diagnostics': https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz
-      cac: 7.0.0
-      js-yaml: 4.3.2
-      semver: 7.8.5
-      zod: 4.6.5
-
   '@q9labsai/config-depcruise@https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz(dependency-cruiser@18.2.0)':
     dependencies:
       dependency-cruiser: 18.2.0
-
-  '@q9labsai/diagnostics@https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz':
-    dependencies:
-      zod: 4.6.5
 
   '@q9labsai/gates@https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz':
     dependencies:
