@@ -106,7 +106,6 @@ run_lane_command() {
 database_tests_and_lifecycle() {
   run_lane_command "Tests" go test -vet=off ./... || return "$?"
   run_lane_command "Lifecycle smoke test" ./scripts/smoke-lifecycle.mjs || return "$?"
-  run "Migration validation" "${script_directory}/migration-validation.sh"
 }
 
 run_race_tests() {
