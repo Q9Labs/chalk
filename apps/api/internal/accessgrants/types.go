@@ -26,8 +26,8 @@ var (
 )
 
 const (
-	Audience              = "chalk-media"
-	ProviderCloudflareRTK = "cloudflare_rtk"
+	Audience = "chalk-media"
+
 	ProviderCloudflareSFU = "cloudflare_sfu"
 	Lifetime              = 5 * time.Minute
 	ClockSkew             = 30 * time.Second
@@ -94,10 +94,7 @@ func sameProviderBinding(subject Subject, route RouteSubject) bool {
 		return subject.ProviderSubject == "" && route.ProviderSubject == "" &&
 			subject.CloudflareConnectionID != "" &&
 			subject.CloudflareConnectionID == route.CloudflareConnectionID
-	case ProviderCloudflareRTK:
-		return subject.CloudflareConnectionID == "" && route.CloudflareConnectionID == "" &&
-			subject.ProviderSubject != "" &&
-			subject.ProviderSubject == route.ProviderSubject
+
 	default:
 		return false
 	}

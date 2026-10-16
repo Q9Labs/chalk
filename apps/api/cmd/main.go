@@ -20,7 +20,6 @@ import (
 	lambdawaker "github.com/q9labs/chalk/apps/api/internal/adapters/aws/lambdawaker"
 	recordingkms "github.com/q9labs/chalk/apps/api/internal/adapters/aws/recordingkms"
 	r2adapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/r2"
-	rtkadapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/rtk"
 	sfuadapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu"
 	googleadapter "github.com/q9labs/chalk/apps/api/internal/adapters/google"
 	mediaplaneprovideradapter "github.com/q9labs/chalk/apps/api/internal/adapters/mediaplaneproviders"
@@ -339,14 +338,6 @@ func run() error {
 	auditLogRepository := postgres.NewAuditLogRepository(operationQueries)
 	auditLogService := auditlogs.NewService(auditLogRepository)
 
-	var episodeCredentials httpapi.EpisodeCredentialVerifier
-	if cfg.CloudflareRealtime.RTKTokenOrgID != "" {
-		verifier, err := rtkadapter.NewCredentialVerifier(cfg.CloudflareRealtime)
-		if err != nil {
-			return fmt.Errorf("configure realtimekit Episode-scoped media credential verifier: %w", err)
-		}
-		episodeCredentials = verifier
-	}
 	mediaPlaneRegistry := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{
 		ProcessConfig:   cfg.CloudflareRealtime,
 		DefaultProvider: cfg.DefaultMediaPlane,
@@ -600,7 +591,6 @@ func run() error {
 		APIKeyAuthentication: apiKeyService,
 		APIKeyAudits:         auditLogService,
 
-		EpisodeCredentials:     episodeCredentials,
 		MediaPlane:             mediaPlaneRegistry,
 		MediaPublications:      mediaPublicationService,
 		ParticipantMediaIssuer: participantMediaIssuer,

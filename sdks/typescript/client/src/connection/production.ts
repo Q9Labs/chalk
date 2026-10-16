@@ -1,4 +1,4 @@
-import { CloudflareRTKClient, CloudflareSFUClient, createCloudflareSFUHTTPTransport } from "../media";
+import { CloudflareSFUClient, createCloudflareSFUHTTPTransport } from "../media";
 import { createChalkChatFileHttpTransport } from "../chat-files";
 import { createV1SyncClient } from "../sync";
 import { createChalkWhiteboardV1Client, createChalkWhiteboardV1FileHttpTransport } from "../whiteboard";
@@ -48,16 +48,6 @@ function createChatFileTransport(apiBaseURL: string, input: ConnectionChatFileFa
   });
 }
 function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInput): ConnectionMediaClient {
-  if (input.access.media.provider === "cloudflare_rtk") {
-    return createRTKConnectionMediaClient(
-      new CloudflareRTKClient({
-        authToken: input.access.media.clientPayload.token,
-        participantId: input.access.subject.participantId,
-        onError: input.onFailure,
-        onScreenEnded: input.onScreenEnded,
-      }),
-    );
-  }
   const { subject } = input.access;
   const replaceMediaConnection = input.replaceMediaConnection;
   const client = new CloudflareSFUClient({
@@ -82,12 +72,6 @@ function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInpu
     onScreenEnded: input.onScreenEnded,
   });
   return createSFUConnectionMediaClient(client);
-}
-function createRTKConnectionMediaClient(client: CloudflareRTKClient): ConnectionMediaClient {
-  return bindConnectionMediaClient(client, (input) => {
-    if (!("provider" in input) || input.provider !== "cloudflare_rtk") throw new TypeError("The RealtimeKit adapter requires a Cloudflare RealtimeKit access grant");
-    return client.restart(input);
-  });
 }
 function createSFUConnectionMediaClient(client: CloudflareSFUClient): ConnectionMediaClient {
   return bindConnectionMediaClient(client, (input) => {

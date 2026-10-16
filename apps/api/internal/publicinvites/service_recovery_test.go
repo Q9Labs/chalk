@@ -9,8 +9,8 @@ import (
 func TestDiscardSupersededPublicAccessRemovesPreviousProviderBinding(t *testing.T) {
 	access := &discardRecordingAccess{}
 	runtime := Runtime{access: access}
-	arrival := Arrival{Provider: PublicProviderCloudflareRTK, ProviderSubject: "previous-provider-participant"}
-	grant := PublicAccessGrant{Provider: PublicProviderCloudflareRTK, ProviderSubject: "replacement-provider-participant"}
+	arrival := Arrival{Provider: PublicProviderCloudflareSFU, ProviderSubject: "previous-provider-participant"}
+	grant := PublicAccessGrant{Provider: PublicProviderCloudflareSFU, ProviderSubject: "replacement-provider-participant"}
 
 	runtime.discardSupersededPublicAccess(context.Background(), arrival, grant)
 

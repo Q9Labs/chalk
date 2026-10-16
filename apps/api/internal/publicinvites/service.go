@@ -1300,10 +1300,7 @@ func validateClientPayload(grant PublicAccessGrant) error {
 		if !validClientPayloadField(payload.ConnectionID) || !validClientPayloadField(payload.StunServer) || payload.ProviderSubject != "" || payload.Token != "" {
 			return ErrInvalidArrival
 		}
-	case PublicProviderCloudflareRTK:
-		if !validClientPayloadField(payload.ProviderSubject) || payload.ProviderSubject != grant.ProviderSubject || !validClientPayloadField(payload.Token) || payload.ConnectionID != "" || payload.StunServer != "" {
-			return ErrInvalidArrival
-		}
+
 	default:
 		return ErrInvalidArrival
 	}

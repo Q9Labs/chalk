@@ -72,15 +72,12 @@ const (
 
 	RedisURL = "CHALK_REDIS_URL"
 
-	CloudflareAccountID                = "CHALK_CLOUDFLARE_ACCOUNT_ID"
-	CloudflareAPIToken                 = "CHALK_CLOUDFLARE_API_TOKEN"
-	CloudflareRealtimeAppID            = "CHALK_CLOUDFLARE_REALTIME_APP_ID"
-	CloudflareRealtimeAppSecret        = "CHALK_CLOUDFLARE_REALTIME_APP_SECRET"
-	CloudflareRealtimeBaseURL          = "CHALK_CLOUDFLARE_REALTIME_BASE_URL"
-	CloudflareRTKAppID                 = "CHALK_CLOUDFLARE_RTK_APP_ID"
-	CloudflareRTKTokenOrgID            = "CHALK_CLOUDFLARE_RTK_TOKEN_ORG_ID"
-	CloudflareRTKPresetFacilitator     = "CHALK_CLOUDFLARE_RTK_PRESET_FACILITATOR"
-	CloudflareRTKPresetContributor     = "CHALK_CLOUDFLARE_RTK_PRESET_CONTRIBUTOR"
+	CloudflareAccountID         = "CHALK_CLOUDFLARE_ACCOUNT_ID"
+	CloudflareAPIToken          = "CHALK_CLOUDFLARE_API_TOKEN"
+	CloudflareRealtimeAppID     = "CHALK_CLOUDFLARE_REALTIME_APP_ID"
+	CloudflareRealtimeAppSecret = "CHALK_CLOUDFLARE_REALTIME_APP_SECRET"
+	CloudflareRealtimeBaseURL   = "CHALK_CLOUDFLARE_REALTIME_BASE_URL"
+
 	CloudflareRealtimeRequestTimeoutMS = "CHALK_CLOUDFLARE_REALTIME_TIMEOUT_MS"
 	DefaultMediaPlane                  = "CHALK_DEFAULT_MEDIA_PLANE"
 
@@ -131,20 +128,19 @@ const (
 	DefaultLogLevel                           = "info"
 	DefaultOAuthStateTTLMS                    = int64(10 * 60 * 1000)
 	DefaultCloudflareRealtimeRequestTimeoutMS = int64(6000)
-	DefaultCloudflareRTKPresetContributor     = "contributor"
-	DefaultCloudflareRTKPresetFacilitator     = "facilitator"
-	DefaultRequestLogs                        = "off"
-	DefaultRequestSampleRate                  = 0.01
-	DefaultR2RequestTimeoutMS                 = int64(10000)
-	DefaultRecordingKMSRequestTimeoutMS       = int64(10000)
-	DefaultTranscriptionControlAudience       = "chalk-control-api"
-	DefaultRedisURL                           = "redis://127.0.0.1:6379/0"
-	DefaultResendTimeoutMS                    = int64(10000)
-	DefaultSessionTTLMS                       = int64(30 * 24 * 60 * 60 * 1000)
-	DefaultRecentAuthSecret                   = "chalk-local-recent-auth-key-32!!"
-	DefaultServiceName                        = "chalk-api"
-	DefaultSlowRequestMS                      = int64(250)
-	DefaultVersion                            = "dev"
+
+	DefaultRequestLogs                  = "off"
+	DefaultRequestSampleRate            = 0.01
+	DefaultR2RequestTimeoutMS           = int64(10000)
+	DefaultRecordingKMSRequestTimeoutMS = int64(10000)
+	DefaultTranscriptionControlAudience = "chalk-control-api"
+	DefaultRedisURL                     = "redis://127.0.0.1:6379/0"
+	DefaultResendTimeoutMS              = int64(10000)
+	DefaultSessionTTLMS                 = int64(30 * 24 * 60 * 60 * 1000)
+	DefaultRecentAuthSecret             = "chalk-local-recent-auth-key-32!!"
+	DefaultServiceName                  = "chalk-api"
+	DefaultSlowRequestMS                = int64(250)
+	DefaultVersion                      = "dev"
 
 	DefaultOAuthStateTTL             = time.Duration(DefaultOAuthStateTTLMS) * time.Millisecond
 	DefaultCloudflareRealtimeTimeout = time.Duration(DefaultCloudflareRealtimeRequestTimeoutMS) * time.Millisecond
@@ -179,16 +175,13 @@ type RedisConfig struct {
 }
 
 type CloudflareRealtimeConfig struct {
-	AccountID            string
-	APIToken             string
-	RealtimeAppID        string
-	RealtimeAppSecret    string
-	RealtimeBaseURL      string
-	RTKAppID             string
-	RTKTokenOrgID        string
-	RTKPresetFacilitator string
-	RTKPresetContributor string
-	RequestTimeout       time.Duration
+	AccountID         string
+	APIToken          string
+	RealtimeAppID     string
+	RealtimeAppSecret string
+	RealtimeBaseURL   string
+
+	RequestTimeout time.Duration
 }
 
 type ProviderBridgeConfig struct {
@@ -476,16 +469,13 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	cloudflareRealtime := CloudflareRealtimeConfig{
-		AccountID:            envOrDefault(CloudflareAccountID, ""),
-		APIToken:             envOrDefault(CloudflareAPIToken, ""),
-		RealtimeAppID:        envOrDefault(CloudflareRealtimeAppID, ""),
-		RealtimeAppSecret:    envOrDefault(CloudflareRealtimeAppSecret, ""),
-		RealtimeBaseURL:      realtimeBaseURL,
-		RTKAppID:             envOrDefault(CloudflareRTKAppID, ""),
-		RTKTokenOrgID:        envOrDefault(CloudflareRTKTokenOrgID, ""),
-		RTKPresetFacilitator: envOrDefault(CloudflareRTKPresetFacilitator, DefaultCloudflareRTKPresetFacilitator),
-		RTKPresetContributor: envOrDefault(CloudflareRTKPresetContributor, DefaultCloudflareRTKPresetContributor),
-		RequestTimeout:       cloudflareRealtimeRequestTimeout,
+		AccountID:         envOrDefault(CloudflareAccountID, ""),
+		APIToken:          envOrDefault(CloudflareAPIToken, ""),
+		RealtimeAppID:     envOrDefault(CloudflareRealtimeAppID, ""),
+		RealtimeAppSecret: envOrDefault(CloudflareRealtimeAppSecret, ""),
+		RealtimeBaseURL:   realtimeBaseURL,
+
+		RequestTimeout: cloudflareRealtimeRequestTimeout,
 	}
 	if err := validateMediaPlaneProcessConfig(defaultMediaPlane, cloudflareRealtime); err != nil {
 		return Config{}, err

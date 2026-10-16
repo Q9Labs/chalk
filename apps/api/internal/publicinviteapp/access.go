@@ -345,7 +345,7 @@ func (a accessPort) resolveMedia(ctx context.Context, tenantID, spaceID, episode
 	if persistedProvider != "" && string(service.Provider()) != persistedProvider {
 		return nil, mediaplane.Episode{}, ErrAccessUnavailable
 	}
-	if service.Provider() != mediaplane.ProviderCloudflareRTK && service.Provider() != mediaplane.ProviderCloudflareSFU {
+	if service.Provider() != mediaplane.ProviderCloudflareSFU {
 		return nil, mediaplane.Episode{}, ErrAccessUnavailable
 	}
 	episode, err := service.EnsureEpisode(ctx, mediaplane.EnsureEpisodeInput{
@@ -370,12 +370,7 @@ func publicJoinPayload(provider mediaplane.Provider, join mediaplane.Join) (stri
 			return "", publicinvites.PublicAccessClientPayload{}, ErrAccessUnavailable
 		}
 		return connectionID, publicinvites.PublicAccessClientPayload{ConnectionID: connectionID, StunServer: stunServer}, nil
-	case mediaplane.ProviderCloudflareRTK:
-		token, ok := join.ClientPayload["token"].(string)
-		if !ok || strings.TrimSpace(join.ParticipantRef) == "" || strings.TrimSpace(token) == "" {
-			return "", publicinvites.PublicAccessClientPayload{}, ErrAccessUnavailable
-		}
-		return join.ParticipantRef, publicinvites.PublicAccessClientPayload{ProviderSubject: join.ParticipantRef, Token: token}, nil
+
 	default:
 		return "", publicinvites.PublicAccessClientPayload{}, ErrAccessUnavailable
 	}
@@ -388,9 +383,7 @@ func sameMediaSubject(subject accessgrants.Subject, arrival publicinvites.Arriva
 	if arrival.Provider == publicinvites.PublicProviderCloudflareSFU {
 		return subject.CloudflareConnectionID == arrival.ProviderSubject && subject.ProviderSubject == ""
 	}
-	if arrival.Provider == publicinvites.PublicProviderCloudflareRTK {
-		return subject.ProviderSubject == arrival.ProviderSubject && subject.CloudflareConnectionID == ""
-	}
+
 	return false
 }
 

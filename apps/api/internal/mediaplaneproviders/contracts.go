@@ -11,7 +11,6 @@ import (
 )
 
 const (
-	SpaceProviderCloudflareRTK = string(spaces.MediaPlaneProviderCloudflareRTK)
 	SpaceProviderCloudflareSFU = string(spaces.MediaPlaneProviderCloudflareSFU)
 	ModeChalkManaged           = "chalk_managed"
 	ModeTenantManaged          = "tenant_managed"

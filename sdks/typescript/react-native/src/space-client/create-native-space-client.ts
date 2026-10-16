@@ -1,6 +1,5 @@
 import {
   AsyncStorageV1PendingTargetStore,
-  CloudflareRTKClient,
   CloudflareSFUClient,
   createChalkChatFileHttpTransport,
   createChalkWhiteboardV1Client,
@@ -17,7 +16,6 @@ import { createSpaceClientForPlatform, type SpaceClientPlatform } from "@q9labsa
 import type { SpaceClient } from "@q9labsai/chalk-client";
 import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc";
 import { AppState } from "react-native";
-import { createNativeRealtimeKitClient } from "./cloudflare-rtk-native";
 type PlatformDependencies = NonNullable<SpaceClientPlatform["dependencies"]>;
 type NativeMediaClient = ReturnType<NonNullable<PlatformDependencies["createMediaClient"]>>;
 type MediaFactoryInput = Parameters<NonNullable<PlatformDependencies["createMediaClient"]>>[0];
@@ -80,16 +78,6 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
 }
 function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: typeof globalThis.fetch): NativeMediaClient {
   const { subject } = input.access;
-  if (input.access.media.provider === "cloudflare_rtk") {
-    const client = new CloudflareRTKClient({
-      authToken: input.access.media.clientPayload.token,
-      participantId: subject.participantId,
-      clientFactory: createNativeRealtimeKitClient,
-      onError: input.onFailure,
-      onScreenEnded: input.onScreenEnded,
-    });
-    return createRTKConnectionMediaClient(client);
-  }
   const replaceMediaConnection = input.replaceMediaConnection;
   const client = new CloudflareSFUClient({
     bootstrap: input.access.media.clientPayload,
@@ -118,23 +106,6 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
     onScreenEnded: input.onScreenEnded,
   });
   return createSFUConnectionMediaClient(client);
-}
-function createRTKConnectionMediaClient(client: CloudflareRTKClient): NativeMediaClient {
-  return {
-    setLocalPublicationTarget: client.setLocalPublicationTarget.bind(client),
-    observeLocalPublications: client.observeLocalPublications.bind(client),
-    observeRemotePublications: client.observeRemotePublications.bind(client),
-    start: client.start.bind(client),
-    stop: client.stop.bind(client),
-    restart: (input) => {
-      if (!("provider" in input) || input.provider !== "cloudflare_rtk") throw new TypeError("The RealtimeKit adapter requires a Cloudflare RealtimeKit access grant");
-      return client.restart(input);
-    },
-    prepareLocalTrack: client.prepareLocalTrack.bind(client),
-    clearPreparedLocalTrack: client.clearPreparedLocalTrack.bind(client),
-    getSnapshot: client.getSnapshot.bind(client),
-    subscribe: client.subscribe.bind(client),
-  };
 }
 function createSFUConnectionMediaClient(client: CloudflareSFUClient): NativeMediaClient {
   return {

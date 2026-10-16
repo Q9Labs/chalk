@@ -3,7 +3,6 @@ import type { SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
 const mocks = vi.hoisted(() => ({ platform: vi.fn(), whiteboard: vi.fn() }));
 vi.mock("react-native", () => ({ AppState: { currentState: "active", addEventListener: vi.fn(() => ({ remove: vi.fn() })) } }));
 vi.mock("@cloudflare/react-native-webrtc", () => ({ RTCPeerConnection: vi.fn(), mediaDevices: {} }));
-vi.mock("./cloudflare-rtk-native", () => ({ createNativeRealtimeKitClient: vi.fn() }));
 vi.mock("@q9labsai/chalk-client/effect", () => ({ createSpaceClientForPlatform: mocks.platform }));
 vi.mock("@q9labsai/chalk-client", async (original) => ({ ...(await original<typeof import("@q9labsai/chalk-client")>()), createChalkWhiteboardV1Client: mocks.whiteboard }));
 import { createNativeSpaceClient } from "./create-native-space-client";

@@ -30,7 +30,6 @@ var (
 type Provider string
 
 const (
-	ProviderCloudflareRTK Provider = "cloudflare_rtk"
 	ProviderCloudflareSFU Provider = "cloudflare_sfu"
 )
 
@@ -325,7 +324,7 @@ func requireEpisodeUsageInput(input *EpisodeUsageInput) error {
 
 func validProvider(provider Provider) bool {
 	switch provider {
-	case ProviderCloudflareRTK, ProviderCloudflareSFU:
+	case ProviderCloudflareSFU:
 		return true
 	default:
 		return false

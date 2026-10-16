@@ -45,7 +45,7 @@ a Create Space request omits `media_plane`. The supported deployment default is
 `cf_sfu`, because the Dashboard access-grant path is SFU-only. Managed
 production requires this setting; generic local and test processes may omit it,
 but then Create Space requests must supply a provider. Explicit Space and
-Tenant-managed provider configuration can still select `cf_rtk`.
+Tenant-managed provider configuration uses `cf_sfu`.
 
 An absent Tenant provider configuration may use deployment credentials only
 when the Space provider matches this default. A concrete Tenant configuration

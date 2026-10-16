@@ -24,8 +24,7 @@ func (r Registry) ResolveBinding(tenant tenants.Tenant, space spaces.Space) (*me
 	switch resolved.provider {
 	case mediaplane.ProviderCloudflareSFU:
 		applicationID = resolved.config.RealtimeAppID
-	case mediaplane.ProviderCloudflareRTK:
-		applicationID = resolved.config.RTKAppID
+
 	default:
 		return nil, providercontracts.ErrUnknownProvider
 	}

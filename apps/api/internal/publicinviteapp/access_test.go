@@ -66,7 +66,7 @@ func TestRefreshReplacementRejectsMissingOrStaleProof(t *testing.T) {
 		t.Fatalf("missing normal refresh proof error = %v, want %v", err, publicinvites.ErrMediaProofRejected)
 	}
 
-	fixture.recovery.subject.ProviderSubject = "stale-provider"
+	fixture.recovery.subject.CloudflareConnectionID = "stale-provider"
 	_, err = access.RefreshPublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: fixture.arrival, MediaProof: "stale-proof", ReplaceMediaConnection: true})
 	if !errors.Is(err, publicinvites.ErrMediaProofRejected) {
 		t.Fatalf("stale proof error = %v, want %v", err, publicinvites.ErrMediaProofRejected)
@@ -108,17 +108,17 @@ func newAccessFixture(t *testing.T) *accessFixture {
 	space := mustID(t, "22222222-2222-4222-8222-222222222222")
 	episode := mustID(t, "33333333-3333-4333-8333-333333333333")
 	participant := mustID(t, "44444444-4444-4444-8444-444444444444")
-	proofSubject := accessgrants.Subject{TenantID: tenant, SpaceID: space, EpisodeID: episode, ParticipantID: participant, ParticipantGeneration: 7, Provider: accessgrants.ProviderCloudflareRTK, ProviderSubject: "old-provider"}
+	proofSubject := accessgrants.Subject{TenantID: tenant, SpaceID: space, EpisodeID: episode, ParticipantID: participant, ParticipantGeneration: 7, Provider: accessgrants.ProviderCloudflareSFU, CloudflareConnectionID: "old-provider"}
 	result := episodes.PublicJoinResult{Episode: episodes.Episode{ID: episode, TenantID: tenant, SpaceID: space}, Participant: episodes.Participant{ID: participant, TenantID: tenant, SpaceID: space, EpisodeID: episode, Generation: 7}}
 	return &accessFixture{
 		tenant: tenant, space: space, episode: episode, participant: participant,
-		arrival: publicinvites.Arrival{TenantID: tenant, SpaceID: space, EpisodeID: episode, ParticipantID: participant, ParticipantGeneration: 7, Provider: publicinvites.PublicProviderCloudflareRTK, ProviderSubject: "old-provider", IdentityMode: publicinvites.IdentityGuest, DisplayName: "Trace Guest", State: publicinvites.ArrivalAdmitted},
+		arrival: publicinvites.Arrival{TenantID: tenant, SpaceID: space, EpisodeID: episode, ParticipantID: participant, ParticipantGeneration: 7, Provider: publicinvites.PublicProviderCloudflareSFU, ProviderSubject: "old-provider", IdentityMode: publicinvites.IdentityGuest, DisplayName: "Trace Guest", State: publicinvites.ArrivalAdmitted},
 		result:  result, plane: &mediaPlaneStub{}, recovery: &proofVerifierStub{subject: proofSubject},
 	}
 }
 
 func (f *accessFixture) config() publicinviteapp.AccessConfig {
-	service := mediaplane.NewServiceForProvider(mediaplane.ProviderCloudflareRTK, f.plane)
+	service := mediaplane.NewServiceForProvider(mediaplane.ProviderCloudflareSFU, f.plane)
 	return publicinviteapp.AccessConfig{
 		Episodes: publicJoinStub{result: f.result}, Spaces: publicSpaceStub{tenantID: f.tenant, spaceID: f.space}, Tenants: publicTenantStub{id: f.tenant},
 		MediaResolver: mediaResolverStub{service: &service},
@@ -192,12 +192,12 @@ func (p *mediaPlaneStub) EnsureEpisode(_ context.Context, input mediaplane.Ensur
 }
 func (p *mediaPlaneStub) CreateJoin(context.Context, mediaplane.CreateJoinInput) (mediaplane.Join, error) {
 	p.createCalls++
-	return mediaplane.Join{Provider: mediaplane.ProviderCloudflareRTK, ParticipantRef: "new-provider", ClientPayload: map[string]any{"token": "provider-token"}}, nil
+	return mediaplane.Join{Provider: mediaplane.ProviderCloudflareSFU, ParticipantRef: "new-provider", ClientPayload: map[string]any{"connectionId": "new-provider", "stunServer": "stun:test"}}, nil
 }
 
 func (p *mediaPlaneStub) ResumeJoin(_ context.Context, input mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
 	p.resumeCalls++
-	return mediaplane.Join{Provider: input.Provider, ParticipantRef: input.ConnectionRef, ClientPayload: map[string]any{"token": "provider-token"}}, nil
+	return mediaplane.Join{Provider: input.Provider, ParticipantRef: input.ConnectionRef, ClientPayload: map[string]any{"connectionId": input.ConnectionRef, "stunServer": "stun:test"}}, nil
 }
 
 func (p *mediaPlaneStub) RemoveParticipant(_ context.Context, input mediaplane.RemoveParticipantInput) error {

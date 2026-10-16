@@ -1954,8 +1954,6 @@ PODS:
     - React-utils (= 0.83.2)
     - ReactNativeDependencies
   - ReactNativeDependencies (0.83.2)
-  - RealtimeKitCore (1.1.0):
-    - React-Core
   - RNCAsyncStorage (2.2.0):
     - hermes-engine
     - RCTRequired
@@ -2119,7 +2117,6 @@ DEPENDENCIES:
   - ReactCodegen (from `build/generated/ios/ReactCodegen`)
   - "ReactCommon/turbomodule/core (from `../../../node_modules/.pnpm/react-native@0.83.2_@babel+core@7.29.7_@types+react@19.2.14_react@19.2.7/node_modules/react-native/ReactCommon`)"
   - "ReactNativeDependencies (from `../../../node_modules/.pnpm/react-native@0.83.2_@babel+core@7.29.7_@types+react@19.2.14_react@19.2.7/node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec`)"
-  - "RealtimeKitCore (from `../../../node_modules/.pnpm/@cloudflare+realtimekit-react-native@1.1.0_@cloudflare+react-native-webrtc@125.0.3_expo_780d1279b07591dc5f2c2db67a47b554/node_modules/@cloudflare/realtimekit-react-native`)"
   - "RNCAsyncStorage (from `../../../node_modules/.pnpm/@react-native-async-storage+async-storage@2.2.0_react-native@0.83.2_@babel+core@7.29.7__889cd9bafd62e3b9ddcde1c69beb47f3/node_modules/@react-native-async-storage/async-storage`)"
   - "RNSVG (from `../../../node_modules/.pnpm/react-native-svg@15.15.4_react-native@0.83.2_@babel+core@7.29.7_@types+react@19.2.14_react@19.2.7__react@19.2.7/node_modules/react-native-svg`)"
   - "Yoga (from `../../../node_modules/.pnpm/react-native@0.83.2_@babel+core@7.29.7_@types+react@19.2.14_react@19.2.7/node_modules/react-native/ReactCommon/yoga`)"
@@ -2312,8 +2309,6 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/.pnpm/react-native@0.83.2_@babel+core@7.29.7_@types+react@19.2.14_react@19.2.7/node_modules/react-native/ReactCommon"
   ReactNativeDependencies:
     :podspec: "../../../node_modules/.pnpm/react-native@0.83.2_@babel+core@7.29.7_@types+react@19.2.14_react@19.2.7/node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec"
-  RealtimeKitCore:
-    :path: "../../../node_modules/.pnpm/@cloudflare+realtimekit-react-native@1.1.0_@cloudflare+react-native-webrtc@125.0.3_expo_780d1279b07591dc5f2c2db67a47b554/node_modules/@cloudflare/realtimekit-react-native"
   RNCAsyncStorage:
     :path: "../../../node_modules/.pnpm/@react-native-async-storage+async-storage@2.2.0_react-native@0.83.2_@babel+core@7.29.7__889cd9bafd62e3b9ddcde1c69beb47f3/node_modules/@react-native-async-storage/async-storage"
   RNSVG:
@@ -2413,7 +2408,6 @@ SPEC CHECKSUMS:
   ReactCodegen: e190b0f500113930053f6bf9475c296b69ec125f
   ReactCommon: 8868269b67561136a7970be188b40738135af077
   ReactNativeDependencies: 09173ec9e3d4fb1bcf5eb3d65fd7a83cb690bab8
-  RealtimeKitCore: 2530085db36dd62592288feb1f9efa6b1f3aa9ca
   RNCAsyncStorage: 3a4f5e2777dae1688b781a487923a08569e27fe4
   RNSVG: 7bf7808626c62cdf93911573b9358f1601d58003
   RTKWebRTC: 943dc8c747e5f22c263148c2a0cb493001510690

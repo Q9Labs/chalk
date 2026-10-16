@@ -213,9 +213,7 @@ func resumeAccessGrantJoin(ctx context.Context, spacesService SpaceService, tena
 		return mediaplane.Join{}, err
 	}
 	connectionRef := subject.CloudflareConnectionID
-	if service.Provider() == mediaplane.ProviderCloudflareRTK {
-		connectionRef = subject.ProviderSubject
-	}
+
 	if strings.TrimSpace(connectionRef) == "" {
 		return mediaplane.Join{}, mediaplane.ErrInvalidConnectionRef
 	}
@@ -229,7 +227,7 @@ func accessGrantMediaEpisode(ctx context.Context, spacesService SpaceService, te
 	if err != nil {
 		return nil, mediaplane.Episode{}, err
 	}
-	if service == nil || (service.Provider() != mediaplane.ProviderCloudflareSFU && service.Provider() != mediaplane.ProviderCloudflareRTK) {
+	if service == nil || (service.Provider() != mediaplane.ProviderCloudflareSFU) {
 		return nil, mediaplane.Episode{}, mediaplane.ErrPlaneUnavailable
 	}
 	episode, err := service.EnsureEpisode(ctx, mediaplane.EnsureEpisodeInput{Provider: service.Provider(), EpisodeKey: episodeID.String(), Metadata: map[string]string{"tenant_id": tenantID.String(), "space_id": spaceID.String()}})
@@ -249,13 +247,7 @@ func accessGrantSubjectForJoin(request issueAccessGrantRequest, join mediaplane.
 		}
 		subject.Provider = accessgrants.ProviderCloudflareSFU
 		subject.CloudflareConnectionID = strings.TrimSpace(connectionID)
-	case mediaplane.ProviderCloudflareRTK:
-		participantRef := strings.TrimSpace(join.ParticipantRef)
-		if participantRef == "" {
-			return accessgrants.Subject{}, mediaplane.ErrProviderFailed
-		}
-		subject.Provider = accessgrants.ProviderCloudflareRTK
-		subject.ProviderSubject = participantRef
+
 	default:
 		return accessgrants.Subject{}, mediaplane.ErrInvalidProvider
 	}
