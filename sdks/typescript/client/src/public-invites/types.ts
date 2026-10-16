@@ -6,8 +6,6 @@ import type {
   ArrivalUnavailableError,
   CreatePublicSpaceError,
   DenySpacePublicAdmissionRequestError,
-  GetPublicStatusError,
-  GetPublicStatusResponse,
   GetSpacePublicInviteArrivalError,
   LeaveSpacePublicInviteArrivalError,
   PublicSpaceArrival as GeneratedPublicSpaceArrival,
@@ -59,7 +57,6 @@ export type PublicSpaceArrival = Omit<GeneratedPublicSpaceArrival, "access"> & {
 export type PublicSpaceCreated = Omit<GeneratedPublicSpaceCreated, "arrival"> & {
   readonly arrival: PublicSpaceArrival;
 };
-export type PublicStatus = GetPublicStatusResponse;
 export type CreatePublicSpace = (input: CreatePublicSpaceInput, options?: ChalkPublicIdempotencyOptions) => Promise<PublicSpaceCreated>;
 export type ArriveBySpacePublicInvite = (input: ArriveBySpacePublicInviteInput, options?: PublicArrivalOptions) => Promise<PublicSpaceArrival>;
 export type GetSpacePublicInviteArrival = (reference: PublicArrivalReference | string) => Promise<PublicSpaceArrival>;
@@ -71,7 +68,6 @@ export type ChalkPublicClient = {
   readonly arriveBySpacePublicInvite: ArriveBySpacePublicInvite;
   readonly create: CreatePublicSpace;
   readonly createPublicSpace: CreatePublicSpace;
-  readonly getPublicStatus: () => Promise<PublicStatus>;
   readonly getSpacePublicInviteArrival: GetSpacePublicInviteArrival;
   readonly leave: LeaveSpacePublicInviteArrival;
   readonly leaveSpacePublicInviteArrival: LeaveSpacePublicInviteArrival;
@@ -85,7 +81,6 @@ export type ChalkPublicInviteError =
   | ArriveBySpacePublicInviteError
   | DenySpacePublicAdmissionRequestError
   | CreatePublicSpaceError
-  | GetPublicStatusError
   | GetSpacePublicInviteArrivalError
   | LeaveSpacePublicInviteArrivalError
   | RefreshSpacePublicInviteAccessError

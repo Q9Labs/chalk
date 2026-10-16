@@ -10,7 +10,6 @@ export function DocsFooter() {
           <a href="/docs">Docs</a>
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
-          <a href="/status">Status</a>
         </nav>
       </div>
     </footer>

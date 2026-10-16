@@ -815,26 +815,6 @@ export const PublicSpaceCreatedSchema = Schema.Struct({
 });
 export type PublicSpaceCreated = typeof PublicSpaceCreatedSchema.Type;
 
-export const StatusComponentIdSchema = Schema.String.check(Schema.isMinLength(1)).pipe(Schema.brand("StatusComponentId"));
-export type StatusComponentId = typeof StatusComponentIdSchema.Type;
-
-export const PublicStatusSchema = Schema.Struct({
-  components: Schema.Array(
-    Schema.Struct({
-      checked_at: Schema.NullOr(DateTimeStringSchema),
-      description: Schema.String,
-      id: StatusComponentIdSchema,
-      last_changed_at: Schema.NullOr(DateTimeStringSchema),
-      name: Schema.String,
-      state: Schema.String,
-    }),
-  ),
-  generated_at: DateTimeStringSchema,
-  overall: Schema.String,
-  schema_version: Schema.Number,
-});
-export type PublicStatus = typeof PublicStatusSchema.Type;
-
 export const RecentAuthSchema = Schema.Struct({
   expires_at: DateTimeStringSchema,
   proof: Schema.String,
@@ -1049,34 +1029,6 @@ export const SpacePublicInviteArrivalRequestSchema = Schema.Struct({
   space_invite_token: Schema.String.check(Schema.isMinLength(1)),
 });
 export type SpacePublicInviteArrivalRequest = typeof SpacePublicInviteArrivalRequestSchema.Type;
-
-export const StatusMonitorIdentifierSchema = Schema.String.check(Schema.isMinLength(1)).pipe(Schema.brand("StatusMonitorIdentifier"));
-export type StatusMonitorIdentifier = typeof StatusMonitorIdentifierSchema.Type;
-
-export const StatusMonitorResultSchema = Schema.Struct({
-  checked_at: DateTimeStringSchema,
-  details: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-  error_code: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-  error_message: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-  event_at: DateTimeStringSchema,
-  http_status: Schema.optional(Schema.NullOr(Schema.Number)),
-  latency_ms: Schema.Number,
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-  monitor_key: Schema.String.check(Schema.isMinLength(1)),
-  reported_emitter_id: StatusMonitorIdentifierSchema,
-  reported_source: Schema.String.check(Schema.isMinLength(1)),
-  response_excerpt: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-  result_key: Schema.String.check(Schema.isMinLength(1)),
-  run_id: StatusMonitorIdentifierSchema,
-  status: Schema.String.check(Schema.isMinLength(1)),
-});
-export type StatusMonitorResult = typeof StatusMonitorResultSchema.Type;
-
-export const StatusMonitorResultAcceptedSchema = Schema.Struct({
-  accepted: Schema.Boolean,
-  duplicate: Schema.Boolean,
-});
-export type StatusMonitorResultAccepted = typeof StatusMonitorResultAcceptedSchema.Type;
 
 export const SyncTokenSchema = Schema.Struct({
   expires_at: DateTimeStringSchema,
@@ -1973,14 +1925,6 @@ export const GetMe429ResponseHeadersSchema = Schema.Struct({
 });
 export type GetMe429ResponseHeaders = typeof GetMe429ResponseHeadersSchema.Type;
 
-export const GetPublicStatusResponseSchema = PublicStatusSchema;
-export type GetPublicStatusResponse = typeof GetPublicStatusResponseSchema.Type;
-
-export const GetPublicStatus200ResponseHeadersSchema = Schema.Struct({
-  "Cache-Control": Schema.String,
-});
-export type GetPublicStatus200ResponseHeaders = typeof GetPublicStatus200ResponseHeadersSchema.Type;
-
 export const GetRecordingPathParamsSchema = Schema.Struct({
   recording_id: RecordingIdSchema,
   tenant_id: TenantIdSchema,
@@ -2120,19 +2064,6 @@ export const GetWhiteboardFileDownload429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type GetWhiteboardFileDownload429ResponseHeaders = typeof GetWhiteboardFileDownload429ResponseHeadersSchema.Type;
-
-export const IngestMonitorResultRequestBodySchema = StatusMonitorResultSchema;
-export type IngestMonitorResultRequestBody = typeof IngestMonitorResultRequestBodySchema.Type;
-
-export const IngestMonitorResultResponseSchema = StatusMonitorResultAcceptedSchema;
-export type IngestMonitorResultResponse = typeof IngestMonitorResultResponseSchema.Type;
-
-export const IngestMonitorResult429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type IngestMonitorResult429ResponseHeaders = typeof IngestMonitorResult429ResponseHeadersSchema.Type;
 
 export const InitiateChatAttachmentUploadRequestBodySchema = InitiateChatAttachmentUploadRequestSchema;
 export type InitiateChatAttachmentUploadRequestBody = typeof InitiateChatAttachmentUploadRequestBodySchema.Type;
@@ -4598,44 +4529,6 @@ export const SpaceSlugConflictErrorSchema = SpaceSlugConflictErrorWireSchema.pip
   }),
 );
 
-export class StatusInvalidResultError extends Schema.TaggedErrorClass<StatusInvalidResultError>()("StatusInvalidResultError", {
-  error: Schema.Struct({
-    code: Schema.Literal("status.invalid_result"),
-    message: Schema.String,
-  }),
-}) {}
-export const StatusInvalidResultErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("status.invalid_result"),
-    message: Schema.String,
-  }),
-});
-export const StatusInvalidResultErrorSchema = StatusInvalidResultErrorWireSchema.pipe(
-  Schema.decodeTo(StatusInvalidResultError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "StatusInvalidResultError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class StatusUnavailableError extends Schema.TaggedErrorClass<StatusUnavailableError>()("StatusUnavailableError", {
-  error: Schema.Struct({
-    code: Schema.Literal("status.unavailable"),
-    message: Schema.String,
-  }),
-}) {}
-export const StatusUnavailableErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("status.unavailable"),
-    message: Schema.String,
-  }),
-});
-export const StatusUnavailableErrorSchema = StatusUnavailableErrorWireSchema.pipe(
-  Schema.decodeTo(StatusUnavailableError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "StatusUnavailableError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
 export class StorageInvalidKeyError extends Schema.TaggedErrorClass<StorageInvalidKeyError>()("StorageInvalidKeyError", {
   error: Schema.Struct({
     code: Schema.Literal("storage.invalid_key"),
@@ -5961,9 +5854,6 @@ export type GetEpisodeError = typeof GetEpisodeErrorSchema.Type;
 export const GetMeErrorSchema = Schema.Union([AccessUnauthenticatedErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
 export type GetMeError = typeof GetMeErrorSchema.Type;
 
-export const GetPublicStatusErrorSchema = Schema.Union([ServiceInternalErrorSchema, StatusUnavailableErrorSchema]);
-export type GetPublicStatusError = typeof GetPublicStatusErrorSchema.Type;
-
 export const GetRecordingErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RecordingInvalidIdErrorSchema, RecordingNotFoundErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
 export type GetRecordingError = typeof GetRecordingErrorSchema.Type;
 
@@ -6084,9 +5974,6 @@ export const GetWhiteboardFileDownloadErrorSchema = Schema.Union([
   WhiteboardUploadNotReadyErrorSchema,
 ]);
 export type GetWhiteboardFileDownloadError = typeof GetWhiteboardFileDownloadErrorSchema.Type;
-
-export const IngestMonitorResultErrorSchema = Schema.Union([AccessUnauthenticatedErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, StatusInvalidResultErrorSchema, StatusUnavailableErrorSchema]);
-export type IngestMonitorResultError = typeof IngestMonitorResultErrorSchema.Type;
 
 export const InitiateChatAttachmentUploadErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -6920,7 +6807,6 @@ export const ChalkOperationPolicies = {
   getSpacePublicInviteArrival: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   getWebhookDelivery: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   getWebhookEndpoint: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
-  ingestMonitorResult: { maxBodyBytes: 1048576, rateLimit: { limit: 600, policy: "v1.telemetry.intake", windowSeconds: 60 } },
   initiateChatAttachmentUpload: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   initiateWhiteboardFileUpload: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   issueAccessGrant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

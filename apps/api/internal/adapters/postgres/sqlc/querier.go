@@ -229,7 +229,6 @@ type Querier interface {
 	InsertRecordingPresentationBaseline(ctx context.Context, arg InsertRecordingPresentationBaselineParams) (RecordingPresentationBaseline, error)
 	InsertRecordingPresentationSource(ctx context.Context, arg InsertRecordingPresentationSourceParams) (RecordingPresentationSource, error)
 	InsertRecordingRenderInput(ctx context.Context, arg InsertRecordingRenderInputParams) (RecordingRenderInput, error)
-	InsertStatusMonitorResult(ctx context.Context, arg InsertStatusMonitorResultParams) (StatusMonitorResult, error)
 	InsertWebhookDelivery(ctx context.Context, arg InsertWebhookDeliveryParams) (WebhookDelivery, error)
 	InsertWebhookEndpoint(ctx context.Context, arg InsertWebhookEndpointParams) (WebhookEndpoint, error)
 	InsertWebhookEndpointRevision(ctx context.Context, arg InsertWebhookEndpointRevisionParams) (WebhookEndpointRevision, error)
@@ -251,7 +250,6 @@ type Querier interface {
 	ListRecordingTranscriptionSourcesNeedingCleanup(ctx context.Context, arg ListRecordingTranscriptionSourcesNeedingCleanupParams) ([]RecordingTranscriptionSource, error)
 	ListSpaceMembers(ctx context.Context, arg ListSpaceMembersParams) ([]SpaceMember, error)
 	ListSpaceRoles(ctx context.Context, arg ListSpaceRolesParams) ([]SpaceRole, error)
-	ListStatusMonitorCurrent(ctx context.Context) ([]StatusMonitorCurrent, error)
 	ListTenantAPIKeys(ctx context.Context, arg ListTenantAPIKeysParams) ([]ListTenantAPIKeysRow, error)
 	ListTenantAuditLogs(ctx context.Context, arg ListTenantAuditLogsParams) ([]AuditLog, error)
 	ListTenantEpisodes(ctx context.Context, arg ListTenantEpisodesParams) ([]Episode, error)
@@ -387,7 +385,6 @@ type Querier interface {
 	UpdateTenantTranscription(ctx context.Context, arg UpdateTenantTranscriptionParams) (Transcription, error)
 	UpdateWebhookEndpoint(ctx context.Context, arg UpdateWebhookEndpointParams) (WebhookEndpoint, error)
 	UpsertRecordingPoolHealth(ctx context.Context, arg UpsertRecordingPoolHealthParams) (UpsertRecordingPoolHealthRow, error)
-	UpsertStatusMonitorCurrent(ctx context.Context, arg UpsertStatusMonitorCurrentParams) (StatusMonitorCurrent, error)
 }
 
 var _ Querier = (*Queries)(nil)

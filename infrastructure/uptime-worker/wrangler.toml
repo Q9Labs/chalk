@@ -8,24 +8,8 @@ crons = ["*/5 * * * *"]
 [vars]
 API_BASE_URL = "https://api.chalkmeet.com"
 
-# Optional private deployment configuration:
-# - API_MONITOR_BASE_URL, SYNC_BASE_URL, and WEB_BASE_URL
-#   override the public production monitor targets for another environment.
-# - ATLAS_BASE_URL adds an anonymous access-boundary synthetic for the protected
-#   architecture Worker. Configure it at deploy time; do not commit the live URL.
-
-# Required secrets:
-# - OPS_INGEST_TOKEN
-# - OPS_MANUAL_RUN_TOKEN
-#
-# Optional fallback bindings/secrets:
-# - OPS_FALLBACK_BUFFER_BUCKET R2 binding
-# - OPS_TWILIO_ACCOUNT_SID
-# - OPS_TWILIO_AUTH_TOKEN
-# - OPS_TWILIO_WHATSAPP_FROM
-# - OPS_WHATSAPP_TO_CRITICAL
-#
-# Example R2 binding, once the bucket exists:
-# [[r2_buckets]]
-# binding = "OPS_FALLBACK_BUFFER_BUCKET"
-# bucket_name = "chalk-uptime-worker-buffer"
+# Optional HTTPS target overrides: API_MONITOR_BASE_URL, SYNC_BASE_URL.
+# Required Worker secret: DISCORD_WEBHOOK_URL.
+# Reuse the existing Axiom monitor provisioner's Discord alert channel webhook;
+# binding it to this Worker is deployment configuration, not a new channel/secret.
+# Optional secret OPS_MANUAL_RUN_TOKEN enables authenticated POST /run.

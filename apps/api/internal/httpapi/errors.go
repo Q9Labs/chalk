@@ -112,9 +112,6 @@ var (
 	apiErrorWebhookIdempotencyRequired      = APIError{Status: http.StatusBadRequest, Code: "webhook.idempotency_key_required", Message: "Idempotency-Key is required"}
 	apiErrorWebhookIdempotencyConflict      = APIError{Status: http.StatusConflict, Code: "webhook.idempotency_conflict", Message: "Idempotency key was used for another request"}
 	apiErrorWebhookIdempotencyExpired       = APIError{Status: http.StatusConflict, Code: "webhook.idempotency_expired", Message: "Idempotency key has expired"}
-
-	apiErrorInvalidStatusResult = APIError{Status: http.StatusBadRequest, Code: "status.invalid_result", Message: "Invalid monitor result"}
-	apiErrorStatusUnavailable   = APIError{Status: http.StatusServiceUnavailable, Code: "status.unavailable", Message: "Status is unavailable"}
 )
 
 func writeAPIError(w http.ResponseWriter, err APIError) {

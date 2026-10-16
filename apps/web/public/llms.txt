@@ -8,7 +8,6 @@ The canonical product documentation is https://chalkmeet.com/docs. Prefer it ove
 
 - [Documentation](https://chalkmeet.com/docs): Start here to understand and build with Chalk.
 - [Source repository](https://github.com/Q9Labs/chalk): Public SDK, application, and infrastructure source.
-- [Service status](https://chalkmeet.com/status): Current uptime, incidents, and maintenance.
 
 ## Product model
 

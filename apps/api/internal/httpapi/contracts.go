@@ -9,7 +9,6 @@ const (
 	APIAuthSessionOrBearer          = APIAuthCookieOrBearer
 	APIAuthParticipantMedia APIAuth = "participant_media"
 	APIAuthParticipantSync  APIAuth = "participant_sync"
-	APIAuthOpsToken         APIAuth = "ops_token"
 )
 
 func accountRouteAuth() APIAuth {
@@ -64,7 +63,6 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, authEndpoints(nil, SessionCookieOptions{})...)
 	endpoints = append(endpoints, meEndpoints(nil, nil)...)
 	endpoints = append(endpoints, accountTenantEndpoints(nil)...)
-	endpoints = append(endpoints, statusEndpoints(nil, nil)...)
 	endpoints = append(endpoints, tenantEndpoints(nil, nil)...)
 	endpoints = append(endpoints, userEndpoints(nil)...)
 	endpoints = append(endpoints, membershipEndpoints(nil, nil)...)

@@ -2,20 +2,7 @@ import { Effect } from "effect";
 import { parseAccessGrant, type AccessGrant } from "../access/grant.js";
 import { createChalkEffectClient } from "../client.js";
 import type { PublicSpaceArrival as GeneratedPublicSpaceArrival, PublicSpaceCreated as GeneratedPublicSpaceCreated } from "../generated/schemas.js";
-import type {
-  ArriveBySpacePublicInviteInput,
-  ChalkPublicClient,
-  ChalkPublicClientOptions,
-  ChalkPublicIdempotencyOptions,
-  CreatePublicSpaceInput,
-  PublicArrivalOptions,
-  PublicArrivalReference,
-  PublicLeaveOptions,
-  PublicRefreshAccessInput,
-  PublicSpaceArrival,
-  PublicSpaceCreated,
-  PublicStatus,
-} from "./types.js";
+import type { ArriveBySpacePublicInviteInput, ChalkPublicClient, ChalkPublicClientOptions, ChalkPublicIdempotencyOptions, CreatePublicSpaceInput, PublicArrivalOptions, PublicArrivalReference, PublicLeaveOptions, PublicRefreshAccessInput, PublicSpaceArrival, PublicSpaceCreated } from "./types.js";
 export function createChalkPublicClient(options: ChalkPublicClientOptions): ChalkPublicClient {
   const baseClientOptions = {
     baseUrl: options.baseUrl,
@@ -84,10 +71,6 @@ export function createChalkPublicClient(options: ChalkPublicClientOptions): Chal
       }),
     );
   };
-  const getPublicStatus = async (): Promise<PublicStatus> => {
-    const client = await Effect.runPromise(createClient(undefined));
-    return Effect.runPromise(client.default.getPublicStatus({}));
-  };
   return {
     prepareSpaceEntrance: async (spaceInviteToken) => {
       const client = await Effect.runPromise(createClient(undefined));
@@ -97,7 +80,6 @@ export function createChalkPublicClient(options: ChalkPublicClientOptions): Chal
     arriveBySpacePublicInvite,
     create: createPublicSpace,
     createPublicSpace,
-    getPublicStatus,
     getSpacePublicInviteArrival,
     leave: leaveSpacePublicInviteArrival,
     leaveSpacePublicInviteArrival,

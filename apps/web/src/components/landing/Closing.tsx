@@ -22,7 +22,6 @@ const FOOTER_COLUMNS = [
       { href: "/docs", label: "Documentation" },
       { href: "/docs/quickstart", label: "SDK quickstart" },
       { href: "#self-host", label: "Self-host" },
-      { href: "/status", label: "Status" },
     ],
   },
   {

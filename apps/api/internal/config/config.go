@@ -32,9 +32,8 @@ const (
 	APIService            = "CHALK_API_SERVICE"
 	APISlowRequestMS      = "CHALK_API_SLOW_REQUEST_MS"
 	APILocalSystemToken   = "CHALK_API_LOCAL_SYSTEM_TOKEN"
-	APIOpsIngestToken     = "CHALK_OPS_INGEST_TOKEN"
-	OpsIngestToken        = APIOpsIngestToken
-	APIVersion            = "CHALK_API_VERSION"
+
+	APIVersion = "CHALK_API_VERSION"
 
 	AuthEmailVerificationRequired    = "CHALK_AUTH_EMAIL_VERIFICATION_REQUIRED"
 	AuthRecentAuthSecret             = "CHALK_AUTH_RECENT_AUTH_SECRET"
@@ -159,11 +158,9 @@ type APIConfig struct {
 	Address            string
 	CORSAllowedOrigins []string
 	LocalSystemToken   string
-	OpsIngestToken     string
-	TrustedProxyCIDRs  []string
-}
 
-const opsIngestTokenMinLength = 32
+	TrustedProxyCIDRs []string
+}
 
 type CapabilityConfig struct {
 	Recording       bool
@@ -457,10 +454,7 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	opsIngestToken := strings.TrimSpace(envOrDefault(APIOpsIngestToken, ""))
-	if err := validateOpsIngestToken(environment, opsIngestToken); err != nil {
-		return Config{}, err
-	}
+
 	publicInvite, err := loadPublicInviteConfig(environment)
 	if err != nil {
 		return Config{}, err
@@ -558,8 +552,8 @@ func Load() (Config, error) {
 			Address:            envOrDefault(APIAddress, DefaultAPIAddress),
 			CORSAllowedOrigins: envList(APICORSAllowedOrigins),
 			LocalSystemToken:   localSystemToken,
-			OpsIngestToken:     opsIngestToken,
-			TrustedProxyCIDRs:  envList(APITrustedProxyCIDRs),
+
+			TrustedProxyCIDRs: envList(APITrustedProxyCIDRs),
 		},
 		Auth: AuthConfig{
 			EmailVerificationRequired: envBool(AuthEmailVerificationRequired),
@@ -619,19 +613,6 @@ func validateGoogleOAuthConfig(environment string, googleOAuth GoogleOAuthConfig
 	googleConfigured := strings.TrimSpace(googleOAuth.ClientID) != "" || strings.TrimSpace(googleOAuth.ClientSecret) != ""
 	if environment != DefaultEnvironment && googleConfigured && strings.TrimSpace(googleOAuth.ReauthenticationRedirectURL) == "" {
 		return fmt.Errorf("%s must be set when Google OAuth is configured outside local environments", GoogleOAuthReauthenticationRedirectURL)
-	}
-	return nil
-}
-
-func validateOpsIngestToken(environment, token string) error {
-	if token == "" {
-		if environment == DefaultEnvironment {
-			return nil
-		}
-		return fmt.Errorf("%s must be set outside local environments", APIOpsIngestToken)
-	}
-	if len(token) < opsIngestTokenMinLength {
-		return fmt.Errorf("%s must be at least %d bytes", APIOpsIngestToken, opsIngestTokenMinLength)
 	}
 	return nil
 }
