@@ -146,8 +146,8 @@ async function assertExactPins() {
   const packageJson = JSON.parse(await readFile(resolve(repositoryRoot, "tools/contract-fixture-proof/package.json"), "utf8"));
   const dependencies = /** @type {Record<string, string>} */ (packageJson.devDependencies);
   const names = ["@typespec/compiler", "@typespec/http"];
-  const invalid = names.filter((name) => dependencies[name] !== "1.13.0");
-  requireCondition(invalid.length === 0, `TypeSpec dependencies require exact 1.13.0 pins: ${invalid.join(", ")}`);
+  const invalid = names.filter((name) => dependencies[name] !== "1.17.0");
+  requireCondition(invalid.length === 0, `TypeSpec dependencies require exact 1.17.0 pins: ${invalid.join(", ")}`);
   return names;
 }
 
