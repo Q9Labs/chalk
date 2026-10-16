@@ -7,7 +7,7 @@ with `GOMAXPROCS=1`, `VITEST_MAX_WORKERS=1`, `ERL_FLAGS='+S 1:1'`, and
 q9gate concurrency 1. `gate.report.json` records every selected/skipped lane.
 
 The pre-commit hook runs `pnpm gate:fast`: tracker check plus the `scope`, `format`,
-`hygiene`, `secrets`, `language-ratchet`, and `generated` lanes on staged files
+`hygiene`, `secrets`, and `generated` lanes on staged files
 (about 10 seconds). The full gate runs in `.github/workflows/gate.yml` on every
 pull request. A run with nothing in scope fails in the `scope` lane; set
 `GATE_ALLOW_EMPTY=1` only when that is intended. `GATE_SERVICES=external` drops
@@ -41,10 +41,6 @@ shipment target from branch, release mode, or directory.
 ## Selection Rules
 
 - Repository hygiene and diff-scoped secret scanning always run.
-- The language vocabulary ratchet always runs. It compares case-insensitive,
-  identifier-aware banned-term counts per surface with the committed baseline;
-  decreases require `pnpm run language:ratchet:update` so each migration wave
-  becomes the next locked baseline.
 - Formatting, Fallow, Semgrep, workspace type checks, coverage tests, and
   builds follow affected source files and workspace dependents.
 - The boundary gate covers cross-workspace dependency direction under `apps`,

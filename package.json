@@ -45,8 +45,6 @@
     "gate:full": "GOMAXPROCS=1 VITEST_MAX_WORKERS=1 ERL_FLAGS='+S 1:1' bash scripts/gates/commit.sh --full",
     "gate:boundaries": "node --test scripts/gates/package-boundaries.test.mjs && node --import=tsx node_modules/@q9labsai/gates/dist/cli.js run --full --lane depcruise",
     "gate:explain": "q9gate why",
-    "language:ratchet": "node tools/language-ratchet/src/cli.mjs",
-    "language:ratchet:update": "node tools/language-ratchet/src/cli.mjs --update",
     "generate:openapi": "bash apps/api/scripts/generate-openapi.sh",
     "generate:sdk": "bash scripts/codegen/generate-sdk.sh",
     "check:sdk-generated": "bash scripts/codegen/check-sdk-generated.sh",

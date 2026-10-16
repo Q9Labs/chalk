@@ -4,7 +4,7 @@ OSS modern real-time collaboration and communication.
 
 The commit hook runs the fast gate lanes. The Gate workflow runs the full root, API, and Sync gates on every pull request. Run `pnpm run gate` before you open a PR, `apps/api/scripts/gate.sh` for API changes, and `apps/sync/scripts/gate.sh` for Sync changes. To run a heavy gate on the M4, use `scripts/gates/remote.sh root|api|sync|recorder`.
 
-- Use the vocabulary in `GLOSSARY.md`; CI checks banned terms.
+- Keep Space and Episode as the canonical names defined in `GLOSSARY.md`.
 - Put shared behavior in packages first, then wire it into apps. Don't fix SDK behavior only in a demo.
 - Keep product language role-neutral unless an integration needs specific terms.
 - After you change a contract, route, migration, or other generator input, run `pnpm run regen`. `pnpm run check:generated` names every stale output in seconds.

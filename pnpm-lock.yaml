@@ -797,8 +797,6 @@ importers:
 
   tools/contract-fixture-proof: {}
 
-  tools/language-ratchet: {}
-
   tools/sdk-web-consumer-e2e:
     dependencies:
       '@q9labsai/chalk-client':
