@@ -66,7 +66,7 @@ body:has(.site) {
 }
 
 /* Scoped, unlike the rest of this file: `.eyebrow` is also a dashboard class,
-   and dashboard.css is imported after this one. Without the `.site` prefix the
+   and account.css is imported after this one. Without the `.site` prefix the
    app's small-caps mono label wins on both surfaces. */
 .site .eyebrow {
   display: inline-flex;

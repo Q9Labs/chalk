@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
-import { DashboardAPIError, getAccount } from "./dashboard-api";
+import { AccountAPIError, getAccount } from "./account-api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -14,7 +14,7 @@ it("names the endpoint and failing field when a response breaks the contract, wi
 
   const failure = await getAccount().catch((error: unknown) => error);
 
-  expect(failure).toBeInstanceOf(DashboardAPIError);
+  expect(failure).toBeInstanceOf(AccountAPIError);
   expect(failure).toMatchObject({ message: "Response did not match the expected contract" });
   expect(warn).toHaveBeenCalledTimes(1);
   const [, detail] = warn.mock.calls[0] ?? [];

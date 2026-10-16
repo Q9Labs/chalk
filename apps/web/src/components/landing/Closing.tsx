@@ -20,7 +20,7 @@ const FOOTER_COLUMNS = [
     title: "Developers",
     links: [
       { href: "/docs", label: "Documentation" },
-      { href: "/sdk-preview", label: "SDK preview" },
+      { href: "/docs/quickstart", label: "SDK quickstart" },
       { href: "#self-host", label: "Self-host" },
       { href: "/status", label: "Status" },
     ],
@@ -31,7 +31,6 @@ const FOOTER_COLUMNS = [
     links: [
       { href: "/sign-up", label: "Create an account" },
       { href: "/sign-in", label: "Sign in" },
-      { href: "/home", label: "Dashboard" },
     ],
   },
 ] as const;
@@ -46,13 +45,13 @@ export function Closing() {
             <h2>
               Give every conversation <span className="muted">a place to live.</span>
             </h2>
-            <p>Create a Space in about a minute. Bring your own infrastructure whenever you are ready.</p>
+            <p>Create a Space through the API. Bring your own infrastructure whenever you are ready.</p>
             <div className="closing-actions">
               <a href="/sign-up" className="btn btn-primary btn-lg">
                 Create an account
                 <Icon glyph={ArrowRight02Icon} size={17} weight={2.2} />
               </a>
-              <a href="/sdk-preview" className="btn btn-secondary btn-lg">
+              <a href="/docs/quickstart" className="btn btn-secondary btn-lg">
                 Explore the SDK
               </a>
             </div>

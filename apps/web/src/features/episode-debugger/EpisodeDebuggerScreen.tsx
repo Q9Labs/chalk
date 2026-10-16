@@ -202,7 +202,7 @@ export function EpisodeDebuggerScreen({ reference, api: apiInput, mode = __EPISO
       <header className="episode-topbar episode-header" aria-labelledby="episode-debugger-title">
         <div className="episode-contextbar">
           <div className="episode-brand">
-            <a className="episode-back-link" href="/home" aria-label="Back to dashboard">
+            <a className="episode-back-link" href="/" aria-label="Back to Chalk">
               <HugeiconsIcon icon={ArrowLeft02Icon} size={15} strokeWidth={2} />
               <span>Dashboard</span>
             </a>

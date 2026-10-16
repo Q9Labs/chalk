@@ -75,8 +75,8 @@ export function SiteNav() {
               {link.label}
             </a>
           ))}
-          <a href="/home" onClick={closeMenu}>
-            Dashboard
+          <a href="/docs/spaces-and-episodes" onClick={closeMenu}>
+            Spaces and Episodes
           </a>
 
           {/* The sign-in and sign-up buttons are hidden at this width, so

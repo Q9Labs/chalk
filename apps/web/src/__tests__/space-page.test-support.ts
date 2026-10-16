@@ -103,7 +103,7 @@ vi.mock("../lib/chalk-access", () => ({
   joinDashboardSpace: getSpacePageTestMocks().joinDashboardSpace,
   resumePublicSpace: getSpacePageTestMocks().resumePublicSpace,
 }));
-vi.mock("../lib/dashboard-api", () => ({ listAllAccountTenants: getSpacePageTestMocks().listAllAccountTenants, listSpaces: getSpacePageTestMocks().listSpaces }));
+vi.mock("../lib/account-api", () => ({ listAllAccountTenants: getSpacePageTestMocks().listAllAccountTenants, listSpaces: getSpacePageTestMocks().listSpaces }));
 vi.mock("../lib/local-space-client", () => ({
   createLocalSpaceClient: getSpacePageTestMocks().createLocalSpaceClient,
   createLocalSpaceRelease: getSpacePageTestMocks().createLocalSpaceRelease,

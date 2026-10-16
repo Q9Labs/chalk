@@ -74,7 +74,7 @@ export function Hero() {
     <>
       <section className="hero">
         <div className="container">
-          <a className="hero-badge" href="/sdk-preview">
+          <a className="hero-badge" href="/docs/quickstart">
             <b>New</b>
             Put a Space inside your own product
             <span>
@@ -89,8 +89,8 @@ export function Hero() {
           <p className="hero-sub">Chalk gives a team, or a product you are building, a space that outlasts the call. Video, chat, whiteboard, and files stay put between calls — on our infrastructure or on yours.</p>
 
           <div className="hero-ctas">
-            <a href="/space" className="btn btn-primary btn-lg">
-              Open a Space
+            <a href="/docs/quickstart" className="btn btn-primary btn-lg">
+              Get started
               <Icon glyph={ArrowRight02Icon} size={17} weight={2.2} />
             </a>
             <a href="#product" className="btn btn-secondary btn-lg">

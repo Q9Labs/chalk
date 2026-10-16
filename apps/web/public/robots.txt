@@ -4,21 +4,8 @@ Disallow: /_internal/
 Disallow: /_shell/
 Disallow: /_serverFn/
 Disallow: /api/
-Disallow: /account
-Disallow: /activity
-Disallow: /artifacts
-Disallow: /developer
-Disallow: /episodes
-Disallow: /home
-Disallow: /new
-Disallow: /onboarding
-Disallow: /people
-Disallow: /sdk-preview
 Disallow: /sign-in
 Disallow: /sign-up
 Disallow: /space
-Disallow: /spaces
-Disallow: /tenant
-Disallow: /whiteboard
 
 Sitemap: https://chalkmeet.com/sitemap.xml

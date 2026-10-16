@@ -2,14 +2,14 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DashboardAPIError } from "../../lib/dashboard-api";
+import { AccountAPIError } from "../../lib/account-api";
 import { AcceptInvitationPage } from "./AcceptInvitationPage";
 
 const mocks = vi.hoisted(() => ({ accept: vi.fn(), account: vi.fn(), logout: vi.fn(), navigate: vi.fn() }));
 
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => mocks.navigate }));
-vi.mock("../../lib/dashboard-api", async () => {
-  const actual = await vi.importActual("../../lib/dashboard-api");
+vi.mock("../../lib/account-api", async () => {
+  const actual = await vi.importActual("../../lib/account-api");
   return { ...actual, acceptTenantInvitation: mocks.accept, getAccount: mocks.account, logoutAccount: mocks.logout };
 });
 
@@ -29,19 +29,18 @@ afterEach(() => {
 });
 
 describe("AcceptInvitationPage", () => {
-  it("posts the fragment token, removes it from the URL and opens the dashboard", async () => {
+  it("posts the fragment token, removes it from the URL and opens the landing page", async () => {
     mocks.accept.mockResolvedValue({ tenant_id: "tenant-1" });
     render(<AcceptInvitationPage />);
 
-    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith({ to: "/home", replace: true }));
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith({ to: "/", replace: true }));
     expect(mocks.accept).toHaveBeenCalledWith("secret-token");
-    expect(storage.get("chalk.tenant-hint")).toBe("tenant-1");
     expect(window.location.hash).toBe("");
     expect(window.sessionStorage.getItem("chalk.invitation-token")).toBeNull();
   });
 
   it("asks for a new invitation on 410", async () => {
-    mocks.accept.mockRejectedValue(new DashboardAPIError(410, "invitation.unavailable", "invitation is expired, revoked or already used; ask an Owner for a new invitation"));
+    mocks.accept.mockRejectedValue(new AccountAPIError(410, "invitation.unavailable", "invitation is expired, revoked or already used; ask an Owner for a new invitation"));
     render(<AcceptInvitationPage />);
 
     expect(await screen.findByText("This invitation no longer works.")).toBeTruthy();
@@ -50,7 +49,7 @@ describe("AcceptInvitationPage", () => {
   });
 
   it("offers to switch Account on 403 and keeps the token for the return trip", async () => {
-    mocks.accept.mockRejectedValue(new DashboardAPIError(403, "invitation.wrong_account", "this invitation belongs to another email"));
+    mocks.accept.mockRejectedValue(new AccountAPIError(403, "invitation.wrong_account", "this invitation belongs to another email"));
     mocks.logout.mockResolvedValue(undefined);
     render(<AcceptInvitationPage />);
 
@@ -62,7 +61,7 @@ describe("AcceptInvitationPage", () => {
   });
 
   it("sends a signed-out visitor to sign in and keeps the token", async () => {
-    mocks.account.mockRejectedValue(new DashboardAPIError(401, "access.unauthenticated", "Sign in required"));
+    mocks.account.mockRejectedValue(new AccountAPIError(401, "access.unauthenticated", "Sign in required"));
     render(<AcceptInvitationPage />);
 
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith({ to: "/sign-in", search: { next: "/invitations/accept" }, replace: true }));

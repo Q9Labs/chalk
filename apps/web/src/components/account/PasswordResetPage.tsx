@@ -2,7 +2,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { Logo } from "@q9labsai/chalk-react";
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { completePasswordReset, DashboardAPIError, requestPasswordReset } from "../../lib/dashboard-api";
+import { completePasswordReset, AccountAPIError, requestPasswordReset } from "../../lib/account-api";
 
 const REQUEST_CONFIRMATION = "If an Account exists for that email, we sent a reset link";
 
@@ -66,7 +66,7 @@ export function RequestPasswordResetPage() {
                 {error}
               </p>
             ) : null}
-            <button className="dashboard-button primary" type="submit" disabled={busy}>
+            <button className="account-button primary" type="submit" disabled={busy}>
               {busy ? "Sending reset link…" : "Send reset link"}
             </button>
           </>
@@ -94,10 +94,10 @@ export function CompletePasswordResetPage({ token }: { token: string | null }) {
       await completePasswordReset({ token, password: String(data.get("password") ?? "") });
       await navigate({ to: "/sign-in", replace: true });
     } catch (cause) {
-      if (cause instanceof DashboardAPIError && cause.code === "access.invalid_password") {
+      if (cause instanceof AccountAPIError && cause.code === "access.invalid_password") {
         setError("Use at least 8 characters. If your password is long, try a shorter one.");
       } else {
-        setError(cause instanceof DashboardAPIError ? cause.message : "This reset link could not be used. Request a new link.");
+        setError(cause instanceof AccountAPIError ? cause.message : "This reset link could not be used. Request a new link.");
       }
     } finally {
       setBusy(false);
@@ -123,7 +123,7 @@ export function CompletePasswordResetPage({ token }: { token: string | null }) {
                 {error}
               </p>
             ) : null}
-            <button className="dashboard-button primary" type="submit" disabled={busy}>
+            <button className="account-button primary" type="submit" disabled={busy}>
               {busy ? "Resetting password…" : "Reset password"}
             </button>
           </>

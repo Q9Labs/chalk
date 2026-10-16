@@ -121,15 +121,15 @@ export function FrontDoors() {
               Use Chalk
             </span>
             <div className="bento-copy">
-              <h3>Open a Space and send one link.</h3> <p>Create it from the dashboard, invite people by link, admit them with roles you control. The chat, the whiteboard, and the files are still there tomorrow.</p>
+              <h3>Open a Space and send one link.</h3> <p>Create it through the API, invite people by link, and control admission. The chat, the whiteboard, and the files are still there tomorrow.</p>
             </div>
             <div className="bento-actions">
               <a href="/sign-up" className="btn btn-primary">
                 Create an account
                 <Icon glyph={ArrowRight02Icon} size={16} weight={2.2} />
               </a>
-              <a href="/home" className="btn btn-secondary">
-                Open the dashboard
+              <a href="/docs/spaces-and-episodes" className="btn btn-secondary">
+                Learn about Spaces
               </a>
             </div>
             <div className="bento-art bento-art-illustrated">
@@ -149,7 +149,7 @@ export function FrontDoors() {
               <h3>Drop a Space into your own product.</h3> <p>One component renders the whole surface. When you want a different shape, the same client gives you hooks for participants, chat, media, and capabilities.</p>
             </div>
             <div className="bento-actions">
-              <a href="/sdk-preview" className="btn btn-primary">
+              <a href="/docs/quickstart" className="btn btn-primary">
                 Explore the SDK
                 <Icon glyph={ArrowRight02Icon} size={16} weight={2.2} />
               </a>
