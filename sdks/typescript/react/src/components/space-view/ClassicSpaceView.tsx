@@ -1,8 +1,6 @@
 "use client";
-
 import type { Reaction } from "@q9labsai/chalk-client";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-
 import { useCan, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
@@ -30,16 +28,13 @@ import { SpacePresentation } from "./SpacePresentation";
 import { SpaceStage } from "./SpaceStage";
 import { DRAWER_EXIT_MS, useDrawerPresence } from "./useDrawerPresence";
 import { useContentLayoutSwitch } from "./useContentLayoutSwitch";
-
 const DEFAULT_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🎉"] as const;
-
 export function ClassicSpaceView({
+  colorScheme = "light",
   spaceName,
   logoUrl,
   inviteLink,
   pickChatFiles,
-  palette = "light",
-  texture = "none",
   stageBackground = true,
   layout: controlledLayout,
   onLayoutChange,
@@ -85,9 +80,7 @@ export function ClassicSpaceView({
   const feature = (name: keyof SpaceViewFeatures) => features?.[name] !== false;
   const localId = self.participantId ?? "local";
   const tiles = useMemo(() => toVideoParticipants(participantsSlice.roster, media.remote, localId, self.displayName ?? "You", media.local), [localId, media.local, media.remote, participantsSlice.roster, self.displayName]);
-
   useEffect(() => setActivePanel(initialPanel), [initialPanel]);
-
   useEffect(() => {
     if (feature("admission") && feature("participants") && canManageAdmission && participantsSlice.admissionQueue.length > 0) setActivePanel("participants");
   }, [canManageAdmission, participantsSlice.admissionQueue.length, features?.admission, features?.participants]);
@@ -103,7 +96,6 @@ export function ClassicSpaceView({
     ...(feature("whiteboard") && canDrawWhiteboard ? ["whiteboard" as const] : []),
     "leave",
   ];
-
   const updateLayout = (nextLayout: "grid" | "focus" | "presentation") => {
     if (controlledLayout === undefined) setUncontrolledLayout(nextLayout);
     onLayoutChange?.(nextLayout);
@@ -112,14 +104,16 @@ export function ClassicSpaceView({
   useContentLayoutSwitch(hasStageContent, layout, updateLayout);
   useSoundCues(feature("sounds"));
   const prefersReducedMotion = usePrefersReducedMotion();
-  const settingsDialogIsControlled = React.isValidElement<{ readonly isOpen?: boolean }>(settingsDialog) && typeof settingsDialog.props.isOpen === "boolean";
+  const settingsDialogIsControlled =
+    React.isValidElement<{
+      readonly isOpen?: boolean;
+    }>(settingsDialog) && typeof settingsDialog.props.isOpen === "boolean";
   const drawerPanel = settingsDialogIsControlled && activePanel === "settings" ? null : activePanel;
   const drawer = useDrawerPresence(drawerPanel, prefersReducedMotion ? 0 : DRAWER_EXIT_MS);
   const openSettings = () => {
     if (!settingsDialogIsControlled) setActivePanel("settings");
     onOpenSettings?.();
   };
-
   const runCommand = useCallback(async (command: () => Promise<unknown>) => {
     try {
       await command();
@@ -128,7 +122,6 @@ export function ClassicSpaceView({
       setCommandError(cause instanceof Error ? cause.message : "This command could not be completed.");
     }
   }, []);
-
   const leaveSpace = async () => {
     if (!onLeft || leavePending) return;
     setLeavePending(true);
@@ -144,7 +137,6 @@ export function ClassicSpaceView({
       setLeavePending(false);
     }
   };
-
   const endEpisode = async () => {
     if (!onEndEpisode || endEpisodePending) return;
     setEndEpisodePending(true);
@@ -160,15 +152,15 @@ export function ClassicSpaceView({
       setEndEpisodePending(false);
     }
   };
-
   const displayedCommandError = externalCommandError ?? commandError;
   const commandToasts: Toast[] = displayedCommandError ? [{ id: "space-command-error", message: displayedCommandError, type: "error" }] : [];
   const dismissCommandError = () => {
     setCommandError(null);
     onDismissCommandError?.();
   };
-
-  const settingsContent = React.isValidElement<{ readonly onClose?: () => void }>(settingsDialog)
+  const settingsContent = React.isValidElement<{
+    readonly onClose?: () => void;
+  }>(settingsDialog)
     ? React.cloneElement(settingsDialog, {
         onClose: () => {
           settingsDialog.props.onClose?.();
@@ -176,17 +168,21 @@ export function ClassicSpaceView({
         },
       })
     : settingsDialog;
-
   useEffect(() => {
-    if (activePanel !== "settings" || !React.isValidElement<{ readonly isOpen?: boolean }>(settingsDialog) || settingsDialog.props.isOpen !== false) return;
+    if (
+      activePanel !== "settings" ||
+      !React.isValidElement<{
+        readonly isOpen?: boolean;
+      }>(settingsDialog) ||
+      settingsDialog.props.isOpen !== false
+    )
+      return;
     setActivePanel(null);
   }, [activePanel, settingsDialog]);
-
   return (
     <ParticipantVolumeProvider>
       <SpacePresentation
-        palette={palette}
-        texture={texture}
+        colorScheme={colorScheme}
         stageBackground={stageBackground}
         header={{
           spaceName,
@@ -263,7 +259,7 @@ export function ClassicSpaceView({
           <>
             {settingsDialogIsControlled ? settingsContent : null}
             {overlay}
-            <ToastStack toasts={commandToasts} onDismiss={dismissCommandError} position="bottom-right" palette={palette} texture={texture} />
+            <ToastStack toasts={commandToasts} onDismiss={dismissCommandError} position="bottom-right" />
             {reconnecting ? <ReconnectingOverlay {...reconnecting} /> : null}
             <OfflineActions />
           </>
@@ -283,8 +279,6 @@ export function ClassicSpaceView({
                 leaveError={leaveError}
                 endEpisodePending={endEpisodePending}
                 endEpisodeError={endEpisodeError}
-                palette={palette}
-                texture={texture}
               />
             ) : null}
           </>

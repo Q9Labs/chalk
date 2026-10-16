@@ -183,7 +183,7 @@ export const ClassicMessageBubble = React.memo<MessageBubbleProps>(
         {!isLocal && <div className="flex w-10 shrink-0 justify-center">{showAvatar && isLastInGroup && <Avatar name={senderName} src={senderAvatar} size="sm" generated={generatedAvatars} />}</div>}
 
         <div className={cn("flex flex-col max-w-[70%]", isLocal ? "items-end" : "items-start")}>
-          <div className={cn("chalk-textured-surface px-4 py-3", isLocal ? "rounded-[16px_4px_16px_16px] bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)]" : "rounded-[4px_16px_16px_16px] border border-[var(--chalk-line)] bg-[var(--chalk-surface)] text-[var(--chalk-text)]")}>
+          <div className={cn("px-4 py-3", isLocal ? "rounded-[16px_4px_16px_16px] bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)]" : "rounded-[4px_16px_16px_16px] border border-[var(--chalk-line)] bg-[var(--chalk-surface)] text-[var(--chalk-text)]")}>
             <p className="text-sm leading-relaxed break-words">{renderContent(content)}</p>
             {renderAttachments()}
           </div>

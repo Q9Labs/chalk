@@ -1,6 +1,6 @@
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
-import { AnimatedCopy01Icon, type AnimatedCopy01IconHandle } from "@q9labsai/chalk-react/utils";
+import { Copy01Icon } from "@q9labsai/chalk-react/utils";
 
 import type { DocsCalloutProps, DocsFeatureCardProps, DocsTone } from "./docs-types";
 
@@ -55,7 +55,6 @@ type CopyState = "idle" | "copied" | "error";
 
 export function CodeBlock({ children, className, ...props }: CodeBlockProps) {
   const codeRef = useRef<HTMLPreElement>(null);
-  const copyIconRef = useRef<AnimatedCopy01IconHandle>(null);
   const [copyState, setCopyState] = useState<CopyState>("idle");
 
   useEffect(() => {
@@ -71,7 +70,6 @@ export function CodeBlock({ children, className, ...props }: CodeBlockProps) {
       if (!navigator.clipboard?.writeText) throw new Error("Clipboard access is unavailable");
       await navigator.clipboard.writeText(source);
       setCopyState("copied");
-      copyIconRef.current?.startAnimation();
     } catch {
       setCopyState("error");
     }
@@ -84,8 +82,8 @@ export function CodeBlock({ children, className, ...props }: CodeBlockProps) {
     <div className="docs-code-block">
       <div className="docs-code-toolbar">
         <span className="docs-code-label">Code</span>
-        <button className="docs-code-copy" type="button" onClick={() => void copyCode()} onMouseEnter={() => copyIconRef.current?.startAnimation()} onFocus={() => copyIconRef.current?.startAnimation()}>
-          <AnimatedCopy01Icon ref={copyIconRef} size={15} aria-hidden="true" onMouseEnter={() => copyIconRef.current?.startAnimation()} />
+        <button className="docs-code-copy" type="button" onClick={() => void copyCode()}>
+          <Copy01Icon size={15} aria-hidden="true" />
           {copyLabel}
         </button>
       </div>

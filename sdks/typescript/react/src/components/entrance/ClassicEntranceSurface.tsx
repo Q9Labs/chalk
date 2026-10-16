@@ -1,15 +1,11 @@
 "use client";
-
 import { useEffect, useRef } from "react";
 import type React from "react";
-
 import { chalkThemeStyle } from "../../theme";
 import { LogoSource } from "../logo/LogoSource";
-import { getThemeMode } from "../theme";
 import { EntranceDeviceControls } from "./EntranceDeviceControls";
 import { EntranceParticipantPreview } from "./EntranceParticipantPreview";
 import type { EntranceSurfaceProps } from "./EntranceSurface";
-
 /**
  * Internal presentational surface shared by production Entrance and the
  * permission-free SDK preview fixture. It deliberately owns no media access.
@@ -42,27 +38,16 @@ export function ClassicEntranceSurface({
   onAudioOutputChange,
 }: EntranceSurfaceProps): React.JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null);
-
   useEffect(() => {
     if (videoRef.current) videoRef.current.srcObject = previewStream;
     return () => {
       if (videoRef.current?.srcObject === previewStream) videoRef.current.srcObject = null;
     };
   }, [previewStream]);
-
   const hasVideoPreview = camera && Boolean(previewStream?.getVideoTracks().length);
-  const colorScheme = theme?.palette ? getThemeMode(theme.palette) : theme?.colorScheme === "dark" ? "dark" : "light";
-
+  const colorScheme = theme?.colorScheme === "dark" ? "dark" : "light";
   return (
-    <main
-      data-chalk
-      data-chalk-theme={colorScheme}
-      data-chalk-palette={theme?.palette}
-      data-chalk-texture={theme?.texture}
-      aria-busy={joining}
-      style={chalkThemeStyle(theme, colorScheme)}
-      className="chalk-root chalk-textured-surface relative grid h-full min-h-0 w-full place-items-center overflow-auto bg-[var(--chalk-canvas)] p-4 text-[var(--chalk-text)]"
-    >
+    <main data-chalk data-chalk-theme={colorScheme} aria-busy={joining} style={chalkThemeStyle(theme, colorScheme)} className="chalk-root relative grid h-full min-h-0 w-full place-items-center overflow-auto bg-[var(--chalk-canvas)] p-4 text-[var(--chalk-text)]">
       <section className="grid w-full max-w-5xl grid-cols-[minmax(0,1fr)] max-h-full overflow-hidden overflow-y-auto rounded-lg border border-[var(--chalk-line)] bg-[var(--chalk-surface)] shadow-[var(--chalk-shadow)] lg:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="min-w-0 border-b border-[var(--chalk-line)] p-5 lg:border-r lg:border-b-0 lg:p-6">
           <header className="mb-5 flex items-center gap-3">

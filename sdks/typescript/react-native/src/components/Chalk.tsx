@@ -1,17 +1,13 @@
 import type { ChatUploadFile, ClientEventMap, GetAccess, SpaceClient } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-
 import { ChalkProvider, useSpaceClient } from "../context/space-client-context";
 import { useConnection } from "../hooks/space-hooks";
 import { createNativeSpaceClient } from "../space-client/create-native-space-client";
-import { NativeAppearanceProvider, NativeTextureOverlay, useNativeAppearance } from "../ui/native-appearance-context";
-import { type ThemePalette, type ThemeTexture } from "../ui/appearance";
 import { NativeThemeProvider, useNativeTheme } from "../ui/native-theme";
 import { DEFAULT_CHALK_THEME_TOKENS } from "../ui/theme-tokens";
 import { SpaceView } from "./SpaceView";
 import { Entrance, type EntranceDefaults } from "./Entrance";
-
 export type ChalkFeatures = {
   readonly chat?: boolean;
   readonly participants?: boolean;
@@ -23,23 +19,16 @@ export type ChalkFeatures = {
   readonly info?: boolean;
   readonly settings?: boolean;
 };
-
 export const CHALK_THEME_TOKENS = DEFAULT_CHALK_THEME_TOKENS;
-
 export type ChalkThemeTokens = {
   readonly [Token in keyof typeof CHALK_THEME_TOKENS]: string;
 };
-
 export type ChalkTheme = {
   readonly colorScheme?: "dark" | "light";
-  readonly palette?: ThemePalette;
-  readonly texture?: ThemeTexture;
   readonly accent?: string;
   readonly tokens?: Partial<ChalkThemeTokens>;
 };
-
 export type SpaceLayout = "grid" | "focus" | "presentation";
-
 type ChalkCallbacks = {
   readonly onJoined?: () => void;
   readonly onLeft?: () => void;
@@ -50,7 +39,6 @@ type ChalkCallbacks = {
   readonly onScreenShareStopped?: (event: ClientEventMap["screenShareStopped"]) => void;
   readonly onError?: (event: ClientEventMap["error"]) => void;
 };
-
 type ChalkCommonProps = ChalkCallbacks & {
   readonly displayName?: string;
   readonly entrance?: boolean;
@@ -65,7 +53,6 @@ type ChalkCommonProps = ChalkCallbacks & {
   readonly layout?: SpaceLayout;
   readonly onLayoutChange?: (layout: SpaceLayout) => void;
 };
-
 export type ChalkProps = ChalkCommonProps &
   (
     | {
@@ -79,7 +66,6 @@ export type ChalkProps = ChalkCommonProps &
         readonly getAccess: GetAccess;
       }
   );
-
 export function Chalk(props: ChalkProps): React.JSX.Element {
   const suppliedClient = props.client;
   const space = props.space;
@@ -105,7 +91,6 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
     [getLatestAccess, space, suppliedClient],
   );
   const client = suppliedClient ?? ownedClient!;
-
   useEffect(() => {
     if (!ownedClient) return;
     return () => {
@@ -115,27 +100,14 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
         .finally(() => ownedClient.dispose());
     };
   }, [ownedClient]);
-
   return (
-    <NativeAppearanceProvider initialAppearance={{ palette: props.theme?.palette, texture: props.theme?.texture }}>
-      <AppearanceThemeBridge theme={props.theme}>
-        <ChalkProvider client={client}>
-          <SpaceExperience {...props} />
-        </ChalkProvider>
-      </AppearanceThemeBridge>
-    </NativeAppearanceProvider>
-  );
-}
-
-function AppearanceThemeBridge({ children, theme }: { readonly children: ReactNode; readonly theme?: ChalkTheme }): React.JSX.Element {
-  const { appearance } = useNativeAppearance();
-  return (
-    <NativeThemeProvider appearance={appearance} theme={theme}>
-      {children}
+    <NativeThemeProvider theme={props.theme}>
+      <ChalkProvider client={client}>
+        <SpaceExperience {...props} />
+      </ChalkProvider>
     </NativeThemeProvider>
   );
 }
-
 function SpaceExperience(props: ChalkProps): React.JSX.Element {
   const client = useSpaceClient();
   const connection = useConnection();
@@ -145,7 +117,6 @@ function SpaceExperience(props: ChalkProps): React.JSX.Element {
   const autoJoinAttempted = useRef(false);
   const previousClient = useRef(client);
   const [joinError, setJoinError] = useState<string | null>(null);
-
   if (previousClient.current !== client) {
     previousClient.current = client;
     previousStatus.current = connection.status;
@@ -153,7 +124,6 @@ function SpaceExperience(props: ChalkProps): React.JSX.Element {
     hasBeenLive.current = connection.status === "live" || connection.status === "reconnecting";
     autoJoinAttempted.current = false;
   }
-
   const entrance = props.entrance ?? true;
   const spaceName = props.spaceName ?? props.space ?? "Space";
   const join = useCallback(
@@ -171,11 +141,9 @@ function SpaceExperience(props: ChalkProps): React.JSX.Element {
     autoJoinAttempted.current = true;
     void join(defaultJoinOptions(props));
   }, [join, props]);
-
   useEffect(() => {
     setJoinError(null);
   }, [client]);
-
   useEffect(() => {
     const subscriptions = [
       props.onEpisodeEnded && client.on("episodeEnded", props.onEpisodeEnded),
@@ -187,14 +155,12 @@ function SpaceExperience(props: ChalkProps): React.JSX.Element {
     ].filter((unsubscribe): unsubscribe is () => void => Boolean(unsubscribe));
     return () => subscriptions.forEach((unsubscribe) => unsubscribe());
   }, [client, props.onEpisodeEnded, props.onError, props.onParticipantJoined, props.onParticipantLeft, props.onScreenShareStarted, props.onScreenShareStopped]);
-
   useEffect(() => {
     if (!entrance && connection.status === "idle" && !autoJoinAttempted.current) {
       autoJoinAttempted.current = true;
       void join(defaultJoinOptions(props));
     }
   }, [connection.status, entrance, join, props.defaults?.camera, props.defaults?.microphone, props.displayName]);
-
   useEffect(() => {
     const previous = previousStatus.current;
     if (hasObservedStatus.current) {
@@ -205,7 +171,6 @@ function SpaceExperience(props: ChalkProps): React.JSX.Element {
     hasObservedStatus.current = true;
     if (connection.status === "live" || connection.status === "reconnecting") hasBeenLive.current = true;
   }, [connection.status, props.onJoined, props.onLeft]);
-
   if (connection.status === "idle" && entrance) {
     return (
       <AppearanceLayer>
@@ -213,7 +178,6 @@ function SpaceExperience(props: ChalkProps): React.JSX.Element {
       </AppearanceLayer>
     );
   }
-
   if (connection.status === "idle") {
     return (
       <AppearanceLayer>
@@ -221,7 +185,6 @@ function SpaceExperience(props: ChalkProps): React.JSX.Element {
       </AppearanceLayer>
     );
   }
-
   if (connection.status === "joining") {
     if (!entrance)
       return (
@@ -235,7 +198,6 @@ function SpaceExperience(props: ChalkProps): React.JSX.Element {
       </AppearanceLayer>
     );
   }
-
   if (connection.status === "failed") {
     if (!hasBeenLive.current && entrance) {
       return (
@@ -250,7 +212,6 @@ function SpaceExperience(props: ChalkProps): React.JSX.Element {
       </AppearanceLayer>
     );
   }
-
   if (connection.status === "leaving")
     return (
       <AppearanceLayer>
@@ -263,10 +224,8 @@ function SpaceExperience(props: ChalkProps): React.JSX.Element {
         <SpaceStatus message="You have left this Space." onRetry={() => void join(defaultJoinOptions(props))} />
       </AppearanceLayer>
     );
-
   return <NativeSpaceView features={props.features} inviteLink={props.inviteLink} layout={props.layout} logoUrl={props.logoUrl} onLayoutChange={props.onLayoutChange} pickChatFiles={props.pickChatFiles} reconnecting={connection.status === "reconnecting"} spaceName={spaceName} />;
 }
-
 function defaultJoinOptions(props: ChalkProps): Parameters<SpaceClient["join"]>[0] {
   const displayName = props.displayName?.trim();
   return {
@@ -275,7 +234,6 @@ function defaultJoinOptions(props: ChalkProps): Parameters<SpaceClient["join"]>[
     camera: props.defaults?.camera ?? true,
   };
 }
-
 type NativeSpaceViewProps = {
   readonly features?: ChalkFeatures;
   readonly inviteLink?: string;
@@ -286,29 +244,19 @@ type NativeSpaceViewProps = {
   readonly reconnecting: boolean;
   readonly spaceName: string;
 };
-
 function NativeSpaceView({ features, inviteLink, layout, logoUrl, onLayoutChange, pickChatFiles, reconnecting, spaceName }: NativeSpaceViewProps): React.JSX.Element {
   const client = useSpaceClient();
   const theme = useNativeTheme();
-
   return (
     <View style={[styles.space, { backgroundColor: theme.colors.background }]}>
       <SpaceView features={features} inviteLink={inviteLink} layout={layout} logoUrl={logoUrl} onEndEpisode={() => client.endEpisode()} onLayoutChange={onLayoutChange} onLeave={() => client.leave()} pickChatFiles={pickChatFiles} reconnecting={reconnecting} spaceName={spaceName} />
-      <NativeTextureOverlay />
     </View>
   );
 }
-
 function AppearanceLayer({ children }: { readonly children: ReactNode }): React.JSX.Element {
   const theme = useNativeTheme();
-  return (
-    <View style={[styles.appearanceLayer, { backgroundColor: theme.colors.background }]}>
-      {children}
-      <NativeTextureOverlay />
-    </View>
-  );
+  return <View style={[styles.appearanceLayer, { backgroundColor: theme.colors.background }]}>{children}</View>;
 }
-
 function SpaceStatus({ message, onRetry }: { readonly message: string; readonly onRetry?: () => void }): React.JSX.Element {
   const theme = useNativeTheme();
   return (
@@ -322,7 +270,6 @@ function SpaceStatus({ message, onRetry }: { readonly message: string; readonly 
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   space: { flex: 1 },
   appearanceLayer: { flex: 1 },

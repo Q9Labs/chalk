@@ -1,15 +1,10 @@
 "use client";
-
 import type { ReactNode } from "react";
-
 import { cn } from "../../utils/cn";
 import { SpaceHeader, type SpaceHeaderProps } from "../space-header/SpaceHeader";
-import { getThemeMode, type ThemePalette, type ThemeTexture } from "../theme";
-
 export interface SpacePresentationProps {
-  readonly palette: ThemePalette;
-  readonly texture: ThemeTexture;
   readonly stageBackground: boolean;
+  readonly colorScheme?: "light" | "dark";
   readonly header: SpaceHeaderProps;
   readonly stage: ReactNode;
   readonly controls: ReactNode;
@@ -23,29 +18,19 @@ export interface SpacePresentationProps {
   readonly interactive?: boolean;
   readonly className?: string;
 }
-
 /**
  * Presentation-only Space chrome shared by the live controller and deterministic
  * Recording projection. Networking, device effects and commands stay in callers.
  */
-export function SpacePresentation({ palette, texture, stageBackground, header, stage, controls, compactControls, stageOverlay, sidebar, mediaOutput, overlays, dialogs, renderToken, interactive = true, className }: SpacePresentationProps): React.JSX.Element {
+export function SpacePresentation({ colorScheme = "light", stageBackground, header, stage, controls, compactControls, stageOverlay, sidebar, mediaOutput, overlays, dialogs, renderToken, interactive = true, className }: SpacePresentationProps): React.JSX.Element {
   const stageSurface = (
-    <section className={cn("min-h-0 min-w-0 flex-1 overflow-hidden rounded-[10px]", stageBackground ? "chalk-textured-surface bg-[var(--chalk-app-stage)]" : "bg-transparent")} aria-label="Space stage">
+    <section className={cn("min-h-0 min-w-0 flex-1 overflow-hidden rounded-[10px]", stageBackground ? "bg-[var(--chalk-app-stage)]" : "bg-transparent")} aria-label="Space stage">
       {stage}
     </section>
   );
-
   return (
-    <main
-      data-chalk
-      data-chalk-theme={getThemeMode(palette)}
-      data-chalk-palette={palette}
-      data-chalk-texture={texture}
-      data-recording-space-render-token={renderToken}
-      inert={interactive ? undefined : true}
-      className={cn("chalk-root chalk-textured-surface relative h-full min-h-0 overflow-hidden bg-[var(--chalk-app-canvas)] text-[var(--chalk-app-text)]", className)}
-    >
-      <section className="chalk-textured-surface relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-app-chrome)]">
+    <main data-chalk data-chalk-theme={colorScheme} data-recording-space-render-token={renderToken} inert={interactive ? undefined : true} className={cn("chalk-root relative h-full min-h-0 overflow-hidden bg-[var(--chalk-app-canvas)] text-[var(--chalk-app-text)]", className)}>
+      <section className="relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-app-chrome)]">
         {mediaOutput}
         <SpaceHeader {...header} className={cn("relative z-20", header.className)} />
 

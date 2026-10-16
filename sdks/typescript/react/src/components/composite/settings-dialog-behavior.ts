@@ -1,15 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type React from "react";
-
 import { useMediaQuery, usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { getParticipantThemeVariables } from "../../utils/colorGenerator";
 import { Message01Icon, Microphone01Icon, Monitor01Icon } from "../../utils/icons";
 import { resolvePortalThemeFromDocument } from "../../utils/theme";
-import { getThemeMode, isDarkThemePalette, type ThemeMode, type ThemePalette, type ThemeTexture } from "../theme";
-import type { BackgroundEffect } from "./BackgroundEffectsPicker";
-
 export type SettingsSectionId = "audio-video" | "audio" | "video" | "appearance" | "experience";
-
 export interface SettingsDialogValue {
   identity: {
     displayName: string;
@@ -33,9 +28,6 @@ export interface SettingsDialogValue {
   appearance: {
     layout: string;
     theme: "light" | "dark" | "system";
-
-    palette?: ThemePalette;
-    texture?: ThemeTexture;
     gradient: "default" | "darker";
     showFilmstrip: boolean;
     reducedMotion: boolean;
@@ -59,9 +51,7 @@ export interface SettingsDialogValue {
     sounds: boolean;
   };
 }
-
 type SelectableDevice = Pick<MediaDeviceInfo, "deviceId" | "kind" | "label">;
-
 export interface SettingsDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -76,13 +66,6 @@ export interface SettingsDialogProps {
   isPictureInPictureSupported?: boolean;
   isPictureInPictureActive?: boolean;
   onOpenPictureInPicture?: () => Promise<void> | void;
-  enableBackgroundEffects?: boolean;
-  isBackgroundEffectsSupported?: boolean;
-  isApplyingBackgroundEffect?: boolean;
-  backgroundEffects?: readonly BackgroundEffect[];
-  selectedBackgroundEffectId?: string;
-  onSelectBackgroundEffect?: (effectId: string) => void;
-  onUploadBackgroundEffect?: (file: File) => void;
   audioInputDevices?: readonly SelectableDevice[];
   audioOutputDevices?: readonly SelectableDevice[];
   videoInputDevices?: readonly SelectableDevice[];
@@ -93,15 +76,15 @@ export interface SettingsDialogProps {
   isDarkMode?: boolean;
   initialSection?: SettingsSectionId;
 }
-
 interface SettingsSection {
   readonly id: SettingsSectionId;
   readonly label: string;
   readonly description: string;
-  readonly icon: React.ComponentType<{ className?: string }>;
+  readonly icon: React.ComponentType<{
+    className?: string;
+  }>;
   readonly keywords: readonly string[];
 }
-
 export const SETTINGS_SECTIONS = [
   {
     id: "audio-video",
@@ -113,9 +96,9 @@ export const SETTINGS_SECTIONS = [
   {
     id: "appearance",
     label: "Appearance",
-    description: "Palette, texture, avatars",
+    description: "Avatars and motion",
     icon: Monitor01Icon,
-    keywords: ["theme", "palette", "texture", "paper", "slate", "motion", "dark", "light", "color", "avatar", "facehash", "generated", "initials", "fun"],
+    keywords: ["theme", "motion", "dark", "light", "color", "avatar", "facehash", "generated", "initials", "fun"],
   },
   {
     id: "experience",
@@ -125,22 +108,18 @@ export const SETTINGS_SECTIONS = [
     keywords: ["picture", "picture-in-picture", "pip"],
   },
 ] as const satisfies readonly SettingsSection[];
-
 interface DeviceGroups {
   readonly audioinput: SelectableDevice[];
   readonly audiooutput: SelectableDevice[];
   readonly videoinput: SelectableDevice[];
 }
-
 const EMPTY_DEVICE_GROUPS: DeviceGroups = {
   audioinput: [],
   audiooutput: [],
   videoinput: [],
 };
-
 function mergeDevices(...deviceGroups: ReadonlyArray<readonly SelectableDevice[]>): SelectableDevice[] {
   const devicesById = new Map<string, SelectableDevice>();
-
   for (const deviceGroup of deviceGroups) {
     for (const device of deviceGroup) {
       const existingDevice = devicesById.get(device.deviceId);
@@ -149,14 +128,11 @@ function mergeDevices(...deviceGroups: ReadonlyArray<readonly SelectableDevice[]
       }
     }
   }
-
   return Array.from(devicesById.values());
 }
-
 function normalizeSection(section: SettingsSectionId): Exclude<SettingsSectionId, "audio" | "video"> {
   return section === "audio" || section === "video" ? "audio-video" : section;
 }
-
 interface SettingsDialogBehaviorOptions {
   readonly isOpen: boolean;
   readonly settings: SettingsDialogValue;
@@ -168,14 +144,10 @@ interface SettingsDialogBehaviorOptions {
   readonly isDarkMode: boolean;
   readonly initialSection: SettingsSectionId;
 }
-
 interface SettingsDialogBehavior {
   readonly disableMotion: boolean;
   readonly isDesktop: boolean;
-
-  readonly resolvedPalette: ThemePalette;
-  readonly resolvedTexture: ThemeTexture;
-  readonly resolvedTheme: ThemeMode;
+  readonly resolvedTheme: "light" | "dark";
   readonly usesDarkPalette: boolean;
   readonly activeSection: SettingsSectionId;
   readonly setActiveSection: React.Dispatch<React.SetStateAction<SettingsSectionId>>;
@@ -189,18 +161,13 @@ interface SettingsDialogBehavior {
   readonly settingsChromeVariables: React.CSSProperties;
   readonly filteredSections: readonly SettingsSection[];
 }
-
 export function useSettingsDialogBehavior({ isOpen, settings, audioInputDevices, audioOutputDevices, videoInputDevices, reducedMotion, participantColorSeed, isDarkMode, initialSection }: SettingsDialogBehaviorOptions): SettingsDialogBehavior {
   const prefersReducedMotion = usePrefersReducedMotion();
   const portalTheme = resolvePortalThemeFromDocument();
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const disableMotion = prefersReducedMotion || reducedMotion;
-  const fallbackPalette: ThemePalette = settings.appearance.theme === "dark" || (settings.appearance.theme === "system" && portalTheme === "dark") ? "warm-charcoal" : "light";
-
-  const resolvedPalette = settings.appearance.palette ?? fallbackPalette;
-  const resolvedTexture = settings.appearance.texture ?? "none";
-  const resolvedTheme = getThemeMode(resolvedPalette);
-  const usesDarkPalette = isDarkMode || isDarkThemePalette(resolvedPalette);
+  const resolvedTheme = settings.appearance.theme === "dark" || (settings.appearance.theme === "system" && portalTheme === "dark") ? "dark" : "light";
+  const usesDarkPalette = isDarkMode || resolvedTheme === "dark";
   const [activeSection, setActiveSection] = useState<SettingsSectionId>(normalizeSection(initialSection));
   const [isNavOpen, setIsNavOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -214,36 +181,28 @@ export function useSettingsDialogBehavior({ isOpen, settings, audioInputDevices,
     if (!searchQuery.trim()) {
       return SETTINGS_SECTIONS;
     }
-
     const query = searchQuery.toLowerCase();
     return SETTINGS_SECTIONS.filter((section) => section.label.toLowerCase().includes(query) || section.description.toLowerCase().includes(query) || section.keywords.some((keyword) => keyword.includes(query)));
   }, [searchQuery]);
-
   useEffect(() => {
     if (!filteredSections.some((section) => section.id === activeSection)) {
       setActiveSection(filteredSections[0]?.id ?? "audio-video");
     }
   }, [activeSection, filteredSections]);
-
   useEffect(() => {
     if (isOpen) {
       setIsNavOpen(true);
     }
   }, [isOpen]);
-
   useEffect(() => {
     if (!isOpen) return;
-
     const mediaDevices = navigator.mediaDevices;
     if (!mediaDevices?.enumerateDevices) return;
-
     let isCancelled = false;
-
     const syncDevices = async () => {
       try {
         const devices = await mediaDevices.enumerateDevices();
         if (isCancelled) return;
-
         setDetectedDevices({
           audioinput: devices.filter((device) => device.kind === "audioinput"),
           audiooutput: devices.filter((device) => device.kind === "audiooutput"),
@@ -253,21 +212,16 @@ export function useSettingsDialogBehavior({ isOpen, settings, audioInputDevices,
         // Prop-driven device lists remain authoritative when browser enumeration fails.
       }
     };
-
     void syncDevices();
     mediaDevices.addEventListener?.("devicechange", syncDevices);
-
     return () => {
       isCancelled = true;
       mediaDevices.removeEventListener?.("devicechange", syncDevices);
     };
   }, [isOpen]);
-
   return {
     disableMotion,
     isDesktop,
-    resolvedPalette,
-    resolvedTexture,
     resolvedTheme,
     usesDarkPalette,
     activeSection,

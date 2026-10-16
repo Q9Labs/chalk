@@ -58,7 +58,7 @@ export const ClassicSpaceInfoDialog = React.memo<SpaceInfoDialogProps>(({ isOpen
         aria-modal="true"
         aria-label="Space details"
         tabIndex={-1}
-        className={cn("chalk-textured-surface max-h-[calc(100dvh-2rem)] w-full max-w-[560px] overflow-y-auto rounded-[14px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)] outline-none", className)}
+        className={cn("max-h-[calc(100dvh-2rem)] w-full max-w-[560px] overflow-y-auto rounded-[14px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)] outline-none", className)}
         onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={handleKeyDown}
       >

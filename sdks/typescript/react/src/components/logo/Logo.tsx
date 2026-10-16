@@ -3,20 +3,17 @@
 import { useId } from "react";
 import type React from "react";
 
-export type LogoMotion = "orbit-burst" | "none";
 export type LogoVariant = "mark" | "wordmark";
 
 export type LogoProps = {
   readonly accessibilityLabel?: string | null;
   readonly color?: string;
   readonly height?: number;
-  readonly motion?: LogoMotion;
   readonly variant?: LogoVariant;
 };
 
 const DEFAULT_COLOR = "#1A332B";
 const DEFAULT_HEIGHT = 32;
-const DEFAULT_MOTION: LogoMotion = "orbit-burst";
 const DEFAULT_VARIANT: LogoVariant = "wordmark";
 const WORDMARK_VIEW_BOX = "0 0 200 80";
 const MARK_VIEW_BOX = "0 0 68 80";
@@ -25,7 +22,7 @@ function gradientId(prefix: string, name: string): string {
   return `${prefix}-${name}`;
 }
 
-export function Logo({ accessibilityLabel = "Chalk", color = DEFAULT_COLOR, height = DEFAULT_HEIGHT, motion = DEFAULT_MOTION, variant = DEFAULT_VARIANT }: LogoProps): React.JSX.Element {
+export function Logo({ accessibilityLabel = "Chalk", color = DEFAULT_COLOR, height = DEFAULT_HEIGHT, variant = DEFAULT_VARIANT }: LogoProps): React.JSX.Element {
   const generatedId = useId().replace(/[^a-zA-Z0-9_-]/gu, "");
   const idPrefix = `chalk-logo-${generatedId}`;
   const isWordmark = variant === "wordmark";
@@ -40,7 +37,6 @@ export function Logo({ accessibilityLabel = "Chalk", color = DEFAULT_COLOR, heig
       className="chalk-logo"
       color={color}
       data-chalk-logo="true"
-      data-chalk-logo-motion={motion}
       focusable="false"
       height={height}
       role={accessible ? "img" : undefined}

@@ -103,7 +103,7 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
   }
 
   return (
-    <div className={cn("chalk-textured-surface flex w-80 flex-col overflow-hidden rounded-[12px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] shadow-[var(--chalk-app-shadow-sm)]", className)} role="complementary" aria-label="Admission requests">
+    <div className={cn("flex w-80 flex-col overflow-hidden rounded-[12px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] shadow-[var(--chalk-app-shadow-sm)]", className)} role="complementary" aria-label="Admission requests">
       <div className="flex items-center justify-between border-b border-[var(--chalk-app-line)] px-4 py-3">
         <h2 className="text-sm font-semibold text-[var(--chalk-app-text)]">Waiting to join</h2>
         {onClose ? <IconButton icon={<Cancel01Icon className="h-4 w-4" />} size="sm" variant="ghost" onClick={onClose} aria-label="Close admission" className="text-[var(--chalk-app-text-muted)] hover:bg-[var(--chalk-app-control-hover)] hover:text-[var(--chalk-app-text)]" /> : null}

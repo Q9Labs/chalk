@@ -1,18 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
-import type { Copy01IconHandle } from "../../utils/animated-icons";
 import { Input } from "@q9labsai/chalk-ui";
 import { Cancel01Icon, Copy01Icon, Mail01Icon, Calendar01Icon, Link01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import type { InviteDialogProps } from "./InviteDialog";
-
 export const ClassicInviteDialog = React.memo<InviteDialogProps>(({ isOpen, onClose, inviteLink, spaceId, onCopyLink, onShareEmail, onShareCalendar, className }: InviteDialogProps) => {
   const [isCopyFeedbackVisible, setIsCopyFeedbackVisible] = useState(false);
   const prefersReducedMotion = usePrefersReducedMotion();
   const modalRef = useRef<HTMLDivElement>(null);
   const copyResetTimeoutRef = useRef<number | null>(null);
-  const copyIconRef = useRef<Copy01IconHandle>(null);
-
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape" && isOpen) {
@@ -22,7 +18,6 @@ export const ClassicInviteDialog = React.memo<InviteDialogProps>(({ isOpen, onCl
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
   }, [isOpen, onClose]);
-
   useEffect(() => {
     return () => {
       if (copyResetTimeoutRef.current) {
@@ -31,11 +26,9 @@ export const ClassicInviteDialog = React.memo<InviteDialogProps>(({ isOpen, onCl
       }
     };
   }, []);
-
   const handleCopyLink = async () => {
     if (!onCopyLink) return;
     await onCopyLink();
-    copyIconRef.current?.startAnimation();
     setIsCopyFeedbackVisible(true);
     if (copyResetTimeoutRef.current) {
       window.clearTimeout(copyResetTimeoutRef.current);
@@ -45,17 +38,12 @@ export const ClassicInviteDialog = React.memo<InviteDialogProps>(({ isOpen, onCl
       copyResetTimeoutRef.current = null;
     }, 1200);
   };
-
   if (!isOpen) return null;
-
   return (
     <div className={cn("fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4 backdrop-blur-[2px]", className)} role="dialog" aria-modal="true" aria-labelledby="invite-modal-title">
       <div
         ref={modalRef}
-        className={cn(
-          "chalk-textured-surface w-full max-w-md overflow-hidden rounded-[12px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]",
-          !prefersReducedMotion && "animate-in fade-in zoom-in-[0.97] duration-200",
-        )}
+        className={cn(" w-full max-w-md overflow-hidden rounded-[12px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]", !prefersReducedMotion && "animate-in fade-in zoom-in-[0.97] duration-200")}
       >
         <div className="flex items-center justify-between border-b border-[var(--chalk-app-line)] px-5 py-4">
           <h2 id="invite-modal-title" className="text-xl font-semibold tracking-[-0.025em] text-[var(--chalk-app-text)]">
@@ -78,12 +66,10 @@ export const ClassicInviteDialog = React.memo<InviteDialogProps>(({ isOpen, onCl
               <button
                 type="button"
                 onClick={handleCopyLink}
-                onMouseEnter={() => copyIconRef.current?.startAnimation()}
-                onFocus={() => copyIconRef.current?.startAnimation()}
                 disabled={isCopyFeedbackVisible}
                 className={cn("flex h-11 w-full items-center justify-center gap-2 rounded-[8px] bg-[var(--chalk-app-control-primary)] text-sm font-semibold text-white transition-colors hover:bg-[var(--chalk-app-control-primary-hover)]", isCopyFeedbackVisible && "cursor-default bg-[#49645d]")}
               >
-                <Copy01Icon ref={copyIconRef} size={18} aria-hidden="true" onMouseEnter={() => copyIconRef.current?.startAnimation()} />
+                <Copy01Icon size={18} aria-hidden="true" />
 
                 <span className="sr-only" aria-live="polite"></span>
               </button>
@@ -124,5 +110,4 @@ export const ClassicInviteDialog = React.memo<InviteDialogProps>(({ isOpen, onCl
     </div>
   );
 });
-
 ClassicInviteDialog.displayName = "InviteDialog";

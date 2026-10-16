@@ -39,7 +39,7 @@ export function SiteNav() {
     <header className="nav" data-menu-open={menuOpen ? "true" : "false"}>
       <div className="container nav-inner">
         <a href="/" className="nav-logo" aria-label="Chalk home">
-          <Logo accessibilityLabel={null} color="currentColor" height={26} motion="orbit-burst" variant="wordmark" />
+          <Logo accessibilityLabel={null} color="currentColor" height={26} variant="wordmark" />
         </a>
 
         <nav className="nav-links" aria-label="Product navigation">

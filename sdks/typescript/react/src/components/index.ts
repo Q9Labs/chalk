@@ -41,6 +41,4 @@ export type { ScreenShareViewProps } from "./composite/ScreenShareView";
 export { Entrance } from "./entrance/Entrance";
 export type { EntranceProps, EntranceSettings } from "./entrance/Entrance";
 export { Logo } from "./logo/Logo";
-export type { LogoMotion, LogoProps, LogoVariant } from "./logo/Logo";
-export type { ThemeAppearance, ThemeMode, ThemePalette, ThemeTexture } from "./theme";
-export { COSMIC_CHALK_THEME } from "../theme";
+export type { LogoProps, LogoVariant } from "./logo/Logo";

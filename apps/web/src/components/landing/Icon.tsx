@@ -1,5 +1,5 @@
 import type { IconSvgElement } from "@hugeicons/react";
-import { AnimatedHugeiconsIcon } from "@q9labsai/chalk-react/utils";
+import { HugeiconsIcon } from "@hugeicons/react";
 
 /**
  * Every icon on the marketing page sits next to the words it illustrates, so
@@ -8,5 +8,5 @@ import { AnimatedHugeiconsIcon } from "@q9labsai/chalk-react/utils";
  * without it a screen reader walks a page of unlabelled graphics.
  */
 export function Icon({ glyph, size = 16, weight = 2 }: { glyph: IconSvgElement; size?: number; weight?: number }) {
-  return <AnimatedHugeiconsIcon icon={glyph} size={size} strokeWidth={weight} aria-hidden="true" focusable="false" />;
+  return <HugeiconsIcon icon={glyph} size={size} strokeWidth={weight} aria-hidden="true" focusable="false" />;
 }

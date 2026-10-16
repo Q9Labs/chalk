@@ -3,17 +3,14 @@ import { Toaster, toast } from "sonner";
 import { cn } from "../../utils/cn";
 import { InformationCircleIcon, CheckmarkCircle02Icon, Alert02Icon, CancelCircleIcon } from "../../utils/icons";
 import { getParticipantThemeVariables } from "../../utils/colorGenerator";
-import { getThemeMode } from "../theme";
 import type { ToastStackProps } from "./ToastStack";
-
 const positionMap = {
   "top-right": "top-right" as const,
   "top-left": "top-left" as const,
   "bottom-right": "bottom-right" as const,
   "bottom-left": "bottom-left" as const,
 };
-
-export const ClassicToastStack = React.memo<ToastStackProps>(({ toasts, onDismiss, position = "bottom-right", maxVisible = 5, participantColorSeed, participantGradientPreference, palette, texture = "none", className }) => {
+export const ClassicToastStack = React.memo<ToastStackProps>(({ toasts, onDismiss, position = "bottom-right", maxVisible = 5, participantColorSeed, participantGradientPreference, className }) => {
   const activeIds = useRef(new Set<string>());
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     if (typeof document !== "undefined") {
@@ -22,15 +19,12 @@ export const ClassicToastStack = React.memo<ToastStackProps>(({ toasts, onDismis
     return "light";
   });
   const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed, participantGradientPreference), [participantColorSeed, participantGradientPreference]);
-  const resolvedTheme = palette ? getThemeMode(palette) : theme;
-
+  const resolvedTheme = theme;
   useEffect(() => {
     const handleThemeChange = () => {
       setTheme(document.documentElement.classList.contains("dark") ? "dark" : "light");
     };
-
     handleThemeChange();
-
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         if (mutation.attributeName === "class") {
@@ -38,17 +32,13 @@ export const ClassicToastStack = React.memo<ToastStackProps>(({ toasts, onDismis
         }
       });
     });
-
     observer.observe(document.documentElement, { attributes: true });
-
     return () => observer.disconnect();
   }, []);
-
   useEffect(() => {
     toasts.slice(0, maxVisible).forEach((currentToast) => {
       if (activeIds.current.has(currentToast.id)) return;
       activeIds.current.add(currentToast.id);
-
       const toastOptions = {
         id: currentToast.id,
         duration: currentToast.duration ?? 5000,
@@ -63,7 +53,6 @@ export const ClassicToastStack = React.memo<ToastStackProps>(({ toasts, onDismis
             }
           : undefined,
       };
-
       switch (currentToast.type) {
         case "success":
           toast.success(currentToast.message, toastOptions);
@@ -79,14 +68,11 @@ export const ClassicToastStack = React.memo<ToastStackProps>(({ toasts, onDismis
       }
     });
   }, [toasts, maxVisible, onDismiss]);
-
   return (
     <Toaster
       theme={resolvedTheme}
       data-chalk
       data-chalk-theme={resolvedTheme}
-      data-chalk-palette={palette}
-      data-chalk-texture={texture}
       position={positionMap[position]}
       visibleToasts={maxVisible}
       closeButton
@@ -115,7 +101,7 @@ export const ClassicToastStack = React.memo<ToastStackProps>(({ toasts, onDismis
       toastOptions={{
         unstyled: true,
         classNames: {
-          toast: cn("chalk-textured-surface group flex min-w-[300px] max-w-[360px] items-center gap-3 rounded-[12px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] p-2.5 pr-3 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]", "chalk-animate-toast-in"),
+          toast: cn("group flex min-w-[300px] max-w-[360px] items-center gap-3 rounded-[12px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] p-2.5 pr-3 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]", "chalk-animate-toast-in"),
           title: "text-sm font-medium leading-5",
           description: "text-[11px] leading-tight text-[var(--chalk-app-text-muted)]",
           actionButton: "ml-auto rounded-[7px] bg-[var(--chalk-app-control-primary)] px-2.5 py-1.5 text-[11px] font-semibold !text-white transition hover:bg-[var(--chalk-app-control-primary-hover)]",
@@ -127,5 +113,4 @@ export const ClassicToastStack = React.memo<ToastStackProps>(({ toasts, onDismis
     />
   );
 });
-
 ClassicToastStack.displayName = "ClassicToastStack";
