@@ -172,7 +172,7 @@ overrides:
   '@vitest/browser': ^4.1.11
   '@xmldom/xmldom': ^0.8.15
   compression: 1.8.2
-  seroval: 1.6.3
+  seroval: 1.6.9
   source-map-js: 1.2.2
   tinypool: 2.1.2
   browserslist: ^4.28.7
@@ -8053,8 +8053,8 @@ packages:
     peerDependencies:
       seroval: 1.6.3
 
-  seroval@1.6.3:
-    resolution: {integrity: sha512-5PwLbVPpT4DEki1hYVSSsoxWY6xCNMVucAVLK/CH0mXSDfp/I4KaAex72q80GNt5hpn7CCMGdSpIg4YGqH/wXQ==}
+  seroval@1.6.9:
+    resolution: {integrity: sha512-UeEzHwAK+yl0YLbsvROV1t5yMYEwZZ0CfKYxDvUgS2fO9Vxdf8djqVIB+OuVpuawRNPqw68LE1Du/GMsW2ZPqA==}
     engines: {node: '>=10'}
 
   serve-static@1.16.3:
@@ -12837,15 +12837,15 @@ snapshots:
     dependencies:
       '@tanstack/history': 1.162.0
       cookie-es: 3.1.1
-      seroval: 1.6.3
-      seroval-plugins: 1.5.4(seroval@1.6.3)
+      seroval: 1.6.9
+      seroval-plugins: 1.5.4(seroval@1.6.9)
 
   '@tanstack/router-core@1.171.34':
     dependencies:
       '@tanstack/history': 1.162.4
       cookie-es: 3.1.1
-      seroval: 1.6.3
-      seroval-plugins: 1.6.9(seroval@1.6.3)
+      seroval: 1.6.9
+      seroval-plugins: 1.6.9(seroval@1.6.9)
 
   '@tanstack/router-generator@1.167.17(supports-color@10.2.2)':
     dependencies:
@@ -12945,7 +12945,7 @@ snapshots:
       '@tanstack/router-core': 1.171.34
       '@tanstack/start-fn-stubs': 1.162.0
       '@tanstack/start-storage-context': 1.167.36
-      seroval: 1.6.3
+      seroval: 1.6.9
 
   '@tanstack/start-fn-stubs@1.162.0': {}
 
@@ -12964,7 +12964,7 @@ snapshots:
       lightningcss: 1.33.0
       pathe: 2.0.3
       picomatch: 4.0.7
-      seroval: 1.6.3
+      seroval: 1.6.9
       source-map: 0.7.6
       srvx: 0.11.22
       tinyglobby: 0.2.17
@@ -12997,7 +12997,7 @@ snapshots:
       '@tanstack/start-storage-context': 1.167.36
       fetchdts: 0.1.7
       h3-v2: h3@2.0.1-rc.31(crossws@0.4.12(srvx@1.0.3))(ocache@0.3.0)
-      seroval: 1.6.3
+      seroval: 1.6.9
     transitivePeerDependencies:
       - crossws
       - ocache
@@ -17740,15 +17740,15 @@ snapshots:
 
   serialize-error@2.1.0: {}
 
-  seroval-plugins@1.5.4(seroval@1.6.3):
+  seroval-plugins@1.5.4(seroval@1.6.9):
     dependencies:
-      seroval: 1.6.3
+      seroval: 1.6.9
 
-  seroval-plugins@1.6.9(seroval@1.6.3):
+  seroval-plugins@1.6.9(seroval@1.6.9):
     dependencies:
-      seroval: 1.6.3
+      seroval: 1.6.9
 
-  seroval@1.6.3: {}
+  seroval@1.6.9: {}
 
   serve-static@1.16.3:
     dependencies:
