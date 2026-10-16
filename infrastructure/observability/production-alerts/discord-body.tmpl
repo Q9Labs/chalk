@@ -33,7 +33,7 @@
 {{- $group := . -}}{{- if ge (len $group) 16 -}}{{- if eq (slice $group 0 16) "delivery-test & " -}}{{- $test = true -}}{{- end -}}{{- end -}}
 {{- range $i := len $group -}}{{- $rest := slice $group $i -}}{{- if ge (len $rest) 19 -}}{{- if eq (slice $rest 0 19) " & delivery-test & " -}}{{- $test = true -}}{{- end -}}{{- end -}}{{- end -}}
 {{- end -}}{{- if $test -}}
-{{- $headline = "TEST: Chalk alert delivery" -}}{{- $summary = "No customer failure was induced." -}}{{- $next = "This only tests notification delivery; no customer action is needed." -}}{{- $engineers = "For engineers: delivery-test; query structured logs by W3C trace ID from the affected journey." -}}
+{{- $headline = "TEST: Chalk alert delivery" -}}{{- $summary = "No customer failure was induced." -}}{{- $next = "This only tests notification delivery; no customer action is needed." -}}{{- $engineers = "For engineers: delivery-test; open the affected Axiom dataset and run | search <episode-id> using the affected Episode ID." -}}
 {{- end -}}
 {{- $content = printf "%s\n%s\n%s\n%s" $headline $summary $next $engineers -}}
 {{- if eq .Action "Closed" -}}{{- $content = printf "The alert threshold is no longer exceeded\nEarlier alert: %s. %s\nThis does not prove the earlier failure was fixed. An engineer must check the earlier message and affected records; do not treat this as recovery.\n%s" $headline $summary $engineers -}}{{- end -}}

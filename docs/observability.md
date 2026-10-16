@@ -1,155 +1,31 @@
-# Observability
+# Production observability
 
-Chalk sends traces, metrics, and logs through OpenTelemetry to Tempo, Prometheus, and Loki, viewed in Grafana alongside the Postgres journey ledger.
+API request logs and Sync event spans export to Axiom. The local Grafana stack,
+journey ledger, client telemetry, Episode diagnostics and trace CLI are removed.
 
-## Correlation
+## Follow an incident
 
-| Surface   | Journey field        |
-| --------- | -------------------- |
-| HTTP      | `x-chalk-journey-id` |
-| WebSocket | `journey_id`         |
-| Telemetry | `chalk.journey.id`   |
+Start with the Space and Episode IDs from the affected class and the participant
+ID when available. Keep the server error code and trace/request ID from a
+failed join when locating the corresponding request.
+Not every request has an Episode (for example, authentication before joining).
 
-The first observer creates the journey and W3C context only when none exists. Propagate `traceparent` and `tracestate` through downstream work. Use parent/child spans for synchronous or propagated OTP work, and span links for independent fan-out and late callbacks.
+In the relevant Axiom API log or Sync trace dataset, run:
 
-The append-only Postgres ledger uses idempotent event IDs and ordering. The highest ordered terminal event determines the result; late retries cannot overwrite it. Preserve lifecycle events across reconnects and split traces.
-
-Webhook Events retain the producer's journey/trace reference and a queued branch per Delivery. Each Attempt starts a producer-linked trace and ends as succeeded, exhausted, canceled, or erased. Manual redelivery and `endpoint.test` start their own linked roots. Customer bodies and Standard Webhooks headers never expose internal journey/trace IDs.
-
-## Client intake
-
-Telemetry is opt-in. Mobile enables it with an intake-capable token provider. Web needs `VITE_CHALK_TELEMETRY_ENABLED=true` and an authenticated `VITE_CHALK_API_URL`; marketing without credentials stays inert.
-
-Client batches are bounded to 100 events per request; explicit and unload/keepalive flushes don't wait for the normal batch window.
-
-Intake rejects tenant API keys. It accepts verified provider/RealtimeKit participant bearers or authenticated User bearer/cookie credentials, with expiry/revocation checks and rate limits. Chalk media grants and `AccessGrant` envelopes are not intake credentials. Tenant attribution/governance beyond this remains deferred.
-
-## Instrument and verify
-
-- Cover meaningful success, rejection, retry, timeout, and terminal failures across SDK, API, Sync, provider adapters, stores, and webhook delivery. Use bounded attributes; never include credentials, secrets, sensitive payloads, media content, or whiteboard content.
-- Keep a journey's errors, terminal events, and pipeline-health signals complete when sampling routine detail. Summarize RTC data; retention and budgets are deployment settings.
-- Test a successful journey and a distinct failure, then query the relevant trace, metrics, logs, and ledger events. The execution trace harness is an explainer, not operational proof.
-- Add actionable alerts and test their signal source. Test notification delivery separately; a Grafana alert doesn't establish that someone received it.
-- Register new services in `infrastructure/uptime-worker/src/index.ts`, add tests and public status where appropriate, and observe the deployed check fail and recover.
-
-## Whiteboard watchdog replacements
-
-Both web and React Native Space clients send one `whiteboard.watchdog.replace`
-Episode diagnostic per slow-connection replacement, using the existing authenticated
-Episode diagnostics exporter independently of opt-in journey telemetry. The single
-`replacement` checkpoint records the socket replacement, not completed recovery.
-Attributes contain only `reason`, `backoff_ms`, up to two `round_trip_*_ms` samples,
-and up to two `outstanding_age_*_ms` samples when probes have not returned.
-The normal diagnostic event ID makes retries idempotent. Disabled diagnostics remain
-inert. Deploy the API's updated event/attribute allowlist to every API instance before
-publishing the SDK, and do not roll the API back while that SDK is in use: an older API
-rejects the whole diagnostic batch that carries this event, so other events in the same
-batch are lost too. No Sync deployment or telemetry-default change is needed.
-
-## Sync diagnostics
-
-`/diagnostics/healthz` is separate from general readiness: it returns `200` only when the exporter is configured and healthy, otherwise `503`. Diagnostic delivery failure must not stop collaboration traffic.
-
-The response exposes bounded counters, ages, and failure classes—not URLs, identifiers, credentials, response bodies, or raw transport errors. The uptime target is `sync.diagnostics`. Successful append clears degradation; cumulative failures/dropped batches remain in `/metrics`.
-
-Verify a rejected append → monitor failure → restored intake → successful append/recovery and durable cursor. Whiteboard sockets record scoped `whiteboard.connect`, `whiteboard.recover`, and `whiteboard.disconnect` events; terminal events include bounded close details and trace correlation, not protocol frames.
-
-The `sync.websocket.closed` log and the `whiteboard.disconnect` event carry `reason` and, when Sync chose the close, `close_code` with the trace and journey IDs, and the whiteboard log adds `scene_id`. When Sync didn't choose the close, the transport does not forward its close code to the callback, so `close_code` is omitted. The reason comes from the transport: `client_closed`, `timeout`, `server_shutdown`, or `transport_error`. Client close text is never recorded. Both Sync sockets add `close_kind`: `normal` for a client close or acknowledged class end, `drain` for server shutdown, and `abnormal` for transport errors, timeouts, rejected admission and server-chosen failure closes. Only abnormal closures and rejected upgrades count toward the production Sync monitor. The transport callback does not expose peer close codes; a peer-sent close frame is a normal leave, while abrupt TCP loss is a transport error.
-
-## Failure evidence by service
-
-- **Capture**: a failed completion stores `stage`, `outcome`, `error_class`, `http_status`, and `api_error_code` in the job's failure detail. A `timed_out` outcome keeps the last retryable API answer, so repeated 5xx responses show up next to the timeout. The API code is read from the response's `error.code` and kept only when it is a short identifier.
-- **Recorder fleet issuer**: every 4xx request log line (`recorder fleet issuer request`) has a `reason` field, such as `registration not found`, `registration revoked`, `bootstrap request does not match registration`, or `controller identity`. Provider-side failures (5xx) are not copied into it.
-- **Dashboard**: when a 2xx response breaks the generated client contract, the user sees the calm "Response did not match the expected contract" message and the browser console gets a `dashboard response did not match the expected contract` warning with the endpoint (identifiers replaced by `:id`), HTTP status, first failing field path, and journey ID. Received values are left out.
-- **Recorder nodes**: node and container logs (`podman logs`, journals) disappear when the node is replaced or deleted, and the fleet controller has no channel to read them. Bootstrap failures survive as bounded diagnostics. The API emits `recording.export.degraded` from accepted Render commit metadata; other node-only events need the node to ship its logs while it runs.
-
-## Limits
-
-### Capture Entrance preparations
-
-`recording.entrance.prewarmed` is emitted after an Automatic Space's Entrance
-preparation commits. Repeated opens within its five-minute lifetime do not emit
-another creation or extend the deadline. `recording.preparation.consumed` carries
-`consumed=true` when Recording admission replaces preparation demand, and
-`consumed=false` for a cold admission. These structured logs use request context
-for correlation and never contain invite tokens or participant details.
-`recording.entrance.failed` reports preparation failures; public requests also
-use the standard `public_invite.request` log/span with success, rejection, and
-failure outcomes. The HTTP proof checks successful and rejected Entrance
-requests through this middleware, including invite-token exclusion from logs.
-
-Public Entrance requests require a verified, enabled, current-generation invite;
-a Space slug is not sufficient. Dashboard requests require Tenant Space-read
-access. Manual, Disabled, archived, and already-recording Spaces do not pre-warm.
-Opening an Entrance advances a future preparation to now using its current
-revision. No schema migration or new fleet provisioning path is required.
-
-Demand expires exactly five minutes after preparation. With the default healthy
-five-second reconciliation cadence, an isolated idle node closes admission,
-revokes identity, and is deleted within three more reconciliations: at most
-5m15s, approximately $0.0007814 at $0.00893/hour. Missing observations can use the
-existing five-minute drain timeout: conservatively 10m15s, approximately
-$0.0015256. These are controller-time bounds for an isolated node, not a provider
-billing guarantee: other fleet transitions, controller outages, or failed
-provider deletion can delay cleanup. Preparations are unique per Tenant/Space,
-and total preparation demand is capped at ten minus active base demand.
-
-Provider analytics/logs/webhooks require deployment-specific account connectors. Local checks cover Chalk adapters and endpoint observations, not Cloudflare's internal SFU behavior.
-
-Pre-runtime events, hard crashes before export, unregistered native peer connections, device/carrier internals, and provider actions with no visible output can remain unobserved. Leave unattributable connections unassigned. Use journey sequence and receive time without claiming perfect clock ordering. Expose exporter drops/failures and pipeline-canary alerts instead of implying complete coverage.
-
-## Local checks
-
-Production user-facing alerts use [native Axiom monitors and Discord](../infrastructure/observability/production-alerts/README.md),
-with read-only Postgres snapshots for durable job state. Local Grafana provisioning
-is not a production route. A created monitor or a direct Discord webhook test does
-not establish end-to-end production alert delivery.
-
-```sh
-pnpm run observability:start
-pnpm run observability:smoke
-pnpm run observability:stop
+```apl
+| search "<episode-id>"
 ```
 
-The stack includes a minute-by-minute trace/metric/log canary. Smoke checks send and query correlated signals and check the dashboard/critical alerts. API and Sync gates cover durable intake, idempotency, propagation, and service health. Live provider connectors and alert delivery need their own checks.
+Replace the placeholder with the affected Episode ID. Narrow by Tenant, Space,
+participant or trace ID where those attributes are present. API/Sync exporters
+remain enabled through their managed OTLP configuration; dataset names and tokens
+are private deployment inputs, not repository constants.
 
-## Recording Export video degradation
+## Alerts
 
-Render holds each source's last decodable frame over video damage, including a
-loss at the end of the source. A source with no decodable frame uses its normal
-placeholder tile. Audio remains on the recording-relative clock. An Export
-with neither decodable video nor audio fails with `recording has no decodable
-video or audio`; video damage alone does not reject an Export.
-
-Render job `result_metadata.video_degradation` stores per-source frozen
-milliseconds, dropped frames, recoveries and placeholder time. Durations count
-only visible intervals, not hidden camera/share time. Startup placeholders
-are counted unless the compositor backfills the first frame (within two seconds
-of the recording origin).
-These are internal job facts, not additions to the public Export API.
-
-After accepting a degraded Render commit, the API emits `recording.export.degraded`
-through its production log pipeline to Axiom. The API is the sole emitter; the
-ephemeral Render worker does not log a duplicate. Each accepted commit request
-emits one structured event (an accepted retry can emit again) with its job ID, total frozen milliseconds, degraded source
-count, and counters for at most 16 sources (plus an omitted count). Logged
-sources use list positions and media kinds, never source, participant, Recording
-or Episode identifiers. No media payloads are logged. Production alerting can
-count this event independently of failed Exports.
-
-Resolution switches restart decoding at complete keyframes and normalize each
-segment to the first segment's dimensions, preserving aspect ratio and RTP
-spacing. Known replays are redundant copies, not additional lost frames. Codec
-validation discards undecodable pictures and waits for a usable keyframe before
-resuming; source preparation fills frozen spans before compositor input seeks.
-
-## Production Discord alerts
-
-The alert-only collector and monitor definitions live in
-`infrastructure/observability/production-alerts`. Capture and Export failure
-rules are disjoint. A custom webhook template puts customer impact and next
-action before the engineer diagnostic line. A cleared alert says only that it has
-gone quiet; aging out is not repair. Verify actual Discord
-receipt separately from valid templates or accepted Axiom requests.
-
-State alerts read Tenant display names and stable grouping IDs at runtime; neither is committed. This is a deliberate privacy trade-off against the former anonymous aggregates. Zero counts for each Tenant prevent stale positive groups. API/Sync alerts cannot currently name a Tenant safely and say so. Export/transcript messages include the earliest known source expiry and explicitly flag unknown/expired deadlines.
+Three Axiom monitors cover API errors and abnormal Sync drops, failed/overdue
+recordings and transcripts or exhausted webhooks, and stale collector state.
+The read-only collector and Discord message templates live in
+[infrastructure/observability/production-alerts](../infrastructure/observability/production-alerts/README.md).
+An independent uptime Worker checks API/Sync health and readiness and reports
+failures directly to Discord. No public status projection is maintained.

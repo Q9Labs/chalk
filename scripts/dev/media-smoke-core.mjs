@@ -10,7 +10,6 @@ export const PHASES = Object.freeze({
   media: "media",
   stats: "stats",
   stopCamera: "stop_camera",
-  observability: "observability",
   cleanup: "cleanup",
 });
 
@@ -20,7 +19,6 @@ export const UNSUPPORTED_ASSERTIONS = Object.freeze({
   mediaTracker: "media_tracker",
   rtcStatsTracker: "rtc_stats_tracker",
   stopParticipantCameraUI: "stop_participant_camera_ui",
-  observabilityProofEndpoint: "observability_proof_endpoint",
 });
 
 const DIRECTIONS = ["inbound", "outbound"];
@@ -99,35 +97,14 @@ export function normalizeReadyRuntimeManifest(manifest, options = {}) {
   const webJoinPath = firstString(options.webJoinPath, options.web_join_path, manifest.webJoinPath, manifest.web_join_path);
   if (!webJoinPath || !webJoinPath.startsWith("/")) throw new MediaProofError("manifest_missing_web_join_path", "Runtime manifest is missing a web join path");
 
-  const proofValue = firstString(
-    options.proofEndpoint,
-    options.observabilityProofURL,
-    options.observabilityProofUrl,
-    manifest.observabilityProofURL,
-    manifest.observabilityProofUrl,
-    manifest.proofEndpoint,
-    manifest.proofURL,
-    manifest.observability?.proofEndpoint,
-    manifest.observability?.proofURL,
-    manifest.observability?.proofUrl,
-    manifest.observability?.proof,
-    manifest.observability?.endpoint,
-    manifest.proof?.endpoint,
-    manifest.proof?.url,
-  );
-  if (!proofValue && typeof options.observabilityProof !== "function") throw new MediaProofError("manifest_missing_observability_proof", "Runtime manifest is missing observability proof endpoint");
-  const observabilityProofURL = proofValue ? localURL(proofValue, "observability proof URL") : undefined;
-
   const privateDirectory = firstString(options.privateDirectory, manifest.privateDirectory, manifest.private_dir, manifest.runtimeDirectory, manifest.runtime_directory);
-  const proofPath = firstString(options.proofPath, manifest.proofPath, manifest.proof?.path, manifest.observability?.proofPath, manifest.observability?.proof?.path) ?? (privateDirectory ? join(privateDirectory, "proof", `media-smoke-${safeFilePart(runtimeID)}.json`) : undefined);
+  const proofPath = firstString(options.proofPath, manifest.proofPath, manifest.proof?.path) ?? (privateDirectory ? join(privateDirectory, "proof", `media-smoke-${safeFilePart(runtimeID)}.json`) : undefined);
   return Object.freeze({
     runtimeID,
     status,
     webURL: webURL.toString(),
     webOrigin: webURL.origin,
     webJoinPath,
-    observabilityProofURL: observabilityProofURL?.toString(),
-    observabilityContract: options.observabilityContract ?? manifest.observability?.contract ?? manifest.proof?.contract,
     proofPath,
     manifestPath: options.manifestPath,
     participantNames: {

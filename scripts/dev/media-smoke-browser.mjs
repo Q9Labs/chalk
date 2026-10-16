@@ -156,31 +156,6 @@ export async function stopParticipantCamera(primary, guest, runtime) {
   return { outcome: "committed", event: "participant_camera_stopped" };
 }
 
-export async function queryObservability(runtime, journeyIDs, options) {
-  if (typeof options.observabilityProof === "function") {
-    const result = await options.observabilityProof({ runtime, journeyIDs });
-    if (!isRecord(result)) throw new MediaProofError("observability_invalid_response", "Observability proof contract returned a non-object");
-    return result;
-  }
-  const fetcher = options.fetch ?? globalThis.fetch;
-  if (typeof fetcher !== "function") unsupported(UNSUPPORTED_ASSERTIONS.observabilityProofEndpoint);
-  const url = new URL(runtime.observabilityProofURL);
-  url.searchParams.set("runtime_id", runtime.runtimeID);
-  if (journeyIDs[0]) url.searchParams.set("journey_id", journeyIDs[0]);
-  const response = await fetcher(url, { headers: journeyIDs[0] ? { "x-chalk-journey-id": journeyIDs[0] } : undefined });
-  if (!response.ok) throw new MediaProofError("observability_http_failed", `Observability proof returned HTTP ${response.status}`);
-  const body = await response.json();
-  if (!isRecord(body)) throw new MediaProofError("observability_invalid_response", "Observability proof returned a non-object");
-  const contract = runtime.observabilityContract;
-  if (typeof contract === "function") {
-    const contractResult = await contract(body);
-    if (contractResult !== true) throw new MediaProofError("observability_contract_failed", typeof contractResult === "string" ? contractResult : "Observability proof contract failed");
-  } else if (isRecord(contract)) {
-    for (const [key, expected] of Object.entries(contract)) if (body[key] !== expected) throw new MediaProofError("observability_contract_failed", `Observability proof field ${key} did not match contract`);
-  }
-  return body;
-}
-
 export async function leaveParticipant(participant) {
   if (!participant?.page) return;
   await closeParticipantsPanel(participant.page);

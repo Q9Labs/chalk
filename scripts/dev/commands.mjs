@@ -11,8 +11,7 @@ Commands: start, status, logs [service], smoke, stop, reset
 Options: --profile core|mobile, --fresh, --yes
 
 start creates a local Tenant and Space with a valid media plane (cf_sfu); its ids are
-in the ready summary. The seed:dataset showcase Spaces use cf_rtk, so use the dev
-fixture for local media runs.`;
+in the ready summary. Use the dev fixture for local media runs.`;
 
 export async function runCommand(command, config, { supervisor, service, yes = false, confirm = confirmReset, hooks = {}, output = console.log } = {}) {
   switch (command) {
@@ -139,10 +138,10 @@ async function resetCommand(config, { yes = false, confirm = confirmReset, hooks
 
 function resetTargets(config) {
   return {
-    containers: ["chalk-postgres", config.redis.container, "chalk-observability-postgres", "chalk-observability-lgtm", "chalk-observability-canary"],
+    containers: ["chalk-postgres", config.redis.container],
     preservedContainers: ["chalk-postgres"],
     databases: [{ container: "chalk-postgres", name: config.databaseName || "chalk_dev", action: "drop-and-recreate" }],
-    volumes: [config.redis.volume, "chalk-observability-postgres-data", "chalk-observability-lgtm-data"],
+    volumes: [config.redis.volume],
     preservedVolumes: ["chalk-postgres"],
     privateRuntimeDirectory: config.runtimeRoot,
   };

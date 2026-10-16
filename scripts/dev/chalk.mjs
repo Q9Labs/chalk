@@ -38,7 +38,6 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
       { kind: "container", name: "chalk-postgres", reusable: true },
       { kind: "database", name: config.databaseName || "chalk_dev", container: "chalk-postgres", reusable: true },
       { kind: "container", name: config.redis.container, reusable: true },
-      { kind: "compose", name: "observability", target: "chalk-observability", reusable: true, logPath: resources.logPaths?.observability || `${config.logRoot}/observability.log` },
       { kind: "generated", path: config.runtimeRoot },
     ],
     resolveSecrets: async (context) => {
@@ -91,7 +90,6 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
       CHALK_SYNC_URL: `ws://127.0.0.1:${config.ports.sync}/v1/sync`,
       CHALK_DEV_WEB_PORT: String(config.ports.web),
     };
-    const telemetryEnvironment = config.observabilityEnabled === false ? {} : { CHALK_API_OTLP_ENDPOINT: "http://127.0.0.1:4318", CHALK_API_OTLP_INSECURE: "true" };
     if (serviceId === "api") {
       if (!identity || !provider || !systemToken) throw failure(FailureKind.STARTUP, "API child identity is incomplete", { stage: "identity" });
       return {
@@ -100,7 +98,6 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         CHALK_API_ENV: "local",
         CHALK_API_LOCAL_SYSTEM_TOKEN: systemToken,
         CHALK_API_REQUEST_LOGS: "all",
-        ...telemetryEnvironment,
         CHALK_API_CORS_ALLOWED_ORIGINS: config.urls.web,
         CHALK_DATABASE_URL: databaseURL(config),
         CHALK_REDIS_URL: `redis://127.0.0.1:${config.redis.port}/0`,
@@ -140,7 +137,6 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         CHALK_SYNC_PROVIDER_BRIDGE_CERTFILE: config.identity.syncCertificate,
         CHALK_SYNC_PROVIDER_BRIDGE_KEYFILE: config.identity.syncKey,
         CHALK_SYNC_PROVIDER_BRIDGE_CAFILE: config.identity.caCertificate,
-        ...(config.observabilityEnabled === false ? {} : { CHALK_SYNC_OTLP_ENDPOINT: "http://127.0.0.1:4318" }),
       };
     }
     if (serviceId === "web") return { ...base, VITE_API_URL: config.urls.api, VITE_CHALK_SYNC_URL: base.CHALK_SYNC_URL, VITE_CHALK_DEV_SYNC_URL: base.CHALK_SYNC_URL, VITE_CHALK_DEV_MEDIA_PLANE: "cf_sfu" };
@@ -177,7 +173,6 @@ function formatReadySummary(config, bindings) {
     `Web       ${config.urls.web}`,
     `API       ${config.urls.api}`,
     `Sync      ws://127.0.0.1:${config.ports.sync}/v1/sync`,
-    config.observabilityEnabled === false ? "Observability disabled" : "Grafana   http://127.0.0.1:3000/d/chalk-observability-v1/chalk-observability",
     "Media     Cloudflare SFU, real provider path",
     `Logs      ${config.aggregateLog}`,
     "Proof     pnpm dev:smoke",
