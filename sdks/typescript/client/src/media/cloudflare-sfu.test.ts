@@ -194,6 +194,53 @@ describe("Cloudflare SFU HTTP signaling", () => {
   });
 });
 describe("remote publication recovery", () => {
+  it("receives a newly present participant when presence changes during a media pull", async () => {
+    await withTimedHarness(async (harness) => {
+      await harness.client.start(fakeStream());
+      harness.transport.snapshot = {
+        incarnation: 1,
+        sequence: 1,
+        publications: [
+          { participantId: "participant-2", source: "camera", publicationId: "remote-a|camera" },
+          { participantId: "participant-3", source: "microphone", publicationId: "remote-b|microphone" },
+        ],
+      };
+      harness.client.remoteParticipantsChanged(["participant-2"]);
+      const addTracks = harness.transport.addTracks.bind(harness.transport);
+      vi.spyOn(harness.transport, "addTracks").mockImplementationOnce(async (input) => {
+        harness.client.remoteParticipantsChanged(["participant-2", "participant-3"]);
+        return addTracks(input);
+      });
+      await harness.client.refreshRemotePublications();
+      await harness.client.refreshRemotePublications();
+      expect(harness.client.getSnapshot().remoteTracks.map((track) => track.publicationId).sort()).toEqual(["remote-a|camera", "remote-b|microphone"]);
+    });
+  });
+  it.each([404, 410])("replaces an expired HTTP %s receiver before exhausting the signaling quota", async (status) => {
+    const replaceMediaConnection = vi.fn(async () => bootstrap("replacement"));
+    await withTimedHarness(
+      async (harness) => {
+        await harness.client.start(fakeStream());
+        harness.transport.snapshot = {
+          incarnation: 1,
+          sequence: 1,
+          publications: Array.from({ length: 64 }, (_, index) => ({ participantId: `publisher-${index}`, source: "camera", publicationId: `remote|camera-${index}` })),
+        };
+        let writes = 0;
+        const addTracks = harness.transport.addTracks.bind(harness.transport);
+        vi.spyOn(harness.transport, "addTracks").mockImplementation(async (input) => {
+          if (++writes > 60) throw new CloudflareSFUError("rate limited", "signaling_failed", { status: 429 });
+          if (input.connectionId === "connection-1") throw new CloudflareSFUError("receiver expired", "signaling_failed", { status, retryableConnection: true });
+          return addTracks(input);
+        });
+        await harness.client.refreshRemotePublications();
+        expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
+        expect(writes).toBe(2);
+        expect(harness.client.getSnapshot().remoteTracks).toHaveLength(64);
+      },
+      { replaceMediaConnection },
+    );
+  });
   it("ignores abandoned participants and restores known subscriptions after Sync disconnection and replacement", async () => {
     await withTimedHarness(async (harness) => {
       await harness.client.start(fakeStream());

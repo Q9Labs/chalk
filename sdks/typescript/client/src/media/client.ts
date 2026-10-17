@@ -68,6 +68,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #remotePullIncomplete = false;
   readonly #remotePullRetryAfter = new Map<string, number>();
   #remoteParticipantIds: ReadonlySet<string> | null = null;
+  #remoteParticipantRevision = 0;
   readonly #subscribedPublicationIds = new Set<string>();
   #generation = 0;
   #negotiatedGeneration: number | null = null;
@@ -115,6 +116,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   remoteParticipantsChanged(participantIds: readonly string[]): void {
     this.#remoteParticipantIds = new Set(participantIds);
+    this.#remoteParticipantRevision++;
     this.#remotePullIncomplete = true;
     this.remotePublicationsChanged();
   }
@@ -597,6 +599,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (cursor === null) return;
     const ordering = comparePublicationCursor(this.#cursor, cursor);
     if (ordering === "stale" || (ordering === "same" && !this.#remotePullIncomplete)) return;
+    const participantRevision = this.#remoteParticipantRevision;
     const desired = this.#desiredRemotePublications(authoritative, cursor);
     const toPull = this.#pendingRemotePulls(desired);
     this.#pollFailedPull = true;
@@ -608,7 +611,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#remoteTracks.clear();
     for (const [key, publication] of next) this.#remoteTracks.set(key, publication);
     this.#cursor = cursor;
-    this.#remotePullIncomplete = [...desired].some(([key, publication]) => next.get(key)?.publicationId !== publication.publicationId);
+    this.#remotePullIncomplete = participantRevision !== this.#remoteParticipantRevision || [...desired].some(([key, publication]) => next.get(key)?.publicationId !== publication.publicationId);
     for (const publication of pulled) {
       this.#subscribedPublicationIds.add(publication.publicationId);
       this.#invokeListener(() => this.#onRemoteTrack?.(publication));
@@ -691,7 +694,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return await this.#pullBatch(eligible, generation);
     } catch (error) {
       this.#requireGeneration(generation);
-      if (eligible.length <= 1 || !retryableRemotePull(error) || isRateLimited(error)) {
+      if (eligible.length <= 1 || !retryableRemotePull(error) || isRateLimited(error) || (error instanceof CloudflareSFUError && (error.options.status === 404 || error.options.status === 410))) {
         this.#deferRemotePulls(eligible, error);
         throw error;
       }
