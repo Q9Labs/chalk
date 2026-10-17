@@ -91,3 +91,42 @@ nightly dispatcher caller and nightly state (`transcription/terraform.tfstate`
 in the nightly backend bucket), initially with `scheduler_state=DISABLED`.
 The binding carries the state forward without changing the scheduler policy.
 Never point nightly configuration at production state or credentials.
+
+## Environment configuration and deployment evidence
+
+Each environment needs `CHALK_MANAGED_AWS_REGION`, `CHALK_MANAGED_DEPLOY_ROLE_ARN`,
+`CHALK_MANAGED_INSTANCE_ID`, `CHALK_MANAGED_LOG_GROUP_NAME`,
+`CHALK_MANAGED_PARAMETER_PREFIX`, and `CHALK_MANAGED_SSM_DOCUMENT_NAME` variables.
+The role's OIDC trust must name that exact GitHub environment. Names use at most
+32 lowercase letters or digits, separated by single hyphens and starting with a letter. The default
+is owned by the Release workflow; select `nightly` explicitly for the isolated stack.
+Choosing a name does not provision its infrastructure.
+
+All environments require their own recorder configuration at
+`/chalk/<environment>/release/recorder.json`. Override this with the optional
+`CHALK_MANAGED_RECORDER_CONFIG_PARAMETER`, scoped to the same environment.
+The configuration must match the target instance and runtime prefix.
+`CHALK_MANAGED_SECRET_EXCLUSIONS` can hold approved comma-separated canonical
+input IDs. A nonempty `managed_secret_exclusions` dispatch input overrides it.
+Missing inputs otherwise fail closed; never copy exclusions from another host.
+
+The deployment role needs the constrained SSM document/host permissions **and**
+the dispatcher module's read/apply permissions: configuration read, exact state
+read/write and `.tflock` management, versioned ZIP read/copy, Lambda binding and
+log tagging. Full plans also refresh existing IAM, queue, schedule and alarm
+state. No role/policy creation or scheduler updates belong in this binding.
+See [dispatcher binding](recording-transcription.md#dispatcher-binding-during-managed-releases).
+
+## Failure evidence
+
+The job logs the SSM command ID before waiting. It saves host proof before
+dispatcher changes; `deployment_phase=dispatcher-failed` means the host is ready
+but dispatcher binding failed. Inspect that partial proof before retrying.
+Use the command ID in the environment's
+deployment log group; GitHub's SSM error text can be truncated. The summary only
+reports success after host health and dispatcher verification both pass. The
+host poll cancels after 30 minutes; the one-hour job allows dispatcher plans.
+If a build succeeds but deployment fails, fix the cause and redispatch with the
+healthy manifest baseline. Do not bypass CI to turn a failed release green.
+For read-only diagnosis, `deploy-managed-release.mjs --dry-run` validates inputs
+and reads dispatcher configuration/state without sending a host command.

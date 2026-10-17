@@ -95,6 +95,7 @@ cat >"${fixture_root}/source/infrastructure/managed-episode/scripts/render-runti
 #!/usr/bin/env bash
 set -euo pipefail
 output="$2"
+[[ "${3:-production}" == "${FAKE_VALIDATION_ENVIRONMENT:?}" ]] || exit 1
 mkdir -p "$output/quadlet" "$output/systemd"
 image="$(jq -er '.images.api' "$1")"
 target="${FAKE_MIGRATION_TARGET:-}"
@@ -524,12 +525,12 @@ if run_controller "$unsafe_release_state" "${fixture_root}/unsafe-release-reques
   fail "path-separating release identifier was accepted"
 fi
 
-staging_state="${fixture_root}/staging-state"
-mkdir -p "$staging_state"
-make_request staging "${fixture_root}/staging-request.json" '[]' staging
-make_manifest staging >"${fixture_root}/staging-manifest.json"
-run_controller "$staging_state" "${fixture_root}/staging-request.json" "${fixture_root}/staging-manifest.json" ok >/dev/null
-jq -e '.environment == "staging" and .parameter_prefix == "/chalk/staging/managed-episode"' "${staging_state}/active-release.json" >/dev/null || fail "staging release was not accepted"
+nightly_state="${fixture_root}/nightly-state"
+mkdir -p "$nightly_state"
+make_request nightly "${fixture_root}/nightly-request.json" '[]' nightly
+make_manifest nightly >"${fixture_root}/nightly-manifest.json"
+run_controller "$nightly_state" "${fixture_root}/nightly-request.json" "${fixture_root}/nightly-manifest.json" ok >/dev/null
+jq -e '.environment == "nightly" and .parameter_prefix == "/chalk/nightly/managed-episode"' "${nightly_state}/active-release.json" >/dev/null || fail "nightly release was not accepted"
 
 preview_state="${fixture_root}/preview-state"
 mkdir -p "$preview_state"
@@ -699,14 +700,17 @@ grep -Fq 'rollback health failed' "${fixture_root}/rollback-failure.log" || fail
 jq -e '.release_id == "stable"' "${stable_state}/active-release.json" >/dev/null || fail "stable pointer was lost after rollback failure"
 
 stable_controller_sha="$(sha256sum "${fixture_root}/install/chalk-deployment-controller" | awk '{print $1}')"
+stable_policy_sha="$(sha256sum "${fixture_root}/install/environments.json" | awk '{print $1}')"
 stable_health_sha="$(sha256sum "${fixture_root}/install/chalk-runtime-health" | awk '{print $1}')"
 stable_restore_unit_sha="$(sha256sum "${fixture_root}/systemd/chalk-runtime-restore.service" | awk '{print $1}')"
 printf '\n# candidate controller\n' >>"${fixture_root}/source/infrastructure/managed-episode/controller/chalk-deployment-controller"
+printf '\n' >>"${fixture_root}/source/infrastructure/managed-episode/contracts/environments.json"
 printf '\n# candidate health\n' >>"${fixture_root}/source/infrastructure/managed-episode/scripts/chalk-runtime-health"
 printf '\n# candidate restore unit\n' >>"${fixture_root}/source/infrastructure/managed-episode/systemd/chalk-runtime-restore.service"
 
 assert_stable_installed_runtime() {
   [[ "$(sha256sum "${fixture_root}/install/chalk-deployment-controller" | awk '{print $1}')" == "$stable_controller_sha" ]] || fail "stable deployment controller was not restored"
+  [[ "$(sha256sum "${fixture_root}/install/environments.json" | awk '{print $1}')" == "$stable_policy_sha" ]] || fail "stable environment policy was not restored"
   [[ "$(sha256sum "${fixture_root}/install/chalk-runtime-health" | awk '{print $1}')" == "$stable_health_sha" ]] || fail "stable health script was not restored"
   [[ "$(sha256sum "${fixture_root}/systemd/chalk-runtime-restore.service" | awk '{print $1}')" == "$stable_restore_unit_sha" ]] || fail "stable restore unit was not restored"
   [[ -e "${fixture_root}/restore-unit-enabled" ]] || fail "stable restore unit enablement was not restored"
@@ -788,6 +792,70 @@ grep -Fqx 'CHALK_RECORDER_FLEET_ROLE=render' "${fixture_root}/run/env/recorder-r
 grep -Fqx 'chalk-recorder-worker-ca-key' "${fixture_root}/secret-state" || fail "issuer signing key was not registered"
 run_restore "$recording_state" ok >/dev/null
 grep -Fqx 'CHALK_RECORDER_FLEET_ISSUER_ENVIRONMENT=production' "${fixture_root}/run/env/recorder-issuer.env" || fail "restore lost the issuer environment"
+test_interrupted_controller_upgrade() (
+  local current_controller="$controller" boundary status
+  local legacy_controller="${fixture_root}/legacy-controller"
+  # Reproduce the pre-policy controller's inline production cap without a Git-history dependency.
+  awk '
+    /^  local role file max_nodes policy_file=/ { print "  local role file max_nodes=10"; policy = 1; next }
+    policy { if (/unsupported recorder environment/) policy = 0; next }
+    { print }
+  ' "$current_controller" >"$legacy_controller"
+  chmod 0755 "$legacy_controller"
+  cat >"${fixture_root}/bin/upgrade-controller" <<'UPGRADE'
+#!/usr/bin/env bash
+set -euo pipefail
+export FAKE_UPGRADE_PID=$$
+exec "${FAKE_UPGRADE_CONTROLLER:?}" "$@"
+UPGRADE
+  cat >"${fixture_root}/bin/mv" <<'MOVE'
+#!/usr/bin/env bash
+set -euo pipefail
+"${FAKE_REAL_MV:?}" "$@"
+if [[ -n "${FAKE_STOP_AFTER_INSTALL:-}" && "${!#}" == "${CHALK_CONTROLLER_INSTALL_DIR}/${FAKE_STOP_AFTER_INSTALL}" ]]; then
+  printf 'stopped after %s\n' "$FAKE_STOP_AFTER_INSTALL" >"${FAKE_INSTALL_BOUNDARY:?}"
+  kill -KILL "$PPID" "${FAKE_UPGRADE_PID:?}"
+fi
+MOVE
+  chmod 0755 "${fixture_root}/bin/"{upgrade-controller,mv}
+  export FAKE_REAL_MV="$(command -v mv)" FAKE_INSTALL_BOUNDARY="${fixture_root}/install-boundary"
+  export PATH="${fixture_root}/bin:${PATH}"
+  make_request recording-upgrade "${fixture_root}/upgrade-request.json"
+  make_manifest recording-upgrade | jq '.images.recorder_control = .images.api' >"${fixture_root}/upgrade-manifest.json"
+  for boundary in chalk-runtime-health environments.json chalk-deployment-controller; do
+    cp "$legacy_controller" "${fixture_root}/install/chalk-deployment-controller"
+    rm -f "${fixture_root}/install/environments.json" "$FAKE_INSTALL_BOUNDARY"
+    controller="${fixture_root}/install/chalk-deployment-controller"
+    run_restore "$recording_state" ok >/dev/null || fail "legacy controller without policy could not restore"
+    controller="${fixture_root}/bin/upgrade-controller"
+    status=0
+    FAKE_UPGRADE_CONTROLLER="$current_controller" FAKE_STOP_AFTER_INSTALL="$boundary" run_controller "$recording_state" "${fixture_root}/upgrade-request.json" "${fixture_root}/upgrade-manifest.json" ok >"${fixture_root}/interrupted-upgrade.log" 2>&1 || status=$?
+    [[ "$status" == 137 && -f "$FAKE_INSTALL_BOUNDARY" ]] || fail "upgrade did not stop after ${boundary}"
+    # macOS uses a directory lock; a reboot releases Linux's flock automatically.
+    if [[ -d "${recording_state}/lock.d" ]]; then rmdir "${recording_state}/lock.d"; fi
+    controller="${fixture_root}/install/chalk-deployment-controller"
+    run_restore "$recording_state" ok >/dev/null || fail "reboot restore failed after installing ${boundary}"
+    grep -Fqx 'CHALK_RECORDER_FLEET_MAX_NODES=10' "${fixture_root}/run/env/recorder-capture.env" || fail "interrupted upgrade changed production cap"
+  done
+  cp "$legacy_controller" "${fixture_root}/install/chalk-deployment-controller"
+  rm "${fixture_root}/install/environments.json"
+  controller="$current_controller"
+  rm -f "${fixture_root}/systemctl-failed"
+  if FAKE_SYSTEMCTL_FAIL_ONCE='enable chalk-runtime-restore.service' run_controller "$recording_state" "${fixture_root}/upgrade-request.json" "${fixture_root}/upgrade-manifest.json" 'ok,ok' >"${fixture_root}/upgrade-rollback.log" 2>&1; then
+    fail "first-upgrade promotion failure was accepted"
+  fi
+  cmp -s "$legacy_controller" "${fixture_root}/install/chalk-deployment-controller" || fail "upgrade rollback lost the legacy controller"
+  [[ ! -e "${fixture_root}/install/environments.json" ]] || fail "upgrade rollback retained an originally absent policy"
+  controller="${fixture_root}/install/chalk-deployment-controller"
+  run_restore "$recording_state" ok >/dev/null || fail "legacy reboot restore failed after upgrade rollback"
+  cp "$current_controller" "$controller"
+  if run_restore "$recording_state" ok >"${fixture_root}/missing-policy.log" 2>&1; then
+    fail "new controller restored without its policy"
+  fi
+  grep -Fq "path is not a regular file: ${fixture_root}/install/environments.json" "${fixture_root}/missing-policy.log" || fail "missing policy failure was not reported"
+  cp "${managed_root}/contracts/environments.json" "${fixture_root}/install/environments.json"
+)
+test_interrupted_controller_upgrade
 make_request recording-disabled "${fixture_root}/recording-disabled-request.json"
 make_manifest recording-disabled >"${fixture_root}/recording-disabled-manifest.json"
 : >"${fixture_root}/commands.log"
@@ -800,6 +868,16 @@ for role in capture render issuer; do
   grep -Fq "systemctl --user stop chalk-recorder-${role}.service" "${fixture_root}/commands.log" || fail "obsolete recorder role was not stopped"
 done
 grep -Fqx 'CHALK_RECORDER_FLEET_ROLE=capture' "${fixture_root}/run/env/recorder-capture.env" || fail "rollback lost recorder configuration"
+nightly_recording_state="${fixture_root}/nightly-recording-state"
+mkdir -p "$nightly_recording_state"
+make_request nightly-recording "${fixture_root}/nightly-recording-request.json" '[]' nightly
+make_manifest nightly-recording | jq '.images.recorder_control = .images.api' >"${fixture_root}/nightly-recording-manifest.json"
+run_controller "$nightly_recording_state" "${fixture_root}/nightly-recording-request.json" "${fixture_root}/nightly-recording-manifest.json" ok >/dev/null
+run_restore "$nightly_recording_state" ok >/dev/null || fail "nightly recorder reboot restore failed"
+for role in capture render; do
+  grep -Fqx 'CHALK_RECORDER_FLEET_MAX_NODES=1' "${fixture_root}/run/env/recorder-${role}.env" || fail "nightly maximum was not one"
+  grep -Fqx 'CHALK_RECORDER_FLEET_ENVIRONMENT=nightly' "${fixture_root}/run/env/recorder-${role}.env" || fail "nightly recorder identity mismatch"
+done
 fi
 
 if group_enabled ssm-contract; then

@@ -12,6 +12,7 @@ pnpm prod:proof smoke
 pnpm prod:proof camera-share --force-layer-switch
 pnpm prod:proof camera-share # simulcast + share, without the optional limit
 pnpm prod:proof export
+pnpm prod:proof recording-rejoin
 pnpm prod:proof transcript
 ```
 
@@ -161,6 +162,15 @@ retention policy. The provisioned Tenant and bootstrap API key are retained.
   throughout the two-minute hold; elapsed time alone cannot pass the proof.
 - **export:** successful completion, MP4 download, ffprobe video/audio/duration,
   four evenly spaced frames in a 2-by-2 contact sheet, and Export wall time.
+- **recording-rejoin:** two camera/tone guests record for 25 seconds, then guest B's
+  browser closes without an SDK leave and rejoins using the same admitted participant.
+  Both record for another 25 seconds. Three MP4 frames per before/after window must
+  contain each guest's phase-specific background and advancing picture. Three
+  three-second audio samples per window must contain each guest's distinct tone
+  (440/880 Hz, above -45 dBFS), not just mixed audio energy. The export clock is
+  end-aligned; phase colors reject sampling the wrong window. The two-wide contact
+  sheet pairs before/after samples. Private timeline and per-guest evidence are
+  saved even when media checks fail. This is a standalone proof, not part of `all`.
 - **transcript:** on-demand completion and the generated phrases in the document.
 
 Default `all` shares one camera/share Recording across the related proofs.
@@ -181,7 +191,7 @@ handoff; they contain production identifiers but no saved owner credentials.
 ## Cancellation and recovery
 
 Each invocation uses a unique run ID (`CHALK_PROOF_RUN_ID` overrides the generated
-ID, 1–51 letters, digits, underscores or hyphens). Keys expire within one hour.
+ID, 1–51 letters, digits, underscores or hyphens). Keys expire after 55 minutes.
 Keys and Spaces use `chalk-proof:<run-id>` names; Space and Episode metadata hold
 `proof_run_id`. Each environment reuses one operator-provisioned webhook endpoint.
 Transcripts are owned through their labeled Space and Episode.
@@ -204,7 +214,7 @@ It is safe to repeat. No API-key or webhook inventory scope is required.
 Before each proof, the sweep lists Spaces and their Episodes only. It ends
 proof-labelled Episodes older than two hours and archives their Spaces, never
 archiving a Space containing a fresh or foreign Episode. Run keys expire within
-one hour and need no sweep. An owned empty Space is archived once the Space itself
+55 minutes and need no sweep. An owned empty Space is archived once the Space itself
 is older than two hours; fresh Spaces and Spaces with fresh or foreign Episodes
 are preserved. Every run immediately revokes the previous webhook secret through
 `rotate-secret`, then PATCHes the same endpoint to its catcher URL and enables it.
@@ -215,7 +225,7 @@ dead catcher; the next invocation rotates and re-points it, without consuming
 another endpoint slot. Proofs for an environment must not overlap, including
 manual/local runs; workflow concurrency serializes hosted runs.
 A key-creation response lost before its ID is saved still leaves a key until its
-one-hour expiry. The next proof recovers live Episodes, the leftovers that keep
+55-minute expiry. The next proof recovers live Episodes, the leftovers that keep
 recorder machines running. Product retention still applies to ended/archived
 history and Recordings. A catcher whose creation response is lost cannot be
 discovered through Chalk's API.
@@ -240,3 +250,21 @@ artifact; a first proof and rollback proof retain separate artifacts.
 Public logs contain fixed phases/statuses and bounded error classes only. Raw
 errors stay in private evidence, encrypted before upload. Dynamically received
 API, webhook and guest access credentials are registered with GitHub masking.
+
+### Time and failure bounds
+
+Capture readiness and source finalization each allow three minutes. Export, audio
+preparation, and transcript completion each allow four minutes. Episode shutdown
+allows two minutes, and signed-event delivery allows three minutes. These replace
+the old 15/20-minute waits; the default smoke/transcript pair has 35 minutes 40 seconds
+of nominal sequential polling and fixture waits, before setup, request overhead, downloads, and cleanup. The `all` command allows
+29 minutes 45 seconds of nominal polling and fixture waits.
+The complete proof step is capped at 40 minutes, inside a 50-minute job. Each
+run key lasts 55 minutes, and the stale sweep waits two hours. Cleanup treats
+`409 api_key.inactive` as already revoked.
+
+Local disposal has a 15-second deadline per resource. After a deadline or disposal
+failure, cleanup kills the Chromium process group, closes server connections, or
+aborts the collector, then writes failure evidence and continues cleanup. Public
+failures expose only allowlisted reason codes and API status/code pairs; raw
+messages and stacks remain in the private encrypted evidence.

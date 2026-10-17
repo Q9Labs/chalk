@@ -14,7 +14,7 @@ variable "environment_name" {
 
   validation {
     condition     = can(regex("^[a-z][a-z0-9-]{0,31}$", var.environment_name))
-    error_message = "environment_name must be a lowercase deployment name (for example, staging or production)."
+    error_message = "environment_name must be a lowercase deployment name (for example, nightly or production)."
   }
 }
 

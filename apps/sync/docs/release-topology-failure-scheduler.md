@@ -11,7 +11,7 @@ The scheduler has two intentionally separate modes:
 - Dry run is the default. It validates the full versioned schedule and writes a
   `DRY_RUN` evidence bundle without launching any command.
 - Execution requires `--execute`, an exact `--confirm-environment` value, and
-  `CHALK_FAILURE_ORCHESTRATOR_ENV` set to that same `local` or `staging`
+  `CHALK_FAILURE_ORCHESTRATOR_ENV` set to that same `local` or `nightly`
   value. `production` is not a valid schedule environment.
 
 Run a dry validation from the repository root:
@@ -31,9 +31,9 @@ apps/sync/scripts/release-topology-failure-schedule \
   --confirm-environment local
 ```
 
-Staging uses the same command with `staging` in both required places. The
+Nightly uses the same command with `nightly` in both required places. The
 scheduler does not load credentials, set command environments, execute a
-shell, or support remote endpoints in a schedule. A local or staging control
+shell, or support remote endpoints in a schedule. A local or nightly control
 program obtains any operational credentials only through its deployment secret
 boundary. It must run in the foreground and complete before its action timeout.
 

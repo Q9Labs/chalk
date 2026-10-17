@@ -222,7 +222,7 @@ func episodeLifecycleEndpoints(spacesService SpaceService, tenantsService Tenant
 		createEpisodeEndpoint(lifecycle, authorizer),
 		listEpisodesEndpoint(lifecycle, authorizer),
 		getEpisodeEndpoint(lifecycle, authorizer),
-		admitParticipantEndpoint(lifecycle, tokens, refresh, mediaTokens, spacesService, tenantsService, media, authorizer),
+		admitParticipantEndpoint(lifecycle, tokens, refresh, mediaTokens, generations, spacesService, tenantsService, media, authorizer),
 		issueSyncTokenEndpoint(refresh, authorizer),
 		issueAccessGrantEndpoint(refresh, mediaTokens, mediaVerifier, active, generations, spacesService, tenantsService, media, authorizer),
 		removeParticipantEndpoint(lifecycle, authorizer),
@@ -313,7 +313,7 @@ func issueSyncTokenEndpoint(service SyncTokenRefreshIssuer, authorizer TenantAut
 		Errors(lifecycleWriteErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorParticipantNotFound, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
 }
 
-func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, spacesService SpaceService, tenantsService TenantService, media MediaPlaneResolver, authorizer TenantAuthorizer) Endpoint[admitParticipantEndpointRequest, participantLifecycleResponse] {
+func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, generations ParticipantGenerationAuthorizer, spacesService SpaceService, tenantsService TenantService, media MediaPlaneResolver, authorizer TenantAuthorizer) Endpoint[admitParticipantEndpointRequest, participantLifecycleResponse] {
 	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants", "/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants", "admitEpisodeParticipant", decodeAdmitParticipantRequest, func(ctx context.Context, request admitParticipantEndpointRequest) (participantLifecycleResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeEpisodesPermission); err != nil {
 			return participantLifecycleResponse{}, err
@@ -353,21 +353,29 @@ func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenI
 		if join.Provider != "" {
 			response.MediaPlane = &mediaPlaneResponse{Provider: string(join.Provider), ClientPayload: join.ClientPayload}
 		}
-		if mediaTokens != nil && syncCredential.Value != "" && join.Provider == mediaplane.ProviderCloudflareSFU {
+		if join.Provider == mediaplane.ProviderCloudflareSFU {
+			if generations == nil {
+				return participantLifecycleResponse{}, apiErrorServiceUnavailable
+			}
 			accessRequest := issueAccessGrantRequest{TenantID: admission.Participant.TenantID, SpaceID: admission.Participant.SpaceID, EpisodeID: admission.Participant.EpisodeID, ParticipantID: admission.Participant.ID, Body: issueAccessGrantBody{ParticipantGeneration: admission.Participant.Generation}}
 			subject, err := accessGrantSubjectForJoin(accessRequest, join)
 			if err != nil {
 				return participantLifecycleResponse{}, err
 			}
-			mediaCredential, err := mediaTokens.Issue(ctx, subject)
-			if err != nil {
+			if mediaTokens != nil && syncCredential.Value != "" {
+				mediaCredential, err := mediaTokens.Issue(ctx, subject)
+				if err != nil {
+					return participantLifecycleResponse{}, err
+				}
+				response.Access = func() *accessGrantResponse {
+					grant := newAccessGrantResponse(subject, syncCredential, mediaCredential, join)
+
+					return &grant
+				}()
+			}
+			if err := generations.BindParticipantMediaConnection(ctx, subject); err != nil {
 				return participantLifecycleResponse{}, err
 			}
-			response.Access = func() *accessGrantResponse {
-				grant := newAccessGrantResponse(subject, syncCredential, mediaCredential, join)
-
-				return &grant
-			}()
 		}
 		return response, nil
 	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).

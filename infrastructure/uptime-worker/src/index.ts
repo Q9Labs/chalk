@@ -1,4 +1,5 @@
 export interface Env {
+  CHALK_ENVIRONMENT?: "production" | "nightly";
   API_BASE_URL?: string;
   API_MONITOR_BASE_URL?: string;
   SYNC_BASE_URL?: string;
@@ -26,9 +27,12 @@ async function check(name: string, url: URL): Promise<CheckResult> {
 }
 
 export async function runMonitorCycle(env: Env): Promise<{ readonly checked: number; readonly failed: number }> {
-  if (!env.DISCORD_WEBHOOK_URL) throw new Error("DISCORD_WEBHOOK_URL must reuse the production Axiom alert channel webhook");
+  if (!env.DISCORD_WEBHOOK_URL) throw new Error("DISCORD_WEBHOOK_URL must be set for this environment");
   const webhook = new URL(env.DISCORD_WEBHOOK_URL);
   if (webhook.protocol !== "https:" || !["discord.com", "discordapp.com"].includes(webhook.hostname) || !webhook.pathname.startsWith("/api/webhooks/")) throw new Error("Invalid Discord webhook configuration");
+  if (env.CHALK_ENVIRONMENT === "nightly" && ((env.API_MONITOR_BASE_URL ?? env.API_BASE_URL) !== "https://nightly-api.chalkmeet.com" || env.SYNC_BASE_URL !== "https://nightly-sync.chalkmeet.com")) {
+    throw new Error("Nightly monitor requires explicit nightly API and Sync targets");
+  }
   const api = baseURL(env.API_MONITOR_BASE_URL ?? env.API_BASE_URL ?? "https://api.chalkmeet.com");
   const sync = baseURL(env.SYNC_BASE_URL ?? "https://sync.chalkmeet.com");
   const results = await Promise.all([check("API health", new URL("/healthz", api)), check("API readiness", new URL("/readyz", api)), check("Sync health", new URL("/healthz", sync)), check("Sync readiness", new URL("/readyz", sync))]);

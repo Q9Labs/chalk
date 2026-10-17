@@ -29,7 +29,7 @@ func TestRecordingFleetAuthorityRepositoryStoresWorkerResources(t *testing.T) {
 		NodeName: "capture-7", CurrentJobID: jobID, ObservedAt: timestamptzValue(time.Now().UTC()),
 	}}
 	repository := NewRecordingFleetAuthorityRepository(queries)
-	observation, err := repository.RecordWorkerObservation(t.Context(), "staging", recorderfleetauthority.WorkerObservation{
+	observation, err := repository.RecordWorkerObservation(t.Context(), "nightly", recorderfleetauthority.WorkerObservation{
 		Identity: workeridentity.Identity{WorkerID: workerID, Role: workeridentity.RoleCapture}, Resources: sample,
 	})
 	if err != nil {
@@ -42,7 +42,7 @@ func TestRecordingFleetAuthorityRepositoryStoresWorkerResources(t *testing.T) {
 	if observation.NodeName != "capture-7" || observation.CurrentJobID != "66666666-6666-4666-8666-666666666666" {
 		t.Fatalf("observation = %#v", observation)
 	}
-	_, err = repository.RecordWorkerObservation(t.Context(), "staging", recorderfleetauthority.WorkerObservation{
+	_, err = repository.RecordWorkerObservation(t.Context(), "nightly", recorderfleetauthority.WorkerObservation{
 		Identity: workeridentity.Identity{WorkerID: workerID, Role: workeridentity.RoleCapture},
 	})
 	if err != nil || queries.observationArg.ResourcesLatest != nil || queries.observationArg.PeakRssBytes.Valid {
@@ -126,10 +126,10 @@ func TestRecordingFleetAuthorityRepositorySeparatesDrainFromClaimAuthorization(t
 	identity := workeridentity.Identity{WorkerID: workerID, Role: workeridentity.RoleCapture}
 	queries := &recordingFleetAuthorityQueriesStub{authorizeWorker: true, authorizeClaim: false}
 	repository := NewRecordingFleetAuthorityRepository(queries)
-	if err := repository.AuthorizeWorker(t.Context(), "staging", identity); err != nil {
+	if err := repository.AuthorizeWorker(t.Context(), "nightly", identity); err != nil {
 		t.Fatalf("existing work authorization: %v", err)
 	}
-	if err := repository.AuthorizeWorkerClaim(t.Context(), "staging", identity); !errors.Is(err, recorderfleet.ErrAdmissionClosed) {
+	if err := repository.AuthorizeWorkerClaim(t.Context(), "nightly", identity); !errors.Is(err, recorderfleet.ErrAdmissionClosed) {
 		t.Fatalf("claim authorization error = %v", err)
 	}
 }
@@ -197,7 +197,7 @@ func (s *recordingFleetAuthorityQueriesStub) RevokeRecordingFleetNode(context.Co
 
 func postgresFleetBootstrapRequest() recorderfleet.BootstrapRequest {
 	return recorderfleet.BootstrapRequest{
-		Key:        recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture},
+		Key:        recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture},
 		ProviderID: "provider-7", NodeName: "capture-7", Region: "fra1", ReleaseID: "release-7",
 		ImageDigest:    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		BootGeneration: 7, InventoryDigest: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",

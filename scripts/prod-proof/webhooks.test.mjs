@@ -48,7 +48,12 @@ test("public integration PATCHes and immediately rotates one endpoint; ownership
   });
   const run = await createRun({ api_key: "bootstrap", api_url: "https://api.example.test", tenant_id: "tenant", web_url: "https://web.example.test", proof_origin: `http://127.0.0.1:${port}`, webhook_service_url: "https://catcher.example.test", webhook_endpoint_id: "hook" }, directory);
   try {
+    const started = Date.now();
     const receiver = await prepareIntegration(run, false);
+    const keyRequest = calls.find(({ path }) => path.endsWith("/api-keys"));
+    const lifetime = Date.parse(keyRequest.body.expires_at) - started;
+    assert.ok(lifetime > 50 * 60_000, "Run key must outlive the 50-minute job");
+    assert.ok(Date.parse(keyRequest.body.expires_at) - Date.now() <= 55 * 60_000, "Run key must stay within its 55-minute lifetime");
     assert.equal(JSON.parse(await readFile(`${directory}/ownership.json`)).keyId, "key");
     // A truncated old file must not erase in-memory key ownership. A symlink
     // witness distinguishes atomic replacement from a truncating writeFile.

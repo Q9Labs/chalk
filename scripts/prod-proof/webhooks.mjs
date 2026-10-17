@@ -23,6 +23,10 @@ export async function proofServer(run) {
   await once(server, "listening");
   run.resources.push({
     kind: "proof-http-server",
+    force: () => {
+      server.closeAllConnections();
+      server.close();
+    },
     dispose: async () => {
       server.closeAllConnections();
       await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
@@ -83,6 +87,7 @@ function startCollector(run, receiver, collect) {
   })();
   run.resources.push({
     kind: "webhook-collector",
+    force: () => controller.abort(),
     dispose: async () => {
       controller.abort();
       await completion;

@@ -37,6 +37,7 @@ test("hands a release to the pinned SSM document and returns its controller proo
     allowedSecretIds,
     commandRunner: async (command) => {
       calls.push(command);
+      if (command.command === "python3") return { stdout: JSON.stringify({ action: "already-bound", release_id: releaseId, verified: !command.args.includes("--dry-run") }) };
       if (command.args.includes("send-command")) {
         return { stdout: JSON.stringify({ Command: { CommandId: commandId } }), stderr: "" };
       }
@@ -58,7 +59,7 @@ test("hands a release to the pinned SSM document and returns its controller proo
   });
 
   const sendCommand = calls.find(({ args }) => args.includes("send-command"));
-  assert.deepEqual(result, { ...controllerResult, ssm_command_id: commandId, document_version: "7", deployment_phase: "complete", dispatcher_binding: { action: "not-configured", environment: "staging" } });
+  assert.deepEqual(result, { ...controllerResult, ssm_command_id: commandId, document_version: "7", deployment_phase: "complete", dispatcher_binding: { action: "already-bound", release_id: releaseId, verified: true } });
   assert.equal(calls.filter(({ args }) => args.includes("send-command")).length, 1);
   assert.equal(calls.filter(({ args }) => args.includes("get-command-invocation")).length, 2);
   assert.equal(sendCommand.command, "aws");
@@ -85,7 +86,7 @@ function requiredArguments(manifestPath = "/tmp/manifest.json") {
     "--manifest",
     manifestPath,
     "--environment",
-    "staging",
+    "nightly",
     "--region",
     "ap-southeast-1",
     "--instance-id",
@@ -95,11 +96,11 @@ function requiredArguments(manifestPath = "/tmp/manifest.json") {
     "--document-version",
     "7",
     "--parameter-prefix",
-    `/chalk/staging/episode/${releaseId}`,
+    `/chalk/nightly/episode/${releaseId}`,
     "--request-id",
     "12345.2",
     "--log-group-name",
-    "/chalk/staging/deployments",
+    "/chalk/nightly/deployments",
     "--adopt-existing-release",
   ];
 }
@@ -124,7 +125,7 @@ async function writeManifest() {
 async function dispatcherDryRun(environment) {
   const manifestPath = await writeManifest();
   const calls = [];
-  const arguments_ = requiredArguments(manifestPath).map((value) => value.replaceAll("staging", environment));
+  const arguments_ = requiredArguments(manifestPath).map((value) => value.replaceAll("nightly", environment));
   const proof = await runManagedRelease({
     arguments_: arguments_.concat("--dry-run"),
     allowedSecretIds,
@@ -151,7 +152,7 @@ test("production cannot report success when dispatcher binding fails after host 
   await assert.rejects(
     runManagedRelease({
       arguments_: requiredArguments(manifestPath)
-        .map((value) => value.replaceAll("staging", "production"))
+        .map((value) => value.replaceAll("nightly", "production"))
         .concat("--proof-file", proofPath),
       allowedSecretIds,
       stdout: { write: () => {} },
@@ -203,7 +204,7 @@ test("configured environments use their own dispatcher parameter in the read-onl
 
 test("invalid environments and cross-environment configuration are rejected before provider calls", () => {
   for (const environment of ["Production", "../production", "preview--2", "preview-", "a".repeat(33)]) {
-    assert.throws(() => parseArguments(requiredArguments().map((value) => value.replaceAll("staging", environment))), /--environment/);
+    assert.throws(() => parseArguments(requiredArguments().map((value) => value.replaceAll("nightly", environment))), /--environment/);
   }
   assert.throws(() => parseArguments(requiredArguments().concat("--dispatcher-config-parameter", "/chalk/production/release/recorder.json")), /must be scoped/);
 });
@@ -213,7 +214,7 @@ test("missing dispatcher permission fails preflight without sending a host comma
   const calls = [];
   await assert.rejects(
     runManagedRelease({
-      arguments_: requiredArguments(manifestPath).map((value) => value.replaceAll("staging", "production")),
+      arguments_: requiredArguments(manifestPath).map((value) => value.replaceAll("nightly", "production")),
       allowedSecretIds,
       commandRunner: async (command) => {
         calls.push(command);

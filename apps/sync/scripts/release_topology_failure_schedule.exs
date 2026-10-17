@@ -25,7 +25,7 @@ defmodule ChalkSync.ReleaseTopology.Script do
       apps/sync/scripts/release-topology-failure-schedule --schedule <schedule.json> --execute --confirm-environment local
 
     The default is a non-mutating dry run. Execution requires a matching
-    CHALK_FAILURE_ORCHESTRATOR_ENV value of local or staging. Production is not
+    CHALK_FAILURE_ORCHESTRATOR_ENV value of local or nightly. Production is not
     a supported schedule environment.
     """)
   end

@@ -641,7 +641,7 @@ func newFleetFixture(t *testing.T) *fleetFixture {
 	now := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
 	events := make([]string, 0)
 	config := Config{
-		Key:      PoolKey{Environment: "staging", Role: workeridentity.RoleCapture},
+		Key:      PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture},
 		OwnerTag: "chalk-recorder-owned", MaxNodes: 11, SlotsPerNode: 4,
 		DemandMaxAge: time.Minute, ObservationMaxAge: 2 * time.Minute,
 		StartupTimeout: 2 * time.Minute, DrainTimeout: 30 * time.Second, HealthRefresh: 30 * time.Second,
