@@ -390,8 +390,6 @@ function createPreviewWhiteboardTransport(): ChalkWhiteboardV1Transport {
     setDrawPermission: async () => undefined,
     setPresentation: async () => undefined,
     files: {
-      initiateUpload: unsupportedFileOperation,
-      finalizeUpload: unsupportedFileOperation,
       getDownloadUrl: unsupportedFileOperation,
     },
   };

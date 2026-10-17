@@ -78,3 +78,23 @@ func TestLeanCutAccountRoutesAreGone(t *testing.T) {
 		}
 	}
 }
+
+func TestLeanCutBoardUploadsAreGoneButDownloadsRemain(t *testing.T) {
+	router := NewRouter(Options{})
+	for _, path := range []string{"/v1/whiteboard/files/uploads", "/v1/whiteboard/files/uploads/00000000-0000-4000-8000-000000000001/finalize"} {
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, path, nil))
+		if response.Code != http.StatusNotFound {
+			t.Errorf("POST %s = %d, want 404", path, response.Code)
+		}
+	}
+	foundDownload := false
+	for _, route := range PreviewRouteContracts() {
+		if route.OperationID == "getWhiteboardFileDownload" {
+			foundDownload = true
+		}
+	}
+	if !foundDownload {
+		t.Fatal("existing board files must retain their download route")
+	}
+}

@@ -164,27 +164,6 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
-    HttpApiEndpoint.post("finalizeWhiteboardFileUpload", "/v1/whiteboard/files/uploads/:uploadId/finalize", {
-      params: S.FinalizeWhiteboardFileUploadPathParamsSchema,
-      success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
-      error: [
-        S.WhiteboardInvalidFileErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.WhiteboardFileNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.WhiteboardUploadNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.WhiteboardFileExistsErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.WhiteboardSceneChangedErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.WhiteboardUploadNotReadyErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.WhiteboardUploadExpiredErrorSchema.pipe(HttpApiSchema.status(410)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.WhiteboardFileTransferFailedErrorSchema.pipe(HttpApiSchema.status(502)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-        S.WhiteboardStorageUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
     HttpApiEndpoint.get("getChatAttachmentDownload", "/v1/chat/attachments/:attachmentId/download", {
       params: S.GetChatAttachmentDownloadPathParamsSchema,
       success: S.GetChatAttachmentDownloadResponseSchema.pipe(HttpApiSchema.status(200)),
@@ -256,11 +235,6 @@ const defaultGroup = HttpApiGroup.make("default")
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.WhiteboardFileNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.WhiteboardUploadNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.WhiteboardFileExistsErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.WhiteboardSceneChangedErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.WhiteboardUploadNotReadyErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.WhiteboardUploadExpiredErrorSchema.pipe(HttpApiSchema.status(410)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.WhiteboardFileTransferFailedErrorSchema.pipe(HttpApiSchema.status(502)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
@@ -287,28 +261,6 @@ const defaultGroup = HttpApiGroup.make("default")
         S.ChatAttachmentTransferFailedErrorSchema.pipe(HttpApiSchema.status(502)),
         S.ChatStorageUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.post("initiateWhiteboardFileUpload", "/v1/whiteboard/files/uploads", {
-      payload: S.InitiateWhiteboardFileUploadRequestBodySchema,
-      success: S.InitiateWhiteboardFileUploadResponseSchema.pipe(HttpApiSchema.status(201)),
-      error: [
-        S.WhiteboardInvalidFileErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.WhiteboardFileNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.WhiteboardUploadNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.WhiteboardFileExistsErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.WhiteboardSceneChangedErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.WhiteboardUploadNotReadyErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.WhiteboardUploadExpiredErrorSchema.pipe(HttpApiSchema.status(410)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.WhiteboardFileTransferFailedErrorSchema.pipe(HttpApiSchema.status(502)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-        S.WhiteboardStorageUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),
   )

@@ -99,10 +99,7 @@ export class ExcalidrawCollabEngine {
     this.filesSync = new WhiteboardFilesSync({
       excalidrawAPI: opts.excalidrawAPI,
       fileTransfer: opts.fileTransfer,
-      initiateUpload: opts.initiateUpload,
-      finalizeUpload: opts.finalizeUpload,
       presignDownload: opts.presignDownload,
-      uploadThrottleMs: 300,
       downloadThrottleMs: 500,
       onStateChange: opts.onFileSyncStateChange,
     });
@@ -158,12 +155,10 @@ export class ExcalidrawCollabEngine {
     this.unsubPointerUp?.();
   }
 
-  handleChange(_elements: readonly OrderedExcalidrawElement[], _appState: AppState, files: BinaryFiles): void {
+  handleChange(_elements: readonly OrderedExcalidrawElement[], _appState: AppState, _files: BinaryFiles): void {
     if (this.disposed) return;
 
     this.applyDeferredRemoteElements();
-    const elementsAll = this.opts.excalidrawAPI.getSceneElementsIncludingDeleted();
-    this.filesSync.handleLocalScene(elementsAll, files);
 
     if (!this.canDraw) return;
 

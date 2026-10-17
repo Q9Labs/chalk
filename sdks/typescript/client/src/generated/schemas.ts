@@ -467,15 +467,6 @@ export const InitiateChatAttachmentUploadRequestSchema = Schema.Struct({
 });
 export type InitiateChatAttachmentUploadRequest = typeof InitiateChatAttachmentUploadRequestSchema.Type;
 
-export const InitiateWhiteboardFileUploadRequestSchema = Schema.Struct({
-  byteLength: Schema.Number,
-  fileId: Schema.String.check(Schema.isMinLength(1)),
-  mimeType: Schema.String.check(Schema.isMinLength(1)),
-  sceneId: Schema.String.check(Schema.isMinLength(1)),
-  sha256: Schema.String.check(Schema.isMinLength(1)),
-});
-export type InitiateWhiteboardFileUploadRequest = typeof InitiateWhiteboardFileUploadRequestSchema.Type;
-
 export const IntegrationActionIdSchema = Schema.String.check(Schema.isMinLength(1)).pipe(Schema.brand("IntegrationActionId"));
 export type IntegrationActionId = typeof IntegrationActionIdSchema.Type;
 
@@ -1135,15 +1126,6 @@ export const WhiteboardFileDownloadSchema = Schema.Struct({
 });
 export type WhiteboardFileDownload = typeof WhiteboardFileDownloadSchema.Type;
 
-export const WhiteboardFileUploadSchema = Schema.Struct({
-  expiresAt: Schema.String,
-  headers: Schema.Record(Schema.String, Schema.String),
-  method: Schema.String,
-  uploadId: Schema.String,
-  uploadUrl: Schema.String,
-});
-export type WhiteboardFileUpload = typeof WhiteboardFileUploadSchema.Type;
-
 export const RateLimitLimitHeaderSchema = Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
 export type RateLimitLimitHeader = typeof RateLimitLimitHeaderSchema.Type;
 
@@ -1565,18 +1547,6 @@ export const FinalizeChatAttachmentUpload429ResponseHeadersSchema = Schema.Struc
 });
 export type FinalizeChatAttachmentUpload429ResponseHeaders = typeof FinalizeChatAttachmentUpload429ResponseHeadersSchema.Type;
 
-export const FinalizeWhiteboardFileUploadPathParamsSchema = Schema.Struct({
-  uploadId: Schema.String,
-});
-export type FinalizeWhiteboardFileUploadPathParams = typeof FinalizeWhiteboardFileUploadPathParamsSchema.Type;
-
-export const FinalizeWhiteboardFileUpload429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type FinalizeWhiteboardFileUpload429ResponseHeaders = typeof FinalizeWhiteboardFileUpload429ResponseHeadersSchema.Type;
-
 export const GetChatAttachmentDownloadPathParamsSchema = Schema.Struct({
   attachmentId: Schema.String,
 });
@@ -1746,19 +1716,6 @@ export const InitiateChatAttachmentUpload429ResponseHeadersSchema = Schema.Struc
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type InitiateChatAttachmentUpload429ResponseHeaders = typeof InitiateChatAttachmentUpload429ResponseHeadersSchema.Type;
-
-export const InitiateWhiteboardFileUploadRequestBodySchema = InitiateWhiteboardFileUploadRequestSchema;
-export type InitiateWhiteboardFileUploadRequestBody = typeof InitiateWhiteboardFileUploadRequestBodySchema.Type;
-
-export const InitiateWhiteboardFileUploadResponseSchema = WhiteboardFileUploadSchema;
-export type InitiateWhiteboardFileUploadResponse = typeof InitiateWhiteboardFileUploadResponseSchema.Type;
-
-export const InitiateWhiteboardFileUpload429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type InitiateWhiteboardFileUpload429ResponseHeaders = typeof InitiateWhiteboardFileUpload429ResponseHeadersSchema.Type;
 
 export const IssueAccessGrantPathParamsSchema = Schema.Struct({
   episode_id: EpisodeIdSchema,
@@ -4197,25 +4154,6 @@ export const WebhookUnsafeUrlErrorSchema = WebhookUnsafeUrlErrorWireSchema.pipe(
   }),
 );
 
-export class WhiteboardFileExistsError extends Schema.TaggedErrorClass<WhiteboardFileExistsError>()("WhiteboardFileExistsError", {
-  error: Schema.Struct({
-    code: Schema.Literal("whiteboard.file_exists"),
-    message: Schema.String,
-  }),
-}) {}
-export const WhiteboardFileExistsErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("whiteboard.file_exists"),
-    message: Schema.String,
-  }),
-});
-export const WhiteboardFileExistsErrorSchema = WhiteboardFileExistsErrorWireSchema.pipe(
-  Schema.decodeTo(WhiteboardFileExistsError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "WhiteboardFileExistsError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
 export class WhiteboardFileNotFoundError extends Schema.TaggedErrorClass<WhiteboardFileNotFoundError>()("WhiteboardFileNotFoundError", {
   error: Schema.Struct({
     code: Schema.Literal("whiteboard.file_not_found"),
@@ -4273,25 +4211,6 @@ export const WhiteboardInvalidFileErrorSchema = WhiteboardInvalidFileErrorWireSc
   }),
 );
 
-export class WhiteboardSceneChangedError extends Schema.TaggedErrorClass<WhiteboardSceneChangedError>()("WhiteboardSceneChangedError", {
-  error: Schema.Struct({
-    code: Schema.Literal("whiteboard.scene_changed"),
-    message: Schema.String,
-  }),
-}) {}
-export const WhiteboardSceneChangedErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("whiteboard.scene_changed"),
-    message: Schema.String,
-  }),
-});
-export const WhiteboardSceneChangedErrorSchema = WhiteboardSceneChangedErrorWireSchema.pipe(
-  Schema.decodeTo(WhiteboardSceneChangedError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "WhiteboardSceneChangedError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
 export class WhiteboardStorageUnavailableError extends Schema.TaggedErrorClass<WhiteboardStorageUnavailableError>()("WhiteboardStorageUnavailableError", {
   error: Schema.Struct({
     code: Schema.Literal("whiteboard.storage_unavailable"),
@@ -4307,63 +4226,6 @@ export const WhiteboardStorageUnavailableErrorWireSchema = Schema.Struct({
 export const WhiteboardStorageUnavailableErrorSchema = WhiteboardStorageUnavailableErrorWireSchema.pipe(
   Schema.decodeTo(WhiteboardStorageUnavailableError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "WhiteboardStorageUnavailableError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class WhiteboardUploadExpiredError extends Schema.TaggedErrorClass<WhiteboardUploadExpiredError>()("WhiteboardUploadExpiredError", {
-  error: Schema.Struct({
-    code: Schema.Literal("whiteboard.upload_expired"),
-    message: Schema.String,
-  }),
-}) {}
-export const WhiteboardUploadExpiredErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("whiteboard.upload_expired"),
-    message: Schema.String,
-  }),
-});
-export const WhiteboardUploadExpiredErrorSchema = WhiteboardUploadExpiredErrorWireSchema.pipe(
-  Schema.decodeTo(WhiteboardUploadExpiredError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "WhiteboardUploadExpiredError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class WhiteboardUploadNotFoundError extends Schema.TaggedErrorClass<WhiteboardUploadNotFoundError>()("WhiteboardUploadNotFoundError", {
-  error: Schema.Struct({
-    code: Schema.Literal("whiteboard.upload_not_found"),
-    message: Schema.String,
-  }),
-}) {}
-export const WhiteboardUploadNotFoundErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("whiteboard.upload_not_found"),
-    message: Schema.String,
-  }),
-});
-export const WhiteboardUploadNotFoundErrorSchema = WhiteboardUploadNotFoundErrorWireSchema.pipe(
-  Schema.decodeTo(WhiteboardUploadNotFoundError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "WhiteboardUploadNotFoundError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
-export class WhiteboardUploadNotReadyError extends Schema.TaggedErrorClass<WhiteboardUploadNotReadyError>()("WhiteboardUploadNotReadyError", {
-  error: Schema.Struct({
-    code: Schema.Literal("whiteboard.upload_not_ready"),
-    message: Schema.String,
-  }),
-}) {}
-export const WhiteboardUploadNotReadyErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("whiteboard.upload_not_ready"),
-    message: Schema.String,
-  }),
-});
-export const WhiteboardUploadNotReadyErrorSchema = WhiteboardUploadNotReadyErrorWireSchema.pipe(
-  Schema.decodeTo(WhiteboardUploadNotReadyError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "WhiteboardUploadNotReadyError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -4722,23 +4584,6 @@ export const FinalizeChatAttachmentUploadErrorSchema = Schema.Union([
 ]);
 export type FinalizeChatAttachmentUploadError = typeof FinalizeChatAttachmentUploadErrorSchema.Type;
 
-export const FinalizeWhiteboardFileUploadErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceUnavailableErrorSchema,
-  WhiteboardFileExistsErrorSchema,
-  WhiteboardFileNotFoundErrorSchema,
-  WhiteboardFileTransferFailedErrorSchema,
-  WhiteboardInvalidFileErrorSchema,
-  WhiteboardSceneChangedErrorSchema,
-  WhiteboardStorageUnavailableErrorSchema,
-  WhiteboardUploadExpiredErrorSchema,
-  WhiteboardUploadNotFoundErrorSchema,
-  WhiteboardUploadNotReadyErrorSchema,
-]);
-export type FinalizeWhiteboardFileUploadError = typeof FinalizeWhiteboardFileUploadErrorSchema.Type;
-
 export const GetChatAttachmentDownloadErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -4875,15 +4720,10 @@ export const GetWhiteboardFileDownloadErrorSchema = Schema.Union([
   AccessUnauthenticatedErrorSchema,
   RequestRateLimitedErrorSchema,
   ServiceUnavailableErrorSchema,
-  WhiteboardFileExistsErrorSchema,
   WhiteboardFileNotFoundErrorSchema,
   WhiteboardFileTransferFailedErrorSchema,
   WhiteboardInvalidFileErrorSchema,
-  WhiteboardSceneChangedErrorSchema,
   WhiteboardStorageUnavailableErrorSchema,
-  WhiteboardUploadExpiredErrorSchema,
-  WhiteboardUploadNotFoundErrorSchema,
-  WhiteboardUploadNotReadyErrorSchema,
 ]);
 export type GetWhiteboardFileDownloadError = typeof GetWhiteboardFileDownloadErrorSchema.Type;
 
@@ -4904,24 +4744,6 @@ export const InitiateChatAttachmentUploadErrorSchema = Schema.Union([
   ServiceUnavailableErrorSchema,
 ]);
 export type InitiateChatAttachmentUploadError = typeof InitiateChatAttachmentUploadErrorSchema.Type;
-
-export const InitiateWhiteboardFileUploadErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  RequestPayloadTooLargeErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceUnavailableErrorSchema,
-  WhiteboardFileExistsErrorSchema,
-  WhiteboardFileNotFoundErrorSchema,
-  WhiteboardFileTransferFailedErrorSchema,
-  WhiteboardInvalidFileErrorSchema,
-  WhiteboardSceneChangedErrorSchema,
-  WhiteboardStorageUnavailableErrorSchema,
-  WhiteboardUploadExpiredErrorSchema,
-  WhiteboardUploadNotFoundErrorSchema,
-  WhiteboardUploadNotReadyErrorSchema,
-]);
-export type InitiateWhiteboardFileUploadError = typeof InitiateWhiteboardFileUploadErrorSchema.Type;
 
 export const IssueAccessGrantErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -5486,14 +5308,12 @@ export const ChalkOperationPolicies = {
   denySpacePublicAdmissionRequest: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   endEpisode: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   finalizeChatAttachmentUpload: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  finalizeWhiteboardFileUpload: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   getEpisode: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getSpacePublicInvite: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   getSpacePublicInviteArrival: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   getWebhookDelivery: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   getWebhookEndpoint: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   initiateChatAttachmentUpload: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  initiateWhiteboardFileUpload: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   issueAccessGrant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   issueEpisodeParticipantSyncToken: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   leaveSpacePublicInviteArrival: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
