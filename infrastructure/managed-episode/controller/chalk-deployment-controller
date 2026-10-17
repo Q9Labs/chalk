@@ -468,14 +468,15 @@ inject_runtime_identity() {
 inject_recorder_runtime_identity() {
   jq -e '.images | has("recorder_control")' "$manifest_path" >/dev/null || return 0
   jq -e 'all(.[] | select(.id | startswith("recorder-")); .missing == false)' <<<"$input_records_json" >/dev/null || fail "enabled recorder control inputs cannot be excluded"
-  local role file
+  local role file max_nodes=10
+  [[ "$request_environment" != nightly ]] || max_nodes=1
   for role in capture render; do
     file="${stage_root}/env/recorder-${role}.env"
     require_regular_file "$file"
     set_env_value "$file" CHALK_RECORDER_FLEET_ROLE "$role"
     set_env_value "$file" CHALK_RECORDER_FLEET_ENVIRONMENT "$request_environment"
     set_env_value "$file" CHALK_RECORDER_FLEET_JOURNAL_PATH /var/lib/chalk-recorder/state/journal.json
-    set_env_value "$file" CHALK_RECORDER_FLEET_MAX_NODES 10
+    set_env_value "$file" CHALK_RECORDER_FLEET_MAX_NODES "$max_nodes"
     set_env_value "$file" CHALK_RECORDER_FLEET_SLOTS_PER_NODE 1
     set_env_value "$file" CHALK_RECORDER_FLEET_GPU false
     set_env_value "$file" CHALK_RECORDER_FLEET_CONTROLLER_CERT /run/chalk/controller.crt
@@ -1332,7 +1333,7 @@ deploy() {
   mkdir -p "$rendered_root"
   local render_script="${managed_root}/scripts/render-runtime"
   require_regular_file "$render_script"
-  "$render_script" "$manifest_path" "$rendered_root" >"${stage_root}/render.log" 2>&1 || fail "runtime rendering failed"
+  "$render_script" "$manifest_path" "$rendered_root" "$request_environment" >"${stage_root}/render.log" 2>&1 || fail "runtime rendering failed"
   local validate_script="${managed_root}/scripts/validate-runtime"
   require_regular_file "$validate_script"
   local missing_inputs_csv

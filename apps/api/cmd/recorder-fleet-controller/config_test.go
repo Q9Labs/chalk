@@ -19,7 +19,7 @@ func TestLoadCommandConfigBuildsRoleFencedCapturePool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	if config.Fleet.Key != (recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}) {
+	if config.Fleet.Key != (recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture}) {
 		t.Fatalf("pool key = %+v", config.Fleet.Key)
 	}
 	if config.Fleet.MaxNodes != 11 || config.Fleet.SlotsPerNode != 1 || config.Fleet.Release.GPU {
@@ -123,7 +123,7 @@ func TestBootstrapNameClaimsStartupWarning(t *testing.T) {
 
 func validCommandEnvironment() map[string]string {
 	return map[string]string{
-		"CHALK_RECORDER_FLEET_ENVIRONMENT":                 "staging",
+		"CHALK_RECORDER_FLEET_ENVIRONMENT":                 "nightly",
 		"CHALK_RECORDER_FLEET_ROLE":                        "capture",
 		"CHALK_RECORDER_FLEET_CONTROL_PLANE_URL":           "https://control.example",
 		"CHALK_RECORDER_FLEET_CONTROLLER_CERT":             "/run/secrets/controller.pem",

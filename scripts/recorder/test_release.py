@@ -8,13 +8,36 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from release_core import (PIN_KEYS, builder_identity, check_fresh, check_image, check_qualification,
-                          digest, env_values, rebuild_dispatcher, replace_pins, scheduler_changes, sealed_result)
+                          digest, env_values, rebuild_dispatcher, replace_pins, scheduler_changes, sealed_result, validate_config)
 from release_io import Provider
 from release import Release
 from spend_guard import expire
 
 
 class ReleaseContracts(unittest.TestCase):
+    def test_nightly_release_configuration_is_environment_scoped(self):
+        from release import parse_args
+        args = parse_args(["plan", "--dry-run", "--environment", "nightly", "--region", "test-region", "--profile", "test-profile"])
+        self.assertEqual(args.config_parameter, "/chalk/nightly/release/recorder.json")
+        with self.assertRaisesRegex(ValueError, "configuration must be under"):
+            parse_args(["plan", "--dry-run", "--environment", "nightly", "--region", "test-region", "--profile", "test-profile", "--config-parameter", "/chalk/production/release/recorder.json"])
+        config = {
+            "schema_version": 1, "do_context": "chalk-nightly",
+            "bootstrap_ca_parameter": "/chalk/nightly/managed-episode/recorder/issuer-server-ca",
+            "bootstrap_server_name": "nightly-recording-control.chalkmeet.com",
+            "builder": {"region": "blr1", "size": "c-8", "image": "test", "ttl_seconds": 1200, "ssh_cidr": "192.0.2.1/32"},
+            "worker": {"region": "blr1", "size": "c-2", "disk_gb": 25},
+            "runtime": {"instance_id": "i-0123456789abcdef0", "parameter_prefix": "/chalk/nightly/managed-episode", "document_name": "chalk-nightly-managed-episode-release", "log_group": "/chalk/nightly/managed-episode", "user_id": 1000},
+            "dispatcher": {"state_bucket": "chalk-nightly-state-000000000000", "state_key": "transcription/terraform.tfstate", "function_name": "chalk-nightly-transcription-dispatcher", "scheduler_name": "chalk-nightly-transcription-reconcile", "scheduler_group": "chalk-nightly"},
+        }
+        self.assertEqual(validate_config(config, "nightly"), config)
+        with self.assertRaisesRegex(ValueError, "outside selected environment"):
+            validate_config(config, "production")
+        config["runtime"]["parameter_prefix"] = "/chalk/production/managed-episode"
+        with self.assertRaisesRegex(ValueError, "outside selected environment"):
+            validate_config(config, "nightly")
+
+
     def test_planning_accepts_distinct_unchanged_role_profile(self):
         release = Release.__new__(Release)
         release.args = Mock(role="render", region="test-region", profile="test-profile")

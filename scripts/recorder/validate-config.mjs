@@ -107,12 +107,12 @@ function requireEnv(env, names) {
 
 // fallow-ignore-next-line complexity
 export function assertOperationalReadiness(env = process.env) {
-  requireEnv(env, ["RECORDER_STAGING_EVIDENCE_SHA256", "DO_CAPTURE_TOKEN", "DO_RENDER_TOKEN", "CLOUDFLARE_API_TOKEN", "RECORDER_CONTROL_PLANE_ROLE_ARN"]);
-  if (!/^sha256:[0-9a-f]{64}$/.test(env.RECORDER_STAGING_EVIDENCE_SHA256)) {
-    throw new Error("RECORDER_STAGING_EVIDENCE_SHA256 must be sha256:<64 lowercase hexadecimal characters>");
+  requireEnv(env, ["RECORDER_NIGHTLY_EVIDENCE_SHA256", "DO_CAPTURE_TOKEN", "DO_RENDER_TOKEN", "CLOUDFLARE_API_TOKEN", "RECORDER_CONTROL_PLANE_ROLE_ARN"]);
+  if (!/^sha256:[0-9a-f]{64}$/.test(env.RECORDER_NIGHTLY_EVIDENCE_SHA256)) {
+    throw new Error("RECORDER_NIGHTLY_EVIDENCE_SHA256 must be sha256:<64 lowercase hexadecimal characters>");
   }
-  if (env.RECORDER_STAGING_EVIDENCE_VERIFIED !== "true") {
-    throw new Error("recorder gate is closed until RECORDER_STAGING_EVIDENCE_VERIFIED=true");
+  if (env.RECORDER_NIGHTLY_EVIDENCE_VERIFIED !== "true") {
+    throw new Error("recorder gate is closed until RECORDER_NIGHTLY_EVIDENCE_VERIFIED=true");
   }
   if (!/^arn:aws:iam::[0-9]{12}:role\/[A-Za-z0-9+=,.@_/-]+$/.test(env.RECORDER_CONTROL_PLANE_ROLE_ARN)) {
     throw new Error("RECORDER_CONTROL_PLANE_ROLE_ARN must be a valid IAM role ARN");
@@ -124,7 +124,7 @@ export function assertOperationalReadiness(env = process.env) {
     }
   }
   return {
-    stagingEvidenceDigest: env.RECORDER_STAGING_EVIDENCE_SHA256,
+    nightlyEvidenceDigest: env.RECORDER_NIGHTLY_EVIDENCE_SHA256,
     captureTokenPresent: true,
     renderTokenPresent: true,
     cloudflareTokenPresent: true,

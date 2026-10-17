@@ -1,0 +1,54 @@
+#cloud-config
+# Launch separately: persistent spot t4g.small, interruption=stop, 2 GiB,
+# Ubuntu 24.04 arm64, encrypted 20 GiB gp3, IMDSv2 required, hop limit 2,
+# no SSH key, chalk-nightly-host instance profile. This file contains no secrets.
+package_update: true
+packages:
+  - podman
+  - uidmap
+  - slirp4netns
+  - fuse-overlayfs
+  - dbus-user-session
+  - jq
+  - curl
+  - tar
+  - ca-certificates
+  - openssl
+  - unzip
+users:
+  - default
+  - name: chalk
+    homedir: /home/chalk
+    shell: /bin/bash
+    lock_passwd: true
+    sudo: []
+write_files:
+  - path: /usr/local/sbin/chalk-nightly-bootstrap
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      test "$(uname -m)" = aarch64
+      test "$(stat -fc %T /sys/fs/cgroup)" = cgroup2fs
+      # useradd may have allocated these already; never append overlapping ranges.
+      grep -q '^chalk:' /etc/subuid || usermod --add-subuids 100000-165535 chalk
+      grep -q '^chalk:' /etc/subgid || usermod --add-subgids 100000-165535 chalk
+      test -x /usr/lib/systemd/system-generators/podman-system-generator
+      work=$(mktemp -d)
+      trap 'find "$work" -depth -delete' EXIT
+      curl --fail --silent --show-error --location https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o "$work/aws.zip"
+      unzip -q "$work/aws.zip" -d "$work"
+      "$work/aws/install" --update
+      if ! systemctl is-active --quiet snap.amazon-ssm-agent.amazon-ssm-agent.service; then
+        curl --fail --silent --show-error --location https://s3.ap-southeast-1.amazonaws.com/amazon-ssm-ap-southeast-1/latest/debian_arm64/amazon-ssm-agent.deb -o "$work/ssm.deb"
+        dpkg -i "$work/ssm.deb"
+        systemctl enable --now amazon-ssm-agent
+      fi
+      loginctl enable-linger chalk
+      user_id=$(id -u chalk)
+      systemctl start "user@$user_id.service"
+      test -S "/run/user/$user_id/bus"
+      runuser -u chalk -- env XDG_RUNTIME_DIR="/run/user/$user_id" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$user_id/bus" podman run --rm docker.io/library/alpine:3.22 true
+      # Deployment installs restore/watchdog units and fetches only nightly SSM.
+runcmd:
+  - [bash, /usr/local/sbin/chalk-nightly-bootstrap]

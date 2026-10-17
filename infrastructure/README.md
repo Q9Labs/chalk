@@ -43,7 +43,7 @@ recorder nodes receive neither KMS nor provider credentials.
 
 Run `pnpm run recorder:gate` for backend-disabled OpenTofu format/validation,
 capacity-contract tests, and the fail-closed credential check. The command does
-not apply infrastructure. A mutation requires a redacted staging-evidence
+not apply infrastructure. A mutation requires a redacted nightly-evidence
 digest, separate short-lived DigitalOcean tokens, a scoped Cloudflare token,
 the control-plane role ARN, immutable image digests, and external one-time
 bootstrap endpoints. Production R2 adoption additionally requires an explicit

@@ -1,11 +1,11 @@
 variable "environment" {
-  description = "Recorder environment. Only staging and production are deployable."
+  description = "Recorder environment. Only nightly and production are deployable."
   type        = string
-  default     = "staging"
+  default     = "nightly"
 
   validation {
-    condition     = contains(["staging", "production"], var.environment)
-    error_message = "environment must be staging or production."
+    condition     = contains(["nightly", "production"], var.environment)
+    error_message = "environment must be nightly or production."
   }
 }
 
@@ -15,15 +15,15 @@ variable "enable_apply" {
   default     = false
 }
 
-variable "staging_evidence_digest" {
-  description = "SHA-256 digest of the redacted staging recorder gate evidence."
+variable "nightly_evidence_digest" {
+  description = "SHA-256 digest of the redacted nightly recorder gate evidence."
   type        = string
   default     = null
   nullable    = true
 
   validation {
-    condition     = var.staging_evidence_digest == null || can(regex("^sha256:[0-9a-f]{64}$", var.staging_evidence_digest))
-    error_message = "staging_evidence_digest must be sha256:<64 lowercase hexadecimal characters>."
+    condition     = var.nightly_evidence_digest == null || can(regex("^sha256:[0-9a-f]{64}$", var.nightly_evidence_digest))
+    error_message = "nightly_evidence_digest must be sha256:<64 lowercase hexadecimal characters>."
   }
 }
 

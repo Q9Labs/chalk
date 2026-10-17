@@ -6,6 +6,7 @@
 .terraform/
 .terraform.lock.hcl
 !opentofu/modules/**/.terraform.lock.hcl
+!nightly/transcription/.terraform.lock.hcl
 crash.log
 crash.*.log
 override.tf

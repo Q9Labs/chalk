@@ -185,7 +185,7 @@ infrastructure root has separate `capture_image_id`/`capture_image_digest` and
 `render_image_id`/`render_image_digest` inputs, and each controller loads its
 own role-fenced release. Set the Capture controller's image ID and digest
 together after the API and issuer support for the new release is deployed.
-Validate the exact snapshot and size in a staging Capture boot before promotion.
+Validate the exact snapshot and size in a nightly Capture boot before promotion.
 
 ### Shared Capture/Render image
 
