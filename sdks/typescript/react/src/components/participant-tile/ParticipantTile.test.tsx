@@ -10,7 +10,9 @@ describe("ParticipantTile", () => {
     const root = createRoot(container);
     try {
       await act(async () => root.render(<ParticipantTileSurface participant={{ id: "nora", displayName: "Nora", isVideoEnabled: false }} mediaVisible={false} showName={false} showStatus={false} animatedAvatars={false} />));
-      expect(container.querySelector('[role="img"][aria-label="Avatar for Nora"]')).not.toBeNull();
+      const avatar = container.querySelector('[role="img"][aria-label="Avatar for Nora"]');
+      expect(avatar).not.toBeNull();
+      expect(avatar?.parentElement?.getAttribute("aria-hidden")).toBe("true");
     } finally {
       await act(async () => root.unmount());
     }
