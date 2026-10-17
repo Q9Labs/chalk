@@ -2,6 +2,7 @@ defmodule ChalkSync.Episodes.ReducerAPIFixtureTest do
   use ExUnit.Case, async: true
 
   alias ChalkSync.Episodes.Reducer
+  alias ChalkSync.Stateholder.Command
 
   @api_artifact Path.expand("../../fixtures/api_episode_snapshot_v1.json", __DIR__)
 
@@ -51,7 +52,7 @@ defmodule ChalkSync.Episodes.ReducerAPIFixtureTest do
     assert state.admission_policy == "members_only"
 
     assert {:error, :invalid_payload} =
-             ChalkSync.Stateholder.Command.new("retired-policy-0001", :set_admission_policy, %{
+             Command.new("retired-policy-0001", :set_admission_policy, %{
                "policy" => "members_only"
              })
   end
