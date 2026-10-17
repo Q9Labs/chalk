@@ -171,7 +171,7 @@ def rebuild_dispatcher(state, module, backend, region, profile):
     if permission:
         inputs["control_api_invoker_principal"] = permission["principal"]
         inputs["control_api_invoke_source_arn"] = permission["source_arn"]
-    return {"terraform": {"required_providers": {"aws": {"source": "hashicorp/aws", "version": "~> 5.0"}},
+    root = {"terraform": {"required_providers": {"aws": {"source": "hashicorp/aws", "version": "~> 5.0"}},
                           "backend": {"s3": {"bucket": backend["state_bucket"], "key": backend["state_key"],
                                              "region": region, "profile": profile, "encrypt": True, "use_lockfile": True}}},
             "provider": {"aws": {"region": region, "profile": profile}},
@@ -189,3 +189,6 @@ def scheduler_changes(plan, desired):
     before, after = change["change"]["before"], change["change"]["after"]
     require(after["state"] == desired and {k: v for k, v in before.items() if k != "state"}
             == {k: v for k, v in after.items() if k != "state"}, "scheduler plan changes more than state")
+    if not root["output"]:
+        del root["output"]
+    return root

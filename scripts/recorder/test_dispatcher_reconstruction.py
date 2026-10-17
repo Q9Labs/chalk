@@ -44,13 +44,14 @@ class DispatcherReconstructionTests(unittest.TestCase):
                     "DEEPINFRA_TOKEN_PARAMETER_ARN": "arn:aws:ssm:ap-southeast-1:000000000000:parameter/chalk/nightly/deepinfra",
                     "DEEPINFRA_CORPUS_DIGEST": "0" * 64,
                 })
+        state["outputs"] = {}
         root = rebuild_dispatcher(state, module, {"state_bucket": "test-state", "state_key": "test.tfstate"},
                                   "ap-southeast-1", "test-profile")
         self.assertEqual(root["module"]["dispatcher"]["scheduler_group_name"], "chalk-nightly")
         # Use local test state and a mock provider only; never contact AWS/S3.
         del root["terraform"]["backend"]
         del root["provider"]
-        del root["output"]
+        self.assertNotIn("output", root)
         mock_provider = (module / "tests/networking.tftest.hcl").read_text().split("\nvariables {", 1)[0]
         with tempfile.TemporaryDirectory(prefix="chalk-dispatcher-reconstruction-") as directory:
             directory = Path(directory)
