@@ -11,6 +11,171 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createDashboardLifecycleParticipant = `-- name: CreateDashboardLifecycleParticipant :one
+insert into participants (
+    id, name, metadata, capabilities, role,
+    tenant_id, space_id, episode_id, account_id, identity_id,
+    generation, status
+) values (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9, null,
+    (select coalesce(max(generation), 0) + 1 from participants
+     where tenant_id = $6
+       and episode_id = $8
+       and account_id = $9), 'joining'
+)
+returning id, name, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, generation, status, role, joined_at, left_at, updated_at, created_at
+`
+
+type CreateDashboardLifecycleParticipantParams struct {
+	ID           pgtype.UUID `json:"id"`
+	Name         pgtype.Text `json:"name"`
+	Metadata     []byte      `json:"metadata"`
+	Capabilities []string    `json:"capabilities"`
+	Role         string      `json:"role"`
+	TenantID     pgtype.UUID `json:"tenant_id"`
+	SpaceID      pgtype.UUID `json:"space_id"`
+	EpisodeID    pgtype.UUID `json:"episode_id"`
+	AccountID    pgtype.UUID `json:"account_id"`
+}
+
+func (q *Queries) CreateDashboardLifecycleParticipant(ctx context.Context, arg CreateDashboardLifecycleParticipantParams) (Participant, error) {
+	row := q.db.QueryRow(ctx, createDashboardLifecycleParticipant,
+		arg.ID,
+		arg.Name,
+		arg.Metadata,
+		arg.Capabilities,
+		arg.Role,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.AccountID,
+	)
+	var i Participant
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Metadata,
+		&i.Capabilities,
+		&i.TenantID,
+		&i.SpaceID,
+		&i.EpisodeID,
+		&i.AccountID,
+		&i.IdentityID,
+		&i.Generation,
+		&i.Status,
+		&i.Role,
+		&i.JoinedAt,
+		&i.LeftAt,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const lockDashboardJoinIntentForUpdate = `-- name: LockDashboardJoinIntentForUpdate :one
+select tenant_id, space_id, episode_id, lifecycle_intent_id, request_key, request_fingerprint, intent_name, participant_id, participant_generation, payload, status, terminal_reason, applied_event_id, applied_revision, attempt_count, last_error_code, next_attempt_at, created_at, completed_at, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id
+from sync_lifecycle_intents
+where tenant_id = $1
+  and space_id = $2
+  and episode_id = $3
+  and participant_id = $4
+  and intent_name = 'participant_joined'
+order by created_at desc
+limit 1
+for update
+`
+
+type LockDashboardJoinIntentForUpdateParams struct {
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	SpaceID       pgtype.UUID `json:"space_id"`
+	EpisodeID     pgtype.UUID `json:"episode_id"`
+	ParticipantID pgtype.UUID `json:"participant_id"`
+}
+
+func (q *Queries) LockDashboardJoinIntentForUpdate(ctx context.Context, arg LockDashboardJoinIntentForUpdateParams) (SyncLifecycleIntent, error) {
+	row := q.db.QueryRow(ctx, lockDashboardJoinIntentForUpdate,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.ParticipantID,
+	)
+	var i SyncLifecycleIntent
+	err := row.Scan(
+		&i.TenantID,
+		&i.SpaceID,
+		&i.EpisodeID,
+		&i.LifecycleIntentID,
+		&i.RequestKey,
+		&i.RequestFingerprint,
+		&i.IntentName,
+		&i.ParticipantID,
+		&i.ParticipantGeneration,
+		&i.Payload,
+		&i.Status,
+		&i.TerminalReason,
+		&i.AppliedEventID,
+		&i.AppliedRevision,
+		&i.AttemptCount,
+		&i.LastErrorCode,
+		&i.NextAttemptAt,
+		&i.CreatedAt,
+		&i.CompletedAt,
+		&i.JourneyID,
+		&i.ParentJourneyEventID,
+		&i.ProducingTraceID,
+		&i.ProducingSpanID,
+	)
+	return i, err
+}
+
+const lockDashboardParticipantForUpdate = `-- name: LockDashboardParticipantForUpdate :one
+select id, name, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, generation, status, role, joined_at, left_at, updated_at, created_at
+from participants
+where tenant_id = $1
+  and space_id = $2
+  and episode_id = $3
+  and account_id = $4
+  and status in ('joining', 'active')
+for update
+`
+
+type LockDashboardParticipantForUpdateParams struct {
+	TenantID  pgtype.UUID `json:"tenant_id"`
+	SpaceID   pgtype.UUID `json:"space_id"`
+	EpisodeID pgtype.UUID `json:"episode_id"`
+	AccountID pgtype.UUID `json:"account_id"`
+}
+
+func (q *Queries) LockDashboardParticipantForUpdate(ctx context.Context, arg LockDashboardParticipantForUpdateParams) (Participant, error) {
+	row := q.db.QueryRow(ctx, lockDashboardParticipantForUpdate,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.AccountID,
+	)
+	var i Participant
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Metadata,
+		&i.Capabilities,
+		&i.TenantID,
+		&i.SpaceID,
+		&i.EpisodeID,
+		&i.AccountID,
+		&i.IdentityID,
+		&i.Generation,
+		&i.Status,
+		&i.Role,
+		&i.JoinedAt,
+		&i.LeftAt,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const lockLiveEpisodeForUpdate = `-- name: LockLiveEpisodeForUpdate :one
 select id, status, metadata, space_id, tenant_id, created_by_user_id, started_at, ended_at, config_snapshot, end_reason, deadline_at, deadline_generation, updated_at, created_at
 from episodes

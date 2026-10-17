@@ -13,9 +13,9 @@ const plans = {
 };
 const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|export|transcript] [--force-layer-switch|--no-layer-switch]
 Default: all, with forced layer switch. Each subcommand creates and cleans its own run.
-Requirements: CHALK_PROOF_API_KEY (existing scoped Tenant key), op (vault dev), aws, ffmpeg, ffprobe, ImageMagick, Chromium,
+Requirements: CHALK_PROOF_API_KEY (existing scoped Tenant key), configuration environment variables (see README), aws, ffmpeg, ffprobe, ImageMagick, Chromium,
              macOS say or Linux espeak; pnpm install and pnpm --filter @q9labsai/chalk-client exec playwright install chromium.
-Private artifacts: .private/prod-proof/<run>/ (never commit). Configuration is loaded from 1Password and SSM.`;
+Private artifacts: .private/prod-proof/<run>/ (never commit). Configuration comes from the environment and SSM.`;
 const args = process.argv.slice(2);
 const mode = args.find((argument) => !argument.startsWith("--")) ?? "all";
 const known = new Set([...Object.keys(plans), "--force-layer-switch", "--no-layer-switch"]);
