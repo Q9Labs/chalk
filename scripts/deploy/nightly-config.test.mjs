@@ -51,9 +51,12 @@ async function assertProductionRendering(directory, baseline, manifest, images) 
     const before = join(directory, `before-${recording}`);
     const after = join(directory, `after-${recording}`);
     run("bash", [join(baseline, managed, "scripts/render-runtime"), manifest, before]);
-    run("bash", [join(root, managed, "scripts/render-runtime"), manifest, after, "production"]);
-    assert.deepEqual(await files(after), await files(before));
-    for (const file of await files(before)) assert.deepEqual(await readFile(join(after, file)), await readFile(join(before, file)), file);
+    for (const environment of [[], ["production"]]) {
+      const rendered = `${after}-${environment.length}`;
+      run("bash", [join(root, managed, "scripts/render-runtime"), manifest, rendered, ...environment]);
+      assert.deepEqual(await files(rendered), await files(before));
+      for (const file of await files(before)) assert.deepEqual(await readFile(join(rendered, file)), await readFile(join(before, file)), file);
+    }
   }
 }
 

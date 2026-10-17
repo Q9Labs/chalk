@@ -11,6 +11,13 @@ allow_dirty=false
 excluded_secrets=""
 environment=production
 
+validate_environment_inputs() {
+  local file="$1" section="$2" key expected
+  while IFS=$'\t' read -r key expected; do
+    [[ "$(env_value "$file" "$key")" == "$expected" ]] || fail "$key does not match environment"
+  done < <(jq -r --arg section "$section" '.[$section] | to_entries[] | [.key, .value] | @tsv' <<<"$environment_policy")
+}
+
 usage() {
   echo "usage: validate-runtime --env-root <dir> --secret-root <dir> --manifest <file> --sync-proof <file> [--environment <name>] [--rendered-root <dir>] [--excluded-secrets <sorted-comma-separated-ids>] [--allow-dirty]" >&2
 }
@@ -30,6 +37,7 @@ while (($# > 0)); do
 done
 
 command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
+environment_policy="$(jq -ce --arg environment "$environment" '.[$environment] // .production' "${managed_root}/contracts/environments.json")"
 command -v openssl >/dev/null || { echo "openssl is required" >&2; exit 1; }
 if [[ -z "${env_root}" || -z "${secret_root}" || -z "${manifest}" || -z "${sync_proof}" ]]; then
   usage
@@ -308,15 +316,9 @@ if jq -e '.images | has("recorder_control")' "$manifest" >/dev/null; then
     done
     require_env "$file" DIGITALOCEAN_TOKEN
     [[ "$(env_value "$file" CHALK_RECORDER_FLEET_ROLE)" == "$role" ]] || fail "recorder fleet role does not match its unit"
-    max_nodes=10
-    [[ "$environment" != nightly ]] || max_nodes=1
+    max_nodes="$(jq -er '.fleet_max_nodes' <<<"$environment_policy")"
     [[ "$(env_value "$file" CHALK_RECORDER_FLEET_MAX_NODES)" == "$max_nodes" ]] || fail "recorder fleet maximum does not match environment"
-    if [[ "$environment" == nightly ]]; then
-      [[ "$(env_value "$file" CHALK_RECORDER_FLEET_ENVIRONMENT)" == nightly ]] || fail "nightly recorder identity mismatch"
-      [[ "$(env_value "$file" CHALK_RECORDER_FLEET_OWNER_TAG)" == chalk-nightly-recorder-owner ]] || fail "nightly recorder owner mismatch"
-      [[ "$(env_value "$file" CHALK_RECORDER_FLEET_SERVER_NAME)" == nightly-recording-control.chalkmeet.com ]] || fail "nightly recorder server name mismatch"
-      [[ "$(env_value "$file" CHALK_RECORDER_FLEET_BOOTSTRAP_ENDPOINT)" == https://nightly-recording-control.chalkmeet.com:8444 ]] || fail "nightly recorder bootstrap endpoint mismatch"
-    fi
+    validate_environment_inputs "$file" fleet_inputs
     [[ "$(env_value "$file" CHALK_RECORDER_FLEET_SLOTS_PER_NODE)" == 1 ]] || fail "recorder fleet must use one Recording per node"
     if [[ "$role" == capture && "$(env_value "$file" CHALK_RECORDER_FLEET_SIZE)" != c-2 ]]; then
       qualification="$(env_value "$file" CHALK_RECORDER_CAPTURE_PROFILE_EVIDENCE_SHA256)" || fail "smaller capture profile has no qualification evidence"
@@ -341,12 +343,12 @@ if jq -e '.images | has("recorder_control")' "$manifest" >/dev/null; then
   done
   openssl verify -purpose sslclient -CAfile "${secret_root}/recorder/issuer-controller-ca" "${secret_root}/recorder/api-issuer-cert" >/dev/null || fail "API identity is not trusted by the issuer"
   openssl verify -purpose sslserver -CAfile "${secret_root}/recorder/issuer-server-ca" "${secret_root}/recorder/issuer-server-cert" >/dev/null || fail "issuer certificate is not trusted by the API"
-  if [[ "$environment" == nightly ]]; then
-    [[ "$(env_value "${env_root}/recorder-issuer.env" CHALK_RECORDER_FLEET_ISSUER_ENVIRONMENT)" == nightly ]] || fail "nightly issuer identity mismatch"
-    [[ "$(env_value "$api_env" CHALK_RECORDER_FLEET_ISSUER_SERVER_NAME)" == nightly-recording-control.chalkmeet.com ]] || fail "nightly issuer server name mismatch"
-    [[ "$(env_value "${env_root}/recorder-issuer.env" CHALK_RECORDER_FLEET_ISSUER_CONTROL_PLANE_SERVER_NAME)" == nightly-recording-control.chalkmeet.com ]] || fail "nightly issuer API server name mismatch"
-    openssl verify -purpose sslserver -verify_hostname nightly-recording-control.chalkmeet.com -CAfile "${secret_root}/provider-bridge/api-server-ca.crt" "${secret_root}/provider-bridge/api-server.crt" >/dev/null || fail "nightly API control certificate SAN mismatch"
-    openssl verify -purpose sslserver -verify_hostname nightly-recording-control.chalkmeet.com -CAfile "${secret_root}/recorder/issuer-server-ca" "${secret_root}/recorder/issuer-server-cert" >/dev/null || fail "nightly issuer certificate SAN mismatch"
+  validate_environment_inputs "${env_root}/recorder-issuer.env" issuer_inputs
+  validate_environment_inputs "$api_env" api_inputs
+  control_server_name="$(jq -r '.control_server_name // empty' <<<"$environment_policy")"
+  if [[ -n "$control_server_name" ]]; then
+    openssl verify -purpose sslserver -verify_hostname "$control_server_name" -CAfile "${secret_root}/provider-bridge/api-server-ca.crt" "${secret_root}/provider-bridge/api-server.crt" >/dev/null || fail "API control certificate SAN mismatch"
+    openssl verify -purpose sslserver -verify_hostname "$control_server_name" -CAfile "${secret_root}/recorder/issuer-server-ca" "${secret_root}/recorder/issuer-server-cert" >/dev/null || fail "issuer certificate SAN mismatch"
   fi
 fi
 manifest_schema_version="$(jq -er '.schema_version' "${manifest}")" || fail "release manifest schema version is missing"

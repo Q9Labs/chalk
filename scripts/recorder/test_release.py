@@ -14,6 +14,27 @@ from release import Release
 from spend_guard import expire
 
 
+def dispatcher_state_fixture():
+    function = {"environment": [{"variables": {"CHALK_ENVIRONMENT": "production", "DEEPINFRA_ENABLED": "true", "TRANSCRIPTION_MAX_BATCH": "7"}}],
+                "function_name": "test-function", "s3_bucket": "test-artifacts", "s3_key": "test.zip", "s3_object_version": "test-version",
+                "source_code_hash": base64.b64encode(b"a" * 32).decode(), "handler": "index.handler", "timeout": 60,
+                "memory_size": 512, "ephemeral_storage": [{"size": 512}], "reserved_concurrent_executions": 2}
+    attributes = {
+        "aws_lambda_function.dispatcher": function,
+        "aws_scheduler_schedule.reconcile": {"name": "test-scheduler", "group_name": "default", "state": "ENABLED",
+                                              "target": [{"input": "{}", "retry_policy": [{"maximum_event_age_in_seconds": 60, "maximum_retry_attempts": 1}]}]},
+        "aws_lambda_function_event_invoke_config.dispatcher": {"maximum_event_age_in_seconds": 60, "maximum_retry_attempts": 1},
+        "aws_cloudwatch_log_group.dispatcher": {"retention_in_days": 7, "kms_key_id": ""},
+        "aws_sqs_queue.async_failure": {"kms_master_key_id": ""},
+        "aws_cloudwatch_metric_alarm.errors": {"alarm_actions": []},
+        "aws_iam_role_policy.dispatcher": {"policy": json.dumps({"Statement": [{"Resource": ["arn:test:kms:key", "arn:test:ssm:path"]}]})},
+        "aws_lambda_permission.control_api": {"principal": "test-principal", "source_arn": "arn:test:source"},
+    }
+    state = {"resources": [{"type": key.split('.')[0], "name": key.split('.')[1], "instances": [{"attributes": value}]}
+                           for key, value in attributes.items()], "outputs": {"function_name": {"sensitive": False}}}
+    return state
+
+
 class ReleaseContracts(unittest.TestCase):
     def test_nightly_release_configuration_is_environment_scoped(self):
         from release import parse_args
@@ -111,23 +132,7 @@ class ReleaseContracts(unittest.TestCase):
                 self.assertTrue(all(command[-2:] == ["123", "--force"] for command in deletions))
 
     def test_dispatcher_root_preserves_typed_live_inputs_and_backend(self):
-        function = {"environment": [{"variables": {"CHALK_ENVIRONMENT": "production", "DEEPINFRA_ENABLED": "true", "TRANSCRIPTION_MAX_BATCH": "7"}}],
-                    "function_name": "test-function", "s3_bucket": "test-artifacts", "s3_key": "test.zip", "s3_object_version": "test-version",
-                    "source_code_hash": base64.b64encode(b"a" * 32).decode(), "handler": "index.handler", "timeout": 60,
-                    "memory_size": 512, "ephemeral_storage": [{"size": 512}], "reserved_concurrent_executions": 2}
-        attributes = {
-            "aws_lambda_function.dispatcher": function,
-            "aws_scheduler_schedule.reconcile": {"name": "test-scheduler", "group_name": "default", "state": "ENABLED",
-                                                  "target": [{"input": "{}", "retry_policy": [{"maximum_event_age_in_seconds": 60, "maximum_retry_attempts": 1}]}]},
-            "aws_lambda_function_event_invoke_config.dispatcher": {"maximum_event_age_in_seconds": 60, "maximum_retry_attempts": 1},
-            "aws_cloudwatch_log_group.dispatcher": {"retention_in_days": 7, "kms_key_id": ""},
-            "aws_sqs_queue.async_failure": {"kms_master_key_id": ""},
-            "aws_cloudwatch_metric_alarm.errors": {"alarm_actions": []},
-            "aws_iam_role_policy.dispatcher": {"policy": json.dumps({"Statement": [{"Resource": ["arn:test:kms:key", "arn:test:ssm:path"]}]})},
-            "aws_lambda_permission.control_api": {"principal": "test-principal", "source_arn": "arn:test:source"},
-        }
-        state = {"resources": [{"type": key.split('.')[0], "name": key.split('.')[1], "instances": [{"attributes": value}]}
-                               for key, value in attributes.items()], "outputs": {"function_name": {"sensitive": False}}}
+        state = dispatcher_state_fixture()
         module = Path(__file__).resolve().parents[2] / "infrastructure/opentofu/modules/aws-transcription-dispatcher"
         root = rebuild_dispatcher(state, module, {"state_bucket": "test-state", "state_key": "test.tfstate"}, "test-region", "test-profile")
         inputs = root["module"]["dispatcher"]

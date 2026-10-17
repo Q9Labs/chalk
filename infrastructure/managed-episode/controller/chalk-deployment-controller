@@ -468,8 +468,8 @@ inject_runtime_identity() {
 inject_recorder_runtime_identity() {
   jq -e '.images | has("recorder_control")' "$manifest_path" >/dev/null || return 0
   jq -e 'all(.[] | select(.id | startswith("recorder-")); .missing == false)' <<<"$input_records_json" >/dev/null || fail "enabled recorder control inputs cannot be excluded"
-  local role file max_nodes=10
-  [[ "$request_environment" != nightly ]] || max_nodes=1
+  local role file max_nodes
+  max_nodes="$(jq -er --arg environment "$request_environment" '(.[$environment] // .production).fleet_max_nodes' "$source_root/infrastructure/managed-episode/contracts/environments.json")" || fail "unsupported recorder environment"
   for role in capture render; do
     file="${stage_root}/env/recorder-${role}.env"
     require_regular_file "$file"

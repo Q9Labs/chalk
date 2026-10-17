@@ -92,12 +92,14 @@ Supply `release_id`, `release_manifest_digest`, `config_digest`, `artifact_s3_ke
 `artifact_s3_object_version`, `artifact_sha256`, `artifact_sha256_base64`,
 `deepinfra_corpus_digest`, `privacy_gate_accepted` and, when needed,
 `ssm_kms_key_arns` through private inputs. The caller derives nightly artifact and
-SSM names from the authenticated account. It creates no bucket or secret.
+SSM names from the authenticated account. It creates no bucket, secret or Scheduler
+group. Provisioning owns `chalk-nightly` outside this dispatcher state; the caller
+and release rebinder reference that group by name.
 Keep `scheduler_state=DISABLED` until the API release, workload secret and signed
 control proof agree. Normal Release deployment rebinds the existing dispatcher
 through the same scoped recorder metadata as production.
 
-Set recorder policy inputs `environment=nightly`, `nightly_evidence_digest`,
+Set recorder policy inputs `environment=nightly`, `staging_evidence_digest`,
 `ready_spare=0`, zero capture reservations and `render_desired_nodes=0`.
 Supply the nightly control role, control addresses, R2 account and image evidence.
 The policy root never creates runtime Droplets. Its API reconciler does.

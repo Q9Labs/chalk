@@ -15,15 +15,15 @@ variable "enable_apply" {
   default     = false
 }
 
-variable "nightly_evidence_digest" {
+variable "staging_evidence_digest" {
   description = "SHA-256 digest of the redacted nightly recorder gate evidence."
   type        = string
   default     = null
   nullable    = true
 
   validation {
-    condition     = var.nightly_evidence_digest == null || can(regex("^sha256:[0-9a-f]{64}$", var.nightly_evidence_digest))
-    error_message = "nightly_evidence_digest must be sha256:<64 lowercase hexadecimal characters>."
+    condition     = var.staging_evidence_digest == null || can(regex("^sha256:[0-9a-f]{64}$", var.staging_evidence_digest))
+    error_message = "staging_evidence_digest must be sha256:<64 lowercase hexadecimal characters>."
   }
 }
 

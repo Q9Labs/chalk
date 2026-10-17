@@ -104,7 +104,7 @@ resource "terraform_data" "apply_gate" {
   input = {
     environment                = var.environment
     release_id                 = var.release_id
-    nightly_evidence_digest    = var.nightly_evidence_digest
+    staging_evidence_digest    = var.staging_evidence_digest
     desired_capture_nodes      = local.desired_capture_nodes
     desired_render_nodes       = local.desired_render_nodes
     global_recorder_node_count = local.global_compute_nodes
@@ -117,7 +117,7 @@ resource "terraform_data" "apply_gate" {
     }
 
     precondition {
-      condition     = can(regex("^sha256:[0-9a-f]{64}$", coalesce(var.nightly_evidence_digest, "")))
+      condition     = can(regex("^sha256:[0-9a-f]{64}$", coalesce(var.staging_evidence_digest, "")))
       error_message = "recorder mutation is disabled until a redacted nightly evidence digest is supplied."
     }
 

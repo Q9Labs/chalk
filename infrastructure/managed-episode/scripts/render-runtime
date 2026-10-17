@@ -12,6 +12,7 @@ if [[ -z "${manifest}" || -z "${output}" ]]; then
   exit 2
 fi
 command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
+environment_policy="$(jq -ce --arg environment "$environment" '.[$environment] // .production' "${managed_root}/contracts/environments.json")"
 if [[ ! -f "${manifest}" ]]; then
   echo "release manifest is not a regular file" >&2
   exit 1
@@ -54,23 +55,10 @@ for template in "${managed_root}"/quadlet/*; do
     contents="${contents/PublishPort=127.0.0.1:18080:8080/${recorder_api_bindings}}"
   fi
   contents="${contents//__DATABASE_MIGRATION_TARGET__/${database_migration_target}}"
-  if [[ "$environment" == nightly ]]; then
-    # 880 MiB including the migrator + 640 MiB host reserve leaves 528 MiB
-    # on t4g.small. Production templates and Redis maxmemory stay unchanged.
-    case "$name" in
-      chalk-api.container) cap=96m ;;
-      chalk-sync.container) cap=256m ;;
-      chalk-redis.container) cap=320m ;;
-      chalk-cloudflared.container) cap=48m ;;
-      chalk-recorder-capture.container|chalk-recorder-render.container) cap=32m ;;
-      chalk-recorder-issuer.container) cap=32m ;;
-      chalk-api-migrate.container) cap=64m ;;
-      *) cap="" ;;
-    esac
-    if [[ -n "$cap" ]]; then
-      contents="$(sed -E "s/--memory=[0-9]+[gm]/--memory=$cap/" <<<"$contents")"
-    fi
-    contents="${contents//Chalk production/Chalk nightly}"
+  cap="$(jq -r --arg name "$name" '.memory_overrides[$name] // empty' <<<"$environment_policy")"
+  if [[ -n "$cap" ]]; then
+    contents="$(sed -E "s/--memory=[0-9]+[gm]/--memory=$cap/" <<<"$contents")"
+    contents="${contents//Chalk production/Chalk $environment}"
   fi
   if [[ "${contents}" == *'__'* ]]; then
     echo "unresolved placeholder in ${name}" >&2

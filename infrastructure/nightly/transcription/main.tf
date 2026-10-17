@@ -22,18 +22,14 @@ provider "aws" {
 
 data "aws_caller_identity" "current" {}
 
-resource "aws_scheduler_schedule_group" "nightly" {
-  name = "chalk-nightly"
-  tags = { Environment = "nightly" }
-}
-
 module "dispatcher" {
   source = "../../opentofu/modules/aws-transcription-dispatcher"
 
   environment_name                = "nightly"
   function_name                   = "chalk-nightly-transcription-dispatcher"
   scheduler_name                  = "chalk-nightly-transcription-reconcile"
-  scheduler_group_name            = aws_scheduler_schedule_group.nightly.name
+  # Provisioning owns this group outside the dispatcher state.
+  scheduler_group_name            = "chalk-nightly"
   scheduler_state                 = var.scheduler_state
   control_api_url                 = "https://nightly-api.chalkmeet.com"
   control_api_audience            = "chalk-nightly-control-api"
