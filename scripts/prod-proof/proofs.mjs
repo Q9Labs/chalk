@@ -6,21 +6,14 @@ import { check, command, request, save, waitFor } from "./runtime.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
 
 export async function prepareIntegration(run, webhooks) {
+  run.signal.throwIfAborted();
   const key = await run.ownerRequest("POST", `${run.tenantPath}/api-keys`, {
-    name: "Production proof",
+    name: run.label,
     scopes: ["spaces:read", "spaces:write", "episodes:read", "episodes:write", "recordings:read", "transcriptions:read", "transcriptions:write"],
-    expires_at: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+    expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
   });
   run.apiKey = key.secret;
   run.apiRequest = (method, path, body) => request(run.config, method, path, body, { Authorization: `Bearer ${run.apiKey}` }, {}, run.signal);
-  run.resources.push({
-    kind: "api-key",
-    dispose: async () => {
-      await run.ownerRequest("DELETE", `${run.tenantPath}/api-keys/${key.api_key.id}`, undefined);
-      const response = await fetch(new URL(`${run.tenantPath}/spaces`, run.config.api_url), { headers: { Authorization: `Bearer ${run.apiKey}` }, signal: AbortSignal.timeout(30_000) });
-      check(response.status === 401, "Revoked proof key was still accepted");
-    },
-  });
   const denied = await fetch(new URL(run.tenantPath, run.config.api_url), {
     headers: { Authorization: `Bearer ${run.apiKey}` },
     signal: AbortSignal.timeout(30_000),
@@ -33,8 +26,9 @@ export async function prepareIntegration(run, webhooks) {
 }
 async function createSpace(run) {
   const space = await run.apiRequest("POST", `${run.tenantPath}/spaces`, {
-    name: "Production proof",
+    name: run.label,
     slug: `prod-proof-${randomUUID()}`,
+    metadata: { proof_run_id: run.runId },
     media_plane: "cf_sfu",
     recording_policy: "manual",
     transcription_policy: "on_demand",
@@ -42,13 +36,6 @@ async function createSpace(run) {
     maximum_episode_duration_seconds: 1800,
     linger_window_seconds: 60,
     admission_policy: { mode: "open" },
-  });
-  run.resources.push({
-    kind: "space",
-    dispose: async () => {
-      const archived = await run.ownerRequest("POST", `${run.tenantPath}/spaces/${space.id}/archive`, {});
-      check(archived.archived, "Proof Space was not archived");
-    },
   });
   check(space.recording_policy === "manual", "Space Recording policy was not applied");
   check(space.transcription_policy === "on_demand", "Space Transcription policy was not applied");
@@ -81,9 +68,8 @@ export function episodeEnd(run, path) {
   };
 }
 async function createEpisode(run, space) {
-  const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, {});
+  const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
   const ending = episodeEnd(run, `${run.tenantPath}/spaces/${space.id}/episodes/${episode.id}`);
-  run.resources.push({ kind: "episode", dispose: ending.end });
   await save(`${run.directory}/episode.json`, episode);
   const policy = episode.config_snapshot.artifact_policy;
   check(policy.transcription.mode === "on_demand", "Episode effective transcription policy is not on_demand");
@@ -320,7 +306,6 @@ export async function transcriptProof(run) {
   );
   const result = await run.apiRequest("POST", `${run.tenantPath}/recordings/${run.recordingId}/transcripts`, { idempotency_key: randomUUID(), language: "en" });
   const transcript = result.transcript;
-  run.resources.push({ kind: "transcript", dispose: () => run.ownerRequest("DELETE", `${run.tenantPath}/transcripts/${transcript.id}`) });
   console.log("Transcript requested");
   await waitFor(
     "Transcript completion",

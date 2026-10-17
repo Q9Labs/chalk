@@ -79,10 +79,10 @@ Have an operator provide a key for that Tenant. Inject it with `2password run`
 or your secret manager as `CHALK_PROOF_API_KEY`; never put its value in a command
 argument, repository file, or browser response. The bootstrap key needs exactly:
 
-- `api_keys:write`, `api_keys:delete` to create and revoke each run's key.
+- `api_keys:read`, `api_keys:write`, `api_keys:delete` to create and revoke each run's key.
 - `spaces:read`, `spaces:write`, `episodes:read`, `episodes:write` for the Space and Episode lifecycle.
 - `recordings:read`, `transcriptions:read`, `transcriptions:write` for artifacts.
-- `transcriptions:delete`, `webhooks:write`, `webhooks:delete` for cleanup and signed webhook proofs.
+- `transcriptions:delete`, `webhooks:read`, `webhooks:write`, `webhooks:delete` for cleanup and signed webhook proofs.
 
 The short-lived key has only the seven Space, Episode, and artifact scopes above.
 The runner checks that it cannot read Tenant administration, then verifies a 401
@@ -145,3 +145,49 @@ MP4, ffprobe output, four frames/contact sheet, Transcript document, and Transcr
 PR. The command prints phase results and the absolute local artifact path.
 Review the contact sheet as one image. Remove local artifacts after the release
 handoff; they contain production identifiers but no saved owner credentials.
+
+## Cancellation and recovery
+
+Each invocation uses a unique run ID (`CHALK_PROOF_RUN_ID` overrides the generated
+ID, 1–51 letters, digits, underscores or hyphens). Keys expire within one hour.
+Keys and Spaces use `chalk-proof:<run-id>` names; Space and Episode metadata hold
+`proof_run_id`. Webhook names append their temporary catcher UUID to the same
+label. Transcripts are owned through their labeled Space and Episode.
+
+Recover a canceled invocation without its local evidence directory:
+
+```sh
+pnpm prod:proof cleanup <run-id>
+```
+
+Cleanup uses the bootstrap key and fresh bounded requests, revokes run keys first,
+ends Episodes, archives Spaces, and deletes Transcripts, webhook catchers and
+endpoints. It is safe to repeat. The workflow also invokes it in an `always()`
+step. Every proof first sweeps labeled runs older than two hours through this
+same cleanup path. The sweep requires bootstrap `api_keys:read` and
+`webhooks:read`, in addition to the scopes above; it fails before creating
+resources if those reads are unavailable. Runner loss is recovered by the next
+proof, not by an independent scheduled reaper. Product retention still applies
+to ended/archived history and Recordings. A catcher creation whose response is
+lost before its UUID is returned cannot be discovered through Chalk's API.
+
+Reusable callers must forward the declared secret explicitly:
+
+```yaml
+jobs:
+  proof:
+    uses: ./.github/workflows/real-call-proof.yml
+    with:
+      environment: nightly
+      proofs: smoke transcript
+    secrets:
+      CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
+```
+
+`secrets: inherit` is also supported (including the promote workflow). Configure
+the environment variables and evidence recipient in the selected environment.
+Every workflow invocation generates a UUID suffix for its encrypted evidence
+artifact; a first proof and rollback proof retain separate artifacts.
+Public logs contain fixed phases/statuses and bounded error classes only. Raw
+errors stay in private evidence, encrypted before upload. Dynamically received
+API, webhook and guest access credentials are registered with GitHub masking.
