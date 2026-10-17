@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 )
 
@@ -24,6 +25,7 @@ func newProviderOperationQueries(db providerOperationDBTX) *providerOperationQue
 }
 
 type providerOperationQuerier interface {
+	LockPublicationParticipant(context.Context, publicationParticipantIdentityParams) (mediapublications.PublicationParticipant, error)
 	GetProviderOperationReceipt(context.Context, getProviderOperationReceiptParams) (providerOperationReceiptRow, error)
 	InsertProviderOperationReceipt(context.Context, insertProviderOperationReceiptParams) (providerOperationReceiptRow, error)
 	MarkProviderOperationDispatching(context.Context, providerOperationIdentityParams) (providerOperationReceiptRow, error)
@@ -37,6 +39,7 @@ type providerOperationQuerier interface {
 	GetProviderObservation(context.Context, getProviderObservationParams) (providerOperationObservationRow, error)
 	LatestProviderObservation(context.Context, providerObservationIdentityParams) (providerOperationObservationRow, error)
 	ListProviderObservations(context.Context, listProviderObservationsParams) ([]providerOperationObservationRow, error)
+	ListPublicationParticipants(context.Context, providerObservationIdentityParams) ([]mediapublications.PublicationParticipant, error)
 }
 
 type providerOperationReceiptRow struct {
