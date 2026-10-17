@@ -31,3 +31,5 @@ The read-only collector and Discord message templates live in
 [infrastructure/observability/production-alerts](../infrastructure/observability/production-alerts/README.md).
 An independent uptime Worker checks API/Sync health and readiness and reports
 failures directly to Discord. No public status projection is maintained.
+
+<!-- gate probe -->
