@@ -193,6 +193,182 @@ describe("Cloudflare SFU HTTP signaling", () => {
     );
   });
 });
+describe("remote publication recovery", () => {
+  it("receives a newly present participant when presence changes during a media pull", async () => {
+    await withTimedHarness(async (harness) => {
+      await harness.client.start(fakeStream());
+      harness.transport.snapshot = {
+        incarnation: 1,
+        sequence: 1,
+        publications: [
+          { participantId: "participant-2", source: "camera", publicationId: "remote-a|camera" },
+          { participantId: "participant-3", source: "microphone", publicationId: "remote-b|microphone" },
+        ],
+      };
+      harness.client.remoteParticipantsChanged(["participant-2"]);
+      const addTracks = harness.transport.addTracks.bind(harness.transport);
+      vi.spyOn(harness.transport, "addTracks").mockImplementationOnce(async (input) => {
+        harness.client.remoteParticipantsChanged(["participant-2", "participant-3"]);
+        return addTracks(input);
+      });
+      await harness.client.refreshRemotePublications();
+      await harness.client.refreshRemotePublications();
+      expect(
+        harness.client
+          .getSnapshot()
+          .remoteTracks.map((track) => track.publicationId)
+          .sort(),
+      ).toEqual(["remote-a|camera", "remote-b|microphone"]);
+    });
+  });
+  it.each([404, 410, 503, 400, 429])("bounds HTTP %s receiver recovery within the signaling quota", async (status) => {
+    const recoverable = status !== 400 && status !== 429;
+    const replaceMediaConnection = vi.fn(async () => bootstrap("replacement"));
+    await withTimedHarness(
+      async (harness) => {
+        await harness.client.start(fakeStream());
+        harness.transport.snapshot = {
+          incarnation: 1,
+          sequence: 1,
+          publications: Array.from({ length: 64 }, (_, index) => ({ participantId: `publisher-${index}`, source: "camera", publicationId: `remote|camera-${index}` })),
+        };
+        let writes = 0;
+        const addTracks = harness.transport.addTracks.bind(harness.transport);
+        vi.spyOn(harness.transport, "addTracks").mockImplementation(async (input) => {
+          if (++writes > 60) throw new CloudflareSFUError("rate limited", "signaling_failed", { status: 429 });
+          if (input.connectionId === "connection-1") throw new CloudflareSFUError("receiver expired", "signaling_failed", { status, retryableConnection: recoverable });
+          return addTracks(input);
+        });
+        if (!recoverable) {
+          await expect(harness.client.refreshRemotePublications()).rejects.toThrow("receiver expired");
+          await vi.advanceTimersByTimeAsync(14_000);
+          expect(writes).toBe(1);
+          expect(replaceMediaConnection).not.toHaveBeenCalled();
+          return;
+        }
+        await harness.client.refreshRemotePublications();
+        expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
+        expect(writes).toBe(2);
+        expect(harness.client.getSnapshot().remoteTracks).toHaveLength(64);
+      },
+      { replaceMediaConnection },
+    );
+  });
+  it("recovers from a second independent receiver expiry after receiving media", async () => {
+    const replaceMediaConnection = vi.fn(async () => bootstrap(`replacement-${replaceMediaConnection.mock.calls.length}`));
+    await withTimedHarness(
+      async (harness) => {
+        await harness.client.start(fakeStream());
+        let expiredConnection = "connection-1";
+        const addTracks = harness.transport.addTracks.bind(harness.transport);
+        vi.spyOn(harness.transport, "addTracks").mockImplementation(async (input) => {
+          if (input.connectionId === expiredConnection) throw new CloudflareSFUError("receiver expired", "signaling_failed", { status: 410, retryableConnection: true });
+          return addTracks(input);
+        });
+        harness.transport.snapshot = publicationSnapshot(1, 1, "remote|camera");
+        await harness.client.refreshRemotePublications();
+        expect(harness.client.getSnapshot().remoteTracks).toHaveLength(1);
+        expiredConnection = "replacement-1";
+        for (const remote of harness.client.getSnapshot().remoteTracks) (remote.track as unknown as FakeTrack).endFromBrowser();
+        harness.transport.snapshot = publicationSnapshot(1, 2, "remote|camera-new");
+        await harness.client.refreshRemotePublications();
+        expect(replaceMediaConnection).toHaveBeenCalledTimes(2);
+        expect(harness.client.getSnapshot().remoteTracks.map((track) => track.publicationId)).toEqual(["remote|camera-new"]);
+      },
+      { replaceMediaConnection },
+    );
+  });
+  it("ignores abandoned participants and restores known subscriptions after Sync disconnection and replacement", async () => {
+    await withTimedHarness(async (harness) => {
+      await harness.client.start(fakeStream());
+      harness.transport.snapshot = publicationSnapshot(1, 1, "remote|camera");
+      harness.client.remoteParticipantsChanged([]);
+      await harness.client.refreshRemotePublications();
+      expect(remotePullCount(harness)).toBe(0);
+      harness.client.remoteParticipantsChanged(["participant-2"]);
+      await harness.client.refreshRemotePublications();
+      expect(harness.client.getSnapshot().remoteTracks).toHaveLength(1);
+      harness.client.remoteParticipantsChanged([]);
+      await harness.client.refreshRemotePublications();
+      expect(harness.client.getSnapshot().remoteTracks).toHaveLength(1);
+      expect(remotePullCount(harness)).toBe(1);
+      await harness.client.restart(bootstrap("replacement"));
+      await harness.client.refreshRemotePublications();
+      expect(harness.client.getSnapshot().remoteTracks.map((track) => track.publicationId)).toEqual(["remote|camera"]);
+      expect(harness.peers).toHaveLength(2);
+    });
+  });
+  it("receives join bursts within the shared sixty-write signaling quota", async () => {
+    await withTimedHarness(async (harness) => {
+      await harness.client.start(fakeStream());
+      harness.transport.immediateRenegotiation = true;
+      let writes = 0;
+      const consumeWrite = () => {
+        if (++writes > 60) throw new CloudflareSFUError("rate limited", "signaling_failed", { status: 429 });
+      };
+      const addTracks = harness.transport.addTracks.bind(harness.transport);
+      const renegotiate = harness.transport.renegotiate.bind(harness.transport);
+      vi.spyOn(harness.transport, "addTracks").mockImplementation(async (input) => {
+        consumeWrite();
+        return addTracks(input);
+      });
+      vi.spyOn(harness.transport, "renegotiate").mockImplementation(async () => {
+        consumeWrite();
+        return renegotiate();
+      });
+      let received = 0;
+      for (let batch = 1; batch <= 3; batch++) {
+        harness.transport.snapshot = {
+          incarnation: 1,
+          sequence: batch,
+          publications: Array.from({ length: 16 }, (_, index) => ({ participantId: `publisher-${index}`, source: "camera", publicationId: `remote-connection|camera-${batch}-${index}` })),
+        };
+        await harness.client.refreshRemotePublications();
+        received += harness.client.getSnapshot().remoteTracks.length;
+      }
+      expect(received).toBe(48);
+      expect(writes).toBeLessThanOrEqual(60);
+    });
+  });
+  it("receives live tracks when another publication is unavailable", async () => {
+    await withTimedHarness(async (harness) => {
+      await harness.client.start(fakeStream());
+      harness.transport.snapshot = {
+        incarnation: 1,
+        sequence: 1,
+        publications: [
+          { participantId: "participant-2", source: "camera", publicationId: "retired|missing" },
+          { participantId: "participant-3", source: "microphone", publicationId: "live|microphone" },
+        ],
+      };
+      rejectRemotePulls(harness, (track) => track.trackName === "missing");
+      await harness.client.refreshRemotePublications();
+      expect(harness.client.getSnapshot().remoteTracks.map((track) => track.publicationId)).toEqual(["live|microphone"]);
+    });
+  });
+  it("does not reset the replacement budget when recovery republishes local tracks", async () => {
+    const replaceMediaConnection = vi.fn(async () => bootstrap("replacement"));
+    await withTimedHarness(
+      async (harness) => {
+        await harness.client.start(fakeStream(new FakeTrack("camera", "video")));
+        harness.transport.snapshot = publicationSnapshot(1, 1, "remote|missing");
+        rejectRemotePulls(harness, (track) => track.location === "remote");
+        await expect(harness.client.refreshRemotePublications()).rejects.toThrow("unavailable");
+        await vi.advanceTimersByTimeAsync(120_000);
+        expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
+        expect(harness.peers).toHaveLength(2);
+      },
+      { replaceMediaConnection },
+    );
+  });
+});
+function rejectRemotePulls(harness: ReturnType<typeof createHarness>, shouldReject: (track: CloudflareSFUTrackRequest) => boolean): void {
+  const addTracks = harness.transport.addTracks.bind(harness.transport);
+  vi.spyOn(harness.transport, "addTracks").mockImplementation(async (input) => {
+    if (input.tracks.some(shouldReject)) throw new CloudflareSFUError("unavailable", "signaling_failed", { status: 503, retryableConnection: true });
+    return addTracks(input);
+  });
+}
 async function startedCameraHarness() {
   const harness = createHarness();
   await harness.client.start(fakeStream(new FakeTrack("camera-track", "video")));

@@ -8,7 +8,63 @@ defmodule ChalkSync.Live.SelfPauseProjectionTest do
   alias ChalkSync.Stateholder.Memory
   alias ChalkSync.UUID
 
-  test "self-disable changes the media projection without revoking the subscriber track" do
+  test "a stopped screen does not reclaim the share lease after a new observation" do
+    episode = %EpisodeKey{
+      tenant_id: UUID.generate(),
+      space_id: UUID.generate(),
+      episode_id: UUID.generate()
+    }
+
+    participant_id = UUID.generate()
+    publication_id = "stopped-screen-track"
+    Memory.reset()
+
+    :ok =
+      Memory.seed_episode(episode, [
+        %{id: participant_id, generation: 1, display_name: "Stopped sharer", role: "owner"}
+      ])
+
+    identity = %Identity{
+      episode: episode,
+      participant_id: participant_id,
+      participant_generation: 1
+    }
+
+    :ok = Memory.set_media_pause(identity, :screen, publication_id)
+
+    {:ok, adapter} =
+      MediaPlaneTestAdapter.start_link(
+        outcomes: %{
+          observe_episode_publications:
+            {:ok,
+             [
+               %{
+                 participant_id: participant_id,
+                 source: :screen,
+                 enabled: true,
+                 publication_id: publication_id
+               }
+             ]}
+        }
+      )
+
+    previous = Application.get_env(:chalk_sync, :media_plane)
+    Application.put_env(:chalk_sync, :media_plane, {MediaPlaneTestAdapter, adapter})
+
+    on_exit(fn ->
+      if previous,
+        do: Application.put_env(:chalk_sync, :media_plane, previous),
+        else: Application.delete_env(:chalk_sync, :media_plane)
+    end)
+
+    assert {:ok, live, _frames} = LiveEpisode.reconcile(LiveEpisode.new(episode))
+    assert [%{"source" => "screen", "enabled" => false}] = live.media_items
+    assert live.screen_leases == %{}
+    assert {:ok, reconciled, []} = LiveEpisode.reconcile(live)
+    assert reconciled.screen_leases == %{}
+  end
+
+  test "self-disable preserves the legacy wire invariant without revoking the provider track" do
     episode = %EpisodeKey{
       tenant_id: "11111111-1111-4111-8111-111111111111",
       space_id: "22222222-2222-4222-8222-222222222222",
@@ -69,14 +125,28 @@ defmodule ChalkSync.Live.SelfPauseProjectionTest do
 
     assert Enum.any?(frames, fn frame ->
              frame["stream"] == "media" and frame["item"]["enabled"] == false and
-               frame["item"]["publication_id"] == publication_id
+               frame["item"]["publication_id"] == nil
            end)
+
+    assert [%{"publication_id" => ^publication_id}] = paused.media_observed_items
+    assert paused.media_pauses[{participant_id, "camera"}] == publication_id
 
     assert {:ok, persisted, []} = LiveEpisode.reconcile(paused)
     assert persisted.media_items == paused.media_items
 
-    assert {:ok, rebuilt, _frames} = LiveEpisode.reconcile(LiveEpisode.new(episode))
+    assert {:ok, rebuilt, rebuilt_frames} = LiveEpisode.reconcile(LiveEpisode.new(episode))
     assert rebuilt.media_items == paused.media_items
+
+    assert Enum.any?(rebuilt_frames, fn frame ->
+             frame["stream"] == "media" and
+               Enum.any?(frame["items"], fn item ->
+                 item["enabled"] == false and item["publication_id"] == nil
+               end)
+           end)
+
+    :ok = Memory.set_media_pause(identity, :camera, nil)
+    assert {:ok, resumed, _frames} = LiveEpisode.reconcile(persisted)
+    assert [%{"enabled" => true, "publication_id" => ^publication_id}] = resumed.media_items
 
     refute Enum.any?(MediaPlaneTestAdapter.calls(adapter), fn {effect, _, _} ->
              effect == :revoke_publication

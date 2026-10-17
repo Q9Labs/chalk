@@ -90,6 +90,7 @@ type BoundMediaClient = Pick<
   | "observeLocalPublications"
   | "observeRemotePublications"
   | "remotePublicationsChanged"
+  | "remoteParticipantsChanged"
   | "remotePublicationResumed"
   | "start"
   | "stop"
@@ -105,6 +106,7 @@ export function bindConnectionMediaClient(client: BoundMediaClient, restart: Con
     ...(client.closeForcedLocalPublication ? { closeForcedLocalPublication: client.closeForcedLocalPublication.bind(client) } : {}),
     observeLocalPublications: client.observeLocalPublications.bind(client),
     observeRemotePublications: client.observeRemotePublications.bind(client),
+    ...(client.remoteParticipantsChanged ? { remoteParticipantsChanged: client.remoteParticipantsChanged.bind(client) } : {}),
     ...(client.remotePublicationsChanged ? { remotePublicationsChanged: client.remotePublicationsChanged.bind(client) } : {}),
     ...(client.remotePublicationResumed ? { remotePublicationResumed: client.remotePublicationResumed.bind(client) } : {}),
     start: client.start.bind(client),
