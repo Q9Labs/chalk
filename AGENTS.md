@@ -2,7 +2,7 @@
 
 OSS modern real-time collaboration and communication.
 
-The commit hook runs the fast gate lanes. The Gate workflow runs the full root, API, and Sync gates on every pull request. Run `pnpm run gate` before you open a PR, `apps/api/scripts/gate.sh` for API changes, and `apps/sync/scripts/gate.sh` for Sync changes. To run a heavy gate on a disposable testbox, use `scripts/gates/remote.sh root|api|sync|recorder`.
+The commit hook runs the fast gate lanes. The Gate workflow runs the root, API, and Sync gate jobs that a pull request's diff selects, and runs every job in full on each push to `master`. Run `pnpm run gate` before you open a PR, `apps/api/scripts/gate.sh` for API changes, and `apps/sync/scripts/gate.sh` for Sync changes. To run a heavy gate on a disposable testbox, use `scripts/gates/remote.sh root|api|sync|recorder`.
 
 - Keep Space and Episode as the canonical names defined in `GLOSSARY.md`.
 - Put shared behavior in packages first, then wire it into apps. Don't fix SDK behavior only in a demo.

@@ -140,9 +140,9 @@ jobs:
           GATE_BASE_REF: origin/${{ github.base_ref || 'master' }}
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            bash scripts/gates/commit.sh --base "${GATE_BASE_REF}"
+            pnpm exec bash scripts/gates/commit.sh --base "${GATE_BASE_REF}"
           else
-            bash scripts/gates/commit.sh --full
+            pnpm exec bash scripts/gates/commit.sh --full
           fi
 
       - name: Save Metro cache
