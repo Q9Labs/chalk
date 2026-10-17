@@ -8,7 +8,7 @@ import test from "node:test";
 
 const script = fileURLToPath(new URL("./check-additive-migrations.mjs", import.meta.url));
 const migrations = "apps/api/db/migrations";
-const approval = "-- chalk:removed-in v0.0.85";
+const approval = "-- chalk:removed-in #248";
 
 function repository(t) {
   const root = mkdtempSync(join(tmpdir(), "chalk-migration-check-"));
@@ -39,7 +39,7 @@ test("CLI checks SQL in new Up sections only", (t) => {
   const cases = [
     ["DROP TABLE spaces;", false],
     ["SELECT 1; -- +goose Down\nDROP TABLE spaces;", false],
-    ["SELECT 1; -- chalk:removed-in v0.0.85\nDROP TABLE spaces;", false],
+    ["SELECT 1; -- chalk:removed-in #248\nDROP TABLE spaces;", false],
     ["ALTER TABLE spaces DROP COLUMN old;", false],
     ["ALTER TABLE spaces DROP old;", false],
     ["DROP TYPE old_type;", false],
@@ -56,7 +56,8 @@ test("CLI checks SQL in new Up sections only", (t) => {
     ["DO $body$ BEGIN ALTER TABLE spaces DROP COLUMN old; END $body$;", false],
     [`${approval}\nALTER TABLE spaces DROP COLUMN old;`, true],
     [`-- chalk:removed-in\nDROP TABLE spaces;`, false],
-    [`-- chalk:removed-in vX.Y.Z\nDROP TABLE spaces;`, false],
+    [`-- chalk:removed-in v0.0.85\nDROP TABLE spaces;`, false],
+    [`-- chalk:removed-in #pr\nDROP TABLE spaces;`, false],
     [`/* ${approval} */\nDROP TABLE spaces;`, false],
     [`SELECT '${approval}';\nDROP TABLE spaces;`, false],
     [`DROP TABLE spaces;\n-- +goose Down\n${approval}`, false],

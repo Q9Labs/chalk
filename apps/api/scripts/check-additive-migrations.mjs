@@ -3,7 +3,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 const migrationPath = "apps/api/db/migrations";
-const marker = /^--\s*chalk:removed-in\s+v\d+\.\d+\.\d+(?:[-+][\w.-]+)?\s*$/;
+const marker = /^--\s*chalk:removed-in\s+#\d+\s*$/;
 
 // Keep comments separate from SQL, including inside PostgreSQL dollar-quoted bodies.
 function* tokens(sql) {
@@ -66,7 +66,7 @@ function check(sql) {
   const sqlUp = up.join(" ").toUpperCase();
   const destructive = /\b(?:DROP|RENAME)\b|\bALTER\s+(?:COLUMN\s+)?\w+\s+(?:SET\s+DATA\s+)?TYPE\b/.exec(sqlUp);
   if (destructive && !approved) {
-    return `${destructive[0]} in Up needs -- chalk:removed-in vX.Y.Z naming the release that stopped using the object`;
+    return `${destructive[0]} in Up needs -- chalk:removed-in #<PR> naming the merged pull request that stopped using the object`;
   }
 }
 
