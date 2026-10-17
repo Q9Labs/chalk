@@ -99,7 +99,7 @@ jobs:
           test "${#proofs[@]}" -gt 0
           for proof in "${proofs[@]}"; do
             case "$proof" in
-              all|smoke|camera-share|export|transcript) ;;
+              all|smoke|camera-share|recording-rejoin|export|transcript) ;;
               *) echo "Unsupported proof command" >&2; exit 1 ;;
             esac
           done
