@@ -611,7 +611,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#remoteTracks.clear();
     for (const [key, publication] of next) this.#remoteTracks.set(key, publication);
     this.#cursor = cursor;
-    this.#remotePullIncomplete = participantRevision !== this.#remoteParticipantRevision || [...desired].some(([key, publication]) => next.get(key)?.publicationId !== publication.publicationId);
+    this.#remotePullIncomplete = participantRevision !== this.#remoteParticipantRevision || next.size !== desired.size;
     if (!this.#remotePullIncomplete && this.#hasLiveRemoteTracks()) this.#replacementAttemptedGeneration = null;
     for (const publication of pulled) {
       this.#subscribedPublicationIds.add(publication.publicationId);

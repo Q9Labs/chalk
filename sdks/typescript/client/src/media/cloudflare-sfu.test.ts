@@ -221,7 +221,8 @@ describe("remote publication recovery", () => {
       ).toEqual(["remote-a|camera", "remote-b|microphone"]);
     });
   });
-  it.each([404, 410, 503])("replaces an expired HTTP %s receiver before exhausting the signaling quota", async (status) => {
+  it.each([404, 410, 503, 400, 429])("bounds HTTP %s receiver recovery within the signaling quota", async (status) => {
+    const recoverable = status !== 400 && status !== 429;
     const replaceMediaConnection = vi.fn(async () => bootstrap("replacement"));
     await withTimedHarness(
       async (harness) => {
@@ -235,9 +236,16 @@ describe("remote publication recovery", () => {
         const addTracks = harness.transport.addTracks.bind(harness.transport);
         vi.spyOn(harness.transport, "addTracks").mockImplementation(async (input) => {
           if (++writes > 60) throw new CloudflareSFUError("rate limited", "signaling_failed", { status: 429 });
-          if (input.connectionId === "connection-1") throw new CloudflareSFUError("receiver expired", "signaling_failed", { status, retryableConnection: true });
+          if (input.connectionId === "connection-1") throw new CloudflareSFUError("receiver expired", "signaling_failed", { status, retryableConnection: recoverable });
           return addTracks(input);
         });
+        if (!recoverable) {
+          await expect(harness.client.refreshRemotePublications()).rejects.toThrow("receiver expired");
+          await vi.advanceTimersByTimeAsync(14_000);
+          expect(writes).toBe(1);
+          expect(replaceMediaConnection).not.toHaveBeenCalled();
+          return;
+        }
         await harness.client.refreshRemotePublications();
         expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
         expect(writes).toBe(2);
@@ -349,21 +357,6 @@ describe("remote publication recovery", () => {
         await vi.advanceTimersByTimeAsync(120_000);
         expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
         expect(harness.peers).toHaveLength(2);
-      },
-      { replaceMediaConnection },
-    );
-  });
-  it.each([400, 429])("does not replace or immediately retry HTTP %s", async (status) => {
-    const replaceMediaConnection = vi.fn(async () => bootstrap("replacement"));
-    await withTimedHarness(
-      async (harness) => {
-        await harness.client.start(fakeStream());
-        harness.transport.snapshot = publicationSnapshot(1, 1, "remote|missing");
-        const add = vi.spyOn(harness.transport, "addTracks").mockRejectedValue(new CloudflareSFUError("rejected", "signaling_failed", { status, retryableConnection: false }));
-        await expect(harness.client.refreshRemotePublications()).rejects.toThrow("rejected");
-        await vi.advanceTimersByTimeAsync(14_000);
-        expect(add).toHaveBeenCalledTimes(1);
-        expect(replaceMediaConnection).not.toHaveBeenCalled();
       },
       { replaceMediaConnection },
     );
