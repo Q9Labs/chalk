@@ -278,7 +278,7 @@ function useCollaborationEngineLoader(refs: CollaborationRefs, apiRef: MutableRe
       .then(({ ExcalidrawCollabEngine }) => {
         const api = apiRef.current;
         const collab = refs.collabOptionsRef.current;
-        if (!refs.isMountedRef.current || !api || !collab || refs.engineRef.current) return;
+        if (!refs.isMountedRef.current || !api || !collab) return;
 
         refs.engineRef.current = new ExcalidrawCollabEngine({
           excalidrawAPI: api,
