@@ -3,96 +3,6 @@
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi";
 import * as S from "./schemas";
 
-const authGroup = HttpApiGroup.make("auth")
-  .add(
-    HttpApiEndpoint.get("completeGoogleSignIn", "/v1/auth/google/callback", {
-      query: S.CompleteGoogleSignInQueryParamsSchema,
-      success: S.CompleteGoogleSignInResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.OauthInvalidStateErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.OauthEmailNotVerifiedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.OauthEmailConflictErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.get("completeRecentAuthGoogle", "/v1/me/recent-auth/google/callback", {
-      query: S.CompleteRecentAuthGoogleQueryParamsSchema,
-      success: S.CompleteRecentAuthGoogleResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AuthInvalidRecentAuthErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.OauthNotConfiguredErrorSchema.pipe(HttpApiSchema.status(503)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.post("login", "/v1/auth/login", {
-      payload: S.LoginRequestBodySchema,
-      success: S.LoginResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.AccessInvalidPasswordErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.IdentityInvalidEmailErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessInvalidCredentialsErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.post("logout", "/v1/auth/logout", {
-      success: S.LogoutResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)), S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)), S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503))],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.post("register", "/v1/auth/register", {
-      payload: S.RegisterRequestBodySchema,
-      success: S.RegisterResponseSchema.pipe(HttpApiSchema.status(201)),
-      error: [
-        S.AccessInvalidPasswordErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.IdentityInvalidEmailErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.UserInvalidNameErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.IdentityEmailVerificationRequiredErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.IdentityEmailRegisteredErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.get("startGoogleSignIn", "/v1/auth/google/start", {
-      success: HttpApiSchema.Empty(302).pipe(HttpApiSchema.status(302)),
-      error: [S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)), S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)), S.OauthNotConfiguredErrorSchema.pipe(HttpApiSchema.status(503)), S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503))],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.get("startRecentAuthGoogle", "/v1/me/recent-auth/google/start", {
-      query: S.StartRecentAuthGoogleQueryParamsSchema,
-      success: S.StartRecentAuthGoogleResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.OauthNotConfiguredErrorSchema.pipe(HttpApiSchema.status(503)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  );
-
 const defaultGroup = HttpApiGroup.make("default")
   .add(
     HttpApiEndpoint.post("addCloudflareSFUTracks", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/participants/:participant_id/media/sfu/tracks", {
@@ -142,21 +52,6 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
-    HttpApiEndpoint.post("completePasswordReset", "/v1/auth/password-reset/complete", {
-      payload: S.CompletePasswordResetRequestBodySchema,
-      success: S.CompletePasswordResetResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.AccessInvalidPasswordErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessPasswordResetTokenInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
     HttpApiEndpoint.post("createAPIKey", "/v1/tenants/:tenant_id/api-keys", {
       params: S.CreateAPIKeyPathParamsSchema,
       headers: S.CreateAPIKeyRequestHeadersSchema,
@@ -167,12 +62,10 @@ const defaultGroup = HttpApiGroup.make("default")
         S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AuthInvalidRecentAuthErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.ApiKeySecretNotReplayableErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.AccessRecentAuthRequiredErrorSchema.pipe(HttpApiSchema.status(428)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
@@ -443,21 +336,6 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
-    HttpApiEndpoint.post("issueRecentAuthProof", "/v1/me/recent-auth", {
-      payload: S.IssueRecentAuthProofRequestBodySchema,
-      success: S.IssueRecentAuthProofResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AuthInvalidRecentAuthErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
     HttpApiEndpoint.get("listAPIKeys", "/v1/tenants/:tenant_id/api-keys", {
       params: S.ListAPIKeysPathParamsSchema,
       query: S.ListAPIKeysQueryParamsSchema,
@@ -595,32 +473,16 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
-    HttpApiEndpoint.post("requestPasswordReset", "/v1/auth/password-reset/request", {
-      payload: S.RequestPasswordResetRequestBodySchema,
-      success: S.RequestPasswordResetResponseSchema.pipe(HttpApiSchema.status(202)),
-      error: [
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
     HttpApiEndpoint.delete("revokeAPIKey", "/v1/tenants/:tenant_id/api-keys/:api_key_id", {
       params: S.RevokeAPIKeyPathParamsSchema,
-      headers: S.RevokeAPIKeyRequestHeadersSchema,
       success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
       error: [
         S.ApiKeyInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AuthInvalidRecentAuthErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.ApiKeyNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.ApiKeyInactiveErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.AccessRecentAuthRequiredErrorSchema.pipe(HttpApiSchema.status(428)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
@@ -639,14 +501,12 @@ const defaultGroup = HttpApiGroup.make("default")
         S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AuthInvalidRecentAuthErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.ApiKeyNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.ApiKeyInactiveErrorSchema.pipe(HttpApiSchema.status(409)),
         S.ApiKeySecretNotReplayableErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.AccessRecentAuthRequiredErrorSchema.pipe(HttpApiSchema.status(428)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
@@ -944,13 +804,6 @@ const episodesGroup = HttpApiGroup.make("episodes")
       ],
     }),
   );
-
-const meGroup = HttpApiGroup.make("me").add(
-  HttpApiEndpoint.get("getMe", "/v1/me", {
-    success: S.GetMeResponseSchema.pipe(HttpApiSchema.status(200)),
-    error: [S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)), S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)), S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)), S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503))],
-  }),
-);
 
 const membershipsGroup = HttpApiGroup.make("memberships")
   .add(
@@ -1301,57 +1154,6 @@ const spacesGroup = HttpApiGroup.make("spaces")
     }),
   )
   .add(
-    HttpApiEndpoint.post("joinDashboardSpaceSelf", "/v1/tenants/:tenant_id/spaces/by-slug/:space_slug/participants/self", {
-      params: S.JoinDashboardSpaceSelfPathParamsSchema,
-      headers: S.JoinDashboardSpaceSelfRequestHeadersSchema,
-      payload: S.JoinDashboardSpaceSelfRequestBodySchema,
-      success: S.JoinDashboardSpaceSelfResponseSchema.pipe(HttpApiSchema.status(201)),
-      error: [
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.SpaceInvalidSlugErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.EpisodeCapacityExceededErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.EpisodeNotActiveErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.ParticipantNotActiveErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.delete("leaveDashboardSpaceSelf", "/v1/tenants/:tenant_id/spaces/by-slug/:space_slug/participants/self", {
-      params: S.LeaveDashboardSpaceSelfPathParamsSchema,
-      headers: S.LeaveDashboardSpaceSelfRequestHeadersSchema,
-      payload: S.LeaveDashboardSpaceSelfRequestBodySchema,
-      success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
-      error: [
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.SpaceInvalidSlugErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.EpisodeNotActiveErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.ParticipantGenerationMismatchErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.ParticipantNotActiveErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
     HttpApiEndpoint.delete("leaveSpacePublicInviteArrival", "/v1/public/space-invite-arrival", {
       headers: S.LeaveSpacePublicInviteArrivalRequestHeadersSchema,
       success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
@@ -1455,29 +1257,6 @@ const spacesGroup = HttpApiGroup.make("spaces")
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.post("refreshDashboardSpaceSelfAccess", "/v1/tenants/:tenant_id/spaces/by-slug/:space_slug/participants/self/access-grants", {
-      params: S.RefreshDashboardSpaceSelfAccessPathParamsSchema,
-      payload: S.RefreshDashboardSpaceSelfAccessRequestBodySchema,
-      success: S.RefreshDashboardSpaceSelfAccessResponseSchema.pipe(HttpApiSchema.status(201)),
-      error: [
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.SpaceInvalidSlugErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.EpisodeNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.ParticipantNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.ParticipantGenerationMismatchErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),
@@ -1620,19 +1399,6 @@ const tenantsGroup = HttpApiGroup.make("tenants")
     }),
   )
   .add(
-    HttpApiEndpoint.get("listMyTenants", "/v1/me/tenants", {
-      query: S.ListMyTenantsQueryParamsSchema,
-      success: S.ListMyTenantsResponseSchema.pipe(HttpApiSchema.status(200)),
-      error: [
-        S.PaginationInvalidCursorErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.PaginationInvalidPageSizeErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
     HttpApiEndpoint.get("listTenants", "/v1/tenants", {
       query: S.ListTenantsQueryParamsSchema,
       success: S.ListTenantsResponseSchema.pipe(HttpApiSchema.status(200)),
@@ -1641,25 +1407,6 @@ const tenantsGroup = HttpApiGroup.make("tenants")
         S.PaginationInvalidPageSizeErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
-        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
-        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
-      ],
-    }),
-  )
-  .add(
-    HttpApiEndpoint.post("onboardTenant", "/v1/me/tenants", {
-      headers: S.OnboardTenantRequestHeadersSchema,
-      payload: S.OnboardTenantRequestBodySchema,
-      success: S.OnboardTenantResponseSchema.pipe(HttpApiSchema.status(201)),
-      error: [
-        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.TenantInvalidNameErrorSchema.pipe(HttpApiSchema.status(400)),
-        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
-        S.TenantNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
-        S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
-        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
@@ -1798,4 +1545,4 @@ const transcriptsGroup = HttpApiGroup.make("transcripts")
     }),
   );
 
-export class ChalkApi extends HttpApi.make("ChalkApi").add(authGroup).add(defaultGroup).add(episodesGroup).add(meGroup).add(membershipsGroup).add(recordingsGroup).add(spacesGroup).add(tenantsGroup).add(transcriptsGroup) {}
+export class ChalkApi extends HttpApi.make("ChalkApi").add(defaultGroup).add(episodesGroup).add(membershipsGroup).add(recordingsGroup).add(spacesGroup).add(tenantsGroup).add(transcriptsGroup) {}

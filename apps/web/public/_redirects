@@ -1,7 +1,3 @@
-/sign-in /_shell/ 200
-/sign-up /_shell/ 200
 /space/* /_shell/ 200
 
-/forgot-password /_shell/ 200
-/reset-password /_shell/ 200
 /invitations/accept /_shell/ 200

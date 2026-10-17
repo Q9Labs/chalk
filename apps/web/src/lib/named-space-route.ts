@@ -4,29 +4,6 @@ export function spaceInviteToken(): string | undefined {
   return value || undefined;
 }
 
-export function hasDashboardSpaceEntry(): boolean {
-  return dashboardSpaceEntryOptions() !== undefined;
-}
-
-export function dashboardSpaceEntryUsesDevicesOff(): boolean {
-  return dashboardSpaceEntryOptions()?.devicesOff === true;
-}
-
-export function clearDashboardSpaceEntry(): void {
-  if (!globalThis.location || !globalThis.history || !hasDashboardSpaceEntry()) return;
-  const url = new URL(globalThis.location.href);
-  url.searchParams.delete("entry");
-  url.searchParams.delete("devices");
-  globalThis.history.replaceState(globalThis.history.state, "", url);
-}
-
-function dashboardSpaceEntryOptions(): { readonly devicesOff: boolean } | undefined {
-  if (!globalThis.location) return undefined;
-  const params = new URLSearchParams(globalThis.location.search);
-  if (params.get("entry") !== "dashboard") return undefined;
-  return { devicesOff: params.get("devices") === "off" };
-}
-
 export function canonicalSpaceInviteLink(slug: string, inviteLink: string): string {
   const value = inviteLink.trim();
   if (!value) throw new Error("The Space invite link was empty.");
