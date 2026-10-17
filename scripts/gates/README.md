@@ -90,7 +90,13 @@ Playwright Chromium revision. Matching Chromium skips OS dependency setup;
 a different revision still installs its dependencies. The existing helpers own PostgreSQL 18.3 and Sync topology.
 Root and custom runs verify the repo's Playwright Chromium revision.
 TTL covers provisioning, setup, and the gate: root/custom 60 minutes, API/Sync
-45 minutes (4 CPU / 8 GB), recorder 20 minutes (2 CPU / 4 GB).
+45 minutes, recorder 20 minutes (2 CPU / 4 GB).
+Root defaults to `c-8` (8 dedicated CPU / 16 GB). API and Sync use
+`c-8`, recorder uses `s-2vcpu-4gb`, and custom commands keep
+`s-4vcpu-8gb`. The measured region is `blr1`, which offers both root trial
+sizes. New shared images must be available there before use. This is an
+allocation choice, not a claim that the region is faster.
+
 Each run retains testbox's $0.50 default ceiling and automatic cleanup.
 `CHALK_REMOTE_SIZE`, `CHALK_REMOTE_REGION`, `CHALK_REMOTE_TTL`, and
 `CHALK_REMOTE_BUDGET` override the allocation for a bounded experiment.
