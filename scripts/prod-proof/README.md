@@ -154,22 +154,28 @@ Keys and Spaces use `chalk-proof:<run-id>` names; Space and Episode metadata hol
 `proof_run_id`. Webhook names append their temporary catcher UUID to the same
 label. Transcripts are owned through their labeled Space and Episode.
 
-Recover a canceled invocation without its local evidence directory:
+Recover a canceled invocation using its private local ownership file:
 
 ```sh
 pnpm prod:proof cleanup <run-id>
 ```
 
-Cleanup uses the bootstrap key and fresh bounded requests, revokes run keys first,
-ends Episodes, archives Spaces, and deletes Transcripts, webhook catchers and
-endpoints. It is safe to repeat. The workflow also invokes it in an `always()`
-step. Every proof first sweeps labeled runs older than two hours through this
-same cleanup path. The sweep requires bootstrap `api_keys:read` and
-`webhooks:read`, in addition to the scopes above; it fails before creating
-resources if those reads are unavailable. Runner loss is recovered by the next
-proof, not by an independent scheduled reaper. Product retention still applies
-to ended/archived history and Recordings. A catcher creation whose response is
-lost before its UUID is returned cannot be discovered through Chalk's API.
+Cleanup uses the bootstrap key and fresh bounded requests, revokes the saved run
+key first, ends Episodes, archives Spaces, and deletes Transcripts, webhook
+catchers and endpoints. Resource IDs are saved in `ownership.json` immediately
+after creation; the workflow's `always()` step uses this file even on cancellation.
+It is safe to repeat. No API-key or webhook inventory scope is required.
+
+Before each proof, the sweep lists Spaces and their Episodes only. It ends
+proof-labelled Episodes older than two hours and archives their Spaces, never
+archiving a Space containing a fresh or foreign Episode. Run keys expire within
+one hour and need no sweep. A lost runner can leave an inert webhook endpoint
+in the proof Tenant pointing at a dead catcher URL; this is an accepted leftover,
+not swept. A creation response lost before its resource ID is saved has the same
+limitation for keys/webhooks (keys still expire). The next proof recovers live
+Episodes, the only leftovers that keep recorder machines running. Product
+retention still applies to ended/archived history and Recordings. A catcher whose
+creation response is lost cannot be discovered through Chalk's API.
 
 Reusable callers must forward the declared secret explicitly:
 
