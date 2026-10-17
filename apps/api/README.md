@@ -59,14 +59,6 @@ The ProviderBridge currently uses the Cloudflare SFU executor independently of
 the deployment default. When the bridge is enabled, its Realtime app ID and
 secret remain required.
 
-### Google OAuth
-
-Google sign-in activates only with a complete
-`CHALK_GOOGLE_OAUTH_CLIENT_ID`, `CHALK_GOOGLE_OAUTH_CLIENT_SECRET`, and
-`CHALK_GOOGLE_OAUTH_REDIRECT_URL` triplet. Generic local development may omit
-the triplet. Managed production requires it and requires the redirect URL to be
-`https://chalkmeet.com/api/auth/google/callback`.
-
 ### Production capabilities
 
 Integrations, recording, and transcription are explicit runtime capabilities:

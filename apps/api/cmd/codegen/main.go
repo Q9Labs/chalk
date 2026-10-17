@@ -91,7 +91,7 @@ func newGenerator(routes []httpapi.APIRouteContract) *generator {
 					"sessionOrBearer": map[string]any{
 						"type":        "http",
 						"scheme":      "bearer",
-						"description": "Preview placeholder for routes accepted by Chalk account auth or bearer/API-key auth.",
+						"description": "Tenant-scoped API key or local system bearer credential. User sessions are not accepted.",
 					},
 					"participantMediaBearer": map[string]any{
 						"type":         "http",

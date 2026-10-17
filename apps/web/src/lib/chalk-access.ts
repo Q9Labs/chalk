@@ -1,22 +1,9 @@
-import { createChalkPublicClient, reloadRejoinAccess, resumeReloadRejoin, type ReloadRejoinMarker, type AccessGrant, type AccessGrantSource, type GetAccess, type PublicArrivalOptions, type PublicSpaceArrival, type PublicSpaceCreated } from "@q9labsai/chalk-client";
+import { createChalkPublicClient, reloadRejoinAccess, resumeReloadRejoin, type ReloadRejoinMarker, type AccessGrant, type GetAccess, type PublicArrivalOptions, type PublicSpaceArrival, type PublicSpaceCreated } from "@q9labsai/chalk-client";
 import type { SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
 export type PublicSpaceCredential = {
   readonly apiBaseURL: string;
   readonly syncURL: string;
   readonly space: string;
-};
-export type AccountSpaceCredential = {
-  readonly apiBaseURL: string;
-  readonly space: string;
-  readonly access: AccessGrantSource;
-  readonly participantGeneration: number;
-};
-export type AccountSpaceAccess = {
-  readonly credential: AccountSpaceCredential;
-  readonly getAccess: GetAccess;
-  readonly reloadMarker: () => Pick<ReloadRejoinMarker, "episodeId" | "participantId" | "participantGeneration" | "mediaProof" | "tenantId">;
-  readonly leave: (options?: SpaceAccessCleanupOptions) => Promise<void>;
-  readonly inviteLink?: string;
 };
 export type SpaceAccessCleanupOptions = {
   readonly keepalive?: boolean;
@@ -39,17 +26,12 @@ export type PublicInviteClient = {
 export type PreparedPublicSpace = {
   readonly reloadMarker: () => Pick<ReloadRejoinMarker, "episodeId" | "participantId" | "participantGeneration" | "mediaProof" | "arrivalHandle">;
   readonly arrival: PublicSpaceArrival;
-  readonly credential: PublicSpaceCredential | AccountSpaceCredential;
+  readonly credential: PublicSpaceCredential;
   readonly getAccess: GetAccess;
   readonly connectionAccess: NonNullable<SpaceClientPlatform["connectionAccess"]>;
   readonly finish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
 };
 const defaultAPIOrigin = "https://api.chalkmeet.com";
-const dashboardCSRF: {
-  token?: string;
-  expiresAt: number;
-} = { token: undefined, expiresAt: 0 };
-const dashboardRequestTimeoutMS = 15000;
 export function createPublicInviteClient(): PublicInviteClient {
   const client = createChalkPublicClient({
     baseUrl: publicAPIBaseURL(),
@@ -62,50 +44,6 @@ export function createPublicInviteClient(): PublicInviteClient {
     getSpacePublicInviteArrival: (arrivalHandle) => client.getSpacePublicInviteArrival({ arrivalHandle }),
     refreshSpacePublicInviteAccess: (arrivalHandle, mediaProof, options) => client.refreshSpacePublicInviteAccess({ mediaProof, arrivalHandle, replaceMediaConnection: options?.replaceMediaConnection, signal: options?.signal }),
     leaveSpacePublicInviteArrival: (arrivalHandle, options) => client.leaveSpacePublicInviteArrival(arrivalHandle, options),
-  };
-}
-export async function prepareDashboardEntrance(tenantID: string, spaceID: string): Promise<void> {
-  await dashboardRequest(`/api/tenants/${encodeURIComponent(tenantID)}/spaces/${encodeURIComponent(spaceID)}/entrance`, "POST", undefined);
-}
-export async function joinDashboardSpace(tenantID: string, spaceSlug: string, displayName: string, reload?: ReloadRejoinMarker): Promise<AccountSpaceAccess> {
-  const path = `/api/tenants/${encodeURIComponent(tenantID)}/spaces/by-slug/${encodeURIComponent(spaceSlug)}/participants/self`;
-  const current = dashboardGrant(await dashboardRequest(reload ? `${path}/access-grants` : path, "POST", reload ? { participant_generation: reload.participantGeneration, replace_media_connection: true, current_media_token: reload.mediaProof } : { display_name: displayName }));
-  if (reload) await resumeReloadRejoin(reload, async () => current.access);
-  const inviteLink = await dashboardInviteLink(current.tenantID, current.spaceID);
-  let active = current;
-  let initial = true;
-  let left = false;
-  const getAccess: GetAccess = async ({ reason, signal }) => {
-    if (left) throw new Error("This Space access has been released.");
-    if (initial && reason === "join") {
-      initial = false;
-      return active.access;
-    }
-    active = dashboardGrant(
-      await dashboardRequest(
-        `${path}/access-grants`,
-        "POST",
-        {
-          participant_generation: active.participantGeneration,
-          replace_media_connection: reason === "retry",
-          ...(reason === "retry" ? {} : { current_media_token: active.mediaToken }),
-        },
-        { signal },
-      ),
-    );
-    return active.access;
-  };
-  const leave = async (options: SpaceAccessCleanupOptions = {}): Promise<void> => {
-    if (left) return;
-    await dashboardRequest(path, "DELETE", { participant_generation: active.participantGeneration }, options);
-    left = true;
-  };
-  return {
-    reloadMarker: () => ({ ...reloadRejoinAccess(active.access), tenantId: active.tenantID }),
-    credential: { apiBaseURL: publicAPIBaseURL(), space: active.spaceID, access: active.access, participantGeneration: active.participantGeneration },
-    getAccess,
-    leave,
-    inviteLink,
   };
 }
 export function createPreparedPublicSpace(client: PublicInviteClient, arrival: PublicSpaceArrival): PreparedPublicSpace {
@@ -165,80 +103,12 @@ function requireArrivalAccess(arrival: PublicSpaceArrival): AccessGrant {
   if (!arrival.access) throw new Error("This Space is not ready yet.");
   return arrival.access;
 }
-type DashboardGrant = {
-  readonly access: AccessGrantSource;
-  readonly mediaToken: string;
-  readonly participantGeneration: number;
-  readonly tenantID: string;
-  readonly spaceID: string;
-};
-function dashboardGrant(value: unknown): DashboardGrant {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("This Space is unavailable.");
-  const subject = "subject" in value && typeof value.subject === "object" && value.subject !== null && !Array.isArray(value.subject) ? value.subject : undefined;
-  const media = "media" in value && typeof value.media === "object" && value.media !== null && !Array.isArray(value.media) ? value.media : undefined;
-  const generation = subject && "participant_generation" in subject ? subject.participant_generation : undefined;
-  const tenantID = subject && "tenant_id" in subject ? subject.tenant_id : undefined;
-  const spaceID = subject && "space_id" in subject ? subject.space_id : undefined;
-  const mediaToken = media && "token" in media ? media.token : undefined;
-  if (typeof generation !== "number" || !Number.isSafeInteger(generation) || generation < 1 || typeof mediaToken !== "string" || !mediaToken || typeof tenantID !== "string" || !tenantID || typeof spaceID !== "string" || !spaceID) throw new Error("This Space is unavailable.");
-  return { access: value, mediaToken, participantGeneration: generation, tenantID, spaceID };
-}
 function accessMediaProof(access: AccessGrant): string {
   const value: unknown = access;
   if (typeof value !== "object" || value === null || Array.isArray(value) || !("media" in value) || typeof value.media !== "object" || value.media === null || Array.isArray(value.media) || !("token" in value.media) || typeof value.media.token !== "string" || !value.media.token) {
     throw new Error("This Space is unavailable.");
   }
   return value.media.token;
-}
-async function dashboardRequest(
-  path: string,
-  method: "GET" | "POST" | "DELETE",
-  body: unknown,
-  options: SpaceAccessCleanupOptions & {
-    readonly signal?: AbortSignal;
-  } = {},
-): Promise<unknown> {
-  const controller = new AbortController();
-  const abort = () => controller.abort();
-  options.signal?.addEventListener("abort", abort, { once: true });
-  if (options.signal?.aborted) controller.abort();
-  const timeout = globalThis.setTimeout(() => controller.abort(), dashboardRequestTimeoutMS);
-  try {
-    const csrf = method === "GET" ? undefined : await dashboardCSRFToken(controller.signal);
-    const response = await fetch(path, {
-      method,
-      credentials: "same-origin",
-      headers: { ...(method === "GET" ? {} : { "content-type": "application/json", "x-chalk-csrf": csrf ?? "", "idempotency-key": requestKey() }) },
-      ...(method === "GET" ? {} : { body: JSON.stringify(body) }),
-      keepalive: options.keepalive,
-      signal: controller.signal,
-    });
-    if (!response.ok) throw Object.assign(new Error("Space request failed."), { status: response.status });
-    if (response.status === 204) return undefined;
-    return response.json();
-  } catch (cause) {
-    if (controller.signal.aborted) throw new Error("This Space is unavailable.");
-    throw cause;
-  } finally {
-    options.signal?.removeEventListener("abort", abort);
-    globalThis.clearTimeout(timeout);
-  }
-}
-async function dashboardCSRFToken(signal: AbortSignal): Promise<string> {
-  if (dashboardCSRF.token && dashboardCSRF.expiresAt > Date.now()) return dashboardCSRF.token;
-  const response = await fetch("/api/auth/csrf", { credentials: "same-origin", headers: { accept: "application/json" }, signal });
-  if (!response.ok) throw Object.assign(new Error("Space request failed."), { status: response.status });
-  const value: unknown = await response.json();
-  if (typeof value !== "object" || value === null || Array.isArray(value) || !("csrf_token" in value) || typeof value.csrf_token !== "string" || !value.csrf_token) throw new Error("This Space is unavailable.");
-  dashboardCSRF.token = value.csrf_token;
-  dashboardCSRF.expiresAt = Date.now() + 55 * 60 * 1000;
-  return value.csrf_token;
-}
-async function dashboardInviteLink(tenantID: string, spaceID: string): Promise<string | undefined> {
-  const value = await dashboardRequest(`/api/tenants/${encodeURIComponent(tenantID)}/spaces/${encodeURIComponent(spaceID)}/public-invite`, "GET", undefined);
-  if (typeof value !== "object" || value === null || Array.isArray(value) || !("canonical_url" in value) || typeof value.canonical_url !== "string") return undefined;
-  const inviteLink = value.canonical_url.trim();
-  return inviteLink || undefined;
 }
 function publicSpaceSlug(arrival: PublicSpaceArrival): string {
   const slug = arrival.space?.slug?.trim();

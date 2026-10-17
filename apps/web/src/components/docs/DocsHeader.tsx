@@ -1,4 +1,3 @@
-import ArrowRight02Icon from "@hugeicons/core-free-icons/ArrowRight02Icon";
 import Menu01Icon from "@hugeicons/core-free-icons/Menu01Icon";
 import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
 import { Logo } from "@q9labsai/chalk-react";
@@ -22,11 +21,6 @@ export function DocsHeader({ menuButtonRef, mobileNavOpen, onMenuToggle, onSearc
         </a>
         <nav className="docs-header-nav" aria-label="Documentation header">
           <a href="/">Product</a>
-          <a href="/sign-in">Sign in</a>
-          <a className="docs-header-cta" href="/sign-up">
-            Create an account
-            <HugeiconsIcon icon={ArrowRight02Icon} size={15} strokeWidth={2} aria-hidden="true" focusable="false" />
-          </a>
         </nav>
         <div className="docs-header-actions">
           <button type="button" className="docs-search-trigger" aria-label="Search docs" onClick={onSearchOpen}>

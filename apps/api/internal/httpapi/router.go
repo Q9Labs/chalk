@@ -56,11 +56,9 @@ type Options struct {
 	RecorderFleetVerifier      RecorderFleetControllerVerifier
 	RecorderFleetEnvironment   string
 	RecorderWorkerVerifier     RecorderWorkerVerifier
-	Authentication             AuthenticationService
-	RecentAuth                 RecentAuthProvider
-	AccountTenants             AccountTenantService
-	APIKeys                    APIKeyService
-	APIKeyAuthentication       APIKeyAuthenticator
+
+	APIKeys              APIKeyService
+	APIKeyAuthentication APIKeyAuthenticator
 
 	MediaPlane             MediaPlaneResolver
 	MediaPublications      mediapublications.Registry
@@ -80,11 +78,11 @@ type Options struct {
 	RecordingEntrance     RecordingEntrancePreparer
 	EntranceInvites       EntranceInviteResolver
 
-	Spaces                 SpaceService
-	Episodes               EpisodeLifecycleService
-	SyncTokens             SyncTokenIssuer
-	SyncTokenRefresh       SyncTokenRefreshIssuer
-	SessionCookie          SessionCookieOptions
+	Spaces           SpaceService
+	Episodes         EpisodeLifecycleService
+	SyncTokens       SyncTokenIssuer
+	SyncTokenRefresh SyncTokenRefreshIssuer
+
 	TenantAuthz            TenantAuthorizer
 	Tenants                TenantService
 	Transcripts            TranscriptService
@@ -214,12 +212,6 @@ func enabledStatus(enabled bool) string {
 	return "disabled"
 }
 
-func requireSessionAuthentication(service AuthenticationService) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return rejectTenantAPIKeyCredential(requireAuthentication(service)(next))
-	}
-}
-
 func rejectTenantAPIKeyCredential(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if hasTenantAPIKeyCredential(r) {
@@ -248,7 +240,7 @@ func hasTenantAPIKeyCredential(r *http.Request) bool {
 	if principal, ok := authentication.PrincipalFromContext(r.Context()); ok && principal.Kind == authentication.PrincipalAPIKey {
 		return true
 	}
-	credential, ok := sessionTokenFromRequest(r)
+	credential, ok := bearerToken(r.Header.Get("Authorization"))
 	return ok && strings.HasPrefix(credential, "chalk_sk_")
 }
 
