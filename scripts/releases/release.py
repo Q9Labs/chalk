@@ -42,30 +42,31 @@ def manifest_bytes(github, info, trusted=True):
 
 def previous_production(github):
     # The existing successful Release is the initial baseline; no invented proof record.
-    runs = github.pages('actions/runs?branch=master&status=completed', 'workflow_runs')
-    for run in sorted(runs, key=lambda item: int(item['id']), reverse=True):
-        if run['path'].split('@')[0] not in ('.github/workflows/ci.yml', '.github/workflows/promote.yml'):
-            continue
-        jobs = github.pages(f"actions/runs/{run['id']}/jobs?filter=latest", 'jobs')
-        if not any(job['name'].endswith('Deploy managed release to production') and job['conclusion'] == 'success' for job in jobs):
-            continue
-        artifacts = github.pages(f"actions/runs/{run['id']}/artifacts", 'artifacts')
-        proofs = sorted((item for item in artifacts if item['name'].startswith('managed-deployment-')),
-                        key=lambda item: int(item['id']), reverse=True)
-        require(proofs, 'latest production deployment has no retained deploy result')
-        proof = json.loads(github.artifact(run['id'], proofs[0]['id'], 'managed-deployment.json'))
-        require(proof['status'] == 'deployed' and proof['health'] == 'passed'
-                and proof['deployment_phase'] == 'complete' and not proof['rolled_back'], 'latest production deploy result is invalid')
-        release = proof['release_id']
-        matches = [item for item in artifacts if item['name'] == 'release-manifest-' + release]
-        require(len(matches) == 1, 'latest production manifest is unavailable; manual recovery required')
-        data = github.artifact(run['id'], matches[0]['id'], release + '.json')
-        value = json.loads(data)
-        info = dict(run_id=str(run['id']), target_sha=value['source_revision'], release_id=release,
-                    manifest_artifact_id=str(matches[0]['id']), manifest_sha256=digest(data))
-        manifest_bytes(github, info)
-        return info
-    raise ValueError('no successful production Release manifest; manual release required')
+    runs = [run for workflow in ('ci.yml', 'promote.yml') for run in
+            github.pages(f'actions/workflows/{workflow}/runs?branch=master&status=completed', 'workflow_runs')]
+    applications = []
+    for run in runs:
+        for job in github.pages(f"actions/runs/{run['id']}/jobs?filter=latest", 'jobs'):
+            if job['name'].endswith('Deploy managed release to production') and job['conclusion'] == 'success':
+                applications.append((job['completed_at'], int(job['id']), run))
+    require(applications, 'no successful production Release manifest; manual release required')
+    _, _, run = max(applications, key=lambda item: item[:2])
+    artifacts = github.pages(f"actions/runs/{run['id']}/artifacts", 'artifacts')
+    proofs = sorted((item for item in artifacts if item['name'].startswith('managed-deployment-')),
+                    key=lambda item: int(item['id']), reverse=True)
+    require(proofs, 'latest production deployment has no retained deploy result')
+    proof = json.loads(github.artifact(run['id'], proofs[0]['id'], 'managed-deployment.json'))
+    require(proof['status'] == 'deployed' and proof['health'] == 'passed'
+            and proof['deployment_phase'] == 'complete' and not proof['rolled_back'], 'latest production deploy result is invalid')
+    release = proof['release_id']
+    matches = [item for item in artifacts if item['name'] == 'release-manifest-' + release]
+    require(len(matches) == 1, 'latest production manifest is unavailable; manual recovery required')
+    data = github.artifact(run['id'], matches[0]['id'], release + '.json')
+    value = json.loads(data)
+    info = dict(run_id=str(run['id']), target_sha=value['source_revision'], release_id=release,
+                manifest_artifact_id=str(matches[0]['id']), manifest_sha256=digest(data))
+    manifest_bytes(github, info)
+    return info
 
 
 def guard_runtime(base, target):
@@ -141,12 +142,13 @@ def recheck(github, args):
 def fresh_envelope(source, output):
     value = json.loads(source.read_bytes())
     subprocess.run([str(ROOT / 'infrastructure/managed-episode/scripts/generate-release-manifest'),
-                    '--stable-manifest', str(source), '--affected-components', 'none',
+                    '--stable-manifest', str(source), '--affected-components', 'none', '--reuse-envelope',
                     '--source-revision', value['source_revision'], '--output', str(output)], check=True)
     applied = json.loads(output.read_bytes())
     require(applied['release_id'] != value['release_id'], 'reuse requires a fresh envelope')
     require(applied['images'] == value['images'] and applied['component_releases'] == value['component_releases'],
             'envelope must preserve images and component source identities')
+    require(applied['database_compatibility'] == value['database_compatibility'], 'envelope must preserve source migration requirements')
     return applied
 
 
@@ -188,17 +190,19 @@ def record(github, args):
     if passed:
         require(info['release_id'] == info['applied_release_id'], 'deploy result identity mismatch')
         validate_choice(github, {'payload': info})
-    # A later applied release invalidates the older served identity, even if its call fails.
-    # Completed-cut history stays in the payload, separate from currently held status.
-    if info.get('applied_release_id'):
-        for item in held_candidates(github.deployments('nightly')):
-            github.request(f"deployments/{item['id']}/statuses", {'state': 'inactive', 'auto_inactive': False})
     outputs({'deployment_id': github.record(info['target_sha'], info, passed)})
+
+
+def invalidate(github, args):
+    # Invalidate before a nightly host write, including manual calls and uncertain failures.
+    # A failed attempt cannot leave a stale served identity held; cut history is unchanged.
+    for item in held_candidates(github.deployments('nightly')):
+        github.request(f"deployments/{item['id']}/statuses", {'state': 'inactive', 'auto_inactive': False})
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('plan', 'select', 'recheck', 'prepare', 'webrefs', 'record'))
+    parser.add_argument('command', choices=('plan', 'select', 'recheck', 'prepare', 'webrefs', 'record', 'invalidate'))
     parser.add_argument('--directory', type=Path, default=Path('release-input'))
     parser.add_argument('--manual', action='store_true')
     parser.add_argument('--reuse', action='store_true')

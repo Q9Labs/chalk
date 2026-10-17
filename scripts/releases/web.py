@@ -44,7 +44,7 @@ def build(target, sha, output):
         stage = Path(directory)
         shutil.copytree(ROOT / 'apps/web/dist/client', stage / 'dist/client')
         (stage / 'dist/client/release.json').write_text(json.dumps({'environment': target, 'commit': sha}))
-        shutil.copyfile(ROOT / 'apps/web/wrangler.toml', stage / 'wrangler.toml')
+        (stage / 'wrangler.toml').write_text((ROOT / 'apps/web/wrangler.toml').read_text().split('[vars]', 1)[0])
         with tarfile.open(output / f'web-{target}.tar.gz', 'w:gz') as archive:
             archive.add(stage / 'dist', arcname='dist')
             archive.add(stage / 'wrangler.toml', arcname='wrangler.toml')

@@ -65,6 +65,15 @@ class CutTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 api.gate(SHA)
 
+    def test_shared_invalidation_never_loses_the_completed_cut_baseline(self):
+        item = held()
+        def status(*_):
+            item['latest_status'] = 'inactive'
+        release.invalidate(SimpleNamespace(deployments=lambda _: [item], request=status), None)
+        self.assertEqual(held_candidates([item]), [])
+        self.assertFalse(cut_decision(SHA, [item], NOW)[0])
+        self.assertTrue(cut_decision('b' * 40, [item], NOW)[0])
+
 
 class ArtifactTests(unittest.TestCase):
     def test_authenticated_artifact_corruption_and_expiry(self):
@@ -114,6 +123,9 @@ class EnvelopeTests(unittest.TestCase):
             subprocess.run([str(generator), '--api-image', image, '--sync-image', image,
                             '--source-revision', sha, '--output', str(source)], check=True, stdout=subprocess.DEVNULL)
             original = json.loads(source.read_bytes())
+            (repo / 'apps/api/db/migrations/20261201000000_future.sql').write_text('-- later migration\n')
+            subprocess.run(['git', '-C', str(repo), 'add', '.'], check=True)
+            subprocess.run(['git', '-C', str(repo), '-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-qm', 'later source'], check=True)
             with patch.object(release, 'ROOT', repo):
                 promoted = release.fresh_envelope(source, root / 'promoted.json')
                 rollback = release.fresh_envelope(source, root / 'rollback.json')
@@ -122,6 +134,7 @@ class EnvelopeTests(unittest.TestCase):
                 self.assertEqual(applied['images'], original['images'])
                 self.assertEqual(applied['component_releases'], original['component_releases'])
                 self.assertEqual(applied['source_revision'], original['source_revision'])
+                self.assertEqual(applied['database_compatibility'], original['database_compatibility'])
 
     def test_pages_rollback_restores_exact_saved_identity_without_archives(self):
         with patch.object(web, 'pages', return_value={'id': 'saved'}) as request:
@@ -133,18 +146,27 @@ class EnvelopeTests(unittest.TestCase):
                 web.rollback('chalk-web', 'saved')
 
     def test_previous_production_uses_deploy_result_and_manifest_not_nightly_archive(self):
-        manifest = dict(source_revision=SHA, release_id='current')
-        proof = dict(release_id='current', status='deployed', health='passed', deployment_phase='complete', rolled_back=False)
         api = SimpleNamespace(repository='Q9Labs/chalk')
-        api.pages = lambda route, key: ([dict(id=10, path='.github/workflows/ci.yml')] if route.startswith('actions/runs?') else
-            [dict(name='Deploy managed release to production', conclusion='success')] if '/jobs?' in route else
-            [dict(id=2, name='managed-deployment-current'), dict(id=1, name='release-manifest-current')])
-        api.artifact = lambda run, identity, name, *args: json.dumps(proof if name == 'managed-deployment.json' else manifest).encode()
+        def pages(route, key):
+            if '/ci.yml/' in route:
+                return [dict(id=100), dict(id=200)]
+            if '/promote.yml/' in route:
+                return []
+            run = int(route.split('/')[2])
+            if '/jobs?' in route:
+                return [dict(id=run, name='Deploy managed release to production', conclusion='success',
+                             completed_at='2026-10-17T12:00:00Z' if run == 100 else '2026-10-16T12:00:00Z')]
+            return [dict(id=run+2, name=f'managed-deployment-release{run}'), dict(id=run+1, name=f'release-manifest-release{run}')]
+        api.pages = pages
+        api.artifact = lambda run, identity, name, *args: json.dumps(
+            dict(release_id=f'release{run}', status='deployed', health='passed', deployment_phase='complete', rolled_back=False)
+            if name == 'managed-deployment.json' else dict(release_id=f'release{run}', source_revision=SHA)).encode()
         api.request = lambda _: dict(head_branch='master', head_repository={'full_name': api.repository}, path='.github/workflows/ci.yml', event='workflow_dispatch')
         previous = release.previous_production(api)
-        self.assertEqual(previous['release_id'], 'current')
-        self.assertEqual(previous['manifest_artifact_id'], '1')
+        self.assertEqual(previous['release_id'], 'release100')
+        self.assertEqual(previous['run_id'], '100')
         self.assertNotIn('web', previous)
+
 
 
 if __name__ == '__main__':

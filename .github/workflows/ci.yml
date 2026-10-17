@@ -320,7 +320,7 @@ jobs:
   build-managed-images:
     name: Build ${{ matrix.component }} image
     needs: plan-managed
-    if: needs.plan-managed.outputs.should_publish == 'true' && needs.plan-managed.outputs.build_set != '[]'
+    if: always() && !cancelled() && needs.plan-managed.outputs.should_publish == 'true' && needs.plan-managed.outputs.build_set != '[]'
     strategy:
       fail-fast: false
       matrix:
@@ -530,7 +530,7 @@ jobs:
   deploy-managed:
     name: Deploy managed release to ${{ inputs.managed_environment }}
     needs: prepare-release
-    if: inputs.deploy_managed && needs.prepare-release.result == 'success'
+    if: always() && !cancelled() && inputs.deploy_managed && needs.prepare-release.result == 'success'
     outputs:
       release_id: ${{ steps.result.outputs.release_id }}
     runs-on: ubuntu-24.04
@@ -543,6 +543,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      deployments: write
       id-token: write
     steps:
       - name: Checkout deployment tooling from workflow revision
@@ -608,6 +609,7 @@ jobs:
 
       - name: Deploy, health-check, and prove release
         env:
+          GH_TOKEN: ${{ github.token }}
           CHALK_MANAGED_AWS_REGION: ${{ vars.CHALK_MANAGED_AWS_REGION }}
           CHALK_MANAGED_INSTANCE_ID: ${{ vars.CHALK_MANAGED_INSTANCE_ID }}
           CHALK_MANAGED_LOG_GROUP_NAME: ${{ vars.CHALK_MANAGED_LOG_GROUP_NAME }}
@@ -652,6 +654,7 @@ jobs:
               echo 'nightly requires its own dispatcher configuration and state (PR #268, scheduler_state=DISABLED initially)' >&2
               exit 1
             }
+            python3 scripts/releases/release.py invalidate
           fi
           node scripts/deploy/deploy-managed-release.mjs "${args[@]}"
 
@@ -723,7 +726,7 @@ jobs:
 
   prepare-web:
     needs: build-web
-    if: needs.build-web.result == 'success'
+    if: always() && !cancelled() && needs.build-web.result == 'success'
     runs-on: ubuntu-24.04
     outputs:
       web: ${{ steps.refs.outputs.web }}

@@ -23,7 +23,7 @@ After nightly deployment, the real-call workflow runs `smoke transcript`.
 A passed call and the controller's checked applied release ID create a held
 `nightly` deployment record. It contains the source SHA, run/artifact IDs,
 SHA256 hashes, applied identity and proof result. Artifact retention is 365 days.
-A new applied cut invalidates older held identities. Completed-cut history remains.
+A nightly host-write attempt invalidates older held identities; completed-cut history remains.
 Failed nightly deployments/calls stay unheld; nightly never auto-rolls back.
 
 ## Promote
@@ -43,7 +43,7 @@ Production receives the selected image digests and prebuilt production web.
 There is no image/web rebuild or staging web upload during promotion.
 The source manifest hash is verified before the existing manifest generator
 creates a fresh envelope: a new top-level release ID, unchanged image digests
-and component source identities. A fresh request ID includes this release ID.
+and component source identities, including migration requirements. A fresh request ID includes this release ID.
 The deployment result and job summary record source and applied identities.
 The controller's verified identity plus the call are the served-identity evidence.
 No additional observer service or host exact-replay support is required.

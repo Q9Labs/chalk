@@ -41,7 +41,7 @@ jobs:
       - name: Save the live production Pages deployment before any upload
         id: pages
         env:
-          CLOUDFLARE_ACCOUNT_ID: '5281943bd26d5bdcf4c3915606cd6bfb'
+          CLOUDFLARE_ACCOUNT_ID: "5281943bd26d5bdcf4c3915606cd6bfb"
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           PAGES_PROJECT: chalk-web
         run: |
