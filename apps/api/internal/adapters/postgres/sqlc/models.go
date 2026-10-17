@@ -1324,8 +1324,10 @@ type SyncWhiteboardScene struct {
 type Tenant struct {
 	ID                       pgtype.UUID        `json:"id"`
 	Name                     string             `json:"name"`
+	DefaultRegion            pgtype.Text        `json:"default_region"`
 	DefaultMediaPlane        pgtype.Text        `json:"default_media_plane"`
 	MediaPlaneProviderConfig []byte             `json:"media_plane_provider_config"`
+	AiProviderConfig         []byte             `json:"ai_provider_config"`
 	StorageProviderConfig    []byte             `json:"storage_provider_config"`
 	CorsAllowedOrigins       []string           `json:"cors_allowed_origins"`
 	LogoKey                  pgtype.Text        `json:"logo_key"`

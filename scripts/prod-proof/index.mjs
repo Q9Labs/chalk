@@ -2,19 +2,18 @@
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { cleanupRun, createRun, loadConfig, save, check } from "./runtime.mjs";
-import { prepareIntegration, recordProof, exportProof, transcriptProof, resetProof, smokeProof } from "./proofs.mjs";
+import { prepareIntegration, recordProof, exportProof, transcriptProof, smokeProof } from "./proofs.mjs";
 
 const plans = {
-  all: { media: true, cameraShare: true, webhooks: true, proofs: ["camera-share", "export", "smoke", "transcript", "reset"] },
+  all: { media: true, cameraShare: true, webhooks: true, proofs: ["camera-share", "export", "smoke", "transcript"] },
   smoke: { media: true, cameraShare: false, webhooks: true, proofs: ["export", "smoke"] },
   "camera-share": { media: true, cameraShare: true, webhooks: false, proofs: ["camera-share"] },
   export: { media: true, cameraShare: false, webhooks: false, proofs: ["export"] },
   transcript: { media: true, cameraShare: false, webhooks: false, proofs: ["transcript"] },
-  reset: { media: false, proofs: ["reset"] },
 };
-const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|export|transcript|reset] [--force-layer-switch|--no-layer-switch]
+const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|export|transcript] [--force-layer-switch|--no-layer-switch]
 Default: all, with forced layer switch. Each subcommand creates and cleans its own run.
-Requirements: op (vault dev), aws, ffmpeg, ffprobe, ImageMagick, Chromium,
+Requirements: CHALK_PROOF_API_KEY (existing scoped Tenant key), op (vault dev), aws, ffmpeg, ffprobe, ImageMagick, Chromium,
              macOS say or Linux espeak; pnpm install and pnpm --filter @q9labsai/chalk-client exec playwright install chromium.
 Private artifacts: .private/prod-proof/<run>/ (never commit). Configuration is loaded from 1Password and SSM.`;
 const args = process.argv.slice(2);
@@ -56,7 +55,6 @@ async function runProofs(run, plan, report, forceLayerSwitch) {
       return smokeProof(run, receiver);
     },
     transcript: () => transcriptProof(run),
-    reset: () => resetProof(run),
   };
   for (const name of plan.proofs) await recordResult(run, report, name, actions[name]);
 }

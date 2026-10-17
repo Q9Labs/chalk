@@ -12,9 +12,13 @@ The server entry point requires Node.js 22 or later. Never import `@q9labsai/cha
 
 ## Prepare your Tenant and API key
 
-With an authenticated account session, create a Tenant with `POST /v1/me/tenants` and an `Idempotency-Key`, or list your accessible Tenants with `GET /v1/me/tenants`. Retain the returned Tenant ID. An Owner can create a key through `POST /v1/tenants/{tenant_id}/api-keys`; complete recent authentication when requested and save the one-time secret on your backend. Grant `spaces:read`, `spaces:write`, `episodes:read`, and `episodes:write` for the setup below; add artifact and webhook scopes only when needed.
+Ask your deployment operator for a provisioned Tenant ID and an existing Tenant API key. Store them as `CHALK_TENANT_ID` and `CHALK_API_KEY` on your backend. The setup below needs exactly `spaces:read`, `spaces:write`, `episodes:read`, and `episodes:write`; request artifact or webhook scopes only for features you use. Account registration, account sessions, and recent authentication are not part of this setup.
 
-For a local frontend, configure its exact origin (for example `http://localhost:5173`) through the Tenant update API's `cors_allowed_origins`. Keep the key, Tenant ID, and Space/Participant mappings on your backend.
+Ask the operator to allow your frontend's exact origin (for example `http://localhost:5173`) in the Tenant's `cors_allowed_origins` and configure its media plane. Do not give the browser the Tenant key or permission to manage keys. Keep Space/Participant mappings on your backend.
+
+### Local operator setup
+
+For a local Chalk checkout, run `pnpm dev`; its supervisor provisions a disposable local Tenant and Space with local credentials. See the [local development guide](../README.md#development). This operator bootstrap is separate from the hosted integration above: it does not enable public Tenant creation or require an account session.
 
 ## Create the Space and initial Participant access on your server
 
