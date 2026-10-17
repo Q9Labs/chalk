@@ -1,3 +1,4 @@
+import { contactSheetFont } from "./contact-sheet.mjs";
 import { command, check, save } from "./runtime.mjs";
 
 const colors = {
@@ -119,7 +120,7 @@ function windowEvidence(sample, phase, times) {
 }
 async function contactSheet(run, samples) {
   const sheet = samples.before.images.flatMap((image, index) => [image, samples.after.images[index]]);
-  const font = process.platform === "darwin" ? "/System/Library/Fonts/Supplemental/Arial.ttf" : "DejaVu-Sans";
+  const font = contactSheetFont(await command("magick", ["-list", "font"], { signal: run.signal }));
   const path = `${run.directory}/rejoin-contact-sheet.png`;
   await command("magick", ["montage", "-font", font, "-pointsize", "24", ...sheet.flatMap(({ frame, label }) => ["-label", label, frame]), "-tile", "2x3", "-geometry", "+16+16", path], { signal: run.signal });
   return path;

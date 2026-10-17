@@ -1,3 +1,4 @@
+import { contactSheetFont } from "./contact-sheet.mjs";
 import { recordingRejoinWindow } from "./recording-rejoin.mjs";
 import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
@@ -245,13 +246,6 @@ export async function recordProof(run, receiver, cameraShare, forceLayerSwitch, 
   const recording = await finalizedSource(run);
   for (const page of pages) await page.context().close();
   return { recording, camera: cameraResult(share, baselineError, forceLayerSwitch) };
-}
-export function contactSheetFont(fonts, platform = process.platform) {
-  // macOS ImageMagick can have no registered fonts despite system fonts existing.
-  if (platform === "darwin" && !fonts.trim()) return "/System/Library/Fonts/Supplemental/Arial.ttf";
-  const font = fonts.match(/^\s*Font:\s*(\S.*)$/m)?.[1].trim();
-  check(font, "ImageMagick has no installed font for the contact sheet");
-  return font;
 }
 export async function exportProof(run, execute = command) {
   const started = Date.now();
