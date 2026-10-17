@@ -11,16 +11,8 @@ test("environment configuration maps each named field without interpreting crede
     proof_origin: "http://127.0.0.1:4567",
     webhook_service_url: "https://catcher.example.test",
   };
-  const environment = Object.fromEntries(
-    Object.entries(fields).map(([name, value]) => [
-      `CHALK_PROOF_${name.toUpperCase()}`,
-      value,
-    ]),
-  );
-  assert.deepEqual(
-    environmentConfig({ ...environment, PASSWORD: "unrelated" }),
-    fields,
-  );
+  const environment = Object.fromEntries(Object.entries(fields).map(([name, value]) => [`CHALK_PROOF_${name.toUpperCase()}`, value]));
+  assert.deepEqual(environmentConfig({ ...environment, PASSWORD: "unrelated" }), fields);
   assert.equal(environmentConfig({}).api_key, undefined);
 });
 
