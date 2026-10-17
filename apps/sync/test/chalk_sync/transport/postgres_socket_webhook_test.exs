@@ -251,14 +251,26 @@ defmodule ChalkSync.Transport.PostgresSocketV1WebhookTest do
     assert attempt_count >= 1
   end
 
-  defp assert_webhook_metrics(before) do
+  # The finalizing process records these metrics after its commit, so the rows can be visible first.
+  defp assert_webhook_metrics(before, attempts \\ 100) do
+    expected =
+      for event_name <- ["participant_left", "episode_ended"],
+          phase <- ["production.committed", "fanout.queued"],
+          into: %{} do
+        metric = "chalk.sync.webhook.#{phase}.#{event_name}.v1"
+        {metric, (get_in(before, [metric, :count]) || 0) + 1}
+      end
+
     snapshot = Metrics.snapshot().metrics
 
-    for event_name <- ["participant_left", "episode_ended"],
-        phase <- ["production.committed", "fanout.queued"] do
-      metric = "chalk.sync.webhook.#{phase}.#{event_name}.v1"
-      before_count = get_in(before, [metric, :count]) || 0
-      assert get_in(snapshot, [metric, :count]) == before_count + 1
+    actual =
+      Map.new(expected, fn {metric, _count} -> {metric, get_in(snapshot, [metric, :count])} end)
+
+    if actual != expected and attempts > 1 do
+      Process.sleep(20)
+      assert_webhook_metrics(before, attempts - 1)
+    else
+      assert actual == expected
     end
   end
 
