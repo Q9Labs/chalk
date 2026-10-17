@@ -71,29 +71,32 @@ class GitHub:
     def deployments(self, environment, task='nightly-cut', sha=None, manifest_sha256=None):
         # GitHub returns newest IDs first. Page only this environment/task, and
         # inspect statuses only after the payload identifies a usable candidate.
-        route = f'deployments?environment={environment}&task={task}&per_page=100'
-        if sha:
-            route += f'&sha={sha}'
-        page = 1
-        while True:
-            items = self.request(f'{route}&page={page}')
-            for item in items:
-                info = payload(item)
-                if info.get('channel') != task:
-                    continue
-                if task == 'nightly-cut' and info.get('proof_result') != 'passed':
-                    continue
-                if manifest_sha256 and info.get('manifest_sha256') != manifest_sha256:
-                    continue
-                if task in ('nightly-cut', 'production-release'):
-                    status = self.request(f"deployments/{item['id']}/statuses?per_page=1")
-                    item['latest_status'] = status[0]['state'] if status else 'pending'
-                    if task == 'production-release' and item['latest_status'] != 'success':
+        tasks = (task, 'deploy') if task.startswith('nightly-') else (task,)
+        for stored_task in tasks:
+            route = f'deployments?environment={environment}&task={stored_task}&per_page=100'
+            if sha:
+                route += f'&sha={sha}'
+            page = 1
+            while True:
+                items = self.request(f'{route}&page={page}')
+                for item in items:
+                    info = payload(item)
+                    if info.get('channel') != task:
                         continue
-                return [item]
-            if len(items) < 100:
-                return []
-            page += 1
+                    if task == 'nightly-cut' and info.get('proof_result') != 'passed':
+                        continue
+                    if manifest_sha256 and info.get('manifest_sha256') != manifest_sha256:
+                        continue
+                    if task in ('nightly-cut', 'production-release'):
+                        status = self.request(f"deployments/{item['id']}/statuses?per_page=1")
+                        item['latest_status'] = status[0]['state'] if status else 'pending'
+                        if task == 'production-release' and item['latest_status'] != 'success':
+                            continue
+                    return [item]
+                if len(items) < 100:
+                    break
+                page += 1
+        return []
 
     def reserve_cut(self, sha):
         self.request('deployments', {'ref': sha, 'environment': 'nightly', 'task': 'nightly-attempt', 'auto_merge': False,

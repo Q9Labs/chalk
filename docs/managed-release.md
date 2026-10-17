@@ -9,8 +9,12 @@ Choose `production` explicitly for an operator production release.
 `Cut nightly` runs daily at 02:17 UTC on master.
 Scheduled cuts require new commits since the last completed cut and at most
 one cut attempt per UTC day, reserved before builds. Failures do not advance the baseline.
-An expired or unavailable build baseline triggers a full component build instead
-of forwarding dead artifact IDs. The changed-input guard still checks its source revision.
+An expired or unavailable build baseline triggers a full build of the saved enabled
+component set instead of forwarding dead artifact IDs. Passed cut records preserve
+recorder enablement for this fallback. A pre-upgrade baseline without readable bytes
+or saved component metadata fails closed rather than silently disabling recording;
+a new explicit manual baseline is required. The changed-input guard still checks
+the baseline source revision.
 A manual dispatch always attempts a cut, including an unchanged source.
 Both paths require the latest master Gate run/attempt for the pinned SHA to pass.
 
@@ -39,7 +43,9 @@ Failed nightly deployments/calls stay unheld; nightly never auto-rolls back.
 Dispatch `Promote newest held nightly` from master with no inputs.
 It selects the newest successful, proof-passed nightly, breaking timestamp ties
 by deployment ID. Deployment lookups filter environment and task, stop at the
-first decisive record, and fetch statuses only for matching candidates. There is no age cutoff and no fallback to an older choice.
+first decisive record, and fetch statuses only for matching candidates. When no
+new-task record exists, a task-filtered legacy lookup preserves pre-upgrade held
+records, reservations and write markers without querying unrelated statuses. There is no age cutoff and no fallback to an older choice.
 The exact selection, all three artifacts, ancestry, latest Gate and rollback
 manifest are checked before approval. Missing/expired/corrupt files fail clearly; an expired web archive says "cut a new nightly".
 Both Nightly and Promote refuse non-master dispatches in their first step.

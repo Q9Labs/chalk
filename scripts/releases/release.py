@@ -52,7 +52,8 @@ def previous_production(github, retain_legacy=False):
     durable = github.deployments('production', 'production-release')
     if durable:
         info = dict(payload(durable[0]))
-        retained_manifest(info)
+        data = retained_manifest(info)
+        info['recorder_control'] = 'recorder_control' in json.loads(data).get('images', {})
         del info['manifest_base64']
         del info['channel']
         return info
@@ -80,7 +81,8 @@ def previous_production(github, retain_legacy=False):
     data = github.artifact(run['id'], matches[0]['id'], release + '.json')
     value = json.loads(data)
     info = dict(run_id=str(run['id']), target_sha=value['source_revision'], release_id=release,
-                manifest_artifact_id=str(matches[0]['id']), manifest_sha256=digest(data))
+                manifest_artifact_id=str(matches[0]['id']), manifest_sha256=digest(data),
+                recorder_control='recorder_control' in value.get('images', {}))
     manifest_bytes(github, info)
     # Only the approved recheck holds the production lock. Nightly planning
     # must remain read-only to avoid adopting stale production during a deploy.
@@ -156,13 +158,18 @@ def plan(github, args):
         guard_runtime(baseline['target_sha'], target)
         # Rebuilding all components is safe when an old baseline cannot be read;
         # do not forward dead artifact IDs and wedge every future cut.
+        recorder_control = baseline.get('recorder_control')
         try:
-            manifest_bytes(github, baseline)
+            data = manifest_bytes(github, baseline)
+            recorder_control = 'recorder_control' in json.loads(data).get('images', {})
             github.artifact(baseline['run_id'], baseline['manifest_artifact_id'], baseline['release_id'] + '.json', baseline['manifest_sha256'])
         except (ValueError, subprocess.CalledProcessError) as error:
-            print(f'Build baseline unavailable; rebuilding all components: {error}')
+            require(isinstance(recorder_control, bool),
+                    'expired legacy baseline lacks its enabled component set; manual Release with explicit recorder enablement required')
+            print(f'Build baseline unavailable; rebuilding all enabled components: {error}')
         else:
             result.update(baseline_run_id=baseline['run_id'], baseline_artifact_id=baseline['manifest_artifact_id'])
+        result['recorder_control'] = recorder_control
         github.reserve_cut(target)
     outputs(result)
 
@@ -261,6 +268,8 @@ def record(github, args):
         require(info['release_id'] == info['applied_release_id'], 'deploy result identity mismatch')
         require_current_write(github.deployments('nightly', 'nightly-write'), info)
         validate_choice(github, {'payload': info})
+        data = manifest_bytes(github, info)
+        info['recorder_control'] = 'recorder_control' in json.loads(data).get('images', {})
     outputs({'deployment_id': github.record(info['target_sha'], info, passed)})
 
 

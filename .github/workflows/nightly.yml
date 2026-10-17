@@ -19,6 +19,7 @@ jobs:
       target_sha: ${{ steps.plan.outputs.target_sha }}
       baseline_run_id: ${{ steps.plan.outputs.baseline_run_id }}
       baseline_artifact_id: ${{ steps.plan.outputs.baseline_artifact_id }}
+      recorder_control: ${{ steps.plan.outputs.recorder_control }}
     steps:
       - name: Refuse non-master dispatch before checkout
         env:
@@ -53,6 +54,7 @@ jobs:
       orchestrated: true
       stable_manifest_run_id: ${{ needs.plan.outputs.baseline_run_id }}
       stable_manifest_artifact_id: ${{ needs.plan.outputs.baseline_artifact_id }}
+      enable_recorder_control: ${{ needs.plan.outputs.recorder_control == 'true' }}
     secrets: inherit
   proof:
     needs: release
