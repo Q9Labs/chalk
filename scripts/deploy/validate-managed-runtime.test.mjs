@@ -85,36 +85,15 @@ test("the real runtime validator binds telemetry to the selected environment", a
 
 test("the nightly examples validate with recording, transcription and freshly issued TLS inputs", async () => {
   const directory = await mkdtemp(join(tmpdir(), "chalk-nightly-full-runtime-"));
-  function command(args) {
-    const result = spawnSync("openssl", args, { cwd: directory, encoding: "utf8" });
-    assert.equal(result.status, 0, result.stderr);
-  }
   try {
     await runtimeFixture(directory, "nightly");
     const manifestPath = join(directory, "manifest.json");
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
     manifest.images.recorder_control = manifest.images.api;
     await writeFile(manifestPath, JSON.stringify(manifest));
-    command(["req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes", "-days", "2", "-subj", "/CN=nightly-test-ca", "-keyout", "ca.key", "-out", "ca.crt"]);
-    command(["req", "-new", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes", "-subj", "/CN=nightly-recording-control.chalkmeet.com", "-keyout", "leaf.key", "-out", "leaf.csr"]);
-    await writeFile(join(directory, "extensions"), "basicConstraints=CA:FALSE\nextendedKeyUsage=serverAuth,clientAuth\nsubjectAltName=DNS:nightly-recording-control.chalkmeet.com,DNS:chalk-api\n");
-    command(["x509", "-req", "-in", "leaf.csr", "-CA", "ca.crt", "-CAkey", "ca.key", "-CAcreateserial", "-days", "2", "-extfile", "extensions", "-out", "leaf.crt"]);
-    const inventory = JSON.parse(await readFile(new URL("contracts/runtime-inputs.json", managedRoot), "utf8"));
-    for (const input of inventory.inputs.filter((input) => input.kind === "secret-file" && input.id !== "cloudflare-tunnel-token")) {
-      const relative = input.destination.replace("secret-inputs/", "");
-      const target = join(directory, "secrets", relative);
-      await mkdir(dirname(target), { recursive: true });
-      const key = input.id.endsWith("key");
-      const ca = input.id.includes("ca") && !input.id.includes("capture");
-      const data = input.id.endsWith("token") ? "test-only-token" : await readFile(join(directory, `${ca ? "ca" : "leaf"}.${key ? "key" : "crt"}`));
-      await writeFile(target, data, { mode: 0o600 });
-    }
-    for (const role of ["capture", "render", "issuer"]) {
-      let values = (await readFile(new URL(`../nightly/env/recorder-${role}.env.example`, managedRoot), "utf8")).replaceAll(/__[A-Z0-9_]+__/g, "test-only-value");
-      if (role !== "issuer") values += `\nCHALK_RECORDER_FLEET_ROLE=${role}\nCHALK_RECORDER_FLEET_ENVIRONMENT=nightly\nCHALK_RECORDER_FLEET_MAX_NODES=1\nCHALK_RECORDER_FLEET_SLOTS_PER_NODE=1\n`;
-      else values += "\nCHALK_RECORDER_FLEET_ISSUER_ENVIRONMENT=nightly\n";
-      await writeFile(join(directory, `recorder-${role}.env`), values, { mode: 0o600 });
-    }
+    await issueTestCertificates(directory);
+    await writeSecretInputs(directory);
+    await writeRecorderInputs(directory);
     const args = [new URL("scripts/validate-runtime", managedRoot).pathname, "--env-root", directory, "--secret-root", join(directory, "secrets"), "--manifest", manifestPath, "--sync-proof", join(directory, "proof.json"), "--excluded-secrets", "cloudflare-tunnel-token", "--environment", "nightly"];
     const validated = spawnSync("bash", args, { encoding: "utf8" });
     assert.equal(validated.status, 0, validated.stderr);
@@ -127,3 +106,45 @@ test("the nightly examples validate with recording, transcription and freshly is
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+async function issueTestCertificates(directory) {
+  function command(args) {
+    const result = spawnSync("openssl", args, { cwd: directory, encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+  }
+  command(["req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes", "-days", "2", "-subj", "/CN=nightly-test-ca", "-keyout", "ca.key", "-out", "ca.crt"]);
+  command(["req", "-new", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes", "-subj", "/CN=nightly-recording-control.chalkmeet.com", "-keyout", "leaf.key", "-out", "leaf.csr"]);
+  await writeFile(join(directory, "extensions"), "basicConstraints=CA:FALSE\nextendedKeyUsage=serverAuth,clientAuth\nsubjectAltName=DNS:nightly-recording-control.chalkmeet.com,DNS:chalk-api\n");
+  command(["x509", "-req", "-in", "leaf.csr", "-CA", "ca.crt", "-CAkey", "ca.key", "-CAcreateserial", "-days", "2", "-extfile", "extensions", "-out", "leaf.crt"]);
+}
+
+async function writeSecretInputs(directory) {
+  const inventory = JSON.parse(await readFile(new URL("contracts/runtime-inputs.json", managedRoot), "utf8"));
+  for (const input of inventory.inputs.filter((input) => input.kind === "secret-file" && input.id !== "cloudflare-tunnel-token")) {
+    const relative = input.destination.replace("secret-inputs/", "");
+    const target = join(directory, "secrets", relative);
+    await mkdir(dirname(target), { recursive: true });
+    const data = await secretFixture(input, directory);
+    await writeFile(target, data, { mode: 0o600 });
+  }
+}
+
+async function writeRecorderInputs(directory) {
+  for (const role of ["capture", "render", "issuer"]) {
+    let values = (await readFile(new URL(`../nightly/env/recorder-${role}.env.example`, managedRoot), "utf8")).replaceAll(/__[A-Z0-9_]+__/g, "test-only-value");
+    if (role !== "issuer") values += `\nCHALK_RECORDER_FLEET_ROLE=${role}\nCHALK_RECORDER_FLEET_ENVIRONMENT=nightly\nCHALK_RECORDER_FLEET_MAX_NODES=1\nCHALK_RECORDER_FLEET_SLOTS_PER_NODE=1\n`;
+    else values += "\nCHALK_RECORDER_FLEET_ISSUER_ENVIRONMENT=nightly\n";
+    await writeFile(join(directory, `recorder-${role}.env`), values, { mode: 0o600 });
+  }
+}
+
+async function secretFixture(input, directory) {
+  if (input.id.endsWith("token")) return "test-only-token";
+  const basename = certificateBasename(input.id);
+  const extension = input.id.endsWith("key") ? "key" : "crt";
+  return readFile(join(directory, `${basename}.${extension}`));
+}
+
+function certificateBasename(id) {
+  return id.includes("ca") && !id.includes("capture") ? "ca" : "leaf";
+}

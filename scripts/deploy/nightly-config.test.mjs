@@ -36,26 +36,42 @@ test("production rendering matches master byte-for-byte; nightly caps and names 
     const images = Object.fromEntries(["api", "sync", "redis", "cloudflared", "recorder_control"].map((name) => [name, `example.invalid/${name}@sha256:${"a".repeat(64)}`]));
     const manifest = join(directory, "release.json");
     await writeFile(manifest, JSON.stringify({ images, database_compatibility: { minimum_migration: 20260819130000 } }));
-    for (const recording of [false, true]) {
-      if (!recording) delete images.recorder_control;
-      else images.recorder_control = images.api;
-      await writeFile(manifest, JSON.stringify({ images, database_compatibility: { minimum_migration: 20260819130000 } }));
-      const before = join(directory, `before-${recording}`);
-      const after = join(directory, `after-${recording}`);
-      run("bash", [join(baseline, managed, "scripts/render-runtime"), manifest, before]);
-      run("bash", [join(root, managed, "scripts/render-runtime"), manifest, after, "production"]);
-      assert.deepEqual(await files(after), await files(before));
-      for (const file of await files(before)) assert.deepEqual(await readFile(join(after, file)), await readFile(join(before, file)), file);
-    }
+    await assertProductionRendering(directory, baseline, manifest, images);
     await assertNightlyConfig(directory, manifest);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
 });
 
+async function assertProductionRendering(directory, baseline, manifest, images) {
+  for (const recording of [false, true]) {
+    if (!recording) delete images.recorder_control;
+    else images.recorder_control = images.api;
+    await writeFile(manifest, JSON.stringify({ images, database_compatibility: { minimum_migration: 20260819130000 } }));
+    const before = join(directory, `before-${recording}`);
+    const after = join(directory, `after-${recording}`);
+    run("bash", [join(baseline, managed, "scripts/render-runtime"), manifest, before]);
+    run("bash", [join(root, managed, "scripts/render-runtime"), manifest, after, "production"]);
+    assert.deepEqual(await files(after), await files(before));
+    for (const file of await files(before)) assert.deepEqual(await readFile(join(after, file)), await readFile(join(before, file)), file);
+  }
+}
+
 async function assertNightlyConfig(directory, manifest) {
   const nightly = join(directory, "nightly");
   run("bash", [join(root, managed, "scripts/render-runtime"), manifest, nightly, "nightly"]);
+  await assertNightlyMemoryCaps(nightly);
+  const ingress = JSON.parse(await readFile(join(root, managed, "cloudflare/ingress.nightly.json"), "utf8"));
+  assert.equal(ingress.environment, "nightly");
+  assert.deepEqual(ingress.routes.map((route) => route.hostname).filter(Boolean), ["nightly-api.chalkmeet.com", "nightly-sync.chalkmeet.com"]);
+  for (const component of ["api", "sync"]) {
+    const example = await readFile(join(root, managed, `env/${component}.nightly.env.example`), "utf8");
+    assert.doesNotMatch(example, /=production|https:\/\/(?:api|sync)\.chalkmeet\.com|=chalk-sync\n/);
+    assert.match(example, /CHALK_API_ENV=nightly/);
+  }
+}
+
+async function assertNightlyMemoryCaps(nightly) {
   let totalMiB = 0;
   for (const file of await files(join(nightly, "quadlet"))) {
     const text = await readFile(join(nightly, "quadlet", file), "utf8");
@@ -66,12 +82,4 @@ async function assertNightlyConfig(directory, manifest) {
   }
   assert.equal(totalMiB, 880);
   assert.ok(2048 - totalMiB - 640 >= 512);
-  const ingress = JSON.parse(await readFile(join(root, managed, "cloudflare/ingress.nightly.json"), "utf8"));
-  assert.equal(ingress.environment, "nightly");
-  assert.deepEqual(ingress.routes.map((route) => route.hostname).filter(Boolean), ["nightly-api.chalkmeet.com", "nightly-sync.chalkmeet.com"]);
-  for (const component of ["api", "sync"]) {
-    const example = await readFile(join(root, managed, `env/${component}.nightly.env.example`), "utf8");
-    assert.doesNotMatch(example, /=production|https:\/\/(?:api|sync)\.chalkmeet\.com|=chalk-sync\n/);
-    assert.match(example, /CHALK_API_ENV=nightly/);
-  }
 }
