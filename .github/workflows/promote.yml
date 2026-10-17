@@ -1,11 +1,6 @@
 name: Promote newest held nightly
 on:
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: Select and verify exact artifacts without deploying
-        type: boolean
-        default: false
 permissions:
   contents: read
   actions: read
@@ -18,89 +13,66 @@ jobs:
   select:
     runs-on: ubuntu-24.04
     outputs:
-      run_id: ${{ steps.select.outputs.run_id }}
-      target_sha: ${{ steps.select.outputs.target_sha }}
-      release_id: ${{ steps.select.outputs.release_id }}
-      set_artifact_id: ${{ steps.select.outputs.set_artifact_id }}
-      set_sha256: ${{ steps.select.outputs.set_sha256 }}
-      manifest_artifact_id: ${{ steps.select.outputs.manifest_artifact_id }}
-      manifest_sha256: ${{ steps.select.outputs.manifest_sha256 }}
-      deployment_id: ${{ steps.select.outputs.deployment_id }}
-      previous_run_id: ${{ steps.select.outputs.previous_run_id }}
-      previous_target_sha: ${{ steps.select.outputs.previous_target_sha }}
-      previous_release_id: ${{ steps.select.outputs.previous_release_id }}
-      previous_set_artifact_id: ${{ steps.select.outputs.previous_set_artifact_id }}
-      previous_set_sha256: ${{ steps.select.outputs.previous_set_sha256 }}
-      previous_manifest_artifact_id: ${{ steps.select.outputs.previous_manifest_artifact_id }}
-      previous_manifest_sha256: ${{ steps.select.outputs.previous_manifest_sha256 }}
-      previous_deployment_id: ${{ steps.select.outputs.previous_deployment_id }}
+      selection: ${{ steps.select.outputs.selection }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/release-tools
-      - name: Pick newest available held nightly and verify rollback bytes
+      - name: Choose newest held record and verify that exact choice and rollback source
         id: select
         env:
           GH_TOKEN: ${{ github.token }}
-          CHALK_IMMUTABLE_REPLAY_READY: ${{ vars.CHALK_IMMUTABLE_REPLAY_READY }}
-        run: python scripts/releases/release.py select
+        run: python3 scripts/releases/release.py select
   approve:
     needs: select
-    if: "!inputs.dry_run"
     runs-on: ubuntu-24.04
     environment: production
-    env:
-      GH_TOKEN: ${{ github.token }}
-      CHALK_MANAGED_AWS_REGION: ${{ vars.CHALK_MANAGED_AWS_REGION }}
-      CHALK_MANAGED_INSTANCE_ID: ${{ vars.CHALK_MANAGED_INSTANCE_ID }}
-      CHALK_MANAGED_PARAMETER_PREFIX: ${{ vars.CHALK_MANAGED_PARAMETER_PREFIX }}
-      CHALK_MANAGED_RECORDER_CONFIG_PARAMETER: ${{ vars.CHALK_MANAGED_RECORDER_CONFIG_PARAMETER }}
-      CHALK_RELEASE_OBSERVER_DOCUMENT_NAME: ${{ vars.CHALK_RELEASE_OBSERVER_DOCUMENT_NAME }}
-      CHALK_RELEASE_OBSERVER_DOCUMENT_VERSION: ${{ vars.CHALK_RELEASE_OBSERVER_DOCUMENT_VERSION }}
+    outputs:
+      pages_deployment_id: ${{ steps.pages.outputs.pages_deployment_id }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/release-tools
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
-      - name: Resolve rollback bytes after approval
-        env:
-          RUN_ID: ${{ needs.select.outputs.previous_run_id }}
-          TARGET_SHA: ${{ needs.select.outputs.previous_target_sha }}
-          RELEASE_ID: ${{ needs.select.outputs.previous_release_id }}
-          SET_ARTIFACT_ID: ${{ needs.select.outputs.previous_set_artifact_id }}
-          SET_SHA256: ${{ needs.select.outputs.previous_set_sha256 }}
-          MANIFEST_ARTIFACT_ID: ${{ needs.select.outputs.previous_manifest_artifact_id }}
-          MANIFEST_SHA256: ${{ needs.select.outputs.previous_manifest_sha256 }}
-        run: python scripts/releases/release.py resolve
-      - name: Confirm the rollback set is what production currently serves
-        run: python scripts/releases/observe.py --target production --release-set release-input/release-set.json
-      - name: Recheck held record after protected-environment approval
+      - name: Recheck exact selection after approval under the production lock
         env:
           GH_TOKEN: ${{ github.token }}
-          DEPLOYMENT_ID: ${{ needs.select.outputs.deployment_id }}
-          SET_SHA256: ${{ needs.select.outputs.set_sha256 }}
-        run: python scripts/releases/release.py recheck
+          SELECTION: ${{ needs.select.outputs.selection }}
+        run: python3 scripts/releases/release.py recheck
+      - name: Save the live production Pages deployment before any upload
+        id: pages
+        env:
+          CLOUDFLARE_ACCOUNT_ID: '5281943bd26d5bdcf4c3915606cd6bfb'
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PAGES_PROJECT: chalk-web
+        run: |
+          python3 scripts/releases/web.py current
+      - name: Retain rollback source and saved Pages identity
+        env:
+          SELECTION: ${{ needs.select.outputs.selection }}
+          PAGES_ID: ${{ steps.pages.outputs.pages_deployment_id }}
+        run: |
+          jq -n --argjson source "$SELECTION" --arg pages "$PAGES_ID" '{source:$source, pages_deployment_id:$pages}' > rollback.json
+          cat rollback.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: promotion-rollback-${{ github.run_attempt }}
+          path: rollback.json
+          retention-days: 365
   release:
     needs: [select, approve]
     uses: ./.github/workflows/ci.yml
     with:
-      target_sha: ${{ needs.select.outputs.target_sha }}
+      target_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
       release_managed: false
       deploy_managed: true
       managed_environment: production
       deploy_web: true
       orchestrated: true
-      manifest_run_id: ${{ needs.select.outputs.run_id }}
-      manifest_artifact_id: ${{ needs.select.outputs.manifest_artifact_id }}
-      manifest_sha256: ${{ needs.select.outputs.manifest_sha256 }}
-      reuse_release_id: ${{ needs.select.outputs.release_id }}
-      release_set_artifact_id: ${{ needs.select.outputs.set_artifact_id }}
-      release_set_sha256: ${{ needs.select.outputs.set_sha256 }}
+      manifest_run_id: ${{ fromJSON(needs.select.outputs.selection).selection.run_id }}
+      manifest_artifact_id: ${{ fromJSON(needs.select.outputs.selection).selection.manifest_artifact_id }}
+      manifest_sha256: ${{ fromJSON(needs.select.outputs.selection).selection.manifest_sha256 }}
+      reuse_release_id: ${{ fromJSON(needs.select.outputs.selection).selection.release_id }}
+      web_artifact: ${{ toJSON(fromJSON(needs.select.outputs.selection).selection.web.production) }}
     secrets: inherit
   proof:
     needs: release
@@ -109,79 +81,42 @@ jobs:
       environment: production
       proofs: smoke transcript
     secrets: inherit
-  observe:
-    needs: [select, release, proof]
-    if: always() && needs.release.result != 'skipped'
-    uses: ./.github/workflows/release-observation.yml
-    with:
-      environment: production
-      source_deployment_id: ${{ needs.select.outputs.deployment_id }}
-      activated_at: ${{ needs.release.outputs.activated_at }}
-      deploy_result: ${{ needs.release.result }}
-      proof_result: ${{ needs.proof.result == 'success' && needs.proof.outputs.result || 'failed' }}
-      run_id: ${{ needs.select.outputs.run_id }}
-      target_sha: ${{ needs.select.outputs.target_sha }}
-      release_id: ${{ needs.select.outputs.release_id }}
-      set_artifact_id: ${{ needs.select.outputs.set_artifact_id }}
-      set_sha256: ${{ needs.select.outputs.set_sha256 }}
-      manifest_artifact_id: ${{ needs.select.outputs.manifest_artifact_id }}
-      manifest_sha256: ${{ needs.select.outputs.manifest_sha256 }}
-    secrets: inherit
   rollback:
-    needs: [select, release, observe]
+    needs: [select, approve, release, proof]
     if: >-
-      always() && !inputs.dry_run && needs.release.result != 'skipped' &&
-      (needs.release.result != 'success' || needs.observe.result != 'success')
+      always() && needs.approve.result == 'success' && needs.release.result != 'skipped' &&
+      (needs.release.result != 'success' || needs.proof.result != 'success' || needs.proof.outputs.result != 'passed')
     uses: ./.github/workflows/ci.yml
     with:
+      target_sha: ${{ fromJSON(needs.select.outputs.selection).previous.target_sha }}
       release_managed: false
       deploy_managed: true
       managed_environment: production
       deploy_web: true
       orchestrated: true
-      target_sha: ${{ needs.select.outputs.previous_target_sha }}
-      manifest_run_id: ${{ needs.select.outputs.previous_run_id }}
-      manifest_artifact_id: ${{ needs.select.outputs.previous_manifest_artifact_id }}
-      manifest_sha256: ${{ needs.select.outputs.previous_manifest_sha256 }}
-      reuse_release_id: ${{ needs.select.outputs.previous_release_id }}
-      release_set_artifact_id: ${{ needs.select.outputs.previous_set_artifact_id }}
-      release_set_sha256: ${{ needs.select.outputs.previous_set_sha256 }}
-    secrets: inherit
-  rollback-proof:
-    needs: rollback
-    uses: ./.github/workflows/real-call-proof.yml
-    with:
-      environment: production
-      proofs: smoke transcript
-    secrets: inherit
-  rollback-observe:
-    needs: [select, rollback, rollback-proof]
-    if: always() && needs.rollback.result != 'skipped'
-    uses: ./.github/workflows/release-observation.yml
-    with:
-      environment: production
-      activated_at: ${{ needs.rollback.outputs.activated_at }}
-      deploy_result: ${{ needs.rollback.result }}
-      proof_result: ${{ needs.rollback-proof.result == 'success' && needs.rollback-proof.outputs.result || 'failed' }}
-      run_id: ${{ needs.select.outputs.previous_run_id }}
-      target_sha: ${{ needs.select.outputs.previous_target_sha }}
-      release_id: ${{ needs.select.outputs.previous_release_id }}
-      set_artifact_id: ${{ needs.select.outputs.previous_set_artifact_id }}
-      set_sha256: ${{ needs.select.outputs.previous_set_sha256 }}
-      manifest_artifact_id: ${{ needs.select.outputs.previous_manifest_artifact_id }}
-      manifest_sha256: ${{ needs.select.outputs.previous_manifest_sha256 }}
+      manifest_run_id: ${{ fromJSON(needs.select.outputs.selection).previous.run_id }}
+      manifest_artifact_id: ${{ fromJSON(needs.select.outputs.selection).previous.manifest_artifact_id }}
+      manifest_sha256: ${{ fromJSON(needs.select.outputs.selection).previous.manifest_sha256 }}
+      reuse_release_id: ${{ fromJSON(needs.select.outputs.selection).previous.release_id }}
+      pages_rollback_id: ${{ needs.approve.outputs.pages_deployment_id }}
     secrets: inherit
   result:
-    needs: [release, observe, rollback, rollback-observe]
-    if: always() && !inputs.dry_run
+    needs: [select, approve, release, proof, rollback]
+    if: always()
     runs-on: ubuntu-24.04
     steps:
-      - name: A failed promotion stays failed even after a healthy rollback
+      - name: Failed promotion stays failed even after successful rollback
         env:
-          RELEASE: ${{ needs.release.result }}
-          OBSERVATION: ${{ needs.observe.result }}
-          ROLLBACK: ${{ needs.rollback.result }}
-          ROLLBACK_OBSERVATION: ${{ needs.rollback-observe.result }}
+          RELEASE_RESULT: ${{ needs.release.result }}
+          PROOF_RESULT: ${{ needs.proof.result == 'success' && needs.proof.outputs.result || 'failed' }}
+          ROLLBACK_RESULT: ${{ needs.rollback.result }}
+          SOURCE_RELEASE: ${{ fromJSON(needs.select.outputs.selection || '{}').selection.release_id }}
+          APPLIED_RELEASE: ${{ needs.release.outputs.applied_release_id }}
+          ROLLBACK_RELEASE: ${{ needs.rollback.outputs.applied_release_id }}
         run: |
-          printf 'Release=%s Proof/identity=%s Rollback=%s Rollback-proof=%s\n' "$RELEASE" "$OBSERVATION" "$ROLLBACK" "$ROLLBACK_OBSERVATION" >> "$GITHUB_STEP_SUMMARY"
-          test "$RELEASE/$OBSERVATION" = success/success
+          printf 'Source: %s\nApplied: %s\nRollback: %s (%s)\n' "$SOURCE_RELEASE" "$APPLIED_RELEASE" "$ROLLBACK_RELEASE" "$ROLLBACK_RESULT" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$ROLLBACK_RESULT" != skipped && "$ROLLBACK_RESULT" != success ]]; then
+            echo 'ROLLBACK FAILED: manual recovery required' >&2
+            exit 1
+          fi
+          test "$RELEASE_RESULT" = success && test "$PROOF_RESULT" = passed
