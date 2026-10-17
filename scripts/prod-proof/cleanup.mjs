@@ -87,7 +87,7 @@ export async function cleanupByRunId(config, runId, directory = resolve(".privat
   return results;
 }
 async function cleanupWebhook(call, config, known, base, attempt) {
-  const endpointId = config.webhook_endpoint_id ?? known.webhook?.id;
+  const endpointId = config.webhook_endpoint_id;
   if (endpointId) {
     await attempt("webhook-endpoint", endpointId, async () => {
       const endpoint = await rotateAndPatchEndpoint(call, `${base}/webhook-endpoints/${endpointId}`, { enabled: false });
@@ -99,14 +99,14 @@ async function cleanupWebhook(call, config, known, base, attempt) {
     await attempt("webhook-catcher", catcherId, async () => {
       const response = await fetch(new URL(`/token/${catcherId}`, config.webhook_service_url), { method: "DELETE", signal: AbortSignal.timeout(15_000) });
       await response.body?.cancel();
-      check(response.ok || response.status === 404, "Catcher deletion failed");
+      check([response.ok, response.status === 404].some(Boolean), "Catcher deletion failed");
     });
   }
 }
 async function readOwnership(directory) {
   try {
     const ownership = JSON.parse(await readFile(`${directory}/ownership.json`, "utf8"));
-    check(ownership && typeof ownership === "object" && !Array.isArray(ownership), "Corrupt proof ownership");
+    check(Object.getPrototypeOf(ownership) === Object.prototype, "Corrupt proof ownership");
     return ownership;
   } catch (error) {
     if (error.code === "ENOENT") return {};
@@ -132,6 +132,7 @@ async function endEpisode(call, path, episode) {
   await waitFor("cleanup Episode ended", async () => (await call("GET", `${path}/${episode.id}`)).status === "ended", 60_000, 1000, AbortSignal.timeout(60_000));
 }
 async function sweepSpace(call, base, space, runId, now) {
+  if (!(Date.parse(space.created_at) < now - 2 * 3600_000)) return;
   const path = `${base}/spaces/${space.id}/episodes`;
   const episodes = await list(call, path, "episodes");
   const owned = episodes.filter((episode) => episode.metadata?.proof_run_id === runId);
@@ -141,7 +142,6 @@ async function sweepSpace(call, base, space, runId, now) {
   }
   // Never archive a Space with a fresh or foreign Episode.
   if (stale.length !== episodes.length) return;
-  if (!episodes.length && !(Date.parse(space.created_at) < now - 2 * 3600_000)) return;
   await call("POST", `${base}/spaces/${space.id}/archive`, {});
   check((await call("GET", `${base}/spaces/${space.id}`)).archived, "Stale Space not archived");
 }
@@ -166,16 +166,8 @@ async function disposeResource(run, resource) {
 }
 export async function cleanupRun(run) {
   const failures = [];
-  try {
-    await cleanupByRunId(run.config, run.runId, run.directory, run.ownership);
-  } catch (error) {
-    failures.push(error);
-  }
-  try {
-    await verifyKeyRejected(run);
-  } catch (error) {
-    failures.push(error);
-  }
+  await cleanupByRunId(run.config, run.runId, run.directory, run.ownership).catch((error) => failures.push(error));
+  await verifyKeyRejected(run).catch((error) => failures.push(error));
   // Remote ownership cleanup is independent of browsers and the aborted proof signal.
   for (const resource of [...run.resources].reverse()) failures.push(...(await disposeResource(run, resource)));
   await save(`${run.directory}/cleanup.json`, run.cleanup);

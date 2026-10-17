@@ -109,6 +109,7 @@ test("cleanup uses persisted IDs, revokes first and is repeatable after abort", 
     if (value === undefined) res.writeHead(204).end();
     else res.end(JSON.stringify(value));
   });
+  config.webhook_endpoint_id = "hook";
   const directory = await mkdtemp(join(tmpdir(), "proof-cleanup-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const controller = new AbortController();
@@ -134,7 +135,7 @@ test("cleanup uses persisted IDs, revokes first and is repeatable after abort", 
 });
 
 function sweepSpacesPage(url) {
-  const space = (id, name = `chalk-proof:${id}`) => ({ id, name, metadata: { proof_run_id: id } });
+  const space = (id, name = `chalk-proof:${id}`) => ({ id, name, created_at: new Date(Date.now() - 3 * 3600_000).toISOString(), metadata: { proof_run_id: id } });
   return {
     "": { spaces: [space("fresh"), space("foreign", "unrelated")], pagination: { next_cursor: "second" } },
     second: { spaces: [space("old")], pagination: {} },
@@ -224,12 +225,10 @@ test("truncated ownership reports failure but in-memory key, endpoint, Spaces an
     calls.push(`${req.method} ${path}`);
     if (req.headers.authorization === "Bearer temporary") res.writeHead(401).end("{}");
     else if (req.method === "DELETE") res.writeHead(204).end();
-    else if (path.endsWith("/spaces")) res.end(JSON.stringify({ spaces: [], pagination: {} }));
-    else if (path.endsWith("/rotate-secret")) res.end(JSON.stringify({ revision: 9, secret: "rotated" }));
     else {
-      assert.equal(req.method, "PATCH");
-      assert.equal(req.headers["if-match"], '"9"');
-      res.end(JSON.stringify({ enabled: false }));
+      if (req.method === "PATCH") assert.equal(req.headers["if-match"], '"9"');
+      const responses = { spaces: { spaces: [], pagination: {} }, "rotate-secret": { revision: 9, secret: "rotated" }, hook: { enabled: false } };
+      res.end(JSON.stringify(responses[path.split("/").at(-1)]));
     }
   });
   config.webhook_endpoint_id = "hook";
