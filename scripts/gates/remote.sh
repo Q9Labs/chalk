@@ -67,7 +67,7 @@ if ((dry_run)); then
 fi
 log_dir="${CHALK_REMOTE_LOG_DIR:-${TMPDIR:-/tmp}/chalk-remote-logs}"
 mkdir -p "$log_dir"
-log_file="$log_dir/$(date -u +%Y%m%dT%H%M%SZ)-${gate/--/command}-$$.log"
+log_file="$(mktemp "$log_dir/$(date -u +%Y%m%dT%H%M%SZ)-${gate/--/command}.XXXXXX")"
 echo "==> testbox $gate; full local log: $log_file"
 set +e
 "${args[@]}" 2>&1 | tee "$log_file"
