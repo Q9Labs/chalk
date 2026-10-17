@@ -806,6 +806,7 @@ mkdir -p "$nightly_recording_state"
 make_request nightly-recording "${fixture_root}/nightly-recording-request.json" '[]' nightly
 make_manifest nightly-recording | jq '.images.recorder_control = .images.api' >"${fixture_root}/nightly-recording-manifest.json"
 run_controller "$nightly_recording_state" "${fixture_root}/nightly-recording-request.json" "${fixture_root}/nightly-recording-manifest.json" ok >/dev/null
+run_restore "$nightly_recording_state" ok >/dev/null || fail "nightly recorder reboot restore failed"
 for role in capture render; do
   grep -Fqx 'CHALK_RECORDER_FLEET_MAX_NODES=1' "${fixture_root}/run/env/recorder-${role}.env" || fail "nightly maximum was not one"
   grep -Fqx 'CHALK_RECORDER_FLEET_ENVIRONMENT=nightly' "${fixture_root}/run/env/recorder-${role}.env" || fail "nightly recorder identity mismatch"
