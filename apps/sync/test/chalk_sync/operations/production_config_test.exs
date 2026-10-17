@@ -65,7 +65,10 @@ defmodule ChalkSync.Operations.ProductionConfigTest do
     assert_raise RuntimeError, "CHALK_SYNC_TOKEN_ISSUER must select nightly", &read_config/0
     System.put_env("CHALK_SYNC_TOKEN_ISSUER", "https://nightly-api.chalkmeet.com")
     System.put_env("CHALK_SYNC_LOCAL_PROOF", "true")
-    assert_raise RuntimeError, "nightly cannot use local proof or parity authentication", &read_config/0
+
+    assert_raise RuntimeError,
+                 "nightly cannot use local proof or parity authentication",
+                 &read_config/0
   end
 
   defp read_config do
