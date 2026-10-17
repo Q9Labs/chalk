@@ -403,6 +403,8 @@ class Release:
                    "CHALK_RECORDER_FLEET_IMAGE_DIGEST": self.state["image_digest"]}
         if role == "capture":
             updates["CHALK_RECORDER_CAPTURE_PROFILE_EVIDENCE_SHA256"] = self.state["qualification"]["receipt_sha256"]
+        if self.args.environment == "nightly" and "CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST" in env_values(parameter["Value"]):
+            updates["CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST"] = self.state["image_digest"]
         value = replace_pins(parameter["Value"], updates)
         metadata = self.provider.aws("ssm", "describe-parameters", "--parameter-filters", "Key=Name,Option=Equals,Values=" + parameter["Name"])["Parameters"]
         require(len(metadata) == 1, "parameter metadata unavailable")

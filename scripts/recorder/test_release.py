@@ -160,6 +160,40 @@ class ReleaseContracts(unittest.TestCase):
         self.assertEqual(updated, text.replace("IMAGE_ID=123", "IMAGE_ID=456").replace("RELEASE_ID=old", "RELEASE_ID=new"))
         self.assertEqual(env_values(updated)["SECRET"], "a=b")
 
+    def test_nightly_pin_publication_keeps_bootstrap_claim_bound_to_image(self):
+        old_digest, new_digest = "sha256:" + "a" * 64, "sha256:" + "b" * 64
+        before = "\n".join(["CHALK_RECORDER_FLEET_IMAGE_ID=123", "CHALK_RECORDER_FLEET_RELEASE_ID=old",
+                            "CHALK_RECORDER_FLEET_IMAGE_DIGEST=" + old_digest,
+                            "CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST=" + old_digest]) + "\n"
+        store = {"Name": "/test/render-env", "Type": "SecureString", "Version": 1, "Value": before}
+        release = Release.__new__(Release)
+        release.args = Mock(environment="nightly")
+        release.config = {"worker": {"region": "test1", "size": "c-8"}}
+        release.state = {"role": "render", "image_id": "456", "release_id": "new", "image_digest": new_digest,
+                         "pins": {"render": {"before_version": 1, "before_sha256": digest(before)}}}
+        release.provider, release.save = Mock(), Mock()
+        release.parameter_name = Mock(return_value=store["Name"])
+        release.provider.parameter.side_effect = lambda _name: dict(store)
+
+        def aws(_service, operation, *_args, **kwargs):
+            if operation == "describe-parameters":
+                return {"Parameters": [{}]}
+            self.assertEqual(operation, "put-parameter")
+            store.update(Value=kwargs["payload"]["Value"], Version=2)
+            return {"Version": 2}
+
+        release.provider.aws.side_effect = aws
+        with tempfile.TemporaryDirectory() as directory:
+            release.directory = Path(directory)
+            receipt = b'{"result":"PASS"}'
+            (release.directory / "boot-receipt.json").write_bytes(receipt)
+            release.state["qualification"] = {"receipt_sha256": digest(receipt)}
+            with patch("release.check_qualification"):
+                result = release.publish_pins()
+        values = env_values(store["Value"])
+        self.assertEqual(values["CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST"], new_digest)
+        self.assertIn("CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST", result["changed_keys"])
+
     def test_pin_scope_is_closed(self):
         with self.assertRaises(ValueError):
             replace_pins("SECRET=x\n", {"SECRET": "changed"})

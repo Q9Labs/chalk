@@ -34,7 +34,7 @@ def env_values(text):
 
 def replace_pins(text, updates):
     before = env_values(text)
-    allowed = PIN_KEYS | {"CHALK_RECORDER_CAPTURE_PROFILE_EVIDENCE_SHA256"}
+    allowed = PIN_KEYS | {"CHALK_RECORDER_CAPTURE_PROFILE_EVIDENCE_SHA256", "CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST"}
     require(set(updates) <= allowed and set(updates) <= set(before), "pin update exceeds allowlist")
     lines = []
     for line in text.splitlines(keepends=True):
