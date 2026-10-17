@@ -595,10 +595,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
   }
   async #reconcileRemotePublications(authoritative: CloudflareSFUPublicationSnapshot, generation: number): Promise<void> {
-    const cursor = this.#validatedRemotePublicationCursor(authoritative);
+    const cursor = this.#nextRemotePublicationCursor(authoritative);
     if (cursor === null) return;
-    const ordering = comparePublicationCursor(this.#cursor, cursor);
-    if (ordering === "stale" || (ordering === "same" && !this.#remotePullIncomplete)) return;
     const participantRevision = this.#remoteParticipantRevision;
     const desired = this.#desiredRemotePublications(authoritative, cursor);
     const toPull = this.#pendingRemotePulls(desired);
@@ -637,14 +635,17 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       })
       .map(([, publication]) => publication);
   }
-  #validatedRemotePublicationCursor(authoritative: CloudflareSFUPublicationSnapshot): PublicationCursor | null {
+  #nextRemotePublicationCursor(authoritative: CloudflareSFUPublicationSnapshot): PublicationCursor | null {
     if (this.#cursor?.signature === INVALID_PUBLICATION_SIGNATURE && this.#cursor.incarnation === authoritative.incarnation && this.#cursor.sequence === authoritative.sequence) return null;
+    let cursor: PublicationCursor;
     try {
-      return validatePublicationSnapshot(authoritative);
+      cursor = validatePublicationSnapshot(authoritative);
     } catch (error) {
       this.#quarantineInvalidRemotePublicationCursor(authoritative);
       throw error;
     }
+    const ordering = comparePublicationCursor(this.#cursor, cursor);
+    return ordering === "stale" || (ordering === "same" && !this.#remotePullIncomplete) ? null : cursor;
   }
   #desiredRemotePublications(authoritative: CloudflareSFUPublicationSnapshot, cursor: PublicationCursor): ReturnType<typeof desiredRemotePublications> {
     try {
