@@ -43,3 +43,4 @@ function authHeaders(auth: ChalkAuth | undefined): Record<string, string> {
       return { Authorization: `Bearer ${auth.token}` };
   }
 }
+// gate probe
