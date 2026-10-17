@@ -346,28 +346,36 @@ func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenI
 			syncCredential = token
 			response.SyncToken, response.ExpiresAt = token.Value, token.ExpiresAt.UTC().Format(time.RFC3339)
 		}
-		join, err := createParticipantJoin(ctx, spacesService, tenantsService, media, generations, admission.Participant)
+		join, err := createParticipantJoin(ctx, spacesService, tenantsService, media, admission.Participant)
 		if err != nil {
 			return participantLifecycleResponse{}, err
 		}
 		if join.Provider != "" {
 			response.MediaPlane = &mediaPlaneResponse{Provider: string(join.Provider), ClientPayload: join.ClientPayload}
 		}
-		if mediaTokens != nil && syncCredential.Value != "" && join.Provider == mediaplane.ProviderCloudflareSFU {
+		if join.Provider == mediaplane.ProviderCloudflareSFU {
+			if generations == nil {
+				return participantLifecycleResponse{}, apiErrorServiceUnavailable
+			}
 			accessRequest := issueAccessGrantRequest{TenantID: admission.Participant.TenantID, SpaceID: admission.Participant.SpaceID, EpisodeID: admission.Participant.EpisodeID, ParticipantID: admission.Participant.ID, Body: issueAccessGrantBody{ParticipantGeneration: admission.Participant.Generation}}
 			subject, err := accessGrantSubjectForJoin(accessRequest, join)
 			if err != nil {
 				return participantLifecycleResponse{}, err
 			}
-			mediaCredential, err := mediaTokens.Issue(ctx, subject)
-			if err != nil {
+			if mediaTokens != nil && syncCredential.Value != "" {
+				mediaCredential, err := mediaTokens.Issue(ctx, subject)
+				if err != nil {
+					return participantLifecycleResponse{}, err
+				}
+				response.Access = func() *accessGrantResponse {
+					grant := newAccessGrantResponse(subject, syncCredential, mediaCredential, join)
+
+					return &grant
+				}()
+			}
+			if err := generations.BindParticipantMediaConnection(ctx, subject); err != nil {
 				return participantLifecycleResponse{}, err
 			}
-			response.Access = func() *accessGrantResponse {
-				grant := newAccessGrantResponse(subject, syncCredential, mediaCredential, join)
-
-				return &grant
-			}()
 		}
 		return response, nil
 	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
@@ -376,26 +384,12 @@ func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenI
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorInvalidRequestKey, apiErrorSpaceNotFound, apiErrorEpisodeNotFound, apiErrorEpisodeNotActive, apiErrorIdempotencyConflict, apiErrorEpisodeCapacityExceeded, apiErrorMediaPlaneUnavailable, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
 }
 
-func createParticipantJoin(ctx context.Context, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, generations ParticipantGenerationAuthorizer, participant episodes.Participant) (mediaplane.Join, error) {
+func createParticipantJoin(ctx context.Context, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, participant episodes.Participant) (mediaplane.Join, error) {
 	service, episode, err := resolveMediaEpisode(ctx, spacesService, tenantsService, resolver, participant.TenantID, participant.SpaceID, participant.EpisodeID)
 	if err != nil || service == nil {
 		return mediaplane.Join{}, err
 	}
-	join, err := service.CreateJoin(ctx, mediaplane.CreateJoinInput{Provider: service.Provider(), Episode: episode, ParticipantName: participant.ID.String(), ExternalParticipantID: participant.ID.String(), ParticipantPreset: "contributor"})
-	if err != nil || join.Provider != mediaplane.ProviderCloudflareSFU {
-		return join, err
-	}
-	if generations == nil {
-		return mediaplane.Join{}, apiErrorServiceUnavailable
-	}
-	subject, err := accessGrantSubjectForJoin(issueAccessGrantRequest{TenantID: participant.TenantID, SpaceID: participant.SpaceID, EpisodeID: participant.EpisodeID, ParticipantID: participant.ID, Body: issueAccessGrantBody{ParticipantGeneration: participant.Generation}}, join)
-	if err != nil {
-		return mediaplane.Join{}, err
-	}
-	if err := generations.BindParticipantMediaConnection(ctx, subject); err != nil {
-		return mediaplane.Join{}, err
-	}
-	return join, nil
+	return service.CreateJoin(ctx, mediaplane.CreateJoinInput{Provider: service.Provider(), Episode: episode, ParticipantName: participant.ID.String(), ExternalParticipantID: participant.ID.String(), ParticipantPreset: "contributor"})
 }
 
 func removeParticipantEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[removeParticipantEndpointRequest, participantRemovalResponse] {

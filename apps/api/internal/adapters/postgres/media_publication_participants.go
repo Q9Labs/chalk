@@ -40,6 +40,15 @@ where participants.tenant_id = $1 and participants.episode_id = $2
 type publicationParticipantIdentityParams struct{ TenantID, EpisodeID, ParticipantID pgtype.UUID }
 
 func (q *providerOperationQueries) LockPublicationParticipant(ctx context.Context, arg publicationParticipantIdentityParams) (mediapublications.PublicationParticipant, error) {
+	// Observation inserts check both parent foreign keys. Take those locks before
+	// the participant, matching the lifecycle's Episode -> participant order.
+	var parent pgtype.UUID
+	if err := q.db.QueryRow(ctx, `select id from tenants where id = $1 for key share`, arg.TenantID).Scan(&parent); err != nil {
+		return mediapublications.PublicationParticipant{}, err
+	}
+	if err := q.db.QueryRow(ctx, `select id from episodes where tenant_id = $1 and id = $2 and status = 'active' for key share`, arg.TenantID, arg.EpisodeID).Scan(&parent); err != nil {
+		return mediapublications.PublicationParticipant{}, err
+	}
 	const query = `select participants.id, participants.generation,
 coalesce(case when participants.media_connection_generation = participants.generation then participants.media_connection_id end, '')
 from participants
