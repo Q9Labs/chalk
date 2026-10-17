@@ -89,7 +89,7 @@ defmodule ChalkSync.Stateholder.Command do
   end
 
   defp validate_payload(:set_admission_policy, %{"policy" => policy} = payload)
-       when map_size(payload) == 1 and policy in ["open", "knock", "members_only"],
+       when map_size(payload) == 1 and policy in ["open", "knock"],
        do: :ok
 
   defp validate_payload(

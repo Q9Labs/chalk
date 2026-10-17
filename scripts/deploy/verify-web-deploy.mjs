@@ -4,8 +4,9 @@ const DEFAULT_DEADLINE_MS = 90_000;
 const DEFAULT_RETRY_DELAY_MS = 5_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 
-export async function verifyWebDeploy({ baseURL, expectedSHA, deadlineMs = DEFAULT_DEADLINE_MS, retryDelayMs = DEFAULT_RETRY_DELAY_MS, requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS }) {
+export async function verifyWebDeploy({ baseURL, expectedSHA, deadlineMs = DEFAULT_DEADLINE_MS, retryDelayMs = DEFAULT_RETRY_DELAY_MS, requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, apiBaseURL = "https://api.chalkmeet.com" }) {
   const origin = normalizeBaseURL(baseURL);
+  const apiOrigin = normalizeBaseURL(apiBaseURL);
   const normalizedSHA = normalizeSHA(expectedSHA);
   const deadline = Date.now() + deadlineMs;
   let attempt = 0;
@@ -14,7 +15,7 @@ export async function verifyWebDeploy({ baseURL, expectedSHA, deadlineMs = DEFAU
   while (Date.now() <= deadline) {
     attempt += 1;
     try {
-      await verifyOnce(origin, normalizedSHA, requestTimeoutMs);
+      await verifyOnce(origin, apiOrigin, normalizedSHA, requestTimeoutMs);
       console.log(`Web deployment verified at ${origin.origin} on attempt ${attempt}.`);
       return;
     } catch (error) {
@@ -38,9 +39,9 @@ export function parseArguments(arguments_) {
   return { baseURL: positional[0], expectedSHA: normalizeSHA(positional[1]), production };
 }
 
-async function verifyOnce(baseURL, expectedSHA, requestTimeoutMs) {
+async function verifyOnce(baseURL, apiBaseURL, expectedSHA, requestTimeoutMs) {
   await verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs);
-  await verifyBoundaryHealth(baseURL, requestTimeoutMs);
+  await verifyAPIHealth(apiBaseURL, requestTimeoutMs);
 }
 
 async function verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs) {
@@ -55,14 +56,11 @@ async function verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs) {
   }
 }
 
-async function verifyBoundaryHealth(baseURL, requestTimeoutMs) {
-  const boundaryHealth = await request(endpointURL(baseURL, "/api/healthz"), requestTimeoutMs);
-  requireStatus(boundaryHealth, 200, "account boundary health");
-  const health = await readJSON(boundaryHealth, "account boundary health");
-  const { status, dependencies = {} } = health ?? {};
-  if (status !== "ok" || dependencies.account_api !== "ok") {
-    throw new Error("account boundary health did not report healthy dependencies");
-  }
+async function verifyAPIHealth(baseURL, requestTimeoutMs) {
+  const response = await request(endpointURL(baseURL, "/healthz"), requestTimeoutMs);
+  requireStatus(response, 200, "API health");
+  const health = await readJSON(response, "API health");
+  if (health?.status !== "ok") throw new Error("API health did not report healthy status");
 }
 
 async function request(url, timeoutMs, accept = "application/json") {

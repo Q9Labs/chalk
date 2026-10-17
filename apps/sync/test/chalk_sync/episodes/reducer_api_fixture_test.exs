@@ -44,5 +44,17 @@ defmodule ChalkSync.Episodes.ReducerAPIFixtureTest do
     assert {:error, :invalid_snapshot} = Reducer.from_snapshot(fixture["episode_id"], snapshot)
   end
 
+  test "rejects new members-only commands while retaining closed legacy snapshots" do
+    fixture = api_artifact()
+    snapshot = Map.put(fixture["folded_state"], "admission_policy", "members_only")
+    assert {:ok, state} = Reducer.from_snapshot(fixture["episode_id"], snapshot)
+    assert state.admission_policy == "members_only"
+
+    assert {:error, :invalid_payload} =
+             ChalkSync.Stateholder.Command.new("retired-policy-0001", :set_admission_policy, %{
+               "policy" => "members_only"
+             })
+  end
+
   defp api_artifact, do: @api_artifact |> File.read!() |> Jason.decode!()
 end

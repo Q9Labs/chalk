@@ -720,3 +720,27 @@ it("keeps the order keys of a board that arrives in another order than the keys"
     fixture.engine.dispose();
   }
 });
+
+it("strips imported image bytes while retaining stored images and new drawings", async () => {
+  const { restoreAppState, restoreElements } = await import("@excalidraw/excalidraw");
+  const { ExcalidrawCollabEngine } = await import("./engine");
+  const { toWireElement } = await import("./wire");
+  vi.useFakeTimers();
+  const api = createCanvas(restoreElements, restoreAppState);
+  const stored = restoreElements([{ type: "image", id: "stored-image", fileId: "stored-file", status: "saved", x: 0, y: 0, width: 100, height: 100, version: 1, versionNonce: 1 }], null);
+  const imported = restoreElements([{ type: "image", id: "imported-image", fileId: "unstored-file", status: "saved", x: 100, y: 0, width: 100, height: 100, version: 1, versionNonce: 1 }], null);
+  const drawing = restoreElements([{ type: "rectangle", id: "new-drawing", x: 0, y: 100, width: 100, height: 100, version: 1, versionNonce: 1 }], null);
+  const submitUpdate = vi.fn(async (input: { sceneId: string }) => ({ operationId: "operation", sceneId: input.sceneId, revision: "2" }));
+  const engine = new ExcalidrawCollabEngine({ excalidrawAPI: api, canDraw: true, submitUpdate, sendCursor: vi.fn(), requestSnapshot: async () => undefined, clear: vi.fn(), subscribe: () => () => undefined });
+  try {
+    engine.handleRemoteSnapshot({ sceneId: "scene", elements: stored.map(toWireElement) });
+    api.updateScene({ elements: [...stored, ...imported, ...drawing] });
+    engine.handleChange(api.getSceneElementsIncludingDeleted(), restoreAppState({}, null), {});
+    expect(api.getSceneElementsIncludingDeleted().map((element) => element.id)).toEqual(["stored-image", "new-drawing"]);
+    await vi.advanceTimersByTimeAsync(150);
+    expect(submitUpdate).toHaveBeenCalledOnce();
+    expect(submitUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ elements: [expect.objectContaining({ id: "new-drawing" })] }));
+  } finally {
+    engine.dispose();
+  }
+});

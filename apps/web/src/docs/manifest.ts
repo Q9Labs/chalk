@@ -251,7 +251,7 @@ export const DOCS_PAGES = [
     navLabel: "Entrance and admission",
     description: "Prepare devices in Entrance and control open, knock, or member entry.",
     groupId: "features",
-    keywords: ["Entrance", "admission", "knock", "members_only", "devices"],
+    keywords: ["Entrance", "admission", "knock", "devices"],
     layout: "article",
     Content: EntranceAndAdmission,
   },

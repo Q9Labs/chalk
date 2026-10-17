@@ -785,12 +785,9 @@ export const SetDisplayNameCommandFrameSchema = Schema.Struct({
   payload: Schema.Struct({ display_name: boundedUtf8String(256, 1).check(Schema.makeFilter((value) => (value.length > 0 && value === value.trim() ? undefined : { path: [], issue: "must be non-empty without surrounding whitespace" }))) }),
 }).check(boundedFrame(65536));
 export type SetDisplayNameCommandFrame = typeof SetDisplayNameCommandFrameSchema.Type;
-export const SetAdmissionPolicyCommandFrameSchema = Schema.Struct({
-  type: Schema.Literal("command"),
-  command_id: CommandIdSchema,
-  name: Schema.Literal("set_admission_policy"),
-  payload: Schema.Struct({ policy: Schema.Union([Schema.Literal("open"), Schema.Literal("knock"), Schema.Literal("members_only")]) }),
-}).check(boundedFrame(65536));
+export const SetAdmissionPolicyCommandFrameSchema = Schema.Struct({ type: Schema.Literal("command"), command_id: CommandIdSchema, name: Schema.Literal("set_admission_policy"), payload: Schema.Struct({ policy: Schema.Union([Schema.Literal("open"), Schema.Literal("knock")]) }) }).check(
+  boundedFrame(65536),
+);
 export type SetAdmissionPolicyCommandFrame = typeof SetAdmissionPolicyCommandFrameSchema.Type;
 export const AssignRolesCommandFrameSchema = Schema.Struct({
   type: Schema.Literal("command"),
