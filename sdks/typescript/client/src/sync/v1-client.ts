@@ -559,6 +559,7 @@ export class V1SyncClient implements V1CollaborationClient {
     } else {
       this.#presence = { projectionId: frame.projection_id, sequence: 0, items: frame.items.map(presenceItem) };
       this.#presenceEventEvidence.clear();
+      this.#notifyRemoteParticipantsChanged();
     }
     this.#enterLiveIfReady();
     this.#emit();
@@ -586,8 +587,12 @@ export class V1SyncClient implements V1CollaborationClient {
       if (this.#acceptProjectionDuplicate(this.#presence, this.#presenceEventEvidence, frame)) return;
       this.#presence = updateProjection(this.#presence, frame.projection_id, frame.sequence, presenceItem(frame.item), (item) => item.participantId);
       rememberBoundedEvidence(this.#presenceEventEvidence, frame.sequence, frameSignature(frame), MAX_PROJECTION_EVENT_EVIDENCE);
+      this.#notifyRemoteParticipantsChanged();
     }
     this.#emit();
+  }
+  #notifyRemoteParticipantsChanged(): void {
+    if (this.#presence && !this.#mediaEnded()) this.#options.mediaPlane?.remoteParticipantsChanged?.(this.#presence.items.filter((item) => item.state === "connected").map((item) => item.participantId));
   }
   #mediaEnded(): boolean {
     return this.#control?.status === "ended" || this.#phase.phase === "terminal";
