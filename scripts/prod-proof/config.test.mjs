@@ -67,46 +67,40 @@ test("a redacted API credential fails before readiness or any resource creation"
   }
 });
 
-test("public failures expose only bounded reasons and allowlisted API status/codes", async (t) => {
-  const { check, publicFailure, request, waitFor } = await import("./runtime.mjs");
-  const output = [];
-  const report = (error) => publicFailure("smoke", error, (line) => output.push(line));
+async function publicReason(execute) {
+  const { publicFailure } = await import("./runtime.mjs");
   try {
-    check(false, "secret configuration detail", "configuration");
+    await execute();
   } catch (error) {
-    report(error);
+    const output = [];
+    publicFailure("smoke", error, (line) => output.push(line));
+    return output[0];
   }
-  try {
-    check(false, "secret assertion detail");
-  } catch (error) {
-    report(error);
-  }
-  try {
-    checkCapabilities({});
-  } catch (error) {
-    report(error);
-  }
-  try {
-    await waitFor("secret timeout label", () => false, 0);
-  } catch (error) {
-    report(error);
-  }
-  for (const code of ["api_key.inactive", "secret-value\n::warning::injected"]) {
+  assert.fail("Expected a proof failure");
+}
+test("public failures expose bounded configuration, capability, assertion and timeout reasons", async () => {
+  const { check, waitFor } = await import("./runtime.mjs");
+  const cases = [
+    ["configuration", () => check(false, "secret configuration detail", "configuration")],
+    ["evidence-assertion", () => check(false, "secret assertion detail")],
+    ["capability-disabled", () => checkCapabilities({})],
+    ["timeout", () => waitFor("secret timeout label", () => false, 0)],
+    [
+      "unknown",
+      () => {
+        throw new Error("secret unknown error");
+      },
+    ],
+  ];
+  for (const [reason, execute] of cases) assert.equal(await publicReason(execute), `PROOF smoke: failed (${reason})`);
+});
+test("public API failures allowlist status and code without exposing values", async (t) => {
+  const { request } = await import("./runtime.mjs");
+  for (const [code, expected] of [
+    ["api_key.inactive", "api_key.inactive"],
+    ["secret-value\n::warning::injected", "unknown"],
+  ]) {
     t.mock.method(globalThis, "fetch", async () => Response.json({ error: { code, message: "secret message" } }, { status: 409 }));
-    try {
-      await request({ api_url: "https://example.invalid" }, "DELETE", "/secret-path");
-    } catch (error) {
-      report(error);
-    }
+    assert.equal(await publicReason(() => request({ api_url: "https://example.invalid" }, "DELETE", "/secret-path")), `PROOF smoke: failed (api:409:${expected})`);
   }
-  report(new Error("secret unknown error"));
-  assert.deepEqual(output, [
-    "PROOF smoke: failed (configuration)",
-    "PROOF smoke: failed (evidence-assertion)",
-    "PROOF smoke: failed (capability-disabled)",
-    "PROOF smoke: failed (timeout)",
-    "PROOF smoke: failed (api:409:api_key.inactive)",
-    "PROOF smoke: failed (api:409:unknown)",
-    "PROOF smoke: failed (unknown)",
-  ]);
 });

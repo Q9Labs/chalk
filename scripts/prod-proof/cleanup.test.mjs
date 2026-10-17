@@ -6,7 +6,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cleanupByRunId, sweepStaleRuns, cleanupRun } from "./cleanup.mjs";
-import { createRun, recordResult, request, errorEvidence } from "./runtime.mjs";
+import { createRun, recordResult, request, errorEvidence, publicFailure } from "./runtime.mjs";
 
 async function fixture(t, handler) {
   const server = createServer(handler);
@@ -341,7 +341,12 @@ test("cleanup kills a hung child and still saves evidence and disposes later res
     },
   });
   run.resources.push({ kind: "hung-child", dispose: () => new Promise(() => {}), force: () => child.kill("SIGKILL") });
-  await assert.rejects(cleanupRun(run, { disposeTimeoutMs: 30 }), /Run cleanup failed/);
+  await assert.rejects(cleanupRun(run, { disposeTimeoutMs: 30 }), (error) => {
+    const output = [];
+    publicFailure("cleanup", error, (line) => output.push(line));
+    assert.deepEqual(output, ["PROOF cleanup: failed (timeout)"]);
+    return true;
+  });
   assert.deepEqual(await exited, [null, "SIGKILL"]);
   assert.equal(disposed, true);
   assert.deepEqual(JSON.parse(await readFile(join(directory, "cleanup.json"))), [

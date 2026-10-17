@@ -137,19 +137,23 @@ export async function createRun(config, directory, signal = new AbortController(
 const publicReasons = new Set(["configuration", "capability-disabled", "evidence-assertion", "timeout"]);
 const publicApiCodes = new Set(["api_key.inactive", "access.forbidden", "resource.not_found", "request.invalid", "rate_limit.exceeded", "internal.error"]);
 const publicStatuses = new Set([400, 401, 403, 404, 409, 422, 429, 500, 502, 503, 504]);
+function apiFailure(error) {
+  const status = publicStatuses.has(error.status) ? error.status : "unknown";
+  const code = publicApiCodes.has(error.apiCode) ? error.apiCode : "unknown";
+  return `api:${status}:${code}`;
+}
+function nestedFailure(error, depth) {
+  if (depth >= 3 || !(error instanceof AggregateError)) return "unknown";
+  return failureReason(error.errors[0] ?? {}, depth + 1);
+}
 function failureReason(error, depth = 0) {
-  if (publicReasons.has(error?.reason)) return error.reason;
-  if (error?.reason === "api") {
-    const status = publicStatuses.has(error.status) ? error.status : "unknown";
-    const code = publicApiCodes.has(error.apiCode) ? error.apiCode : "unknown";
-    return `api:${status}:${code}`;
-  }
-  if (["AbortError", "TimeoutError"].includes(error?.name)) return "timeout";
-  if (depth < 3 && error instanceof AggregateError) return failureReason(error.errors[0], depth + 1);
-  return "unknown";
+  if (publicReasons.has(error.reason)) return error.reason;
+  if (error.reason === "api") return apiFailure(error);
+  if (["AbortError", "TimeoutError"].includes(error.name)) return "timeout";
+  return nestedFailure(error, depth);
 }
 export function publicFailure(phase, error, output = console.error) {
-  output(`PROOF ${phase}: failed (${failureReason(error)})`);
+  output(`PROOF ${phase}: failed (${failureReason(error ?? {})})`);
 }
 function maskCredential(name, value) {
   if (!value || !/secret|token|credential|jwt/i.test(name)) return;

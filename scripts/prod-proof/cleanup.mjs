@@ -93,8 +93,11 @@ async function revokeKey(call, path) {
     if (error.status !== 409 || error.apiCode !== "api_key.inactive") throw error;
   }
 }
+function cleanupEndpointId(config, known) {
+  return known.webhook?.id ?? config.webhook_endpoint_id;
+}
 async function cleanupWebhook(call, config, known, base, attempt) {
-  const endpointId = known.webhook?.id ?? config.webhook_endpoint_id;
+  const endpointId = cleanupEndpointId(config, known);
   if (endpointId) {
     await attempt("webhook-endpoint", endpointId, async () => {
       const endpoint = await rotateAndPatchEndpoint(call, `${base}/webhook-endpoints/${endpointId}`, { enabled: false });
@@ -165,7 +168,7 @@ async function disposeResource(run, resource, timeoutMs) {
     run.cleanup.push({ kind: resource.kind, result: "passed" });
     return [];
   } catch (error) {
-    const failures = [new Error(`${resource.kind}: ${error.message}`, { cause: error })];
+    const failures = [error];
     try {
       resource.force?.();
     } catch (forceError) {
