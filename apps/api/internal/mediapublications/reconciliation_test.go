@@ -249,7 +249,7 @@ func TestLatestRetiresInactiveAndReplacedPublicationsWithNewCursor(t *testing.T)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if snapshot.Sequence != 2 || len(snapshot.Publications) != 1 || snapshot.Publications[0].Enabled || snapshot.Publications[0].PublicationID != "" {
+			if snapshot.Sequence != 2 || len(snapshot.Publications) != 1 || snapshot.Publications[0].Enabled || snapshot.Publications[0].PublicationID == "" {
 				t.Fatalf("retired snapshot = %#v", snapshot)
 			}
 			again, err := service.Latest(context.Background(), tenantID, episodeID)

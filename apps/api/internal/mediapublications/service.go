@@ -189,7 +189,7 @@ func (s Service) Latest(ctx context.Context, tenantID, episodeID utilities.ID) (
 		changed := false
 		for index := range publications {
 			publication := &publications[index]
-			if publication.PublicationID == "" {
+			if publication.PublicationID == "" || !publication.Enabled {
 				continue
 			}
 			reference, err := ParseReference(publication.PublicationID)
@@ -202,7 +202,6 @@ func (s Service) Latest(ctx context.Context, tenantID, episodeID utilities.ID) (
 				continue
 			}
 			publication.Enabled = false
-			publication.PublicationID = ""
 			changed = true
 		}
 		if !changed {
