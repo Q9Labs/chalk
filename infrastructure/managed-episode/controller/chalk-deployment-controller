@@ -260,7 +260,7 @@ validate_request() {
     (.adopt_existing_release | type == "boolean") and
     (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and
     (.source_revision | type == "string" and test("^[0-9a-f]{40}$")) and
-    (.environment | type == "string" and (. == "staging" or . == "production")) and
+    (.environment | type == "string" and length <= 32 and test("^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")) and
     (.aws_region | type == "string" and test("^[a-z]{2}(?:-gov)?-[a-z]+-[1-9][0-9]*$")) and
     (.parameter_prefix | type == "string" and length <= 900 and test("^/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$")) and
     (.request_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and
@@ -274,7 +274,6 @@ validate_request() {
   request_region="$(jq -er '.aws_region' "$request_path")"
   request_prefix="$(jq -er '.parameter_prefix' "$request_path")"
   [[ "$request_prefix" != *'//' && "$request_prefix" != *'..'* ]] || fail "parameter_prefix contains an unsafe path component"
-  [[ "$request_environment" == staging || "$request_environment" == production ]] || fail "deployment environment must be staging or production"
   [[ "$request_prefix" == "/chalk/${request_environment}" || "$request_prefix" == "/chalk/${request_environment}/"* ]] || fail "parameter_prefix must be scoped to the deployment environment"
   request_id="$(jq -er '.request_id' "$request_path")"
   requested_at="$(jq -er '.requested_at' "$request_path")"
@@ -1182,7 +1181,7 @@ load_active_pointer() {
     (.release_root | type == "string" and startswith("/")) and
     (.manifest_sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
     (.runtime_sha256 | type == "object" and length > 0 and all(.[]; type == "string" and test("^[0-9a-f]{64}$"))) and
-    (.environment == "staging" or .environment == "production") and
+    (.environment | type == "string" and length <= 32 and test("^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")) and
     (.environment as $environment | (.parameter_prefix == ("/chalk/" + $environment) or (.parameter_prefix | startswith("/chalk/" + $environment + "/")))) and
     (.excluded_secrets | type == "array" and (map(. as $id | $allowed | index($id) != null) | all) and (.[0:] == (sort | unique))) and
     (

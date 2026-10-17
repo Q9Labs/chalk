@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { runManagedRelease } from "./deploy-managed-release.mjs";
+import { parseArguments, runManagedRelease } from "./deploy-managed-release.mjs";
 
 const releaseId = "managed-episode-20260818T120000Z-01234567-89abcdef";
 const sourceRevision = "0123456789abcdef0123456789abcdef01234567";
@@ -58,7 +58,7 @@ test("hands a release to the pinned SSM document and returns its controller proo
   });
 
   const sendCommand = calls.find(({ args }) => args.includes("send-command"));
-  assert.deepEqual(result, { ...controllerResult, dispatcher_binding: { action: "not-configured", environment: "staging" } });
+  assert.deepEqual(result, { ...controllerResult, ssm_command_id: commandId, document_version: "7", dispatcher_binding: { action: "not-configured", environment: "staging" } });
   assert.equal(calls.filter(({ args }) => args.includes("send-command")).length, 1);
   assert.equal(calls.filter(({ args }) => args.includes("get-command-invocation")).length, 2);
   assert.equal(sendCommand.command, "aws");
@@ -175,4 +175,51 @@ test("production cannot report success when dispatcher binding fails after host 
   assert.equal(calls.at(-1).command, "python3");
   assert.equal(calls.at(-1).args.includes("--dry-run"), false);
   assert.ok(calls.some(({ args }) => args.includes("get-command-invocation")));
+});
+
+test("configured environments use their own dispatcher parameter in the read-only dry run", async () => {
+  const manifestPath = await writeManifest();
+  const calls = [];
+  const proof = await runManagedRelease({
+    arguments_: requiredArguments(manifestPath)
+      .map((value) => value.replaceAll("staging", "preview-2"))
+      .concat("--dry-run"),
+    allowedSecretIds,
+    commandRunner: async (command) => {
+      calls.push(command);
+      return { stdout: JSON.stringify({ action: "already-bound", release_id: releaseId }) };
+    },
+    stdout: { write: () => {} },
+  });
+  assert.equal(proof.request.environment, "preview-2");
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].args.includes("/chalk/preview-2/release/recorder.json"));
+  assert.ok(calls[0].args.includes("--dry-run"));
+});
+
+test("invalid environments and cross-environment configuration are rejected before provider calls", () => {
+  for (const environment of ["Production", "../production", "preview--2", "preview-", "a".repeat(33)]) {
+    assert.throws(() => parseArguments(requiredArguments().map((value) => value.replaceAll("staging", environment))), /--environment/);
+  }
+  assert.throws(() => parseArguments(requiredArguments().concat("--dispatcher-config-parameter", "/chalk/production/release/recorder.json")), /must be scoped/);
+});
+
+test("missing dispatcher permission fails preflight without sending a host command", async () => {
+  const manifestPath = await writeManifest();
+  const calls = [];
+  await assert.rejects(
+    runManagedRelease({
+      arguments_: requiredArguments(manifestPath).map((value) => value.replaceAll("staging", "production")),
+      allowedSecretIds,
+      commandRunner: async (command) => {
+        calls.push(command);
+        throw new Error("ssm:GetParameter implicitDeny for dispatcher configuration");
+      },
+      stdout: { write: () => {} },
+    }),
+    /ssm:GetParameter implicitDeny/,
+  );
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].command, "python3");
+  assert.ok(calls[0].args.includes("--dry-run"));
 });

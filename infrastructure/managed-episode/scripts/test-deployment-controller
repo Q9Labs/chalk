@@ -529,6 +529,13 @@ make_request staging "${fixture_root}/staging-request.json" '[]' staging
 make_manifest staging >"${fixture_root}/staging-manifest.json"
 run_controller "$staging_state" "${fixture_root}/staging-request.json" "${fixture_root}/staging-manifest.json" ok >/dev/null
 jq -e '.environment == "staging" and .parameter_prefix == "/chalk/staging/managed-episode"' "${staging_state}/active-release.json" >/dev/null || fail "staging release was not accepted"
+
+preview_state="${fixture_root}/preview-state"
+mkdir -p "$preview_state"
+make_request preview "${fixture_root}/preview-request.json" '[]' preview-2
+make_manifest preview >"${fixture_root}/preview-manifest.json"
+run_controller "$preview_state" "${fixture_root}/preview-request.json" "${fixture_root}/preview-manifest.json" ok >/dev/null
+jq -e '.environment == "preview-2" and .parameter_prefix == "/chalk/preview-2/managed-episode"' "${preview_state}/active-release.json" >/dev/null || fail "configured environment was not accepted"
 fi
 
 stable_state="${fixture_root}/stable-state"

@@ -12,7 +12,7 @@ export { DEFAULT_TIMEOUT_SECONDS, normalizeExclusions, parseArguments, usage } f
 export { buildDeploymentRequest, buildDocumentParameters, CONTROLLER_VERSION, parseControllerResult } from "./managed-release-contracts.mjs";
 export { ensureDocumentVersion } from "./managed-release-ssm.mjs";
 
-export async function runManagedRelease({ arguments_, commandRunner = runCommand, now = () => new Date(), sleep = sleepFor, allowedSecretIds, stdout = process.stdout } = {}) {
+export async function runManagedRelease({ arguments_, commandRunner = runCommand, now = () => new Date(), sleep = sleepFor, allowedSecretIds, stdout = process.stdout, stderr = process.stderr } = {}) {
   const options = parseArguments(arguments_ ?? []);
   if (options.help) {
     stdout.write(`${usage()}\n`);
@@ -27,16 +27,18 @@ export async function runManagedRelease({ arguments_, commandRunner = runCommand
     return proof;
   }
 
-  const result = await deployRelease({ commandRunner, options, release, sleep });
+  const result = await deployRelease({ commandRunner, options, release, sleep, stderr });
   result.dispatcher_binding = await dispatcherBinding({ commandRunner, options, dryRun: false });
   stdout.write(`${JSON.stringify(result)}\n`);
   return result;
 }
 
 async function dispatcherBinding({ commandRunner, options, dryRun }) {
-  if (options.environment !== "production") return { action: "not-configured", environment: options.environment };
+  // Keep the legacy staging path; other environments own an isolated recorder configuration.
+  if (options.environment === "staging" && !options.dispatcherConfigParameter) return { action: "not-configured", environment: options.environment };
   const script = fileURLToPath(new URL("../recorder/dispatcher_binding.py", import.meta.url));
-  const args = [script, "--manifest", resolve(options.manifestPath), "--region", options.region, "--instance-id", options.instanceId, "--parameter-prefix", options.parameterPrefix];
+  const configurationParameter = options.dispatcherConfigParameter ?? `/chalk/${options.environment}/release/recorder.json`;
+  const args = [script, "--manifest", resolve(options.manifestPath), "--region", options.region, "--instance-id", options.instanceId, "--parameter-prefix", options.parameterPrefix, "--configuration-parameter", configurationParameter];
   if (dryRun) args.push("--dry-run");
   const result = await commandRunner({ command: "python3", args });
   return JSON.parse(result.stdout);
@@ -55,10 +57,11 @@ async function prepareRelease({ allowedSecretIds, now, options }) {
   return { document, manifest, manifestBytes, parameters, request };
 }
 
-async function deployRelease({ commandRunner, options, release, sleep }) {
+async function deployRelease({ commandRunner, options, release, sleep, stderr }) {
   const documentVersion = await resolveDocumentVersion({ commandRunner, document: release.document, options, sleep });
   const sendResult = await sendReleaseCommand({ commandRunner, documentVersion, options, release });
   const commandId = parseCommandId(sendResult.stdout);
+  stderr.write(`SSM deployment command: ${commandId} (document version ${documentVersion})\n`);
   const invocation = await waitForInvocation({
     commandId,
     commandRunner,
@@ -68,7 +71,7 @@ async function deployRelease({ commandRunner, options, release, sleep }) {
     timeoutSeconds: options.timeoutSeconds,
   });
   if (invocation.Status !== "Success") throw invocationError(invocation, commandId);
-  return parseControllerResult(invocation.StandardOutputContent, release.manifest.release_id, options.requestId);
+  return { ...parseControllerResult(invocation.StandardOutputContent, release.manifest.release_id, options.requestId), ssm_command_id: commandId, document_version: documentVersion };
 }
 
 async function resolveDocumentVersion({ commandRunner, document, options, sleep }) {
