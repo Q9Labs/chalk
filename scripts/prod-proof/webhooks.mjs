@@ -4,7 +4,8 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { shareHTML } from "./fixture.mjs";
-import { check, save, waitFor, maskCredentials } from "./runtime.mjs";
+import { check, save, waitFor, maskCredentials, saveOwnership } from "./runtime.mjs";
+import { rotateAndPatchEndpoint } from "./webhook-endpoint.mjs";
 
 const { build } = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url))("esbuild");
 export async function proofServer(run) {
@@ -90,24 +91,18 @@ function startCollector(run, receiver, collect) {
 }
 export async function exposeWebhook(run, receiver) {
   check(run.config.webhook_service_url, "Proof configuration is missing webhook_service_url");
+  check(run.config.webhook_endpoint_id, "Proof configuration is missing webhook_endpoint_id");
   const base = run.config.webhook_service_url;
   const token = await (await catcherRequest(base, "/token", "POST", { default_status: 204, request_limit: 50 }, run.signal)).json();
   maskCredentials({ token: token.uuid });
-  let endpoint;
-  try {
-    endpoint = await run.ownerRequest("POST", `${run.tenantPath}/webhook-endpoints`, {
-      name: `${run.label}:${token.uuid}`,
-      url: new URL(`/${token.uuid}`, base).href,
-      enabled: true,
-      api_version: 1,
-      event_types: ["episode.started", "episode.ended", "recording.started", "recording.completed", "transcript.completed"],
-    });
-  } catch (error) {
-    await catcherRequest(base, `/token/${token.uuid}`, "DELETE");
-    throw error;
-  }
-  run.ownership.webhook = { id: endpoint.id, revision: endpoint.revision, catcherId: token.uuid };
-  await save(`${run.directory}/ownership.json`, run.ownership);
+  run.ownership.webhook = { id: run.config.webhook_endpoint_id, catcherId: token.uuid };
+  await saveOwnership(run);
+  const endpoint = await rotateAndPatchEndpoint(run.ownerRequest, `${run.tenantPath}/webhook-endpoints/${run.config.webhook_endpoint_id}`, {
+    url: new URL(`/${token.uuid}`, base).href,
+    enabled: true,
+    api_version: 1,
+    event_types: ["episode.started", "episode.ended", "recording.started", "recording.completed", "transcript.completed"],
+  });
   const path = `${run.directory}/sdk-webhooks.mjs`;
   await build({ logLevel: "silent", entryPoints: [new URL("../../sdks/typescript/client/src/webhooks/index.ts", import.meta.url).pathname], bundle: true, outfile: path, format: "esm", platform: "node" });
   const { verifyWebhook } = await import(pathToFileURL(path).href);

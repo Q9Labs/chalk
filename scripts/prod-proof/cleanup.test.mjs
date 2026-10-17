@@ -32,23 +32,17 @@ test("cleanup uses persisted IDs, revokes first and is repeatable after abort", 
   let ended = false;
   let archived = false;
   let deleted = false;
-  let webhookDeleted = false;
+  let webhookDisabled = false;
   const runId = "canceled-run";
   const label = `chalk-proof:${runId}`;
   const catcher = "12345678-1234-1234-1234-123456789abc";
   const state = {
     keyStatus: 200,
-    revokedAt: null,
     episodeStatus: "live",
     transcriptStatus: "complete",
-    endpoints: [{ id: "hook", name: `${label}:${catcher}`, revision: 1 }],
   };
   const base = "/v1/tenants/tenant";
   const routes = {
-    [`GET ${base}/api-keys`]: () => ({
-      api_keys: [{ id: "key", name: label, revoked_at: state.revokedAt }],
-      pagination: {},
-    }),
     [`GET ${base}/spaces`]: () => ({
       spaces: [
         {
@@ -78,22 +72,18 @@ test("cleanup uses persisted IDs, revokes first and is repeatable after abort", 
       transcripts: [{ id: "transcript", space_id: "space", status: state.transcriptStatus }],
       pagination: {},
     }),
-    [`GET ${base}/webhook-endpoints`]: () => ({
-      webhook_endpoints: state.endpoints,
-      page: {},
-    }),
     [`DELETE ${base}/api-keys/key`]: () => {
       revoked = true;
       state.keyStatus = 401;
-      state.revokedAt = "now";
     },
     [`DELETE ${base}/transcripts/transcript`]: () => {
       deleted = true;
       state.transcriptStatus = "deleted";
     },
-    [`DELETE ${base}/webhook-endpoints/hook`]: () => {
-      webhookDeleted = true;
-      state.endpoints = [];
+    [`POST ${base}/webhook-endpoints/hook/rotate-secret`]: () => ({ revision: 5, secret: "rotated" }),
+    [`PATCH ${base}/webhook-endpoints/hook`]: () => {
+      webhookDisabled = true;
+      return { enabled: false };
     },
     [`DELETE /token/${catcher}`]: () => {},
     [`POST ${base}/spaces/space/episodes/episode/end`]: () => {
@@ -138,7 +128,7 @@ test("cleanup uses persisted IDs, revokes first and is repeatable after abort", 
   assert.ok(ended);
   assert.ok(archived);
   assert.ok(deleted);
-  assert.ok(webhookDeleted);
+  assert.ok(webhookDisabled);
   assert.deepEqual(JSON.parse(await readFile(`${directory}/key-rejection.json`)), { status: 401 });
   await cleanupByRunId(config, runId, directory);
 });
@@ -212,21 +202,8 @@ test("sweep skips fully cleaned retained history without per-run reads", async (
       name: `chalk-proof:completed-${index}`,
       created_at: old,
     }));
-    if (req.url.includes("/api-keys"))
-      res.end(
-        JSON.stringify({
-          api_keys: history.map((entry) => ({ ...entry, revoked_at: old })),
-          pagination: {},
-        }),
-      );
-    else if (req.url.includes("/spaces"))
-      res.end(
-        JSON.stringify({
-          spaces: history.map((entry) => ({ ...entry, archived: true })),
-          pagination: {},
-        }),
-      );
-    else res.end(JSON.stringify({ webhook_endpoints: [], page: {} }));
+    assert.ok(req.url.includes("/spaces"));
+    res.end(JSON.stringify({ spaces: history.map((entry) => ({ ...entry, archived: true })), pagination: {} }));
   });
   await sweepStaleRuns(config);
   assert.equal(reads.length, 1);
@@ -238,4 +215,75 @@ test("sweep failures preserve the private HTTP cause", async (t) => {
     assert.match(JSON.stringify(errorEvidence(error)), /HTTP 403, private-code/);
     return true;
   });
+});
+
+test("truncated ownership reports failure but in-memory key, endpoint, Spaces and local cleanup still run", async (t) => {
+  const calls = [];
+  const config = await fixture(t, (req, res) => {
+    const path = new URL(req.url, "http://local").pathname;
+    calls.push(`${req.method} ${path}`);
+    if (req.headers.authorization === "Bearer temporary") res.writeHead(401).end("{}");
+    else if (req.method === "DELETE") res.writeHead(204).end();
+    else if (path.endsWith("/spaces")) res.end(JSON.stringify({ spaces: [], pagination: {} }));
+    else if (path.endsWith("/rotate-secret")) res.end(JSON.stringify({ revision: 9, secret: "rotated" }));
+    else {
+      assert.equal(req.method, "PATCH");
+      assert.equal(req.headers["if-match"], '"9"');
+      res.end(JSON.stringify({ enabled: false }));
+    }
+  });
+  config.webhook_endpoint_id = "hook";
+  const directory = await mkdtemp(join(tmpdir(), "proof-corrupt-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const run = await createRun(config, directory, undefined, "truncated");
+  run.ownership = { keyId: "key", webhook: { id: "hook", catcherId: "catcher" } };
+  run.apiKey = "temporary";
+  let disposed = false;
+  run.resources.push({
+    kind: "local",
+    dispose: () => {
+      disposed = true;
+    },
+  });
+  await writeFile(`${directory}/ownership.json`, '{"keyId":');
+  await assert.rejects(cleanupRun(run), /Run cleanup failed/);
+  assert.ok(disposed);
+  assert.ok(calls.includes("DELETE /v1/tenants/tenant/api-keys/key"));
+  assert.ok(calls.includes("GET /v1/tenants/tenant/spaces"));
+  assert.ok(calls.includes("PATCH /v1/tenants/tenant/webhook-endpoints/hook"));
+  assert.ok(calls.includes("DELETE /token/catcher"));
+  assert.deepEqual(JSON.parse(await readFile(`${directory}/key-rejection.json`)), { status: 401 });
+  const results = JSON.parse(await readFile(`${directory}/remote-cleanup.json`));
+  assert.equal(results.find((entry) => entry.kind === "ownership").result, "failed");
+  // Recovery without in-memory state still disables the configured endpoint and sweeps Spaces.
+  calls.length = 0;
+  await assert.rejects(cleanupByRunId(config, "truncated", directory), /Remote cleanup failed/);
+  assert.ok(calls.includes("GET /v1/tenants/tenant/spaces"));
+  assert.ok(calls.includes("PATCH /v1/tenants/tenant/webhook-endpoints/hook"));
+});
+
+test("sweep archives only old owned empty Spaces or Spaces whose Episodes are all stale and owned", async (t) => {
+  const now = Date.now();
+  const old = new Date(now - 3 * 3600_000).toISOString();
+  const fresh = new Date(now).toISOString();
+  const changed = [];
+  const cases = [
+    { id: "old-empty", created_at: old, episodes: [] },
+    { id: "fresh-empty", created_at: fresh, episodes: [] },
+    { id: "foreign-episode", created_at: old, episodes: [{ id: "ep", created_at: old, metadata: { proof_run_id: "another" } }] },
+    { id: "fresh-episode", created_at: old, episodes: [{ id: "ep", created_at: fresh, metadata: { proof_run_id: "fresh-episode" } }] },
+  ];
+  const config = await fixture(t, (req, res) => {
+    const path = new URL(req.url, "http://local").pathname;
+    if (req.method === "POST") {
+      changed.push(path);
+      res.end("{}");
+    } else if (path.endsWith("/spaces")) {
+      res.end(JSON.stringify({ spaces: cases.map(({ id, created_at }) => ({ id, created_at, name: `chalk-proof:${id}`, metadata: { proof_run_id: id } })), pagination: {} }));
+    } else if (path.endsWith("/episodes")) {
+      res.end(JSON.stringify({ episodes: cases.find((entry) => entry.id === path.split("/").at(-2)).episodes, pagination: {} }));
+    } else res.end(JSON.stringify({ archived: true }));
+  });
+  await sweepStaleRuns(config, now);
+  assert.deepEqual(changed, ["/v1/tenants/tenant/spaces/old-empty/archive"]);
 });

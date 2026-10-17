@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, rename, rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -34,7 +35,17 @@ export async function waitFor(label, probe, timeoutMs = 120_000, intervalMs = 20
 export async function save(path, value) {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
 }
-const requiredConfigFields = ["api_key", "tenant_id", "api_url", "web_url", "proof_origin", "webhook_service_url"];
+export async function saveOwnership(run) {
+  const path = join(run.directory, "ownership.json");
+  const temporary = join(dirname(path), `.ownership-${randomUUID()}.tmp`);
+  try {
+    await save(temporary, run.ownership);
+    await rename(temporary, path);
+  } finally {
+    await rm(temporary, { force: true });
+  }
+}
+const requiredConfigFields = ["api_key", "tenant_id", "api_url", "web_url", "proof_origin", "webhook_service_url", "webhook_endpoint_id"];
 export function environmentConfig(environment) {
   return Object.fromEntries(requiredConfigFields.map((name) => [name, environment[`CHALK_PROOF_${name.toUpperCase()}`]]));
 }
@@ -106,6 +117,7 @@ export async function createRun(config, directory, signal = new AbortController(
     label: `chalk-proof:${runId}`,
     owner,
     signal,
+    ownership: {},
     resources: [],
     cleanup: [],
     wait: (ms) => delay(ms, undefined, { signal }),

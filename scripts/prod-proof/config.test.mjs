@@ -10,6 +10,7 @@ test("environment configuration maps each named field without interpreting crede
     web_url: "https://web.example.test",
     proof_origin: "http://127.0.0.1:4567",
     webhook_service_url: "https://catcher.example.test",
+    webhook_endpoint_id: "hook",
   };
   const environment = Object.fromEntries(Object.entries(fields).map(([name, value]) => [`CHALK_PROOF_${name.toUpperCase()}`, value]));
   assert.deepEqual(environmentConfig({ ...environment, PASSWORD: "unrelated" }), fields);
@@ -48,6 +49,7 @@ test("a redacted API credential fails before readiness or any resource creation"
     WEB_URL: "https://web.example.test",
     PROOF_ORIGIN: "http://127.0.0.1:4567",
     WEBHOOK_SERVICE_URL: "https://catcher.example.test",
+    WEBHOOK_ENDPOINT_ID: "hook",
   };
   const previous = new Map();
   for (const [name, value] of Object.entries(fields)) {

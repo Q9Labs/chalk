@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { generateVoice } from "./fixture.mjs";
 import { launchGuests, stats, limitCamera, restoreCamera, proveLayers } from "./media.mjs";
-import { check, command, request, save, waitFor } from "./runtime.mjs";
+import { check, command, request, save, saveOwnership, waitFor } from "./runtime.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
 
 export async function prepareIntegration(run, webhooks) {
@@ -13,8 +13,8 @@ export async function prepareIntegration(run, webhooks) {
     expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
   });
   run.ownership = { keyId: key.api_key.id };
-  await save(`${run.directory}/ownership.json`, run.ownership);
   run.apiKey = key.secret;
+  await saveOwnership(run);
   run.apiRequest = (method, path, body) => request(run.config, method, path, body, { Authorization: `Bearer ${run.apiKey}` }, {}, run.signal);
   const denied = await fetch(new URL(run.tenantPath, run.config.api_url), {
     headers: { Authorization: `Bearer ${run.apiKey}` },

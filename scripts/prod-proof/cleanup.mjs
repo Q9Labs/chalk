@@ -1,6 +1,7 @@
 import { mkdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { check, request, save, waitFor, errorEvidence } from "./runtime.mjs";
+import { rotateAndPatchEndpoint } from "./webhook-endpoint.mjs";
 
 export function runLabel(runId) {
   check(/^[A-Za-z0-9_-]{1,51}$/.test(runId), "Invalid proof run ID");
@@ -22,7 +23,7 @@ async function list(call, path, field) {
   } while (cursor);
   return values;
 }
-export async function cleanupByRunId(config, runId, directory = resolve(".private", "prod-proof", runId)) {
+export async function cleanupByRunId(config, runId, directory = resolve(".private", "prod-proof", runId), ownership = {}) {
   const label = runLabel(runId);
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const call = cleanupClient(config);
@@ -46,7 +47,11 @@ export async function cleanupByRunId(config, runId, directory = resolve(".privat
       }
     }
   };
-  const known = await readOwnership(directory);
+  let known = {};
+  await attempt("ownership", runId, async () => {
+    known = await readOwnership(directory);
+  });
+  known = { ...known, ...ownership };
   // Persisted IDs avoid requiring inventory scopes on the bootstrap key.
   if (known.keyId) await attempt("api-key", known.keyId, () => call("DELETE", `${base}/api-keys/${known.keyId}`));
   await attempt("spaces", runId, async () => {
@@ -76,26 +81,33 @@ export async function cleanupByRunId(config, runId, directory = resolve(".privat
       }
     }
   });
-  if (known.webhook) {
-    const { id, revision, catcherId } = known.webhook;
+  await cleanupWebhook(call, config, known, base, attempt);
+  await save(`${directory}/remote-cleanup.json`, results);
+  if (failures.length) throw new AggregateError(failures, "Remote cleanup failed");
+  return results;
+}
+async function cleanupWebhook(call, config, known, base, attempt) {
+  const endpointId = config.webhook_endpoint_id ?? known.webhook?.id;
+  if (endpointId) {
+    await attempt("webhook-endpoint", endpointId, async () => {
+      const endpoint = await rotateAndPatchEndpoint(call, `${base}/webhook-endpoints/${endpointId}`, { enabled: false });
+      check(endpoint.enabled === false, "Webhook endpoint not disabled");
+    });
+  }
+  if (known.webhook?.catcherId) {
+    const { catcherId } = known.webhook;
     await attempt("webhook-catcher", catcherId, async () => {
       const response = await fetch(new URL(`/token/${catcherId}`, config.webhook_service_url), { method: "DELETE", signal: AbortSignal.timeout(15_000) });
       await response.body?.cancel();
       check(response.ok || response.status === 404, "Catcher deletion failed");
     });
-    await attempt("webhook-endpoint", id, () =>
-      call("DELETE", `${base}/webhook-endpoints/${id}`, undefined, {
-        "If-Match": `"${revision}"`,
-      }),
-    );
   }
-  await save(`${directory}/remote-cleanup.json`, results);
-  if (failures.length) throw new AggregateError(failures, "Remote cleanup failed");
-  return results;
 }
 async function readOwnership(directory) {
   try {
-    return JSON.parse(await readFile(`${directory}/ownership.json`, "utf8"));
+    const ownership = JSON.parse(await readFile(`${directory}/ownership.json`, "utf8"));
+    check(ownership && typeof ownership === "object" && !Array.isArray(ownership), "Corrupt proof ownership");
+    return ownership;
   } catch (error) {
     if (error.code === "ENOENT") return {};
     throw error;
@@ -128,7 +140,8 @@ async function sweepSpace(call, base, space, runId, now) {
     await endEpisode(call, path, episode);
   }
   // Never archive a Space with a fresh or foreign Episode.
-  if (!stale.length || stale.length !== episodes.length) return;
+  if (stale.length !== episodes.length) return;
+  if (!episodes.length && !(Date.parse(space.created_at) < now - 2 * 3600_000)) return;
   await call("POST", `${base}/spaces/${space.id}/archive`, {});
   check((await call("GET", `${base}/spaces/${space.id}`)).archived, "Stale Space not archived");
 }
@@ -154,7 +167,11 @@ async function disposeResource(run, resource) {
 export async function cleanupRun(run) {
   const failures = [];
   try {
-    await cleanupByRunId(run.config, run.runId, run.directory);
+    await cleanupByRunId(run.config, run.runId, run.directory, run.ownership);
+  } catch (error) {
+    failures.push(error);
+  }
+  try {
     await verifyKeyRejected(run);
   } catch (error) {
     failures.push(error);
