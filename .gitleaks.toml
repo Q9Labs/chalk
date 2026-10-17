@@ -21,8 +21,8 @@ regexTarget = "line"
 regexes = ['''^\s*export const spacePageTestToken = "cspi1\.test-capability";$''']
 
 [[allowlists]]
-description = "The release manifest records file hashes and 1Password item IDs, not the secrets themselves."
+description = "The release manifest records a keystore hash and a 1Password item ID, not the secrets themselves."
 regexTarget = "line"
-# The line must hold only one such field in its exact format: a 1Password item ID, a SHA-256 hash, or a
-# certificate fingerprint. A secret on the same line, or in the field's place, still fails.
-regexes = ['''^\s*"[a-z0-9_]+_(?:item_id": "[a-z0-9]{26}|sha256": "(?:[0-9a-f]{64}|(?:[0-9A-F]{2}:){31}[0-9A-F]{2}))",?$''']
+# Only the two manifest keys that the default rules flag, each with its exact value format, so a secret
+# under any other key, on the same line, or in another format still fails.
+regexes = ['''^\s*"(?:keystore_sha256": "[0-9a-f]{64}|p12_password_item_id": "[a-z0-9]{26})",?$''']
