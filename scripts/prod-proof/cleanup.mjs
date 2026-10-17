@@ -110,19 +110,22 @@ export async function sweepStaleRuns(config, now = Date.now()) {
     const runId = space.metadata?.proof_run_id;
     if (space.archived || !runId || space.name !== `chalk-proof:${runId}`) continue;
     runLabel(runId);
-    const path = `${base}/spaces/${space.id}/episodes`;
-    const episodes = await list(call, path, "episodes");
-    const owned = episodes.filter((episode) => episode.metadata?.proof_run_id === runId);
-    const stale = owned.filter((episode) => Date.parse(episode.created_at) < now - 2 * 3600_000);
-    for (const episode of stale) {
-      if (episode.status !== "ended") await call("POST", `${path}/${episode.id}/end`, {});
-      await waitFor("stale Episode ended", async () => (await call("GET", `${path}/${episode.id}`)).status === "ended", 60_000, 1000, AbortSignal.timeout(60_000));
-    }
-    // Never archive a Space with a fresh or foreign Episode.
-    if (!stale.length || stale.length !== episodes.length) continue;
-    await call("POST", `${base}/spaces/${space.id}/archive`, {});
-    check((await call("GET", `${base}/spaces/${space.id}`)).archived, "Stale Space not archived");
+    await sweepSpace(call, base, space, runId, now);
   }
+}
+async function sweepSpace(call, base, space, runId, now) {
+  const path = `${base}/spaces/${space.id}/episodes`;
+  const episodes = await list(call, path, "episodes");
+  const owned = episodes.filter((episode) => episode.metadata?.proof_run_id === runId);
+  const stale = owned.filter((episode) => Date.parse(episode.created_at) < now - 2 * 3600_000);
+  for (const episode of stale) {
+    if (episode.status !== "ended") await call("POST", `${path}/${episode.id}/end`, {});
+    await waitFor("stale Episode ended", async () => (await call("GET", `${path}/${episode.id}`)).status === "ended", 60_000, 1000, AbortSignal.timeout(60_000));
+  }
+  // Never archive a Space with a fresh or foreign Episode.
+  if (!stale.length || stale.length !== episodes.length) return;
+  await call("POST", `${base}/spaces/${space.id}/archive`, {});
+  check((await call("GET", `${base}/spaces/${space.id}`)).archived, "Stale Space not archived");
 }
 
 async function disposeResource(run, resource) {

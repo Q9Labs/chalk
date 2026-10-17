@@ -143,48 +143,32 @@ test("cleanup uses persisted IDs, revokes first and is repeatable after abort", 
   await cleanupByRunId(config, runId, directory);
 });
 
+function sweepPage(url, old) {
+  const path = url.pathname;
+  if (path.endsWith("/spaces")) {
+    const second = url.searchParams.get("cursor");
+    const ids = second ? ["old"] : ["fresh", "foreign"];
+    return { spaces: ids.map((id) => ({ id, name: id === "foreign" ? "unrelated" : `chalk-proof:${id}`, metadata: { proof_run_id: id } })), pagination: { next_cursor: second ? null : "second" } };
+  }
+  if (path.endsWith("/episodes")) {
+    const id = path.split("/").at(-2);
+    return { episodes: [{ id: "ep", metadata: { proof_run_id: id }, created_at: id === "fresh" ? new Date().toISOString() : old, status: "live" }], pagination: {} };
+  }
+  return { ep: { status: "ended" }, old: { archived: true } }[path.split("/").at(-1)];
+}
 test("sweep uses only Spaces and Episodes, follows pagination and preserves fresh/foreign resources", async (t) => {
   const changed = [];
   const old = new Date(Date.now() - 3 * 3600_000).toISOString();
   const config = await fixture(t, (req, res) => {
     const url = new URL(req.url, "http://local");
-    const path = url.pathname;
     if (req.method === "POST") {
-      changed.push(path);
+      changed.push(url.pathname);
       res.end("{}");
-    } else if (path.endsWith("/spaces")) {
-      const second = url.searchParams.get("cursor");
-      const ids = second ? ["old"] : ["fresh", "foreign"];
-      res.end(
-        JSON.stringify({
-          spaces: ids.map((id) => ({
-            id,
-            name: id === "foreign" ? "unrelated" : `chalk-proof:${id}`,
-            metadata: { proof_run_id: id },
-          })),
-          pagination: { next_cursor: second ? null : "second" },
-        }),
-      );
-    } else if (path.endsWith("/episodes")) {
-      const id = path.split("/").at(-2);
-      res.end(
-        JSON.stringify({
-          episodes: [
-            {
-              id: "ep",
-              metadata: { proof_run_id: id },
-              created_at: id === "fresh" ? new Date().toISOString() : old,
-              status: "live",
-            },
-          ],
-          pagination: {},
-        }),
-      );
-    } else if (path.endsWith("/ep")) res.end(JSON.stringify({ status: "ended" }));
-    else if (path.endsWith("/old")) res.end(JSON.stringify({ archived: true }));
-    else {
-      res.writeHead(403).end("{}");
+      return;
     }
+    const page = sweepPage(url, old);
+    assert.ok(page, `Unexpected inventory request: ${url.pathname}`);
+    res.end(JSON.stringify(page));
   });
   await sweepStaleRuns(config);
   assert.deepEqual(changed, ["/v1/tenants/tenant/spaces/old/episodes/ep/end", "/v1/tenants/tenant/spaces/old/archive"]);
