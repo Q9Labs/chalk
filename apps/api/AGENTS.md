@@ -12,7 +12,7 @@ lifecycle, recordings, transcripts, and webhooks.
 
 - Consult the relevant sections of `apps/api/docs/code-standards.md` when writing Go here.
 - Read `apps/api/docs/route-workflow.md` before adding a new route.
-- Read `apps/api/docs/database-workflow.md` when doing database work.
+- Read `apps/api/docs/database-workflow.md` when doing database work, including its two-release removal rule and required `chalk:removed-in` marker.
 - Run the gate before committing: `scripts/gate.sh`.
 
 ## Media plane providers

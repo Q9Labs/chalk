@@ -27,6 +27,31 @@ apps/api/scripts/db-migrate.sh up
 
 Production images contain `chalk-migrate` and the checked-in migrations. Before API/Sync activation, the controller runs a one-shot migration to the release manifest's `minimum_migration`. Owner credentials stay out of runtime services. Only an explicitly named checked-in repair may fill an out-of-order gap; other gaps fail. API readiness rejects an older schema. Runtime rollback does not undo migrations.
 
+## Keep the previous release runnable
+
+A migration's `Up` section must not remove or rename a table, column, type, or
+constraint that the previous release still uses. Removal takes two releases:
+the first stops using the object; the second drops it and names the first release.
+Redeploying the previous image must work without undoing migrations.
+
+The API gate checks migrations added since the merge base with `origin/master`
+(`GATE_BASE_REF` overrides the base). Existing migrations are exempt. In `Up`,
+the check rejects `DROP` (including `ALTER ... DROP`), `RENAME`, and
+`ALTER [COLUMN] name TYPE` / `ALTER [COLUMN] name SET DATA TYPE`.
+`Down` is exempt. A deliberate second-release removal needs this standalone
+comment inside `Up`, with the actual release tag that stopped using the object:
+
+```sql
+-- +goose Up
+-- chalk:removed-in v0.0.85
+ALTER TABLE example DROP COLUMN unused_column;
+```
+
+The marker is a review assertion, not proof of compatibility. Reviewers must
+verify that the named release no longer uses every affected object. The check
+ignores SQL comments, quoted identifiers, and ordinary string values; it also
+checks dollar-quoted bodies. It does not prove dynamic SQL or data changes safe.
+
 ## Queries
 
 Write named sqlc queries in `apps/api/db/queries`, then generate and verify:
