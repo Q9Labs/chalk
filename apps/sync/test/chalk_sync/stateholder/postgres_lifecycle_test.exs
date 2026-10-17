@@ -31,6 +31,128 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
     end
   end
 
+  for archived <- [false, true],
+      endpoint_state <- [:enabled, :deleted, :disabled, :unsubscribed, :absent] do
+    @archived archived
+    @endpoint_state endpoint_state
+    test "Episode end (archived=#{archived}) retains one Event with #{endpoint_state} endpoint",
+         %{
+           connections: connections
+         } do
+      connection = hd(connections)
+      fixture = SyncPostgres.seed_episode(connection, 1)
+      on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+
+      if @endpoint_state != :absent do
+        event_types =
+          if @endpoint_state == :unsubscribed, do: ["participant.left"], else: ["episode.ended"]
+
+        SyncPostgres.seed_webhook_endpoint(fixture, connection, event_types)
+      end
+
+      {:ok, operation} = Operation.new("archived_episode_end", :tenant_end_episode, %{})
+
+      assert {:ok, %{external_operation_id: operation_id}} =
+               Postgres.begin_internal_operation(fixture.episode, operation)
+
+      finish = fn ->
+        Postgres.finalize_operation(
+          fixture.episode,
+          operation_id,
+          {:applied, :episode_ended, %{"reason" => "tenant_recovery"}}
+        )
+      end
+
+      # Cleanup can archive the Space and remove the receiver after accepting
+      # the asynchronous end, before Sync commits the terminal transition.
+      if @archived do
+        Postgrex.query!(connection, "update spaces set archived_at = now() where id = $1", [
+          UUID.dump!(fixture.episode.space_id)
+        ])
+      end
+
+      case @endpoint_state do
+        :deleted ->
+          Postgrex.query!(
+            connection,
+            "update webhook_endpoints set enabled = false, deleted_at = now(), current_secret_ciphertext = null where tenant_id = $1",
+            [UUID.dump!(fixture.episode.tenant_id)]
+          )
+
+        :disabled ->
+          Postgrex.query!(
+            connection,
+            "update webhook_endpoints set enabled = false where tenant_id = $1",
+            [UUID.dump!(fixture.episode.tenant_id)]
+          )
+
+        _ ->
+          :ok
+      end
+
+      assert {:ok, %{result: :applied}} = finish.()
+      assert {:ok, %{result: :applied, delivery: :duplicate}} = finish.()
+
+      expected_deliveries = if @endpoint_state == :enabled, do: 1, else: 0
+
+      assert [["ended", 1, ^expected_deliveries]] =
+               query_rows(
+                 fixture,
+                 """
+                 select episode.status,
+                   (select count(*) from webhook_events event where event.tenant_id = episode.tenant_id and event.resource_id = episode.id and event.event_name = 'episode.ended'),
+                   (select count(*) from webhook_deliveries delivery join webhook_events event on event.id = delivery.event_id where event.tenant_id = episode.tenant_id and event.resource_id = episode.id and event.event_name = 'episode.ended')
+                 from episodes episode where episode.tenant_id = $1 and episode.id = $2
+                 """,
+                 []
+               )
+    end
+  end
+
+  test "a legacy Episode without started_at ends and retains a valid Event without receivers", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = SyncPostgres.seed_episode(connection, 1)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+
+    Postgrex.query!(connection, "update episodes set started_at = null where id = $1", [
+      UUID.dump!(fixture.episode.episode_id)
+    ])
+
+    {:ok, operation} = Operation.new("legacy_episode_end", :tenant_end_episode, %{})
+
+    assert {:ok, %{external_operation_id: operation_id}} =
+             Postgres.begin_internal_operation(fixture.episode, operation)
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(
+               fixture.episode,
+               operation_id,
+               {:applied, :episode_ended, %{"reason" => "tenant_recovery"}}
+             )
+
+    assert [[%{"data" => %{"object" => object}}]] =
+             query_rows(
+               fixture,
+               """
+               select convert_from(body, 'UTF8')::jsonb from webhook_events
+               where tenant_id = $1 and resource_id = $2 and event_name = 'episode.ended'
+               """,
+               []
+             )
+
+    assert is_binary(object["started_at"])
+    assert object["started_at"] == object["created_at"]
+
+    assert [["ended", nil]] =
+             query_rows(
+               fixture,
+               "select status, started_at from episodes where tenant_id = $1 and id = $2",
+               []
+             )
+  end
+
   test "an authoritative Participant join atomically queues one automatic Recording", %{
     connections: connections
   } do
