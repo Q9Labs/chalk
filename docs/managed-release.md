@@ -17,7 +17,7 @@ gh workflow run ci.yml --repo Q9Labs/chalk --ref master -f target_sha="$SOURCE_S
 Watch the returned run through completion. The managed job must succeed, not be
 skipped. Inspect its summary and `managed-deployment-*` proof artifact: host
 health must pass, rollback must be false, and the dispatcher must be verified.
-Legacy staging reports `not-configured` unless its dispatcher parameter is set.
+Every environment requires its own dispatcher configuration.
 Run the environment's real-call proof after deployment; controller readiness
 alone does not prove a call, recording, or export.
 
@@ -33,9 +33,10 @@ Each environment needs `CHALK_MANAGED_AWS_REGION`, `CHALK_MANAGED_DEPLOY_ROLE_AR
 `CHALK_MANAGED_PARAMETER_PREFIX`, and `CHALK_MANAGED_SSM_DOCUMENT_NAME` variables.
 The role's OIDC trust must name that exact GitHub environment. Names use at most
 32 lowercase letters or digits, separated by single hyphens and starting with a letter. The default
-remains `staging`; choosing a name does not provision its infrastructure.
+is owned by the Release workflow; select `nightly` explicitly for the isolated stack.
+Choosing a name does not provision its infrastructure.
 
-Non-staging environments require their own recorder configuration at
+All environments require their own recorder configuration at
 `/chalk/<environment>/release/recorder.json`. Override this with the optional
 `CHALK_MANAGED_RECORDER_CONFIG_PARAMETER`, scoped to the same environment.
 The configuration must match the target instance and runtime prefix.

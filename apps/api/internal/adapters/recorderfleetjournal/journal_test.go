@@ -18,7 +18,7 @@ func TestStorePersistsAtomicJournalAndRejectsStaleRevision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	key := recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}
+	key := recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture}
 	if _, err := store.Load(t.Context(), key); !errors.Is(err, recorderfleet.ErrJournalNotFound) {
 		t.Fatalf("missing load error = %v", err)
 	}
@@ -62,12 +62,12 @@ func TestStoreRoundTripsFencedIdentityWithoutSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	key := recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}
+	key := recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture}
 	drainingAt := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
 	journal := recorderfleet.NewJournal()
 	journal.Revision = 1
 	journal.Nodes["123"] = recorderfleet.ManagedNode{
-		ProviderID: "123", Name: "chalk-recorder-capture-staging-1-release", Phase: recorderfleet.PhaseDraining,
+		ProviderID: "123", Name: "chalk-recorder-capture-nightly-1-release", Phase: recorderfleet.PhaseDraining,
 		BootGeneration: 1, DrainStartedAt: &drainingAt,
 		Identity: &recorderfleet.NodeIdentity{
 			ProviderID: "123", WorkerID: "55555555-5555-4555-8555-555555555555",
@@ -97,7 +97,7 @@ func TestStoreRoundTripsFencedIdentityWithoutSecrets(t *testing.T) {
 
 func TestStoreRejectsCorruptAndSymlinkJournals(t *testing.T) {
 	directory := t.TempDir()
-	key := recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}
+	key := recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture}
 	corruptPath := filepath.Join(directory, "corrupt.json")
 	if err := os.WriteFile(corruptPath, []byte(`{"key":`), 0o600); err != nil {
 		t.Fatalf("write corrupt journal: %v", err)
@@ -122,7 +122,7 @@ func TestStoreRejectsCorruptAndSymlinkJournals(t *testing.T) {
 }
 
 func TestStoreMigratesSafeLegacyJournalAndRejectsAmbiguousBootstrap(t *testing.T) {
-	key := recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}
+	key := recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture}
 	directory := t.TempDir()
 	legacy := recorderfleet.NewJournal()
 	legacy.SchemaVersion = recorderfleet.LegacyJournalSchemaVersion

@@ -8,13 +8,61 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from release_core import (PIN_KEYS, builder_identity, check_fresh, check_image, check_qualification,
-                          digest, env_values, rebuild_dispatcher, replace_pins, scheduler_changes, sealed_result)
+                          digest, env_values, rebuild_dispatcher, replace_pins, scheduler_changes, sealed_result, validate_config)
 from release_io import Provider
 from release import Release
 from spend_guard import expire
 
 
+def dispatcher_state_fixture():
+    function = {"environment": [{"variables": {"CHALK_ENVIRONMENT": "production", "DEEPINFRA_ENABLED": "true", "TRANSCRIPTION_MAX_BATCH": "7"}}],
+                "function_name": "test-function", "s3_bucket": "test-artifacts", "s3_key": "test.zip", "s3_object_version": "test-version",
+                "source_code_hash": base64.b64encode(b"a" * 32).decode(), "handler": "index.handler", "timeout": 60,
+                "memory_size": 512, "ephemeral_storage": [{"size": 512}], "reserved_concurrent_executions": 2}
+    attributes = {
+        "aws_lambda_function.dispatcher": function,
+        "aws_scheduler_schedule.reconcile": {"name": "test-scheduler", "group_name": "default", "state": "ENABLED",
+                                              "target": [{"input": "{}", "retry_policy": [{"maximum_event_age_in_seconds": 60, "maximum_retry_attempts": 1}]}]},
+        "aws_lambda_function_event_invoke_config.dispatcher": {"maximum_event_age_in_seconds": 60, "maximum_retry_attempts": 1},
+        "aws_cloudwatch_log_group.dispatcher": {"retention_in_days": 7, "kms_key_id": ""},
+        "aws_sqs_queue.async_failure": {"kms_master_key_id": ""},
+        "aws_cloudwatch_metric_alarm.errors": {"alarm_actions": []},
+        "aws_iam_role_policy.dispatcher": {"policy": json.dumps({"Statement": [{"Resource": ["arn:test:kms:key", "arn:test:ssm:path"]}]})},
+        "aws_lambda_permission.control_api": {"principal": "test-principal", "source_arn": "arn:test:source"},
+    }
+    state = {"resources": [{"type": key.split('.')[0], "name": key.split('.')[1], "instances": [{"attributes": value}]}
+                           for key, value in attributes.items()], "outputs": {"function_name": {"sensitive": False}}}
+    return state
+
+
 class ReleaseContracts(unittest.TestCase):
+    def test_nightly_release_configuration_is_environment_scoped(self):
+        from release import parse_args
+        args = parse_args(["plan", "--dry-run", "--environment", "nightly", "--region", "test-region", "--profile", "test-profile"])
+        self.assertEqual(args.config_parameter, "/chalk/nightly/release/recorder.json")
+        with self.assertRaisesRegex(ValueError, "configuration must be under"):
+            parse_args(["plan", "--dry-run", "--environment", "nightly", "--region", "test-region", "--profile", "test-profile", "--config-parameter", "/chalk/production/release/recorder.json"])
+        config = {
+            "schema_version": 1, "do_context": "chalk-nightly",
+            "bootstrap_ca_parameter": "/chalk/nightly/managed-episode/recorder/issuer-server-ca",
+            "bootstrap_server_name": "nightly-recording-control.chalkmeet.com",
+            "builder": {"region": "blr1", "size": "c-8", "image": "test", "ttl_seconds": 1200, "ssh_cidr": "192.0.2.1/32"},
+            "worker": {"region": "blr1", "size": "c-2", "disk_gb": 25},
+            "runtime": {"instance_id": "i-0123456789abcdef0", "parameter_prefix": "/chalk/nightly/managed-episode", "document_name": "chalk-nightly-managed-episode-release", "log_group": "/chalk/nightly/managed-episode", "user_id": 1000},
+            "dispatcher": {"state_bucket": "chalk-nightly-state-000000000000", "state_key": "transcription/terraform.tfstate", "function_name": "chalk-nightly-transcription-dispatcher", "scheduler_name": "chalk-nightly-transcription-reconcile", "scheduler_group": "chalk-nightly"},
+        }
+        self.assertEqual(validate_config(config, "nightly"), config)
+        config["do_context"] = "copied-production-context"
+        with self.assertRaisesRegex(ValueError, "nightly DigitalOcean context"):
+            validate_config(config, "nightly")
+        config["do_context"] = "chalk-nightly"
+        with self.assertRaisesRegex(ValueError, "outside selected environment"):
+            validate_config(config, "production")
+        config["runtime"]["parameter_prefix"] = "/chalk/production/managed-episode"
+        with self.assertRaisesRegex(ValueError, "outside selected environment"):
+            validate_config(config, "nightly")
+
+
     def test_planning_accepts_distinct_unchanged_role_profile(self):
         release = Release.__new__(Release)
         release.args = Mock(role="render", region="test-region", profile="test-profile")
@@ -84,23 +132,7 @@ class ReleaseContracts(unittest.TestCase):
                 self.assertTrue(all(command[-2:] == ["123", "--force"] for command in deletions))
 
     def test_dispatcher_root_preserves_typed_live_inputs_and_backend(self):
-        function = {"environment": [{"variables": {"CHALK_ENVIRONMENT": "production", "DEEPINFRA_ENABLED": "true", "TRANSCRIPTION_MAX_BATCH": "7"}}],
-                    "function_name": "test-function", "s3_bucket": "test-artifacts", "s3_key": "test.zip", "s3_object_version": "test-version",
-                    "source_code_hash": base64.b64encode(b"a" * 32).decode(), "handler": "index.handler", "timeout": 60,
-                    "memory_size": 512, "ephemeral_storage": [{"size": 512}], "reserved_concurrent_executions": 2}
-        attributes = {
-            "aws_lambda_function.dispatcher": function,
-            "aws_scheduler_schedule.reconcile": {"name": "test-scheduler", "group_name": "default", "state": "ENABLED",
-                                                  "target": [{"input": "{}", "retry_policy": [{"maximum_event_age_in_seconds": 60, "maximum_retry_attempts": 1}]}]},
-            "aws_lambda_function_event_invoke_config.dispatcher": {"maximum_event_age_in_seconds": 60, "maximum_retry_attempts": 1},
-            "aws_cloudwatch_log_group.dispatcher": {"retention_in_days": 7, "kms_key_id": ""},
-            "aws_sqs_queue.async_failure": {"kms_master_key_id": ""},
-            "aws_cloudwatch_metric_alarm.errors": {"alarm_actions": []},
-            "aws_iam_role_policy.dispatcher": {"policy": json.dumps({"Statement": [{"Resource": ["arn:test:kms:key", "arn:test:ssm:path"]}]})},
-            "aws_lambda_permission.control_api": {"principal": "test-principal", "source_arn": "arn:test:source"},
-        }
-        state = {"resources": [{"type": key.split('.')[0], "name": key.split('.')[1], "instances": [{"attributes": value}]}
-                               for key, value in attributes.items()], "outputs": {"function_name": {"sensitive": False}}}
+        state = dispatcher_state_fixture()
         module = Path(__file__).resolve().parents[2] / "infrastructure/opentofu/modules/aws-transcription-dispatcher"
         root = rebuild_dispatcher(state, module, {"state_bucket": "test-state", "state_key": "test.tfstate"}, "test-region", "test-profile")
         inputs = root["module"]["dispatcher"]
@@ -132,6 +164,40 @@ class ReleaseContracts(unittest.TestCase):
         updated = replace_pins(text, updates)
         self.assertEqual(updated, text.replace("IMAGE_ID=123", "IMAGE_ID=456").replace("RELEASE_ID=old", "RELEASE_ID=new"))
         self.assertEqual(env_values(updated)["SECRET"], "a=b")
+
+    def test_nightly_pin_publication_keeps_bootstrap_claim_bound_to_image(self):
+        old_digest, new_digest = "sha256:" + "a" * 64, "sha256:" + "b" * 64
+        before = "\n".join(["CHALK_RECORDER_FLEET_IMAGE_ID=123", "CHALK_RECORDER_FLEET_RELEASE_ID=old",
+                            "CHALK_RECORDER_FLEET_IMAGE_DIGEST=" + old_digest,
+                            "CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST=" + old_digest]) + "\n"
+        store = {"Name": "/test/render-env", "Type": "SecureString", "Version": 1, "Value": before}
+        release = Release.__new__(Release)
+        release.args = Mock(environment="nightly")
+        release.config = {"worker": {"region": "test1", "size": "c-8"}}
+        release.state = {"role": "render", "image_id": "456", "release_id": "new", "image_digest": new_digest,
+                         "pins": {"render": {"before_version": 1, "before_sha256": digest(before)}}}
+        release.provider, release.save = Mock(), Mock()
+        release.parameter_name = Mock(return_value=store["Name"])
+        release.provider.parameter.side_effect = lambda _name: dict(store)
+
+        def aws(_service, operation, *_args, **kwargs):
+            if operation == "describe-parameters":
+                return {"Parameters": [{}]}
+            self.assertEqual(operation, "put-parameter")
+            store.update(Value=kwargs["payload"]["Value"], Version=2)
+            return {"Version": 2}
+
+        release.provider.aws.side_effect = aws
+        with tempfile.TemporaryDirectory() as directory:
+            release.directory = Path(directory)
+            receipt = b'{"result":"PASS"}'
+            (release.directory / "boot-receipt.json").write_bytes(receipt)
+            release.state["qualification"] = {"receipt_sha256": digest(receipt)}
+            with patch("release.check_qualification"):
+                result = release.publish_pins()
+        values = env_values(store["Value"])
+        self.assertEqual(values["CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST"], new_digest)
+        self.assertIn("CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST", result["changed_keys"])
 
     def test_pin_scope_is_closed(self):
         with self.assertRaises(ValueError):

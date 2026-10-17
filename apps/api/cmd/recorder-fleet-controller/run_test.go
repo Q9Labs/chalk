@@ -29,7 +29,7 @@ func TestNewControllerHTTPClientRequiresControllerSPIFFEIdentity(t *testing.T) {
 	directory := t.TempDir()
 	certificateFile, keyFile, caFile := writeControllerCertificate(t, directory, "recorder-fleet-controller")
 	config := commandConfig{
-		Fleet:          recorderfleet.Config{Key: recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}},
+		Fleet:          recorderfleet.Config{Key: recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture}},
 		ControllerCert: certificateFile, ControllerKey: keyFile, ServerCA: caFile,
 		ServerName: "control.example", SPIFFETrustDomain: "workers.example.test",
 	}
@@ -141,7 +141,7 @@ func writeControllerCertificate(t *testing.T, directory, role string) (string, s
 	if err != nil {
 		t.Fatalf("generate client key: %v", err)
 	}
-	spiffeID, err := url.Parse("spiffe://workers.example.test/environment/staging/" + role + "/55555555-5555-4555-8555-555555555555")
+	spiffeID, err := url.Parse("spiffe://workers.example.test/environment/nightly/" + role + "/55555555-5555-4555-8555-555555555555")
 	if err != nil {
 		t.Fatalf("parse SPIFFE ID: %v", err)
 	}

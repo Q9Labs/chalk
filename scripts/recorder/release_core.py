@@ -7,7 +7,6 @@ import re
 from pathlib import Path
 
 PHASES = ("plan", "build", "qualify", "snapshot", "publish-pins", "deploy", "verify")
-PREFIX = "/chalk/production/release/"
 PIN_KEYS = {"CHALK_RECORDER_FLEET_" + key for key in ("IMAGE_ID", "RELEASE_ID", "IMAGE_DIGEST")}
 
 
@@ -35,7 +34,7 @@ def env_values(text):
 
 def replace_pins(text, updates):
     before = env_values(text)
-    allowed = PIN_KEYS | {"CHALK_RECORDER_CAPTURE_PROFILE_EVIDENCE_SHA256"}
+    allowed = PIN_KEYS | {"CHALK_RECORDER_CAPTURE_PROFILE_EVIDENCE_SHA256", "CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST"}
     require(set(updates) <= allowed and set(updates) <= set(before), "pin update exceeds allowlist")
     lines = []
     for line in text.splitlines(keepends=True):
@@ -54,7 +53,8 @@ def check_fresh(parameter, receipt):
             "SSM inputs changed since plan; start a fresh plan")
 
 
-def validate_config(config):
+def validate_config(config, environment="production"):
+    require(re.fullmatch(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*", environment) and len(environment) <= 32, "invalid deployment environment")
     require(config["schema_version"] == 1, "unsupported release configuration")
     sections = {
         "builder": {"region", "size", "image", "ttl_seconds", "ssh_cidr"},
@@ -71,7 +71,19 @@ def validate_config(config):
     import ipaddress
     ipaddress.ip_network(config["builder"]["ssh_cidr"], strict=True)
     require(re.fullmatch(r"i-[0-9a-f]{8,17}", config["runtime"]["instance_id"]), "invalid runtime instance")
-    require(config["runtime"]["parameter_prefix"].startswith("/chalk/production/"), "runtime prefix outside production")
+    require(config["runtime"]["parameter_prefix"].startswith(f"/chalk/{environment}/"), "runtime prefix outside selected environment")
+    if environment == "nightly":
+        require(config["do_context"] == "chalk-nightly", "invalid nightly DigitalOcean context")
+        require(config["runtime"]["parameter_prefix"] == "/chalk/nightly/managed-episode", "invalid nightly runtime prefix")
+        require(config["runtime"]["document_name"] == "chalk-nightly-managed-episode-release", "invalid nightly document")
+        require(config["runtime"]["log_group"] == "/chalk/nightly/managed-episode", "invalid nightly log group")
+        require(config["bootstrap_server_name"] == "nightly-recording-control.chalkmeet.com", "invalid nightly bootstrap hostname")
+        require(config["bootstrap_ca_parameter"].startswith("/chalk/nightly/"), "bootstrap CA outside nightly")
+        require(config["dispatcher"]["function_name"] == "chalk-nightly-transcription-dispatcher", "invalid nightly function")
+        require(config["dispatcher"]["scheduler_name"] == "chalk-nightly-transcription-reconcile", "invalid nightly schedule")
+        require(config["dispatcher"]["scheduler_group"] == "chalk-nightly", "invalid nightly schedule group")
+        require(re.fullmatch(r"chalk-nightly-state-[0-9]{12}", config["dispatcher"]["state_bucket"]), "invalid nightly state bucket")
+        require(config["dispatcher"]["state_key"] == "transcription/terraform.tfstate", "invalid nightly state key")
     require(re.fullmatch(r"[A-Za-z0-9.-]+", config["bootstrap_server_name"]), "invalid bootstrap server name")
     require(isinstance(config["runtime"]["user_id"], int) and config["runtime"]["user_id"] > 0, "invalid runtime user")
     return config
@@ -159,13 +171,16 @@ def rebuild_dispatcher(state, module, backend, region, profile):
     if permission:
         inputs["control_api_invoker_principal"] = permission["principal"]
         inputs["control_api_invoke_source_arn"] = permission["source_arn"]
-    return {"terraform": {"required_providers": {"aws": {"source": "hashicorp/aws", "version": "~> 5.0"}},
+    root = {"terraform": {"required_providers": {"aws": {"source": "hashicorp/aws", "version": "~> 5.0"}},
                           "backend": {"s3": {"bucket": backend["state_bucket"], "key": backend["state_key"],
                                              "region": region, "profile": profile, "encrypt": True, "use_lockfile": True}}},
             "provider": {"aws": {"region": region, "profile": profile}},
             "module": {"dispatcher": {"source": str(module), **inputs}},
             "output": {key: {"value": "${module.dispatcher." + key + "}", "sensitive": value.get("sensitive", False)}
                        for key, value in state["outputs"].items()}}
+    if not root["output"]:
+        del root["output"]
+    return root
 
 
 def scheduler_changes(plan, desired):

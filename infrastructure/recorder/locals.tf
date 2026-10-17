@@ -1,7 +1,7 @@
 locals {
   # A production bucket name is never guessed: omission must stop before the
   # provider can propose creating a replacement bucket.
-  bucket_name = var.recording_bucket_name != null ? var.recording_bucket_name : (var.environment == "staging" ? "chalk-recorder-staging" : "")
+  bucket_name = var.recording_bucket_name != null ? var.recording_bucket_name : (var.environment == "nightly" ? "chalk-recorder-nightly" : "")
 
   capture_episode_nodes      = var.reserved_capture_episodes == 0 ? 0 : ceil(var.reserved_capture_episodes / var.capture_episodes_per_node)
   capture_participant_nodes  = var.reserved_capture_participants == 0 ? 0 : ceil(var.reserved_capture_participants / var.capture_participants_per_node)
@@ -59,7 +59,7 @@ check "capture_admission_ceiling" {
 
 check "production_bucket_adoption_contract" {
   assert {
-    condition     = var.environment == "staging" || (var.recording_bucket_name != null && var.recording_bucket_import_id != null && var.recording_bucket_adoption_plan_digest != null)
+    condition     = var.environment == "nightly" || (var.recording_bucket_name != null && var.recording_bucket_import_id != null && var.recording_bucket_adoption_plan_digest != null)
     error_message = "production requires an explicit existing R2 bucket name, inventory import ID, and no-delete adoption-plan digest before planning."
   }
 }
@@ -118,7 +118,7 @@ resource "terraform_data" "apply_gate" {
 
     precondition {
       condition     = can(regex("^sha256:[0-9a-f]{64}$", coalesce(var.staging_evidence_digest, "")))
-      error_message = "recorder mutation is disabled until a redacted staging evidence digest is supplied."
+      error_message = "recorder mutation is disabled until a redacted nightly evidence digest is supplied."
     }
 
     precondition {
@@ -142,7 +142,7 @@ resource "terraform_data" "apply_gate" {
     }
 
     precondition {
-      condition     = var.environment == "staging" || (var.recording_bucket_name != null && var.recording_bucket_import_id != null && var.recording_bucket_adoption_plan_digest != null)
+      condition     = var.environment == "nightly" || (var.recording_bucket_name != null && var.recording_bucket_import_id != null && var.recording_bucket_adoption_plan_digest != null)
       error_message = "production recorder mutation requires an explicit existing bucket name, private inventory import ID, and approved no-delete adoption-plan digest."
     }
   }

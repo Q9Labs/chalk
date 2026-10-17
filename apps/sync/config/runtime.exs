@@ -14,6 +14,20 @@ if config_env() == :prod do
   local_proof? = System.get_env("CHALK_SYNC_LOCAL_PROOF") == "true"
   local_parity? = System.get_env("CHALK_SYNC_LOCAL_PARITY") == "true"
 
+  if System.get_env("CHALK_API_ENV") == "nightly" do
+    if local_proof? or local_parity? do
+      raise "nightly cannot use local proof or parity authentication"
+    end
+
+    for {key, expected} <- [
+          {"CHALK_API_URL", "https://nightly-api.chalkmeet.com"},
+          {"CHALK_SYNC_TOKEN_ISSUER", "https://nightly-api.chalkmeet.com"},
+          {"CHALK_SYNC_TOKEN_AUDIENCE", "chalk-nightly-sync"}
+        ] do
+      if System.get_env(key) != expected, do: raise("#{key} must select nightly")
+    end
+  end
+
   if local_proof? and local_parity? do
     raise "CHALK_SYNC_LOCAL_PROOF and CHALK_SYNC_LOCAL_PARITY cannot both be true"
   end

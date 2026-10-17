@@ -4,7 +4,7 @@ defmodule ChalkSync.ReleaseTopology.Schedule do
   alias ChalkSync.CanonicalJSON
 
   @schema_version 1
-  @environments ["local", "staging"]
+  @environments ["local", "nightly"]
   @action_expectations %{
     "trigger_check" => "confirmed",
     "inject" => "injected",

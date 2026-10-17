@@ -15,7 +15,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from release_core import (PHASES, PREFIX, PIN_KEYS, builder_identity, check_fresh, check_image,
+from release_core import (PHASES, PIN_KEYS, builder_identity, check_fresh, check_image,
                           check_qualification, digest, env_values, rebuild_dispatcher, require,
                           replace_pins, scheduler_changes, sealed_result, validate_config)
 from release_io import Provider, private_json
@@ -31,7 +31,8 @@ def parse_args(arguments=None):
     parser.add_argument("--dry-run", action="store_true", help="read production metadata only; plan covers all phases")
     parser.add_argument("--region", default=os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION"))
     parser.add_argument("--profile", default=os.environ.get("AWS_PROFILE"))
-    parser.add_argument("--config-parameter", default=PREFIX + "recorder.json")
+    parser.add_argument("--environment", choices=("production", "nightly"), default="production")
+    parser.add_argument("--config-parameter")
     parser.add_argument("--role", choices=("capture", "render"), default="render")
     parser.add_argument("--source", help="exact 40-character public Git commit; defaults to this checkout HEAD")
     parser.add_argument("--state", help="private release directory outside the checkout; required for real phases")
@@ -40,7 +41,9 @@ def parse_args(arguments=None):
     parser.add_argument("--build-worker", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(arguments)
     require(args.region and args.profile, "set AWS_REGION and AWS_PROFILE (or pass --region and --profile)")
-    require(args.config_parameter.startswith(PREFIX) and ".." not in args.config_parameter, "configuration must be under " + PREFIX)
+    prefix = f"/chalk/{args.environment}/release/"
+    args.config_parameter = args.config_parameter or prefix + "recorder.json"
+    require(args.config_parameter.startswith(prefix) and ".." not in args.config_parameter, "configuration must be under " + prefix)
     require(args.dry_run or args.state, "real phases require --state outside the checkout")
     if args.source:
         require(re.fullmatch(r"[0-9a-f]{40}", args.source), "--source must be an exact 40-character commit")
@@ -51,9 +54,10 @@ class Release:
     def __init__(self, args):
         self.args = args
         self.provider = Provider(args.region, args.profile, args.dry_run)
+        os.environ["CHALK_RECORDER_RELEASE_CONFIG_PARAMETER"] = args.config_parameter
         parameter = self.provider.parameter(args.config_parameter)
         require(parameter["Type"] == "String", "release configuration must be a non-secret String")
-        self.config = validate_config(json.loads(parameter["Value"]))
+        self.config = validate_config(json.loads(parameter["Value"]), args.environment)
         self.config_version = parameter["Version"]
         self.config_digest = digest(parameter["Value"])
         self.provider.context = self.config["do_context"]
@@ -399,6 +403,8 @@ class Release:
                    "CHALK_RECORDER_FLEET_IMAGE_DIGEST": self.state["image_digest"]}
         if role == "capture":
             updates["CHALK_RECORDER_CAPTURE_PROFILE_EVIDENCE_SHA256"] = self.state["qualification"]["receipt_sha256"]
+        if self.args.environment == "nightly" and "CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST" in env_values(parameter["Value"]):
+            updates["CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST"] = self.state["image_digest"]
         value = replace_pins(parameter["Value"], updates)
         metadata = self.provider.aws("ssm", "describe-parameters", "--parameter-filters", "Key=Name,Option=Equals,Values=" + parameter["Name"])["Parameters"]
         require(len(metadata) == 1, "parameter metadata unavailable")
@@ -419,7 +425,7 @@ class Release:
         require(self.args.managed_manifest, "--managed-manifest is required for the canonical input reload")
         runtime = self.config["runtime"]
         command = ["node", str(REPO / "scripts/deploy/deploy-managed-release.mjs"), "--manifest", str(Path(self.args.managed_manifest).resolve()),
-                   "--environment", "production", "--region", self.args.region, "--instance-id", runtime["instance_id"],
+                   "--environment", self.args.environment, "--region", self.args.region, "--instance-id", runtime["instance_id"],
                    "--document-name", runtime["document_name"], "--document", str(REPO / "infrastructure/managed-episode/ssm/chalk-managed-episode-deploy.json"),
                    "--parameter-prefix", runtime["parameter_prefix"], "--request-id", "recorder-" + uuid.uuid4().hex,
                    "--log-group-name", runtime["log_group"]]

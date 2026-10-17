@@ -363,7 +363,7 @@ Both managed release `--dry-run` and recorder `deploy --dry-run
 release, retained ZIP digest and planned copy action. Dry runs do not copy,
 apply, invoke SSM commands or verify loaded processes. Production configuration
 is mandatory. Other configured environments use their own scoped recorder
-configuration; legacy staging still reports `not-configured` unless configured.
+configuration; there is no production configuration fallback.
 
 The deployment identity needs the existing dispatcher module's read/apply
 permissions, remote state and lock access, SSM configuration read, and versioned
