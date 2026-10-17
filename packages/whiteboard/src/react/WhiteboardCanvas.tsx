@@ -415,7 +415,7 @@ function useWhiteboardMath({ apiRef, canDraw, excalidraw, isCollaborating, selec
     [apiRef, closeMath, excalidraw, isCollaborating, setSelectedLatex, syncScene],
   );
 
-  return { closeMath, handleSubmitMath, isMathOpen, openMath, selectedLatex };
+  return { closeMath, handleSubmitMath, initialLatex: selectedLatex ?? DEFAULT_LATEX, isMathOpen, openMath, selectedLatex };
 }
 
 function useWhiteboardCanvasState(props: WhiteboardCanvasProps) {
@@ -477,17 +477,18 @@ function WhiteboardCanvasView({ state }: { state: ReturnType<typeof useWhiteboar
           uiOptions={uiOptions}
         />
       )}
-      {math.isMathOpen && <MathEditor initialLatex={math.selectedLatex ?? DEFAULT_LATEX} isEditing={Boolean(math.selectedLatex)} classNames={configuration.classNames} icons={configuration.icons} onClose={math.closeMath} onSubmit={math.handleSubmitMath} />}
+      {math.isMathOpen && <MathEditor initialLatex={math.initialLatex} isEditing={Boolean(math.selectedLatex)} classNames={configuration.classNames} icons={configuration.icons} onClose={math.closeMath} onSubmit={math.handleSubmitMath} />}
     </div>
   );
 }
 
 function WhiteboardMathToolbar({ canDraw, classNames, isReady, onOpenMath, selectedLatex }: { canDraw: boolean; classNames: WhiteboardCanvasClassNames; isReady: boolean; onOpenMath: () => void; selectedLatex: string | null }): React.JSX.Element | null {
   if (!isReady || !canDraw) return null;
+  const label = selectedLatex ? "Edit math equation" : "Insert math equation";
 
   return (
     <div className={classNames.toolbar} style={{ position: "absolute", top: 12, left: 12, zIndex: 20, display: "flex" }}>
-      <button type="button" onClick={onOpenMath} disabled={!canDraw} className={classNames.toolbarButton} aria-label={selectedLatex ? "Edit math equation" : "Insert math equation"} title={selectedLatex ? "Edit equation" : "Math"}>
+      <button type="button" onClick={onOpenMath} disabled={!canDraw} className={classNames.toolbarButton} aria-label={label} title={label}>
         ∑
       </button>
     </div>
