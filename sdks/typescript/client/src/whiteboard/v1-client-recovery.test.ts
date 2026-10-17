@@ -8,8 +8,6 @@ import type { ChalkWhiteboardV1ClientOptions, ChalkWhiteboardSummary, ChalkWhite
 
 const sceneId = "10000000-0000-4000-8000-000000000001";
 const files: ChalkWhiteboardV1FileTransport = {
-  initiateUpload: async () => ({ uploadId: "upload-1", method: "PUT", uploadUrl: "https://files.test/upload", headers: {}, expiresAt: "2026-08-23T00:00:00.000Z" }),
-  finalizeUpload: async () => undefined,
   getDownloadUrl: async () => ({ downloadUrl: "https://files.test/download", expiresAt: "2026-08-23T00:00:00.000Z" }),
 };
 

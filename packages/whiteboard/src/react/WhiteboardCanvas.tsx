@@ -216,7 +216,7 @@ function useWhiteboardInitialData(theme: "light" | "dark", localParticipantColor
   );
 }
 
-function useWhiteboardUiOptions(canDraw: boolean) {
+function useWhiteboardUiOptions() {
   return useMemo(
     () => ({
       canvasActions: {
@@ -228,10 +228,10 @@ function useWhiteboardUiOptions(canDraw: boolean) {
         saveToActiveFile: false,
         toggleTheme: false,
       },
-      tools: { image: canDraw },
+      tools: { image: false },
       welcomeScreen: false,
     }),
-    [canDraw],
+    [],
   );
 }
 
@@ -287,8 +287,6 @@ function useCollaborationEngineLoader(refs: CollaborationRefs, onLoadError: ((er
             requestSnapshot: collab.requestSnapshot,
             clear: collab.clear,
             fileTransfer: collab.fileTransfer,
-            initiateUpload: collab.initiateUpload,
-            finalizeUpload: collab.finalizeUpload,
             presignDownload: collab.presignDownload,
             subscribe: collab.subscribe,
             onFileSyncStateChange: collab.onFileSyncStateChange,
@@ -444,7 +442,7 @@ function useWhiteboardCanvasState(props: WhiteboardCanvasProps) {
     syncScene: collaboration.syncScene,
   });
   const initialData = useWhiteboardInitialData(configuration.theme, props.localParticipantColor);
-  const uiOptions = useWhiteboardUiOptions(configuration.canDraw);
+  const uiOptions = useWhiteboardUiOptions();
   const resolvedLoadError = loadError ?? stylesheet.error;
 
   return {
@@ -464,7 +462,7 @@ function WhiteboardCanvasView({ state }: { state: ReturnType<typeof useWhiteboar
 
   return (
     <div className={configuration.rootClassName} hidden={!configuration.isVisible}>
-      <WhiteboardMathToolbar canDraw={configuration.canDraw} classNames={configuration.classNames} isReady={isReady} onOpenMath={math.openMath} selectedLatex={math.selectedLatex} />
+      <WhiteboardMathToolbar canDraw={configuration.canDraw && !configuration.isCollaborating} classNames={configuration.classNames} isReady={isReady} onOpenMath={math.openMath} selectedLatex={math.selectedLatex} />
       <WhiteboardCanvasStatus classNames={configuration.classNames} error={resolvedLoadError} icons={configuration.icons} isReady={isReady} />
       {excalidraw && (
         <WhiteboardScene
@@ -485,7 +483,7 @@ function WhiteboardCanvasView({ state }: { state: ReturnType<typeof useWhiteboar
 }
 
 function WhiteboardMathToolbar({ canDraw, classNames, isReady, onOpenMath, selectedLatex }: { canDraw: boolean; classNames: WhiteboardCanvasClassNames; isReady: boolean; onOpenMath: () => void; selectedLatex: string | null }): React.JSX.Element | null {
-  if (!isReady) return null;
+  if (!isReady || !canDraw) return null;
 
   return (
     <div className={classNames.toolbar} style={{ position: "absolute", top: 12, left: 12, zIndex: 20, display: "flex" }}>

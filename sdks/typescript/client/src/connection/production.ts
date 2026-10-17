@@ -1,7 +1,7 @@
 import { CloudflareSFUClient, createCloudflareSFUHTTPTransport } from "../media";
 import { createChalkChatFileHttpTransport } from "../chat-files";
 import { createV1SyncClient } from "../sync";
-import { createChalkWhiteboardV1Client, createChalkWhiteboardV1FileHttpTransport } from "../whiteboard";
+import { createChalkWhiteboardV1Client, createChalkWhiteboardV1FileDownloadTransport } from "../whiteboard";
 import { makeConnectionPlatformLayer, type ConnectionChatFileFactoryInput, type ConnectionDependencies, type ConnectionMediaFactoryInput, type ConnectionMediaClient, type ConnectionSyncFactoryInput, type ConnectionWhiteboardFactoryInput } from "./dependencies";
 import { createBrowserMediaDevices } from "./media-devices";
 export function createDefaultConnectionDependencies(options: { readonly apiBaseURL: string; readonly syncURL: string; readonly whiteboardURL?: string | null }): ConnectionDependencies {
@@ -125,14 +125,9 @@ function createSyncClient(syncURL: string, input: ConnectionSyncFactoryInput) {
   });
 }
 function createWhiteboardClient(apiBaseURL: string, url: string, input: ConnectionWhiteboardFactoryInput) {
-  let sceneId: string | null = null;
-  const files = createChalkWhiteboardV1FileHttpTransport({
+  const files = createChalkWhiteboardV1FileDownloadTransport({
     baseUrl: apiBaseURL,
     token: input.token,
-    sceneId: () => {
-      if (sceneId === null) throw new TypeError("Whiteboard scene is not ready");
-      return sceneId;
-    },
   });
   return createChalkWhiteboardV1Client({
     url,
@@ -140,7 +135,6 @@ function createWhiteboardClient(apiBaseURL: string, url: string, input: Connecti
     files,
     onWatchdogReplacement: input.onWatchdogReplacement,
     onSummary: (summary) => {
-      sceneId = summary.sceneId;
       input.onSummary(summary);
     },
   });

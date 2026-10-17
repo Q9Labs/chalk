@@ -1,6 +1,3 @@
-import { sha256 } from "@noble/hashes/sha2.js";
-import { bytesToHex } from "@noble/hashes/utils.js";
-
 import type { WhiteboardCommit, WhiteboardJsonValue, WhiteboardWireElement } from "../collab/wire";
 import { chalkEmbeddedWhiteboardSupportedElementTypes } from "./manifest";
 import {
@@ -62,13 +59,6 @@ export type ChalkEmbeddedWhiteboardTransportEvent =
     };
 
 export interface ChalkEmbeddedWhiteboardFileTransport {
-  readonly initiateUpload: (input: { readonly fileId: string; readonly mimeType: string; readonly byteLength: number; readonly sha256: string }) => Promise<{
-    readonly uploadId: string;
-    readonly method: "PUT";
-    readonly uploadUrl: string;
-    readonly headers: Readonly<Record<string, string>>;
-  }>;
-  readonly finalizeUpload: (uploadId: string) => Promise<void>;
   readonly getDownloadUrl: (fileId: string) => Promise<{ readonly downloadUrl: string }>;
 }
 
@@ -300,32 +290,7 @@ export class ChalkWhiteboardController {
   async #writeFile(message: ChalkEmbeddedWhiteboardRendererEnvelope): Promise<void> {
     const payload = requireFileWrite(message.payload);
     await this.#operation(payload.requestId, async () => {
-      if (!this.#effectiveCanDraw()) throw new Error("whiteboard file upload is not permitted");
-      const abortController = this.#beginFileTransfer(payload.requestId);
-      try {
-        const blob = await this.#dataURLBlob(payload.dataURL);
-        if (blob.size !== payload.byteLength) throw new Error("whiteboard file byte length does not match");
-        const validated = await validateFileBlob(blob, payload.mimeType);
-        if (bytesToHex(sha256(validated.bytes)) !== payload.sha256.toLowerCase()) {
-          throw new Error("whiteboard file digest does not match");
-        }
-        const upload = await this.options.transport.files.initiateUpload({
-          fileId: payload.fileId,
-          mimeType: validated.mimeType,
-          byteLength: payload.byteLength,
-          sha256: payload.sha256,
-        });
-        const response = await this.#fetch(upload.uploadUrl, {
-          method: upload.method,
-          headers: upload.headers,
-          body: blob,
-          signal: abortController.signal,
-        });
-        if (!response.ok) throw new Error(`whiteboard file upload failed with HTTP ${response.status}`);
-        await this.options.transport.files.finalizeUpload(upload.uploadId);
-      } finally {
-        this.#finishFileTransfer(payload.requestId, abortController);
-      }
+      throw new Error("Board uploads are unavailable.");
     });
   }
 
@@ -489,29 +454,6 @@ export class ChalkWhiteboardController {
   #reportHostError(cause: unknown): void {
     const message = safeErrorMessage(cause);
     this.options.onError?.({ code: "invalid_renderer_message", message, recoverable: false });
-  }
-
-  async #dataURLBlob(dataURL: string): Promise<Blob> {
-    if (!dataURL.startsWith("data:") || dataURL.length > Math.ceil((MAX_FILE_BYTES * 4) / 3) + 1024) {
-      throw new Error("whiteboard file data is invalid");
-    }
-    const separator = dataURL.indexOf(",");
-    if (separator < 0) throw new Error("whiteboard file data is invalid");
-    const metadata = dataURL.slice(5, separator).split(";");
-    const mimeType = normalizeMimeType(metadata[0] ?? "");
-    if (metadata.length !== 2 || metadata[1]?.toLowerCase() !== "base64") {
-      throw new Error("whiteboard file data must use base64 encoding");
-    }
-    let decoded: string;
-    try {
-      decoded = atob(dataURL.slice(separator + 1));
-    } catch {
-      throw new Error("whiteboard file data is not valid base64");
-    }
-    const bytes = Uint8Array.from(decoded, (character) => character.charCodeAt(0));
-    const blob = new Blob([bytes], { type: mimeType });
-    if (blob.size > MAX_FILE_BYTES) throw new Error("whiteboard file exceeds the renderer transfer limit");
-    return blob;
   }
 
   #beginFileTransfer(requestId: string): AbortController {
