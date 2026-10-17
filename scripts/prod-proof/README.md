@@ -15,18 +15,21 @@ pnpm prod:proof export
 pnpm prod:proof transcript
 ```
 
-Install `op`, `aws`, FFmpeg (`ffmpeg`/`ffprobe`), and ImageMagick (`magick`).
+Install `aws`, FFmpeg (`ffmpeg`/`ffprobe`), and ImageMagick (`magick`).
 Signed webhook proofs use a temporary Webhook.site receiver. Voice generation uses macOS `say` (Samantha), or Linux `espeak`.
 No new JavaScript dependencies are needed; Playwright and esbuild come from the
 client SDK workspace. Run from the repository root. Headless Chromium only.
 
 ## Configuration and ownership
 
-The existing configuration item holds `tenant_id`, `api_url`, `web_url`,
-`proof_origin`, `aws_profile`, `aws_region`, `ssm_api_env`, and
-`webhook_service_url` (Webhook.site). The command reads these fields without
-using the item's legacy account or inbox credentials. `ssm_api_env` identifies
-the production SSM parameter used to verify Recording and Transcription are enabled.
+Supply configuration through the environment: `CHALK_PROOF_TENANT_ID`,
+`CHALK_PROOF_API_URL`, `CHALK_PROOF_WEB_URL`, `CHALK_PROOF_PROOF_ORIGIN`,
+`CHALK_PROOF_AWS_PROFILE`, `CHALK_PROOF_AWS_REGION`, `CHALK_PROOF_SSM_API_ENV`,
+and `CHALK_PROOF_WEBHOOK_SERVICE_URL`. Resolve the existing configuration item's
+matching fields with your secret manager alongside the API key. The command
+never reads its legacy account or inbox credentials, and it needs no nested
+1Password session. The SSM parameter verifies that Recording and Transcription
+are enabled; AWS uses the supplied profile.
 
 Have an operator provide a key for that Tenant. Inject it with `2password run`
 or your secret manager as `CHALK_PROOF_API_KEY`; never put its value in a command

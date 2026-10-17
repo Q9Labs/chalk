@@ -32,10 +32,10 @@ export async function save(path, value) {
 }
 export async function loadConfig() {
   check(process.env.CHALK_PROOF_API_KEY, "Set CHALK_PROOF_API_KEY to an existing scoped Tenant API key");
-  const item = JSON.parse(await command("op", ["item", "get", "Chalk production proof Tenant", "--vault", "dev", "--format", "json"]));
-  const fields = Object.fromEntries(item.fields.map((field) => [field.label, field.value]));
-  for (const name of ["tenant_id", "api_url", "web_url", "aws_profile", "aws_region", "ssm_api_env", "proof_origin"]) {
-    check(fields[name], `1Password item is missing ${name}`);
+  const fields = {};
+  for (const name of ["tenant_id", "api_url", "web_url", "aws_profile", "aws_region", "ssm_api_env", "proof_origin", "webhook_service_url"]) {
+    fields[name] = process.env[`CHALK_PROOF_${name.toUpperCase()}`];
+    check(fields[name], `Set CHALK_PROOF_${name.toUpperCase()}`);
   }
   const env = await command("aws", ["--profile", fields.aws_profile, "--region", fields.aws_region, "ssm", "get-parameter", "--name", fields.ssm_api_env, "--with-decryption", "--query", "Parameter.Value", "--output", "text"]);
   const settings = Object.fromEntries(
