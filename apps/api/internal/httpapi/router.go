@@ -105,10 +105,6 @@ type Options struct {
 	WhiteboardFiles        WhiteboardFileService
 	WhiteboardParticipants WhiteboardParticipantVerifier
 	PublicInvites          PublicInviteService
-
-	// EpisodeDiagnostics owns a diagnostics-only internal boundary. Its zero
-	// value is disabled and therefore does not mount any /_internal route.
-
 }
 
 func NewRouter(options Options) http.Handler {

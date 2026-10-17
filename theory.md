@@ -2,8 +2,8 @@
 
 Correct, fast, flexible real-time collaboration. This file owns the product
 model and intended behavior. [tracker.yaml](tracker.yaml) owns implementation
-status; [tracker-human.md](tracker-human.md) and [tracker-human.html](tracker-human.html)
-are its generated views. [design.md](design.md) owns presentation.
+status; [tracker-human.md](tracker-human.md)
+is its generated view. [design.md](design.md) owns presentation.
 
 Targets below are requirements, not measured performance claims.
 

@@ -257,18 +257,6 @@ a running API. `smoke-lifecycle.mjs` builds the binary, waits for `/healthz`,
 sends `SIGTERM`, and verifies the process exits cleanly within configurable
 startup/shutdown budgets.
 
-## Execution Trace Harness
-
-The local harness exercises the real router and services with traced test doubles at external boundaries. It explains flows; it does not prove live provider behavior or operational observability.
-
-```bash
-cd apps/api
-go run ./cmd/trace -scenario all -style tree
-go run ./cmd/trace -scenario tenant-create -format json
-```
-
-See [the harness guide](docs/execution-trace-harness.md) for scenarios and output options. Keep raw traces with private data out of Git.
-
 ## Local Observability And Performance
 
 Logging is vendor-neutral and writes structured logs to stdout by default. The

@@ -73,7 +73,6 @@
     "clean": "turbo clean && rm -rf node_modules",
     "generate:tracker": "node scripts/generate-tracker.mjs",
     "check:tracker": "node scripts/generate-tracker.mjs --check",
-    "serve:tracker": "node scripts/tracker-server.mjs",
     "test:tracker": "node --test scripts/tracker.node-test.mjs",
     "prod:proof": "node scripts/prod-proof/index.mjs",
     "tenant:purge": "cd apps/api && go run ./cmd/tenant-purge"

@@ -22,8 +22,8 @@ Gate-definition or unknown files fail closed to the full plan. The Chalk custom 
 and reverse-dependent planner, including Go, Elixir, Postgres, contracts,
 recorder, publication, static checks, and resource-limited shell scripts.
 
-Documentation-only changes run the four always-on Chalk lanes: routing
-self-test, language ratchet, hygiene, and diff-scoped secrets. They do not
+Documentation-only changes keep routing self-tests, hygiene, diff-scoped secrets,
+generated-output checks, and formatting. They do not
 force unrelated service or workspace checks. The package-boundary check still
 runs its own test and q9gate's built-in Dependency Cruiser lane with Chalk's
 `.dependency-cruiser.cjs` configuration and a TypeScript analysis guard.
