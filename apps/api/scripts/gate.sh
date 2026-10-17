@@ -131,6 +131,8 @@ if ((internal_database_lane)); then
   exit 0
 fi
 
+node "${script_directory}/check-additive-migrations.mjs"
+
 lane_status_dir="$(mktemp -d "${TMPDIR:-/tmp}/chalk-api-gate.XXXXXX")"
 lane_pids=()
 lane_labels=()
