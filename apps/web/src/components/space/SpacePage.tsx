@@ -479,7 +479,7 @@ function selectEntranceDevices(client: ReturnType<typeof createLocalSpaceClient>
     void item.select().catch(() => {});
   }
 }
-function SpaceArrival({
+export function SpaceArrival({
   displayName,
   error,
   pending,

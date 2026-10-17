@@ -1,0 +1,156 @@
+import type { SpaceSnapshot } from "@q9labsai/chalk-client";
+import { Chalk, Entrance, type SpaceLayout } from "@q9labsai/chalk-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { SpaceArrival } from "../components/space/SpacePage";
+import { HOST, INVITE_LINK, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type CallStateClient, type Person } from "./fixtures";
+
+/** A step the capture script performs after the state mounts, by accessible role and name. */
+export type Action = { readonly click: string; readonly role?: "button" | "menuitemradio" } | { readonly wait: number };
+
+export type CallStateMeta = {
+  readonly id: string;
+  readonly title: string;
+  readonly actions?: readonly Action[];
+  /** The capture script holds back the board's stylesheet, so the board stays on its loading screen. */
+  readonly stallBoard?: boolean;
+  readonly cameraBlocked?: boolean;
+};
+
+export type CallState = CallStateMeta & { readonly render: () => ReactNode };
+
+const nora: Person = PEOPLE[0]!;
+const akash: Person = PEOPLE[1]!;
+const sofia: Person = PEOPLE[2]!;
+const crowd = (count: number): Person[] => Array.from({ length: count }, (_, index) => ({ ...PEOPLE[index % PEOPLE.length]!, id: `p${index}`, name: index < PEOPLE.length ? PEOPLE[index]!.name : `${PEOPLE[index % PEOPLE.length]!.name.split(" ")[0]} ${index}` }));
+
+const openChat: Action = { click: "Chat" };
+const openLayout: Action = { click: "Layout" };
+
+export const CALL_STATES: readonly CallState[] = [
+  { id: "entrance", title: "Entrance, no name yet", render: () => <WebEntrance /> },
+  { id: "entrance-named", title: "Entrance, name typed", render: () => <WebEntrance name={SELF_NAME} /> },
+  { id: "entrance-devices-off", title: "Entrance, mic and camera off", render: () => <WebEntrance name={SELF_NAME} microphone={false} camera={false} /> },
+  { id: "entrance-camera-blocked", title: "Entrance, camera blocked by the browser", cameraBlocked: true, render: () => <WebEntrance name={SELF_NAME} /> },
+  { id: "entrance-joining", title: "Entrance, asking to enter", render: () => <WebEntrance name={SELF_NAME} joining /> },
+  { id: "entrance-error", title: "Entrance, invite link failed", render: () => <WebEntrance name={SELF_NAME} error="This Space is unavailable. Please check the invite link and try again." /> },
+  { id: "waiting-for-host", title: "Waiting for the host to let you in", render: () => <WaitingForHost /> },
+  { id: "entering", title: "Entering after access is granted", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null } }} /> },
+
+  { id: "solo", title: "Alone in the call", render: () => <Live snapshot={liveSnapshot()} /> },
+  { id: "duo", title: "Two people, default layout", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
+  { id: "duo-grid", title: "Two people, grid", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} layout="grid" /> },
+  { id: "cameras-off", title: "Two people, both cameras off", render: () => <Live snapshot={liveSnapshot({ self: { camera: false }, others: [{ ...nora, camera: false }] })} /> },
+  {
+    id: "cues",
+    title: "Speaking, muted, hand raised, camera off",
+    render: () => (
+      <Live
+        snapshot={liveSnapshot({
+          self: { microphone: false },
+          others: [
+            { ...nora, speaking: true },
+            { ...akash, microphone: false, handRaised: true },
+            { ...sofia, camera: false },
+          ],
+        })}
+        layout="grid"
+      />
+    ),
+  },
+  { id: "group-spotlight", title: "Ten people, spotlight", render: () => <Live snapshot={liveSnapshot({ others: crowd(9) })} /> },
+  { id: "group-grid", title: "Ten people, grid", render: () => <Live snapshot={liveSnapshot({ others: crowd(9) })} layout="grid" /> },
+  { id: "crowd-grid", title: "Thirty people, grid with pages", render: () => <Live snapshot={liveSnapshot({ others: crowd(29) })} layout="grid" /> },
+  { id: "recording", title: "Recording on", render: () => <Live snapshot={liveSnapshot({ others: [nora], recording: true, capabilities: HOST })} /> },
+
+  { id: "board", title: "Board open", render: () => <Live snapshot={liveSnapshot({ others: [nora], board: true })} /> },
+  { id: "board-grid", title: "Board open, grid picked", actions: [openLayout, { click: "Grid", role: "menuitemradio" }], render: () => <Live snapshot={liveSnapshot({ others: [nora], board: true })} /> },
+  { id: "board-spotlight", title: "Board open, spotlight picked", actions: [openLayout, { click: "Spotlight", role: "menuitemradio" }], render: () => <Live snapshot={liveSnapshot({ others: [nora], board: true })} /> },
+  { id: "board-loading", title: "Board loading", stallBoard: true, render: () => <Live snapshot={liveSnapshot({ others: [nora], board: true })} /> },
+  { id: "share-remote", title: "Someone else shares a screen", render: () => <Live snapshot={liveSnapshot({ others: [{ ...nora, sharing: true }] })} /> },
+  { id: "share-local", title: "You share your screen", render: () => <Live snapshot={liveSnapshot({ self: { sharing: true }, others: [nora] })} /> },
+  { id: "share-and-board", title: "Screen share and board together", render: () => <Live snapshot={liveSnapshot({ others: [{ ...nora, sharing: true }], board: true })} /> },
+
+  { id: "chat-empty", title: "Chat, no messages", actions: [openChat], render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
+  { id: "chat", title: "Chat with messages and a file", actions: [openChat], render: () => <Live snapshot={liveSnapshot({ others: [nora, akash], chat: chatMessages() })} /> },
+  {
+    id: "participants",
+    title: "Participants panel",
+    actions: [{ click: "Participants" }],
+    render: () => (
+      <Live
+        snapshot={liveSnapshot({
+          others: [
+            { ...nora, speaking: true },
+            { ...akash, handRaised: true, microphone: false },
+            { ...sofia, camera: false },
+          ],
+        })}
+      />
+    ),
+  },
+  { id: "admission", title: "Someone is waiting to be let in", render: () => <Live snapshot={liveSnapshot({ others: [nora], capabilities: HOST, admission: true })} /> },
+  { id: "layout-menu", title: "Layout menu", actions: [openLayout], render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
+  { id: "info", title: "Call details", actions: [{ click: "Space information" }], render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
+  { id: "settings", title: "Settings", actions: [{ click: "Settings" }], render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
+  { id: "device-menu", title: "Microphone menu", actions: [{ click: "Select microphone" }], render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
+  { id: "reactions", title: "Reactions", actions: [{ click: "React" }], render: () => <Live snapshot={liveSnapshot({ others: [nora], reactions: true })} /> },
+  { id: "leave", title: "Leave, as host", actions: [{ click: "Leave" }], render: () => <Live snapshot={liveSnapshot({ others: [nora], capabilities: HOST })} /> },
+  { id: "media-request", title: "Asked to unmute", render: () => <Live snapshot={liveSnapshot({ self: { microphone: false }, others: [nora], mediaRequest: true })} /> },
+  { id: "command-error", title: "Camera busy error", render: () => <Live snapshot={liveSnapshot({ self: { camera: false }, others: [nora], lastError: { code: "media.device_busy", recoverable: true, message: "Your camera is being used by another app." } })} /> },
+
+  { id: "reconnecting", title: "Reconnecting, first seconds", render: () => <Live snapshot={liveSnapshot({ others: [nora], status: "reconnecting" })} /> },
+  { id: "reconnecting-short", title: "Reconnecting, after 3 seconds", actions: [{ wait: 1_500 }], render: () => <Live snapshot={liveSnapshot({ others: [nora], status: "reconnecting" })} /> },
+  { id: "reconnecting-long", title: "Reconnecting, after 10 seconds", actions: [{ wait: 10_500 }], render: () => <Live snapshot={liveSnapshot({ others: [nora], status: "reconnecting" })} /> },
+  { id: "offline-actions", title: "Back online with unsent actions", render: () => <Live snapshot={liveSnapshot({ others: [nora], offlinePending: true })} /> },
+  { id: "failed", title: "Connection lost", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} then={(client) => client.updateSnapshot((current) => withStatus(current, "failed"))} /> },
+  { id: "leaving", title: "Leaving", render: () => <Live snapshot={liveSnapshot({ others: [nora], status: "leaving" })} /> },
+  { id: "left", title: "Left the call", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} then={(client) => client.updateSnapshot((current) => withStatus(current, "left"))} /> },
+  {
+    id: "episode-ended",
+    title: "Call ended for everyone",
+    render: () => (
+      <Live
+        snapshot={liveSnapshot({ others: [nora] })}
+        then={(client) => {
+          client.emit("episodeEnded", { episode: client.getSnapshot().connection.episode });
+          client.updateSnapshot((current) => withStatus(current, "left"));
+        }}
+      />
+    ),
+  },
+];
+
+function withStatus(snapshot: SpaceSnapshot, status: SpaceSnapshot["connection"]["status"]): SpaceSnapshot {
+  const lastError = status === "failed" ? { code: "connection.sync_recovery_exhausted" as const, recoverable: false, message: "Chalk could not reconnect to this Space." } : null;
+  return { ...snapshot, connection: { ...snapshot.connection, status, lastError } };
+}
+
+/** Mirrors SpacePage's LocalSpace: the SDK's Chalk root, with the app's own entrance already done. */
+function Live({ snapshot, layout, then }: { readonly snapshot: SpaceSnapshot; readonly layout?: SpaceLayout; readonly then?: (client: CallStateClient) => void }) {
+  const [client] = useState(() => createCallStateClient(snapshot));
+  const [transition] = useState(() => then);
+  useEffect(() => {
+    if (!transition) return;
+    const timer = setTimeout(() => transition(client), 200);
+    return () => clearTimeout(timer);
+  }, [client, transition]);
+  return (
+    <main className="h-dvh min-h-0 w-full overflow-hidden">
+      <Chalk client={client} entrance={false} displayName={SELF_NAME} logoUrl="/brand/chalk/chalk-logo.svg" spaceName={SPACE_NAME} inviteLink={INVITE_LINK} layout={layout} />
+    </main>
+  );
+}
+
+/** Mirrors SpacePage's entrance: the slug stands in for the Space name until the invite is verified. */
+function WebEntrance({ name = "", microphone = true, camera = true, joining = false, error }: { readonly name?: string; readonly microphone?: boolean; readonly camera?: boolean; readonly joining?: boolean; readonly error?: string }) {
+  return (
+    <main className="h-dvh min-h-0 w-full overflow-hidden">
+      <Entrance spaceName="q9-team" defaultDisplayName={name} defaults={{ microphone, camera }} joining={joining} error={error} onJoin={() => undefined} onPrepare={async () => undefined} />
+    </main>
+  );
+}
+
+function WaitingForHost() {
+  const [displayName, setDisplayName] = useState(SELF_NAME);
+  return <SpaceArrival displayName={displayName} error={null} pending preparing={false} onCancel={async () => undefined} onDisplayNameChange={setDisplayName} onEnter={() => undefined} />;
+}

@@ -527,6 +527,9 @@ importers:
       jsdom:
         specifier: ^29.1.1
         version: 29.1.1(@noble/hashes@2.3.0)
+      playwright:
+        specifier: 1.62.1
+        version: 1.62.1
       rehype-autolink-headings:
         specifier: 7.1.0
         version: 7.1.0

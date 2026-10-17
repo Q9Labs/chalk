@@ -8,10 +8,10 @@ import tailwindcss from "@tailwindcss/vite";
 import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { execSync } from "child_process";
-import { fileURLToPath } from "node:url";
 import pkg from "./package.json";
 import sdkReactPkg from "../../sdks/typescript/react/package.json";
 import { accountBoundaryVitePlugin } from "./scripts/account-boundary-vite";
+import { sourceAliases } from "./vite.aliases";
 
 const commitHash = resolveCommitHash(process.env.CHALK_COMMIT_SHA?.trim() || process.env.GITHUB_SHA?.trim());
 const buildTime = new Date().toISOString();
@@ -51,22 +51,7 @@ const config = defineConfig({
     },
   },
   resolve: {
-    alias: [
-      { find: /^@q9labsai\/chalk-client\/effect$/, replacement: fileURLToPath(new URL("../../sdks/typescript/client/src/effect.ts", import.meta.url)) },
-      { find: /^@q9labsai\/chalk-client$/, replacement: fileURLToPath(new URL("../../sdks/typescript/client/src/index.ts", import.meta.url)) },
-      { find: /^@q9labsai\/chalk-react\/ui$/, replacement: fileURLToPath(new URL("../../sdks/typescript/react/src/components/ui/index.ts", import.meta.url)) },
-      { find: /^@q9labsai\/chalk-react\/utils$/, replacement: fileURLToPath(new URL("../../sdks/typescript/react/src/utils/index.ts", import.meta.url)) },
-      { find: /^@q9labsai\/chalk-react\/preview$/, replacement: fileURLToPath(new URL("../../sdks/typescript/react/src/test-support/index.ts", import.meta.url)) },
-      { find: /^@q9labsai\/chalk-react$/, replacement: fileURLToPath(new URL("../../sdks/typescript/react/src/index.ts", import.meta.url)) },
-      { find: /^@q9labsai\/chalk-ui$/, replacement: fileURLToPath(new URL("../../packages/ui/src/index.ts", import.meta.url)) },
-      { find: "@q9labsai/chalk-ui/assets", replacement: fileURLToPath(new URL("../../packages/ui/src/assets.ts", import.meta.url)) },
-      { find: "@q9labsai/chalk-ui/button", replacement: fileURLToPath(new URL("../../packages/ui/src/button.tsx", import.meta.url)) },
-      { find: "@q9labsai/chalk-ui/reactions", replacement: fileURLToPath(new URL("../../packages/ui/src/reactions.ts", import.meta.url)) },
-      { find: /^@q9labsai\/chalk-assets$/, replacement: fileURLToPath(new URL("../../packages/assets/src/index.ts", import.meta.url)) },
-      { find: /^@q9labsai\/chalk-whiteboard\/react$/, replacement: fileURLToPath(new URL("../../packages/whiteboard/src/react/index.ts", import.meta.url)) },
-      { find: "@q9labsai/facehash/react", replacement: fileURLToPath(new URL("../../packages/facehash/src/react.ts", import.meta.url)) },
-      { find: "@q9labsai/facehash", replacement: fileURLToPath(new URL("../../packages/facehash/src/index.ts", import.meta.url)) },
-    ],
+    alias: sourceAliases,
     dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
     tsconfigPaths: true,
   },
