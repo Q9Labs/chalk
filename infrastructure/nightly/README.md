@@ -33,7 +33,7 @@ SPIFFE identities, but never share a production signing key or trust root.
 
 Start from the [API example](../managed-episode/env/api.nightly.env.example),
 [Sync example](../managed-episode/env/sync.nightly.env.example) and recorder examples
-in `env/`. Supply all placeholders privately. The host controller injects release
+in `env/`. Supply all placeholders privately. Recorder release metadata must select doctl context `chalk-nightly`, scoped to the dedicated team. The host controller injects release
 identities and mounted certificate paths. Use only the dedicated DO team's tokens,
 project ID, VPC UUID, firewall IDs and qualified image pins.
 
@@ -49,16 +49,17 @@ Production rendering remains unchanged.
 
 | Container                              | Cap, MiB |
 | -------------------------------------- | -------: |
-| API                                    |      256 |
-| Sync                                   |      384 |
+| API                                    |       96 |
+| Sync                                   |      256 |
 | Redis                                  |      320 |
-| Tunnel                                 |       96 |
-| Capture controller                     |       64 |
-| Render controller                      |       64 |
-| Issuer                                 |       64 |
-| One-shot migrator                      |      256 |
-| Total including migrator               |     1504 |
-| Outside container caps on a 2 GiB host |      544 |
+| Tunnel                                 |       48 |
+| Capture controller                     |       32 |
+| Render controller                      |       32 |
+| Issuer                                 |       32 |
+| One-shot migrator                      |       64 |
+| Total including migrator               |      880 |
+| Host OS reserve                        |      640 |
+| Free after caps and host OS reserve    |      528 |
 
 The 640 MiB host reserve exceeds the measured production idle non-container
 usage of about 618 MB. Redis retains its 256 MiB maxmemory policy.

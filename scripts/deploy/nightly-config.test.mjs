@@ -72,14 +72,39 @@ async function assertNightlyConfig(directory, manifest) {
 }
 
 async function assertNightlyMemoryCaps(nightly) {
+  const budget = Object.fromEntries(
+    (await readFile(join(root, "infrastructure/nightly/README.md"), "utf8"))
+      .split("\n")
+      .filter((line) => line.startsWith("|"))
+      .map((line) =>
+        line
+          .split("|")
+          .slice(1, -1)
+          .map((cell) => cell.trim()),
+      ),
+  );
+  const labels = {
+    "chalk-api.container": "API",
+    "chalk-sync.container": "Sync",
+    "chalk-redis.container": "Redis",
+    "chalk-cloudflared.container": "Tunnel",
+    "chalk-recorder-capture.container": "Capture controller",
+    "chalk-recorder-render.container": "Render controller",
+    "chalk-recorder-issuer.container": "Issuer",
+    "chalk-api-migrate.container": "One-shot migrator",
+  };
   let totalMiB = 0;
   for (const file of await files(join(nightly, "quadlet"))) {
     const text = await readFile(join(nightly, "quadlet", file), "utf8");
     assert.doesNotMatch(text, /production|https:\/\/(?:api|sync)\.chalkmeet\.com/);
     const cap = text.match(/--memory=(\d+)m/);
     if (file.endsWith(".container")) assert.ok(cap, `${file} has no nightly memory cap`);
-    if (cap) totalMiB += Number(cap[1]);
+    if (cap) {
+      assert.equal(Number(budget[labels[file]]), Number(cap[1]), `${file} differs from its runbook budget`);
+      totalMiB += Number(cap[1]);
+    }
   }
   assert.equal(totalMiB, 880);
+  assert.equal(Number(budget["Total including migrator"]), totalMiB);
   assert.ok(2048 - totalMiB - 640 >= 512);
 }

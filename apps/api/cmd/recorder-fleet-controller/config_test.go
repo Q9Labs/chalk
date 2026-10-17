@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"log/slog"
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -145,5 +147,42 @@ func validCommandEnvironment() map[string]string {
 		"CHALK_RECORDER_FLEET_SIZE":                        "c-2",
 		"CHALK_RECORDER_FLEET_FIREWALL_ID":                 "firewall-7",
 		"CHALK_RECORDER_FLEET_BOOTSTRAP_ENDPOINT":          "https://control.example/internal/v1/recorder/bootstrap",
+	}
+}
+
+func TestNightlyExamplesLoadActualControllerConfig(t *testing.T) {
+	for _, role := range []string{"capture", "render"} {
+		t.Run(role, func(t *testing.T) {
+			contents, err := os.ReadFile("../../../../infrastructure/nightly/env/recorder-" + role + ".env.example")
+			if err != nil {
+				t.Fatal(err)
+			}
+			environment := validCommandEnvironment()
+			delete(environment, "CHALK_RECORDER_FLEET_BOOTSTRAP_SERVER_NAME")
+			delete(environment, "CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST")
+			replacements := strings.NewReplacer(
+				"__NIGHTLY_IMAGE_ID__", "123456",
+				"__NIGHTLY_IMAGE_DIGEST__", "sha256:"+strings.Repeat("a", 64),
+				"__QUALIFIED_BOOTSTRAP_NAME__", "nightly-recording-control.chalkmeet.com",
+				"__WORKER_RELEASE_ID__", "release-7",
+			)
+			placeholders := regexp.MustCompile("__[A-Z0-9_]+__")
+			for _, line := range strings.Split(string(contents), "\n") {
+				key, value, ok := strings.Cut(line, "=")
+				if ok && !strings.HasPrefix(key, "#") {
+					environment[key] = placeholders.ReplaceAllString(replacements.Replace(value), "test-only-value")
+				}
+			}
+			environment["CHALK_RECORDER_FLEET_ROLE"] = role
+			environment["CHALK_RECORDER_FLEET_MAX_NODES"] = "1"
+			environment["CHALK_RECORDER_FLEET_SLOTS_PER_NODE"] = "1"
+			config, err := loadCommandConfig(nil, func(key string) string { return environment[key] })
+			if err != nil {
+				t.Fatalf("nightly example cannot boot: %v", err)
+			}
+			if !config.BootstrapNameVerified || config.Fleet.Key.Environment != "nightly" {
+				t.Fatal("nightly image bootstrap identity was not verified")
+			}
+		})
 	}
 }

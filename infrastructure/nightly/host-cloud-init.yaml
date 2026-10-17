@@ -39,7 +39,12 @@ write_files:
       curl --fail --silent --show-error --location https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o "$work/aws.zip"
       unzip -q "$work/aws.zip" -d "$work"
       "$work/aws/install" --update
-      if ! systemctl is-active --quiet snap.amazon-ssm-agent.amazon-ssm-agent.service; then
+      # Keep one installed SSM Agent, including when an existing agent is stopped.
+      if command -v snap >/dev/null && snap list amazon-ssm-agent >/dev/null 2>&1; then
+        snap start --enable amazon-ssm-agent
+      elif dpkg-query -W -f='${Status}' amazon-ssm-agent 2>/dev/null | grep -q 'install ok installed'; then
+        systemctl enable --now amazon-ssm-agent
+      else
         curl --fail --silent --show-error --location https://s3.ap-southeast-1.amazonaws.com/amazon-ssm-ap-southeast-1/latest/debian_arm64/amazon-ssm-agent.deb -o "$work/ssm.deb"
         dpkg -i "$work/ssm.deb"
         systemctl enable --now amazon-ssm-agent

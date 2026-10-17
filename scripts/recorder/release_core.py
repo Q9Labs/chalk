@@ -73,6 +73,7 @@ def validate_config(config, environment="production"):
     require(re.fullmatch(r"i-[0-9a-f]{8,17}", config["runtime"]["instance_id"]), "invalid runtime instance")
     require(config["runtime"]["parameter_prefix"].startswith(f"/chalk/{environment}/"), "runtime prefix outside selected environment")
     if environment == "nightly":
+        require(config["do_context"] == "chalk-nightly", "invalid nightly DigitalOcean context")
         require(config["runtime"]["parameter_prefix"] == "/chalk/nightly/managed-episode", "invalid nightly runtime prefix")
         require(config["runtime"]["document_name"] == "chalk-nightly-managed-episode-release", "invalid nightly document")
         require(config["runtime"]["log_group"] == "/chalk/nightly/managed-episode", "invalid nightly log group")

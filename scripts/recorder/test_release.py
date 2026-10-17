@@ -31,6 +31,10 @@ class ReleaseContracts(unittest.TestCase):
             "dispatcher": {"state_bucket": "chalk-nightly-state-000000000000", "state_key": "transcription/terraform.tfstate", "function_name": "chalk-nightly-transcription-dispatcher", "scheduler_name": "chalk-nightly-transcription-reconcile", "scheduler_group": "chalk-nightly"},
         }
         self.assertEqual(validate_config(config, "nightly"), config)
+        config["do_context"] = "copied-production-context"
+        with self.assertRaisesRegex(ValueError, "nightly DigitalOcean context"):
+            validate_config(config, "nightly")
+        config["do_context"] = "chalk-nightly"
         with self.assertRaisesRegex(ValueError, "outside selected environment"):
             validate_config(config, "production")
         config["runtime"]["parameter_prefix"] = "/chalk/production/managed-episode"
