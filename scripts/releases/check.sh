@@ -72,4 +72,4 @@ for target in ('nightly', 'production'):
     deploy(target, root / 'release-set.json', root / f'web-{target}.tar.gz', 'offline-example', dry_run=True)
 PY
 # Check the CLI argument without uploading or creating a Pages project.
-pnpm exec wrangler pages deploy --help | rg -- '--bundle'
+pnpm exec wrangler pages deploy --help | grep -F -- '--bundle'
