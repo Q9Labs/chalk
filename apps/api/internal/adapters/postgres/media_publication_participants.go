@@ -36,3 +36,22 @@ where participants.tenant_id = $1 and participants.episode_id = $2
 	}
 	return participants, rows.Err()
 }
+
+type publicationParticipantIdentityParams struct{ TenantID, EpisodeID, ParticipantID pgtype.UUID }
+
+func (q *providerOperationQueries) LockPublicationParticipant(ctx context.Context, arg publicationParticipantIdentityParams) (mediapublications.PublicationParticipant, error) {
+	const query = `select participants.id, participants.generation,
+coalesce(case when participants.media_connection_generation = participants.generation then participants.media_connection_id end, '')
+from participants
+join episodes on episodes.tenant_id = participants.tenant_id and episodes.id = participants.episode_id
+where participants.tenant_id = $1 and participants.episode_id = $2 and participants.id = $3
+ and participants.status = 'active' and episodes.status = 'active'
+for update of participants`
+	var id pgtype.UUID
+	var participant mediapublications.PublicationParticipant
+	if err := q.db.QueryRow(ctx, query, arg.TenantID, arg.EpisodeID, arg.ParticipantID).Scan(&id, &participant.Generation, &participant.ConnectionID); err != nil {
+		return mediapublications.PublicationParticipant{}, err
+	}
+	participant.ID = utilities.IDFromBytes(id.Bytes)
+	return participant, nil
+}

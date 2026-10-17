@@ -274,8 +274,8 @@ func TestReplacementRetiresSourcesNotRepublishedOnNewConnection(t *testing.T) {
 	assertPublicationEnabled(t, repository.appended.Publications, participantID, "camera", false)
 	assertPublicationEnabled(t, repository.appended.Publications, participantID, "microphone", true)
 	for _, publication := range repository.appended.Publications {
-		if publication.Source == "camera" && publication.PublicationID != "" {
-			t.Fatal("old camera reference survived replacement")
+		if publication.Source == "camera" && publication.PublicationID == "" {
+			t.Fatal("old camera reference lost before provider cleanup")
 		}
 	}
 }
@@ -305,4 +305,17 @@ func TestDelayedOldPublishCannotEraseReplacementTracks(t *testing.T) {
 	}
 	assertPublicationEnabled(t, repository.appended.Publications, participantID, "microphone", true)
 	assertPublicationEnabled(t, repository.appended.Publications, participantID, "camera", true)
+}
+
+func (r *reconciliationRepositoryStub) AppendPublicationObservation(ctx context.Context, input provideroperations.ObservationInput, publisher PublicationParticipant) (provideroperations.Observation, error) {
+	participants, err := r.ListPublicationParticipants(ctx, input.TenantID, input.EpisodeID)
+	if err != nil {
+		return provideroperations.Observation{}, err
+	}
+	for _, participant := range participants {
+		if participant.ID == publisher.ID && participant.Generation == publisher.Generation && (participant.ConnectionID == "" || participant.ConnectionID == publisher.ConnectionID) {
+			return r.AppendObservation(ctx, input)
+		}
+	}
+	return provideroperations.Observation{}, ErrInvalidPublication
 }

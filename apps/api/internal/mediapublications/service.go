@@ -28,6 +28,7 @@ const (
 var tracer = otel.Tracer("github.com/q9labs/chalk/apps/api/internal/mediapublications")
 
 type Repository interface {
+	AppendPublicationObservation(context.Context, provideroperations.ObservationInput, PublicationParticipant) (provideroperations.Observation, error)
 	AppendObservation(context.Context, provideroperations.ObservationInput) (provideroperations.Observation, error)
 	ListObservations(context.Context, utilities.ID, utilities.ID, *provideroperations.Cursor, int) (provideroperations.ObservationPage, error)
 	ListPublicationParticipants(context.Context, utilities.ID, utilities.ID) ([]PublicationParticipant, error)
@@ -240,24 +241,8 @@ func (s Service) RecordPublishedTracks(ctx context.Context, input RecordInput) (
 		if err != nil {
 			return nil, err
 		}
-		participants, err := s.repository.ListPublicationParticipants(ctx, input.TenantID, input.EpisodeID)
-		if err != nil {
-			return nil, fmt.Errorf("check current publication connection: %w", err)
-		}
-		current := false
-		for _, participant := range participants {
-			if participant.ID == input.ParticipantID && participant.Generation == input.ParticipantGeneration &&
-				(participant.ConnectionID == "" || participant.ConnectionID == input.ConnectionID) {
-				current = true
-				break
-			}
-		}
-		if !current {
-			span.SetAttributes(attribute.String("chalk.media.rejection_reason", "participant_connection_not_current"))
-			return nil, ErrInvalidPublication
-		}
 		next := merge(latest, input, references)
-		if _, err := s.repository.AppendObservation(ctx, next); err == nil {
+		if _, err := s.repository.AppendPublicationObservation(ctx, next, PublicationParticipant{ID: input.ParticipantID, Generation: input.ParticipantGeneration, ConnectionID: input.ConnectionID}); err == nil {
 			return references, nil
 		} else if !errors.Is(err, provideroperations.ErrObservationConflict) && !errors.Is(err, provideroperations.ErrObservationStale) {
 			return nil, fmt.Errorf("append media publication observation: %w", err)
@@ -364,7 +349,6 @@ func merge(latest *provideroperations.Observation, input RecordInput, references
 				reference, err := ParseReference(publication.PublicationID)
 				if err != nil || reference.ConnectionID != input.ConnectionID || (reference.HasParticipantGeneration && reference.ParticipantGeneration != input.ParticipantGeneration) {
 					publication.Enabled = false
-					publication.PublicationID = ""
 				}
 			}
 			publications[publicationKey(publication.ParticipantID, publication.Source)] = publication

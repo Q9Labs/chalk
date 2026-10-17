@@ -612,6 +612,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     for (const [key, publication] of next) this.#remoteTracks.set(key, publication);
     this.#cursor = cursor;
     this.#remotePullIncomplete = participantRevision !== this.#remoteParticipantRevision || [...desired].some(([key, publication]) => next.get(key)?.publicationId !== publication.publicationId);
+    if (!this.#remotePullIncomplete && this.#hasLiveRemoteTracks()) this.#replacementAttemptedGeneration = null;
     for (const publication of pulled) {
       this.#subscribedPublicationIds.add(publication.publicationId);
       this.#invokeListener(() => this.#onRemoteTrack?.(publication));
@@ -694,7 +695,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return await this.#pullBatch(eligible, generation);
     } catch (error) {
       this.#requireGeneration(generation);
-      if (eligible.length <= 1 || !retryableRemotePull(error) || isRateLimited(error) || (error instanceof CloudflareSFUError && (error.options.status === 404 || error.options.status === 410))) {
+      if (eligible.length <= 1 || !retryableRemotePull(error) || isRateLimited(error) || this.#canReplaceConnectionAfterRemotePull(error, generation) || (error instanceof CloudflareSFUError && (error.options.status === 404 || error.options.status === 410))) {
         this.#deferRemotePulls(eligible, error);
         throw error;
       }

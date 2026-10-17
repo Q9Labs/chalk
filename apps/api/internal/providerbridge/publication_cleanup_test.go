@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -11,6 +12,7 @@ import (
 
 type cleanupPublicationRepository struct {
 	observations []provideroperations.Observation
+	participants []mediapublications.PublicationParticipant
 }
 
 func (r *cleanupPublicationRepository) AppendObservation(_ context.Context, input provideroperations.ObservationInput) (provideroperations.Observation, error) {
@@ -23,8 +25,8 @@ func (r *cleanupPublicationRepository) ListObservations(context.Context, utiliti
 	return provideroperations.ObservationPage{Observations: r.observations}, nil
 }
 
-func (*cleanupPublicationRepository) ListPublicationParticipants(context.Context, utilities.ID, utilities.ID) ([]mediapublications.PublicationParticipant, error) {
-	return []mediapublications.PublicationParticipant{}, nil
+func (r *cleanupPublicationRepository) ListPublicationParticipants(context.Context, utilities.ID, utilities.ID) ([]mediapublications.PublicationParticipant, error) {
+	return r.participants, nil
 }
 
 func TestPublicationRetirementPreservesProviderCleanup(t *testing.T) {
@@ -50,4 +52,46 @@ func TestPublicationRetirementPreservesProviderCleanup(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReplacementPublishingPreservesOtherSourcesForCleanup(t *testing.T) {
+	for _, effect := range []provideroperations.Effect{provideroperations.EffectRemoveParticipant, provideroperations.EffectEndEpisode} {
+		t.Run(string(effect), func(t *testing.T) {
+			tenantID := testExecutorID(t, "11111111-1111-4111-8111-111111111111")
+			episodeID := testExecutorID(t, "22222222-2222-4222-8222-222222222222")
+			participantID := testExecutorID(t, "33333333-3333-4333-8333-333333333333")
+			repository := &cleanupPublicationRepository{participants: []mediapublications.PublicationParticipant{{ID: participantID, Generation: 1, ConnectionID: "old"}}}
+			registry := mediapublications.NewService(repository)
+			input := mediapublications.RecordInput{TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 1, ConnectionID: "old", Tracks: []mediapublications.PublishedTrack{{Source: "camera", MID: "0", TrackName: "camera"}, {Source: "screen", MID: "1", TrackName: "screen"}}}
+			if _, err := registry.RecordPublishedTracks(context.Background(), input); err != nil {
+				t.Fatal(err)
+			}
+			repository.participants[0].ConnectionID = "replacement"
+			input.ConnectionID = "replacement"
+			input.Tracks = []mediapublications.PublishedTrack{{Source: "microphone", MID: "0", TrackName: "microphone"}}
+			if _, err := registry.RecordPublishedTracks(context.Background(), input); err != nil {
+				t.Fatal(err)
+			}
+			closer := &cleanupSourceCloser{}
+			executor := NewSFUExecutor(registry, closer)
+			operation := provideroperations.OperationInput{TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 1, Effect: effect}
+			if result := executor.Dispatch(context.Background(), operation); result.Outcome != provideroperations.OutcomeConfirmed || closer.tracks != 3 {
+				t.Fatalf("cleanup lost old sources: result=%+v tracks=%d", result, closer.tracks)
+			}
+			if result := executor.Dispatch(context.Background(), operation); result.Outcome != provideroperations.OutcomeSatisfied || closer.tracks != 3 {
+				t.Fatalf("cleanup replay: result=%+v tracks=%d", result, closer.tracks)
+			}
+		})
+	}
+}
+
+type cleanupSourceCloser struct{ tracks int }
+
+func (c *cleanupSourceCloser) CloseTracks(_ context.Context, input mediaplane.CloseTracksRequest) (mediaplane.CloseTracksResponse, error) {
+	c.tracks += len(input.Tracks)
+	return mediaplane.CloseTracksResponse{}, nil
+}
+
+func (r *cleanupPublicationRepository) AppendPublicationObservation(ctx context.Context, input provideroperations.ObservationInput, _ mediapublications.PublicationParticipant) (provideroperations.Observation, error) {
+	return r.AppendObservation(ctx, input)
 }

@@ -25,6 +25,7 @@ func newProviderOperationQueries(db providerOperationDBTX) *providerOperationQue
 }
 
 type providerOperationQuerier interface {
+	LockPublicationParticipant(context.Context, publicationParticipantIdentityParams) (mediapublications.PublicationParticipant, error)
 	GetProviderOperationReceipt(context.Context, getProviderOperationReceiptParams) (providerOperationReceiptRow, error)
 	InsertProviderOperationReceipt(context.Context, insertProviderOperationReceiptParams) (providerOperationReceiptRow, error)
 	MarkProviderOperationDispatching(context.Context, providerOperationIdentityParams) (providerOperationReceiptRow, error)

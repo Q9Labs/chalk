@@ -7,9 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/config"
+	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 )
 
@@ -68,6 +70,17 @@ func TestPublicationParticipantsUseAuthenticatedReplacementBeforeRepublish(t *te
 		t.Fatalf("current session without a public arrival or republish: %#v, %v", participants, err)
 	}
 
+	t.Run("replacement before publication transaction", func(t *testing.T) {
+		transactor := publicationReplacementTransactor{Tx: tx, replace: func(ctx context.Context) error {
+			return repository.SetParticipantMediaConnection(ctx, key, 1, "newer-replacement")
+		}}
+		publications := NewProviderOperationRepository(newProviderOperationQueries(tx), transactor)
+		_, err := mediapublications.NewService(publications).RecordPublishedTracks(ctx, mediapublications.RecordInput{TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 1, ConnectionID: "authenticated-replacement", Tracks: []mediapublications.PublishedTrack{{Source: "camera", MID: "0", TrackName: "old-camera"}}})
+		if !errors.Is(err, mediapublications.ErrInvalidPublication) {
+			t.Fatalf("old session published after replacement: %v", err)
+		}
+	})
+
 	arrivalID := accountTenantIntegrationID(t)
 	handle := repeatedBytes(0x81, 32)
 	if _, err := tx.Exec(ctx, `insert into space_public_invites(tenant_id,space_id,handle) values($1,$2,$3)`, uuid(tenantID), uuid(spaceID), handle); err != nil {
@@ -111,4 +124,16 @@ func TestPublicationParticipantsUseAuthenticatedReplacementBeforeRepublish(t *te
 	if err != nil || len(participants) != 1 || participants[0].ConnectionID != "" {
 		t.Fatalf("previous generation fenced new publications: %#v, %v", participants, err)
 	}
+}
+
+type publicationReplacementTransactor struct {
+	pgx.Tx
+	replace func(context.Context) error
+}
+
+func (t publicationReplacementTransactor) BeginTx(ctx context.Context, options pgx.TxOptions) (pgx.Tx, error) {
+	if err := t.replace(ctx); err != nil {
+		return nil, err
+	}
+	return t.Tx.Begin(ctx)
 }

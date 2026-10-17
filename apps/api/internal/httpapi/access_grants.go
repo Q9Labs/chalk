@@ -110,9 +110,6 @@ func issueAccessGrantEndpoint(
 					return accessGrantResponse{}, err
 				}
 				subject, err = accessGrantSubjectForJoin(request, join)
-				if err == nil {
-					err = generations.BindParticipantMediaConnection(ctx, subject)
-				}
 			} else {
 				currentToken := strings.TrimSpace(request.Body.CurrentMediaToken)
 				if currentToken == "" {
@@ -150,6 +147,11 @@ func issueAccessGrantEndpoint(
 			mediaCredential, err := mediaIssuer.Issue(ctx, subject)
 			if err != nil {
 				return accessGrantResponse{}, err
+			}
+			if request.Body.ReplaceMediaConnection {
+				if err := generations.BindParticipantMediaConnection(ctx, subject); err != nil {
+					return accessGrantResponse{}, err
+				}
 			}
 			response := newAccessGrantResponse(subject, syncCredential, mediaCredential, join)
 

@@ -221,7 +221,7 @@ describe("remote publication recovery", () => {
       ).toEqual(["remote-a|camera", "remote-b|microphone"]);
     });
   });
-  it.each([404, 410])("replaces an expired HTTP %s receiver before exhausting the signaling quota", async (status) => {
+  it.each([404, 410, 503])("replaces an expired HTTP %s receiver before exhausting the signaling quota", async (status) => {
     const replaceMediaConnection = vi.fn(async () => bootstrap("replacement"));
     await withTimedHarness(
       async (harness) => {
@@ -242,6 +242,30 @@ describe("remote publication recovery", () => {
         expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
         expect(writes).toBe(2);
         expect(harness.client.getSnapshot().remoteTracks).toHaveLength(64);
+      },
+      { replaceMediaConnection },
+    );
+  });
+  it("recovers from a second independent receiver expiry after receiving media", async () => {
+    const replaceMediaConnection = vi.fn(async () => bootstrap(`replacement-${replaceMediaConnection.mock.calls.length}`));
+    await withTimedHarness(
+      async (harness) => {
+        await harness.client.start(fakeStream());
+        let expiredConnection = "connection-1";
+        const addTracks = harness.transport.addTracks.bind(harness.transport);
+        vi.spyOn(harness.transport, "addTracks").mockImplementation(async (input) => {
+          if (input.connectionId === expiredConnection) throw new CloudflareSFUError("receiver expired", "signaling_failed", { status: 410, retryableConnection: true });
+          return addTracks(input);
+        });
+        harness.transport.snapshot = publicationSnapshot(1, 1, "remote|camera");
+        await harness.client.refreshRemotePublications();
+        expect(harness.client.getSnapshot().remoteTracks).toHaveLength(1);
+        expiredConnection = "replacement-1";
+        for (const remote of harness.client.getSnapshot().remoteTracks) (remote.track as unknown as FakeTrack).endFromBrowser();
+        harness.transport.snapshot = publicationSnapshot(1, 2, "remote|camera-new");
+        await harness.client.refreshRemotePublications();
+        expect(replaceMediaConnection).toHaveBeenCalledTimes(2);
+        expect(harness.client.getSnapshot().remoteTracks.map((track) => track.publicationId)).toEqual(["remote|camera-new"]);
       },
       { replaceMediaConnection },
     );
