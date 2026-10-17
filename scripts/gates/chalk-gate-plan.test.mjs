@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { classify } from "@q9labsai/gates";
 import gateConfig from "../../gate.config.ts";
@@ -169,4 +170,11 @@ test("every lane runs in exactly one CI lane group", () => {
     () => laneGroupLanes(lanes, "nope"),
     (error) => error instanceof GatePlanningError && error.reason === "invalid-lane-group",
   );
+});
+
+test("CI installs the same scanner versions that the gate scripts fall back to", () => {
+  const read = (file) => readFileSync(new URL(`../../${file}`, import.meta.url), "utf8");
+  const action = read(".github/actions/setup-scanners/action.yml");
+  assert.match(read("scripts/gates/gitleaks.sh"), new RegExp(`gitleaks/v8@v${/gitleaks_version="([^"]+)"/u.exec(action)[1]}\\b`, "u"));
+  assert.match(read("scripts/gates/osv-scanner.sh"), new RegExp(`osv-scanner@v${/osv_version="([^"]+)"/u.exec(action)[1]}\\b`, "u"));
 });
