@@ -42,6 +42,17 @@ class CutTests(unittest.TestCase):
         self.assertFalse(cut_decision('b' * 40, records, NOW)[0])
         self.assertTrue(cut_decision('b' * 40, records, NOW, manual=True)[0])
 
+    def test_reserved_cut_consumes_day_without_advancing_completed_baseline(self):
+        api = object.__new__(GitHub)
+        with patch.object(api, 'request') as request:
+            api.reserve_cut(SHA)
+        reservation = request.call_args.args[1]
+        reservation.update(id=2, created_at='2026-10-17T02:00:00Z')
+        self.assertFalse(cut_decision(SHA, [reservation], NOW)[0])
+        tomorrow = datetime(2026, 10, 18, tzinfo=timezone.utc)
+        self.assertTrue(cut_decision(SHA, [reservation], tomorrow)[0])
+        self.assertEqual(held_candidates([reservation], held=False), [])
+
     def test_newest_held_has_no_age_cutoff_and_has_stable_tie_break(self):
         records = [held(1), held(2), held(3, status='failure'), held(4, proof='failed'), held(5, status='inactive')]
         self.assertEqual([item['id'] for item in held_candidates(records)], [2, 1])

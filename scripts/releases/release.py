@@ -97,6 +97,7 @@ def plan(github, args):
         baseline = payload(held[0]) if held else previous_production(github)
         data = manifest_bytes(github, baseline)
         guard_runtime(json.loads(data)['source_revision'], target)
+        github.reserve_cut(target)
         result.update(baseline_run_id=baseline['run_id'], baseline_artifact_id=baseline['manifest_artifact_id'])
     outputs(result)
 

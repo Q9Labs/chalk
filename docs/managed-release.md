@@ -8,7 +8,7 @@ Choose `production` explicitly for an operator production release.
 
 `Cut nightly` runs daily at 02:17 UTC on master.
 Scheduled cuts require new commits since the last completed cut and at most
-one cut attempt per UTC day. Failed cuts never advance that baseline.
+one cut attempt per UTC day, reserved before builds. Failures do not advance the baseline.
 A manual dispatch always attempts a cut, including an unchanged source.
 Both paths require the latest master Gate run/attempt for the pinned SHA to pass.
 

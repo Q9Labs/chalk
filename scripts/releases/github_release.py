@@ -39,7 +39,7 @@ def held_candidates(deployments, held=True):
 def cut_decision(target, deployments, now, manual=False):
     if manual:
         return True, 'explicit manual cut'
-    if any(payload(item).get('channel') == 'nightly-cut'
+    if any(payload(item).get('channel') in ('nightly-attempt', 'nightly-cut')
            and datetime.fromisoformat(item['created_at'].replace('Z', '+00:00')).date() >= now.date()
            for item in deployments):
         return False, 'cut already attempted today (UTC)'
@@ -74,6 +74,10 @@ class GitHub:
             status = self.request(f"deployments/{item['id']}/statuses?per_page=1")
             item['latest_status'] = status[0]['state'] if status else 'pending'
         return items
+
+    def reserve_cut(self, sha):
+        self.request('deployments', {'ref': sha, 'environment': 'nightly', 'auto_merge': False,
+                     'required_contexts': [], 'payload': {'channel': 'nightly-attempt'}})
 
     def gate(self, sha):
         runs = self.pages(f'actions/workflows/gate.yml/runs?head_sha={sha}&branch=master', 'workflow_runs')
