@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChalkProvider } from "../../bindings/context";
 import { createPreviewClient, createSnapshot } from "../../test-support";
-import { OfflineActions, offlineNoticeText } from "./OfflineActions";
+import { OfflineActions, RECONNECTING_GRACE_MS, offlineNoticeText } from "./OfflineActions";
 import { OfflineActionsSetting } from "./OfflineActionsSetting";
 import { RECONNECTING_NOTICE_MS } from "../reconnecting-overlay/ReconnectingOverlay";
 
@@ -50,12 +50,26 @@ async function mount(snapshot: SpaceSnapshot, node = <OfflineActions />) {
 const button = (container: HTMLElement, name: string) => [...container.querySelectorAll("button")].find((candidate) => candidate.textContent === name);
 
 describe("OfflineActions", () => {
-  it("shows a calm notice with the waiting count while reconnecting", async () => {
+  it("shows the waiting count at once while reconnecting", async () => {
     const { container } = await mount(withOffline("reconnecting", {}));
-    expect(container.querySelector("[role=status]")?.textContent).toBe("You're offline. 2 actions will send when you're back.");
+    expect(container.querySelector("[role=status]")?.textContent).toBe("Reconnecting. 2 actions will send when you're back.");
     expect(container.querySelector("[role=dialog]")).toBeNull();
-    expect(offlineNoticeText(1)).toBe("You're offline. 1 action will send when you're back.");
-    expect(offlineNoticeText(0)).toBe("You're offline. Reconnecting…");
+    expect(offlineNoticeText(1, false)).toBe("You're offline. 1 action will send when you're back.");
+    expect(offlineNoticeText(0, false)).toBe("You're offline. Reconnecting…");
+  });
+
+  it("stays quiet through a short drop and says reconnecting, not offline, when the browser is online", async () => {
+    vi.useFakeTimers();
+    try {
+      const { client, container } = await mount(withOffline("reconnecting", { pending: [] }));
+      expect(container.querySelector("[role=status]")).toBeNull();
+      await act(async () => vi.advanceTimersByTime(RECONNECTING_GRACE_MS));
+      expect(container.querySelector("[role=status]")?.textContent).toBe("Reconnecting…");
+      await act(async () => client.updateSnapshot((snapshot) => ({ ...snapshot, connection: { ...snapshot.connection, status: "live" } })));
+      expect(container.querySelector("[role=status]")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("asks once the connection is back and sends on request, remembering the choice", async () => {

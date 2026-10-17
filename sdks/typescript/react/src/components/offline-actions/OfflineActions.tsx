@@ -1,5 +1,5 @@
 import type { OfflineAction } from "@q9labsai/chalk-client";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { useConnection, useOffline, useSpaceClient } from "../../bindings/hooks";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
@@ -21,18 +21,22 @@ function ageLabel(milliseconds: number): string {
   return `${Math.round(seconds / 60)} min ago`;
 }
 
-export function offlineNoticeText(pendingCount: number): string {
-  if (pendingCount === 0) return "You're offline. Reconnecting…";
-  return `You're offline. ${pendingCount === 1 ? "1 action" : `${pendingCount} actions`} will send when you're back.`;
+/** Most drops recover within a second or two, so the notice waits this long before it appears. */
+export const RECONNECTING_GRACE_MS = 2_000;
+
+export function offlineNoticeText(pendingCount: number, online: boolean): string {
+  const state = online ? "Reconnecting" : "You're offline";
+  if (pendingCount === 0) return online ? "Reconnecting…" : "You're offline. Reconnecting…";
+  return `${state}. ${pendingCount === 1 ? "1 action" : `${pendingCount} actions`} will send when you're back.`;
 }
 
 /** Calm, non-blocking notice shown while the connection recovers. */
-export function OfflineNotice({ pendingCount }: { readonly pendingCount: number }): React.JSX.Element {
+export function OfflineNotice({ pendingCount, online }: { readonly pendingCount: number; readonly online: boolean }): React.JSX.Element {
   return (
     <div className="pointer-events-none absolute inset-x-0 top-3 z-40 flex justify-center px-4">
       <p role="status" className="pointer-events-auto flex items-center gap-2 rounded-xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-3.5 py-2 text-sm text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]">
-        <WifiOffIcon size={16} className="shrink-0 text-[var(--chalk-app-text-muted)]" />
-        <span>{offlineNoticeText(pendingCount)}</span>
+        {online ? null : <WifiOffIcon size={16} className="shrink-0 text-[var(--chalk-app-text-muted)]" />}
+        <span>{offlineNoticeText(pendingCount, online)}</span>
       </p>
     </div>
   );
@@ -94,6 +98,9 @@ export function OfflineActions(): React.JSX.Element | null {
   const connection = useConnection();
   const offline = useOffline();
   const [policy, setPolicy] = useOfflineActionsPolicy();
+  const online = useSyncExternalStore(subscribeToOnline, readOnline, () => true);
+  const reconnecting = connection.status === "reconnecting";
+  const reconnectingNoticeDue = useTrueFor(reconnecting, RECONNECTING_GRACE_MS);
 
   useEffect(() => {
     void client.offline.setPolicy(policy);
@@ -104,7 +111,8 @@ export function OfflineActions(): React.JSX.Element | null {
     void (decision === "send" ? client.offline.send() : client.offline.discard());
   };
 
-  if (connection.status === "reconnecting") return <OfflineNotice pendingCount={offline.pending.length} />;
+  // A known outage or a queued message shows at once; a plain blip gets the grace period first.
+  if (reconnecting) return !online || offline.pending.length > 0 || reconnectingNoticeDue ? <OfflineNotice pendingCount={offline.pending.length} online={online} /> : null;
   if (offline.decisionNeeded) return <OfflineDecisionDialog actions={offline.pending} now={Date.now()} onSend={(remember) => decide("send", remember)} onDiscard={(remember) => decide("discard", remember)} />;
   if (offline.notice)
     return (
@@ -113,4 +121,28 @@ export function OfflineActions(): React.JSX.Element | null {
       </p>
     );
   return null;
+}
+
+function useTrueFor(value: boolean, milliseconds: number): boolean {
+  const [elapsed, setElapsed] = useState(false);
+  useEffect(() => {
+    setElapsed(false);
+    if (!value) return;
+    const timer = setTimeout(() => setElapsed(true), milliseconds);
+    return () => clearTimeout(timer);
+  }, [milliseconds, value]);
+  return value && elapsed;
+}
+
+function subscribeToOnline(onChange: () => void): () => void {
+  globalThis.addEventListener?.("online", onChange);
+  globalThis.addEventListener?.("offline", onChange);
+  return () => {
+    globalThis.removeEventListener?.("online", onChange);
+    globalThis.removeEventListener?.("offline", onChange);
+  };
+}
+
+function readOnline(): boolean {
+  return globalThis.navigator?.onLine ?? true;
 }
