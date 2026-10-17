@@ -23,9 +23,9 @@ on:
         default: false
         type: boolean
       managed_environment:
-        description: GitHub Environment and host environment to deploy (staging, production, or another configured environment)
+        description: Configured GitHub environment and managed host target
         required: true
-        default: staging
+        default: nightly
         type: string
       managed_secret_exclusions:
         description: Comma-separated canonical runtime input IDs allowed to be missing
@@ -35,34 +35,158 @@ on:
         description: Run ID whose release manifest is the current stable baseline; omit only for the first release
         required: false
         type: string
+      stable_manifest_artifact_id:
+        description: Exact build baseline artifact within the baseline run (recommended after reruns)
+        required: false
+        type: string
       deploy_web:
         description: Run the CI web deployment fallback
         required: true
         default: false
         type: boolean
-      skip_staging:
-        description: Skip the staging web upload for this release
-        required: true
+      build_release_set:
+        description: Build both web targets and freeze the qualified runtime members
+        type: boolean
+        default: false
+      manifest_run_id:
+        description: Exact artifact-producing run to reuse; skips planning and all builds
+        type: string
+      manifest_artifact_id:
+        description: Exact immutable backend artifact ID (reuse mode)
+        type: string
+      manifest_sha256:
+        description: SHA256 of backend manifest bytes (reuse mode)
+        type: string
+      reuse_release_id:
+        description: Frozen release ID (reuse mode)
+        type: string
+      release_set_artifact_id:
+        description: Exact immutable release-set artifact ID (reuse mode)
+        type: string
+      release_set_sha256:
+        description: SHA256 of release-set.json bytes (reuse mode)
+        type: string
+      dry_run:
+        description: Validate inputs and print commands without building or deploying
+        type: boolean
+        default: false
+      adopt_existing_release:
+        description: Explicit one-time adoption of a legacy host; never needed for a fresh host
+        type: boolean
+        default: false
+
+  workflow_call:
+    inputs:
+      target_sha:
+        description: Full 40-character commit SHA whose pull request passed the Gate workflow
+        required: false
+        type: string
+      release_managed:
+        description: Build the changed API or Sync image and emit a managed release manifest
+        required: false
+        default: true
+        type: boolean
+      deploy_managed:
+        description: Deploy the managed release through the pinned SSM controller
+        required: false
         default: false
         type: boolean
+      enable_recorder_control:
+        description: First enablement of colocated recording controls (requires approved secrets and direct TLS ingress)
+        required: false
+        default: false
+        type: boolean
+      managed_environment:
+        description: Configured GitHub environment and managed host target
+        required: false
+        default: nightly
+        type: string
+      managed_secret_exclusions:
+        description: Comma-separated canonical runtime input IDs allowed to be missing
+        required: false
+        type: string
+      stable_manifest_run_id:
+        description: Run ID whose release manifest is the current stable baseline; omit only for the first release
+        required: false
+        type: string
+      stable_manifest_artifact_id:
+        description: Exact build baseline artifact within the baseline run (recommended after reruns)
+        required: false
+        type: string
+      deploy_web:
+        description: Run the CI web deployment fallback
+        required: false
+        default: false
+        type: boolean
+      build_release_set:
+        description: Build both web targets and freeze the qualified runtime members
+        type: boolean
+        default: false
+      manifest_run_id:
+        description: Exact artifact-producing run to reuse; skips planning and all builds
+        type: string
+      manifest_artifact_id:
+        description: Exact immutable backend artifact ID (reuse mode)
+        type: string
+      manifest_sha256:
+        description: SHA256 of backend manifest bytes (reuse mode)
+        type: string
+      reuse_release_id:
+        description: Frozen release ID (reuse mode)
+        type: string
+      release_set_artifact_id:
+        description: Exact immutable release-set artifact ID (reuse mode)
+        type: string
+      release_set_sha256:
+        description: SHA256 of release-set.json bytes (reuse mode)
+        type: string
+      orchestrated:
+        description: Internal caller owns the environment lock through proof and rollback
+        type: boolean
+        default: false
+      dry_run:
+        description: Validate inputs and print commands without building or deploying
+        type: boolean
+        default: false
+      adopt_existing_release:
+        description: Explicit one-time adoption of a legacy host; never needed for a fresh host
+        type: boolean
+        default: false
+    outputs:
+      release_id:
+        value: ${{ jobs.prepare-release.outputs.release_id }}
+      run_id:
+        value: ${{ jobs.prepare-release.outputs.run_id }}
+      manifest_artifact_id:
+        value: ${{ jobs.prepare-release.outputs.manifest_artifact_id }}
+      manifest_sha256:
+        value: ${{ jobs.prepare-release.outputs.manifest_sha256 }}
+      set_artifact_id:
+        value: ${{ jobs.prepare-release.outputs.set_artifact_id }}
+      set_sha256:
+        value: ${{ jobs.prepare-release.outputs.set_sha256 }}
+      activated_at:
+        value: ${{ jobs.activation.outputs.activated_at }}
 
 run-name: Release ${{ inputs.target_sha }}
 
 permissions:
   contents: read
   actions: read
+  deployments: write
+  id-token: write
 
 env:
   TARGET_SHA: ${{ inputs.target_sha }}
 
 concurrency:
-  group: release-${{ inputs.target_sha }}
+  group: ${{ inputs.orchestrated && format('chalk-release-child-{0}', github.run_id) || format('chalk-environment-{0}', inputs.managed_environment) }}
   cancel-in-progress: false
 
 jobs:
   plan-managed:
     name: Plan managed components
-    if: inputs.release_managed || inputs.deploy_managed
+    if: (inputs.release_managed || inputs.deploy_managed) && inputs.manifest_run_id == '' && !inputs.dry_run
     runs-on: ubuntu-24.04
     outputs:
       build_set: ${{ steps.plan.outputs.build_set }}
@@ -106,7 +230,7 @@ jobs:
           node --test scripts/deploy/deploy-managed-release.test.mjs
 
       - name: Download stable release manifest
-        if: inputs.stable_manifest_run_id != ''
+        if: inputs.stable_manifest_run_id != '' && inputs.stable_manifest_artifact_id == ''
         uses: actions/download-artifact@v4
         with:
           github-token: ${{ github.token }}
@@ -114,6 +238,16 @@ jobs:
           pattern: release-manifest-*
           path: ${{ runner.temp }}/stable-download
           merge-multiple: true
+
+      - name: Download exact build baseline artifact
+        if: inputs.stable_manifest_run_id != '' && inputs.stable_manifest_artifact_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.stable_manifest_run_id }}
+          artifact-ids: ${{ inputs.stable_manifest_artifact_id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/stable-download
 
       - name: Plan changed components
         id: plan
@@ -335,6 +469,8 @@ jobs:
 
   publish-managed-manifest:
     name: Publish managed release manifest
+    outputs:
+      artifact_id: ${{ steps.manifest-upload.outputs.artifact-id }}
     needs: [plan-managed, build-managed-images]
     if: >-
       always() &&
@@ -401,25 +537,27 @@ jobs:
           infrastructure/managed-episode/scripts/generate-release-manifest "${args[@]}"
 
       - name: Upload release manifest
+        id: manifest-upload
         uses: actions/upload-artifact@v4
         with:
           name: release-manifest-${{ needs.plan-managed.outputs.release_id }}
           path: infrastructure/managed-episode/generated/${{ needs.plan-managed.outputs.release_id }}.json
-          retention-days: 90
+          retention-days: 365
           if-no-files-found: error
 
   deploy-managed:
     name: Deploy managed release to ${{ inputs.managed_environment }}
-    needs: [plan-managed, publish-managed-manifest]
+    needs: [prepare-release, runtime-preflight]
     if: >-
       always() && !cancelled() && inputs.deploy_managed &&
-      needs.plan-managed.result == 'success' && needs.publish-managed-manifest.result == 'success'
+      needs.prepare-release.result == 'success' && !inputs.dry_run &&
+      (needs.runtime-preflight.result == 'success' || needs.prepare-release.outputs.set_artifact_id == '')
     runs-on: ubuntu-24.04
     # Host polling is bounded to 30 minutes; leave time for guarded dispatcher plans.
     timeout-minutes: 60
     environment: ${{ inputs.managed_environment }}
     concurrency:
-      group: deploy-managed-${{ inputs.managed_environment }}
+      group: managed-host-${{ inputs.managed_environment }}
       cancel-in-progress: false
     permissions:
       contents: read
@@ -438,8 +576,20 @@ jobs:
       - name: Download exact release manifest
         uses: actions/download-artifact@v4
         with:
-          name: release-manifest-${{ needs.plan-managed.outputs.release_id }}
+          merge-multiple: true
+          artifact-ids: ${{ needs.prepare-release.outputs.manifest_artifact_id }}
+          github-token: ${{ github.token }}
+          run-id: ${{ needs.prepare-release.outputs.run_id }}
           path: ${{ runner.temp }}/managed-release
+
+      - uses: ./.github/actions/release-tools
+
+      - name: Verify exact backend bytes before credentials
+        env:
+          EXPECTED_SHA256: ${{ needs.prepare-release.outputs.manifest_sha256 }}
+          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
+        run: |
+          python -c 'import hashlib,os,pathlib; p=pathlib.Path(os.environ["RUNNER_TEMP"])/"managed-release"/(os.environ["RELEASE_ID"]+".json"); assert hashlib.sha256(p.read_bytes()).hexdigest() == os.environ["EXPECTED_SHA256"]'
 
       - name: Validate managed deployment configuration
         env:
@@ -486,14 +636,13 @@ jobs:
           CHALK_MANAGED_RECORDER_CONFIG_PARAMETER: ${{ vars.CHALK_MANAGED_RECORDER_CONFIG_PARAMETER }}
           MANAGED_ENVIRONMENT: ${{ inputs.managed_environment }}
           MANAGED_SECRET_EXCLUSIONS: ${{ inputs.managed_secret_exclusions || vars.CHALK_MANAGED_SECRET_EXCLUSIONS }}
-          RELEASE_ID: ${{ needs.plan-managed.outputs.release_id }}
+          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
         run: |
           set -euo pipefail
           manifest="${{ runner.temp }}/managed-release/${RELEASE_ID}.json"
           jq -e --arg source "$TARGET_SHA" --arg release "$RELEASE_ID" \
             '.source_revision == $source and .release_id == $release' "$manifest" >/dev/null
           args=(
-            --adopt-existing-release
             --manifest "$manifest"
             --proof-file "${{ runner.temp }}/managed-deployment.json"
             --environment "$MANAGED_ENVIRONMENT"
@@ -506,6 +655,9 @@ jobs:
             --log-group-name "$CHALK_MANAGED_LOG_GROUP_NAME"
             --timeout-seconds 1800
           )
+          if [[ "${{ inputs.adopt_existing_release }}" == true ]]; then
+            args+=(--adopt-existing-release)
+          fi
           if [[ -n "$CHALK_MANAGED_RECORDER_CONFIG_PARAMETER" ]]; then
             args+=(--dispatcher-config-parameter "$CHALK_MANAGED_RECORDER_CONFIG_PARAMETER")
           fi
@@ -524,7 +676,7 @@ jobs:
         env:
           DEPLOYMENT_RESULT: ${{ runner.temp }}/managed-deployment.json
           MANAGED_ENVIRONMENT: ${{ inputs.managed_environment }}
-          RELEASE_ID: ${{ needs.plan-managed.outputs.release_id }}
+          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
         run: |
           # shellcheck disable=SC2016
           {
@@ -542,53 +694,314 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: managed-deployment-${{ needs.plan-managed.outputs.release_id }}
+          name: managed-deployment-${{ needs.prepare-release.outputs.release_id }}
           path: ${{ runner.temp }}/managed-deployment.json
           if-no-files-found: ignore
           retention-days: 90
 
-  deploy-web:
-    name: Deploy web fallback
-    if: inputs.deploy_web
+  build-web:
+    name: Build web-${{ matrix.target }} once
+    if: inputs.build_release_set && inputs.manifest_run_id == '' && !inputs.dry_run
     runs-on: ubuntu-24.04
-    concurrency:
-      group: deploy-web
-      cancel-in-progress: false
-    permissions:
-      contents: read
-    env:
-      CLOUDFLARE_ACCOUNT_ID: "5281943bd26d5bdcf4c3915606cd6bfb"
+    strategy:
+      matrix:
+        target: [nightly, production]
     steps:
-      - name: Checkout exact release
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.target_sha }}
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - uses: ./.github/actions/release-tools
+      - uses: pnpm/action-setup@v4
         with:
           version: 12.8.1
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version-file: .tool-versions
           cache: pnpm
-
-      - name: Restore Turbo build cache
-        uses: actions/cache@v4
+      - run: pnpm install --frozen-lockfile
+      - name: Build target-specific public configuration
+        env:
+          WEB_TARGET: ${{ matrix.target }}
+        run: python scripts/releases/web.py build --target "$WEB_TARGET" --sha "$TARGET_SHA" --output web-output
+      - uses: actions/upload-artifact@v4
         with:
-          path: .turbo/cache
-          key: web-release-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ inputs.target_sha }}
-          restore-keys: |
-            web-release-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+          name: web-${{ matrix.target }}-${{ github.run_attempt }}
+          path: web-output/web-${{ matrix.target }}.tar.gz
+          retention-days: 365
+          if-no-files-found: error
 
-      - name: Build once, upload, and verify
+  publish-release-set:
+    needs: [plan-managed, publish-managed-manifest, build-web]
+    if: >-
+      always() && !cancelled() && inputs.build_release_set && inputs.manifest_run_id == '' && !inputs.dry_run &&
+      needs.publish-managed-manifest.result == 'success' && needs.build-web.result == 'success'
+    runs-on: ubuntu-24.04
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      sha256: ${{ steps.assemble.outputs.sha256 }}
+      manifest_sha256: ${{ steps.assemble.outputs.manifest_sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/release-tools
+      - name: Locate both immutable web artifacts
+        id: web
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import os, sys
+          sys.path.insert(0, 'scripts/releases')
+          from github_release import GitHub, outputs
+          api = GitHub()
+          artifacts = list(api.pages(f"actions/runs/{os.environ['GITHUB_RUN_ID']}/artifacts", 'artifacts'))
+          values = {}
+          for target in ('nightly', 'production'):
+              matches = [a for a in artifacts if a['name'] == f"web-{target}-{os.environ['GITHUB_RUN_ATTEMPT']}" and not a['expired']]
+              assert len(matches) == 1, f'expected one {target} artifact'
+              values[target] = matches[0]['id']
+          outputs(values)
+          PY
+      - name: Freeze and validate the complete set
+        id: assemble
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.plan-managed.outputs.release_id }}
+          MANIFEST_ARTIFACT_ID: ${{ needs.publish-managed-manifest.outputs.artifact_id }}
+          WEB_NIGHTLY_ARTIFACT_ID: ${{ steps.web.outputs.nightly }}
+          WEB_PRODUCTION_ARTIFACT_ID: ${{ steps.web.outputs.production }}
+          RUNTIME_RUN_ID: ${{ vars.CHALK_QUALIFIED_RUNTIME_RUN_ID }}
+          RUNTIME_ARTIFACT_ID: ${{ vars.CHALK_QUALIFIED_RUNTIME_ARTIFACT_ID }}
+          RUNTIME_SHA256: ${{ vars.CHALK_QUALIFIED_RUNTIME_SHA256 }}
+        run: python scripts/releases/release.py assemble --directory release-output
+      - uses: actions/upload-artifact@v4
+        id: upload
+        with:
+          name: release-set-${{ github.run_attempt }}
+          path: release-output/release-set.json
+          retention-days: 365
+          if-no-files-found: error
+
+  prepare-release:
+    name: Resolve immutable deployment inputs
+    needs: [plan-managed, publish-managed-manifest, publish-release-set]
+    if: >-
+      always() && !cancelled() && !inputs.dry_run &&
+      (inputs.manifest_run_id != '' ||
+       (needs.publish-managed-manifest.result == 'success' &&
+        (!inputs.build_release_set || needs.publish-release-set.result == 'success')))
+    runs-on: ubuntu-24.04
+    outputs:
+      release_id: ${{ steps.resolve.outputs.release_id }}
+      run_id: ${{ inputs.manifest_run_id || github.run_id }}
+      manifest_artifact_id: ${{ steps.resolve.outputs.manifest_artifact_id }}
+      manifest_sha256: ${{ steps.resolve.outputs.manifest_sha256 }}
+      set_artifact_id: ${{ inputs.release_set_artifact_id || needs.publish-release-set.outputs.artifact_id }}
+      set_sha256: ${{ inputs.release_set_sha256 || needs.publish-release-set.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/release-tools
+      - name: Reject incomplete reuse or mixed build/reuse mode
+        env:
+          REUSE: ${{ inputs.manifest_run_id }}
+          REUSE_ID: ${{ inputs.reuse_release_id }}
+          MANIFEST_ID: ${{ inputs.manifest_artifact_id }}
+          MANIFEST_HASH: ${{ inputs.manifest_sha256 }}
+          SET_ID: ${{ inputs.release_set_artifact_id }}
+          SET_HASH: ${{ inputs.release_set_sha256 }}
+          BUILD: ${{ inputs.release_managed || inputs.build_release_set }}
+        run: |
+          if [[ -n "$REUSE" ]]; then
+            test "$BUILD" = false
+            test -n "$REUSE_ID" && test -n "$MANIFEST_ID" && test -n "$MANIFEST_HASH" && test -n "$SET_ID" && test -n "$SET_HASH"
+          fi
+      - name: Resolve exact bytes, never use the baseline as a reuse selector
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.manifest_run_id || github.run_id }}
+          RELEASE_ID: ${{ inputs.reuse_release_id || needs.plan-managed.outputs.release_id }}
+          MANIFEST_ARTIFACT_ID: ${{ inputs.manifest_artifact_id || needs.publish-managed-manifest.outputs.artifact_id }}
+          MANIFEST_SHA256: ${{ inputs.manifest_sha256 || needs.publish-release-set.outputs.manifest_sha256 }}
+          SET_ARTIFACT_ID: ${{ inputs.release_set_artifact_id || needs.publish-release-set.outputs.artifact_id }}
+          SET_SHA256: ${{ inputs.release_set_sha256 || needs.publish-release-set.outputs.sha256 }}
+        run: |
+          if [[ -n "$SET_ARTIFACT_ID" ]]; then
+            python scripts/releases/release.py resolve
+          else
+            python - <<'PY'
+          import os, sys
+          sys.path.insert(0, 'scripts/releases')
+          from github_release import GitHub, outputs
+          from release_set import digest, require
+          api = GitHub()
+          data = api.artifact(os.environ['RUN_ID'], os.environ['MANIFEST_ARTIFACT_ID'], os.environ['RELEASE_ID'] + '.json')
+          require(not os.environ.get('MANIFEST_SHA256') or digest(data) == os.environ['MANIFEST_SHA256'], 'manifest checksum mismatch')
+          outputs({'release_id': os.environ['RELEASE_ID'], 'manifest_artifact_id': os.environ['MANIFEST_ARTIFACT_ID'], 'manifest_sha256': digest(data)})
+          PY
+          fi
+
+  runtime-preflight:
+    needs: prepare-release
+    if: inputs.deploy_managed && needs.prepare-release.outputs.set_artifact_id != ''
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.managed_environment }}
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    env:
+      CHALK_MANAGED_AWS_REGION: ${{ vars.CHALK_MANAGED_AWS_REGION }}
+      CHALK_MANAGED_PARAMETER_PREFIX: ${{ vars.CHALK_MANAGED_PARAMETER_PREFIX }}
+      CHALK_MANAGED_RECORDER_CONFIG_PARAMETER: ${{ vars.CHALK_MANAGED_RECORDER_CONFIG_PARAMETER }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/release-tools
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          artifact-ids: ${{ needs.prepare-release.outputs.set_artifact_id }}
+          github-token: ${{ github.token }}
+          run-id: ${{ needs.prepare-release.outputs.run_id }}
+          path: release-input
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
+      - name: Require qualified runtime pins before any deployment
+        env:
+          RELEASE_TARGET: ${{ inputs.managed_environment }}
+        run: python scripts/releases/observe.py --target "$RELEASE_TARGET" --release-set release-input/release-set.json --preflight
+
+  deploy-web:
+    name: Upload prebuilt web-${{ inputs.managed_environment }}
+    needs: [prepare-release, deploy-managed]
+    if: >-
+      always() && !cancelled() && inputs.deploy_web && !inputs.dry_run &&
+      needs.prepare-release.result == 'success' &&
+      (!inputs.deploy_managed || needs.deploy-managed.result == 'success')
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.managed_environment }}
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/release-tools
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.8.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          artifact-ids: ${{ needs.prepare-release.outputs.set_artifact_id }}
+          run-id: ${{ needs.prepare-release.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: release-input
+      - name: Fetch the exact prebuilt web archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WEB_TARGET: ${{ inputs.managed_environment }}
+        run: |
+          python - <<'PY'
+          import json, os, pathlib, sys
+          sys.path.insert(0, 'scripts/releases')
+          from github_release import GitHub
+          from release_set import validate
+          value = validate(json.loads(pathlib.Path('release-input/release-set.json').read_text()))
+          target = os.environ['WEB_TARGET']
+          member = value['web'][target]
+          data = GitHub().artifact(value['run_id'], member['artifact_id'], f'web-{target}.tar.gz', member['sha256'])
+          pathlib.Path(f'release-input/web-{target}.tar.gz').write_bytes(data)
+          PY
+      - name: Upload without build or Functions compilation
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WEB_TARGET: ${{ inputs.managed_environment }}
+          PAGES_PROJECT: ${{ vars.CHALK_PAGES_PROJECT }}
+        run: python scripts/releases/web.py deploy --target "$WEB_TARGET" --release-set release-input/release-set.json --archive "release-input/web-$WEB_TARGET.tar.gz" --project "$PAGES_PROJECT"
+
+  activation:
+    needs: [prepare-release, deploy-managed, deploy-web]
+    if: >-
+      always() && !cancelled() && inputs.deploy_managed && inputs.deploy_web &&
+      needs.deploy-managed.result == 'success' && needs.deploy-web.result == 'success'
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.managed_environment }}
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    outputs:
+      activated_at: ${{ steps.time.outputs.activated_at }}
+    env:
+      CHALK_MANAGED_AWS_REGION: ${{ vars.CHALK_MANAGED_AWS_REGION }}
+      CHALK_MANAGED_INSTANCE_ID: ${{ vars.CHALK_MANAGED_INSTANCE_ID }}
+      CHALK_MANAGED_PARAMETER_PREFIX: ${{ vars.CHALK_MANAGED_PARAMETER_PREFIX }}
+      CHALK_MANAGED_RECORDER_CONFIG_PARAMETER: ${{ vars.CHALK_MANAGED_RECORDER_CONFIG_PARAMETER }}
+      CHALK_RELEASE_OBSERVER_DOCUMENT_NAME: ${{ vars.CHALK_RELEASE_OBSERVER_DOCUMENT_NAME }}
+      CHALK_RELEASE_OBSERVER_DOCUMENT_VERSION: ${{ vars.CHALK_RELEASE_OBSERVER_DOCUMENT_VERSION }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/release-tools
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.prepare-release.outputs.set_artifact_id }}
+          merge-multiple: true
+          run-id: ${{ needs.prepare-release.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: release-input
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
+      - name: Confirm served tuple before the call
+        env:
+          RELEASE_TARGET: ${{ inputs.managed_environment }}
+        run: python scripts/releases/observe.py --target "$RELEASE_TARGET" --release-set release-input/release-set.json
+      - id: time
+        run: echo "activated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+  dry-run:
+    if: inputs.dry_run
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/release-tools
+      - name: Print build configuration only
         run: |
-          args=(--sha "$TARGET_SHA")
-          if [[ "${{ inputs.skip_staging }}" == "true" ]]; then
-            args+=(--skip-staging)
-          fi
-          pnpm run release:web:ci -- "${args[@]}"
+          python scripts/releases/web.py build --target nightly --sha "$TARGET_SHA" --dry-run
+          python scripts/releases/web.py build --target production --sha "$TARGET_SHA" --dry-run
+          echo 'No credentials requested, artifacts built, or deployments dispatched.'
+  proof-direct:
+    needs: [prepare-release, activation]
+    if: "!inputs.orchestrated"
+    uses: ./.github/workflows/real-call-proof.yml
+    with:
+      environment: ${{ inputs.managed_environment }}
+      proofs: smoke transcript
+    secrets: inherit
+
+  observe-direct:
+    needs: [prepare-release, activation, proof-direct]
+    if: always() && !inputs.orchestrated && needs.activation.result == 'success'
+    uses: ./.github/workflows/release-observation.yml
+    with:
+      environment: ${{ inputs.managed_environment }}
+      target_sha: ${{ inputs.target_sha }}
+      run_id: ${{ needs.prepare-release.outputs.run_id }}
+      release_id: ${{ needs.prepare-release.outputs.release_id }}
+      set_artifact_id: ${{ needs.prepare-release.outputs.set_artifact_id }}
+      set_sha256: ${{ needs.prepare-release.outputs.set_sha256 }}
+      manifest_artifact_id: ${{ needs.prepare-release.outputs.manifest_artifact_id }}
+      manifest_sha256: ${{ needs.prepare-release.outputs.manifest_sha256 }}
+      activated_at: ${{ needs.activation.outputs.activated_at }}
+      deploy_result: success
+      proof_result: ${{ needs.proof-direct.result == 'success' && needs.proof-direct.outputs.result || 'failed' }}
+    secrets: inherit

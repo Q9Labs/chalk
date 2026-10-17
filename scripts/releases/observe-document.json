@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "2.2",
+  "description": "Read-only immutable release tuple observer; emits no environment or manifest values.",
+  "parameters": {
+    "ExpectedTupleBase64": {
+      "type": "String",
+      "interpolationType": "ENV_VAR",
+      "allowedPattern": "^[A-Za-z0-9+/=]+$",
+      "maxChars": 16384
+    }
+  },
+  "mainSteps": [
+    {
+      "action": "aws:runShellScript",
+      "name": "observeRelease",
+      "inputs": {
+        "timeoutSeconds": "90",
+        "runCommand": [
+          "#!/bin/bash",
+          "set -euo pipefail",
+          "python3 - <<'PYTHON'",
+          "import base64, hashlib, json, os, subprocess\nfrom pathlib import Path\nexpected = json.loads(base64.b64decode(os.environ['SSM_ExpectedTupleBase64']))\ndata = Path('/run/chalk/release/release-manifest.json').read_bytes()\nassert hashlib.sha256(data).hexdigest() == expected['manifest_sha256'], 'manifest differs'\nmanifest = json.loads(data)\nuid = subprocess.check_output(['id', '-u', 'chalk'], text=True).strip()\ndef inspect(name):\n    return json.loads(subprocess.check_output(['runuser', '-u', 'chalk', '--', 'env', 'XDG_RUNTIME_DIR=/run/user/' + uid, 'podman', 'inspect', name], text=True))[0]\nfor role in ('api', 'sync'):\n    assert inspect('chalk-' + role)['ImageName'] == manifest['images'][role], 'component image differs'\nfor role in ('capture', 'render'):\n    observed = inspect('chalk-recorder-' + role)\n    assert observed['ImageName'] == manifest['images']['recorder_control'], 'recorder controller image differs'\n    values = dict(item.split('=', 1) for item in observed['Config']['Env'])\n    member = expected[role]\n    assert values['CHALK_RECORDER_FLEET_IMAGE_ID'] == member['image_id'], 'loaded worker image differs'\n    assert values['CHALK_RECORDER_FLEET_RELEASE_ID'] == member['release_id'], 'loaded worker release differs'\n    assert values['CHALK_RECORDER_FLEET_IMAGE_DIGEST'].removeprefix('sha256:') == member['content_sha256'], 'loaded worker digest differs'\nprint('CHALK_RELEASE_MATCH')",
+          "PYTHON"
+        ]
+      }
+    }
+  ]
+}
