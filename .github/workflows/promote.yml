@@ -5,7 +5,7 @@ on:
       dry_run:
         description: Select and verify exact artifacts without deploying
         type: boolean
-        default: true
+        default: false
 permissions:
   contents: read
   actions: read

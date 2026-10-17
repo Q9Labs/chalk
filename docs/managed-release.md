@@ -32,7 +32,7 @@ Do not enable deployment until the following work is complete:
    credentials, private call data or tokens.
 5. Seed the previous production release set using a full, approved Release run
    with `build_release_set`, `deploy_managed`, and `deploy_web` enabled and
-   `orchestrated=false`. It runs the same proof and records production only after
+   the caller-owned-lock option left off. It runs the same proof and records production only after
    identity checks pass. Promotion refuses to mutate without an available rollback
    set that still matches production. Do not fabricate a successful deployment.
 
@@ -55,7 +55,7 @@ the baseline. Automatic retries of the same failed SHA are suppressed.
 
 Use **Run workflow** for a retry after fixing the cause. A retry can repeat a
 failed activation/proof, but cannot cut a second new SHA after today's activation.
-The dispatch defaults to dry-run; disable that option to deploy. Dry-run reads
+The dispatch runs the retry by default; select dry-run to inspect it first. Dry-run reads
 GitHub and prints the decision without creating deployment records or building.
 
 Release builds `web-nightly` and `web-production` from the same full commit.
@@ -78,7 +78,7 @@ ineligible even when their source SHA is known.
 ## Promote and rollback
 
 Use **Promote newest held nightly** (`promote.yml`). It has no SHA/run selector.
-The dry-run default picks and verifies the same artifacts without mutation.
+The optional dry-run picks and verifies the same artifacts without mutation.
 
 The selection job paginates all deployments and status histories, chooses by
 activation time (not a later status update), checks Gate and `master` ancestry,
@@ -116,8 +116,7 @@ Fresh hosts never receive `--adopt-existing-release` automatically. The optional
 
 Direct Release runs use the same environment lock as the parent loops. Reusable
 calls set `orchestrated=true`: the caller owns that lock through proof/rollback,
-so a child never reacquires its parent's lock. Keep that internal flag off for
-manual Release dispatches. The backend job retains its bounded host lock.
+so a child never reacquires its parent's lock. That internal flag is available only to reusable callers, not manual dispatches. The backend job retains its bounded host lock.
 
 ## Operator configuration (names only)
 
