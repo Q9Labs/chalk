@@ -2,14 +2,17 @@ name: Gate
 
 # Required status checks: "Root gate", "API gate", "Sync gate".
 # A pull request runs only the jobs and lanes its diff selects; a skipped job counts as passed.
-# Pushes to master and manual runs run every job and lane in full, and only pushes to master save caches,
-# so every pull request starts from the caches of the latest master run.
+# Pushes to master, manual runs and the nightly run run every job and lane in full, and only pushes to master
+# save caches, so every pull request starts from the caches of the latest master run.
 # The pre-commit hook runs only the fast lanes; this workflow is the full verification.
 
 on:
   pull_request:
   push:
     branches: [master]
+  schedule:
+    # New advisories against packages nobody changed fail here, not on unrelated pull requests.
+    - cron: "17 1 * * *"
   workflow_dispatch:
 
 permissions:
@@ -22,6 +25,8 @@ concurrency:
 
 env:
   CI: "true"
+  # A pull request fails only on vulnerability findings that its base branch lacks; full runs fail on every finding.
+  GATE_VULN_BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
 
 jobs:
   changes:
@@ -188,6 +193,9 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          # The vulnerability check compares a pull request with its merge base.
+          fetch-depth: 0
 
       - name: Set up pnpm
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1

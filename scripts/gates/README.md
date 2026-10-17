@@ -18,7 +18,7 @@ the `services` lane, because CI runs the API and Sync gates as separate jobs.
 ## The Gate workflow
 
 `.github/workflows/gate.yml` runs on every pull request, every push to `master`,
-and on manual dispatch. `Select gate jobs` runs
+every night, and on manual dispatch. `Select gate jobs` runs
 `node scripts/gates/chalk-gate-plan.mjs --ci-jobs <base-ref>`, which uses the
 same plan as the lanes to pick the jobs a pull request needs: the API gate, the
 Sync gate, and the root lane groups. The root lanes run as parallel jobs, one
@@ -28,11 +28,20 @@ checks), `tests`, `browser-tests` (workspaces whose tests drive Chromium), and
 Each job sets `GATE_LANE_GROUP`, so q9gate plans only that group's lanes and
 keeps its own selection inside the group. `Root gate` passes only when the
 planner and every selected group passed; a job that the planner skips counts as
-passed. Pushes to `master` and manual runs select every job and run every lane
-with `--full`, so anything a pull request skips still runs once it merges, and
+passed. Pushes to `master`, the nightly run, and manual runs select every job and
+run every lane with `--full`, so anything a pull request skips still runs once it merges, and
 every master commit keeps its own run. A full run scans staged files and commits
 for secrets: the pushed range on a push to `master`, otherwise the commits since
 the base, or the last commit.
+
+On a pull request, the workflow sets `GATE_VULN_BASE_REF` to the base branch.
+When OSV-Scanner (`osv` lane) or govulncheck (API gate) finds a vulnerability,
+`osv-scanner.sh` and `govulncheck.sh` run the same scan on the merge base, and
+`new-vulnerabilities.mjs` fails the pull request only for a finding the base
+lacks, that is, a package version the pull request changed. A new advisory
+against a package nobody changed fails the next master push or nightly run
+instead, because those runs leave `GATE_VULN_BASE_REF` empty and fail on every
+finding.
 
 Only pushes to `master` save the Go build caches and the Metro cache, so pull
 requests start from the latest master caches and do not evict each other's.
