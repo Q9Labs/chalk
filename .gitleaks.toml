@@ -1,9 +1,20 @@
 title = "Chalk gitleaks policy"
 
+# Without this, gitleaks loads no rules from this file and every scan passes.
+[extend]
+useDefault = true
+
 [[allowlists]]
 description = "Local mobile/app credentials and generated artifacts are not part of the public gate surface."
 paths = ['''^apps/mobile/\.gplay/''', '''^apps/mobile/android/app/keystore\.properties$''', '''^apps/mobile/ios/Pods/''', '''^apps/web/\.dev\.vars$''', '''^packages/.*/dist/''']
 
 [[allowlists]]
 description = "Checked-in tests and API docs use obvious placeholder credentials."
-paths = ['''^apps/docs/src/content/docs/api/authentication\.mdx$''', '''_test\.go$''', '''\.test\.ts$''', '''\.test\.tsx$''']
+paths = ['''^apps/docs/src/content/docs/api/authentication\.mdx$''', '''_test\.go$''', '''\.test\.ts$''', '''\.test\.tsx$''', '''\.test-support\.ts$''']
+
+[[allowlists]]
+description = "The release manifest records file hashes and 1Password item IDs, not the secrets themselves."
+condition = "AND"
+paths = ['''^release/manifest\.json$''']
+regexTarget = "line"
+regexes = ['''"[a-z0-9_]+_(?:sha256|item_id)"\s*:''']

@@ -185,3 +185,7 @@ test("CI installs the same scanner versions that the gate scripts fall back to",
   assert.match(read("scripts/gates/gitleaks.sh"), new RegExp(`gitleaks/v8@v${/gitleaks_version="([^"]+)"/u.exec(action)[1]}\\b`, "u"));
   assert.match(read("scripts/gates/osv-scanner.sh"), new RegExp(`osv-scanner@v${/osv_version="([^"]+)"/u.exec(action)[1]}\\b`, "u"));
 });
+
+test("gitleaks loads its default rules, because a config without them has no rules at all", () => {
+  assert.match(readFileSync(new URL("../../.gitleaks.toml", import.meta.url), "utf8"), /^\[extend\]\nuseDefault = true$/mu);
+});
