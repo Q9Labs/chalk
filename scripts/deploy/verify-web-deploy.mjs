@@ -1,4 +1,5 @@
 import { pathToFileURL } from "node:url";
+import { parseArgs } from "node:util";
 
 const DEFAULT_DEADLINE_MS = 90_000;
 const DEFAULT_RETRY_DELAY_MS = 5_000;
@@ -31,37 +32,27 @@ export async function verifyWebDeploy({ baseURL, expectedSHA, deadlineMs = DEFAU
 }
 
 export function parseArguments(arguments_) {
-  const positional = [];
-  const options = {};
-  for (let index = 0; index < arguments_.length; index += 1) {
-    const argument = arguments_[index];
-    if (argument === "--production") options.production = true;
-    else if (["--api-base-url", "--environment"].includes(argument)) {
-      const value = arguments_[++index];
-      if (!value || value.startsWith("--")) throw new Error(`Missing value for ${argument}`);
-      if (argument === "--api-base-url") options.apiBaseURL = value;
-      else {
-        if (!["nightly", "production"].includes(value)) throw new Error("Invalid target environment");
-        options.expectedEnvironment = value;
-      }
-    } else if (argument.startsWith("--")) throw new Error(`Unknown argument: ${argument}`);
-    else positional.push(argument);
-  }
-  if (positional.length !== 2) throw new Error("Expected base URL and full commit SHA");
-  return { baseURL: positional[0], expectedSHA: normalizeSHA(positional[1]), ...options };
+  const { positionals, values } = parseArgs({
+    args: arguments_,
+    allowPositionals: true,
+    options: { production: { type: "boolean", default: false }, "api-base-url": { type: "string" }, environment: { type: "string" } },
+  });
+  if (positionals.length !== 2) throw new Error("Expected base URL and full commit SHA");
+  if (values.environment && !["nightly", "production"].includes(values.environment)) throw new Error("Invalid target environment");
+  return { baseURL: positionals[0], expectedSHA: normalizeSHA(positionals[1]), production: values.production, apiBaseURL: values["api-base-url"], expectedEnvironment: values.environment };
 }
 
 async function verifyOnce(baseURL, apiBaseURL, expectedSHA, requestTimeoutMs, expectedEnvironment, deadlineSignal) {
   await verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs, deadlineSignal);
   await verifyAPIHealth(apiBaseURL, requestTimeoutMs, deadlineSignal);
-  if (expectedEnvironment) {
-    const response = await request(endpointURL(baseURL, "/release.json"), requestTimeoutMs, deadlineSignal);
-    requireStatus(response, 200, "release marker");
-    const marker = await readJSON(response, "release marker");
-    if (marker?.environment !== expectedEnvironment || marker?.commit !== expectedSHA) {
-      throw new Error("served web release mismatch");
-    }
-  }
+  if (expectedEnvironment) await verifyReleaseMarker(baseURL, expectedSHA, expectedEnvironment, requestTimeoutMs, deadlineSignal);
+}
+
+async function verifyReleaseMarker(baseURL, expectedSHA, expectedEnvironment, requestTimeoutMs, deadlineSignal) {
+  const response = await request(endpointURL(baseURL, "/release.json"), requestTimeoutMs, deadlineSignal);
+  requireStatus(response, 200, "release marker");
+  const marker = await readJSON(response, "release marker");
+  if (!marker || marker.environment !== expectedEnvironment || marker.commit !== expectedSHA) throw new Error("served web release mismatch");
 }
 
 async function verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs, deadlineSignal) {
