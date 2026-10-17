@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import tempfile
 import tarfile
+import textwrap
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -67,7 +68,20 @@ class MemoryGitHub(GitHub):
     def deployments(self, environment):
         return self.items
 
+    def pages(self, route, key):
+        if '/workflows/ci.yml/' in route:
+            return [dict(id=10)]
+        if '/jobs?' in route:
+            return [dict(id=10, name='Deploy managed release to production', conclusion='success',
+                         completed_at='2026-10-16T02:00:00Z')]
+        if '/artifacts' in route:
+            return [dict(id=30, name='managed-deployment-previous'), dict(id=31, name='release-manifest-previous')]
+        return []
+
     def artifact(self, run, identity, name, expected=None):
+        if name == 'managed-deployment.json':
+            return json.dumps(dict(release_id='previous', status='deployed', health='passed',
+                                   deployment_phase='complete', rolled_back=False)).encode()
         data = self.archive(name[4:-7]) if name.startswith('web-') else json.dumps(
             dict(release_id=name[:-5], source_revision=SHA)).encode()
         if expected is not None and digest(data) != expected:
@@ -79,6 +93,46 @@ class MemoryGitHub(GitHub):
 
 
 class CutTests(unittest.TestCase):
+    @patch.dict(os.environ, GITHUB_OUTPUT=os.devnull, TARGET_SHA=SHA)
+    def test_old_web_retry_cannot_replace_new_backend_or_held_nightly(self):
+        api = MemoryGitHub()
+        for run, identity in [('1', 'A'), ('2', 'B')]:
+            with patch.dict(os.environ, GITHUB_RUN_ID=run, RELEASE_ID=identity):
+                release.invalidate(api, None)  # backend succeeds; A's web fails before recording
+                if identity == 'B':
+                    with patch.dict(os.environ, EXPECTED_BACKEND_RELEASE_ID=identity):
+                        release.invalidate(api, None)
+                    with patch.dict(os.environ, RELEASE=json.dumps(api.info(run, identity)), DEPLOY_RESULT='success', PROOF_RESULT='passed'):
+                        release.record(api, None)
+        before = json.dumps(api.items)
+        with patch.dict(os.environ, GITHUB_RUN_ID='1', EXPECTED_BACKEND_RELEASE_ID='A'):
+            with self.assertRaisesRegex(ValueError, "a newer nightly write replaced this run's backend"):
+                release.invalidate(api, None)
+        self.assertEqual(json.dumps(api.items), before)
+        with patch.dict(os.environ, GITHUB_RUN_ID='1', RELEASE=json.dumps(api.info('1', 'A')), DEPLOY_RESULT='success', PROOF_RESULT='passed'):
+            with self.assertRaisesRegex(ValueError, 'newer nightly write'):
+                release.record(api, None)
+        with patch.dict(os.environ, GITHUB_RUN_ID='2', RELEASE=json.dumps(api.info('2', 'B')), DEPLOY_RESULT='success', PROOF_RESULT='passed'):
+            release.record(api, None)
+        self.assertEqual({item['payload']['release_id'] for item in held_candidates(api.items)}, {'B'})
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / 'output'
+            with patch.dict(os.environ, GITHUB_OUTPUT=str(output), GITHUB_STEP_SUMMARY=str(Path(directory) / 'summary')):
+                release.select(api, None)
+            selection = json.loads(output.read_text().split('selection=', 1)[1])
+        self.assertEqual(selection['selection']['release_id'], 'B')
+
+    @patch.dict(os.environ, GITHUB_OUTPUT=os.devnull, TARGET_SHA=SHA, GITHUB_RUN_ID='1', RELEASE_ID='A')
+    def test_web_requires_both_backend_run_and_applied_identity(self):
+        api = MemoryGitHub()
+        release.invalidate(api, None)
+        before = json.dumps(api.items)
+        for run, identity in [('1', 'B'), ('2', 'A')]:
+            with self.subTest(run=run, identity=identity), patch.dict(os.environ, GITHUB_RUN_ID=run, EXPECTED_BACKEND_RELEASE_ID=identity):
+                with self.assertRaisesRegex(ValueError, "newer nightly write replaced this run's backend"):
+                    release.invalidate(api, None)
+                self.assertEqual(json.dumps(api.items), before)
+
     @patch.dict(os.environ, GITHUB_OUTPUT=os.devnull)
     def test_old_record_retry_cannot_replace_new_held_nightly(self):
         api = MemoryGitHub()
@@ -118,7 +172,8 @@ class CutTests(unittest.TestCase):
     def test_same_run_web_write_keeps_the_applied_identity_recordable(self):
         api = MemoryGitHub()
         release.invalidate(api, None)  # backend
-        release.invalidate(api, None)  # web
+        with patch.dict(os.environ, EXPECTED_BACKEND_RELEASE_ID='A'):
+            release.invalidate(api, None)  # web
         with patch.dict(os.environ, RELEASE=json.dumps(api.info('1', 'A')), DEPLOY_RESULT='success', PROOF_RESULT='passed'):
             release.record(api, None)
         self.assertEqual([item['payload']['release_id'] for item in held_candidates(api.items)], ['A'])
@@ -222,6 +277,13 @@ class ArtifactTests(unittest.TestCase):
 
 
 class RecoveryTests(unittest.TestCase):
+    def run_result(self, directory):
+        workflow = (release.ROOT / '.github/workflows/promote.yml').read_text()
+        step = workflow.split('      - name: Failed promotion stays failed; require explicit recovery evidence\n')[1]
+        command = step.split('      - name:', 1)[0].split('        run:', 1)[1]
+        command = textwrap.dedent(command.split('\n', 1)[1]) if command.startswith(' |') else command.strip()
+        return subprocess.run(['bash', '-e', '-c', command], cwd=directory, capture_output=True, text=True)
+
     def test_cancelled_promote_requires_exact_backend_and_pages_evidence(self):
         previous = dict(target_sha=SHA, release_id='previous', run_id='10', manifest_artifact_id='20', manifest_sha256='a' * 64)
         evidence = dict(restored_source_release_id='previous', release_id='fresh-recovery',
@@ -239,8 +301,9 @@ class RecoveryTests(unittest.TestCase):
                     with patch.dict(os.environ, GITHUB_STEP_SUMMARY=str(summary), DEPLOY_RESULT='cancelled', PROOF_RESULT='failed',
                                     SELECTION=json.dumps(dict(previous=previous, selection={'release_id': 'nightly'})),
                                     ROLLBACK_RESULT=status, ROLLBACK=json.dumps(rollback), PAGES_ID='saved-pages'):
-                        with self.assertRaisesRegex(ValueError, 'promotion failed'):
-                            release.promotion_result(None, None)
+                        result = self.run_result(directory)
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertIn('promotion failed', result.stderr)
                     text = summary.read_text()
                     if recovered:
                         self.assertIn('RECOVERY VERIFIED', text)
@@ -262,7 +325,8 @@ class RecoveryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with patch.dict(os.environ, GITHUB_STEP_SUMMARY=str(Path(directory) / 'summary'), DEPLOY_RESULT='success',
                             PROOF_RESULT='passed', SELECTION=json.dumps(dict(previous={}, selection={'release_id': 'nightly'}))):
-                release.promotion_result(None, None)
+                result = self.run_result(directory)
+                self.assertEqual(result.returncode, 0, result.stderr)
 
 
 class WebBuildTests(unittest.TestCase):

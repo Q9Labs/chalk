@@ -839,7 +839,7 @@ jobs:
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && inputs.managed_environment == 'nightly'
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_ID: ${{ needs.deploy-managed.outputs.release_id }}
+          EXPECTED_BACKEND_RELEASE_ID: ${{ needs.deploy-managed.outputs.release_id }}
         run: python3 scripts/releases/release.py invalidate
       - name: Upload verified prebuilt archive without rebuilding
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && (inputs.pages_rollback_id == '')
