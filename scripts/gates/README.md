@@ -30,7 +30,9 @@ keeps its own selection inside the group. `Root gate` passes only when the
 planner and every selected group passed; a job that the planner skips counts as
 passed. Pushes to `master` and manual runs select every job and run every lane
 with `--full`, so anything a pull request skips still runs once it merges, and
-every master commit keeps its own run.
+every master commit keeps its own run. A full run scans staged files and commits
+for secrets: the pushed range on a push to `master`, otherwise the commits since
+the base, or the last commit.
 
 Only pushes to `master` save the Go build caches and the Metro cache, so pull
 requests start from the latest master caches and do not evict each other's.

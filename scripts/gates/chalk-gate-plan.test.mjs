@@ -90,6 +90,13 @@ test("plan options map each scope to its snapshot and base", () => {
   assert.equal(gatePlanOptions({ allChangedFiles: [], scope: "staged", classification: { fullRequired: false }, target: undefined }, { GATE_SERVICES: "external" }).services, "external");
 });
 
+test("a full plan scans committed secrets, because a clean checkout has nothing staged", () => {
+  const secretScope = (options) => createGatePlan(["README.md"], options).tasks.find((task) => task.id === "secrets").env.GATE_SCOPE;
+  assert.equal(secretScope({ full: true }), "full");
+  assert.equal(secretScope({}), "staged");
+  assert.equal(secretScope({ scope: "merge base to HEAD" }), "merge base to HEAD");
+});
+
 test("lane environment adds explicit files only for the secrets lane", () => {
   assert.deepEqual(laneEnvironment("secrets", { A: "1" }, ["a", "b"], true), [
     { name: "A", value: "1" },

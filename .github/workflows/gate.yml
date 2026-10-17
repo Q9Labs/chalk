@@ -138,6 +138,8 @@ jobs:
           GATE_LANE_GROUP: ${{ matrix.group }}
           GATE_SERVICES: external
           GATE_BASE_REF: origin/${{ github.base_ref || 'master' }}
+          # A push to master scans every pushed commit for secrets, including the commits a merge brings in.
+          GITLEAKS_LOG_OPTS: ${{ github.event_name == 'push' && format('{0}..{1}', github.event.before, github.sha) || '' }}
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             pnpm exec bash scripts/gates/commit.sh --base "${GATE_BASE_REF}"

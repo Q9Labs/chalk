@@ -33,9 +33,10 @@ run_gitleaks() {
     done <<< "${GATE_EXPLICIT_FILES}"
   fi
 
-  if [[ "${GATE_SCOPE:-}" == "staged" ]]; then
+  if [[ "${GATE_SCOPE:-}" == "staged" || "${GATE_SCOPE:-}" == "full" ]]; then
     "$@" protect --staged --config "${CONFIG_PATH}" --redact --verbose
-    return
+    # A full run also scans commits, because a clean CI checkout has nothing staged.
+    [[ "${GATE_SCOPE}" == "full" ]] || return 0
   fi
 
   if [[ -n "${LOG_OPTS}" ]]; then
