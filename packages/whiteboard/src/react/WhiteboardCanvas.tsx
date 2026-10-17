@@ -111,6 +111,7 @@ interface WhiteboardCollaboration {
 }
 
 interface WhiteboardMath {
+  initialLatex: string;
   closeMath: () => void;
   handleSubmitMath: (latex: string) => Promise<void>;
   isMathOpen: boolean;
