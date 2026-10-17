@@ -11,17 +11,47 @@ allocated CPUs; Vitest and Erlang remain capped at two workers/schedulers.
 
 The pre-commit hook runs `pnpm gate:fast`: tracker check plus the `scope`, `format`,
 `hygiene`, `secrets`, and `generated` lanes on staged files
-(about 10 seconds). The full gate runs in `.github/workflows/gate.yml` on every
-pull request. A run with nothing in scope fails in the `scope` lane; set
+(about 10 seconds). A run with nothing in scope fails in the `scope` lane; set
 `GATE_ALLOW_EMPTY=1` only when that is intended. `GATE_SERVICES=external` drops
 the `services` lane, because CI runs the API and Sync gates as separate jobs.
+
+## The Gate workflow
+
+`.github/workflows/gate.yml` runs on every pull request, every push to `master`,
+and on manual dispatch. `Select gate jobs` runs
+`node scripts/gates/chalk-gate-plan.mjs --ci-jobs <base-ref>`, which uses the
+same plan as the lanes to pick the jobs a pull request needs: the API gate, the
+Sync gate, and the root lane groups. The root lanes run as parallel jobs, one
+per lane group: `checks` (every lane that no other group names, including type
+checks), `tests`, `browser-tests` (workspaces whose tests drive Chromium), and
+`build` (with Publint and Are The Types Wrong, which read the build output).
+Each job sets `GATE_LANE_GROUP`, so q9gate plans only that group's lanes and
+keeps its own selection inside the group. `Root gate` passes only when the
+planner and every selected group passed; a job that the planner skips counts as
+passed. Pushes to `master` and manual runs select every job and run every lane
+with `--full`, so anything a pull request skips still runs once it merges, and
+every master commit keeps its own run. A full run scans staged files and commits
+for secrets: the pushed range on a push to `master`, otherwise the commits since
+the base, or the last commit.
+
+Only pushes to `master` save the Go build caches and the Metro cache, so pull
+requests start from the latest master caches and do not evict each other's.
+The API job sets `-count=1` because a cached Go test result would not see a
+migration or database change. CI calls `scripts/gates/commit.sh` directly with
+`GATE_WORKSPACE_CONCURRENCY=2` and `VITEST_MAX_WORKERS=2` instead of the
+one-CPU `pnpm gate` alias, and installs the pinned Gitleaks and OSV-Scanner
+releases through `.github/actions/setup-scanners` instead of compiling them with
+`go run`.
 
 `pnpm gate:explain <path>` asks q9gate why a path selects lanes. Local hooks
 classify staged files. For branch/CI scope use `pnpm gate -- --base <ref>`;
 q9gate compares `<ref>...HEAD`. Use `pnpm gate -- --files <path>` (repeatable)
 or `GATE_FILES` (comma/newline-separated) for an explicit changed-file list.
 Those worktree files are scanned for secrets in addition to the staged diff.
-Gate-definition or unknown files fail closed to the full plan. The Chalk custom lanes reuse the affected-workspace
+Gate-definition or unknown files fail closed to the full plan. q9gate counts
+every path as source, so Chalk's planner alone decides which paths are unknown;
+a self-test checks that every tracked path that makes q9gate run in full also
+makes Chalk's plan run in full, which keeps the CI job selection exact. The Chalk custom lanes reuse the affected-workspace
 and reverse-dependent planner, including Go, Elixir, Postgres, contracts,
 recorder, publication, static checks, and resource-limited shell scripts.
 

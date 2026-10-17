@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-import { createGatePlan, emptyScopeResult, GatePlanningError, gatePlanOptions, laneEnvironment, laneResult, resolveGateTarget } from "./chalk-gate-plan.mjs";
+import { classify } from "@q9labsai/gates";
+import gateConfig from "../../gate.config.ts";
+import { ciJobs, createGatePlan, discoverWorkspaces, emptyScopeResult, GatePlanningError, gatePlanOptions, laneEnvironment, laneGroup, laneGroupLanes, laneResult, resolveGateTarget } from "./chalk-gate-plan.mjs";
 
 function boundaryTask(files, options = {}) {
   return createGatePlan(files, options).tasks.find((task) => task.id === "boundaries");
@@ -72,13 +76,25 @@ test("gate target resolution prefers the environment and rejects a mismatch", ()
 test("plan options map each scope to its snapshot and base", () => {
   const classification = { fullRequired: false };
   const staged = gatePlanOptions({ allChangedFiles: [], scope: "staged", classification, target: undefined }, {});
-  assert.deepEqual(staged, { full: false, scope: "staged", base: "origin/master", target: undefined, services: "local", snapshot: { mode: "index" } });
+  assert.deepEqual(staged, { full: false, scope: "staged", base: "origin/master", target: undefined, services: "local", snapshot: { mode: "index" }, workspaceConcurrency: 1 });
   const branch = gatePlanOptions({ allChangedFiles: [], scope: "branch", classification, target: "web", base: "origin/dev" }, { GATE_BASE_REF: "x" });
-  assert.deepEqual(branch, { full: false, scope: "merge base to HEAD", base: "origin/dev", target: "web", services: "local", snapshot: { mode: "ref", ref: "HEAD" } });
+  assert.deepEqual(branch, { full: false, scope: "merge base to HEAD", base: "origin/dev", target: "web", services: "local", snapshot: { mode: "ref", ref: "HEAD" }, workspaceConcurrency: 1 });
   const full = gatePlanOptions({ allChangedFiles: [], scope: "full", classification, target: undefined }, { GATE_BASE_REF: "origin/main" });
-  assert.deepEqual(full, { full: true, scope: "staged", base: "origin/main", target: undefined, services: "local", snapshot: { mode: "worktree" } });
+  assert.deepEqual(full, { full: true, scope: "staged", base: "origin/main", target: undefined, services: "local", snapshot: { mode: "worktree" }, workspaceConcurrency: 1 });
+  assert.equal(gatePlanOptions({ allChangedFiles: [], scope: "branch", classification, target: undefined }, { GATE_WORKSPACE_CONCURRENCY: "2" }).workspaceConcurrency, 2);
+  assert.throws(
+    () => gatePlanOptions({ allChangedFiles: [], scope: "branch", classification, target: undefined }, { GATE_WORKSPACE_CONCURRENCY: "0" }),
+    (error) => error instanceof GatePlanningError && error.reason === "invalid-concurrency",
+  );
   assert.equal(gatePlanOptions({ allChangedFiles: [], scope: "staged", classification: { fullRequired: true }, target: undefined }, {}).full, true);
   assert.equal(gatePlanOptions({ allChangedFiles: [], scope: "staged", classification: { fullRequired: false }, target: undefined }, { GATE_SERVICES: "external" }).services, "external");
+});
+
+test("a full plan scans committed secrets, because a clean checkout has nothing staged", () => {
+  const secretScope = (options) => createGatePlan(["README.md"], options).tasks.find((task) => task.id === "secrets").env.GATE_SCOPE;
+  assert.equal(secretScope({ full: true }), "full");
+  assert.equal(secretScope({}), "staged");
+  assert.equal(secretScope({ scope: "merge base to HEAD" }), "merge base to HEAD");
 });
 
 test("lane environment adds explicit files only for the secrets lane", () => {
@@ -118,7 +134,54 @@ test("scoped builds include workspace dependencies without widening other lanes"
   assert.deepEqual(command("build"), ["pnpm", "exec", "turbo", "run", "build", "--force", "--filter=web..."]);
   assert.deepEqual(command("types"), ["pnpm", "--workspace-concurrency=1", "--sort", "--filter", "web", "run", "check-types"]);
   assert.deepEqual(command("tests"), ["pnpm", "--workspace-concurrency=1", "--sort", "--filter", "web", "run", "test", "--coverage"]);
+  assert.deepEqual(
+    createGatePlan(["apps/web/src/main.ts"], { workspaces, workspaceConcurrency: 2 })
+      .tasks.find((task) => task.id === "tests")
+      .command.slice(0, 2),
+    ["pnpm", "--workspace-concurrency=2"],
+  );
   const docs = createGatePlan(["docs/guide.md"], { workspaces });
   assert.equal(docs.tasks.find((task) => task.id === "build").command, null);
   assert.deepEqual(docs.services, { api: false, sync: false });
+});
+
+// CI skips a root job when Chalk's plan selects none of its lanes, so q9gate must never run a full gate that Chalk's
+// plan does not.
+test("every path that makes q9gate run in full also makes Chalk's plan run in full", () => {
+  const workspaces = discoverWorkspaces();
+  const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8" }).split("\n").filter(Boolean);
+  const nested = ["apps/web/turbo.json", "packages/ui/lefthook.yml", "apps/sync/scripts/gates/run.sh", "tools/x/.github/workflows/ci.yml", "apps/web/public/logo.svg", "osv-scanner.toml", ".tool-versions"];
+  for (const file of [...tracked, ...nested]) {
+    if (classify([file], gateConfig.classifiers).fullRequired) assert.equal(createGatePlan([file], { workspaces }).full, true, file);
+  }
+});
+
+test("CI runs only the jobs whose lanes the plan selects", () => {
+  assert.deepEqual(ciJobs(["docs/contract-codegen.md"]), { api: false, sync: false, rootGroups: ["checks"] });
+  assert.deepEqual(ciJobs(["apps/api/internal/server.go"]), { api: true, sync: false, rootGroups: ["checks"] });
+  assert.deepEqual(ciJobs(["apps/web/src/main.tsx"]), { api: false, sync: false, rootGroups: ["checks", "tests", "build"] });
+  assert.deepEqual(ciJobs(["sdks/typescript/react/src/index.ts"]), { api: false, sync: false, rootGroups: ["checks", "tests", "browser-tests", "build"] });
+  assert.deepEqual(ciJobs(["gate.config.ts"]), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "build"] });
+  assert.deepEqual(ciJobs([], { full: true }), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "build"] });
+});
+
+test("every lane runs in exactly one CI lane group", () => {
+  const lanes = gateConfig.lanes;
+  const groups = ["checks", "tests", "browser-tests", "build"].map((group) => laneGroupLanes(lanes, group).map((lane) => lane.id));
+  assert.deepEqual(groups.flat().toSorted(), lanes.map((lane) => lane.id).toSorted());
+  assert.equal(laneGroup("publint"), "build");
+  assert.equal(laneGroup("browser-tests"), "browser-tests");
+  assert.equal(laneGroup("a-new-lane"), "checks");
+  assert.equal(laneGroupLanes(lanes, undefined), lanes);
+  assert.throws(
+    () => laneGroupLanes(lanes, "nope"),
+    (error) => error instanceof GatePlanningError && error.reason === "invalid-lane-group",
+  );
+});
+
+test("CI installs the same scanner versions that the gate scripts fall back to", () => {
+  const read = (file) => readFileSync(new URL(`../../${file}`, import.meta.url), "utf8");
+  const action = read(".github/actions/setup-scanners/action.yml");
+  assert.match(read("scripts/gates/gitleaks.sh"), new RegExp(`gitleaks/v8@v${/gitleaks_version="([^"]+)"/u.exec(action)[1]}\\b`, "u"));
+  assert.match(read("scripts/gates/osv-scanner.sh"), new RegExp(`osv-scanner@v${/osv_version="([^"]+)"/u.exec(action)[1]}\\b`, "u"));
 });

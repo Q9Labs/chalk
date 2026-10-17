@@ -1,33 +1,37 @@
 name: Gate
 
 # Required status checks: "Root gate", "API gate", "Sync gate".
-# The API and Sync jobs skip themselves (and count as passed) when their inputs are unchanged.
+# A pull request runs only the jobs and lanes its diff selects; a skipped job counts as passed.
+# Pushes to master and manual runs run every job and lane in full, and only pushes to master save caches,
+# so every pull request starts from the caches of the latest master run.
 # The pre-commit hook runs only the fast lanes; this workflow is the full verification.
 
 on:
   pull_request:
+  push:
+    branches: [master]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: chalk-gate-${{ github.ref }}
-  cancel-in-progress: true
+  # A new push to a pull request cancels its older run; every master commit keeps its own full run.
+  group: chalk-gate-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CI: "true"
-  GOMAXPROCS: "2"
-  VITEST_MAX_WORKERS: "2"
 
 jobs:
   changes:
-    name: Select service gates
+    name: Select gate jobs
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       api: ${{ steps.select.outputs.api }}
       sync: ${{ steps.select.outputs.sync }}
+      root_groups: ${{ steps.select.outputs.root_groups }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -39,21 +43,30 @@ jobs:
         with:
           node-version-file: .tool-versions
 
-      - name: Select gates from changed paths
+      - name: Select jobs from changed paths
         id: select
         env:
-          BASE_REF: ${{ github.base_ref || 'master' }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            printf 'api=true\nsync=true\n' >> "${GITHUB_OUTPUT}"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            node scripts/gates/chalk-gate-plan.mjs --ci-jobs "origin/${BASE_REF}" >> "${GITHUB_OUTPUT}"
           else
-            node scripts/gates/chalk-gate-plan.mjs --services "origin/${BASE_REF}" >> "${GITHUB_OUTPUT}"
+            node scripts/gates/chalk-gate-plan.mjs --ci-jobs --full >> "${GITHUB_OUTPUT}"
           fi
+          cat "${GITHUB_OUTPUT}"
 
-  root:
-    name: Root gate
+  root-lanes:
+    name: Root ${{ matrix.group }}
+    needs: changes
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        group: ${{ fromJSON(needs.changes.outputs.root_groups) }}
+    env:
+      GATE_WORKSPACE_CONCURRENCY: "2"
+      VITEST_MAX_WORKERS: "2"
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -71,14 +84,26 @@ jobs:
           node-version-file: .tool-versions
           cache: pnpm
 
-      # Go runs gitleaks, osv-scanner, and the contract checks.
+      # Go runs the generated-output and contract checks.
       - name: Set up Go
+        if: matrix.group == 'checks'
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
           go-version-file: apps/api/go.mod
-          cache-dependency-path: apps/api/go.sum
+          cache: false
+
+      - name: Restore Go caches
+        if: matrix.group == 'checks'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-root-checks-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
+          restore-keys: go-root-checks-${{ runner.os }}-
 
       - name: Install Semgrep
+        if: matrix.group == 'checks'
         run: pipx install semgrep==1.179.0
 
       - name: Install JavaScript dependencies
@@ -86,23 +111,69 @@ jobs:
 
       # The recorder lane runs scripts/recorder/gate.sh, which needs tofu.
       - name: Set up OpenTofu
+        if: matrix.group == 'checks'
         uses: ./.github/actions/setup-opentofu
 
-      # The root tests lane runs tools/sdk-web-consumer-e2e in Chromium.
+      - name: Set up security scanners
+        if: matrix.group == 'checks'
+        uses: ./.github/actions/setup-scanners
+
+      # The browser-tests lane runs tools/sdk-web-consumer-e2e in Chromium.
       - name: Install browser runtime
+        if: matrix.group == 'browser-tests'
         run: pnpm --dir sdks/typescript/client exec playwright install --with-deps chromium
 
+      # Metro reuses transforms of unchanged modules, so the mobile export takes seconds instead of a minute.
+      - name: Restore Metro cache
+        if: matrix.group == 'build'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: /tmp/metro-cache
+          key: metro-${{ runner.os }}-${{ github.sha }}
+          restore-keys: metro-${{ runner.os }}-
+
       # API and Sync have their own jobs below, so the root gate leaves its service lane out.
-      - name: Run the root gate against the pull request base
+      - name: Run the ${{ matrix.group }} lanes
         env:
+          GATE_LANE_GROUP: ${{ matrix.group }}
           GATE_SERVICES: external
           GATE_BASE_REF: origin/${{ github.base_ref || 'master' }}
+          # A push to master scans every pushed commit for secrets, including the commits a merge brings in.
+          GITLEAKS_LOG_OPTS: ${{ github.event_name == 'push' && format('{0}..{1}', github.event.before, github.sha) || '' }}
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            pnpm run gate:full
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            pnpm exec bash scripts/gates/commit.sh --base "${GATE_BASE_REF}"
           else
-            pnpm run gate -- --base "origin/${{ github.base_ref || 'master' }}"
+            pnpm exec bash scripts/gates/commit.sh --full
           fi
+
+      - name: Save Metro cache
+        if: matrix.group == 'build' && github.event_name == 'push'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: /tmp/metro-cache
+          key: metro-${{ runner.os }}-${{ github.sha }}
+
+      - name: Save Go caches
+        if: matrix.group == 'checks' && github.event_name == 'push'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-root-checks-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
+
+  root:
+    name: Root gate
+    needs: [changes, root-lanes]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every root lane group to pass
+        run: |
+          echo "Select gate jobs: ${{ needs.changes.result }}; root lane groups: ${{ needs.root-lanes.result }}"
+          [[ "${{ needs.changes.result }}" == "success" && "${{ needs.root-lanes.result }}" == "success" ]]
 
   api:
     name: API gate
@@ -110,6 +181,10 @@ jobs:
     if: needs.changes.outputs.api == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    env:
+      GOMAXPROCS: "2"
+      # A cached Go test result would not see migration or database changes.
+      GOFLAGS: -buildvcs=false -count=1
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -129,7 +204,16 @@ jobs:
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
           go-version-file: apps/api/go.mod
-          cache-dependency-path: apps/api/go.sum
+          cache: false
+
+      - name: Restore Go caches
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-api-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
+          restore-keys: go-api-${{ runner.os }}-
 
       # The migration proofs run mix deps.get in apps/sync.
       - name: Set up Erlang and Elixir
@@ -146,12 +230,24 @@ jobs:
       - name: Run the API gate
         run: apps/api/scripts/gate.sh
 
+      - name: Save Go caches
+        if: github.event_name == 'push'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-api-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
+
   sync:
     name: Sync gate
     needs: changes
     if: needs.changes.outputs.sync == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    env:
+      GOMAXPROCS: "2"
+      VITEST_MAX_WORKERS: "2"
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -172,7 +268,16 @@ jobs:
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
           go-version-file: apps/api/go.mod
-          cache-dependency-path: apps/api/go.sum
+          cache: false
+
+      - name: Restore Go caches
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-sync-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
+          restore-keys: go-sync-${{ runner.os }}-
 
       - name: Set up Erlang and Elixir
         uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124
@@ -191,6 +296,16 @@ jobs:
             apps/sync/_build
           key: sync-mix-${{ runner.os }}-${{ hashFiles('apps/sync/mix.lock') }}
 
-      # One PostgreSQL container serves the Sync gate and the Sync correctness harness.
+      # The correctness harness runs the full Sync gate first, then the breaker, replay, and SDK sync tests,
+      # against one PostgreSQL container.
       - name: Run the Sync gate and correctness harness
-        run: scripts/gates/with-postgres.sh apps/sync/scripts/gate.sh apps/sync/scripts/reliability-correctness
+        run: scripts/gates/with-postgres.sh apps/sync/scripts/reliability-correctness
+
+      - name: Save Go caches
+        if: github.event_name == 'push'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-sync-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}

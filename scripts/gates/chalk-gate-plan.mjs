@@ -11,8 +11,14 @@ const workspaceRoots = ["apps", "infrastructure", "packages", "sdks/typescript",
 const sourceExtensions = new Set([".cjs", ".ex", ".exs", ".go", ".js", ".jsx", ".mjs", ".ts", ".tsx"]);
 const formatExtensions = new Set([".css", ".html", ".js", ".json", ".jsonc", ".jsx", ".md", ".mdx", ".mjs", ".ts", ".tsx", ".yaml", ".yml"]);
 const dependencyBasenames = new Set(["go.mod", "go.sum", "mix.exs", "mix.lock", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"]);
-const gateDefinitionPaths = new Set([".dependency-cruiser.cjs", ".fallowrc.json", "gate.config.ts", "lefthook.yml", "package.json", "pnpm-workspace.yaml", "turbo.json", ".github/workflows/ci.yml"]);
+const gateDefinitionPaths = new Set(["package.json", "pnpm-workspace.yaml"]);
+// q9gate matches these by basename and directory anywhere in the tree; matching at least as much keeps the CI job
+// selection from skipping a job that q9gate would run in full mode.
+const gateDefinitionNames = new Set([".dependency-cruiser.cjs", ".fallowrc.json", "gate.config.ts", "lefthook.yml", "turbo.json"]);
+const gateDefinitionDirectories = [".github/workflows/", "scripts/gates/"];
 const dependencyFields = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
+// Their tests drive a real browser, so CI runs them in their own job with the browser installed.
+const browserTestWorkspaceNames = new Set(["@chalk/sdk-web-consumer-e2e"]);
 const targetRoots = {
   web: ["web", "@q9labsai/chalk-react", "@chalk/sdk-web-consumer-e2e"],
   mobile: ["@q9labsai/chalk-mobile", "@q9labsai/chalk-react-native"],
@@ -70,7 +76,7 @@ function startsWithAny(file, prefixes) {
 }
 
 function isGateDefinition(file) {
-  return gateDefinitionPaths.has(file) || file.startsWith(".github/workflows/") || file.startsWith("scripts/gates/");
+  return gateDefinitionPaths.has(file) || gateDefinitionNames.has(path.posix.basename(file)) || gateDefinitionDirectories.some((directory) => file.startsWith(directory) || file.includes(`/${directory}`));
 }
 
 function isSyncReliabilityInput(file) {
@@ -326,7 +332,11 @@ export function createGatePlan(files, options = {}) {
     excludedWorkspaces = affected.filter((workspace) => oppositeExclusive.has(workspace.name));
     selectedWorkspaces = affected.filter((workspace) => !oppositeExclusive.has(workspace.name));
   }
-  const selectedNames = selectedWorkspaces.map((workspace) => workspace.name).join(", ");
+  const names = (selection) => selection.map((workspace) => workspace.name).join(", ");
+  const selectedNames = names(selectedWorkspaces);
+  const unitTestWorkspaces = selectedWorkspaces.filter((workspace) => !browserTestWorkspaceNames.has(workspace.name));
+  const browserTestWorkspaces = selectedWorkspaces.filter((workspace) => browserTestWorkspaceNames.has(workspace.name));
+  const workspaceConcurrency = `--workspace-concurrency=${options.workspaceConcurrency ?? 1}`;
   const api = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/api"]));
   const sync = full || nonDocumentationFiles.some(isSyncReliabilityInput);
   const contracts = full || api || nonDocumentationFiles.some((file) => startsWithAny(file, ["contract", "scripts/codegen", "scripts/contracts", "tools/contract-fixture-proof", "sdks/typescript/client/src/generated"]));
@@ -346,7 +356,7 @@ export function createGatePlan(files, options = {}) {
   const tasks = [
     task("self-test", "Gate routing and Sync reliability self-tests", true, "always required", ["node", "--test", "scripts/gates/chalk-gate-plan.test.mjs", "apps/sync/scripts/reliability_harness.test.mjs"]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
-    task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: scope, GITLEAKS_BASE_REF: base }),
+    task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: explicitFull ? "full" : scope, GITLEAKS_BASE_REF: base }),
     task("generated", "Generated files are current", true, "always required", ["pnpm", "run", "check:generated"]),
     task("format", "Formatting", Boolean(formatCommand), full ? fullReason : `${formattedFiles.length} changed formattable file(s)`, formatCommand),
     task("fallow", "Changed-code analysis", full || sourceFiles.length > 0, full ? fullReason : `${sourceFiles.length} source file(s) changed`, fallowCommand),
@@ -367,8 +377,9 @@ export function createGatePlan(files, options = {}) {
     task("contracts", "Contract and generated SDK drift", contracts, contracts ? "contract producers or consumers changed" : "contracts are unaffected", ["pnpm", "run", "contract:check"]),
     task("image-size", "Patched image-size parser contract", imageSizePatch, imageSizePatch ? "image-size patch or guard changed" : "image-size patch is unaffected", ["pnpm", "run", "security:image-size"]),
     task("syncpack", "Workspace dependency policy", dependencyChange, dependencyChange ? "workspace dependency inputs changed" : "workspace dependency inputs are unchanged", ["pnpm", "run", "deps:syncpack"]),
-    task("types", "Affected workspace type checks", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", filteredPnpmCommand(selectedWorkspaces, "check-types", [], ["--workspace-concurrency=1", "--sort"])),
-    task("tests", "Affected workspace tests with coverage", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", filteredPnpmCommand(selectedWorkspaces, "test", ["--coverage"], ["--workspace-concurrency=1", "--sort"])),
+    task("types", "Affected workspace type checks", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", filteredPnpmCommand(selectedWorkspaces, "check-types", [], [workspaceConcurrency, "--sort"])),
+    task("tests", "Affected workspace tests with coverage", unitTestWorkspaces.length > 0, names(unitTestWorkspaces) || "no affected workspace", filteredPnpmCommand(unitTestWorkspaces, "test", ["--coverage"], [workspaceConcurrency, "--sort"])),
+    task("browser-tests", "Affected browser tests", browserTestWorkspaces.length > 0, names(browserTestWorkspaces) || "no affected browser test", filteredPnpmCommand(browserTestWorkspaces, "test")),
     task("build", "Affected workspace builds", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", workspaceBuildCommand(selectedWorkspaces)),
     task("recorder", "Recorder infrastructure", recorder, recorder ? "recorder inputs changed" : "no recorder inputs changed", ["pnpm", "run", "recorder:gate"]),
     task(
@@ -407,7 +418,6 @@ export function createGatePlan(files, options = {}) {
   };
 }
 
-// CI entry: print which service gates a pull request needs, as lines for $GITHUB_OUTPUT.
 export function resolveGateTarget(environmentTarget, flagTarget) {
   if (environmentTarget && flagTarget && environmentTarget !== flagTarget) throw new Error("GATE_TARGET and --target must match");
   return environmentTarget ?? flagTarget;
@@ -419,6 +429,12 @@ function snapshotForScope(scope) {
   return { mode: "worktree" };
 }
 
+function workspaceConcurrencyFrom(value) {
+  if (value === undefined) return 1;
+  if (!/^[1-9]\d*$/u.test(value)) throw new GatePlanningError("invalid-concurrency", `GATE_WORKSPACE_CONCURRENCY must be a positive integer, not ${value}`);
+  return Number(value);
+}
+
 export function gatePlanOptions(context, environment = process.env) {
   return {
     full: context.scope === "full" || context.classification.fullRequired,
@@ -427,6 +443,7 @@ export function gatePlanOptions(context, environment = process.env) {
     target: resolveGateTarget(environment.GATE_TARGET, context.target),
     services: environment.GATE_SERVICES === "external" ? "external" : "local",
     snapshot: snapshotForScope(context.scope),
+    workspaceConcurrency: workspaceConcurrencyFrom(environment.GATE_WORKSPACE_CONCURRENCY),
   };
 }
 
@@ -453,17 +470,37 @@ export function emptyScopeResult(context, environment = process.env) {
   return { status: "failed", findings: [{ file: "gate.config.ts", rule: "scope", message }] };
 }
 
-function printServiceGates(base) {
-  const files = gitLines(["diff", "--name-only", `${base}...HEAD`]);
-  const { services } = createGatePlan(files, { scope: "merge base to HEAD", base, snapshot: { mode: "ref", ref: "HEAD" } });
-  console.log(`api=${services.api}\nsync=${services.sync}`);
+// CI runs the root gate as one job per lane group. Lanes that no group names run in the checks job, so a new lane
+// cannot drop out of CI.
+const rootLaneGroups = { tests: ["tests"], "browser-tests": ["browser-tests"], build: ["build", "publint", "attw"] };
+
+export function laneGroup(laneId) {
+  return Object.keys(rootLaneGroups).find((group) => rootLaneGroups[group].includes(laneId)) ?? "checks";
+}
+
+export function laneGroupLanes(lanes, group) {
+  if (group === undefined) return lanes;
+  if (group !== "checks" && !Object.hasOwn(rootLaneGroups, group)) throw new GatePlanningError("invalid-lane-group", `Unknown lane group: ${group}`);
+  return lanes.filter((lane) => laneGroup(lane.id) === group);
+}
+
+// The checks group always runs; the other root groups and the service gates run only when the plan selects them.
+export function ciJobs(files, options = {}) {
+  const plan = createGatePlan(files, { scope: "merge base to HEAD", services: "external", ...options });
+  const groups = Object.keys(rootLaneGroups).filter((group) => plan.full || plan.tasks.some((task) => task.selected && laneGroup(task.id) === group));
+  return { api: plan.services.api, sync: plan.services.sync, rootGroups: ["checks", ...groups] };
+}
+
+function changedFiles(base) {
+  return gitLines(["diff", "--name-only", `${base}...HEAD`]);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [flag, base] = process.argv.slice(2);
-  if (flag !== "--services" || !base) {
-    console.error("Usage: chalk-gate-plan.mjs --services <base-ref>");
+  if (flag !== "--ci-jobs" || !base) {
+    console.error("Usage: chalk-gate-plan.mjs --ci-jobs <base-ref|--full>");
     process.exit(2);
   }
-  printServiceGates(base);
+  const jobs = base === "--full" ? ciJobs([], { full: true }) : ciJobs(changedFiles(base), { base, snapshot: { mode: "ref", ref: "HEAD" } });
+  console.log(`api=${jobs.api}\nsync=${jobs.sync}\nroot_groups=${JSON.stringify(jobs.rootGroups)}`);
 }
