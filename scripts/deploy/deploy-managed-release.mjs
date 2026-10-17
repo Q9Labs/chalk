@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_TIMEOUT_SECONDS, normalizeExclusions, parseArguments, usage } from "./managed-release-arguments.mjs";
@@ -28,9 +28,29 @@ export async function runManagedRelease({ arguments_, commandRunner = runCommand
   }
 
   const result = await deployRelease({ commandRunner, options, release, sleep, stderr });
-  result.dispatcher_binding = await dispatcherBinding({ commandRunner, options, dryRun: false });
+  await completeDispatcherBinding({ commandRunner, options, result });
   stdout.write(`${JSON.stringify(result)}\n`);
   return result;
+}
+
+async function completeDispatcherBinding({ commandRunner, options, result }) {
+  result.deployment_phase = "host-ready";
+  result.dispatcher_binding = { action: "pending", verified: false };
+  await persistProof(options, result);
+  try {
+    result.dispatcher_binding = await dispatcherBinding({ commandRunner, options, dryRun: false });
+  } catch (error) {
+    result.deployment_phase = "dispatcher-failed";
+    result.dispatcher_binding = { action: "failed", verified: false };
+    await persistProof(options, result);
+    throw error;
+  }
+  result.deployment_phase = "complete";
+  await persistProof(options, result);
+}
+
+async function persistProof(options, result) {
+  if (options.proofPath) await writeFile(resolve(options.proofPath), `${JSON.stringify(result)}\n`, { mode: 0o600 });
 }
 
 async function dispatcherBinding({ commandRunner, options, dryRun }) {

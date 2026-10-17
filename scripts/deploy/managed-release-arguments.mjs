@@ -19,6 +19,7 @@ const optionProperties = {
   "log-group-name": "logGroupName",
   manifest: "manifestPath",
   "parameter-prefix": "parameterPrefix",
+  "proof-file": "proofPath",
   region: "region",
   "request-id": "requestId",
 };
@@ -55,6 +56,7 @@ export function usage() {
   --request-id <ci-run-id> \\
   --log-group-name <cloudwatch-log-group> \\
   [--dispatcher-config-parameter </chalk/environment/release/recorder.json>] \\
+  [--proof-file <deployment-proof.json>] \\
   [--adopt-existing-release] \\
   [--exclude-secret <canonical-id>]... \\
   [--timeout-seconds <60-3600>] \\

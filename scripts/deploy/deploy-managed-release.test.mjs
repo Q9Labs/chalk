@@ -58,7 +58,7 @@ test("hands a release to the pinned SSM document and returns its controller proo
   });
 
   const sendCommand = calls.find(({ args }) => args.includes("send-command"));
-  assert.deepEqual(result, { ...controllerResult, ssm_command_id: commandId, document_version: "7", dispatcher_binding: { action: "not-configured", environment: "staging" } });
+  assert.deepEqual(result, { ...controllerResult, ssm_command_id: commandId, document_version: "7", deployment_phase: "complete", dispatcher_binding: { action: "not-configured", environment: "staging" } });
   assert.equal(calls.filter(({ args }) => args.includes("send-command")).length, 1);
   assert.equal(calls.filter(({ args }) => args.includes("get-command-invocation")).length, 2);
   assert.equal(sendCommand.command, "aws");
@@ -147,16 +147,22 @@ test("production dry run includes the dispatcher rebind without deploying", asyn
 
 test("production cannot report success when dispatcher binding fails after host deployment", async () => {
   const manifestPath = await writeManifest();
+  const proofPath = join(manifestPath, "..", "deployment-proof.json");
   const calls = [];
   await assert.rejects(
     runManagedRelease({
-      arguments_: requiredArguments(manifestPath).map((value) => value.replaceAll("staging", "production")),
+      arguments_: requiredArguments(manifestPath)
+        .map((value) => value.replaceAll("staging", "production"))
+        .concat("--proof-file", proofPath),
       allowedSecretIds,
       stdout: { write: () => {} },
       commandRunner: async (command) => {
         calls.push(command);
         if (command.command === "python3") {
-          if (!command.args.includes("--dry-run")) throw new Error("dispatcher runtime release binding mismatch");
+          if (!command.args.includes("--dry-run")) {
+            assert.equal(JSON.parse(await readFile(proofPath, "utf8")).deployment_phase, "host-ready");
+            throw new Error("dispatcher runtime release binding mismatch");
+          }
           return { stdout: JSON.stringify({ action: "rebind", release_id: releaseId }) };
         }
         if (command.args.includes("send-command")) return { stdout: JSON.stringify({ Command: { CommandId: "01234567-89ab-cdef-0123-456789abcdef" } }) };
@@ -180,6 +186,12 @@ test("production cannot report success when dispatcher binding fails after host 
   assert.equal(calls.at(-1).command, "python3");
   assert.equal(calls.at(-1).args.includes("--dry-run"), false);
   assert.ok(calls.some(({ args }) => args.includes("get-command-invocation")));
+  const proof = JSON.parse(await readFile(proofPath, "utf8"));
+  assert.equal(proof.deployment_phase, "dispatcher-failed");
+  assert.equal(proof.status, "deployed");
+  assert.equal(proof.health, "passed");
+  assert.equal(proof.ssm_command_id, "01234567-89ab-cdef-0123-456789abcdef");
+  assert.deepEqual(proof.dispatcher_binding, { action: "failed", verified: false });
 });
 
 test("configured environments use their own dispatcher parameter in the read-only dry run", async () => {

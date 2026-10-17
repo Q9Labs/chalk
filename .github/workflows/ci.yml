@@ -495,6 +495,7 @@ jobs:
           args=(
             --adopt-existing-release
             --manifest "$manifest"
+            --proof-file "${{ runner.temp }}/managed-deployment.json"
             --environment "$MANAGED_ENVIRONMENT"
             --region "$CHALK_MANAGED_AWS_REGION"
             --instance-id "$CHALK_MANAGED_INSTANCE_ID"
@@ -516,7 +517,7 @@ jobs:
             fi
           done < <(printf '%s\n' "$MANAGED_SECRET_EXCLUSIONS" | tr ',' '\n')
 
-          node scripts/deploy/deploy-managed-release.mjs "${args[@]}" | tee "${{ runner.temp }}/managed-deployment.json"
+          node scripts/deploy/deploy-managed-release.mjs "${args[@]}"
 
       - name: Managed deployment summary
         if: always()
@@ -530,7 +531,7 @@ jobs:
             printf '## Managed release: %s\n\nRelease: `%s`\n\n' "$MANAGED_ENVIRONMENT" "$RELEASE_ID"
             if [[ -s "$DEPLOYMENT_RESULT" ]]; then
               printf '```json\n'
-              jq '{status, health, release_id, request_id, rolled_back, ssm_command_id, document_version, dispatcher_binding}' "$DEPLOYMENT_RESULT"
+              jq '{deployment_phase, status, health, release_id, request_id, rolled_back, ssm_command_id, document_version, dispatcher_binding}' "$DEPLOYMENT_RESULT"
               printf '```\n'
             else
               printf 'Deployment did not complete. Inspect the failed step and its SSM command ID; do not bypass CI.\n'

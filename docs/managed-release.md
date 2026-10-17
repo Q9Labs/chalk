@@ -52,7 +52,10 @@ See [dispatcher binding](recording-transcription.md#dispatcher-binding-during-ma
 
 ## Failure evidence
 
-The job logs the SSM command ID before waiting. Use that ID in the environment's
+The job logs the SSM command ID before waiting. It saves host proof before
+dispatcher changes; `deployment_phase=dispatcher-failed` means the host is ready
+but dispatcher binding failed. Inspect that partial proof before retrying.
+Use the command ID in the environment's
 deployment log group; GitHub's SSM error text can be truncated. The summary only
 reports success after host health and dispatcher verification both pass. The
 host poll cancels after 30 minutes; the one-hour job allows dispatcher plans.

@@ -1338,6 +1338,7 @@ deploy() {
   local missing_inputs_csv
   missing_inputs_csv="$(jq -r 'sort | join(",")' <<<"${missing_json}")"
   "$validate_script" \
+    --environment "$request_environment" \
     --env-root "${stage_root}/env" \
     --secret-root "${stage_root}/secret-inputs" \
     --manifest "$manifest_path" \

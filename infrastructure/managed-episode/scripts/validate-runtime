@@ -9,14 +9,16 @@ sync_proof=""
 rendered_root=""
 allow_dirty=false
 excluded_secrets=""
+environment=production
 
 usage() {
-  echo "usage: validate-runtime --env-root <dir> --secret-root <dir> --manifest <file> --sync-proof <file> [--rendered-root <dir>] [--excluded-secrets <sorted-comma-separated-ids>] [--allow-dirty]" >&2
+  echo "usage: validate-runtime --env-root <dir> --secret-root <dir> --manifest <file> --sync-proof <file> [--environment <name>] [--rendered-root <dir>] [--excluded-secrets <sorted-comma-separated-ids>] [--allow-dirty]" >&2
 }
 
 while (($# > 0)); do
   case "$1" in
     --env-root) env_root="${2:-}"; shift 2 ;;
+    --environment) environment="${2:-}"; shift 2 ;;
     --secret-root) secret_root="${2:-}"; shift 2 ;;
     --manifest) manifest="${2:-}"; shift 2 ;;
     --sync-proof) sync_proof="${2:-}"; shift 2 ;;
@@ -33,6 +35,7 @@ if [[ -z "${env_root}" || -z "${secret_root}" || -z "${manifest}" || -z "${sync_
   usage
   exit 2
 fi
+[[ "$environment" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ && ${#environment} -le 32 ]] || { echo "deployment environment is invalid" >&2; exit 2; }
 
 if [[ -n "${excluded_secrets}" ]]; then
   excluded_secrets="$(jq -Rcer --argjson allowed '["api-env","sync-env","provider-bridge-api-server-cert","provider-bridge-api-server-key","provider-bridge-sync-client-ca","provider-bridge-sync-client-cert","provider-bridge-sync-client-key","provider-bridge-api-server-ca","cloudflare-tunnel-token"]' '
@@ -205,8 +208,8 @@ sync_source_commit="$(env_value "${sync_env}" CHALK_SYNC_SOURCE_COMMIT)"
 [[ "${sync_source_commit}" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+/=-]{0,127}$ ]] || fail "CHALK_SYNC_SOURCE_COMMIT must be a safe bounded identifier"
 sync_instance_id="$(env_value "${sync_env}" CHALK_SYNC_INSTANCE_ID)"
 [[ "${sync_instance_id}" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+/=-]{0,127}$ ]] || fail "CHALK_SYNC_INSTANCE_ID must be a safe bounded identifier"
-expected_sync_resource_attributes="service.name=chalk-sync,service.version=${sync_release_id},deployment.environment.name=production,service.instance.id=${sync_instance_id}"
-[[ "$(env_value "${sync_env}" OTEL_RESOURCE_ATTRIBUTES)" == "${expected_sync_resource_attributes}" ]] || fail "OTEL_RESOURCE_ATTRIBUTES must bind Sync telemetry to its production service, release, and instance"
+expected_sync_resource_attributes="service.name=chalk-sync,service.version=${sync_release_id},deployment.environment.name=${environment},service.instance.id=${sync_instance_id}"
+[[ "$(env_value "${sync_env}" OTEL_RESOURCE_ATTRIBUTES)" == "${expected_sync_resource_attributes}" ]] || fail "OTEL_RESOURCE_ATTRIBUTES must bind Sync telemetry to its deployment environment, service, release, and instance"
 [[ "$(env_value "${api_env}" CHALK_API_ADDR)" == 0.0.0.0:8080 ]] || fail "CHALK_API_ADDR must match the Quadlet port"
 [[ "$(env_value "${sync_env}" PORT)" == 4100 ]] || fail "Sync PORT must match the Quadlet port"
 [[ "$(env_value "${api_env}" CHALK_REDIS_URL)" == redis://redis:6379/0 ]] || fail "CHALK_REDIS_URL must use the private Redis network alias"
