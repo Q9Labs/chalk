@@ -38,3 +38,4 @@ export function buildPublicSiteHead({ path, title, description, imageAlt }: Publ
     links: [{ rel: "canonical", href: canonicalUrl }],
   };
 }
+// gate probe
