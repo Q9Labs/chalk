@@ -11,7 +11,7 @@ fail() {
 }
 
 usage() {
-  printf 'usage: %s [--group validation|adoption|inputs|healthy|rollback|restore|recording|ssm-contract|all]\n' "$0"
+  printf 'usage: %s [--group validation|adoption|inputs|healthy|rollback|restore|recording|source-reuse|ssm-contract|all]\n' "$0"
 }
 
 test_group="all"
@@ -24,7 +24,7 @@ if [[ $# -gt 0 ]]; then
   test_group="$2"
 fi
 case "${test_group}" in
-  all|validation|adoption|inputs|healthy|rollback|restore|recording|ssm-contract) ;;
+  all|validation|adoption|inputs|healthy|rollback|restore|recording|source-reuse|ssm-contract) ;;
   *) fail "unknown test group: ${test_group}" ;;
 esac
 
@@ -32,7 +32,7 @@ group_enabled() {
   local group="$1"
   case "${test_group}:${group}" in
     all:*) return 0 ;;
-    validation:validation|adoption:adoption|inputs:inputs|healthy:healthy|rollback:rollback|restore:restore|recording:recording|ssm-contract:ssm-contract) return 0 ;;
+    validation:validation|adoption:adoption|inputs:inputs|healthy:healthy|rollback:rollback|restore:restore|recording:recording|ssm-contract:ssm-contract|source-reuse:source-reuse) return 0 ;;
     rollback:healthy|restore:healthy|restore:rollback) return 0 ;;
     *) return 1 ;;
   esac
@@ -368,6 +368,48 @@ invalid_request="${fixture_root}/invalid-request.json"
 manifest="${fixture_root}/manifest.json"
 make_manifest stable >"$manifest"
 make_request stable "${fixture_root}/request.json"
+if group_enabled source-reuse; then
+  # Model SSM's source archive: the old controller, helper and policy differ
+  # from the workflow checkout used by the current manifest generator.
+  old_managed="${fixture_root}/source/infrastructure/managed-episode"
+  printf '\n# older source controller\n' >>"${old_managed}/controller/chalk-deployment-controller"
+  printf '\n# older source health helper\n' >>"${old_managed}/scripts/chalk-runtime-health"
+  printf '\n' >>"${old_managed}/contracts/environments.json"
+  make_manifest source-runtime-base >"${fixture_root}/source-runtime-base.json"
+  python3 - "$old_managed" "${fixture_root}/source-runtime-base.json" <<'PYRUNTIME'
+import hashlib, json, sys
+from pathlib import Path
+root, manifest = map(Path, sys.argv[1:])
+value = json.loads(manifest.read_bytes())
+value['runtime_artifacts'] = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+                              for path in root.rglob('*') if path.is_file()}
+manifest.write_text(json.dumps(value))
+PYRUNTIME
+  "${managed_root}/scripts/generate-release-manifest" \
+    --stable-manifest "${fixture_root}/source-runtime-base.json" \
+    --affected-components none --reuse-envelope --source-revision "$source_revision" \
+    --allow-dirty --output "${fixture_root}/source-runtime-reuse.json" >/dev/null
+  reused_id="$(jq -er .release_id "${fixture_root}/source-runtime-reuse.json")"
+  [[ "$reused_id" != source-runtime-base ]] || fail "source runtime reuse did not create a fresh release ID"
+  make_request "$reused_id" "${fixture_root}/source-runtime-request.json"
+  mkdir -p "${fixture_root}/source-runtime-state" "${fixture_root}/install"
+  # Pretend a newer runtime was installed; rollback must replace all three files.
+  cp "${managed_root}/controller/chalk-deployment-controller" "${fixture_root}/install/"
+  cp "${managed_root}/scripts/chalk-runtime-health" "${fixture_root}/install/"
+  cp "${managed_root}/contracts/environments.json" "${fixture_root}/install/"
+  workflow_controller="$controller"
+  controller="${old_managed}/controller/chalk-deployment-controller"
+  run_controller "${fixture_root}/source-runtime-state" "${fixture_root}/source-runtime-request.json" "${fixture_root}/source-runtime-reuse.json" ok >/dev/null
+  controller="$workflow_controller"
+  for relative in controller/chalk-deployment-controller scripts/chalk-runtime-health contracts/environments.json; do
+    cmp -s "${old_managed}/${relative}" "${fixture_root}/install/${relative##*/}" || fail "rollback installed workflow runtime instead of source runtime: $relative"
+  done
+  jq -e --arg id "$reused_id" '.release_id == $id' "${fixture_root}/source-runtime-state/active-release.json" >/dev/null || fail "source runtime deploy lost fresh envelope identity"
+  cp "${managed_root}/controller/chalk-deployment-controller" "${old_managed}/controller/"
+  cp "${fixture_root}/health" "${old_managed}/scripts/chalk-runtime-health"
+  cp "${managed_root}/contracts/environments.json" "${old_managed}/contracts/"
+fi
+
 if group_enabled validation; then
 jq '.unexpected = true' "${fixture_root}/request.json" >"$invalid_request"
 expect_failure "$controller" deploy --request "$invalid_request" --manifest "$manifest" --source-root "${fixture_root}/source"

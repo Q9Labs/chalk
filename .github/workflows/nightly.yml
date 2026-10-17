@@ -20,6 +20,10 @@ jobs:
       baseline_run_id: ${{ steps.plan.outputs.baseline_run_id }}
       baseline_artifact_id: ${{ steps.plan.outputs.baseline_artifact_id }}
     steps:
+      - name: Refuse non-master dispatch before checkout
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: test "$WORKFLOW_REF" = refs/heads/master
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0

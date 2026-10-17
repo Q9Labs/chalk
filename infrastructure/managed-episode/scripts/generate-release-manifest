@@ -272,6 +272,10 @@ sha256_file() {
   fi
 }
 
+if [[ "$reuse_envelope" == true ]]; then
+  artifacts_json="$(jq -c .runtime_artifacts "$stable_manifest")"
+  source_tree_state="$(jq -er .source_tree_state "$stable_manifest")"
+else
 artifacts_json="$({
   find "${managed_root}" -type f \
     ! -path '*/generated/*' \
@@ -282,6 +286,7 @@ artifacts_json="$({
   relative="${file#"${managed_root}/"}"
   jq -cn --arg path "${relative}" --arg digest "$(sha256_file "${file}")" '{key:$path,value:$digest}'
 done | jq -s 'from_entries')"
+fi
 
 generated_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"

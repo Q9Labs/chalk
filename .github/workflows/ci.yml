@@ -527,7 +527,7 @@ jobs:
         with:
           name: release-manifest-${{ needs.plan-managed.outputs.release_id }}
           path: infrastructure/managed-episode/generated/${{ needs.plan-managed.outputs.release_id }}.json
-          retention-days: 365
+          retention-days: 90
           if-no-files-found: error
 
   deploy-managed:
@@ -579,6 +579,16 @@ jobs:
           RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
         run: |
           python -c 'import hashlib,os,pathlib; p=pathlib.Path(os.environ["RUNNER_TEMP"])/"managed-release"/(os.environ["RELEASE_ID"]+".json"); assert hashlib.sha256(p.read_bytes()).hexdigest() == os.environ["EXPECTED_SHA256"]'
+
+      - name: Retain exact production rollback bytes before host mutation
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && inputs.managed_environment == 'production'
+        id: retained
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
+          MANIFEST_SHA256: ${{ needs.prepare-release.outputs.manifest_sha256 }}
+          MANIFEST_ARTIFACT_ID: ${{ needs.prepare-release.outputs.manifest_artifact_id }}
+        run: python3 scripts/releases/release.py retain_production --directory "${{ runner.temp }}/managed-release"
 
       - name: Validate managed deployment configuration
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
@@ -682,6 +692,15 @@ jobs:
           echo "release_id=$EXPECTED_RELEASE" >> "$GITHUB_OUTPUT"
           echo "restored_source_release_id=$SOURCE_RELEASE" >> "$GITHUB_OUTPUT"
 
+      - name: Mark the retained production manifest healthy
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && inputs.managed_environment == 'production'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOYMENT_ID: ${{ steps.retained.outputs.deployment_id }}
+          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
+          DEPLOYMENT_RESULT: ${{ runner.temp }}/managed-deployment.json
+        run: python3 scripts/releases/release.py complete_production
+
       - name: Managed deployment summary
         if: always()
         env:
@@ -745,7 +764,7 @@ jobs:
         with:
           name: web-${{ matrix.target }}-${{ github.run_attempt }}
           path: web-output/web-${{ matrix.target }}.tar.gz
-          retention-days: 365
+          retention-days: 90
           if-no-files-found: error
 
   prepare-web:
@@ -798,7 +817,7 @@ jobs:
         with:
           name: release-manifest-${{ steps.prepare.outputs.release_id }}
           path: release-input/${{ steps.prepare.outputs.release_id }}.json
-          retention-days: 365
+          retention-days: 90
           if-no-files-found: error
 
   deploy-web:

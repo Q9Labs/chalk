@@ -9,12 +9,16 @@ Choose `production` explicitly for an operator production release.
 `Cut nightly` runs daily at 02:17 UTC on master.
 Scheduled cuts require new commits since the last completed cut and at most
 one cut attempt per UTC day, reserved before builds. Failures do not advance the baseline.
+An expired or unavailable build baseline triggers a full component build instead
+of forwarding dead artifact IDs. The changed-input guard still checks its source revision.
 A manual dispatch always attempts a cut, including an unchanged source.
 Both paths require the latest master Gate run/attempt for the pinned SHA to pass.
 
 Before builds, the existing component planner checks worker dependencies.
 Renderer workspace inputs and transcription Lambda build inputs must not change.
 Unsupported changes fail with the manual recorder/Lambda release paths.
+The dispatcher fingerprint includes all `infrastructure/` inputs, so these changes
+also fail before a cut can mutate nightly.
 This first rollout does not build or activate new external workers or Lambda code.
 The existing deployment-time dispatcher binding still runs.
 
@@ -22,7 +26,7 @@ Release builds changed backend images and two target-specific web archives.
 After nightly deployment, the real-call workflow runs `smoke transcript`.
 A passed call and the controller's checked applied release ID create a held
 `nightly` deployment record. It contains the source SHA, run/artifact IDs,
-SHA256 hashes, applied identity and proof result. Artifact retention is 365 days.
+SHA256 hashes, applied identity and proof result. Actions artifacts are retained for 90 days (the public-repository maximum).
 Every nightly backend or web write first records a durable current-write marker
 under the nightly lock and invalidates older held identities. Manual web-only
 releases count too. Recording or selecting held proof requires that newest marker
@@ -34,9 +38,11 @@ Failed nightly deployments/calls stay unheld; nightly never auto-rolls back.
 
 Dispatch `Promote newest held nightly` from master with no inputs.
 It selects the newest successful, proof-passed nightly, breaking timestamp ties
-by deployment ID. There is no age cutoff and no fallback to an older choice.
+by deployment ID. Deployment lookups filter environment and task, stop at the
+first decisive record, and fetch statuses only for matching candidates. There is no age cutoff and no fallback to an older choice.
 The exact selection, all three artifacts, ancestry, latest Gate and rollback
-manifest are checked before approval. Missing/expired/corrupt files fail clearly.
+manifest are checked before approval. Missing/expired/corrupt files fail clearly; an expired web archive says "cut a new nightly".
+Both Nightly and Promote refuse non-master dispatches in their first step.
 The exact status, payload and previous production source are rechecked after approval.
 
 The parent holds `chalk-environment-production` across approval, deploy, call
@@ -47,18 +53,36 @@ Production receives the selected image digests and prebuilt production web.
 There is no image/web rebuild or staging web upload during promotion.
 The source manifest hash is verified before the existing manifest generator
 creates a fresh envelope: a new top-level release ID, unchanged image digests
-and component source identities, including migration requirements. A fresh request ID includes this release ID.
+and component source identities, including migration requirements and exact
+`runtime_artifacts`. SSM downloads `archive/$SSM_SourceRevision.tar.gz` from the
+manifest source revision. It verifies the old controller hash before execution;
+the controller verifies scripts and contracts from that same source archive.
+The workflow checkout never supplies replacement runtime hashes. A fresh request ID includes this release ID.
 The deployment result and job summary record source and applied identities.
 The controller's verified identity plus the call are the served-identity evidence.
 No additional observer service or host exact-replay support is required.
 
 ## Recovery
 
-Before mutation, promotion finds the latest successful production backend
-deploy's retained manifest and checked deployment result in its Release run.
-This also works for the existing production release; no proof record is seeded.
+Before host mutation, every production deployment stores exact manifest bytes
+(base64) and their SHA256 in a `production-release` GitHub deployment payload.
+Only a complete, healthy deployment marks that record successful. Selection uses
+the newest healthy record, and rollback verifies its hash and source identity
+before generating a fresh envelope. Neither manifest download nor rollback needs
+retained Actions artifacts or even the old Actions run.
+
+The first selection can adopt the existing production Release only after checking
+its successful deploy result and exact retained manifest. It copies those bytes
+into the same durable deployment payload before approval. If those legacy files
+are already missing, perform a manual production release to establish the durable
+baseline; selection fails closed. No proof result is invented.
+GitHub documents `payload` as JSON deployment data with no smaller payload limit
+listed in its [REST deployment reference](https://docs.github.com/en/rest/deployments/deployments#create-a-deployment).
+Deploy manifests already fit the SSM document's 48,000-character base64 bound.
+A rejected payload fails before host mutation; no bucket or new storage service is added.
 It saves the production Pages project's canonical deployment ID before upload.
-The saved backend references and Pages ID are retained in a rollback artifact.
+The saved backend references and Pages ID also appear in a 90-day rollback artifact;
+that artifact is a convenience copy, not the backend rollback source of truth.
 
 A failed production deploy/call invokes Release again with the verified previous
 manifest, another fresh envelope/request ID, and the saved Pages deployment ID.

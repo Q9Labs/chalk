@@ -68,15 +68,35 @@ class GitHub:
                                        f'repos/{self.repository}/{route}{separator}per_page=100'])
         return [item for page in json.loads(data) for item in (page[key] if key else page)]
 
-    def deployments(self, environment):
-        items = self.pages(f'deployments?environment={environment}')
-        for item in items:
-            status = self.request(f"deployments/{item['id']}/statuses?per_page=1")
-            item['latest_status'] = status[0]['state'] if status else 'pending'
-        return items
+    def deployments(self, environment, task='nightly-cut', sha=None, manifest_sha256=None):
+        # GitHub returns newest IDs first. Page only this environment/task, and
+        # inspect statuses only after the payload identifies a usable candidate.
+        route = f'deployments?environment={environment}&task={task}&per_page=100'
+        if sha:
+            route += f'&sha={sha}'
+        page = 1
+        while True:
+            items = self.request(f'{route}&page={page}')
+            for item in items:
+                info = payload(item)
+                if info.get('channel') != task:
+                    continue
+                if task == 'nightly-cut' and info.get('proof_result') != 'passed':
+                    continue
+                if manifest_sha256 and info.get('manifest_sha256') != manifest_sha256:
+                    continue
+                if task in ('nightly-cut', 'production-release'):
+                    status = self.request(f"deployments/{item['id']}/statuses?per_page=1")
+                    item['latest_status'] = status[0]['state'] if status else 'pending'
+                    if task == 'production-release' and item['latest_status'] != 'success':
+                        continue
+                return [item]
+            if len(items) < 100:
+                return []
+            page += 1
 
     def reserve_cut(self, sha):
-        self.request('deployments', {'ref': sha, 'environment': 'nightly', 'auto_merge': False,
+        self.request('deployments', {'ref': sha, 'environment': 'nightly', 'task': 'nightly-attempt', 'auto_merge': False,
                      'required_contexts': [], 'payload': {'channel': 'nightly-attempt'}})
 
     def gate(self, sha):
@@ -88,12 +108,19 @@ class GitHub:
 
     def artifact(self, run_id, artifact_id, filename, expected=None):
         require(str(run_id).isdigit() and str(artifact_id).isdigit(), 'invalid artifact reference')
-        item = self.request(f'actions/artifacts/{artifact_id}')
-        require(not item['expired'] and str(item['workflow_run']['id']) == str(run_id), 'expired or wrong-run artifact')
+        try:
+            item = self.request(f'actions/artifacts/{artifact_id}')
+        except subprocess.CalledProcessError as error:
+            raise ValueError('artifact unavailable; cut a new nightly') from error
+        require(not item['expired'], 'artifact expired; cut a new nightly')
+        require(str(item['workflow_run']['id']) == str(run_id), 'wrong-run artifact')
         # gh handles authentication, redirects and the Actions archive format.
         with tempfile.TemporaryDirectory() as directory:
-            subprocess.run(['gh', 'run', 'download', str(run_id), '--repo', self.repository,
-                            '--name', item['name'], '--dir', directory], check=True)
+            try:
+                subprocess.run(['gh', 'run', 'download', str(run_id), '--repo', self.repository,
+                                '--name', item['name'], '--dir', directory], check=True)
+            except subprocess.CalledProcessError as error:
+                raise ValueError('artifact download unavailable; cut a new nightly') from error
             files = list(Path(directory).rglob('*'))
             files = [path for path in files if path.is_file()]
             require(len(files) == 1 and files[0].name == filename, 'artifact must contain exactly the expected file')
@@ -102,7 +129,7 @@ class GitHub:
         return data
 
     def record(self, sha, info, passed):
-        item = self.request('deployments', {'ref': sha, 'environment': 'nightly', 'auto_merge': False,
+        item = self.request('deployments', {'ref': sha, 'environment': 'nightly', 'task': 'nightly-cut', 'auto_merge': False,
                             'required_contexts': [], 'payload': info})
         self.request(f"deployments/{item['id']}/statuses", {'state': 'success' if passed else 'failure',
                      'auto_inactive': False, 'log_url': f"https://github.com/{self.repository}/actions/runs/{os.environ['GITHUB_RUN_ID']}"})

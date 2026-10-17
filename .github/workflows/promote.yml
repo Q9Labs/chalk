@@ -15,6 +15,10 @@ jobs:
     outputs:
       selection: ${{ steps.select.outputs.selection }}
     steps:
+      - name: Refuse non-master dispatch before checkout
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: test "$WORKFLOW_REF" = refs/heads/master
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -59,7 +63,7 @@ jobs:
         with:
           name: promotion-rollback-${{ github.run_attempt }}
           path: rollback.json
-          retention-days: 365
+          retention-days: 90
   release:
     needs: [select, approve]
     uses: ./.github/workflows/ci.yml

@@ -65,8 +65,12 @@ class MemoryGitHub(GitHub):
         return dict(head_branch='master', head_repository={'full_name': self.repository},
                     path='.github/workflows/nightly.yml', event='schedule')
 
-    def deployments(self, environment):
-        return self.items
+    def deployments(self, environment, task='nightly-cut', sha=None, manifest_sha256=None):
+        return [item for item in reversed(self.items) if item.get('environment') == environment
+                and (task != 'production-release' or item['latest_status'] == 'success')
+                and item['payload'].get('channel') == task
+                and (not sha or item['payload'].get('target_sha') == sha)
+                and (not manifest_sha256 or item['payload'].get('manifest_sha256') == manifest_sha256)]
 
     def pages(self, route, key):
         if '/workflows/ci.yml/' in route:
@@ -217,7 +221,7 @@ class CutTests(unittest.TestCase):
         records = [held(1), held(2), dict(id=3, created_at='2026-09-01T02:00:00Z',
                    payload=dict(channel='nightly-write', run_id='1', release_id='source'))]
         records[1]['payload']['applied_release_id'] = 'source'
-        with patch.object(api, 'deployments', return_value=records), patch.object(api, 'request', return_value=run):
+        with patch.object(api, 'deployments', side_effect=lambda environment, *args, **kwargs: records if environment == 'nightly' else []), patch.object(api, 'request', return_value=run):
             with patch.object(api, 'artifact', side_effect=ValueError('corrupt newest')) as download:
                 with self.assertRaisesRegex(ValueError, 'corrupt newest'):
                     release.select(api, SimpleNamespace())
@@ -270,7 +274,7 @@ class ArtifactTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / 'not-created'
             with patch.dict(os.environ, SOURCE_RUN_ID='1', SOURCE_RELEASE_ID='source', SOURCE_ARTIFACT_ID='2', SOURCE_SHA256='a' * 64, TARGET_SHA=SHA):
-                with patch.object(api, 'request', return_value=run), patch.object(api, 'artifact', side_effect=ValueError('checksum mismatch')):
+                with patch.object(api, 'request', side_effect=lambda route: [] if route.startswith('deployments?') else run), patch.object(api, 'artifact', side_effect=ValueError('checksum mismatch')):
                     with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
                         release.prepare(api, SimpleNamespace(reuse=True, directory=output))
             self.assertFalse(output.exists())
@@ -378,6 +382,12 @@ class EnvelopeTests(unittest.TestCase):
                             '--source-revision', sha, '--output', str(source)], check=True, stdout=subprocess.DEVNULL)
             original = json.loads(source.read_bytes())
             (repo / 'apps/api/db/migrations/20261201000000_future.sql').write_text('-- later migration\n')
+            runtime = repo / 'infrastructure/managed-episode'
+            old_files = {name: (runtime / name).read_bytes() for name in original['runtime_artifacts']}
+            for name in ('controller/chalk-deployment-controller', 'scripts/generate-release-manifest', 'contracts/release-manifest.schema.json'):
+                path = runtime / name
+                if path.exists():
+                    path.write_bytes(path.read_bytes() + b'\n')
             subprocess.run(['git', '-C', str(repo), 'add', '.'], check=True)
             subprocess.run(['git', '-C', str(repo), '-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-qm', 'later source'], check=True)
             with patch.object(release, 'ROOT', repo):
@@ -389,6 +399,19 @@ class EnvelopeTests(unittest.TestCase):
                 self.assertEqual(applied['component_releases'], original['component_releases'])
                 self.assertEqual(applied['source_revision'], original['source_revision'])
                 self.assertEqual(applied['database_compatibility'], original['database_compatibility'])
+                self.assertEqual(applied['runtime_artifacts'], original['runtime_artifacts'])
+                # Reproduce the SSM source archive selection offline, from the
+                # actual document command, then verify every installed file.
+                document = json.loads((runtime / 'ssm/chalk-managed-episode-deploy.json').read_bytes())
+                commands = document['mainSteps'][0]['inputs']['runCommand']
+                fetch = next(line for line in commands if line.startswith('curl '))
+                self.assertIn('archive/$SSM_SourceRevision.tar.gz', fetch)
+                archive = subprocess.check_output(['git', '-C', str(repo), 'archive', '--format=tar', applied['source_revision']])
+                with tarfile.open(fileobj=io.BytesIO(archive)) as source_archive:
+                    for name, expected in applied['runtime_artifacts'].items():
+                        installed = source_archive.extractfile('infrastructure/managed-episode/' + name).read()
+                        self.assertEqual(installed, old_files[name])
+                        self.assertEqual(digest(installed), expected)
 
     def test_pages_rollback_restores_exact_saved_identity_without_archives(self):
         os.environ.setdefault('GITHUB_OUTPUT', os.devnull)
@@ -401,7 +424,7 @@ class EnvelopeTests(unittest.TestCase):
                 web.rollback('chalk-web', 'saved')
 
     def test_previous_production_uses_deploy_result_and_manifest_not_nightly_archive(self):
-        api = SimpleNamespace(repository='Q9Labs/chalk')
+        api = SimpleNamespace(repository='Q9Labs/chalk', deployments=lambda *args, **kwargs: [])
         def pages(route, key):
             if '/ci.yml/' in route:
                 return [dict(id=100), dict(id=200)]
@@ -416,11 +439,20 @@ class EnvelopeTests(unittest.TestCase):
         api.artifact = lambda run, identity, name, *args: json.dumps(
             dict(release_id=f'release{run}', status='deployed', health='passed', deployment_phase='complete', rolled_back=False)
             if name == 'managed-deployment.json' else dict(release_id=f'release{run}', source_revision=SHA)).encode()
-        api.request = lambda _: dict(head_branch='master', head_repository={'full_name': api.repository}, path='.github/workflows/ci.yml', event='workflow_dispatch')
+        writes = []
+        def request(route, data=None):
+            if data:
+                writes.append((route, data))
+            return dict(id=99, head_branch='master', head_repository={'full_name': api.repository}, path='.github/workflows/ci.yml', event='workflow_dispatch')
+        api.request = request
         previous = release.previous_production(api)
         self.assertEqual(previous['release_id'], 'release100')
         self.assertEqual(previous['run_id'], '100')
         self.assertNotIn('web', previous)
+        self.assertEqual(writes[0][1]['task'], 'production-release')
+        self.assertEqual(release.retained_manifest(writes[0][1]['payload']),
+                         json.dumps(dict(release_id='release100', source_revision=SHA)).encode())
+        self.assertEqual(writes[1], ('deployments/99/statuses', dict(state='success', auto_inactive=False)))
 
 
 
