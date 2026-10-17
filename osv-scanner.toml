@@ -1,14 +1,14 @@
 [[IgnoredVulns]]
 id = "GHSA-86w9-cpqp-85rv"
-ignoreUntil = 2026-10-17
+ignoreUntil = 2026-11-17
 reason = "node-forge 1.4.0 has no released fix for this unreviewed low-exponent RSA verification advisory. The locked consumers are Expo CLI and its development code-signing tools, not Chalk's production signature verification; Chalk has no Expo update code-signing configuration. Expo's generated keys use Forge's default exponent 65537 rather than the vulnerable low exponents. Revisit if Forge is used at a production trust boundary, Expo code signing is configured, or upstream ships a fix."
 
 [[IgnoredVulns]]
 id = "GHSA-vfj7-8cjw-p6xm"
-ignoreUntil = 2026-10-17
+ignoreUntil = 2026-11-17
 reason = "braces 3.0.3 has no fixed release for this deep-nesting stack-exhaustion advisory. Every locked path reaches it through Node build and dev tooling (fast-glob and micromatch in q9gate, chokidar under sass via Excalidraw, and the React Native CLI and Jest), which expand only patterns written in this repo. No Chalk service or SDK runtime passes user input to brace expansion, and no browser bundle includes braces. Revisit when braces ships a depth-limited release or a runtime path appears."
 
 [[IgnoredVulns]]
 id = "GHSA-238p-pmpm-9mq7"
-ignoreUntil = 2026-10-17
-reason = "KaTeX 0.16.47 reaches browser whiteboards through Excalidraw/Mermaid; user-authored diagram math can reach it. The advisory requires separate prototype pollution and unsanitized insertion; Mermaid defaults to strict security and sanitizes rendered math and SVG. Chalk math uses MathJax, not KaTeX. The 0.18.2 bump changes renderer CSS classes (base/strut/sizing) in all seven compatibility samples, so defer this minor upgrade to a Mermaid/whiteboard compatibility change. Revisit by this date, if sanitizer/security settings change, or if a prototype-pollution path is found."
+ignoreUntil = 2026-11-17
+reason = "KaTeX 0.16.47 reaches browser whiteboards through Excalidraw/Mermaid; user-authored diagram math can reach it. The advisory requires separate prototype pollution and unsanitized insertion; Mermaid defaults to strict security and sanitizes rendered math and SVG. Chalk math uses MathJax, not KaTeX. The 0.18.2 bump changes renderer CSS classes (base/strut/sizing) in all seven compatibility samples, so defer this minor upgrade to a Mermaid/whiteboard compatibility change. Re-reviewed 17 Oct 2026: 0.18.2 is still the only fix and the whiteboard compatibility change has not been scheduled. Revisit by this date, if sanitizer/security settings change, or if a prototype-pollution path is found."
