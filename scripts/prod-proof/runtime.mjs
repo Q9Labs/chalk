@@ -49,6 +49,7 @@ export async function loadConfig() {
   for (const name of requiredConfigFields) {
     check(fields[name], `Proof configuration is missing ${name}`);
   }
+  check(fields.api_key.startsWith("chalk_sk_"), "Proof API key must use the chalk_sk_ namespace");
   const readiness = await request(fields, "GET", "/readyz");
   checkCapabilities(readiness);
   return fields;

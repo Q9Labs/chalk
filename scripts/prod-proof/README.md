@@ -33,7 +33,8 @@ The old item's AWS fields can remain but are no longer read.
 Set `CHALK_PROOF_CONFIG_SOURCE=env` to read those same fields from environment
 variables instead. Each field maps to `CHALK_PROOF_` plus its uppercase name;
 for example, `api_url` maps to `CHALK_PROOF_API_URL`. Missing required fields fail
-before creating resources. Local runs still default to 1Password.
+before creating resources. Redacted or wrong-namespace API keys fail before any
+HTTP request. Local runs still default to 1Password.
 
 ### GitHub Actions
 
