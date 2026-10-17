@@ -4,7 +4,10 @@
 existing checks declared as custom lanes in `gate.config.ts`. `pnpm gate:full`
 runs the same tracker checks followed by `q9gate run --full`. Each gate runs
 with `GOMAXPROCS=1`, `VITEST_MAX_WORKERS=1`, `ERL_FLAGS='+S 1:1'`, and
-q9gate concurrency 1. `gate.report.json` records every selected/skipped lane.
+q9gate concurrency 1. The testbox wrapper invokes the same commit script through
+`pnpm exec` instead of the one-CPU package alias, allowing Go to use the
+allocated CPUs; Vitest and Erlang remain capped at two workers/schedulers.
+`gate.report.json` records every selected/skipped lane.
 
 The pre-commit hook runs `pnpm gate:fast`: tracker check plus the `scope`, `format`,
 `hygiene`, `secrets`, and `generated` lanes on staged files
@@ -80,12 +83,21 @@ rejects non-ignored untracked files rather than silently omitting them. Ignored
 files (including local dependencies and secrets) are not shipped. Custom base
 refs must exist in testbox's limited history; fetch `origin/master` locally first.
 
-The box installs Node, Go, Erlang, Elixir, and OpenTofu from the same version
-sources as Gate CI. The existing helpers own PostgreSQL 18.3 and Sync topology.
-Root and custom runs also install the repo's Playwright Chromium revision.
+The wrapper checks Node, Go, Erlang, Elixir, and OpenTofu against the same
+version sources as Gate CI and installs only mismatches. The shared testbox
+image includes these pins, Gitleaks, Semgrep, prebuilt OSV, and the pinned
+Playwright Chromium revision. Matching Chromium skips OS dependency setup;
+a different revision still installs its dependencies. The existing helpers own PostgreSQL 18.3 and Sync topology.
+Root and custom runs verify the repo's Playwright Chromium revision.
 TTL covers provisioning, setup, and the gate: root/custom 60 minutes, API/Sync
 45 minutes (4 CPU / 8 GB), recorder 20 minutes (2 CPU / 4 GB).
-Each run retains testbox's $0.50 ceiling and automatic cleanup.
+Each run retains testbox's $0.50 default ceiling and automatic cleanup.
+`CHALK_REMOTE_SIZE`, `CHALK_REMOTE_REGION`, `CHALK_REMOTE_TTL`, and
+`CHALK_REMOTE_BUDGET` override the allocation for a bounded experiment.
+The snapshot must be available in the selected region.
+`CHALK_PHASE` epoch markers and UTC headers time each setup step and the gate;
+testbox imports the markers into receipt phases. The job checks that competing
+OS upgrade and firmware timers/services are masked.
 
 Provisioning prints live. The current testbox CLI saves job output but does not
 stream it; collected step headers and the final 60 lines print at completion.

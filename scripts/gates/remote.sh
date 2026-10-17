@@ -17,6 +17,10 @@ testbox currently saves job output without streaming it to stdout.
 Full logs and receipts remain in ~/.local/state/testbox/<task>/.
 
 Environment:
+  CHALK_REMOTE_REGION      override testbox region (snapshot must be available)
+  CHALK_REMOTE_SIZE        override the measured per-gate Droplet size
+  CHALK_REMOTE_TTL         override the setup-inclusive lifetime in seconds
+  CHALK_REMOTE_BUDGET      compute reservation ceiling in USD (default 0.50)
   CHALK_REMOTE_BASE_REF    root base (default origin/master; only testbox's
                           origin/HEAD merge-base history is available)
   CHALK_REMOTE_TAIL_LINES  final log tail length (default 60)
@@ -44,6 +48,8 @@ case "$gate" in
   help | -h | --help) usage; exit 0 ;;
   *) echo "Unknown gate: $gate" >&2; usage >&2; exit 2 ;;
 esac
+size="${CHALK_REMOTE_SIZE:-$size}"
+ttl="${CHALK_REMOTE_TTL:-$ttl}"
 repository_root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$repository_root"
 tail_lines="${CHALK_REMOTE_TAIL_LINES:-60}"
@@ -58,7 +64,8 @@ fi
 printf -v command '%q ' bash scripts/gates/testbox-run.sh "$gate" "$@"
 printf -v base '%q' "${CHALK_REMOTE_BASE_REF:-origin/master}"
 command="CHALK_REMOTE_BASE_REF=$base $command"
-args=(python3 "$HOME/.agents/skills/testbox/testbox.py" run --repo "$repository_root" --command "$command" --ttl "$ttl" --size "$size" --budget 0.50)
+args=(python3 "$HOME/.agents/skills/testbox/testbox.py" run --repo "$repository_root" --command "$command" --ttl "$ttl" --size "$size" --budget "${CHALK_REMOTE_BUDGET:-0.50}")
+if [[ -n "${CHALK_REMOTE_REGION:-}" ]]; then args+=(--region "$CHALK_REMOTE_REGION"); fi
 if ((dry_run)); then
   printf 'remote.sh dry run (no box, no files written)\n  source: %s\n  tracked changes included; no untracked inputs\n  ' "$(git rev-parse HEAD)"
   printf '%q ' "${args[@]}"
