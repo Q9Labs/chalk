@@ -32,6 +32,7 @@ class MemoryGitHub(GitHub):
     def __init__(self):
         self.repository = 'Q9Labs/chalk'
         self.items = []
+        self.archives = {}
 
     def info(self, run, identity):
         data = json.dumps(dict(release_id=identity, source_revision=SHA)).encode()
@@ -41,13 +42,16 @@ class MemoryGitHub(GitHub):
                                     for target in ('nightly', 'production')}))
 
     def archive(self, target):
+        if target in self.archives:
+            return self.archives[target]
         result = io.BytesIO()
         with tarfile.open(fileobj=result, mode='w:gz') as archive:
             data = json.dumps(dict(environment=target, commit=SHA)).encode()
             member = tarfile.TarInfo('dist/client/release.json')
             member.size = len(data)
             archive.addfile(member, io.BytesIO(data))
-        return result.getvalue()
+        self.archives[target] = result.getvalue()
+        return self.archives[target]
 
     def request(self, route, data=None):
         if route == 'deployments':
