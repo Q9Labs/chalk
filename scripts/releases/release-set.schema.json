@@ -1,0 +1,274 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chalkmeet.com/schemas/release-set-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "target_sha", "release_id", "run_id", "run_attempt", "created_at", "backend", "web", "runtime", "versions"],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "target_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "release_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "run_attempt": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "backend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "sha256", "components"],
+      "properties": {
+        "artifact_id": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "components": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["api", "sync"],
+          "properties": {
+            "api": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["release_id", "source_revision"],
+              "properties": {
+                "release_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+                },
+                "source_revision": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{40}$"
+                }
+              }
+            },
+            "sync": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["release_id", "source_revision"],
+              "properties": {
+                "release_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+                },
+                "source_revision": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{40}$"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "web": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nightly", "production"],
+      "properties": {
+        "nightly": {
+          "$ref": "#/$defs/web"
+        },
+        "production": {
+          "$ref": "#/$defs/web"
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nightly", "production"],
+      "properties": {
+        "nightly": {
+          "$ref": "#/$defs/runtime"
+        },
+        "production": {
+          "$ref": "#/$defs/runtime"
+        }
+      }
+    },
+    "versions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime_contract", "sync_protocol"],
+      "properties": {
+        "runtime_contract": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sync_protocol": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  },
+  "$defs": {
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["environment", "commit", "api_url", "sync_url", "app_url"],
+      "properties": {
+        "environment": {
+          "enum": ["nightly", "production"]
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "api_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "sync_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "app_url": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "worker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["release_id", "source_revision", "build_sha256", "content_sha256", "image_id", "bootstrap_server_name", "qualification_sha256"],
+      "properties": {
+        "release_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+        },
+        "source_revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "build_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "content_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "image_id": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "bootstrap_server_name": {
+          "type": "string",
+          "pattern": "^[a-z0-9.-]+$"
+        },
+        "qualification_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "dispatcher": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_revision", "zip_sha256", "handler", "runtime", "qualification_sha256", "bucket", "key", "version_id", "config_sha256"],
+      "properties": {
+        "source_revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "zip_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "handler": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "runtime": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "qualification_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "bucket": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "version_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "config_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "web": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "sha256", "config_sha256", "config"],
+      "properties": {
+        "artifact_id": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "config_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "config": {
+          "$ref": "#/$defs/config"
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capture", "render", "dispatcher"],
+      "properties": {
+        "capture": {
+          "$ref": "#/$defs/worker"
+        },
+        "render": {
+          "$ref": "#/$defs/worker"
+        },
+        "dispatcher": {
+          "$ref": "#/$defs/dispatcher"
+        }
+      }
+    }
+  }
+}

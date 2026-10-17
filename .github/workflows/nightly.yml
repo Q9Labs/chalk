@@ -1,0 +1,136 @@
+name: Nightly cut
+on:
+  schedule:
+    - cron: "17 1 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Read the decision and Gate without building or deploying
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  actions: read
+  deployments: write
+  id-token: write
+concurrency:
+  group: chalk-environment-nightly
+  cancel-in-progress: false
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      should_cut: ${{ steps.plan.outputs.should_cut }}
+      target_sha: ${{ steps.plan.outputs.target_sha }}
+      baseline_run_id: ${{ steps.plan.outputs.baseline_run_id }}
+      baseline_artifact_id: ${{ steps.plan.outputs.baseline_artifact_id }}
+      attempt_id: ${{ steps.plan.outputs.attempt_id }}
+      previous_run_id: ${{ steps.plan.outputs.previous_run_id }}
+      previous_target_sha: ${{ steps.plan.outputs.previous_target_sha }}
+      previous_release_id: ${{ steps.plan.outputs.previous_release_id }}
+      previous_set_artifact_id: ${{ steps.plan.outputs.previous_set_artifact_id }}
+      previous_set_sha256: ${{ steps.plan.outputs.previous_set_sha256 }}
+      previous_manifest_artifact_id: ${{ steps.plan.outputs.previous_manifest_artifact_id }}
+      previous_manifest_sha256: ${{ steps.plan.outputs.previous_manifest_sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/release-tools
+      - name: Pin master, check Gate, and decide under the nightly lock
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHALK_IMMUTABLE_REPLAY_READY: ${{ vars.CHALK_IMMUTABLE_REPLAY_READY }}
+          MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
+          DRY_RUN: ${{ inputs.dry_run || false }}
+        run: |
+          args=()
+          if [[ "$MANUAL" == true ]]; then args+=(--manual); fi
+          if [[ "$DRY_RUN" == true ]]; then args+=(--dry-run); fi
+          python scripts/releases/release.py plan "${args[@]}"
+  release:
+    needs: plan
+    if: needs.plan.outputs.should_cut == 'true' && !inputs.dry_run
+    uses: ./.github/workflows/ci.yml
+    with:
+      target_sha: ${{ needs.plan.outputs.target_sha }}
+      release_managed: true
+      deploy_managed: true
+      enable_recorder_control: true
+      managed_environment: nightly
+      stable_manifest_run_id: ${{ needs.plan.outputs.baseline_run_id }}
+      stable_manifest_artifact_id: ${{ needs.plan.outputs.baseline_artifact_id }}
+      build_release_set: true
+      deploy_web: true
+      orchestrated: true
+    secrets: inherit
+  proof:
+    needs: release
+    uses: ./.github/workflows/real-call-proof.yml
+    with:
+      environment: nightly
+      proofs: smoke transcript
+    secrets: inherit
+  observe:
+    needs: [plan, release, proof]
+    if: always() && needs.plan.outputs.should_cut == 'true' && !inputs.dry_run
+    uses: ./.github/workflows/release-observation.yml
+    with:
+      environment: nightly
+      target_sha: ${{ needs.plan.outputs.target_sha }}
+      run_id: ${{ needs.release.outputs.run_id }}
+      release_id: ${{ needs.release.outputs.release_id }}
+      set_artifact_id: ${{ needs.release.outputs.set_artifact_id }}
+      set_sha256: ${{ needs.release.outputs.set_sha256 }}
+      manifest_artifact_id: ${{ needs.release.outputs.manifest_artifact_id }}
+      manifest_sha256: ${{ needs.release.outputs.manifest_sha256 }}
+      activated_at: ${{ needs.release.outputs.activated_at }}
+      attempt_id: ${{ needs.plan.outputs.attempt_id }}
+      deploy_result: ${{ needs.release.result }}
+      proof_result: ${{ needs.proof.result == 'success' && needs.proof.outputs.result || 'failed' }}
+    secrets: inherit
+  rollback:
+    needs: [plan, release, observe]
+    if: >-
+      always() && needs.plan.outputs.previous_run_id != '' && needs.release.result != 'skipped' &&
+      (needs.release.result != 'success' || needs.observe.result != 'success')
+    uses: ./.github/workflows/ci.yml
+    with:
+      release_managed: false
+      deploy_managed: true
+      managed_environment: nightly
+      deploy_web: true
+      orchestrated: true
+      target_sha: ${{ needs.plan.outputs.previous_target_sha }}
+      manifest_run_id: ${{ needs.plan.outputs.previous_run_id }}
+      manifest_artifact_id: ${{ needs.plan.outputs.previous_manifest_artifact_id }}
+      manifest_sha256: ${{ needs.plan.outputs.previous_manifest_sha256 }}
+      reuse_release_id: ${{ needs.plan.outputs.previous_release_id }}
+      release_set_artifact_id: ${{ needs.plan.outputs.previous_set_artifact_id }}
+      release_set_sha256: ${{ needs.plan.outputs.previous_set_sha256 }}
+    secrets: inherit
+  rollback-proof:
+    needs: rollback
+    uses: ./.github/workflows/real-call-proof.yml
+    with:
+      environment: nightly
+      proofs: smoke transcript
+    secrets: inherit
+  rollback-observe:
+    needs: [plan, rollback, rollback-proof]
+    if: always() && needs.rollback.result != 'skipped'
+    uses: ./.github/workflows/release-observation.yml
+    with:
+      environment: nightly
+      activated_at: ${{ needs.rollback.outputs.activated_at }}
+      deploy_result: ${{ needs.rollback.result }}
+      proof_result: ${{ needs.rollback-proof.result == 'success' && needs.rollback-proof.outputs.result || 'failed' }}
+      run_id: ${{ needs.plan.outputs.previous_run_id }}
+      target_sha: ${{ needs.plan.outputs.previous_target_sha }}
+      release_id: ${{ needs.plan.outputs.previous_release_id }}
+      set_artifact_id: ${{ needs.plan.outputs.previous_set_artifact_id }}
+      set_sha256: ${{ needs.plan.outputs.previous_set_sha256 }}
+      manifest_artifact_id: ${{ needs.plan.outputs.previous_manifest_artifact_id }}
+      manifest_sha256: ${{ needs.plan.outputs.previous_manifest_sha256 }}
+    secrets: inherit
