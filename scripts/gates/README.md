@@ -4,7 +4,10 @@
 existing checks declared as custom lanes in `gate.config.ts`. `pnpm gate:full`
 runs the same tracker checks followed by `q9gate run --full`. Each gate runs
 with `GOMAXPROCS=1`, `VITEST_MAX_WORKERS=1`, `ERL_FLAGS='+S 1:1'`, and
-q9gate concurrency 1. `gate.report.json` records every selected/skipped lane.
+q9gate concurrency 1. The testbox wrapper invokes the same commit script through
+`pnpm exec` instead of the one-CPU package alias, allowing Go to use the
+allocated CPUs; Vitest and Erlang remain capped at two workers/schedulers.
+`gate.report.json` records every selected/skipped lane.
 
 The pre-commit hook runs `pnpm gate:fast`: tracker check plus the `scope`, `format`,
 `hygiene`, `secrets`, and `generated` lanes on staged files
@@ -68,14 +71,44 @@ shipment target from branch, release mode, or directory.
   workflows add multi-node partitions, PostgreSQL failover, sustained load,
   process restart, and real-browser proof.
 
-## Running a gate on the M4
+## Running a gate on testbox
 
-`scripts/gates/remote.sh <root|api|sync|recorder|-- command...>` runs a gate in
-a throwaway checkout on the M4 and always cleans up; `--dry-run` prints the plan.
-It snapshots the local commit plus uncommitted work as `origin/master` and the
-branch tip, so branch scope and Fallow work. Before starting it reaps stale
-`/tmp/chalk-*` checkouts and orphaned `chalk-gate-postgres-*` containers, and it
-refuses to start below `CHALK_REMOTE_MIN_FREE_GIB` free disk. Dependencies come
-from the M4 user's default pnpm, Go, Hex, and Mix caches. The root
-gate fails early when installed packages differ from `pnpm-lock.yaml`
-(`check-install.mjs`), and slow steps run under `with-timeout.sh`.
+`scripts/gates/remote.sh <root|api|sync|recorder|-- command...>` runs on a
+disposable Linux Droplet through the testbox skill, never on the M4.
+`--dry-run` prints the exact plan without creating a box.
+
+Testbox ships the real tip and merge-base with `origin/HEAD`, then commits
+tracked working-tree changes on top. Stage new files before running: the wrapper
+rejects non-ignored untracked files rather than silently omitting them. Ignored
+files (including local dependencies and secrets) are not shipped. Custom base
+refs must exist in testbox's limited history; fetch `origin/master` locally first.
+
+The wrapper checks Node, Go, Erlang, Elixir, and OpenTofu against the same
+version sources as Gate CI and installs only mismatches. The shared testbox
+image includes these pins, Gitleaks, Semgrep, prebuilt OSV, and the pinned
+Playwright Chromium revision. Matching Chromium skips OS dependency setup;
+a different revision still installs its dependencies. The existing helpers own PostgreSQL 18.3 and Sync topology.
+Root and custom runs verify the repo's Playwright Chromium revision.
+TTL covers provisioning, setup, and the gate: root/custom 60 minutes, API/Sync
+45 minutes, recorder 20 minutes (2 CPU / 4 GB).
+Root defaults to `c-8` (8 dedicated CPU / 16 GB). API and Sync use
+`c-8`, recorder uses `s-2vcpu-4gb`, and custom commands keep
+`s-4vcpu-8gb`. The measured region is `blr1`, which offers both root trial
+sizes. New shared images must be available there before use. This is an
+allocation choice, not a claim that the region is faster.
+
+Each run retains testbox's $0.50 default ceiling and automatic cleanup.
+`CHALK_REMOTE_SIZE`, `CHALK_REMOTE_REGION`, `CHALK_REMOTE_TTL`, and
+`CHALK_REMOTE_BUDGET` override the allocation for a bounded experiment.
+The snapshot must be available in the selected region.
+`CHALK_PHASE` epoch markers and UTC headers time each setup step and the gate;
+testbox imports the markers into receipt phases. The job checks that competing
+OS upgrade and firmware timers/services are masked.
+
+Provisioning prints live. The current testbox CLI saves job output but does not
+stream it; collected step headers and the final 60 lines print at completion.
+`CHALK_REMOTE_VERBOSE=1` prints the complete collected job log.
+`CHALK_REMOTE_TAIL_LINES` and `CHALK_REMOTE_LOG_DIR` control the tail and combined
+local log (default `${TMPDIR:-/tmp}/chalk-remote-logs`). Testbox keeps its receipt,
+launcher log, job log, and artifact archive in `~/.local/state/testbox/<task>/`.
+The wrapper returns testbox's exit status, including setup and provisioning failures.
