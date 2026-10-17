@@ -213,7 +213,12 @@ describe("remote publication recovery", () => {
       });
       await harness.client.refreshRemotePublications();
       await harness.client.refreshRemotePublications();
-      expect(harness.client.getSnapshot().remoteTracks.map((track) => track.publicationId).sort()).toEqual(["remote-a|camera", "remote-b|microphone"]);
+      expect(
+        harness.client
+          .getSnapshot()
+          .remoteTracks.map((track) => track.publicationId)
+          .sort(),
+      ).toEqual(["remote-a|camera", "remote-b|microphone"]);
     });
   });
   it.each([404, 410])("replaces an expired HTTP %s receiver before exhausting the signaling quota", async (status) => {
