@@ -23,13 +23,10 @@ on:
         default: false
         type: boolean
       managed_environment:
-        description: GitHub Environment and host environment to deploy
+        description: GitHub Environment and host environment to deploy (staging, production, or another configured environment)
         required: true
         default: staging
-        type: choice
-        options:
-          - staging
-          - production
+        type: string
       managed_secret_exclusions:
         description: Comma-separated canonical runtime input IDs allowed to be missing
         required: false
@@ -414,9 +411,12 @@ jobs:
   deploy-managed:
     name: Deploy managed release to ${{ inputs.managed_environment }}
     needs: [plan-managed, publish-managed-manifest]
-    if: inputs.deploy_managed && needs.publish-managed-manifest.result == 'success'
+    if: >-
+      always() && !cancelled() && inputs.deploy_managed &&
+      needs.plan-managed.result == 'success' && needs.publish-managed-manifest.result == 'success'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # Host polling is bounded to 30 minutes; leave time for guarded dispatcher plans.
+    timeout-minutes: 60
     environment: ${{ inputs.managed_environment }}
     concurrency:
       group: deploy-managed-${{ inputs.managed_environment }}
@@ -425,10 +425,10 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - name: Checkout exact release
+      - name: Checkout deployment tooling from workflow revision
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.target_sha }}
+          ref: ${{ github.sha }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -471,6 +471,7 @@ jobs:
         with:
           role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
+          role-duration-seconds: 3600
 
       - name: Set up OpenTofu for dispatcher binding
         uses: ./.github/actions/setup-opentofu
@@ -482,15 +483,19 @@ jobs:
           CHALK_MANAGED_LOG_GROUP_NAME: ${{ vars.CHALK_MANAGED_LOG_GROUP_NAME }}
           CHALK_MANAGED_PARAMETER_PREFIX: ${{ vars.CHALK_MANAGED_PARAMETER_PREFIX }}
           CHALK_MANAGED_SSM_DOCUMENT_NAME: ${{ vars.CHALK_MANAGED_SSM_DOCUMENT_NAME }}
+          CHALK_MANAGED_RECORDER_CONFIG_PARAMETER: ${{ vars.CHALK_MANAGED_RECORDER_CONFIG_PARAMETER }}
           MANAGED_ENVIRONMENT: ${{ inputs.managed_environment }}
-          MANAGED_SECRET_EXCLUSIONS: ${{ inputs.managed_secret_exclusions }}
+          MANAGED_SECRET_EXCLUSIONS: ${{ inputs.managed_secret_exclusions || vars.CHALK_MANAGED_SECRET_EXCLUSIONS }}
           RELEASE_ID: ${{ needs.plan-managed.outputs.release_id }}
         run: |
           set -euo pipefail
           manifest="${{ runner.temp }}/managed-release/${RELEASE_ID}.json"
+          jq -e --arg source "$TARGET_SHA" --arg release "$RELEASE_ID" \
+            '.source_revision == $source and .release_id == $release' "$manifest" >/dev/null
           args=(
             --adopt-existing-release
             --manifest "$manifest"
+            --proof-file "${{ runner.temp }}/managed-deployment.json"
             --environment "$MANAGED_ENVIRONMENT"
             --region "$CHALK_MANAGED_AWS_REGION"
             --instance-id "$CHALK_MANAGED_INSTANCE_ID"
@@ -499,7 +504,11 @@ jobs:
             --parameter-prefix "$CHALK_MANAGED_PARAMETER_PREFIX"
             --request-id "${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
             --log-group-name "$CHALK_MANAGED_LOG_GROUP_NAME"
+            --timeout-seconds 1800
           )
+          if [[ -n "$CHALK_MANAGED_RECORDER_CONFIG_PARAMETER" ]]; then
+            args+=(--dispatcher-config-parameter "$CHALK_MANAGED_RECORDER_CONFIG_PARAMETER")
+          fi
           while IFS= read -r secret_id; do
             secret_id="${secret_id#"${secret_id%%[![:space:]]*}"}"
             secret_id="${secret_id%"${secret_id##*[![:space:]]}"}"
@@ -509,6 +518,34 @@ jobs:
           done < <(printf '%s\n' "$MANAGED_SECRET_EXCLUSIONS" | tr ',' '\n')
 
           node scripts/deploy/deploy-managed-release.mjs "${args[@]}"
+
+      - name: Managed deployment summary
+        if: always()
+        env:
+          DEPLOYMENT_RESULT: ${{ runner.temp }}/managed-deployment.json
+          MANAGED_ENVIRONMENT: ${{ inputs.managed_environment }}
+          RELEASE_ID: ${{ needs.plan-managed.outputs.release_id }}
+        run: |
+          # shellcheck disable=SC2016
+          {
+            printf '## Managed release: %s\n\nRelease: `%s`\n\n' "$MANAGED_ENVIRONMENT" "$RELEASE_ID"
+            if [[ -s "$DEPLOYMENT_RESULT" ]]; then
+              printf '```json\n'
+              jq '{deployment_phase, status, health, release_id, request_id, rolled_back, ssm_command_id, document_version, dispatcher_binding}' "$DEPLOYMENT_RESULT"
+              printf '```\n'
+            else
+              printf 'Deployment did not complete. Inspect the failed step and its SSM command ID; do not bypass CI.\n'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Retain managed deployment proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: managed-deployment-${{ needs.plan-managed.outputs.release_id }}
+          path: ${{ runner.temp }}/managed-deployment.json
+          if-no-files-found: ignore
+          retention-days: 90
 
   deploy-web:
     name: Deploy web fallback

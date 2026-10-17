@@ -157,10 +157,11 @@ def main():
     parser.add_argument("--region", required=True)
     parser.add_argument("--instance-id", required=True)
     parser.add_argument("--parameter-prefix", required=True)
+    parser.add_argument("--configuration-parameter", default=PREFIX + "recorder.json")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     provider = Provider(args.region, os.environ.get("AWS_PROFILE"), args.dry_run)
-    config = json.loads(provider.parameter(PREFIX + "recorder.json")["Value"])
+    config = json.loads(provider.parameter(args.configuration_parameter)["Value"])
     require(config["runtime"]["instance_id"] == args.instance_id and config["runtime"]["parameter_prefix"] == args.parameter_prefix,
             "dispatcher configuration does not belong to the target managed runtime")
     print(json.dumps(bind(provider, config["dispatcher"], json.loads(Path(args.manifest).read_text()), args.dry_run)))

@@ -114,6 +114,7 @@ RENDER
 cat >"${fixture_root}/source/infrastructure/managed-episode/scripts/validate-runtime" <<'VALIDATE'
 #!/usr/bin/env bash
 set -euo pipefail
+[[ "$1" == --environment && "$2" == "${FAKE_VALIDATION_ENVIRONMENT:?}" ]] || exit 1
 VALIDATE
 chmod 0755 "${fixture_root}/source/infrastructure/managed-episode/scripts/"{render-runtime,validate-runtime}
 cp "${managed_root}/scripts/chalk-runtime-health" "${fixture_root}/source/infrastructure/managed-episode/scripts/chalk-runtime-health"
@@ -343,7 +344,7 @@ run_controller() {
   sync_release_id="${FAKE_SYNC_RELEASE_ID_OVERRIDE:-$sync_release_id}"
   sync_source_commit="${FAKE_SYNC_SOURCE_COMMIT_OVERRIDE:-$sync_source_commit}"
   FAKE_AWS_LOG="${fixture_root}/aws.log" FAKE_COMMAND_LOG="${fixture_root}/commands.log" FAKE_SECRET_STATE="${fixture_root}/secret-state" FAKE_SYSTEMCTL_FAILURE_STATE="${fixture_root}/systemctl-failed" FAKE_RESTORE_ENABLED_STATE="${fixture_root}/restore-unit-enabled" FAKE_HEALTH_INDEX="${fixture_root}/health-index" FAKE_HEALTH_SEQUENCE="$mode" \
-  FAKE_API_RELEASE_ID="$api_release_id" FAKE_SYNC_RELEASE_ID="$sync_release_id" FAKE_SYNC_SOURCE_COMMIT="$sync_source_commit" \
+  FAKE_API_RELEASE_ID="$api_release_id" FAKE_SYNC_RELEASE_ID="$sync_release_id" FAKE_SYNC_SOURCE_COMMIT="$sync_source_commit" FAKE_VALIDATION_ENVIRONMENT="$(jq -er '.environment' "$request")" \
   CHALK_CONTROLLER_STATE_ROOT="$state" CHALK_CONTROLLER_RUN_ROOT="${fixture_root}/run" CHALK_CONTROLLER_LOCK_FILE="${state}/lock" CHALK_ACTIVE_RELEASE_POINTER="${state}/active-release.json" CHALK_DEPLOYMENT_LEDGER="${state}/ledger.jsonl" \
   CHALK_CONTROLLER_SYSTEMD_ROOT="${fixture_root}/systemd" CHALK_CONTROLLER_INSTALL_DIR="${fixture_root}/install" CHALK_RUNTIME_QUADLET_DIR="${fixture_root}/user-quadlet" CHALK_RUNTIME_SYSTEMD_DIR="${fixture_root}/user-systemd" \
   CHALK_AWS_BIN="${fixture_root}/bin/aws" CHALK_PODMAN_BIN="${fixture_root}/bin/podman" CHALK_SYSTEMCTL_BIN="${fixture_root}/bin/systemctl" CHALK_HEALTH_ATTEMPTS=1 CHALK_HEALTH_INTERVAL_SECONDS=1 CHALK_CONTROLLER_DIRECT_USER_COMMANDS=true \
@@ -529,6 +530,14 @@ make_request staging "${fixture_root}/staging-request.json" '[]' staging
 make_manifest staging >"${fixture_root}/staging-manifest.json"
 run_controller "$staging_state" "${fixture_root}/staging-request.json" "${fixture_root}/staging-manifest.json" ok >/dev/null
 jq -e '.environment == "staging" and .parameter_prefix == "/chalk/staging/managed-episode"' "${staging_state}/active-release.json" >/dev/null || fail "staging release was not accepted"
+
+preview_state="${fixture_root}/preview-state"
+mkdir -p "$preview_state"
+make_request preview "${fixture_root}/preview-request.json" '[]' preview-2
+make_manifest preview >"${fixture_root}/preview-manifest.json"
+run_controller "$preview_state" "${fixture_root}/preview-request.json" "${fixture_root}/preview-manifest.json" ok >/dev/null
+jq -e '.environment == "preview-2" and .parameter_prefix == "/chalk/preview-2/managed-episode"' "${preview_state}/active-release.json" >/dev/null || fail "configured environment was not accepted"
+grep -Fqx 'OTEL_RESOURCE_ATTRIBUTES=service.name=chalk-sync,service.version=preview,deployment.environment.name=preview-2,service.instance.id=sync-test-instance' "${fixture_root}/run/env/sync.env" || fail "configured environment telemetry was labeled as production"
 fi
 
 stable_state="${fixture_root}/stable-state"
