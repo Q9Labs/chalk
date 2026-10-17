@@ -2,6 +2,7 @@ package mediapublications
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -148,6 +149,7 @@ func TestObserveRemoteTracksDoesNotCloseReplacementPublication(t *testing.T) {
 	if err := service.ObserveRemoteTracks(context.Background(), oldMissing); err != nil {
 		t.Fatalf("observe old absence again: %v", err)
 	}
+	repository.participants = []PublicationParticipant{{ID: participantID, Generation: 2}}
 	_, err := service.RecordPublishedTracks(context.Background(), RecordInput{
 		TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 2, ConnectionID: "replacement-connection",
 		Tracks: []PublishedTrack{{Source: "camera", MID: "replacement-mid", TrackName: "replacement-track"}},
@@ -167,9 +169,18 @@ func TestObserveRemoteTracksDoesNotCloseReplacementPublication(t *testing.T) {
 }
 
 type reconciliationRepositoryStub struct {
+	participants   []PublicationParticipant
 	observations   []provideroperations.Observation
 	appended       provideroperations.ObservationInput
 	appendedInputs []provideroperations.ObservationInput
+}
+
+func (r *reconciliationRepositoryStub) ListPublicationParticipants(_ context.Context, _, _ utilities.ID) ([]PublicationParticipant, error) {
+	if r.participants != nil {
+		return r.participants, nil
+	}
+	id, _ := utilities.ParseID("33333333-3333-4333-8333-333333333333")
+	return []PublicationParticipant{{ID: id, Generation: 1}}, nil
 }
 
 func (r *reconciliationRepositoryStub) AppendObservation(_ context.Context, input provideroperations.ObservationInput) (provideroperations.Observation, error) {
@@ -219,4 +230,79 @@ func assertPublicationEnabled(t *testing.T, publications []provideroperations.Pu
 		}
 	}
 	t.Fatalf("publication %s missing from %#v", source, publications)
+}
+
+func TestLatestRetiresInactiveAndReplacedPublicationsWithNewCursor(t *testing.T) {
+	for _, reason := range []string{"left", "generation", "connection"} {
+		t.Run(reason, func(t *testing.T) {
+			repository := &reconciliationRepositoryStub{}
+			service := NewService(repository)
+			tenantID, episodeID, participantID, _ := publishRemoteObservationFixture(t, service, repository)
+			repository.participants = []PublicationParticipant{}
+			if reason == "generation" {
+				repository.participants = []PublicationParticipant{{ID: participantID, Generation: 2}}
+			}
+			if reason == "connection" {
+				repository.participants = []PublicationParticipant{{ID: participantID, Generation: 1, ConnectionID: "replacement"}}
+			}
+			snapshot, err := service.Latest(context.Background(), tenantID, episodeID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if snapshot.Sequence != 2 || len(snapshot.Publications) != 1 || snapshot.Publications[0].Enabled || snapshot.Publications[0].PublicationID != "" {
+				t.Fatalf("retired snapshot = %#v", snapshot)
+			}
+			again, err := service.Latest(context.Background(), tenantID, episodeID)
+			if err != nil || again.Sequence != snapshot.Sequence {
+				t.Fatalf("retirement not idempotent: %#v, %v", again, err)
+			}
+		})
+	}
+}
+
+func TestReplacementRetiresSourcesNotRepublishedOnNewConnection(t *testing.T) {
+	repository := &reconciliationRepositoryStub{}
+	service := NewService(repository)
+	tenantID, episodeID, participantID, _ := publishRemoteObservationFixture(t, service, repository)
+	_, err := service.RecordPublishedTracks(context.Background(), RecordInput{
+		TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 1, ConnectionID: "replacement",
+		Tracks: []PublishedTrack{{Source: "microphone", MID: "0", TrackName: "microphone"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertPublicationEnabled(t, repository.appended.Publications, participantID, "camera", false)
+	assertPublicationEnabled(t, repository.appended.Publications, participantID, "microphone", true)
+	for _, publication := range repository.appended.Publications {
+		if publication.Source == "camera" && publication.PublicationID != "" {
+			t.Fatal("old camera reference survived replacement")
+		}
+	}
+}
+
+func TestDelayedOldPublishCannotEraseReplacementTracks(t *testing.T) {
+	repository := &reconciliationRepositoryStub{}
+	service := NewService(repository)
+	tenantID, episodeID, participantID, _ := publishRemoteObservationFixture(t, service, repository)
+	repository.participants = []PublicationParticipant{{ID: participantID, Generation: 1, ConnectionID: "replacement"}}
+	_, err := service.RecordPublishedTracks(context.Background(), RecordInput{
+		TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 1, ConnectionID: "replacement",
+		Tracks: []PublishedTrack{{Source: "microphone", MID: "0", TrackName: "current-mic"}, {Source: "camera", MID: "1", TrackName: "current-camera"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := len(repository.appendedInputs)
+	_, err = service.RecordPublishedTracks(context.Background(), RecordInput{
+		TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 1, ConnectionID: "publisher-connection",
+		Tracks: []PublishedTrack{{Source: "screen", MID: "2", TrackName: "delayed-screen"}},
+	})
+	if !errors.Is(err, ErrInvalidPublication) {
+		t.Fatalf("stale publish accepted: %v", err)
+	}
+	if len(repository.appendedInputs) != before {
+		t.Fatal("stale publish changed the snapshot")
+	}
+	assertPublicationEnabled(t, repository.appended.Publications, participantID, "microphone", true)
+	assertPublicationEnabled(t, repository.appended.Publications, participantID, "camera", true)
 }

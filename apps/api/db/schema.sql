@@ -497,6 +497,8 @@ create table participants (
     episode_id uuid not null,
     account_id uuid references users(id) on delete restrict,
     identity_id uuid,
+    media_connection_id text,
+    media_connection_generation bigint,
     generation bigint not null check (generation > 0),
     status text not null check (status in ('joining', 'active', 'leaving', 'left')),
     role text not null,
@@ -952,6 +954,26 @@ create table space_public_arrivals (
 );
 create index space_public_arrivals_expiry_idx on space_public_arrivals(expires_at, state);
 create index space_public_arrivals_space_state_idx on space_public_arrivals(tenant_id, space_id, state, created_at);
+
+create function bind_public_arrival_media_connection() returns trigger
+language plpgsql as $$
+begin
+    if new.state = 'admitted' and new.provider_subject is not null and
+       (TG_OP = 'INSERT' or old.state is distinct from new.state or
+        old.provider_subject is distinct from new.provider_subject or
+        old.participant_generation is distinct from new.participant_generation or
+        old.participant_id is distinct from new.participant_id) then
+        update participants set media_connection_id = new.provider_subject,
+            media_connection_generation = new.participant_generation
+        where tenant_id = new.tenant_id and episode_id = new.episode_id
+          and id = new.participant_id and generation = new.participant_generation;
+    end if;
+    return new;
+end;
+$$;
+create trigger public_arrival_media_connection
+    after insert or update of state, provider_subject, participant_generation, participant_id
+    on space_public_arrivals for each row execute function bind_public_arrival_media_connection();
 
 create table space_public_admission_requests (
     request_handle uuid primary key,

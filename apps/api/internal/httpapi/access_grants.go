@@ -19,6 +19,7 @@ type ParticipantMediaIssuer interface {
 
 type ParticipantGenerationAuthorizer interface {
 	AuthorizeActiveParticipantGeneration(context.Context, synctokens.SubjectKey, int64) (bool, error)
+	ReplaceParticipantMediaConnection(context.Context, accessgrants.Subject) error
 }
 
 type accessGrantSubjectResponse struct {
@@ -109,6 +110,9 @@ func issueAccessGrantEndpoint(
 					return accessGrantResponse{}, err
 				}
 				subject, err = accessGrantSubjectForJoin(request, join)
+				if err == nil {
+					err = generations.ReplaceParticipantMediaConnection(ctx, subject)
+				}
 			} else {
 				currentToken := strings.TrimSpace(request.Body.CurrentMediaToken)
 				if currentToken == "" {

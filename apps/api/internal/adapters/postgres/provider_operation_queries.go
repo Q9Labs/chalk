@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 )
 
@@ -37,6 +38,7 @@ type providerOperationQuerier interface {
 	GetProviderObservation(context.Context, getProviderObservationParams) (providerOperationObservationRow, error)
 	LatestProviderObservation(context.Context, providerObservationIdentityParams) (providerOperationObservationRow, error)
 	ListProviderObservations(context.Context, listProviderObservationsParams) ([]providerOperationObservationRow, error)
+	ListPublicationParticipants(context.Context, providerObservationIdentityParams) ([]mediapublications.PublicationParticipant, error)
 }
 
 type providerOperationReceiptRow struct {
