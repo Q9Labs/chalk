@@ -47,19 +47,19 @@ runtime secrets. Verify SSM Online and a successful reboot before deployment.
 `render-runtime <manifest> <output> nightly` selects the following caps.
 Production rendering remains unchanged.
 
-| Container                              | Cap, MiB |
-| -------------------------------------- | -------: |
-| API                                    |       96 |
-| Sync                                   |      256 |
-| Redis                                  |      320 |
-| Tunnel                                 |       48 |
-| Capture controller                     |       32 |
-| Render controller                      |       32 |
-| Issuer                                 |       32 |
-| One-shot migrator                      |       64 |
-| Total including migrator               |      880 |
-| Host OS reserve                        |      640 |
-| Free after caps and host OS reserve    |      528 |
+| Container                           | Cap, MiB |
+| ----------------------------------- | -------: |
+| API                                 |       96 |
+| Sync                                |      256 |
+| Redis                               |      320 |
+| Tunnel                              |       48 |
+| Capture controller                  |       32 |
+| Render controller                   |       32 |
+| Issuer                              |       32 |
+| One-shot migrator                   |       64 |
+| Total including migrator            |      880 |
+| Host OS reserve                     |      640 |
+| Free after caps and host OS reserve |      528 |
 
 The 640 MiB host reserve exceeds the measured production idle non-container
 usage of about 618 MB. Redis retains its 256 MiB maxmemory policy.
