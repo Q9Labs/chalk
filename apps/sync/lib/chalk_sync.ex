@@ -19,3 +19,5 @@ defmodule ChalkSync do
   See `README.md` for invariants and the protocol walkthrough.
   """
 end
+
+# gate probe
