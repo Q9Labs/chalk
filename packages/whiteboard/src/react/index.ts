@@ -1,4 +1,4 @@
-export { WhiteboardCanvas } from "./WhiteboardCanvas";
+export { WhiteboardCanvas, preloadWhiteboardStylesheet } from "./WhiteboardCanvas";
 export type { WhiteboardCanvasClassNames, WhiteboardCanvasIcons, WhiteboardCanvasProps, WhiteboardCollaborationOptions } from "./WhiteboardCanvas";
 export { appendOrReplaceMathElement, CHALK_MATH_CUSTOM_DATA_KEY, CHALK_MATH_RENDERER, createMathFileId, createMathImageAsset, getChalkMathData, getInsertionPoint, getSelectedMathElement, isChalkMathElement, svgToDataUrl } from "./math-elements";
 export type { ChalkMathCustomData, MathImageAsset } from "./math-elements";

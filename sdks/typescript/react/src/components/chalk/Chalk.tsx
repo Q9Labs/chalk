@@ -1,5 +1,6 @@
 "use client";
 import { createSpaceClient, type ChalkWhiteboardV1Transport, type ChatUploadFile, type ClientEventMap, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
+import { preloadWhiteboardStylesheet } from "@q9labsai/chalk-whiteboard/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { ChalkProvider } from "../../bindings/context";
@@ -246,6 +247,9 @@ function SpaceSurface(
   }, []);
   const whiteboardTransport = client.whiteboard.transport();
   const whiteboardAvailable = props.features?.whiteboard !== false;
+  useEffect(() => {
+    if (whiteboardAvailable) preloadWhiteboardStylesheet();
+  }, [whiteboardAvailable]);
   const whiteboardSubscription = useWhiteboardSceneSubscription(whiteboardTransport, whiteboardAvailable);
   const setWhiteboardPresentation = whiteboardSubscription.status === "ready" ? bindWhiteboardPresentation(whiteboardSubscription.transport) : undefined;
   useEffect(() => {
