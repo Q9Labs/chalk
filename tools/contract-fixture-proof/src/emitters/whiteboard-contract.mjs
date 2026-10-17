@@ -87,8 +87,8 @@ function validateWhiteboardContract(contract) {
   if (contract.persistence?.fullSyncDeletesAbsentElements !== false || contract.persistence?.clearStartsNewSceneEpoch !== true || contract.persistence?.operationReceipts !== true) {
     throw new Error("Invalid whiteboard contract: merge, clear, and receipt persistence semantics are required");
   }
-  if (contract.fileTransport?.initiateUploadResult?.method !== "PUT" || contract.fileTransport?.initiateUploadResult?.headers !== "exact-string-map") {
-    throw new Error("Invalid whiteboard contract: upload initiation must preserve the exact signed PUT headers");
+  if (Object.keys(contract.fileTransport ?? {}).length !== 1 || contract.fileTransport?.download !== "participant-bound-short-lived-url") {
+    throw new Error("Invalid whiteboard contract: file transport must expose only participant-bound downloads");
   }
 
   const frameEntries = Object.values(contract.frames ?? {});

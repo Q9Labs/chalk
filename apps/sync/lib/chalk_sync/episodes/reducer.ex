@@ -336,7 +336,7 @@ defmodule ChalkSync.Episodes.Reducer do
 
   defp command_target(state, _actor_id, :set_admission_policy, payload) do
     with :ok <- exact_keys(payload, ["policy"]),
-         policy when policy in @admission_policies <- payload["policy"] do
+         policy when policy in ["open", "knock"] <- payload["policy"] do
       if state.admission_policy == policy,
         do: {:error, :satisfied},
         else: {:ok, "admission_policy_changed", %{"policy" => policy}}
