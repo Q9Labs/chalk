@@ -41,9 +41,8 @@ type Subject struct {
 	ParticipantID         utilities.ID
 	ParticipantGeneration int64
 	Provider              string
-	// ProviderSubject is the provider-owned participant binding. SFU uses a
-	// connection ID; RealtimeKit uses its participant reference. It is never a
-	// provider access token.
+	// ProviderSubject is the provider-owned participant binding, never a provider
+	// access token. Cloudflare SFU uses CloudflareConnectionID instead.
 	ProviderSubject        string
 	CloudflareConnectionID string
 }

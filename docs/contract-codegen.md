@@ -13,11 +13,11 @@ From the repo root:
 
 ```sh
 pnpm run generate:sdk      # API/SDK protocol output
-pnpm run contract:generate # also fixture proof and API design artifacts
+pnpm run contract:generate # alias for SDK generation
 pnpm run contract:check    # non-mutating drift and contract checks
 ```
 
-`pnpm run regen` runs every generator in dependency order: SDK, OpenAPI, Sync contract, sqlc, migration `LatestVersion`, and tracker views. `pnpm run check:generated` verifies all of them in seconds without Postgres or Docker. Run `pnpm run hooks:install` once so rebases keep one side of generated files without conflicts; then run `pnpm run regen` to rebuild them. Toolchain versions live in `.tool-versions` (Node, Erlang, Elixir, OpenTofu), `apps/api/go.mod` (Go), and `packageManager` (pnpm). The language ratchet baseline is a reviewed baseline, not generated output: `check:generated` runs it but `regen` never rewrites it.
+`pnpm run regen` runs every generator in dependency order: SDK, OpenAPI, Sync contract, sqlc, migration `LatestVersion`, and the Markdown tracker. `pnpm run check:generated` verifies all of them in seconds without Postgres or Docker. Run `pnpm run hooks:install` once so rebases keep one side of generated files without conflicts; then run `pnpm run regen` to rebuild them. Toolchain versions live in `.tool-versions` (Node, Erlang, Elixir, OpenTofu), `apps/api/go.mod` (Go), and `packageManager` (pnpm).
 
 The root gate includes contract checks. For endpoint declarations, see [the API route guide](../apps/api/docs/route-workflow.md).
 
