@@ -1,4 +1,3 @@
-import { cleanupByRunId } from "./cleanup.mjs";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -111,46 +110,6 @@ export async function createRun(config, directory, signal = new AbortController(
   run.tenantPath = `/v1/tenants/${config.tenant_id}`;
   return run;
 }
-async function disposeResource(run, resource) {
-  let timer;
-  try {
-    await Promise.race([
-      resource.dispose(),
-      new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error("Local cleanup timed out")), 15_000);
-      }),
-    ]);
-    run.cleanup.push({ kind: resource.kind, result: "passed" });
-    return [];
-  } catch (error) {
-    run.cleanup.push({ kind: resource.kind, result: "failed" });
-    return [new Error(`${resource.kind}: ${error.message}`)];
-  } finally {
-    clearTimeout(timer);
-  }
-}
-export async function cleanupRun(run) {
-  const failures = [];
-  try {
-    await cleanupByRunId(run.config, run.runId, run.directory);
-    if (run.apiKey) {
-      const response = await fetch(new URL(`${run.tenantPath}/spaces`, run.config.api_url), {
-        headers: { Authorization: `Bearer ${run.apiKey}` },
-        signal: AbortSignal.timeout(15_000),
-      });
-      await response.body?.cancel();
-      check(response.status === 401, "Revoked proof key was still accepted");
-      await save(`${run.directory}/key-rejection.json`, { status: response.status });
-    }
-  } catch (error) {
-    failures.push(error);
-  }
-  // Remote ownership cleanup is independent of browsers and the aborted proof signal.
-  for (const resource of [...run.resources].reverse()) failures.push(...(await disposeResource(run, resource)));
-  await save(`${run.directory}/cleanup.json`, run.cleanup);
-  if (failures.length) throw new AggregateError(failures, "Run cleanup failed; see private evidence");
-}
-
 export function publicFailure(phase, error, output = console.error) {
   const kind = error instanceof SyntaxError ? "SyntaxError" : error instanceof TypeError ? "TypeError" : error instanceof AggregateError ? "AggregateError" : error?.name === "AbortError" ? "AbortError" : error?.name === "TimeoutError" ? "TimeoutError" : "Error";
   output(`PROOF ${phase}: failed (${kind})`);
@@ -175,8 +134,16 @@ export async function recordResult(run, report, name, execute) {
     report.proofs[name] = { result: "passed", evidence: await execute() };
     console.log(`PROOF ${name}: passed`);
   } catch (error) {
-    report.proofs[name] = { result: "failed", error: error.stack ?? String(error) };
+    report.proofs[name] = { result: "failed", error: errorEvidence(error) };
     publicFailure(name, error);
   }
   await save(`${run.directory}/report.json`, report);
+}
+
+export function errorEvidence(error) {
+  return {
+    stack: error.stack ?? String(error),
+    errors: error.errors?.map(errorEvidence),
+    cause: error.cause ? errorEvidence(error.cause) : undefined,
+  };
 }

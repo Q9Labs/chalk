@@ -2,8 +2,8 @@
 import { resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { cleanupRun, createRun, loadConfig, save, check, publicFailure, recordResult } from "./runtime.mjs";
-import { cleanupByRunId, runLabel, sweepStaleRuns } from "./cleanup.mjs";
+import { createRun, loadConfig, save, check, publicFailure, recordResult, errorEvidence } from "./runtime.mjs";
+import { cleanupRun, cleanupByRunId, runLabel, sweepStaleRuns } from "./cleanup.mjs";
 import { prepareIntegration, recordProof, exportProof, transcriptProof, smokeProof } from "./proofs.mjs";
 
 const plans = {
@@ -58,7 +58,7 @@ else if (mode === "cleanup") {
   } catch (error) {
     const directory = resolve(".private", "prod-proof", `cleanup-${randomUUID()}`);
     await mkdir(directory, { recursive: true, mode: 0o700 });
-    await save(`${directory}/error.json`, { error: error.stack, causes: error.errors?.map((entry) => entry.stack) });
+    await save(`${directory}/error.json`, errorEvidence(error));
     publicFailure("cleanup", error);
     process.exitCode = 1;
   }
@@ -95,7 +95,7 @@ async function clean(run, report) {
     report.cleanup = "passed";
   } catch (error) {
     report.cleanup = "failed";
-    report.cleanupError = error.stack ?? String(error);
+    report.cleanupError = errorEvidence(error);
     publicFailure("cleanup", error);
   }
 }
@@ -136,7 +136,7 @@ async function main(mode, forceLayerSwitch) {
     run = await createRun(config, directory, interruption.signal, runId);
     await runProofs(run, plans[mode], report, forceLayerSwitch);
   } catch (error) {
-    report.error = error.stack ?? String(error);
+    report.error = errorEvidence(error);
     publicFailure("setup-or-capture", error);
   } finally {
     await finish(run, report, plans[mode], directory);

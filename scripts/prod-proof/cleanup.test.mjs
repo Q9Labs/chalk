@@ -5,8 +5,8 @@ import { once } from "node:events";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cleanupByRunId, sweepStaleRuns } from "./cleanup.mjs";
-import { createRun, cleanupRun, recordResult, request } from "./runtime.mjs";
+import { cleanupByRunId, sweepStaleRuns, cleanupRun } from "./cleanup.mjs";
+import { createRun, recordResult, request, errorEvidence } from "./runtime.mjs";
 
 async function fixture(t, handler) {
   const server = createServer(handler);
@@ -128,4 +128,35 @@ test("malformed HTTP and thrown browser errors remain private in real proof repo
   assert.ok(output.includes("PROOF export: failed (SyntaxError)"));
   assert.ok(output.includes("PROOF camera-share: failed (Error)"));
   assert.match(await readFile(`${directory}/report.json`, "utf8"), /page.evaluate: private-credential/);
+});
+
+test("sweep skips fully cleaned retained history without per-run reads", async (t) => {
+  const reads = [];
+  const old = new Date(Date.now() - 3 * 3600_000).toISOString();
+  const config = await fixture(t, (req, res) => {
+    reads.push(req.url);
+    assert.equal(req.method, "GET");
+    const history = Array.from({ length: 50 }, (_, index) => ({ name: `chalk-proof:completed-${index}`, created_at: old }));
+    if (req.url.includes("/api-keys")) res.end(JSON.stringify({ api_keys: history.map((entry) => ({ ...entry, revoked_at: old })), pagination: {} }));
+    else if (req.url.includes("/spaces")) res.end(JSON.stringify({ spaces: history.map((entry) => ({ ...entry, archived: true })), pagination: {} }));
+    else res.end(JSON.stringify({ webhook_endpoints: [], page: {} }));
+  });
+  await sweepStaleRuns(config);
+  assert.equal(reads.length, 3);
+});
+
+test("sweep failures preserve the private nested HTTP cause", async (t) => {
+  const config = await fixture(t, (req, res) => {
+    if (req.method === "DELETE") {
+      res.writeHead(403).end(JSON.stringify({ error: { code: "private-code" } }));
+      return;
+    }
+    if (req.url.includes("/api-keys")) res.end(JSON.stringify({ api_keys: [{ id: "key", name: "chalk-proof:failed", created_at: new Date(0).toISOString() }], pagination: {} }));
+    else if (req.url.includes("/spaces")) res.end(JSON.stringify({ spaces: [], pagination: {} }));
+    else res.end(JSON.stringify({ webhook_endpoints: [], page: {} }));
+  });
+  await assert.rejects(sweepStaleRuns(config), (error) => {
+    assert.match(JSON.stringify(errorEvidence(error)), /HTTP 403, private-code/);
+    return true;
+  });
 });

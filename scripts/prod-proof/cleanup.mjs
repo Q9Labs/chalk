@@ -1,4 +1,4 @@
-import { check, request, save, waitFor } from "./runtime.mjs";
+import { check, request, save, waitFor, errorEvidence } from "./runtime.mjs";
 
 export function runLabel(runId) {
   check(/^[A-Za-z0-9_-]{1,51}$/.test(runId), "Invalid proof run ID");
@@ -33,7 +33,7 @@ export async function cleanupByRunId(config, runId, directory) {
     } catch (error) {
       if (error.status === 404) results.push({ kind, id, result: "absent" });
       else {
-        results.push({ kind, id, result: "failed", error: error.stack ?? String(error) });
+        results.push({ kind, id, result: "failed", error: errorEvidence(error) });
         failures.push(error);
       }
     }
@@ -48,6 +48,7 @@ export async function cleanupByRunId(config, runId, directory) {
   await attempt("spaces", runId, async () => {
     const spaces = (await list(call, `${base}/spaces`, "spaces")).filter((space) => space.name === label && space.metadata?.proof_run_id === runId);
     for (const space of spaces) {
+      const before = failures.length;
       await attempt("episodes", space.id, async () => {
         const path = `${base}/spaces/${space.id}/episodes`;
         const episodes = await list(call, path, "episodes");
@@ -58,16 +59,18 @@ export async function cleanupByRunId(config, runId, directory) {
           });
         }
       });
-      await attempt("space", space.id, async () => {
-        if (!space.archived) await call("POST", `${base}/spaces/${space.id}/archive`, {});
-        check((await call("GET", `${base}/spaces/${space.id}`)).archived, "Space not archived");
-      });
       await attempt("transcripts", space.id, async () => {
         const transcripts = await list(call, `${base}/transcripts`, "transcripts");
         for (const transcript of transcripts.filter((entry) => entry.space_id === space.id && entry.status !== "deleted")) {
           await attempt("transcript", transcript.id, () => call("DELETE", `${base}/transcripts/${transcript.id}`));
         }
       });
+      if (failures.length === before) {
+        await attempt("space", space.id, async () => {
+          if (!space.archived) await call("POST", `${base}/spaces/${space.id}/archive`, {});
+          check((await call("GET", `${base}/spaces/${space.id}`)).archived, "Space not archived");
+        });
+      }
     }
   });
   await attempt("webhooks", runId, async () => {
@@ -100,8 +103,49 @@ export async function sweepStaleRuns(config, now = Date.now()) {
   ]) {
     for (const entry of await list(call, `${base}/${route}`, field)) {
       const match = /^chalk-proof:([A-Za-z0-9_-]{1,51})(?::[0-9a-f-]{36})?$/.exec(entry.name);
-      if (match && Date.parse(entry.created_at) < now - 2 * 60 * 60 * 1000) runs.add(match[1]);
+      const completed = route === "api-keys" ? entry.revoked_at : route === "spaces" && entry.archived;
+      if (!completed && match && Date.parse(entry.created_at) < now - 2 * 60 * 60 * 1000) runs.add(match[1]);
     }
   }
   for (const runId of runs) await cleanupByRunId(config, runId);
+}
+
+async function disposeResource(run, resource) {
+  let timer;
+  try {
+    await Promise.race([
+      resource.dispose(),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Local cleanup timed out")), 15_000);
+      }),
+    ]);
+    run.cleanup.push({ kind: resource.kind, result: "passed" });
+    return [];
+  } catch (error) {
+    run.cleanup.push({ kind: resource.kind, result: "failed" });
+    return [new Error(`${resource.kind}: ${error.message}`)];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+export async function cleanupRun(run) {
+  const failures = [];
+  try {
+    await cleanupByRunId(run.config, run.runId, run.directory);
+    if (run.apiKey) {
+      const response = await fetch(new URL(`${run.tenantPath}/spaces`, run.config.api_url), {
+        headers: { Authorization: `Bearer ${run.apiKey}` },
+        signal: AbortSignal.timeout(15_000),
+      });
+      await response.body?.cancel();
+      check(response.status === 401, "Revoked proof key was still accepted");
+      await save(`${run.directory}/key-rejection.json`, { status: response.status });
+    }
+  } catch (error) {
+    failures.push(error);
+  }
+  // Remote ownership cleanup is independent of browsers and the aborted proof signal.
+  for (const resource of [...run.resources].reverse()) failures.push(...(await disposeResource(run, resource)));
+  await save(`${run.directory}/cleanup.json`, run.cleanup);
+  if (failures.length) throw new AggregateError(failures, "Run cleanup failed; see private evidence");
 }
