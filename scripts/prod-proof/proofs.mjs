@@ -1,13 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { generateVoice } from "./fixture.mjs";
-import {
-  launchGuests,
-  stats,
-  limitCamera,
-  restoreCamera,
-  proveLayers,
-} from "./media.mjs";
+import { launchGuests, stats, limitCamera, restoreCamera, proveLayers } from "./media.mjs";
 import { check, command, request, save, waitFor } from "./runtime.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
 
@@ -15,39 +9,19 @@ export async function prepareIntegration(run, webhooks) {
   run.signal.throwIfAborted();
   const key = await run.ownerRequest("POST", `${run.tenantPath}/api-keys`, {
     name: run.label,
-    scopes: [
-      "spaces:read",
-      "spaces:write",
-      "episodes:read",
-      "episodes:write",
-      "recordings:read",
-      "transcriptions:read",
-      "transcriptions:write",
-    ],
+    scopes: ["spaces:read", "spaces:write", "episodes:read", "episodes:write", "recordings:read", "transcriptions:read", "transcriptions:write"],
     expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
   });
   run.ownership = { keyId: key.id };
   await save(`${run.directory}/ownership.json`, run.ownership);
   run.apiKey = key.secret;
-  run.apiRequest = (method, path, body) =>
-    request(
-      run.config,
-      method,
-      path,
-      body,
-      { Authorization: `Bearer ${run.apiKey}` },
-      {},
-      run.signal,
-    );
+  run.apiRequest = (method, path, body) => request(run.config, method, path, body, { Authorization: `Bearer ${run.apiKey}` }, {}, run.signal);
   const denied = await fetch(new URL(run.tenantPath, run.config.api_url), {
     headers: { Authorization: `Bearer ${run.apiKey}` },
     signal: AbortSignal.timeout(30_000),
   });
   await denied.body?.cancel();
-  check(
-    denied.status === 403,
-    "Proof key unexpectedly has Tenant administration access",
-  );
+  check(denied.status === 403, "Proof key unexpectedly has Tenant administration access");
   const receiver = await proofServer(run);
   if (webhooks) await exposeWebhook(run, receiver);
   return receiver;
@@ -65,14 +39,8 @@ async function createSpace(run) {
     linger_window_seconds: 60,
     admission_policy: { mode: "open" },
   });
-  check(
-    space.recording_policy === "manual",
-    "Space Recording policy was not applied",
-  );
-  check(
-    space.transcription_policy === "on_demand",
-    "Space Transcription policy was not applied",
-  );
+  check(space.recording_policy === "manual", "Space Recording policy was not applied");
+  check(space.transcription_policy === "on_demand", "Space Transcription policy was not applied");
   await save(`${run.directory}/space.json`, space);
   return space;
 }
@@ -85,11 +53,7 @@ export function episodeEnd(run, path) {
       await endRequest();
       ended = true;
     }
-    await waitFor(
-      "proof Episode ended",
-      async () => (await run.ownerRequest("GET", path)).status === "ended",
-      120_000,
-    );
+    await waitFor("proof Episode ended", async () => (await run.ownerRequest("GET", path)).status === "ended", 120_000);
   };
   return {
     end,
@@ -106,31 +70,16 @@ export function episodeEnd(run, path) {
   };
 }
 async function createEpisode(run, space) {
-  const episode = await run.apiRequest(
-    "POST",
-    `${run.tenantPath}/spaces/${space.id}/episodes`,
-    { metadata: { proof_run_id: run.runId } },
-  );
-  const ending = episodeEnd(
-    run,
-    `${run.tenantPath}/spaces/${space.id}/episodes/${episode.id}`,
-  );
+  const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
+  const ending = episodeEnd(run, `${run.tenantPath}/spaces/${space.id}/episodes/${episode.id}`);
   await save(`${run.directory}/episode.json`, episode);
   const policy = episode.config_snapshot.artifact_policy;
-  check(
-    policy.transcription.mode === "on_demand",
-    "Episode effective transcription policy is not on_demand",
-  );
-  check(
-    policy.recording.mode === "manual",
-    "Episode effective Recording policy is not manual",
-  );
+  check(policy.transcription.mode === "on_demand", "Episode effective transcription policy is not on_demand");
+  check(policy.recording.mode === "manual", "Episode effective Recording policy is not manual");
   return { episode, ...ending };
 }
 async function startCapture(run, pages) {
-  const started = await pages[0].evaluate(() =>
-    window.proofClient.recording.start(),
-  );
+  const started = await pages[0].evaluate(() => window.proofClient.recording.start());
   check(started.recordingId, "Recording start returned no Recording");
   run.recordingId = started.recordingId;
   await save(`${run.directory}/recording-start.json`, started);
@@ -138,15 +87,10 @@ async function startCapture(run, pages) {
   await waitFor(
     "Capture ready",
     async () => {
-      const current = await pages[0].evaluate(
-        () => window.proofClient.getSnapshot().recording.current,
-      );
+      const current = await pages[0].evaluate(() => window.proofClient.getSnapshot().recording.current);
       if (!current) return false;
       check(current.status !== "failed", "Capture failed before readiness");
-      return (
-        current.recordingId === run.recordingId &&
-        current.status === "recording"
-      );
+      return current.recordingId === run.recordingId && current.status === "recording";
     },
     900_000,
     3000,
@@ -197,29 +141,15 @@ async function forceSwitch(run, pages, sample, receiveBefore) {
 }
 export function checkShareProgress(before, after) {
   const screens = after.filter((row) => row.source === "screen");
-  const advancing = screens.some((row) =>
-    before.some(
-      (previous) =>
-        previous.id === row.id &&
-        previous.connection === row.connection &&
-        row.framesDecoded - previous.framesDecoded >= 2,
-    ),
-  );
-  check(
-    advancing,
-    "Screen-share decoding stalled during a ten-second observation window",
-  );
+  const advancing = screens.some((row) => before.some((previous) => previous.id === row.id && previous.connection === row.connection && row.framesDecoded - previous.framesDecoded >= 2));
+  check(advancing, "Screen-share decoding stalled during a ten-second observation window");
 }
 async function monitorShare(run, sample) {
   let before = await waitFor(
     "screen-share decoded frames",
     async () => {
       const value = await sample("share-ready");
-      return value[1].some(
-        (row) => row.source === "screen" && row.framesDecoded > 0,
-      )
-        ? value
-        : false;
+      return value[1].some((row) => row.source === "screen" && row.framesDecoded > 0) ? value : false;
     },
     30_000,
     1000,
@@ -238,15 +168,8 @@ async function cameraShareWindow(run, pages, sample, origin, forceLayerSwitch) {
   const share = await pages[0].context().newPage();
   await share.goto(`${origin}/share`);
   await pages[0].bringToFront();
-  await pages[0].evaluate(() =>
-    window.proofClient.media.setScreenShareEnabled(true),
-  );
-  await waitFor("screen share enabled", () =>
-    pages[0].evaluate(
-      () =>
-        window.proofClient.getSnapshot().media.screenShare.state === "enabled",
-    ),
-  );
+  await pages[0].evaluate(() => window.proofClient.media.setScreenShareEnabled(true));
+  await waitFor("screen share enabled", () => pages[0].evaluate(() => window.proofClient.getSnapshot().media.screenShare.state === "enabled"));
   console.log("Screen share enabled; holding for two minutes");
   // Collect continuous receiving evidence independently of the camera limit.
   const monitor = monitorShare(run, sample).then(
@@ -259,9 +182,7 @@ async function cameraShareWindow(run, pages, sample, origin, forceLayerSwitch) {
   if (forceLayerSwitch) failure = await forceSwitch(run, pages, sample, before);
   const observed = await monitor;
   if (observed.error) throw observed.error;
-  await pages[0].evaluate(() =>
-    window.proofClient.media.setScreenShareEnabled(false),
-  );
+  await pages[0].evaluate(() => window.proofClient.media.setScreenShareEnabled(false));
   await share.close();
   return { seconds: observed.seconds, failure };
 }
@@ -269,25 +190,16 @@ async function finalizedSource(run) {
   const recording = await waitFor(
     "Recording source",
     async () => {
-      const value = await run.apiRequest(
-        "GET",
-        `${run.tenantPath}/recordings/${run.recordingId}`,
-      );
+      const value = await run.apiRequest("GET", `${run.tenantPath}/recordings/${run.recordingId}`);
       await save(`${run.directory}/recording.json`, value);
-      check(
-        !["failed", "expired"].includes(value.source.status),
-        `Recording source ${value.source.status}`,
-      );
+      check(!["failed", "expired"].includes(value.source.status), `Recording source ${value.source.status}`);
       return value.source.status === "available" ? value : false;
     },
     900_000,
     5000,
     run.signal,
   );
-  check(
-    recording.transcription_policy === "on_demand",
-    "Recording effective transcription policy is disabled",
-  );
+  check(recording.transcription_policy === "on_demand", "Recording effective transcription policy is disabled");
   return recording;
 }
 function cameraResult(share, baselineError, forceLayerSwitch) {
@@ -301,36 +213,18 @@ function cameraResult(share, baselineError, forceLayerSwitch) {
   if (error) result.error = error;
   return result;
 }
-export async function recordProof(
-  run,
-  receiver,
-  cameraShare,
-  forceLayerSwitch,
-) {
+export async function recordProof(run, receiver, cameraShare, forceLayerSwitch) {
   const space = await createSpace(run);
   const { episode, end, useSDK } = await createEpisode(run, space);
   run.episodeId = episode.id;
   console.log("Joining two synthetic camera/voice guests");
-  const pages = await launchGuests(
-    run,
-    space,
-    episode,
-    await generateVoice(run.directory, run.signal),
-    receiver.origin,
-  );
+  const pages = await launchGuests(run, space, episode, await generateVoice(run.directory, run.signal), receiver.origin);
   useSDK(pages[0]);
   await startCapture(run, pages);
   const sample = statsSampler(run, pages);
   const baselineError = await baselineLayers(run, sample);
   let share = { seconds: 0 };
-  if (cameraShare)
-    share = await cameraShareWindow(
-      run,
-      pages,
-      sample,
-      receiver.origin,
-      forceLayerSwitch,
-    );
+  if (cameraShare) share = await cameraShareWindow(run, pages, sample, receiver.origin, forceLayerSwitch);
   else await run.wait(5000);
   // End the active Episode once; its lifecycle stops Capture and finalizes the Recording.
   console.log("Ending own Episode and its active Recording");
@@ -344,32 +238,21 @@ export async function recordProof(
 }
 export function contactSheetFont(fonts, platform = process.platform) {
   // macOS ImageMagick can have no registered fonts despite system fonts existing.
-  if (platform === "darwin" && !fonts.trim())
-    return "/System/Library/Fonts/Supplemental/Arial.ttf";
+  if (platform === "darwin" && !fonts.trim()) return "/System/Library/Fonts/Supplemental/Arial.ttf";
   const font = fonts.match(/^\s*Font:\s*(\S.*)$/m)?.[1].trim();
   check(font, "ImageMagick has no installed font for the contact sheet");
   return font;
 }
 export async function exportProof(run, execute = command) {
   const started = Date.now();
-  await run.apiRequest(
-    "POST",
-    `${run.tenantPath}/recordings/${run.recordingId}/export`,
-    {},
-  );
+  await run.apiRequest("POST", `${run.tenantPath}/recordings/${run.recordingId}/export`, {});
   console.log("Export requested");
   await waitFor(
     "Export completion",
     async () => {
-      const value = await run.apiRequest(
-        "GET",
-        `${run.tenantPath}/recordings/${run.recordingId}`,
-      );
+      const value = await run.apiRequest("GET", `${run.tenantPath}/recordings/${run.recordingId}`);
       await save(`${run.directory}/export-state.json`, value);
-      check(
-        !["failed", "unavailable"].includes(value.export.status),
-        `Export ${value.export.status}: ${value.export.failure_code ?? "unknown"}`,
-      );
+      check(!["failed", "unavailable"].includes(value.export.status), `Export ${value.export.status}: ${value.export.failure_code ?? "unknown"}`);
       return value.export.status === "ready";
     },
     1200_000,
@@ -378,41 +261,19 @@ export async function exportProof(run, execute = command) {
   );
   const wallSeconds = (Date.now() - started) / 1000;
   // Download immediately; one minute stays below the API artifact URL cap.
-  const download = await run.apiRequest(
-    "POST",
-    `${run.tenantPath}/recordings/${run.recordingId}/download-url`,
-    { expires_in_seconds: 60 },
-  );
+  const download = await run.apiRequest("POST", `${run.tenantPath}/recordings/${run.recordingId}/download-url`, { expires_in_seconds: 60 });
   const response = await fetch(download.url, {
     headers: download.signed_headers ?? {},
     signal: AbortSignal.timeout(120_000),
   });
   check(response.ok, `MP4 download failed: HTTP ${response.status}`);
   const bytes = Buffer.from(await response.arrayBuffer());
-  check(
-    bytes.length > 1024 && bytes.subarray(4, 8).toString() === "ftyp",
-    "Download is not an MP4",
-  );
+  check(bytes.length > 1024 && bytes.subarray(4, 8).toString() === "ftyp", "Download is not an MP4");
   const mp4 = `${run.directory}/export.mp4`;
   await writeFile(mp4, bytes, { mode: 0o600 });
-  const probe = JSON.parse(
-    await execute("ffprobe", [
-      "-v",
-      "error",
-      "-show_streams",
-      "-show_format",
-      "-of",
-      "json",
-      mp4,
-    ]),
-  );
+  const probe = JSON.parse(await execute("ffprobe", ["-v", "error", "-show_streams", "-show_format", "-of", "json", mp4]));
   check(
-    probe.streams.some(
-      (stream) =>
-        stream.codec_type === "video" &&
-        stream.width >= 640 &&
-        stream.height >= 360,
-    ),
+    probe.streams.some((stream) => stream.codec_type === "video" && stream.width >= 640 && stream.height >= 360),
     "Export has no usable video",
   );
   check(
@@ -424,35 +285,11 @@ export async function exportProof(run, execute = command) {
   const frames = [];
   for (let index = 0; index < 4; index++) {
     const frame = `${run.directory}/frame-${index + 1}.png`;
-    await execute("ffmpeg", [
-      "-hide_banner",
-      "-loglevel",
-      "error",
-      "-y",
-      "-ss",
-      String((duration * (index + 0.5)) / 4),
-      "-i",
-      mp4,
-      "-frames:v",
-      "1",
-      "-vf",
-      "scale=1000:-1",
-      frame,
-    ]);
+    await execute("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-ss", String((duration * (index + 0.5)) / 4), "-i", mp4, "-frames:v", "1", "-vf", "scale=1000:-1", frame]);
     frames.push(frame);
   }
   const font = contactSheetFont(await execute("magick", ["-list", "font"]));
-  await execute("magick", [
-    "montage",
-    "-font",
-    font,
-    ...frames,
-    "-tile",
-    "2x2",
-    "-geometry",
-    "+16+16",
-    `${run.directory}/contact-sheet.png`,
-  ]);
+  await execute("magick", ["montage", "-font", font, ...frames, "-tile", "2x2", "-geometry", "+16+16", `${run.directory}/contact-sheet.png`]);
   await save(`${run.directory}/ffprobe.json`, probe);
   const result = {
     wallSeconds,
@@ -477,51 +314,32 @@ export async function transcriptProof(run) {
   await waitFor(
     "Transcript audio preparation",
     async () => {
-      const state = await run.apiRequest(
-        "GET",
-        `${run.tenantPath}/recordings/${run.recordingId}`,
-      );
+      const state = await run.apiRequest("GET", `${run.tenantPath}/recordings/${run.recordingId}`);
       await save(`${run.directory}/transcription-preparation.json`, state);
       const status = state.transcription_preparation.status;
-      check(
-        !["failed", "expired", "none"].includes(status),
-        `Transcript audio preparation ${status}`,
-      );
+      check(!["failed", "expired", "none"].includes(status), `Transcript audio preparation ${status}`);
       return status === "ready";
     },
     1200_000,
     5000,
     run.signal,
   );
-  const result = await run.apiRequest(
-    "POST",
-    `${run.tenantPath}/recordings/${run.recordingId}/transcripts`,
-    { idempotency_key: randomUUID(), language: "en" },
-  );
+  const result = await run.apiRequest("POST", `${run.tenantPath}/recordings/${run.recordingId}/transcripts`, { idempotency_key: randomUUID(), language: "en" });
   const transcript = result.transcript;
   console.log("Transcript requested");
   await waitFor(
     "Transcript completion",
     async () => {
-      const state = await run.apiRequest(
-        "GET",
-        `${run.tenantPath}/transcripts/${transcript.id}`,
-      );
+      const state = await run.apiRequest("GET", `${run.tenantPath}/transcripts/${transcript.id}`);
       await save(`${run.directory}/transcript-state.json`, state);
-      check(
-        !["failed", "deleted", "expired"].includes(state.status),
-        `Transcript ${state.status}`,
-      );
+      check(!["failed", "deleted", "expired"].includes(state.status), `Transcript ${state.status}`);
       return state.status === "complete";
     },
     1200_000,
     5000,
     run.signal,
   );
-  const document = await run.apiRequest(
-    "GET",
-    `${run.tenantPath}/transcripts/${transcript.id}/document`,
-  );
+  const document = await run.apiRequest("GET", `${run.tenantPath}/transcripts/${transcript.id}/document`);
   await save(`${run.directory}/transcript-document.json`, document);
   const text = document.cues
     .map((cue) => cue.text)
@@ -529,17 +347,8 @@ export async function transcriptProof(run) {
     .toLowerCase()
     .replace(/[^a-z\s]/g, " ")
     .replace(/\s+/g, " ");
-  const phrases = [
-    "purple lantern",
-    "quiet river",
-    "screen sharing",
-    "transcription",
-  ];
-  for (const phrase of phrases)
-    check(
-      text.includes(phrase),
-      `Spoken words missing from Transcript: ${phrase}`,
-    );
+  const phrases = ["purple lantern", "quiet river", "screen sharing", "transcription"];
+  for (const phrase of phrases) check(text.includes(phrase), `Spoken words missing from Transcript: ${phrase}`);
   return {
     wallSeconds: (Date.now() - started) / 1000,
     phrases,

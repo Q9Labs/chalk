@@ -75,9 +75,7 @@ test("cleanup uses persisted IDs, revokes first and is repeatable after abort", 
     }),
     [`GET ${base}/spaces/space`]: () => ({ archived }),
     [`GET ${base}/transcripts`]: () => ({
-      transcripts: [
-        { id: "transcript", space_id: "space", status: state.transcriptStatus },
-      ],
+      transcripts: [{ id: "transcript", space_id: "space", status: state.transcriptStatus }],
       pagination: {},
     }),
     [`GET ${base}/webhook-endpoints`]: () => ({
@@ -135,19 +133,13 @@ test("cleanup uses persisted IDs, revokes first and is repeatable after abort", 
   );
   run.apiKey = "temporary";
   await cleanupRun(run);
-  assert.equal(
-    calls.find(([method]) => method !== "GET")[1],
-    "/v1/tenants/tenant/api-keys/key",
-  );
+  assert.equal(calls.find(([method]) => method !== "GET")[1], "/v1/tenants/tenant/api-keys/key");
   assert.ok(revoked);
   assert.ok(ended);
   assert.ok(archived);
   assert.ok(deleted);
   assert.ok(webhookDeleted);
-  assert.deepEqual(
-    JSON.parse(await readFile(`${directory}/key-rejection.json`)),
-    { status: 401 },
-  );
+  assert.deepEqual(JSON.parse(await readFile(`${directory}/key-rejection.json`)), { status: 401 });
   await cleanupByRunId(config, runId, directory);
 });
 
@@ -188,18 +180,14 @@ test("sweep uses only Spaces and Episodes, follows pagination and preserves fres
           pagination: {},
         }),
       );
-    } else if (path.endsWith("/ep"))
-      res.end(JSON.stringify({ status: "ended" }));
+    } else if (path.endsWith("/ep")) res.end(JSON.stringify({ status: "ended" }));
     else if (path.endsWith("/old")) res.end(JSON.stringify({ archived: true }));
     else {
       res.writeHead(403).end("{}");
     }
   });
   await sweepStaleRuns(config);
-  assert.deepEqual(changed, [
-    "/v1/tenants/tenant/spaces/old/episodes/ep/end",
-    "/v1/tenants/tenant/spaces/old/archive",
-  ]);
+  assert.deepEqual(changed, ["/v1/tenants/tenant/spaces/old/episodes/ep/end", "/v1/tenants/tenant/spaces/old/archive"]);
 });
 
 test("malformed HTTP and thrown browser errors remain private in real proof reporting", async (t) => {
@@ -213,9 +201,7 @@ test("malformed HTTP and thrown browser errors remain private in real proof repo
   console.error = (line) => output.push(line);
   t.after(() => Object.assign(console, original));
   const report = { proofs: {} };
-  await recordResult({ directory }, report, "export", () =>
-    request(config, "GET", "/malformed"),
-  );
+  await recordResult({ directory }, report, "export", () => request(config, "GET", "/malformed"));
   await recordResult({ directory }, report, "camera-share", async () => {
     throw new Error(`page.evaluate: ${marker}`);
   });
@@ -225,10 +211,7 @@ test("malformed HTTP and thrown browser errors remain private in real proof repo
   );
   assert.ok(output.includes("PROOF export: failed (SyntaxError)"));
   assert.ok(output.includes("PROOF camera-share: failed (Error)"));
-  assert.match(
-    await readFile(`${directory}/report.json`, "utf8"),
-    /page.evaluate: private-credential/,
-  );
+  assert.match(await readFile(`${directory}/report.json`, "utf8"), /page.evaluate: private-credential/);
 });
 
 test("sweep skips fully cleaned retained history without per-run reads", async (t) => {
@@ -262,14 +245,9 @@ test("sweep skips fully cleaned retained history without per-run reads", async (
 });
 
 test("sweep failures preserve the private HTTP cause", async (t) => {
-  const config = await fixture(t, (_req, res) =>
-    res.writeHead(403).end(JSON.stringify({ error: { code: "private-code" } })),
-  );
+  const config = await fixture(t, (_req, res) => res.writeHead(403).end(JSON.stringify({ error: { code: "private-code" } })));
   await assert.rejects(sweepStaleRuns(config), (error) => {
-    assert.match(
-      JSON.stringify(errorEvidence(error)),
-      /HTTP 403, private-code/,
-    );
+    assert.match(JSON.stringify(errorEvidence(error)), /HTTP 403, private-code/);
     return true;
   });
 });

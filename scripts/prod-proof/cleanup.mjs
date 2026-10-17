@@ -8,16 +8,7 @@ export function runLabel(runId) {
 }
 function cleanupClient(config) {
   // Never inherit the proof's aborted signal. Every HTTP operation has a deadline.
-  return (method, path, body, headers) =>
-    request(
-      config,
-      method,
-      path,
-      body,
-      { Authorization: `Bearer ${config.api_key}` },
-      headers,
-      AbortSignal.timeout(15_000),
-    );
+  return (method, path, body, headers) => request(config, method, path, body, { Authorization: `Bearer ${config.api_key}` }, headers, AbortSignal.timeout(15_000));
 }
 async function list(call, path, field) {
   const values = [];
@@ -31,11 +22,7 @@ async function list(call, path, field) {
   } while (cursor);
   return values;
 }
-export async function cleanupByRunId(
-  config,
-  runId,
-  directory = resolve(".private", "prod-proof", runId),
-) {
+export async function cleanupByRunId(config, runId, directory = resolve(".private", "prod-proof", runId)) {
   const label = runLabel(runId);
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const call = cleanupClient(config);
@@ -61,58 +48,31 @@ export async function cleanupByRunId(
   };
   const known = await readOwnership(directory);
   // Persisted IDs avoid requiring inventory scopes on the bootstrap key.
-  if (known.keyId)
-    await attempt("api-key", known.keyId, () =>
-      call("DELETE", `${base}/api-keys/${known.keyId}`),
-    );
+  if (known.keyId) await attempt("api-key", known.keyId, () => call("DELETE", `${base}/api-keys/${known.keyId}`));
   await attempt("spaces", runId, async () => {
-    const spaces = (await list(call, `${base}/spaces`, "spaces")).filter(
-      (space) => space.name === label && space.metadata?.proof_run_id === runId,
-    );
+    const spaces = (await list(call, `${base}/spaces`, "spaces")).filter((space) => space.name === label && space.metadata?.proof_run_id === runId);
     for (const space of spaces) {
       const before = failures.length;
       await attempt("episodes", space.id, async () => {
         const path = `${base}/spaces/${space.id}/episodes`;
         const episodes = await list(call, path, "episodes");
-        for (const episode of episodes.filter(
-          (episode) => episode.metadata?.proof_run_id === runId,
-        )) {
+        for (const episode of episodes.filter((episode) => episode.metadata?.proof_run_id === runId)) {
           await attempt("episode", episode.id, async () => {
-            if (episode.status !== "ended")
-              await call("POST", `${path}/${episode.id}/end`, {});
-            await waitFor(
-              "cleanup Episode ended",
-              async () =>
-                (await call("GET", `${path}/${episode.id}`)).status === "ended",
-              60_000,
-              1000,
-              AbortSignal.timeout(60_000),
-            );
+            if (episode.status !== "ended") await call("POST", `${path}/${episode.id}/end`, {});
+            await waitFor("cleanup Episode ended", async () => (await call("GET", `${path}/${episode.id}`)).status === "ended", 60_000, 1000, AbortSignal.timeout(60_000));
           });
         }
       });
       await attempt("transcripts", space.id, async () => {
-        const transcripts = await list(
-          call,
-          `${base}/transcripts`,
-          "transcripts",
-        );
-        for (const transcript of transcripts.filter(
-          (entry) => entry.space_id === space.id && entry.status !== "deleted",
-        )) {
-          await attempt("transcript", transcript.id, () =>
-            call("DELETE", `${base}/transcripts/${transcript.id}`),
-          );
+        const transcripts = await list(call, `${base}/transcripts`, "transcripts");
+        for (const transcript of transcripts.filter((entry) => entry.space_id === space.id && entry.status !== "deleted")) {
+          await attempt("transcript", transcript.id, () => call("DELETE", `${base}/transcripts/${transcript.id}`));
         }
       });
       if (failures.length === before) {
         await attempt("space", space.id, async () => {
-          if (!space.archived)
-            await call("POST", `${base}/spaces/${space.id}/archive`, {});
-          check(
-            (await call("GET", `${base}/spaces/${space.id}`)).archived,
-            "Space not archived",
-          );
+          if (!space.archived) await call("POST", `${base}/spaces/${space.id}/archive`, {});
+          check((await call("GET", `${base}/spaces/${space.id}`)).archived, "Space not archived");
         });
       }
     }
@@ -120,10 +80,7 @@ export async function cleanupByRunId(
   if (known.webhook) {
     const { id, revision, catcherId } = known.webhook;
     await attempt("webhook-catcher", catcherId, async () => {
-      const response = await fetch(
-        new URL(`/token/${catcherId}`, config.webhook_service_url),
-        { method: "DELETE", signal: AbortSignal.timeout(15_000) },
-      );
+      const response = await fetch(new URL(`/token/${catcherId}`, config.webhook_service_url), { method: "DELETE", signal: AbortSignal.timeout(15_000) });
       await response.body?.cancel();
       check(response.ok || response.status === 404, "Catcher deletion failed");
     });
@@ -134,8 +91,7 @@ export async function cleanupByRunId(
     );
   }
   if (directory) await save(`${directory}/remote-cleanup.json`, results);
-  if (failures.length)
-    throw new AggregateError(failures, "Remote cleanup failed");
+  if (failures.length) throw new AggregateError(failures, "Remote cleanup failed");
   return results;
 }
 async function readOwnership(directory) {
@@ -152,36 +108,20 @@ export async function sweepStaleRuns(config, now = Date.now()) {
   const spaces = await list(call, `${base}/spaces`, "spaces");
   for (const space of spaces) {
     const runId = space.metadata?.proof_run_id;
-    if (space.archived || !runId || space.name !== `chalk-proof:${runId}`)
-      continue;
+    if (space.archived || !runId || space.name !== `chalk-proof:${runId}`) continue;
     runLabel(runId);
     const path = `${base}/spaces/${space.id}/episodes`;
     const episodes = await list(call, path, "episodes");
-    const owned = episodes.filter(
-      (episode) => episode.metadata?.proof_run_id === runId,
-    );
-    const stale = owned.filter(
-      (episode) => Date.parse(episode.created_at) < now - 2 * 3600_000,
-    );
+    const owned = episodes.filter((episode) => episode.metadata?.proof_run_id === runId);
+    const stale = owned.filter((episode) => Date.parse(episode.created_at) < now - 2 * 3600_000);
     for (const episode of stale) {
-      if (episode.status !== "ended")
-        await call("POST", `${path}/${episode.id}/end`, {});
-      await waitFor(
-        "stale Episode ended",
-        async () =>
-          (await call("GET", `${path}/${episode.id}`)).status === "ended",
-        60_000,
-        1000,
-        AbortSignal.timeout(60_000),
-      );
+      if (episode.status !== "ended") await call("POST", `${path}/${episode.id}/end`, {});
+      await waitFor("stale Episode ended", async () => (await call("GET", `${path}/${episode.id}`)).status === "ended", 60_000, 1000, AbortSignal.timeout(60_000));
     }
     // Never archive a Space with a fresh or foreign Episode.
     if (!stale.length || stale.length !== episodes.length) continue;
     await call("POST", `${base}/spaces/${space.id}/archive`, {});
-    check(
-      (await call("GET", `${base}/spaces/${space.id}`)).archived,
-      "Stale Space not archived",
-    );
+    check((await call("GET", `${base}/spaces/${space.id}`)).archived, "Stale Space not archived");
   }
 }
 
@@ -191,10 +131,7 @@ async function disposeResource(run, resource) {
     await Promise.race([
       resource.dispose(),
       new Promise((_, reject) => {
-        timer = setTimeout(
-          () => reject(new Error("Local cleanup timed out")),
-          15_000,
-        );
+        timer = setTimeout(() => reject(new Error("Local cleanup timed out")), 15_000);
       }),
     ]);
     run.cleanup.push({ kind: resource.kind, result: "passed" });
@@ -215,25 +152,17 @@ export async function cleanupRun(run) {
     failures.push(error);
   }
   // Remote ownership cleanup is independent of browsers and the aborted proof signal.
-  for (const resource of [...run.resources].reverse())
-    failures.push(...(await disposeResource(run, resource)));
+  for (const resource of [...run.resources].reverse()) failures.push(...(await disposeResource(run, resource)));
   await save(`${run.directory}/cleanup.json`, run.cleanup);
-  if (failures.length)
-    throw new AggregateError(
-      failures,
-      "Run cleanup failed; see private evidence",
-    );
+  if (failures.length) throw new AggregateError(failures, "Run cleanup failed; see private evidence");
 }
 
 async function verifyKeyRejected(run) {
   if (!run.apiKey) return;
-  const response = await fetch(
-    new URL(`${run.tenantPath}/spaces`, run.config.api_url),
-    {
-      headers: { Authorization: `Bearer ${run.apiKey}` },
-      signal: AbortSignal.timeout(15_000),
-    },
-  );
+  const response = await fetch(new URL(`${run.tenantPath}/spaces`, run.config.api_url), {
+    headers: { Authorization: `Bearer ${run.apiKey}` },
+    signal: AbortSignal.timeout(15_000),
+  });
   await response.body?.cancel();
   check(response.status === 401, "Revoked proof key was still accepted");
   await save(`${run.directory}/key-rejection.json`, {
