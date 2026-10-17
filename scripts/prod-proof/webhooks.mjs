@@ -10,10 +10,7 @@ const { build } = createRequire(new URL("../../sdks/typescript/client/package.js
 export async function proofServer(run) {
   const origin = new URL(run.config.proof_origin);
   check(origin.protocol === "http:" && ["127.0.0.1", "localhost"].includes(origin.hostname) && Number(origin.port) > 0, "proof_origin must be an HTTP loopback origin with an explicit port");
-  const pages = {
-    "/": "<!doctype html><title>Chalk production proof</title>",
-    "/share": shareHTML,
-  };
+  const pages = { "/": "<!doctype html><title>Chalk production proof</title>", "/share": shareHTML };
   const server = createServer((request, response) => {
     if (request.method !== "GET" || !Object.hasOwn(pages, request.url)) {
       response.writeHead(404).end();
@@ -58,11 +55,7 @@ async function collectEvents(run, receiver, token, endpoint, verifyWebhook, sign
     if (seen.has(message.uuid)) continue;
     check(message.size <= 262_144, "Webhook exceeded body limit");
     const raw = await catcherRequest(base, `/token/${token.uuid}/request/${message.uuid}/raw`, "GET", undefined, signal);
-    const event = await verifyWebhook({
-      rawBody: new Uint8Array(await raw.arrayBuffer()),
-      headers: originalHeaders(message.headers),
-      secrets: [endpoint.secret],
-    });
+    const event = await verifyWebhook({ rawBody: new Uint8Array(await raw.arrayBuffer()), headers: originalHeaders(message.headers), secrets: [endpoint.secret] });
     check(event.tenant_id === run.config.tenant_id, "Webhook Tenant does not match this run");
     receiver.events.set(event.id, event);
     seen.add(message.uuid);
@@ -72,11 +65,7 @@ async function collectEvents(run, receiver, token, endpoint, verifyWebhook, sign
 function saveEvents(run, receiver) {
   return save(
     `${run.directory}/signed-webhooks.json`,
-    [...receiver.events.values()].map((event) => ({
-      event: event.event,
-      objectId: event.data.object.id,
-      verified: true,
-    })),
+    [...receiver.events.values()].map((event) => ({ event: event.event, objectId: event.data.object.id, verified: true })),
   );
 }
 function startCollector(run, receiver, collect) {
@@ -117,21 +106,10 @@ export async function exposeWebhook(run, receiver) {
     await catcherRequest(base, `/token/${token.uuid}`, "DELETE");
     throw error;
   }
-  run.ownership.webhook = {
-    id: endpoint.id,
-    revision: endpoint.revision,
-    catcherId: token.uuid,
-  };
+  run.ownership.webhook = { id: endpoint.id, revision: endpoint.revision, catcherId: token.uuid };
   await save(`${run.directory}/ownership.json`, run.ownership);
   const path = `${run.directory}/sdk-webhooks.mjs`;
-  await build({
-    logLevel: "silent",
-    entryPoints: [new URL("../../sdks/typescript/client/src/webhooks/index.ts", import.meta.url).pathname],
-    bundle: true,
-    outfile: path,
-    format: "esm",
-    platform: "node",
-  });
+  await build({ logLevel: "silent", entryPoints: [new URL("../../sdks/typescript/client/src/webhooks/index.ts", import.meta.url).pathname], bundle: true, outfile: path, format: "esm", platform: "node" });
   const { verifyWebhook } = await import(pathToFileURL(path).href);
   const seen = new Set();
   startCollector(run, receiver, (signal) => collectEvents(run, receiver, token, endpoint, verifyWebhook, signal, seen));
@@ -145,9 +123,5 @@ export async function proveWebhookEvents(receiver, expected) {
     },
     180_000,
   );
-  return [...receiver.events.values()].map((event) => ({
-    event: event.event,
-    objectId: event.data.object.id,
-    verified: true,
-  }));
+  return [...receiver.events.values()].map((event) => ({ event: event.event, objectId: event.data.object.id, verified: true }));
 }

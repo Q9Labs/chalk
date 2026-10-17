@@ -204,12 +204,7 @@ async function finalizedSource(run) {
 }
 function cameraResult(share, baselineError, forceLayerSwitch) {
   const error = baselineError ?? share.failure;
-  const result = {
-    guests: 2,
-    simulcast: !baselineError,
-    shareSeconds: share.seconds,
-    forcedLayerSwitch: forceLayerSwitch && !error,
-  };
+  const result = { guests: 2, simulcast: !baselineError, shareSeconds: share.seconds, forcedLayerSwitch: forceLayerSwitch && !error };
   if (error) result.error = error;
   return result;
 }
@@ -231,10 +226,7 @@ export async function recordProof(run, receiver, cameraShare, forceLayerSwitch) 
   await end();
   const recording = await finalizedSource(run);
   for (const page of pages) await page.context().close();
-  return {
-    recording,
-    camera: cameraResult(share, baselineError, forceLayerSwitch),
-  };
+  return { recording, camera: cameraResult(share, baselineError, forceLayerSwitch) };
 }
 export function contactSheetFont(fonts, platform = process.platform) {
   // macOS ImageMagick can have no registered fonts despite system fonts existing.
@@ -262,10 +254,7 @@ export async function exportProof(run, execute = command) {
   const wallSeconds = (Date.now() - started) / 1000;
   // Download immediately; one minute stays below the API artifact URL cap.
   const download = await run.apiRequest("POST", `${run.tenantPath}/recordings/${run.recordingId}/download-url`, { expires_in_seconds: 60 });
-  const response = await fetch(download.url, {
-    headers: download.signed_headers ?? {},
-    signal: AbortSignal.timeout(120_000),
-  });
+  const response = await fetch(download.url, { headers: download.signed_headers ?? {}, signal: AbortSignal.timeout(120_000) });
   check(response.ok, `MP4 download failed: HTTP ${response.status}`);
   const bytes = Buffer.from(await response.arrayBuffer());
   check(bytes.length > 1024 && bytes.subarray(4, 8).toString() === "ftyp", "Download is not an MP4");
@@ -295,14 +284,7 @@ export async function exportProof(run, execute = command) {
     wallSeconds,
     durationSeconds: duration,
     bytes: bytes.length,
-    video: probe.streams
-      .filter((stream) => stream.codec_type === "video")
-      .map(({ codec_name, width, height, avg_frame_rate }) => ({
-        codec: codec_name,
-        width,
-        height,
-        frameRate: avg_frame_rate,
-      })),
+    video: probe.streams.filter((stream) => stream.codec_type === "video").map(({ codec_name, width, height, avg_frame_rate }) => ({ codec: codec_name, width, height, frameRate: avg_frame_rate })),
     audio: true,
     contactSheet: `${run.directory}/contact-sheet.png`,
   };
@@ -349,11 +331,7 @@ export async function transcriptProof(run) {
     .replace(/\s+/g, " ");
   const phrases = ["purple lantern", "quiet river", "screen sharing", "transcription"];
   for (const phrase of phrases) check(text.includes(phrase), `Spoken words missing from Transcript: ${phrase}`);
-  return {
-    wallSeconds: (Date.now() - started) / 1000,
-    phrases,
-    transcriptId: transcript.id,
-  };
+  return { wallSeconds: (Date.now() - started) / 1000, phrases, transcriptId: transcript.id };
 }
 export async function smokeProof(run, receiver) {
   const events = await proveWebhookEvents(receiver, [
@@ -363,12 +341,5 @@ export async function smokeProof(run, receiver) {
     { event: "recording.completed", objectId: run.recordingId },
   ]);
   await save(`${run.directory}/signed-webhooks.json`, events);
-  return {
-    apiKey: true,
-    space: true,
-    episode: true,
-    recording: true,
-    mp4Download: true,
-    signedEvents: events.map((event) => event.event),
-  };
+  return { apiKey: true, space: true, episode: true, recording: true, mp4Download: true, signedEvents: events.map((event) => event.event) };
 }
