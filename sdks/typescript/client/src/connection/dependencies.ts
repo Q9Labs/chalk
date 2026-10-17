@@ -1,6 +1,6 @@
 import type { ClientMediaPlane, CloudflareSFUBootstrap, ConnectionMediaSnapshot } from "../media";
 import type { ChalkChatFileTransport } from "../chat-files";
-import type { V1AdmissionPolicy, V1AssignableRole, V1CommandResult, V1EpisodeSnapshot, V1SelfMediaTargetResult } from "../sync";
+import type { V1AdmissionTarget, V1AssignableRole, V1CommandResult, V1EpisodeSnapshot, V1SelfMediaTargetResult } from "../sync";
 import type { V1CollaborationClient, V1DirectedRequest, V1DirectedRequestResult } from "../sync/v1-types";
 import type { ChalkWhiteboardSummary, ChalkWhiteboardV1ClientOptions, ChalkWhiteboardV1Transport } from "../whiteboard/types";
 import type { ParsedAccessGrant, ParticipantMediaAccess, ParticipantMediaCredential } from "../access/grant";
@@ -42,7 +42,7 @@ export type ConnectionSyncClient = V1CollaborationClient & {
   readonly setScreenShareEnabled: (enabled: boolean) => Promise<V1SelfMediaTargetResult>;
   readonly setHandRaised: (raised: boolean) => Promise<V1CommandResult>;
   readonly setDisplayName: (displayName: string) => Promise<V1CommandResult>;
-  readonly setAdmissionPolicy: (policy: V1AdmissionPolicy) => Promise<V1CommandResult>;
+  readonly setAdmissionPolicy: (policy: V1AdmissionTarget) => Promise<V1CommandResult>;
   readonly assignRole: (participantId: string, role: V1AssignableRole) => Promise<V1CommandResult>;
   readonly admit: (admissionRequestId: string) => Promise<V1CommandResult>;
   readonly deny: (admissionRequestId: string) => Promise<V1CommandResult>;

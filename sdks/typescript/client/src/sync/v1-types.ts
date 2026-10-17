@@ -1,4 +1,4 @@
-import type { SyncV1ServerFrame } from "../generated/sync";
+import type { SetAdmissionPolicyCommandFrame, SyncV1ServerFrame } from "../generated/sync";
 import type { ClientMediaPlane, MediaPlaneOutcome, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaSource } from "../media/plane";
 import type { ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
 import type { SyncClock, SyncIdGenerator, SyncLifecycle, SyncSocket, SyncWebSocketFactory } from "./types";
@@ -32,6 +32,7 @@ export type V1Capability = (typeof V1_CAPABILITIES)[number];
 export type V1Role = string;
 export type V1AssignableRole = string;
 export type V1AdmissionPolicy = "open" | "knock" | "members_only";
+export type V1AdmissionTarget = SetAdmissionPolicyCommandFrame["payload"]["policy"];
 export type V1MediaSource = MediaSource;
 export type V1ConnectionPhase = "idle" | "connecting" | "recovering" | "live" | "terminal" | "stopped";
 export type V1Participant = {
@@ -126,7 +127,7 @@ export type V1TargetCommand =
   | {
       readonly name: "set_admission_policy";
       readonly payload: {
-        readonly policy: V1AdmissionPolicy;
+        readonly policy: V1AdmissionTarget;
       };
     }
   | {

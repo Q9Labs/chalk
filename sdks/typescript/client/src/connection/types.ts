@@ -17,7 +17,7 @@ import type {
 } from "../collaboration/types";
 import type { ChalkChatFileTransport } from "../chat-files/types";
 import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../whiteboard/types";
-import type { V1Capability } from "../sync/v1-types";
+import type { V1AdmissionPolicy, V1AdmissionTarget, V1Capability } from "../sync/v1-types";
 
 export { ChalkWhiteboardV1Error } from "../whiteboard/types";
 export type {
@@ -143,7 +143,7 @@ export type ConnectionConnectionPhase = "idle" | "connecting" | "healthy" | "unr
 export type ChalkMediaSource = "microphone" | "camera" | "screen";
 export type ChalkParticipantRole = string;
 export type ChalkAssignableParticipantRole = string;
-export type ChalkAdmissionPolicy = "open" | "knock" | "members_only";
+export type ChalkAdmissionPolicy = V1AdmissionPolicy;
 
 export type ConnectionCapability = V1Capability;
 
@@ -215,7 +215,7 @@ export type ConnectionActions = {
   readonly stopScreenShare: () => Promise<void>;
   readonly setHandRaised: (raised: boolean) => Promise<void>;
   readonly setDisplayName: (displayName: string) => Promise<void>;
-  readonly setAdmissionPolicy: (policy: ChalkAdmissionPolicy) => Promise<void>;
+  readonly setAdmissionPolicy: (policy: V1AdmissionTarget) => Promise<void>;
   readonly assignRole: (participantId: string, role: ChalkAssignableParticipantRole) => Promise<void>;
   readonly admitParticipant: (admissionRequestId: string) => Promise<void>;
   readonly denyAdmission: (admissionRequestId: string) => Promise<void>;

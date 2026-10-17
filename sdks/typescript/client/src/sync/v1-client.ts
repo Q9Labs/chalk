@@ -11,7 +11,7 @@ import { V1LiveTargetCoordinator } from "./v1-live-target-coordinator";
 import { InMemoryV1PendingTargetStore } from "./v1-persistence";
 import { applyV1Event, optimisticV1Control, restoreV1Snapshot, V1ReplicaError } from "./v1-reducer";
 import type {
-  V1AdmissionPolicy,
+  V1AdmissionTarget,
   V1AssignableRole,
   V1CommandResult,
   V1ControlState,
@@ -234,7 +234,7 @@ export class V1SyncClient implements V1CollaborationClient {
   setDisplayName(displayName: string, options?: CommandOptions): Promise<V1CommandResult> {
     return this.#sendTarget({ name: "set_display_name", payload: { display_name: displayName } }, options);
   }
-  setAdmissionPolicy(policy: V1AdmissionPolicy, options?: CommandOptions): Promise<V1CommandResult> {
+  setAdmissionPolicy(policy: V1AdmissionTarget, options?: CommandOptions): Promise<V1CommandResult> {
     return this.#sendTarget({ name: "set_admission_policy", payload: { policy } }, options);
   }
   assignRole(participantId: string, role: V1AssignableRole, options?: CommandOptions): Promise<V1CommandResult> {
