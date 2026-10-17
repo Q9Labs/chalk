@@ -1,8 +1,8 @@
 # Production proofs
 
 `pnpm prod:proof` runs all release proofs, including a forced camera layer switch.
-It uses an existing Tenant API key from `CHALK_PROOF_API_KEY`. Reuse the permanent Tenant in the
-1Password `dev` vault, item **Chalk production proof Tenant**.
+It uses an existing Tenant API key from `CHALK_PROOF_API_KEY`. Reuse an operator-provisioned
+Tenant dedicated to release proofs.
 
 ```sh
 pnpm install --frozen-lockfile

@@ -6,15 +6,11 @@ import { check, command, request, save, waitFor } from "./runtime.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
 
 export async function prepareIntegration(run, webhooks) {
-  const key = await run.ownerRequest(
-    "POST",
-    `${run.tenantPath}/api-keys`,
-    {
-      name: "Production proof",
-      scopes: ["spaces:read", "spaces:write", "episodes:read", "episodes:write", "recordings:read", "transcriptions:read", "transcriptions:write"],
-      expires_at: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
-    },
-  );
+  const key = await run.ownerRequest("POST", `${run.tenantPath}/api-keys`, {
+    name: "Production proof",
+    scopes: ["spaces:read", "spaces:write", "episodes:read", "episodes:write", "recordings:read", "transcriptions:read", "transcriptions:write"],
+    expires_at: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+  });
   run.apiKey = key.secret;
   run.apiRequest = (method, path, body) => request(run.config, method, path, body, { Authorization: `Bearer ${run.apiKey}` }, {}, run.signal);
   run.resources.push({
