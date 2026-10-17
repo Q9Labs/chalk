@@ -60,6 +60,8 @@ jobs:
       CHALK_RELEASE_OBSERVER_DOCUMENT_VERSION: ${{ vars.CHALK_RELEASE_OBSERVER_DOCUMENT_VERSION }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: ./.github/actions/release-tools
       - uses: aws-actions/configure-aws-credentials@v4
         with:

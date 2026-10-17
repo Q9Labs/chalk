@@ -557,7 +557,7 @@ jobs:
     timeout-minutes: 60
     environment: ${{ inputs.managed_environment }}
     concurrency:
-      group: managed-host-${{ inputs.managed_environment }}
+      group: deploy-managed-${{ inputs.managed_environment }}
       cancel-in-progress: false
     permissions:
       contents: read

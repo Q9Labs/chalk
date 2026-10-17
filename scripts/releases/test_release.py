@@ -1,4 +1,5 @@
 """Offline release contracts: no provider credentials, builds, or deployments."""
+import base64
 import contextlib
 import io
 import json
@@ -13,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from github_release import SafeRedirect, cut_decision, held_candidates, newest_activation
+from observe import check_dispatcher, dispatcher_config_digest
 from release_set import canonical, digest, validate, validate_manifest
 from web import build, deploy, public_config, read_marker
 
@@ -140,6 +142,34 @@ class ReleaseSetTests(unittest.TestCase):
         value['backend']['components'] = parsed['component_releases']
         value['backend']['sha256'] = digest(data)
         validate_manifest(validate(value), data)
+
+
+class DispatcherIdentityTests(unittest.TestCase):
+    def function(self, release):
+        variables = {'CHALK_ENVIRONMENT': 'nightly', 'CHALK_RELEASE_ID': release, 'CONTROL_API_BASE_URL': 'https://api.example.test'}
+        variables['CHALK_CONFIG_DIGEST'] = 'sha256:' + digest(json.dumps(variables, sort_keys=True, separators=(',', ':')).encode())
+        return {'State': 'Active', 'LastUpdateStatus': 'Successful', 'CodeSha256': base64.b64encode(bytes.fromhex(HASH)).decode(),
+                'Handler': 'index.handler', 'Runtime': 'nodejs22.x', 'Environment': {'Variables': variables}}
+
+    def test_provider_prefix_and_binding_are_separate_from_immutable_config(self):
+        old = self.function('old-api-release')
+        new = self.function('new-api-release')
+        member = fixture()[0]['runtime']['nightly']['dispatcher']
+        member['config_sha256'] = dispatcher_config_digest(old['Environment']['Variables'])
+        self.assertEqual(member['config_sha256'], dispatcher_config_digest(new['Environment']['Variables']))
+        check_dispatcher(old, member)  # Preflight accepts a pending rebind.
+        check_dispatcher(new, member, 'new-api-release')
+        check_dispatcher(old, member, 'old-api-release')  # The same immutable member supports rollback.
+        with self.assertRaisesRegex(ValueError, 'binding'):
+            check_dispatcher(old, member, 'new-api-release')
+
+    def test_mutable_or_corrupt_config_still_fails(self):
+        function = self.function('old-api-release')
+        member = fixture()[0]['runtime']['nightly']['dispatcher']
+        member['config_sha256'] = dispatcher_config_digest(function['Environment']['Variables'])
+        function['Environment']['Variables']['CONTROL_API_BASE_URL'] = 'https://wrong.example.test'
+        with self.assertRaisesRegex(ValueError, 'fingerprint'):
+            check_dispatcher(function, member)
 
 
 class WebArchiveTests(unittest.TestCase):

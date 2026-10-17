@@ -73,3 +73,5 @@ for target in ('nightly', 'production'):
 PY
 # Check the CLI argument without uploading or creating a Pages project.
 pnpm exec wrangler pages deploy --help | grep -F -- '--bundle'
+# The root check also covers the new JavaScript handler's complexity and reachability.
+pnpm exec fallow audit

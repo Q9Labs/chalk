@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 
 from github_release import outputs
-from release_set import require, validate
+from release_set import digest, require, validate
 from web import verify
 
 
@@ -30,7 +30,26 @@ def values(text):
     return dict(line.split("=", 1) for line in text.splitlines() if line and not line.startswith("#"))
 
 
-def runtime_check(release_set, target):
+def dispatcher_config_digest(variables):
+    # Binding changes for every API release; it is not immutable configuration.
+    stable = {key: value for key, value in variables.items() if key not in ("CHALK_RELEASE_ID", "CHALK_CONFIG_DIGEST")}
+    return digest(json.dumps(stable, sort_keys=True, separators=(",", ":")).encode())
+
+
+def check_dispatcher(function, member, release_id=None):
+    require(function["State"] == "Active" and function["LastUpdateStatus"] == "Successful", "dispatcher not healthy")
+    require(function["CodeSha256"] == base64.b64encode(bytes.fromhex(member["zip_sha256"])).decode(), "dispatcher code differs")
+    require(function["Handler"] == member["handler"] and function["Runtime"] == member["runtime"], "dispatcher runtime differs")
+    variables = function["Environment"]["Variables"]
+    provider_config = {key: value for key, value in variables.items() if key != "CHALK_CONFIG_DIGEST"}
+    provider_digest = "sha256:" + digest(json.dumps(provider_config, sort_keys=True, separators=(",", ":")).encode())
+    require(variables.get("CHALK_CONFIG_DIGEST") == provider_digest, "dispatcher provider config fingerprint differs")
+    require(dispatcher_config_digest(variables) == member["config_sha256"], "dispatcher immutable config differs")
+    if release_id is not None:
+        require(variables.get("CHALK_RELEASE_ID") == release_id, "dispatcher API binding differs")
+
+
+def runtime_check(release_set, target, require_binding=True):
     prefix = os.environ["CHALK_MANAGED_PARAMETER_PREFIX"]
     require(prefix == f"/chalk/{target}/managed-episode", "runtime prefix does not match environment")
     expected = release_set["runtime"][target]
@@ -56,9 +75,7 @@ def runtime_check(release_set, target):
                 for member in (expected["capture"], expected["render"])), "worker bootstrap authority differs")
     function = aws("lambda", "get-function-configuration", "--function-name", config["dispatcher"]["function_name"])
     dispatcher = expected["dispatcher"]
-    require(function["CodeSha256"] == base64.b64encode(bytes.fromhex(dispatcher["zip_sha256"])).decode(), "dispatcher code differs")
-    require(function["Handler"] == dispatcher["handler"] and function["Runtime"] == dispatcher["runtime"], "dispatcher runtime differs")
-    require(function["Environment"]["Variables"].get("CHALK_CONFIG_DIGEST") == dispatcher["config_sha256"], "dispatcher config differs")
+    check_dispatcher(function, dispatcher, release_set["backend"]["components"]["api"]["release_id"] if require_binding else None)
     return versions
 
 
@@ -90,7 +107,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     os.environ["RELEASE_TARGET"] = args.target
     release_set = validate(json.loads(args.release_set.read_text()))
-    versions = runtime_check(release_set, args.target)
+    versions = runtime_check(release_set, args.target, require_binding=not args.preflight)
     if not args.preflight:
         host_check(release_set)
         verify(args.target, args.release_set)

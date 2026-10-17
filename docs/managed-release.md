@@ -26,7 +26,9 @@ Do not enable deployment until the following work is complete:
    requires capture/render release IDs, source revisions, build/content hashes,
    image IDs, bootstrap authorities and qualification hashes; the dispatcher
    needs its ZIP hash, source revision, handler/runtime, corpus hash, versioned
-   bucket/key, and non-secret config hash. It contains no environment files,
+   bucket/key, and non-secret config hash. The dispatcher config hash excludes
+   `CHALK_RELEASE_ID` and `CHALK_CONFIG_DIGEST`; the observer verifies the full
+   prefixed provider digest and the selected API release binding separately. It contains no environment files,
    credentials, private call data or tokens.
 5. Seed the previous production release set using a full, approved Release run
    with `build_release_set`, `deploy_managed`, and `deploy_web` enabled and
