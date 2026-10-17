@@ -254,6 +254,7 @@ func (s Service) RecordPublishedTracks(ctx context.Context, input RecordInput) (
 			}
 		}
 		if !current {
+			span.SetAttributes(attribute.String("chalk.media.rejection_reason", "participant_connection_not_current"))
 			return nil, ErrInvalidPublication
 		}
 		next := merge(latest, input, references)

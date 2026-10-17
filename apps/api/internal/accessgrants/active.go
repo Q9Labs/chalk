@@ -50,9 +50,9 @@ func (a ActiveAuthorizer) AuthorizeActiveParticipantGeneration(ctx context.Conte
 		current.ParticipantGeneration == generation, nil
 }
 
-// ReplaceParticipantMediaConnection records the connection before returning its grant.
+// BindParticipantMediaConnection records the connection before returning its grant.
 // Old publications must disappear even when the replacement starts muted.
-func (a ActiveAuthorizer) ReplaceParticipantMediaConnection(ctx context.Context, subject Subject) error {
+func (a ActiveAuthorizer) BindParticipantMediaConnection(ctx context.Context, subject Subject) error {
 	if a.repository == nil || !validSubject(subject) {
 		return ErrInvalidSubject
 	}

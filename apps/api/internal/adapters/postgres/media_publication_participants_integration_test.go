@@ -46,6 +46,19 @@ func TestPublicationParticipantsUseAuthenticatedReplacementBeforeRepublish(t *te
 	}
 	repository := NewEpisodeLifecycleRepository(lingerTestTransactor{tx})
 	key := synctokens.SubjectKey{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID}
+	if _, err := tx.Exec(ctx, `update participants set status='joining' where id=$1`, uuid(participantID)); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.SetParticipantMediaConnection(ctx, key, 1, "initial-join"); err != nil {
+		t.Fatalf("bind connection before Sync admission: %v", err)
+	}
+	var initialConnection string
+	if err := tx.QueryRow(ctx, `select media_connection_id from participants where id=$1`, uuid(participantID)).Scan(&initialConnection); err != nil || initialConnection != "initial-join" {
+		t.Fatalf("joining participant connection: %q, %v", initialConnection, err)
+	}
+	if _, err := tx.Exec(ctx, `update participants set status='active' where id=$1`, uuid(participantID)); err != nil {
+		t.Fatal(err)
+	}
 	if err := repository.SetParticipantMediaConnection(ctx, key, 1, "authenticated-replacement"); err != nil {
 		t.Fatal(err)
 	}
