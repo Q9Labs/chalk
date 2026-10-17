@@ -1,3 +1,4 @@
+import { contactSheetFont } from "./contact-sheet.mjs";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -5,7 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { movingLayers, proveLayers } from "./media.mjs";
 import { cleanupRun } from "./cleanup.mjs";
-import { checkShareProgress, episodeEnd, exportProof, contactSheetFont } from "./proofs.mjs";
+import { checkShareProgress, episodeEnd, exportProof } from "./proofs.mjs";
 import { proofServer } from "./webhooks.mjs";
 import { createServer } from "node:net";
 import { once } from "node:events";
@@ -161,6 +162,7 @@ for (const defect of ["URL lifetime", "null headers", "montage font"]) {
 test("macOS montage uses a system font when ImageMagick lists none", () => {
   assert.equal(contactSheetFont("", "darwin"), "/System/Library/Fonts/Supplemental/Arial.ttf");
   assert.equal(contactSheetFont("  Font: DejaVu-Sans\n", "linux"), "DejaVu-Sans");
+  assert.equal(contactSheetFont("  Font: Liberation-Sans\n", "linux"), "Liberation-Sans");
   assert.throws(() => contactSheetFont("", "linux"), /no installed font/);
 });
 

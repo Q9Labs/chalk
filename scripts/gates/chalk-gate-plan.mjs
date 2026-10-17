@@ -354,7 +354,7 @@ export function createGatePlan(files, options = {}) {
   const formatCommand = formattedFiles.length > 0 ? ["pnpm", "exec", "oxfmt", "--check", ...formattedFiles] : null;
   const semgrepCommand = explicitFull || (full && scope !== "staged") ? ["bash", "scripts/gates/semgrep.sh"] : sourceFiles.length > 0 ? ["bash", "scripts/gates/semgrep.sh", ...sourceFiles] : null;
   const tasks = [
-    task("self-test", "Gate routing and Sync reliability self-tests", true, "always required", [
+    task("self-test", "Gate routing, Sync reliability and production-proof self-tests", true, "always required", [
       "node",
       "--test",
       "scripts/gates/chalk-gate-plan.test.mjs",
@@ -363,6 +363,7 @@ export function createGatePlan(files, options = {}) {
       "scripts/prod-proof/cleanup.test.mjs",
       "scripts/prod-proof/config.test.mjs",
       "scripts/prod-proof/evidence.test.mjs",
+      "scripts/prod-proof/recording-rejoin.test.mjs",
       "scripts/prod-proof/webhooks.test.mjs",
     ]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),

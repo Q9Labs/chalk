@@ -1,0 +1,37 @@
+{
+  "production": {
+    "fleet_max_nodes": 10,
+    "fleet_inputs": {},
+    "issuer_inputs": {},
+    "api_inputs": {},
+    "control_server_name": null,
+    "memory_overrides": {}
+  },
+  "nightly": {
+    "fleet_max_nodes": 1,
+    "fleet_inputs": {
+      "CHALK_RECORDER_FLEET_ENVIRONMENT": "nightly",
+      "CHALK_RECORDER_FLEET_OWNER_TAG": "chalk-nightly-recorder-owner",
+      "CHALK_RECORDER_FLEET_SERVER_NAME": "nightly-recording-control.chalkmeet.com",
+      "CHALK_RECORDER_FLEET_BOOTSTRAP_ENDPOINT": "https://nightly-recording-control.chalkmeet.com:8444"
+    },
+    "issuer_inputs": {
+      "CHALK_RECORDER_FLEET_ISSUER_ENVIRONMENT": "nightly",
+      "CHALK_RECORDER_FLEET_ISSUER_CONTROL_PLANE_SERVER_NAME": "nightly-recording-control.chalkmeet.com"
+    },
+    "api_inputs": {
+      "CHALK_RECORDER_FLEET_ISSUER_SERVER_NAME": "nightly-recording-control.chalkmeet.com"
+    },
+    "control_server_name": "nightly-recording-control.chalkmeet.com",
+    "memory_overrides": {
+      "chalk-api.container": "96m",
+      "chalk-sync.container": "256m",
+      "chalk-redis.container": "320m",
+      "chalk-cloudflared.container": "48m",
+      "chalk-recorder-capture.container": "32m",
+      "chalk-recorder-render.container": "32m",
+      "chalk-recorder-issuer.container": "32m",
+      "chalk-api-migrate.container": "64m"
+    }
+  }
+}

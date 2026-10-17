@@ -12,7 +12,7 @@ async function sdkBundle() {
     stdin: {
       contents: `import {createSpaceClient} from './sdks/typescript/client/src/index.ts';
 window.proofJoin=async(space,baseUrl,displayName)=>{
- const client=createSpaceClient({space,baseUrl,getAccess:()=>window.proofAccess()});
+ const client=createSpaceClient({space,baseUrl,getAccess:({replaceMediaConnection})=>window.proofAccess({replaceMediaConnection})});
  window.proofClient=client;await client.join({displayName,microphone:true,camera:true});
 };`,
       resolveDir: process.cwd(),
@@ -26,87 +26,113 @@ window.proofJoin=async(space,baseUrl,displayName)=>{
   });
   return result.outputFiles[0].text;
 }
-export async function launchGuests(run, space, episode, speech, origin) {
+export async function launchGuests(run, space, episode, speech, origin, tones = false) {
   const bundle = await sdkBundle();
   const serverPath = `${run.directory}/sdk-server.mjs`;
   await build({ logLevel: "silent", entryPoints: [new URL("../../sdks/typescript/client/src/server/index.ts", import.meta.url).pathname], bundle: true, outfile: serverPath, format: "esm", platform: "node" });
   const { createChalkServerClient, getAccessRefreshState } = await import(pathToFileURL(serverPath).href);
   const chalk = createChalkServerClient({ apiKey: run.apiKey, tenantId: run.config.tenant_id, apiBaseURL: run.config.api_url, headers: { "User-Agent": "Chalk-Production-Proof/1.0" }, fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(30_000) }) });
   const pages = [];
+  const reopen = [];
+  const close = [];
+  const participants = [];
   for (let guest = 0; guest < 2; guest++) {
     const admission = await chalk.participants.admit(space.id, episode.id, { name: `Proof guest ${guest + 1}`, role: "owner" });
     let grant = admission.access;
     maskCredentials(grant);
     let first = true;
     let queue = Promise.resolve();
-    const server = await chromium.launchServer({
-      headless: true,
-      handleSIGINT: false,
-      handleSIGTERM: false,
-      args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required", "--auto-select-tab-capture-source-by-title=Chalk proof screen share", "--enable-usermedia-screen-capturing"],
-    });
-    run.resources.push({
-      kind: "headless-browser",
-      dispose: () => server.close(),
-      force: () => {
-        try {
-          process.kill(-server.process().pid, "SIGKILL");
-        } catch (error) {
-          if (error.code !== "ESRCH") throw error;
-        }
-      },
-    });
-    const browser = await chromium.connect(server.wsEndpoint());
-    const context = await browser.newContext({ permissions: ["camera", "microphone"] });
-    await context.addInitScript(installFixture, { speech, guest });
-    const page = await context.newPage();
-    const network = [];
-    page.on("requestfailed", (request) => network.push({ type: "request-failed", path: new URL(request.url()).pathname, error: request.failure()?.errorText }));
-    page.on("websocket", (socket) => {
-      socket.on("socketerror", (error) => network.push({ type: "websocket-error", error }));
-      socket.on("framereceived", ({ payload }) => {
-        try {
-          const frame = JSON.parse(String(payload));
-          network.push({ type: "websocket-frame", frameType: frame.type, event: frame.event, code: frame.code, status: frame.status });
-        } catch {
-          network.push({ type: "websocket-frame", bytes: payload.length });
-        }
+    const open = async (replacing = false) => {
+      let replaceOnNextAccess = replacing;
+      const server = await chromium.launchServer({
+        headless: true,
+        handleSIGINT: false,
+        handleSIGTERM: false,
+        args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required", "--auto-select-tab-capture-source-by-title=Chalk proof screen share", "--enable-usermedia-screen-capturing"],
       });
-    });
-    await page.exposeFunction("proofAccess", () => {
-      const next = queue.then(async () => {
-        if (first) {
-          first = false;
+      close[guest] = () => server.close();
+      run.resources.push({
+        kind: "headless-browser",
+        dispose: close[guest],
+        force: () => {
+          try {
+            process.kill(-server.process().pid, "SIGKILL");
+          } catch (error) {
+            if (error.code !== "ESRCH") throw error;
+          }
+        },
+      });
+      const browser = await chromium.connect(server.wsEndpoint());
+      const context = await browser.newContext({ permissions: ["camera", "microphone"] });
+      await context.addInitScript(installFixture, { speech, guest, tones });
+      const page = await context.newPage();
+      const network = [];
+      page.on("requestfailed", (request) => network.push({ type: "request-failed", path: new URL(request.url()).pathname, error: request.failure()?.errorText }));
+      page.on("websocket", (socket) => {
+        socket.on("socketerror", (error) => network.push({ type: "websocket-error", error }));
+        socket.on("framereceived", ({ payload }) => {
+          try {
+            const frame = JSON.parse(String(payload));
+            network.push({ type: "websocket-frame", frameType: frame.type, event: frame.event, code: frame.code, status: frame.status });
+          } catch {
+            network.push({ type: "websocket-frame", bytes: payload.length });
+          }
+        });
+      });
+      await page.exposeFunction("proofAccess", (request) => {
+        const next = queue.then(async () => {
+          if (first) {
+            first = false;
+            return grant;
+          }
+          grant = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, getAccessRefreshState(grant), { replaceMediaConnection: replaceOnNextAccess || request.replaceMediaConnection });
+          maskCredentials(grant);
+          replaceOnNextAccess = false;
           return grant;
-        }
-        grant = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, getAccessRefreshState(grant));
-        maskCredentials(grant);
-        return grant;
+        });
+        queue = next.catch(() => {}); // The caller receives errors; a failed refresh must not poison later calls.
+        return next;
       });
-      queue = next.catch(() => {}); // The caller receives errors; a failed refresh must not poison later calls.
-      return next;
-    });
-    await page.goto(origin);
-    await page.addScriptTag({ content: bundle });
-    try {
-      await page.evaluate(({ slug, api, name }) => window.proofJoin(slug, api, name), { slug: space.slug, api: run.config.api_url, name: `Proof guest ${guest + 1}` });
-    } finally {
-      await save(`${run.directory}/guest-${guest + 1}-network.json`, network);
-    }
-    pages.push(page);
+      await page.goto(origin);
+      await page.addScriptTag({ content: bundle });
+      try {
+        await page.evaluate(({ slug, api, name }) => window.proofJoin(slug, api, name), { slug: space.slug, api: run.config.api_url, name: `Proof guest ${guest + 1}` });
+      } finally {
+        await save(`${run.directory}/guest-${guest + 1}-network.json`, network);
+      }
+      return page;
+    };
+    pages.push(await open());
+    participants.push(admission.participant.id);
+    reopen.push(open);
   }
-  await waitFor("two live camera and voice publishers", async () => {
-    for (const page of pages) {
-      const live = await page.evaluate(() => {
-        const snapshot = window.proofClient.getSnapshot();
-        const readiness = [snapshot.connection.status === "live", snapshot.participants.roster.length === 2, snapshot.media.local.microphone.state === "enabled", snapshot.media.local.camera.state === "enabled"];
-        return readiness.every(Boolean) && snapshot.media.remote.some((entry) => entry.track.readyState === "live");
-      });
-      if (!live) return false;
-    }
-    return true;
-  });
-  return pages;
+  const ready = () =>
+    waitFor("two live camera and voice publishers", async () => {
+      for (const page of pages) {
+        const live = await page.evaluate(() => {
+          const snapshot = window.proofClient.getSnapshot();
+          const readiness = [snapshot.connection.status === "live", snapshot.participants.roster.length === 2, snapshot.media.local.microphone.state === "enabled", snapshot.media.local.camera.state === "enabled"];
+          return readiness.every(Boolean) && snapshot.media.remote.some((entry) => entry.track.readyState === "live");
+        });
+        if (!live) return false;
+      }
+      return true;
+    });
+  await ready();
+  return {
+    pages,
+    participants,
+    rejoin: async (guest) => {
+      // Closing the entire browser drops transports without an SDK leave request.
+      await close[guest]();
+      await run.wait(2000);
+      pages[guest] = await reopen[guest](true);
+      await ready();
+      const participant = await pages[guest].evaluate(() => window.proofClient.getSnapshot().self.participantId);
+      check(participant === participants[guest], "Rejoin changed participant identity");
+      return participant;
+    },
+  };
 }
 function browserStats() {
   function sourceFor(row, cameraMids, screenMids, remote) {

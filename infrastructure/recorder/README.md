@@ -185,7 +185,7 @@ infrastructure root has separate `capture_image_id`/`capture_image_digest` and
 `render_image_id`/`render_image_digest` inputs, and each controller loads its
 own role-fenced release. Set the Capture controller's image ID and digest
 together after the API and issuer support for the new release is deployed.
-Validate the exact snapshot and size in a staging Capture boot before promotion.
+Validate the exact snapshot and size in a nightly Capture boot before promotion.
 
 ### Shared Capture/Render image
 
@@ -353,7 +353,7 @@ produce a zero-capacity plan.
 
 Production R2 adoption is fail-closed. A plan must name the existing bucket,
 provide its private inventory import ID, and carry a digest of the approved
-no-delete/no-replacement plan before mutation is possible. Staging can use its
+no-delete/no-replacement plan before mutation is possible. Nightly can use its
 explicit generated name. All backend configuration and credentials are
 provided outside this tree; `gate.sh` always initializes with the backend
 disabled and never applies a provider.

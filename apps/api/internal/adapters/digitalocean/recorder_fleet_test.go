@@ -209,7 +209,7 @@ func TestRecorderFleetErrorsNeverExposeTokenOrProviderBody(t *testing.T) {
 	defer server.Close()
 	adapter := recorderFleetAdapter(t, server, secret)
 
-	_, err := adapter.ListNodes(t.Context(), recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture})
+	_, err := adapter.ListNodes(t.Context(), recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture})
 	if err == nil || strings.Contains(err.Error(), secret) || strings.Contains(err.Error(), "private detail") {
 		t.Fatalf("unsafe provider error = %v", err)
 	}
@@ -218,7 +218,7 @@ func TestRecorderFleetErrorsNeverExposeTokenOrProviderBody(t *testing.T) {
 func TestNewRecorderFleetAcceptsCPURenderPool(t *testing.T) {
 	t.Parallel()
 	adapter, err := NewRecorderFleet(RecorderFleetConfig{
-		Token: "token", BaseURL: "https://api.digitalocean.com", Environment: "staging",
+		Token: "token", BaseURL: "https://api.digitalocean.com", Environment: "nightly",
 		Role: workeridentity.RoleRender, OwnerTag: "chalk-recorder-owned", GPU: false,
 	})
 	if err != nil || adapter.gpu {
@@ -258,7 +258,7 @@ func recorderFleetAdapter(t *testing.T, server *httptest.Server, token string) *
 	t.Helper()
 	adapter, err := NewRecorderFleet(RecorderFleetConfig{
 		Token: token, BaseURL: server.URL, HTTPClient: server.Client(),
-		Environment: "staging", Role: workeridentity.RoleCapture,
+		Environment: "nightly", Role: workeridentity.RoleCapture,
 		OwnerTag: "chalk-recorder-owned", ProjectID: "project-1", VPCUUID: "vpc-1", SSHKeyIDs: []int64{17},
 	})
 	if err != nil {
@@ -268,7 +268,7 @@ func recorderFleetAdapter(t *testing.T, server *httptest.Server, token string) *
 }
 
 func recorderFleetEnsureRequest() recorderfleet.EnsureNodeRequest {
-	key := recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}
+	key := recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture}
 	release := recorderfleet.ReleaseSpec{
 		ReleaseID: "release-1", ImageID: 1234,
 		ImageDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

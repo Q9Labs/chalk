@@ -725,7 +725,7 @@ func loadSyncTokenConfig(environment string) (SyncTokenConfig, error) {
 		KeyID:    strings.TrimSpace(envOrDefault(SyncTokenKeyID, "")),
 	}
 	encodedKey := strings.TrimSpace(envOrDefault(SyncTokenPrivateKey, ""))
-	if config.Audience == "" && config.Issuer == "" && config.KeyID == "" && encodedKey == "" && environment != "production" {
+	if config.Audience == "" && config.Issuer == "" && config.KeyID == "" && encodedKey == "" && environment == DefaultEnvironment {
 		return config, nil
 	}
 	if config.Audience == "" || config.Issuer == "" || config.KeyID == "" || encodedKey == "" {

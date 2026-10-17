@@ -457,7 +457,7 @@ def run(request_path, receipt_path):
         evidence_command = None
         bucket = os.environ.get("CHALK_BOOT_CHECK_EVIDENCE_BUCKET")
         if not bucket:
-            config = services.aws("ssm", "get-parameter", "--name", "/chalk/production/release/recorder.json")
+            config = services.aws("ssm", "get-parameter", "--name", os.environ.get("CHALK_RECORDER_RELEASE_CONFIG_PARAMETER") or f"/chalk/{live['ENVIRONMENT']}/release/recorder.json")
             bucket = json.loads(config["Parameter"]["Value"])["dispatcher"]["state_bucket"]
         require(re.fullmatch(r"[a-z0-9][a-z0-9-]{1,61}[a-z0-9]", bucket), "private evidence bucket must be a DNS-compatible name without dots")
         if bucket:

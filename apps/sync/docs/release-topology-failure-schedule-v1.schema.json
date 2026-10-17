@@ -8,7 +8,7 @@
   "properties": {
     "schema_version": { "const": 1 },
     "name": { "$ref": "#/$defs/identifier" },
-    "environment": { "enum": ["local", "staging"] },
+    "environment": { "enum": ["local", "nightly"] },
     "topology": {
       "type": "object",
       "additionalProperties": false,

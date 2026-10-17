@@ -19,7 +19,7 @@ func TestServicePersistsBootstrapBeforeAndAfterIdempotentIssuance(t *testing.T) 
 	identity := testNodeIdentity()
 	repository := &authorityRepositoryStub{}
 	issuer := &bootstrapAuthorityStub{identity: identity}
-	service, err := NewService("staging", repository, issuer)
+	service, err := NewService("nightly", repository, issuer)
 	if err != nil {
 		t.Fatalf("new service: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestServiceDoesNotPersistRevocationUntilIssuerSucceeds(t *testing.T) {
 	t.Parallel()
 	repository := &authorityRepositoryStub{}
 	issuer := &bootstrapAuthorityStub{revokeErr: recorderfleet.ErrProviderUnavailable}
-	service, _ := NewService("staging", repository, issuer)
+	service, _ := NewService("nightly", repository, issuer)
 	if err := service.RevokeIdentity(t.Context(), testNodeIdentity()); !errors.Is(err, recorderfleet.ErrProviderUnavailable) {
 		t.Fatalf("revoke error = %v", err)
 	}
@@ -60,7 +60,7 @@ func TestServiceAbandonsDatabaseBeforeIssuerAndRetriesPartialSuccess(t *testing.
 	request := testBootstrapRequest()
 	repository := &authorityRepositoryStub{abandonErr: recorderfleet.ErrInventoryDrift}
 	issuer := &bootstrapAuthorityStub{}
-	service, _ := NewService("staging", repository, issuer)
+	service, _ := NewService("nightly", repository, issuer)
 
 	if err := service.AbandonBootstrap(t.Context(), request); !errors.Is(err, recorderfleet.ErrInventoryDrift) {
 		t.Fatalf("database mismatch error = %v", err)
@@ -113,7 +113,7 @@ func TestBoundWorkerVerifierAllowsDrainCompletionButRejectsClaimsAndRevocation(t
 
 func testBootstrapRequest() recorderfleet.BootstrapRequest {
 	return recorderfleet.BootstrapRequest{
-		Key:        recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture},
+		Key:        recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture},
 		ProviderID: "42", NodeName: "node-42", Region: "sgp1", ReleaseID: "release-7",
 		ImageDigest: "sha256:" + strings.Repeat("a", 64), BootGeneration: 3,
 		InventoryDigest: strings.Repeat("b", 64),

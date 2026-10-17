@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 from urllib.parse import quote
 
-from release_core import PREFIX, digest, rebuild_dispatcher, require
+from release_core import digest, rebuild_dispatcher, require, validate_config
 from release_io import Provider, private_json
 
 MODULE = Path(__file__).resolve().parents[2] / "infrastructure/opentofu/modules/aws-transcription-dispatcher"
@@ -81,6 +81,11 @@ def dispatcher_root(provider, config):
         root["terraform"]["backend"]["s3"].pop("profile", None)
     inputs = root["module"]["dispatcher"]
     require(inputs["function_name"] == config["function_name"], "dispatcher state identity mismatch")
+    if config["function_name"] == "chalk-nightly-transcription-dispatcher":
+        require(inputs["environment_name"] == "nightly", "nightly dispatcher state environment mismatch")
+        require(inputs["control_api_url"] == "https://nightly-api.chalkmeet.com", "nightly dispatcher API mismatch")
+        require(inputs["control_api_audience"] == "chalk-nightly-control-api", "nightly dispatcher audience mismatch")
+        require(inputs["scheduler_name"] == "chalk-nightly-transcription-reconcile" and inputs["scheduler_group_name"] == "chalk-nightly", "nightly dispatcher scheduler mismatch")
     return root
 
 
@@ -157,11 +162,13 @@ def main():
     parser.add_argument("--region", required=True)
     parser.add_argument("--instance-id", required=True)
     parser.add_argument("--parameter-prefix", required=True)
-    parser.add_argument("--configuration-parameter", default=PREFIX + "recorder.json")
+    parser.add_argument("--configuration-parameter", required=True)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     provider = Provider(args.region, os.environ.get("AWS_PROFILE"), args.dry_run)
-    config = json.loads(provider.parameter(args.configuration_parameter)["Value"])
+    match = re.fullmatch(r"/chalk/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)/release/[A-Za-z0-9_.-]+", args.configuration_parameter)
+    require(match, "configuration parameter must select a deployment environment")
+    config = validate_config(json.loads(provider.parameter(args.configuration_parameter)["Value"]), match[1])
     require(config["runtime"]["instance_id"] == args.instance_id and config["runtime"]["parameter_prefix"] == args.parameter_prefix,
             "dispatcher configuration does not belong to the target managed runtime")
     print(json.dumps(bind(provider, config["dispatcher"], json.loads(Path(args.manifest).read_text()), args.dry_run)))

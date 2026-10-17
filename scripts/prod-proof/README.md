@@ -12,6 +12,7 @@ pnpm prod:proof smoke
 pnpm prod:proof camera-share --force-layer-switch
 pnpm prod:proof camera-share # simulcast + share, without the optional limit
 pnpm prod:proof export
+pnpm prod:proof recording-rejoin
 pnpm prod:proof transcript
 ```
 
@@ -161,6 +162,15 @@ retention policy. The provisioned Tenant and bootstrap API key are retained.
   throughout the two-minute hold; elapsed time alone cannot pass the proof.
 - **export:** successful completion, MP4 download, ffprobe video/audio/duration,
   four evenly spaced frames in a 2-by-2 contact sheet, and Export wall time.
+- **recording-rejoin:** two camera/tone guests record for 25 seconds, then guest B's
+  browser closes without an SDK leave and rejoins using the same admitted participant.
+  Both record for another 25 seconds. Three MP4 frames per before/after window must
+  contain each guest's phase-specific background and advancing picture. Three
+  three-second audio samples per window must contain each guest's distinct tone
+  (440/880 Hz, above -45 dBFS), not just mixed audio energy. The export clock is
+  end-aligned; phase colors reject sampling the wrong window. The two-wide contact
+  sheet pairs before/after samples. Private timeline and per-guest evidence are
+  saved even when media checks fail. This is a standalone proof, not part of `all`.
 - **transcript:** on-demand completion and the generated phrases in the document.
 
 Default `all` shares one camera/share Recording across the related proofs.

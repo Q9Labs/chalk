@@ -51,5 +51,6 @@ export type ClientMediaPlane = {
   readonly observeLocalPublications: (listener: (publications: readonly MediaPublication[]) => void) => () => void;
   readonly observeRemotePublications: (listener: (publications: readonly MediaPublication[]) => void) => () => void;
   readonly remotePublicationsChanged?: () => void;
+  readonly remoteParticipantsChanged?: (participantIds: readonly string[]) => void;
   readonly remotePublicationResumed?: (publicationId: string) => void;
 };
