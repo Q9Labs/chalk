@@ -58,8 +58,7 @@ export async function cleanupByRunId(config, runId, directory = resolve(".privat
         const episodes = await list(call, path, "episodes");
         for (const episode of episodes.filter((episode) => episode.metadata?.proof_run_id === runId)) {
           await attempt("episode", episode.id, async () => {
-            if (episode.status !== "ended") await call("POST", `${path}/${episode.id}/end`, {});
-            await waitFor("cleanup Episode ended", async () => (await call("GET", `${path}/${episode.id}`)).status === "ended", 60_000, 1000, AbortSignal.timeout(60_000));
+            await endEpisode(call, path, episode);
           });
         }
       });
@@ -90,7 +89,7 @@ export async function cleanupByRunId(config, runId, directory = resolve(".privat
       }),
     );
   }
-  if (directory) await save(`${directory}/remote-cleanup.json`, results);
+  await save(`${directory}/remote-cleanup.json`, results);
   if (failures.length) throw new AggregateError(failures, "Remote cleanup failed");
   return results;
 }
@@ -106,12 +105,19 @@ export async function sweepStaleRuns(config, now = Date.now()) {
   const call = cleanupClient(config);
   const base = `/v1/tenants/${config.tenant_id}`;
   const spaces = await list(call, `${base}/spaces`, "spaces");
-  for (const space of spaces) {
-    const runId = space.metadata?.proof_run_id;
-    if (space.archived || !runId || space.name !== `chalk-proof:${runId}`) continue;
+  for (const space of spaces.filter(isProofSpace)) {
+    const runId = space.metadata.proof_run_id;
     runLabel(runId);
     await sweepSpace(call, base, space, runId, now);
   }
+}
+function isProofSpace(space) {
+  const runId = space.metadata?.proof_run_id;
+  return [!space.archived, Boolean(runId), space.name === `chalk-proof:${runId}`].every(Boolean);
+}
+async function endEpisode(call, path, episode) {
+  if (episode.status !== "ended") await call("POST", `${path}/${episode.id}/end`, {});
+  await waitFor("cleanup Episode ended", async () => (await call("GET", `${path}/${episode.id}`)).status === "ended", 60_000, 1000, AbortSignal.timeout(60_000));
 }
 async function sweepSpace(call, base, space, runId, now) {
   const path = `${base}/spaces/${space.id}/episodes`;
@@ -119,8 +125,7 @@ async function sweepSpace(call, base, space, runId, now) {
   const owned = episodes.filter((episode) => episode.metadata?.proof_run_id === runId);
   const stale = owned.filter((episode) => Date.parse(episode.created_at) < now - 2 * 3600_000);
   for (const episode of stale) {
-    if (episode.status !== "ended") await call("POST", `${path}/${episode.id}/end`, {});
-    await waitFor("stale Episode ended", async () => (await call("GET", `${path}/${episode.id}`)).status === "ended", 60_000, 1000, AbortSignal.timeout(60_000));
+    await endEpisode(call, path, episode);
   }
   // Never archive a Space with a fresh or foreign Episode.
   if (!stale.length || stale.length !== episodes.length) return;

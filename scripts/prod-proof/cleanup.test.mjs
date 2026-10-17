@@ -143,16 +143,20 @@ test("cleanup uses persisted IDs, revokes first and is repeatable after abort", 
   await cleanupByRunId(config, runId, directory);
 });
 
+function sweepSpacesPage(url) {
+  const space = (id, name = `chalk-proof:${id}`) => ({ id, name, metadata: { proof_run_id: id } });
+  return {
+    "": { spaces: [space("fresh"), space("foreign", "unrelated")], pagination: { next_cursor: "second" } },
+    second: { spaces: [space("old")], pagination: {} },
+  }[url.searchParams.get("cursor") ?? ""];
+}
 function sweepPage(url, old) {
   const path = url.pathname;
-  if (path.endsWith("/spaces")) {
-    const second = url.searchParams.get("cursor");
-    const ids = second ? ["old"] : ["fresh", "foreign"];
-    return { spaces: ids.map((id) => ({ id, name: id === "foreign" ? "unrelated" : `chalk-proof:${id}`, metadata: { proof_run_id: id } })), pagination: { next_cursor: second ? null : "second" } };
-  }
+  if (path.endsWith("/spaces")) return sweepSpacesPage(url);
   if (path.endsWith("/episodes")) {
     const id = path.split("/").at(-2);
-    return { episodes: [{ id: "ep", metadata: { proof_run_id: id }, created_at: id === "fresh" ? new Date().toISOString() : old, status: "live" }], pagination: {} };
+    const created_at = { fresh: new Date().toISOString(), old }[id];
+    return { episodes: [{ id: "ep", metadata: { proof_run_id: id }, created_at, status: "live" }], pagination: {} };
   }
   return { ep: { status: "ended" }, old: { archived: true } }[path.split("/").at(-1)];
 }
