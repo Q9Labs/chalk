@@ -47,4 +47,3 @@ insert into participants (
        and account_id = sqlc.arg(account_id)), 'joining'
 )
 returning *;
-
