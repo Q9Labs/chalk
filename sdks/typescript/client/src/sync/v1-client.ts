@@ -599,7 +599,7 @@ export class V1SyncClient implements V1CollaborationClient {
   }
   #notifyRemotePublicationResumed(previous: V1MediaPublication | undefined, current: V1MediaPublication): void {
     if (this.#mediaEnded()) return;
-    if (previous?.enabled === false && current.enabled && current.publicationId && previous.publicationId === current.publicationId && current.participantId !== this.#participantId) {
+    if (previous?.enabled === false && current.enabled && current.publicationId && current.participantId !== this.#participantId) {
       this.#options.mediaPlane?.remotePublicationResumed?.(current.publicationId);
     }
   }
