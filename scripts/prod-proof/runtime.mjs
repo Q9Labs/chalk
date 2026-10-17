@@ -30,24 +30,24 @@ export async function waitFor(label, probe, timeoutMs = 120_000, intervalMs = 20
 export async function save(path, value) {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
 }
+const requiredConfigFields = ["username", "password", "tenant_id", "inbox_url", "inbox_password", "api_url", "web_url", "proof_origin"];
+const optionalConfigFields = ["inbox_account_id", "webhook_service_url"];
+export function environmentConfig(environment) {
+  return Object.fromEntries([...requiredConfigFields, ...optionalConfigFields].map((name) => [name, environment[`CHALK_PROOF_${name.toUpperCase()}`]]));
+}
+export function checkCapabilities(readiness) {
+  check(readiness?.capabilities?.recording === "enabled", "API readiness: Recording is not enabled");
+  check(readiness?.capabilities?.transcription === "enabled", "API readiness: Transcription is not enabled");
+}
 export async function loadConfig() {
-  const item = JSON.parse(await command("op", ["item", "get", "Chalk production proof Tenant", "--vault", "dev", "--format", "json"]));
-  const fields = Object.fromEntries(item.fields.map((field) => [field.label, field.value]));
-  for (const name of ["username", "password", "tenant_id", "inbox_url", "inbox_password", "api_url", "web_url", "aws_profile", "aws_region", "ssm_api_env", "proof_origin"]) {
-    check(fields[name], `1Password item is missing ${name}`);
+  const source = process.env.CHALK_PROOF_CONFIG_SOURCE ?? "1password";
+  check(["env", "1password"].includes(source), "CHALK_PROOF_CONFIG_SOURCE must be env or 1password");
+  const fields = source === "env" ? environmentConfig(process.env) : Object.fromEntries(JSON.parse(await command("op", ["item", "get", "Chalk production proof Tenant", "--vault", "dev", "--format", "json"])).fields.map((field) => [field.label, field.value]));
+  for (const name of requiredConfigFields) {
+    check(fields[name], `Proof configuration is missing ${name}`);
   }
-  const env = await command("aws", ["--profile", fields.aws_profile, "--region", fields.aws_region, "ssm", "get-parameter", "--name", fields.ssm_api_env, "--with-decryption", "--query", "Parameter.Value", "--output", "text"]);
-  const settings = Object.fromEntries(
-    env
-      .split("\n")
-      .filter((line) => /^[A-Z_]+=/.test(line))
-      .map((line) => {
-        const at = line.indexOf("=");
-        return [line.slice(0, at), line.slice(at + 1).replace(/^["']|["']$/g, "")];
-      }),
-  );
-  check(settings.CHALK_RECORDING_ENABLED === "true", "SSM: Recording is disabled");
-  check(settings.CHALK_TRANSCRIPTION_ENABLED === "true", "SSM: Transcription is disabled");
+  const readiness = await request(fields, "GET", "/readyz");
+  checkCapabilities(readiness);
   return fields;
 }
 export async function request(config, method, path, body, authorization = {}, extraHeaders = {}, signal) {

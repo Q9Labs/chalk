@@ -1,0 +1,93 @@
+name: Real-call proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment with a permanent proof Tenant
+        type: environment
+        default: production
+        required: true
+  workflow_call:
+    inputs:
+      environment:
+        description: Environment with a permanent proof Tenant
+        type: string
+        required: true
+  schedule:
+    - cron: "23 4 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-call-proof-${{ inputs.environment || 'production' }}
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Real-call smoke
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.environment || 'production' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+      - name: Install proof dependencies
+        run: |
+          pnpm install --frozen-lockfile --filter @q9labsai/chalk-client...
+          pnpm --filter @q9labsai/chalk-client exec playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg imagemagick espeak fonts-dejavu-core age
+          # Ubuntu ships ImageMagick 6, without the ImageMagick 7 entry point.
+          sudo tee /usr/local/bin/magick > /dev/null <<'SH'
+          #!/bin/sh
+          if [ "$1" = montage ]; then
+            shift
+            exec montage "$@"
+          fi
+          exec convert "$@"
+          SH
+          sudo chmod +x /usr/local/bin/magick
+      - name: Validate evidence recipient
+        env:
+          EVIDENCE_RECIPIENT: ${{ vars.CHALK_PROOF_EVIDENCE_RECIPIENT }}
+        run: |
+          test -n "$EVIDENCE_RECIPIENT"
+          printf '' | age --recipient "$EVIDENCE_RECIPIENT" --output /dev/null
+      - name: Prove a real call
+        env:
+          CHALK_PROOF_CONFIG_SOURCE: env
+          CHALK_PROOF_USERNAME: ${{ secrets.CHALK_PROOF_USERNAME }}
+          CHALK_PROOF_PASSWORD: ${{ secrets.CHALK_PROOF_PASSWORD }}
+          CHALK_PROOF_INBOX_PASSWORD: ${{ secrets.CHALK_PROOF_INBOX_PASSWORD }}
+          CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
+          CHALK_PROOF_API_URL: ${{ vars.CHALK_PROOF_API_URL }}
+          CHALK_PROOF_WEB_URL: ${{ vars.CHALK_PROOF_WEB_URL }}
+          CHALK_PROOF_PROOF_ORIGIN: ${{ vars.CHALK_PROOF_PROOF_ORIGIN }}
+          CHALK_PROOF_INBOX_URL: ${{ vars.CHALK_PROOF_INBOX_URL }}
+          CHALK_PROOF_INBOX_ACCOUNT_ID: ${{ vars.CHALK_PROOF_INBOX_ACCOUNT_ID }}
+          CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ vars.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
+        run: pnpm prod:proof smoke
+      - name: Encrypt private proof evidence
+        if: always()
+        env:
+          EVIDENCE_RECIPIENT: ${{ vars.CHALK_PROOF_EVIDENCE_RECIPIENT }}
+        run: |
+          if [ -d .private/prod-proof ]; then
+            mkdir -p .private/prod-proof-artifact
+            tar -czf - -C .private prod-proof | age --recipient "$EVIDENCE_RECIPIENT" --output .private/prod-proof-artifact/evidence.tar.gz.age
+          fi
+      - name: Upload encrypted proof evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-call-proof-${{ inputs.environment || 'production' }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .private/prod-proof-artifact/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 3

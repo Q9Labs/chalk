@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
+import { mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { cleanupRun, createRun, loadConfig, save, check } from "./runtime.mjs";
 import { prepareIntegration, recordProof, exportProof, transcriptProof, resetProof, smokeProof } from "./proofs.mjs";
@@ -14,9 +15,9 @@ const plans = {
 };
 const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|export|transcript|reset] [--force-layer-switch|--no-layer-switch]
 Default: all, with forced layer switch. Each subcommand creates and cleans its own run.
-Requirements: op (vault dev), aws, ffmpeg, ffprobe, ImageMagick, Chromium,
+Requirements: op (vault dev, local configuration only), ffmpeg, ffprobe, ImageMagick, Chromium,
              macOS say or Linux espeak; pnpm install and pnpm --filter @q9labsai/chalk-client exec playwright install chromium.
-Private artifacts: .private/prod-proof/<run>/ (never commit). Configuration is loaded from 1Password and SSM.`;
+Private artifacts: .private/prod-proof/<run>/ (never commit). Configuration is loaded from 1Password or environment variables; API readiness checks capabilities.`;
 const args = process.argv.slice(2);
 const mode = args.find((argument) => !argument.startsWith("--")) ?? "all";
 const known = new Set([...Object.keys(plans), "--force-layer-switch", "--no-layer-switch"]);
@@ -70,18 +71,20 @@ async function clean(run, report) {
     report.cleanupError = error.message;
   }
 }
-async function finish(run, report, plan) {
+async function finish(run, report, plan, directory) {
   await clean(run, report);
   report.completedAt = new Date().toISOString();
   const complete = [!report.error, report.cleanup === "passed", ...plan.proofs.map((name) => report.proofs[name]?.result === "passed")].every(Boolean);
   report.result = complete ? "passed" : "failed";
-  if (run) await save(`${run.directory}/report.json`, report);
+  await save(`${directory}/report.json`, report);
   console.log(`Production proof ${report.result}; cleanup ${report.cleanup}`);
   if (!complete) process.exitCode = 1;
 }
 async function main(mode, forceLayerSwitch) {
   const directory = resolve(".private", "prod-proof", `${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`);
   const report = { mode, startedAt: new Date().toISOString(), proofs: {}, cleanup: "not-started", result: "failed" };
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  console.log(`Private evidence: ${directory}`);
   let run;
   const interruption = new AbortController();
   const stop = () => interruption.abort(new Error("Production proof interrupted"));
@@ -89,13 +92,12 @@ async function main(mode, forceLayerSwitch) {
   process.once("SIGTERM", stop);
   try {
     run = await createRun(await loadConfig(), directory, interruption.signal);
-    console.log(`Private evidence: ${directory}`);
     await runProofs(run, plans[mode], report, forceLayerSwitch);
   } catch (error) {
     report.error = error.message;
     console.error(`Production proof failed: ${error.message}`);
   } finally {
-    await finish(run, report, plans[mode]);
+    await finish(run, report, plans[mode], directory);
     process.removeListener("SIGINT", stop);
     process.removeListener("SIGTERM", stop);
   }
