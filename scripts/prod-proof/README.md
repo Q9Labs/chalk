@@ -1,4 +1,4 @@
-# Production proofs
+# Real-call proofs
 
 `pnpm prod:proof` runs all release proofs, including a forced camera layer switch.
 It uses an existing Tenant API key from `CHALK_PROOF_API_KEY`. Reuse an operator-provisioned
@@ -15,21 +15,65 @@ pnpm prod:proof export
 pnpm prod:proof transcript
 ```
 
-Install `aws`, FFmpeg (`ffmpeg`/`ffprobe`), and ImageMagick (`magick`).
+Install `op` (local configuration only), FFmpeg (`ffmpeg`/`ffprobe`), and ImageMagick (`magick`).
 Signed webhook proofs use a temporary Webhook.site receiver. Voice generation uses macOS `say` (Samantha), or Linux `espeak`.
 No new JavaScript dependencies are needed; Playwright and esbuild come from the
 client SDK workspace. Run from the repository root. Headless Chromium only.
 
 ## Configuration and ownership
 
-Supply configuration through the environment: `CHALK_PROOF_TENANT_ID`,
-`CHALK_PROOF_API_URL`, `CHALK_PROOF_WEB_URL`, `CHALK_PROOF_PROOF_ORIGIN`,
-`CHALK_PROOF_AWS_PROFILE`, `CHALK_PROOF_AWS_REGION`, `CHALK_PROOF_SSM_API_ENV`,
-and `CHALK_PROOF_WEBHOOK_SERVICE_URL`. Resolve the existing configuration item's
-matching fields with your secret manager alongside the API key. The command
-never reads its legacy account or inbox credentials, and it needs no nested
-1Password session. The SSM parameter verifies that Recording and Transcription
-are enabled; AWS uses the supplied profile.
+By default, the local command reads the 1Password item `Chalk production proof Tenant`. It holds
+`api_key`, `tenant_id`, `api_url`, `web_url`, `proof_origin`,
+and `webhook_service_url`
+(Webhook.site). Identifiers and credentials are loaded at runtime, not checked in.
+The API's `/readyz` response must report both Recording and Transcription as
+`enabled`. This uses the running API's capability flags; no AWS access is needed.
+The old item's AWS fields can remain but are no longer read.
+
+Set `CHALK_PROOF_CONFIG_SOURCE=env` to read those same fields from environment
+variables instead. Each field maps to `CHALK_PROOF_` plus its uppercase name;
+for example, `api_url` maps to `CHALK_PROOF_API_URL`. Missing required fields fail
+before creating resources. Redacted or wrong-namespace API keys fail before any
+HTTP request. Local runs still default to 1Password.
+
+### GitHub Actions
+
+`real-call-proof.yml` accepts an environment through manual dispatch or
+`workflow_call`; the daily 04:23 UTC schedule selects `production`. A caller uses
+`./.github/workflows/real-call-proof.yml` with `environment: nightly` (or
+`production`) and grants `contents: read`. The job reads its own environment's
+secrets, so callers do not need to pass secrets. No Release workflow is changed.
+Both triggers accept a space-separated `proofs` string (default `smoke transcript`).
+The reusable workflow exposes `result` (`passed` or `failed`); a failed job still fails
+the caller. Runs for the same environment queue without cancelling an active call.
+
+Create these separately in **each** GitHub environment (`production`, `nightly`):
+
+- Secret: `CHALK_PROOF_API_KEY`.
+- Variables: `CHALK_PROOF_TENANT_ID`, `CHALK_PROOF_API_URL`,
+  `CHALK_PROOF_WEB_URL`, `CHALK_PROOF_PROOF_ORIGIN`,
+  `CHALK_PROOF_WEBHOOK_SERVICE_URL`, `CHALK_PROOF_EVIDENCE_RECIPIENT`.
+
+Use that environment's permanent Tenant and scoped API key, API/web URLs, and
+allowed loopback proof origin. Do not reuse the production Tenant for nightly.
+For unattended runs, the selected GitHub environment must allow the workflow's
+ref without a human approval. The command runs on Ubuntu with Chromium, FFmpeg,
+ImageMagick, and espeak. The workflow adapts Ubuntu's ImageMagick 6 commands to
+the `magick` entry point expected locally.
+
+The job preserves the proof's nonzero exit status and uploads
+the proof evidence folder even after failure, encrypted with `age` before upload,
+with three-day retention. Set `CHALK_PROOF_EVIDENCE_RECIPIENT` to an age public
+recipient (`age1...`); keep the matching private identity outside GitHub. Public
+repository artifacts are publicly downloadable, so raw evidence is never uploaded.
+The recipient is validated before the call. To read a downloaded artifact locally:
+
+```sh
+age --decrypt --identity /absolute/path/to/private-identity.txt evidence.tar.gz.age | tar -xz
+```
+
+The decrypted folder contains environment identifiers and call evidence. Keep it
+private; never copy raw files to a public PR or issue.
 
 Have an operator provide a key for that Tenant. Inject it with `2password run`
 or your secret manager as `CHALK_PROOF_API_KEY`; never put its value in a command

@@ -7,7 +7,11 @@ import { setTimeout as delay } from "node:timers/promises";
 const execute = promisify(execFile);
 export async function command(program, args, options = {}) {
   try {
-    const result = await execute(program, args, { timeout: 120_000, maxBuffer: 8 * 1024 * 1024, ...options });
+    const result = await execute(program, args, {
+      timeout: 120_000,
+      maxBuffer: 8 * 1024 * 1024,
+      ...options,
+    });
     return result.stdout;
   } catch (error) {
     // CLI errors can contain decrypted output or secret arguments. Never echo them.
@@ -30,31 +34,37 @@ export async function waitFor(label, probe, timeoutMs = 120_000, intervalMs = 20
 export async function save(path, value) {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
 }
+const requiredConfigFields = ["api_key", "tenant_id", "api_url", "web_url", "proof_origin", "webhook_service_url"];
+export function environmentConfig(environment) {
+  return Object.fromEntries(requiredConfigFields.map((name) => [name, environment[`CHALK_PROOF_${name.toUpperCase()}`]]));
+}
+export function checkCapabilities(readiness) {
+  check(readiness?.capabilities?.recording === "enabled", "API readiness: Recording is not enabled");
+  check(readiness?.capabilities?.transcription === "enabled", "API readiness: Transcription is not enabled");
+}
 export async function loadConfig() {
-  check(process.env.CHALK_PROOF_API_KEY, "Set CHALK_PROOF_API_KEY to an existing scoped Tenant API key");
-  const fields = {};
-  for (const name of ["tenant_id", "api_url", "web_url", "aws_profile", "aws_region", "ssm_api_env", "proof_origin", "webhook_service_url"]) {
-    fields[name] = process.env[`CHALK_PROOF_${name.toUpperCase()}`];
-    check(fields[name], `Set CHALK_PROOF_${name.toUpperCase()}`);
+  const source = process.env.CHALK_PROOF_CONFIG_SOURCE ?? "1password";
+  check(["env", "1password"].includes(source), "CHALK_PROOF_CONFIG_SOURCE must be env or 1password");
+  const fields = source === "env" ? environmentConfig(process.env) : Object.fromEntries(JSON.parse(await command("op", ["item", "get", "Chalk production proof Tenant", "--vault", "dev", "--format", "json"])).fields.map((field) => [field.label, field.value]));
+  for (const name of requiredConfigFields) {
+    check(fields[name], `Proof configuration is missing ${name}`);
   }
-  const env = await command("aws", ["--profile", fields.aws_profile, "--region", fields.aws_region, "ssm", "get-parameter", "--name", fields.ssm_api_env, "--with-decryption", "--query", "Parameter.Value", "--output", "text"]);
-  const settings = Object.fromEntries(
-    env
-      .split("\n")
-      .filter((line) => /^[A-Z_]+=/.test(line))
-      .map((line) => {
-        const at = line.indexOf("=");
-        return [line.slice(0, at), line.slice(at + 1).replace(/^["']|["']$/g, "")];
-      }),
-  );
-  check(settings.CHALK_RECORDING_ENABLED === "true", "SSM: Recording is disabled");
-  check(settings.CHALK_TRANSCRIPTION_ENABLED === "true", "SSM: Transcription is disabled");
+  check(fields.api_key.startsWith("chalk_sk_"), "Proof API key must use the chalk_sk_ namespace");
+  const readiness = await request(fields, "GET", "/readyz");
+  checkCapabilities(readiness);
   return fields;
 }
 export async function request(config, method, path, body, authorization = {}, extraHeaders = {}, signal) {
   const response = await fetch(new URL(path, config.api_url), {
     method,
-    headers: { "Content-Type": "application/json", "User-Agent": "Chalk-Production-Proof/1.0", Origin: config.web_url, "Idempotency-Key": randomUUID(), ...authorization, ...extraHeaders },
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent": "Chalk-Production-Proof/1.0",
+      Origin: config.web_url,
+      "Idempotency-Key": randomUUID(),
+      ...authorization,
+      ...extraHeaders,
+    },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     signal: AbortSignal.any([AbortSignal.timeout(30_000), ...(signal ? [signal] : [])]),
   });
@@ -73,9 +83,17 @@ function errorCode(value) {
 }
 export async function createRun(config, directory, signal = new AbortController().signal) {
   await mkdir(directory, { recursive: true, mode: 0o700 });
-  check(process.env.CHALK_PROOF_API_KEY, "Set CHALK_PROOF_API_KEY to an existing scoped Tenant API key");
-  const owner = { Authorization: `Bearer ${process.env.CHALK_PROOF_API_KEY}` };
-  const run = { config, directory, owner, signal, resources: [], cleanup: [], wait: (ms) => delay(ms, undefined, { signal }) };
+  check(config.api_key, "Proof configuration is missing api_key");
+  const owner = { Authorization: `Bearer ${config.api_key}` };
+  const run = {
+    config,
+    directory,
+    owner,
+    signal,
+    resources: [],
+    cleanup: [],
+    wait: (ms) => delay(ms, undefined, { signal }),
+  };
   run.ownerRequest = (method, path, body, headers) => request(config, method, path, body, owner, headers);
   run.tenantPath = `/v1/tenants/${config.tenant_id}`;
   return run;

@@ -89,7 +89,7 @@ function startCollector(run, receiver, collect) {
   });
 }
 export async function exposeWebhook(run, receiver) {
-  check(run.config.webhook_service_url, "1Password item is missing webhook_service_url");
+  check(run.config.webhook_service_url, "Proof configuration is missing webhook_service_url");
   const base = run.config.webhook_service_url;
   const token = await (await catcherRequest(base, "/token", "POST", { default_status: 204, request_limit: 50 }, run.signal)).json();
   run.resources.push({
