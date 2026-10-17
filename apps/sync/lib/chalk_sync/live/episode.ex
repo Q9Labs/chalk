@@ -193,8 +193,9 @@ defmodule ChalkSync.Live.Episode do
 
   defp apply_newer_media_observation(state, cursor, publications, options) do
     observed_items = normalize_media_items(publications)
+    {_pauses, media_items} = apply_media_pauses(observed_items, state.media_pauses)
 
-    with {:ok, next} <- reconcile_screen_leases(state, observed_items, options) do
+    with {:ok, next} <- reconcile_screen_leases(state, media_items, options) do
       next = %{next | media_observed_items: observed_items, media_observation_cursor: cursor}
       reconcile_observed_media(next, observed_items)
     end

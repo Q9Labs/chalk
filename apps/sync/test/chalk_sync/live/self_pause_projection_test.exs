@@ -8,6 +8,62 @@ defmodule ChalkSync.Live.SelfPauseProjectionTest do
   alias ChalkSync.Stateholder.Memory
   alias ChalkSync.UUID
 
+  test "a stopped screen does not reclaim the share lease after a new observation" do
+    episode = %EpisodeKey{
+      tenant_id: UUID.generate(),
+      space_id: UUID.generate(),
+      episode_id: UUID.generate()
+    }
+
+    participant_id = UUID.generate()
+    publication_id = "stopped-screen-track"
+    Memory.reset()
+
+    :ok =
+      Memory.seed_episode(episode, [
+        %{id: participant_id, generation: 1, display_name: "Stopped sharer", role: "owner"}
+      ])
+
+    identity = %Identity{
+      episode: episode,
+      participant_id: participant_id,
+      participant_generation: 1
+    }
+
+    :ok = Memory.set_media_pause(identity, :screen, publication_id)
+
+    {:ok, adapter} =
+      MediaPlaneTestAdapter.start_link(
+        outcomes: %{
+          observe_episode_publications:
+            {:ok,
+             [
+               %{
+                 participant_id: participant_id,
+                 source: :screen,
+                 enabled: true,
+                 publication_id: publication_id
+               }
+             ]}
+        }
+      )
+
+    previous = Application.get_env(:chalk_sync, :media_plane)
+    Application.put_env(:chalk_sync, :media_plane, {MediaPlaneTestAdapter, adapter})
+
+    on_exit(fn ->
+      if previous,
+        do: Application.put_env(:chalk_sync, :media_plane, previous),
+        else: Application.delete_env(:chalk_sync, :media_plane)
+    end)
+
+    assert {:ok, live, _frames} = LiveEpisode.reconcile(LiveEpisode.new(episode))
+    assert [%{"source" => "screen", "enabled" => false}] = live.media_items
+    assert live.screen_leases == %{}
+    assert {:ok, reconciled, []} = LiveEpisode.reconcile(live)
+    assert reconciled.screen_leases == %{}
+  end
+
   test "self-disable changes the media projection without revoking the subscriber track" do
     episode = %EpisodeKey{
       tenant_id: "11111111-1111-4111-8111-111111111111",
