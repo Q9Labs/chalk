@@ -228,9 +228,9 @@ defmodule ChalkSync.Live.Episode do
       Enum.map(observed_items, fn item ->
         key = {item["participant_id"], item["source"]}
 
-        if item["enabled"] and Map.has_key?(retained, key),
-          do: %{item | "enabled" => false},
-          else: item
+        if item["enabled"] and not Map.has_key?(retained, key),
+          do: item,
+          else: %{item | "enabled" => false, "publication_id" => nil}
       end)
 
     {retained, projected}

@@ -64,7 +64,7 @@ defmodule ChalkSync.Live.SelfPauseProjectionTest do
     assert reconciled.screen_leases == %{}
   end
 
-  test "self-disable changes the media projection without revoking the subscriber track" do
+  test "self-disable preserves the legacy wire invariant without revoking the provider track" do
     episode = %EpisodeKey{
       tenant_id: "11111111-1111-4111-8111-111111111111",
       space_id: "22222222-2222-4222-8222-222222222222",
@@ -125,14 +125,35 @@ defmodule ChalkSync.Live.SelfPauseProjectionTest do
 
     assert Enum.any?(frames, fn frame ->
              frame["stream"] == "media" and frame["item"]["enabled"] == false and
-               frame["item"]["publication_id"] == publication_id
+               frame["item"]["publication_id"] == nil
            end)
+
+    assert [%{"publication_id" => ^publication_id}] = paused.media_observed_items
+    assert paused.media_pauses[{participant_id, "camera"}] == publication_id
 
     assert {:ok, persisted, []} = LiveEpisode.reconcile(paused)
     assert persisted.media_items == paused.media_items
 
-    assert {:ok, rebuilt, _frames} = LiveEpisode.reconcile(LiveEpisode.new(episode))
+    assert {:ok, rebuilt, rebuilt_frames} = LiveEpisode.reconcile(LiveEpisode.new(episode))
     assert rebuilt.media_items == paused.media_items
+
+    assert Enum.any?(rebuilt_frames, fn frame ->
+             frame["stream"] == "media" and
+               Enum.any?(frame["items"], fn item ->
+                 item["enabled"] == false and item["publication_id"] == nil
+               end)
+           end)
+
+    {unpausing, result} =
+      LiveEpisode.live_target(persisted, identity, %{
+        name: :set_camera_enabled,
+        operation_id: UUID.generate(),
+        enabled: true
+      })
+
+    assert result["outcome"] == "confirmed"
+    assert {:ok, resumed, _frames} = LiveEpisode.reconcile(unpausing)
+    assert [%{"enabled" => true, "publication_id" => ^publication_id}] = resumed.media_items
 
     refute Enum.any?(MediaPlaneTestAdapter.calls(adapter), fn {effect, _, _} ->
              effect == :revoke_publication
