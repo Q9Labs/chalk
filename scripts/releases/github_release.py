@@ -39,14 +39,16 @@ def held_candidates(deployments, held=True):
 def cut_decision(target, deployments, now, manual=False):
     if manual:
         return True, 'explicit manual cut'
+    if any(payload(item).get('channel') == 'nightly-cut'
+           and datetime.fromisoformat(item['created_at'].replace('Z', '+00:00')).date() >= now.date()
+           for item in deployments):
+        return False, 'cut already attempted today (UTC)'
     completed = held_candidates(deployments, held=False)
     if not completed:
         return True, 'first completed cut'
     last = completed[0]
     if payload(last)['target_sha'] == target:
         return False, 'master has no new commits'
-    if datetime.fromisoformat(last['created_at'].replace('Z', '+00:00')).date() >= now.date():
-        return False, 'completed a cut today (UTC)'
     return True, 'new master commits'
 
 

@@ -38,6 +38,9 @@ class CutTests(unittest.TestCase):
         records = [held(2, 'b' * 40, '2026-10-16T02:00:00Z', status='failure', proof='failed'), held()]
         self.assertTrue(cut_decision('b' * 40, records, NOW)[0])
         self.assertTrue(cut_decision('b' * 40, records, NOW, manual=True)[0])
+        records[0]['created_at'] = '2026-10-17T02:00:00Z'
+        self.assertFalse(cut_decision('b' * 40, records, NOW)[0])
+        self.assertTrue(cut_decision('b' * 40, records, NOW, manual=True)[0])
 
     def test_newest_held_has_no_age_cutoff_and_has_stable_tie_break(self):
         records = [held(1), held(2), held(3, status='failure'), held(4, proof='failed'), held(5, status='inactive')]
