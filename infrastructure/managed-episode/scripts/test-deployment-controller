@@ -95,6 +95,7 @@ cat >"${fixture_root}/source/infrastructure/managed-episode/scripts/render-runti
 #!/usr/bin/env bash
 set -euo pipefail
 output="$2"
+[[ "${3:-production}" == "${FAKE_VALIDATION_ENVIRONMENT:?}" ]] || exit 1
 mkdir -p "$output/quadlet" "$output/systemd"
 image="$(jq -er '.images.api' "$1")"
 target="${FAKE_MIGRATION_TARGET:-}"
@@ -524,12 +525,12 @@ if run_controller "$unsafe_release_state" "${fixture_root}/unsafe-release-reques
   fail "path-separating release identifier was accepted"
 fi
 
-staging_state="${fixture_root}/staging-state"
-mkdir -p "$staging_state"
-make_request staging "${fixture_root}/staging-request.json" '[]' staging
-make_manifest staging >"${fixture_root}/staging-manifest.json"
-run_controller "$staging_state" "${fixture_root}/staging-request.json" "${fixture_root}/staging-manifest.json" ok >/dev/null
-jq -e '.environment == "staging" and .parameter_prefix == "/chalk/staging/managed-episode"' "${staging_state}/active-release.json" >/dev/null || fail "staging release was not accepted"
+nightly_state="${fixture_root}/nightly-state"
+mkdir -p "$nightly_state"
+make_request nightly "${fixture_root}/nightly-request.json" '[]' nightly
+make_manifest nightly >"${fixture_root}/nightly-manifest.json"
+run_controller "$nightly_state" "${fixture_root}/nightly-request.json" "${fixture_root}/nightly-manifest.json" ok >/dev/null
+jq -e '.environment == "nightly" and .parameter_prefix == "/chalk/nightly/managed-episode"' "${nightly_state}/active-release.json" >/dev/null || fail "nightly release was not accepted"
 
 preview_state="${fixture_root}/preview-state"
 mkdir -p "$preview_state"
@@ -800,6 +801,16 @@ for role in capture render issuer; do
   grep -Fq "systemctl --user stop chalk-recorder-${role}.service" "${fixture_root}/commands.log" || fail "obsolete recorder role was not stopped"
 done
 grep -Fqx 'CHALK_RECORDER_FLEET_ROLE=capture' "${fixture_root}/run/env/recorder-capture.env" || fail "rollback lost recorder configuration"
+nightly_recording_state="${fixture_root}/nightly-recording-state"
+mkdir -p "$nightly_recording_state"
+make_request nightly-recording "${fixture_root}/nightly-recording-request.json" '[]' nightly
+make_manifest nightly-recording | jq '.images.recorder_control = .images.api' >"${fixture_root}/nightly-recording-manifest.json"
+run_controller "$nightly_recording_state" "${fixture_root}/nightly-recording-request.json" "${fixture_root}/nightly-recording-manifest.json" ok >/dev/null
+run_restore "$nightly_recording_state" ok >/dev/null || fail "nightly recorder reboot restore failed"
+for role in capture render; do
+  grep -Fqx 'CHALK_RECORDER_FLEET_MAX_NODES=1' "${fixture_root}/run/env/recorder-${role}.env" || fail "nightly maximum was not one"
+  grep -Fqx 'CHALK_RECORDER_FLEET_ENVIRONMENT=nightly' "${fixture_root}/run/env/recorder-${role}.env" || fail "nightly recorder identity mismatch"
+done
 fi
 
 if group_enabled ssm-contract; then

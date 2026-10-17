@@ -54,6 +54,9 @@ function policyFromEnv(env: NodeJS.ProcessEnv): ProviderPolicy {
 }
 
 export function validateReleaseConfig(config: ReleaseConfig): ReleaseConfig {
+  if (config.environment === "nightly" && (config.controlApiBaseUrl !== "https://nightly-api.chalkmeet.com" || config.controlApiAudience !== "chalk-nightly-control-api")) {
+    throw new ConfigError("nightly requires its own control API URL and audience");
+  }
   if (!config.privacyGateAccepted) throw new ConfigError("transcription privacy gate is not accepted");
   if (!config.controlApiBaseUrl.startsWith("https://")) throw new ConfigError("control API must use HTTPS");
   if (config.maxBatch < 3 || config.maxBatch > 50) throw new ConfigError("max batch must be between 3 and 50 so reconciliation cannot starve a durable queue");

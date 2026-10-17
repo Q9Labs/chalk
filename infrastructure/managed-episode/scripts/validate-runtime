@@ -11,6 +11,13 @@ allow_dirty=false
 excluded_secrets=""
 environment=production
 
+validate_environment_inputs() {
+  local file="$1" section="$2" key expected
+  while IFS=$'\t' read -r key expected; do
+    [[ "$(env_value "$file" "$key")" == "$expected" ]] || fail "$key does not match environment"
+  done < <(jq -r --arg section "$section" '.[$section] | to_entries[] | [.key, .value] | @tsv' <<<"$environment_policy")
+}
+
 usage() {
   echo "usage: validate-runtime --env-root <dir> --secret-root <dir> --manifest <file> --sync-proof <file> [--environment <name>] [--rendered-root <dir>] [--excluded-secrets <sorted-comma-separated-ids>] [--allow-dirty]" >&2
 }
@@ -30,6 +37,7 @@ while (($# > 0)); do
 done
 
 command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
+environment_policy="$(jq -ce --arg environment "$environment" '.[$environment] // .production' "${managed_root}/contracts/environments.json")"
 command -v openssl >/dev/null || { echo "openssl is required" >&2; exit 1; }
 if [[ -z "${env_root}" || -z "${secret_root}" || -z "${manifest}" || -z "${sync_proof}" ]]; then
   usage
@@ -184,8 +192,26 @@ case "$(env_value "${api_env}" CHALK_WHITEBOARD_FILES_ENABLED)" in
   *) fail "CHALK_WHITEBOARD_FILES_ENABLED must be true or false" ;;
 esac
 
-[[ "$(env_value "${api_env}" CHALK_API_ENV)" == production ]] || fail "CHALK_API_ENV must be production"
-[[ "$(env_value "${sync_env}" CHALK_API_ENV)" == production ]] || fail "Sync CHALK_API_ENV must be production"
+[[ "$(env_value "${api_env}" CHALK_API_ENV)" == "$environment" ]] || fail "CHALK_API_ENV must match deployment environment"
+[[ "$(env_value "${sync_env}" CHALK_API_ENV)" == "$environment" ]] || fail "Sync CHALK_API_ENV must match deployment environment"
+if [[ "$environment" == nightly ]]; then
+  for file in "$api_env" "$sync_env"; do
+    [[ "$(env_value "$file" CHALK_SYNC_TOKEN_ISSUER)" == https://nightly-api.chalkmeet.com ]] || fail "nightly token issuer mismatch"
+    [[ "$(env_value "$file" CHALK_SYNC_TOKEN_AUDIENCE)" == chalk-nightly-sync ]] || fail "nightly token audience mismatch"
+  done
+  [[ "$(env_value "$api_env" CHALK_API_CORS_ALLOWED_ORIGINS)" == https://nightly.chalkmeet.com ]] || fail "nightly CORS origin mismatch"
+  [[ "$(env_value "$api_env" CHALK_R2_BUCKET)" == chalk-recorder-nightly ]] || fail "nightly recording bucket mismatch"
+  [[ "$(env_value "$sync_env" CHALK_API_URL)" == https://nightly-api.chalkmeet.com ]] || fail "nightly Sync API origin mismatch"
+  [[ "$(env_value "$sync_env" CHALK_SYNC_INSTANCE_ID)" == chalk-nightly-sync-1 ]] || fail "nightly Sync instance mismatch"
+  for key in CHALK_SYNC_LOCAL_PROOF CHALK_SYNC_LOCAL_PARITY; do
+    [[ "$(env_value "$sync_env" "$key")" != true ]] || fail "nightly cannot use local proof or parity"
+  done
+  [[ -z "$(env_value "$api_env" CHALK_API_LOCAL_SYSTEM_TOKEN)" ]] || fail "nightly cannot use a local system token"
+  if [[ "$(env_value "$api_env" CHALK_TRANSCRIPTION_ENABLED)" == true ]]; then
+    [[ "$(env_value "$api_env" CHALK_TRANSCRIPTION_CONTROL_AUDIENCE)" == chalk-nightly-control-api ]] || fail "nightly transcription audience mismatch"
+    [[ "$(env_value "$api_env" CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME)" == chalk-nightly-transcription-dispatcher ]] || fail "nightly transcription function mismatch"
+  fi
+fi
 [[ "$(env_value "${api_env}" CHALK_API_SERVICE)" == chalk-api ]] || fail "CHALK_API_SERVICE must be chalk-api"
 for endpoint_entry in "${api_env}|CHALK_API_OTLP_ENDPOINT" "${sync_env}|CHALK_SYNC_OTLP_ENDPOINT"; do
   IFS='|' read -r file name <<<"${endpoint_entry}"
@@ -290,7 +316,9 @@ if jq -e '.images | has("recorder_control")' "$manifest" >/dev/null; then
     done
     require_env "$file" DIGITALOCEAN_TOKEN
     [[ "$(env_value "$file" CHALK_RECORDER_FLEET_ROLE)" == "$role" ]] || fail "recorder fleet role does not match its unit"
-    [[ "$(env_value "$file" CHALK_RECORDER_FLEET_MAX_NODES)" == 10 ]] || fail "recorder fleet maximum must be ten"
+    max_nodes="$(jq -er '.fleet_max_nodes' <<<"$environment_policy")"
+    [[ "$(env_value "$file" CHALK_RECORDER_FLEET_MAX_NODES)" == "$max_nodes" ]] || fail "recorder fleet maximum does not match environment"
+    validate_environment_inputs "$file" fleet_inputs
     [[ "$(env_value "$file" CHALK_RECORDER_FLEET_SLOTS_PER_NODE)" == 1 ]] || fail "recorder fleet must use one Recording per node"
     if [[ "$role" == capture && "$(env_value "$file" CHALK_RECORDER_FLEET_SIZE)" != c-2 ]]; then
       qualification="$(env_value "$file" CHALK_RECORDER_CAPTURE_PROFILE_EVIDENCE_SHA256)" || fail "smaller capture profile has no qualification evidence"
@@ -315,6 +343,13 @@ if jq -e '.images | has("recorder_control")' "$manifest" >/dev/null; then
   done
   openssl verify -purpose sslclient -CAfile "${secret_root}/recorder/issuer-controller-ca" "${secret_root}/recorder/api-issuer-cert" >/dev/null || fail "API identity is not trusted by the issuer"
   openssl verify -purpose sslserver -CAfile "${secret_root}/recorder/issuer-server-ca" "${secret_root}/recorder/issuer-server-cert" >/dev/null || fail "issuer certificate is not trusted by the API"
+  validate_environment_inputs "${env_root}/recorder-issuer.env" issuer_inputs
+  validate_environment_inputs "$api_env" api_inputs
+  control_server_name="$(jq -r '.control_server_name // empty' <<<"$environment_policy")"
+  if [[ -n "$control_server_name" ]]; then
+    openssl verify -purpose sslserver -verify_hostname "$control_server_name" -CAfile "${secret_root}/provider-bridge/api-server-ca.crt" "${secret_root}/provider-bridge/api-server.crt" >/dev/null || fail "API control certificate SAN mismatch"
+    openssl verify -purpose sslserver -verify_hostname "$control_server_name" -CAfile "${secret_root}/recorder/issuer-server-ca" "${secret_root}/recorder/issuer-server-cert" >/dev/null || fail "issuer certificate SAN mismatch"
+  fi
 fi
 manifest_schema_version="$(jq -er '.schema_version' "${manifest}")" || fail "release manifest schema version is missing"
 case "${manifest_schema_version}" in
@@ -371,14 +406,16 @@ while IFS=$'\t' read -r relative expected; do
   [[ "${actual}" == "${expected}" ]] || fail "manifest artifact digest mismatch: ${relative}"
 done < <(jq -r '.runtime_artifacts | to_entries[] | [.key, .value] | @tsv' "${manifest}")
 
-jq -e '
-  .schema_version == 1 and .management == "remote" and .environment == "production" and
+hostname_prefix=""
+[[ "$environment" == production ]] || hostname_prefix="${environment}-"
+jq -e --arg environment "$environment" --arg prefix "$hostname_prefix" '
+  .schema_version == 1 and .management == "remote" and .environment == $environment and
   .routes == [
-    {hostname:"api.chalkmeet.com", service:"http://chalk-api:8080"},
-    {hostname:"sync.chalkmeet.com", service:"http://chalk-sync:4100", websocket:true},
+    {hostname:($prefix + "api.chalkmeet.com"), service:"http://chalk-api:8080"},
+    {hostname:($prefix + "sync.chalkmeet.com"), service:"http://chalk-sync:4100", websocket:true},
     {service:"http_status:404"}
   ]
-' "${managed_root}/cloudflare/ingress.production.json" >/dev/null || fail "Cloudflare ingress contract is invalid"
+' "${managed_root}/cloudflare/ingress.${environment}.json" >/dev/null || fail "Cloudflare ingress contract is invalid"
 
 if [[ -n "${rendered_root}" ]]; then
   for file in chalk-api.container chalk-sync.container chalk-redis.container chalk-cloudflared.container; do
@@ -402,7 +439,7 @@ if [[ -n "${rendered_root}" ]]; then
   [[ -f "${rendered_root}/systemd/chalk-runtime.target" ]] || fail "rendered runtime target is missing"
   expected_rendered_root="$(mktemp -d)"
   trap 'rm -rf "${expected_rendered_root}"' EXIT
-  "${managed_root}/scripts/render-runtime" "${manifest}" "${expected_rendered_root}" >/dev/null
+  "${managed_root}/scripts/render-runtime" "${manifest}" "${expected_rendered_root}" "$environment" >/dev/null
   diff -qr "${expected_rendered_root}/quadlet" "${rendered_root}/quadlet" >/dev/null || fail "rendered Quadlets differ from the release templates"
   diff -qr "${expected_rendered_root}/systemd" "${rendered_root}/systemd" >/dev/null || fail "rendered systemd units differ from the release templates"
   cmp -s "${expected_rendered_root}/release-manifest.json" "${rendered_root}/release-manifest.json" || fail "rendered release manifest differs from the promoted manifest"

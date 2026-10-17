@@ -115,7 +115,7 @@ func TestVerifyImageManifestRejectsUnknownProfile(t *testing.T) {
 
 func TestBootstrapConfigRejectsBakedIssuerNameMismatch(t *testing.T) {
 	config := Config{
-		Environment: "staging", Role: workeridentity.RoleCapture,
+		Environment: "nightly", Role: workeridentity.RoleCapture,
 		ReleaseID: "release-1", ImageDigest: "sha256:" + strings.Repeat("a", 64), BootGeneration: 1,
 		BootstrapEndpoint: "https://issuer.example:8444", BootstrapServerName: "wrong.example",
 		BootstrapCAFile: "/etc/chalk-recorder/bootstrap-ca.pem", IdentityDirectory: "/etc/chalk-recorder/identity",

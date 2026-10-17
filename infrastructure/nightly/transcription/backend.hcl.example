@@ -1,0 +1,2 @@
+# Replace ACCOUNT_ID privately. Never select the production state bucket.
+bucket = "chalk-nightly-state-ACCOUNT_ID"

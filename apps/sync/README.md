@@ -197,6 +197,6 @@ commit-bound evidence and fails closed.
 
 The external
 [`release-topology-failure-schedule`](./docs/release-topology-failure-scheduler.md)
-still controls staging provider drills. The replayable v1 matrix is documented
+still controls nightly provider drills. The replayable v1 matrix is documented
 in [`sync-breaker-v1.md`](./docs/sync-breaker-v1.md); the complete acceptance
 contract is covered by the checked-in Sync tests and reliability profiles.

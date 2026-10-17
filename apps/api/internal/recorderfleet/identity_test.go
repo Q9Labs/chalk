@@ -11,19 +11,19 @@ import (
 
 func TestControllerVerifierAcceptsOnlyIndependentControllerRole(t *testing.T) {
 	now := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
-	verifier, err := NewControllerVerifier("workers.example.test", "staging")
+	verifier, err := NewControllerVerifier("workers.example.test", "nightly")
 	if err != nil {
 		t.Fatalf("new verifier: %v", err)
 	}
 	verifier.now = func() time.Time { return now }
 
-	controllerURI, _ := url.Parse("spiffe://workers.example.test/environment/staging/recorder-fleet-controller/55555555-5555-4555-8555-555555555555")
+	controllerURI, _ := url.Parse("spiffe://workers.example.test/environment/nightly/recorder-fleet-controller/55555555-5555-4555-8555-555555555555")
 	identity, err := verifier.Verify(controllerRequest(now, controllerURI))
 	if err != nil || identity.ControllerID.String() != "55555555-5555-4555-8555-555555555555" {
 		t.Fatalf("controller identity/error = %+v/%v", identity, err)
 	}
 
-	workerURI, _ := url.Parse("spiffe://workers.example.test/environment/staging/capture/55555555-5555-4555-8555-555555555555")
+	workerURI, _ := url.Parse("spiffe://workers.example.test/environment/nightly/capture/55555555-5555-4555-8555-555555555555")
 	if _, err := verifier.Verify(controllerRequest(now, workerURI)); err != ErrInvalidControllerIdentity {
 		t.Fatalf("capture worker identity error = %v", err)
 	}
@@ -39,9 +39,9 @@ func TestControllerVerifierAcceptsOnlyIndependentControllerRole(t *testing.T) {
 
 func TestControllerVerifierRequiresVerifiedCurrentSingleURI(t *testing.T) {
 	now := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
-	verifier, _ := NewControllerVerifier("workers.example.test", "staging")
+	verifier, _ := NewControllerVerifier("workers.example.test", "nightly")
 	verifier.now = func() time.Time { return now }
-	controllerURI, _ := url.Parse("spiffe://workers.example.test/environment/staging/recorder-fleet-controller/55555555-5555-4555-8555-555555555555")
+	controllerURI, _ := url.Parse("spiffe://workers.example.test/environment/nightly/recorder-fleet-controller/55555555-5555-4555-8555-555555555555")
 
 	if _, err := verifier.Verify(&http.Request{}); err != ErrUnverifiedControllerPeer {
 		t.Fatalf("unverified request error = %v", err)
