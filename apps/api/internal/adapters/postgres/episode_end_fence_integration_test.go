@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/config"
@@ -64,5 +65,8 @@ func TestTenantEndWithExistingPublicationFenceReturnsControlBusy(t *testing.T) {
 	})
 	if !errors.Is(err, episodes.ErrEpisodeControlBusy) {
 		t.Fatalf("end while leave fence exists = %v, want control busy", err)
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("end fence contention must not leak a database error: %v", err)
 	}
 }
