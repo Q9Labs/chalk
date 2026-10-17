@@ -42,10 +42,14 @@ export function checkCapabilities(readiness) {
   check(readiness?.capabilities?.recording === "enabled", "API readiness: Recording is not enabled");
   check(readiness?.capabilities?.transcription === "enabled", "API readiness: Transcription is not enabled");
 }
+async function configurationFields(source) {
+  if (source === "env") return environmentConfig(process.env);
+  return Object.fromEntries(JSON.parse(await command("op", ["item", "get", "Chalk production proof Tenant", "--vault", "dev", "--format", "json"])).fields.map((field) => [field.label, field.value]));
+}
 export async function loadConfig({ readiness = true } = {}) {
   const source = process.env.CHALK_PROOF_CONFIG_SOURCE ?? "1password";
   check(["env", "1password"].includes(source), "CHALK_PROOF_CONFIG_SOURCE must be env or 1password");
-  const fields = source === "env" ? environmentConfig(process.env) : Object.fromEntries(JSON.parse(await command("op", ["item", "get", "Chalk production proof Tenant", "--vault", "dev", "--format", "json"])).fields.map((field) => [field.label, field.value]));
+  const fields = await configurationFields(source);
   for (const name of requiredConfigFields) {
     check(fields[name], `Proof configuration is missing ${name}`);
   }
@@ -110,22 +114,22 @@ export async function createRun(config, directory, signal = new AbortController(
   run.tenantPath = `/v1/tenants/${config.tenant_id}`;
   return run;
 }
+const publicErrorClasses = new Set(["SyntaxError", "TypeError", "AggregateError", "AbortError", "TimeoutError"]);
 export function publicFailure(phase, error, output = console.error) {
-  const kind = error instanceof SyntaxError ? "SyntaxError" : error instanceof TypeError ? "TypeError" : error instanceof AggregateError ? "AggregateError" : error?.name === "AbortError" ? "AbortError" : error?.name === "TimeoutError" ? "TimeoutError" : "Error";
+  const kind = publicErrorClasses.has(error?.name) ? error.name : "Error";
   output(`PROOF ${phase}: failed (${kind})`);
 }
+function maskCredential(name, value) {
+  if (!value || !/secret|token|credential|jwt/i.test(name)) return;
+  console.log(`::add-mask::${value.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A")}`);
+}
 export function maskCredentials(value) {
-  if (!process.env.GITHUB_ACTIONS || value == null) return;
-  if (Array.isArray(value)) {
-    for (const entry of value) maskCredentials(entry);
-    return;
-  }
-  if (typeof value !== "object") return;
-  for (const [name, entry] of Object.entries(value)) {
-    if (typeof entry === "string" && /secret|token|credential|jwt/i.test(name) && entry) {
-      console.log(`::add-mask::${entry.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A")}`);
-    } else maskCredentials(entry);
-  }
+  if (!process.env.GITHUB_ACTIONS) return;
+  if (value === null || typeof value !== "object") return;
+  Object.entries(value).forEach(([name, entry]) => {
+    if (typeof entry === "string") maskCredential(name, entry);
+    else maskCredentials(entry);
+  });
 }
 
 export async function recordResult(run, report, name, execute) {

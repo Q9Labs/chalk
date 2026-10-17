@@ -30,39 +30,52 @@ test("cleanup rediscovers lost responses, revokes first and is repeatable after 
   const runId = "canceled-run";
   const label = `chalk-proof:${runId}`;
   const catcher = "12345678-1234-1234-1234-123456789abc";
+  const state = { keyStatus: 200, revokedAt: null, episodeStatus: "live", transcriptStatus: "complete", endpoints: [{ id: "hook", name: `${label}:${catcher}`, revision: 1 }] };
+  const base = "/v1/tenants/tenant";
+  const routes = {
+    [`GET ${base}/api-keys`]: () => ({ api_keys: [{ id: "key", name: label, revoked_at: state.revokedAt }], pagination: {} }),
+    [`GET ${base}/spaces`]: () => ({ spaces: [{ id: "space", name: label, metadata: { proof_run_id: runId }, archived }], pagination: {} }),
+    [`GET ${base}/spaces/space/episodes`]: () => ({ episodes: [{ id: "episode", metadata: { proof_run_id: runId }, status: state.episodeStatus }], pagination: {} }),
+    [`GET ${base}/spaces/space/episodes/episode`]: () => ({ status: state.episodeStatus }),
+    [`GET ${base}/spaces/space`]: () => ({ archived }),
+    [`GET ${base}/transcripts`]: () => ({ transcripts: [{ id: "transcript", space_id: "space", status: state.transcriptStatus }], pagination: {} }),
+    [`GET ${base}/webhook-endpoints`]: () => ({ webhook_endpoints: state.endpoints, page: {} }),
+    [`DELETE ${base}/api-keys/key`]: () => {
+      revoked = true;
+      state.keyStatus = 401;
+      state.revokedAt = "now";
+    },
+    [`DELETE ${base}/transcripts/transcript`]: () => {
+      deleted = true;
+      state.transcriptStatus = "deleted";
+    },
+    [`DELETE ${base}/webhook-endpoints/hook`]: () => {
+      webhookDeleted = true;
+      state.endpoints = [];
+    },
+    [`DELETE /token/${catcher}`]: () => {},
+    [`POST ${base}/spaces/space/episodes/episode/end`]: () => {
+      ended = true;
+      state.episodeStatus = "ended";
+      return {};
+    },
+    [`POST ${base}/spaces/space/archive`]: () => {
+      archived = true;
+      return {};
+    },
+  };
   const config = await fixture(t, (req, res) => {
-    const url = new URL(req.url, "http://local");
-    const path = url.pathname;
+    const path = new URL(req.url, "http://local").pathname;
     calls.push([req.method, path]);
-    let value;
     if (req.headers.authorization === "Bearer temporary") {
-      res.writeHead(revoked ? 401 : 200).end("{}");
+      res.writeHead(state.keyStatus).end("{}");
       return;
     }
-    if (req.method === "DELETE") {
-      if (path.endsWith("/api-keys/key")) revoked = true;
-      if (path.endsWith("/transcripts/transcript")) deleted = true;
-      if (path.endsWith("/webhook-endpoints/hook")) webhookDeleted = true;
-      res.writeHead(204).end();
-      return;
-    }
-    if (req.method === "POST") {
-      if (path.endsWith("/end")) ended = true;
-      if (path.endsWith("/archive")) archived = true;
-      value = {};
-    } else if (path.endsWith("/api-keys")) value = { api_keys: [{ id: "key", name: label, revoked_at: revoked ? "now" : null }], pagination: {} };
-    else if (path.endsWith("/spaces")) value = { spaces: [{ id: "space", name: label, metadata: { proof_run_id: runId }, archived }], pagination: {} };
-    else if (path.endsWith("/episodes")) value = { episodes: [{ id: "episode", metadata: { proof_run_id: runId }, status: ended ? "ended" : "live" }], pagination: {} };
-    else if (path.endsWith("/episodes/episode")) value = { status: ended ? "ended" : "live" };
-    else if (path.endsWith("/spaces/space")) value = { archived };
-    else if (path.endsWith("/transcripts")) value = { transcripts: [{ id: "transcript", space_id: "space", status: deleted ? "deleted" : "complete" }], pagination: {} };
-    else if (path.endsWith("/webhook-endpoints")) value = { webhook_endpoints: webhookDeleted ? [] : [{ id: "hook", name: `${label}:${catcher}`, revision: 1 }], page: {} };
-    else {
-      res.writeHead(500).end("{}");
-      return;
-    }
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify(value));
+    const execute = routes[`${req.method} ${path}`];
+    assert.ok(execute, `Unexpected request: ${req.method} ${path}`);
+    const value = execute();
+    if (value === undefined) res.writeHead(204).end();
+    else res.end(JSON.stringify(value));
   });
   const directory = await mkdtemp(join(tmpdir(), "proof-cleanup-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -72,7 +85,11 @@ test("cleanup rediscovers lost responses, revokes first and is repeatable after 
   run.apiKey = "temporary";
   await cleanupRun(run);
   assert.equal(calls.find(([method]) => method !== "GET")[1], "/v1/tenants/tenant/api-keys/key");
-  assert.ok(revoked && ended && archived && deleted && webhookDeleted);
+  assert.ok(revoked);
+  assert.ok(ended);
+  assert.ok(archived);
+  assert.ok(deleted);
+  assert.ok(webhookDeleted);
   assert.deepEqual(JSON.parse(await readFile(`${directory}/key-rejection.json`)), { status: 401 });
   await cleanupByRunId(config, runId);
 });
@@ -80,27 +97,29 @@ test("cleanup rediscovers lost responses, revokes first and is repeatable after 
 test("sweep follows pagination, cleans only old proof labels and does not use foreign names", async (t) => {
   const cleaned = [];
   const now = Date.now();
+  const pages = {
+    "": {
+      api_keys: [
+        { id: "fresh", name: "chalk-proof:fresh", created_at: new Date(now).toISOString() },
+        { id: "foreign", name: "unrelated", created_at: new Date(0).toISOString() },
+      ],
+      pagination: { next_cursor: "second" },
+    },
+    second: { api_keys: [{ id: "old", name: "chalk-proof:old", created_at: new Date(now - 3 * 3600_000).toISOString() }], pagination: {} },
+  };
   const config = await fixture(t, (req, res) => {
     const url = new URL(req.url, "http://local");
-    let value;
     if (req.method === "DELETE") {
       cleaned.push(url.pathname);
       res.writeHead(204).end();
       return;
     }
-    if (url.pathname.endsWith("/api-keys")) {
-      value = url.searchParams.has("cursor")
-        ? { api_keys: [{ id: "old", name: "chalk-proof:old", created_at: new Date(now - 3 * 3600_000).toISOString() }], pagination: {} }
-        : {
-            api_keys: [
-              { id: "fresh", name: "chalk-proof:fresh", created_at: new Date(now).toISOString() },
-              { id: "foreign", name: "unrelated", created_at: new Date(0).toISOString() },
-            ],
-            pagination: { next_cursor: "second" },
-          };
-    } else if (url.pathname.endsWith("/spaces")) value = { spaces: [], pagination: {} };
-    else value = { webhook_endpoints: [], page: {} };
-    res.end(JSON.stringify(value));
+    const responses = {
+      "/v1/tenants/tenant/api-keys": pages[url.searchParams.get("cursor") ?? ""],
+      "/v1/tenants/tenant/spaces": { spaces: [], pagination: {} },
+      "/v1/tenants/tenant/webhook-endpoints": { webhook_endpoints: [], page: {} },
+    };
+    res.end(JSON.stringify(responses[url.pathname]));
   });
   await sweepStaleRuns(config, now);
   assert.deepEqual(cleaned, ["/v1/tenants/tenant/api-keys/old"]);

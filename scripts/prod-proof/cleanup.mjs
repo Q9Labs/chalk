@@ -10,13 +10,13 @@ function cleanupClient(config) {
 }
 async function list(call, path, field) {
   const values = [];
-  let cursor;
+  let cursor = "";
   do {
-    const query = new URLSearchParams({ page_size: "100", ...(cursor ? { cursor } : {}) });
+    const query = new URLSearchParams({ page_size: "100", cursor });
     const page = await call("GET", `${path}?${query}`);
     check(Array.isArray(page[field]), "Invalid cleanup listing");
     values.push(...page[field]);
-    cursor = (page.pagination ?? page.page)?.next_cursor;
+    cursor = (page.pagination ?? page.page).next_cursor;
   } while (cursor);
   return values;
 }
@@ -92,6 +92,13 @@ export async function cleanupByRunId(config, runId, directory) {
   if (failures.length) throw new AggregateError(failures, "Remote cleanup failed");
   return results;
 }
+function staleRun(entry, route, now) {
+  const completed = { "api-keys": Boolean(entry.revoked_at), spaces: entry.archived, "webhook-endpoints": false }[route];
+  if (completed) return;
+  const match = /^chalk-proof:([A-Za-z0-9_-]{1,51})(?::[0-9a-f-]{36})?$/.exec(entry.name);
+  if (!match) return;
+  if (Date.parse(entry.created_at) < now - 2 * 60 * 60 * 1000) return match[1];
+}
 export async function sweepStaleRuns(config, now = Date.now()) {
   const call = cleanupClient(config);
   const base = `/v1/tenants/${config.tenant_id}`;
@@ -101,11 +108,9 @@ export async function sweepStaleRuns(config, now = Date.now()) {
     ["spaces", "spaces"],
     ["webhook-endpoints", "webhook_endpoints"],
   ]) {
-    for (const entry of await list(call, `${base}/${route}`, field)) {
-      const match = /^chalk-proof:([A-Za-z0-9_-]{1,51})(?::[0-9a-f-]{36})?$/.exec(entry.name);
-      const completed = route === "api-keys" ? entry.revoked_at : route === "spaces" && entry.archived;
-      if (!completed && match && Date.parse(entry.created_at) < now - 2 * 60 * 60 * 1000) runs.add(match[1]);
-    }
+    const entries = await list(call, `${base}/${route}`, field);
+    const staleIds = entries.map((entry) => staleRun(entry, route, now)).filter(Boolean);
+    staleIds.forEach((runId) => runs.add(runId));
   }
   for (const runId of runs) await cleanupByRunId(config, runId);
 }
@@ -132,15 +137,7 @@ export async function cleanupRun(run) {
   const failures = [];
   try {
     await cleanupByRunId(run.config, run.runId, run.directory);
-    if (run.apiKey) {
-      const response = await fetch(new URL(`${run.tenantPath}/spaces`, run.config.api_url), {
-        headers: { Authorization: `Bearer ${run.apiKey}` },
-        signal: AbortSignal.timeout(15_000),
-      });
-      await response.body?.cancel();
-      check(response.status === 401, "Revoked proof key was still accepted");
-      await save(`${run.directory}/key-rejection.json`, { status: response.status });
-    }
+    await verifyKeyRejected(run);
   } catch (error) {
     failures.push(error);
   }
@@ -148,4 +145,15 @@ export async function cleanupRun(run) {
   for (const resource of [...run.resources].reverse()) failures.push(...(await disposeResource(run, resource)));
   await save(`${run.directory}/cleanup.json`, run.cleanup);
   if (failures.length) throw new AggregateError(failures, "Run cleanup failed; see private evidence");
+}
+
+async function verifyKeyRejected(run) {
+  if (!run.apiKey) return;
+  const response = await fetch(new URL(`${run.tenantPath}/spaces`, run.config.api_url), {
+    headers: { Authorization: `Bearer ${run.apiKey}` },
+    signal: AbortSignal.timeout(15_000),
+  });
+  await response.body?.cancel();
+  check(response.status === 401, "Revoked proof key was still accepted");
+  await save(`${run.directory}/key-rejection.json`, { status: response.status });
 }
