@@ -48,7 +48,7 @@ def manifest_bytes(github, info, trusted=True):
     return data
 
 
-def previous_production(github):
+def previous_production(github, retain_legacy=False):
     durable = github.deployments('production', 'production-release')
     if durable:
         info = dict(payload(durable[0]))
@@ -82,11 +82,12 @@ def previous_production(github):
     info = dict(run_id=str(run['id']), target_sha=value['source_revision'], release_id=release,
                 manifest_artifact_id=str(matches[0]['id']), manifest_sha256=digest(data))
     manifest_bytes(github, info)
-    # Adopt the checked legacy result before approval/mutation so the first
-    # promotion can also roll back after Actions artifacts expire.
-    saved = dict(info, channel='production-release', manifest_base64=base64.b64encode(data).decode())
-    item = save_production(github, saved)
-    github.request(f"deployments/{item['id']}/statuses", {'state': 'success', 'auto_inactive': False})
+    # Only the approved recheck holds the production lock. Nightly planning
+    # must remain read-only to avoid adopting stale production during a deploy.
+    if retain_legacy:
+        saved = dict(info, channel='production-release', manifest_base64=base64.b64encode(data).decode())
+        item = save_production(github, saved)
+        github.request(f"deployments/{item['id']}/statuses", {'state': 'success', 'auto_inactive': False})
     return info
 
 
@@ -204,7 +205,7 @@ def recheck(github, args):
     require_current_write(github.deployments('nightly', 'nightly-write'), payload(item))
     validate_choice(github, item)
     manifest_bytes(github, selection['previous'])
-    require(previous_production(github) == selection['previous'], 'production rollback baseline changed')
+    require(previous_production(github, retain_legacy=True) == selection['previous'], 'production rollback baseline changed')
 
 
 def fresh_envelope(source, output):

@@ -446,6 +446,8 @@ class EnvelopeTests(unittest.TestCase):
             return dict(id=99, head_branch='master', head_repository={'full_name': api.repository}, path='.github/workflows/ci.yml', event='workflow_dispatch')
         api.request = request
         previous = release.previous_production(api)
+        self.assertEqual(writes, [])
+        self.assertEqual(release.previous_production(api, retain_legacy=True), previous)
         self.assertEqual(previous['release_id'], 'release100')
         self.assertEqual(previous['run_id'], '100')
         self.assertNotIn('web', previous)

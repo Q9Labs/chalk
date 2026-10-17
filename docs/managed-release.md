@@ -73,7 +73,8 @@ retained Actions artifacts or even the old Actions run.
 
 The first selection can adopt the existing production Release only after checking
 its successful deploy result and exact retained manifest. It copies those bytes
-into the same durable deployment payload before approval. If those legacy files
+into the same durable deployment payload during approved recheck, under the
+production lock and before host mutation. Nightly planning only reads this evidence. If those legacy files
 are already missing, perform a manual production release to establish the durable
 baseline; selection fails closed. No proof result is invented.
 GitHub documents `payload` as JSON deployment data with no smaller payload limit
