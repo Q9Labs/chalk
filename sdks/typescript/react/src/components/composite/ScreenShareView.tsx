@@ -33,17 +33,15 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, cla
           <Monitor01Icon size={32} aria-hidden="true" />
         </ChalkEmptyState>
       ) : null}
-      <ChalkBadge tone="accent" className="absolute top-3 left-3 text-xs font-medium">
-        Shared by {sharedByName}
-      </ChalkBadge>
+      <SharedByTag name={sharedByName} />
     </div>
   );
   return <div className={cn("h-full w-full overflow-hidden rounded-2xl bg-[var(--chalk-text)]", className)}>{viewport}</div>;
-  return (
-    <ChalkPanel tone="neutral" className={cn("relative h-full w-full overflow-hidden rounded-2xl p-0 [&>div]:h-full [&>div]:w-full", className)}>
-      {viewport}
-    </ChalkPanel>
-  );
+}
+
+/** Same dark chip as a tile's name tag, so it reads on any shared screen. */
+function SharedByTag({ name, className }: { readonly name: string; readonly className?: string }): React.JSX.Element {
+  return <span className={cn("absolute top-3 left-3 rounded-md bg-[rgba(12,14,18,0.62)] px-2 py-1 text-xs font-medium text-white ring-1 ring-white/10 backdrop-blur-md", className)}>Shared by {name}</span>;
 }
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 4;
@@ -242,9 +240,7 @@ export const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByNa
             />
           </div>
 
-          <ChalkBadge tone="accent" className={cn("absolute top-3 left-3 text-xs font-medium transition-opacity duration-500", isLoading ? "opacity-0" : "opacity-100")}>
-            Shared by {sharedByName}
-          </ChalkBadge>
+          <SharedByTag name={sharedByName} className={cn("transition-opacity duration-500", isLoading ? "opacity-0" : "opacity-100")} />
 
           {/* Zoom controls */}
           {enableZoom && (

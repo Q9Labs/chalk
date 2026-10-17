@@ -7,21 +7,21 @@ import type { StatusBadgeProps } from "./StatusBadge";
 const config = {
   recording: {
     icon: CircleIcon,
-    text: "REC",
+    text: "Recording",
     colorClass: "text-[var(--chalk-danger)]",
-    bgClass: "bg-[var(--chalk-danger)]",
+    bgClass: "bg-[var(--chalk-danger-surface)]",
   },
   live: {
     icon: Radio01Icon,
-    text: "LIVE",
+    text: "Live",
     colorClass: "text-[var(--chalk-danger)]",
-    bgClass: "bg-[var(--chalk-danger)]",
+    bgClass: "bg-[var(--chalk-danger-surface)]",
   },
   transcribing: {
     icon: TextIcon,
     text: "CC",
     colorClass: "text-[var(--chalk-accent)]",
-    bgClass: "bg-[var(--chalk-accent)]",
+    bgClass: "bg-[var(--chalk-stage)]",
   },
   connecting: {
     icon: Alert02Icon,
