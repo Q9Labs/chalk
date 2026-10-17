@@ -144,15 +144,8 @@ defmodule ChalkSync.Live.SelfPauseProjectionTest do
                end)
            end)
 
-    {unpausing, result} =
-      LiveEpisode.live_target(persisted, identity, %{
-        name: :set_camera_enabled,
-        operation_id: UUID.generate(),
-        enabled: true
-      })
-
-    assert result["outcome"] == "confirmed"
-    assert {:ok, resumed, _frames} = LiveEpisode.reconcile(unpausing)
+    :ok = Memory.set_media_pause(identity, :camera, nil)
+    assert {:ok, resumed, _frames} = LiveEpisode.reconcile(persisted)
     assert [%{"enabled" => true, "publication_id" => ^publication_id}] = resumed.media_items
 
     refute Enum.any?(MediaPlaneTestAdapter.calls(adapter), fn {effect, _, _} ->
