@@ -4,18 +4,19 @@ const DEFAULT_DEADLINE_MS = 90_000;
 const DEFAULT_RETRY_DELAY_MS = 5_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 
-export async function verifyWebDeploy({ baseURL, expectedSHA, deadlineMs = DEFAULT_DEADLINE_MS, retryDelayMs = DEFAULT_RETRY_DELAY_MS, requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, apiBaseURL = "https://api.chalkmeet.com" }) {
+export async function verifyWebDeploy({ baseURL, expectedSHA, deadlineMs = DEFAULT_DEADLINE_MS, retryDelayMs = DEFAULT_RETRY_DELAY_MS, requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, apiBaseURL = "https://api.chalkmeet.com", expectedEnvironment }) {
   const origin = normalizeBaseURL(baseURL);
   const apiOrigin = normalizeBaseURL(apiBaseURL);
   const normalizedSHA = normalizeSHA(expectedSHA);
   const deadline = Date.now() + deadlineMs;
+  const deadlineSignal = AbortSignal.timeout(Math.max(1, deadlineMs));
   let attempt = 0;
   let lastError;
 
   while (Date.now() <= deadline) {
     attempt += 1;
     try {
-      await verifyOnce(origin, apiOrigin, normalizedSHA, requestTimeoutMs);
+      await verifyOnce(origin, apiOrigin, normalizedSHA, requestTimeoutMs, expectedEnvironment, deadlineSignal);
       console.log(`Web deployment verified at ${origin.origin} on attempt ${attempt}.`);
       return;
     } catch (error) {
@@ -30,24 +31,43 @@ export async function verifyWebDeploy({ baseURL, expectedSHA, deadlineMs = DEFAU
 }
 
 export function parseArguments(arguments_) {
-  const production = arguments_.includes("--production");
-  const positional = arguments_.filter((argument) => argument !== "--production");
-  if (positional.length !== 2 || arguments_.some((argument) => argument.startsWith("--") && argument !== "--production")) {
-    throw new Error("Usage: node scripts/deploy/verify-web-deploy.mjs <base-url> <expected-sha> [--production]");
+  const positional = [];
+  const options = {};
+  for (let index = 0; index < arguments_.length; index += 1) {
+    const argument = arguments_[index];
+    if (argument === "--production") options.production = true;
+    else if (["--api-base-url", "--environment"].includes(argument)) {
+      const value = arguments_[++index];
+      if (!value || value.startsWith("--")) throw new Error(`Missing value for ${argument}`);
+      if (argument === "--api-base-url") options.apiBaseURL = value;
+      else {
+        if (!["nightly", "production"].includes(value)) throw new Error("Invalid target environment");
+        options.expectedEnvironment = value;
+      }
+    } else if (argument.startsWith("--")) throw new Error(`Unknown argument: ${argument}`);
+    else positional.push(argument);
   }
-
-  return { baseURL: positional[0], expectedSHA: normalizeSHA(positional[1]), production };
+  if (positional.length !== 2) throw new Error("Expected base URL and full commit SHA");
+  return { baseURL: positional[0], expectedSHA: normalizeSHA(positional[1]), ...options };
 }
 
-async function verifyOnce(baseURL, apiBaseURL, expectedSHA, requestTimeoutMs) {
-  await verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs);
-  await verifyAPIHealth(apiBaseURL, requestTimeoutMs);
+async function verifyOnce(baseURL, apiBaseURL, expectedSHA, requestTimeoutMs, expectedEnvironment, deadlineSignal) {
+  await verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs, deadlineSignal);
+  await verifyAPIHealth(apiBaseURL, requestTimeoutMs, deadlineSignal);
+  if (expectedEnvironment) {
+    const response = await request(endpointURL(baseURL, "/release.json"), requestTimeoutMs, deadlineSignal);
+    requireStatus(response, 200, "release marker");
+    const marker = await readJSON(response, "release marker");
+    if (marker?.environment !== expectedEnvironment || marker?.commit !== expectedSHA) {
+      throw new Error("served web release mismatch");
+    }
+  }
 }
 
-async function verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs) {
+async function verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs, deadlineSignal) {
   const serviceWorkerURL = endpointURL(baseURL, "/sw.js");
   serviceWorkerURL.searchParams.set("cb", expectedSHA);
-  const serviceWorker = await request(serviceWorkerURL, requestTimeoutMs);
+  const serviceWorker = await request(serviceWorkerURL, requestTimeoutMs, deadlineSignal);
   requireStatus(serviceWorker, 200, "service worker");
   const serviceWorkerSource = await serviceWorker.text();
   const deployedSHA = serviceWorkerSource.match(/"commitHash"\s*:\s*"([0-9a-f]{40})"/i)?.[1]?.toLowerCase();
@@ -56,18 +76,18 @@ async function verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs) {
   }
 }
 
-async function verifyAPIHealth(baseURL, requestTimeoutMs) {
-  const response = await request(endpointURL(baseURL, "/healthz"), requestTimeoutMs);
+async function verifyAPIHealth(baseURL, requestTimeoutMs, deadlineSignal) {
+  const response = await request(endpointURL(baseURL, "/healthz"), requestTimeoutMs, deadlineSignal);
   requireStatus(response, 200, "API health");
   const health = await readJSON(response, "API health");
   if (health?.status !== "ok") throw new Error("API health did not report healthy status");
 }
 
-async function request(url, timeoutMs, accept = "application/json") {
+async function request(url, timeoutMs, deadlineSignal) {
   return fetch(url, {
     cache: "no-store",
-    headers: { Accept: accept },
-    signal: AbortSignal.timeout(timeoutMs),
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.any([deadlineSignal, AbortSignal.timeout(timeoutMs)]),
   });
 }
 

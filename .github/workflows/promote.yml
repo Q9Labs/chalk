@@ -38,12 +38,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SELECTION: ${{ needs.select.outputs.selection }}
         run: python3 scripts/releases/release.py recheck
+      - name: Select the explicit production Pages destination
+        run: |
+          node --input-type=module -e 'import { PRODUCTION_PROJECT } from "./scripts/deploy/deploy-web-release.mjs"; console.log("PAGES_PROJECT=" + PRODUCTION_PROJECT)' >> "$GITHUB_ENV"
       - name: Save the live production Pages deployment before any upload
         id: pages
         env:
           CLOUDFLARE_ACCOUNT_ID: "5281943bd26d5bdcf4c3915606cd6bfb"
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          PAGES_PROJECT: chalk-web
         run: |
           python3 scripts/releases/web.py current
       - name: Retain rollback source and saved Pages identity
@@ -105,18 +107,20 @@ jobs:
     if: always()
     runs-on: ubuntu-24.04
     steps:
-      - name: Failed promotion stays failed even after successful rollback
+      - uses: actions/checkout@v4
+        if: always()
+      - name: Failed promotion stays failed; require explicit recovery evidence
+        if: always() && needs.approve.result == 'success' && needs.release.result != 'skipped'
         env:
-          RELEASE_RESULT: ${{ needs.release.result }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          DEPLOY_RESULT: ${{ needs.release.result }}
           PROOF_RESULT: ${{ needs.proof.result == 'success' && needs.proof.outputs.result || 'failed' }}
           ROLLBACK_RESULT: ${{ needs.rollback.result }}
-          SOURCE_RELEASE: ${{ fromJSON(needs.select.outputs.selection || '{}').selection.release_id }}
+          SELECTION: ${{ needs.select.outputs.selection }}
           APPLIED_RELEASE: ${{ needs.release.outputs.applied_release_id }}
-          ROLLBACK_RELEASE: ${{ needs.rollback.outputs.applied_release_id }}
-        run: |
-          printf 'Source: %s\nApplied: %s\nRollback: %s (%s)\n' "$SOURCE_RELEASE" "$APPLIED_RELEASE" "$ROLLBACK_RELEASE" "$ROLLBACK_RESULT" >> "$GITHUB_STEP_SUMMARY"
-          if [[ "$ROLLBACK_RESULT" != skipped && "$ROLLBACK_RESULT" != success ]]; then
-            echo 'ROLLBACK FAILED: manual recovery required' >&2
-            exit 1
-          fi
-          test "$RELEASE_RESULT" = success && test "$PROOF_RESULT" = passed
+          ROLLBACK: ${{ toJSON(needs.rollback.outputs) }}
+          PAGES_ID: ${{ needs.approve.outputs.pages_deployment_id }}
+        run: python3 scripts/releases/release.py promotion_result
+      - name: Refused or skipped promotion stays red
+        if: always() && (needs.approve.result != 'success' || needs.release.result == 'skipped')
+        run: exit 1

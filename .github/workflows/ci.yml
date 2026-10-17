@@ -124,6 +124,10 @@ on:
         value: ${{ jobs.prepare-release.outputs.manifest_sha256 }}
       web:
         value: ${{ jobs.prepare-web.outputs.web }}
+      restored_source_release_id:
+        value: ${{ jobs.deploy-managed.outputs.restored_source_release_id }}
+      pages_deployment_id:
+        value: ${{ jobs.deploy-web.outputs.pages_deployment_id }}
 
 run-name: Release ${{ inputs.target_sha }}
 
@@ -148,7 +152,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ inputs.target_sha }}
       - uses: actions/setup-go@v5
         with:
           go-version-file: apps/api/go.mod
@@ -530,9 +533,10 @@ jobs:
   deploy-managed:
     name: Deploy managed release to ${{ inputs.managed_environment }}
     needs: prepare-release
-    if: always() && !cancelled() && inputs.deploy_managed && needs.prepare-release.result == 'success'
+    if: always() && (!cancelled() || inputs.pages_rollback_id != '') && inputs.deploy_managed && needs.prepare-release.result == 'success'
     outputs:
       release_id: ${{ steps.result.outputs.release_id }}
+      restored_source_release_id: ${{ steps.result.outputs.restored_source_release_id }}
     runs-on: ubuntu-24.04
     # Host polling is bounded to 30 minutes; leave time for guarded dispatcher plans.
     timeout-minutes: 60
@@ -547,16 +551,19 @@ jobs:
       id-token: write
     steps:
       - name: Checkout deployment tooling from workflow revision
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
 
       - name: Setup Node
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         uses: actions/setup-node@v4
         with:
           node-version-file: .tool-versions
 
       - name: Download exact release manifest
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         uses: actions/download-artifact@v4
         with:
           merge-multiple: true
@@ -566,6 +573,7 @@ jobs:
           path: ${{ runner.temp }}/managed-release
 
       - name: Verify exact backend bytes before credentials
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         env:
           EXPECTED_SHA256: ${{ needs.prepare-release.outputs.manifest_sha256 }}
           RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
@@ -573,6 +581,7 @@ jobs:
           python -c 'import hashlib,os,pathlib; p=pathlib.Path(os.environ["RUNNER_TEMP"])/"managed-release"/(os.environ["RELEASE_ID"]+".json"); assert hashlib.sha256(p.read_bytes()).hexdigest() == os.environ["EXPECTED_SHA256"]'
 
       - name: Validate managed deployment configuration
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         env:
           CHALK_MANAGED_AWS_REGION: ${{ vars.CHALK_MANAGED_AWS_REGION }}
           CHALK_MANAGED_DEPLOY_ROLE_ARN: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
@@ -598,6 +607,7 @@ jobs:
           done
 
       - name: Configure managed deployment credentials
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
@@ -605,9 +615,11 @@ jobs:
           role-duration-seconds: 3600
 
       - name: Set up OpenTofu for dispatcher binding
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         uses: ./.github/actions/setup-opentofu
 
       - name: Deploy, health-check, and prove release
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         env:
           GH_TOKEN: ${{ github.token }}
           CHALK_MANAGED_AWS_REGION: ${{ vars.CHALK_MANAGED_AWS_REGION }}
@@ -659,8 +671,16 @@ jobs:
           node scripts/deploy/deploy-managed-release.mjs "${args[@]}"
 
       - name: Capture applied identity under the environment lock
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         id: result
-        run: echo "release_id=$(jq -er '.release_id' '${{ runner.temp }}/managed-deployment.json')" >> "$GITHUB_OUTPUT"
+        env:
+          EXPECTED_RELEASE: ${{ needs.prepare-release.outputs.release_id }}
+          SOURCE_RELEASE: ${{ inputs.reuse_release_id }}
+          DEPLOYMENT_RESULT: ${{ runner.temp }}/managed-deployment.json
+        run: |
+          jq -e --arg expected "$EXPECTED_RELEASE" '.release_id == $expected and .status == "deployed" and .health == "passed" and .deployment_phase == "complete" and .rolled_back == false' "$DEPLOYMENT_RESULT"
+          echo "release_id=$EXPECTED_RELEASE" >> "$GITHUB_OUTPUT"
+          echo "restored_source_release_id=$SOURCE_RELEASE" >> "$GITHUB_OUTPUT"
 
       - name: Managed deployment summary
         if: always()
@@ -703,8 +723,11 @@ jobs:
         target: ${{ fromJSON(inputs.managed_environment == 'nightly' && '["nightly","production"]' || '["production"]') }}
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout requested web source independently of release tooling
+        uses: actions/checkout@v4
         with:
           ref: ${{ inputs.target_sha }}
+          path: build-source
       - uses: pnpm/action-setup@v4
         with:
           version: 12.8.1
@@ -713,10 +736,11 @@ jobs:
           node-version-file: .tool-versions
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+        working-directory: build-source
       - name: Build selected public endpoints
         env:
           WEB_TARGET: ${{ matrix.target }}
-        run: python3 scripts/releases/web.py build --target "$WEB_TARGET" --sha "$TARGET_SHA"
+        run: python3 scripts/releases/web.py build --target "$WEB_TARGET" --sha "$TARGET_SHA" --source-root "$GITHUB_WORKSPACE/build-source"
       - uses: actions/upload-artifact@v4
         with:
           name: web-${{ matrix.target }}-${{ github.run_attempt }}
@@ -741,7 +765,7 @@ jobs:
     name: Verify source and prepare deployment envelope
     needs: [plan-managed, publish-managed-manifest]
     if: >-
-      always() && !cancelled() &&
+      always() && (!cancelled() || inputs.pages_rollback_id != '') &&
       (inputs.manifest_run_id != '' || needs.publish-managed-manifest.result == 'success')
     runs-on: ubuntu-24.04
     outputs:
@@ -751,9 +775,11 @@ jobs:
       run_id: ${{ github.run_id }}
     steps:
       - uses: actions/checkout@v4
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         with:
           fetch-depth: 0
       - name: Verify source hash before preparing fresh reuse envelope
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         id: prepare
         env:
           GH_TOKEN: ${{ github.token }}
@@ -768,7 +794,7 @@ jobs:
           python3 scripts/releases/release.py prepare "${args[@]}"
       - uses: actions/upload-artifact@v4
         id: upload
-        if: inputs.manifest_run_id != ''
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && (inputs.manifest_run_id != '')
         with:
           name: release-manifest-${{ steps.prepare.outputs.release_id }}
           path: release-input/${{ steps.prepare.outputs.release_id }}.json
@@ -777,9 +803,11 @@ jobs:
 
   deploy-web:
     name: Deploy selected web or restore Pages
+    outputs:
+      pages_deployment_id: ${{ steps.restore.outputs.pages_deployment_id }}
     needs: [prepare-web, deploy-managed]
     if: >-
-      always() && !cancelled() && inputs.deploy_web &&
+      always() && (!cancelled() || inputs.pages_rollback_id != '') && inputs.deploy_web &&
       (inputs.pages_rollback_id != '' || needs.deploy-managed.result == 'success' || (!inputs.deploy_managed && needs.deploy-managed.result == 'skipped')) &&
       (inputs.manifest_run_id != '' || needs.prepare-web.result == 'success')
     runs-on: ubuntu-24.04
@@ -788,22 +816,33 @@ jobs:
       # Preserve today's production destination; new configuration is nightly-only.
       CLOUDFLARE_ACCOUNT_ID: ${{ inputs.managed_environment == 'production' && '5281943bd26d5bdcf4c3915606cd6bfb' || vars.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      PAGES_PROJECT: ${{ inputs.managed_environment == 'production' && 'chalk-web' || vars.CHALK_PAGES_PROJECT }}
+      PAGES_PROJECT: ${{ vars.CHALK_PAGES_PROJECT }}
     steps:
       - uses: actions/checkout@v4
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
+      - name: Select the explicit production Pages destination
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && (inputs.managed_environment == 'production')
+        run: |
+          node --input-type=module -e 'import { PRODUCTION_PROJECT } from "./scripts/deploy/deploy-web-release.mjs"; console.log("PAGES_PROJECT=" + PRODUCTION_PROJECT)' >> "$GITHUB_ENV"
       - uses: pnpm/action-setup@v4
-        if: inputs.pages_rollback_id == ''
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && (inputs.pages_rollback_id == '')
         with:
           version: 12.8.1
       - uses: actions/setup-node@v4
-        if: inputs.pages_rollback_id == ''
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && (inputs.pages_rollback_id == '')
         with:
           node-version-file: .tool-versions
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-        if: inputs.pages_rollback_id == ''
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && (inputs.pages_rollback_id == '')
+      - name: Record the current nightly write before any web mutation
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && inputs.managed_environment == 'nightly'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.deploy-managed.outputs.release_id }}
+        run: python3 scripts/releases/release.py invalidate
       - name: Upload verified prebuilt archive without rebuilding
-        if: inputs.pages_rollback_id == ''
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && (inputs.pages_rollback_id == '')
         env:
           GH_TOKEN: ${{ github.token }}
           WEB_TARGET: ${{ inputs.managed_environment }}
@@ -811,7 +850,8 @@ jobs:
           WEB_ARTIFACT: ${{ inputs.web_artifact || toJSON(fromJSON(needs.prepare-web.outputs.web)[inputs.managed_environment]) }}
         run: python3 scripts/releases/web.py deploy --target "$WEB_TARGET" --sha "$TARGET_SHA"
       - name: Restore the saved Pages production deployment
-        if: inputs.pages_rollback_id != ''
+        id: restore
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && (inputs.pages_rollback_id != '')
         env:
           PAGES_ROLLBACK_ID: ${{ inputs.pages_rollback_id }}
         run: python3 scripts/releases/web.py rollback

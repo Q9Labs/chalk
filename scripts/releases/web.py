@@ -5,6 +5,7 @@ import argparse
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import tarfile
@@ -13,7 +14,7 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import quote
 
-from github_release import GitHub, digest, outputs, require
+from github_release import GitHub, outputs, require
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -36,21 +37,25 @@ def read_marker(data):
         return json.load(archive.extractfile('dist/client/release.json'))
 
 
-def build(target, sha, output):
+def build(target, sha, output, source_root):
+    require(re.fullmatch('[0-9a-f]{40}', sha or ''), 'expected full source SHA')
+    checked_out = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source_root, text=True).strip()
+    require(checked_out == sha, 'web source checkout does not match requested SHA')
     subprocess.run(['pnpm', 'exec', 'turbo', 'run', 'build', '--filter=web...', '--force', '--env-mode=loose'],
-                   cwd=ROOT, env={**os.environ, **public_config(target, sha)}, check=True)
+                   cwd=source_root, env={**os.environ, **public_config(target, sha)}, check=True)
     output.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as directory:
         stage = Path(directory)
-        shutil.copytree(ROOT / 'apps/web/dist/client', stage / 'dist/client')
+        shutil.copytree(source_root / 'apps/web/dist/client', stage / 'dist/client')
         (stage / 'dist/client/release.json').write_text(json.dumps({'environment': target, 'commit': sha}))
-        (stage / 'wrangler.toml').write_text((ROOT / 'apps/web/wrangler.toml').read_text().split('[vars]', 1)[0])
+        (stage / 'wrangler.toml').write_text((source_root / 'apps/web/wrangler.toml').read_text().split('[vars]', 1)[0])
         with tarfile.open(output / f'web-{target}.tar.gz', 'w:gz') as archive:
             archive.add(stage / 'dist', arcname='dist')
             archive.add(stage / 'wrangler.toml', arcname='wrangler.toml')
 
 
 def pages(project, route='', method='GET'):
+    require(project, 'missing explicit Pages project')
     account = os.environ['CLOUDFLARE_ACCOUNT_ID']
     url = f'https://api.cloudflare.com/client/v4/accounts/{account}/pages/projects/{quote(project, safe="")}{route}'
     request = urllib.request.Request(url, method=method, headers={'Authorization': 'Bearer ' + os.environ['CLOUDFLARE_API_TOKEN']})
@@ -70,6 +75,7 @@ def current(project):
 def rollback(project, deployment_id):
     deployment = pages(project, f'/deployments/{quote(deployment_id, safe="")}/rollback', 'POST')
     require(deployment['id'] == deployment_id and current(project) == deployment_id, 'Pages rollback did not restore the saved deployment')
+    outputs({'pages_deployment_id': deployment_id})
 
 
 def deploy(target, sha, run, member, project):
@@ -83,10 +89,9 @@ def deploy(target, sha, run, member, project):
         subprocess.run([str(ROOT / 'node_modules/.bin/wrangler'), 'pages', 'deploy', 'dist/client',
                         '--project-name', project, '--branch', 'master', '--commit-hash', sha,
                         '--commit-dirty=false'], cwd=directory, check=True)
-    url = public_config(target, sha)['VITE_PUBLIC_APP_URL'] + '/release.json'
-    request = urllib.request.Request(url, headers={'Cache-Control': 'no-cache'})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        require(json.load(response) == {'environment': target, 'commit': sha}, 'served web release mismatch')
+    config = public_config(target, sha)
+    subprocess.run(['node', str(ROOT / 'scripts/deploy/verify-web-deploy.mjs'), config['VITE_PUBLIC_APP_URL'], sha,
+                    '--api-base-url', config['VITE_API_URL'], '--environment', target], check=True)
 
 
 if __name__ == '__main__':
@@ -95,13 +100,14 @@ if __name__ == '__main__':
     parser.add_argument('--target', choices=('nightly', 'production'))
     parser.add_argument('--sha')
     parser.add_argument('--output', type=Path, default=Path('web-output'))
+    parser.add_argument('--source-root', type=Path)
     args = parser.parse_args()
-    project = os.environ.get('PAGES_PROJECT', 'chalk-web')
     if args.command == 'build':
-        build(args.target, args.sha, args.output)
+        require(args.source_root is not None, 'build requires explicit --source-root')
+        build(args.target, args.sha, args.output, args.source_root)
     elif args.command == 'current':
-        outputs({'pages_deployment_id': current(project)})
+        outputs({'pages_deployment_id': current(os.environ['PAGES_PROJECT'])})
     elif args.command == 'rollback':
-        rollback(project, os.environ['PAGES_ROLLBACK_ID'])
+        rollback(os.environ['PAGES_PROJECT'], os.environ['PAGES_ROLLBACK_ID'])
     else:
-        deploy(args.target, args.sha, os.environ['ARTIFACT_RUN_ID'], json.loads(os.environ['WEB_ARTIFACT']), project)
+        deploy(args.target, args.sha, os.environ['ARTIFACT_RUN_ID'], json.loads(os.environ['WEB_ARTIFACT']), os.environ['PAGES_PROJECT'])

@@ -118,9 +118,11 @@ def validate_choice(github, item):
 
 
 def select(github, args):
-    held = held_candidates(github.deployments('nightly'))
+    records = github.deployments('nightly')
+    held = held_candidates(records)
     require(held, 'no held nightly')
     selected = held[0]  # Never fall back when the newest held record is invalid.
+    require_current_write(records, payload(selected))
     info = validate_choice(github, selected)
     previous = previous_production(github)
     result = dict(deployment_id=selected['id'], selection=info, previous=previous)
@@ -135,6 +137,7 @@ def recheck(github, args):
     status = github.request(f"deployments/{item['id']}/statuses?per_page=1")
     item['latest_status'] = status[0]['state'] if status else 'pending'
     require(held_candidates([item]) and payload(item) == selection['selection'], 'selected nightly changed or is no longer held')
+    require_current_write(github.deployments('nightly'), payload(item))
     validate_choice(github, item)
     manifest_bytes(github, selection['previous'])
     require(previous_production(github) == selection['previous'], 'production rollback baseline changed')
@@ -166,7 +169,7 @@ def prepare(github, args):
         value = fresh_envelope(source, output) if args.reuse else json.loads(data)
         applied = args.directory / (value['release_id'] + '.json')
         applied.write_bytes(output.read_bytes() if args.reuse else data)
-    outputs(dict(release_id=value['release_id'], source_release_id=info['release_id'], manifest_sha256=digest(applied.read_bytes())))
+    outputs(dict(release_id=value['release_id'], manifest_sha256=digest(applied.read_bytes())))
 
 
 def webrefs(github, args):
@@ -190,20 +193,61 @@ def record(github, args):
     info.update(channel='nightly-cut', proof_result='passed' if passed else 'failed', proof_run_id=env('GITHUB_RUN_ID'))
     if passed:
         require(info['release_id'] == info['applied_release_id'], 'deploy result identity mismatch')
+        require_current_write(github.deployments('nightly'), info)
         validate_choice(github, {'payload': info})
     outputs({'deployment_id': github.record(info['target_sha'], info, passed)})
 
 
+def require_current_write(records, info):
+    markers = [item for item in records if payload(item).get('channel') == 'nightly-write']
+    latest = max(markers, key=lambda item: (item['created_at'], int(item['id'])), default=None)
+    require(latest and payload(latest).get('run_id') == info['run_id']
+            and payload(latest).get('release_id') == info['applied_release_id'],
+            'a newer nightly write replaced this run; refusing stale held evidence')
+
+
 def invalidate(github, args):
-    # Invalidate before a nightly host write, including manual calls and uncertain failures.
-    # A failed attempt cannot leave a stale served identity held; cut history is unchanged.
+    # All callers hold chalk-environment-nightly, including record-only retries.
+    # Persist first: partial invalidation must not leave an older cut selectable.
+    github.request('deployments', {'ref': env('TARGET_SHA'), 'environment': 'nightly', 'auto_merge': False,
+                   'required_contexts': [], 'payload': dict(channel='nightly-write', run_id=env('GITHUB_RUN_ID'),
+                                                          release_id=os.environ.get('RELEASE_ID', ''))})
     for item in held_candidates(github.deployments('nightly')):
         github.request(f"deployments/{item['id']}/statuses", {'state': 'inactive', 'auto_inactive': False})
 
 
+def promotion_result(github, args):
+    selection = json.loads(env('SELECTION'))
+    rollback = json.loads(os.environ.get('ROLLBACK') or '{}')
+    passed = os.environ.get('DEPLOY_RESULT') == 'success' and os.environ.get('PROOF_RESULT') == 'passed'
+    previous = selection['previous']
+    recovered = (os.environ.get('ROLLBACK_RESULT') == 'success'
+                 and rollback.get('restored_source_release_id') == previous['release_id']
+                 and bool(rollback.get('release_id'))
+                 and rollback.get('applied_release_id') == rollback['release_id']
+                 and bool(os.environ.get('PAGES_ID'))
+                 and rollback.get('pages_deployment_id') == os.environ['PAGES_ID'])
+    with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
+        summary.write(f"Source: {selection['selection']['release_id']}\n\nApplied: {os.environ.get('APPLIED_RELEASE', '')}\n\n")
+        if not passed:
+            if recovered:
+                summary.write(f"RECOVERY VERIFIED — backend source {previous['release_id']}, applied envelope "
+                              f"{rollback['applied_release_id']}, Pages {rollback['pages_deployment_id']}\n\n")
+            else:
+                summary.write('RECOVERY NOT RUN — manual recovery required\n\n'
+                              'Recovery was skipped, cancelled, failed, or lacks explicit restoration evidence.\n\n'
+                              'Run the Release workflow from master with exactly these manual inputs:\n\n```json\n')
+                manual = dict(target_sha=previous['target_sha'], release_managed=False, deploy_managed=True,
+                              managed_environment='production', deploy_web=True, manifest_run_id=previous['run_id'],
+                              manifest_artifact_id=previous['manifest_artifact_id'], manifest_sha256=previous['manifest_sha256'],
+                              reuse_release_id=previous['release_id'], pages_rollback_id=env('PAGES_ID'))
+                summary.write(json.dumps(manual, indent=2) + '\n```\n')
+    require(passed, 'promotion failed; consult the recovery evidence and manual Release inputs in the summary')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('plan', 'select', 'recheck', 'prepare', 'webrefs', 'record', 'invalidate'))
+    parser.add_argument('command', choices=('plan', 'select', 'recheck', 'prepare', 'webrefs', 'record', 'invalidate', 'promotion_result'))
     parser.add_argument('--directory', type=Path, default=Path('release-input'))
     parser.add_argument('--manual', action='store_true')
     parser.add_argument('--reuse', action='store_true')

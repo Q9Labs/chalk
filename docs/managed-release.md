@@ -23,7 +23,11 @@ After nightly deployment, the real-call workflow runs `smoke transcript`.
 A passed call and the controller's checked applied release ID create a held
 `nightly` deployment record. It contains the source SHA, run/artifact IDs,
 SHA256 hashes, applied identity and proof result. Artifact retention is 365 days.
-A nightly host-write attempt invalidates older held identities; completed-cut history remains.
+Every nightly backend or web write first records a durable current-write marker
+under the nightly lock and invalidates older held identities. Manual web-only
+releases count too. Recording or selecting held proof requires that newest marker
+to match the run and applied identity; retrying an older record job cannot revive it.
+Completed-cut history remains.
 Failed nightly deployments/calls stay unheld; nightly never auto-rolls back.
 
 ## Promote
@@ -59,13 +63,22 @@ The saved backend references and Pages ID are retained in a rollback artifact.
 A failed production deploy/call invokes Release again with the verified previous
 manifest, another fresh envelope/request ID, and the saved Pages deployment ID.
 Pages' native rollback restores the old web; no old web archive is needed.
-A rollback failure is explicit and requires manual recovery. A recovered promotion
-still ends failed. No nightly rollback exists.
+Recovery jobs and their mutation steps use `always()` semantics even on cancellation.
+Recovery requires the applied ID to match the fresh recovery envelope that preserves
+the previous production source, plus the canonical Pages ID to match the saved ID.
+Missing, skipped, cancelled or failed recovery evidence keeps the run red with
+`RECOVERY NOT RUN — manual recovery required` and exact manual Release inputs in
+the summary. A verified recovery also leaves the promotion red. No nightly rollback exists.
 
 ## Manual Release and setup
 
 `deploy_web=true` builds and uploads web without any extra build switch, including
-web-only releases with `release_managed=false`. Reuse accepts exact manifest run,
+web-only releases with `release_managed=false`. Tooling stays at the workflow
+revision; an explicit source root holds the requested full SHA and must match it.
+The served service-worker commit, target API health and release marker retry within
+90 seconds. Production's `chalk` Pages destination comes from the existing web
+release constant, passed explicitly for upload, capture and rollback; no fallback exists.
+Reuse accepts exact manifest run,
 artifact, source release ID and hash, plus the prebuilt target web artifact/hash.
 Production keeps its existing Pages account/project, credentials and legacy
 `--adopt-existing-release` behavior. New configuration is nightly-only.
