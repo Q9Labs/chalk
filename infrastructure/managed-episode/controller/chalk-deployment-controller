@@ -696,8 +696,8 @@ install_controller_runtime() {
   mkdir -p "$controller_install_dir"
   chmod 755 "$controller_install_dir"
   atomic_install 0755 "${managed_root}/scripts/chalk-runtime-health" "${controller_install_dir}/chalk-runtime-health"
-  atomic_install 0755 "${managed_root}/controller/chalk-deployment-controller" "${controller_install_dir}/chalk-deployment-controller"
   atomic_install 0644 "${managed_root}/contracts/environments.json" "${controller_install_dir}/environments.json"
+  atomic_install 0755 "${managed_root}/controller/chalk-deployment-controller" "${controller_install_dir}/chalk-deployment-controller"
 }
 
 snapshot_installed_runtime() {
