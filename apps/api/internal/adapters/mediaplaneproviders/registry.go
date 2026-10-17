@@ -38,7 +38,6 @@ type providerConfig struct {
 
 type cloudflareConfig struct {
 	AccountID string `json:"account_id"`
-	APIToken  string `json:"api_token"`
 
 	SFU *cloudflareSFUConfig `json:"sfu"`
 }
@@ -226,7 +225,6 @@ func (r Registry) tenantManagedConfig(providerName spaces.MediaPlaneProvider, pr
 	resolved.RequestTimeout = r.processConfig.RequestTimeout
 	resolved.RealtimeBaseURL = r.processConfig.RealtimeBaseURL
 	resolved.AccountID = providerConfig.Cloudflare.AccountID
-	resolved.APIToken = providerConfig.Cloudflare.APIToken
 
 	if providerName == spaces.MediaPlaneProviderCloudflareSFU {
 		if providerConfig.Cloudflare.SFU == nil {

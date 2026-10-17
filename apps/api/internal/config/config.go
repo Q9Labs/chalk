@@ -61,7 +61,6 @@ const (
 	RedisURL = "CHALK_REDIS_URL"
 
 	CloudflareAccountID         = "CHALK_CLOUDFLARE_ACCOUNT_ID"
-	CloudflareAPIToken          = "CHALK_CLOUDFLARE_API_TOKEN"
 	CloudflareRealtimeAppID     = "CHALK_CLOUDFLARE_REALTIME_APP_ID"
 	CloudflareRealtimeAppSecret = "CHALK_CLOUDFLARE_REALTIME_APP_SECRET"
 	CloudflareRealtimeBaseURL   = "CHALK_CLOUDFLARE_REALTIME_BASE_URL"
@@ -150,7 +149,6 @@ type RedisConfig struct {
 
 type CloudflareRealtimeConfig struct {
 	AccountID         string
-	APIToken          string
 	RealtimeAppID     string
 	RealtimeAppSecret string
 	RealtimeBaseURL   string
@@ -393,7 +391,6 @@ func Load() (Config, error) {
 	}
 	cloudflareRealtime := CloudflareRealtimeConfig{
 		AccountID:         envOrDefault(CloudflareAccountID, ""),
-		APIToken:          envOrDefault(CloudflareAPIToken, ""),
 		RealtimeAppID:     envOrDefault(CloudflareRealtimeAppID, ""),
 		RealtimeAppSecret: envOrDefault(CloudflareRealtimeAppSecret, ""),
 		RealtimeBaseURL:   realtimeBaseURL,

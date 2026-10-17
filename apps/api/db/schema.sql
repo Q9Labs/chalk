@@ -11,7 +11,6 @@ create table tenants (
     --   "mode": "chalk_managed" | "tenant_managed",
     --   "cloudflare": {
     --     "account_id": "cloudflare-account-id",
-    --     "api_token": string,
     --     "sfu": {
     --       "enabled": true,
     --       "app_id": "realtime-app-id",
