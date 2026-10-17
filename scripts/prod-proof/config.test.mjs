@@ -104,3 +104,46 @@ test("public API failures allowlist status and code without exposing values", as
     assert.equal(await publicReason(() => request({ api_url: "https://example.invalid" }, "DELETE", "/secret-path")), `PROOF smoke: failed (api:409:${expected})`);
   }
 });
+
+async function workflowStep(name) {
+  const { readFile } = await import("node:fs/promises");
+  const workflow = await readFile(new URL("../../.github/workflows/real-call-proof.yml", import.meta.url), "utf8");
+  return workflow.split(`      - name: ${name}\n`)[1].split("      - name:")[0];
+}
+
+test("hosted recording-rejoin IDs fit the ownership cleanup label", async (t) => {
+  const { mkdtemp, writeFile, readFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { spawnSync } = await import("node:child_process");
+  const { runLabel } = await import("./cleanup.mjs");
+  const directory = await mkdtemp(join(tmpdir(), "proof-workflow-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const uuid = join(directory, "uuid");
+  const output = join(directory, "output");
+  await writeFile(uuid, "01234567-89ab-cdef-0123-456789abcdef\n");
+  const step = await workflowStep("Identify invocation");
+  const script = step.match(/        run: (.+)/)[1].replace("/proc/sys/kernel/random/uuid", '"$UUID_FILE"');
+  const invocation = spawnSync("bash", ["-e", "-o", "pipefail", "-c", script], { env: { ...process.env, UUID_FILE: uuid, GITHUB_OUTPUT: output }, encoding: "utf8" });
+  assert.equal(invocation.status, 0, invocation.stderr);
+  const prefix = (await readFile(output, "utf8")).trim().split("=")[1];
+  const assignment = (await workflowStep("Prove a real call")).match(/^\s*run_id=(.+)$/m)[0];
+  const id = spawnSync("bash", ["-e", "-c", `${assignment}\nprintf '%s' "$run_id"`], { env: { ...process.env, RUN_PREFIX: prefix, proof: "recording-rejoin" }, encoding: "utf8" });
+  assert.equal(id.status, 0, id.stderr);
+  assert.doesNotThrow(() => runLabel(id.stdout));
+});
+
+test("hosted empty proof lists fail with a bounded configuration reason", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const step = await workflowStep("Prove a real call");
+  const validation = step
+    .split("        run: |\n")[1]
+    .split("          mkdir -p .private")[0]
+    .split("\n")
+    .map((line) => line.slice(10))
+    .join("\n");
+  const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", validation], { env: { ...process.env, PROOFS: "   " }, encoding: "utf8" });
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, "");
+  assert.equal(result.stderr.trim(), "PROOF configuration: failed (empty-proof-list)");
+});

@@ -47,9 +47,9 @@ jobs:
       result: ${{ steps.result.outputs.result }}
     timeout-minutes: 50
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .tool-versions
           cache: pnpm
@@ -80,7 +80,7 @@ jobs:
           printf '' | age --recipient "$EVIDENCE_RECIPIENT" --output /dev/null
       - name: Identify invocation
         id: invocation
-        run: echo "suffix=$(cat /proc/sys/kernel/random/uuid)" >> "$GITHUB_OUTPUT"
+        run: echo "suffix=$(tr -d '-' < /proc/sys/kernel/random/uuid)" >> "$GITHUB_OUTPUT"
       - name: Prove a real call
         timeout-minutes: 40
         env:
@@ -96,7 +96,10 @@ jobs:
           CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ vars.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
         run: |
           read -r -a proofs <<< "$PROOFS"
-          test "${#proofs[@]}" -gt 0
+          if [ "${#proofs[@]}" -eq 0 ]; then
+            echo "PROOF configuration: failed (empty-proof-list)" >&2
+            exit 1
+          fi
           for proof in "${proofs[@]}"; do
             case "$proof" in
               all|smoke|camera-share|recording-rejoin|export|transcript) ;;
@@ -141,7 +144,7 @@ jobs:
           fi
       - name: Upload encrypted proof evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: real-call-proof-${{ inputs.environment || 'production' }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ steps.invocation.outputs.suffix }}
           path: .private/prod-proof-artifact/
