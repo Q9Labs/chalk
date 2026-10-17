@@ -76,3 +76,4 @@ export default defineGate({
   // CI sets GATE_LANE_GROUP to run one lane group per job.
   lanes: laneGroupLanes([emptyScopeLane, ...chalkLanes, lanes.depcruise({ config: ".dependency-cruiser.cjs", source: "." })], process.env.GATE_LANE_GROUP),
 });
+// gate probe
