@@ -12,7 +12,7 @@ export async function prepareIntegration(run, webhooks) {
     scopes: ["spaces:read", "spaces:write", "episodes:read", "episodes:write", "recordings:read", "transcriptions:read", "transcriptions:write"],
     expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
   });
-  run.ownership = { keyId: key.id };
+  run.ownership = { keyId: key.api_key.id };
   await save(`${run.directory}/ownership.json`, run.ownership);
   run.apiKey = key.secret;
   run.apiRequest = (method, path, body) => request(run.config, method, path, body, { Authorization: `Bearer ${run.apiKey}` }, {}, run.signal);
