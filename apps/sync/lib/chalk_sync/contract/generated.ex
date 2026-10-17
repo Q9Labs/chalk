@@ -638,8 +638,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   "policy"
 ]) and policy in [
   "open",
-  "knock",
-  "members_only"
+  "knock"
 ]
   end
 

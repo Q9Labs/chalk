@@ -229,9 +229,6 @@ func episodeLifecycleEndpoints(spacesService SpaceService, tenantsService Tenant
 		setDeadlineEndpoint(lifecycle, authorizer),
 		endEpisodeEndpoint(lifecycle, authorizer),
 	}
-	if self, ok := lifecycle.(DashboardSpaceJoinService); ok {
-		endpoints = append(endpoints, dashboardSpaceSelfEndpoints(self, tokens, refresh, mediaTokens, mediaVerifier, active, generations, spacesService, tenantsService, media, authorizer)...)
-	}
 	return endpoints
 }
 

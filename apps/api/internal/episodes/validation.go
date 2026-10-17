@@ -300,7 +300,7 @@ func admissionPolicyMode(raw json.RawMessage) (string, error) {
 	if err := json.Unmarshal(raw, &policy); err != nil {
 		return "", ErrInvalidAdmissionPolicy
 	}
-	if policy.Mode != "open" && policy.Mode != "knock" && policy.Mode != "members_only" {
+	if policy.Mode != "open" && policy.Mode != "knock" {
 		return "", ErrInvalidAdmissionPolicy
 	}
 	return policy.Mode, nil

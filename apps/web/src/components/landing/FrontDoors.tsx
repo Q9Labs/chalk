@@ -106,7 +106,7 @@ export function FrontDoors() {
             Two ways in
           </span>
           <h2>
-            Sign in, <span className="muted">or npm install.</span>
+            Open a Space, <span className="muted">or npm install.</span>
           </h2>
           <p>Both doors open onto the same Space and Episode model, so nothing you learn on one side is wasted on the other.</p>
         </header>
@@ -124,10 +124,6 @@ export function FrontDoors() {
               <h3>Open a Space and send one link.</h3> <p>Create it through the API, invite people by link, and control admission. The chat, the whiteboard, and the files are still there tomorrow.</p>
             </div>
             <div className="bento-actions">
-              <a href="/sign-up" className="btn btn-primary">
-                Create an account
-                <Icon glyph={ArrowRight02Icon} size={16} weight={2.2} />
-              </a>
               <a href="/docs/spaces-and-episodes" className="btn btn-secondary">
                 Learn about Spaces
               </a>

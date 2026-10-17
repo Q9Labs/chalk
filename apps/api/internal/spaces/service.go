@@ -498,7 +498,7 @@ func prepareAdmissionPolicy(value json.RawMessage) (json.RawMessage, error) {
 
 func validAdmissionMode(mode string) bool {
 	switch mode {
-	case "open", "knock", "members_only":
+	case "open", "knock":
 		return true
 	default:
 		return false

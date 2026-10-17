@@ -2,32 +2,31 @@ import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { generateVoice } from "./fixture.mjs";
 import { launchGuests, stats, limitCamera, restoreCamera, proveLayers } from "./media.mjs";
-import { check, command, request, recentAuth, save, waitFor } from "./runtime.mjs";
+import { check, command, request, save, waitFor } from "./runtime.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
 
 export async function prepareIntegration(run, webhooks) {
-  const auth = await recentAuth(run.config, run.owner, "api_key.create", run.config.tenant_id);
-  const key = await run.ownerRequest(
-    "POST",
-    `${run.tenantPath}/api-keys`,
-    {
-      name: "Production proof",
-      scopes: ["spaces:read", "spaces:write", "episodes:read", "episodes:write", "recordings:read", "recordings:write", "transcriptions:read", "transcriptions:write"],
-      expires_at: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
-    },
-    auth,
-  );
+  const key = await run.ownerRequest("POST", `${run.tenantPath}/api-keys`, {
+    name: "Production proof",
+    scopes: ["spaces:read", "spaces:write", "episodes:read", "episodes:write", "recordings:read", "transcriptions:read", "transcriptions:write"],
+    expires_at: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+  });
   run.apiKey = key.secret;
   run.apiRequest = (method, path, body) => request(run.config, method, path, body, { Authorization: `Bearer ${run.apiKey}` }, {}, run.signal);
   run.resources.push({
     kind: "api-key",
     dispose: async () => {
-      const proof = await recentAuth(run.config, run.owner, "api_key.revoke", key.api_key.id);
-      await run.ownerRequest("DELETE", `${run.tenantPath}/api-keys/${key.api_key.id}`, undefined, proof);
+      await run.ownerRequest("DELETE", `${run.tenantPath}/api-keys/${key.api_key.id}`, undefined);
       const response = await fetch(new URL(`${run.tenantPath}/spaces`, run.config.api_url), { headers: { Authorization: `Bearer ${run.apiKey}` }, signal: AbortSignal.timeout(30_000) });
       check(response.status === 401, "Revoked proof key was still accepted");
     },
   });
+  const denied = await fetch(new URL(run.tenantPath, run.config.api_url), {
+    headers: { Authorization: `Bearer ${run.apiKey}` },
+    signal: AbortSignal.timeout(30_000),
+  });
+  await denied.body?.cancel();
+  check(denied.status === 403, "Proof key unexpectedly has Tenant administration access");
   const receiver = await proofServer(run);
   if (webhooks) await exposeWebhook(run, receiver);
   return receiver;
@@ -346,42 +345,6 @@ export async function transcriptProof(run) {
   const phrases = ["purple lantern", "quiet river", "screen sharing", "transcription"];
   for (const phrase of phrases) check(text.includes(phrase), `Spoken words missing from Transcript: ${phrase}`);
   return { wallSeconds: (Date.now() - started) / 1000, phrases, transcriptId: transcript.id };
-}
-function resetMessage(value, address) {
-  const body = `${value.subject} ${value.text} ${(value.html ?? []).join(" ")}`;
-  return [/reset/i.test(value.subject), /https:\/\//i.test(body), value.to.some((recipient) => recipient.address === address)].every(Boolean);
-}
-export async function resetProof(run) {
-  const config = run.config;
-  const tokenResponse = await fetch(new URL("/token", config.inbox_url), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address: config.username, password: config.inbox_password }), signal: AbortSignal.timeout(30_000) });
-  check(tokenResponse.ok, `Inbox login failed: HTTP ${tokenResponse.status}`);
-  const { token } = await tokenResponse.json();
-  const inbox = async (path) => {
-    const response = await fetch(new URL(path, config.inbox_url), { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30_000) });
-    check(response.ok, `Inbox read failed: HTTP ${response.status}`);
-    return response.json();
-  };
-  const existing = new Set((await inbox("/messages"))["hydra:member"].map((message) => message.id));
-  const started = Date.now();
-  await request(config, "POST", "/v1/auth/password-reset/request", { email: config.username });
-  const message = await waitFor(
-    "password-reset email",
-    async () => {
-      const messages = (await inbox("/messages"))["hydra:member"];
-      for (const entry of messages) {
-        if (existing.has(entry.id)) continue;
-        const value = await inbox(`/messages/${entry.id}`);
-        if (resetMessage(value, config.username)) return value;
-      }
-      return false;
-    },
-    120_000,
-    3000,
-    run.signal,
-  );
-  await save(`${run.directory}/reset-email.json`, { received: true, elapsedSeconds: (Date.now() - started) / 1000, subject: message.subject });
-  // Arrival proof only: never consume the reset token or rotate the permanent owner's password.
-  return { received: true, wallSeconds: (Date.now() - started) / 1000, passwordUnchanged: true };
 }
 export async function smokeProof(run, receiver) {
   const events = await proveWebhookEvents(receiver, [

@@ -75,8 +75,6 @@ const spacePageTestMocks = vi.hoisted(() => {
     }),
     listAllAccountTenants: vi.fn(async () => [{ tenant: { id: "tenant-1" } }]),
     listSpaces: vi.fn(async () => ({ spaces: [], pagination: { page_size: 100, next_cursor: null, has_more: false } })),
-    prepareDashboardEntrance: vi.fn(async () => undefined),
-    joinDashboardSpace: vi.fn(),
     resumePublicSpace: vi.fn(),
   };
 });
@@ -90,11 +88,8 @@ vi.mock("@q9labsai/chalk-react", () => ({
 vi.mock("../lib/chalk-access", () => ({
   createPublicInviteClient: getSpacePageTestMocks().createPublicInviteClient,
   createPreparedPublicSpace: getSpacePageTestMocks().createPreparedPublicSpace,
-  prepareDashboardEntrance: getSpacePageTestMocks().prepareDashboardEntrance,
-  joinDashboardSpace: getSpacePageTestMocks().joinDashboardSpace,
   resumePublicSpace: getSpacePageTestMocks().resumePublicSpace,
 }));
-vi.mock("../lib/account-api", () => ({ listAllAccountTenants: getSpacePageTestMocks().listAllAccountTenants, listSpaces: getSpacePageTestMocks().listSpaces }));
 vi.mock("../lib/local-space-client", () => ({
   createLocalSpaceClient: getSpacePageTestMocks().createLocalSpaceClient,
   createLocalSpaceRelease: getSpacePageTestMocks().createLocalSpaceRelease,
@@ -112,7 +107,6 @@ export const spacePageTestArrival = {
 };
 export function resetSpacePageTestMocks(): void {
   spacePageTestMocks.publicClient.prepareSpaceEntrance.mockClear();
-  spacePageTestMocks.prepareDashboardEntrance.mockClear();
   window.sessionStorage.clear();
   spacePageTestMocks.resumePublicSpace.mockReset().mockResolvedValue(spacePageTestMocks.prepared);
   window.history.replaceState({}, "", "/space");

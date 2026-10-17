@@ -1,13 +1,6 @@
 package ratelimit
 
 const (
-	PolicyNameAuthRegister       = "auth.register"
-	PolicyNameAuthLogin          = "auth.login"
-	PolicyNameAuthMe             = "auth.me"
-	PolicyNameAuthRecentAuth     = "auth.recent_auth"
-	PolicyNameAuthOAuthStart     = "auth.oauth.start"
-	PolicyNameAuthOAuthCallback  = "auth.oauth.callback"
-	PolicyNameAuthPasswordReset  = "auth.password_reset"
 	PolicyNameCORSPolicyLookup   = "cors.policy_lookup"
 	PolicyNameAuthenticatedRead  = "v1.authenticated.read"
 	PolicyNameAuthenticatedWrite = "v1.authenticated.write"

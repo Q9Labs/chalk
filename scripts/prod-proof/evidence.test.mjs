@@ -91,13 +91,10 @@ test("cleanup continues after a failed resource and reports the failure", async 
         },
       },
     ],
-    ownerRequest: async () => {
-      disposed.push("logout");
-    },
   };
   try {
     await assert.rejects(cleanupRun(run), /Run cleanup failed/);
-    assert.deepEqual(disposed, ["episode", "key", "logout"]);
+    assert.deepEqual(disposed, ["episode", "key"]);
     assert.equal(JSON.parse(await readFile(join(directory, "cleanup.json"), "utf8"))[0].result, "failed");
   } finally {
     await rm(directory, { recursive: true, force: true });

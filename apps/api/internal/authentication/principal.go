@@ -1,6 +1,9 @@
 package authentication
 
-import "github.com/q9labs/chalk/apps/api/internal/utilities"
+import (
+	"errors"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
+)
 
 type PrincipalKind string
 
@@ -34,3 +37,5 @@ func (p Principal) HasScope(scope Scope) bool {
 func (p Principal) IsAuthenticated() bool {
 	return p.Kind == PrincipalUser || p.Kind == PrincipalAPIKey || p.Kind == PrincipalSystem
 }
+
+var ErrUnauthenticated = errors.New("unauthenticated")

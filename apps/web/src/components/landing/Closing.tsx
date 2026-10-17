@@ -1,7 +1,5 @@
-import ArrowRight02Icon from "@hugeicons/core-free-icons/ArrowRight02Icon";
 import { Logo } from "@q9labsai/chalk-react";
 
-import { Icon } from "./Icon";
 import { Illustration } from "./Illustration";
 
 const FOOTER_COLUMNS = [
@@ -24,40 +22,11 @@ const FOOTER_COLUMNS = [
       { href: "#self-host", label: "Self-host" },
     ],
   },
-  {
-    id: "account",
-    title: "Account",
-    links: [
-      { href: "/sign-up", label: "Create an account" },
-      { href: "/sign-in", label: "Sign in" },
-    ],
-  },
 ] as const;
 
 export function Closing() {
   return (
     <>
-      <section className="closing">
-        <Illustration className="closing-illustration" src="/images/landing/chalk-flow-closing-20260818.webp" width={1774} height={887} priority />
-        <div className="container closing-content">
-          <div className="closing-copy">
-            <h2>
-              Give every conversation <span className="muted">a place to live.</span>
-            </h2>
-            <p>Create a Space through the API. Bring your own infrastructure whenever you are ready.</p>
-            <div className="closing-actions">
-              <a href="/sign-up" className="btn btn-primary btn-lg">
-                Create an account
-                <Icon glyph={ArrowRight02Icon} size={17} weight={2.2} />
-              </a>
-              <a href="/docs/quickstart" className="btn btn-secondary btn-lg">
-                Explore the SDK
-              </a>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <footer className="footer">
         <Illustration className="footer-illustration" src="/images/landing/chalk-flow-closing-20260818.webp" width={1774} height={887} priority />
         <div className="container">

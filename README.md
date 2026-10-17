@@ -5,7 +5,7 @@ Chalk is an open-source monorepo for low-latency real-time collaboration and com
 ## Project documents
 
 - [Theory](theory.md) — intent, product model and boundaries.
-- [Tracker](tracker-human.md) · [interactive view](tracker-human.html) — outcomes and remaining work.
+- [Tracker](tracker-human.md) — outcomes and remaining work.
 - [tracker.yaml](tracker.yaml) — the only editable outcome inventory.
 - [Design](design.md) — visual system and Google Stitch generation guidance.
 
@@ -99,7 +99,4 @@ Edit `tracker.yaml`, then run `pnpm generate:tracker`. `pnpm check:tracker`
 validates states, priorities, sizes, source references and generated-view freshness;
 `pnpm test:tracker` exercises the tooling. Both are part of the canonical gate.
 
-Run `pnpm serve:tracker` for the read-only viewer at
-`http://127.0.0.1:4176/tracker-human.html`. `TRACKER_PORT` overrides the port;
-Ctrl-C stops the server. The HTML also opens directly as a file. Do not edit the
-generated Markdown or HTML views.
+Do not edit the generated Markdown view.

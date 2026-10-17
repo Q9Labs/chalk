@@ -239,9 +239,13 @@ pnpm release:recorder build --role render --state "$RELEASE_STATE"
 pnpm release:recorder snapshot --role render --state "$RELEASE_STATE"
 pnpm release:recorder qualify --role render --state "$RELEASE_STATE" --boot-check "$BOOT_CHECK"
 pnpm release:recorder publish-pins --role render --state "$RELEASE_STATE"
-pnpm release:recorder deploy --role render --state "$RELEASE_STATE" --managed-manifest "$MANAGED_MANIFEST"
-pnpm release:recorder verify --role render --state "$RELEASE_STATE"
 ```
+
+After pin publication, reload managed API and Sync through the
+[Release workflow](managed-release.md), not `release:recorder deploy` or a local
+SSM command. Use the currently healthy source SHA and manifest run as the
+baseline when only inputs changed. Require CI's host/dispatcher proof and the
+real-call recording/export proof before accepting the new pins.
 
 Snapshot precedes qualification because qualification boots the resulting image.
 The detached build worker and exact-ID deadline guard survive terminal connection
@@ -324,7 +328,7 @@ signature window and consumes the nonce once. The release must equal the loaded
 API component release (`CHALK_API_VERSION`); an old or unapproved release remains
 unauthorized. These checks are unchanged.
 
-Production `scripts/deploy/deploy-managed-release.mjs` now carries the dispatcher
+The Release workflow's `scripts/deploy/deploy-managed-release.mjs` carries the dispatcher
 binding forward after the host controller proves a healthy deployment. It reads
 the recorder release configuration from SSM, verifies the target runtime and the
 Lambda's current digest/binding, and reconstructs the dispatcher OpenTofu root
@@ -343,10 +347,10 @@ For a changed API component, it:
    release readback must pass afterward.
 
 The release fails if binding or verification fails, even if the host deployment
-succeeded. `pnpm release:recorder deploy` keeps the scheduler disabled until its
-loaded-runtime verifier also matches the observed Lambda binding to the running
-API process. Scheduler resume reconstructs fresh state so it cannot restore an
-old binding. If deployment fails, inspect the failure and restore a clean
+succeeded. The older `release:recorder deploy` wrapper paused the scheduler and
+called the controller locally; do not use it for managed deployments. Preserve
+any existing scheduler pause until runtime and binding verification pass.
+If deployment fails, inspect the failure and restore a clean
 baseline before retrying with the same manifest. A failed Lambda apply after
 the log-tag step can leave that tag ahead of the bound release; restore the tag
 to the currently bound release before retrying. Do not manually enable the
@@ -358,7 +362,8 @@ Both managed release `--dry-run` and recorder `deploy --dry-run
 --managed-manifest <path>` report `dispatcher_binding` with the previous/target
 release, retained ZIP digest and planned copy action. Dry runs do not copy,
 apply, invoke SSM commands or verify loaded processes. Production configuration
-is mandatory; other environments explicitly report `not-configured`.
+is mandatory. Other configured environments use their own scoped recorder
+configuration; legacy staging still reports `not-configured` unless configured.
 
 The deployment identity needs the existing dispatcher module's read/apply
 permissions, remote state and lock access, SSM configuration read, and versioned

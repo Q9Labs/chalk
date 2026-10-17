@@ -27,8 +27,6 @@ it.each(["before", "after"])("keeps the canvas mounted when readiness arrives %s
     clear: commit,
     setDrawPermission: async () => undefined,
     files: {
-      initiateUpload: async () => ({ uploadId: "upload", method: "PUT", uploadUrl: "https://files.test", headers: {}, expiresAt: "2030-01-01T00:00:00Z" }),
-      finalizeUpload: async () => undefined,
       getDownloadUrl: async () => ({ downloadUrl: "https://files.test", expiresAt: "2030-01-01T00:00:00Z" }),
     },
   };

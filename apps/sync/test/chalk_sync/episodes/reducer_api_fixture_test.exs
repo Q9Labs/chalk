@@ -2,6 +2,7 @@ defmodule ChalkSync.Episodes.ReducerAPIFixtureTest do
   use ExUnit.Case, async: true
 
   alias ChalkSync.Episodes.Reducer
+  alias ChalkSync.Stateholder.Command
 
   @api_artifact Path.expand("../../fixtures/api_episode_snapshot_v1.json", __DIR__)
 
@@ -42,6 +43,18 @@ defmodule ChalkSync.Episodes.ReducerAPIFixtureTest do
     snapshot = Map.put(fixture["folded_state"], "future_field", true)
 
     assert {:error, :invalid_snapshot} = Reducer.from_snapshot(fixture["episode_id"], snapshot)
+  end
+
+  test "rejects new members-only commands while retaining closed legacy snapshots" do
+    fixture = api_artifact()
+    snapshot = Map.put(fixture["folded_state"], "admission_policy", "members_only")
+    assert {:ok, state} = Reducer.from_snapshot(fixture["episode_id"], snapshot)
+    assert state.admission_policy == "members_only"
+
+    assert {:error, :invalid_payload} =
+             Command.new("retired-policy-0001", :set_admission_policy, %{
+               "policy" => "members_only"
+             })
   end
 
   defp api_artifact, do: @api_artifact |> File.read!() |> Jason.decode!()

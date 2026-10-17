@@ -9,7 +9,7 @@ POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/end
 GET /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries
 ```
 
-Customer operations cover Tenant, Space, and Episode records; Participant admission and access; media and file uploads; recordings and transcripts; webhook endpoints and delivery inspection; and the public status document. Most routes use a Tenant id in the path. List routes expose `page_size` and `cursor`; the webhook delivery list also filters by `state` and `event_type`. Mutating routes that create or change durable state require an `Idempotency-Key` where the contract declares it.
+Customer operations cover Tenant, Space, and Episode records; Participant admission and access; media and file uploads; recordings and transcripts; webhook endpoints and delivery inspection. Most routes use a Tenant id in the path. List routes expose `page_size` and `cursor`; the webhook delivery list also filters by `state` and `event_type`. Mutating routes that create or change durable state require an `Idempotency-Key` where the contract declares it.
 
 ### Use generated clients carefully
 

@@ -66,6 +66,14 @@ def check_binding_plan(plan, release, key, version, config_digest=None):
         require(expected == actual, "binding plan changes more than release identity")
 
 
+def check_output_plan(plan):
+    for item in plan.get("resource_changes", []):
+        require(item["change"]["actions"] == ["no-op"], "output plan must not change resources")
+    for name, change in plan.get("output_changes", {}).items():
+        require(change["actions"] == ["no-op"] or name in ("artifact_identity", "release_identity"),
+                "output plan exceeds output allowlist")
+
+
 def dispatcher_root(provider, config):
     root = rebuild_dispatcher(provider.state(config), MODULE, config, provider.region, provider.profile)
     if not provider.profile:
@@ -134,6 +142,9 @@ def bind(provider, config, manifest, dry_run):
                 tofu("plan", "-input=false", "-no-color", "-target=module.dispatcher." + resource, "-out=binding.plan")
                 check_binding_plan(json.loads(tofu("show", "-json", "binding.plan")), release, key, version, config_digest)
                 tofu("apply", "-input=false", "-no-color", "binding.plan")
+            tofu("plan", "-input=false", "-no-color", "-out=outputs.plan")
+            check_output_plan(json.loads(tofu("show", "-json", "outputs.plan")))
+            tofu("apply", "-input=false", "-no-color", "outputs.plan")
             tofu("plan", "-input=false", "-detailed-exitcode", "-no-color")
         proof.update(verify_dispatcher(provider, config, release))
     return proof
@@ -146,10 +157,11 @@ def main():
     parser.add_argument("--region", required=True)
     parser.add_argument("--instance-id", required=True)
     parser.add_argument("--parameter-prefix", required=True)
+    parser.add_argument("--configuration-parameter", default=PREFIX + "recorder.json")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     provider = Provider(args.region, os.environ.get("AWS_PROFILE"), args.dry_run)
-    config = json.loads(provider.parameter(PREFIX + "recorder.json")["Value"])
+    config = json.loads(provider.parameter(args.configuration_parameter)["Value"])
     require(config["runtime"]["instance_id"] == args.instance_id and config["runtime"]["parameter_prefix"] == args.parameter_prefix,
             "dispatcher configuration does not belong to the target managed runtime")
     print(json.dumps(bind(provider, config["dispatcher"], json.loads(Path(args.manifest).read_text()), args.dry_run)))

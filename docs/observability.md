@@ -1,7 +1,9 @@
 # Production observability
 
 API request logs and Sync event spans export to Axiom. The local Grafana stack,
-journey ledger, client telemetry, Episode diagnostics and trace CLI are removed.
+client telemetry, Episode diagnostics and trace CLI are removed. The private
+`observability_journey_events` table remains for webhook and recording lifecycle
+correlation.
 
 ## Follow an incident
 

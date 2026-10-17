@@ -96,7 +96,6 @@ export function createCollaborationBridge(rendererBridge: ChalkEmbeddedWhiteboar
     requestSnapshot: () => rendererBridge.requestSnapshot(),
     clear: () => rendererBridge.clear(),
     fileTransfer: {
-      upload: (input: Parameters<ChalkEmbeddedWhiteboardRendererBridge["uploadFile"]>[0]) => rendererBridge.uploadFile(input),
       download: (fileId: string) => rendererBridge.downloadFile(fileId),
     },
     subscribe: (listener: (event: WhiteboardCollaborationEvent) => void) => {

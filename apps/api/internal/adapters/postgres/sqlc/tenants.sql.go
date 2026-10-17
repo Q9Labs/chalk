@@ -32,7 +32,8 @@ insert into tenants (
     $7,
     $8
 )
-returning id, name, default_region, default_media_plane, media_plane_provider_config, ai_provider_config, storage_provider_config, cors_allowed_origins, logo_key, website, updated_at, created_at
+returning id, name, default_media_plane, media_plane_provider_config, storage_provider_config,
+    cors_allowed_origins, logo_key, website, updated_at, created_at
 ), seeded as (
     insert into tenant_artifact_policies (tenant_id)
     select id
@@ -343,7 +344,8 @@ set
     end,
     updated_at = now()
 where id = $15
-returning id, name, default_region, default_media_plane, media_plane_provider_config, ai_provider_config, storage_provider_config, cors_allowed_origins, logo_key, website, updated_at, created_at
+returning id, name, default_media_plane, media_plane_provider_config, storage_provider_config,
+    cors_allowed_origins, logo_key, website, updated_at, created_at
 ), updated_policy as (
 update tenant_artifact_policies
 set

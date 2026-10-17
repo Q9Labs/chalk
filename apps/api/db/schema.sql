@@ -3,21 +3,15 @@ create table tenants (
     id uuid primary key,
     name text not null,
     default_region text,
-    -- cf_sfu, cf_rtk, mediasoup
+    -- cf_sfu
     default_media_plane text,
     -- {
     --   "enabled": true,
-    --   "provider": "cf_sfu" | "cf_rtk",
+    --   "provider": "cf_sfu",
     --   "mode": "chalk_managed" | "tenant_managed",
     --   "cloudflare": {
     --     "account_id": "cloudflare-account-id",
     --     "api_token": string,
-    --     "rtk": {
-    --       "enabled": true,
-    --       "app_id": "realtimekit-app-id",
-    --       "host_preset": "facilitator",
-    --       "participant_preset": "contributor"
-    --     },
     --     "sfu": {
     --       "enabled": true,
     --       "app_id": "realtime-app-id",
@@ -26,19 +20,6 @@ create table tenants (
     --   }
     -- }
     media_plane_provider_config jsonb,
-    -- {
-    --   "enabled": true,
-    --   "provider": "openrouter",
-    --   "mode": "chalk_managed" | "tenant_managed",
-    --   "api_key": string,
-    --   "base_url": "https://openrouter.ai/api/v1",
-    --   "default_model": "openai/gpt-5.4-mini",
-    --   "fallback_model": "anthropic/claude-fable-5",
-    --   "allowed_models": [
-    --     "openai/gpt-5.4-mini",
-    --     "anthropic/claude-fable-5"
-    --   ]
-    -- }
     ai_provider_config jsonb,
     -- {
     --   "enabled": true,
@@ -229,7 +210,7 @@ create table spaces (
     name text not null,
     tenant_id uuid not null references tenants(id),
     slug text not null,
-    -- cf_sfu, cf_rtk, mediasoup
+    -- cf_sfu
     media_plane text not null,
     metadata jsonb,
     -- recurring_policy is null for non-recurring spaces.

@@ -5,7 +5,7 @@ import { WhiteboardFilesSync } from "./files";
 import type { WhiteboardFileSyncState, WhiteboardFileTransferOptions } from "./files";
 import { compareElementOrder } from "./order";
 import { WhiteboardPresence } from "./presence";
-import { filterSyncableElements } from "./syncable";
+import { filterSyncableElements, remoteImageFileIds, retainStoredImages } from "./syncable";
 import type { AppState, BinaryFiles, ExcalidrawElement, ExcalidrawImperativeAPI, OrderedExcalidrawElement } from "./types";
 import { fromWireElement, toFittedWireElement, type WhiteboardCommit, type WhiteboardWireElement } from "./wire";
 
@@ -75,6 +75,7 @@ export class ExcalidrawCollabEngine {
   private sceneId: string | null = null;
   private sceneGeneration: string | null = null;
   private canDraw = true;
+  private storedImageFileIds = new Set<string>();
 
   private broadcastedElementVersions = new Map<string, { readonly version: number; readonly versionNonce: number }>();
   private rejectedElementVersions = new Map<string, { readonly version: number; readonly versionNonce: number }>();
@@ -99,10 +100,7 @@ export class ExcalidrawCollabEngine {
     this.filesSync = new WhiteboardFilesSync({
       excalidrawAPI: opts.excalidrawAPI,
       fileTransfer: opts.fileTransfer,
-      initiateUpload: opts.initiateUpload,
-      finalizeUpload: opts.finalizeUpload,
       presignDownload: opts.presignDownload,
-      uploadThrottleMs: 300,
       downloadThrottleMs: 500,
       onStateChange: opts.onFileSyncStateChange,
     });
@@ -125,6 +123,7 @@ export class ExcalidrawCollabEngine {
   async clear(): Promise<WhiteboardCommit> {
     if (!this.canDraw) throw new Error("whiteboard drawing is not permitted");
     const commit = await this.opts.clear();
+    this.storedImageFileIds.clear();
     this.sceneId = commit.sceneId;
     this.sceneGeneration = commit.sceneGeneration ?? null;
     this.broadcastedElementVersions.clear();
@@ -158,12 +157,11 @@ export class ExcalidrawCollabEngine {
     this.unsubPointerUp?.();
   }
 
-  handleChange(_elements: readonly OrderedExcalidrawElement[], _appState: AppState, files: BinaryFiles): void {
+  handleChange(_elements: readonly OrderedExcalidrawElement[], _appState: AppState, _files: BinaryFiles): void {
     if (this.disposed) return;
 
     this.applyDeferredRemoteElements();
-    const elementsAll = this.opts.excalidrawAPI.getSceneElementsIncludingDeleted();
-    this.filesSync.handleLocalScene(elementsAll, files);
+    this.stripUnstoredImages();
 
     if (!this.canDraw) return;
 
@@ -243,13 +241,20 @@ export class ExcalidrawCollabEngine {
     });
   }
 
+  private stripUnstoredImages(): void {
+    const elements = this.opts.excalidrawAPI.getSceneElementsIncludingDeleted();
+    const retained = retainStoredImages(elements, this.storedImageFileIds);
+    if (retained.length === elements.length) return;
+    this.opts.excalidrawAPI.updateScene({ elements: retained, captureUpdate: CaptureUpdateAction.NEVER });
+  }
+
   private flushNow(skipEditing = false): void {
     if (this.disposed || this.submissionRetryTimer !== null) return;
 
     const context = this.submissionContext();
     if (!context) return;
     const editing = skipEditing ? editingElementIds(this.opts.excalidrawAPI.getAppState()) : [];
-    const syncableAll = filterSyncableElements(context.elements);
+    const syncableAll = filterSyncableElements(retainStoredImages(context.elements, this.storedImageFileIds));
     const delta: OrderedExcalidrawElement[] = [];
     for (const el of syncableAll) {
       if (this.isUnsubmitted(el) && !editing.includes(el.id)) delta.push(el);
@@ -263,7 +268,7 @@ export class ExcalidrawCollabEngine {
     const context = this.submissionContext({ allowDisposed: true, allowInFlight: true });
     if (!context) return;
 
-    const syncableAll = filterSyncableElements(context.elements);
+    const syncableAll = filterSyncableElements(retainStoredImages(context.elements, this.storedImageFileIds));
     const delta: OrderedExcalidrawElement[] = [];
     for (const element of syncableAll) {
       if (this.isUnsubmitted(element)) delta.push(element);
@@ -437,6 +442,7 @@ export class ExcalidrawCollabEngine {
       }
     }
     if (replacingScene) {
+      this.storedImageFileIds.clear();
       this.rejectedElementVersions.clear();
       this.clearChangeDebounce();
       this.dirtyDuringSubmission = false;
@@ -453,10 +459,11 @@ export class ExcalidrawCollabEngine {
     // disagrees with it. Sync lists a board by order key in its database's collation, not in the keys' own order.
     const remoteElements = [...(args.remoteElements as readonly ExcalidrawElement[])].sort(compareElementOrder);
     const restoredRemote = restoreElements(remoteElements, null);
+    this.storedImageFileIds = new Set([...this.storedImageFileIds, ...remoteImageFileIds(restoredRemote)]);
     const remoteForReconcile = toReconcileRemoteElements(restoredRemote);
     const appState = excalidrawAPI.getAppState();
     const editing = editingElementIds(appState);
-    const reconciled = reconcileElements(local, remoteForReconcile, appState);
+    const reconciled = retainStoredImages(reconcileElements(local, remoteForReconcile, appState), this.storedImageFileIds);
 
     // A reconciled local draft is not evidence that the remote scene received it.
     if (args.isSnapshot) {

@@ -1,8 +1,8 @@
 # Real-call proofs
 
 `pnpm prod:proof` runs all release proofs, including a forced camera layer switch.
-It never signs up or deletes an account. Reuse the permanent Tenant in the
-1Password `dev` vault, item **Chalk production proof Tenant**.
+It uses an existing Tenant API key from `CHALK_PROOF_API_KEY`. Reuse an operator-provisioned
+Tenant dedicated to release proofs.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -13,7 +13,6 @@ pnpm prod:proof camera-share --force-layer-switch
 pnpm prod:proof camera-share # simulcast + share, without the optional limit
 pnpm prod:proof export
 pnpm prod:proof transcript
-pnpm prod:proof reset
 ```
 
 Install `op` (local configuration only), FFmpeg (`ffmpeg`/`ffprobe`), and ImageMagick (`magick`).
@@ -23,9 +22,9 @@ client SDK workspace. Run from the repository root. Headless Chromium only.
 
 ## Configuration and ownership
 
-By default, the local command reads the 1Password Login item named above. It holds
-`username`, `password`, `tenant_id`, `api_url`, `web_url`, `proof_origin`,
-`inbox_url`, `inbox_password`, `inbox_account_id`, and `webhook_service_url`
+By default, the local command reads the 1Password item `Chalk production proof Tenant`. It holds
+`api_key`, `tenant_id`, `api_url`, `web_url`, `proof_origin`,
+and `webhook_service_url`
 (Webhook.site). Identifiers and credentials are loaded at runtime, not checked in.
 The API's `/readyz` response must report both Recording and Transcription as
 `enabled`. This uses the running API's capability flags; no AWS access is needed.
@@ -34,8 +33,7 @@ The old item's AWS fields can remain but are no longer read.
 Set `CHALK_PROOF_CONFIG_SOURCE=env` to read those same fields from environment
 variables instead. Each field maps to `CHALK_PROOF_` plus its uppercase name;
 for example, `api_url` maps to `CHALK_PROOF_API_URL`. Missing required fields fail
-before login; `inbox_account_id` is optional, and `webhook_service_url` is required
-for smoke's signed webhooks. Local runs still default to 1Password.
+before creating resources. Local runs still default to 1Password.
 
 ### GitHub Actions
 
@@ -44,18 +42,18 @@ for smoke's signed webhooks. Local runs still default to 1Password.
 `./.github/workflows/real-call-proof.yml` with `environment: nightly` (or
 `production`) and grants `contents: read`. The job reads its own environment's
 secrets, so callers do not need to pass secrets. No Release workflow is changed.
-Runs for the same environment queue without cancelling an active call.
+Both triggers accept a space-separated `proofs` string (default `smoke transcript`).
+The reusable workflow exposes `result` (`passed` or `failed`); a failed job still fails
+the caller. Runs for the same environment queue without cancelling an active call.
 
 Create these separately in **each** GitHub environment (`production`, `nightly`):
 
-- Secrets: `CHALK_PROOF_USERNAME`, `CHALK_PROOF_PASSWORD`,
-  `CHALK_PROOF_INBOX_PASSWORD`.
+- Secret: `CHALK_PROOF_API_KEY`.
 - Variables: `CHALK_PROOF_TENANT_ID`, `CHALK_PROOF_API_URL`,
-  `CHALK_PROOF_WEB_URL`, `CHALK_PROOF_PROOF_ORIGIN`, `CHALK_PROOF_INBOX_URL`,
+  `CHALK_PROOF_WEB_URL`, `CHALK_PROOF_PROOF_ORIGIN`,
   `CHALK_PROOF_WEBHOOK_SERVICE_URL`, `CHALK_PROOF_EVIDENCE_RECIPIENT`.
-- Optional variable: `CHALK_PROOF_INBOX_ACCOUNT_ID` (not used by smoke).
 
-Use that environment's permanent Tenant and owner, inbox, API/web URLs, and
+Use that environment's permanent Tenant and scoped API key, API/web URLs, and
 allowed loopback proof origin. Do not reuse the production Tenant for nightly.
 For unattended runs, the selected GitHub environment must allow the workflow's
 ref without a human approval. The command runs on Ubuntu with Chromium, FFmpeg,
@@ -76,12 +74,24 @@ age --decrypt --identity /absolute/path/to/private-identity.txt evidence.tar.gz.
 The decrypted folder contains environment identifiers and call evidence. Keep it
 private; never copy raw files to a public PR or issue.
 
-Provision the permanent owner through the product registration flow and create
-its Tenant through the normal Tenant creation endpoint. Store inbox credentials
-before registration so a failed setup can be recovered. Allow `proof_origin` in
-that Tenant's CORS origins once; the command does not change Tenant settings.
-Use a loopback HTTP origin with a fixed available port. One run per origin at a
-time; another lane or machine may use a different configured origin.
+Have an operator provide a key for that Tenant. Inject it with `2password run`
+or your secret manager as `CHALK_PROOF_API_KEY`; never put its value in a command
+argument, repository file, or browser response. The bootstrap key needs exactly:
+
+- `api_keys:write`, `api_keys:delete` to create and revoke each run's key.
+- `spaces:read`, `spaces:write`, `episodes:read`, `episodes:write` for the Space and Episode lifecycle.
+- `recordings:read`, `transcriptions:read`, `transcriptions:write` for artifacts.
+- `transcriptions:delete`, `webhooks:write`, `webhooks:delete` for cleanup and signed webhook proofs.
+
+The short-lived key has only the seven Space, Episode, and artifact scopes above.
+The runner checks that it cannot read Tenant administration, then verifies a 401
+after revocation. The bootstrap key never needs Tenant management, membership,
+signing-key management, or account permissions.
+
+Provision the Tenant separately through your deployment's operator tooling.
+Allow `proof_origin` in that Tenant's CORS origins once; the command does not
+change Tenant settings. Use a loopback HTTP origin with a fixed available port.
+Run one proof per origin at a time.
 
 Every run creates its own short-lived API key, Space, Episode, and Recording.
 Configure the permanent Tenant once with `transcription_ceiling: on_demand`,
@@ -95,8 +105,7 @@ Cleanup runs even on a failed proof: revoke and test the key, remove the webhook
 endpoint and Transcript, close Chromium and the local server and delete the temporary webhook catcher, end the Episode,
 and archive the Space. There is no product hard-delete API for Spaces, Episodes,
 or Recordings; ended/archived history and Recording artifacts follow the product's
-retention policy. The permanent owner, Tenant, inbox, and password are retained.
-The reset proof only checks arrival of a new email; it does not consume the token.
+retention policy. The provisioned Tenant and bootstrap API key are retained.
 
 ## What counts as proof
 
@@ -120,21 +129,18 @@ The reset proof only checks arrival of a new email; it does not consume the toke
 - **export:** successful completion, MP4 download, ffprobe video/audio/duration,
   four evenly spaced frames in a 2-by-2 contact sheet, and Export wall time.
 - **transcript:** on-demand completion and the generated phrases in the document.
-- **reset:** a new reset email arrives for the permanent owner within two minutes.
 
 Default `all` shares one camera/share Recording across the related proofs.
 Standalone Export, Transcript, and smoke create a shorter fresh Recording.
 `--no-layer-switch` explicitly skips the limit in `all`; do not use it when a
 release requires forced-switch evidence. Exit zero means every requested proof
-and cleanup passed. A failed Export does not prevent independent Transcript or
-reset proofs in `all`.
+and cleanup passed. A failed Export does not prevent independent Transcript proofs in `all`.
 
 ## Evidence
 
 `.private/prod-proof/<run>/report.json` contains each result. It also holds policy
 snapshots, WebRTC stats, the limit and switch evidence, signed event summaries,
-MP4, ffprobe output, four frames/contact sheet, Transcript document, and reset
-arrival timing. Keep this directory private; do not attach raw files to a public
+MP4, ffprobe output, four frames/contact sheet, Transcript document, and Transcript timing. Keep this directory private; do not attach raw files to a public
 PR. The command prints phase results and the absolute local artifact path.
 Review the contact sheet as one image. Remove local artifacts after the release
 handoff; they contain production identifiers but no saved owner credentials.
