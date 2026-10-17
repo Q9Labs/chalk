@@ -156,7 +156,12 @@ function finishOptions(options) {
     throw usageError("provide exactly one of --document or --document-version");
   }
   validateOptions(options);
-  return options;
+  return { ...options, dispatcherConfigParameter: dispatcherConfiguration(options) };
+}
+
+function dispatcherConfiguration(options) {
+  // Keep staging opt-in; other environments own an isolated recorder configuration.
+  return options.dispatcherConfigParameter ?? (options.environment === "staging" ? undefined : `/chalk/${options.environment}/release/recorder.json`);
 }
 
 function requireOptions(options) {

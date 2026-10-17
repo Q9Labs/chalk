@@ -122,10 +122,10 @@ async function writeManifest() {
   return path;
 }
 
-test("production dry run includes the dispatcher rebind without deploying", async () => {
+async function dispatcherDryRun(environment) {
   const manifestPath = await writeManifest();
   const calls = [];
-  const arguments_ = requiredArguments(manifestPath).map((value) => value.replaceAll("staging", "production"));
+  const arguments_ = requiredArguments(manifestPath).map((value) => value.replaceAll("staging", environment));
   const proof = await runManagedRelease({
     arguments_: arguments_.concat("--dry-run"),
     allowedSecretIds,
@@ -135,6 +135,11 @@ test("production dry run includes the dispatcher rebind without deploying", asyn
     },
     stdout: { write: () => {} },
   });
+  return { proof, calls };
+}
+
+test("production dry run includes the dispatcher rebind without deploying", async () => {
+  const { proof, calls } = await dispatcherDryRun("production");
   assert.equal(proof.dispatcher_binding.action, "rebind");
   assert.equal(calls.length, 1);
   assert.ok(calls[0].args.includes("--dry-run"));
@@ -178,19 +183,7 @@ test("production cannot report success when dispatcher binding fails after host 
 });
 
 test("configured environments use their own dispatcher parameter in the read-only dry run", async () => {
-  const manifestPath = await writeManifest();
-  const calls = [];
-  const proof = await runManagedRelease({
-    arguments_: requiredArguments(manifestPath)
-      .map((value) => value.replaceAll("staging", "preview-2"))
-      .concat("--dry-run"),
-    allowedSecretIds,
-    commandRunner: async (command) => {
-      calls.push(command);
-      return { stdout: JSON.stringify({ action: "already-bound", release_id: releaseId }) };
-    },
-    stdout: { write: () => {} },
-  });
+  const { proof, calls } = await dispatcherDryRun("preview-2");
   assert.equal(proof.request.environment, "preview-2");
   assert.equal(calls.length, 1);
   assert.ok(calls[0].args.includes("/chalk/preview-2/release/recorder.json"));

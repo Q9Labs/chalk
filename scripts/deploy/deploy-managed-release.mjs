@@ -34,11 +34,9 @@ export async function runManagedRelease({ arguments_, commandRunner = runCommand
 }
 
 async function dispatcherBinding({ commandRunner, options, dryRun }) {
-  // Keep the legacy staging path; other environments own an isolated recorder configuration.
-  if (options.environment === "staging" && !options.dispatcherConfigParameter) return { action: "not-configured", environment: options.environment };
+  if (!options.dispatcherConfigParameter) return { action: "not-configured", environment: options.environment };
   const script = fileURLToPath(new URL("../recorder/dispatcher_binding.py", import.meta.url));
-  const configurationParameter = options.dispatcherConfigParameter ?? `/chalk/${options.environment}/release/recorder.json`;
-  const args = [script, "--manifest", resolve(options.manifestPath), "--region", options.region, "--instance-id", options.instanceId, "--parameter-prefix", options.parameterPrefix, "--configuration-parameter", configurationParameter];
+  const args = [script, "--manifest", resolve(options.manifestPath), "--region", options.region, "--instance-id", options.instanceId, "--parameter-prefix", options.parameterPrefix, "--configuration-parameter", options.dispatcherConfigParameter];
   if (dryRun) args.push("--dry-run");
   const result = await commandRunner({ command: "python3", args });
   return JSON.parse(result.stdout);
