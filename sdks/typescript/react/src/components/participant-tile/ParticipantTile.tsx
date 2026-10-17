@@ -141,7 +141,9 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       <div className={cn("relative z-10 block h-full w-full overflow-hidden transition-opacity duration-300 [&>*]:h-full [&>*]:w-full [&>*]:object-cover", mirrored && "scale-x-[-1]", mediaVisible ? "opacity-100" : "opacity-0")}>{media}</div>
       {!mediaVisible && showAvatar && (
         <div className="chalk-participant-wash absolute inset-0 z-10 flex items-center justify-center">
-          <span className={cn("relative grid place-items-center rounded-full", participant.isSpeaking && !participant.isMuted && "chalk-voice-halo")}></span>
+          <span className={cn("relative grid place-items-center rounded-full", participant.isSpeaking && !participant.isMuted && "chalk-voice-halo")}>
+            <Avatar name={participant.displayName} src={participant.avatarUrl} size="xl" generated={generatedAvatars} animated={animatedAvatars} className="opacity-90" gradientPreference={gradientPreference} />
+          </span>
         </div>
       )}
       {children}
