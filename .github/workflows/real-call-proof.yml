@@ -1,0 +1,157 @@
+name: Real-call proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment with a permanent proof Tenant
+        type: environment
+        default: production
+        required: true
+      proofs:
+        description: Space-separated proof commands
+        type: string
+        default: smoke transcript
+  workflow_call:
+    inputs:
+      environment:
+        description: Environment with a permanent proof Tenant
+        type: string
+        required: true
+      proofs:
+        description: Space-separated proof commands
+        type: string
+        default: smoke transcript
+    secrets:
+      CHALK_PROOF_API_KEY:
+        description: Bootstrap key for the environment proof Tenant
+        required: true
+    outputs:
+      result:
+        description: passed or failed; may be absent on cancellation or runner loss
+        value: ${{ jobs.smoke.outputs.result }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-call-proof-${{ inputs.environment || 'production' }}
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Real-call proofs
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.environment || 'production' }}
+    outputs:
+      result: ${{ steps.result.outputs.result }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+      - name: Install proof dependencies
+        run: |
+          pnpm install --frozen-lockfile --filter @q9labsai/chalk-client...
+          pnpm --filter @q9labsai/chalk-client exec playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg imagemagick espeak fonts-dejavu-core age
+          # Ubuntu ships ImageMagick 6, without the ImageMagick 7 entry point.
+          sudo tee /usr/local/bin/magick > /dev/null <<'SH'
+          #!/bin/sh
+          if [ "$1" = montage ]; then
+            shift
+            exec montage "$@"
+          fi
+          exec convert "$@"
+          SH
+          sudo chmod +x /usr/local/bin/magick
+      - name: Validate evidence recipient
+        env:
+          EVIDENCE_RECIPIENT: ${{ vars.CHALK_PROOF_EVIDENCE_RECIPIENT }}
+        run: |
+          test -n "$EVIDENCE_RECIPIENT"
+          printf '' | age --recipient "$EVIDENCE_RECIPIENT" --output /dev/null
+      - name: Identify invocation
+        id: invocation
+        run: echo "suffix=$(cat /proc/sys/kernel/random/uuid)" >> "$GITHUB_OUTPUT"
+      - name: Prove a real call
+        env:
+          CHALK_PROOF_CONFIG_SOURCE: env
+          CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
+          RUN_PREFIX: ${{ steps.invocation.outputs.suffix }}
+          PROOFS: ${{ inputs.proofs || 'smoke transcript' }}
+          CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
+          CHALK_PROOF_API_URL: ${{ vars.CHALK_PROOF_API_URL }}
+          CHALK_PROOF_WEB_URL: ${{ vars.CHALK_PROOF_WEB_URL }}
+          CHALK_PROOF_PROOF_ORIGIN: ${{ vars.CHALK_PROOF_PROOF_ORIGIN }}
+          CHALK_PROOF_WEBHOOK_ENDPOINT_ID: ${{ vars.CHALK_PROOF_WEBHOOK_ENDPOINT_ID }}
+          CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ vars.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
+        run: |
+          read -r -a proofs <<< "$PROOFS"
+          test "${#proofs[@]}" -gt 0
+          for proof in "${proofs[@]}"; do
+            case "$proof" in
+              all|smoke|camera-share|export|transcript) ;;
+              *) echo "Unsupported proof command" >&2; exit 1 ;;
+            esac
+          done
+          mkdir -p .private
+          for proof in "${proofs[@]}"; do
+            start=$(date +%s)
+            run_id="${RUN_PREFIX}-${proof}"
+            echo "$run_id" >> .private/proof-run-ids
+            CHALK_PROOF_RUN_ID="$run_id" pnpm prod:proof "$proof"
+            echo "$proof wall seconds: $(( $(date +%s) - start ))" >> "$GITHUB_STEP_SUMMARY"
+          done
+      - name: Clean proof runs
+        if: always()
+        env:
+          CHALK_PROOF_CONFIG_SOURCE: env
+          CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
+          CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
+          CHALK_PROOF_API_URL: ${{ vars.CHALK_PROOF_API_URL }}
+          CHALK_PROOF_WEB_URL: ${{ vars.CHALK_PROOF_WEB_URL }}
+          CHALK_PROOF_PROOF_ORIGIN: ${{ vars.CHALK_PROOF_PROOF_ORIGIN }}
+          CHALK_PROOF_WEBHOOK_ENDPOINT_ID: ${{ vars.CHALK_PROOF_WEBHOOK_ENDPOINT_ID }}
+          CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ vars.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
+        run: |
+          status=0
+          if [ -f .private/proof-run-ids ]; then
+            while IFS= read -r run_id; do
+              pnpm prod:proof cleanup "$run_id" || status=1
+            done < .private/proof-run-ids
+          fi
+          exit "$status"
+      - name: Encrypt private proof evidence
+        if: always()
+        env:
+          EVIDENCE_RECIPIENT: ${{ vars.CHALK_PROOF_EVIDENCE_RECIPIENT }}
+        run: |
+          if [ -d .private/prod-proof ]; then
+            mkdir -p .private/prod-proof-artifact
+            tar -czf - -C .private prod-proof | age --recipient "$EVIDENCE_RECIPIENT" --output .private/prod-proof-artifact/evidence.tar.gz.age
+          fi
+      - name: Upload encrypted proof evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-call-proof-${{ inputs.environment || 'production' }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ steps.invocation.outputs.suffix }}
+          path: .private/prod-proof-artifact/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 3
+      - name: Publish proof result
+        id: result
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [ "$JOB_STATUS" = success ]; then
+            echo 'result=passed' >> "$GITHUB_OUTPUT"
+          else
+            echo 'result=failed' >> "$GITHUB_OUTPUT"
+          fi

@@ -1,13 +1,18 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, rename, rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 
 const execute = promisify(execFile);
 export async function command(program, args, options = {}) {
   try {
-    const result = await execute(program, args, { timeout: 120_000, maxBuffer: 8 * 1024 * 1024, ...options });
+    const result = await execute(program, args, {
+      timeout: 120_000,
+      maxBuffer: 8 * 1024 * 1024,
+      ...options,
+    });
     return result.stdout;
   } catch (error) {
     // CLI errors can contain decrypted output or secret arguments. Never echo them.
@@ -30,40 +35,70 @@ export async function waitFor(label, probe, timeoutMs = 120_000, intervalMs = 20
 export async function save(path, value) {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
 }
-export async function loadConfig() {
-  check(process.env.CHALK_PROOF_API_KEY, "Set CHALK_PROOF_API_KEY to an existing scoped Tenant API key");
-  const fields = {};
-  for (const name of ["tenant_id", "api_url", "web_url", "aws_profile", "aws_region", "ssm_api_env", "proof_origin", "webhook_service_url"]) {
-    fields[name] = process.env[`CHALK_PROOF_${name.toUpperCase()}`];
-    check(fields[name], `Set CHALK_PROOF_${name.toUpperCase()}`);
+export async function saveOwnership(run) {
+  const path = join(run.directory, "ownership.json");
+  const temporary = join(dirname(path), `.ownership-${randomUUID()}.tmp`);
+  try {
+    await save(temporary, run.ownership);
+    await rename(temporary, path);
+  } finally {
+    await rm(temporary, { force: true });
   }
-  const env = await command("aws", ["--profile", fields.aws_profile, "--region", fields.aws_region, "ssm", "get-parameter", "--name", fields.ssm_api_env, "--with-decryption", "--query", "Parameter.Value", "--output", "text"]);
-  const settings = Object.fromEntries(
-    env
-      .split("\n")
-      .filter((line) => /^[A-Z_]+=/.test(line))
-      .map((line) => {
-        const at = line.indexOf("=");
-        return [line.slice(0, at), line.slice(at + 1).replace(/^["']|["']$/g, "")];
-      }),
-  );
-  check(settings.CHALK_RECORDING_ENABLED === "true", "SSM: Recording is disabled");
-  check(settings.CHALK_TRANSCRIPTION_ENABLED === "true", "SSM: Transcription is disabled");
+}
+const requiredConfigFields = ["api_key", "tenant_id", "api_url", "web_url", "proof_origin", "webhook_service_url", "webhook_endpoint_id"];
+export function environmentConfig(environment) {
+  return Object.fromEntries(requiredConfigFields.map((name) => [name, environment[`CHALK_PROOF_${name.toUpperCase()}`]]));
+}
+export function checkCapabilities(readiness) {
+  check(readiness?.capabilities?.recording === "enabled", "API readiness: Recording is not enabled");
+  check(readiness?.capabilities?.transcription === "enabled", "API readiness: Transcription is not enabled");
+}
+async function configurationFields(source) {
+  if (source === "env") return environmentConfig(process.env);
+  return Object.fromEntries(JSON.parse(await command("op", ["item", "get", "Chalk production proof Tenant", "--vault", "dev", "--format", "json"])).fields.map((field) => [field.label, field.value]));
+}
+export async function loadConfig({ readiness = true } = {}) {
+  const source = process.env.CHALK_PROOF_CONFIG_SOURCE ?? "1password";
+  check(["env", "1password"].includes(source), "CHALK_PROOF_CONFIG_SOURCE must be env or 1password");
+  const fields = await configurationFields(source);
+  for (const name of requiredConfigFields) {
+    check(fields[name], `Proof configuration is missing ${name}`);
+  }
+  check(fields.api_key.startsWith("chalk_sk_"), "Proof API key must use the chalk_sk_ namespace");
+  if (readiness) checkCapabilities(await request(fields, "GET", "/readyz"));
   return fields;
 }
 export async function request(config, method, path, body, authorization = {}, extraHeaders = {}, signal) {
   const response = await fetch(new URL(path, config.api_url), {
     method,
-    headers: { "Content-Type": "application/json", "User-Agent": "Chalk-Production-Proof/1.0", Origin: config.web_url, "Idempotency-Key": randomUUID(), ...authorization, ...extraHeaders },
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent": "Chalk-Production-Proof/1.0",
+      Origin: config.web_url,
+      "Idempotency-Key": randomUUID(),
+      ...authorization,
+      ...extraHeaders,
+    },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     signal: AbortSignal.any([AbortSignal.timeout(30_000), ...(signal ? [signal] : [])]),
   });
-  return readResponse(response, method);
+  if (response.status === 404) {
+    const error = new Error("API resource not found");
+    error.status = 404;
+    throw error;
+  }
+  const value = await readResponse(response, method);
+  maskCredentials(value);
+  return value;
 }
 async function readResponse(response, method) {
   if (response.status === 204) return undefined;
   const value = await response.json();
-  if (!response.ok) throw new Error(`API ${method} failed: HTTP ${response.status}, ${errorCode(value)}`);
+  if (!response.ok) {
+    const error = new Error(`API ${method} failed: HTTP ${response.status}, ${errorCode(value)}`);
+    error.status = response.status;
+    throw error;
+  }
   return value;
 }
 function errorCode(value) {
@@ -71,31 +106,60 @@ function errorCode(value) {
   if (value.error) return value.error.code;
   return value.code ?? "unknown";
 }
-export async function createRun(config, directory, signal = new AbortController().signal) {
+export async function createRun(config, directory, signal = new AbortController().signal, runId = randomUUID()) {
   await mkdir(directory, { recursive: true, mode: 0o700 });
-  check(process.env.CHALK_PROOF_API_KEY, "Set CHALK_PROOF_API_KEY to an existing scoped Tenant API key");
-  const owner = { Authorization: `Bearer ${process.env.CHALK_PROOF_API_KEY}` };
-  const run = { config, directory, owner, signal, resources: [], cleanup: [], wait: (ms) => delay(ms, undefined, { signal }) };
+  check(config.api_key, "Proof configuration is missing api_key");
+  const owner = { Authorization: `Bearer ${config.api_key}` };
+  const run = {
+    config,
+    directory,
+    runId,
+    label: `chalk-proof:${runId}`,
+    owner,
+    signal,
+    ownership: {},
+    resources: [],
+    cleanup: [],
+    wait: (ms) => delay(ms, undefined, { signal }),
+  };
   run.ownerRequest = (method, path, body, headers) => request(config, method, path, body, owner, headers);
   run.tenantPath = `/v1/tenants/${config.tenant_id}`;
   return run;
 }
-async function disposeResource(run, resource) {
-  try {
-    await resource.dispose();
-    run.cleanup.push({ kind: resource.kind, result: "passed" });
-    return [];
-  } catch (error) {
-    run.cleanup.push({ kind: resource.kind, result: "failed" });
-    return [new Error(`${resource.kind}: ${error.message}`)];
-  }
+const publicErrorClasses = new Set(["SyntaxError", "TypeError", "AggregateError", "AbortError", "TimeoutError"]);
+export function publicFailure(phase, error, output = console.error) {
+  const kind = publicErrorClasses.has(error?.name) ? error.name : "Error";
+  output(`PROOF ${phase}: failed (${kind})`);
 }
-export async function cleanupRun(run) {
-  const failures = [];
-  const reversed = [...run.resources].reverse();
-  // Ending needs a live SDK guest; keep browsers and the API key until it completes.
-  const ordered = [...reversed.filter((resource) => resource.kind === "episode"), ...reversed.filter((resource) => resource.kind !== "episode")];
-  for (const resource of ordered) failures.push(...(await disposeResource(run, resource)));
-  await save(`${run.directory}/cleanup.json`, run.cleanup);
-  if (failures.length) throw new AggregateError(failures, "Run cleanup failed; see private cleanup.json");
+function maskCredential(name, value) {
+  if (!value || !/secret|token|credential|jwt/i.test(name)) return;
+  console.log(`::add-mask::${value.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A")}`);
+}
+export function maskCredentials(value) {
+  if (!process.env.GITHUB_ACTIONS) return;
+  if (value === null || typeof value !== "object") return;
+  Object.entries(value).forEach(([name, entry]) => {
+    if (typeof entry === "string") maskCredential(name, entry);
+    else maskCredentials(entry);
+  });
+}
+
+export async function recordResult(run, report, name, execute) {
+  console.log(`PROOF ${name}: started`);
+  try {
+    report.proofs[name] = { result: "passed", evidence: await execute() };
+    console.log(`PROOF ${name}: passed`);
+  } catch (error) {
+    report.proofs[name] = { result: "failed", error: errorEvidence(error) };
+    publicFailure(name, error);
+  }
+  await save(`${run.directory}/report.json`, report);
+}
+
+export function errorEvidence(error) {
+  return {
+    stack: error.stack ?? String(error),
+    errors: error.errors?.map(errorEvidence),
+    cause: error.cause ? errorEvidence(error.cause) : undefined,
+  };
 }
