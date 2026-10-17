@@ -1,7 +1,8 @@
--- Schema snapshot through migration 20261017000000.
+-- Schema snapshot through migration 20261001100000.
 create table tenants (
     id uuid primary key,
     name text not null,
+    default_region text,
     -- cf_sfu
     default_media_plane text,
     -- {
@@ -19,6 +20,7 @@ create table tenants (
     --   }
     -- }
     media_plane_provider_config jsonb,
+    ai_provider_config jsonb,
     -- {
     --   "enabled": true,
     --   "provider": "cloudflare_r2" | "aws_s3",

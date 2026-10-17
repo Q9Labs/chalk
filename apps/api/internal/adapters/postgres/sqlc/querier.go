@@ -24,7 +24,6 @@ type Querier interface {
 	AuthorizeRecordingJobLease(ctx context.Context, arg AuthorizeRecordingJobLeaseParams) (pgtype.UUID, error)
 	AuthorizeRecordingRenderInput(ctx context.Context, arg AuthorizeRecordingRenderInputParams) (AuthorizeRecordingRenderInputRow, error)
 	CancelArtifactJob(ctx context.Context, arg CancelArtifactJobParams) (ArtifactJob, error)
-	CancelDashboardParticipantJoin(ctx context.Context, arg CancelDashboardParticipantJoinParams) (Participant, error)
 	CancelRecordingPreparation(ctx context.Context, arg CancelRecordingPreparationParams) (CancelRecordingPreparationRow, error)
 	CancelWebhookDeliveriesForOldTarget(ctx context.Context, arg CancelWebhookDeliveriesForOldTargetParams) (int64, error)
 	CancelWebhookEndpointDeliveries(ctx context.Context, arg CancelWebhookEndpointDeliveriesParams) (int64, error)
@@ -66,7 +65,6 @@ type Querier interface {
 	CreateAdmissionRequest(ctx context.Context, arg CreateAdmissionRequestParams) (SyncAdmissionRequest, error)
 	CreateArtifactJob(ctx context.Context, arg CreateArtifactJobParams) (ArtifactJob, error)
 	CreateAutoSpaceLifecycle(ctx context.Context, arg CreateAutoSpaceLifecycleParams) (AutoSpaceLifecycle, error)
-	CreateDashboardLifecycleParticipant(ctx context.Context, arg CreateDashboardLifecycleParticipantParams) (Participant, error)
 	CreateDeferredLifecycleIntent(ctx context.Context, arg CreateDeferredLifecycleIntentParams) (SyncLifecycleIntent, error)
 	CreateEpisode(ctx context.Context, arg CreateEpisodeParams) (Episode, error)
 	CreateIdentity(ctx context.Context, arg CreateIdentityParams) (Identity, error)
@@ -248,12 +246,8 @@ type Querier interface {
 	LockActiveRecordingForTenantEnd(ctx context.Context, arg LockActiveRecordingForTenantEndParams) (pgtype.UUID, error)
 	LockAdmissionRequestForParticipant(ctx context.Context, arg LockAdmissionRequestForParticipantParams) (SyncAdmissionRequest, error)
 	LockAutoSpaceLifecycle(ctx context.Context, arg LockAutoSpaceLifecycleParams) (AutoSpaceLifecycle, error)
-	LockDashboardJoinIntentForUpdate(ctx context.Context, arg LockDashboardJoinIntentForUpdateParams) (SyncLifecycleIntent, error)
-	LockDashboardParticipantForUpdate(ctx context.Context, arg LockDashboardParticipantForUpdateParams) (Participant, error)
 	LockDeadlineEpisodeForUpdate(ctx context.Context, arg LockDeadlineEpisodeForUpdateParams) (Episode, error)
 	LockEpisodeEndLifecycleIntentForUpdate(ctx context.Context, arg LockEpisodeEndLifecycleIntentForUpdateParams) (SyncLifecycleIntent, error)
-	LockLatestDashboardParticipantForUpdate(ctx context.Context, arg LockLatestDashboardParticipantForUpdateParams) (Participant, error)
-	LockLatestEpisodeForUpdate(ctx context.Context, arg LockLatestEpisodeForUpdateParams) (Episode, error)
 	LockLifecycleEpisodeForUpdate(ctx context.Context, arg LockLifecycleEpisodeForUpdateParams) (Episode, error)
 	LockLifecycleIntentForParticipantTransitionForUpdate(ctx context.Context, arg LockLifecycleIntentForParticipantTransitionForUpdateParams) (SyncLifecycleIntent, error)
 	LockLifecycleIntentForRequestForUpdate(ctx context.Context, arg LockLifecycleIntentForRequestForUpdateParams) (SyncLifecycleIntent, error)
@@ -280,10 +274,6 @@ type Querier interface {
 	LockTenantArtifactPolicyForShare(ctx context.Context, tenantID pgtype.UUID) (LockTenantArtifactPolicyForShareRow, error)
 	LockTenantExternalOperationForRequest(ctx context.Context, arg LockTenantExternalOperationForRequestParams) (SyncExternalOperation, error)
 	LockTenantMediaPolicyForEpisode(ctx context.Context, id pgtype.UUID) (LockTenantMediaPolicyForEpisodeRow, error)
-	// Dashboard account-bound Space join primitives. These queries are kept
-	// separate from the legacy Episode/Participant broker surface so slug lookup,
-	// live-Episode reuse, and account ownership stay explicit.
-	LockTenantSpaceBySlugForUpdate(ctx context.Context, arg LockTenantSpaceBySlugForUpdateParams) (Space, error)
 	LockTenantSpaceForUpdate(ctx context.Context, arg LockTenantSpaceForUpdateParams) (Space, error)
 	LockTenantTranscriptionForUpdate(ctx context.Context, arg LockTenantTranscriptionForUpdateParams) (Transcription, error)
 	LockWebhookTenantState(ctx context.Context, tenantID pgtype.UUID) error
