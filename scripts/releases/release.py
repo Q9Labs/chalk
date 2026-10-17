@@ -158,14 +158,12 @@ def plan(github, args):
         guard_runtime(baseline['target_sha'], target)
         # Rebuilding all components is safe when an old baseline cannot be read;
         # do not forward dead artifact IDs and wedge every future cut.
-        recorder_control = baseline.get('recorder_control')
+        recorder_control = baseline['recorder_control']
         try:
             data = manifest_bytes(github, baseline)
             recorder_control = 'recorder_control' in json.loads(data).get('images', {})
             github.artifact(baseline['run_id'], baseline['manifest_artifact_id'], baseline['release_id'] + '.json', baseline['manifest_sha256'])
         except (ValueError, subprocess.CalledProcessError) as error:
-            require(isinstance(recorder_control, bool),
-                    'expired legacy baseline lacks its enabled component set; manual Release with explicit recorder enablement required')
             print(f'Build baseline unavailable; rebuilding all enabled components: {error}')
         else:
             result.update(baseline_run_id=baseline['run_id'], baseline_artifact_id=baseline['manifest_artifact_id'])

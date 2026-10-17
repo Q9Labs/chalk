@@ -75,18 +75,6 @@ class RetainedReleaseTests(unittest.TestCase):
             self.assertIn('recorder_control=true', values)
             self.assertEqual(api.items[-1]['payload']['channel'], 'nightly-attempt')
 
-    def test_expired_legacy_baseline_never_silently_disables_unknown_components(self):
-        api = MemoryGitHub()
-        info = api.info('1', 'legacy')
-        info.update(channel='nightly-cut', proof_result='passed', target_sha=SHA)
-        api.items.append(dict(id=1, environment='nightly', payload=info, latest_status='inactive',
-                              created_at='2026-10-16T00:00:00Z'))
-        with patch.dict(os.environ, GITHUB_OUTPUT=os.devnull):
-            with patch.object(api, 'artifact', side_effect=ValueError('artifact expired')):
-                with self.assertRaisesRegex(ValueError, 'enabled component set'):
-                    release.plan(api, SimpleNamespace(manual=True))
-        self.assertEqual(len(api.items), 1)
-
     def test_dispatcher_infrastructure_change_is_refused_before_build_or_mutation(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)
@@ -160,23 +148,6 @@ class DeploymentLookupTests(unittest.TestCase):
         self.assertEqual(len(calls), 3)
         self.assertIn(f'&sha={SHA}&page=1', calls[0])
         self.assertEqual(calls[1:], ['deployments/3/statuses?per_page=1', 'deployments/2/statuses?per_page=1'])
-
-    def test_legacy_default_task_records_remain_selectable_without_reading_unrelated_statuses(self):
-        for task in ('nightly-cut', 'nightly-write', 'nightly-attempt'):
-            calls = []
-            def request(route):
-                calls.append(route)
-                if '/statuses?' in route:
-                    return [dict(state='success')]
-                if f'task={task}&' in route:
-                    return []
-                return [dict(id=2, payload=dict(channel='unrelated')),
-                        dict(id=1, payload=dict(channel=task, proof_result='passed'))]
-            records = self.api(request).deployments('nightly', task)
-            self.assertEqual(records[0]['id'], 1)
-            self.assertEqual(calls[:2], [f'deployments?environment=nightly&task={task}&per_page=100&page=1',
-                                        'deployments?environment=nightly&task=deploy&per_page=100&page=1'])
-            self.assertEqual(len(calls), 3 if task == 'nightly-cut' else 2)
 
     def test_pagination_continues_only_until_a_relevant_record(self):
         calls = []

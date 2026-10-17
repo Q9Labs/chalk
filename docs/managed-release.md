@@ -43,9 +43,9 @@ Failed nightly deployments/calls stay unheld; nightly never auto-rolls back.
 Dispatch `Promote newest held nightly` from master with no inputs.
 It selects the newest successful, proof-passed nightly, breaking timestamp ties
 by deployment ID. Deployment lookups filter environment and task, stop at the
-first decisive record, and fetch statuses only for matching candidates. When no
-new-task record exists, a task-filtered legacy lookup preserves pre-upgrade held
-records, reservations and write markers without querying unrelated statuses. There is no age cutoff and no fallback to an older choice.
+first decisive record, and fetch statuses only for matching candidates. Nightly
+records use only their dedicated tasks; no legacy nightly records exist.
+There is no age cutoff and no fallback to an older choice.
 The exact selection, all three artifacts, ancestry, latest Gate and rollback
 manifest are checked before approval. Missing/expired/corrupt files fail clearly; an expired web archive says "cut a new nightly".
 Both Nightly and Promote refuse non-master dispatches in their first step.
