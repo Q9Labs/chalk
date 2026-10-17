@@ -27,8 +27,7 @@ const viewportNames = values.viewports ? values.viewports.split(",") : Object.ke
 const server = spawn("pnpm", ["exec", "vite", "--config", "vite.call-states.config.ts", "--port", values.port], { cwd: resolve(import.meta.dirname, ".."), stdio: ["ignore", "ignore", "inherit"], detached: true });
 let browser;
 try {
-  // CHROMIUM_PATH lets a machine whose Playwright browser cache is a different build run the capture.
-  browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
+  browser = await launchBrowser();
   await waitForServer();
   const states = await readStates();
   const selected = states.filter((state) => !only || only.has(state.id));
@@ -38,6 +37,8 @@ try {
     if (!viewport) throw new Error(`Unknown viewport ${viewportName}; use ${Object.keys(VIEWPORTS).join(", ")}.`);
     await mkdir(join(outDir, viewportName), { recursive: true });
     for (const state of selected) {
+      // A browser killed under memory pressure would fail every later state, so start a new one.
+      if (!browser.isConnected()) browser = await launchBrowser();
       const problems = await capture(state, viewportName, viewport).catch((error) => [{ state: state.id, viewport: viewportName, kind: "capture", message: error.message.split("\n")[0] }]);
       report.problems.push(...problems);
       console.log(`${viewportName} ${state.id}${problems.length ? ` (${problems.length} problems)` : ""}`);
@@ -84,6 +85,11 @@ async function capture(state, viewportName, viewport) {
     await context.close();
   }
   return problems;
+}
+
+function launchBrowser() {
+  // CHROMIUM_PATH lets a machine whose Playwright browser cache is a different build run the capture.
+  return chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
 }
 
 async function readStates() {
