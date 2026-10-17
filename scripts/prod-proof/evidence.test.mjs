@@ -163,3 +163,13 @@ test("macOS montage uses a system font when ImageMagick lists none", () => {
   assert.equal(contactSheetFont("  Font: DejaVu-Sans\n", "linux"), "DejaVu-Sans");
   assert.throws(() => contactSheetFont("", "linux"), /no installed font/);
 });
+
+for (const name of ["export", "transcript"]) {
+  test(`${name} stops a processing wait before five minutes`, { timeout: 1000 }, async (t) => {
+    const { transcriptProof } = await import("./proofs.mjs");
+    let now = 0;
+    t.mock.method(Date, "now", () => (now += 300_000));
+    const run = { tenantPath: "/tenant", recordingId: "recording", apiRequest: async () => ({ export: { id: "export" } }) };
+    await assert.rejects(name === "export" ? exportProof(run) : transcriptProof(run), /timed out after 240s/);
+  });
+}

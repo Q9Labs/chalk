@@ -39,13 +39,24 @@ export async function launchGuests(run, space, episode, speech, origin) {
     maskCredentials(grant);
     let first = true;
     let queue = Promise.resolve();
-    const browser = await chromium.launch({
+    const server = await chromium.launchServer({
       headless: true,
       handleSIGINT: false,
       handleSIGTERM: false,
       args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required", "--auto-select-tab-capture-source-by-title=Chalk proof screen share", "--enable-usermedia-screen-capturing"],
     });
-    run.resources.push({ kind: "headless-browser", dispose: () => browser.close() });
+    run.resources.push({
+      kind: "headless-browser",
+      dispose: () => server.close(),
+      force: () => {
+        try {
+          process.kill(-server.process().pid, "SIGKILL");
+        } catch (error) {
+          if (error.code !== "ESRCH") throw error;
+        }
+      },
+    });
+    const browser = await chromium.connect(server.wsEndpoint());
     const context = await browser.newContext({ permissions: ["camera", "microphone"] });
     await context.addInitScript(installFixture, { speech, guest });
     const page = await context.newPage();

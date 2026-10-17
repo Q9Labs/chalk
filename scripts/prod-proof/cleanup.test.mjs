@@ -188,8 +188,8 @@ test("malformed HTTP and thrown browser errors remain private in real proof repo
     output.some((line) => line.includes(marker)),
     false,
   );
-  assert.ok(output.includes("PROOF export: failed (SyntaxError)"));
-  assert.ok(output.includes("PROOF camera-share: failed (Error)"));
+  assert.ok(output.includes("PROOF export: failed (unknown)"));
+  assert.ok(output.includes("PROOF camera-share: failed (unknown)"));
   assert.match(await readFile(`${directory}/report.json`, "utf8"), /page.evaluate: private-credential/);
 });
 
@@ -285,4 +285,67 @@ test("sweep archives only old owned empty Spaces or Spaces whose Episodes are al
   });
   await sweepStaleRuns(config, now);
   assert.deepEqual(changed, ["/v1/tenants/tenant/spaces/old-empty/archive"]);
+});
+
+for (const code of ["api_key.inactive", "access.forbidden"]) {
+  test(`cleanup only accepts inactive-key conflicts (${code})`, async (t) => {
+    const config = await fixture(t, (req, res) => {
+      res.setHeader("Content-Type", "application/json");
+      if (req.method === "DELETE") {
+        res.writeHead(409).end(JSON.stringify({ error: { code } }));
+      } else res.end(JSON.stringify({ spaces: [], pagination: {} }));
+    });
+    const directory = await mkdtemp(join(tmpdir(), "proof-inactive-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const cleanup = () => cleanupByRunId(config, "expired-run", directory, { keyId: "key" });
+    if (code === "api_key.inactive") await cleanup();
+    else await assert.rejects(cleanup(), /Remote cleanup failed/);
+  });
+}
+
+test("cleanup prefers the persisted endpoint when configuration changes", async (t) => {
+  const paths = [];
+  const config = await fixture(t, (req, res) => {
+    paths.push(req.url);
+    res.setHeader("Content-Type", "application/json");
+    const response = req.method === "PATCH" ? { enabled: false } : { revision: 2, spaces: [], pagination: {} };
+    res.end(JSON.stringify(response));
+  });
+  config.webhook_endpoint_id = "replacement";
+  const directory = await mkdtemp(join(tmpdir(), "proof-owned-endpoint-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await writeFile(join(directory, "ownership.json"), JSON.stringify({ webhook: { id: "original" } }));
+  await cleanupByRunId(config, "canceled-run", directory);
+  assert.ok(paths.some((path) => path.endsWith("/original/rotate-secret")));
+  assert.ok(paths.some((path) => path.endsWith("/original")));
+  assert.equal(
+    paths.some((path) => path.includes("replacement")),
+    false,
+  );
+});
+
+test("cleanup kills a hung child and still saves evidence and disposes later resources", { timeout: 2000 }, async (t) => {
+  const { spawn } = await import("node:child_process");
+  const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+  t.after(() => child.kill("SIGKILL"));
+  const exited = once(child, "exit");
+  const config = await fixture(t, (_req, res) => res.end(JSON.stringify({ spaces: [], pagination: {} })));
+  const directory = await mkdtemp(join(tmpdir(), "proof-hung-child-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const run = await createRun(config, directory, undefined, "hung-child");
+  let disposed = false;
+  run.resources.push({
+    kind: "later",
+    dispose: async () => {
+      disposed = true;
+    },
+  });
+  run.resources.push({ kind: "hung-child", dispose: () => new Promise(() => {}), force: () => child.kill("SIGKILL") });
+  await assert.rejects(cleanupRun(run, { disposeTimeoutMs: 30 }), /Run cleanup failed/);
+  assert.deepEqual(await exited, [null, "SIGKILL"]);
+  assert.equal(disposed, true);
+  assert.deepEqual(JSON.parse(await readFile(join(directory, "cleanup.json"))), [
+    { kind: "hung-child", result: "failed" },
+    { kind: "later", result: "passed" },
+  ]);
 });

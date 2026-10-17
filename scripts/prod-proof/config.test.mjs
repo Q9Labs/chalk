@@ -66,3 +66,47 @@ test("a redacted API credential fails before readiness or any resource creation"
     }
   }
 });
+
+test("public failures expose only bounded reasons and allowlisted API status/codes", async (t) => {
+  const { check, publicFailure, request, waitFor } = await import("./runtime.mjs");
+  const output = [];
+  const report = (error) => publicFailure("smoke", error, (line) => output.push(line));
+  try {
+    check(false, "secret configuration detail", "configuration");
+  } catch (error) {
+    report(error);
+  }
+  try {
+    check(false, "secret assertion detail");
+  } catch (error) {
+    report(error);
+  }
+  try {
+    checkCapabilities({});
+  } catch (error) {
+    report(error);
+  }
+  try {
+    await waitFor("secret timeout label", () => false, 0);
+  } catch (error) {
+    report(error);
+  }
+  for (const code of ["api_key.inactive", "secret-value\n::warning::injected"]) {
+    t.mock.method(globalThis, "fetch", async () => Response.json({ error: { code, message: "secret message" } }, { status: 409 }));
+    try {
+      await request({ api_url: "https://example.invalid" }, "DELETE", "/secret-path");
+    } catch (error) {
+      report(error);
+    }
+  }
+  report(new Error("secret unknown error"));
+  assert.deepEqual(output, [
+    "PROOF smoke: failed (configuration)",
+    "PROOF smoke: failed (evidence-assertion)",
+    "PROOF smoke: failed (capability-disabled)",
+    "PROOF smoke: failed (timeout)",
+    "PROOF smoke: failed (api:409:api_key.inactive)",
+    "PROOF smoke: failed (api:409:unknown)",
+    "PROOF smoke: failed (unknown)",
+  ]);
+});

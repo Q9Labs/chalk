@@ -19,8 +19,14 @@ export async function command(program, args, options = {}) {
     throw new Error(`${program} failed (exit ${error.code ?? "unknown"})`);
   }
 }
-export function check(condition, message) {
-  if (!condition) throw new Error(message);
+export class ProofError extends Error {
+  constructor(reason, message) {
+    super(message);
+    this.reason = reason;
+  }
+}
+export function check(condition, message, reason = "evidence-assertion") {
+  if (!condition) throw new ProofError(reason, message);
 }
 export async function waitFor(label, probe, timeoutMs = 120_000, intervalMs = 2000, signal) {
   const deadline = Date.now() + timeoutMs;
@@ -30,7 +36,7 @@ export async function waitFor(label, probe, timeoutMs = 120_000, intervalMs = 20
     if (value) return value;
     await delay(intervalMs, undefined, { signal });
   }
-  throw new Error(`${label} timed out after ${timeoutMs / 1000}s`);
+  throw new ProofError("timeout", `${label} timed out after ${timeoutMs / 1000}s`);
 }
 export async function save(path, value) {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
@@ -50,8 +56,8 @@ export function environmentConfig(environment) {
   return Object.fromEntries(requiredConfigFields.map((name) => [name, environment[`CHALK_PROOF_${name.toUpperCase()}`]]));
 }
 export function checkCapabilities(readiness) {
-  check(readiness?.capabilities?.recording === "enabled", "API readiness: Recording is not enabled");
-  check(readiness?.capabilities?.transcription === "enabled", "API readiness: Transcription is not enabled");
+  check(readiness?.capabilities?.recording === "enabled", "API readiness: Recording is not enabled", "capability-disabled");
+  check(readiness?.capabilities?.transcription === "enabled", "API readiness: Transcription is not enabled", "capability-disabled");
 }
 async function configurationFields(source) {
   if (source === "env") return environmentConfig(process.env);
@@ -59,12 +65,12 @@ async function configurationFields(source) {
 }
 export async function loadConfig({ readiness = true } = {}) {
   const source = process.env.CHALK_PROOF_CONFIG_SOURCE ?? "1password";
-  check(["env", "1password"].includes(source), "CHALK_PROOF_CONFIG_SOURCE must be env or 1password");
+  check(["env", "1password"].includes(source), "CHALK_PROOF_CONFIG_SOURCE must be env or 1password", "configuration");
   const fields = await configurationFields(source);
   for (const name of requiredConfigFields) {
-    check(fields[name], `Proof configuration is missing ${name}`);
+    check(fields[name], `Proof configuration is missing ${name}`, "configuration");
   }
-  check(fields.api_key.startsWith("chalk_sk_"), "Proof API key must use the chalk_sk_ namespace");
+  check(fields.api_key.startsWith("chalk_sk_"), "Proof API key must use the chalk_sk_ namespace", "configuration");
   if (readiness) checkCapabilities(await request(fields, "GET", "/readyz"));
   return fields;
 }
@@ -83,7 +89,8 @@ export async function request(config, method, path, body, authorization = {}, ex
     signal: AbortSignal.any([AbortSignal.timeout(30_000), ...(signal ? [signal] : [])]),
   });
   if (response.status === 404) {
-    const error = new Error("API resource not found");
+    const error = new ProofError("api", "API resource not found");
+    error.apiCode = "resource.not_found";
     error.status = 404;
     throw error;
   }
@@ -95,7 +102,8 @@ async function readResponse(response, method) {
   if (response.status === 204) return undefined;
   const value = await response.json();
   if (!response.ok) {
-    const error = new Error(`API ${method} failed: HTTP ${response.status}, ${errorCode(value)}`);
+    const error = new ProofError("api", `API ${method} failed: HTTP ${response.status}, ${errorCode(value)}`);
+    error.apiCode = errorCode(value);
     error.status = response.status;
     throw error;
   }
@@ -108,7 +116,7 @@ function errorCode(value) {
 }
 export async function createRun(config, directory, signal = new AbortController().signal, runId = randomUUID()) {
   await mkdir(directory, { recursive: true, mode: 0o700 });
-  check(config.api_key, "Proof configuration is missing api_key");
+  check(config.api_key, "Proof configuration is missing api_key", "configuration");
   const owner = { Authorization: `Bearer ${config.api_key}` };
   const run = {
     config,
@@ -126,10 +134,22 @@ export async function createRun(config, directory, signal = new AbortController(
   run.tenantPath = `/v1/tenants/${config.tenant_id}`;
   return run;
 }
-const publicErrorClasses = new Set(["SyntaxError", "TypeError", "AggregateError", "AbortError", "TimeoutError"]);
+const publicReasons = new Set(["configuration", "capability-disabled", "evidence-assertion", "timeout"]);
+const publicApiCodes = new Set(["api_key.inactive", "access.forbidden", "resource.not_found", "request.invalid", "rate_limit.exceeded", "internal.error"]);
+const publicStatuses = new Set([400, 401, 403, 404, 409, 422, 429, 500, 502, 503, 504]);
+function failureReason(error, depth = 0) {
+  if (publicReasons.has(error?.reason)) return error.reason;
+  if (error?.reason === "api") {
+    const status = publicStatuses.has(error.status) ? error.status : "unknown";
+    const code = publicApiCodes.has(error.apiCode) ? error.apiCode : "unknown";
+    return `api:${status}:${code}`;
+  }
+  if (["AbortError", "TimeoutError"].includes(error?.name)) return "timeout";
+  if (depth < 3 && error instanceof AggregateError) return failureReason(error.errors[0], depth + 1);
+  return "unknown";
+}
 export function publicFailure(phase, error, output = console.error) {
-  const kind = publicErrorClasses.has(error?.name) ? error.name : "Error";
-  output(`PROOF ${phase}: failed (${kind})`);
+  output(`PROOF ${phase}: failed (${failureReason(error)})`);
 }
 function maskCredential(name, value) {
   if (!value || !/secret|token|credential|jwt/i.test(name)) return;

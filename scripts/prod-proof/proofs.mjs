@@ -10,7 +10,7 @@ export async function prepareIntegration(run, webhooks) {
   const key = await run.ownerRequest("POST", `${run.tenantPath}/api-keys`, {
     name: run.label,
     scopes: ["spaces:read", "spaces:write", "episodes:read", "episodes:write", "recordings:read", "transcriptions:read", "transcriptions:write"],
-    expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    expires_at: new Date(Date.now() + 55 * 60 * 1000).toISOString(),
   });
   run.ownership = { keyId: key.api_key.id };
   run.apiKey = key.secret;
@@ -92,7 +92,7 @@ async function startCapture(run, pages) {
       check(current.status !== "failed", "Capture failed before readiness");
       return current.recordingId === run.recordingId && current.status === "recording";
     },
-    900_000,
+    180_000,
     3000,
     run.signal,
   );
@@ -195,7 +195,7 @@ async function finalizedSource(run) {
       check(!["failed", "expired"].includes(value.source.status), `Recording source ${value.source.status}`);
       return value.source.status === "available" ? value : false;
     },
-    900_000,
+    180_000,
     5000,
     run.signal,
   );
@@ -247,7 +247,7 @@ export async function exportProof(run, execute = command) {
       check(!["failed", "unavailable"].includes(value.export.status), `Export ${value.export.status}: ${value.export.failure_code ?? "unknown"}`);
       return value.export.status === "ready";
     },
-    1200_000,
+    240_000,
     5000,
     run.signal,
   );
@@ -302,7 +302,7 @@ export async function transcriptProof(run) {
       check(!["failed", "expired", "none"].includes(status), `Transcript audio preparation ${status}`);
       return status === "ready";
     },
-    1200_000,
+    240_000,
     5000,
     run.signal,
   );
@@ -317,7 +317,7 @@ export async function transcriptProof(run) {
       check(!["failed", "deleted", "expired"].includes(state.status), `Transcript ${state.status}`);
       return state.status === "complete";
     },
-    1200_000,
+    240_000,
     5000,
     run.signal,
   );

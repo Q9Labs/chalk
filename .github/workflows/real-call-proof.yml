@@ -45,7 +45,7 @@ jobs:
     environment: ${{ inputs.environment || 'production' }}
     outputs:
       result: ${{ steps.result.outputs.result }}
-    timeout-minutes: 60
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -73,12 +73,16 @@ jobs:
         env:
           EVIDENCE_RECIPIENT: ${{ vars.CHALK_PROOF_EVIDENCE_RECIPIENT }}
         run: |
-          test -n "$EVIDENCE_RECIPIENT"
+          if [ -z "$EVIDENCE_RECIPIENT" ]; then
+            echo "Missing required variable CHALK_PROOF_EVIDENCE_RECIPIENT" >&2
+            exit 1
+          fi
           printf '' | age --recipient "$EVIDENCE_RECIPIENT" --output /dev/null
       - name: Identify invocation
         id: invocation
         run: echo "suffix=$(cat /proc/sys/kernel/random/uuid)" >> "$GITHUB_OUTPUT"
       - name: Prove a real call
+        timeout-minutes: 40
         env:
           CHALK_PROOF_CONFIG_SOURCE: env
           CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
