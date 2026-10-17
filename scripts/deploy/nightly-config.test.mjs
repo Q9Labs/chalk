@@ -54,10 +54,14 @@ async function assertProductionRendering(directory, baseline, manifest, images) 
     for (const environment of [[], ["production"]]) {
       const rendered = `${after}-${environment.length}`;
       run("bash", [join(root, managed, "scripts/render-runtime"), manifest, rendered, ...environment]);
-      assert.deepEqual(await files(rendered), await files(before));
-      for (const file of await files(before)) assert.deepEqual(await readFile(join(rendered, file)), await readFile(join(before, file)), file);
+      await assertSameRenderedFiles(before, rendered);
     }
   }
+}
+
+async function assertSameRenderedFiles(before, rendered) {
+  assert.deepEqual(await files(rendered), await files(before));
+  for (const file of await files(before)) assert.deepEqual(await readFile(join(rendered, file)), await readFile(join(before, file)), file);
 }
 
 async function assertNightlyConfig(directory, manifest) {
