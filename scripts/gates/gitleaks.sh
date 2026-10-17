@@ -29,7 +29,8 @@ run_gitleaks() {
         echo "Explicit gate file is not a regular in-repository file: ${file}" >&2
         return 1
       fi
-      "$@" dir --config "${CONFIG_PATH}" --redact --verbose -- "./${file}"
+      # Pass the path as Git names it, because allowlist paths are anchored at the repository root.
+      "$@" dir --config "${CONFIG_PATH}" --redact --verbose -- "${file#./}"
     done <<< "${GATE_EXPLICIT_FILES}"
   fi
 
