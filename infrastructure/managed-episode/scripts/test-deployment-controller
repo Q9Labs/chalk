@@ -536,6 +536,7 @@ make_request preview "${fixture_root}/preview-request.json" '[]' preview-2
 make_manifest preview >"${fixture_root}/preview-manifest.json"
 run_controller "$preview_state" "${fixture_root}/preview-request.json" "${fixture_root}/preview-manifest.json" ok >/dev/null
 jq -e '.environment == "preview-2" and .parameter_prefix == "/chalk/preview-2/managed-episode"' "${preview_state}/active-release.json" >/dev/null || fail "configured environment was not accepted"
+grep -Fqx 'OTEL_RESOURCE_ATTRIBUTES=service.name=chalk-sync,service.version=preview,deployment.environment.name=preview-2,service.instance.id=sync-test-instance' "${fixture_root}/run/env/sync.env" || fail "configured environment telemetry was labeled as production"
 fi
 
 stable_state="${fixture_root}/stable-state"
