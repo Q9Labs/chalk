@@ -1,3 +1,5 @@
+import { contactSheetFont } from "./contact-sheet.mjs";
+import { recordingRejoinWindow } from "./recording-rejoin.mjs";
 import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { generateVoice } from "./fixture.mjs";
@@ -220,32 +222,30 @@ function cameraResult(share, baselineError, forceLayerSwitch) {
   if (error) result.error = error;
   return result;
 }
-export async function recordProof(run, receiver, cameraShare, forceLayerSwitch) {
+async function shortRecordingWindow(run, guests, rejoin) {
+  if (rejoin) await recordingRejoinWindow(run, guests);
+  else await run.wait(5000);
+}
+export async function recordProof(run, receiver, cameraShare, forceLayerSwitch, rejoin = false) {
   const space = await createSpace(run);
   const { episode, end, useSDK } = await createEpisode(run, space);
   run.episodeId = episode.id;
   console.log("Joining two synthetic camera/voice guests");
-  const pages = await launchGuests(run, space, episode, await generateVoice(run.directory, run.signal), receiver.origin);
+  const guests = await launchGuests(run, space, episode, rejoin ? null : await generateVoice(run.directory, run.signal), receiver.origin, rejoin);
+  const { pages } = guests;
   useSDK(pages[0]);
   await startCapture(run, pages);
   const sample = statsSampler(run, pages);
   const baselineError = await baselineLayers(run, sample);
   let share = { seconds: 0 };
   if (cameraShare) share = await cameraShareWindow(run, pages, sample, receiver.origin, forceLayerSwitch);
-  else await run.wait(5000);
+  else await shortRecordingWindow(run, guests, rejoin);
   // End the active Episode once; its lifecycle stops Capture and finalizes the Recording.
   console.log("Ending own Episode and its active Recording");
   await end();
   const recording = await finalizedSource(run);
   for (const page of pages) await page.context().close();
   return { recording, camera: cameraResult(share, baselineError, forceLayerSwitch) };
-}
-export function contactSheetFont(fonts, platform = process.platform) {
-  // macOS ImageMagick can have no registered fonts despite system fonts existing.
-  if (platform === "darwin" && !fonts.trim()) return "/System/Library/Fonts/Supplemental/Arial.ttf";
-  const font = fonts.match(/^\s*Font:\s*(\S.*)$/m)?.[1].trim();
-  check(font, "ImageMagick has no installed font for the contact sheet");
-  return font;
 }
 export async function exportProof(run, execute = command) {
   const started = Date.now();

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { recordingRejoinProof } from "./recording-rejoin.mjs";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { cleanupRun, createRun, loadConfig, save, check } from "./runtime.mjs";
@@ -8,10 +9,11 @@ const plans = {
   all: { media: true, cameraShare: true, webhooks: true, proofs: ["camera-share", "export", "smoke", "transcript"] },
   smoke: { media: true, cameraShare: false, webhooks: true, proofs: ["export", "smoke"] },
   "camera-share": { media: true, cameraShare: true, webhooks: false, proofs: ["camera-share"] },
+  "recording-rejoin": { media: true, rejoin: true, cameraShare: false, webhooks: false, proofs: ["export", "recording-rejoin"] },
   export: { media: true, cameraShare: false, webhooks: false, proofs: ["export"] },
   transcript: { media: true, cameraShare: false, webhooks: false, proofs: ["transcript"] },
 };
-const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|export|transcript] [--force-layer-switch|--no-layer-switch]
+const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|recording-rejoin|export|transcript] [--force-layer-switch|--no-layer-switch]
 Default: all, with forced layer switch. Each subcommand creates and cleans its own run.
 Requirements: CHALK_PROOF_API_KEY (existing scoped Tenant key), configuration environment variables (see README), aws, ffmpeg, ffprobe, ImageMagick, Chromium,
              macOS say or Linux espeak; pnpm install and pnpm --filter @q9labsai/chalk-client exec playwright install chromium.
@@ -42,7 +44,7 @@ async function runProofs(run, plan, report, forceLayerSwitch) {
   let captured;
   if (plan.media) {
     receiver = await prepareIntegration(run, plan.webhooks);
-    captured = await recordProof(run, receiver, plan.cameraShare, forceLayerSwitch);
+    captured = await recordProof(run, receiver, plan.cameraShare, forceLayerSwitch, plan.rejoin);
   }
   const actions = {
     "camera-share": async () => {
@@ -50,6 +52,10 @@ async function runProofs(run, plan, report, forceLayerSwitch) {
       return captured.camera;
     },
     export: () => exportProof(run),
+    "recording-rejoin": () => {
+      check(report.proofs.export.result === "passed", "MP4 Export/download did not pass");
+      return recordingRejoinProof(run, report.proofs.export.evidence);
+    },
     smoke: () => {
       check(report.proofs.export.result === "passed", "MP4 Export/download did not pass");
       return smokeProof(run, receiver);

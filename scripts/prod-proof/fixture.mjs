@@ -16,7 +16,7 @@ export async function generateVoice(directory, signal) {
 }
 
 // Browser-side generator: animated, distinguishable camera; repeatable spoken audio.
-export function installFixture({ speech, guest }) {
+export function installFixture({ speech, guest, tones = false }) {
   const NativePC = window.RTCPeerConnection;
   window.proofConnections = [];
   window.RTCPeerConnection = class extends NativePC {
@@ -45,13 +45,14 @@ export function installFixture({ speech, guest }) {
     canvas.height = 720;
     const context = canvas.getContext("2d");
     let frame = 0;
+    const backgrounds = { before: ["#1b365d", "#613c69"], after: ["#185d45", "#69461d"] };
     window.proofCameraTimer = setInterval(() => {
-      context.fillStyle = guest === 0 ? "#1b365d" : "#613c69";
+      context.fillStyle = backgrounds[window.proofPhase ?? "before"][guest];
       context.fillRect(0, 0, 1280, 720);
       context.fillStyle = "white";
       context.font = "64px sans-serif";
       context.fillText(`Proof guest ${guest + 1}`, 60, 100);
-      context.fillText(`Frame ${frame++}`, 60, 200);
+      context.fillText(`${window.proofPhase ?? "before"}: Frame ${frame++}`, 60, 200);
       for (let n = 0; n < 30; n++) {
         context.fillStyle = `hsl(${(frame * 7 + n * 12) % 360} 70% 60%)`;
         context.fillRect((frame * 11 + n * 61) % 1280, 250 + (n % 5) * 80, 70, 60);
@@ -61,6 +62,27 @@ export function installFixture({ speech, guest }) {
     window.proofCameraId = camera.id;
     return camera;
   }
+  function toneTrack(context) {
+    const source = context.createOscillator();
+    source.frequency.value = [440, 880][guest];
+    const gain = context.createGain();
+    gain.gain.value = 0.15;
+    const destination = context.createMediaStreamDestination();
+    source.connect(gain);
+    gain.connect(destination);
+    source.start();
+    window.proofAudio = { context, source, destination };
+    return destination.stream.getAudioTracks()[0].clone();
+  }
+  async function toneVoiceTrack() {
+    if (!window.proofAudio) {
+      const context = new AudioContext();
+      await context.resume();
+      return toneTrack(context);
+    }
+    return window.proofAudio.destination.stream.getAudioTracks()[0].clone();
+  }
+  const audioTrack = tones ? toneVoiceTrack : voiceTrack;
   async function voiceTrack() {
     if (!window.proofAudio) {
       const context = new AudioContext();
@@ -90,7 +112,7 @@ export function installFixture({ speech, guest }) {
   navigator.mediaDevices.getUserMedia = async (constraints) => {
     const stream = await nativeCapture(constraints);
     if (constraints.video) replaceTracks(stream, stream.getVideoTracks(), cameraTrack());
-    if (constraints.audio) replaceTracks(stream, stream.getAudioTracks(), await voiceTrack());
+    if (constraints.audio) replaceTracks(stream, stream.getAudioTracks(), await audioTrack());
     return stream;
   };
 }
