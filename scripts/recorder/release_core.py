@@ -178,6 +178,9 @@ def rebuild_dispatcher(state, module, backend, region, profile):
             "module": {"dispatcher": {"source": str(module), **inputs}},
             "output": {key: {"value": "${module.dispatcher." + key + "}", "sensitive": value.get("sensitive", False)}
                        for key, value in state["outputs"].items()}}
+    if not root["output"]:
+        del root["output"]
+    return root
 
 
 def scheduler_changes(plan, desired):
@@ -189,6 +192,3 @@ def scheduler_changes(plan, desired):
     before, after = change["change"]["before"], change["change"]["after"]
     require(after["state"] == desired and {k: v for k, v in before.items() if k != "state"}
             == {k: v for k, v in after.items() if k != "state"}, "scheduler plan changes more than state")
-    if not root["output"]:
-        del root["output"]
-    return root
