@@ -1,7 +1,4 @@
-/sign-in /_shell/ 200
-/sign-up /_shell/ 200
-/space/* /_shell/ 200
+/space/* /space/ 200
+/docs/reactions /docs/chat 301
 
-/forgot-password /_shell/ 200
-/reset-password /_shell/ 200
 /invitations/accept /_shell/ 200

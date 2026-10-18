@@ -3,8 +3,7 @@
 This Vite, React 19, and TanStack Router app serves:
 
 - the landing page at `/`, docs and legal pages;
-- the public-SDK consumer Space at `/space`;
-- account sign-in, sign-up, password recovery and invitation acceptance.
+- the public-SDK consumer Space at `/space`, including guest admission by public Space link.
 
 Implementation status lives in the root [human tracker](../../tracker-human.md), generated from [tracker.yaml](../../tracker.yaml). Route names and this integration guide are not release-readiness evidence.
 

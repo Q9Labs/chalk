@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "ai.q9labs.chalk.mobile",
+      "sha256_cert_fingerprints": ["C3:94:F2:86:8C:16:B8:5C:B7:84:52:AF:B9:A5:80:C1:23:4E:06:44:B4:ED:B0:97:EA:F1:DA:06:55:7F:BB:73", "70:57:9D:12:D1:8E:8E:4C:82:44:BA:6C:28:C1:05:10:64:4B:EA:83:9F:E1:06:3F:85:E6:46:15:16:05:BD:EE"]
+    }
+  }
+]
