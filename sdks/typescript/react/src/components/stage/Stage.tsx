@@ -4,7 +4,7 @@ import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
 import type { ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { ChalkSheet } from "../chalk-ui";
-import { useResizeObserver } from "../chalk-ui/useResizeObserver";
+import { useStageDimensions } from "./useStageDimensions";
 import { ParticipantTile } from "../participant-tile/ParticipantTile";
 import { DEFAULT_GRID_OPTIONS, DEFAULT_SPOTLIGHT_OPTIONS, EMPTY_GEOMETRY, fitGrid, fitSpotlight, type StageBox, type StageFrame, type StageGeometry, MORE_TILE_ID } from "./stage-layout";
 import { buildStageItems, choosePrimary, gridOrder, isContentItem, stabilizeOrder, type StageItem, type StageLayout } from "./stage-items";
@@ -87,7 +87,7 @@ export function Stage({
   className,
 }: StageProps): React.JSX.Element {
   const prefersReducedMotion = usePrefersReducedMotion();
-  const { ref: boxRef, dimensions: box } = useResizeObserver<HTMLDivElement>(FALLBACK_BOX);
+  const { ref: boxRef, dimensions: box } = useStageDimensions(FALLBACK_BOX);
   const [overflowOpen, setOverflowOpen] = useState(false);
   const [shareAspects, setShareAspects] = useState<ReadonlyMap<string, number>>(new Map());
   const [uncontrolledPinnedId, setUncontrolledPinnedId] = useState<string | null>(null);

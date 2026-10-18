@@ -209,7 +209,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
           </div>
           <button
             type="button"
-            className="flex min-h-[52px] w-full items-center gap-3.5 rounded-[16px] bg-[var(--chalk-raised)] px-4 text-left text-base hover:bg-[var(--chalk-hover)] active:bg-[var(--chalk-pressed)]"
+            className="flex min-h-[52px] w-full items-center gap-3.5 rounded-[16px] bg-[var(--chalk-raised)] px-4 text-left text-base leading-[1.4] hover:bg-[var(--chalk-hover)] active:bg-[var(--chalk-pressed)]"
             onClick={() => {
               onClick();
               closeOptions();
