@@ -9,9 +9,11 @@ export type ScreenShareCapture = {
 };
 export type MediaSource = "microphone" | "camera" | "screen";
 
+export type MediaPublicationSource = MediaSource | "screen_audio";
+
 export type MediaPublication = {
   readonly participantId: string;
-  readonly source: MediaSource;
+  readonly source: MediaPublicationSource;
   readonly enabled: boolean;
   readonly publicationId: string | null;
 };

@@ -1,4 +1,4 @@
-import type { MediaSource } from "./plane";
+import type { MediaPublicationSource } from "./plane";
 import { CloudflareSFUError } from "./types";
 import type { CloudflareSFUCredentialProvider, CloudflareSFUHTTPTransportOptions, CloudflareSFUPublicationSnapshot, CloudflareSFUSignalingTransport, CloudflareSFUTracksResponse } from "./types";
 const SIGNALING_TIMEOUT_MS = 8000;
@@ -69,7 +69,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
         publications: readonly {
           participant_id?: string;
           participant_session_id?: string;
-          source: MediaSource;
+          source: MediaPublicationSource;
           publication_id: string;
         }[];
       }>("publications");

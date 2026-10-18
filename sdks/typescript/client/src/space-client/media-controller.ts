@@ -91,6 +91,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #requests: readonly IncomingMediaRequest[] = Object.freeze([]);
   #ports: ConnectionPorts | null = null;
   #screenEndedPending = false;
+  #screenAudioTrack: MediaStreamTrack | null = null;
   #unsubscribeMedia: (() => void) | null = null;
   #unsubscribeRequests: (() => void) | null = null;
   #unsubscribeSync: (() => void) | null = null;
@@ -210,6 +211,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#unsubscribeScreenEnded = null;
     this.#unsubscribePorts = null;
     this.#ports = null;
+    this.#screenAudioTrack?.stop();
+    this.#screenAudioTrack = null;
     for (const track of this.#tracks.values()) track.stop();
     this.#tracks.clear();
     this.#clearRequests();
@@ -347,6 +350,13 @@ class MediaControllerRuntime implements MediaControllerEffects {
                       stream = captured;
                       this.#assertActivePorts(ports, "startScreenShare");
                       track = requireDisplayVideoTrack(captured);
+                      const audio = captured.getAudioTracks()[0];
+                      for (const extra of captured.getAudioTracks().slice(1)) extra.stop();
+                      this.#screenAudioTrack = audio ?? null;
+                      if (audio) {
+                        ports.media.prepareLocalTrack("screen_audio", audio);
+                        audio.addEventListener("ended", () => this.#handleScreenAudioEnded(audio, ports));
+                      }
                       this.#tracks.set("screen", track);
                       ports.media.prepareLocalTrack("screen", track);
                       prepared = true;
@@ -360,7 +370,12 @@ class MediaControllerRuntime implements MediaControllerEffects {
                   Effect.tap(() => Effect.sync(() => this.#assertActivePorts(ports, "startScreenShare"))),
 
                   Effect.asVoid,
-                  Effect.catch((cause) => this.#rollbackCapture({ action: "startScreenShare", cause, fallback: Effect.sync(() => stopStream(stream)), media: ports.media, permissionMessage: "Screen sharing permission was denied", prepared, source: "screen", track })),
+                  Effect.catch((cause) =>
+                    this.#clearScreenAudio(ports.media).pipe(
+                      Effect.ignore,
+                      Effect.andThen(this.#rollbackCapture({ action: "startScreenShare", cause, fallback: Effect.sync(() => stopStream(stream)), media: ports.media, permissionMessage: "Screen sharing permission was denied", prepared, source: "screen", track })),
+                    ),
+                  ),
                 );
               });
             }),
@@ -404,6 +419,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
                   ),
                   Effect.andThen(foreign(() => ports.sync.setScreenShareEnabled(false))),
                   Effect.tap(() => Effect.sync(() => this.#assertActivePorts(ports, "stopScreenShare"))),
+                  Effect.andThen(this.#clearScreenAudio(ports.media)),
                   Effect.andThen(foreign(() => ports.media.clearPreparedLocalTrack("screen"))),
                   Effect.tap(() =>
                     Effect.sync(() => {
@@ -431,6 +447,16 @@ class MediaControllerRuntime implements MediaControllerEffects {
         ),
       )
       .pipe(Effect.mapError(normalizeClientError));
+  }
+  #clearScreenAudio(media: ConnectionPorts["media"]): Effect.Effect<void, unknown> {
+    return foreign(() => media.clearPreparedLocalTrack("screen_audio")).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          this.#screenAudioTrack?.stop();
+          this.#screenAudioTrack = null;
+        }),
+      ),
+    );
   }
   #beginLocalPause(ports: ConnectionPorts, source: MediaSource): Promise<void> {
     const pause = Effect.runPromise(this.#localTarget(ports, source, false));
@@ -526,6 +552,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (this.#ports?.media !== ports?.media) this.#observedPublicationIds.clear();
     this.#ports = ports;
     if (!ports) {
+      this.#screenAudioTrack?.stop();
+      this.#screenAudioTrack = null;
       for (const track of this.#tracks.values()) track.stop();
       this.#tracks.clear();
       this.#screenEndedPending = false;
@@ -549,7 +577,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #applyRemoteMediaState(ports: ConnectionPorts, snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]>): void {
     for (const publication of ports.media.getSnapshot().remoteTracks) {
-      publication.track.enabled = snapshot.media?.items.some((item) => item.participantId === publication.participantId && item.source === publication.source && item.enabled) ?? false;
+      publication.track.enabled = snapshot.media?.items.some((item) => item.participantId === publication.participantId && item.source === (publication.source === "screen_audio" ? "screen" : publication.source) && item.enabled) ?? false;
     }
   }
   #applyForcedMediaState(ports: ConnectionPorts, snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]>): void {
@@ -572,6 +600,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (!pendingEnable) {
       this.#intentRevisions.set(source, (this.#intentRevisions.get(source) ?? 0) + 1);
       if (source !== "screen") this.#intent[source] = false;
+      else if (this.#screenAudioTrack) this.#screenAudioTrack.enabled = false;
     }
     const track = this.#tracks.get(source);
     if (track) track.enabled = false;
@@ -633,6 +662,17 @@ class MediaControllerRuntime implements MediaControllerEffects {
     }
     this.#publish();
   }
+  #handleScreenAudioEnded(track: MediaStreamTrack, ports: ConnectionPorts): void {
+    this.#fork(
+      this.#serialize(
+        "screen",
+        Effect.suspend(() => {
+          if (this.#screenAudioTrack !== track || this.#ports !== ports) return Effect.void;
+          return this.#clearScreenAudio(ports.media).pipe(Effect.ensuring(Effect.sync(() => this.#publish())));
+        }),
+      ).pipe(Effect.ignore),
+    );
+  }
   #handleScreenEnded(track = this.#tracks.get("screen")): void {
     if (!track || this.#tracks.get("screen") !== track) return;
     if (this.#connection.getSnapshot().state === "reconnecting") {
@@ -651,7 +691,17 @@ class MediaControllerRuntime implements MediaControllerEffects {
       screen: localMedia("screen", this.#tracks, snapshot, false, state, this.#pendingSources.has("screen")),
     });
     const remote = Object.freeze((snapshot?.remoteTracks ?? []).map((track) => Object.freeze({ participantId: track.participantId, source: track.source, publicationId: track.publicationId, track: track.track })));
-    const media = Object.freeze({ ...current.media, local, remote, screenShare: { ...local.screen, ...(local.screen.track ? { capture: screenShareCapture(local.screen.track) } : {}) }, incomingRequests: this.#requests });
+    const media = Object.freeze({
+      ...current.media,
+      local,
+      remote,
+      screenShare: {
+        ...local.screen,
+        hasAudio: Boolean(this.#screenAudioTrack?.readyState === "live" && snapshot?.localTracks.some((track) => track.source === "screen_audio" && track.enabled && track.track.readyState === "live")),
+        ...(local.screen.track ? { capture: screenShareCapture(local.screen.track) } : {}),
+      },
+      incomingRequests: this.#requests,
+    });
     if (!sameMediaSlice(current.media, media)) this.#store.updateMedia(media);
   }
 }
@@ -718,7 +768,7 @@ function sameMediaSlice(left: MediaSlice, right: MediaSlice): boolean {
   return sameScreenShare(left.screenShare, right.screenShare) && sameRemoteMedia(left.remote, right.remote) && sameRequests(left.incomingRequests, right.incomingRequests);
 }
 function sameScreenShare(left: MediaSlice["screenShare"], right: MediaSlice["screenShare"]): boolean {
-  return sameLocalMedia(left, right) && left.capture?.surface === right.capture?.surface && left.capture?.label === right.capture?.label;
+  return sameLocalMedia(left, right) && left.hasAudio === right.hasAudio && left.capture?.surface === right.capture?.surface && left.capture?.label === right.capture?.label;
 }
 function sameLocalMedia(left: MediaSlice["local"][MediaSource], right: MediaSlice["local"][MediaSource]): boolean {
   return left.source === right.source && left.state === right.state && left.track === right.track;

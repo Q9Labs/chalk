@@ -646,6 +646,8 @@
   ],
   "mediaPlanePort": {
     "sources": ["microphone", "camera", "screen"],
+    "publicationSources": ["microphone", "camera", "screen", "screen_audio"],
+    "screenAudioControlSource": "screen",
     "clientRuntime": {
       "operations": ["set_local_publication_target", "observe_local_publications", "observe_remote_publications"],
       "enableRequiresLocalConsent": true

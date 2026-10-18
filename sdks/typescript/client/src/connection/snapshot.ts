@@ -1,4 +1,4 @@
-import type { ConnectionMediaSnapshot } from "../media";
+import type { ConnectionMediaSnapshot, MediaPublicationSource } from "../media";
 import type { V1EpisodeSnapshot } from "../sync";
 import type { AccessSubject } from "../access/grant";
 import type { ChalkChatState, ChalkCollaborationCapability, ChalkIncomingMediaRequest, ChalkLocalMedia, ChalkMediaSource, ChalkParticipantMediaState, ChalkReactionEvent, ConnectionConnectionPhase, ConnectionFailure, ConnectionSnapshot, ConnectionState, ChalkWhiteboardSummary } from "./types";
@@ -196,11 +196,11 @@ function mediaStateFor(participantId: string, source: ChalkMediaSource, active: 
 }
 
 function projectLocalMedia(input: ConnectionProjectionInput): Readonly<Record<ChalkMediaSource, ChalkLocalMedia>> {
-  const published = new Map<ChalkMediaSource, LocalPublication>(input.media?.localTracks.map((publication) => [publication.source, publication]));
+  const published = new Map<MediaPublicationSource, LocalPublication>(input.media?.localTracks.map((publication) => [publication.source, publication]));
   return Object.fromEntries(SOURCES.map((source) => [source, projectLocalMediaSource(input, published, source)])) as Readonly<Record<ChalkMediaSource, ChalkLocalMedia>>;
 }
 
-function projectLocalMediaSource(input: ConnectionProjectionInput, published: ReadonlyMap<ChalkMediaSource, LocalPublication>, source: ChalkMediaSource): ChalkLocalMedia {
+function projectLocalMediaSource(input: ConnectionProjectionInput, published: ReadonlyMap<MediaPublicationSource, LocalPublication>, source: ChalkMediaSource): ChalkLocalMedia {
   const track = trackFor(input.localTracks, source);
   const intended = localMediaIntent(input.localIntent, source, track);
   const state = localMediaState(input.state, publicationEnabled(published.get(source)), track !== null, intended);

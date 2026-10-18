@@ -14,7 +14,7 @@ const EMPTY = empty({
     selection: empty({ microphone: null, camera: null, speaker: null }),
     local: empty({ microphone: empty({ source: "microphone", state: "unavailable", track: null }), camera: empty({ source: "camera", state: "unavailable", track: null }), screen: empty({ source: "screen", state: "unavailable", track: null }) }),
     remote: empty([]),
-    screenShare: empty({ source: "screen", state: "unavailable", track: null }),
+    screenShare: empty({ source: "screen", state: "unavailable", track: null, hasAudio: false }),
     incomingRequests: empty([]),
   }),
   chat: empty({ status: "idle", messages: empty([]), pendingSends: empty([]), readReceipts: empty([]), unreadCount: 0, pagination: empty({ cursor: null, hasOlder: false, historyTruncated: false }), lastError: null }),

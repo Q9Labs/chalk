@@ -137,7 +137,7 @@ export type LocalMedia = {
 };
 export type RemoteMedia = {
   readonly participantId: string;
-  readonly source: MediaSource;
+  readonly source: MediaSource | "screen_audio";
   readonly publicationId: string;
   readonly track: MediaStreamTrack;
 };
@@ -156,7 +156,7 @@ export type MediaSlice = {
   };
   readonly local: Readonly<Record<MediaSource, LocalMedia>>;
   readonly remote: readonly RemoteMedia[];
-  readonly screenShare: LocalMedia & { readonly capture?: ScreenShareCapture };
+  readonly screenShare: LocalMedia & { readonly hasAudio?: boolean; readonly capture?: ScreenShareCapture };
   readonly incomingRequests: readonly IncomingMediaRequest[];
 };
 export type ChatAttachment = ChalkChatAttachment;

@@ -43,6 +43,7 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
   readonly #offline: OfflineActionsHold | undefined;
   #unsubscribePorts: (() => void) | null = null;
   #unsubscribe: (() => void) | null = null;
+  #unsubscribeMedia: (() => void) | null = null;
   constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, offline?: OfflineActionsHold) {
     this.#offline = offline;
     this.#connection = connection;
@@ -116,6 +117,8 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
   dispose(): void {
     this.#unsubscribePorts?.();
     this.#unsubscribe?.();
+    this.#unsubscribeMedia?.();
+    this.#unsubscribeMedia = null;
     this.#unsubscribePorts = null;
     this.#unsubscribe = null;
   }
@@ -127,16 +130,26 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
   }
   #bind(ports: ConnectionPorts | null): void {
     this.#unsubscribe?.();
+    this.#unsubscribeMedia?.();
     this.#unsubscribe = null;
+    this.#unsubscribeMedia = null;
     if (!ports) {
       this.#publish(null, {});
       return;
     }
-    this.#unsubscribe = ports.sync.subscribe((snapshot) => this.#publish(snapshot, ports.sync.getParticipantCollaborationCapabilities()));
-    this.#publish(ports.sync.getSnapshot(), ports.sync.getParticipantCollaborationCapabilities());
+    const publish = () => this.#publish(ports.sync.getSnapshot(), ports.sync.getParticipantCollaborationCapabilities(), ports.media.getSnapshot());
+    this.#unsubscribe = ports.sync.subscribe(publish);
+    this.#unsubscribeMedia = ports.media.subscribe(publish);
+    publish();
   }
-  #publish(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | null, collaborationCapabilities: Readonly<Record<string, readonly string[]>>): void {
-    const participants = participantsFor(snapshot, collaborationCapabilities);
+  #publish(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | null, collaborationCapabilities: Readonly<Record<string, readonly string[]>>, media?: ReturnType<ConnectionPorts["media"]["getSnapshot"]>): void {
+    const audioParticipants = new Set(media?.remoteTracks.filter((track) => track.source === "screen_audio" && track.track.readyState === "live").map((track) => track.participantId));
+    if (snapshot?.participantId && media?.localTracks.some((track) => track.source === "screen_audio" && track.enabled && track.track.readyState === "live")) audioParticipants.add(snapshot.participantId);
+    const projected = participantsFor(snapshot, collaborationCapabilities);
+    const participants = Object.freeze({
+      ...projected,
+      roster: Object.freeze(projected.roster.map((participant) => Object.freeze({ ...participant, media: Object.freeze({ ...participant.media, screenShareHasAudio: participant.media.screenShare === "active" && audioParticipants.has(participant.participantId) }) }))),
+    });
     const self = selfFor(snapshot, participants.roster);
     const current = this.#store.getSnapshot();
     if (!sameParticipants(current.participants, participants)) this.#store.updateParticipants(participants);
@@ -246,7 +259,7 @@ function sameParticipantProfile(left: Participant, right: Participant): boolean 
   return left.participantId === right.participantId && left.displayName === right.displayName && left.role === right.role && left.handRaised === right.handRaised && sameValues(left.eligibleRoles, right.eligibleRoles) && sameValues(left.capabilities, right.capabilities);
 }
 function sameParticipantMedia(left: Participant, right: Participant): boolean {
-  return left.media.microphone === right.media.microphone && left.media.camera === right.media.camera && left.media.screenShare === right.media.screenShare;
+  return left.media.microphone === right.media.microphone && left.media.camera === right.media.camera && left.media.screenShare === right.media.screenShare && left.media.screenShareHasAudio === right.media.screenShareHasAudio;
 }
 function sameParticipantPresence(left: Participant, right: Participant): boolean {
   return left.presence.state === right.presence.state && left.presence.speaking === right.presence.speaking && left.presence.activeSpeaker === right.presence.activeSpeaker;

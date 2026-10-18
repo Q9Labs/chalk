@@ -185,7 +185,7 @@ func operationTargets(publications []provideroperations.Publication, input provi
 func publicationMatchesOperation(publication provideroperations.Publication, input provideroperations.OperationInput) bool {
 	switch input.Effect {
 	case provideroperations.EffectRevokePublication:
-		return publication.ParticipantID == input.ParticipantID && publication.Source == input.PublicationSource
+		return publication.ParticipantID == input.ParticipantID && (publication.Source == input.PublicationSource || (input.PublicationSource == "screen" && publication.Source == "screen_audio"))
 	case provideroperations.EffectRemoveParticipant:
 		return publication.ParticipantID == input.ParticipantID
 	case provideroperations.EffectEndEpisode:

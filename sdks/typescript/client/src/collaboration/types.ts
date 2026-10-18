@@ -8,6 +8,7 @@ export type ChalkParticipantMediaState = {
   readonly microphone: "active" | "inactive" | "unknown";
   readonly camera: "active" | "inactive" | "unknown";
   readonly screenShare: "active" | "inactive" | "unknown";
+  readonly screenShareHasAudio?: boolean;
 };
 
 export const CHALK_REACTIONS = ReactionValues;

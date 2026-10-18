@@ -374,6 +374,10 @@ func capturePlanParticipants(folded []foldedCapturePlanParticipant, persisted []
 func capturePlanTracks(publications []persistedCapturePlanPublication, participantGenerations map[utilities.ID]int64) ([]captureplan.TrackSnapshot, error) {
 	tracks := make([]captureplan.TrackSnapshot, 0, len(publications))
 	for _, publication := range publications {
+		// Shared tab audio is not part of the recording format yet.
+		if publication.Source == "screen_audio" {
+			continue
+		}
 		if publication.Enabled && publication.PublicationID == nil {
 			return nil, fmt.Errorf("invalid capture publication identity: %w", captureplan.ErrInvalidTrack)
 		}

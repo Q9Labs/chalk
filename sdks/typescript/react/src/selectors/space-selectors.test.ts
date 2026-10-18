@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Participant } from "@q9labsai/chalk-client";
-import { toListParticipants, toVideoParticipants } from "./space-selectors";
+import { toAudioParticipants, toListParticipants, toVideoParticipants } from "./space-selectors";
 
 describe("Participant microphone projections", () => {
   it("does not report an active remote microphone as muted while its audio is still being pulled", () => {
@@ -42,4 +42,17 @@ describe("Participant microphone projections", () => {
   it("keeps the local row on the same publication state as the local controls while the roster catches up", () => {
     expect(toListParticipants([{ id: "local", displayName: "Local", isLocal: true, isMuted: true, isVideoEnabled: false }], { local: { microphone: "active", camera: "active", screenShare: "inactive" } })[0]).toMatchObject({ isMuted: true, isVideoEnabled: false });
   });
+});
+
+it("routes share audio separately from microphone audio", () => {
+  const microphone = { kind: "audio" } as MediaStreamTrack;
+  const audio = { kind: "audio" } as MediaStreamTrack;
+  const video = { kind: "video" } as MediaStreamTrack;
+  expect(
+    toAudioParticipants([
+      { participantId: "remote", source: "microphone", publicationId: "mic", track: microphone },
+      { participantId: "remote", source: "screen_audio", publicationId: "audio", track: audio },
+      { participantId: "remote", source: "screen", publicationId: "video", track: video },
+    ]),
+  ).toEqual([{ id: "remote", audioTrack: microphone, screenShareAudioTrack: audio }]);
 });

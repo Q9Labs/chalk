@@ -1,4 +1,4 @@
-import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame } from "../generated/sync";
+import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame, type MediaProjectionItemSchema } from "../generated/sync";
 import type { ClientMediaPlane } from "../media/plane";
 import type { ChalkChatReactionInput, ChalkChatReactions, ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
 import { encodeV1ClientFrame, decodeV1ServerFrame } from "./v1-codec";
@@ -859,7 +859,7 @@ function updateProjection<T>(projection: V1Projection<T> | null, projectionId: s
   const itemKey = key(item);
   return { projectionId, sequence, items: [...projection.items.filter((candidate) => key(candidate) !== itemKey), item] };
 }
-function mediaItem(item: { readonly participant_id: string; readonly source: V1MediaSource; readonly enabled: boolean; readonly publication_id: string | null }): V1MediaPublication {
+function mediaItem(item: typeof MediaProjectionItemSchema.Type): V1MediaPublication {
   return { participantId: item.participant_id, source: item.source, enabled: item.enabled, publicationId: item.publication_id };
 }
 function presenceItem(item: { readonly participant_id: string; readonly state: "connected" | "disconnected"; readonly speaking: boolean; readonly active_speaker: boolean }): V1Presence {
@@ -897,7 +897,7 @@ function validMediaPublication(publication: V1MediaPublication): boolean {
   return (
     typeof publication.participantId === "string" &&
     publication.participantId.length > 0 &&
-    (publication.source === "microphone" || publication.source === "camera" || publication.source === "screen") &&
+    (publication.source === "microphone" || publication.source === "camera" || publication.source === "screen" || publication.source === "screen_audio") &&
     typeof publication.enabled === "boolean" &&
     (publication.publicationId === null || typeof publication.publicationId === "string") &&
     (!publication.enabled || publication.publicationId !== null)

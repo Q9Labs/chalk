@@ -2,6 +2,8 @@
 
 ## 5.0.0
 
+- Publish and play shared tab audio separately from microphones, with share-audio state and coupled screen-share lifecycle.
+
 - Expose per-message reactions, count, participant IDs, `isMine`, and `react(input)` from `useChat()`; export the shared 24-emoji set and reaction types.
 
 - Add `useScreenShare()` and screen source hint/capture types, without changing UI.

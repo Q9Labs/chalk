@@ -416,7 +416,7 @@ func CanonicalizeObservation(input ObservationInput) (ObservationInput, [32]byte
 			return ObservationInput{}, [32]byte{}, nil, ErrInvalidParticipantID
 		}
 		publication.Source = strings.ToLower(strings.TrimSpace(publication.Source))
-		if !validPublicationSource(publication.Source) {
+		if !validPublicationSource(publication.Source) && publication.Source != "screen_audio" {
 			return ObservationInput{}, [32]byte{}, nil, ErrInvalidPublicationSource
 		}
 		publication.PublicationID = strings.TrimSpace(publication.PublicationID)

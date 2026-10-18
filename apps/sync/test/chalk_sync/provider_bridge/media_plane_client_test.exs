@@ -60,6 +60,31 @@ defmodule ChalkSync.ProviderBridge.MediaPlaneClientTest do
     refute Map.has_key?(query, "latest")
   end
 
+  test "decodes screen audio as an independent publication source" do
+    value = %{
+      "incarnation" => 1,
+      "sequence" => 1,
+      "publications" => [
+        %{
+          "participant_id" => @participant_id,
+          "source" => "screen_audio",
+          "enabled" => true,
+          "publication_id" => "tab-audio"
+        }
+      ]
+    }
+
+    transport = fn :get, _url, _headers, _body, _options ->
+      {:ok, 200, [], JSON.encode!(page([value]))}
+    end
+
+    client = Client.new!(base_url: "http://localhost:4000", transport: transport)
+    episode = %EpisodeKey{tenant_id: @tenant_id, episode_id: @episode_id, space_id: @space_id}
+
+    assert {:ok, %{publications: [%{source: :screen_audio, enabled: true}]}} =
+             Client.observe_episode_publications(client, episode)
+  end
+
   defp observation(sequence) do
     publications =
       Enum.map(["microphone", "camera", "screen"], fn source ->

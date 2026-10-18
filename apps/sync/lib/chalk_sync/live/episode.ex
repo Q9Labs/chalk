@@ -293,6 +293,9 @@ defmodule ChalkSync.Live.Episode do
 
   defp normalize_media_items(publications) do
     publications
+    # Older v1 SDKs reject unknown projection sources. Tab audio is discovered
+    # through the SFU publication list and follows the screen's control state.
+    |> Enum.reject(&(&1.source == :screen_audio))
     |> Enum.map(&media_item/1)
     |> Enum.sort_by(&{&1["participant_id"], &1["source"]})
   end
