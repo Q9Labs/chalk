@@ -156,7 +156,7 @@ export function DevicePopover({
         {mic ? (
           <>
             <DeviceSwitch label="Noise suppression" checked={noiseSuppression} onChange={onNoiseSuppressionChange} />
-            <Menu.Separator className="my-1 border-t border-[var(--chalk-line)]" />
+            <Menu.Separator className="chalk-shell-menu-separator" />
             <ChalkMenuLabel>Speaker</ChalkMenuLabel>
             {secondaryDevices?.map((device) => (
               <ChalkMenuItem key={device.deviceId} checked={selectedSecondaryDeviceId === device.deviceId} onClick={() => onSecondaryDeviceChange?.(device.deviceId)}>
@@ -169,7 +169,10 @@ export function DevicePopover({
             </ChalkMenuItem>
           </>
         ) : (
-          <DeviceSwitch label="Mirror my video" checked={mirrored} onChange={onMirrorChange} />
+          <>
+            <Menu.Separator className="chalk-shell-menu-separator" />
+            <DeviceSwitch label="Mirror my video" checked={mirrored} onChange={onMirrorChange} />
+          </>
         )}
       </ChalkMenu>
       {warning ? (

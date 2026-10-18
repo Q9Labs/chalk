@@ -126,7 +126,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 .chalk-shell-preview {
   position: relative;
   height: 150px;
-  margin: 2px 2px 8px;
+  margin: 0 0 6px;
   overflow: hidden;
   border-radius: 8px;
   background: var(--chalk-canvas);
@@ -138,19 +138,24 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 }
 .chalk-shell-preview small {
   position: absolute;
+  left: 8px;
   bottom: 8px;
-  inset-inline: 0;
-  text-align: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: rgba(12,14,18,.75);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
   color: #fff;
-  text-shadow: 0 1px 4px #000;
 }
+.chalk-shell-menu-separator {height:1px;background:var(--chalk-line);margin:6px 4px;}
 .chalk-shell-level {
   display: block;
   height: 4px;
-  margin-top: 6px;
-  width: 160px;
+  width: 100%;
   background: var(--chalk-pressed);
-  border-radius: 3px;
+  border-radius: 2px;
   overflow: hidden;
 }
 .chalk-shell-level i {
@@ -158,12 +163,18 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   height: 100%;
   background: var(--chalk-positive);
   transform-origin: left;
+  transition: transform 80ms linear;
 }
 .chalk-shell-device-label {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  gap: 5px;
   min-width: 0;
 }
+.chalk-shell-source {min-height:52px;}
+.chalk-shell-source .chalk-shell-device-label {gap:2px;}
+.chalk-shell-device-label small {display:block;font-size:12px;color:var(--chalk-muted-text);white-space:normal;line-height:1.3;}
 .chalk-shell-menu-switch {
   margin-inline-start: auto;
   pointer-events: none;
