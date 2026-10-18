@@ -209,6 +209,8 @@ overrides:
   ws@>=8.0.0 <8.21.0: ^8.21.0
 
 patchedDependencies:
+  metro@0.83.3: 3674191468595e952739a9cbd383d3eda1fb648dcacb89a25b16646bd5d17760
+  metro@0.83.5: 67d9721fe94224703251c6214ef69bfad308a33ec8655845aac83cb0d82cb623
   minimatch@3.1.5: 48c1b049d61c2e749a252b8f7e9e1072d71f7b081c1cdb2596c721695c7a3856
   minimatch@5.1.9: e8eec729f736baf44370a0e5eaeb0f7130201c980174217f568bea1179c3c2ef
 
@@ -10626,7 +10628,7 @@ snapshots:
 
   '@expo/metro@54.2.0(supports-color@10.2.2)':
     dependencies:
-      metro: 0.83.3(supports-color@10.2.2)
+      metro: 0.83.3(patch_hash=3674191468595e952739a9cbd383d3eda1fb648dcacb89a25b16646bd5d17760)(supports-color@10.2.2)
       metro-babel-transformer: 0.83.3(supports-color@10.2.2)
       metro-cache: 0.83.3(supports-color@10.2.2)
       metro-cache-key: 0.83.3
@@ -12018,7 +12020,7 @@ snapshots:
       '@react-native/dev-middleware': 0.83.2(supports-color@10.2.2)
       debug: 4.4.3(supports-color@10.2.2)
       invariant: 2.2.4
-      metro: 0.83.5(supports-color@10.2.2)
+      metro: 0.83.5(patch_hash=67d9721fe94224703251c6214ef69bfad308a33ec8655845aac83cb0d82cb623)(supports-color@10.2.2)
       metro-config: 0.83.5(supports-color@10.2.2)
       metro-core: 0.83.5
       semver: 7.8.5
@@ -15866,7 +15868,7 @@ snapshots:
       connect: 3.7.0(supports-color@10.2.2)
       flow-enums-runtime: 0.0.6
       jest-validate: 29.7.0
-      metro: 0.83.3(supports-color@10.2.2)
+      metro: 0.83.3(patch_hash=3674191468595e952739a9cbd383d3eda1fb648dcacb89a25b16646bd5d17760)(supports-color@10.2.2)
       metro-cache: 0.83.3(supports-color@10.2.2)
       metro-core: 0.83.3
       metro-runtime: 0.83.3
@@ -15881,7 +15883,7 @@ snapshots:
       connect: 3.7.0(supports-color@10.2.2)
       flow-enums-runtime: 0.0.6
       jest-validate: 29.7.0
-      metro: 0.83.5(supports-color@10.2.2)
+      metro: 0.83.5(patch_hash=67d9721fe94224703251c6214ef69bfad308a33ec8655845aac83cb0d82cb623)(supports-color@10.2.2)
       metro-cache: 0.83.5(supports-color@10.2.2)
       metro-core: 0.83.5
       metro-runtime: 0.83.5
@@ -16035,7 +16037,7 @@ snapshots:
       '@babel/parser': 7.29.7
       '@babel/types': 7.29.7
       flow-enums-runtime: 0.0.6
-      metro: 0.83.3(supports-color@10.2.2)
+      metro: 0.83.3(patch_hash=3674191468595e952739a9cbd383d3eda1fb648dcacb89a25b16646bd5d17760)(supports-color@10.2.2)
       metro-babel-transformer: 0.83.3(supports-color@10.2.2)
       metro-cache: 0.83.3(supports-color@10.2.2)
       metro-cache-key: 0.83.3
@@ -16055,7 +16057,7 @@ snapshots:
       '@babel/parser': 7.29.8
       '@babel/types': 7.29.8
       flow-enums-runtime: 0.0.6
-      metro: 0.83.5(supports-color@10.2.2)
+      metro: 0.83.5(patch_hash=67d9721fe94224703251c6214ef69bfad308a33ec8655845aac83cb0d82cb623)(supports-color@10.2.2)
       metro-babel-transformer: 0.83.5(supports-color@10.2.2)
       metro-cache: 0.83.5(supports-color@10.2.2)
       metro-cache-key: 0.83.5
@@ -16068,7 +16070,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  metro@0.83.3(supports-color@10.2.2):
+  metro@0.83.3(patch_hash=3674191468595e952739a9cbd383d3eda1fb648dcacb89a25b16646bd5d17760)(supports-color@10.2.2):
     dependencies:
       '@babel/code-frame': 7.29.7
       '@babel/core': 7.29.7(supports-color@10.2.2)
@@ -16115,7 +16117,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  metro@0.83.5(supports-color@10.2.2):
+  metro@0.83.5(patch_hash=67d9721fe94224703251c6214ef69bfad308a33ec8655845aac83cb0d82cb623)(supports-color@10.2.2):
     dependencies:
       '@babel/code-frame': 7.29.7
       '@babel/core': 7.29.7(supports-color@10.2.2)
