@@ -30,7 +30,7 @@ func TestServiceTenantMigrationUpDownUpPreservesExistingTenant(t *testing.T) {
 	if _, err := tx.Exec(ctx, `insert into tenants(id,name) values($1,'Previous release Tenant')`, uuid(id)); err != nil {
 		t.Fatal(err)
 	}
-	migration, err := migrations.Files.ReadFile("20261018120000_service_owned_tenants.sql")
+	migration, err := migrations.Files.ReadFile("20261018130000_service_owned_tenants.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
