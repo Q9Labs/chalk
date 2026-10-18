@@ -1,8 +1,9 @@
 import type { ActiveReaction } from "@q9labsai/chalk-client";
-import type React from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { useReactions } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
-import { reactionFloatStyle } from "./reaction-float";
 import { ReactionBubble } from "../atomic";
 import { reactionPresentationStyle } from "./reaction-float";
 
@@ -45,23 +46,25 @@ interface ReactionsOverlaySurfaceProps extends ReactionsOverlayProps {
 }
 
 export function ReactionsOverlaySurface({ reactions, maxVisible = 6, className }: ReactionsOverlaySurfaceProps): React.JSX.Element {
-  return (
-    <div className={cn("pointer-events-none absolute inset-0 z-30 overflow-hidden", className)} aria-live="polite" aria-atomic="false">
-      {reactions.slice(-maxVisible).map((reaction) => (
-        <div key={reaction.eventId} className="chalk-reaction-rise absolute bottom-24 flex flex-col items-center gap-1" style={reactionFloatStyle(reaction.eventId)}>
-          <span className="text-[38px] leading-none drop-shadow-[0_2px_6px_rgba(0,0,0,0.25)]" aria-hidden="true">
-            {reaction.reaction}
-          </span>
-          <span className="max-w-[120px] truncate rounded-full bg-[rgba(12,14,18,0.62)] px-2 py-0.5 text-[11px] font-medium text-white ring-1 ring-white/10 backdrop-blur-md" aria-hidden="true">
-            {reaction.displayName}
-          </span>
-          <span className="sr-only">
-            {reaction.displayName} reacted {reaction.reaction}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
+  const root = useRef<HTMLDivElement>(null);
+  return <div ref={root} className={cn("pointer-events-none absolute inset-0 z-30", className)} aria-live="polite" aria-atomic="false">{reactions.slice(-maxVisible).map(reaction => <TileReaction key={reaction.eventId} reaction={reaction} root={root} />)}</div>;
+}
+function TileReaction({ reaction, root }: { readonly reaction: ActiveReaction; readonly root: React.RefObject<HTMLDivElement | null> }) {
+  const [host, setHost] = useState<Element | null>(null);
+  const emoji = useRef<HTMLSpanElement>(null);
+  const reduced = usePrefersReducedMotion();
+  useEffect(() => {
+    const frame = root.current?.closest("[data-part=call-frame]");
+    const tile = Array.from(frame?.querySelectorAll<HTMLElement>("[data-stage-item]") ?? []).find(element => element.dataset.stageItem === reaction.participantId && element.getAttribute("aria-hidden") !== "true");
+    setHost(tile?.firstElementChild ?? root.current);
+  }, [reaction.participantId, root]);
+  useEffect(() => {
+    const element = emoji.current;
+    if (!element || !host) return;
+    const animation = element.animate(reduced ? [{ opacity: 0 }, { opacity: 1, offset: .2 }, { opacity: 0 }] : [{ opacity: 0, transform: "translate(-50%,12px)" }, { opacity: 1, offset: .15 }, { opacity: 0, transform: "translate(-50%,-70px)" }], { duration: 2000, easing: "ease-out", fill: "forwards" });
+    return () => animation.cancel();
+  }, [host, reduced]);
+  return <><span className="sr-only">{reaction.displayName} reacted {reaction.reaction}</span>{host ? createPortal(<span ref={emoji} aria-hidden="true" className="pointer-events-none absolute bottom-[28%] left-1/2 z-40 text-[44px] leading-[1.4]" style={{ transform: "translateX(-50%)" }}>{reaction.reaction}</span>, host) : null}</>;
 }
 
 export function ReactionsOverlay(props: ReactionsOverlayProps): React.JSX.Element {

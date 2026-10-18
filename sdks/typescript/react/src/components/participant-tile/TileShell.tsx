@@ -1,80 +1,34 @@
-import React, { useCallback, type CSSProperties, type ReactNode } from "react";
-
+import React, { type CSSProperties, type ReactNode } from "react";
 import { cn } from "../../utils/cn";
 
 export interface TileShellProps {
-  /** Accessible name of the whole tile, e.g. "Video tile for Nora". */
   readonly label: string;
-  /** Accent used for the pinned ring and the avatar voice halo, usually the participant colour. */
   readonly accentColor: string;
   readonly pinned?: boolean;
+  readonly speaking?: boolean;
+  readonly lift?: boolean;
   readonly onClick?: () => void;
   readonly onDoubleClick?: () => void;
   readonly className?: string;
   readonly style?: CSSProperties;
   readonly dataTour?: string;
-  /** Off-screen tiles stay mounted but leave the accessibility tree and tab order. */
   readonly hidden?: boolean;
-  /** Stable content identity for deterministic Chalk chrome across projection seeks. */
-  /** Lower-left chip: name plus status; omitted when null. Rendered inside a `min-w-0` flex row so a `truncate` name shrinks to the tile. */
   readonly chip?: ReactNode;
-  /** Top-right slot (connection warning, pin marker). */
   readonly corner?: ReactNode;
-  /** Media layer: video, avatar wash, board card. */
   readonly children?: ReactNode;
 }
+interface TileVars extends CSSProperties { "--chalk-participant-color": string }
 
-interface TileVars extends CSSProperties {
-  "--chalk-participant-color": string;
-  "--tw-ring-color"?: string;
-}
-
-/**
- * Shared tile chrome for participant and content tiles: frame, pinned ring, chip slot, chalk stroke.
- * The shell is a `@container`, so the chip picks its size from the tile width (`@[240px]:` variants).
- * Speaking is shown in the chip and on the avatar, never as a frame.
- */
-export function TileShell({ label, accentColor, pinned = false, onClick, onDoubleClick, className, style, dataTour, hidden = false, chip, corner, children }: TileShellProps): React.JSX.Element {
-  const vars: TileVars = {
-    ...style,
-    "--chalk-participant-color": accentColor,
-    ...(pinned ? { "--tw-ring-color": `${accentColor}80` } : {}),
-  };
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent) => {
-      if (!onClick || (event.key !== "Enter" && event.key !== " ")) return;
-      event.preventDefault();
-      onClick();
-    },
-    [onClick],
-  );
-
+/** One shared frame and bottom-left name tag for camera, screen and board tiles. */
+export function TileShell({ label, accentColor, pinned = false, speaking = false, lift = true, onClick, onDoubleClick, className, style, dataTour, hidden = false, chip, corner, children }: TileShellProps): React.JSX.Element {
+  const vars: TileVars = { ...style, containerType: "size", "--chalk-participant-color": accentColor };
   return (
-    <div
-      className={cn(
-        "@container relative overflow-hidden rounded-[8px] border border-transparent bg-[var(--chalk-app-tile-base)] outline-none",
-        pinned && "ring-2",
-        onClick && "cursor-pointer focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--chalk-canvas)]",
-        className,
-      )}
-      style={vars}
-      onClick={onClick}
-      onDoubleClick={onDoubleClick}
-      onKeyDown={handleKeyDown}
-      data-tour={dataTour}
-      role={onClick ? "button" : "region"}
-      tabIndex={onClick && !hidden ? 0 : undefined}
-      aria-hidden={hidden || undefined}
-      aria-label={label}
-    >
+    <div data-part="stage-tile" className={cn("group/tile relative overflow-clip rounded-[12px] bg-[var(--chalk-app-tile-base)] max-[640px]:rounded-[14px] motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-out", onClick && lift && "[@media(hover:hover)]:hover:-translate-y-0.5", className)} style={vars} data-tour={dataTour} aria-hidden={hidden || undefined} role="region" aria-label={onClick ? undefined : label}>
       {children}
+      {onClick ? <button type="button" onClick={onClick} onDoubleClick={onDoubleClick} tabIndex={hidden ? -1 : 0} aria-label={label} aria-pressed={pinned} className="absolute inset-0 z-20 rounded-[inherit] outline-none hover:bg-white/[.045] active:bg-white/[.09] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--chalk-focus)]" /> : null}
+      <div aria-hidden="true" data-part="speaking-ring" className="pointer-events-none absolute inset-0 z-30 rounded-[inherit] motion-safe:transition-opacity motion-safe:duration-[90ms] motion-safe:ease-linear" style={{ opacity: speaking ? 1 : 0, boxShadow: "inset 0 0 0 3px rgba(255,255,255,.9), inset 0 0 0 4px rgba(0,0,0,.35)" }} />
       {corner}
-      {chip ? (
-        <div className="pointer-events-none absolute right-1.5 bottom-1.5 left-1.5 z-20 flex @[240px]:right-2 @[240px]:bottom-2 @[240px]:left-2">
-          {<div className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md bg-[rgba(12,14,18,0.62)] px-1.5 py-0.5 text-white shadow-[0_1px_2px_rgba(0,0,0,0.35)] ring-1 ring-white/10 backdrop-blur-md @[240px]:gap-2 @[240px]:px-2 @[240px]:py-1">{chip}</div>}
-        </div>
-      ) : null}
-      {null}
+      {chip ? <div data-part="tile-tag" className="pointer-events-none absolute bottom-2 left-2 z-30 flex h-6 max-w-[calc(100%_-_16px)] items-center gap-[5px] rounded-[6px] bg-[rgba(12,14,18,.75)] px-2 text-[12px] leading-[1.4] font-medium text-white">{chip}</div> : null}
     </div>
   );
 }

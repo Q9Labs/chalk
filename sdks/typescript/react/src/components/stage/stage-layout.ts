@@ -1,182 +1,149 @@
-/**
- * Pure stage geometry. Turns a measured box plus an ordered list of item ids
- * into absolute frames (px), so the renderer never reasons about breakpoints
- * or participant counts. Everything here is deterministic and unit-tested.
- */
-
-export interface StageBox {
-  readonly width: number;
-  readonly height: number;
-}
-
+/** Deterministic geometry shared by the live call and recording projection. */
+export interface StageBox { readonly width: number; readonly height: number }
 export type StageRole = "primary" | "strip" | "grid";
-
 export interface StageFrame {
   readonly id: string;
   readonly role: StageRole;
-  /** Zero-based page the frame lives on. Primary frames are always page 0. */
   readonly page: number;
   readonly x: number;
   readonly y: number;
   readonly width: number;
   readonly height: number;
 }
-
 export interface StageGeometry {
   readonly frames: readonly StageFrame[];
   readonly pageCount: number;
-  /** Items shown per page (grid) or strip tiles per strip page (spotlight). */
   readonly perPage: number;
+  readonly overflowCount?: number;
 }
-
 export interface GridFitOptions {
-  /** Gap between tiles and between pages, px. */
   readonly gap: number;
-  /** Tiles narrower than this force a smaller page. */
   readonly minTileWidth: number;
-  /** Tiles shorter than this force a smaller page. */
   readonly minTileHeight: number;
-  /** Hard cap on tiles per page. */
   readonly maxPerPage: number;
-  /** Tiles stretch to fill their cell as long as their aspect (width / height) stays inside these bounds. */
   readonly minAspect: number;
   readonly maxAspect: number;
 }
-
 export interface SpotlightFitOptions {
   readonly gap: number;
-  /** Strip height as a fraction of the box height, clamped to [minStripHeight, maxStripHeight]. */
   readonly stripRatio: number;
   readonly minStripHeight: number;
   readonly maxStripHeight: number;
-  /** Aspect ratio of strip tiles (width / height). */
   readonly stripAspect: number;
+  readonly primaryAspect?: number;
+  readonly content?: boolean;
+  readonly wideIds?: readonly string[];
+  readonly maxPerPage?: number;
 }
-
 export const WIDESCREEN = 16 / 9;
-/** An arrangement whose tiles cannot fill their cells must beat a filling one by this much area. */
-const CLAMPED_AREA_WEIGHT = 0.85;
-
-export const DEFAULT_GRID_OPTIONS: GridFitOptions = { gap: 12, minTileWidth: 160, minTileHeight: 120, maxPerPage: 25, minAspect: 3 / 4, maxAspect: 21 / 9 };
-export const DEFAULT_SPOTLIGHT_OPTIONS: SpotlightFitOptions = { gap: 12, stripRatio: 0.18, minStripHeight: 88, maxStripHeight: 168, stripAspect: WIDESCREEN };
-
+export const MORE_TILE_ID = "stage:more";
+export const DEFAULT_GRID_OPTIONS: GridFitOptions = { gap: 8, minTileWidth: 150, minTileHeight: 96, maxPerPage: 25, minAspect: .8, maxAspect: 2 };
+export const DEFAULT_SPOTLIGHT_OPTIONS: SpotlightFitOptions = { gap: 8, stripRatio: .17, minStripHeight: 104, maxStripHeight: 150, stripAspect: WIDESCREEN };
 export const EMPTY_GEOMETRY: StageGeometry = { frames: [], pageCount: 0, perPage: 0 };
+const HARD_MIN = .6;
+const HARD_MAX = 2.4;
+const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+interface RowPlan { readonly counts: readonly number[]; readonly height: number; readonly minWidth: number; readonly cost: number }
 
-interface Arrangement {
-  readonly cols: number;
-  readonly rows: number;
-  readonly tileWidth: number;
-  readonly tileHeight: number;
-}
-
-/**
- * Best column count for `count` equal tiles inside `box`, maximising tile area. Tiles take their whole
- * cell so the stage is filled; only when a cell would be absurdly tall or wide is the tile clamped to
- * the aspect bounds and centred in the cell, and such arrangements have to win by a margin.
- */
-export function bestArrangement(box: StageBox, count: number, options: Pick<GridFitOptions, "gap" | "minAspect" | "maxAspect">): Arrangement {
-  let best: Arrangement = { cols: 1, rows: count, tileWidth: 0, tileHeight: 0 };
-  let bestScore = 0;
-  for (let cols = 1; cols <= count; cols += 1) {
-    const rows = Math.ceil(count / cols);
-    const cellWidth = (box.width - options.gap * (cols - 1)) / cols;
-    const cellHeight = (box.height - options.gap * (rows - 1)) / rows;
-    if (cellWidth <= 0 || cellHeight <= 0) continue;
-    const cellAspect = cellWidth / cellHeight;
-    const clamped = cellAspect > options.maxAspect || cellAspect < options.minAspect;
-    const tileWidth = cellAspect > options.maxAspect ? cellHeight * options.maxAspect : cellWidth;
-    const tileHeight = cellAspect < options.minAspect ? cellWidth / options.minAspect : cellHeight;
-    const score = tileWidth * tileHeight * (clamped ? CLAMPED_AREA_WEIGHT : 1);
-    if (score > bestScore) {
-      best = { cols, rows, tileWidth, tileHeight };
-      bestScore = score;
+function rowPlan(box: StageBox, weights: readonly number[], options: GridFitOptions): RowPlan | null {
+  const units = weights.reduce((sum, weight) => sum + weight, 0);
+  let best: RowPlan | null = null;
+  for (let rows = 1; rows <= units; rows += 1) {
+    const base = Math.floor(units / rows);
+    const counts = Array.from({ length: rows }, (_, index) => base + (index < units % rows ? 1 : 0));
+    const height = (box.height - (rows - 1) * options.gap) / rows;
+    if (height <= 0) break;
+    // A double-width content tile must fit wholly in one row.
+    let index = 0;
+    let fits = true;
+    for (const count of counts) {
+      let used = 0;
+      while (index < weights.length && used < count) { used += weights[index] ?? 1; index += 1; }
+      if (used !== count) { fits = false; break; }
     }
+    if (!fits || index !== weights.length) continue;
+    let cost = 0;
+    let minWidth = Infinity;
+    const target = options.minTileWidth === 88 ? 1 : 1.6;
+    for (const count of counts) {
+      const width = (box.width - (count - 1) * options.gap) / count;
+      if (width <= 0) { fits = false; break; }
+      minWidth = Math.min(minWidth, width);
+      const aspect = width / height;
+      const hard = aspect < HARD_MIN ? Math.log(HARD_MIN / aspect) : aspect > HARD_MAX ? Math.log(aspect / HARD_MAX) : 0;
+      const soft = aspect < options.minAspect ? Math.log(options.minAspect / aspect) : aspect > options.maxAspect ? Math.log(aspect / options.maxAspect) : 0;
+      cost += count * (hard * 60 + soft * 3 + Math.abs(Math.log(aspect / target)));
+    }
+    cost /= units;
+    if (fits && (!best || cost < best.cost)) best = { counts, height, minWidth, cost };
   }
   return best;
 }
 
-/** Largest page size (≤ maxPerPage) whose tiles still meet `minTileWidth` and `minTileHeight`. */
-export function tilesPerPage(box: StageBox, count: number, options: GridFitOptions): number {
-  const upper = Math.min(count, Math.max(1, options.maxPerPage));
-  for (let size = upper; size > 1; size -= 1) {
-    const { tileWidth, tileHeight } = bestArrangement(box, size, options);
-    if (tileWidth >= options.minTileWidth && tileHeight >= options.minTileHeight) return size;
-  }
-  return 1;
-}
-
-function round(value: number): number {
-  return Math.round(value * 100) / 100;
-}
-
-/** Equal tiles that fill the box, centred last row, paged when they would get too small. */
+/** All rows fill their width, including the uneven final row. Overflow is a real +N tile. */
 export function fitGrid(box: StageBox, ids: readonly string[], options: GridFitOptions, wideIds: readonly string[] = []): StageGeometry {
-  const count = ids.length;
-  if (count === 0) return EMPTY_GEOMETRY;
-  if (count === 1) {
-    return { frames: [{ id: ids[0]!, role: "grid", page: 0, x: 0, y: 0, width: box.width, height: box.height }], pageCount: 1, perPage: 1 };
+  if (!ids.length) return EMPTY_GEOMETRY;
+  let keys: readonly string[] = ids;
+  let plan: RowPlan | null = null;
+  let overflowCount = 0;
+  const weight = (id: string): number => wideIds.includes(id) ? 2 : 1;
+  for (let count = Math.min(ids.length, Math.max(1, options.maxPerPage)); count >= 1; count -= 1) {
+    overflowCount = count < ids.length ? ids.length - count + 1 : 0;
+    keys = overflowCount ? [...ids.slice(0, count - 1), MORE_TILE_ID] : ids;
+    plan = rowPlan(box, keys.map(weight), options);
+    if (plan && ((plan.minWidth >= options.minTileWidth && plan.height >= options.minTileHeight) || count <= (wideIds.includes(ids[0] ?? "") ? 2 : 1))) break;
   }
-  const perPage = tilesPerPage(box, count, options);
-  const pageCount = Math.ceil(count / perPage);
-  const arrangement = bestArrangement(box, Math.min(count, perPage), options);
-  const { cols, tileWidth, tileHeight } = arrangement;
-  const pageStride = box.width + options.gap;
+  if (!plan) return EMPTY_GEOMETRY;
+  let height = plan.height;
+  for (const count of plan.counts) height = Math.min(height, (box.width - (count - 1) * options.gap) / count / HARD_MIN);
+  const offsetY = (box.height - plan.counts.length * height - (plan.counts.length - 1) * options.gap) / 2;
   const frames: StageFrame[] = [];
-  for (let page = 0; page < pageCount; page += 1) {
-    const pageIds = ids.slice(page * perPage, (page + 1) * perPage);
-    const rows = Math.ceil(pageIds.length / cols);
-    const gridHeight = rows * tileHeight + (rows - 1) * options.gap;
-    const offsetY = Math.max(0, (box.height - gridHeight) / 2);
-    for (let row = 0; row < rows; row += 1) {
-      const rowIds = pageIds.slice(row * cols, (row + 1) * cols);
-      const rowWidth = rowIds.length * tileWidth + (rowIds.length - 1) * options.gap;
-      const offsetX = Math.max(0, (box.width - rowWidth) / 2);
-      rowIds.forEach((id, column) => {
-        const width = rowIds.length === 1 && wideIds.includes(id) ? Math.max(tileWidth, Math.min(box.width, tileHeight * options.maxAspect)) : tileWidth;
-        const x = rowIds.length === 1 ? (box.width - width) / 2 : offsetX + column * (tileWidth + options.gap);
-        frames.push({
-          id,
-          role: "grid",
-          page,
-          x: round(page * pageStride + x),
-          y: round(offsetY + row * (tileHeight + options.gap)),
-          width: round(width),
-          height: round(tileHeight),
-        });
-      });
+  let index = 0;
+  plan.counts.forEach((count, row) => {
+    const unitWidth = Math.min((box.width - (count - 1) * options.gap) / count, height * HARD_MAX);
+    let x = (box.width - count * unitWidth - (count - 1) * options.gap) / 2;
+    let used = 0;
+    while (used < count && index < keys.length) {
+      const id = keys[index];
+      if (id === undefined) break;
+      const units = weight(id);
+      const width = unitWidth * units + options.gap * (units - 1);
+      frames.push({ id, role: "grid", page: 0, x, y: offsetY + row * (height + options.gap), width, height });
+      x += width + options.gap;
+      used += units;
+      index += 1;
     }
-  }
-  return { frames, pageCount, perPage };
+  });
+  return { frames, pageCount: 1, perPage: keys.length, overflowCount };
 }
 
-/** One primary filling the stage above a paged strip of fixed-height tiles. */
+function contain(box: StageBox, aspect: number): StageBox {
+  const width = Math.min(box.width, box.height * aspect);
+  return { width, height: width / aspect };
+}
+
+/** Content takes whichever placement gives it more visible area; people justify into the remainder. */
 export function fitSpotlight(box: StageBox, primaryId: string, stripIds: readonly string[], options: SpotlightFitOptions): StageGeometry {
-  if (stripIds.length === 0) {
-    return { frames: [{ id: primaryId, role: "primary", page: 0, x: 0, y: 0, width: box.width, height: box.height }], pageCount: 1, perPage: 0 };
+  const phone = box.width <= 640;
+  const aspect = options.primaryAspect ?? WIDESCREEN;
+  if (!stripIds.length) {
+    const width = options.content || phone ? box.width : Math.min(box.width * .56, box.height * WIDESCREEN);
+    const height = options.content || phone ? box.height : Math.min(box.height, width / (4 / 3));
+    return { frames: [{ id: primaryId, role: "primary", page: 0, x: (box.width - width) / 2, y: (box.height - height) / 2, width, height }], pageCount: 1, perPage: 0 };
   }
-  const stripHeight = Math.min(options.maxStripHeight, Math.max(options.minStripHeight, box.height * options.stripRatio));
-  const tileWidth = stripHeight * options.stripAspect;
-  const perPage = Math.max(1, Math.floor((box.width + options.gap) / (tileWidth + options.gap)));
-  const pageCount = Math.ceil(stripIds.length / perPage);
-  const primaryHeight = Math.max(0, box.height - stripHeight - options.gap);
-  const pageStride = box.width + options.gap;
-  const stripY = primaryHeight + options.gap;
-  const frames: StageFrame[] = [{ id: primaryId, role: "primary", page: 0, x: 0, y: 0, width: box.width, height: round(primaryHeight) }];
-  for (let page = 0; page < pageCount; page += 1) {
-    const pageIds = stripIds.slice(page * perPage, (page + 1) * perPage);
-    const rowWidth = pageIds.length * tileWidth + (pageIds.length - 1) * options.gap;
-    const offsetX = Math.max(0, (box.width - rowWidth) / 2);
-    pageIds.forEach((id, column) => {
-      frames.push({
-        id,
-        role: "strip",
-        page,
-        x: round(page * pageStride + offsetX + column * (tileWidth + options.gap)),
-        y: round(stripY),
-        width: round(tileWidth),
-        height: round(stripHeight),
-      });
-    });
+  if (phone && stripIds.length === 1 && !options.content) {
+    return { frames: [{ id: primaryId, role: "primary", page: 0, x: 0, y: 0, ...box }, { id: stripIds[0] ?? "", role: "strip", page: 0, x: box.width - 108, y: 12, width: 96, height: 128 }], pageCount: 1, perPage: 1 };
   }
-  return { frames, pageCount, perPage };
+  const strip = phone ? Math.round(box.height * .3) : clamp(box.height * options.stripRatio, options.minStripHeight, options.maxStripHeight);
+  const column = phone && options.content ? 120 : clamp(box.width * .15, 180, 260);
+  const belowMain = options.content ? contain({ width: box.width, height: box.height - strip - options.gap }, aspect) : { width: box.width, height: box.height - strip - options.gap };
+  const besideMain = options.content ? contain({ width: box.width - column - options.gap, height: box.height }, aspect) : { width: box.width - column - options.gap, height: box.height };
+  const beside = options.content ? besideMain.width * besideMain.height > belowMain.width * belowMain.height * 1.005 : !phone && Math.abs(Math.log(besideMain.width / besideMain.height / WIDESCREEN)) < Math.abs(Math.log(belowMain.width / belowMain.height / WIDESCREEN));
+  const main = { width: beside ? besideMain.width : box.width, height: beside ? box.height : belowMain.height };
+  const remaining = { width: beside ? box.width - main.width - options.gap : box.width, height: beside ? box.height : box.height - main.height - options.gap };
+  const people = fitGrid(remaining, stripIds, { ...DEFAULT_GRID_OPTIONS, minTileWidth: phone ? 88 : 150, minTileHeight: phone ? 72 : 96, maxPerPage: options.maxPerPage ?? 25 }, options.wideIds);
+  return {
+    ...people,
+    frames: [{ id: primaryId, role: "primary", page: 0, x: 0, y: 0, ...main }, ...people.frames.map(frame => ({ ...frame, role: "strip" as const, x: frame.x + (beside ? main.width + options.gap : 0), y: frame.y + (beside ? 0 : main.height + options.gap) }))],
+  };
 }

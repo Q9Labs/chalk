@@ -8,9 +8,9 @@ const share: StageItem = { kind: "screen-share", id: "screen-share:person", part
 const context: PrimaryContext = { layout: "focus", pinnedId: null, lastSpeakerId: null, seenAt: new Map([[share.id, 1]]) };
 
 describe("Spotlight primary content", () => {
-  it("keeps shared content ahead of a speaking or pinned person", () => {
+  it("keeps shared content ahead of a speaking person, but honors an explicit pin", () => {
     expect(choosePrimary([person, board], context)).toBe(board);
-    expect(choosePrimary([person, board], { ...context, pinnedId: person.id })).toBe(board);
+    expect(choosePrimary([person, board], { ...context, pinnedId: person.id })).toBe(person);
   });
   it("prefers a screen share over the board unless the board was selected", () => {
     expect(choosePrimary([person, board, share], context)).toBe(share);
@@ -38,16 +38,26 @@ describe("Spotlight primary content", () => {
   });
 });
 
-describe("Grid shared-content room", () => {
-  it("lets a lone content tile use spare columns without displacing people", () => {
-    const box = { width: 1000, height: 700 };
-    const ids = ["a", "b", "whiteboard"];
-    const equal = fitGrid(box, ids, DEFAULT_GRID_OPTIONS);
-    const expanded = fitGrid(box, ids, DEFAULT_GRID_OPTIONS, ["whiteboard"]);
-    const content = expanded.frames.find((frame) => frame.id === "whiteboard")!;
-    expect(content.width).toBeGreaterThan(equal.frames.find((frame) => frame.id === "whiteboard")!.width);
-    expect(expanded.frames.filter((frame) => frame.id !== "whiteboard")).toEqual(equal.frames.filter((frame) => frame.id !== "whiteboard"));
-    expect(content.x).toBeGreaterThanOrEqual(0);
-    expect(content.x + content.width).toBeLessThanOrEqual(box.width);
+describe("Justified rows", () => {
+  it.each([3, 5, 7, 12])("fills all rows for %i people without holes", count => {
+    const box = { width: 1408, height: 756 };
+    const geometry = fitGrid(box, Array.from({ length: count }, (_, index) => String(index)), DEFAULT_GRID_OPTIONS);
+    const rows = Array.from(new Set(geometry.frames.map(frame => frame.y)), y => geometry.frames.filter(frame => frame.y === y));
+    let coveredHeight = 0;
+    for (const frames of rows.values()) {
+      expect(frames[0]?.x).toBeCloseTo(0);
+      let edge = 0;
+      for (const frame of frames) { expect(frame.x).toBeCloseTo(edge); edge = frame.x + frame.width + 8; }
+      expect(edge - 8).toBeCloseTo(box.width);
+      coveredHeight += frames[0]?.height ?? 0;
+    }
+    expect(coveredHeight + (rows.length - 1) * 8).toBeCloseTo(box.height);
+  });
+  it("gives content two real units, without overlapping its neighbor", () => {
+    const geometry = fitGrid({ width: 1408, height: 756 }, ["whiteboard", "a", "b", "c", "d"], DEFAULT_GRID_OPTIONS, ["whiteboard"]);
+    const board = geometry.frames.find(frame => frame.id === "whiteboard");
+    const neighbor = geometry.frames.find(frame => frame.id === "a");
+    expect(board?.width).toBeCloseTo((neighbor?.width ?? 0) * 2 + 8);
+    expect(neighbor?.x).toBeCloseTo((board?.width ?? 0) + 8);
   });
 });

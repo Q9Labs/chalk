@@ -12,7 +12,7 @@ export type StageItem = { readonly kind: "participant"; readonly id: string; rea
 export function buildStageItems(participants: readonly Participant[], whiteboardOpen: boolean): StageItem[] {
   const items: StageItem[] = participants.map((participant) => ({ kind: "participant", id: participant.id, participant }));
   for (const participant of participants) {
-    if (participant.isScreenSharing && participant.screenShareTrack) {
+    if (participant.isScreenSharing) {
       items.push({ kind: "screen-share", id: screenShareItemId(participant.id), participant });
     }
   }
@@ -69,14 +69,13 @@ function participantWhere(items: readonly StageItem[], predicate: (participant: 
   return items.find((item) => item.kind === "participant" && predicate(item.participant));
 }
 
-/** Content stays primary in Spotlight; an explicitly pinned content item wins over other content. */
+/** A pin wins; otherwise the newest share, board, then active speaker leads Spotlight. */
 export function choosePrimary(items: readonly StageItem[], context: PrimaryContext): StageItem | null {
   if (items.length === 0) return null;
   const pinned = context.pinnedId ? items.find((item) => item.id === context.pinnedId) : undefined;
-  if (pinned && isContentItem(pinned)) return pinned;
+  if (pinned) return pinned;
   const content = newestScreenShare(items, context.seenAt) ?? items.find((item) => item.kind === "whiteboard");
   if (content) return content;
-  if (pinned) return pinned;
   return (
     participantWhere(items, (participant) => participant.isActiveSpeaker === true) ??
     participantWhere(items, (participant) => participant.isSpeaking === true) ??

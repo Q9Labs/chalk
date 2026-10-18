@@ -20,6 +20,10 @@ export interface Participant {
   isVideoEnabled?: boolean;
   isScreenSharing?: boolean;
   isHandRaised?: boolean;
+  handRaiseOrder?: number;
+  screenShareHasAudio?: boolean;
+  screenShareAspect?: number;
+  screenShareState?: "live" | "connecting" | "paused" | "low-quality";
   connectionQuality?: 0 | 1 | 2 | 3 | 4;
   avatarUrl?: string;
   videoTrack?: MediaStreamTrack | null;
@@ -34,7 +38,7 @@ export interface ParticipantGridProps {
   pinnedParticipantId?: string;
   onParticipantClick?: (participantId: string) => void;
   onParticipantDoubleClick?: (participantId: string) => void;
-  /** Upper bound of tiles on a grid page; further participants go to the next page. */
+  /** Upper bound of visible tiles; further participants fold into the +N tile. */
   maxVisibleParticipants?: number;
   className?: string;
   /** Keeps the classic screen-share indicator available to callers; Chalk renders it in the stage tile. */
@@ -43,7 +47,7 @@ export interface ParticipantGridProps {
   screenShareContent?: React.ReactNode;
 }
 
-const MIN_TILE_WIDTH = { desktop: 160, mobile: 140 } as const;
+const MIN_TILE_WIDTH = { desktop: 150, mobile: 88 } as const;
 
 /** Stage of participant tiles for the current Space; screen shares appear as their own tiles. */
 export function ParticipantGrid(props: ParticipantGridProps): React.JSX.Element {

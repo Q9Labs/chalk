@@ -114,7 +114,7 @@ export function SpaceView({
   const layout = onLayoutChange ? (controlledLayout ?? uncontrolledLayout) : uncontrolledLayout;
   const feature = (name: keyof SpaceViewFeatures) => features?.[name] !== false;
   const localId = self.participantId ?? "local";
-  const tiles = useMemo(() => toVideoParticipants(participantsSlice.roster, media.remote, localId, self.displayName ?? "You", media.local), [localId, media.local, media.remote, participantsSlice.roster, self.displayName]);
+  const tiles = useMemo(() => toVideoParticipants(participantsSlice.roster, media.remote, localId, self.displayName ?? "You", media.local).map(tile => ({ ...tile, screenShareHasAudio: tile.isLocal ? media.screenShare.hasAudio : participantsSlice.roster.find(person => person.participantId === tile.id)?.media.screenShareHasAudio })), [localId, media.local, media.remote, media.screenShare.hasAudio, participantsSlice.roster, self.displayName]);
   useEffect(() => setActivePanel(initialPanel), [initialPanel]);
   useEffect(() => {
     if (feature("admission") && feature("participants") && canManageAdmission && participantsSlice.admissionQueue.length > 0) setActivePanel("participants");
@@ -168,7 +168,7 @@ export function SpaceView({
           layout,
           onLayoutChange: updateLayout,
         }}
-        stage={<SpaceStage tiles={tiles} layout={layout} onLayoutChange={updateLayout} generatedAvatars={generatedAvatars} whiteboard={whiteboard} className="h-full" />}
+        stage={<SpaceStage tiles={tiles} layout={layout} onLayoutChange={updateLayout} generatedAvatars={generatedAvatars} whiteboard={whiteboard} onOverflowClick={() => setActivePanel("participants")} shareCapture={media.screenShare.capture} onStopSharing={() => client.media.setScreenShareEnabled(false)} onChangeShare={async options => { await client.media.setScreenShareEnabled(false); await client.media.setScreenShareEnabled(true, options); }} className="h-full" />}
         controls={
           <ControlBar
             density="comfortable"
