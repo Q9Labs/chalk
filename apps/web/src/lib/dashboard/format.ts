@@ -4,6 +4,7 @@ const DAY = 86400000;
 const time = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const weekdayShort = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short" });
 const weekdayLong = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long" });
+const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "long" });
 const dayMonth = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
 const dayMonthYear = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
@@ -27,13 +28,36 @@ export function sessionDay(iso: string, now = Date.now()): string {
   return weekdayShort.format(new Date(iso)).replace(",", "").replace("Sept", "Sep");
 }
 
+/** When a call was last used: "Today, 10:02", "Yesterday, 16:30", "Thursday" within a week, then "12 Oct". */
+export function lastActive(iso: string, now = Date.now()): string {
+  const days = daysBefore(iso, now);
+  if (days === 0) return `Today, ${clock(iso)}`;
+  if (days === 1) return `Yesterday, ${clock(iso)}`;
+  if (days > 1 && days < 7) return weekday.format(new Date(iso));
+  return shortDate(iso, now);
+}
+
+/** How long ago, roughly: "Just now", "2 minutes ago", "Yesterday", "3 weeks ago", then the date. */
+export function ago(iso: string, now = Date.now()): string {
+  const minutes = Math.floor((now - Date.parse(iso)) / 60000);
+  const days = daysBefore(iso, now);
+  const plural = (count: number, unit: string) => `${count} ${unit}${count === 1 ? "" : "s"} ago`;
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return plural(minutes, "minute");
+  if (days === 0) return plural(Math.floor(minutes / 60), "hour");
+  if (days === 1) return "Yesterday";
+  if (days < 7) return plural(days, "day");
+  if (days < 35) return plural(Math.floor(days / 7), "week");
+  return shortDate(iso, now);
+}
+
 /** "Sunday 18 October" */
 export function longDay(iso: string): string {
   return weekdayLong.format(new Date(iso)).replace(",", "");
 }
 
 /** "12 Oct" this year, "2 Sep 2027" otherwise. */
-export function shortDate(iso: string, now = Date.now()): string {
+function shortDate(iso: string, now = Date.now()): string {
   const date = new Date(iso);
   return (date.getFullYear() === new Date(now).getFullYear() ? dayMonth.format(date) : dayMonthYear.format(date)).replace("Sept", "Sep");
 }

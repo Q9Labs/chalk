@@ -291,10 +291,17 @@ export function RevokeKeyDialog({ apiKey, onClose, onRevoked }: { readonly apiKe
   );
 }
 
-export function AddEndpointDialog({ onClose, onCreated }: { readonly onClose: () => void; readonly onCreated: (webhook: WebhookDTO, secret: string) => void }) {
+const EVENT_NAMES: readonly string[] = EVENT_GROUPS.flatMap(([, types]) => types);
+const isEventType = (value: string): value is EventType => EVENT_NAMES.includes(value);
+
+type EndpointDialogProps = { readonly onClose: () => void } & ({ readonly webhook?: undefined; readonly onCreated: (webhook: WebhookDTO, secret: string) => void } | { readonly webhook: WebhookDTO; readonly onSaved: (webhook: WebhookDTO) => void });
+
+/** Adds an endpoint, or edits an existing one's events. Editing never sends the URL: the list only has it redacted. */
+export function EndpointDialog(props: EndpointDialogProps) {
+  const { webhook, onClose } = props;
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
-  const [events, setEvents] = useState<readonly EventType[]>(["episode.started", "episode.ended"]);
+  const [events, setEvents] = useState<readonly EventType[]>(webhook ? webhook.eventTypes.filter(isEventType) : ["episode.started", "episode.ended"]);
   const [errors, setErrors] = useState<{ name?: boolean; url?: boolean; events?: boolean }>({});
   const [saving, setSaving] = useState(false);
   // Keyed by the request itself: a retry reuses the key, a changed request gets a new one.
@@ -302,7 +309,7 @@ export function AddEndpointDialog({ onClose, onCreated }: { readonly onClose: ()
   const toast = useToast();
 
   async function save() {
-    const next = { name: !name.trim(), url: !/^https:\/\/[^\s/]+\.[^\s]+/.test(url.trim()), events: !events.length };
+    const next = { name: !webhook && !name.trim(), url: !webhook && !/^https:\/\/[^\s/]+\.[^\s]+/.test(url.trim()), events: !events.length };
     if (next.name || next.url || next.events) {
       setErrors(next);
       document.getElementById(next.name ? "endpoint-name" : next.url ? "endpoint-url" : "endpoint-events")?.focus();
@@ -310,9 +317,15 @@ export function AddEndpointDialog({ onClose, onCreated }: { readonly onClose: ()
     }
     setSaving(true);
     try {
+      if (props.webhook) {
+        const request = { webhookId: props.webhook.id, eventTypes: [...events], revision: props.webhook.revision };
+        const { webhook: saved } = await act("developer", { action: "update-webhook", ...request, idempotencyKey: intents.key(JSON.stringify(request)) });
+        props.onSaved(saved);
+        return;
+      }
       const request = { name: name.trim(), url: url.trim(), enabled: true, eventTypes: [...events] };
-      const { webhook, secret } = await act("developer", { action: "create-webhook", ...request, idempotencyKey: intents.key(JSON.stringify(request)) });
-      onCreated(webhook, secret);
+      const { webhook: created, secret } = await act("developer", { action: "create-webhook", ...request, idempotencyKey: intents.key(JSON.stringify(request)) });
+      props.onCreated(created, secret);
     } catch (error) {
       toast(errorMessage(error), { icon: "alert" });
     } finally {
@@ -322,8 +335,16 @@ export function AddEndpointDialog({ onClose, onCreated }: { readonly onClose: ()
 
   return (
     <Dialog
-      title="Add endpoint"
-      description="Chalk sends a signed POST to this URL for each event you pick."
+      title={webhook ? `Events for ${webhook.name}` : "Add endpoint"}
+      description={
+        webhook ? (
+          <>
+            Sends to <span className="mono">{webhook.url}</span>. To change the URL, add a new endpoint.
+          </>
+        ) : (
+          "Chalk sends a signed POST to this URL for each event you pick."
+        )
+      }
       wide
       onClose={onClose}
       onSubmit={() => void save()}
@@ -331,47 +352,51 @@ export function AddEndpointDialog({ onClose, onCreated }: { readonly onClose: ()
         <>
           <Cancel onClose={onClose} />
           <button type="submit" className="btn pri" disabled={saving}>
-            Add endpoint
+            {webhook ? "Save events" : "Add endpoint"}
           </button>
         </>
       }
     >
-      <div className="field" style={{ marginTop: 18 }}>
-        <label className="lbl" htmlFor="endpoint-name">
-          Name
-        </label>
-        <input
-          id="endpoint-name"
-          className={errors.name ? "inp bad" : "inp"}
-          value={name}
-          placeholder="For example, Attendance sync"
-          maxLength={120}
-          autoComplete="off"
-          aria-invalid={Boolean(errors.name)}
-          aria-describedby={errors.name ? "endpoint-name-error" : undefined}
-          onChange={(event) => setName(event.target.value)}
-        />
-        {errors.name ? <FieldError id="endpoint-name-error">Give the endpoint a name.</FieldError> : null}
-      </div>
-      <div className="field">
-        <label className="lbl" htmlFor="endpoint-url">
-          URL
-        </label>
-        <input
-          id="endpoint-url"
-          className={errors.url ? "inp mono bad" : "inp mono"}
-          value={url}
-          placeholder="https://example.com/chalk/webhooks"
-          inputMode="url"
-          autoComplete="off"
-          spellCheck={false}
-          aria-invalid={Boolean(errors.url)}
-          aria-describedby={errors.url ? "endpoint-url-error" : undefined}
-          onChange={(event) => setUrl(event.target.value)}
-        />
-        {errors.url ? <FieldError id="endpoint-url-error">Use a public https:// URL.</FieldError> : null}
-      </div>
-      <fieldset className="field">
+      {webhook ? null : (
+        <>
+          <div className="field" style={{ marginTop: 18 }}>
+            <label className="lbl" htmlFor="endpoint-name">
+              Name
+            </label>
+            <input
+              id="endpoint-name"
+              className={errors.name ? "inp bad" : "inp"}
+              value={name}
+              placeholder="For example, Attendance sync"
+              maxLength={120}
+              autoComplete="off"
+              aria-invalid={Boolean(errors.name)}
+              aria-describedby={errors.name ? "endpoint-name-error" : undefined}
+              onChange={(event) => setName(event.target.value)}
+            />
+            {errors.name ? <FieldError id="endpoint-name-error">Give the endpoint a name.</FieldError> : null}
+          </div>
+          <div className="field">
+            <label className="lbl" htmlFor="endpoint-url">
+              URL
+            </label>
+            <input
+              id="endpoint-url"
+              className={errors.url ? "inp mono bad" : "inp mono"}
+              value={url}
+              placeholder="https://example.com/chalk/webhooks"
+              inputMode="url"
+              autoComplete="off"
+              spellCheck={false}
+              aria-invalid={Boolean(errors.url)}
+              aria-describedby={errors.url ? "endpoint-url-error" : undefined}
+              onChange={(event) => setUrl(event.target.value)}
+            />
+            {errors.url ? <FieldError id="endpoint-url-error">Use a public https:// URL.</FieldError> : null}
+          </div>
+        </>
+      )}
+      <fieldset className="field" style={webhook ? { marginTop: 18 } : undefined}>
         <legend className="lbl">Events</legend>
         <div className="evgrid">
           {EVENT_GROUPS.map(([group, types], groupIndex) => (

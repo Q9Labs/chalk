@@ -1,15 +1,17 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 
-import type { CallPageDTO, EpisodeDTO } from "../../lib/dashboard/contracts";
+import type { CallPageDTO, RecordingDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage, readPage } from "../../lib/dashboard/client";
 import { clock, displayLink, duration, sessionDay } from "../../lib/dashboard/format";
+import { Faces } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { useLoad } from "./AppShell";
 import { RenameDialog } from "./HomePage";
 import { CopyAction, ErrorPanel, Menu, MenuItem, MoreButton, Seg, Sk, SkeletonRows, useIntentKeys, usePhone, useToast } from "./kit";
 
 type Admission = CallPageDTO["call"]["admission"];
+type Session = CallPageDTO["episodes"][number];
 const ADMISSION: readonly (readonly [Admission, string])[] = [
   ["anyone", "Anyone with the link"],
   ["knock", "Ask to join"],
@@ -39,9 +41,9 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
       </div>
     );
 
-  const { call, inviteUrl, episodes, nextCursor, knocks } = state.data;
-  const live = episodes.find((episode) => episode.status === "active");
-  const past = episodes.filter((episode) => episode !== live);
+  const { call, inviteUrl, episodes, live, nextCursor, knocks } = state.data;
+  const current = episodes.find((episode) => episode.status === "active");
+  const past = episodes.filter((episode) => episode !== current);
 
   async function setAdmission(admission: Admission) {
     if (admission === call.admission) return;
@@ -119,7 +121,11 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
             <span className="dot" />
             Live now
           </span>
-          <span className="mu">People are in the call. It started at {clock(live.startedAt)}.</span>
+          {live.participants.length ? <Faces names={live.participants.map((person) => person.name)} size={28} /> : null}
+          <span className="mu">
+            {inCall(live.participants.map((person) => person.name))}
+            {current ? ` It started at ${clock(current.startedAt)}.` : ""}
+          </span>
         </div>
       ) : null}
       {knocks.length ? (
@@ -146,11 +152,11 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
           <h2>Call link</h2>
           <div className="linkrow">
             <div className="linkbox">
-              <span>{displayLink(inviteUrl)}</span>
+              <span>{inviteUrl ? displayLink(inviteUrl) : "The link isn’t available"}</span>
             </div>
-            <CopyAction text={inviteUrl} pill />
+            {inviteUrl ? <CopyAction text={inviteUrl} pill /> : null}
           </div>
-          <p className="help">This link never changes. Share it once and use it every time.</p>
+          <p className="help">{inviteUrl ? "This link never changes. Share it once and use it every time." : "Chalk couldn’t make a link for this call. A name with letters outside A to Z can cause this, so try renaming it."}</p>
         </div>
         <div>
           <h2 id="who-can-join">Who can join</h2>
@@ -178,17 +184,47 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
           {nextCursor ? <MoreButton label="Show older sessions" cursor={nextCursor} load={(cursor) => readPage("call", { spaceId, cursor })} onLoaded={(page) => update((data) => ({ ...data, episodes: [...data.episodes, ...page.episodes], nextCursor: page.nextCursor }))} /> : null}
         </>
       )}
-      {renaming ? <RenameDialog call={call} page="call" link={inviteUrl} onClose={() => setRenaming(false)} onRenamed={(renamed) => update((data) => ({ ...data, call: renamed }))} /> : null}
+      {renaming ? <RenameDialog call={call} page="call" link={inviteUrl ?? undefined} onClose={() => setRenaming(false)} onRenamed={(renamed) => update((data) => ({ ...data, call: renamed }))} /> : null}
     </div>
   );
 }
 
-function SessionRow({ spaceId, episode }: { readonly spaceId: string; readonly episode: EpisodeDTO }) {
+/** "Nora, Akash and Sofia are in the call." First names, and a count past three. */
+function inCall(names: readonly string[]): string {
+  const first = names.map((name) => name.split(" ")[0] ?? name);
+  if (!first.length) return "People are in the call.";
+  if (first.length === 1) return `${first[0]} is in the call.`;
+  const shown = first.length > 3 ? [...first.slice(0, 2), `${first.length - 2} others`] : first;
+  return `${shown.slice(0, -1).join(", ")} and ${shown.at(-1)} are in the call.`;
+}
+
+type Kept = { readonly recording: boolean; readonly transcript: "none" | "ready" | "processing" };
+
+/** What a session kept: its newest recording, and that recording's best transcript. */
+function kept(recordings: readonly RecordingDTO[]): Kept {
+  const recording = recordings.find((item) => item.status === "completed") ?? recordings[0];
+  if (!recording) return { recording: false, transcript: "none" };
+  const transcripts = recording.transcripts ?? [];
+  if (transcripts.some((item) => item.status === "completed")) return { recording: true, transcript: "ready" };
+  if (recording.status !== "completed" || transcripts.some((item) => item.status !== "failed" && item.status !== "deleted")) return { recording: true, transcript: "processing" };
+  return { recording: true, transcript: "none" };
+}
+
+function keptSummary({ recording, transcript }: Kept): string {
+  if (!recording) return "No recording";
+  if (transcript === "ready") return "Recording and transcript";
+  if (transcript === "processing") return "Recording · transcript soon";
+  return "Recording";
+}
+
+function SessionRow({ spaceId, episode }: { readonly spaceId: string; readonly episode: Session }) {
   const phone = usePhone();
   const day = sessionDay(episode.startedAt);
   const range = episode.endedAt ? `${clock(episode.startedAt)} to ${clock(episode.endedAt)}` : `${clock(episode.startedAt)}, ending`;
   const length = episode.endedAt ? duration(episode.startedAt, episode.endedAt) : "";
-  const link = <Link className="ra" to="/dashboard/call/$spaceId/session/$episodeId" params={{ spaceId, episodeId: episode.id }} aria-label={`Session ${day}, ${range}${length ? `, ${length}` : ""}`} />;
+  const what = kept(episode.recordings);
+  const people = `${episode.participantCount} ${episode.participantCount === 1 ? "person" : "people"}`;
+  const link = <Link className="ra" to="/dashboard/call/$spaceId/session/$episodeId" params={{ spaceId, episodeId: episode.id }} aria-label={`Session ${day}, ${range}${length ? `, ${length}` : ""}, ${people}, ${what.recording ? "recorded" : "not recorded"}`} />;
   if (phone)
     return (
       <div className="row">
@@ -197,8 +233,11 @@ function SessionRow({ spaceId, episode }: { readonly spaceId: string; readonly e
           <b>
             {day}, {clock(episode.startedAt)}
           </b>
-          <span>{length || "Ending"}</span>
+          <span>
+            {length || "Ending"} · {keptSummary(what)}
+          </span>
         </span>
+        <span className="np num mu">{people}</span>
         <Icon name="right" />
       </div>
     );
@@ -208,9 +247,30 @@ function SessionRow({ spaceId, episode }: { readonly spaceId: string; readonly e
       <span className="np">{day}</span>
       <span className="np num mu">{range}</span>
       <span className="np num mu">{length}</span>
-      {/* Who came and what was kept go here once EpisodeDTO carries them. */}
-      <span className="np" />
-      <span className="kept np" />
+      <span className="np num mu">{people}</span>
+      <span className="kept np">
+        {what.recording ? (
+          <>
+            <span>
+              <Icon name="film" />
+              Recording
+            </span>
+            {what.transcript === "ready" ? (
+              <span>
+                <Icon name="file" />
+                Transcript
+              </span>
+            ) : what.transcript === "processing" ? (
+              <span>
+                <Icon name="clock" />
+                Transcript processing
+              </span>
+            ) : null}
+          </>
+        ) : (
+          <span>No recording</span>
+        )}
+      </span>
       <Icon name="right" />
     </div>
   );

@@ -1,4 +1,4 @@
-import type { AllowedWebsitesDTO, ArtifactURLDTO, CallAction, CallDTO, CallPageDTO, DeveloperAction, DeveloperDTO, HomeAction, HomeDTO, OwnerAccessDTO, PastSessionAction, PastSessionDTO, RecordingDTO, SecretDTO, SessionDTO, TranscriptDTO, WebhookDTO } from "./contracts";
+import type { AllowedWebsitesDTO, ArtifactURLDTO, CallAction, CallDTO, CallPageDTO, CueDTO, DeliveryDTO, DeveloperAction, DeveloperDTO, HomeAction, HomeDTO, OwnerAccessDTO, PastSessionAction, PastSessionDTO, RecordingDTO, SecretDTO, SessionDTO, TranscriptDTO, WebhookDTO } from "./contracts";
 
 // The browser half of the dashboard. It holds only the session-bound CSRF token, never a secret:
 // the WorkOS session and every engine credential stay in HttpOnly cookies and the Pages Functions.
@@ -14,9 +14,7 @@ type Pages = {
 export type DashboardPage = keyof Pages;
 
 type Ok = { ok: true };
-export type CueDTO = { startMs: number; endMs: number; text: string };
-export type DeliveryDTO = { id: string; state: string; createdAt: string };
-type DeliveryDetailDTO = { id: string; state: string; attempts: { status: number | null; errorCode: string | null; finishedAt: string | null }[] };
+type DeliveryDetailDTO = { id: string; state: string; eventType: string; attemptCount: number; attempts: { status: number | null; errorCode: string | null; finishedAt: string | null }[] };
 
 /** What each action returns, as the server branch's handlers build it. The contract doesn't export these yet. */
 type Results = {
@@ -31,6 +29,7 @@ type Results = {
   "end-for-everyone": Ok;
   "approve-knock": Ok;
   "deny-knock": Ok;
+  "create-transcript": { transcript: TranscriptDTO };
   "recording-url": ArtifactURLDTO;
   "export-recording": { recording: RecordingDTO };
   transcripts: { transcripts: TranscriptDTO[]; nextCursor: string | null };

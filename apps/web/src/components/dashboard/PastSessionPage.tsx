@@ -1,13 +1,13 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 
-import type { AttendanceDTO, PastSessionDTO, RecordingDTO, TranscriptDTO } from "../../lib/dashboard/contracts";
-import { act, errorMessage, intentKey, readPage, type CueDTO } from "../../lib/dashboard/client";
+import type { AttendanceDTO, CueDTO, PastSessionDTO, RecordingDTO, TranscriptDTO } from "../../lib/dashboard/contracts";
+import { act, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
 import { clock, duration, longDay, playbackTime } from "../../lib/dashboard/format";
 import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { useLoad } from "./AppShell";
-import { ErrorPanel, Menu, MenuItem, Sk, usePhone, useToast } from "./kit";
+import { ErrorPanel, Menu, MenuItem, Sk, useIntentKeys, usePhone, useToast } from "./kit";
 
 type Ids = { readonly spaceId: string; readonly episodeId: string };
 type Transcript = { readonly kind: "loading" } | { readonly kind: "none" } | { readonly kind: "processing" } | { readonly kind: "failed" } | { readonly kind: "ready"; readonly transcript: TranscriptDTO; readonly cues: readonly CueDTO[] };
@@ -59,7 +59,9 @@ function Session({ ids, back, session }: { readonly ids: Ids; readonly back: Rea
   const phone = usePhone();
   const { episode, attendance, recordings } = session;
   const recording = recordings.find((item) => item.status === "completed") ?? recordings[0];
-  const transcript = useTranscript(ids, recording);
+  const [transcript, setTranscript] = useTranscript(ids, recording);
+  const intents = useIntentKeys();
+  const toast = useToast();
   const [time, setTime] = useState(0);
   const seek = useRef<(seconds: number) => void>(() => {});
   const end = episode.endedAt ?? episode.startedAt;
@@ -108,7 +110,17 @@ function Session({ ids, back, session }: { readonly ids: Ids; readonly back: Rea
         </div>
       </div>
     );
-  const panel = <TranscriptPanel transcript={recording.status === "completed" ? transcript : { kind: "processing" }} time={time} onSeek={(seconds) => seek.current(seconds)} />;
+  async function createTranscript(recordingId: string) {
+    try {
+      await act("past-session", { action: "create-transcript", ...ids, recordingId, languages: [TRANSCRIPT_LANGUAGE], idempotencyKey: intents.key(`transcript:${recordingId}`) });
+      intents.done(`transcript:${recordingId}`);
+      setTranscript({ kind: "processing" });
+      toast("Making the transcript. It shows here when it’s ready.", { icon: "clock" });
+    } catch (error) {
+      toast(errorMessage(error), { icon: "alert" });
+    }
+  }
+  const panel = <TranscriptPanel transcript={recording.status === "completed" ? transcript : { kind: "processing" }} time={time} onSeek={(seconds) => seek.current(seconds)} onCreate={() => createTranscript(recording.id)} />;
 
   if (phone)
     return (
@@ -137,7 +149,17 @@ function Session({ ids, back, session }: { readonly ids: Ids; readonly back: Rea
   );
 }
 
-function useTranscript(ids: Ids, recording: RecordingDTO | undefined): Transcript {
+/** The engine needs a language to transcribe in. The viewer's own is the best single guess. */
+const TRANSCRIPT_LANGUAGE = (typeof navigator === "undefined" ? "en" : navigator.language).split("-")[0]?.toLowerCase() || "en";
+const languageName = (code: string) => {
+  try {
+    return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code;
+  } catch {
+    return code;
+  }
+};
+
+function useTranscript(ids: Ids, recording: RecordingDTO | undefined): readonly [Transcript, (next: Transcript) => void] {
   const [state, setState] = useState<Transcript>({ kind: "loading" });
   const recordingId = recording?.status === "completed" ? recording.id : null;
   useEffect(() => {
@@ -159,7 +181,7 @@ function useTranscript(ids: Ids, recording: RecordingDTO | undefined): Transcrip
       current = false;
     };
   }, [ids, recordingId]);
-  return state;
+  return [state, setState];
 }
 
 function DownloadMenu({ ids, recording, transcript }: { readonly ids: Ids; readonly recording: RecordingDTO; readonly transcript: TranscriptDTO | null }) {
@@ -333,8 +355,9 @@ function Player({ ids, recording, onTime, seekRef }: { readonly ids: Ids; readon
 
 const ESCAPE = /[.*+?^${}()|[\]\\]/g;
 
-function TranscriptPanel({ transcript, time, onSeek }: { readonly transcript: Transcript; readonly time: number; readonly onSeek: (seconds: number) => void }) {
+function TranscriptPanel({ transcript, time, onSeek, onCreate }: { readonly transcript: Transcript; readonly time: number; readonly onSeek: (seconds: number) => void; readonly onCreate: () => Promise<void> }) {
   const [query, setQuery] = useState("");
+  const [creating, setCreating] = useState(false);
   const search = query.trim().toLowerCase();
   const cues = transcript.kind === "ready" ? transcript.cues : [];
   const active = cues.reduce((found, cue, index) => (cue.startMs / 1000 <= time ? index : found), -1);
@@ -350,15 +373,42 @@ function TranscriptPanel({ transcript, time, onSeek }: { readonly transcript: Tr
       </div>
     );
   else if (transcript.kind === "processing") body = <div className="tempty">The transcript follows the recording.</div>;
-  else if (transcript.kind === "none") body = <div className="tempty">There’s no transcript for this recording.</div>;
+  else if (transcript.kind === "none")
+    body = (
+      <div className="tempty">
+        <p>There’s no transcript for this recording.</p>
+        <button
+          type="button"
+          className="btn sec sm"
+          aria-busy={creating || undefined}
+          onClick={() => {
+            if (creating) return;
+            setCreating(true);
+            void onCreate().finally(() => setCreating(false));
+          }}
+        >
+          <Icon name="file" />
+          Make a transcript in {languageName(TRANSCRIPT_LANGUAGE)}
+        </button>
+      </div>
+    );
   else if (!lines.length) body = <div className="tempty">No lines mention “{query.trim()}”.</div>;
   else
     body = lines.map(({ cue, index }) => {
       const at = playbackTime(cue.startMs / 1000);
+      const speaker = cue.speaker?.name;
       return (
-        <button key={index} type="button" className={index === active ? "tline on" : "tline"} aria-label={`Play from ${at}: ${cue.text}`} aria-current={index === active ? true : undefined} onClick={() => onSeek(cue.startMs / 1000)}>
+        <button key={index} type="button" className={index === active ? "tline on" : "tline"} aria-label={`Play from ${at}${speaker ? `, ${speaker}` : ""}: ${cue.text}`} aria-current={index === active ? true : undefined} onClick={() => onSeek(cue.startMs / 1000)}>
           <span className="mono num">{at}</span>
-          <span>{mark ? cue.text.split(mark).map((part, at) => (at % 2 ? <mark key={at}>{part}</mark> : part)) : cue.text}</span>
+          <span>
+            {speaker ? (
+              <b>
+                <Avatar name={speaker} size={18} />
+                {speaker}
+              </b>
+            ) : null}
+            {mark ? cue.text.split(mark).map((part: string, n: number) => (n % 2 ? <mark key={n}>{part}</mark> : part)) : cue.text}
+          </span>
         </button>
       );
     });
@@ -407,7 +457,10 @@ function WhoCame({ attendance, endedAt }: { readonly attendance: AttendanceDTO; 
               <Avatar name={person.name} size={28} />
               <div>
                 <div className="nm">
-                  <span>{person.name}</span>
+                  <span>
+                    {person.name}
+                    {person.isYou ? " (you)" : ""}
+                  </span>
                   {tag ? <span className="tag gst">{tag}</span> : null}
                 </div>
                 <small>

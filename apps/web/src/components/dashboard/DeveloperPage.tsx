@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import type { DeveloperDTO, KeyDTO, WebhookDTO } from "../../lib/dashboard/contracts";
+import type { DeliveryDTO, DeveloperDTO, KeyDTO, WebhookDTO } from "../../lib/dashboard/contracts";
 import { dashboardWebsiteOrigin } from "../../lib/dashboard/contracts";
-import { act, errorMessage, readPage, type DeliveryDTO } from "../../lib/dashboard/client";
-import { clock, expiresSoon, fullDate, sessionDay } from "../../lib/dashboard/format";
+import { act, errorMessage, readPage } from "../../lib/dashboard/client";
+import { ago, clock, expiresSoon, fullDate, sessionDay } from "../../lib/dashboard/format";
 import { Icon } from "../site/Icon";
 import { useLoad } from "./AppShell";
-import { accessLabel, AddEndpointDialog, AddWebsiteDialog, CreateKeyDialog, RemoveWebsiteDialog, RevokeKeyDialog, RotateKeyDialog, RotateWebhookDialog, SecretDialog, type Secret } from "./DeveloperDialogs";
+import { accessLabel, EndpointDialog, AddWebsiteDialog, CreateKeyDialog, RemoveWebsiteDialog, RevokeKeyDialog, RotateKeyDialog, RotateWebhookDialog, SecretDialog, type Secret } from "./DeveloperDialogs";
 import { ErrorPanel, Menu, MenuItem, MoreButton, Sk, SkeletonRows, useIntentKeys, usePhone, useToast } from "./kit";
 
 type Open =
@@ -14,7 +14,7 @@ type Open =
   | { readonly kind: "create-key" }
   | { readonly kind: "rotate-key" | "revoke-key"; readonly apiKey: KeyDTO }
   | { readonly kind: "add-endpoint" }
-  | { readonly kind: "rotate-webhook"; readonly webhook: WebhookDTO }
+  | { readonly kind: "rotate-webhook" | "edit-endpoint"; readonly webhook: WebhookDTO }
   | { readonly kind: "add-website" }
   | { readonly kind: "remove-website"; readonly origin: string }
   | { readonly kind: "secret"; readonly secret: Secret };
@@ -119,7 +119,7 @@ export function DeveloperPage() {
       ) : (
         <div className="list">
           {data.webhooks.map((webhook) => (
-            <Endpoint key={webhook.id} webhook={webhook} open={opened === webhook.id} onToggle={() => setExpanded(opened === webhook.id ? null : webhook.id)} onRotate={() => setOpen({ kind: "rotate-webhook", webhook })} />
+            <Endpoint key={webhook.id} webhook={webhook} open={opened === webhook.id} onToggle={() => setExpanded(opened === webhook.id ? null : webhook.id)} onRotate={() => setOpen({ kind: "rotate-webhook", webhook })} onEdit={() => setOpen({ kind: "edit-endpoint", webhook })} />
           ))}
         </div>
       )}
@@ -152,12 +152,24 @@ export function DeveloperPage() {
         />
       ) : null}
       {open?.kind === "add-endpoint" ? (
-        <AddEndpointDialog
+        <EndpointDialog
           onClose={close}
           onCreated={(webhook, secret) => {
             update((value) => ({ ...value, webhooks: [...value.webhooks, webhook] }));
             setExpanded(webhook.id);
             setOpen({ kind: "secret", secret: { kind: "webhook", secret } });
+          }}
+        />
+      ) : null}
+      {open?.kind === "edit-endpoint" ? (
+        <EndpointDialog
+          webhook={open.webhook}
+          onClose={close}
+          onSaved={(saved) => {
+            // The save returns the endpoint without its last delivery; keep the one the list had.
+            update((value) => ({ ...value, webhooks: value.webhooks.map((item) => (item.id === saved.id ? { ...saved, lastDelivery: item.lastDelivery } : item)) }));
+            close();
+            toast(`Saved the events for ${saved.name}`);
           }}
         />
       ) : null}
@@ -209,6 +221,7 @@ function KeysTable({ keys, onRotate, onRevoke }: { readonly keys: readonly KeyDT
             <th scope="col">Key</th>
             <th scope="col">Access</th>
             <th scope="col">Expires</th>
+            <th scope="col">Last used</th>
             <th scope="col">
               <span className="sr">Actions</span>
             </th>
@@ -236,6 +249,7 @@ function KeysTable({ keys, onRotate, onRevoke }: { readonly keys: readonly KeyDT
                     `${phone ? "Expires " : ""}${fullDate(key.expiresAt)}`
                   )}
                 </td>
+                <td className="phh">{key.lastUsedAt ? ago(key.lastUsedAt) : "Never"}</td>
                 <td className="act">
                   <Menu label={`Actions for ${key.name}`}>
                     {(close) => (
@@ -281,14 +295,43 @@ const DELIVERY: Record<string, readonly [string, string]> = {
 };
 const deliveryState = (state: string) => DELIVERY[state] ?? (["d-mu", state] as const);
 
-function Endpoint({ webhook, open, onToggle, onRotate }: { readonly webhook: WebhookDTO; readonly open: boolean; readonly onToggle: () => void; readonly onRotate: () => void }) {
+function Endpoint({ webhook, open, onToggle, onRotate, onEdit }: { readonly webhook: WebhookDTO; readonly open: boolean; readonly onToggle: () => void; readonly onRotate: () => void; readonly onEdit: () => void }) {
   const phone = usePhone();
+  // The list carries each endpoint's last delivery; once the details load, their newest row is fresher.
+  const [latest, setLatest] = useState<DeliveryDTO | null | undefined>(undefined);
+  const last = latest === undefined ? webhook.lastDelivery : latest;
+  const [dot, label] = !webhook.enabled ? ["d-mu", "Paused"] : last ? deliveryState(last.state) : ["d-mu", last === null ? "No deliveries yet" : ""];
+
+  return (
+    <div className="ep">
+      <button type="button" className="eph" aria-expanded={open} aria-controls={`endpoint-${webhook.id}`} onClick={onToggle}>
+        <Icon name="right" />
+        <span style={{ minWidth: 0 }}>
+          <b>{webhook.name}</b>
+          <span className="mono">{webhook.url}</span>
+        </span>
+        <span className="mu phh">{webhook.eventTypes.length} events</span>
+        <span className="status">
+          {label ? <span className={`dot ${dot}`} /> : null}
+          {label}
+          {last && !phone ? <span className="mu"> · {clock(last.createdAt)}</span> : null}
+        </span>
+      </button>
+      {open ? <EndpointDetails webhook={webhook} onRotate={onRotate} onEdit={onEdit} onLatest={setLatest} /> : null}
+    </div>
+  );
+}
+
+/** An open endpoint. Its deliveries load only while it's open, since each one costs engine reads. */
+function EndpointDetails({ webhook, onRotate, onEdit, onLatest }: { readonly webhook: WebhookDTO; readonly onRotate: () => void; readonly onEdit: () => void; readonly onLatest: (delivery: DeliveryDTO | null) => void }) {
   const toast = useToast();
   const intents = useIntentKeys();
   const { state, reload, update } = useLoad(() => act("developer", { action: "webhook-deliveries", webhookId: webhook.id }), `deliveries:${webhook.id}`);
   const deliveries = state.kind === "ready" ? state.data.deliveries : null;
-  const last = deliveries?.[0];
-  const [dot, label] = !webhook.enabled ? ["d-mu", "Paused"] : last ? deliveryState(last.state) : ["d-mu", deliveries ? "No deliveries yet" : ""];
+  const newest = deliveries ? (deliveries[0] ?? null) : undefined;
+  useEffect(() => {
+    if (newest !== undefined) onLatest(newest);
+  }, [newest, onLatest]);
 
   async function test() {
     try {
@@ -312,98 +355,97 @@ function Endpoint({ webhook, open, onToggle, onRotate }: { readonly webhook: Web
   }
 
   return (
-    <div className="ep">
-      <button type="button" className="eph" aria-expanded={open} aria-controls={`endpoint-${webhook.id}`} onClick={onToggle}>
-        <Icon name="right" />
-        <span style={{ minWidth: 0 }}>
-          <b>{webhook.name}</b>
-          <span className="mono">{webhook.url}</span>
-        </span>
-        <span className="mu phh">{webhook.eventTypes.length} events</span>
-        <span className="status">
-          {label ? <span className={`dot ${dot}`} /> : null}
-          {label}
-          {last && !phone ? <span className="mu"> · {clock(last.createdAt)}</span> : null}
-        </span>
-      </button>
-      {open ? (
-        <div className="epd" id={`endpoint-${webhook.id}`}>
-          <dl className="kv">
-            <dt>Events</dt>
-            <dd>
-              {webhook.eventTypes.map((type) => (
-                <span className="chip" key={type}>
-                  {type}
-                </span>
-              ))}
-            </dd>
-            <dt>Signing secret</dt>
-            <dd>
-              <span className="mono mu">whsec_••••••••</span>
-              <button type="button" className="btn sec sm" onClick={onRotate}>
-                <Icon name="retry" />
-                Rotate secret
-              </button>
-              <p>The secret is shown once, when it’s made. Rotating keeps the old one working for 24 hours unless you stop it.</p>
-            </dd>
-            <dt>Test</dt>
-            <dd>
-              <button type="button" className="btn sec sm" onClick={() => void test()}>
-                <Icon name="send" />
-                Send test event
-              </button>
-              <p>Sends a signed test Event to this URL and adds it to recent deliveries.</p>
-            </dd>
-          </dl>
-          <div className="dtbl">
-            <h3>Recent deliveries</h3>
-            {state.kind === "loading" ? (
-              <SkeletonRows count={2} />
-            ) : state.kind === "error" ? (
-              <ErrorPanel title="Couldn’t load deliveries" detail={errorMessage(state.error)} onRetry={reload} />
-            ) : !deliveries?.length ? (
-              <p className="tempty">No deliveries yet. Send a test event to try the endpoint.</p>
-            ) : (
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th scope="col">Status</th>
-                    <th scope="col">Time</th>
-                    <th scope="col">
-                      <span className="sr">Actions</span>
-                    </th>
+    <div className="epd" id={`endpoint-${webhook.id}`}>
+      <dl className="kv">
+        <dt>Events</dt>
+        <dd>
+          {webhook.eventTypes.map((type) => (
+            <span className="chip" key={type}>
+              {type}
+            </span>
+          ))}
+          <button type="button" className="btn gh sm" onClick={onEdit}>
+            <Icon name="edit" />
+            Edit events
+          </button>
+        </dd>
+        <dt>Signing secret</dt>
+        <dd>
+          <span className="mono mu">whsec_••••••••</span>
+          <button type="button" className="btn sec sm" onClick={onRotate}>
+            <Icon name="retry" />
+            Rotate secret
+          </button>
+          <p>The secret is shown once, when it’s made. Rotating keeps the old one working for 24 hours unless you stop it.</p>
+        </dd>
+        <dt>Test</dt>
+        <dd>
+          <button type="button" className="btn sec sm" onClick={() => void test()}>
+            <Icon name="send" />
+            Send test event
+          </button>
+          <p>Sends a signed test Event to this URL and adds it to recent deliveries.</p>
+        </dd>
+      </dl>
+      <div className="dtbl">
+        <h3>Recent deliveries</h3>
+        {state.kind === "loading" ? (
+          <SkeletonRows count={2} />
+        ) : state.kind === "error" ? (
+          <ErrorPanel title="Couldn’t load deliveries" detail={errorMessage(state.error)} onRetry={reload} />
+        ) : !deliveries?.length ? (
+          <p className="tempty">No deliveries yet. Send a test event to try the endpoint.</p>
+        ) : (
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th scope="col">Event</th>
+                <th scope="col">Status</th>
+                <th scope="col" className="r">
+                  Response
+                </th>
+                <th scope="col" className="r">
+                  Attempts
+                </th>
+                <th scope="col">Time</th>
+                <th scope="col">
+                  <span className="sr">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {deliveries.map((delivery) => {
+                const [deliveryDot, deliveryLabel] = deliveryState(delivery.state);
+                return (
+                  <tr key={delivery.id}>
+                    <td>
+                      <span className="mono">{delivery.eventType}</span>
+                    </td>
+                    <td>
+                      <span className="status">
+                        <span className={`dot ${deliveryDot}`} />
+                        {deliveryLabel}
+                      </span>
+                    </td>
+                    <td className="r mono num phh">{delivery.status ?? "–"}</td>
+                    <td className="r num phh">{delivery.attempts}</td>
+                    <td className="phh">
+                      {sessionDay(delivery.createdAt)}, {clock(delivery.createdAt)}
+                    </td>
+                    <td className="act">
+                      {delivery.state === "failed" ? (
+                        <button type="button" className="btn sec sm" onClick={() => void redeliver(delivery)}>
+                          Redeliver
+                        </button>
+                      ) : null}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {deliveries.map((delivery) => {
-                    const [deliveryDot, deliveryLabel] = deliveryState(delivery.state);
-                    return (
-                      <tr key={delivery.id}>
-                        <td>
-                          <span className="status">
-                            <span className={`dot ${deliveryDot}`} />
-                            {deliveryLabel}
-                          </span>
-                        </td>
-                        <td>
-                          {sessionDay(delivery.createdAt)}, {clock(delivery.createdAt)}
-                        </td>
-                        <td className="act">
-                          {delivery.state === "failed" ? (
-                            <button type="button" className="btn sec sm" onClick={() => void redeliver(delivery)}>
-                              Redeliver
-                            </button>
-                          ) : null}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
-      ) : null}
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }

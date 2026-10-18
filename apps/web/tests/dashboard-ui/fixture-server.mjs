@@ -37,6 +37,11 @@ function richAccount() {
     ["Weekly planning", "weekly", 14],
     ["Ali Raza intro", "k4f-82m", 10],
   ].map(([name, slug, days], i) => ({ id: uuid(0x100 + i), slug, name, archived: false, admission: i === 0 ? "knock" : "anyone", createdAt: at(days, 9, 0) }));
+  // What Home shows for calls with no sessions here: when they were last used, and who came most recently.
+  const recent = [null, [at(1, 16, 30), ["Priya Shah", "Eli Cohen"]], [at(3, 11, 0), ["Ali Raza", "Lena Vogel", "Malik Haddad"]], [at(6, 10, 0), ["Akash Rao", "June Park", "Lena Vogel", "Nora Patel"]], [null, []]];
+  calls.forEach((call, i) => {
+    if (recent[i]) [call.lastActiveAt, call.recentPeople] = [recent[i][0], recent[i][1].map((name, n) => ({ id: uuid(0x6100 + i * 16 + n), name }))];
+  });
   const people = ["Hasan Shoaib", "Nora Patel", "Akash Rao", "Sofia Lind", "Malik Haddad", "Priya Shah", "Eli Cohen", "Ali Raza"];
   const sessions = [
     [0, 10, 2, 46, 5, "done"],
@@ -52,6 +57,8 @@ function richAccount() {
     const startedAt = at(days, hh, mm);
     return { id: uuid(0x200 + i), status: "ended", startedAt, endedAt: plus(startedAt, length), people: people.slice(0, count), kept };
   });
+  calls[0].lastActiveAt = sessions[0].endedAt;
+  calls[0].recentPeople = sessions[0].people.slice(1).map((name, n) => ({ id: uuid(0x700 + n + 1), name }));
   return {
     calls,
     sessions,
@@ -64,9 +71,10 @@ function richAccount() {
         scopes: ["spaces:read", "spaces:write", "episodes:read", "episodes:write", "recordings:read", "recordings:write", "transcriptions:read", "transcriptions:write", "webhooks:read", "webhooks:write"],
         expiresAt: at(-319, 12, 0),
         revokedAt: null,
+        lastUsedAt: new Date(Date.now() - 2 * 60000).toISOString(),
       },
-      { id: uuid(0x301), name: "MCP server", prefix: "chalk_sk_k91P", scopes: ["spaces:read", "episodes:read", "recordings:read", "transcriptions:read", "webhooks:read"], expiresAt: at(-83, 12, 0), revokedAt: null },
-      { id: uuid(0x302), name: "Staging", prefix: "chalk_sk_Zt4m", scopes: ["spaces:read", "spaces:write", "episodes:read", "episodes:write"], expiresAt: at(-5, 12, 0), revokedAt: null },
+      { id: uuid(0x301), name: "MCP server", prefix: "chalk_sk_k91P", scopes: ["spaces:read", "episodes:read", "recordings:read", "transcriptions:read", "webhooks:read"], expiresAt: at(-83, 12, 0), revokedAt: null, lastUsedAt: at(1, 15, 20) },
+      { id: uuid(0x302), name: "Staging", prefix: "chalk_sk_Zt4m", scopes: ["spaces:read", "spaces:write", "episodes:read", "episodes:write"], expiresAt: at(-5, 12, 0), revokedAt: null, lastUsedAt: at(21, 9, 40) },
     ],
     webhooks: [
       { id: uuid(0x400), name: "TH attendance", url: "https://api.tuitionhighway.com/chalk/…", enabled: true, revision: 3, eventTypes: ["participant.joined", "participant.left", "episode.started", "episode.ended"] },
@@ -74,13 +82,13 @@ function richAccount() {
     ],
     deliveries: {
       [uuid(0x400)]: [
-        { id: uuid(0x500), state: "failed", createdAt: at(0, 10, 49) },
-        { id: uuid(0x501), state: "retrying", createdAt: at(0, 10, 48) },
-        { id: uuid(0x502), state: "delivered", createdAt: at(0, 10, 48) },
-        { id: uuid(0x503), state: "delivered", createdAt: at(0, 10, 9) },
-        { id: uuid(0x504), state: "delivered", createdAt: at(0, 10, 2) },
+        { id: uuid(0x500), state: "failed", createdAt: at(0, 10, 49), eventType: "participant.left", attempts: 1, status: 401 },
+        { id: uuid(0x501), state: "retrying", createdAt: at(0, 10, 48), eventType: "episode.ended", attempts: 3, status: 503 },
+        { id: uuid(0x502), state: "delivered", createdAt: at(0, 10, 48), eventType: "participant.left", attempts: 1, status: 200 },
+        { id: uuid(0x503), state: "delivered", createdAt: at(0, 10, 9), eventType: "participant.joined", attempts: 1, status: 200 },
+        { id: uuid(0x504), state: "delivered", createdAt: at(0, 10, 2), eventType: "episode.started", attempts: 1, status: 200 },
       ],
-      [uuid(0x401)]: [{ id: uuid(0x505), state: "delivered", createdAt: at(0, 11, 2) }],
+      [uuid(0x401)]: [{ id: uuid(0x505), state: "delivered", createdAt: at(0, 11, 2), eventType: "recording.completed", attempts: 1, status: 200 }],
     },
     origins: ["https://chalkmeet.com", "https://portal.tuitionhighway.com", "https://app.q9labs.ai", "http://localhost:5173"],
   };
@@ -88,23 +96,24 @@ function richAccount() {
 const emptyAccount = () => ({ calls: [], sessions: [], live: false, keys: [], webhooks: [], deliveries: {}, origins: ["https://chalkmeet.com"] });
 
 const TRANSCRIPT = [
-  [12, "Morning. Can everyone hear me?"],
-  [18, "Loud and clear."],
-  [41, "Let’s start with the launch date. Where are we?"],
-  [65, "The call page is done. The phone build goes to review on Tuesday."],
-  [92, "I’d move the launch to Friday, so review has two clear days."],
-  [110, "Friday works. Akash, does that fit the API side?"],
-  [124, "Yes. The recording fix lands Monday, so Friday is safe."],
-  [151, "I’ll tell the TH team about the new date today."],
-  [190, "Next, the docs. The quickstart still says Space in its first line."],
-  [206, "That’s right for the docs. Developers see Space in the API."],
-  [242, "Agreed. Space and Episode stay in the docs. Everywhere else, it’s a call."],
-  [280, "One more thing. Webhook deliveries to TH failed twice this week."],
-  [298, "Their endpoint returned 401 after they rotated the signing secret."],
-  [321, "I’ll ask them to accept both secrets during the overlap."],
-  [2650, "I’ll write up the launch notes and share them in chat."],
-  [2731, "Thanks, everyone. Same link on Tuesday."],
+  [12, "Nora Patel", "Morning. Can everyone hear me?"],
+  [18, "Akash Rao", "Loud and clear."],
+  [41, "Hasan Shoaib", "Let’s start with the launch date. Where are we?"],
+  [65, "Nora Patel", "The call page is done. The phone build goes to review on Tuesday."],
+  [92, "Sofia Lind", "I’d move the launch to Friday, so review has two clear days."],
+  [110, "Hasan Shoaib", "Friday works. Akash, does that fit the API side?"],
+  [124, "Akash Rao", "Yes. The recording fix lands Monday, so Friday is safe."],
+  [151, "Malik Haddad", "I’ll tell the TH team about the new date today."],
+  [190, "Sofia Lind", "Next, the docs. The quickstart still says Space in its first line."],
+  [206, "Nora Patel", "That’s right for the docs. Developers see Space in the API."],
+  [242, "Hasan Shoaib", "Agreed. Space and Episode stay in the docs. Everywhere else, it’s a call."],
+  [280, "Akash Rao", "One more thing. Webhook deliveries to TH failed twice this week."],
+  [298, "Akash Rao", "Their endpoint returned 401 after they rotated the signing secret."],
+  [321, "Malik Haddad", "I’ll ask them to accept both secrets during the overlap."],
+  [2650, "Sofia Lind", "I’ll write up the launch notes and share them in chat."],
+  [2731, "Hasan Shoaib", "Thanks, everyone. Same link on Tuesday."],
 ];
+const SEAT = (name) => uuid(0x700 + ["Hasan Shoaib", "Nora Patel", "Akash Rao", "Sofia Lind", "Malik Haddad", "Priya Shah", "Eli Cohen", "Ali Raza"].indexOf(name));
 
 let state;
 let accounts;
@@ -137,9 +146,23 @@ async function readBody(request) {
 }
 const wait = (ms) => new Promise((done) => setTimeout(done, ms));
 
-const callDTO = ({ slug: _slug, ...call }) => call;
+const callDTO = ({ lastActiveAt: _last, recentPeople: _people, ...call }) => call;
+const homeCallDTO = (call) => ({ ...callDTO(call), inviteUrl: inviteURL(call), lastActiveAt: call.lastActiveAt ?? null, recentPeople: call.recentPeople ?? [] });
 const episodeDTO = ({ people: _people, kept: _kept, ...episode }) => episode;
 const inviteURL = (call) => `https://chalkmeet.com/space/${call.slug}#invite=fx${call.id.slice(-6)}`;
+const transcriptsFor = (createdAt) => (state.transcript === "none" ? [] : [{ id: uuid(0x900), status: state.transcript, languages: ["en"], createdAt }]);
+const recordingsFor = (episode, withTranscripts) =>
+  episode.kept === "none"
+    ? []
+    : [
+        {
+          id: uuid(0x800),
+          status: episode.kept === "processing" ? "processing" : "completed",
+          exportStatus: "not_requested",
+          createdAt: episode.startedAt,
+          ...(withTranscripts ? { transcripts: [{ id: uuid(0x900), status: episode.kept === "processing" ? "processing" : "completed", languages: ["en"], createdAt: episode.endedAt }], transcriptsNextCursor: null } : {}),
+        },
+      ];
 
 async function auth(request, response, path, url) {
   if (path === "/auth/start") {
@@ -176,7 +199,7 @@ async function auth(request, response, path, url) {
   return fail(response, 404, "route_not_found");
 }
 
-async function dashboard(request, response, page, url) {
+async function dashboard(request, response, page, url, entry) {
   const account = cookies(request).fx_session;
   if (request.method === "POST" && request.headers.origin !== ORIGIN) return fail(response, 403, "origin_rejected");
   if (!account) return fail(response, 401, "sign_in_required");
@@ -191,16 +214,18 @@ async function dashboard(request, response, page, url) {
     if (page === "home") {
       const calls = data.calls.filter((call) => !call.archived);
       const live = calls.map((call, i) => ({ spaceId: call.id, episode: data.live && i === 0 ? { id: uuid(0x2ff), count: 3, participants: ["Nora Patel", "Akash Rao", "Sofia Lind"].map((name, n) => ({ id: uuid(0x600 + n), name })) } : null }));
-      return send(response, 200, { calls: calls.map(callDTO), live, nextCursor: null });
+      return send(response, 200, { calls: calls.map(homeCallDTO), live, nextCursor: null });
     }
     if (page === "call") {
       const call = data.calls.find((item) => item.id === query.spaceId);
       if (!call) return fail(response, 404, "not_found");
       const own = call === data.calls[0] ? data.sessions : [];
       const start = Number(query.cursor ?? 0);
-      const episodes = own.slice(start, start + 7).map(episodeDTO);
-      if (data.live && call === data.calls[0] && !query.cursor) episodes.unshift({ id: uuid(0x2ff), status: "active", startedAt: at(0, 10, 2), endedAt: null });
-      return send(response, 200, { call: callDTO(call), inviteUrl: inviteURL(call), episodes, nextCursor: start + 7 < own.length ? String(start + 7) : null, knocks: [] });
+      const episodes = own.slice(start, start + 7).map((episode) => ({ ...episodeDTO(episode), participantCount: episode.people.length, recordings: recordingsFor(episode, true), recordingsNextCursor: null }));
+      const isLive = data.live && call === data.calls[0];
+      if (isLive && !query.cursor) episodes.unshift({ id: uuid(0x2ff), status: "active", startedAt: at(0, 10, 2), endedAt: null, participantCount: 3, recordings: [], recordingsNextCursor: null });
+      const live = isLive ? { id: uuid(0x2ff), count: 3, participants: ["Nora Patel", "Akash Rao", "Sofia Lind"].map((name, n) => ({ id: uuid(0x600 + n), name })) } : null;
+      return send(response, 200, { call: callDTO(call), inviteUrl: inviteURL(call), episodes, live, nextCursor: start + 7 < own.length ? String(start + 7) : null, knocks: [] });
     }
     if (page === "past-session") {
       const episode = data.sessions.find((item) => item.id === query.episodeId);
@@ -210,18 +235,22 @@ async function dashboard(request, response, page, url) {
       const participants = episode.people.map((name, i) => ({
         id: uuid(0x700 + i),
         name,
+        // The server marks only the owner's current seat: here, Hasan in the newest session.
+        isYou: name === "Hasan Shoaib" && episode === data.sessions[0],
         kind: name === "Malik Haddad" ? "guest" : "user",
         externalId: name === "Malik Haddad" ? null : `user_${i}`,
         firstJoinedAt: plus(episode.startedAt, offsets[i] ?? i * 2),
         lastLeftAt: i === 3 ? plus(episode.startedAt, length - 7) : null,
       }));
-      const recordings = episode.kept === "none" ? [] : [{ id: uuid(0x800), status: episode.kept === "processing" ? "processing" : "completed", exportStatus: "not_requested", createdAt: episode.startedAt }];
+      const recordings = recordingsFor(episode, false);
       return send(response, 200, { episode: episodeDTO(episode), attendance: { kind: "available", participants }, recordings, nextCursor: null });
     }
-    if (page === "developer") return send(response, 200, { allowedWebsites: data.origins, keys: data.keys.filter((key) => !key.revokedAt), webhooks: data.webhooks, nextKeyCursor: null, nextWebhookCursor: null });
+    if (page === "developer")
+      return send(response, 200, { allowedWebsites: data.origins, keys: data.keys.filter((key) => !key.revokedAt), webhooks: data.webhooks.map((webhook) => ({ ...webhook, lastDelivery: data.deliveries[webhook.id]?.[0] ?? null })), nextKeyCursor: null, nextWebhookCursor: null });
     return fail(response, 404, "route_not_found");
   }
   const action = await readBody(request);
+  entry.body = action;
   if (state.limit.has(action.action)) return fail(response, 429, "engine_rate_limited", { retryable: true, retryAfterSeconds: 60 });
   if (state.fail.has(action.action)) return fail(response, 503, "service_unavailable");
   if (state.freshSignIn.has(action.action)) return fail(response, 401, "fresh_sign_in_required");
@@ -229,8 +258,7 @@ async function dashboard(request, response, page, url) {
   const call = data.calls.find((item) => item.id === action.spaceId);
   switch (action.action) {
     case "create-call": {
-      const slug = ["k4f-9tz", "p2r-7mx", "w8d-3qa"][data.calls.length % 3];
-      const created = { id: uuid(0x1000 + data.calls.length), slug, name: action.name, archived: false, admission: action.admission, createdAt: new Date().toISOString() };
+      const created = { id: uuid(0x1000 + data.calls.length), slug: `call-${action.idempotencyKey}`, name: action.name ?? "New call", archived: false, admission: action.admission, createdAt: new Date().toISOString() };
       data.calls.unshift(created);
       return send(response, 200, { call: callDTO(created) });
     }
@@ -252,9 +280,13 @@ async function dashboard(request, response, page, url) {
     case "export-recording":
       return send(response, 200, { recording: { id: action.recordingId, status: "completed", exportStatus: "processing", createdAt: new Date().toISOString() } });
     case "transcripts":
-      return send(response, 200, { transcripts: [{ id: uuid(0x900), status: state.transcript, languages: ["en"], createdAt: new Date().toISOString() }], nextCursor: null });
+      return send(response, 200, { transcripts: transcriptsFor(new Date().toISOString()), nextCursor: null });
+    case "create-transcript":
+      if (state.transcript !== "none") return fail(response, 409, "transcript_already_exists");
+      state.transcript = "processing";
+      return send(response, 200, { transcript: transcriptsFor(new Date().toISOString())[0] });
     case "transcript-document":
-      return send(response, 200, { cues: TRANSCRIPT.map(([seconds, text]) => ({ startMs: seconds * 1000, endMs: seconds * 1000 + 5000, text })) });
+      return send(response, 200, { cues: TRANSCRIPT.map(([seconds, name, text]) => ({ startMs: seconds * 1000, endMs: seconds * 1000 + 5000, text, speaker: { name, participantRef: SEAT(name) } })) });
     case "transcript-url":
       return send(response, 200, { url: `${ORIGIN}/__fixture/transcript.txt`, expiresAt: plus(new Date().toISOString(), 5), method: "GET", headers: {} });
     case "set-allowed-websites":
@@ -262,7 +294,7 @@ async function dashboard(request, response, page, url) {
       return send(response, 200, { allowedWebsites: data.origins });
     case "create-key": {
       const id = uuid(0x3000 + data.keys.length);
-      data.keys.unshift({ id, name: action.name, prefix: "chalk_sk_Rw8f", scopes: action.scopes, expiresAt: action.expiresAt, revokedAt: null });
+      data.keys.unshift({ id, name: action.name, prefix: "chalk_sk_Rw8f", scopes: action.scopes, expiresAt: action.expiresAt, revokedAt: null, lastUsedAt: null });
       return send(response, 200, { id, secret: "chalk_sk_Rw8f2LqN0vXc4TzJ7hKp1sYd9mBaE3uG" });
     }
     case "rotate-key":
@@ -276,11 +308,24 @@ async function dashboard(request, response, page, url) {
       data.deliveries[webhook.id] = [];
       return send(response, 200, { webhook, secret: "whsec_Rw8f2LqN0vXc4TzJ7hKp1sYd9mBaE3uG" });
     }
+    case "update-webhook": {
+      const webhook = data.webhooks.find((item) => item.id === action.webhookId);
+      if (!webhook) return fail(response, 404, "not_found");
+      if (webhook.revision !== action.revision) return fail(response, 409, "revision_conflict");
+      Object.assign(webhook, {
+        ...(action.name ? { name: action.name } : {}),
+        ...(action.url ? { url: `${new URL(action.url).origin}/…` } : {}),
+        ...(action.enabled === undefined ? {} : { enabled: action.enabled }),
+        ...(action.eventTypes ? { eventTypes: action.eventTypes } : {}),
+        revision: webhook.revision + 1,
+      });
+      return send(response, 200, { webhook });
+    }
     case "rotate-webhook-secret":
       return send(response, 200, { id: action.webhookId, secret: "whsec_Tn5k2LqN0vXc4TzJ7hKp1sYd9mBaE3uG" });
     case "test-webhook": {
       const id = uuid(0x5000 + log.length);
-      data.deliveries[action.webhookId].unshift({ id, state: "pending", createdAt: new Date().toISOString() });
+      data.deliveries[action.webhookId].unshift({ id, state: "pending", createdAt: new Date().toISOString(), eventType: "test", attempts: 0, status: null });
       return send(response, 200, { deliveryId: id });
     }
     case "webhook-deliveries":
@@ -329,7 +374,7 @@ const server = createServer(async (request, response) => {
       }
       if (path === "/__fixture/transcript.txt") {
         response.writeHead(200, { "Content-Type": "text/plain" });
-        return response.end(TRANSCRIPT.map(([, text]) => text).join("\n"));
+        return response.end(TRANSCRIPT.map(([, name, text]) => `${name}: ${text}`).join("\n"));
       }
       if (path === "/__fixture/set") {
         for (const [key, value] of url.searchParams) {
@@ -346,9 +391,10 @@ const server = createServer(async (request, response) => {
       return fail(response, 404, "route_not_found");
     }
     if (path.startsWith("/auth/") || path.startsWith("/dashboard-api/")) {
-      log.push({ method: request.method, path, query: url.search, csrf: request.headers["x-csrf-token"] ?? null, origin: request.headers.origin ?? null });
+      const entry = { method: request.method, path, query: url.search, csrf: request.headers["x-csrf-token"] ?? null, origin: request.headers.origin ?? null };
+      log.push(entry);
       if (path.startsWith("/auth/")) return await auth(request, response, path, url);
-      return await dashboard(request, response, path.slice("/dashboard-api/".length), url);
+      return await dashboard(request, response, path.slice("/dashboard-api/".length), url, entry);
     }
     proxy(request, response);
   } catch (error) {

@@ -1,22 +1,27 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 
-import type { CallDTO, HomeDTO, LiveDTO } from "../../lib/dashboard/contracts";
+import type { CallDTO, HomeCallDTO, HomeDTO, LiveDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
-import { displayLink, shortDate } from "../../lib/dashboard/format";
+import { displayLink, lastActive } from "../../lib/dashboard/format";
 import { Avatar, Faces } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { useLoad } from "./AppShell";
 import { CopyAction, Dialog, ErrorPanel, Menu, MenuItem, MoreButton, SkeletonRows, usePhone, useToast } from "./kit";
 
-/** A call's shareable link. Home doesn't carry it, so it's read from the call's page on demand. */
-async function inviteLink(spaceId: string): Promise<string> {
-  return (await readPage("call", { spaceId })).inviteUrl;
+/** A call's shareable link: the row's own, or read from the call's page when Home couldn't load it. */
+async function inviteLink(call: HomeCallDTO): Promise<string> {
+  const link = call.inviteUrl ?? (await readPage("call", { spaceId: call.id })).inviteUrl;
+  if (!link) throw new Error("This call has no link yet");
+  return link;
 }
+
+/** A mutation returns the bare call; keep the row's link, activity and people. */
+const merge = (row: HomeCallDTO, call: CallDTO): HomeCallDTO => ({ ...row, ...call });
 
 export function HomePage() {
   const { state, reload, update } = useLoad(() => readPage("home", {}), "home");
-  const [dialog, setDialog] = useState<null | { kind: "ready"; call: CallDTO; link: string } | { kind: "join" } | { kind: "rename"; call: CallDTO }>(null);
+  const [dialog, setDialog] = useState<null | { kind: "ready"; call: CallDTO; link: string } | { kind: "join" } | { kind: "rename"; call: HomeCallDTO }>(null);
   const [starting, setStarting] = useState(false);
   const toast = useToast();
   const navigate = useNavigate();
@@ -26,11 +31,14 @@ export function HomePage() {
     if (starting) return;
     setStarting(true);
     try {
-      // The contract needs a name; the person can rename it from the row.
-      const { call } = await act("home", { action: "create-call", name: "New call", admission: "knock", idempotencyKey: startKey.current });
+      // No name: the server names it, and the person can rename it from the row.
+      const { call } = await act("home", { action: "create-call", admission: "knock", idempotencyKey: startKey.current });
       startKey.current = intentKey();
-      update((data) => ({ ...data, calls: [call, ...data.calls], live: [{ spaceId: call.id, episode: null }, ...data.live] }));
-      setDialog({ kind: "ready", call, link: await inviteLink(call.id) });
+      const row: HomeCallDTO = { ...call, inviteUrl: null, lastActiveAt: null, recentPeople: [] };
+      update((data) => ({ ...data, calls: [row, ...data.calls], live: [{ spaceId: call.id, episode: null }, ...data.live] }));
+      const link = await inviteLink(row);
+      update((data) => ({ ...data, calls: data.calls.map((item) => (item.id === call.id ? { ...item, inviteUrl: link } : item)) }));
+      setDialog({ kind: "ready", call, link });
     } catch (error) {
       toast(errorMessage(error), { icon: "alert" });
     } finally {
@@ -38,7 +46,7 @@ export function HomePage() {
     }
   }
 
-  async function archive(call: CallDTO) {
+  async function archive(call: HomeCallDTO) {
     const index = state.kind === "ready" ? state.data.calls.findIndex((item) => item.id === call.id) : -1;
     try {
       await act("home", { action: "archive-call", spaceId: call.id });
@@ -47,7 +55,7 @@ export function HomePage() {
         icon: "trash",
         undo: () => {
           act("home", { action: "restore-call", spaceId: call.id }).then(
-            ({ call: restored }) => update((data) => ({ ...data, calls: [...data.calls.slice(0, index), restored, ...data.calls.slice(index)] })),
+            ({ call: restored }) => update((data) => ({ ...data, calls: [...data.calls.slice(0, index), merge(call, restored), ...data.calls.slice(index)] })),
             (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
           );
         },
@@ -97,7 +105,7 @@ export function HomePage() {
       )}
       {dialog?.kind === "ready" ? <CallReadyDialog link={dialog.link} onJoin={() => void navigate({ to: "/dashboard/call/$spaceId/join", params: { spaceId: dialog.call.id } })} onClose={() => setDialog(null)} /> : null}
       {dialog?.kind === "join" ? <JoinLinkDialog onClose={() => setDialog(null)} /> : null}
-      {dialog?.kind === "rename" ? <RenameDialog call={dialog.call} page="home" onClose={() => setDialog(null)} onRenamed={(renamed) => update((data) => ({ ...data, calls: data.calls.map((item) => (item.id === renamed.id ? renamed : item)) }))} /> : null}
+      {dialog?.kind === "rename" ? <RenameDialog call={dialog.call} page="home" onClose={() => setDialog(null)} onRenamed={(renamed) => update((data) => ({ ...data, calls: data.calls.map((item) => (item.id === renamed.id ? merge(item, renamed) : item)) }))} /> : null}
     </div>
   );
 }
@@ -106,7 +114,7 @@ function liveFor(data: HomeDTO, spaceId: string): LiveDTO["episode"] {
   return data.live.find((item) => item.spaceId === spaceId)?.episode ?? null;
 }
 
-function CallRow({ call, live, onRename, onArchive }: { readonly call: CallDTO; readonly live: LiveDTO["episode"]; readonly onRename: () => void; readonly onArchive: () => void }) {
+function CallRow({ call, live, onRename, onArchive }: { readonly call: HomeCallDTO; readonly live: LiveDTO["episode"]; readonly onRename: () => void; readonly onArchive: () => void }) {
   const phone = usePhone();
   const navigate = useNavigate();
   const join = () => void navigate({ to: "/dashboard/call/$spaceId/join", params: { spaceId: call.id } });
@@ -116,16 +124,17 @@ function CallRow({ call, live, onRename, onArchive }: { readonly call: CallDTO; 
       Live · {live.count} in the call
     </span>
   ) : (
-    `Created ${shortDate(call.createdAt)}`
+    lastActive(call.lastActiveAt ?? call.createdAt)
   );
-  const label = live ? `${call.name}, live now with ${live.count} people` : `${call.name}, created ${shortDate(call.createdAt)}`;
+  const label = live ? `${call.name}, live now with ${live.count} people` : `${call.name}, last active ${lastActive(call.lastActiveAt ?? call.createdAt)}`;
+  const faces = live ? live.participants.map((person) => person.name) : call.recentPeople.map((person) => person.name);
   return (
     <div className="row">
       <Link className="ra" to="/dashboard/call/$spaceId" params={{ spaceId: call.id }} aria-label={label} />
-      <span className="fcol np">{live ? <Faces names={live.participants.map((person) => person.name)} size={28} max={phone ? 2 : 3} /> : <Avatar name={call.name} size={28} />}</span>
+      <span className="fcol np">{faces.length ? <Faces names={faces} size={28} max={phone ? 2 : 3} /> : <Avatar name={call.name} size={28} />}</span>
       <span className="rt np">
         <b>{call.name}</b>
-        {phone ? <span>{status}</span> : null}
+        {phone ? <span>{status}</span> : call.inviteUrl ? <span className="mono">{displayLink(call.inviteUrl)}</span> : null}
       </span>
       {phone ? null : <span className="rm np">{status}</span>}
       <span className="ract">
@@ -134,7 +143,7 @@ function CallRow({ call, live, onRename, onArchive }: { readonly call: CallDTO; 
             Join
           </button>
         ) : null}
-        {phone ? null : <CopyAction text={() => inviteLink(call.id)} />}
+        {phone ? null : <CopyAction text={() => inviteLink(call)} />}
         <Menu label={`More actions for ${call.name}`}>
           {(close) => (
             <>
@@ -147,7 +156,7 @@ function CallRow({ call, live, onRename, onArchive }: { readonly call: CallDTO; 
               >
                 Join call
               </MenuItem>
-              <CopyMenuItem spaceId={call.id} onDone={close} />
+              <CopyMenuItem call={call} onDone={close} />
               <MenuItem
                 icon="edit"
                 onSelect={() => {
@@ -176,14 +185,14 @@ function CallRow({ call, live, onRename, onArchive }: { readonly call: CallDTO; 
   );
 }
 
-function CopyMenuItem({ spaceId, onDone }: { readonly spaceId: string; readonly onDone: () => void }) {
+function CopyMenuItem({ call, onDone }: { readonly call: HomeCallDTO; readonly onDone: () => void }) {
   const toast = useToast();
   return (
     <MenuItem
       icon="copy"
       onSelect={() => {
         onDone();
-        inviteLink(spaceId)
+        inviteLink(call)
           .then((link) => navigator.clipboard.writeText(link))
           .then(
             () => toast("Link copied"),
