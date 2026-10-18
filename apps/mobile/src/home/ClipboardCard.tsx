@@ -1,5 +1,5 @@
 import { ChalkText, fontFamilies, Icon, IconButton, PillButton, useTheme } from "@q9labsai/chalk-react-native/ui";
-import { addClipboardListener, getStringAsync, hasUrlAsync } from "expo-clipboard";
+import { addClipboardListener, getStringAsync, hasStringAsync, hasUrlAsync } from "expo-clipboard";
 import { useCallback, useEffect, useState } from "react";
 import { AppState, Platform, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, Keyframe } from "react-native-reanimated";
@@ -7,10 +7,11 @@ import { displayLink, parseSpaceLink, type SpaceRoute } from "../lib/spaces";
 import { PasteButton } from "./PasteButton";
 
 /**
- * What the clipboard offers. iOS can only tell that a link is there without reading it (reading
- * would show "Allow Paste"), so the person pastes it with the system button. Android reads it.
+ * What the clipboard offers. iOS can only tell that text or a URL is there without reading it
+ * (reading would show "Allow Paste"), so the person pastes it with the system button and a
+ * non-link is caught then. Android reads the clipboard and offers only a Chalk link.
  */
-type ClipboardOffer = { readonly kind: "ios-link" } | { readonly kind: "android-link"; readonly text: string; readonly route: SpaceRoute };
+export type ClipboardOffer = { readonly kind: "ios-link" } | { readonly kind: "android-link"; readonly text: string; readonly route: SpaceRoute };
 
 /** `@keyframes pin` over 200 ms on `--ease`. */
 const pinIn = new Keyframe({
@@ -18,11 +19,13 @@ const pinIn = new Keyframe({
   100: { opacity: 1, transform: [{ translateY: 0 }], easing: Easing.bezier(0.16, 1, 0.3, 1) },
 }).duration(200);
 
+export type ClipboardState = { readonly offer: ClipboardOffer | null; readonly dismiss: () => void };
+
 /**
  * K6: a link on the clipboard. Dismissing it hides the card until the clipboard changes; on
  * Android the dismissed link is remembered, since iOS can't say which link it was.
  */
-export function useClipboardOffer(): { readonly offer: ClipboardOffer | null; readonly dismiss: () => void } {
+export function useClipboardOffer(): ClipboardState {
   const [offer, setOffer] = useState<ClipboardOffer | null>(null);
   const [dismissed, setDismissed] = useState<string | true | null>(null);
 
@@ -30,8 +33,9 @@ export function useClipboardOffer(): { readonly offer: ClipboardOffer | null; re
   const check = useCallback(async () => {
     if (Platform.OS === "ios") {
       setOffer(
-        await hasUrlAsync().then(
-          (has) => (has ? { kind: "ios-link" } : null),
+        // A link copied as text (from a chat message, say) has no URL type, so text counts too.
+        await Promise.all([hasUrlAsync(), hasStringAsync()]).then(
+          ([url, text]) => (url || text ? { kind: "ios-link" } : null),
           () => null,
         ),
       );

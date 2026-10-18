@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Linking } from "react-native";
 import { Splash } from "./src/brand/Splash";
 import { CallScreen } from "./src/call/CallScreen";
+import { useClipboardOffer } from "./src/home/ClipboardCard";
 import { HomeScreen } from "./src/home/HomeScreen";
 import { useRecentCalls, type RecentCall, type RecentCalls } from "./src/home/recent-calls";
 import { JoiningScreen, type ArrivedCall, type JoinTarget } from "./src/join/JoiningScreen";
@@ -139,7 +140,7 @@ function Shell({ apiBaseURL, buildProfile, diagnosticsEnabled, name, onNameChang
 
   switch (step.kind) {
     case "home":
-      return <HomeScreen name={name} onJoin={(route) => join({ kind: "link", route })} onJoinRecent={joinRecent} onSaveName={saveName} onStartCall={() => join({ kind: "start" })} preferences={preferences} recentCalls={recentCalls} />;
+      return <Home name={name} onJoin={(route) => join({ kind: "link", route })} onJoinRecent={joinRecent} onSaveName={saveName} onStartCall={() => join({ kind: "start" })} preferences={preferences} recentCalls={recentCalls} />;
     case "name":
       return (
         <NameStep
@@ -155,4 +156,9 @@ function Shell({ apiBaseURL, buildProfile, diagnosticsEnabled, name, onNameChang
     case "call":
       return <CallScreen apiBaseURL={apiBaseURL} call={step.call} onClose={goHome} onError={reportError("leave")} onRemember={recentCalls.remember} preferences={preferences} />;
   }
+}
+
+/** Home watches the clipboard only while it shows, so a call never reads it. */
+function Home(props: Omit<React.ComponentProps<typeof HomeScreen>, "clipboard">): React.JSX.Element {
+  return <HomeScreen {...props} clipboard={useClipboardOffer()} />;
 }

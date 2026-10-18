@@ -31,7 +31,6 @@ export function joiningName(target: JoinTarget, displayName: string): string {
  * so the hand-over is seamless. Leaving before access arrives gives the arrival back.
  */
 export function JoiningScreen({ apiBaseURL, target, displayName, onArrived, onFailed }: JoiningScreenProps): React.JSX.Element {
-  const { colors } = useTheme();
   const callbacks = useRef({ onArrived, onFailed });
   callbacks.current = { onArrived, onFailed };
 
@@ -53,9 +52,15 @@ export function JoiningScreen({ apiBaseURL, target, displayName, onArrived, onFa
     };
   }, [apiBaseURL, displayName, target]);
 
+  return <Joining callName={joiningName(target, displayName)} />;
+}
+
+/** T1 as drawn: the limbo on the call background. */
+export function Joining({ callName }: { readonly callName: string }): React.JSX.Element {
+  const { colors } = useTheme();
   return (
     <View style={[styles.root, { backgroundColor: colors.canvas }]} testID="join.joining">
-      <Limbo message={`Joining ${joiningName(target, displayName)}…`} />
+      <Limbo message={`Joining ${callName}…`} />
     </View>
   );
 }

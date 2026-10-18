@@ -6,7 +6,7 @@ import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { shareLink } from "../lib/share";
 import type { SpaceRoute } from "../lib/spaces";
 import type { StoredCallPreferences } from "../preferences/call-preferences";
-import { ClipboardCard, useClipboardOffer } from "./ClipboardCard";
+import { ClipboardCard, type ClipboardState } from "./ClipboardCard";
 import { JoinSheet } from "./JoinSheet";
 import { formatJoinedAt, type RecentCall, type RecentCalls } from "./recent-calls";
 import { YouSheet } from "./YouSheet";
@@ -19,17 +19,18 @@ type HomeScreenProps = {
   readonly onStartCall: () => void;
   readonly onJoin: (route: SpaceRoute) => void;
   readonly onJoinRecent: (call: RecentCall) => void;
+  /** From `useClipboardOffer`, which runs only while Home shows. */
+  readonly clipboard: ClipboardState;
 };
 
 type OpenSheet = "you" | "join" | null;
 type OpenMenu = { readonly call: RecentCall; readonly anchorRef: RefObject<View | null> };
 
 /** A1 with H1: you, recent calls, then Start a call and Join with a link at the bottom. */
-export function HomeScreen({ name, onSaveName, preferences, recentCalls, onStartCall, onJoin, onJoinRecent }: HomeScreenProps): React.JSX.Element {
+export function HomeScreen({ name, onSaveName, preferences, recentCalls, onStartCall, onJoin, onJoinRecent, clipboard }: HomeScreenProps): React.JSX.Element {
   const { colors } = useTheme();
   const layout = useDeviceLayout();
   const toasts = useToasts();
-  const clipboard = useClipboardOffer();
   const [sheet, setSheet] = useState<OpenSheet>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const youRef = useRef<View>(null);
