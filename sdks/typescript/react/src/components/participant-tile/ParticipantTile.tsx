@@ -179,7 +179,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
                 )}
                 name={participant.displayName || participant.id}
                 size="100%"
-                variant="flat"
+                variant="solid"
                 intensity3d="dramatic"
                 interactive={!phone && !prefersReducedMotion && animatedAvatars}
                 enableBlink={!phone && !prefersReducedMotion && animatedAvatars}
