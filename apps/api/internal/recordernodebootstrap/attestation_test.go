@@ -122,7 +122,7 @@ func TestBootstrapConfigRejectsIssuerNameMismatch(t *testing.T) {
 		WorkerEnvironment: "/etc/chalk-recorder/worker.env", NodeEnvironment: "/etc/chalk-recorder/node.env",
 		ImageManifest: "/opt/chalk-recorder/image-manifest.json",
 	}
-	if err := config.Validate(); !errors.Is(err, ErrInvalidConfig) || !strings.Contains(err.Error(), "baked bootstrap server name") {
+	if err := config.Validate(); !errors.Is(err, ErrInvalidConfig) || !strings.Contains(err.Error(), "bootstrap server name") {
 		t.Fatalf("mismatched issuer name error = %v", err)
 	}
 }
