@@ -123,6 +123,7 @@ type Querier interface {
 	GetChatAttachmentByClientID(ctx context.Context, arg GetChatAttachmentByClientIDParams) (GetChatAttachmentByClientIDRow, error)
 	GetChatAttachmentByUploadID(ctx context.Context, arg GetChatAttachmentByUploadIDParams) (GetChatAttachmentByUploadIDRow, error)
 	GetCompletedCaptureRecordingJob(ctx context.Context, arg GetCompletedCaptureRecordingJobParams) (RecordingJob, error)
+	GetEpisodeAttendance(ctx context.Context, arg GetEpisodeAttendanceParams) ([]GetEpisodeAttendanceRow, error)
 	GetEpisodeCreateRequest(ctx context.Context, arg GetEpisodeCreateRequestParams) (EpisodeCreateRequest, error)
 	GetFirstOpenRecordingCaptureCommand(ctx context.Context, arg GetFirstOpenRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
 	GetLatestRecordingCapturePlan(ctx context.Context, planHandle pgtype.UUID) (RecordingCapturePlan, error)

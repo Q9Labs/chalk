@@ -4953,6 +4953,126 @@
         }
       }
     },
+    "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/attendance": {
+      "get": {
+        "operationId": "getEpisodeAttendance",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SpaceId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "episode_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/EpisodeId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EpisodeAttendance"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["episode.invalid_id", "space.invalid_id", "tenant.invalid_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["episode.not_found"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "summary": "Get episode attendance",
+        "x-chalk-rate-limit": {
+          "limit": 300,
+          "name": "v1.authenticated.read",
+          "window_seconds": 60
+        }
+      }
+    },
     "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/deadline": {
       "post": {
         "operationId": "setEpisodeDeadline",
@@ -12085,6 +12205,63 @@
           }
         },
         "required": ["config_snapshot", "created_at", "deadline_at", "deadline_generation", "id", "metadata", "space_id", "started_at", "status", "tenant_id", "updated_at"],
+        "type": "object"
+      },
+      "EpisodeAttendance": {
+        "additionalProperties": false,
+        "properties": {
+          "episode_id": {
+            "$ref": "#/components/schemas/EpisodeId"
+          },
+          "participants": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "display_name": {
+                  "type": "string"
+                },
+                "external_id": {
+                  "type": ["string", "null"]
+                },
+                "first_joined_at": {
+                  "$ref": "#/components/schemas/DateTimeString"
+                },
+                "identity_kind": {
+                  "enum": ["user", "agent", "guest"],
+                  "type": "string"
+                },
+                "last_left_at": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/DateTimeString"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "left_reason": {
+                  "anyOf": [
+                    {
+                      "enum": ["left", "episode_ended"],
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "participant_id": {
+                  "$ref": "#/components/schemas/ParticipantId"
+                }
+              },
+              "required": ["display_name", "external_id", "first_joined_at", "identity_kind", "last_left_at", "left_reason", "participant_id"],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": ["episode_id", "participants"],
         "type": "object"
       },
       "EpisodeDeadline": {

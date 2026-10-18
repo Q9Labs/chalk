@@ -97,6 +97,7 @@ var validCapabilities = func() map[string]struct{} {
 }()
 
 type Repository interface {
+	GetEpisodeAttendance(context.Context, utilities.ID, utilities.ID, utilities.ID) ([]AttendanceParticipant, error)
 	ListSpaceLiveEpisodes(context.Context, utilities.ID, []utilities.ID) ([]SpaceLiveEpisode, error)
 	CreateEpisode(context.Context, CreateEpisodeInput) (Episode, error)
 	GetEpisode(context.Context, utilities.ID, utilities.ID, utilities.ID) (Episode, error)
