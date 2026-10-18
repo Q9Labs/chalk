@@ -98,7 +98,7 @@ class BootCheckTests(unittest.TestCase):
         manifest = json.dumps({'source_commit': 'a' * 40, 'release_id': 'candidate'})
         digest = hashlib.sha256(manifest.encode()).hexdigest()
         request = dict(schema_version=1, role='capture', source_commit='a' * 40, release_id='candidate', image_id=1,
-                       image_digest='sha256:' + digest, region='region', size='size')
+                       image_digest='sha256:' + digest, region='region', size='size', archive=dict(bucket='example-artifacts', key='recorder/capture/' + 'a' * 64 + '.tar.gz', sha256='a' * 64, region='ap-southeast-1'))
         bootstrap = dict(provider_id='1', boot_generation=7)
         identity = dict(provider_id='1', role='capture', boot_generation=7, worker_id='worker')
         cert = '-----BEGIN CERTIFICATE-----\nQ0VSVA==\n-----END CERTIFICATE-----\n'
@@ -250,7 +250,8 @@ class BootCheckTests(unittest.TestCase):
         request = {'image_id': 1, 'region': 'region', 'size': 'size'}
         inspected = {'node': {**request, 'name': 'owned', 'tags': ['owned']}}
         accepted = {'path': '/v2/droplets', 'method': 'POST', 'status': 202, 'body_sha256': 'a' * 64,
-                    'body': {'image': 1, 'name': 'owned', 'user_data': 'transmitted'}, 'original_body': {'user_data': 'original'}}
+                    'user_data_sha256': 'b' * 64, 'fleet_user_data_sha256': 'c' * 64,
+                    'body': {'image': 1, 'name': 'owned', 'user_data': '[redacted]'}, 'original_body': {'user_data': 'original'}}
         with tempfile.TemporaryDirectory() as directory:
             directory = Path(directory)
             path = directory / 'provider.jsonl'

@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 
 SCRIPTS = Path(__file__).resolve().parent
 ROOT = SCRIPTS.parent.parent
-IDENTITIES = ("schema_version", "role", "source_commit", "release_id", "image_id", "image_digest", "region", "size")
+IDENTITIES = ("schema_version", "role", "source_commit", "release_id", "image_id", "image_digest", "region", "size", "archive")
 _upload_spec = importlib.util.spec_from_file_location("boot_check_upload", SCRIPTS / "boot-check-upload.py")
 upload = importlib.util.module_from_spec(_upload_spec)
 _upload_spec.loader.exec_module(upload)
@@ -64,6 +64,12 @@ def ledger(directory):
 def validate_request(request):
     require(set(request) == set(IDENTITIES), "boot request fields do not match qualification contract")
     require(request["schema_version"] == 1 and request["role"] in ("capture", "render"), "invalid boot request schema/role")
+    archive = request['archive']
+    require(set(archive) == {'bucket', 'key', 'sha256', 'region'}, 'invalid archive fields')
+    require(re.fullmatch(r'[0-9a-f]{64}', archive['sha256']), 'invalid archive digest')
+    require(archive['key'] == f"recorder/{request['role']}/{archive['sha256']}.tar.gz", 'invalid archive key')
+    require(re.fullmatch(r'[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]', archive['bucket']), 'invalid archive bucket')
+    require(re.fullmatch(r'[a-z0-9-]{1,64}', archive['region']), 'invalid archive region')
     require(type(request["image_id"]) is int and request["image_id"] > 0, "invalid image ID")
     require(re.fullmatch(r"[0-9a-f]{40}", request["source_commit"]), "invalid source commit")
     require(re.fullmatch(r"sha256:[0-9a-f]{64}", request["image_digest"]), "invalid image digest")
@@ -379,8 +385,8 @@ def provisioning_receipt(directory, request, inspected, tags):
     payload = creates[0]["body"]
     require(payload["image"] == request["image_id"] and payload["name"] == node["name"], "create payload candidate mismatch")
     return {"create_payload_sha256": creates[0]["body_sha256"],
-            "user_data_sha256": hashlib.sha256(payload["user_data"].encode()).hexdigest(),
-            "fleet_user_data_sha256": hashlib.sha256(creates[0]["original_body"]["user_data"].encode()).hexdigest(),
+            "user_data_sha256": creates[0]["user_data_sha256"],
+            "fleet_user_data_sha256": creates[0]["fleet_user_data_sha256"],
             "vpc_uuid": payload.get("vpc_uuid", "")}
 
 
@@ -499,7 +505,7 @@ def run(request_path, receipt_path):
                 "evidence_path": str(directory / "provider.jsonl"),
                 "request": {"key": {"environment": live["ENVIRONMENT"], "role": request["role"]}, "name": name,
                             "owner_tag": live["OWNER_TAG"], "boot_generation": generation, "required_tags": tags,
-                            "release": {"release_id": request["release_id"], "image_id": request["image_id"], "image_digest": request["image_digest"],
+                            "release": {"archive": request["archive"], "release_id": request["release_id"], "image_id": request["image_id"], "image_digest": request["image_digest"],
                                         "region": request["region"], "size": request["size"], "firewall_id": created["id"],
                                         "bootstrap_endpoint": live["BOOTSTRAP_ENDPOINT"], "bootstrap_ca_base64": live["BOOTSTRAP_CA_BASE64"], "gpu": False}}}
         if evidence_command:

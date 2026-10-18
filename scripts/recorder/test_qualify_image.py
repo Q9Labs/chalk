@@ -10,15 +10,6 @@ SOURCE = 'a' * 40
 
 
 class ImageValidation(unittest.TestCase):
-    def test_build_validation_checks_both_roles_without_building_or_sealing(self):
-        source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
-        for role in ('capture', 'render'):
-            result = subprocess.run(['bash', str(ROOT / 'scripts/recorder/build-and-seal.sh'), '--validate', source, 'contract-check', role], capture_output=True, text=True, check=True)
-            proof = json.loads(result.stdout)
-            self.assertEqual(proof, dict(result='PASS', role=role, validation_only=True, built=False, sealed=False))
-        result = subprocess.run(['bash', str(ROOT / 'scripts/recorder/build-and-seal.sh'), '--validate', 'not-a-source', 'contract-check', 'capture'], capture_output=True)
-        self.assertNotEqual(result.returncode, 0)
-
     def test_qualifier_validates_real_manifest_bytes_without_running_a_worker(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

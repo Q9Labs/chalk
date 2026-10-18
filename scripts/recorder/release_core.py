@@ -6,7 +6,6 @@ import json
 import re
 from pathlib import Path
 
-PHASES = ("plan", "build", "snapshot", "inspect")
 PIN_KEYS = {"CHALK_RECORDER_FLEET_" + key for key in ("IMAGE_ID", "RELEASE_ID", "IMAGE_DIGEST")}
 
 
@@ -101,23 +100,6 @@ def check_qualification(receipt, state):
         require(receipt.get(key) == state.get(key), "qualification identity mismatch: " + key)
     require(receipt.get("result") == "PASS" and receipt.get("fleet_equivalent_signed_boot") is True,
             "BOOTDIAG signed-boot qualification is required before publishing")
-
-
-def builder_identity(droplet, identity):
-    require(str(droplet["id"]) == str(identity["id"]) and droplet["name"] == identity["name"]
-            and droplet["created_at"] == identity["created_at"], "refusing to touch an unowned Droplet")
-
-
-def sealed_result(output, source, release, role):
-    require("SEALED_READONLY_VERIFICATION_PASS" in output.splitlines(), "builder did not finish sealing")
-    manifests = [line.removeprefix("CHALK_RELEASE_MANIFEST ") for line in output.splitlines()
-                 if line.startswith("CHALK_RELEASE_MANIFEST ")]
-    require(len(manifests) == 1, "missing or ambiguous sealed manifest")
-    raw = base64.b64decode(manifests[0], validate=True)
-    manifest = json.loads(raw)
-    require(manifest["source_commit"] == source and manifest["release_id"] == release, "sealed source identity mismatch")
-    require(manifest["profile"] == ("capture-minimal-v1" if role == "capture" else "cpu-libx264-frame2"), "sealed profile mismatch")
-    return raw, "sha256:" + digest(raw)
 
 
 def rebuild_dispatcher(state, module, backend, region, profile):

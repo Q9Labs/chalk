@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -84,4 +85,38 @@ func TestStatusEnumsCoverDomainStatusConstants(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Optional* PATCH wrappers decode a bare value or null, so their Go fields
+// must never reach the contract as an object with Set and Value.
+func TestContractHasNoOptionalWrapperObjects(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "contract", "generated", "openapi.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document any
+	if err := json.Unmarshal(data, &document); err != nil {
+		t.Fatal(err)
+	}
+	var walk func(path string, node any)
+	walk = func(path string, node any) {
+		switch value := node.(type) {
+		case map[string]any:
+			if properties, ok := value["properties"].(map[string]any); ok {
+				_, hasSet := properties["Set"]
+				_, hasValue := properties["Value"]
+				if hasSet && hasValue {
+					t.Errorf("%s exposes an Optional wrapper as {Set, Value}; teach codegen its JSON shape", path)
+				}
+			}
+			for key, child := range value {
+				walk(path+"/"+key, child)
+			}
+		case []any:
+			for index, child := range value {
+				walk(path+"/"+strconv.Itoa(index), child)
+			}
+		}
+	}
+	walk("#", document)
 }

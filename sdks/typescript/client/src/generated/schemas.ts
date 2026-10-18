@@ -958,18 +958,9 @@ export type UpdateSpacePublicInviteRequest = typeof UpdateSpacePublicInviteReque
 
 export const UpdateSpaceRequestSchema = Schema.Struct({
   admission_policy: Schema.optional(Schema.Unknown),
-  default_episode_duration_seconds: Schema.Struct({
-    Set: Schema.Boolean,
-    Value: Schema.optional(Schema.NullOr(Schema.Number)),
-  }),
-  linger_window_seconds: Schema.Struct({
-    Set: Schema.Boolean,
-    Value: Schema.optional(Schema.NullOr(Schema.Number)),
-  }),
-  maximum_episode_duration_seconds: Schema.Struct({
-    Set: Schema.Boolean,
-    Value: Schema.optional(Schema.NullOr(Schema.Number)),
-  }),
+  default_episode_duration_seconds: Schema.optional(Schema.NullOr(Schema.Number)),
+  linger_window_seconds: Schema.optional(Schema.NullOr(Schema.Number)),
+  maximum_episode_duration_seconds: Schema.optional(Schema.NullOr(Schema.Number)),
   media_plane: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
   metadata: Schema.optional(Schema.Unknown),
   name: Schema.optional(Schema.String.check(Schema.isMinLength(1))),

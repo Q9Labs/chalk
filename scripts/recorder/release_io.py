@@ -10,7 +10,7 @@ from release_core import require
 
 AWS_READS = {("ssm", "get-parameter"), ("ssm", "describe-parameters"), ("ssm", "get-document"),
              ("ec2", "describe-instances"), ("scheduler", "get-schedule"),
-             ("lambda", "get-function-configuration"), ("s3api", "get-object"),
+             ("lambda", "get-function-configuration"), ("s3api", "get-object"), ("s3api", "head-object"),
              ("sts", "get-caller-identity")}
 DO_READS = {("compute", "image", "get"), ("compute", "size", "list"),
             ("compute", "region", "list"), ("compute", "droplet", "get")}

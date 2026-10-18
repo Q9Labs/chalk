@@ -14041,43 +14041,13 @@
             "type": ["object", "array", "string", "number", "boolean", "null"]
           },
           "default_episode_duration_seconds": {
-            "additionalProperties": false,
-            "properties": {
-              "Set": {
-                "type": "boolean"
-              },
-              "Value": {
-                "type": ["integer", "null"]
-              }
-            },
-            "required": ["Set"],
-            "type": "object"
+            "type": ["integer", "null"]
           },
           "linger_window_seconds": {
-            "additionalProperties": false,
-            "properties": {
-              "Set": {
-                "type": "boolean"
-              },
-              "Value": {
-                "type": ["integer", "null"]
-              }
-            },
-            "required": ["Set"],
-            "type": "object"
+            "type": ["integer", "null"]
           },
           "maximum_episode_duration_seconds": {
-            "additionalProperties": false,
-            "properties": {
-              "Set": {
-                "type": "boolean"
-              },
-              "Value": {
-                "type": ["integer", "null"]
-              }
-            },
-            "required": ["Set"],
-            "type": "object"
+            "type": ["integer", "null"]
           },
           "media_plane": {
             "minLength": 1,
@@ -14110,7 +14080,6 @@
             "type": "string"
           }
         },
-        "required": ["default_episode_duration_seconds", "linger_window_seconds", "maximum_episode_duration_seconds"],
         "type": "object"
       },
       "UpdateTenantRequest": {

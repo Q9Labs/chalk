@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/adapters/aws/recorderarchive"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/digitalocean"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
@@ -56,14 +57,16 @@ type createRequest struct {
 	UserData string `json:"user_data"`
 }
 type auditEntry struct {
-	Time         time.Time       `json:"time"`
-	Method       string          `json:"method"`
-	Path         string          `json:"path"`
-	OriginalBody json.RawMessage `json:"original_body,omitempty"`
-	Body         json.RawMessage `json:"body,omitempty"`
-	BodySHA256   string          `json:"body_sha256"`
-	Status       int             `json:"status"`
-	Response     json.RawMessage `json:"response,omitempty"`
+	Time                time.Time       `json:"time"`
+	Method              string          `json:"method"`
+	Path                string          `json:"path"`
+	OriginalBody        json.RawMessage `json:"original_body,omitempty"`
+	Body                json.RawMessage `json:"body,omitempty"`
+	BodySHA256          string          `json:"body_sha256"`
+	UserDataSHA256      string          `json:"user_data_sha256,omitempty"`
+	FleetUserDataSHA256 string          `json:"fleet_user_data_sha256,omitempty"`
+	Status              int             `json:"status"`
+	Response            json.RawMessage `json:"response,omitempty"`
 }
 
 type evidenceTransport struct {
@@ -147,6 +150,26 @@ func addEvidenceBootCommand(body []byte, command []string) ([]byte, error) {
 	return bytes.Replace(body, original, updated, 1), nil
 }
 
+// Archive URLs are bearer credentials. Keep byte evidence without saving them.
+func redactUserData(body []byte) (json.RawMessage, string, error) {
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, "", err
+	}
+	raw, exists := payload["user_data"]
+	if !exists {
+		return body, "", nil
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, "", err
+	}
+	hash := sha256.Sum256([]byte(value))
+	payload["user_data"] = json.RawMessage(`"[redacted; see user_data_sha256]"`)
+	redacted, err := json.Marshal(payload)
+	return redacted, hex.EncodeToString(hash[:]), err
+}
+
 func (t evidenceTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	var original, body []byte
 	var err error
@@ -221,6 +244,16 @@ func (t evidenceTransport) RoundTrip(request *http.Request) (*http.Response, err
 	if request.Method != http.MethodGet {
 		hash := sha256.Sum256(body)
 		entry := auditEntry{Time: time.Now().UTC(), Method: request.Method, Path: request.URL.Path, OriginalBody: original, Body: body, BodySHA256: hex.EncodeToString(hash[:]), Status: response.StatusCode, Response: raw}
+		if create {
+			entry.OriginalBody, entry.FleetUserDataSHA256, err = redactUserData(original)
+			if err != nil {
+				return nil, err
+			}
+			entry.Body, entry.UserDataSHA256, err = redactUserData(body)
+			if err != nil {
+				return nil, err
+			}
+		}
 		file, err := os.OpenFile(t.path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
 		if err != nil {
 			return nil, err
@@ -244,6 +277,9 @@ func Run(ctx context.Context, input Input, token string) (Output, error) {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	defer transport.CloseIdleConnections()
 	adapter, err := digitalocean.NewRecorderFleet(digitalocean.RecorderFleetConfig{
+		PresignArchive: func(ctx context.Context, archive recorderfleet.ArchiveSpec) (string, error) {
+			return recorderarchive.Presign(ctx, archive, time.Until(input.MutationDeadline))
+		},
 		Token: token, Environment: input.Environment, Role: input.Role, OwnerTag: input.OwnerTag,
 		ProjectID: input.ProjectID, VPCUUID: input.VPCUUID, SSHKeyIDs: input.SSHKeyIDs,
 		HTTPClient: &http.Client{Transport: evidenceTransport{next: transport, path: input.EvidencePath, deadline: input.MutationDeadline, diagnosticSSHKeyID: input.DiagnosticSSHKeyID, evidenceBootCommand: input.EvidenceBootCommand}, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
