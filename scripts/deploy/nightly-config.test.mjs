@@ -73,7 +73,8 @@ async function assertNightlyConfig(directory, manifest) {
   assert.deepEqual(ingress.routes.map((route) => route.hostname).filter(Boolean), ["nightly-api.chalkmeet.com", "nightly-sync.chalkmeet.com"]);
   for (const component of ["api", "sync"]) {
     const example = await readFile(join(root, managed, `env/${component}.nightly.env.example`), "utf8");
-    assert.doesNotMatch(example, /=production|https:\/\/(?:api|sync)\.chalkmeet\.com|=chalk-sync\n/);
+    assert.doesNotMatch(example, /=production|https:\/\/(?:api|sync)\.chalkmeet\.com/);
+    assert.match(example, /^CHALK_SYNC_TOKEN_AUDIENCE=chalk-sync$/m);
     assert.match(example, /CHALK_API_ENV=nightly/);
   }
 }
