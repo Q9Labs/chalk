@@ -147,84 +147,31 @@ enough warm capture capacity for its startup objective and monitor that gap.
 
 ## Recorder images
 
-### Minimal Capture image
+Release owns image builds, inspection, fleet pins, signed cold-boot qualification
+and deployment. Promote selects those same snapshot IDs without rebuilding.
+See [managed releases](../../docs/managed-release.md) for release and rollback.
+Do not build or publish fleet pins outside that path.
 
-`images/capture` builds only `recorder-capture` and
-`chalk-recorder-bootstrap`. Build the release on a Linux AMD64 host with Go,
-`jq`, `tar`, and `sha256sum`; the build records the source commit and a
-deterministic source-tree digest. Create the image builder in BLR1 from the
-Debian 13 genericcloud custom image `247595332` on
-`s-1vcpu-512mb-10gb` (or `s-1vcpu-1gb` with the same 10 GB disk). Do not
-resize its disk: the snapshot must fit `s-1vcpu-512mb-10gb`.
+The pipeline's `images/capture` builder produces only `recorder-capture` and
+`chalk-recorder-bootstrap`, Capture and renewal units, `capture.env` with
+10-second keyframes, and image metadata. There is no Node, Chromium, FFmpeg or
+boot-time package installation. Bootstrap accepts `capture-minimal-v1` only for
+the Capture role.
 
-```sh
-infrastructure/recorder/images/capture/build-release.sh \
-  --source /absolute/path/to/chalk --release-id <release-id> \
-  --output /absolute/path/chalk-recorder-capture.tar.gz
+The `images/cpu` builder produces the render worker, native Node compositor and
+bootstrap/renewal agent. It uses checksum-pinned Go 1.26.9, Node.js 22.23.2 and
+pnpm 12.8.1. Release starts a clean Debian builder at the fleet's disk size, then
+increases only CPU and memory if needed. The snapshot must still fit the fleet.
 
-sudo infrastructure/recorder/images/capture/install.sh \
-  --bundle /absolute/path/chalk-recorder-capture.tar.gz \
-  --bundle-sha256 <bundle-sha256> \
-  --bootstrap-ca /absolute/path/issuer-server-ca.pem \
-  --bootstrap-server-name <issuer-server-name>
+Each image records its source commit, deterministic source-tree digest and
+installed recorder files. `image_manifest_digest` is the SHA256 of
+`/opt/chalk-recorder/image-manifest.json`, not an OCI or whole-VM digest. The
+bootstrap agent rehashes that manifest and every listed file before generating
+a node key or contacting the issuer.
 
-sudo infrastructure/recorder/images/cpu/seal.sh
-```
-
-Run the installer and seal on that clean Debian builder, then shut it down and
-snapshot it. The installer places only the two binaries, Capture and renewal
-units, `capture.env` (10-second keyframes), bootstrap CA, and image metadata.
-There is no Node, Chromium, FFmpeg, or boot-time package installation. Its
-`capture-minimal-v1` manifest hashes only these installed recorder files; the
-same digest pin, file rehash, one-time assertion, inventory match, and seal
-checks apply. Bootstrap accepts that profile only for the Capture role.
-
-Publish the printed `image_manifest_digest` and new snapshot ID to the
-**Capture** image pin only; leave the Render image pin unchanged. The
-infrastructure root has separate `capture_image_id`/`capture_image_digest` and
-`render_image_id`/`render_image_digest` inputs, and each controller loads its
-own role-fenced release. Set the Capture controller's image ID and digest
-together after the API and issuer support for the new release is deployed.
-Validate the exact snapshot and size in a nightly Capture boot before promotion.
-
-### Shared Capture/Render image
-
-`images/cpu` builds one Ubuntu 24.04 AMD64 release containing both real worker
-daemons, the native Node compositor, and the node bootstrap/renewal
-agent. Build the public artifact on a machine with sufficient CPU, then install
-it on a clean builder whose disk is the fleet's, so the resulting DigitalOcean
-snapshot can launch the fleet's nodes. the Release workflow creates the
-builder at the fleet size and raises only its CPU and memory to the configured
-builder size, because a region may offer no larger size with the fleet's disk:
-
-```sh
-sudo infrastructure/recorder/images/cpu/build-release.sh \
-  --source /absolute/path/to/chalk \
-  --release-id <release-id> \
-  --output /absolute/path/chalk-recorder-cpu.tar.gz
-
-sudo infrastructure/recorder/images/cpu/install.sh \
-  --bundle /absolute/path/chalk-recorder-cpu.tar.gz \
-  --bundle-sha256 <bundle-sha256> \
-  --bootstrap-ca /absolute/path/issuer-server-ca.pem \
-  --bootstrap-server-name <issuer-server-name>
-```
-
-The build uses checksum-pinned Go 1.26.9 and Node.js 22.23.2 toolchains plus
-pnpm 12.8.1. It records the Git commit, a deterministic SHA-256 of the complete
-public source tree and every installed recorder file. The
-installer prints `image_manifest_digest`; this is specifically the SHA-256 of
-`/opt/chalk-recorder/image-manifest.json`, not an OCI digest or a digest of the
-entire VM filesystem. Cloud-init supplies that exact value as
-`CHALK_RECORDER_FLEET_IMAGE_DIGEST`, and the bootstrap agent rehashes the
-manifest and every listed file before it generates a node key or contacts the
-issuer.
-
-Portable v2 images do not contain an environment's hostname or CA. Release
-provides the selected environment's public bootstrap trust through cloud-init.
-The image manifest still attests the worker binaries and installed files.
-Promote selects the same snapshot IDs; it does not rebuild for production.
-See [managed releases](../../docs/managed-release.md) for deployment and rollback.
+Portable v2 images contain no environment hostname or CA. Cloud-init installs
+the selected environment's public bootstrap CA and server name before signed
+bootstrap. Nightly and production keep their own keys, trust roots and fleet tags.
 
 ## Production KMS context cutover
 

@@ -2,6 +2,7 @@
 import copy
 import json
 import os
+import subprocess
 from pathlib import Path
 import tempfile
 import unittest
@@ -19,6 +20,46 @@ def members():
 
 
 class MediaIdentities(unittest.TestCase):
+    def test_renderer_fingerprint_changes_with_root_config_and_headless_sdk(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(media, 'ROOT', Path(directory)):
+            def git(*args):
+                return subprocess.run(['git', '-C', directory, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', *args], check=True, capture_output=True)
+            git('init')
+            paths = ['tsconfig.json', 'sdks/typescript/react/src/headless.ts', 'apps/api/example.go']
+            for name in paths:
+                path = Path(directory, name)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('original')
+            git('add', *paths)
+            git('commit', '-m', 'base')
+            capture = media.fingerprint('capture')
+            previous = media.fingerprint('render')
+            for name in paths[:2]:
+                Path(directory, name).write_text('changed')
+                git('add', name)
+                git('commit', '-m', 'change')
+                current = media.fingerprint('render')
+                self.assertNotEqual(previous, current)
+                self.assertEqual(capture, media.fingerprint('capture'))
+                previous = current
+
+    def test_release_artifact_reads_each_paired_member_and_rejects_extra_files(self):
+        from unittest.mock import Mock
+        from github_release import GitHub
+        github = GitHub.__new__(GitHub)
+        github.repository = 'Q9Labs/chalk'
+        github.request = Mock(return_value=dict(expired=False, workflow_run=dict(id=1), name='release-manifest-example'))
+        files = {'example.json': b'backend', 'example.media.json': b'media'}
+        def download(command, **kwargs):
+            for name, data in files.items():
+                Path(command[-1], name).write_bytes(data)
+        with patch('github_release.subprocess.run', side_effect=download):
+            for filename, data in files.items():
+                self.assertEqual(github.artifact('1', '2', filename, digest(data)), data)
+            files['unexpected.json'] = b'not a member'
+            with self.assertRaisesRegex(ValueError, 'unexpected'):
+                github.artifact('1', '2', 'example.json')
+
     def test_deploy_only_current_media_can_seed_the_first_cut(self):
         from types import SimpleNamespace
         from unittest.mock import Mock

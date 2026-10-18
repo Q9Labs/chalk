@@ -124,8 +124,13 @@ class GitHub:
                 raise ValueError('artifact download unavailable; cut a new nightly') from error
             files = list(Path(directory).rglob('*'))
             files = [path for path in files if path.is_file()]
-            require(len(files) == 1 and files[0].name == filename, 'artifact must contain exactly the expected file')
-            data = files[0].read_bytes()
+            allowed = {filename}
+            release = filename.removesuffix('.media.json') if filename.endswith('.media.json') else filename.removesuffix('.json')
+            if item['name'] == 'release-manifest-' + release:
+                allowed = {release + '.json', release + '.media.json'}
+            actual = {str(path.relative_to(directory)) for path in files}
+            require(filename in actual and actual <= allowed, 'artifact contains unexpected or missing release files')
+            data = Path(directory, filename).read_bytes()
         require(expected is None or digest(data) == expected, f'{filename} checksum mismatch')
         return data
 
