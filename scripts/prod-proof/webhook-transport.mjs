@@ -2,7 +2,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { check } from "./runtime.mjs";
 
 function isTransportFailure(error) {
-  return (error instanceof TypeError && error.message === "fetch failed") || error.name === "TimeoutError";
+  return (error instanceof TypeError && ["fetch failed", "terminated"].includes(error.message)) || error.name === "TimeoutError";
 }
 
 function requireRetry(error, attempts, signal) {
@@ -10,18 +10,20 @@ function requireRetry(error, attempts, signal) {
   if (attempts === 1 || !isTransportFailure(error)) throw error;
 }
 
-async function fetchCatcher(url, options, attempts, signal) {
+async function fetchCatcher(url, options, attempts, signal, responseType) {
   try {
-    return await fetch(url, { ...options, signal: AbortSignal.any([AbortSignal.timeout(15_000), ...(signal ? [signal] : [])]) });
+    const response = await fetch(url, { ...options, signal: AbortSignal.any([AbortSignal.timeout(15_000), ...(signal ? [signal] : [])]) });
+    check(response.ok, `Webhook transport ${options.method} failed: HTTP ${response.status}`);
+    return await response[responseType]();
   } catch (error) {
     requireRetry(error, attempts, signal);
     await delay(1000, undefined, { signal });
-    return fetchCatcher(url, options, attempts - 1, signal);
+    return fetchCatcher(url, options, attempts - 1, signal, responseType);
   }
 }
 
-export async function catcherRequest(base, path, method = "GET", body, signal) {
-  const response = await fetchCatcher(
+export async function catcherRequest(base, path, method = "GET", body, signal, responseType = "json") {
+  return fetchCatcher(
     new URL(path, base),
     {
       method,
@@ -30,7 +32,6 @@ export async function catcherRequest(base, path, method = "GET", body, signal) {
     },
     method === "GET" ? 3 : 1,
     signal,
+    responseType,
   );
-  check(response.ok, `Webhook transport ${method} failed: HTTP ${response.status}`);
-  return response;
 }

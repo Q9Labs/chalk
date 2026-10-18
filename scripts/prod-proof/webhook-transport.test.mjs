@@ -23,7 +23,7 @@ test("a failed catcher read recovers from a dropped connection", async () => {
       else response.end('{"data":[]}');
     },
     async (base) => {
-      assert.deepEqual(await (await catcherRequest(base, "/requests")).json(), { data: [] });
+      assert.deepEqual(await catcherRequest(base, "/requests"), { data: [] });
       assert.equal(requests, 2);
     },
   );
@@ -76,3 +76,24 @@ test("cancellation stops catcher reads", async () => {
   controller.abort();
   await assert.rejects(catcherRequest("http://127.0.0.1:1", "/requests", "GET", undefined, controller.signal), { name: "AbortError" });
 });
+
+for (const responseType of ["json", "arrayBuffer"]) {
+  test(`a catcher ${responseType} read recovers from a mid-body disconnect`, async () => {
+    let requests = 0;
+    await withServer(
+      (request, response) => {
+        response.writeHead(200, { "Content-Length": 11 });
+        if (++requests === 1) {
+          response.write('{"data":');
+          setTimeout(() => response.destroy(), 25);
+        } else response.end('{"data":[]}');
+      },
+      async (base) => {
+        const result = await catcherRequest(base, "/requests", "GET", undefined, undefined, responseType);
+        if (responseType === "json") assert.deepEqual(result, { data: [] });
+        else assert.equal(Buffer.from(result).toString(), '{"data":[]}');
+        assert.equal(requests, 2);
+      },
+    );
+  });
+}
