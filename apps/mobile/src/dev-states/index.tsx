@@ -8,7 +8,7 @@ import { parseCodes, type ScenarioCode } from "./codes";
 import { createFixtureClient } from "./fixtures";
 import { MeasuredText, MeasuredView, sendMeasurements } from "./measurement";
 
-function isChalkExport(value: object): value is { Chalk: ComponentType<{ client: SpaceClient }> } {
+function isChalkExport(value: object): value is { Chalk: ComponentType<{ client: SpaceClient; colorScheme: "dark" | "light"; soundsEnabled: boolean }> } {
   if (!("Chalk" in value)) return false;
   const component = value.Chalk;
   return typeof component === "function" || (component !== null && typeof component === "object" && "$$typeof" in component && (component.$$typeof === Symbol.for("react.memo") || component.$$typeof === Symbol.for("react.forward_ref")));
@@ -59,9 +59,16 @@ export function DevStates({ url }: { url: string }) {
     return () => clearTimeout(timer);
   }, [params, scenario]);
   if (scenario.error || error) return <Text accessibilityRole="alert">{scenario.error ?? error}</Text>;
-  // The SDK needs an explicit scenario adapter before these UI-only states can be honoured.
-  // Fail closed when foundation lands instead of silently rendering every code as a live call.
-  if (isChalkExport(SDK)) return <Text accessibilityRole="alert">SDK Chalk scenario adapter is not implemented</Text>;
+  if (isChalkExport(SDK)) {
+    const supported: readonly ScenarioCode[] = ["D1", "D2", "O1", "P1", "P2", "P3", "P4", "U1", "U2", "V1", "V2", "A2", "A3", "A5", "T1", "T5", "C1"];
+    const unsupported = scenario.codes.filter((code) => !supported.includes(code));
+    if (unsupported.length) return <Text accessibilityRole="alert">SDK scenario adapter does not support: {unsupported.join(",")}</Text>;
+    return (
+      <MeasuredView testID="harness.ready" style={{ flex: 1 }}>
+        <SDK.Chalk client={client} colorScheme={state.theme} soundsEnabled={false} />
+      </MeasuredView>
+    );
+  }
   const light = scenario.codes.includes("V2");
   return (
     <MeasuredView testID="harness.ready" style={{ flex: 1, backgroundColor: light ? "#f5f5f5" : "#171717", padding: 24, justifyContent: "center", gap: 12 }}>
