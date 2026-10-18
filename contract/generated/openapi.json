@@ -1574,7 +1574,8 @@
             "schema": {
               "maxLength": 512,
               "minLength": 1,
-              "type": "string"
+              "type": "string",
+              "x-chalk-length-unit": "code-points"
             }
           }
         ],
@@ -12305,7 +12306,8 @@
           "external_id": {
             "maxLength": 512,
             "minLength": 1,
-            "type": ["string", "null"]
+            "type": ["string", "null"],
+            "x-chalk-length-unit": "code-points"
           },
           "logo_key": {
             "minLength": 1,
@@ -13811,7 +13813,8 @@
           "external_id": {
             "maxLength": 512,
             "minLength": 1,
-            "type": ["string", "null"]
+            "type": ["string", "null"],
+            "x-chalk-length-unit": "code-points"
           },
           "id": {
             "$ref": "#/components/schemas/TenantId"
