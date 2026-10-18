@@ -315,7 +315,8 @@ native detached-node count and the largest retained object types. Diagnostic
 summaries compute dominators over strong edges: `largestRetainedBytes` is the
 largest individual retained subtree for that type (not a sum of overlapping
 subtrees); `shallowBytes` totals the type's own allocations. Snapshots can contain
-application data: keep artifacts out of Git. Clean runs take no snapshots.
+application data: keep artifacts out of Git. Passing uninjected journeys take no
+snapshots; the self-test's deliberate failures do produce snapshots.
 
 `--self-test` runs panel cycles with two independent faults: an unreleased document
 listener per panel open and retained detached sections per panel open. Each must
@@ -344,6 +345,33 @@ For a focused diagnostic, add `--leak-journey people`; gate mode rejects this an
 Do not widen a count budget to absorb a real leak. Finite 20-cycle tests cannot
 prove absence of slower leaks, browser/native leaks, production SDK media leaks,
 or leaks triggered only by real transports, device changes or long sessions.
+
+### Calibration and known findings (2026-10-18)
+
+Count calibration used shared 4-vCPU testboxes; timing verification uses the
+dedicated `c-8` reference runner described above. Shared-run timing numbers are
+not comparable with the reference budgets. Only complete 21-sample journeys
+count toward the calibration spread; an interrupted three-repeat command is not
+a successful full run.
+
+Blank-page controls measured heap slopes of 0.000012 MiB/sample without the
+observer and 0.000852 with it. The idle call without instrumentation initially
+grew by 0.0386 MiB/sample over 20 cycles, but over 120 cycles its overall slope was
+0.00440 and its final 21-sample slope was 0.00312. Panel and layout controls over
+60 cycles had final 21-sample slopes of 0.0172 and 0.00946 respectively. These
+controls expose startup/JIT/cache growth, not a zero-allocation call. Across
+completed ordinary journey observations, early whole-run heap slopes reached
+about 0.073 MiB/cycle and final-ten slopes about 0.038. The 0.1/3 MiB whole-run
+limits and 0.05 tail limit leave headroom above those observations; the fixed
+count budgets independently catch smaller retained resources.
+
+Fresh guest IDs expose a real failure in the current SDK: the stage's
+`seenAtRef` map retains departed participant IDs. One warm guest plus 20 cycles
+leaves 21 guest keys, growing by one per cycle. The `rosterCacheKeys` budget stays
+at 0.1 keys/cycle with a fixed allowance of one, so the gate remains red until
+the SDK is fixed. The measurement lane deliberately does not edit SDK components.
+Full leave clears the map by unmounting; repeated guest departure while the call
+stays mounted is the failing journey.
 
 ### Additional rendering signals
 
