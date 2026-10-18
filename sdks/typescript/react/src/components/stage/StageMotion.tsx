@@ -9,8 +9,8 @@ interface StageMotionProps {
 }
 
 interface StageSnapshot {
-  readonly play: () => void;
-  readonly previous: ReadonlySet<HTMLElement>;
+  play: (() => void) | null;
+  readonly previous: Set<HTMLElement>;
 }
 
 /** Snapshot before React mutates tile boxes, not after an animation has started. */
@@ -37,17 +37,22 @@ export class StageMotion extends Component<StageMotionProps> {
     }
     if (!snapshot) return;
     const elements = this.elements();
+    const entering = new Set(elements.filter((element) => !snapshot.previous.has(element)));
+    const play = snapshot.play;
+    // React keeps its last snapshot on the instance after this lifecycle returns.
+    snapshot.play = null;
+    snapshot.previous.clear();
     for (const element of elements) {
       if (!element.hasAttribute("data-leaving")) for (const animation of element.getAnimations()) if (animation.id === "stage-exit") animation.cancel();
     }
-    snapshot.play();
+    play?.();
     for (const element of elements) {
       if (element.getAttribute("aria-hidden") === "true") continue;
       if (element.hasAttribute("data-leaving")) {
         if (element.getAnimations().some((animation) => animation.id === "stage-exit")) continue;
         const exit = element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: "ease-out", fill: "forwards" });
         exit.id = "stage-exit";
-      } else if (!snapshot.previous.has(element)) {
+      } else if (entering.has(element)) {
         const transform = getComputedStyle(element).transform;
         element.animate(
           [
