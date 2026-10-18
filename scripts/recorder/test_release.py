@@ -36,6 +36,19 @@ def dispatcher_state_fixture():
 
 
 class ReleaseContracts(unittest.TestCase):
+    def test_provider_uses_the_fleet_token_only_in_child_environment(self):
+        provider = Provider('test-region', None)
+        provider.context = 'private-context'
+        provider.do_token = 'fixture-fleet-token'
+        with patch.dict(os.environ, DIGITALOCEAN_ACCESS_TOKEN='fixture-builder-token'), patch('subprocess.run') as run:
+            run.return_value = subprocess.CompletedProcess([], 0, stdout='[]', stderr='')
+            self.assertEqual(provider.do('compute', 'image', 'get', '123'), [])
+            arguments, options = run.call_args
+            self.assertNotIn('--context', arguments[0])
+            self.assertNotIn('fixture-fleet-token', arguments[0])
+            self.assertEqual(options['env']['DIGITALOCEAN_ACCESS_TOKEN'], 'fixture-fleet-token')
+            self.assertEqual(os.environ['DIGITALOCEAN_ACCESS_TOKEN'], 'fixture-builder-token')
+
     def test_nightly_release_configuration_is_environment_scoped(self):
         from release import parse_args
         args = parse_args(["plan", "--state", "/tmp/pipeline-build", "--environment", "nightly", "--region", "test-region", "--profile", "test-profile"])

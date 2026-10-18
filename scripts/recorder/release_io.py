@@ -29,13 +29,14 @@ class Provider:
     def __init__(self, region, profile, dry_run=False):
         self.region, self.profile, self.dry_run = region, profile, dry_run
         self.context = None
+        self.do_token = None
         self.reads = []
 
-    def command(self, arguments, *, timeout=120, input_text=None, read_only=False):
+    def command(self, arguments, *, timeout=120, input_text=None, read_only=False, environment=None):
         if self.dry_run:
             require(read_only, "dry-run refused a non-read operation")
         result = subprocess.run(arguments, input=input_text, text=True, capture_output=True, timeout=timeout,
-                                env={**os.environ, "AWS_PAGER": "", "AWS_CLI_AUTO_PROMPT": "off"})
+                                env={**os.environ, "AWS_PAGER": "", "AWS_CLI_AUTO_PROMPT": "off", **(environment or {})})
         if result.returncode:
             # Provider errors can quote secret payloads. Never echo stdout/stderr here.
             raise RuntimeError(f"{arguments[0]} operation failed (exit {result.returncode}); no payload logged")
@@ -58,8 +59,9 @@ class Provider:
         read_only = tuple(arguments[:3]) in DO_READS
         if read_only:
             self.reads.append("do:" + ":".join(arguments[:3]))
-        return json.loads(self.command(["doctl", *([] if os.environ.get("DIGITALOCEAN_ACCESS_TOKEN") else ["--context", self.context]), *map(str, arguments), "--output", "json"],
-                                       timeout=timeout, read_only=read_only) or "null")
+        token = self.do_token or os.environ.get("DIGITALOCEAN_ACCESS_TOKEN")
+        return json.loads(self.command(["doctl", *([] if token else ["--context", self.context]), *map(str, arguments), "--output", "json"],
+                                       timeout=timeout, read_only=read_only, environment={"DIGITALOCEAN_ACCESS_TOKEN": token} if token else None) or "null")
 
     def parameter(self, name):
         return self.aws("ssm", "get-parameter", "--name", name, "--with-decryption")["Parameter"]

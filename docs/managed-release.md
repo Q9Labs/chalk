@@ -24,6 +24,9 @@ The backend artifact also contains `<release_id>.media.json`: exact image IDs,
 image-manifest digests, source/input hashes, inspection evidence, ZIP SHA256 and
 versioned S3 object identity. Cut records retain its SHA256. Promote verifies this
 sidecar and uses those same images and ZIP bytes; it never rebuilds them.
+Before either fleet pin changes, deployment reads both snapshots from DigitalOcean
+using each environment's existing fleet token. Each snapshot must be available in
+its role's configured region and fit its configured fleet size's disk.
 
 Snapshot v2 contains no environment hostname or CA. Fleet cloud-init installs the
 target environment's public bootstrap CA and hostname before signed bootstrap.
@@ -168,6 +171,11 @@ If a build succeeds but deployment fails, fix the cause and redispatch with the
 healthy manifest baseline. Do not bypass CI to turn a failed release green.
 For read-only diagnosis, `deploy-managed-release.mjs --dry-run` validates inputs
 and reads dispatcher configuration/state without sending a host command.
+Release runs this preflight before invalidating a held cut or changing fleet pins.
+The media path rejects changes under `infrastructure/nightly/transcription/`
+before builds or deployment mutations. Installed dispatcher updates reconstruct
+their root from state, so root-input changes require a separately reviewed
+infrastructure migration before updating the supported configuration checksum.
 
 ## Media build configuration
 

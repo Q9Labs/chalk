@@ -179,6 +179,10 @@ jobs:
           go-version-file: apps/api/go.mod
           cache-dependency-path: apps/api/go.sum
 
+      - name: Reject unsupported installed dispatcher root changes before builds
+        if: inputs.managed_environment == 'nightly'
+        run: python3 scripts/releases/media.py check_configuration --environment nightly
+
       - name: Verify exact release SHA
         env:
           DEPLOY_MANAGED: ${{ inputs.deploy_managed }}
@@ -742,6 +746,12 @@ jobs:
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         uses: ./.github/actions/setup-opentofu
 
+      - name: Install doctl for read-only snapshot validation
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
+        uses: digitalocean/action-doctl@v2
+        with:
+          no_auth: 'true'
+
       - uses: actions/setup-go@v5
         if: inputs.managed_environment == 'nightly'
         with:
@@ -798,6 +808,9 @@ jobs:
               echo 'nightly requires its own dispatcher configuration and state (PR #268, scheduler_state=DISABLED initially)' >&2
               exit 1
             }
+          fi
+          node scripts/deploy/deploy-managed-release.mjs "${args[@]}" --dry-run > "$RUNNER_TEMP/managed-preflight.json"
+          if [[ "$MANAGED_ENVIRONMENT" == nightly ]]; then
             python3 scripts/releases/release.py invalidate
           fi
           media="${manifest%.json}.media.json"

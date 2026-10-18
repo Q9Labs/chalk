@@ -13,16 +13,19 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT / 'scripts/recorder'))
-from release_core import digest, env_values, require, validate_config
+from release_core import check_image, digest, env_values, require, validate_config
 from release_io import Provider, private_json
 from dispatcher_binding import dispatcher_root, binding_target, verify_dispatcher, MODULE
 from github_release import GitHub, payload
 
 INPUTS = {
     'capture': ('apps/api/', 'go.work', 'go.work.sum', 'infrastructure/recorder/', 'scripts/recorder/'),
-    'render': ('apps/api/', 'apps/recording-renderer/', 'packages/', 'sdks/typescript/', 'tsconfig.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'infrastructure/recorder/', 'scripts/recorder/'),
-    'dispatcher': ('infrastructure/opentofu/modules/aws-transcription-dispatcher/', 'infrastructure/nightly/transcription/', 'apps/transcription-dispatcher/', 'scripts/transcription-dispatcher/', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json'),
+    'render': ('apps/api/', 'apps/recording-renderer/', 'packages/', 'sdks/typescript/', 'tsconfig.json', '.npmrc', '.pnpmfile.cjs', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'infrastructure/recorder/', 'scripts/recorder/'),
+    'dispatcher': ('infrastructure/opentofu/modules/aws-transcription-dispatcher/', 'infrastructure/nightly/transcription/', 'apps/transcription-dispatcher/', 'scripts/transcription-dispatcher/', '.npmrc', '.pnpmfile.cjs', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json'),
+    'dispatcher_configuration': ('infrastructure/nightly/transcription/',),
 }
+# Installed releases reconstruct their root from state; this path cannot migrate root inputs.
+SUPPORTED_DISPATCHER_CONFIGURATION = '8ea6b73b24126245ef9ce49a41e69be5f8f0dcd60b4c2d8bd00ad46e15468771'
 
 
 def fingerprint(member):
@@ -79,6 +82,11 @@ def baseline(args):
         data = base64.b64decode(saved['media_base64'], validate=True)
         require(digest(data) == saved['media_sha256'], 'current media checksum mismatch')
         private_json(args.output, validate_members(json.loads(data)))
+
+
+def check_configuration(args):
+    require(fingerprint('dispatcher_configuration') == SUPPORTED_DISPATCHER_CONFIGURATION,
+            'dispatcher infrastructure configuration changed; this media release path cannot migrate root inputs; apply a separately reviewed infrastructure migration before updating the supported configuration checksum')
 
 
 def record_current(args):
@@ -225,9 +233,19 @@ def write_parameter(provider, parameter, value):
 def pin_images(args):
     provider, config = settings(args)
     media = validate_members(json.loads(args.output.read_text()))
+    parameters = {role: provider.parameter(config['runtime']['parameter_prefix'] + '/recorder/' + role + '.env') for role in ('capture', 'render')}
+    for role, parameter in parameters.items():
+        values = env_values(parameter['Value'])
+        provider.do_token = values['DIGITALOCEAN_TOKEN']
+        sizes = provider.do('compute', 'size', 'list')
+        size = next((item for item in sizes if item['slug'] == values['CHALK_RECORDER_FLEET_SIZE']), None)
+        region = values['CHALK_RECORDER_FLEET_REGION']
+        require(size and size['available'] and region in size['regions'], role + ' fleet size unavailable')
+        images = provider.do('compute', 'image', 'get', media[role]['image_id'])
+        require(len(images) == 1 and str(images[0]['id']) == str(media[role]['image_id']), role + ' candidate snapshot not found')
+        check_image(images[0], dict(region=region, disk_gb=size['disk']))
     ca = provider.parameter(config['bootstrap_ca_parameter'])['Value']
-    for role in ('capture', 'render'):
-        parameter = provider.parameter(config['runtime']['parameter_prefix'] + '/recorder/' + role + '.env')
+    for role, parameter in parameters.items():
         image = media[role]
         updates = { 'CHALK_RECORDER_FLEET_' + key.upper(): str(image[key]) for key in ('image_id', 'image_digest', 'release_id') }
         updates.update(CHALK_RECORDER_FLEET_BOOTSTRAP_CA_BASE64=base64.b64encode(ca.encode()).decode(),
@@ -267,6 +285,7 @@ def check_dispatcher_update(plan, release, archive, key, version, manifest_diges
 
 
 def deploy_dispatcher(args):
+    check_configuration(args)
     provider, config = settings(args)
     manifest = json.loads(args.manifest.read_text())
     archive = validate_members(json.loads(args.output.read_text()))['dispatcher']
@@ -371,7 +390,7 @@ def qualify(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('baseline', 'record_current', 'cleanup_cloud', 'cleanup', 'snapshot', 'build_images', 'publish_zip', 'zip_needed', 'pin_images', 'deploy_dispatcher', 'qualify'))
+    parser.add_argument('command', choices=('check_configuration', 'baseline', 'record_current', 'cleanup_cloud', 'cleanup', 'snapshot', 'build_images', 'publish_zip', 'zip_needed', 'pin_images', 'deploy_dispatcher', 'qualify'))
     parser.add_argument('--environment', choices=('nightly', 'production'), default=os.environ.get('MANAGED_ENVIRONMENT', 'nightly'))
     parser.add_argument('--region', default=os.environ.get('AWS_REGION'))
     parser.add_argument('--config-parameter', default=os.environ.get('CHALK_MANAGED_RECORDER_CONFIG_PARAMETER'))

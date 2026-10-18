@@ -63,6 +63,134 @@ class MediaIdentities(unittest.TestCase):
                 self.assertEqual(capture, media.fingerprint('capture'))
                 previous = current
 
+    def test_adding_or_editing_package_manager_config_changes_both_fingerprints(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(media, 'ROOT', Path(directory)):
+            def git(*args):
+                return subprocess.check_output(['git', '-C', directory, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', *args])
+            git('init', '-q')
+            git('commit', '--allow-empty', '-qm', 'base')
+            previous = {role: media.fingerprint(role) for role in ('render', 'dispatcher')}
+            for name in ('.npmrc', '.pnpmfile.cjs'):
+                for value in ('added', 'changed'):
+                    Path(directory, name).write_text(value)
+                    git('add', name)
+                    git('commit', '-qm', 'package manager config')
+                    for role in previous:
+                        current = media.fingerprint(role)
+                        self.assertNotEqual(previous[role], current, (role, name, value))
+                        previous[role] = current
+
+    def test_installed_dispatcher_root_change_is_rejected_before_builds(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory, patch.object(media, 'ROOT', Path(directory)):
+            def git(*args):
+                return subprocess.check_output(['git', '-C', directory, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', *args])
+            git('init', '-q')
+            root = Path(directory, 'infrastructure/nightly/transcription/main.tf')
+            root.parent.mkdir(parents=True)
+            root.write_text('approved configuration')
+            git('add', '.')
+            git('commit', '-qm', 'installed root')
+            with patch.object(media, 'SUPPORTED_DISPATCHER_CONFIGURATION', media.fingerprint('dispatcher_configuration')):
+                args = SimpleNamespace(environment='nightly')
+                media.check_configuration(args)
+                Path(directory, 'worker.js').write_text('code update is supported')
+                git('add', 'worker.js')
+                git('commit', '-qm', 'code only')
+                media.check_configuration(args)
+                root.write_text('changed runtime configuration')
+                git('add', str(root))
+                git('commit', '-qm', 'root change')
+                with self.assertRaisesRegex(ValueError, 'dispatcher infrastructure configuration changed'):
+                    media.check_configuration(args)
+                with patch.object(media, 'settings') as settings, self.assertRaisesRegex(ValueError, 'dispatcher infrastructure configuration changed'):
+                    media.deploy_dispatcher(args)
+                settings.assert_not_called()
+
+    def test_all_candidate_images_are_checked_before_either_pin_write(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        config = dict(runtime=dict(parameter_prefix='/chalk/nightly/managed-episode'),
+                      bootstrap_ca_parameter='ca', bootstrap_server_name='issuer.example')
+        parameters = {'ca': dict(Value='public CA')}
+        events = []
+        provider = Mock()
+        for role in ('capture', 'render'):
+            name = config['runtime']['parameter_prefix'] + '/recorder/' + role + '.env'
+            parameters[name] = dict(Name=name, Type='SecureString', Version=1,
+                Value='DIGITALOCEAN_TOKEN=fixture-token\nCHALK_RECORDER_FLEET_REGION=' + role + '-region\nCHALK_RECORDER_FLEET_SIZE=' + role + '-size\n')
+        images = {str(image['image_id']): dict(id=int(image['image_id']), status='available', regions=[role + '-region'], min_disk_size=50)
+                  for role, image in members().items() if role in ('capture', 'render')}
+        def do(*args):
+            events.append(args)
+            if args[:3] == ('compute', 'size', 'list'):
+                return [dict(slug=role + '-size', available=True, regions=[role + '-region'], disk=50) for role in ('capture', 'render')]
+            image = images[str(args[3])]
+            if image is None:
+                raise RuntimeError('candidate snapshot not found')
+            return [image]
+        def aws(service, operation, *args, payload=None):
+            if operation == 'describe-parameters':
+                return dict(Parameters=[dict(Tier='Standard')])
+            self.assertEqual((service, operation), ('ssm', 'put-parameter'))
+            events.append(('put', payload['Name']))
+            parameter = parameters[payload['Name']]
+            parameter.update(Value=payload['Value'], Version=parameter['Version'] + 1)
+            return dict(Version=parameter['Version'])
+        provider.parameter.side_effect = lambda name: copy.deepcopy(parameters[name])
+        provider.do.side_effect, provider.aws.side_effect = do, aws
+        with tempfile.TemporaryDirectory() as directory, patch.object(media, 'settings', return_value=(provider, config)):
+            output = Path(directory, 'media.json')
+            output.write_text(json.dumps(members()))
+            args = SimpleNamespace(output=output)
+            for role in ('capture', 'render'):
+                image_id = members()[role]['image_id']
+                original = copy.deepcopy(images[image_id])
+                for invalid in (None, dict(original, status='deleted'), dict(original, regions=['wrong-region']), dict(original, min_disk_size=51)):
+                    with self.subTest(role=role, invalid=invalid):
+                        images[image_id] = invalid
+                        events.clear()
+                        with self.assertRaises((ValueError, RuntimeError)):
+                            media.pin_images(args)
+                        self.assertFalse(any(event[0] == 'put' for event in events))
+                images[image_id] = original
+            events.clear()
+            media.pin_images(args)
+            image_reads = [i for i, event in enumerate(events) if event[:3] == ('compute', 'image', 'get')]
+            writes = [i for i, event in enumerate(events) if event[0] == 'put']
+            self.assertEqual(len(image_reads), 2)
+            self.assertEqual(len(writes), 2)
+            self.assertLess(max(image_reads), min(writes))
+
+    def test_failed_workflow_preflight_cannot_invalidate_or_publish_pins(self):
+        script = (media.ROOT / '.github/workflows/ci.yml').read_text().split('      - name: Deploy, health-check, and prove release\n', 1)[1]
+        script = script.split('        run: |\n', 1)[1].split('\n      - name:', 1)[0]
+        script = '\n'.join(line[10:] for line in script.splitlines())
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bindir = root / 'bin'
+            bindir.mkdir()
+            for name in ('node', 'python3', 'jq'):
+                executable = bindir / name
+                executable.write_text('#!/bin/sh\n' + ('exit 0\n' if name == 'jq' else 'echo "' + name + ' $*" >> "$EVENT_LOG"\n' + ('exit 9\n' if name == 'node' else 'exit 0\n')))
+                executable.chmod(0o755)
+            manifests = root / 'managed-release'
+            manifests.mkdir()
+            for suffix in ('.json', '.media.json'):
+                (manifests / ('fixture' + suffix)).write_text('{}')
+            script = script.replace('${{ runner.temp }}', directory)
+            env = dict(os.environ, PATH=str(bindir) + ':' + os.environ['PATH'], EVENT_LOG=str(root / 'events'), RUNNER_TEMP=directory,
+                RELEASE_ID='fixture', TARGET_SHA=SHA, MANAGED_ENVIRONMENT='nightly', MANAGED_SECRET_EXCLUSIONS='',
+                CHALK_MANAGED_AWS_REGION='test-region', CHALK_MANAGED_INSTANCE_ID='i-12345678',
+                CHALK_MANAGED_SSM_DOCUMENT_NAME='fixture', CHALK_MANAGED_PARAMETER_PREFIX='/chalk/nightly/managed-episode',
+                CHALK_MANAGED_RECORDER_CONFIG_PARAMETER='/chalk/nightly/release/recorder.json',
+                CHALK_MANAGED_LOG_GROUP_NAME='fixture', GITHUB_RUN_ID='1', GITHUB_RUN_ATTEMPT='1')
+            result = subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 9, result.stderr)
+            events = (root / 'events').read_text().splitlines()
+            self.assertEqual(len(events), 1, events)
+            self.assertTrue(events[0].startswith('node ') and '--dry-run' in events[0], events)
+
     def test_release_artifact_reads_each_paired_member_and_rejects_extra_files(self):
         from unittest.mock import Mock
         from github_release import GitHub
