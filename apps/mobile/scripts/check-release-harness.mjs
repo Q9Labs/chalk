@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// Direct release-export scanner CLI, documented in the harness README.
+// fallow-ignore-file unused-file
 import { readdir, readFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 

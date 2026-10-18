@@ -1,8 +1,6 @@
 import type { ActiveReaction, Capability, ChatAttachment, ChatMessage, ChatSendInput, ChatUploadFile, ClientEventHandler, ClientEventName, IncomingMediaRequest, MediaRequestKind, OfflineActionsPolicy, Reaction, SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
 import { createPreviewMediaDevices } from "./preview-devices";
 
-export { PREVIEW_DEVICE_FIXTURES } from "./preview-devices";
-
 export type PreviewClientCommand =
   | { readonly type: "join" }
   | { readonly type: "leave" }

@@ -6,8 +6,8 @@ export type PreviewMediaDevices = Readonly<{
   readonly speakers: readonly MediaDevice[];
 }>;
 
-/** One immutable fixture set shared by the preview client and web media adapter. */
-export const PREVIEW_DEVICE_FIXTURES: PreviewMediaDevices = Object.freeze({
+/** Immutable device fixtures copied into each client. */
+const PREVIEW_DEVICE_FIXTURES: PreviewMediaDevices = Object.freeze({
   microphones: Object.freeze([Object.freeze({ deviceId: "preview-microphone", label: "Preview microphone" }), Object.freeze({ deviceId: "preview-microphone-backup", label: "Preview microphone · backup" })]),
   cameras: Object.freeze([Object.freeze({ deviceId: "preview-camera", label: "Preview camera" }), Object.freeze({ deviceId: "preview-camera-wide", label: "Preview camera · wide" })]),
   speakers: Object.freeze([Object.freeze({ deviceId: "preview-speaker", label: "Preview speaker" }), Object.freeze({ deviceId: "preview-speaker-headphones", label: "Preview speaker · headphones" })]),

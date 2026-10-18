@@ -12,7 +12,7 @@ const at = "2026-10-18T10:00:00.000Z";
 export function snapshotForCodes(codes: readonly ScenarioCode[]): SpaceSnapshot {
   const has = (code: ScenarioCode) => codes.includes(code);
   const count = has("P4") ? 24 : has("P3") ? 6 : has("P2") ? 2 : 1;
-  const base = createSnapshot(has("U2") ? hostCapabilities : guestCapabilities);
+  const base = createSnapshot(has("U2") ? hostCapabilities : has("K8") ? guestCapabilities.filter((capability) => capability !== "drawWhiteboard") : guestCapabilities);
   const roster: Participant[] = Array.from({ length: count }, (_, index) => ({
     participantId: `person-${index}`,
     displayName: names[index % names.length] ?? `Person ${index + 1}`,

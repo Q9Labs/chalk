@@ -1,3 +1,5 @@
+// Direct node:test CLI entrypoint, documented in the harness README.
+// fallow-ignore-file unused-file
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createRequire } from "node:module";
