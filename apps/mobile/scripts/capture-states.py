@@ -50,7 +50,8 @@ def remote(args):
         temporary.write_text(json.dumps({'groups': [proc.pid for proc in processes if proc.poll() is None], 'device': device, 'avd': avd if avd_created else None, 'manager': str(manager) if manager else None, 'retain_device': bool(args.client_cache)}))
         temporary.replace(owner_state)
     remember()
-    watcher = subprocess.Popen([sys.executable, str(Path(__file__).with_name('capture-owner-watch.py')), str(owner_state)], stdin=subprocess.PIPE, start_new_session=True, pass_fds=(lock.fileno(),))
+    with (path / 'owner-cleanup.log').open('w') as cleanup_log:
+        watcher = subprocess.Popen([sys.executable, str(Path(__file__).with_name('capture-owner-watch.py')), str(owner_state)], stdin=subprocess.PIPE, stdout=cleanup_log, stderr=subprocess.STDOUT, start_new_session=True, pass_fds=(lock.fileno(),))
     def run(command, **kwargs):
         data = kwargs.pop('input', None)
         if data is not None:
@@ -175,13 +176,13 @@ def remote(args):
             if not (Path.home() / '.android/avd' / (avd + '.ini')).exists():
                 run([str(manager), 'create', 'avd', '-n', avd, '-k', ';'.join(image.relative_to(sdk).parts)], input='no\n', text=True)
             config = Path.home() / '.android/avd' / (avd + '.avd/config.ini')
-            display = {'hw.lcd.width': '1236', 'hw.lcd.height': '2745', 'hw.lcd.density': '480', 'hw.cpu.ncore': '2', 'hw.ramSize': '1536', 'skin.dynamic': 'yes', 'skin.name': '1236x2745'}
+            display = {'hw.lcd.width': '1236', 'hw.lcd.height': '2745', 'hw.lcd.density': '480', 'hw.cpu.ncore': '2', 'hw.ramSize': '1536', 'hw.gpu.enabled': 'yes', 'hw.gpu.mode': args.android_gpu, 'skin.dynamic': 'yes', 'skin.name': '1236x2745'}
             values = dict(line.split('=', 1) for line in config.read_text().splitlines() if '=' in line)
             values.update(display)
             config.write_text(''.join(f'{key}={value}\n' for key, value in values.items()))
             avd_created = True
             remember()
-            emulator = start([str(sdk / 'emulator/emulator'), '-avd', avd, '-no-snapshot', '-no-window', '-no-boot-anim', '-skin', '1236x2745', '-cores', '2', '-memory', '1536', '-port', str(args.emulator_port)], 'emulator.log')
+            emulator = start([str(sdk / 'emulator/emulator'), '-avd', avd, '-no-snapshot', '-no-window', '-no-boot-anim', '-skin', '1236x2745', '-cores', '2', '-memory', '1536', '-gpu', args.android_gpu, '-port', str(args.emulator_port)], 'emulator.log')
             run([adb, '-s', serial, 'wait-for-device'])
             deadline = time.monotonic() + 180
             while subprocess.check_output([adb, '-s', serial, 'shell', 'getprop', 'sys.boot_completed'], text=True).strip() != '1':
@@ -287,6 +288,11 @@ def remote(args):
                 with urllib.request.urlopen(request, timeout=10) as response:
                     response.read()
             time.sleep(args.settle)
+            if args.platform == 'android':
+                run([adb, '-s', serial, 'shell', 'uiautomator', 'dump', '/sdcard/chalk-capture-ui.xml'])
+                hierarchy = subprocess.check_output([adb, '-s', serial, 'exec-out', 'cat', '/sdcard/chalk-capture-ui.xml'], text=True)
+                if "isn't responding" in hierarchy or 'isn\u2019t responding' in hierarchy:
+                    raise RuntimeError('Android ANR dialog covers the app; capture rejected')
             if args.flow:
                 import shutil
                 if not shutil.which(args.maestro):
@@ -320,7 +326,7 @@ def remote(args):
             terminate(proc)
         remember()
         watcher.stdin.close()
-        if watcher.wait(timeout=60):
+        if watcher.wait(timeout=180):
             raise RuntimeError('Capture owner cleanup failed')
         lock.close()
 
@@ -347,6 +353,7 @@ def main():
     p.add_argument('--output', default='artifacts/mobile-captures')
     p.add_argument('--port', type=int, default=8081)
     p.add_argument('--emulator-port', type=int, default=5582)
+    p.add_argument('--android-gpu', choices=['auto', 'host', 'software'], default='auto')
     p.add_argument('--sheet', choices=['more', 'people'])
     p.add_argument('--menu', choices=['leave'])
     p.add_argument('--slot', choices=['ios-1', 'ios-2', 'ios-3', 'android-1'])
@@ -394,8 +401,15 @@ def perform_copy(args, dest, host):
         run(['rsync', '-az', '-e', shlex.join(SSH), '--delete', '--exclude=/native-build', '--exclude=/native-*.stamp', '--exclude=/captures', '--exclude=*.log', '--exclude=.expo', '--exclude=node_modules', '--exclude=.git', '--exclude=.worktrees', '--exclude=.env*', '--exclude=scratchpad', '--exclude=/apps/mobile/ios', '--exclude=/apps/mobile/android', '--exclude=artifacts', '--exclude=dist', str(Path(args.worktree).resolve()) + '/', host + ':' + dest + '/'])
     if not args.cleanup:
         run(['scp', str(Path(__file__)), str(Path(__file__).with_name('capture-owner-watch.py')), host + ':' + dest + '/apps/mobile/scripts/'])
+        if not (Path(args.worktree) / 'apps/mobile/src/dev-states').is_dir():
+            print('Installing dev-only capture route in the remote copy; product source remains unchanged', flush=True)
+            source = Path(__file__).resolve().parents[1] / 'src/dev-states'
+            run(['rsync', '-az', '-e', shlex.join(SSH), str(source), host + ':' + dest + '/apps/mobile/src/'])
+            run([*SSH, host, shlex.join(['cp', dest + '/apps/mobile/App.tsx', dest + '/apps/mobile/App.product.tsx'])])
+            run(['scp', str(Path(__file__).with_name('capture-entry.tsx.template')), host + ':' + dest + '/apps/mobile/App.tsx'])
     command = ['python3', dest + '/apps/mobile/scripts/capture-states.py', '--remote', dest, '--platform', args.platform, '--port', str(args.port), '--settle', str(args.settle), '--maestro', args.maestro, '--states', *args.states]
     command += ['--emulator-port', str(args.emulator_port)]
+    command += ['--android-gpu', args.android_gpu]
     if args.sheet:
         command += ['--sheet', args.sheet]
     if args.menu:
@@ -407,7 +421,9 @@ def perform_copy(args, dest, host):
     if args.cleanup:
         command.append('--cleanup')
     if args.dump:
-        command += ['--dump', args.dump, '--ids', args.ids]
+        command += ['--dump', args.dump]
+    if args.ids:
+        command += ['--ids', args.ids]
     if args.flow:
         run(['scp', args.flow, host + ':' + dest + '/capture-flow.yaml'])
         command += ['--flow', dest + '/capture-flow.yaml']

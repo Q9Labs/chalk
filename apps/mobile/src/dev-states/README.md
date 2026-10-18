@@ -28,3 +28,5 @@ python3 apps/mobile/scripts/capture-states.py --name unique-lane-proof --cleanup
 ```
 
 Each output includes native screenshots and per-state measurement JSON. Pass `--flow /absolute/maestro.yaml --maestro /absolute/m4-maestro` to record a journey. Reusing a capture name clears its old remote captures before starting, so a failed rerun cannot silently return an earlier recording.
+
+When a foundation-based lane has no `apps/mobile/src/dev-states/`, the runner installs this harness and a development route wrapper **only in its remote capture copy**. Its original App is retained as `App.product.tsx`; normal routes render that app. Lane worktrees and SDK product files are never overlaid. If a lane already has a harness, its version is preserved.
