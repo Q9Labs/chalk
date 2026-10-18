@@ -121,6 +121,14 @@ func TestEpisodeAttendancePublicHTTP(t *testing.T) {
 	if l.ParticipantID != legacy.String() || l.DisplayName != "Legacy" || !l.FirstJoinedAt.Equal(legacyJoin) || l.LastLeftAt != nil || l.LeftReason != nil {
 		t.Fatalf("unexpected seat without first_joined_at: %+v", l)
 	}
+	// The previous Sync image closed seats without a leave reason. A departure at the Episode end was the end; an earlier one was a leave.
+	oldEnded, oldLeft := accountTenantIntegrationID(t), accountTenantIntegrationID(t)
+	for index, seat := range []struct {
+		id     utilities.ID
+		leftAt time.Time
+	}{{oldEnded, end}, {oldLeft, explicitLeave}} {
+		exec(`insert into participants(id,tenant_id,space_id,episode_id,generation,status,role,capabilities,name,joined_at,left_at) values($1,$2,$3,$4,1,'left','observer','{subscribe}','Old Sync',$5,$6)`, uuid(seat.id), uuid(tenant), uuid(space), uuid(episode), first.Add(time.Duration(6+index)*time.Minute), seat.leftAt)
+	}
 	// End fallback covers a seat whose explicit departure never arrived.
 	exec(`update episodes set status='ended',ended_at=$2 where id=$1`, uuid(episode), end)
 	ended := read(tenant, space, episode, key, http.StatusOK)
@@ -129,6 +137,12 @@ func TestEpisodeAttendancePublicHTTP(t *testing.T) {
 		if p.LastLeftAt == nil || !p.LastLeftAt.Equal(end) || p.LeftReason == nil || *p.LeftReason != "episode_ended" {
 			t.Fatalf("unclosed ended seat: %+v", p)
 		}
+	}
+	if closed := ended.Participants[4]; closed.ParticipantID != oldEnded.String() || closed.LastLeftAt == nil || !closed.LastLeftAt.Equal(end) || closed.LeftReason == nil || *closed.LeftReason != "episode_ended" {
+		t.Fatalf("seat closed by the previous Sync image at the Episode end: %+v", closed)
+	}
+	if left := ended.Participants[5]; left.ParticipantID != oldLeft.String() || left.LastLeftAt == nil || !left.LastLeftAt.Equal(explicitLeave) || left.LeftReason == nil || *left.LeftReason != "left" {
+		t.Fatalf("seat left before the Episode end without a recorded reason: %+v", left)
 	}
 	if ended.Participants[1].LastLeftAt == nil || !ended.Participants[1].LastLeftAt.Equal(explicitLeave) || *ended.Participants[1].LeftReason != "left" {
 		t.Fatal("Episode end overwrote explicit leave")
