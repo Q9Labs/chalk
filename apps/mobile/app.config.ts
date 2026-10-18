@@ -22,7 +22,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       owner: "q9labs",
       slug: "chalk-mobile",
       scheme: "chalk",
-      version: "2.0.1",
+      version: "3.0.0",
       // The call turns to landscape; Home stays usable in either.
       orientation: "default",
       icon: "./assets/icon.png",
