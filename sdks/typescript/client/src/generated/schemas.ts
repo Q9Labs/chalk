@@ -778,6 +778,27 @@ export const SpaceListSchema = Schema.Struct({
 });
 export type SpaceList = typeof SpaceListSchema.Type;
 
+export const SpaceLiveEpisodeListSchema = Schema.Struct({
+  spaces: Schema.Array(
+    Schema.Struct({
+      live_episode: Schema.NullOr(
+        Schema.Struct({
+          episode_id: EpisodeIdSchema,
+          participant_count: Schema.Number,
+          participants: Schema.Array(
+            Schema.Struct({
+              display_name: Schema.String,
+              participant_id: ParticipantIdSchema,
+            }),
+          ),
+        }),
+      ),
+      space_id: SpaceIdSchema,
+    }),
+  ),
+});
+export type SpaceLiveEpisodeList = typeof SpaceLiveEpisodeListSchema.Type;
+
 export const SpacePublicInviteSchema = Schema.Struct({
   admission_mode: Schema.String,
   canonical_url: URLStringSchema,
@@ -1845,6 +1866,19 @@ export type ListRecordingsQueryParams = typeof ListRecordingsQueryParamsSchema.T
 export const ListRecordingsResponseSchema = RecordingListSchema;
 export type ListRecordingsResponse = typeof ListRecordingsResponseSchema.Type;
 
+export const ListSpaceLiveEpisodesPathParamsSchema = Schema.Struct({
+  tenant_id: TenantIdSchema,
+});
+export type ListSpaceLiveEpisodesPathParams = typeof ListSpaceLiveEpisodesPathParamsSchema.Type;
+
+export const ListSpaceLiveEpisodesQueryParamsSchema = Schema.Struct({
+  space_ids: Schema.String,
+});
+export type ListSpaceLiveEpisodesQueryParams = typeof ListSpaceLiveEpisodesQueryParamsSchema.Type;
+
+export const ListSpaceLiveEpisodesResponseSchema = SpaceLiveEpisodeListSchema;
+export type ListSpaceLiveEpisodesResponse = typeof ListSpaceLiveEpisodesResponseSchema.Type;
+
 export const ListSpacePublicAdmissionRequestsPathParamsSchema = Schema.Struct({
   space_id: SpaceIdSchema,
   tenant_id: TenantIdSchema,
@@ -2820,6 +2854,25 @@ export const EpisodeInvalidIdErrorWireSchema = Schema.Struct({
 export const EpisodeInvalidIdErrorSchema = EpisodeInvalidIdErrorWireSchema.pipe(
   Schema.decodeTo(EpisodeInvalidIdError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "EpisodeInvalidIdError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class EpisodeInvalidSpaceIdsError extends Schema.TaggedErrorClass<EpisodeInvalidSpaceIdsError>()("EpisodeInvalidSpaceIdsError", {
+  error: Schema.Struct({
+    code: Schema.Literal("episode.invalid_space_ids"),
+    message: Schema.String,
+  }),
+}) {}
+export const EpisodeInvalidSpaceIdsErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("episode.invalid_space_ids"),
+    message: Schema.String,
+  }),
+});
+export const EpisodeInvalidSpaceIdsErrorSchema = EpisodeInvalidSpaceIdsErrorWireSchema.pipe(
+  Schema.decodeTo(EpisodeInvalidSpaceIdsError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "EpisodeInvalidSpaceIdsError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -4840,6 +4893,9 @@ export const ListRecordingsErrorSchema = Schema.Union([
 ]);
 export type ListRecordingsError = typeof ListRecordingsErrorSchema.Type;
 
+export const ListSpaceLiveEpisodesErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, EpisodeInvalidSpaceIdsErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, SpaceNotFoundErrorSchema, TenantInvalidIdErrorSchema]);
+export type ListSpaceLiveEpisodesError = typeof ListSpaceLiveEpisodesErrorSchema.Type;
+
 export const ListSpacePublicAdmissionRequestsErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -5318,6 +5374,7 @@ export const ChalkOperationPolicies = {
   issueEpisodeParticipantSyncToken: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   leaveSpacePublicInviteArrival: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   listEpisodes: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
+  listSpaceLiveEpisodes: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   listSpacePublicAdmissionRequests: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   listWebhookDeliveries: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   listWebhookEndpoints: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },

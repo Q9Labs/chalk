@@ -13,7 +13,9 @@ Customer operations cover Tenant, Space, and Episode records; Participant admiss
 
 For an embed, set `cors_allowed_origins` with `updateTenant`, then use `createSpace` and `createEpisode` to prepare a live Space. Admit each Participant with `admitEpisodeParticipant` and issue an AccessGrant with `issueAccessGrant`. Keep the Tenant API key on your backend; the frontend gets its AccessGrant through your `getAccess` endpoint. See [Authentication](/docs/authentication) for the credential boundary.
 
-The API has no attendance query. Use `participant.joined` and `participant.left` Events to compute attendance as described in [Webhooks](/docs/webhooks).
+For current Participants across multiple Spaces, use `listSpaceLiveEpisodes` (`GET /v1/tenants/{tenant_id}/live-episodes?space_ids=...`) with 1–30 distinct comma-separated Space IDs and `episodes:read`. Each Space returns `live_episode: null` or an Episode ID, Participant count, and current Participant IDs and display names. Unknown or other-Tenant Space IDs return `404` for the entire batch.
+
+The API has no historical attendance query. Use `participant.joined` and `participant.left` Events to compute attendance as described in [Webhooks](/docs/webhooks).
 
 ### Use generated clients carefully
 
