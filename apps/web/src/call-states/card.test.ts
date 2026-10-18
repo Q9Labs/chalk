@@ -48,6 +48,12 @@ async function journey(run: (page: Page) => Promise<void>, phone = false) {
   }
 }
 
+async function capture(page: Page, name: string) {
+  if (!process.env.CARD_ARTIFACTS) return;
+  await mkdir(process.env.CARD_ARTIFACTS, { recursive: true });
+  await page.screenshot({ path: `${process.env.CARD_ARTIFACTS}/${name}.png` });
+}
+
 async function openPeople(page: Page, state = "card-people") {
   await page.goto(`${origin}/call-states.html?state=${state}`);
   const opener = page.getByRole("button", { name: "Participants", exact: true });
@@ -87,9 +93,11 @@ it(
       await page.getByRole("button", { name: "Send message", exact: true }).click();
       const image = page.getByRole("button", { name: "View sample.png", exact: true });
       await image.waitFor();
+      await capture(page, "laptop-chat-image-light");
       await image.click();
       const viewer = page.getByRole("dialog", { name: "Photo viewer" });
       expect(await viewer.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(11, 12, 14)");
+      await capture(page, "laptop-photo-viewer-light");
       await page.keyboard.press("Escape");
       expect(await image.evaluate((element) => element === document.activeElement)).toBe(true);
     }),
@@ -121,6 +129,7 @@ it(
   async () =>
     journey(async (page) => {
       await openPeople(page, "card-knocks");
+      await capture(page, "laptop-knocks-dark");
       await page.getByRole("button", { name: "Admit Rania Aziz", exact: true }).click();
       await page.getByRole("button", { name: "Admit Rania Aziz", exact: true }).waitFor({ state: "detached" });
       await openPeople(page, "card-guest");
@@ -134,21 +143,20 @@ it(
   "keeps phone focus inside its sheet and captures both themes",
   async () =>
     journey(async (page) => {
-      await openPeople(page);
-      const sheet = page.getByRole("dialog", { name: "People and Chat" });
-      await sheet.waitFor();
-      for (let index = 0; index < 16; index++) {
-        await page.keyboard.press("Tab");
-        expect(await sheet.evaluate((element) => element.contains(document.activeElement))).toBe(true);
-      }
-      if (process.env.CARD_ARTIFACTS) {
-        await mkdir(process.env.CARD_ARTIFACTS, { recursive: true });
-        await page.screenshot({ path: `${process.env.CARD_ARTIFACTS}/phone-people-dark.png` });
+      for (const scheme of ["dark", "light"] as const) {
+        await openPeople(page, scheme === "dark" ? "card-people" : "card-people-light");
+        const sheet = page.getByRole("dialog", { name: "People and Chat" });
+        await sheet.waitFor();
+        for (let index = 0; index < 16; index++) {
+          await page.keyboard.press("Tab");
+          expect(await sheet.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+        }
+        await capture(page, `phone-people-${scheme}`);
         await page.getByRole("tab", { name: "Chat", exact: true }).click();
-        await page.screenshot({ path: `${process.env.CARD_ARTIFACTS}/phone-chat-dark.png` });
+        await capture(page, `phone-chat-${scheme}`);
+        await page.keyboard.press("Escape");
+        await sheet.waitFor({ state: "hidden" });
       }
-      await page.keyboard.press("Escape");
-      await sheet.waitFor({ state: "hidden" });
     }, true),
   30_000,
 );

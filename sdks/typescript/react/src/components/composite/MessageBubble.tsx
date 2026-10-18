@@ -73,6 +73,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
     useEffect(() => () => cancelPress(), []);
     useEffect(() => {
       if (!reactionBarOpen) return;
+      messageRef.current?.querySelector<HTMLButtonElement>(".call-reaction-bar button")?.focus({ preventScroll: true });
       const dismiss = (event: PointerEvent) => {
         if (event.target instanceof Node && !messageRef.current?.contains(event.target)) setReactionBarOpen(false);
       };
@@ -135,7 +136,6 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
                 timer: setTimeout(() => {
                   press.current = null;
                   setReactionBarOpen(true);
-                  messageRef.current?.querySelector<HTMLButtonElement>(".call-reaction-bar button")?.focus({ preventScroll: true });
                 }, 450),
               };
             }}
