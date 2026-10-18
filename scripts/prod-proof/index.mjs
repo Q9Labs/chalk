@@ -42,7 +42,7 @@ const plans = {
   transcript: {
     media: true,
     cameraShare: false,
-    webhooks: false,
+    webhooks: true,
     proofs: ["transcript"],
   },
 };
@@ -96,7 +96,7 @@ async function runProofs(run, plan, report, forceLayerSwitch) {
       check(report.proofs.export.result === "passed", "MP4 Export/download did not pass");
       return smokeProof(run, receiver);
     },
-    transcript: () => transcriptProof(run),
+    transcript: () => transcriptProof(run, receiver),
   };
   for (const name of plan.proofs) await recordResult(run, report, name, actions[name]);
 }
