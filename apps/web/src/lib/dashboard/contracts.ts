@@ -101,7 +101,7 @@ export type RecordingDTO = { id: string; status: string; exportStatus: string; c
 export type TranscriptDTO = { id: string; status: string; languages: readonly string[]; createdAt: string };
 export type KeyDTO = { id: string; name: string; prefix: string; scopes: readonly string[]; expiresAt: string; revokedAt: string | null };
 export type WebhookDTO = { id: string; name: string; url: string; enabled: boolean; revision: number; eventTypes: readonly string[] };
-export type AttendanceDTO = { kind: "available"; participants: { id: string; name: string; kind: "user" | "agent" | "guest"; externalId: string | null; intervals: { joinedAt: string; leftAt: string | null }[] }[] } | { kind: "unavailable"; reason: "attendance_api_pending" };
+export type AttendanceDTO = { kind: "available"; participants: { id: string; name: string; kind: "user" | "agent" | "guest"; externalId: string | null; firstJoinedAt: string; lastLeftAt: string | null }[] };
 export type HomeDTO = { calls: CallDTO[]; live: LiveDTO[]; nextCursor: string | null };
 export type CallPageDTO = { call: CallDTO; inviteUrl: string; episodes: EpisodeDTO[]; nextCursor: string | null; knocks: { handle: string; name: string; requestedAt: string; expiresAt: string; state: string }[] };
 export type PastSessionDTO = { episode: EpisodeDTO; attendance: AttendanceDTO; recordings: RecordingDTO[]; nextCursor: string | null };
@@ -109,7 +109,7 @@ export type AllowedWebsitesDTO = { allowedWebsites: readonly string[] };
 export type DeveloperDTO = AllowedWebsitesDTO & { keys: KeyDTO[]; webhooks: WebhookDTO[]; nextKeyCursor: string | null; nextWebhookCursor: string | null };
 export type SecretDTO = { id: string; secret: string };
 export type ArtifactURLDTO = { url: string; expiresAt: string; method: string; headers: Readonly<Record<string, readonly string[]>> };
-export type DashboardErrorDTO = { error: { code: string } };
+export type DashboardErrorDTO = { error: { code: string; retryable?: true; retryAfterSeconds?: number } };
 
 export type OwnerAccessDTO = { access: AccessGrant };
 

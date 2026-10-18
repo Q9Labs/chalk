@@ -1,16 +1,14 @@
 import { Schema } from "effect";
 import { EpisodeIdSchema, RecordingIdSchema, SpaceIdSchema, TranscriptIdSchema } from "@q9labsai/chalk-client/effect";
-import type { DashboardEnvironment } from "./config";
 import type { Engine } from "./engine";
 import { attendance, run } from "./engine";
 import { episodeDTO, recordingDTO, transcriptDTO } from "./dto";
 import { DashboardError } from "./http";
 import type { ArtifactURLDTO, PastSessionAction, PastSessionDTO } from "../src/lib/dashboard/contracts";
-export async function pastSessionPage(env: DashboardEnvironment, engine: Engine, spaceId: string, episodeId: string, cursor?: string): Promise<PastSessionDTO> {
+export async function pastSessionPage(engine: Engine, spaceId: string, episodeId: string, cursor?: string): Promise<PastSessionDTO> {
   const params = { tenant_id: engine.tenantId, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(spaceId), episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(episodeId) };
-  // Verify the Episode before the provisional attendance endpoint, which may not exist yet.
   const episode = await run(engine.api.episodes.getEpisode({ params }));
-  const [recordings, people] = await Promise.all([run(engine.api.recordings.listRecordings({ params: { tenant_id: engine.tenantId }, query: { space_id: params.space_id, episode_id: params.episode_id, page_size: 30, cursor } })), attendance(env, engine.tenantId, spaceId, episodeId)]);
+  const [recordings, people] = await Promise.all([run(engine.api.recordings.listRecordings({ params: { tenant_id: engine.tenantId }, query: { space_id: params.space_id, episode_id: params.episode_id, page_size: 30, cursor } })), attendance(engine, params)]);
   return { episode: episodeDTO(episode), attendance: people, recordings: recordings.recordings.map(recordingDTO), nextCursor: recordings.pagination.next_cursor };
 }
 function artifactDTO(value: { url: string; expires_at: string; method: string; signed_headers: Readonly<Record<string, readonly string[]>> }): ArtifactURLDTO {

@@ -26,14 +26,14 @@ export async function ownerAccess(request: Request, env: DashboardEnvironment, e
     return json({ access } satisfies OwnerAccessDTO);
   }
   await run(engine.api.spaces.prepareSpaceEntrance({ params }));
-  const current = (await live(env, engine.tenantId, [action.spaceId]))[0]?.episode;
+  const current = (await live(engine, [action.spaceId]))[0]?.episode;
   let episodeId = current?.id;
   if (!episodeId) {
     try {
       episodeId = (await run(engine.api.episodes.createEpisode({ params, headers: { "Idempotency-Key": action.idempotencyKey }, payload: {} }))).id;
     } catch (error) {
       if (!(error instanceof DashboardError) || error.status !== 409) throw error;
-      episodeId = (await live(env, engine.tenantId, [action.spaceId]))[0]?.episode?.id;
+      episodeId = (await live(engine, [action.spaceId]))[0]?.episode?.id;
       if (!episodeId) throw error;
     }
   }

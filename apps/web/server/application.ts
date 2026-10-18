@@ -116,14 +116,14 @@ async function dashboard(request: Request, env: DashboardEnvironment, provider: 
   if (request.method === "GET") {
     switch (path) {
       case "/dashboard-api/home":
-        return json(await homePage(env, client, pageQuery.parse(query(request)).cursor));
+        return json(await homePage(client, pageQuery.parse(query(request)).cursor));
       case "/dashboard-api/call": {
         const input = callQuery.parse(query(request));
         return json(await callPage(client, input.spaceId, input.cursor));
       }
       case "/dashboard-api/past-session": {
         const input = pastQuery.parse(query(request));
-        return json(await pastSessionPage(env, client, input.spaceId, input.episodeId, input.cursor));
+        return json(await pastSessionPage(client, input.spaceId, input.episodeId, input.cursor));
       }
       case "/dashboard-api/developer":
         return json(await developerPage(client, developerQuery.parse(query(request))));
@@ -163,7 +163,8 @@ function failure(error: unknown): Response {
   const code = error instanceof DashboardError ? error.code : error instanceof z.ZodError ? "invalid_request" : "service_unavailable";
   const requestId = crypto.randomUUID();
   console.warn(JSON.stringify({ event: "dashboard.request_failed", request_id: requestId, status, code, error_type: error instanceof Error ? error.name : typeof error, source: error instanceof Error ? error.stack?.split("\n")[1]?.trim().slice(0, 180) : undefined }));
-  const response = json({ error: { code } }, status);
+  const response = json({ error: status === 429 ? { code, retryable: true, retryAfterSeconds: 60 } : { code } }, status);
+  if (status === 429) response.headers.set("Retry-After", "60");
   response.headers.set("X-Request-ID", requestId);
   return response;
 }

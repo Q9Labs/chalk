@@ -1,17 +1,15 @@
 import { Schema } from "effect";
 import { SpaceIdSchema } from "@q9labsai/chalk-client/effect";
-import type { DashboardEnvironment } from "./config";
 import type { Engine } from "./engine";
 import { live, run } from "./engine";
 import { callDTO } from "./dto";
 import type { HomeAction, HomeDTO } from "../src/lib/dashboard/contracts";
-export async function homePage(env: DashboardEnvironment, engine: Engine, cursor?: string): Promise<HomeDTO> {
+export async function homePage(engine: Engine, cursor?: string): Promise<HomeDTO> {
   const result = await run(engine.api.spaces.listSpaces({ params: { tenant_id: engine.tenantId }, query: { page_size: 30, cursor, archived: false } }));
   return {
     calls: result.spaces.map(callDTO),
     live: await live(
-      env,
-      engine.tenantId,
+      engine,
       result.spaces.map((s) => s.id),
     ),
     nextCursor: result.pagination.next_cursor,
@@ -38,7 +36,7 @@ export async function homeMutation(engine: Engine, action: HomeAction) {
     case "rename-call":
     case "set-admission": {
       const patch = action.action === "rename-call" ? { name: action.name } : { admission_policy: { mode: action.admission === "anyone" ? "open" : "knock" } };
-      const space = await run(engine.api.spaces.updateSpace({ params: spaceParams, payload: { ...patch, default_episode_duration_seconds: { Set: false }, maximum_episode_duration_seconds: { Set: false }, linger_window_seconds: { Set: false } } }));
+      const space = await run(engine.api.spaces.updateSpace({ params: spaceParams, payload: patch }));
       return { call: callDTO(space) };
     }
   }
