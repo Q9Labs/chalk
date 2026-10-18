@@ -62,6 +62,7 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${origin}/call-states.html?state=duo`);
   const phoneStage = page.getByTestId("stage");
+  await phoneStage.locator(":scope > div > *").first().waitFor();
   const tilesBefore = await phoneStage.locator(":scope > div > *").elementHandles();
   const spotlightBox = await tilesBefore[0].boundingBox();
   await page.getByRole("button", { name: "More options", exact: true }).click();

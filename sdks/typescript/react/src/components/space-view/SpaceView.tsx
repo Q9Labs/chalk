@@ -108,9 +108,6 @@ export function SpaceView({
   const canManageRecording = useCan("manageRecording");
   const episodeDuration = useEpisodeDuration();
   const [uncontrolledLayout, setUncontrolledLayout] = useState<"grid" | "focus">(controlledLayout ?? "focus");
-  useEffect(() => {
-    if (controlledLayout !== undefined) setUncontrolledLayout(controlledLayout);
-  }, [controlledLayout]);
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(initialPanel);
   const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(null);
