@@ -89,6 +89,7 @@ async function dispatcherBinding({ commandRunner, options, dryRun }) {
 
 async function prepareRelease({ allowedSecretIds, now, options }) {
   const manifest = await loadManifest(options.manifestPath);
+  if (options.environment === "nightly" && !manifest.images?.recorder_control) options.dispatcherConfigParameter = undefined;
   const secretIds = await resolveAllowedSecretIds(allowedSecretIds);
   const exclusions = normalizeExclusions(options.excludedSecrets, secretIds);
   const requestedAt = now().toISOString();

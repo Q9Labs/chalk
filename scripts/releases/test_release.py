@@ -294,7 +294,7 @@ class ArtifactTests(unittest.TestCase):
                    path='.github/workflows/ci.yml', event='workflow_dispatch')
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / 'not-created'
-            with patch.dict(os.environ, SOURCE_RUN_ID='1', SOURCE_RELEASE_ID='source', SOURCE_ARTIFACT_ID='2', SOURCE_SHA256='a' * 64, TARGET_SHA=SHA):
+            with patch.dict(os.environ, SOURCE_RUN_ID='1', SOURCE_RELEASE_ID='source', SOURCE_ARTIFACT_ID='2', SOURCE_SHA256='a' * 64, TARGET_SHA=SHA, MANAGED_ENVIRONMENT='production'):
                 with patch.object(api, 'request', side_effect=lambda route: [] if route.startswith('deployments?') else run), patch.object(api, 'artifact', side_effect=ValueError('checksum mismatch')):
                     with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
                         release.prepare(api, SimpleNamespace(reuse=True, directory=output))

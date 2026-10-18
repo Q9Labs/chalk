@@ -18,7 +18,7 @@ on:
         default: false
         type: boolean
       enable_recorder_control:
-        description: First enablement of colocated recording controls (requires approved secrets and direct TLS ingress)
+        description: Include recorder control and media on nightly; production also preserves an enabled baseline
         required: true
         default: false
         type: boolean
@@ -244,10 +244,13 @@ jobs:
           fi
 
           recorder_control="$ENABLE_RECORDER_CONTROL"
-          if [[ "${{ inputs.managed_environment }}" == nightly ]]; then recorder_control=true; fi
-          if [[ -n "$stable_manifest" ]] && jq -e '.images | has("recorder_control")' "$stable_manifest" >/dev/null; then
+          if [[ "${{ inputs.managed_environment }}" != nightly && -n "$stable_manifest" ]] && jq -e '.images | has("recorder_control")' "$stable_manifest" >/dev/null; then
             recorder_control=true
-          elif [[ "$ENABLE_RECORDER_CONTROL" == true ]]; then
+          fi
+          if [[ "${{ inputs.managed_environment }}" == nightly && "$recorder_control" != true && -n "$stable_manifest" ]]; then
+            jq 'del(.images.recorder_control)' "$stable_manifest" > "$PLAN_ROOT/backend-baseline.json"
+            mv "$PLAN_ROOT/backend-baseline.json" "$stable_manifest"
+          elif [[ "$recorder_control" == true ]] && { [[ -z "$stable_manifest" ]] || ! jq -e '.images | has("recorder_control")' "$stable_manifest" >/dev/null; }; then
             infrastructure/managed-episode/scripts/plan-release-components --component both > "$PLAN_ROOT/plan.json"
           fi
           jq -e '.build_set == [] or .build_set == ["api"] or .build_set == ["sync"] or .build_set == ["api", "sync"]' "$PLAN_ROOT/plan.json" >/dev/null
@@ -430,7 +433,7 @@ jobs:
   build-media:
     name: Build and inspect media release members
     needs: plan-managed
-    if: needs.plan-managed.outputs.should_publish == 'true' && inputs.managed_environment == 'nightly'
+    if: needs.plan-managed.outputs.should_publish == 'true' && needs.plan-managed.outputs.recorder_control == 'true' && inputs.managed_environment == 'nightly'
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     environment: nightly
@@ -533,7 +536,7 @@ jobs:
     if: >-
       always() &&
       needs.plan-managed.outputs.should_publish == 'true' &&
-      (needs.build-media.result == 'success' || (needs.build-media.result == 'skipped' && inputs.managed_environment != 'nightly')) &&
+      (needs.build-media.result == 'success' || (needs.build-media.result == 'skipped' && (inputs.managed_environment != 'nightly' || needs.plan-managed.outputs.recorder_control != 'true'))) &&
       (needs.build-managed-images.result == 'success' || (needs.build-managed-images.result == 'skipped' && needs.plan-managed.outputs.build_set == '[]'))
     runs-on: ubuntu-24.04
     steps:
@@ -558,7 +561,7 @@ jobs:
           merge-multiple: true
 
       - name: Download immutable media members
-        if: inputs.managed_environment == 'nightly'
+        if: needs.build-media.result == 'success'
         uses: actions/download-artifact@v4
         with:
           name: media-members-${{ needs.plan-managed.outputs.release_id }}
@@ -603,6 +606,7 @@ jobs:
           infrastructure/managed-episode/scripts/generate-release-manifest "${args[@]}"
 
       - name: Bind media members to the backend artifact
+        if: needs.plan-managed.outputs.recorder_control == 'true'
         id: media-hash
         env:
           RELEASE_ID: ${{ needs.plan-managed.outputs.release_id }}
@@ -772,7 +776,8 @@ jobs:
             --timeout-seconds 1800
           )
           args+=(--adopt-existing-release)
-          if [[ -n "$CHALK_MANAGED_RECORDER_CONFIG_PARAMETER" ]]; then
+          recorder_control="$(jq -r '.images | has("recorder_control")' "$manifest")"
+          if [[ "$recorder_control" == true && -n "$CHALK_MANAGED_RECORDER_CONFIG_PARAMETER" ]]; then
             args+=(--dispatcher-config-parameter "$CHALK_MANAGED_RECORDER_CONFIG_PARAMETER")
           fi
           while IFS= read -r secret_id; do
@@ -784,7 +789,13 @@ jobs:
           done < <(printf '%s\n' "$MANAGED_SECRET_EXCLUSIONS" | tr ',' '\n')
 
           if [[ "$MANAGED_ENVIRONMENT" == nightly ]]; then
-            [[ "$CHALK_MANAGED_PARAMETER_PREFIX" == /chalk/nightly/managed-episode && "$CHALK_MANAGED_RECORDER_CONFIG_PARAMETER" == /chalk/nightly/* ]] || {
+            [[ "$CHALK_MANAGED_PARAMETER_PREFIX" == /chalk/nightly/managed-episode ]] || {
+              echo 'nightly requires its own managed parameter prefix' >&2
+              exit 1
+            }
+          fi
+          if [[ "$MANAGED_ENVIRONMENT" == nightly && "$recorder_control" == true ]]; then
+            [[ "$CHALK_MANAGED_RECORDER_CONFIG_PARAMETER" == /chalk/nightly/* ]] || {
               echo 'nightly requires its own dispatcher configuration and state (PR #268, scheduler_state=DISABLED initially)' >&2
               exit 1
             }
@@ -938,6 +949,7 @@ jobs:
           SOURCE_ARTIFACT_ID: ${{ inputs.manifest_artifact_id || needs.publish-managed-manifest.outputs.artifact_id }}
           SOURCE_SHA256: ${{ inputs.manifest_sha256 }}
           SOURCE_MEDIA_SHA256: ${{ inputs.media_sha256 || needs.publish-managed-manifest.outputs.media_sha256 }}
+          MANAGED_ENVIRONMENT: ${{ inputs.managed_environment }}
           ROLLBACK_MEDIA: ${{ inputs.rollback_media }}
           REUSE: ${{ inputs.manifest_run_id != '' }}
         run: |

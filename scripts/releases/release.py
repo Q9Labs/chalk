@@ -229,6 +229,8 @@ def media_bytes(github, info):
 
 
 def prepare(github, args):
+    environment = env('MANAGED_ENVIRONMENT')
+    require(environment in ('nightly', 'production'), 'unsupported managed environment; expected nightly or production')
     info = dict(run_id=env('SOURCE_RUN_ID'), release_id=env('SOURCE_RELEASE_ID'),
                 manifest_artifact_id=env('SOURCE_ARTIFACT_ID'), manifest_sha256=os.environ.get('SOURCE_SHA256'), target_sha=env('TARGET_SHA'),
                 media_sha256=os.environ.get('SOURCE_MEDIA_SHA256'))
@@ -238,6 +240,8 @@ def prepare(github, args):
     if os.environ.get('ROLLBACK_MEDIA'):
         require(args.reuse and not media, 'rollback snapshot is only for a legacy source')
         media = os.environ['ROLLBACK_MEDIA'].encode()
+    if environment == 'production':
+        require('recorder_control' in json.loads(data).get('images', {}), 'production requires recorder control')
     if media:
         from media import validate_members
         validate_members(json.loads(media))

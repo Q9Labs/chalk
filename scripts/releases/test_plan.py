@@ -4,12 +4,17 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import release
+from test_release import MemoryGitHub, SHA
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 class ReleasePlan(unittest.TestCase):
-    def plan(self, root, *, stable=False, baseline=None, duplicate=False):
+    def plan(self, root, *, stable=False, baseline=None, duplicate=False, recorder_control=False):
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
         script = workflow.split('      - name: Plan changed components\n', 1)[1].split('        run: |\n', 1)[1].split('\n      - name:', 1)[0]
         script = '\n'.join(line[10:] for line in script.splitlines())
@@ -26,17 +31,44 @@ class ReleasePlan(unittest.TestCase):
                 (download / 'duplicate.json').write_text(json.dumps(manifest))
         # Run a script, not stdin: the component planner also reads stdin for paths.
         result = subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', script], cwd=ROOT, stdin=subprocess.DEVNULL, text=True, capture_output=True,
-                                env=dict(os.environ, TARGET_SHA=head, DEPLOY_MANAGED='true', ENABLE_RECORDER_CONTROL='false',
+                                env=dict(os.environ, TARGET_SHA=head, DEPLOY_MANAGED='true', ENABLE_RECORDER_CONTROL=str(recorder_control).lower(),
                                          PLAN_ROOT=str(root / 'plan'), GITHUB_OUTPUT=str(root / 'output')))
         return result
 
-    def test_first_install_builds_both_components_and_enables_nightly_recording(self):
-        with tempfile.TemporaryDirectory() as directory:
+    def test_first_install_builds_both_components_and_follows_recording_input(self):
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                result = self.plan(root, recorder_control=enabled)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                output = dict(line.split('=', 1) for line in (root / 'output').read_text().splitlines())
+                self.assertEqual(json.loads(output['build_set']), ['api', 'sync'])
+                self.assertEqual(output['recorder_control'], str(enabled).lower())
+                self.assertEqual(output['should_publish'], 'true')
+
+    def test_nightly_cut_forwards_recording_from_production_baseline(self):
+        api = MemoryGitHub()
+        original_artifact = api.artifact
+        manifest = json.dumps(dict(release_id='previous', source_revision=SHA,
+                                   images=dict(recorder_control='production-control'))).encode()
+
+        def artifact(run, identity, name, expected=None):
+            if name == 'previous.json':
+                return manifest
+            return original_artifact(run, identity, name, expected)
+
+        with tempfile.TemporaryDirectory() as directory, patch.object(api, 'artifact', side_effect=artifact):
             root = Path(directory)
-            result = self.plan(root)
+            self.assertTrue(release.previous_production(api)['recorder_control'])
+            with patch.dict(os.environ, GITHUB_OUTPUT=str(root / 'cut-output'), GITHUB_RUN_ID='1'):
+                release.plan(api, SimpleNamespace(manual=True))
+            cut = dict(line.split('=', 1) for line in (root / 'cut-output').read_text().splitlines())
+            self.assertEqual(cut['recorder_control'], 'true')
+            workflow = (ROOT / '.github/workflows/nightly.yml').read_text()
+            self.assertIn("enable_recorder_control: ${{ needs.plan.outputs.recorder_control == 'true' }}", workflow)
+            result = self.plan(root, stable=True, recorder_control=cut['recorder_control'] == 'true')
             self.assertEqual(result.returncode, 0, result.stderr)
             output = dict(line.split('=', 1) for line in (root / 'output').read_text().splitlines())
-            self.assertEqual(json.loads(output['build_set']), ['api', 'sync'])
             self.assertEqual(output['recorder_control'], 'true')
             self.assertEqual(output['should_publish'], 'true')
 
