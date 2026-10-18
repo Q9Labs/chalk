@@ -62,6 +62,8 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${origin}/call-states.html?state=duo`);
   const phoneStage = page.getByTestId("stage");
+  assert.equal(await page.locator('[data-part="dock-more-glyph"]').getAttribute("d"), "M5 12h.01M12 12h.01M19 12h.01");
+  assert.equal(await page.locator('[data-part="dock-more-glyph"]').getAttribute("stroke-width"), "3");
   await phoneStage.locator(":scope > div > *").first().waitFor();
   await page.waitForTimeout(300);
   const tilesBefore = await phoneStage.locator(":scope > div > *").elementHandles();
