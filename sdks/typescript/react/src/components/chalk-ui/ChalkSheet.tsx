@@ -18,6 +18,7 @@ export function ChalkSheet({ open, onOpenChange, title, children, variant = "def
           <Dialog.Portal container={container}>
             <Dialog.Backdrop data-part="sheet-scrim" className="chalk-sheet-scrim" />
             <Dialog.Popup
+              initialFocus={variant === "ready" ? () => container.querySelector<HTMLElement>("[data-part=ready-title]") : undefined}
               finalFocus={variant === "ready" ? () => container.querySelector<HTMLElement>("[data-call-link-trigger]") : undefined}
               data-part={variant === "ready" ? "call-ready" : variant === "panel" ? "panel-card" : "sheet"}
               data-variant={variant}

@@ -48,11 +48,13 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
   const content = (
     <>
       <div className="-mt-1.5 mb-0.5 flex items-center justify-between">
-        <h2 id={id} data-part="ready-title" style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.4, fontFamily: "inherit", letterSpacing: "normal", textWrap: "wrap" }}>
+        <h2 id={id} data-part="ready-title" tabIndex={-1} style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.4, fontFamily: "inherit", letterSpacing: "normal", textWrap: "wrap", outline: "none" }}>
           Your call is ready
         </h2>
-        <button type="button" className="chalk-dismiss max-sm:!h-11 max-sm:!w-11" aria-label="Close call link" onClick={close}>
-          ×
+        <button type="button" data-part="ready-dismiss" className="chalk-dismiss max-sm:!h-11 max-sm:!w-11" aria-label="Close call link" onClick={close}>
+          <svg width="20" height="20" style={{ width: 20, height: 20 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
+            <path d="m6 6 12 12M6 18 18 6" />
+          </svg>
         </button>
       </div>
       <p className="mr-1 text-[13px] text-[var(--chalk-muted-text)]">Share this link with people you want in the call</p>
