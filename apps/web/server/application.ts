@@ -97,7 +97,7 @@ async function auth(request: Request, env: DashboardEnvironment, provider: Ident
     const refreshed = await provider.refresh(sealed);
     if (refreshed.kind === "transient") return json({ error: { code: "identity_temporarily_unavailable" } }, 503);
     if (refreshed.kind === "terminal" || refreshed.identity.userId !== bound.userId || refreshed.identity.sessionId !== bound.sessionId) {
-      const response = json({ error: { code: "sign_in_required" } }, 401);
+      const response = failure(new DashboardError(401, refreshed.kind === "terminal" ? "sign_in_required" : "session_binding_mismatch"));
       clearSession(response, env);
       return response;
     }

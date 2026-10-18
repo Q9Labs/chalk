@@ -10,6 +10,16 @@ import { DashboardError, json } from "./http";
 import type { CallAction, OwnerAccessDTO } from "../src/lib/dashboard/contracts";
 
 const seatSchema = z.object({ userId: z.string(), sessionId: z.string(), spaceId: z.uuid(), episodeId: z.uuid(), participantId: z.uuid(), generation: z.number().int().positive(), expiresAt: z.number() });
+// Domain-separated, Tenant/owner/Episode-bound retry identity. A deliberate new
+// join uses a new idempotency key and therefore gets a new seat.
+async function ownerParticipantId(tenantId: string, userId: string, spaceId: string, episodeId: string, idempotencyKey: string) {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(["dashboard-owner-seat-v1", tenantId, userId, spaceId, episodeId, idempotencyKey]))));
+  const bytes = new DataView(digest.buffer);
+  bytes.setUint8(6, (bytes.getUint8(6) & 0x0f) | 0x80);
+  bytes.setUint8(8, (bytes.getUint8(8) & 0x3f) | 0x80);
+  const hex = Array.from(digest.slice(0, 16), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return Schema.decodeUnknownSync(ParticipantIdSchema)(`${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`);
+}
 export async function ownerAccess(request: Request, env: DashboardEnvironment, engine: Engine, person: Identity, action: Extract<CallAction, { action: "join" | "refresh-access" }>): Promise<Response> {
   const params = { tenant_id: engine.tenantId, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(action.spaceId) };
   if (action.action === "refresh-access") {
@@ -37,7 +47,13 @@ export async function ownerAccess(request: Request, env: DashboardEnvironment, e
       if (!episodeId) throw error;
     }
   }
-  const result = await run(engine.api.episodes.admitEpisodeParticipant({ params: { ...params, episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(episodeId) }, headers: { "Idempotency-Key": action.idempotencyKey }, payload: { role: "owner", name: person.name || person.email } }));
+  const result = await run(
+    engine.api.episodes.admitEpisodeParticipant({
+      params: { ...params, episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(episodeId) },
+      headers: { "Idempotency-Key": action.idempotencyKey },
+      payload: { admission: "direct", participant_id: await ownerParticipantId(engine.tenantId, person.userId, action.spaceId, episodeId, action.idempotencyKey), role: "owner", name: person.name || person.email },
+    }),
+  );
   if (!result.access) throw new DashboardError(409, "admission_pending");
   const response = json({ access: result.access } satisfies OwnerAccessDTO);
   writeCookie(

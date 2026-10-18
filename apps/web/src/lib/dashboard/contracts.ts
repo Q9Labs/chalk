@@ -80,7 +80,7 @@ export const developerAction = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("rotate-key"), keyId: id, expiresAt: z.iso.datetime(), idempotencyKey }),
   z.strictObject({ action: z.literal("revoke-key"), keyId: id }),
   z.strictObject({ action: z.literal("create-webhook"), ...webhookFields, idempotencyKey }),
-  z.strictObject({ action: z.literal("update-webhook"), webhookId: id, ...webhookFields, revision: z.number().int().positive(), idempotencyKey }),
+  z.strictObject({ action: z.literal("update-webhook"), webhookId: id, name: webhookFields.name.optional(), url: webhookFields.url.optional(), enabled: webhookFields.enabled.optional(), eventTypes: webhookFields.eventTypes.optional(), revision: z.number().int().positive(), idempotencyKey }),
   z.strictObject({ action: z.literal("delete-webhook"), webhookId: id, revision: z.number().int().positive(), idempotencyKey }),
   z.strictObject({ action: z.literal("rotate-webhook-secret"), webhookId: id, revokePreviousImmediately: z.boolean(), idempotencyKey }),
   z.strictObject({ action: z.literal("test-webhook"), webhookId: id, idempotencyKey }),

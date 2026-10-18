@@ -187,13 +187,60 @@ try {
   assert.equal(storedSpace.name, "Renamed");
   assert.equal(storedSpace.admission_policy.mode, "knock");
   assert.equal(storedSpace.default_episode_duration_seconds, 3600);
+  // Use separate Spaces so the historical attendance fixtures stay independent.
+  for (const admission of ["anyone", "knock"]) {
+    const createdCall = await post(ada, "/dashboard-api/home", { action: "create-call", name: `Owner ${admission}`, admission, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
+    assert.equal(createdCall.status, 200, await createdCall.clone().text());
+    const ownerSpaceId = (await createdCall.json()).call.id;
+    const join = { action: "join", spaceId: ownerSpaceId, idempotencyKey: crypto.randomUUID() };
+    const joined = await post(ada, "/dashboard-api/call", join, session.csrfToken);
+    assert.equal(joined.status, 200, await joined.clone().text());
+    const grant = (await joined.json()).access;
+    assert(grant.sync.token && grant.media.token);
+    assert.equal(grant.subject.tenant_id, firstTenant);
+    const replay = await post(ada, "/dashboard-api/call", join, session.csrfToken);
+    assert.equal(replay.status, 200, await replay.clone().text());
+    assert.equal((await replay.json()).access.subject.participant_id, grant.subject.participant_id);
+    assert.equal(sql(`select count(*) from participants where episode_id='${grant.subject.episode_id}'`), "1");
+    const refreshedAccess = await post(ada, "/dashboard-api/call", { action: "refresh-access", spaceId: ownerSpaceId }, session.csrfToken);
+    assert.equal(refreshedAccess.status, 200, await refreshedAccess.clone().text());
+    if (admission === "knock") {
+      const guest = await fetch(`${process.env.DASHBOARD_TEST_API_ORIGIN}/v1/tenants/${firstTenant}/spaces/${ownerSpaceId}/episodes/${grant.subject.episode_id}/participants`, {
+        method: "POST",
+        headers: { Authorization: "Bearer fixture-dashboard-service-token-not-a-secret", "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({ name: "Guest", role: "observer", participant_id: crypto.randomUUID() }),
+      });
+      assert.equal(guest.status, 201, await guest.clone().text());
+      const waiting = await guest.json();
+      assert(waiting.admission_request);
+      assert(!waiting.access);
+    }
+    // A deliberate rejoin after a leave gets a fresh seat, not the replay seat.
+    // Sync is not running in this harness; seed its completed leave state.
+    sql(`update participants set status='left', last_left_at=now() where id='${grant.subject.participant_id}'`);
+    const rejoin = await post(ada, "/dashboard-api/call", { ...join, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
+    assert.equal(rejoin.status, 200, await rejoin.clone().text());
+    assert.notEqual((await rejoin.json()).access.subject.participant_id, grant.subject.participant_id);
+  }
+  console.log("PASS: owner open/knock direct grants, same-key seat replay, access refresh, new-key rejoin seat, guest knock still waits");
   const keyResponse = await post(ada, "/dashboard-api/developer", { action: "create-key", name: "Test", scopes: ["spaces:read"], expiresAt: "2027-01-01T00:00:00Z", idempotencyKey: crypto.randomUUID() }, session.csrfToken);
   assert.equal(keyResponse.status, 200, await keyResponse.clone().text());
   const keyId = (await keyResponse.json()).id;
   assert.equal((await post(ada, "/dashboard-api/developer", { action: "create-key", name: "Escalation", scopes: ["tenants:write"], expiresAt: "2027-01-01T00:00:00Z", idempotencyKey: crypto.randomUUID() }, session.csrfToken)).status, 400);
-  const hookResponse = await post(ada, "/dashboard-api/developer", { action: "create-webhook", name: "Test", url: "https://example.com/hook", enabled: true, eventTypes: ["episode.ended"], idempotencyKey: crypto.randomUUID() }, session.csrfToken);
+  const hookResponse = await post(ada, "/dashboard-api/developer", { action: "create-webhook", name: "Test", url: "https://example.com/hook?token=fixture-webhook-url-credential", enabled: true, eventTypes: ["episode.ended"], idempotencyKey: crypto.randomUUID() }, session.csrfToken);
   assert.equal(hookResponse.status, 200, await hookResponse.clone().text());
-  const webhookId = (await hookResponse.json()).webhook.id;
+  const hook = (await hookResponse.json()).webhook;
+  const webhookId = hook.id;
+  const targetBefore = sql(`select current_target_revision from webhook_endpoints where id='${webhookId}'`);
+  const urlBefore = sql(`select encode(url_ciphertext,'hex') from webhook_endpoint_revisions where endpoint_id='${webhookId}' and revision=${targetBefore}`);
+  const updatedHook = await post(ada, "/dashboard-api/developer", { action: "update-webhook", webhookId, revision: hook.revision, enabled: false, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
+  assert.equal(updatedHook.status, 200, await updatedHook.clone().text());
+  const patch = unsupportedBodies.findLast((r) => r.method === "PATCH" && r.path.endsWith(`/webhook-endpoints/${webhookId}`));
+  assert.deepEqual(JSON.parse(patch.body), { enabled: false });
+  assert.equal(sql(`select enabled from webhook_endpoints where id='${webhookId}'`), "f");
+  const targetAfter = sql(`select current_target_revision from webhook_endpoints where id='${webhookId}'`);
+  assert.equal(sql(`select encode(url_ciphertext,'hex') from webhook_endpoint_revisions where endpoint_id='${webhookId}' and revision=${targetAfter}`), urlBefore);
+  console.log("PASS: partial webhook update omits URL and preserves the actual encrypted destination");
   const foreign = { spaceId, episodeId: crypto.randomUUID(), recordingId: crypto.randomUUID(), transcriptId: crypto.randomUUID(), keyId, webhookId, deliveryId: crypto.randomUUID() };
   // Provider artifacts are seeded, not mocked. Every read/authorization uses the
   // production HTTP server and PostgreSQL repositories; no vendor is contacted.
@@ -313,7 +360,12 @@ try {
   assert.equal((await post(ada, "/auth/sign-out", {}, session.csrfToken)).status, 200);
   assert.equal((await ada.request("/auth/session")).status, 401);
   await fetch(`${origin}/fixture/control`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ person: "malik", refresh: "terminal" }) });
-  assert.equal((await post(malik, "/auth/refresh", {}, other.csrfToken)).status, 401);
+  const terminal = await post(malik, "/auth/refresh", {}, other.csrfToken);
+  assert.equal(terminal.status, 401);
+  const terminalRequestId = terminal.headers.get("X-Request-ID");
+  assert(terminalRequestId);
+  await delay(100);
+  assert(pagesOutput.includes(terminalRequestId), "terminal refresh must log its returned request ID");
   assert.equal(malik.cookies.size, 0);
   console.log("PASS: real Pages auth, two identities, idempotent Tenant bootstrap, callback replay, return URLs, exact Origin, CSRF, refresh success/transient/terminal, online-gated secrets, sign-out");
   console.log("PASS: real API/PostgreSQL A/B isolation across every named resource action, persisted rename/admission/websites, seat attendance, and bounded retryable 429s without provisioning");
