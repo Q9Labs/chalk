@@ -110,8 +110,15 @@ async function setup(initial: readonly MessageFrame[] = [], localParticipantId =
     await send.acknowledge();
     return send.message;
   }
+  async function catchUpRange(messages: MessageFrame[], start: number, end: number, source: "own" | "peer", floor = 1) {
+    for (let sequence = start; sequence <= end; sequence += 1) {
+      messages.push(source === "own" ? await acknowledge(sequence) : message(sequence));
+      head(sequence, floor);
+      await drain(messages);
+    }
+  }
   if (drainInitial) await drain(initial);
-  return { client, collaboration, sent, requests, head, phase, page, drain, beginSend, acknowledge, sequences: () => client.getSnapshot().chat.messages.map((item) => item.sequence) };
+  return { client, collaboration, sent, requests, head, phase, page, drain, beginSend, acknowledge, catchUpRange, sequences: () => client.getSnapshot().chat.messages.map((item) => item.sequence) };
 }
 
 describe("Chat controller catch-up", () => {
@@ -213,17 +220,9 @@ describe("Chat controller catch-up", () => {
     const harness = await setup();
     const messages: MessageFrame[] = [];
     try {
-      for (let sequence = 1; sequence <= 100; sequence += 1) {
-        messages.push(await harness.acknowledge(sequence));
-        harness.head(sequence);
-        await harness.drain(messages);
-      }
+      await harness.catchUpRange(messages, 1, 100, "own");
       expect(harness.sent.filter((frame) => frame.type === "chat_page_request")).toHaveLength(0);
-      for (let sequence = 101; sequence <= 200; sequence += 1) {
-        messages.push(message(sequence));
-        harness.head(sequence);
-        await harness.drain(messages);
-      }
+      await harness.catchUpRange(messages, 101, 200, "peer");
       expect(harness.sent.filter((frame) => frame.type === "chat_page_request")).toHaveLength(100);
       expect(harness.sequences()).toEqual(messages.map((item) => item.sequence));
     } finally {
@@ -235,11 +234,7 @@ describe("Chat controller catch-up", () => {
     const harness = await setup();
     const messages: MessageFrame[] = [];
     try {
-      for (let sequence = 101; sequence <= 110; sequence += 1) {
-        messages.push(await harness.acknowledge(sequence));
-        harness.head(sequence, 101);
-        await harness.drain(messages);
-      }
+      await harness.catchUpRange(messages, 101, 110, "own", 101);
       expect(harness.sent.filter((frame) => frame.type === "chat_page_request")).toHaveLength(0);
       expect(harness.sequences()).toEqual(messages.map((item) => item.sequence));
     } finally {
