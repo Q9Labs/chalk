@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { shareHTML } from "./fixture.mjs";
 import { check, save, waitFor, maskCredentials, saveOwnership } from "./runtime.mjs";
+import { catcherRequest } from "./webhook-transport.mjs";
 import { rotateAndPatchEndpoint } from "./webhook-endpoint.mjs";
 
 const { build } = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url))("esbuild");
@@ -34,16 +35,7 @@ export async function proofServer(run) {
   });
   return { origin: origin.origin, events: new Map() };
 }
-async function catcherRequest(base, path, method = "GET", body, signal) {
-  const response = await fetch(new URL(path, base), {
-    method,
-    headers: { "Content-Type": "application/json" },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    signal: AbortSignal.any([AbortSignal.timeout(15_000), ...(signal ? [signal] : [])]),
-  });
-  check(response.ok, `Webhook transport ${method} failed: HTTP ${response.status}`);
-  return response;
-}
+
 function originalHeaders(values) {
   const headers = new Headers();
   for (const [name, entries] of Object.entries(values)) {
@@ -55,12 +47,12 @@ function originalHeaders(values) {
 async function collectEvents(run, receiver, token, endpoint, verifyWebhook, signal, seen) {
   const base = run.config.webhook_service_url;
   const response = await catcherRequest(base, `/token/${token.uuid}/requests?sorting=newest&per_page=50`, "GET", undefined, signal);
-  const messages = (await response.json()).data;
+  const messages = response.data;
   for (const message of messages) {
     if (seen.has(message.uuid)) continue;
     check(message.size <= 262_144, "Webhook exceeded body limit");
-    const raw = await catcherRequest(base, `/token/${token.uuid}/request/${message.uuid}/raw`, "GET", undefined, signal);
-    const event = await verifyWebhook({ rawBody: new Uint8Array(await raw.arrayBuffer()), headers: originalHeaders(message.headers), secrets: [endpoint.secret] });
+    const raw = await catcherRequest(base, `/token/${token.uuid}/request/${message.uuid}/raw`, "GET", undefined, signal, "arrayBuffer");
+    const event = await verifyWebhook({ rawBody: new Uint8Array(raw), headers: originalHeaders(message.headers), secrets: [endpoint.secret] });
     check(event.tenant_id === run.config.tenant_id, "Webhook Tenant does not match this run");
     receiver.events.set(event.id, event);
     seen.add(message.uuid);
@@ -98,7 +90,7 @@ export async function exposeWebhook(run, receiver) {
   check(run.config.webhook_service_url, "Proof configuration is missing webhook_service_url");
   check(run.config.webhook_endpoint_id, "Proof configuration is missing webhook_endpoint_id");
   const base = run.config.webhook_service_url;
-  const token = await (await catcherRequest(base, "/token", "POST", { default_status: 204, request_limit: 50 }, run.signal)).json();
+  const token = await catcherRequest(base, "/token", "POST", { default_status: 204, request_limit: 50 }, run.signal);
   maskCredentials({ token: token.uuid });
   run.ownership.webhook = { id: run.config.webhook_endpoint_id, catcherId: token.uuid };
   await saveOwnership(run);
