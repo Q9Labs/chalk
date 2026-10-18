@@ -478,6 +478,10 @@ jobs:
         with:
           name: managed-release-plan-${{ needs.plan-managed.outputs.release_id }}
           path: ${{ runner.temp }}/media-plan
+      - name: Prefer the qualified environment pins, including a deploy-only first install
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/releases/media.py baseline --output "$RUNNER_TEMP/media-plan/stable-media.json"
       - name: Build first-install or changed capture image and inspect its installed bytes
         run: |
           args=()
@@ -803,6 +807,7 @@ jobs:
           node scripts/deploy/deploy-managed-release.mjs "${args[@]}"
           if [[ "$MANAGED_ENVIRONMENT" == nightly && -f "$media" ]]; then
             python3 scripts/releases/media.py qualify --manifest "$manifest" --output "$media" --directory "$RUNNER_TEMP/media-qualification"
+            python3 scripts/releases/media.py record_current --manifest "$manifest" --output "$media" --directory "$RUNNER_TEMP/media-qualification"
           fi
 
       - name: Capture applied identity under the environment lock

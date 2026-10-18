@@ -67,10 +67,21 @@ async function dispatcherBinding({ commandRunner, options, dryRun }) {
   if (!options.dispatcherConfigParameter) return { action: "not-configured", environment: options.environment };
   const members = resolve(options.manifestPath).replace(/\.json$/, ".media.json");
   const hasMembers = await fileExists(members);
-  const script = fileURLToPath(new URL(hasMembers ? "../releases/media.py" : "../recorder/dispatcher_binding.py", import.meta.url));
   const args = hasMembers
-    ? [script, "deploy_dispatcher", "--manifest", resolve(options.manifestPath), "--output", members, "--region", options.region, "--environment", options.environment, "--config-parameter", options.dispatcherConfigParameter]
-    : [script, "--manifest", resolve(options.manifestPath), "--region", options.region, "--instance-id", options.instanceId, "--parameter-prefix", options.parameterPrefix, "--configuration-parameter", options.dispatcherConfigParameter];
+    ? [fileURLToPath(new URL("../releases/media.py", import.meta.url)), "deploy_dispatcher", "--manifest", resolve(options.manifestPath), "--output", members, "--region", options.region, "--environment", options.environment, "--config-parameter", options.dispatcherConfigParameter]
+    : [
+        fileURLToPath(new URL("../recorder/dispatcher_binding.py", import.meta.url)),
+        "--manifest",
+        resolve(options.manifestPath),
+        "--region",
+        options.region,
+        "--instance-id",
+        options.instanceId,
+        "--parameter-prefix",
+        options.parameterPrefix,
+        "--configuration-parameter",
+        options.dispatcherConfigParameter,
+      ];
   if (dryRun) args.push("--dry-run");
   const result = await commandRunner({ command: "python3", args });
   return JSON.parse(result.stdout);

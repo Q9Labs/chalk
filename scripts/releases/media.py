@@ -16,6 +16,7 @@ sys.path.append(str(ROOT / 'scripts/recorder'))
 from release_core import digest, env_values, require, validate_config
 from release_io import Provider, private_json
 from dispatcher_binding import dispatcher_root, binding_target, verify_dispatcher, MODULE
+from github_release import GitHub, payload
 
 INPUTS = {
     'capture': ('apps/api/', 'go.work', 'go.work.sum', 'infrastructure/recorder/', 'scripts/recorder/'),
@@ -67,6 +68,27 @@ def current(provider, config):
 def snapshot(args):
     provider, config = settings(args)
     private_json(args.output, current(provider, config))
+
+
+def baseline(args):
+    # A deploy-only first install is not a held cut, but its qualified current
+    # members must still be reusable by the first cut without rebuilding them.
+    records = GitHub().deployments('nightly', 'media-current')
+    if records:
+        saved = payload(records[0])
+        data = base64.b64decode(saved['media_base64'], validate=True)
+        require(digest(data) == saved['media_sha256'], 'current media checksum mismatch')
+        private_json(args.output, validate_members(json.loads(data)))
+
+
+def record_current(args):
+    require(args.environment == 'nightly', 'current media record is nightly-only')
+    data = args.output.read_bytes()
+    validate_members(json.loads(data))
+    receipts = [json.loads((args.directory / (role + '-receipt.json')).read_text()) for role in ('capture', 'render')]
+    require(all(item['result'] == 'PASS' and item['fleet_equivalent_signed_boot'] and item['cleanup_confirmed'] for item in receipts), 'current media requires successful signed boot and cleanup')
+    GitHub().request('deployments', dict(ref=os.environ['TARGET_SHA'], environment='nightly', task='media-current', auto_merge=False,
+                     required_contexts=[], payload=dict(channel='media-current', media_sha256=digest(data), media_base64=base64.b64encode(data).decode())))
 
 
 def cleanup_cloud(args):
@@ -341,7 +363,7 @@ def qualify(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('cleanup_cloud', 'cleanup', 'snapshot', 'build_images', 'publish_zip', 'zip_needed', 'pin_images', 'deploy_dispatcher', 'qualify'))
+    parser.add_argument('command', choices=('baseline', 'record_current', 'cleanup_cloud', 'cleanup', 'snapshot', 'build_images', 'publish_zip', 'zip_needed', 'pin_images', 'deploy_dispatcher', 'qualify'))
     parser.add_argument('--environment', choices=('nightly', 'production'), default=os.environ.get('MANAGED_ENVIRONMENT', 'nightly'))
     parser.add_argument('--region', default=os.environ.get('AWS_REGION'))
     parser.add_argument('--config-parameter', default=os.environ.get('CHALK_MANAGED_RECORDER_CONFIG_PARAMETER'))

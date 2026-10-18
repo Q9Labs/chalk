@@ -14,7 +14,7 @@ Use `nightly` as the deployment identity. Sync still builds with `MIX_ENV=prod`.
 | Sync               | `https://nightly-sync.chalkmeet.com`, issuer `https://nightly-api.chalkmeet.com`, audience `chalk-nightly-sync`, instance `chalk-nightly-sync-1`. |
 | Redis              | Host-local `redis://redis:6379/0`, no public port or persistence.                                                                                 |
 | Database           | New empty `chalk-nightly` database, `main` branch, Postgres 18, separate API, direct Sync and direct migrator roles.                              |
-| Recorder           | Shared DigitalOcean team via `collabez`, project `Chalk Nightly Recording`, owner tag `chalk-nightly-recorder-owner`.                                   |
+| Recorder           | Shared DigitalOcean team via `collabez`, project `Chalk Nightly Recording`, owner tag `chalk-nightly-recorder-owner`.                             |
 | Capture and render | BLR1 `c-2` capture and CPU `c-8` render, one node and one slot per pool, no spare or reservations.                                                |
 | Recorder TLS       | `nightly-recording-control.chalkmeet.com`, worker control port 8443, issuer port 8444.                                                            |
 | Storage            | Private R2 `chalk-recorder-nightly`, separate credentials and Singapore recording KEK.                                                            |
@@ -22,7 +22,7 @@ Use `nightly` as the deployment identity. Sync still builds with `MIX_ENV=prod`.
 | Scheduler          | `chalk-nightly-transcription-reconcile` in group `chalk-nightly`, initially disabled.                                                             |
 | Release metadata   | `/chalk/nightly/release/recorder.json`, with explicit nightly host, DO context and state coordinates.                                             |
 | Uptime             | `wrangler.nightly.toml`, separate Worker secrets and explicit nightly API and Sync targets.                                                       |
-| External services  | Separate SFU application, tunnel, Axiom datasets and tokens, and Google OAuth client; no email sender.                                          |
+| External services  | Separate SFU application, tunnel, Axiom datasets and tokens, and Google OAuth client; no email sender.                                            |
 
 The controller's existing [runtime input contract](../managed-episode/contracts/runtime-inputs.json)
 is the exact ID-to-SSM-suffix map. Prefix every suffix with

@@ -19,6 +19,22 @@ def members():
 
 
 class MediaIdentities(unittest.TestCase):
+    def test_deploy_only_current_media_can_seed_the_first_cut(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        import base64
+        data = json.dumps(members()).encode()
+        github = Mock()
+        github.deployments.return_value = [dict(payload=dict(media_base64=base64.b64encode(data).decode(), media_sha256=digest(data)))]
+        with tempfile.TemporaryDirectory() as directory, patch.object(media, 'GitHub', return_value=github):
+            output = Path(directory) / 'baseline.json'
+            media.baseline(SimpleNamespace(output=output))
+            self.assertEqual(json.loads(output.read_text()), members())
+            github.deployments.assert_called_once_with('nightly', 'media-current')
+            github.deployments.return_value[0]['payload']['media_sha256'] = '0' * 64
+            with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
+                media.baseline(SimpleNamespace(output=output))
+
     def test_import_only_dispatcher_state_is_resumable_not_installed(self):
         from unittest.mock import Mock
         provider = Mock()
