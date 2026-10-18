@@ -308,9 +308,9 @@ scheduler before verification passes.
 Requests already running during a release can briefly receive 401; normal fenced
 retries reconcile them after the binding update.
 
-Both managed release `--dry-run` and recorder `deploy --dry-run
---managed-manifest <path>` report `dispatcher_binding` with the previous/target
-release, retained ZIP digest and planned copy action. Dry runs do not copy,
+Managed release `--dry-run` reports `dispatcher_binding` with the selected
+ZIP digest and version, after artifact readback and a read-only state plan.
+Dry runs do not copy,
 apply, invoke SSM commands or verify loaded processes. Production configuration
 is mandatory. Other configured environments use their own scoped recorder
 configuration; there is no production configuration fallback.

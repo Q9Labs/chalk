@@ -159,8 +159,9 @@ def installed_dispatcher(provider, config):
         return False
     state = provider.state(config['dispatcher'])
     resources = {item['type'] + '.' + item['name']: item for item in state.get('resources', []) if item.get('mode', 'managed') == 'managed'}
-    required = {'aws_lambda_function.dispatcher', 'aws_scheduler_schedule.reconcile', 'aws_lambda_function_event_invoke_config.dispatcher',
-                'aws_cloudwatch_log_group.dispatcher', 'aws_sqs_queue.async_failure', 'aws_cloudwatch_metric_alarm.errors', 'aws_iam_role_policy.dispatcher'}
+    required = {kind + '.' + name for kind, name in re.findall(r'^resource "([^"]+)" "([^"]+)"', (MODULE / 'main.tf').read_text(), re.MULTILINE)}
+    # The sole optional resource has count=0 unless an external invoker is configured.
+    required.discard('aws_lambda_permission.control_api')
     return all(resources.get(name, {}).get('instances') for name in required)
 
 
@@ -269,9 +270,6 @@ def deploy_dispatcher(args):
     provider, config = settings(args)
     manifest = json.loads(args.manifest.read_text())
     archive = validate_members(json.loads(args.output.read_text()))['dispatcher']
-    if args.dry_run:
-        print(json.dumps({'action': 'deploy-exact-media-zip', 'sha256': archive['sha256'], 'version_id': archive['version_id'], 'verified': False}))
-        return
     with tempfile.TemporaryDirectory(prefix='chalk-dispatcher-release-') as temp:
         directory = Path(temp)
         zip_path = directory / 'dispatcher.zip'
@@ -282,7 +280,6 @@ def deploy_dispatcher(args):
             root = dispatcher_root(provider, config['dispatcher'])
         else:
             require(args.environment == 'nightly', 'production dispatcher must already be provisioned')
-            root = {'terraform': {'required_providers': {'aws': {'source': 'hashicorp/aws', 'version': '= 5.90.0'}}, 'backend': {'s3': {'bucket': config['dispatcher']['state_bucket'], 'key': config['dispatcher']['state_key'], 'region': args.region, 'encrypt': True, 'use_lockfile': True}}}, 'provider': {'aws': {'region': args.region}}, 'module': {'dispatcher': {'source': str(ROOT / 'infrastructure/nightly/transcription')}}}
             # Use the existing root's module without nesting its backend/provider.
             # The checked-in root is copied so its module source remains absolute.
             source = (ROOT / 'infrastructure/nightly/transcription/main.tf').read_text()
@@ -294,8 +291,11 @@ def deploy_dispatcher(args):
         # The module requires the current API identity in the object key. Copy exact bytes, never rebuild.
         key = f'transcription-dispatcher/{release}/{archive["sha256"]}.zip'
         bucket = os.environ['CHALK_MEDIA_ARTIFACT_BUCKET'] if not installed else root['module']['dispatcher']['artifact_s3_bucket']
-        uploaded = provider.aws('s3api', 'put-object', '--bucket', bucket, '--key', key, '--body', zip_path)
-        version = uploaded.get('VersionId')
+        if args.dry_run:
+            bucket, key, version = archive['bucket'], archive['key'], archive['version_id']
+        else:
+            uploaded = provider.aws('s3api', 'put-object', '--bucket', bucket, '--key', key, '--body', zip_path)
+            version = uploaded.get('VersionId')
         require(version and version != 'null', 'dispatcher destination bucket is not versioned')
         inputs = dict(release_id=release, release_manifest_digest='sha256:' + digest(args.manifest.read_bytes()),
                       artifact_s3_bucket=bucket, artifact_s3_key=key, artifact_s3_object_version=version,
@@ -306,7 +306,8 @@ def deploy_dispatcher(args):
             environment.update(CHALK_RELEASE_ID=release, CHALK_RELEASE_MANIFEST_DIGEST=inputs['release_manifest_digest'], DEEPINFRA_CORPUS_DIGEST=archive['corpus_digest'])
             environment.pop('CHALK_CONFIG_DIGEST', None)
             inputs['config_digest'] = 'sha256:' + digest(json.dumps(environment, sort_keys=True, separators=(',', ':')))
-            root['module']['dispatcher'].update(inputs)
+            if not args.dry_run:
+                root['module']['dispatcher'].update(inputs)
             private_json(directory / 'main.tf.json', root)
         else:
             inputs.pop('artifact_s3_bucket')
@@ -317,6 +318,15 @@ def deploy_dispatcher(args):
             return provider.command(['tofu', '-chdir=' + str(directory), *values], timeout=900)
         backend = ['-backend-config=bucket=' + config['dispatcher']['state_bucket']] if not installed else []
         tofu('init', '-input=false', '-upgrade=false', *backend)
+        if args.dry_run:
+            flags = ['-refresh-only'] if installed else []
+            tofu('plan', '-input=false', '-lock=false', '-no-color', *flags, '-out=preflight.plan')
+            plan = json.loads(tofu('show', '-json', 'preflight.plan'))
+            for item in plan.get('resource_changes', []):
+                require('delete' not in item['change']['actions'], 'dispatcher preflight must not destroy or replace resources')
+            print(json.dumps({'action': 'deploy-exact-media-zip', 'sha256': archive['sha256'], 'version_id': archive['version_id'],
+                              'artifact_verified': True, 'state_plan_verified': True, 'verified': False}))
+            return
         if not installed:
             # These two roles belong to the dispatcher module but provisioning created them before the first ZIP.
             present = set(tofu('state', 'list').splitlines())

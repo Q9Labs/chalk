@@ -104,6 +104,51 @@ class MediaIdentities(unittest.TestCase):
         provider.state.return_value = dict(resources=[dict(type='aws_iam_role', name='dispatcher', instances=[dict(attributes={})])])
         self.assertFalse(media.installed_dispatcher(provider, config))
         provider.state.assert_called_once_with(config['dispatcher'])
+        resources = [dict(type=kind, name=name, instances=[dict(attributes={})])
+                     for kind, name in media.re.findall(r'^resource "([^"]+)" "([^"]+)"', (media.MODULE / 'main.tf').read_text(), media.re.MULTILINE)
+                     if name != 'control_api']
+        provider.state.return_value = dict(resources=resources)
+        self.assertTrue(media.installed_dispatcher(provider, config))
+        for resource in resources:
+            with self.subTest(missing=resource['type'] + '.' + resource['name']):
+                provider.state.return_value = dict(resources=[item for item in resources if item is not resource])
+                self.assertFalse(media.installed_dispatcher(provider, config))
+
+    def test_dispatcher_dry_run_reads_exact_zip_and_plans_without_mutations(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        import contextlib
+        import io
+        archive_bytes = b'qualified dispatcher bytes'
+        value = members()
+        value['dispatcher']['sha256'] = digest(archive_bytes)
+        provider = Mock()
+        def aws(*arguments):
+            if arguments[:2] == ('s3api', 'get-object'):
+                Path(arguments[-1]).write_bytes(archive_bytes)
+                return {}
+            self.assertEqual(arguments[:2], ('s3api', 'list-objects-v2'))
+            return {}
+        provider.aws.side_effect = aws
+        provider.command.side_effect = lambda command, **kwargs: json.dumps(dict(resource_changes=[])) if 'show' in command else ''
+        config = dict(dispatcher=dict(state_bucket='state', state_key='dispatcher.tfstate'))
+        with tempfile.TemporaryDirectory() as directory:
+            manifest, output = Path(directory) / 'manifest.json', Path(directory) / 'media.json'
+            manifest.write_text(json.dumps(dict(component_releases=dict(api=dict(release_id='managed-episode-preflight')))))
+            output.write_text(json.dumps(value))
+            args = SimpleNamespace(manifest=manifest, output=output, dry_run=True, environment='nightly', region='test-region')
+            stdout = io.StringIO()
+            with patch.object(media, 'settings', return_value=(provider, config)), patch.dict(os.environ, CHALK_MEDIA_ARTIFACT_BUCKET='example-artifacts'), contextlib.redirect_stdout(stdout):
+                media.deploy_dispatcher(args)
+                proof = json.loads(stdout.getvalue())
+                self.assertTrue(proof['artifact_verified'] and proof['state_plan_verified'])
+                commands = [call.args[0][2] for call in provider.command.call_args_list]
+                self.assertEqual(commands, ['init', 'plan', 'show'])
+                value['dispatcher']['sha256'] = '0' * 64
+                output.write_text(json.dumps(value))
+                with self.assertRaisesRegex(ValueError, 'ZIP readback mismatch'):
+                    media.deploy_dispatcher(args)
+                self.assertEqual(provider.command.call_count, 3)
 
     def test_mutable_or_incomplete_members_are_refused(self):
         value = members()

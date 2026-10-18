@@ -14,7 +14,7 @@ Use `nightly` as the deployment identity. Sync still builds with `MIX_ENV=prod`.
 | Sync               | `https://nightly-sync.chalkmeet.com`, issuer `https://nightly-api.chalkmeet.com`, audience `chalk-nightly-sync`, instance `chalk-nightly-sync-1`. |
 | Redis              | Host-local `redis://redis:6379/0`, no public port or persistence.                                                                                 |
 | Database           | New empty `chalk-nightly` database, `main` branch, Postgres 18, separate API, direct Sync and direct migrator roles.                              |
-| Recorder           | Shared DigitalOcean team via `collabez`, project `Chalk Nightly Recording`, owner tag `chalk-nightly-recorder-owner`.                             |
+| Recorder           | Shared DigitalOcean team, private configured builder context, separate nightly project and fleet owner tag.                                       |
 | Capture and render | BLR1 `c-2` capture and CPU `c-8` render, one node and one slot per pool, no spare or reservations.                                                |
 | Recorder TLS       | `nightly-recording-control.chalkmeet.com`, worker control port 8443, issuer port 8444.                                                            |
 | Storage            | Private R2 `chalk-recorder-nightly`, separate credentials and Singapore recording KEK.                                                            |
@@ -33,7 +33,7 @@ SPIFFE identities, but never share a production signing key or trust root.
 
 Start from the [API example](../managed-episode/env/api.nightly.env.example),
 [Sync example](../managed-episode/env/sync.nightly.env.example) and recorder examples
-in `env/`. Supply all placeholders privately. Recorder release metadata selects the existing `collabez` context in the shared team.
+in `env/`. Supply all placeholders privately. Recorder release metadata selects the existing builder context in the shared team.
 The host controller injects release identities and mounted certificate paths.
 Nightly keeps its own project, VPC UUID, firewall IDs, fleet tags and certificates.
 Nightly and production select the same qualified image IDs; boot-time configuration
