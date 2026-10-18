@@ -50,7 +50,9 @@ async function journey(run: (page: Page) => Promise<void>, phone = false) {
 
 async function openPeople(page: Page, state = "card-people") {
   await page.goto(`${origin}/call-states.html?state=${state}`);
-  await page.getByRole("button", { name: "Participants", exact: true }).click();
+  const opener = page.getByRole("button", { name: "Participants", exact: true });
+  await opener.waitFor();
+  if (state !== "card-knocks") await opener.click();
   await page.getByRole("tab", { name: /^People/ }).waitFor();
 }
 
@@ -58,14 +60,14 @@ it(
   "opens People and Chat by keyboard, then Escape returns to the dock",
   async () =>
     journey(async (page) => {
-      await page.goto(`${origin}/call-states.html?state=card-people`);
+      await page.goto(`${origin}/call-states.html?state=card-guest`);
       const opener = page.getByRole("button", { name: "Participants", exact: true });
       await opener.focus();
       await page.keyboard.press("Enter");
       const people = page.getByRole("tab", { name: /^People/ });
       await people.focus();
       await page.keyboard.press("ArrowRight");
-      expect(await page.getByRole("tab", { name: "Chat", exact: true }).getAttribute("aria-selected")).toBe("true");
+      await page.waitForFunction(() => document.querySelector('[data-card-tab="chat"]')?.getAttribute("aria-selected") === "true");
       await page.keyboard.press("Escape");
       await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Participants");
       expect(await opener.getAttribute("aria-pressed")).toBe("false");
@@ -118,7 +120,7 @@ it(
   "lets a host admit a knock and hides host controls from a guest",
   async () =>
     journey(async (page) => {
-      await openPeople(page);
+      await openPeople(page, "card-knocks");
       await page.getByRole("button", { name: "Admit Rania Aziz", exact: true }).click();
       await page.getByRole("button", { name: "Admit Rania Aziz", exact: true }).waitFor({ state: "detached" });
       await openPeople(page, "card-guest");

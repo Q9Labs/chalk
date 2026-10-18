@@ -788,12 +788,6 @@ const styles = `.call-card-tabs {
     min-width: 44px;
     min-height: 44px;
   }
-  .call-reaction-bar {
-    position: static;
-    opacity: 1;
-    visibility: visible;
-    transform: none;
-  }
   .call-emoji-picker {
     grid-template-columns: repeat(6, 44px);
   }

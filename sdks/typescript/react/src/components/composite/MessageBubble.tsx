@@ -1,5 +1,5 @@
 import { CHALK_REACTIONS, type ChatMessage, type ChatReactionInput, type ChatAttachment, type ChatReadReceipt } from "@q9labsai/chalk-client";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { cn } from "../../utils/cn";
 import { Avatar } from "../atomic/Avatar";
 import { ChalkPopover } from "../chalk-ui";
@@ -52,6 +52,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
     isLastInGroup = true,
     status = "sent",
     attachments = [],
+    readBy = [],
     participantNames = {},
     onResolveAttachmentUrl,
     reactions = [],
@@ -62,10 +63,27 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
     const { resolvedUrls, failedAttachmentIds, markFailed, retry } = useChatAttachmentPreviews(attachments, onResolveAttachmentUrl);
     const [reactionError, setReactionError] = useState<string | null>(null);
     const [reacting, setReacting] = useState(false);
+    const [reactionBarOpen, setReactionBarOpen] = useState(false);
+    const messageRef = useRef<HTMLDivElement>(null);
+    const press = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
+    const cancelPress = () => {
+      if (press.current) clearTimeout(press.current.timer);
+      press.current = null;
+    };
+    useEffect(() => () => cancelPress(), []);
+    useEffect(() => {
+      if (!reactionBarOpen) return;
+      const dismiss = (event: PointerEvent) => {
+        if (event.target instanceof Node && !messageRef.current?.contains(event.target)) setReactionBarOpen(false);
+      };
+      document.addEventListener("pointerdown", dismiss);
+      return () => document.removeEventListener("pointerdown", dismiss);
+    }, [reactionBarOpen]);
     const [photo, setPhoto] = useState<ChatAttachment | null>(null);
     const viewer = useRef<HTMLDialogElement>(null);
     const react = async (emoji: ChatReactionInput["emoji"]) => {
       if (!onReact || reacting) return;
+      setReactionBarOpen(false);
       setReacting(true);
       setReactionError(null);
       const mine = reactions.some((reaction) => reaction.emoji === emoji && localParticipantId !== undefined && reaction.participantIds.includes(localParticipantId));
@@ -104,7 +122,40 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
               {showTimestamp ? (displayTime ?? new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(new Date(timestamp))) : null}
             </div>
           ) : null}
-          <div className="call-message" tabIndex={0} aria-label={`${isLocal ? "You" : senderName}: ${content || `${attachments.length} attachments`}`}>
+          <div
+            ref={messageRef}
+            className={cn("call-message", reactionBarOpen && "on")}
+            tabIndex={0}
+            onPointerDown={(event) => {
+              if (event.pointerType !== "touch" || !onReact || (event.target instanceof Element && event.target.closest("button, a"))) return;
+              cancelPress();
+              press.current = {
+                x: event.clientX,
+                y: event.clientY,
+                timer: setTimeout(() => {
+                  press.current = null;
+                  setReactionBarOpen(true);
+                  messageRef.current?.querySelector<HTMLButtonElement>(".call-reaction-bar button")?.focus({ preventScroll: true });
+                }, 450),
+              };
+            }}
+            onPointerMove={(event) => {
+              if (press.current && Math.hypot(event.clientX - press.current.x, event.clientY - press.current.y) > 8) cancelPress();
+            }}
+            onPointerUp={cancelPress}
+            onPointerCancel={cancelPress}
+            onContextMenu={(event) => {
+              if (reactionBarOpen) event.preventDefault();
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape" || !reactionBarOpen) return;
+              event.preventDefault();
+              event.stopPropagation();
+              setReactionBarOpen(false);
+              messageRef.current?.focus({ preventScroll: true });
+            }}
+            aria-label={`${isLocal ? "You" : senderName}: ${content || `${attachments.length} attachments`}`}
+          >
             {content ? (
               <div className="call-message-bubble" dir="auto">
                 {content.split(/(https?:\/\/[^\s]+)/g).map((part, index) =>
@@ -213,7 +264,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
               {reactionError}
             </p>
           ) : null}
-          {isLocal && isLastInGroup ? <span className="call-message-status">{status === "queued" ? "Queued · sends when you’re back online" : status === "pending" ? "Sending…" : status === "read" ? "Read" : "Sent"}</span> : null}
+          {isLocal && isLastInGroup ? <span className="call-message-status">{status === "queued" ? "Queued · sends when you’re back online" : status === "pending" ? "Sending…" : status === "read" || readBy.length > 0 ? "Read" : "Sent"}</span> : null}
         </div>
         <dialog
           ref={viewer}
