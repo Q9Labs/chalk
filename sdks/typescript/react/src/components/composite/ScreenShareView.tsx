@@ -99,7 +99,7 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
           <span dir="auto" className="min-w-0 truncate [unicode-bidi:plaintext]">
             {name}
           </span>
-          {hasAudio ? <StageIcon name="volume" size={14} aria-label="With share audio" className="shrink-0" /> : null}
+          {!isLocal && hasAudio ? <StageIcon name="volume" size={14} aria-label="With share audio" className="shrink-0" /> : null}
         </>
       }
     >

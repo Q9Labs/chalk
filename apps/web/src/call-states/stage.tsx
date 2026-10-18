@@ -15,6 +15,7 @@ interface StageFixtureProps {
   readonly share?: Share;
   readonly aspect?: number;
   readonly shareState?: ScreenShareState;
+  readonly shareAudio?: boolean;
   readonly cameras?: boolean;
   readonly board?: boolean;
   readonly names?: readonly string[];
@@ -53,7 +54,7 @@ function useScreenTrack(aspect: number): MediaStreamTrack | null {
 }
 
 /** The actual frame and stage, with deterministic media and observable roster/share controls. */
-function StageFixture({ count: initialCount = 6, theme = "dark", layout: initialLayout = "focus", share: initialShare = "none", aspect = 16 / 9, shareState = "live", cameras = true, board = false, names = NAMES }: StageFixtureProps) {
+function StageFixture({ count: initialCount = 6, theme = "dark", layout: initialLayout = "focus", share: initialShare = "none", aspect = 16 / 9, shareState = "live", shareAudio = false, cameras = true, board = false, names = NAMES }: StageFixtureProps) {
   const [count, setCount] = useState(initialCount);
   const [layout, setLayout] = useState(initialLayout);
   const [share, setShare] = useState(initialShare);
@@ -78,11 +79,11 @@ function StageFixture({ count: initialCount = 6, theme = "dark", layout: initial
         connectionQuality: index === 4 ? 1 : 4,
         isScreenSharing: share === "local" ? index === 0 : share === "two" ? index === 1 || index === 2 : share === "remote" && index === 1,
         screenShareTrack: track,
-        screenShareHasAudio: true,
+        screenShareHasAudio: shareAudio,
         screenShareAspect: aspect,
         screenShareState: shareState,
       })),
-    [count, cameras, share, track, aspect, shareState, names, secondHand, voiceLevel],
+    [count, cameras, share, track, aspect, shareState, shareAudio, names, secondHand, voiceLevel],
   );
   return (
     <div className="h-dvh w-full">
@@ -143,7 +144,8 @@ export const STAGE_STATES: readonly CallState[] = [
   ...[9 / 16, 4 / 3, 16 / 9, 21 / 9].map((aspect, index) => ({ id: `stage-share-aspect-${index}`, title: `Content-aware Spotlight ${aspect}`, render: () => <StageFixture share="remote" aspect={aspect} /> })),
   ...(["connecting", "paused", "low-quality"] as const).map((shareState) => ({ id: `stage-share-${shareState}`, title: `Screen ${shareState}`, render: () => <StageFixture share="remote" shareState={shareState} /> })),
   { id: "stage-share-two", title: "Two simultaneous sharers", render: () => <StageFixture share="two" /> },
-  { id: "stage-share-local", title: "Your live screen preview", render: () => <StageFixture share="local" /> },
+  { id: "stage-share-audio", title: "Remote tab share with audio", render: () => <StageFixture share="remote" shareAudio /> },
+  { id: "stage-share-local", title: "Your live screen preview", render: () => <StageFixture share="local" shareAudio /> },
   { id: "stage-light", title: "Grid in Light", render: () => <StageFixture layout="grid" theme="light" /> },
   { id: "stage-share-light", title: "Share in Light", render: () => <StageFixture share="remote" theme="light" /> },
 ];

@@ -188,3 +188,12 @@ it("pins from the phone options row and refits instantly with reduced motion", a
   expect(await page.getByRole("dialog").count()).toBe(0);
   await page.setViewportSize({ width: 1440, height: 900 });
 });
+
+it("labels audio only on a remote share that includes it", async () => {
+  await open("stage-share-aspect-2");
+  expect(await page.getByLabel("With share audio", { exact: true }).count()).toBe(0);
+  await open("stage-share-audio");
+  expect(await page.getByLabel("With share audio", { exact: true }).count()).toBe(1);
+  await open("stage-share-local");
+  expect(await page.getByLabel("With share audio", { exact: true }).count()).toBe(0);
+});
