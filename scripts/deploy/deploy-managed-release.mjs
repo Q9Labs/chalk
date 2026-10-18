@@ -141,7 +141,7 @@ function sendReleaseCommand({ commandRunner, documentVersion, options, release }
       "--instance-ids",
       options.instanceId,
       "--comment",
-      `Chalk ${release.manifest.release_id} (${options.requestId})`,
+      `Chalk ${release.manifest.release_id} (${options.requestId})`.slice(0, 100),
       "--parameters",
       JSON.stringify(release.parameters),
       "--timeout-seconds",
