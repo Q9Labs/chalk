@@ -10,3 +10,10 @@ CHALK_API_ORIGIN = "https://api.chalkmeet.com"
 CHALK_ENVIRONMENT = "production"
 VITE_API_URL = "https://api.chalkmeet.com"
 VITE_PUBLIC_APP_URL = "https://chalkmeet.com"
+# Non-secret dashboard configuration. Configure each Pages environment separately.
+DASHBOARD_ORIGIN = "https://chalkmeet.com"
+WORKOS_REDIRECT_URI = "https://chalkmeet.com/auth/callback"
+WORKOS_CLIENT_ID = "configure-in-pages"
+DASHBOARD_IDENTITY_PROVIDER = "workos"
+# Secret bindings (set with Pages secrets, never VITE_*):
+# WORKOS_API_KEY, WORKOS_COOKIE_PASSWORD (>=32 random characters), DASHBOARD_SERVICE_TOKEN
