@@ -182,7 +182,7 @@ export function SpaceView({
             onLayoutChange={updateLayout}
             generatedAvatars={generatedAvatars}
             whiteboard={whiteboard}
-            onOverflowClick={() => setActivePanel("participants")}
+            onOverflowClick={feature("participants") ? () => setActivePanel("participants") : undefined}
             shareCapture={media.screenShare.capture}
             onStopSharing={() => client.media.setScreenShareEnabled(false)}
             onChangeShare={async (options) => {

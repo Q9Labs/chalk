@@ -1,7 +1,7 @@
 import React, { useRef, type CSSProperties } from "react";
 
 import { ScreenSharePresentation, type ScreenSharePresentationProps } from "../composite/ScreenShareView";
-import { Edit02Icon } from "../../utils/icons";
+import { StageIcon } from "./StageIcon";
 import { TileShell } from "../participant-tile/TileShell";
 import { useVideoTrack } from "../participant-tile/useVideoTrack";
 import type { StageItem } from "./stage-items";
@@ -79,7 +79,6 @@ export const StageContentTileSurface = React.memo(function StageContentTileSurfa
       />
     );
   const accentColor = BOARD_ACCENT;
-  const Icon = Edit02Icon;
 
   return (
     <TileShell
@@ -95,7 +94,7 @@ export const StageContentTileSurface = React.memo(function StageContentTileSurfa
       chip={
         primary ? null : (
           <>
-            <Icon size={14} className="shrink-0" />
+            <StageIcon name="pen" size={14} className="shrink-0" />
             <span className="min-w-0 truncate">{contentTileName(item)}</span>
           </>
         )
@@ -104,7 +103,7 @@ export const StageContentTileSurface = React.memo(function StageContentTileSurfa
       <div className="relative z-10 block h-full w-full overflow-hidden bg-[var(--chalk-app-tile-base)] [&>*]:h-full [&>*]:w-full [&>*]:object-contain">{media}</div>
       {!mediaVisible && (
         <div className="chalk-participant-wash absolute inset-0 z-10 flex items-center justify-center text-[var(--chalk-app-text-muted)]">
-          <Icon size={32} />
+          <StageIcon name="pen" size={32} />
         </div>
       )}
     </TileShell>

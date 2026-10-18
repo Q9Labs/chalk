@@ -4,7 +4,7 @@ import React, { useMemo, useRef, useState } from "react";
 import { usePrefersReducedMotion, useMediaQuery } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
 import { getParticipantColor, getParticipantAvatarRecipe, type ParticipantGradientPreference } from "../../utils/colorGenerator";
-import { HandIcon, MicrophoneOff01Icon, Pin01Icon, MoreVerticalIcon } from "../../utils/icons";
+import { StageIcon } from "../stage/StageIcon";
 import { Avatar } from "../atomic/Avatar";
 import { ChalkMenu, ChalkMenuItem, ChalkSheet } from "../chalk-ui";
 import { TileShell } from "./TileShell";
@@ -129,7 +129,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
               <ChalkMenu
                 trigger={
                   <button type="button" aria-label={`More options for ${participant.displayName}`} className="grid h-8 w-8 place-items-center rounded-full bg-[rgba(12,14,18,.75)] text-white outline-none hover:bg-[rgba(40,42,48,.95)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]">
-                    <MoreVerticalIcon size={18} />
+                    <StageIcon name="more" size={18} />
                   </button>
                 }
               >
@@ -144,17 +144,17 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       chip={
         showName || showStatus ? (
           <>
-            {pinned && <Pin01Icon size={14} aria-label="Pinned" />}
+            {pinned && <StageIcon name="pin" size={14} aria-label="Pinned" />}
             {showName && (
               <span dir="auto" className="min-w-0 truncate" title={participant.displayName}>
                 {participant.displayName}
                 {participant.isLocal && participant.displayName !== "You" && <span className="text-white"> (You)</span>}
               </span>
             )}
-            {showStatus && participant.isMuted && <MicrophoneOff01Icon size={14} className="shrink-0 text-[#ff6b6b]" aria-label="Muted" />}
+            {showStatus && participant.isMuted && <StageIcon name="mute" size={14} className="shrink-0 text-[#ff6b6b]" aria-label="Muted" />}
             {showStatus && participant.isHandRaised && (
               <span className="flex shrink-0 items-center text-[#e2bd3a]" role="img" aria-label={`Hand raised${participant.handRaiseOrder ? `, number ${participant.handRaiseOrder}` : ""}`}>
-                <HandIcon size={14} />
+                <StageIcon name="hand" size={14} />
                 {participant.handRaiseOrder ? <b className="ml-px text-[11px] font-bold">{participant.handRaiseOrder}</b> : null}
               </span>
             )}

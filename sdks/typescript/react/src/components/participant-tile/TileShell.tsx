@@ -31,6 +31,7 @@ export function TileShell({ label, accentColor, pinned = false, speaking = false
       style={vars}
       data-tour={dataTour}
       aria-hidden={hidden || undefined}
+      onDoubleClick={onClick ? undefined : onDoubleClick}
       role="region"
       aria-label={onClick ? undefined : label}
     >

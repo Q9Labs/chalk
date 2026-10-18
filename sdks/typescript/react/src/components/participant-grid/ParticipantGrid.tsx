@@ -36,6 +36,7 @@ export interface ParticipantGridProps {
   /** Mobile variant allows narrower tiles; defaults from the viewport. */
   variant?: "desktop" | "mobile";
   pinnedParticipantId?: string;
+  onOverflowClick?: () => void;
   onParticipantClick?: (participantId: string) => void;
   onParticipantDoubleClick?: (participantId: string) => void;
   /** Upper bound of visible tiles; further participants fold into the +N tile. */
@@ -67,7 +68,7 @@ interface ParticipantGridSurfaceProps extends ParticipantGridProps {
   readonly participants: readonly Participant[];
 }
 
-export const ParticipantGridSurface = React.memo(function ParticipantGridSurface({ participants, layout = "grid", variant, pinnedParticipantId, onParticipantClick, onParticipantDoubleClick, maxVisibleParticipants, className, screenShareContent }: ParticipantGridSurfaceProps) {
+export const ParticipantGridSurface = React.memo(function ParticipantGridSurface({ participants, layout = "grid", variant, pinnedParticipantId, onOverflowClick, onParticipantClick, onParticipantDoubleClick, maxVisibleParticipants, className, screenShareContent }: ParticipantGridSurfaceProps) {
   const isMobile = useIsMobile();
   const effectiveVariant = variant ?? (isMobile ? "mobile" : "desktop");
   const items = useMemo(() => buildStageItems(participants, false), [participants]);
@@ -77,6 +78,7 @@ export const ParticipantGridSurface = React.memo(function ParticipantGridSurface
       items={items}
       layout={layout}
       pinnedId={pinnedParticipantId}
+      onOverflowClick={onOverflowClick}
       onItemClick={onParticipantClick ? (item) => forwardParticipant(item, onParticipantClick) : undefined}
       onItemDoubleClick={onParticipantDoubleClick ? (item) => forwardParticipant(item, onParticipantDoubleClick) : undefined}
       maxPerPage={maxVisibleParticipants}

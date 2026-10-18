@@ -107,3 +107,14 @@ it("uses a 96 by 128 picture-in-picture only for two-person phone Spotlight", as
   }
   await page.setViewportSize({ width: 1440, height: 900 });
 });
+
+it("cancels a departing tile's fade when the same participant immediately rejoins", async () => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await open("stage-grid-6");
+  await page.getByRole("button", { name: "Remove participant", exact: true }).click();
+  await page.getByRole("button", { name: "Add participant", exact: true }).click();
+  const returning = page.locator('[data-stage-item="stage-5"]');
+  await expect.poll(() => returning.evaluate((tile) => getComputedStyle(tile).opacity)).toBe("1");
+  expect(await returning.evaluate((tile) => tile.getAnimations().some((animation) => animation.id === "stage-exit"))).toBe(false);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+});

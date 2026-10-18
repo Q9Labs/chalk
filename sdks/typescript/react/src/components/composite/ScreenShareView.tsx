@@ -2,7 +2,7 @@ import type { ScreenShareCapture, ScreenShareOptions } from "@q9labsai/chalk-cli
 import React, { useMemo, useRef, useState } from "react";
 import { useMedia, useParticipants, useSelf } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
-import { Maximize01Icon, Monitor01Icon, PauseIcon, VolumeHighIcon } from "../../utils/icons";
+import { StageIcon } from "../stage/StageIcon";
 import { toVideoParticipants } from "../../selectors/space-selectors";
 import { ChalkButton, ChalkMenu, ChalkMenuItem } from "../chalk-ui";
 import { SignalBars } from "../participant-tile/ParticipantTile";
@@ -81,11 +81,11 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
       className={cn("h-full w-full", className)}
       chip={
         <>
-          <Monitor01Icon size={14} className="shrink-0" />
+          <StageIcon name="share" size={14} className="shrink-0" />
           <span dir="auto" className="min-w-0 truncate">
             {name}
           </span>
-          {hasAudio ? <VolumeHighIcon size={14} aria-label="With share audio" className="shrink-0" /> : null}
+          {hasAudio ? <StageIcon name="volume" size={14} aria-label="With share audio" className="shrink-0" /> : null}
         </>
       }
     >
@@ -107,7 +107,7 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
         {status === "paused" ? (
           <div role="status" className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 text-white">
             <span className="grid h-12 w-12 place-items-center rounded-full bg-[rgba(12,14,18,.82)]">
-              <PauseIcon size={24} />
+              <StageIcon name="pause" size={24} />
             </span>
             <p className="rounded-[8px] bg-[rgba(12,14,18,.82)] px-3 py-1.5 font-semibold">{sharedByName} paused sharing</p>
           </div>
@@ -156,16 +156,16 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
         {primary && !isLocal && status !== "connecting" ? (
           <div role="toolbar" aria-label="Share controls" className="absolute right-2 bottom-2 z-30 flex gap-1.5 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 focus-within:opacity-100 max-[640px]:opacity-100">
             <ShareControl label={fill ? "Fit the whole screen" : "Fill the tile"} pressed={fill} onClick={() => setFill(!fill)}>
-              <Monitor01Icon size={16} />
+              <StageIcon name={fill ? "fit" : "fill"} size={16} />
             </ShareControl>
             <ShareControl label={zoom ? "Zoom out" : "Zoom in"} pressed={zoom} onClick={() => setZoom(!zoom)}>
-              <span className="text-xl">{zoom ? "−" : "+"}</span>
+              <StageIcon name={zoom ? "zoom-out" : "zoom-in"} size={16} />
             </ShareControl>
             <ShareControl label="Pop out" onClick={() => void popout()}>
-              <Monitor01Icon size={16} />
+              <StageIcon name="pip" size={16} />
             </ShareControl>
             <ShareControl label="Full screen" onClick={() => void fullscreen()}>
-              <Maximize01Icon size={16} />
+              <StageIcon name="maximize" size={16} />
             </ShareControl>
           </div>
         ) : null}

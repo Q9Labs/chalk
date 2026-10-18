@@ -4,6 +4,7 @@ import { captureFlip } from "../../internal/call-motion";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
 import type { ParticipantGradientPreference } from "../../utils/colorGenerator";
+import { ChalkSheet } from "../chalk-ui";
 import { useResizeObserver } from "../chalk-ui/useResizeObserver";
 import { ParticipantTile } from "../participant-tile/ParticipantTile";
 import { DEFAULT_GRID_OPTIONS, DEFAULT_SPOTLIGHT_OPTIONS, EMPTY_GEOMETRY, fitGrid, fitSpotlight, type StageBox, type StageFrame, type StageGeometry, MORE_TILE_ID } from "./stage-layout";
@@ -87,6 +88,8 @@ export function Stage({
 }: StageProps): React.JSX.Element {
   const prefersReducedMotion = usePrefersReducedMotion();
   const { ref: boxRef, dimensions: box } = useResizeObserver<HTMLDivElement>(FALLBACK_BOX);
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const [shareAspects, setShareAspects] = useState<ReadonlyMap<string, number>>(new Map());
   const [uncontrolledPinnedId, setUncontrolledPinnedId] = useState<string | null>(null);
   const activePinnedId = pinnedId === undefined ? uncontrolledPinnedId : pinnedId;
   const orderRef = useRef<readonly string[]>([]);
@@ -145,14 +148,15 @@ export function Stage({
     }
     const track = primary.kind === "screen-share" ? primary.participant.screenShareTrack : null;
     const settings = track?.getSettings();
-    const aspect = primary.kind === "screen-share" && primary.participant.screenShareAspect ? primary.participant.screenShareAspect : settings?.width && settings.height ? settings.width / settings.height : 16 / 9;
+    const observedAspect = shareAspects.get(primary.id);
+    const aspect = observedAspect ?? (primary.kind === "screen-share" && primary.participant.screenShareAspect ? primary.participant.screenShareAspect : settings?.width && settings.height ? settings.width / settings.height : 16 / 9);
     return fitSpotlight(
       box,
       primary.id,
       ordered.filter((item) => item.id !== primary.id).map((item) => item.id),
       { ...DEFAULT_SPOTLIGHT_OPTIONS, primaryAspect: aspect, content: primary.kind !== "participant", wideIds, maxPerPage },
     );
-  }, [activePinnedId, box, layout, maxPerPage, minTileWidth, ordered, primary]);
+  }, [activePinnedId, box, layout, maxPerPage, minTileWidth, ordered, primary, shareAspects]);
   const framesById = useMemo(() => new Map(geometry.frames.map((frame) => [frame.id, frame])), [geometry.frames]);
   const animate = animateOverride ?? !prefersReducedMotion;
   const [displayed, setDisplayed] = useState<{ source: readonly StageItem[]; geometry: StageGeometry; tiles: readonly { item: StageItem; frame: StageFrame | undefined; leaving: boolean }[] }>({
@@ -171,6 +175,26 @@ export function Stage({
     return () => clearTimeout(timer);
   }, [displayed]);
   const tilesRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const root = tilesRef.current;
+    if (!root) return;
+    const updateAspect = (event: Event) => {
+      const video = event.target;
+      if (!(video instanceof HTMLVideoElement) || !video.videoWidth || !video.videoHeight) return;
+      const id = video.closest<HTMLElement>("[data-stage-item]")?.dataset.stageItem;
+      if (!id || !ordered.some((item) => item.id === id && item.kind === "screen-share")) return;
+      const aspect = video.videoWidth / video.videoHeight;
+      setShareAspects((current) => (Math.abs((current.get(id) ?? 0) - aspect) < 0.001 ? current : new Map(current).set(id, aspect)));
+    };
+    root.addEventListener("loadedmetadata", updateAspect, true);
+    root.addEventListener("resize", updateAspect, true);
+    const present = new Set(ordered.filter(isContentItem).map((item) => item.id));
+    setShareAspects((current) => ([...current.keys()].every((id) => present.has(id)) ? current : new Map([...current].filter(([id]) => present.has(id)))));
+    return () => {
+      root.removeEventListener("loadedmetadata", updateAspect, true);
+      root.removeEventListener("resize", updateAspect, true);
+    };
+  }, [ordered]);
   const playRef = useRef<(() => void) | null>(null);
   const mountedRef = useRef(new Set<HTMLElement>());
   useLayoutEffect(() => {
@@ -269,6 +293,7 @@ export function Stage({
               <div
                 key={item.id}
                 ref={(element) => {
+                  if (element && !leaving) for (const animation of element.getAnimations()) if (animation.id === "stage-exit") animation.cancel();
                   if (element && leaving && animate && !element.getAnimations().some((animation) => animation.id === "stage-exit")) {
                     const exit = element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: "ease-out", fill: "forwards" });
                     exit.id = "stage-exit";
@@ -294,7 +319,7 @@ export function Stage({
                 type="button"
                 data-stage-item={MORE_TILE_ID}
                 style={frameStyle(frame)}
-                onClick={onOverflowClick}
+                onClick={onOverflowClick ?? (() => setOverflowOpen(true))}
                 disabled={!interactive}
                 aria-label={`Show ${geometry.overflowCount} more participants`}
                 className="grid place-items-center rounded-[12px] bg-[var(--chalk-raised)] text-[22px] font-semibold text-[var(--chalk-text)] hover:bg-[var(--chalk-hover)] max-[640px]:rounded-[14px]"
@@ -304,6 +329,24 @@ export function Stage({
             ))}
         </div>
       </div>
+      <ChalkSheet open={overflowOpen} onOpenChange={setOverflowOpen} title="People">
+        {ordered
+          .filter((item) => item.kind === "participant")
+          .map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="min-h-11 w-full rounded-xl px-4 text-left hover:bg-[var(--chalk-hover)]"
+              onClick={() => {
+                handlersById.get(item.id)?.onClick();
+                setOverflowOpen(false);
+              }}
+            >
+              {item.participant.displayName}
+              {item.participant.isMuted ? " · Muted" : ""}
+            </button>
+          ))}
+      </ChalkSheet>
     </div>
   );
 }
