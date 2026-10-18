@@ -626,6 +626,10 @@ validate_host_quadlets() {
 install_runtime_files() {
   local runtime_source="$1"
   require_directory "$runtime_source"
+  if [[ "$direct_user_commands" != true ]]; then
+    install -d -m 0700 -o "$runtime_user" -g "$(id -gn "$runtime_user")" \
+      "${runtime_home}/.config" "${runtime_home}/.config/containers" "${runtime_home}/.config/systemd"
+  fi
   mkdir -p "$runtime_quadlet_dir" "$runtime_systemd_dir"
   chmod 700 "$runtime_quadlet_dir" "$runtime_systemd_dir"
   remove_absent_runtime_files "${runtime_source}/quadlet" "$runtime_quadlet_dir" \
