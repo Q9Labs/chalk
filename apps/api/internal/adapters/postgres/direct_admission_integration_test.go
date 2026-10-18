@@ -145,7 +145,7 @@ func TestDirectAdmissionHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(httpapi.NewRouter(httpapi.Options{
-		APIKeyAuthentication: keys, TenantAuthz: authorization.NewTenantPolicy(nil), Episodes: episodes.NewService(repository),
+		APIKeyAuthentication: keys, TenantAuthz: authorization.NewTenantPolicy(nil, nil), Episodes: episodes.NewService(repository),
 		Spaces: spaces.NewService(NewSpaceRepository(queries, pool)), Tenants: tenants.NewService(NewTenantRepository(queries)),
 		SyncTokens: syncTokens, ParticipantMediaIssuer: mediaTokens, ParticipantGeneration: accessgrants.NewActiveAuthorizer(repository), MediaPlane: media,
 	}))
