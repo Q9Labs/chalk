@@ -39,6 +39,21 @@ try {
  await page.keyboard.press('Escape');
  await page.setViewportSize({width:1440,height:900});
  await load();
+ for (const viewport of [{width:1440,height:900},{width:390,height:844}]) {
+  await page.setViewportSize(viewport);
+  const trigger=page.getByRole('button',{name:'Reactions',exact:true});
+  await trigger.click();
+  const tray=page.getByRole('toolbar',{name:'Reactions',exact:true});
+  await tray.waitFor();
+  assert.deepEqual(await tray.getByRole('button',{name:/^React with /}).allTextContents(),['👍','❤️','😂','😮','🎉','👏']);
+  await page.waitForFunction(()=>{
+   const tray=document.querySelector('.chalk-shell-reactions')?.getBoundingClientRect();
+   const trigger=document.querySelector('[data-part="dock"] button[aria-label="Reactions"]')?.getBoundingClientRect();
+   return tray&&trigger&&Math.abs(trigger.top-tray.bottom-10)<1;
+  });
+  await page.keyboard.press('Escape');
+ }
+ await page.setViewportSize({width:1440,height:900});
  await page.getByRole('button',{name:'Call details',exact:true}).click();
  await page.getByRole('button',{name:'Copy link',exact:true}).click();
  assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),'https://chalkmeet.com/team-call');
@@ -48,6 +63,11 @@ try {
  await page.reload();await page.locator('[data-part="call-frame"]').waitFor();assert.equal(await page.locator('[data-part="call-frame"]').getAttribute('data-chalk-theme'),'light');
  for(const name of ['Select microphone','Select camera']){
   await page.getByRole('button',{name,exact:true}).filter({visible:true}).click();
+  assert.equal(await page.getByRole('menuitemcheckbox').evaluateAll(items=>items.every(item=>{
+   const track=item.querySelector('.chalk-switch')?.getBoundingClientRect();
+   const row=item.getBoundingClientRect();
+   return track&&track.width===36&&track.height===22&&track.left>=row.left&&track.right<=row.right;
+  })),true);
   await page.keyboard.press('ArrowDown');
   await page.waitForFunction(()=>document.querySelector('[role=menu]')?.contains(document.activeElement));
   await page.keyboard.press('End');await page.keyboard.press('Escape');

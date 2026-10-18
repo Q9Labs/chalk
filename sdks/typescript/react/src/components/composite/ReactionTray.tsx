@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { ShellStyles } from "../control-bar/ShellStyles";
 import { useHaptics } from "../../internal/useHaptics";
@@ -26,13 +26,30 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
   const { trigger } = useHaptics();
   const listRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     returnFocus.current = document.activeElement;
+    const tray = listRef.current;
+    const anchor = tray?.closest("[data-part='call-frame']")?.querySelector("[data-part='dock'] button[aria-label='Reactions']") ?? returnFocus.current;
+    const place = () => {
+      if (!tray || !(anchor instanceof HTMLElement) || !(tray.offsetParent instanceof HTMLElement)) return;
+      const trigger = anchor.getBoundingClientRect();
+      const parent = tray.offsetParent.getBoundingClientRect();
+      const width = tray.offsetWidth;
+      const height = tray.offsetHeight;
+      tray.style.left = `${Math.max(8, Math.min(window.innerWidth - width - 8, trigger.x + trigger.width / 2 - width / 2)) - parent.x}px`;
+      tray.style.top = `${Math.max(8, Math.min(window.innerHeight - height - 8, position === "top" ? trigger.y - height - 10 : trigger.bottom + 10)) - parent.y}px`;
+    };
+    place();
+    const resize = new ResizeObserver(place);
+    if (tray) resize.observe(tray);
+    window.addEventListener("resize", place);
     listRef.current?.querySelector("button")?.focus();
     return () => {
+      window.removeEventListener("resize", place);
+      resize.disconnect();
       if (returnFocus.current instanceof HTMLElement && returnFocus.current.isConnected) returnFocus.current.focus();
     };
-  }, []);
+  }, [position]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -67,7 +84,7 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
     </button>
   ));
 
-  const trayClassName = cn("absolute left-1/2 z-50 -translate-x-1/2", position === "top" ? "bottom-full mb-3" : "top-full mt-3", !prefersReducedMotion && "chalk-shell-reactions-enter", className);
+  const trayClassName = cn("absolute z-50", !prefersReducedMotion && "chalk-shell-reactions-enter", className);
 
   return (
     <>

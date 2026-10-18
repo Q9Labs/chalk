@@ -1,6 +1,7 @@
 "use client";
 import { commandFailure } from "../control-bar/command-failure";
 import type { ClientFailure, Reaction } from "@q9labsai/chalk-client";
+import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useCan, useConnection, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { callDiagnostics } from "../space-header/call-diagnostics";
@@ -76,8 +77,6 @@ export interface SpaceViewProps {
   readonly onEndEpisode?: () => void | Promise<void>;
   readonly className?: string;
 }
-
-const DEFAULT_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🎉"] as const;
 
 export function SpaceView({
   colorScheme = "dark",
@@ -229,7 +228,7 @@ export function SpaceView({
                   onToggleHandRaise={feature("handRaise") && canRaiseHand ? () => void runCommand(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())) : undefined}
                   isOpen={isReactionPickerOpen}
                   onClose={() => setReactionPickerOpen(false)}
-                  allowedReactions={[...DEFAULT_REACTIONS]}
+                  allowedReactions={[...DEFAULT_QUICK_REACTIONS]}
                   onSelect={(reaction) => void runCommand(() => client.reactions.send(reaction as Reaction)).finally(() => setReactionPickerOpen(false))}
                   size="compact"
                 />

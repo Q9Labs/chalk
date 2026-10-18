@@ -176,9 +176,11 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 .chalk-shell-source .chalk-shell-device-label {gap:2px;}
 .chalk-shell-device-label small {display:block;font-size:12px;color:var(--chalk-muted-text);white-space:normal;line-height:1.3;}
 .chalk-shell-menu-switch {
+  display: flex;
   margin-inline-start: auto;
   pointer-events: none;
 }
+.chalk-shell-menu-switch .chalk-switch {display:block;}
 .chalk-shell-section {
   padding: 4px 0 8px;
   border-top: 1px solid var(--chalk-line);

@@ -50,7 +50,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
   const linkLabel = props.onCallLinkToggle ? (props.callLinkOpen ? "Hide call link" : "Show call link") : "Copy call link";
   const reactions = has("reactions") && (props.onOpenReactions || props.displayOnly) ? iconButton("Reactions", <SmileIcon />, props.onOpenReactions, undefined, 0, props.isHandRaised) : null;
   return (
-    <div ref={dock} data-part="dock" className={cn("chalk-shell-dock", props.className)} role="toolbar" aria-label="Call controls">
+    <div ref={dock} data-part="dock" className={cn("chalk-shell-dock", props.className)} role="toolbar" aria-label="Space controls">
       <ShellStyles />
       {has("mic") ? (
         <DevicePopover
