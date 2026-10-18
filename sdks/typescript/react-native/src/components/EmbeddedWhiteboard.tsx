@@ -1,9 +1,8 @@
 import { ChalkWhiteboardController, type ChalkEmbeddedWhiteboardTransport, type ChalkEmbeddedWhiteboardViewport } from "@q9labsai/chalk-whiteboard/embedded";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
+import { useWindowDimensions, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
 import WebView, { type WebViewMessageEvent, type WebViewNavigation } from "react-native-webview";
 
-import { useNativeTheme } from "../ui/native-theme";
 import { isEmbeddedWhiteboardNavigationAllowed, rendererURLWithContext, resolveEmbeddedWhiteboardRendererURL } from "../whiteboard/embedded-whiteboard-assets";
 import { createEmbeddedWhiteboardViewport } from "../whiteboard/embedded-whiteboard-viewport";
 
@@ -39,8 +38,7 @@ export const embeddedWhiteboardWebViewSecurityPolicy = Object.freeze({
 });
 
 export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracestate, canDraw, canClear, theme: themeOverride, localParticipantColor, rendererURL: rendererURLOverride, style, testID, onMetric, onError, onUserExport }: EmbeddedWhiteboardProps): React.JSX.Element {
-  const nativeTheme = useNativeTheme();
-  const theme = themeOverride ?? nativeTheme.colorScheme;
+  const theme = themeOverride ?? "light";
   const webViewRef = useRef<WebView>(null);
   const controllerRef = useRef<ChalkWhiteboardController | null>(null);
   const listenersRef = useRef(new Set<(message: string) => void>());
@@ -49,9 +47,7 @@ export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracesta
   const onUserExportRef = useRef(onUserExport);
   const [rendererURL, setRendererURL] = useState<string | null>(null);
   const [rendererGeneration, setRendererGeneration] = useState(createRendererGeneration);
-  const [loadAttempt, setLoadAttempt] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [compatibilityNotice, setCompatibilityNotice] = useState<string | null>(null);
   const [layout, setLayout] = useState({ width: 0, height: 0 });
   const { scale } = useWindowDimensions();
   const viewport = useMemo<ChalkEmbeddedWhiteboardViewport | null>(() => createEmbeddedWhiteboardViewport(layout.width, layout.height, scale), [layout.height, layout.width, scale]);
@@ -91,10 +87,9 @@ export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracesta
     return () => {
       active = false;
     };
-  }, [loadAttempt, onError, rendererURLOverride]);
+  }, [onError, rendererURLOverride]);
 
   useEffect(() => {
-    setCompatibilityNotice(null);
     const controller = new ChalkWhiteboardController({
       renderer: rendererPort,
       transport,
@@ -107,7 +102,6 @@ export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracesta
       ...(localParticipantColor ? { localParticipantColor } : {}),
       onMetric: handleControllerMetric,
       onError: handleControllerError,
-      onCompatibilityChange: (state) => setCompatibilityNotice(state.message),
       onUserExport: handleControllerUserExport,
     });
     controller.start();
@@ -141,11 +135,6 @@ export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracesta
     controllerRef.current?.rendererReloaded();
     setRendererGeneration(createRendererGeneration());
   };
-  const retryRenderer = (): void => {
-    setLoadError(null);
-    setLoadAttempt((attempt) => attempt + 1);
-    reloadRenderer();
-  };
   const handleRendererTermination = (): void => {
     handleControllerMetric({ name: "whiteboard.renderer.termination", value: 1 });
     handleControllerError({
@@ -156,28 +145,10 @@ export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracesta
     reloadRenderer();
   };
 
-  if (loadError) {
-    return (
-      <View style={[styles.status, { backgroundColor: nativeTheme.colors.lightSurface }, style]} testID={testID}>
-        <Text style={[styles.errorTitle, { color: nativeTheme.colors.lightText }]}>Whiteboard unavailable</Text>
-        <Text style={[styles.errorMessage, { color: nativeTheme.colors.lightSubtleText }]}>{loadError}</Text>
-        <Pressable accessibilityRole="button" onPress={retryRenderer} style={({ pressed }) => [styles.retryButton, { backgroundColor: nativeTheme.colors.info }, pressed && styles.retryButtonPressed]}>
-          <Text style={[styles.retryButtonText, { color: nativeTheme.colors.onDark }]}>Retry</Text>
-        </Pressable>
-      </View>
-    );
-  }
-  if (!sourceURL || !rendererURL) {
-    return (
-      <View style={[styles.status, { backgroundColor: nativeTheme.colors.lightSurface }, style]} testID={testID}>
-        <ActivityIndicator color={nativeTheme.colors.info} />
-        <Text style={[styles.loadingMessage, { color: nativeTheme.colors.lightMutedText }]}>Loading whiteboard…</Text>
-      </View>
-    );
-  }
+  if (loadError || !sourceURL || !rendererURL) return <View style={[{ flex: 1 }, style]} testID={testID} />;
 
   return (
-    <View onLayout={handleLayout} style={[styles.container, style]} testID={testID}>
+    <View onLayout={handleLayout} style={[{ flex: 1 }, style]} testID={testID}>
       <WebView
         key={rendererGeneration}
         ref={webViewRef}
@@ -197,14 +168,10 @@ export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracesta
         pullToRefreshEnabled={false}
         scrollEnabled={false}
         source={{ uri: sourceURL }}
-        style={[styles.webView, { backgroundColor: nativeTheme.colors.lightSurface }]}
+        style={{ flex: 1 }}
         webviewDebuggingEnabled={typeof __DEV__ !== "undefined" && __DEV__}
       />
-      {compatibilityNotice ? (
-        <View pointerEvents="none" style={[styles.compatibilityNotice, { backgroundColor: nativeTheme.colors.dangerSurfaceOverlay94 }]}>
-          <Text style={[styles.compatibilityNoticeText, { color: nativeTheme.colors.onDark }]}>{compatibilityNotice}</Text>
-        </View>
-      ) : null}
+
     </View>
   );
 }
@@ -213,57 +180,3 @@ function createRendererGeneration(): string {
   return globalThis.crypto?.randomUUID?.() ?? `whiteboard-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    overflow: "hidden",
-  },
-  webView: {
-    flex: 1,
-  },
-  compatibilityNotice: {
-    position: "absolute",
-    top: 12,
-    left: 12,
-    right: 12,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  compatibilityNoticeText: {
-    fontSize: 13,
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  status: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    padding: 24,
-  },
-  loadingMessage: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  errorTitle: {
-    fontSize: 17,
-    fontWeight: "700",
-  },
-  errorMessage: {
-    fontSize: 13,
-    textAlign: "center",
-  },
-  retryButton: {
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  retryButtonPressed: {
-    opacity: 0.75,
-  },
-  retryButtonText: {
-    fontSize: 14,
-    fontWeight: "700",
-  },
-});
