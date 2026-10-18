@@ -1,6 +1,7 @@
 import { Chalk } from "@q9labsai/chalk-react";
 import { useState } from "react";
 import { createCallStateClient, liveSnapshot, PEOPLE, SELF_NAME, SPACE_NAME } from "./fixtures";
+import { releaseFakeMedia } from "./media";
 import type { CallState } from "./states";
 
 export const PERFORMANCE_STATES: readonly CallState[] = [
@@ -19,6 +20,12 @@ function PerformanceCall({ count, share = false, board = false }: { readonly cou
       }),
     ),
   );
+  const [joined, setJoined] = useState(true);
+  const [generation, setGeneration] = useState(0);
+  const updateRoster = (extra: boolean, sharing = false) => {
+    const next = liveSnapshot({ others: Array.from({ length: count - 1 + (extra ? 1 : 0) }, (_, index) => ({ id: `perf-${index}`, name: `Camera ${index + 1}`, sharing: sharing && index === 0 })) });
+    client.updateSnapshot((current) => ({ ...current, participants: next.participants, media: next.media }));
+  };
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
       {/* Fixture controls stay hidden; Playwright dispatches trusted input to the real call UI separately. */}
@@ -40,7 +47,52 @@ function PerformanceCall({ count, share = false, board = false }: { readonly cou
       >
         Reaction burst
       </button>
-      <Chalk theme={{ colorScheme: "dark" }} client={client} entrance={false} displayName={SELF_NAME} spaceName={SPACE_NAME} layout={count === 24 ? "grid" : "focus"} onLeft={() => undefined} />
+      <button
+        hidden
+        data-perf-join
+        onClick={() => {
+          client.updateSnapshot(() => liveSnapshot({ others: Array.from({ length: count - 1 }, (_, index) => ({ id: `perf-${index}`, name: `Camera ${index + 1}` })) }));
+          setGeneration((value) => value + 1);
+          setJoined(true);
+        }}
+      >
+        Join
+      </button>
+      <button hidden data-perf-people-in onClick={() => updateRoster(true)}>
+        Add person
+      </button>
+      <button hidden data-perf-people-out onClick={() => updateRoster(false)}>
+        Remove person
+      </button>
+      <button hidden data-perf-share-on onClick={() => updateRoster(false, true)}>
+        Start share
+      </button>
+      <button hidden data-perf-share-off onClick={() => updateRoster(false)}>
+        Stop share
+      </button>
+      <button hidden data-perf-board-on onClick={() => client.updateSnapshot((current) => ({ ...current, whiteboard: { ...current.whiteboard, open: true, engine: { ...current.whiteboard.engine, status: "ready", sceneId: "scene-1", revision: "1", presenting: true } } }))}>
+        Open board
+      </button>
+      <button hidden data-perf-board-off onClick={() => client.updateSnapshot((current) => ({ ...current, whiteboard: { ...current.whiteboard, open: false, engine: { ...current.whiteboard.engine, presenting: false } } }))}>
+        Close board
+      </button>
+      {joined && (
+        <Chalk
+          key={generation}
+          theme={{ colorScheme: "dark" }}
+          client={client}
+          entrance={false}
+          displayName={SELF_NAME}
+          spaceName={SPACE_NAME}
+          layout={count === 24 ? "grid" : "focus"}
+          onLeft={() => {
+            setJoined(false);
+            // The preview client has no media engine. Release its snapshot and owned sources here.
+            client.updateSnapshot(() => liveSnapshot({ self: { camera: false, microphone: false } }));
+            releaseFakeMedia();
+          }}
+        />
+      )}
     </main>
   );
 }
