@@ -110,8 +110,30 @@ func TestServicePrincipalHTTPIsolationAndAtomicTenantCreation(t *testing.T) {
 	if !bytes.Equal(original, repeated) {
 		t.Fatalf("repeat changed Tenant: %s / %s", original, repeated)
 	}
+	// Every non-CORS field is forbidden by presence, including null and mixed patches.
+	for _, field := range []string{"external_id", "created_by_service_id", "id", "future_setting", "Name", "name", "default_media_plane", "media_plane_provider_config", "storage_provider_config", "logo_key", "website", "transcription_ceiling", "transcription_default_mode", "provider_policy_version", "recording_retention_seconds", "transcript_retention_seconds", "transcription_source_window_seconds"} {
+		for _, patch := range []string{fmt.Sprintf(`{"%s":null}`, field), fmt.Sprintf(`{"cors_allowed_origins":["https://forbidden.example"],"%s":null}`, field)} {
+			denied := expect(first, "PATCH", "/v1/tenants/"+id, oldSecret, patch, http.StatusForbidden)
+			if !bytes.Contains(denied, []byte(`"code":"access.forbidden"`)) {
+				t.Fatalf("not the normal forbidden error: %s", denied)
+			}
+		}
+	}
+	expect(first, "PATCH", "/v1/tenants/"+id, oldSecret, `{"name":"Forbidden"}`, http.StatusForbidden)
+	corsBody := `{"cors_allowed_origins":["https://dashboard.example","http://localhost:3000"]}`
+	cors := expect(first, "PATCH", "/v1/tenants/"+id, newSecret, corsBody, http.StatusOK)
+	read := expect(first, "GET", "/v1/tenants/"+id, oldSecret, "", http.StatusOK)
+	if !bytes.Equal(cors, read) || !bytes.Contains(read, []byte(`"cors_allowed_origins":["http://localhost:3000","https://dashboard.example"]`)) {
+		t.Fatalf("CORS read after update: %s / %s", cors, read)
+	}
+	var persistedOrigins []string
+	var persistedName string
+	if err := pool.QueryRow(ctx, `select cors_allowed_origins,name from tenants where id::text=$1`, id).Scan(&persistedOrigins, &persistedName); err != nil || strings.Join(persistedOrigins, ",") != "http://localhost:3000,https://dashboard.example" || persistedName != "Original" {
+		t.Fatalf("persisted CORS/name: %v / %s / %v", persistedOrigins, persistedName, err)
+	}
+	expect(first, "PATCH", "/v1/tenants/"+id, oldSecret, `{"cors_allowed_origins":[]}`, http.StatusOK)
 	policyBody := `{"transcription_ceiling":"on_demand","transcription_default_mode":"on_demand","provider_policy_version":"service-policy"}`
-	updated := expect(first, "PATCH", "/v1/tenants/"+id, newSecret, policyBody, http.StatusOK)
+	updated := expect(first, "PATCH", "/v1/tenants/"+id, "local-test-system", policyBody, http.StatusOK)
 	repeated = expect(first, "POST", "/v1/tenants", newSecret, body, http.StatusCreated)
 	if !bytes.Equal(updated, repeated) {
 		t.Fatalf("repeat replaced policy: %s / %s", updated, repeated)
@@ -123,8 +145,12 @@ func TestServicePrincipalHTTPIsolationAndAtomicTenantCreation(t *testing.T) {
 	systemID = tenantID(expect(first, "POST", "/v1/tenants", "local-test-system", `{"name":"System-created TH-style Tenant"}`, http.StatusCreated))
 	for _, foreign := range []string{otherID, systemID} {
 		expect(first, "GET", "/v1/tenants/"+foreign, oldSecret, "", http.StatusForbidden)
-		expect(first, "PATCH", "/v1/tenants/"+foreign, oldSecret, `{"name":"Forbidden"}`, http.StatusForbidden)
+		expect(first, "PATCH", "/v1/tenants/"+foreign, oldSecret, corsBody, http.StatusForbidden)
 		expect(first, "GET", "/v1/tenants/"+foreign+"/api-keys", oldSecret, "", http.StatusForbidden)
+		var foreignOrigins []string
+		if err := pool.QueryRow(ctx, `select cors_allowed_origins from tenants where id::text=$1`, foreign).Scan(&foreignOrigins); err != nil || len(foreignOrigins) != 0 {
+			t.Fatalf("foreign Tenant changed: %v, %v", foreignOrigins, err)
+		}
 	}
 	listed := expect(first, "GET", "/v1/tenants", oldSecret, "", http.StatusOK)
 	if !bytes.Contains(listed, []byte(id)) || bytes.Contains(listed, []byte(otherID)) || bytes.Contains(listed, []byte(systemID)) {
@@ -149,7 +175,7 @@ func TestServicePrincipalHTTPIsolationAndAtomicTenantCreation(t *testing.T) {
 	expect(disabled, "POST", "/v1/tenants", "local-test-system", `{"name":"System external ID is invalid","external_id":"orphan"}`, http.StatusBadRequest)
 	limited := server(firstID, []string{oldSecret}, []authentication.Scope{authentication.ScopeTenantsRead})
 	expect(limited, "POST", "/v1/tenants", oldSecret, body, http.StatusForbidden)
-	expect(limited, "PATCH", "/v1/tenants/"+id, oldSecret, `{"name":"Forbidden"}`, http.StatusForbidden)
+	expect(limited, "PATCH", "/v1/tenants/"+id, oldSecret, corsBody, http.StatusForbidden)
 	expires := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
 	keyBody := fmt.Sprintf(`{"name":"Narrow key","scopes":["tenants:read"],"expires_at":%q}`, expires)
 	key := expect(first, "POST", "/v1/tenants/"+id+"/api-keys", oldSecret, keyBody, http.StatusCreated)
@@ -161,6 +187,12 @@ func TestServicePrincipalHTTPIsolationAndAtomicTenantCreation(t *testing.T) {
 	}
 	expect(disabled, "GET", "/v1/tenants/"+id, createdKey.Secret, "", http.StatusOK)
 	expect(disabled, "GET", "/v1/tenants/"+otherID, createdKey.Secret, "", http.StatusForbidden)
+	writeKeyBody := fmt.Sprintf(`{"name":"Tenant writer","scopes":["tenants:read","tenants:write"],"expires_at":%q}`, expires)
+	writeKey := expect(first, "POST", "/v1/tenants/"+id+"/api-keys", oldSecret, writeKeyBody, http.StatusCreated)
+	if err := json.Unmarshal(writeKey, &createdKey); err != nil {
+		t.Fatal(err)
+	}
+	expect(disabled, "PATCH", "/v1/tenants/"+id, createdKey.Secret, `{"name":"Tenant key can still rename"}`, http.StatusOK)
 	keyBody = fmt.Sprintf(`{"name":"Too broad","scopes":["spaces:write"],"expires_at":%q}`, expires)
 	expect(first, "POST", "/v1/tenants/"+id+"/api-keys", oldSecret, keyBody, http.StatusForbidden)
 	broad := expect(first, "POST", "/v1/tenants/"+id+"/api-keys", "local-test-system", keyBody, http.StatusCreated)

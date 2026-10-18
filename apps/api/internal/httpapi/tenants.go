@@ -298,12 +298,37 @@ func decodeUpdateTenantRequest(r *http.Request) (updateTenantEndpointRequest, er
 		return updateTenantEndpointRequest{}, err
 	}
 
-	body, err := decodeJSONBody[updateTenantRequest](r)
+	body, err := decodeUpdateTenantBody(r)
 	if err != nil {
 		return updateTenantEndpointRequest{}, err
 	}
 
 	return updateTenantEndpointRequest{TenantID: tenantID, Body: body}, nil
+}
+
+// Service credentials can manage Allowed websites, not other Tenant settings.
+// Check field presence before decoding, including nulls and future fields.
+func decodeUpdateTenantBody(r *http.Request) (updateTenantRequest, error) {
+	principal, _ := authentication.PrincipalFromContext(r.Context())
+	if principal.Kind != authentication.PrincipalService {
+		return decodeJSONBody[updateTenantRequest](r)
+	}
+	fields, err := decodeJSONBody[map[string]json.RawMessage](r)
+	if err != nil {
+		return updateTenantRequest{}, err
+	}
+	var body updateTenantRequest
+	for field := range fields {
+		if field != "cors_allowed_origins" {
+			return updateTenantRequest{}, apiErrorForbidden
+		}
+	}
+	if value, ok := fields["cors_allowed_origins"]; ok {
+		if err := json.Unmarshal(value, &body.CORSAllowedOrigins); err != nil {
+			return updateTenantRequest{}, apiErrorInvalidRequest
+		}
+	}
+	return body, nil
 }
 
 func tenantIDFromRequest(r *http.Request) (utilities.ID, error) {
