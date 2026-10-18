@@ -19,10 +19,11 @@ export interface CallLimboProps {
   /** Start covered when the real call first replaces the stand-in. */
   readonly initiallyCovered?: boolean;
   readonly theme?: ChalkTheme;
+  readonly blocking?: boolean;
 }
 
 /** One surface for joining, admission and connection recovery. Never renders participant data. */
-export function CallLimbo({ spaceName = "Call", message, detail, action, children, overlay = false, active = true, initiallyCovered = false, theme, recorded = false }: CallLimboProps): React.JSX.Element {
+export function CallLimbo({ spaceName = "Call", message, detail, action, children, overlay = false, active = true, initiallyCovered = false, theme, recorded = false, blocking = true }: CallLimboProps): React.JSX.Element {
   const layerRef = useRef<HTMLDivElement>(null);
   const reducedMotion = usePrefersReducedMotion();
   const [covered, setCovered] = useState(active || initiallyCovered);
@@ -47,21 +48,21 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
       for (const sibling of branch.parentElement.children) {
         if (sibling !== branch && sibling instanceof HTMLElement) {
           siblings.push({ element: sibling, inert: sibling.inert, filter: sibling.style.filter });
-          sibling.inert = true;
+          if (blocking) sibling.inert = true;
           sibling.style.filter = root.getAttribute("data-chalk-theme") === "light" ? "blur(10px) grayscale(.75)" : "blur(10px) grayscale(.75) brightness(.6)";
         }
       }
       branch = branch.parentElement;
     }
-    layerRef.current.focus({ preventScroll: true });
+    if (blocking) layerRef.current.focus({ preventScroll: true });
     return () => {
       for (const { element, inert, filter } of siblings) {
         element.inert = inert;
         element.style.filter = filter;
       }
-      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
+      if (blocking && previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
     };
-  }, [active, overlay]);
+  }, [active, blocking, overlay]);
   const layer = (
     <div
       ref={layerRef}
@@ -71,7 +72,7 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
       aria-hidden={!active}
       className="absolute inset-0 z-50 flex items-center justify-center px-6 text-[var(--chalk-app-text)]"
       style={{
-        pointerEvents: active ? "auto" : "none",
+        pointerEvents: active && blocking ? "auto" : "none",
         opacity: covered ? 1 : 0,
         transition: reducedMotion ? "none" : "opacity 220ms cubic-bezier(.2,.8,.2,1)",
       }}

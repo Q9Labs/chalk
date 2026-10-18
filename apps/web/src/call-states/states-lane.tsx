@@ -5,6 +5,7 @@ import { useCallLink } from "../../../../sdks/typescript/react/src/components/ca
 import { Avatar } from "../../../../sdks/typescript/react/src/components/atomic/Avatar";
 import { CallEventIcon } from "../../../../sdks/typescript/react/src/components/toast-stack/CallEventIcon";
 import { mediaFailureToast } from "../../../../sdks/typescript/react/src/components/toast-stack/call-events";
+import { ReconnectingOverlay } from "../../../../sdks/typescript/react/src/components/reconnecting-overlay/ReconnectingOverlay";
 import { PEOPLE, SPACE_NAME, createCallStateClient, liveSnapshot } from "./fixtures";
 import type { CallState } from "./states";
 
@@ -111,7 +112,19 @@ function CallLinkFixture() {
         {callLink.open ? "Hide call link" : "Show call link"}
       </button>
       <button onClick={() => setAlone(false)}>Someone joins</button>
+      <button onClick={() => setAlone(true)}>Everyone leaves</button>
       <CallReady open={callLink.open} onClose={callLink.close} link="https://chalk.example/join/example" />
+    </main>
+  );
+}
+function ReconnectingInputFixture() {
+  return (
+    <main data-chalk data-chalk-theme="dark" className="chalk-root relative h-dvh bg-[var(--chalk-canvas)]">
+      <label>
+        Message
+        <textarea aria-label="Message" />
+      </label>
+      <ReconnectingOverlay isVisible status="reconnecting" />
     </main>
   );
 }
@@ -136,6 +149,7 @@ function CommandFailureFixture() {
   );
 }
 export const STATES_LANE: readonly CallState[] = [
+  { id: "states-reconnecting-input", title: "Reconnecting keeps input usable", render: () => <ReconnectingInputFixture /> },
   { id: "states-link-controls", title: "Controlled call link", render: () => <CallLinkFixture /> },
   { id: "states-command-failures", title: "Typed command failures", render: () => <CommandFailureFixture /> },
   { id: "states-events", title: "Call event journeys", render: () => <StatesCall /> },

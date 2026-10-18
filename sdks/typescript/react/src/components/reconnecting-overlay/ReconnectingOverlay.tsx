@@ -21,7 +21,7 @@ export const ReconnectingOverlay = memo(function ReconnectingOverlay({ isVisible
     const timer = setTimeout(() => setElapsed(true), RECONNECTING_NOTICE_MS);
     return () => clearTimeout(timer);
   }, [reconnecting]);
-  if (status === "reconnecting") return showNotice === false ? null : <CallLimbo overlay active={reconnecting && elapsed} message={message ?? "Reconnecting…"} />;
+  if (status === "reconnecting") return showNotice === false ? null : <CallLimbo overlay blocking={false} active={reconnecting && elapsed} message={message ?? "Reconnecting…"} />;
   if (!isVisible) return null;
   if (status === "failed")
     return (

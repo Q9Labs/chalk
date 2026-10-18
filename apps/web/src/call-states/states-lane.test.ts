@@ -134,7 +134,20 @@ it("reopens the controlled call link and restores trigger focus when closed", as
     if (width === 1440) {
       await page.getByRole("button", { name: "Someone joins" }).click();
       await trigger.waitFor();
+      await page.getByRole("button", { name: "Everyone leaves" }).click();
+      expect(await trigger.getAttribute("aria-pressed")).toBe("false");
     }
   }
   await page.setViewportSize({ width: 1440, height: 900 });
+}, 30_000);
+
+it("waits two seconds for reconnecting without blocking message input", async () => {
+  await page.goto(`${origin}/call-states.html?state=states-reconnecting-input`);
+  expect(await page.getByRole("status").count()).toBe(0);
+  const message = page.getByRole("textbox", { name: "Message" });
+  await message.fill("Before reconnect notice");
+  await page.getByRole("status").filter({ hasText: "Reconnecting…" }).waitFor();
+  await message.fill("Still writing while reconnecting");
+  expect(await message.inputValue()).toBe("Still writing while reconnecting");
+  expect(await message.evaluate((element) => element === document.activeElement)).toBe(true);
 }, 30_000);

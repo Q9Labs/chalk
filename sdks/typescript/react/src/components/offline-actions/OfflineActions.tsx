@@ -26,7 +26,7 @@ export function OfflineActions({ reconnecting: requestedReconnecting = false }: 
   }, [client]);
 
   // Keep the layer mounted so recovery lifts the blur rather than removing it abruptly.
-  if (reconnecting || (!offline.decisionNeeded && !offline.notice)) return <CallLimbo overlay active={reconnectingNoticeDue} message={offlineNoticeText(offline.pending.length, online)} />;
+  if (reconnecting || (!offline.decisionNeeded && !offline.notice)) return <CallLimbo overlay blocking={false} active={reconnectingNoticeDue} message={offlineNoticeText(offline.pending.length, online)} />;
   if (offline.notice && offline.notice !== dismissedNotice) return <ToastStack toasts={[{ id: "offline-notice", message: offline.notice }]} onDismiss={() => setDismissedNotice(offline.notice ?? null)} />;
   return null;
 }
