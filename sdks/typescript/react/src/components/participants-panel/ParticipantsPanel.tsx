@@ -133,7 +133,7 @@ export const ParticipantsPanelSurface = React.memo(
           </div>
         ) : null}
         {error ? <p role="alert">{error}</p> : null}
-        {searchable && participants.length > 8 ? (
+        {searchable && (participants.length > 8 || query.length > 0) ? (
           <label className="call-people-search">
             <Search01Icon aria-hidden="true" />
             <input aria-label="Search people" placeholder="Search people" value={query} onChange={(event) => setQuery(event.target.value)} />

@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 
 import { CallCardStyles } from "./CallCardStyles";
 import { cn } from "../../utils/cn";
@@ -12,6 +12,7 @@ export interface CallCardProps {
   readonly onPanelChange?: (panel: "participants" | "chat") => void;
   readonly peopleCount?: number;
   readonly chatEnabled?: boolean;
+  readonly participantsEnabled?: boolean;
   readonly onClose?: () => void;
   readonly interactive?: boolean;
   readonly children: ReactNode;
@@ -21,8 +22,13 @@ export interface CallCardProps {
  * The inset card for desktop panels and the focus-trapped bottom sheet on phones. Escape closes it and focus returns to
  * where it came from. Panels keep their own landmarks, so the drawer itself carries no role.
  */
-export function CallCard({ state, onClose, interactive = true, children, panel, onPanelChange, peopleCount, chatEnabled = true }: CallCardProps) {
+export function CallCard({ state, onClose, interactive = true, children, panel, onPanelChange, peopleCount, chatEnabled = true, participantsEnabled = true }: CallCardProps) {
   const phone = useIsMobile();
+  const id = useId();
+  const tabs: ("participants" | "chat")[] = [];
+  if (participantsEnabled) tabs.push("participants");
+  if (chatEnabled) tabs.push("chat");
+  const selected = panel === "chat" ? "chat" : "participants";
   const drawerRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
 
@@ -50,15 +56,26 @@ export function CallCard({ state, onClose, interactive = true, children, panel, 
           role="tablist"
           aria-label="Call panels"
           onKeyDown={(event) => {
-            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key) || !chatEnabled) return;
+            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key) || tabs.length < 2) return;
             event.preventDefault();
             const next = event.key === "Home" ? "participants" : event.key === "End" ? "chat" : panel === "chat" ? "participants" : "chat";
             onPanelChange(next);
             event.currentTarget.querySelector<HTMLButtonElement>(`[data-card-tab="${next}"]`)?.focus();
           }}
         >
-          {(["participants", ...(chatEnabled ? (["chat"] as const) : [])] as const).map((tab) => (
-            <button key={tab} type="button" className="call-card-tab" data-card-tab={tab} role="tab" aria-selected={tab === "participants" ? panel !== "chat" : panel === "chat"} tabIndex={(tab === "participants" ? panel !== "chat" : panel === "chat") ? 0 : -1} onClick={() => onPanelChange(tab)}>
+          {tabs.map((tab) => (
+            <button
+              key={tab}
+              id={`${id}-${tab}`}
+              aria-controls={`${id}-content`}
+              type="button"
+              className="call-card-tab"
+              data-card-tab={tab}
+              role="tab"
+              aria-selected={tab === "participants" ? panel !== "chat" : panel === "chat"}
+              tabIndex={(tab === "participants" ? panel !== "chat" : panel === "chat") ? 0 : -1}
+              onClick={() => onPanelChange(tab)}
+            >
               {tab === "participants" ? (
                 <>
                   People <span className="call-card-count">{peopleCount}</span>
@@ -73,7 +90,9 @@ export function CallCard({ state, onClose, interactive = true, children, panel, 
           </button>
         </div>
       ) : null}
-      {children}
+      <div id={`${id}-content`} role={onPanelChange ? "tabpanel" : undefined} aria-labelledby={onPanelChange ? `${id}-${selected}` : undefined} className="flex min-h-0 flex-1 flex-col">
+        {children}
+      </div>
     </>
   );
 

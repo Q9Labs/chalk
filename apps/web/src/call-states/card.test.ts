@@ -150,3 +150,19 @@ it(
     }, true),
   30_000,
 );
+
+it(
+  "does not offer People when the participants feature is disabled",
+  async () =>
+    journey(async (page) => {
+      await page.goto(`${origin}/call-states.html?state=card-chat-only`);
+      await page.getByRole("button", { name: "Chat", exact: true }).click();
+      const chat = page.getByRole("tab", { name: "Chat", exact: true });
+      await chat.waitFor();
+      expect(await page.getByRole("tab", { name: /^People/ }).count()).toBe(0);
+      await chat.focus();
+      await page.keyboard.press("ArrowLeft");
+      expect(await chat.getAttribute("aria-selected")).toBe("true");
+    }),
+  30_000,
+);

@@ -85,6 +85,7 @@ export const ChatPanelSurface = React.memo(
     const [draft, setDraft] = useState("");
     const [stagedFiles, setStagedFiles] = useState<readonly ChatUploadFile[]>([]);
     const uploads = useRef(new Map<ChatUploadFile, Promise<{ readonly attachment: ChatAttachment } | { readonly error: string }>>());
+    const [failedUploads, setFailedUploads] = useState<ReadonlySet<ChatUploadFile>>(new Set());
     const [uploading, setUploading] = useState<ReadonlySet<ChatUploadFile>>(new Set());
     const [previews, setPreviews] = useState<ReadonlyMap<ChatUploadFile, string>>(new Map());
     useEffect(() => {
@@ -142,6 +143,51 @@ export const ChatPanelSurface = React.memo(
       textarea.style.height = "auto";
       textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
     }, [draft]);
+    const startUpload = (file: ChatUploadFile) => {
+      if (!onUploadAttachment) return undefined;
+      setFailedUploads((current) => {
+        const next = new Set(current);
+        next.delete(file);
+        return next;
+      });
+      setUploading((current) => new Set(current).add(file));
+      const task: Promise<{ readonly attachment: ChatAttachment } | { readonly error: string }> = Promise.resolve()
+        .then(() => onUploadAttachment(file))
+        .then(
+          (attachment) => ({ attachment }),
+          (cause: unknown) => ({ error: cause instanceof Error ? cause.message : "Attachment could not be uploaded." }),
+        )
+        .then((result) => {
+          if (uploads.current.get(file) !== task) return result;
+          setUploading((current) => {
+            const next = new Set(current);
+            next.delete(file);
+            return next;
+          });
+          if ("error" in result) {
+            uploads.current.delete(file);
+            setFailedUploads((current) => new Set(current).add(file));
+            setComposerError(result.error);
+          }
+          return result;
+        });
+      uploads.current.set(file, task);
+      return task;
+    };
+    const removeFile = (file: ChatUploadFile) => {
+      uploads.current.delete(file);
+      setUploading((current) => {
+        const next = new Set(current);
+        next.delete(file);
+        return next;
+      });
+      setFailedUploads((current) => {
+        const next = new Set(current);
+        next.delete(file);
+        return next;
+      });
+      setStagedFiles((current) => current.filter((candidate) => candidate !== file));
+    };
     const send = async () => {
       const text = draft.trim();
       if ((!text && stagedFiles.length === 0) || !onSendMessage || disabled || sending || pickingFiles) return;
@@ -150,7 +196,7 @@ export const ChatPanelSurface = React.memo(
       try {
         const attachments: ChatAttachment[] = [];
         for (const file of stagedFiles) {
-          const result = await uploads.current.get(file);
+          const result = await (uploads.current.get(file) ?? startUpload(file));
           if (!result) throw new Error("This attachment is not ready. Remove it and attach it again.");
           if ("error" in result) throw new Error(result.error);
           attachments.push(result.attachment);
@@ -184,26 +230,7 @@ export const ChatPanelSurface = React.memo(
         if (fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
-      for (const file of selected) {
-        if (!onUploadAttachment) continue;
-        setUploading((current) => new Set(current).add(file));
-        const task = Promise.resolve()
-          .then(() => onUploadAttachment(file))
-          .then(
-            (attachment) => ({ attachment }),
-            (cause: unknown) => ({ error: cause instanceof Error ? cause.message : "Attachment could not be uploaded." }),
-          )
-          .then((result) => {
-            setUploading((current) => {
-              const next = new Set(current);
-              next.delete(file);
-              return next;
-            });
-            if ("error" in result) setComposerError(result.error);
-            return result;
-          });
-        uploads.current.set(file, task);
-      }
+      for (const file of selected) startUpload(file);
       setStagedFiles((current) => [...current, ...selected]);
       setComposerError(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -363,12 +390,14 @@ export const ChatPanelSurface = React.memo(
                       <span role="progressbar" aria-valuetext="Uploading" aria-label={`Uploading ${describeChatUploadFile(file).fileName}`}>
                         Uploading…
                       </span>
+                    ) : failedUploads.has(file) ? (
+                      "Upload failed · Send to retry"
                     ) : (
                       "Ready"
                     )}
                   </small>
                 </span>
-                <button type="button" disabled={sending || pickingFiles} aria-label={`Remove ${describeChatUploadFile(file).fileName}`} onClick={() => setStagedFiles((current) => current.filter((_, candidate) => candidate !== index))}>
+                <button type="button" disabled={sending || pickingFiles} aria-label={`Remove ${describeChatUploadFile(file).fileName}`} onClick={() => removeFile(file)}>
                   <Cancel01Icon className="h-3.5 w-3.5" />
                 </button>
               </div>
