@@ -9,6 +9,7 @@ import { releaseSounds } from "../sounds/sounds";
 import { ThemeProvider } from "../theme/theme";
 import type { ColorScheme } from "../theme/tokens";
 import type { Permission } from "../toasts/CallEventToasts";
+import { StageViewProvider } from "../stage/stage-view";
 import { CallFrame } from "./CallFrame";
 import { DeviceLayoutProvider } from "./device-layout";
 import { PortalProvider } from "./portal";
@@ -55,7 +56,9 @@ export function Chalk({ client, colorScheme, onColorSchemeChange, soundsEnabled,
                 <PortalProvider>
                   <ToastProvider>
                     <ChalkProvider client={client}>
-                      <CallFrame {...frame} />
+                      <StageViewProvider>
+                        <CallFrame {...frame} />
+                      </StageViewProvider>
                     </ChalkProvider>
                   </ToastProvider>
                 </PortalProvider>

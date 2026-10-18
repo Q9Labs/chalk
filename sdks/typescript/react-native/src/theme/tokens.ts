@@ -133,13 +133,15 @@ export const identityColors = ["#315F72", "#5C6650", "#6B5B4F", "#64576B", "#496
 export type Elevation = {
   readonly popover: string;
   readonly toast: string;
+  /** The small tile floating over the other person when two are in the call (`.tile.float`). */
+  readonly floatTile: string;
   /** Controls on the canvas (dock buttons, people pill) get a one-pixel ring in light. */
   readonly ringOnCanvas: boolean;
 };
 
 export const elevations: Readonly<Record<ColorScheme, Elevation>> = {
-  dark: { popover: "0px 12px 32px rgba(0,0,0,0.5)", toast: "0px 8px 24px rgba(0,0,0,0.4)", ringOnCanvas: false },
-  light: { popover: "0px 0px 0px 1px rgba(0,0,0,0.09), 0px 12px 32px rgba(0,0,0,0.12)", toast: "0px 0px 0px 1px rgba(0,0,0,0.09), 0px 12px 32px rgba(0,0,0,0.12)", ringOnCanvas: true },
+  dark: { popover: "0px 12px 32px rgba(0,0,0,0.5)", toast: "0px 8px 24px rgba(0,0,0,0.4)", floatTile: "0px 0px 0px 1px rgba(255,255,255,0.14), 0px 6px 18px rgba(0,0,0,0.5)", ringOnCanvas: false },
+  light: { popover: "0px 0px 0px 1px rgba(0,0,0,0.09), 0px 12px 32px rgba(0,0,0,0.12)", toast: "0px 0px 0px 1px rgba(0,0,0,0.09), 0px 12px 32px rgba(0,0,0,0.12)", floatTile: "0px 0px 0px 1px rgba(0,0,0,0.15), 0px 6px 18px rgba(0,0,0,0.5)", ringOnCanvas: true },
 };
 
 export type FontWeight = 400 | 500 | 600 | 700;

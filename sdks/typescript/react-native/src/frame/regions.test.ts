@@ -23,10 +23,9 @@ describe("frameRegions", () => {
 });
 
 describe("arrangementFor", () => {
-  it("uses the laptop arrangement on an iPad and the phone layout in narrow Split View", () => {
-    expect(arrangementFor(820, 1180)).toBe("pad");
-    expect(arrangementFor(1180, 820)).toBe("pad");
-    expect(arrangementFor(320, 1180)).toBe("portrait");
+  it("gives the iPad the phone layout today, like a phone", () => {
+    expect(arrangementFor(820, 1180)).toBe("portrait");
+    expect(arrangementFor(1180, 820)).toBe("landscape");
     expect(arrangementFor(375, 820)).toBe("portrait");
     expect(arrangementFor(852, 393)).toBe("landscape");
   });

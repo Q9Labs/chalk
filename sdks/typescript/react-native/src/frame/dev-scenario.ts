@@ -12,6 +12,14 @@ export type DevScenario = {
   readonly videoSlots?: Readonly<Record<string, ReactNode>>;
   /** Shows a call state the fixture client can't reach: a screen before joining, a status page, or a phone call holding the call. */
   readonly callState?: ArrivalState | CallOutcome | "hold";
+  /** Content drawn in place of a person's shared screen, keyed by the sharer's participant id. */
+  readonly screenSlots?: Readonly<Record<string, ReactNode>>;
+  /** The shared screen's width over height (S1 to S4). A real share is drawn as 16:9. */
+  readonly shareAspect?: number;
+  /** Spotlight (G1) or Grid (G2), as if the user had chosen it. */
+  readonly layout?: "spotlight" | "grid";
+  /** Pins this participant, as if the user had pinned them. */
+  readonly pinned?: string;
 };
 
 const empty: DevScenario = {};
