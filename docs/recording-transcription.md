@@ -155,9 +155,40 @@ terms separately:
 - taxes, discounts, and future price changes.
 
 Sources: [DigitalOcean Droplet pricing](https://www.digitalocean.com/pricing/droplets),
+
 [Cloudflare Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/),
 [Cloudflare R2 pricing](https://developers.cloudflare.com/r2/pricing/), and
 [AWS KMS pricing](https://aws.amazon.com/kms/pricing/).
+
+## Prior qualification environment
+
+The 2026-09-10 qualification used the immutable recorder release built from
+commit `0f2c5d0a` and exercised the real API, Sync, Cloudflare SFU/R2/Workers AI,
+AWS KMS/Lambda, and DigitalOcean pools:
+
+- two browser participants exchanged bidirectional audio and video while a real
+  capture worker subscribed through the SFU;
+- ordered audio/video bundles and eleven contiguous explicit gap bundles closed
+  without a timeline discontinuity;
+- the CPU renderer completed on its first attempt and produced a 22,823,192-byte
+  MP4 with a 556.372-second probed duration;
+- API list, get, and signed download returned the same bytes as the independently
+  read R2 object;
+- two transcription chunks completed on their first attempt, finalization
+  produced a 19-cue transcript, and API/download bytes matched R2;
+- all five cleanup jobs completed on their first attempt and every temporary
+  transcript/source object returned not found;
+- capture and render returned naturally to zero active jobs, reservations, and
+  nodes, with future demand cleared.
+
+The proof also caught and corrected a coupled-release failure: the render worker
+image and API's allowed presentation UI hash must move together. That invariant
+is now treated as part of the release tuple, not mutable deployment trivia.
+
+This qualification does **not** claim completion of live in-Space captions,
+first-party mobile recording/transcript wiring, every regional load ceiling,
+every possible worker-loss timing, or managed observability and notification
+configuration. Those remain separate product and operational milestones.
 
 ## Recorder releases
 

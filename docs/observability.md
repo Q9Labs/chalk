@@ -1,7 +1,9 @@
 # Production observability
 
 API request logs and Sync event spans export to Axiom. Use W3C trace IDs and
-Space or Episode IDs to correlate them.
+Space or Episode IDs to correlate them. The private
+`observability_journey_events` table holds the durable correlation record for
+webhook and recording lifecycles.
 
 ## Follow an incident
 
