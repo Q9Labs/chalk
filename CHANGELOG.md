@@ -25,7 +25,6 @@
 - Removed the React Native `@q9labsai/chalk-react-native/macos` entry point.
 - Removed the React Native `@q9labsai/chalk-react-native/theme` entry point.
 
-
 - BREAKING: removes Episode diagnostics producers, credentials, backend, CLI and the diagnostics-contracts package.
 - Remove Episode Debugger launch and diagnostic-reference UI props from the React SDK. Local connection diagnostics and recording instrumentation remain.
 

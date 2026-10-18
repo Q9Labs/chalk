@@ -1,13 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { GetAccess, SpaceClient } from "@q9labsai/chalk-client";
-import { createNativeSpaceClient } from "@q9labsai/chalk-react-native/client";
+import { createNativeSpaceClient, type NativeSpaceClientOptions } from "@q9labsai/chalk-react-native/client";
 
 import type { StoredSpaceArrival } from "../lib/spaces";
-import type { EntranceSettings } from "@q9labsai/chalk-react-native";
 
 type MobileSpaceClientOptions = {
   readonly apiBaseURL: string;
-  readonly defaults: Pick<EntranceSettings, "camera" | "microphone">;
+  readonly defaults: Required<Pick<NativeSpaceClientOptions, "camera" | "microphone">>;
   readonly getAccess: GetAccess;
   readonly space: string;
 };

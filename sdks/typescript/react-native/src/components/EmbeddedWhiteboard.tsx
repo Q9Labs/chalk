@@ -1,6 +1,6 @@
 import { ChalkWhiteboardController, type ChalkEmbeddedWhiteboardTransport, type ChalkEmbeddedWhiteboardViewport } from "@q9labsai/chalk-whiteboard/embedded";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useWindowDimensions, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
+import { ActivityIndicator, Pressable, Text, useWindowDimensions, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
 import WebView, { type WebViewMessageEvent, type WebViewNavigation } from "react-native-webview";
 
 import { isEmbeddedWhiteboardNavigationAllowed, rendererURLWithContext, resolveEmbeddedWhiteboardRendererURL } from "../whiteboard/embedded-whiteboard-assets";
@@ -47,7 +47,9 @@ export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracesta
   const onUserExportRef = useRef(onUserExport);
   const [rendererURL, setRendererURL] = useState<string | null>(null);
   const [rendererGeneration, setRendererGeneration] = useState(createRendererGeneration);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [compatibilityNotice, setCompatibilityNotice] = useState<string | null>(null);
   const [layout, setLayout] = useState({ width: 0, height: 0 });
   const { scale } = useWindowDimensions();
   const viewport = useMemo<ChalkEmbeddedWhiteboardViewport | null>(() => createEmbeddedWhiteboardViewport(layout.width, layout.height, scale), [layout.height, layout.width, scale]);
@@ -87,9 +89,10 @@ export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracesta
     return () => {
       active = false;
     };
-  }, [onError, rendererURLOverride]);
+  }, [loadAttempt, onError, rendererURLOverride]);
 
   useEffect(() => {
+    setCompatibilityNotice(null);
     const controller = new ChalkWhiteboardController({
       renderer: rendererPort,
       transport,
@@ -102,6 +105,7 @@ export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracesta
       ...(localParticipantColor ? { localParticipantColor } : {}),
       onMetric: handleControllerMetric,
       onError: handleControllerError,
+      onCompatibilityChange: (state) => setCompatibilityNotice(state.message),
       onUserExport: handleControllerUserExport,
     });
     controller.start();
@@ -135,6 +139,11 @@ export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracesta
     controllerRef.current?.rendererReloaded();
     setRendererGeneration(createRendererGeneration());
   };
+  const retryRenderer = (): void => {
+    setLoadError(null);
+    setLoadAttempt((attempt) => attempt + 1);
+    reloadRenderer();
+  };
   const handleRendererTermination = (): void => {
     handleControllerMetric({ name: "whiteboard.renderer.termination", value: 1 });
     handleControllerError({
@@ -145,7 +154,25 @@ export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracesta
     reloadRenderer();
   };
 
-  if (loadError || !sourceURL || !rendererURL) return <View style={[{ flex: 1 }, style]} testID={testID} />;
+  if (loadError) {
+    return (
+      <View style={[{ flex: 1 }, style]} testID={testID}>
+        <Text>Whiteboard unavailable</Text>
+        <Text>{loadError}</Text>
+        <Pressable accessibilityRole="button" onPress={retryRenderer}>
+          <Text>Retry</Text>
+        </Pressable>
+      </View>
+    );
+  }
+  if (!sourceURL || !rendererURL) {
+    return (
+      <View style={[{ flex: 1 }, style]} testID={testID}>
+        <ActivityIndicator />
+        <Text>Loading whiteboard…</Text>
+      </View>
+    );
+  }
 
   return (
     <View onLayout={handleLayout} style={[{ flex: 1 }, style]} testID={testID}>
@@ -171,6 +198,11 @@ export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracesta
         style={{ flex: 1 }}
         webviewDebuggingEnabled={typeof __DEV__ !== "undefined" && __DEV__}
       />
+      {compatibilityNotice ? (
+        <View pointerEvents="none">
+          <Text>{compatibilityNotice}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
