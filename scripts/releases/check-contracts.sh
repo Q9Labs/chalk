@@ -34,7 +34,7 @@ check deploy-tools node --test scripts/deploy/*.test.mjs
 check releases python3 -m unittest discover -s scripts/releases -p 'test_*.py'
 check recorder python3 -m unittest discover -s scripts/recorder -p 'test_*.py'
 check recorder-node node --experimental-import-meta-resolve --test scripts/recorder/*.test.mjs infrastructure/recorder/images/cpu/*.test.mjs
-check dispatcher-artifacts node --test scripts/transcription-dispatcher/*.test.mjs
+check dispatcher-artifacts bash -O failglob -c 'node --test scripts/transcription-dispatcher/*.test.mjs'
 check dispatcher-tests pnpm --dir apps/transcription-dispatcher test
 check dispatcher-contract scripts/transcription-dispatcher/validate-contract.sh
 check image-shell bash -c 'for path in scripts/recorder/build-and-seal.sh infrastructure/recorder/images/{cpu,capture}/*.sh; do bash -n "$path" || exit; done'
