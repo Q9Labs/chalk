@@ -1,7 +1,7 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { useRef, type ReactNode } from "react";
 export interface ChalkSheetProps {
-  readonly variant?: "default" | "details" | "panel";
+  readonly variant?: "default" | "details" | "panel" | "ready";
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly title: string;
@@ -20,7 +20,12 @@ export function ChalkSheet({ open, onOpenChange, title, children, variant = "def
       <Dialog.Root open={open} onOpenChange={onOpenChange}>
         <Dialog.Portal container={container}>
           <Dialog.Backdrop data-part="sheet-scrim" className="chalk-sheet-scrim" />
-          <Dialog.Popup data-part={variant === "panel" ? "panel-card" : "sheet"} data-variant={variant} className="chalk-sheet">
+          <Dialog.Popup
+            data-part={variant === "ready" ? "call-ready" : variant === "panel" ? "panel-card" : "sheet"}
+            data-variant={variant}
+            className="chalk-sheet"
+            style={variant === "ready" ? { padding: "8px 20px 46px", borderTop: "1px solid var(--chalk-line)", transitionDuration: "200ms" } : undefined}
+          >
             <div data-part="sheet-handle" className="chalk-sheet-handle" />
             {variant !== "details" ? (
               <Dialog.Title className="sr-only">{title}</Dialog.Title>

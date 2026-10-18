@@ -17,6 +17,8 @@ import { ParticipantsPanel } from "../participants-panel/ParticipantsPanel";
 import { ParticipantVolumeProvider } from "../participants-panel/participant-volume-context";
 import { OfflineActions } from "../offline-actions/OfflineActions";
 import { ReconnectingOverlay } from "../reconnecting-overlay/ReconnectingOverlay";
+import { useCallToasts } from "../toast-stack/useCallToasts";
+import { CallReady } from "../call-limbo/CallReady";
 import { ToastStack, type Toast } from "../toast-stack/ToastStack";
 import { CallCard } from "../call-card/CallCard";
 import { SpacePresentation } from "./SpacePresentation";
@@ -94,6 +96,7 @@ export function SpaceView({
   onEndEpisode,
   className,
 }: SpaceViewProps): React.JSX.Element {
+  const callToasts = useCallToasts();
   const [soundsEnabled] = useSoundsSetting();
   const client = useSpaceClient();
   const self = useSelf();
@@ -222,10 +225,15 @@ export function SpaceView({
             {drawer.panel === "admission" && feature("admission") ? <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} /> : null}
           </CallCard>
         }
-        toasts={<ToastStack toasts={commandToasts} onDismiss={dismissCommandError} />}
-        mediaOutput={<AudioOutput />}
+        toasts={<ToastStack toasts={[...callToasts.toasts, ...commandToasts]} onDismiss={(id) => (id === "space-command-error" ? dismissCommandError() : callToasts.dismiss(id))} />}
+        mediaOutput={
+          <div className="[&>div]:top-[68px] [&>div>button]:h-11 [&>div>button]:shadow-[0_8px_24px_rgba(0,0,0,.4)]">
+            <AudioOutput resumeAudioLabel="Your browser paused the sound. Click to hear the call" />
+          </div>
+        }
         overlays={
           <>
+            <CallReady alone={participantsSlice.roster.length <= 1} />
             {overlay}
             {reconnecting && reconnecting.status !== "reconnecting" ? <ReconnectingOverlay {...reconnecting} /> : null}
             <OfflineActions reconnecting={reconnecting?.status === "reconnecting" && reconnecting.isVisible} />

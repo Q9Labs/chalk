@@ -3,12 +3,14 @@
 import React, { useEffect, useRef, useState, type ReactNode } from "react";
 import { chalkThemeStyle, type ChalkTheme } from "../../theme";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
+import { CallEventIcon } from "../toast-stack/CallEventIcon";
 import { ChalkButton } from "../chalk-ui";
 
 export interface CallLimboProps {
   readonly spaceName?: string;
   readonly message: string;
   readonly detail?: string;
+  readonly recorded?: boolean;
   readonly action?: { readonly label: string; readonly onClick: () => void; readonly disabled?: boolean };
   readonly children?: ReactNode;
   /** Overlay the admitted call instead of rendering the privacy-safe stand-in. */
@@ -20,7 +22,7 @@ export interface CallLimboProps {
 }
 
 /** One surface for joining, admission and connection recovery. Never renders participant data. */
-export function CallLimbo({ spaceName = "Call", message, detail, action, children, overlay = false, active = true, initiallyCovered = false, theme }: CallLimboProps): React.JSX.Element {
+export function CallLimbo({ spaceName = "Call", message, detail, action, children, overlay = false, active = true, initiallyCovered = false, theme, recorded = false }: CallLimboProps): React.JSX.Element {
   const layerRef = useRef<HTMLDivElement>(null);
   const reducedMotion = usePrefersReducedMotion();
   const [covered, setCovered] = useState(active || initiallyCovered);
@@ -39,20 +41,24 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
     const root = layerRef.current.closest("[data-chalk]");
     if (!root) return;
     const previousFocus = document.activeElement;
-    const siblings: { element: HTMLElement; inert: boolean }[] = [];
+    const siblings: { element: HTMLElement; inert: boolean; filter: string }[] = [];
     let branch: HTMLElement = layerRef.current;
     while (branch !== root && branch.parentElement) {
       for (const sibling of branch.parentElement.children) {
         if (sibling !== branch && sibling instanceof HTMLElement) {
-          siblings.push({ element: sibling, inert: sibling.inert });
+          siblings.push({ element: sibling, inert: sibling.inert, filter: sibling.style.filter });
           sibling.inert = true;
+          sibling.style.filter = "blur(10px) grayscale(.75) brightness(.6)";
         }
       }
       branch = branch.parentElement;
     }
     layerRef.current.focus({ preventScroll: true });
     return () => {
-      for (const { element, inert } of siblings) element.inert = inert;
+      for (const { element, inert, filter } of siblings) {
+        element.inert = inert;
+        element.style.filter = filter;
+      }
       if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
     };
   }, [active, overlay]);
@@ -66,19 +72,27 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
       className="absolute inset-0 z-50 flex items-center justify-center px-6 text-[var(--chalk-app-text)]"
       style={{
         pointerEvents: active ? "auto" : "none",
-        backdropFilter: reducedMotion ? "blur(12px)" : `blur(${covered ? 12 : 0}px)`,
-        background: covered ? "color-mix(in srgb, var(--chalk-app-control-primary) 18%, transparent)" : "transparent",
-        opacity: reducedMotion && !covered ? 0 : 1,
-        transition: reducedMotion ? "opacity 350ms ease" : "backdrop-filter 350ms ease, background 350ms ease",
+        background: covered ? "color-mix(in srgb, var(--chalk-canvas) 72%, transparent)" : "transparent",
+        opacity: covered ? 1 : 0,
+        transition: reducedMotion ? "none" : "opacity 220ms cubic-bezier(.2,.8,.2,1)",
       }}
     >
-      <div className="w-full max-w-sm text-center" style={{ opacity: covered ? 1 : 0, transition: "opacity 200ms ease" }}>
+      <div data-part="limbo-message" className="flex max-w-full flex-col items-center gap-2 rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] px-7 py-[22px] text-center">
         {message ? (
-          <p role={active ? "status" : undefined} className="inline-block max-w-full text-lg font-medium tracking-[-0.02em]" style={overlay ? { background: "color-mix(in srgb, var(--chalk-app-canvas) 92%, transparent)", borderRadius: "1rem", padding: "12px 16px" } : undefined}>
+          <p role={active ? "status" : undefined} className="flex items-center gap-2.5 text-[17px] font-semibold">
+            {message.endsWith("…") ? <span aria-hidden="true" className="h-[18px] w-[18px] animate-spin rounded-full border-2 border-[var(--chalk-line-strong)] border-t-[var(--chalk-text)] motion-reduce:animate-none" /> : null}
             {message}
           </p>
         ) : null}
-        {detail ? <p className="mt-2 text-sm text-[var(--chalk-app-text-muted)]">{detail}</p> : null}
+        {detail ? <p className="text-sm text-[var(--chalk-soft-text)]">{detail}</p> : null}
+        {recorded ? (
+          <p className="mt-1 flex items-center gap-1.5 text-xs text-[var(--chalk-muted-text)]">
+            <span className="[&>svg]:h-3.5 [&>svg]:w-3.5">
+              <CallEventIcon kind="recording" error />
+            </span>
+            This call is recorded. By joining, you agree to be recorded.
+          </p>
+        ) : null}
         {children}
         {action ? (
           <ChalkButton className="mt-6 !h-11" variant="outline" onClick={action.onClick} disabled={action.disabled}>
@@ -91,7 +105,7 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
   if (overlay) return layer;
   return (
     <div data-chalk data-chalk-theme={theme?.colorScheme ?? "dark"} className="chalk-root relative h-full min-h-0 w-full overflow-hidden bg-[var(--chalk-app-canvas)]" style={chalkThemeStyle(theme)}>
-      <div aria-hidden="true" inert className="absolute inset-0 flex flex-col p-5">
+      <div aria-hidden="true" inert className="absolute inset-0 flex flex-col p-5 blur-[18px] brightness-[.7]">
         <div className="text-sm font-medium text-[var(--chalk-app-text)]">{spaceName}</div>
         <div className="my-5 flex-1 rounded-2xl border border-[var(--chalk-app-line-strong)]" style={{ background: "color-mix(in srgb, var(--chalk-app-text) 12%, var(--chalk-app-stage))" }} />
         <div className="mx-auto flex h-16 items-center gap-3 rounded-2xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-4">

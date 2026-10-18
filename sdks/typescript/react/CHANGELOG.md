@@ -2,6 +2,8 @@
 
 ## 5.0.0
 
+- Unify call status pages, add optional report/terminal-state integration, a share-ready card, recorded joining consent and accessible call-event toasts.
+
 - Publish and play shared tab audio separately from microphones, with share-audio state and coupled screen-share lifecycle.
 
 - Keep layout changes interactive when `layout` is supplied without `onLayoutChange`; the prop initializes local state in that case. A paired prop and handler remain controlled. Add Spotlight/Grid to the phone dock's More sheet.

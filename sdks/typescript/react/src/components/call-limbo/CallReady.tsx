@@ -1,0 +1,97 @@
+"use client";
+import { useEffect, useId, useState } from "react";
+import { useIsMobile, usePrefersReducedMotion } from "../../internal/useMediaQuery";
+import { ChalkCopyButton, ChalkSheet } from "../chalk-ui";
+import { inviteQR } from "./qr-code";
+
+export interface CallReadyProps {
+  readonly alone: boolean;
+  readonly link?: string;
+}
+export function CallReady({ alone, link = typeof location === "undefined" ? "" : location.href }: CallReadyProps) {
+  const [dismissed, setDismissed] = useState(false);
+  const [showQR, setShowQR] = useState(false);
+  const phone = useIsMobile();
+  const reducedMotion = usePrefersReducedMotion();
+  const [entered, setEntered] = useState(false);
+  const [present, setPresent] = useState(alone);
+  const id = useId();
+  const qr = showQR ? inviteQR(link) : null;
+  const open = alone && !dismissed;
+  useEffect(() => {
+    if (open) setPresent(true);
+    const frame = requestAnimationFrame(() => setEntered(open));
+    const timer = setTimeout(
+      () => {
+        if (!open) setPresent(false);
+      },
+      reducedMotion ? 0 : 200,
+    );
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
+  }, [open, reducedMotion]);
+  useEffect(() => {
+    if (!alone) setDismissed(true);
+  }, [alone]);
+  const content = (
+    <>
+      <div className="-mt-1.5 mb-0.5 flex items-center justify-between">
+        <h2 id={id} className="text-[15px] font-semibold">
+          Your call is ready
+        </h2>
+        <button type="button" className="chalk-dismiss max-sm:!h-11 max-sm:!w-11" aria-label="Close call link" onClick={() => setDismissed(true)}>
+          ×
+        </button>
+      </div>
+      <p className="mr-1 text-[13px] text-[var(--chalk-muted-text)]">Share this link with people you want in the call</p>
+      <div data-part="ready-link" className="mt-3 flex h-11 items-center justify-between gap-2 rounded-full bg-[var(--chalk-raised)] pl-3.5 pr-1 font-medium">
+        <span className="min-w-0 truncate">{link.replace(/^https?:\/\//, "")}</span>
+        <span className="flex gap-0.5">
+          <button type="button" className="chalk-copy" aria-label={showQR ? "Hide QR code" : "Show QR code"} aria-expanded={showQR} aria-controls={`${id}-qr`} onClick={() => setShowQR(!showQR)}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
+              <path d="M3 3h6v6H3zM15 3h6v6h-6zM3 15h6v6H3zM15 15h2v2h-2zM19 15h2v6h-6v-2" />
+            </svg>
+          </button>
+          <ChalkCopyButton text={link} announcement="Copied" />
+        </span>
+      </div>
+      <div id={`${id}-qr`} hidden={!showQR}>
+        <div className="mt-3 flex items-center gap-3.5">
+          {qr ? (
+            <svg role="img" aria-label="Scan to join this call" width="104" height="104" viewBox="-4 -4 45 45" className="shrink-0 rounded-lg bg-white p-1" shapeRendering="crispEdges">
+              <path fill="#000" d={qr.flatMap((row, y) => row.flatMap((dark, x) => (dark ? [`M${x} ${y}h1v1h-1z`] : []))).join("")} />
+            </svg>
+          ) : null}
+          <p className="text-[13px] text-[var(--chalk-soft-text)]">{qr ? "Scan with a phone camera to join this call." : "This link is too long for a QR code. Copy the link to share it."}</p>
+        </div>
+      </div>
+    </>
+  );
+  if (phone)
+    return (
+      <ChalkSheet
+        variant="ready"
+        open={open}
+        onOpenChange={(value) => {
+          if (!value) setDismissed(true);
+        }}
+        title="Your call is ready"
+      >
+        <section aria-labelledby={id}>{content}</section>
+      </ChalkSheet>
+    );
+  return present ? (
+    <section
+      data-part="call-ready"
+      aria-labelledby={id}
+      aria-hidden={!open}
+      inert={!open}
+      style={{ opacity: entered ? 1 : 0, transform: entered ? "none" : "translateY(8px)", transition: reducedMotion ? "none" : "opacity .2s cubic-bezier(.16,1,.3,1), transform .2s cubic-bezier(.16,1,.3,1)" }}
+      className="absolute bottom-[76px] left-5 z-40 w-80 rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] pb-4 pl-4 pr-3 pt-3.5 text-[var(--chalk-text)]"
+    >
+      {content}
+    </section>
+  ) : null;
+}

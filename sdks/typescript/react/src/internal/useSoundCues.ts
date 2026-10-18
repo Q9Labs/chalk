@@ -23,8 +23,12 @@ export function useSoundCues(enabled: boolean, createPlayer: (options: { readonl
       if (enabledRef.current) for (const cue of diffSoundCues(previous, next)) player.play(cue);
       previous = next;
     });
+    const offError = client.on("error", () => {
+      if (enabledRef.current) player.play("error");
+    });
     return () => {
       unsubscribe();
+      offError();
       player.dispose();
     };
   }, [client, outputDeviceId]);

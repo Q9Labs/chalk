@@ -1,5 +1,5 @@
 import type { SpaceSnapshot } from "@q9labsai/chalk-client";
-export type SoundCue = "join" | "leave" | "message" | "hand-raise" | "reaction" | "knock" | "mute" | "unmute" | "recording";
+export type SoundCue = "join" | "leave" | "message" | "hand-raise" | "reaction" | "knock" | "mute" | "unmute" | "recording" | "error";
 /** Cues raised by a snapshot change; the player decides whether they are audible. */
 export const SNAPSHOT_SOUND_CUES = ["join", "leave", "message", "hand-raise", "reaction", "knock", "mute", "unmute", "recording"] as const satisfies readonly SoundCue[];
 
@@ -146,6 +146,10 @@ export function createSoundPlayer({ outputDeviceId }: { readonly outputDeviceId?
           tone(587, 0, 0.14);
           tone(587, 0.18, 0.14);
           tone(880, 0.36, 0.32, 0.06);
+          break;
+        case "error":
+          tone(392, 0, 0.16, 0.05, "triangle");
+          tone(311, 0.13, 0.24, 0.05, "triangle");
           break;
         case "reaction":
           break;

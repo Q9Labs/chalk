@@ -1,7 +1,7 @@
 import { useTheme } from "../../lib/theme-context";
 import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
 import { Chalk, CallLimbo, ChalkButton } from "@q9labsai/chalk-react";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPreparedPublicSpace, createPublicInviteClient, joinDashboardSpace, resumePublicSpace, type AccountSpaceCredential, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
 import { getAccount, listAllAccountTenants } from "../../lib/account-api";
 import { canonicalSpaceInviteLink, clearDashboardSpaceEntry, hasDashboardSpaceEntry, spaceInviteToken, verifiedSpaceInviteLink } from "../../lib/named-space-route";
@@ -405,21 +405,10 @@ function LocalSpace({
   const { mode, setPreference } = useTheme();
   const client = useMemo(() => createLocalSpaceClient({ credential, getAccess, connectionAccess }), [connectionAccess, credential, getAccess]);
   const release = useMemo(() => createLocalSpaceRelease(client, () => onFinish()), [client, onFinish]);
-  const connection = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection;
+  const [homeError, setHomeError] = useState<string | null>(null);
   const pendingRelease = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(undefined);
   const intentionallyLeft = useRef(false);
-  const releaseFromLifecycle = useCallback(() => {
-    intentionallyLeft.current = true;
-    try {
-      globalThis.sessionStorage.removeItem(reloadRejoinStorageKey);
-    } catch {
-      /* Storage may be disabled. */
-    }
-    void release().catch(() => undefined);
-  }, [release]);
-  useEffect(() => {
-    if (connection.status === "failed") releaseFromLifecycle();
-  }, [connection.status, releaseFromLifecycle]);
+
   useEffect(() => {
     if (pendingRelease.current !== undefined) {
       globalThis.clearTimeout(pendingRelease.current);
@@ -455,7 +444,34 @@ function LocalSpace({
   }, [client, credential.space, displayName, onFinish, reloadMarker]);
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
-      <Chalk theme={{ colorScheme: mode }} onColorSchemeChange={setPreference} client={client} displayName={displayName} defaults={defaults} spaceName={spaceName} onEpisodeEnded={releaseFromLifecycle} onLeft={releaseFromLifecycle} />
+      {homeError ? <p role="alert">{homeError}</p> : null}
+      <Chalk
+        theme={{ colorScheme: mode }}
+        onColorSchemeChange={setPreference}
+        client={client}
+        displayName={displayName}
+        defaults={defaults}
+        spaceName={spaceName}
+        onEpisodeEnded={() => {
+          intentionallyLeft.current = true;
+        }}
+        onLeft={() => {
+          intentionallyLeft.current = true;
+          try {
+            globalThis.sessionStorage.removeItem(reloadRejoinStorageKey);
+          } catch {
+            /* Storage may be disabled. */
+          }
+        }}
+        onJoined={() => {
+          intentionallyLeft.current = false;
+        }}
+        onHome={() => {
+          void release()
+            .then(() => globalThis.location.assign("/"))
+            .catch(() => setHomeError("Couldn’t leave the call. Try Home again."));
+        }}
+      />
     </main>
   );
 }

@@ -62,3 +62,5 @@ export type { ChatReactionInput, ChatReaction, ChatReactions } from "@q9labsai/c
 
 export type { MessageReaction, ReactChatMessage, UseChatResult } from "./bindings/hooks";
 export { CHALK_REACTIONS } from "@q9labsai/chalk-client";
+
+export { CallReady, type CallReadyProps } from "./components/call-limbo/CallReady";
