@@ -1,11 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # Uploaded once. The same connection verifies sealing; never reconnect after success.
+validate=false
+if [[ "${1:-}" == --validate ]]; then validate=true; shift; fi
+[[ $# == 3 ]] || { echo 'usage: build-and-seal.sh [--validate] <source-commit> <release-id> <capture|render>' >&2; exit 2; }
 source_commit="$1"
 release_id="$2"
 role="$3"
 [[ "$source_commit" =~ ^[a-f0-9]{40}$ && "$release_id" =~ ^[a-z0-9][a-z0-9._-]{0,127}$ ]] || exit 2
 [[ "$role" == capture || "$role" == render ]] || exit 2
+if [[ "$validate" == true ]]; then
+  source_root="$(cd "$(dirname "$0")/../.." && pwd)"
+  [[ "$(git -C "$source_root" rev-parse HEAD)" == "$source_commit" ]]
+  profile=cpu
+  [[ "$role" != capture ]] || profile=capture
+  for script in "$source_root/infrastructure/recorder/images/$profile/"{build-release,install}.sh "$source_root/infrastructure/recorder/images/cpu/seal.sh"; do
+    [[ -x "$script" ]]
+    bash -n "$script"
+  done
+  [[ -f "$source_root/apps/api/go.mod" ]]
+  if [[ "$role" == render ]]; then
+    [[ -f "$source_root/apps/recording-renderer/package.json" ]]
+    if find "$source_root/apps/recording-renderer" -maxdepth 1 -type f -name '.env*' -print -quit | grep -q .; then
+      echo 'recording renderer source contains an environment file' >&2
+      exit 1
+    fi
+  fi
+  printf '{"result":"PASS","role":"%s","validation_only":true,"built":false,"sealed":false}\n' "$role"
+  exit
+fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq git ca-certificates curl jq

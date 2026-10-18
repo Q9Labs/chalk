@@ -408,6 +408,10 @@ PYRUNTIME
   cp "${managed_root}/controller/chalk-deployment-controller" "${old_managed}/controller/"
   cp "${fixture_root}/health" "${old_managed}/scripts/chalk-runtime-health"
   cp "${managed_root}/contracts/environments.json" "${old_managed}/contracts/"
+  for live_directory in run user-quadlet user-systemd; do
+    find "${fixture_root}/${live_directory}" -mindepth 1 -depth -delete
+  done
+  : >"${fixture_root}/secret-state"
 fi
 
 if group_enabled validation; then
