@@ -320,6 +320,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   font-size: 13px;
   align-items: center;
 }
+.chalk-shell-modal-heading h2,.chalk-shell-details-heading h2 {font-family:inherit;font-size:15px;font-weight:600;line-height:1.4;letter-spacing:normal;text-wrap:wrap;}
 .chalk-shell-shortcuts dd {
   margin: 0;
   display: flex;
@@ -366,7 +367,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 .chalk-shell-report-actions {display:flex;justify-content:flex-end;gap:8px;margin:4px 6px 0;}
 .chalk-shell-report-sent {display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px 10px 6px;text-align:center;}
 .chalk-shell-report-sent > svg {color:var(--chalk-positive);}
-.chalk-shell-report-sent h2 {font-size:17px;font-weight:600;}
+.chalk-shell-report-sent h2 {font-family:inherit;font-size:17px;font-weight:600;line-height:1.4;letter-spacing:normal;text-wrap:wrap;}
 .chalk-shell-report-sent p {color:var(--chalk-text-soft);margin-bottom:10px;}
 [data-chalk-theme="light"] .chalk-shell-split {
   box-shadow: 0 0 0 1px var(--chalk-line);
