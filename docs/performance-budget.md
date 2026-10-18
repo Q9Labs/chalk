@@ -367,7 +367,7 @@ grew by 0.0386 MiB/sample over 20 cycles, but over 120 cycles its overall slope 
 60 cycles had final 21-sample slopes of 0.0172 and 0.00946 respectively. These
 controls expose startup/JIT/cache growth, not a zero-allocation call. Across
 completed ordinary journey observations, early whole-run heap slopes reached
-about 0.073 MiB/cycle and final-ten slopes about 0.038. The 0.1/3 MiB whole-run
+about 0.073 MiB/cycle and final-ten slopes about 0.044. The 0.1/3 MiB whole-run
 limits and 0.05 tail limit leave headroom above those observations; the fixed
 count budgets independently catch smaller retained resources.
 
@@ -388,6 +388,17 @@ Do not interpret it as standard Core Web Vitals CLS. The same run's phone
 first-load frame p95 exceeded its existing timing limit (116.6 ms versus 110 ms);
 that limit was not widened either. The combined command took 18.79 minutes,
 confirming the need for the separate leak lane.
+
+The final separate reference lanes took 9.98 minutes for timing and 8.94 for
+leaks, including their builds and self-tests. Both reported no measurement
+errors. Timing failed only the panel shift (median 0.3388); leaks failed only
+the retained guest keys. The phone first-load timing passed that repetition.
+All 22 focused metric/routing tests, resource lifecycle probes, injected fault
+checks, the uninjected 20-cycle panel comparison and the web typecheck passed.
+At least four complete observations cover every ordinary journey's original
+counters; the newer guest-key counter has five People observations and at least two per
+other ordinary journey. This finite spread is calibration evidence, not a claim
+that all counts were collected on every earlier revision.
 
 ### Additional rendering signals
 
