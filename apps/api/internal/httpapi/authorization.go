@@ -22,18 +22,6 @@ func authorizeTenant(ctx context.Context, authorizer TenantAuthorizer, tenantID 
 	return authorizer.AuthorizeTenant(ctx, principal, tenantID, permission)
 }
 
-func authorizeSystem(ctx context.Context) error {
-	principal, ok := authentication.PrincipalFromContext(ctx)
-	if !ok {
-		return apiErrorUnauthenticated
-	}
-	if principal.Kind != authentication.PrincipalSystem {
-		return apiErrorForbidden
-	}
-
-	return nil
-}
-
 func authorizationAPIError(err error) APIError {
 	if apiErr, ok := errorAsAPIError(err); ok {
 		return apiErr

@@ -35,12 +35,15 @@ type TenantService interface {
 	CreateTenant(ctx context.Context, input tenants.CreateTenantInput) (tenants.Tenant, error)
 	GetTenant(ctx context.Context, id utilities.ID) (tenants.Tenant, error)
 	ListTenants(ctx context.Context, page pagination.PageRequest) (tenants.TenantList, error)
+	ListServiceTenants(context.Context, string, pagination.PageRequest) (tenants.TenantList, error)
+	FindServiceTenant(context.Context, string, string) (tenants.Tenant, error)
 	UpdateTenant(ctx context.Context, id utilities.ID, input tenants.UpdateTenantInput) (tenants.Tenant, error)
 }
 
 type tenantResponse struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID         string  `json:"id"`
+	Name       string  `json:"name"`
+	ExternalID *string `json:"external_id"`
 
 	DefaultMediaPlane                *string                          `json:"default_media_plane"`
 	MediaPlaneProviderConfig         any                              `json:"media_plane_provider_config"`
@@ -64,7 +67,8 @@ type tenantListResponse struct {
 }
 
 type createTenantRequest struct {
-	Name string `json:"name"`
+	Name       string  `json:"name"`
+	ExternalID *string `json:"external_id"`
 
 	DefaultMediaPlane        *string         `json:"default_media_plane"`
 	MediaPlaneProviderConfig json.RawMessage `json:"media_plane_provider_config"`
@@ -113,6 +117,7 @@ func mountTenantRoutes(r chi.Router, service TenantService, authorizer TenantAut
 func tenantEndpoints(service TenantService, authorizer TenantAuthorizer) []RouteEndpoint {
 	return []RouteEndpoint{
 		createTenantEndpoint(service),
+		findServiceTenantEndpoint(service),
 		listTenantsEndpoint(service),
 		getTenantEndpoint(service, authorizer),
 		updateTenantEndpoint(service, authorizer),
@@ -124,10 +129,14 @@ func createTenantEndpoint(service TenantService) Endpoint[createTenantRequest, t
 		if service == nil {
 			return tenantResponse{}, apiErrorServiceUnavailable
 		}
-		if err := authorizeSystem(ctx); err != nil {
+		serviceID, err := authorizeTenantCollection(ctx, authentication.ScopeTenantsWrite)
+		if err != nil {
 			return tenantResponse{}, err
 		}
-		tenant, err := service.CreateTenant(ctx, request.input())
+		input := request.input()
+		input.CreatedByServiceID = serviceID
+		input.ExternalID = request.ExternalID
+		tenant, err := service.CreateTenant(ctx, input)
 		if err != nil {
 			return tenantResponse{}, err
 		}
@@ -158,16 +167,21 @@ func listTenantsEndpoint(service TenantService) Endpoint[listTenantsRequest, ten
 			return tenantListResponse{}, apiErrorServiceUnavailable
 		}
 
-		if err := authorizeSystem(ctx); err != nil {
+		serviceID, err := authorizeTenantCollection(ctx, authentication.ScopeTenantsRead)
+		if err != nil {
 			return tenantListResponse{}, err
 		}
-
-		tenants, err := service.ListTenants(ctx, request.Page)
+		var list tenants.TenantList
+		if serviceID == nil {
+			list, err = service.ListTenants(ctx, request.Page)
+		} else {
+			list, err = service.ListServiceTenants(ctx, *serviceID, request.Page)
+		}
 		if err != nil {
 			return tenantListResponse{}, err
 		}
 
-		response, err := newTenantListResponse(tenants)
+		response, err := newTenantListResponse(list)
 		if err != nil {
 			return tenantListResponse{}, err
 		}
@@ -355,8 +369,9 @@ func newTenantListResponse(list tenants.TenantList) (tenantListResponse, error) 
 
 func newTenantResponse(tenant tenants.Tenant) tenantResponse {
 	return tenantResponse{
-		ID:   tenant.ID.String(),
-		Name: tenant.Name,
+		ID:         tenant.ID.String(),
+		Name:       tenant.Name,
+		ExternalID: tenant.ExternalID,
 
 		DefaultMediaPlane:                tenant.DefaultMediaPlane,
 		MediaPlaneProviderConfig:         utilities.RedactJSONSecrets(tenant.MediaPlaneProviderConfig),
@@ -407,4 +422,51 @@ func (r updateTenantRequest) input() tenants.UpdateTenantInput {
 			TranscriptionSourceWindowSeconds: r.TranscriptionSourceWindowSeconds,
 		},
 	}
+}
+
+// Only System may enumerate all Tenants. Services always use their authenticated ID.
+func authorizeTenantCollection(ctx context.Context, scope authentication.Scope) (*string, error) {
+	principal, ok := authentication.PrincipalFromContext(ctx)
+	if !ok || !principal.IsAuthenticated() {
+		return nil, apiErrorUnauthenticated
+	}
+	if principal.Kind == authentication.PrincipalSystem {
+		return nil, nil
+	}
+	if principal.Kind != authentication.PrincipalService || !principal.HasScope(scope) {
+		return nil, apiErrorForbidden
+	}
+	return &principal.ServiceID, nil
+}
+
+type findServiceTenantRequest struct{ ExternalID string }
+
+func findServiceTenantEndpoint(service TenantService) Endpoint[findServiceTenantRequest, tenantResponse] {
+	return Get("/v1/tenants/by-external-id", "/tenants/by-external-id", "findTenantByExternalID", func(r *http.Request) (findServiceTenantRequest, error) {
+		externalID := r.URL.Query().Get("external_id")
+		if !tenants.ValidExternalID(externalID) {
+			return findServiceTenantRequest{}, apiErrorInvalidTenantField
+		}
+		return findServiceTenantRequest{ExternalID: externalID}, nil
+	}, func(ctx context.Context, request findServiceTenantRequest) (tenantResponse, error) {
+		if service == nil {
+			return tenantResponse{}, apiErrorServiceUnavailable
+		}
+		serviceID, err := authorizeTenantCollection(ctx, authentication.ScopeTenantsRead)
+		if err != nil {
+			return tenantResponse{}, err
+		}
+		if serviceID == nil {
+			return tenantResponse{}, apiErrorForbidden
+		}
+		tenant, err := service.FindServiceTenant(ctx, *serviceID, request.ExternalID)
+		if err != nil {
+			return tenantResponse{}, err
+		}
+		return newTenantResponse(tenant), nil
+	}).Auth(APIAuthSessionOrBearer).
+		Parameters(APIParameterContract{Name: "external_id", In: "query", Type: "string", Required: true, MinLength: 1, MaxLength: 512}).
+		Responds(http.StatusOK, "Tenant", tenantResponse{}).
+		Errors(apiErrorUnauthenticated, apiErrorForbidden, apiErrorServiceUnavailable, apiErrorInvalidTenantField, apiErrorTenantNotFound, apiErrorInternal).
+		MapErrors(tenantEndpointAPIError)
 }

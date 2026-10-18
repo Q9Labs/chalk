@@ -49,7 +49,7 @@ func TestLeanCutAPIKeyCreationNeedsNoSessionOrRecentProof(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			service := &leanCutKeyService{principal: authentication.Principal{Kind: authentication.PrincipalAPIKey, APIKeyID: keyID, TenantID: test.tenant, Scopes: []authentication.Scope{test.scope}}}
-			router := NewRouter(Options{APIKeys: service, APIKeyAuthentication: service, TenantAuthz: authorization.NewTenantPolicy(nil)})
+			router := NewRouter(Options{APIKeys: service, APIKeyAuthentication: service, TenantAuthz: authorization.NewTenantPolicy(nil, nil)})
 			request := httptest.NewRequest(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/api-keys", strings.NewReader(`{"name":"Automation","scopes":["api_keys:write"],"expires_at":"2030-01-01T00:00:00Z"}`))
 			request.Header.Set("Authorization", test.credential)
 			request.Header.Set("Idempotency-Key", "lean-cut-test-request")

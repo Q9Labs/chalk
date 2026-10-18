@@ -45,7 +45,7 @@ func TestLegacyKeyCanManageOnlyEffectiveScopeSubset(t *testing.T) {
 					}
 					repository.records[id] = record
 				}
-				router := httpapi.NewRouter(httpapi.Options{APIKeys: service, APIKeyAuthentication: service, TenantAuthz: authorization.NewTenantPolicy(nil)})
+				router := httpapi.NewRouter(httpapi.Options{APIKeys: service, APIKeyAuthentication: service, TenantAuthz: authorization.NewTenantPolicy(nil, nil)})
 				method, path := http.MethodPost, "/v1/tenants/"+tenantID.String()+"/api-keys/"+key.Key.ID.String()+"/rotate"
 				want := target.status
 				if action == "revoke" {

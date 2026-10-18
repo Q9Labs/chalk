@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 )
 
@@ -32,6 +33,9 @@ const (
 	APIService            = "CHALK_API_SERVICE"
 	APISlowRequestMS      = "CHALK_API_SLOW_REQUEST_MS"
 	APILocalSystemToken   = "CHALK_API_LOCAL_SYSTEM_TOKEN"
+	APIServiceID          = "CHALK_API_SERVICE_ID"
+	APIServiceSecrets     = "CHALK_API_SERVICE_SECRETS"
+	APIServiceScopes      = "CHALK_API_SERVICE_SCOPES"
 
 	APIVersion                       = "CHALK_API_VERSION"
 	SyncTokenAudience                = "CHALK_SYNC_TOKEN_AUDIENCE"
@@ -127,6 +131,7 @@ type APIConfig struct {
 	Address            string
 	CORSAllowedOrigins []string
 	LocalSystemToken   string
+	ServicePrincipal   authentication.ServiceCredential
 
 	TrustedProxyCIDRs []string
 }
@@ -356,6 +361,10 @@ func Load() (Config, error) {
 	if environment != DefaultEnvironment && localSystemToken != "" {
 		return Config{}, fmt.Errorf("%s is only supported in local environments", APILocalSystemToken)
 	}
+	servicePrincipal, err := loadServicePrincipal(localSystemToken)
+	if err != nil {
+		return Config{}, err
+	}
 	syncToken, err := loadSyncTokenConfig(environment)
 	if err != nil {
 		return Config{}, err
@@ -449,6 +458,7 @@ func Load() (Config, error) {
 			Address:            envOrDefault(APIAddress, DefaultAPIAddress),
 			CORSAllowedOrigins: envList(APICORSAllowedOrigins),
 			LocalSystemToken:   localSystemToken,
+			ServicePrincipal:   servicePrincipal,
 
 			TrustedProxyCIDRs: envList(APITrustedProxyCIDRs),
 		},

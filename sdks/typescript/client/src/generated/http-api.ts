@@ -1371,6 +1371,20 @@ const tenantsGroup = HttpApiGroup.make("tenants")
     }),
   )
   .add(
+    HttpApiEndpoint.get("findTenantByExternalID", "/v1/tenants/by-external-id", {
+      query: S.FindTenantByExternalIDQueryParamsSchema,
+      success: S.FindTenantByExternalIDResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.TenantInvalidFieldErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.TenantNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("getTenant", "/v1/tenants/:tenant_id", {
       params: S.GetTenantPathParamsSchema,
       success: S.GetTenantResponseSchema.pipe(HttpApiSchema.status(200)),

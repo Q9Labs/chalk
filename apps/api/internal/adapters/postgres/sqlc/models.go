@@ -1338,6 +1338,8 @@ type Tenant struct {
 	Website                  pgtype.Text        `json:"website"`
 	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+	CreatedByServiceID       pgtype.Text        `json:"created_by_service_id"`
+	ExternalID               pgtype.Text        `json:"external_id"`
 }
 
 type TenantArtifactPolicy struct {
@@ -1358,6 +1360,18 @@ type TenantOnboardingRequest struct {
 	RequestFingerprint []byte             `json:"request_fingerprint"`
 	TenantID           pgtype.UUID        `json:"tenant_id"`
 	TenantAccessID     pgtype.UUID        `json:"tenant_access_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type TenantServiceOwnershipAudit struct {
+	ID                 int64              `json:"id"`
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	ServiceID          string             `json:"service_id"`
+	ExternalID         pgtype.Text        `json:"external_id"`
+	PreviousServiceID  pgtype.Text        `json:"previous_service_id"`
+	PreviousExternalID pgtype.Text        `json:"previous_external_id"`
+	Actor              string             `json:"actor"`
+	Reason             string             `json:"reason"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
