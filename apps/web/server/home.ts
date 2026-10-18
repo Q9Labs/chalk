@@ -19,7 +19,8 @@ export async function homePage(engine: Engine, cursor?: string): Promise<HomeDTO
           lastActiveAt: latest ? (latest.ended_at ?? latest.started_at) : null,
           recentPeople: people
             ? people.participants
-                .toSorted((a, b) => b.firstJoinedAt.localeCompare(a.firstJoinedAt))
+                .slice()
+                .sort((a, b) => b.firstJoinedAt.localeCompare(a.firstJoinedAt))
                 .slice(0, 5)
                 .map(({ id, name }) => ({ id, name }))
             : [],

@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 
 // Only the external Cloudflare allocation is simulated. Never emulate engine
@@ -6,6 +7,10 @@ import { randomUUID } from "node:crypto";
 const server = createServer((request, response) => {
   request.resume();
   if (request.method === "GET" && request.url === "/healthz") return response.writeHead(200).end();
+  if (request.method === "GET" && new URL(request.url, "http://localhost").pathname.endsWith("/transcript.json")) {
+    const body = readFileSync("artifacts/dashboard-transcript.json");
+    return response.writeHead(200, { "Content-Type": "application/json", "Content-Length": body.length }).end(body);
+  }
   if (request.method !== "POST" || request.url !== "/apps/dashboard-proof/sessions/new") return response.writeHead(404).end();
   response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ sessionId: randomUUID() }));
 });

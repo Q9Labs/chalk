@@ -84,8 +84,11 @@ separate authenticated purposes. Both have bounded expiry.
 Every operation uses the generated `@q9labsai/chalk-client/effect` client.
 `resolveTenant` finds the authenticated user's `workos:<environment>:<user id>`
 external ID. Only the sign-in callback provisions on an authoritative 404;
-429s never cause creation and return `engine_rate_limited`, `retryable: true`,
-`retryAfterSeconds: 60`, and `Retry-After: 60`. There are no automatic retries.
+429s never cause creation. Dashboard API errors return `engine_rate_limited`,
+`retryable: true`, `retryAfterSeconds: 60`, and `Retry-After: 60`. Callback failures
+redirect to `/dashboard/sign-in?failed=google` or `failed=apple`, using the
+provider sealed in the login transaction. The bounded failure log retains the
+request ID and failure code. There are no automatic retries.
 Attendance returns one row per Participant seat, with first join and last leave;
 seats are never merged, and ended-session leave times come from the API.
 
@@ -152,3 +155,42 @@ Developer GET includes `allowedWebsites`. POST `allowed-websites` reads only tha
 `url`, `enabled` and `eventTypes` are optional patches. Send only fields the person
 changed. In particular, omit `url` unless a new destination was entered: the DTO
 contains a redacted URL and must never be submitted as the real destination.
+
+## Dashboard summaries and limits
+
+Home returns five calls per page, each with its canonical invite URL. `lastActiveAt`
+is the latest Episode's end time, or its start time while active. `recentPeople`
+contains at most five seats from that Episode, ordered by first join descending.
+These are names, not avatar URLs. Empty history returns `null` and an empty list.
+
+Call returns five Episodes per page. Each row contains its attendance count and
+up to five recordings. Each recording includes up to five transcript summaries.
+`recordingsNextCursor` and `transcriptsNextCursor` identify incomplete lists. The
+Past session page and transcript action expose their existing paginated reads.
+`live` uses the batch live-Episode read, independently of the history cursor.
+The API does not return a total Episode count, so the DTO does not invent one.
+
+Developer returns five webhooks per page, each with `lastDelivery` or `null`.
+Delivery lists return five rows per page, with event type, attempt count, and the
+latest attempt's HTTP status. A delivery with no HTTP response has `status: null`.
+API keys include nullable `lastUsedAt`. Mutation responses do not fetch summaries.
+
+Including Tenant resolution, worst-case engine request counts are 18 for Home,
+41 for Call, 14 for Developer, and 8 for a delivery list. These are structural
+bounds, not measured throughput. The service read limit is 300 per minute across
+requests. There is no per-row expansion of an unbounded page and no auto-retry.
+
+`AttendanceDTO.isYou` is true only for a seat in the server-sealed owner cookie
+that matches the signed-in user, session, Space, Episode, and cookie lifetime.
+The browser supplies no viewer or Participant ID. Other seats remain false,
+including older seats whose cookies expired or were replaced. Durable self-labels
+across devices and sign-ins need an engine identity-to-owner mapping.
+
+`CueDTO.speaker` preserves the transcript's name and Participant reference when
+present. Missing identity returns `null`; missing speaker name stays `null`.
+
+`create-call` accepts an omitted name and uses `New call`. `create-transcript`
+requests transcription for an owned recording using the generated operation and
+a stable idempotency key. The engine rejects requests when any transcript already
+exists for that recording. A failed-transcript retry therefore still needs an
+engine endpoint. Deleting a transcript does not remove that restriction.

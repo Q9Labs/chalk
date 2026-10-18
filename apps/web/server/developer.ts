@@ -104,6 +104,6 @@ export async function developerMutation(engine: Engine, action: DeveloperAction)
 }
 
 function deliveryDTO(delivery: WebhookDeliveryDetail): DeliveryDTO {
-  const latest = delivery.attempts.toSorted((a, b) => b.number - a.number)[0];
+  const latest = delivery.attempts.slice().sort((a, b) => b.number - a.number)[0];
   return { id: delivery.id, state: delivery.state, createdAt: delivery.created_at, eventType: delivery.event_type, attempts: delivery.attempt_count, status: latest?.http_status ?? null };
 }

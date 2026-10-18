@@ -145,9 +145,9 @@ try {
     const finished = await client.request(callback);
     assert.equal(finished.status, 303, `Callback ${await finished.text()}; engine paths ${JSON.stringify(requests)}`);
     assert.equal(finished.headers.get("location"), "/dashboard");
-    assert.equal((await client.request(callback)).status, 400);
+    assert.equal((await client.request(callback)).headers.get("location"), "/dashboard/sign-in?failed=google");
     client.cookies.set("local_chalk_login", loginCookie);
-    assert.equal((await client.request(callback)).status, 401);
+    assert.equal((await client.request(callback)).headers.get("location"), "/dashboard/sign-in?failed=google");
     const response = await client.request("/auth/session");
     assert.equal(response.status, 200);
     const dto = await response.json();
@@ -177,6 +177,15 @@ try {
   assert.equal((await post(ada, "/dashboard-api/home", {}, "")).status, 403);
   assert.equal((await post(ada, "/dashboard-api/home", {}, other.csrfToken)).status, 403);
   assert.equal(requests.length, count);
+  const apple = browser();
+  await apple.request("/auth/start?provider=apple");
+  const failedApple = await apple.request("/auth/callback?error=access_denied");
+  assert.equal(failedApple.status, 303);
+  assert.equal(failedApple.headers.get("location"), "/dashboard/sign-in?failed=apple");
+  assert(failedApple.headers.get("X-Request-ID"));
+  const unnamed = await post(ada, "/dashboard-api/home", { action: "create-call", admission: "anyone", idempotencyKey: crypto.randomUUID() }, session.csrfToken);
+  assert.equal(unnamed.status, 200, await unnamed.clone().text());
+  assert.equal((await unnamed.json()).call.name, "New call");
   const malikTenant = secondTenant;
   const created = await post(ada, "/dashboard-api/home", { action: "create-call", name: "Original", admission: "anyone", idempotencyKey: crypto.randomUUID() }, session.csrfToken);
   assert.equal(created.status, 200, await created.clone().text());
@@ -209,6 +218,19 @@ try {
     assert.equal(replay.status, 200, await replay.clone().text());
     assert.equal((await replay.json()).access.subject.participant_id, grant.subject.participant_id);
     assert.equal(sql(`select count(*) from participants where episode_id='${grant.subject.episode_id}'`), "1");
+    sql(`update participants set status='active', joined_at=now(), first_joined_at=now() where id='${grant.subject.participant_id}'`);
+    const liveOffset = requests.length;
+    const liveCall = await ada.request(`/dashboard-api/call?spaceId=${ownerSpaceId}`);
+    assert.equal(liveCall.status, 200, await liveCall.clone().text());
+    const liveDTO = await liveCall.json();
+    assert(requests.length - liveOffset <= 41, "Call enrichment stays within its request bound");
+    assert.equal(liveDTO.live.count, 1);
+    assert.equal(liveDTO.live.participants[0].id, grant.subject.participant_id);
+    assert.equal(liveDTO.episodes[0].participantCount, 1);
+    const ownPast = await ada.request(`/dashboard-api/past-session?spaceId=${ownerSpaceId}&episodeId=${grant.subject.episode_id}`);
+    assert.equal(ownPast.status, 200, await ownPast.clone().text());
+    assert.equal((await ownPast.json()).attendance.participants[0].isYou, true);
+    sql(`update participants set status='joining', joined_at=null where id='${grant.subject.participant_id}'`);
     const refreshedAccess = await post(ada, "/dashboard-api/call", { action: "refresh-access", spaceId: ownerSpaceId }, session.csrfToken);
     // Before Sync has committed participant_joined, refresh must fail closed.
     assert.equal(refreshedAccess.status, 404, await refreshedAccess.clone().text());
@@ -252,6 +274,27 @@ try {
   const ownDeliveries = await post(ada, "/dashboard-api/developer", { action: "webhook-deliveries", webhookId }, session.csrfToken);
   assert.equal(ownDeliveries.status, 200, await ownDeliveries.clone().text());
   assert.deepEqual((await ownDeliveries.json()).deliveries, []);
+  const testDelivery = await post(ada, "/dashboard-api/developer", { action: "test-webhook", webhookId, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
+  assert.equal(testDelivery.status, 200, await testDelivery.clone().text());
+  const testDeliveryId = (await testDelivery.json()).deliveryId;
+  sql(`update webhook_deliveries set attempt_count=1 where id='${testDeliveryId}';
+  insert into webhook_delivery_attempts(id,tenant_id,delivery_id,attempt_number,started_at,finished_at,latency_milliseconds,outcome,http_status) values(gen_random_uuid(),'${firstTenant}','${testDeliveryId}',1,now(),now(),1,'succeeded',204);
+  update api_keys set last_used_at='2026-10-18T00:00:00Z' where id='${keyId}'`);
+  const developer = await ada.request("/dashboard-api/developer");
+  assert.equal(developer.status, 200, await developer.clone().text());
+  const developerDTO = await developer.json();
+  assert.equal(developerDTO.keys.find((key) => key.id === keyId).lastUsedAt, "2026-10-18T00:00:00Z");
+  const lastDelivery = developerDTO.webhooks.find((hook) => hook.id === webhookId).lastDelivery;
+  assert.equal(lastDelivery.id, testDeliveryId);
+  assert(lastDelivery.eventType);
+  assert.equal(lastDelivery.status, 204);
+  assert.equal(lastDelivery.attempts, 1);
+  const deliveryRows = await post(ada, "/dashboard-api/developer", { action: "webhook-deliveries", webhookId }, session.csrfToken);
+  assert.equal(deliveryRows.status, 200, await deliveryRows.clone().text());
+  assert.deepEqual(
+    (await deliveryRows.json()).deliveries.find((d) => d.id === testDeliveryId),
+    lastDelivery,
+  );
   const foreign = { spaceId, episodeId: crypto.randomUUID(), recordingId: crypto.randomUUID(), transcriptId: crypto.randomUUID(), keyId, webhookId, deliveryId: crypto.randomUUID() };
   // Provider artifacts are seeded, not mocked. Every read/authorization uses the
   // production HTTP server and PostgreSQL repositories; no vendor is contacted.
@@ -263,11 +306,63 @@ try {
   assert.equal(past.status, 200, await past.clone().text());
   const pastDTO = await past.json();
   assert.equal(pastDTO.attendance.participants.length, 2);
-  assert(pastDTO.attendance.participants.every((p) => p.name === "Same name" && p.kind === "guest" && p.firstJoinedAt && p.lastLeftAt === pastDTO.episode.endedAt));
+  assert(pastDTO.attendance.participants.every((p) => p.name === "Same name" && p.kind === "guest" && p.isYou === false && p.firstJoinedAt && p.lastLeftAt === pastDTO.episode.endedAt));
   assert.equal(pastDTO.recordings[0].id, foreign.recordingId);
   const ownTranscripts = await post(ada, "/dashboard-api/past-session", { action: "transcripts", spaceId, episodeId: foreign.episodeId, recordingId: foreign.recordingId }, session.csrfToken);
   assert.equal(ownTranscripts.status, 200, await ownTranscripts.clone().text());
   assert.equal((await ownTranscripts.json()).transcripts[0].id, foreign.transcriptId);
+  const enrichedCall = await ada.request(`/dashboard-api/call?spaceId=${spaceId}`);
+  assert.equal(enrichedCall.status, 200, await enrichedCall.clone().text());
+  const historical = (await enrichedCall.json()).episodes.find((episode) => episode.id === foreign.episodeId);
+  assert.equal(historical.participantCount, 2);
+  assert.equal(historical.recordings[0].status, "failed");
+  assert.equal(historical.recordings[0].transcripts[0].status, "terminal_failure");
+  const retry = await post(ada, "/dashboard-api/past-session", { action: "create-transcript", spaceId, episodeId: foreign.episodeId, recordingId: foreign.recordingId, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
+  assert.equal(retry.status, 409, await retry.clone().text());
+  assert(unsupportedBodies.some((r) => r.method === "POST" && r.path.endsWith(`/recordings/${foreign.recordingId}/transcripts`)));
+  const documentFixture = JSON.stringify({
+    schemaVersion: "transcript.v1",
+    jobId: crypto.randomUUID(),
+    episodeId: foreign.episodeId,
+    provider: "cloudflare",
+    model: "fixture",
+    versionContract: "v1",
+    attempt: 0,
+    measuredAudioMs: 1000,
+    cues: [
+      {
+        startMs: 0,
+        endMs: 1000,
+        identity: { kind: "participant", participantRef: "speaker-1", participantGeneration: 1, trackId: "audio", trackEpoch: "one" },
+        trackClass: "microphone",
+        displayNameSnapshot: "Speaker name",
+        text: "Hello",
+        overlap: false,
+        provider: "cloudflare",
+        model: "fixture",
+        versionContract: "v1",
+        attempt: 0,
+      },
+    ],
+  });
+  await writeFile(resolve(import.meta.dirname, "../../../../artifacts/dashboard-transcript.json"), documentFixture);
+  sql(`update transcriptions set status='complete', artifact_key='transcript.json', artifact_size=${Buffer.byteLength(documentFixture)}, artifact_content_type='application/json' where id='${foreign.transcriptId}'`);
+  const documentResponse = await post(ada, "/dashboard-api/past-session", { action: "transcript-document", spaceId, episodeId: foreign.episodeId, transcriptId: foreign.transcriptId }, session.csrfToken);
+  assert.equal(documentResponse.status, 200, await documentResponse.clone().text());
+  assert.deepEqual((await documentResponse.json()).cues, [{ startMs: 0, endMs: 1000, text: "Hello", speaker: { name: "Speaker name", participantRef: "speaker-1" } }]);
+  const freshRecordingId = crypto.randomUUID();
+  sql(`insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider) values('${freshRecordingId}','${firstTenant}','${spaceId}','${foreign.episodeId}','failed','r2');
+  insert into recording_transcription_sources(recording_id,tenant_id,manifest_key,manifest_sha256,manifest_size,manifest_content_type,schema_version,committed_at,generation,commit_digest,presentation_sha256,status,expires_at)
+  values('${freshRecordingId}','${firstTenant}','transcription/source/${freshRecordingId}/manifest.json',decode(repeat('00',32),'hex'),1,'application/json',1,now(),1,decode(repeat('00',32),'hex'),decode(repeat('00',32),'hex'),'ready',now()+interval '1 hour');
+  insert into recording_transcription_source_chunks(id,recording_id,tenant_id,chunk_index,generation,start_ms,end_ms,source_start_ms,source_end_ms,participant_ref,participant_generation,track_id,track_epoch,identity_kind,track_class,display_name_snapshot,overlap,storage_key,checksum,size,content_type)
+  values(gen_random_uuid(),'${freshRecordingId}','${firstTenant}',0,1,0,1000,0,1000,'participant-1',1,'track-1','1','participant','microphone','Speaker',false,'transcription/source/${freshRecordingId}/chunk-0.flac',decode(repeat('00',32),'hex'),1,'audio/flac')`);
+  const transcriptRequest = { action: "create-transcript", spaceId, episodeId: foreign.episodeId, recordingId: freshRecordingId, idempotencyKey: crypto.randomUUID() };
+  const requestedTranscript = await post(ada, "/dashboard-api/past-session", transcriptRequest, session.csrfToken);
+  assert.equal(requestedTranscript.status, 200, await requestedTranscript.clone().text());
+  const transcriptId = (await requestedTranscript.json()).transcript.id;
+  const replayedTranscript = await post(ada, "/dashboard-api/past-session", transcriptRequest, session.csrfToken);
+  assert.equal(replayedTranscript.status, 200, await replayedTranscript.clone().text());
+  assert.equal((await replayedTranscript.json()).transcript.id, transcriptId);
   for (const path of [`/dashboard-api/call?spaceId=${spaceId}`, `/dashboard-api/past-session?spaceId=${spaceId}&episodeId=${foreign.episodeId}`]) assert.equal((await malik.request(path)).status, 404);
   const mutations = [
     ["call", { action: "rename-call", spaceId: foreign.spaceId, name: "Renamed" }],
@@ -281,9 +376,9 @@ try {
     ["call", { action: "end-for-everyone", spaceId: foreign.spaceId, episodeId: foreign.episodeId, idempotencyKey: crypto.randomUUID() }],
     ["call", { action: "approve-knock", spaceId: foreign.spaceId, requestHandle: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() }],
     ["call", { action: "deny-knock", spaceId: foreign.spaceId, requestHandle: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() }],
-    ...["recording-url", "export-recording", "transcripts"].map((action) => [
+    ...["recording-url", "export-recording", "transcripts", "create-transcript"].map((action) => [
       "past-session",
-      { action, spaceId: foreign.spaceId, episodeId: foreign.episodeId, recordingId: foreign.recordingId, ...(action === "recording-url" ? { download: true } : action === "export-recording" ? { idempotencyKey: crypto.randomUUID() } : {}) },
+      { action, spaceId: foreign.spaceId, episodeId: foreign.episodeId, recordingId: foreign.recordingId, ...(action === "recording-url" ? { download: true } : action === "export-recording" || action === "create-transcript" ? { idempotencyKey: crypto.randomUUID() } : {}) },
     ]),
     ...["transcript-document", "transcript-url", "delete-transcript"].map((action) => ["past-session", { action, spaceId: foreign.spaceId, episodeId: foreign.episodeId, transcriptId: foreign.transcriptId }]),
     ["developer", { action: "rotate-key", keyId: foreign.keyId, expiresAt: "2027-01-01T00:00:00Z", idempotencyKey: crypto.randomUUID() }],
@@ -319,9 +414,16 @@ try {
   const expectedWebsites = ["https://chalkmeet.com", "https://example.test", "http://localhost:3000"].toSorted();
   assert.deepEqual((await websites.json()).allowedWebsites.toSorted(), expectedWebsites);
   assert.deepEqual((await tenantFor("malik")).cors_allowed_origins.toSorted(), expectedWebsites);
+  const homeOffset = requests.length;
   const home = await ada.request("/dashboard-api/home");
   assert.equal(home.status, 200, await home.clone().text());
-  assert.equal((await home.json()).live.find((row) => row.spaceId === spaceId).episode, null);
+  const homeDTO = await home.json();
+  assert(requests.length - homeOffset <= 18, "Home enrichment stays within its request bound");
+  assert.equal(homeDTO.live.find((row) => row.spaceId === spaceId).episode, null);
+  const homeCall = homeDTO.calls.find((row) => row.id === spaceId);
+  assert(homeCall.inviteUrl && homeCall.slug && homeCall.lastActiveAt);
+  assert.equal(homeCall.recentPeople.length, 2);
+  console.log("PASS: bounded enriched Home/Call/Developer DTOs, live people, authenticated isYou, optional call name, provider-safe callback redirects, and transcript request ownership");
   rateLimitPath = "/v1/tenants/by-external-id";
   const beforeThrottle = sql("select count(*) from tenants");
   const blocked = browser();
@@ -330,9 +432,9 @@ try {
   authorize.searchParams.set("person", "ada");
   const authorized = await blocked.request(authorize);
   const throttled = await blocked.request(authorized.headers.get("location"));
-  assert.equal(throttled.status, 429, await throttled.clone().text());
-  assert.deepEqual((await throttled.json()).error, { code: "engine_rate_limited", retryable: true, retryAfterSeconds: 60 });
-  assert.equal(throttled.headers.get("retry-after"), "60");
+  assert.equal(throttled.status, 303);
+  assert.equal(throttled.headers.get("location"), "/dashboard/sign-in?failed=google");
+  assert(throttled.headers.get("X-Request-ID"));
   assert.equal(blocked.cookies.has("local_chalk_session"), false);
   assert.equal(sql("select count(*) from tenants"), beforeThrottle);
   assert.equal((await ada.request("/dashboard-api/home")).status, 429);
