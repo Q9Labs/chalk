@@ -14,7 +14,6 @@ import { ReactionsOverlay } from "../composite/ReactionsOverlay";
 import { SettingsPanel } from "../composite/SettingsPanel";
 import { ControlBar, type ControlBarButtonName } from "../control-bar/ControlBar";
 import { InviteDialog } from "../invite-dialog/InviteDialog";
-import { LeaveDialog } from "../leave-dialog/LeaveDialog";
 import { ParticipantsPanel } from "../participants-panel/ParticipantsPanel";
 import { ParticipantVolumeProvider } from "../participants-panel/participant-volume-context";
 import { OfflineActions } from "../offline-actions/OfflineActions";
@@ -70,12 +69,7 @@ export function ClassicSpaceView({
   const [uncontrolledLayout, setUncontrolledLayout] = useState<"grid" | "focus" | "presentation">("focus");
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(initialPanel);
   const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
-  const [isLeaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(null);
-  const [leavePending, setLeavePending] = useState(false);
-  const [leaveError, setLeaveError] = useState<string | null>(null);
-  const [endEpisodePending, setEndEpisodePending] = useState(false);
-  const [endEpisodeError, setEndEpisodeError] = useState<string | null>(null);
   const layout = controlledLayout ?? uncontrolledLayout;
   const feature = (name: keyof SpaceViewFeatures) => features?.[name] !== false;
   const localId = self.participantId ?? "local";
@@ -122,36 +116,8 @@ export function ClassicSpaceView({
       setCommandError(cause instanceof Error ? cause.message : "This command could not be completed.");
     }
   }, []);
-  const leaveSpace = async () => {
-    if (!onLeft || leavePending) return;
-    setLeavePending(true);
-    setLeaveError(null);
-    try {
-      await onLeft();
-      setLeaveDialogOpen(false);
-    } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "Could not leave this Space.";
-      setLeaveError(message);
-      setCommandError(message);
-    } finally {
-      setLeavePending(false);
-    }
-  };
-  const endEpisode = async () => {
-    if (!onEndEpisode || endEpisodePending) return;
-    setEndEpisodePending(true);
-    setEndEpisodeError(null);
-    try {
-      await onEndEpisode();
-      setLeaveDialogOpen(false);
-    } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "Could not end this Episode.";
-      setEndEpisodeError(message);
-      setCommandError(message);
-    } finally {
-      setEndEpisodePending(false);
-    }
-  };
+  const leaveCall = onLeft ? () => void runCommand(async () => onLeft()) : undefined;
+  const endCallForEveryone = onEndEpisode ? () => void runCommand(async () => onEndEpisode()) : undefined;
   const displayedCommandError = externalCommandError ?? commandError;
   const commandToasts: Toast[] = displayedCommandError ? [{ id: "space-command-error", message: displayedCommandError, type: "error" }] : [];
   const dismissCommandError = () => {
@@ -209,7 +175,8 @@ export function ClassicSpaceView({
             onOpenInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
             onOpenSettings={openSettings}
             onCommandError={setCommandError}
-            onLeaveRequest={onLeft ? () => setLeaveDialogOpen(true) : undefined}
+            onLeaveRequest={leaveCall}
+            onEndForEveryone={endCallForEveryone}
           />
         }
         compactControls={
@@ -226,7 +193,8 @@ export function ClassicSpaceView({
             onOpenInfo={infoDialog ? () => infoDialog.onOpenChange(true) : undefined}
             onOpenSettings={openSettings}
             onCommandError={setCommandError}
-            onLeaveRequest={onLeft ? () => setLeaveDialogOpen(true) : undefined}
+            onLeaveRequest={leaveCall}
+            onEndForEveryone={endCallForEveryone}
           />
         }
         stageOverlay={
@@ -268,19 +236,6 @@ export function ClassicSpaceView({
           <>
             {infoDialog ? <SpaceInfoDialog {...infoDialog} duration={episodeDuration} isOpen={infoDialog.isOpen} onClose={() => infoDialog.onOpenChange(false)} /> : null}
             {inviteDialog ? <InviteDialog {...inviteDialog} inviteLink={inviteDialog.inviteLink || inviteLink || ""} isOpen={inviteDialog.isOpen} onClose={() => inviteDialog.onOpenChange(false)} /> : null}
-            {onLeft ? (
-              <LeaveDialog
-                isOpen={isLeaveDialogOpen}
-                onClose={() => setLeaveDialogOpen(false)}
-                onConfirm={() => void leaveSpace()}
-                onEndEpisode={onEndEpisode ? () => void endEpisode() : undefined}
-                canEndEpisode={Boolean(onEndEpisode)}
-                leavePending={leavePending}
-                leaveError={leaveError}
-                endEpisodePending={endEpisodePending}
-                endEpisodeError={endEpisodeError}
-              />
-            ) : null}
           </>
         }
         className={className}

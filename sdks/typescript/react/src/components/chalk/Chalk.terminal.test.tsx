@@ -53,7 +53,7 @@ describe("Chalk terminal callbacks with a real SpaceClient", () => {
       expect(onJoined).not.toHaveBeenCalled();
       expect(onLeft).not.toHaveBeenCalled();
       expect(container.textContent).toContain("The Episode has ended");
-      expect(container.textContent).not.toContain("Entering");
+      expect(container.textContent).not.toContain("Joining");
     } finally {
       await act(async () => root.unmount());
       client.dispose();
@@ -113,7 +113,7 @@ describe("Chalk terminal callbacks with a real SpaceClient", () => {
       expect(onError).not.toHaveBeenCalled();
       expect(onLeft).toHaveBeenCalledTimes(ending === "expired Access" ? 0 : 1);
       if (ending === "server end" || ending === "participant end") {
-        expect(container.textContent).toContain("Episode ended");
+        expect(container.textContent).toContain("The call ended");
         expect(container.textContent).not.toContain("Unable to enter");
       }
     } finally {

@@ -40,6 +40,7 @@ import {
   Download01Icon as StaticDownload01Icon,
   Edit02Icon as StaticEdit02Icon,
   Home01Icon as StaticHome01Icon,
+  Logout01Icon as StaticLogout01Icon,
   Image01Icon as StaticImage01Icon,
   InformationCircleIcon as StaticInformationCircleIcon,
   Link01Icon as StaticLink01Icon,
@@ -105,6 +106,7 @@ export const FileTextIcon = createIcon(FileTextIconSvg);
 export const GridIcon = createIcon(GridIconSvg);
 export const HandIcon = createIcon(HandIconSvg);
 export const Home01Icon = createIcon(StaticHome01Icon);
+export const Logout01Icon = createIcon(StaticLogout01Icon);
 export const Image01Icon = createIcon(StaticImage01Icon);
 export const InformationCircleIcon = createIcon(StaticInformationCircleIcon);
 export const LayoutGridIcon = createIcon(LayoutGridIconSvg);
