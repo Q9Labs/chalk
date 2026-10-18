@@ -22,6 +22,7 @@ const { values } = parseArgs({
     "self-test": { type: "boolean" },
     smoke: { type: "boolean" },
     "leaks-only": { type: "boolean" },
+    "timing-only": { type: "boolean" },
     "leak-journey": { type: "string" },
     "leak-repeats": { type: "string", default: "1" },
     diagnostics: { type: "boolean" },
@@ -29,7 +30,8 @@ const { values } = parseArgs({
     "record-baseline": { type: "boolean" },
   },
 });
-if (values.gate && (values.smoke || values["record-baseline"] || values["leaks-only"] || values["leak-journey"])) throw new Error("Gate runs cannot skip timing checks or collect an unenforced baseline");
+if (values["leaks-only"] && values["timing-only"]) throw new Error("Choose either leaks-only or timing-only");
+if (values.gate && (values.smoke || values["record-baseline"] || values["leak-journey"])) throw new Error("Gate runs cannot narrow journeys or collect an unenforced baseline");
 if (values.gate && !process.env.TESTBOX_SOURCE_COMMIT) values["bundle-only"] = true;
 if (values.gate && !values["bundle-only"]) values["self-test"] = true;
 if (values["leak-journey"] && !LEAK_JOURNEYS.includes(values["leak-journey"])) throw new Error("Unknown leak journey");
@@ -67,7 +69,7 @@ const report = {
   baselineCommit: budgets.baselineCommit,
   recordedAt: new Date().toISOString(),
   machine: { platform: platform(), arch: arch(), cpu: cpus()[0].model, cores: cpus().length, load: loadavg() },
-  mode: values["bundle-only"] ? "bundle-only" : "full",
+  mode: values["bundle-only"] ? "bundle-only" : values["leaks-only"] ? "leaks-only" : values["timing-only"] ? "timing-only" : "full",
   devices: budgets.devices,
   calibration: [],
   results: [],
@@ -134,7 +136,7 @@ try {
       console.log(`Self-test: ${detected ? "PASS (injected regression detected)" : "FAIL"}`);
     }
   }
-  if (!values["bundle-only"]) {
+  if (!values["bundle-only"] && !values["timing-only"]) {
     const repeats = Number(values["leak-repeats"]);
     if (!Number.isInteger(repeats) || repeats < 1) throw new Error("Invalid leak repeats");
     report.leaks = await checkLeaks({

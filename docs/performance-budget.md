@@ -13,10 +13,11 @@ Run heavy work through testbox, not on the laptop:
 python3 ~/.agents/skills/testbox/testbox.py run --repo "$PWD" --region blr1 --size c-8 --ttl 3600 --budget 0.35 --command 'pnpm install --frozen-lockfile && node apps/web/scripts/check-call-performance.mjs --self-test'
 ```
 
-The focused gate is `pnpm run gate -- --lane call-performance --files
-apps/web/src/call-states/performance.tsx`, also run on testbox. The root gate
-selects it for web, React SDK, UI, whiteboard and dependency changes, and full
-gates. The PR Gate workflow already runs this root gate and installs Chromium.
+The focused timing gate is `pnpm run gate -- --lane call-performance --files
+apps/web/src/call-states/performance.tsx`; the lifecycle gate uses `--lane
+call-leaks` instead. Run both on testbox. The root gate selects both for web,
+React SDK, UI, whiteboard and dependency changes, and full gates. The PR Gate
+workflow already runs this root gate and installs Chromium.
 The pre-commit fast profile deliberately does not run browser measurements.
 
 `--gate` enforces all limits on testbox (identified by `TESTBOX_SOURCE_COMMIT`).
@@ -339,8 +340,13 @@ cycle without changing call state. It measures observer/automation heap noise.
 
 Leak runs use an unthrottled desktop viewport to reduce timer/teardown timing
 noise; timing scenarios still exercise both CPU-throttled device profiles.
-For a focused diagnostic, add `--leak-journey people`; gate mode rejects this and
-`--leaks-only` so neither can silently narrow a shipping check.
+For a focused diagnostic, add `--leak-journey people`; gate mode rejects narrowed
+journeys. The root gate invokes `--gate --timing-only` and `--gate --leaks-only`
+as separate required lanes, with different JSON reports. A direct invocation
+without either flag still runs both. The combined reference run passed 11 minutes
+before starting leak cycles, so leaks have their own lane to keep timing checks
+under about 15 minutes. Each lane builds its own harness; no build-directory
+sharing or background server is required.
 
 Do not widen a count budget to absorb a real leak. Finite 20-cycle tests cannot
 prove absence of slower leaks, browser/native leaks, production SDK media leaks,

@@ -374,6 +374,15 @@ export function createGatePlan(files, options = {}) {
       "node",
       "apps/web/scripts/check-call-performance.mjs",
       "--gate",
+      "--timing-only",
+    ]),
+    task("call-leaks", "Call lifecycle leak budgets", full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/web", "sdks/typescript/react", "packages/ui", "packages/whiteboard"])), "call lifecycle inputs or full gate", [
+      "node",
+      "apps/web/scripts/check-call-performance.mjs",
+      "--gate",
+      "--leaks-only",
+      "--out",
+      "artifacts/call-leaks.json",
     ]),
     task("recorder", "Recorder infrastructure", recorder, recorder ? "recorder inputs changed" : "no recorder inputs changed", ["pnpm", "run", "recorder:gate"]),
     task(
