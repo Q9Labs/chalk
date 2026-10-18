@@ -9,10 +9,7 @@ export type DocsCalloutProps = {
 };
 
 export type DocsFeatureCardProps = {
-  children?: ReactNode;
-  description?: string;
-  eyebrow?: string;
-  href?: string;
-  icon?: ReactNode;
+  children: ReactNode;
+  href: string;
   title: string;
 };

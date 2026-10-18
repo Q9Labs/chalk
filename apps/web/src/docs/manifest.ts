@@ -42,7 +42,6 @@ export type DocsPage = {
   readonly description: string;
   readonly groupId: string;
   readonly keywords: readonly string[];
-  readonly layout: "landing" | "article";
   readonly Content: DocsContent;
 };
 
@@ -64,7 +63,6 @@ export const DOCS_PAGES = [
     description: "A durable Space and bounded Episodes for live collaboration.",
     groupId: "start",
     keywords: ["collaboration", "communication", "Space", "Episode", "durable"],
-    layout: "landing",
     Content: WhyChalk,
   },
   {
@@ -75,7 +73,6 @@ export const DOCS_PAGES = [
     description: "Install the TypeScript client, pass an AccessGrant, and join a Space.",
     groupId: "start",
     keywords: ["install", "join", "getAccess", "AccessGrant", "TypeScript"],
-    layout: "article",
     Content: Quickstart,
   },
   {
@@ -86,7 +83,6 @@ export const DOCS_PAGES = [
     description: "Understand the durable Space and its bounded live Episode.",
     groupId: "concepts",
     keywords: ["Space", "Episode", "lifecycle", "deadline", "artifacts"],
-    layout: "article",
     Content: SpacesAndEpisodes,
   },
   {
@@ -97,7 +93,6 @@ export const DOCS_PAGES = [
     description: "Model live seats, Presence, rosters, and admission requests.",
     groupId: "concepts",
     keywords: ["Participant", "Presence", "roster", "admission", "speaking"],
-    layout: "article",
     Content: ParticipantsAndPresence,
   },
   {
@@ -108,7 +103,6 @@ export const DOCS_PAGES = [
     description: "Choose the right identity boundary for durable and temporary access.",
     groupId: "concepts",
     keywords: ["User", "Agent", "Guest", "Member", "external_id"],
-    layout: "article",
     Content: UsersAgentsGuests,
   },
   {
@@ -119,7 +113,6 @@ export const DOCS_PAGES = [
     description: "Use capabilities for checks and Roles for customer-defined bundles.",
     groupId: "concepts",
     keywords: ["Role", "Capability", "owner", "collaborator", "observer", "permissions"],
-    layout: "article",
     Content: RolesAndCapabilities,
   },
   {
@@ -130,7 +123,6 @@ export const DOCS_PAGES = [
     description: "Keep the signed client access envelope opaque and short-lived.",
     groupId: "concepts",
     keywords: ["AccessGrant", "access", "refresh", "retry", "credentials"],
-    layout: "article",
     Content: AccessGrants,
   },
   {
@@ -141,7 +133,6 @@ export const DOCS_PAGES = [
     description: "Use the framework-agnostic SpaceClient and SpaceSnapshot store.",
     groupId: "sdks",
     keywords: ["TypeScript", "SpaceClient", "SpaceSnapshot", "subscribe", "controllers"],
-    layout: "article",
     Content: TypeScript,
   },
   {
@@ -152,7 +143,6 @@ export const DOCS_PAGES = [
     description: "Embed the turnkey Chalk surface or bind React to your own UI.",
     groupId: "sdks",
     keywords: ["React", "Chalk", "ChalkProvider", "hooks", "Entrance"],
-    layout: "article",
     Content: React,
   },
   {
@@ -163,7 +153,6 @@ export const DOCS_PAGES = [
     description: "Use the matching React Native components, hooks, and native adapter.",
     groupId: "sdks",
     keywords: ["React Native", "android", "ios", "macos", "createNativeSpaceClient"],
-    layout: "article",
     Content: ReactNative,
   },
   {
@@ -174,7 +163,6 @@ export const DOCS_PAGES = [
     description: "Configure feature flags, layouts, and themes for the complete surface.",
     groupId: "sdks",
     keywords: ["Chalk", "features", "theme", "skin", "layout", "classic"],
-    layout: "article",
     Content: TurnkeyUI,
   },
   {
@@ -185,7 +173,6 @@ export const DOCS_PAGES = [
     description: "Build your own panels with ChalkProvider and the closed hook set.",
     groupId: "sdks",
     keywords: ["custom", "ChalkProvider", "useCan", "useParticipants", "snapshot"],
-    layout: "article",
     Content: CustomUI,
   },
   {
@@ -196,7 +183,6 @@ export const DOCS_PAGES = [
     description: "Control microphone, camera, devices, tracks, and media requests.",
     groupId: "features",
     keywords: ["media", "microphone", "camera", "devices", "requests"],
-    layout: "article",
     Content: Media,
   },
   {
@@ -207,7 +193,6 @@ export const DOCS_PAGES = [
     description: "Publish and observe screen tracks through the media controller.",
     groupId: "features",
     keywords: ["screen", "screenShare", "publishScreen", "tracks", "presentation"],
-    layout: "article",
     Content: ScreenSharing,
   },
   {
@@ -218,7 +203,6 @@ export const DOCS_PAGES = [
     description: "Send durable Space messages, paginate history, upload files, and send reactions.",
     groupId: "features",
     keywords: ["chat", "messages", "attachments", "pagination", "read receipts", "reactions", "emoji", "sendReaction"],
-    layout: "article",
     Content: Chat,
   },
   {
@@ -229,7 +213,6 @@ export const DOCS_PAGES = [
     description: "Add the Excalidraw-backed collaborative whiteboard.",
     groupId: "features",
     keywords: ["whiteboard", "Excalidraw", "WhiteboardCanvas", "scene", "math"],
-    layout: "article",
     Content: Whiteboard,
   },
   {
@@ -240,7 +223,6 @@ export const DOCS_PAGES = [
     description: "Join a Space and control open, knock, or member entry.",
     groupId: "features",
     keywords: ["Entrance", "admission", "knock", "devices"],
-    layout: "article",
     Content: EntranceAndAdmission,
   },
   {
@@ -251,7 +233,6 @@ export const DOCS_PAGES = [
     description: "Keep identity, server credentials, and Participant access at clear boundaries.",
     groupId: "platform",
     keywords: ["authentication", "bearer", "API key", "identity", "AccessGrant"],
-    layout: "article",
     Content: Authentication,
   },
   {
@@ -262,7 +243,6 @@ export const DOCS_PAGES = [
     description: "Verify raw bytes, deduplicate Event ids, and respond safely.",
     groupId: "platform",
     keywords: ["webhooks", "signature", "raw body", "idempotency", "inbox"],
-    layout: "article",
     Content: Webhooks,
   },
   {
@@ -273,7 +253,6 @@ export const DOCS_PAGES = [
     description: "Choose typed Event subscriptions and inspect delivery outcomes.",
     groupId: "platform",
     keywords: ["Events", "event_types", "deliveries", "recording", "transcript"],
-    layout: "article",
     Content: WebhookEvents,
   },
   {
@@ -284,7 +263,6 @@ export const DOCS_PAGES = [
     description: "Navigate the versioned OpenAPI contract for durable platform resources.",
     groupId: "platform",
     keywords: ["API", "OpenAPI", "HTTP", "v1", "pagination", "idempotency"],
-    layout: "article",
     Content: PublicAPI,
   },
   {
@@ -295,7 +273,6 @@ export const DOCS_PAGES = [
     description: "Handle the stable error envelope, HTTP status, and retry headers.",
     groupId: "platform",
     keywords: ["errors", "ErrorResponse", "status", "Retry-After", "rate limit"],
-    layout: "article",
     Content: ApiErrors,
   },
   {
@@ -306,7 +283,6 @@ export const DOCS_PAGES = [
     description: "Let Connection refresh access and recover transports through one store.",
     groupId: "operations",
     keywords: ["recovery", "reconnect", "Connection", "refresh", "retry"],
-    layout: "article",
     Content: Recovery,
   },
   {
@@ -317,7 +293,6 @@ export const DOCS_PAGES = [
     description: "Use stable snapshots and protocol bounds to keep the live path responsive.",
     groupId: "operations",
     keywords: ["performance", "stable slices", "bounds", "pagination", "disposal"],
-    layout: "article",
     Content: Performance,
   },
   {
@@ -328,7 +303,6 @@ export const DOCS_PAGES = [
     description: "Map stable client failures to the smallest safe recovery action.",
     groupId: "operations",
     keywords: ["troubleshooting", "errors", "recoverable", "media", "Sync", "whiteboard"],
-    layout: "article",
     Content: Troubleshooting,
   },
 ] as const satisfies readonly DocsPage[];

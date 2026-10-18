@@ -1,17 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { Closing } from "../components/landing/Closing";
-import { FrontDoors } from "../components/landing/FrontDoors";
+import { AfterSection } from "../components/landing/AfterSection";
+import { EmbedSection } from "../components/landing/EmbedSection";
 import { Hero } from "../components/landing/Hero";
-import { SiteNav } from "../components/landing/Nav";
-import { Performance } from "../components/landing/Performance";
-import { Platform } from "../components/landing/Platform";
-import { SelfHost } from "../components/landing/SelfHost";
-import { SpaceModel } from "../components/landing/SpaceModel";
+import { LinkSection } from "../components/landing/LinkSection";
+import { OpenSourceSection } from "../components/landing/OpenSourceSection";
+import { SpeedSection } from "../components/landing/SpeedSection";
+import { SiteFooter } from "../components/site/SiteFooter";
+import { SiteNav } from "../components/site/SiteNav";
+import { SiteRoot } from "../components/site/theme";
 import { buildPublicSiteHead, SITE_ORIGIN } from "../lib/site-head";
 
-const title = "Chalk | Real-time collaboration for products";
-const description = "Chalk is the open-source real-time collaboration and communication layer for building persistent Spaces into web, React, and React Native products.";
+const title = "Chalk | Calls for your team, and inside your product";
+const description = "Start a call and share one link that keeps working next week, or render the same call in your own app with a few lines of React. Chalk is open source.";
 
 const structuredData = {
   "@context": "https://schema.org",
@@ -47,31 +48,31 @@ const structuredData = {
 };
 
 export const Route = createFileRoute("/")({
-  head: () => ({
-    ...buildPublicSiteHead({
+  head: () =>
+    buildPublicSiteHead({
       path: "/",
       title,
       description,
-      imageAlt: "Chalk open-source real-time Spaces for mobile and web",
+      imageAlt: "A Chalk call with four people",
     }),
-    scripts: [{ type: "application/ld+json", children: JSON.stringify(structuredData) }],
-  }),
   component: LandingPage,
 });
 
 function LandingPage() {
   return (
-    <div className="site">
+    <SiteRoot>
       <SiteNav />
       <main>
         <Hero />
-        <FrontDoors />
-        <SpaceModel />
-        <Performance />
-        <SelfHost />
-        <Platform />
-        <Closing />
+        <LinkSection />
+        <AfterSection />
+        <SpeedSection />
+        <EmbedSection />
+        <OpenSourceSection />
       </main>
-    </div>
+      <SiteFooter />
+      {/* In the body, not the head, so it can't shift the head's scripts out of step during hydration. */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
+    </SiteRoot>
   );
 }

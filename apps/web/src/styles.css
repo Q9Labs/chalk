@@ -4,9 +4,7 @@
 
 @import "./styles/tokens.css";
 @import "./styles/base.css";
-@import "./styles/landing.css";
-@import "./styles/sections.css";
-@import "./styles/visuals.css";
 @import "./styles/account.css";
 @import "./styles/legal.css";
+@import "./styles/site.css";
 @import "./styles/docs.css";

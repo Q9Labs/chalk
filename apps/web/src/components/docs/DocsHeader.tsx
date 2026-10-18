@@ -1,38 +1,38 @@
-import Menu01Icon from "@hugeicons/core-free-icons/Menu01Icon";
-import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
-import { Logo } from "@q9labsai/chalk-react";
-import { HugeiconsIcon } from "@hugeicons/react";
-import type { RefObject } from "react";
+import { GitHubMark } from "../site/GitHubMark";
+import { Icon } from "../site/Icon";
+import { GITHUB_URL, SIGN_IN_HREF } from "../site/links";
+import { Lockup } from "../site/Lockup";
+import { ThemeButton } from "../site/theme";
 
-type DocsHeaderProps = {
-  mobileNavOpen: boolean;
-  menuButtonRef: RefObject<HTMLButtonElement | null>;
-  onMenuToggle: () => void;
-  onSearchOpen: () => void;
-};
-
-export function DocsHeader({ menuButtonRef, mobileNavOpen, onMenuToggle, onSearchOpen }: DocsHeaderProps) {
+export function DocsHeader({ onSearchOpen }: { readonly onSearchOpen: () => void }) {
   return (
-    <header className="docs-header">
-      <div className="docs-header-inner">
-        <a href="/" className="docs-logo" aria-label="Chalk home">
-          <Logo accessibilityLabel={null} color="currentColor" height={34} variant="wordmark" />
-          <span>Docs</span>
+    <header className="dhead">
+      <a href="/" aria-label="Chalk home">
+        <Lockup />
+      </a>
+      <span className="dsep" aria-hidden="true" />
+      <a className="dlab" href="/docs">
+        Docs
+      </a>
+      <button type="button" className="dsearch" aria-keyshortcuts="Meta+K" onClick={onSearchOpen}>
+        <Icon name="search" />
+        Search docs
+        <span className="kbd" aria-hidden="true">
+          ⌘K
+        </span>
+      </button>
+      <div className="dr">
+        <button type="button" className="ib dsearch-icon" aria-label="Search docs" onClick={onSearchOpen}>
+          <Icon name="search" />
+        </button>
+        <a className="ghl" href={GITHUB_URL}>
+          <GitHubMark />
+          GitHub
         </a>
-        <nav className="docs-header-nav" aria-label="Documentation header">
-          <a href="/">Product</a>
-        </nav>
-        <div className="docs-header-actions">
-          <button type="button" className="docs-search-trigger" aria-label="Search docs" onClick={onSearchOpen}>
-            <HugeiconsIcon icon={Search01Icon} size={18} strokeWidth={1.8} aria-hidden="true" focusable="false" />
-            <span>Search docs</span>
-            <kbd>⌘K</kbd>
-          </button>
-          <button ref={menuButtonRef} type="button" className="docs-menu-trigger" aria-expanded={mobileNavOpen} aria-controls="docs-mobile-navigation" onClick={onMenuToggle}>
-            <HugeiconsIcon icon={Menu01Icon} size={20} strokeWidth={1.8} aria-hidden="true" focusable="false" />
-            <span className="visually-hidden">{mobileNavOpen ? "Close navigation" : "Open navigation"}</span>
-          </button>
-        </div>
+        <ThemeButton />
+        <a className="btn gh dsignin" href={SIGN_IN_HREF}>
+          Sign in
+        </a>
       </div>
     </header>
   );

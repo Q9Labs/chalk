@@ -3,64 +3,77 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import type { DocsPage } from "../../docs/manifest";
 import { getAdjacentDocsPages } from "../../docs/manifest";
 import { MDX_COMPONENTS } from "../../docs/mdx-components";
+import { Icon } from "../site/Icon";
+import { GITHUB_URL } from "../site/links";
 
-type DocsArticleProps = {
-  page: DocsPage;
-};
+type OutlineItem = { readonly id: string; readonly label: string; readonly level: 2 | 3 };
 
-type OutlineItem = {
-  id: string;
-  label: string;
-  level: 2 | 3;
-};
+/** How far below the top bar a heading counts as the one being read. */
+const READING_LINE = 96;
 
-export function DocsArticle({ page }: DocsArticleProps) {
+export function DocsArticle({ page }: { readonly page: DocsPage }) {
   const articleRef = useRef<HTMLElement>(null);
-  const [outline, setOutline] = useState<OutlineItem[]>([]);
+  const [outline, setOutline] = useState<readonly OutlineItem[]>([]);
+  const [currentId, setCurrentId] = useState<string>();
   const { previous, next } = getAdjacentDocsPages(page.slug);
 
   useEffect(() => {
     const article = articleRef.current;
     if (!article) return;
-    const updateOutline = () => {
-      const headings = Array.from(article.querySelectorAll<HTMLHeadingElement>("h2[id], h3[id]"));
+    const headings = () => Array.from(article.querySelectorAll<HTMLHeadingElement>(".art-body h2[id], .art-body h3[id]"));
+    const readOutline = () =>
       setOutline(
-        headings.flatMap((heading) => {
-          const id = heading.id;
+        headings().flatMap((heading) => {
           const label = heading.textContent?.trim();
-          if (!id || !label) return [];
-          const level: OutlineItem["level"] = heading.tagName === "H3" ? 3 : 2;
-          return [{ id, label, level }];
+          return label ? [{ id: heading.id, label, level: heading.tagName === "H3" ? 3 : 2 }] : [];
         }),
       );
+    let frame = 0;
+    const readPosition = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() =>
+        setCurrentId(
+          headings()
+            .filter((heading) => heading.getBoundingClientRect().top < READING_LINE)
+            .at(-1)?.id,
+        ),
+      );
     };
-
-    updateOutline();
-    const observer = new MutationObserver(updateOutline);
+    readOutline();
+    readPosition();
+    const observer = new MutationObserver(readOutline);
     observer.observe(article, { childList: true, subtree: true });
-    return () => observer.disconnect();
+    window.addEventListener("scroll", readPosition, { passive: true });
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("scroll", readPosition);
+      cancelAnimationFrame(frame);
+    };
   }, [page.slug]);
 
+  const current = currentId ?? outline[0]?.id;
   return (
-    <div className={page.layout === "landing" ? "docs-article-layout is-landing" : "docs-article-layout"}>
-      <article ref={articleRef} className="docs-article" id="docs-content">
-        <header className="docs-article-header">
-          <p className="docs-article-group">{page.navLabel}</p>
-          <h1>{page.title}</h1>
-          <p className="docs-article-description">{page.description}</p>
-          {page.layout === "landing" ? (
-            <div className="docs-article-hero-actions">
-              <a className="docs-article-primary-action" href="/docs/quickstart">
-                Start with Quickstart <span aria-hidden="true">→</span>
+    <div className="dpage">
+      <article ref={articleRef} className="art" id="docs-content">
+        <h1>{page.title}</h1>
+        <p className="desc">{page.description}</p>
+        {outline.length ? (
+          <details className="otp">
+            <summary>
+              On this page
+              <Icon name="down" />
+            </summary>
+            {outline.map((item) => (
+              <a key={item.id} href={`#${item.id}`}>
+                {item.label}
               </a>
-              <img src="/images/landing/chalk-flow-hero-20260818.webp" alt="" aria-hidden="true" width={1536} height={1024} />
-            </div>
-          ) : null}
-        </header>
-        <div className="docs-article-content">
+            ))}
+          </details>
+        ) : null}
+        <div className="art-body">
           <Suspense
             fallback={
-              <p className="docs-content-loading" role="status">
+              <p className="mu" role="status">
                 Loading this page…
               </p>
             }
@@ -68,51 +81,45 @@ export function DocsArticle({ page }: DocsArticleProps) {
             <page.Content components={MDX_COMPONENTS} />
           </Suspense>
         </div>
-        <DocsPageNavigation previous={previous} next={next} />
-      </article>
-      <DocsOutline items={outline} />
-    </div>
-  );
-}
-
-function DocsOutline({ items }: { items: OutlineItem[] }) {
-  if (!items.length) return null;
-  return (
-    <aside className="docs-outline" aria-label="On this page">
-      <p>On this page</p>
-      <nav>
-        {items.map((item) => (
-          <a key={item.id} className={item.level === 3 ? "is-subheading" : undefined} href={`#${item.id}`}>
-            {item.label}
+        {previous || next ? (
+          <nav className="pn" aria-label="Previous and next">
+            {previous ? (
+              <a href={previous.href}>
+                <small>
+                  <Icon name="left" />
+                  Previous
+                </small>
+                <b>{previous.navLabel}</b>
+              </a>
+            ) : null}
+            {next ? (
+              <a className="nx" href={next.href}>
+                <small>
+                  Next
+                  <Icon name="right" />
+                </small>
+                <b>{next.navLabel}</b>
+              </a>
+            ) : null}
+          </nav>
+        ) : null}
+        <div className="dfoot">
+          <a href={`${GITHUB_URL}/edit/master/apps/web/src/docs/content/${page.slug || "why-chalk"}.mdx`}>
+            <Icon name="edit" />
+            Edit this page on GitHub
           </a>
-        ))}
-      </nav>
-    </aside>
-  );
-}
-
-function DocsPageNavigation({ next, previous }: { next: DocsPage | undefined; previous: DocsPage | undefined }) {
-  if (!next && !previous) return null;
-  return (
-    <nav className="docs-page-navigation" aria-label="Page navigation">
-      {previous ? (
-        <a href={previous.href} className="docs-page-nav-link is-previous">
-          <span>Previous</span>
-          <strong>{previous.navLabel}</strong>
-          <small aria-hidden="true">←</small>
-        </a>
-      ) : (
-        <span />
-      )}
-      {next ? (
-        <a href={next.href} className="docs-page-nav-link is-next">
-          <span>Next</span>
-          <strong>{next.navLabel}</strong>
-          <small aria-hidden="true">→</small>
-        </a>
-      ) : (
-        <span />
-      )}
-    </nav>
+        </div>
+      </article>
+      {outline.length ? (
+        <nav className="toc" aria-label="On this page">
+          <h3>On this page</h3>
+          {outline.map((item) => (
+            <a key={item.id} href={`#${item.id}`} className={[item.id === current ? "on" : "", item.level === 3 ? "tsub" : ""].join(" ").trim() || undefined} aria-current={item.id === current ? "location" : undefined}>
+              {item.label}
+            </a>
+          ))}
+        </nav>
+      ) : null}
+    </div>
   );
 }
