@@ -50,7 +50,12 @@ export async function developerMutation(engine: Engine, action: DeveloperAction)
             api.updateWebhookEndpoint({
               params: { ...params, endpoint_id: Schema.decodeUnknownSync(UUIDSchema)(action.webhookId) },
               headers: { "Idempotency-Key": action.idempotencyKey, "If-Match": `"${action.revision}"` },
-              payload: { name: action.name, url: action.url, enabled: action.enabled, event_types: action.eventTypes },
+              payload: {
+                ...(action.name === undefined ? {} : { name: action.name }),
+                ...(action.url === undefined ? {} : { url: action.url }),
+                ...(action.enabled === undefined ? {} : { enabled: action.enabled }),
+                ...(action.eventTypes === undefined ? {} : { event_types: action.eventTypes }),
+              },
             }),
           ),
         ),
