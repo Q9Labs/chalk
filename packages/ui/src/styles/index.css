@@ -618,18 +618,6 @@
   }
 }
 
-@keyframes chalk-tooltip-in {
-  from {
-    opacity: 0;
-    transform: scale(0.92) translateY(4px);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
 @keyframes chalk-scale-spring {
   0% {
     opacity: 0;
@@ -655,65 +643,6 @@
   to {
     transform: translateX(0);
     opacity: 1;
-  }
-}
-
-@keyframes chalk-highlight-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 4px oklch(0.6 0.1 185 / 50%);
-  }
-
-  50% {
-    box-shadow: 0 0 0 8px oklch(0.6 0.1 185 / 30%);
-  }
-}
-
-@keyframes chalk-transcript-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes chalk-typing-dot {
-  0%,
-  60%,
-  100% {
-    opacity: 0.3;
-    transform: scale(0.8);
-  }
-
-  30% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes chalk-interim-pulse {
-  0%,
-  100% {
-    background-color: transparent;
-  }
-
-  50% {
-    background-color: oklch(0.6 0.1 185 / 5%);
-  }
-}
-
-@keyframes chalk-search-highlight {
-  0%,
-  100% {
-    box-shadow: 0 0 0 2px oklch(0.8 0.15 85 / 50%);
-  }
-
-  50% {
-    box-shadow: 0 0 0 4px oklch(0.8 0.15 85 / 30%);
   }
 }
 
@@ -1185,18 +1114,6 @@
   animation: chalk-toast-in var(--chalk-duration-normal) var(--chalk-ease-out-expo);
 }
 
-.chalk-animate-tooltip-in {
-  animation: chalk-tooltip-in var(--chalk-duration-fast) var(--chalk-ease-out-back);
-}
-
-.chalk-animate-highlight {
-  animation: chalk-highlight-pulse 2s ease-in-out infinite;
-}
-
-.chalk-animate-transcript-in {
-  animation: chalk-transcript-in var(--chalk-duration-fast) var(--chalk-ease-out-expo);
-}
-
 .chalk-animate-scale-spring {
   animation: chalk-scale-spring var(--chalk-duration-slow) var(--chalk-ease-out-back);
 }
@@ -1223,29 +1140,9 @@
   animation: chalk-spin-reverse-slow 12s linear infinite;
 }
 
-.chalk-animate-typing-dot {
-  animation: chalk-typing-dot 1.4s ease-in-out infinite;
-}
-
-.chalk-animate-interim-pulse {
-  animation: chalk-interim-pulse 2s ease-in-out infinite;
-}
-
-.chalk-animate-search-highlight {
-  animation: chalk-search-highlight 2s ease-in-out infinite;
-}
-
 .chalk-logo {
   display: block;
   overflow: visible;
-}
-
-/* Low confidence text styling */
-.chalk-low-confidence {
-  text-decoration: underline;
-  text-decoration-style: dotted;
-  text-decoration-color: var(--warning);
-  text-underline-offset: 3px;
 }
 
 /* Respect reduced motion preference */

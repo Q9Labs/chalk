@@ -1,6 +1,6 @@
 ## React has a turnkey surface and a custom path
 
-Install the client and React binding, then render `<Chalk />` with a Space slug and `getAccess`. The component creates and owns its client when you do not pass one, shows the Entrance by default, and disposes its owned client on unmount.
+Install the client and React binding, then render `<Chalk />` with a Space slug and `getAccess`. The component creates and owns its client when you do not pass one, joins directly through CallLimbo, and disposes its owned client on unmount.
 
 ```sh
 pnpm add @q9labsai/chalk-client @q9labsai/chalk-react
@@ -26,7 +26,7 @@ export function SpacePage() {
 Pass an existing `SpaceClient` when your application owns its lifetime:
 
 ```tsx
-<Chalk client={spaceClient} entrance={false} />
+<Chalk client={spaceClient} />
 ```
 
 The public hooks are `useSpaceClient`, `useConnection`, `useSelf`, `useParticipants`, `useMedia`, `useChat`, `useReactions`, `useWhiteboard`, and `useCan`. They read the same stable `SpaceSnapshot` slices as the TypeScript client.

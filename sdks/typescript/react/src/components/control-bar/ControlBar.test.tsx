@@ -18,7 +18,7 @@ describe("compact screen sharing", () => {
         root.render(
           <>
             <ChalkProvider client={client}>
-              <ControlBar placement="floating" density="compact" buttons={["screenshare"]} />
+              <ControlBar density="compact" buttons={["screenshare"]} />
             </ChalkProvider>
           </>,
         ),

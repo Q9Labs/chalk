@@ -115,7 +115,7 @@ describe("public Space entry", () => {
     await waitFor(() => expect(mocks.publicClient.arriveBySpacePublicInvite).toHaveBeenCalledWith(spacePageTestToken, "Ada"));
     await waitFor(() => expect(navigatePublicSpace).toHaveBeenCalledWith("design-lab", `${window.location.origin}/space/design-lab#spaceInviteToken=${spacePageTestToken}`));
     expect(mocks.publicClient.createPublicSpace).not.toHaveBeenCalled();
-    await waitFor(() => expect(mocks.holder.chalkProps).toMatchObject({ inviteLink: window.location.href, spaceName: "Design Lab" }));
+    await waitFor(() => expect(mocks.holder.chalkProps).toMatchObject({ spaceName: "Design Lab" }));
   });
 
   it("shows a failed cancellation without hiding the pending request", async () => {

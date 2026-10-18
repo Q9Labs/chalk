@@ -8,8 +8,6 @@ import { control, terminalTestPlatform } from "../../../../client/src/space-clie
 import { Chalk } from "./Chalk";
 
 vi.mock("../space-view/SpaceView", () => ({ SpaceView: () => <div>Live Space</div> }));
-vi.mock("../entrance/Entrance", () => ({ Entrance: () => <div>Entrance</div> }));
-vi.mock("../composite/SettingsDialog", () => ({ SettingsDialog: () => null }));
 vi.mock("../media-request-dialog/MediaRequestDialog", () => ({ MediaRequestDialog: () => null }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -42,7 +40,7 @@ describe("Chalk terminal callbacks with a real SpaceClient", () => {
     document.body.append(container);
     const root = createRoot(container);
     try {
-      await act(async () => root.render(<Chalk client={client} entrance={false} defaults={{ microphone: false, camera: false }} onError={onError} onEpisodeEnded={onEpisodeEnded} onJoined={onJoined} onLeft={onLeft} />));
+      await act(async () => root.render(<Chalk client={client} defaults={{ microphone: false, camera: false }} onError={onError} onEpisodeEnded={onEpisodeEnded} onJoined={onJoined} onLeft={onLeft} />));
       await act(async () => {
         await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("failed"));
       });

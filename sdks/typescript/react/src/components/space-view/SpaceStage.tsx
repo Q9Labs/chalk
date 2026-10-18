@@ -30,7 +30,7 @@ export function SpaceStage({ tiles, layout, onLayoutChange, generatedAvatars = t
       }
       const track = item.participant.screenShareTrack;
       if (!track) return null;
-      return <ScreenShareViewSurface screenShareTrack={track} sharedByName={item.participant.displayName} participants={[]} showThumbnails={false} className="h-full" />;
+      return <ScreenShareViewSurface screenShareTrack={track} sharedByName={item.participant.displayName} className="h-full" />;
     },
     [whiteboard],
   );

@@ -92,7 +92,6 @@
     "@q9labsai/recording-presentation": "workspace:^0.1.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "qrcode.react": "^4.2.0",
     "sonner": "^2.0.8",
     "tailwind-merge": "^3.6.0"
   },

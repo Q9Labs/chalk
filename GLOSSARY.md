@@ -223,16 +223,14 @@ into a Space: what a phone product would call ringing someone.
 
 The turnkey UI component: the complete embedded experience dropped into a
 customer's app. Replaces VideoConference. It is a full name, not a prefix;
-its interior tree is platform-named (SpaceView, Stage, Entrance, panels)
+its interior tree is platform-named (SpaceView, Stage, panels)
 with no `Chalk*` symbols.
 
 ### Entrance
 
-Where a visitor prepares before joining a Space: name, devices,
-self-preview — and where knock-admission waiting happens. One place for
-both pre-live states, so the lobby/pre-join split other products have
-does not exist. Replaces PreJoinScreen; a place-noun like Stage, no shape
-suffix. `entrance: false` on `<Chalk />` means walk straight in.
+A product-owned entry step before joining a Space. The web app asks for a name;
+React Chalk joins directly through CallLimbo with the supplied defaults.
+The React Native SDK retains its device-preparation Entrance.
 
 ### SpaceClient
 

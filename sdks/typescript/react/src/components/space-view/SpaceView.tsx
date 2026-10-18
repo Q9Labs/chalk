@@ -1,12 +1,32 @@
 "use client";
+import type { Reaction } from "@q9labsai/chalk-client";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useCan, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
+import { useSoundCues } from "../../internal/useSoundCues";
+import { toVideoParticipants } from "../../selectors/space-selectors";
+import { AudioOutput } from "../audio-output/AudioOutput";
+import { AdmissionPanel } from "../admission-panel/AdmissionPanel";
+import { ChatPanel } from "../composite/ChatPanel";
+import { ReactionPicker } from "../composite/ReactionPicker";
+import { ReactionsOverlay } from "../composite/ReactionsOverlay";
+import { ControlBar, type ControlBarButtonName } from "../control-bar/ControlBar";
+import { ParticipantsPanel } from "../participants-panel/ParticipantsPanel";
+import { ParticipantVolumeProvider } from "../participants-panel/participant-volume-context";
+import { OfflineActions } from "../offline-actions/OfflineActions";
+import { ReconnectingOverlay } from "../reconnecting-overlay/ReconnectingOverlay";
+import { ToastStack, type Toast } from "../toast-stack/ToastStack";
+import { SpaceDrawer } from "./SpaceDrawer";
+import { SpacePresentation } from "./SpacePresentation";
+import { SpaceStage } from "./SpaceStage";
+import { DRAWER_EXIT_MS, useDrawerPresence } from "./useDrawerPresence";
 import type { ChatUploadFile } from "@q9labsai/chalk-client";
-import React from "react";
-import { type InviteDialogProps } from "../invite-dialog/InviteDialog";
 import { type ReconnectingOverlayProps } from "../reconnecting-overlay/ReconnectingOverlay";
-import { type SpaceInfoDialogProps } from "../space-info-dialog/SpaceInfoDialog";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
-import { ClassicSpaceView } from "./ClassicSpaceView";
-export type SpacePanel = "chat" | "participants" | "transcript" | "admission" | "settings";
+
+export type SpacePanel = "chat" | "participants" | "admission";
+
 export interface SpaceViewFeatures {
   readonly chat?: boolean;
   readonly participants?: boolean;
@@ -16,42 +36,27 @@ export interface SpaceViewFeatures {
   readonly whiteboard?: boolean;
   readonly reactions?: boolean;
   readonly handRaise?: boolean;
-  readonly info?: boolean;
-  readonly settings?: boolean;
-  readonly transcript?: boolean;
   /** Join / leave / message / hand-raise / reaction cues. */
   readonly sounds?: boolean;
 }
-export interface SpaceViewInfoDialogProps extends Omit<SpaceInfoDialogProps, "isOpen" | "onClose"> {
-  readonly isOpen: boolean;
-  readonly onOpenChange: (open: boolean) => void;
-}
-export interface SpaceViewInviteDialogProps extends Omit<InviteDialogProps, "isOpen" | "onClose"> {
-  readonly isOpen: boolean;
-  readonly onOpenChange: (open: boolean) => void;
-}
+
 export interface SpaceViewWhiteboard {
   readonly isOpen: boolean;
   readonly props: WhiteboardViewProps;
 }
+
 export interface SpaceViewProps {
   readonly colorScheme?: "light" | "dark";
   readonly spaceName: string;
-  readonly logoUrl?: string;
-  readonly inviteLink?: string;
   readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
   readonly stageBackground?: boolean;
   readonly layout?: "grid" | "focus";
   readonly onLayoutChange?: (layout: "grid" | "focus") => void;
   readonly initialPanel?: SpacePanel | null;
   readonly features?: SpaceViewFeatures;
-  readonly infoDialog?: SpaceViewInfoDialogProps;
-  readonly inviteDialog?: SpaceViewInviteDialogProps;
-  readonly settingsDialog?: React.ReactNode;
   readonly generatedAvatars?: boolean;
   readonly commandError?: string;
   readonly onDismissCommandError?: () => void;
-  readonly onOpenSettings?: () => void;
   readonly onToggleWhiteboard?: () => void;
   readonly whiteboard?: SpaceViewWhiteboard;
   readonly reconnecting?: Omit<ReconnectingOverlayProps, "isVisible"> & {
@@ -62,11 +67,163 @@ export interface SpaceViewProps {
   readonly onEndEpisode?: () => void | Promise<void>;
   readonly className?: string;
 }
-export function SpaceView(props: SpaceViewProps): React.JSX.Element {
-  const themedProps = { ...props, logoUrl: logoForColorScheme(props.logoUrl, props.colorScheme ?? "light") };
-  return <>{<ClassicSpaceView {...themedProps} />}</>;
-}
-function logoForColorScheme(logoUrl: string | undefined, colorScheme: "light" | "dark"): string | undefined {
-  if (!logoUrl || colorScheme !== "dark") return logoUrl;
-  return logoUrl.replace(/chalk-logo\.svg(?=$|[?#])/u, "chalk-logo-on-dark.svg");
+
+const DEFAULT_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🎉"] as const;
+
+export function SpaceView({
+  colorScheme = "light",
+  spaceName,
+  pickChatFiles,
+  stageBackground = true,
+  layout: controlledLayout,
+  onLayoutChange,
+  initialPanel = null,
+  features,
+  generatedAvatars = true,
+  commandError: externalCommandError,
+  onDismissCommandError,
+  onToggleWhiteboard,
+  whiteboard,
+  reconnecting,
+  overlay,
+  onLeft,
+  onEndEpisode,
+  className,
+}: SpaceViewProps): React.JSX.Element {
+  const client = useSpaceClient();
+  const self = useSelf();
+  const participantsSlice = useParticipants();
+  const media = useMedia();
+  const recording = useRecording();
+  const canPublishScreen = useCan("publishScreen");
+  const canSendChat = useCan("sendChat");
+  const canSendReaction = useCan("sendReaction");
+  const canDrawWhiteboard = useCan("drawWhiteboard");
+  const canManageAdmission = useCan("manageAdmission");
+  const canManageRecording = useCan("manageRecording");
+  const episodeDuration = useEpisodeDuration();
+  const [uncontrolledLayout, setUncontrolledLayout] = useState<"grid" | "focus">("focus");
+  const [activePanel, setActivePanel] = useState<SpacePanel | null>(initialPanel);
+  const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
+  const [commandError, setCommandError] = useState<string | null>(null);
+  const layout = controlledLayout ?? uncontrolledLayout;
+  const feature = (name: keyof SpaceViewFeatures) => features?.[name] !== false;
+  const localId = self.participantId ?? "local";
+  const tiles = useMemo(() => toVideoParticipants(participantsSlice.roster, media.remote, localId, self.displayName ?? "You", media.local), [localId, media.local, media.remote, participantsSlice.roster, self.displayName]);
+  useEffect(() => setActivePanel(initialPanel), [initialPanel]);
+  useEffect(() => {
+    if (feature("admission") && feature("participants") && canManageAdmission && participantsSlice.admissionQueue.length > 0) setActivePanel("participants");
+  }, [canManageAdmission, participantsSlice.admissionQueue.length, features?.admission, features?.participants]);
+  const buttons: ControlBarButtonName[] = [
+    "mic",
+    "video",
+    ...(feature("screenShare") && canPublishScreen ? ["screenshare" as const] : []),
+    ...(feature("recording") && canManageRecording ? ["record" as const] : []),
+    ...(feature("participants") ? ["participants" as const] : []),
+    ...(feature("chat") && canSendChat ? ["chat" as const] : []),
+    ...(feature("handRaise") ? ["handraise" as const] : []),
+    ...(feature("reactions") && canSendReaction ? ["reactions" as const] : []),
+    ...(feature("whiteboard") && canDrawWhiteboard ? ["whiteboard" as const] : []),
+    "leave",
+  ];
+  const updateLayout = (nextLayout: "grid" | "focus") => {
+    if (controlledLayout === undefined) setUncontrolledLayout(nextLayout);
+    onLayoutChange?.(nextLayout);
+  };
+  useSoundCues(feature("sounds"));
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const drawer = useDrawerPresence(activePanel, prefersReducedMotion ? 0 : DRAWER_EXIT_MS);
+  const runCommand = useCallback(async (command: () => Promise<unknown>) => {
+    try {
+      await command();
+      setCommandError(null);
+    } catch (cause) {
+      setCommandError(cause instanceof Error ? cause.message : "This command could not be completed.");
+    }
+  }, []);
+  const leaveCall = onLeft ? () => void runCommand(async () => onLeft()) : undefined;
+  const endCallForEveryone = onEndEpisode ? () => void runCommand(async () => onEndEpisode()) : undefined;
+  const displayedCommandError = externalCommandError ?? commandError;
+  const commandToasts: Toast[] = displayedCommandError ? [{ id: "space-command-error", message: displayedCommandError, type: "error" }] : [];
+  const dismissCommandError = () => {
+    setCommandError(null);
+    onDismissCommandError?.();
+  };
+  return (
+    <ParticipantVolumeProvider>
+      <SpacePresentation
+        colorScheme={colorScheme}
+        stageBackground={stageBackground}
+        header={{
+          spaceName,
+          duration: episodeDuration,
+          isRecording: recording.current?.status === "recording",
+          layout,
+          onLayoutChange: updateLayout,
+        }}
+        stage={<SpaceStage tiles={tiles} layout={layout} onLayoutChange={updateLayout} generatedAvatars={generatedAvatars} whiteboard={whiteboard} className="h-full" />}
+        controls={
+          <ControlBar
+            density="comfortable"
+            buttons={buttons}
+            activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
+            onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
+            onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
+            onToggleWhiteboard={onToggleWhiteboard}
+            onOpenReactions={() => setReactionPickerOpen((current) => !current)}
+            onCommandError={setCommandError}
+            onLeaveRequest={leaveCall}
+            onEndForEveryone={endCallForEveryone}
+          />
+        }
+        compactControls={
+          <ControlBar
+            density="compact"
+            buttons={buttons}
+            activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
+            onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
+            onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
+            onToggleWhiteboard={onToggleWhiteboard}
+            onOpenReactions={() => setReactionPickerOpen((current) => !current)}
+            onCommandError={setCommandError}
+            onLeaveRequest={leaveCall}
+            onEndForEveryone={endCallForEveryone}
+          />
+        }
+        stageOverlay={
+          <>
+            {feature("reactions") ? <ReactionsOverlay /> : null}
+            {feature("reactions") && canSendReaction ? (
+              <div className="absolute bottom-24 left-1/2 z-50 -translate-x-1/2">
+                <ReactionPicker
+                  isOpen={isReactionPickerOpen}
+                  onClose={() => setReactionPickerOpen(false)}
+                  allowedReactions={[...DEFAULT_REACTIONS]}
+                  onSelect={(reaction) => void runCommand(() => client.reactions.send(reaction as Reaction)).finally(() => setReactionPickerOpen(false))}
+                  size="compact"
+                />
+              </div>
+            ) : null}
+          </>
+        }
+        sidebar={
+          <SpaceDrawer state={drawer.state} onClose={() => setActivePanel(null)}>
+            {drawer.panel === "chat" && feature("chat") && canSendChat ? <ChatPanel variant="sidebar" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} /> : null}
+            {drawer.panel === "participants" && feature("participants") ? <ParticipantsPanel variant="sidebar" admissionEnabled={feature("admission")} generatedAvatars={generatedAvatars} onCommandError={setCommandError} onClose={() => setActivePanel(null)} /> : null}
+            {drawer.panel === "admission" && feature("admission") ? <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} /> : null}
+          </SpaceDrawer>
+        }
+        mediaOutput={<AudioOutput />}
+        overlays={
+          <>
+            {overlay}
+            <ToastStack toasts={commandToasts} onDismiss={dismissCommandError} position="bottom-right" />
+            {reconnecting && reconnecting.status !== "reconnecting" ? <ReconnectingOverlay {...reconnecting} /> : null}
+            <OfflineActions reconnecting={reconnecting?.status === "reconnecting" && reconnecting.isVisible} />
+          </>
+        }
+        className={className}
+      />
+    </ParticipantVolumeProvider>
+  );
 }

@@ -249,7 +249,7 @@ export const DOCS_PAGES = [
     href: "/docs/entrance-and-admission",
     title: "Entrance and admission",
     navLabel: "Entrance and admission",
-    description: "Prepare devices in Entrance and control open, knock, or member entry.",
+    description: "Join a Space and control open, knock, or member entry.",
     groupId: "features",
     keywords: ["Entrance", "admission", "knock", "members_only", "devices"],
     layout: "article",

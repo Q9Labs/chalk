@@ -1,14 +1,10 @@
 export interface SpaceHeaderProps {
   spaceName: string;
-  logoUrl?: string;
   duration?: number;
   isRecording?: boolean;
   isTranscribing?: boolean;
   layout?: "grid" | "focus";
   onLayoutChange?: (layout: "grid" | "focus") => void;
-  onInvite?: () => void;
-  onInfo?: () => void;
-  onSettings?: () => void;
   className?: string;
 }
 

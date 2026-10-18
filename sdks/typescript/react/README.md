@@ -13,7 +13,7 @@ pnpm add @q9labsai/chalk-client @q9labsai/chalk-react
 ## Turnkey UI
 
 Provide a Space slug and a `getAccess` callback. Chalk creates and owns the
-client, renders the Entrance by default, and releases its owned client when it
+client, joins directly through CallLimbo, and releases its owned client when it
 unmounts.
 
 ```tsx
@@ -48,10 +48,10 @@ Pass an existing client when its lifecycle belongs to the embedding
 application. Chalk will use it without disposing it.
 
 ```tsx
-<Chalk client={spaceClient} entrance={false} />
+<Chalk client={spaceClient} />
 ```
 
-`theme` controls color scheme, accent and typed token overrides. Classic is the only interface style.
+`theme` controls color scheme, accent and typed token overrides.
 
 `colorScheme` accepts `light`, `dark`, or `system`. With `system`, Chalk follows
 the browser preference while keeping explicit token overrides in place.
@@ -108,9 +108,8 @@ returns it unchanged, and `SpaceClient` handles refresh and recovery.
 
 ## Component maintenance
 
-`transcript-panel-behavior.ts`, `settings-dialog-behavior.ts`, and
-`control-bar-behavior.ts` own the shared contracts, state, and commands for their
-components. Classic renderers own presentation.
+`control-bar-behavior.ts` owns the shared contracts, state, and commands for the
+controls. The component files own presentation.
 
 The SDK-owned `@q9labsai/chalk-react/preview` dev-tool entrypoint exposes the
 preview contract used by the first-party gallery. Application previews should

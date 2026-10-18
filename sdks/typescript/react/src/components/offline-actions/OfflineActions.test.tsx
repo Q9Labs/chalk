@@ -12,7 +12,6 @@ import { useConnection } from "../../bindings/hooks";
 import { ChalkProvider } from "../../bindings/context";
 import { createPreviewClient, createSnapshot } from "../../test-support";
 import { OfflineActions, RECONNECTING_GRACE_MS, offlineNoticeText } from "./OfflineActions";
-import { OfflineActionsSetting } from "./OfflineActionsSetting";
 import { RECONNECTING_NOTICE_MS } from "../reconnecting-overlay/ReconnectingOverlay";
 
 const actions: readonly OfflineAction[] = [
@@ -49,8 +48,6 @@ async function mount(snapshot: SpaceSnapshot, node = <OfflineActions />) {
   return { client, container };
 }
 
-const button = (container: HTMLElement, name: string) => [...container.querySelectorAll("button")].find((candidate) => candidate.textContent === name);
-
 describe("OfflineActions", () => {
   it("keeps the waiting count in the limbo after the grace period", async () => {
     vi.useFakeTimers();
@@ -76,33 +73,6 @@ describe("OfflineActions", () => {
       vi.useRealTimers();
     }
   });
-
-  it("asks once the connection is back and sends on request, remembering the choice", async () => {
-    const { client, container } = await mount(withOffline("live", { decisionNeeded: true }));
-    expect(container.querySelector("[role=dialog]")?.textContent).toContain("Message: running late");
-    expect(container.querySelector("[role=dialog]")?.textContent).toContain("Raise hand");
-    await act(async () => container.querySelector<HTMLInputElement>("input[type=checkbox]")?.click());
-    await act(async () => button(container, "Send actions")?.click());
-    expect(window.localStorage.getItem("chalk:offline-actions-policy")).toBe("send");
-    expect(client.getSnapshot().offline).toMatchObject({ pending: [], decisionNeeded: false, policy: "send" });
-    expect(container.querySelector("[role=dialog]")).toBeNull();
-  });
-
-  it("discards without remembering when the box stays unchecked", async () => {
-    const { client, container } = await mount(withOffline("live", { decisionNeeded: true }));
-    await act(async () => button(container, "Discard actions")?.click());
-    expect(window.localStorage.getItem("chalk:offline-actions-policy")).toBeNull();
-    expect(client.getSnapshot().offline.pending).toEqual([]);
-  });
-
-  it("lets Settings change the remembered choice", async () => {
-    window.localStorage.setItem("chalk:offline-actions-policy", "send");
-    const { container } = await mount(withOffline("live", {}), <OfflineActionsSetting />);
-    const radios = [...container.querySelectorAll<HTMLInputElement>("input[type=radio]")];
-    expect(radios.find((radio) => radio.checked)?.value).toBe("send");
-    await act(async () => radios.find((radio) => radio.value === "ask")?.click());
-    expect(window.localStorage.getItem("chalk:offline-actions-policy")).toBeNull();
-  });
 });
 
 it("uses one limbo through a continuous disconnection and lifts on recovery", async () => {
@@ -118,7 +88,7 @@ it("uses one limbo through a continuous disconnection and lifts on recovery", as
     vi.useRealTimers();
   };
 
-  await act(async () => root.render(<Chalk client={client} entrance={false} />));
+  await act(async () => root.render(<Chalk client={client} />));
   expect(container.querySelector("[role=status]")).toBeNull();
 
   await act(async () => vi.advanceTimersByTime(RECONNECTING_NOTICE_MS));
@@ -155,7 +125,7 @@ it("restores call controls after recovery with SpaceView's public reconnecting p
 
 it.each(["left", "failed"] as const)("explains dropped offline actions on the %s screen", (status) => {
   const snapshot = withOffline(status, { pending: [], notice: "Your offline actions were not sent because the Episode ended or the connection closed." });
-  const html = renderToStaticMarkup(<Chalk client={createPreviewClient(snapshot)} entrance={false} />);
+  const html = renderToStaticMarkup(<Chalk client={createPreviewClient(snapshot)} />);
   expect(html).toContain("Your offline actions were not sent");
 });
 

@@ -1,9 +1,9 @@
 import { PERFORMANCE_STATES } from "./performance";
 import type { SpaceSnapshot } from "@q9labsai/chalk-client";
-import { CallLimbo, Chalk, Entrance, type SpaceLayout } from "@q9labsai/chalk-react";
+import { CallLimbo, Chalk, type SpaceLayout } from "@q9labsai/chalk-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { NameNeeded } from "../components/space/SpacePage";
-import { HOST, INVITE_LINK, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type CallStateClient, type Person } from "./fixtures";
+import { HOST, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type CallStateClient, type Person } from "./fixtures";
 
 /** A step the capture script performs after the state mounts, by accessible role and name. */
 export type Action = { readonly click: string; readonly role?: "button" | "menuitemradio" } | { readonly wait: number };
@@ -51,12 +51,6 @@ export const CALL_STATES: readonly CallState[] = [
     ),
   },
   { id: "joining-complete", title: "Blur lifting on admission", render: () => <JoiningComplete /> },
-  { id: "entrance", title: "Entrance, no name yet", render: () => <WebEntrance /> },
-  { id: "entrance-named", title: "Entrance, name typed", render: () => <WebEntrance name={SELF_NAME} /> },
-  { id: "entrance-devices-off", title: "Entrance, mic and camera off", render: () => <WebEntrance name={SELF_NAME} microphone={false} camera={false} /> },
-  { id: "entrance-camera-blocked", title: "Entrance, camera blocked by the browser", cameraBlocked: true, render: () => <WebEntrance name={SELF_NAME} /> },
-  { id: "entrance-joining", title: "Entrance, asking to enter", render: () => <WebEntrance name={SELF_NAME} joining /> },
-  { id: "entrance-error", title: "Entrance, invite link failed", render: () => <WebEntrance name={SELF_NAME} error="This Space is unavailable. Please check the invite link and try again." /> },
   { id: "waiting-for-host", title: "Waiting for the host to let you in", render: () => <WaitingForHost /> },
   { id: "entering", title: "Entering after access is granted", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null } }} /> },
 
@@ -114,8 +108,6 @@ export const CALL_STATES: readonly CallState[] = [
   },
   { id: "admission", title: "Someone is waiting to be let in", render: () => <Live snapshot={liveSnapshot({ others: [nora], capabilities: HOST, admission: true })} /> },
   { id: "layout-menu", title: "Layout menu", actions: [openLayout], render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
-  { id: "info", title: "Call details", actions: [{ click: "Space information" }], render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
-  { id: "settings", title: "Settings", actions: [{ click: "Settings" }], render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
   { id: "device-menu", title: "Microphone menu", actions: [{ click: "Select microphone" }], render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
   { id: "reactions", title: "Reactions", actions: [{ click: "React" }], render: () => <Live snapshot={liveSnapshot({ others: [nora], reactions: true })} /> },
   { id: "leave", title: "Leave, as guest: leaves at once", actions: [{ click: "Leave call" }], render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
@@ -161,16 +153,7 @@ function Live({ snapshot, layout, then }: { readonly snapshot: SpaceSnapshot; re
   }, [client, transition]);
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
-      <Chalk client={client} entrance={false} displayName={SELF_NAME} logoUrl="/brand/chalk/chalk-logo.svg" spaceName={SPACE_NAME} inviteLink={INVITE_LINK} layout={layout} onLeft={() => undefined} onHome={() => undefined} />
-    </main>
-  );
-}
-
-/** Mirrors SpacePage's entrance: the slug stands in for the Space name until the invite is verified. */
-function WebEntrance({ name = "", microphone = true, camera = true, joining = false, error }: { readonly name?: string; readonly microphone?: boolean; readonly camera?: boolean; readonly joining?: boolean; readonly error?: string }) {
-  return (
-    <main className="h-dvh min-h-0 w-full overflow-hidden">
-      <Entrance spaceName="q9-team" defaultDisplayName={name} defaults={{ microphone, camera }} joining={joining} error={error} onJoin={() => undefined} onPrepare={async () => undefined} />
+      <Chalk client={client} displayName={SELF_NAME} spaceName={SPACE_NAME} layout={layout} onLeft={() => undefined} onHome={() => undefined} />
     </main>
   );
 }
@@ -199,7 +182,7 @@ function JoiningComplete() {
       <button hidden data-complete-join onClick={() => client.updateSnapshot(() => liveSnapshot({ self: { camera: false, microphone: false } }))}>
         Complete join
       </button>
-      <Chalk client={client} entrance={false} displayName={SELF_NAME} spaceName={SPACE_NAME} />
+      <Chalk client={client} displayName={SELF_NAME} spaceName={SPACE_NAME} />
     </main>
   );
 }
