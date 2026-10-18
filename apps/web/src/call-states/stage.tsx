@@ -124,6 +124,7 @@ function StageFixture({ count: initialCount = 6, theme = "dark", layout: initial
 export const STAGE_STATES: readonly CallState[] = [
   ...[3, 5, 6, 7, 12, 24, 30].map((count) => ({ id: `stage-grid-${count}`, title: `${count} people in justified Grid`, render: () => <StageFixture count={count} layout="grid" /> })),
   { id: "stage-spotlight", title: "Spotlight", render: () => <StageFixture /> },
+  { id: "stage-solo", title: "Solo centered Spotlight", render: () => <StageFixture count={1} /> },
   { id: "stage-duo", title: "Two-person phone picture-in-picture", render: () => <StageFixture count={2} /> },
   { id: "stage-avatars", title: "Bold speaking Facehash tiles", render: () => <StageFixture cameras={false} layout="grid" /> },
   { id: "stage-board", title: "Board in Spotlight", render: () => <StageFixture board /> },

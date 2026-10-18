@@ -144,8 +144,10 @@ export function fitSpotlight(box: StageBox, primaryId: string, stripIds: readonl
   const phone = box.width <= 640;
   const aspect = options.primaryAspect ?? WIDESCREEN;
   if (!stripIds.length) {
-    const width = options.content || phone ? box.width : Math.min(box.width * 0.56, box.height * WIDESCREEN);
-    const height = options.content || phone ? box.height : Math.min(box.height, width / (4 / 3));
+    const aspect = clamp(box.width / box.height, 4 / 3, WIDESCREEN);
+    const fitted = contain(box, aspect);
+    const width = options.content || phone ? box.width : Math.min(box.width * 0.56, fitted.width);
+    const height = options.content || phone ? box.height : width / aspect;
     return { frames: [{ id: primaryId, role: "primary", page: 0, x: (box.width - width) / 2, y: (box.height - height) / 2, width, height }], pageCount: 1, perPage: 0 };
   }
   if (phone && stripIds.length === 1 && !options.content) {
@@ -165,7 +167,7 @@ export function fitSpotlight(box: StageBox, primaryId: string, stripIds: readonl
   const beside = options.content ? besideMain.width * besideMain.height > belowMain.width * belowMain.height * 1.005 : !phone && Math.abs(Math.log(besideMain.width / besideMain.height / WIDESCREEN)) < Math.abs(Math.log(belowMain.width / belowMain.height / WIDESCREEN));
   const main = { width: beside ? besideMain.width : box.width, height: beside ? box.height : belowMain.height };
   const remaining = { width: beside ? box.width - main.width - options.gap : box.width, height: beside ? box.height : box.height - main.height - options.gap };
-  const people = fitGrid(remaining, stripIds, { ...DEFAULT_GRID_OPTIONS, minTileWidth: phone ? 88 : 150, minTileHeight: phone ? 72 : 96, maxPerPage: options.maxPerPage ?? 25 }, options.wideIds);
+  const people = fitGrid(remaining, stripIds, { ...DEFAULT_GRID_OPTIONS, minTileWidth: phone ? 88 : 150, minTileHeight: phone ? 72 : 96, maxPerPage: options.maxPerPage ?? DEFAULT_GRID_OPTIONS.maxPerPage }, options.wideIds);
   return {
     ...people,
     frames: [{ id: primaryId, role: "primary", page: 0, x: 0, y: 0, ...main }, ...people.frames.map((frame) => ({ ...frame, role: "strip" as const, x: frame.x + (beside ? main.width + options.gap : 0), y: frame.y + (beside ? 0 : main.height + options.gap) }))],
