@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { routeCallFixtureAssets } from "./call-fixture-routes.mjs";
 import { resolve } from "node:path";
 import { summarizeHeap } from "./call-heap-summary.mjs";
 import { installLeakObservers } from "./call-leak-observers.mjs";
@@ -112,8 +113,7 @@ export async function checkLeaks({ browser, origin, budgets, directory, boardCss
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await cdp.send("Performance.enable");
-    await page.route("https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@*/dist/prod/index.css", (route) => route.fulfill({ path: boardCss, contentType: "text/css" }));
-    await page.route(/https:\/\/fonts\.(googleapis|gstatic)\.com\//, (route) => route.fulfill({ body: "", contentType: "text/css" }));
+    await routeCallFixtureAssets(page, boardCss);
     try {
       await page.goto(`${origin}/call-states.html?state=perf-six`, { waitUntil: "load" });
       await page.getByRole("button", { name: "Leave call", exact: true }).waitFor();
