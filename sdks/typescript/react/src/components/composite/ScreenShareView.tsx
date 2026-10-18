@@ -1,5 +1,5 @@
 import type { ScreenShareCapture, ScreenShareOptions } from "@q9labsai/chalk-client";
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useMedia, useParticipants, useSelf } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
 import { StageIcon } from "../stage/StageIcon";
@@ -39,6 +39,8 @@ export interface ScreenShareViewSurfaceProps extends Omit<ScreenSharePresentatio
 export function ScreenSharePresentation({ sharedByName, media, mediaVisible, state, isLocal = false, hasAudio = false, capture, primary = true, pinned, hidden, style, onClick, onDoubleClick, onStopSharing, onChangeShare, switcher, className }: ScreenSharePresentationProps): React.JSX.Element {
   const root = useRef<HTMLDivElement>(null);
   const [fill, setFill] = useState(false);
+  const [controlsOpen, setControlsOpen] = useState(false);
+  const [poppedOut, setPoppedOut] = useState(false);
   const [zoom, setZoom] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,10 +59,22 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
       setPending(false);
     }
   };
+  useEffect(() => {
+    const video = root.current?.querySelector("video");
+    if (!video) return;
+    const entered = () => setPoppedOut(true);
+    const left = () => setPoppedOut(false);
+    video.addEventListener("enterpictureinpicture", entered);
+    video.addEventListener("leavepictureinpicture", left);
+    return () => {
+      video.removeEventListener("enterpictureinpicture", entered);
+      video.removeEventListener("leavepictureinpicture", left);
+    };
+  }, [media]);
   const fullscreen = () =>
     run(async () => {
       if (document.fullscreenElement) await document.exitFullscreen();
-      else await root.current?.requestFullscreen();
+      else await root.current?.closest<HTMLElement>('[data-part="stage-tile"]')?.requestFullscreen();
     });
   const popout = () =>
     run(async () => {
@@ -89,8 +103,14 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
         </>
       }
     >
-      <div ref={root} className="absolute inset-0 bg-[var(--chalk-tile)]">
-        <div data-part="share-media" className={cn("absolute inset-0 overflow-hidden motion-safe:transition-opacity motion-safe:duration-300 motion-safe:ease-out", status === "paused" ? "opacity-35" : "opacity-100")}>
+      <div
+        ref={root}
+        className="absolute inset-0 bg-[var(--chalk-tile)]"
+        onPointerUp={(event) => {
+          if (primary && event.pointerType !== "mouse" && !(event.target instanceof Element && event.target.closest("button"))) setControlsOpen((open) => !open);
+        }}
+      >
+        <div data-part="share-media" className={cn("absolute inset-0 overflow-hidden motion-safe:transition-opacity motion-safe:duration-300 motion-safe:ease-out", poppedOut ? "opacity-0" : status === "paused" ? "opacity-35" : "opacity-100")}>
           <div
             className={cn("h-full w-full motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-out [&>*]:h-full [&>*]:w-full", status === "low-quality" && "blur-[2.5px]", fill ? "[&>*]:object-cover" : "[&>*]:object-contain")}
             style={{ transform: zoom ? "scale(2)" : undefined }}
@@ -98,6 +118,15 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
             {media}
           </div>
         </div>
+        {poppedOut ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 p-4 text-center text-[var(--chalk-muted-text)]">
+            <StageIcon name="pip" size={32} />
+            <p className="font-medium text-[var(--chalk-text)]">{name} is in a picture-in-picture window</p>
+            <ChalkButton className="!h-8 !px-3" onClick={() => void popout()}>
+              Bring it back
+            </ChalkButton>
+          </div>
+        ) : null}
         {status === "connecting" ? (
           <div role="status" className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--chalk-tile)] text-[var(--chalk-muted-text)]">
             <span className="h-6 w-6 rounded-full border-2 border-current border-t-transparent motion-safe:animate-spin" />
@@ -154,7 +183,7 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
           </div>
         ) : null}
         {primary && !isLocal && status !== "connecting" ? (
-          <div role="toolbar" aria-label="Share controls" className="absolute right-2 bottom-2 z-30 flex gap-1.5 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 focus-within:opacity-100 max-[640px]:opacity-100">
+          <div role="toolbar" aria-label="Share controls" className={cn("absolute right-2 bottom-2 z-30 flex gap-1.5 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 focus-within:opacity-100", controlsOpen && "opacity-100")}>
             <ShareControl label={fill ? "Fit the whole screen" : "Fill the tile"} pressed={fill} onClick={() => setFill(!fill)}>
               <StageIcon name={fill ? "fit" : "fill"} size={16} />
             </ShareControl>
@@ -185,7 +214,7 @@ function ShareControl({ label, pressed, onClick, children }: { readonly label: s
       aria-label={label}
       aria-pressed={pressed}
       onClick={onClick}
-      className="grid h-8 w-8 place-items-center rounded-full bg-[rgba(12,14,18,.75)] text-white outline-none hover:bg-[rgba(40,42,48,.95)] aria-pressed:bg-white aria-pressed:text-[#0b0c0e] motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-out active:scale-[.92] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)] [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11"
+      className="relative grid h-8 w-8 place-items-center rounded-full bg-[rgba(12,14,18,.75)] text-white outline-none hover:bg-[rgba(40,42,48,.95)] aria-pressed:bg-white aria-pressed:text-[#0b0c0e] motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-out active:scale-[.92] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)] [@media(pointer:coarse)]:before:absolute [@media(pointer:coarse)]:before:-inset-1.5"
     >
       {children}
     </button>

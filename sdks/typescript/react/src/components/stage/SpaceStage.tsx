@@ -50,7 +50,7 @@ export function SpaceStage({ tiles, layout, onLayoutChange, generatedAvatars = t
                         setPin(null);
                         setSelectedShare(share.id);
                       }}
-                      className="h-7 rounded-full px-3 text-[12px] font-semibold text-[#d4d5d9] hover:bg-white/10 aria-pressed:bg-white aria-pressed:text-[#0b0c0e] [@media(pointer:coarse)]:min-h-11"
+                      className="relative h-7 rounded-full px-3 text-[12px] font-semibold text-[#d4d5d9] hover:bg-white/10 aria-pressed:bg-white aria-pressed:text-[#0b0c0e] [@media(pointer:coarse)]:before:absolute [@media(pointer:coarse)]:before:-inset-y-2 [@media(pointer:coarse)]:before:inset-x-0"
                     >
                       {share.participant.displayName}
                     </button>
