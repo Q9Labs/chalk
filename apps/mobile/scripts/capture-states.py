@@ -266,15 +266,15 @@ def remote(args):
                 run([adb, '-s', serial, 'shell', 'cmd', 'uimode', 'night', 'no' if light else 'yes'])
                 run([adb, '-s', serial, 'shell', shlex.join(['am', 'start', '-a', 'android.intent.action.VIEW', '-d', url, bundle])])
             deadline = time.monotonic() + 180
-            warm_delivery = time.monotonic() + 10 if index == 0 and args.platform == 'ios' else None
+            warm_deliveries = [time.monotonic() + delay for delay in [10, 30, 60]] if index == 0 and args.platform == 'ios' else []
             while codes not in received:
                 if metro.poll() is not None or time.monotonic() > deadline:
                     raise RuntimeError(f'No native SDK measurement upload for {state}; inspect app-console.log/metro.log')
                 receiver.handle_request()
-                if codes not in received and warm_delivery is not None and time.monotonic() >= warm_delivery:
+                if codes not in received and warm_deliveries and time.monotonic() >= warm_deliveries[0]:
                     # A cold native launch may deliver the URL before JS installs its Linking listener.
                     run(['xcrun', 'simctl', 'openurl', device, url])
-                    warm_delivery = None
+                    warm_deliveries.pop(0)
             payload = received.pop(codes)
             (out / f'{index}-measurements.json').write_text(json.dumps(payload, indent=2))
             if payload.get('platform') != args.platform or not payload.get('root', {}).get('frame') or not payload.get('measurements', {}).get('frame.screen', {}).get('frame'):
