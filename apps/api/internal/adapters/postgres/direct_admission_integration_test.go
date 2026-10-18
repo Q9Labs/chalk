@@ -99,6 +99,16 @@ func TestDirectAdmissionHTTP(t *testing.T) {
 		exec(`insert into tenants(id,name) values($1,'Direct admission HTTP fixture')`, uuid(id))
 		exec(`insert into tenant_artifact_policies(tenant_id) values($1)`, uuid(id))
 	}
+	// Sync reads pending Lifecycle intents and Admission requests from the whole
+	// database, so work left queued here would reach a Sync test that shares it.
+	// This runs before pool.Close.
+	defer func() {
+		for _, table := range []string{"sync_admission_requests", "sync_lifecycle_intents"} {
+			if _, err := pool.Exec(context.Background(), "delete from "+table+" where tenant_id=$1", uuid(tenantID)); err != nil {
+				t.Errorf("cleanup %s: %v", table, err)
+			}
+		}
+	}()
 	queries := sqlc.New(pool)
 	keys := apikeys.NewService(NewAPIKeyRepository(queries, pool), apikeys.Config{})
 	key := func(tenant utilities.ID, scopes ...authentication.Scope) string {
