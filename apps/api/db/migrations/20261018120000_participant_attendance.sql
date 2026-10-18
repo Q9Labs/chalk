@@ -7,9 +7,12 @@ alter table participants
 -- Dropping the columns would delete recorded attendance. Refuse the rollback
 -- once any seat has a first join or a leave reason; the old code ignores both
 -- columns, so a revert of the code does not need this rollback.
+-- The lock stays until the transaction ends, so Sync cannot record attendance
+-- between the check and the drop.
 -- +goose StatementBegin
 do $$
 begin
+    lock table participants in access exclusive mode;
     if exists (
         select 1
         from participants
