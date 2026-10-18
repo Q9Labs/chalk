@@ -138,12 +138,21 @@ async function verifyDirectedRequests(alice, bob) {
   await invoke(bob, "declineMediaRequest", camera.requestId);
 }
 
+// Resting call controls fade and ignore the pointer until it moves, so move it
+// the way a person would before reaching for the dock.
+async function showCallControls(page) {
+  const { width, height } = page.viewportSize();
+  await page.mouse.move(width / 2, height / 2);
+  await page.mouse.move(width / 2 + 10, height / 2 + 10);
+  await page.getByRole("toolbar", { name: "Space controls", exact: true }).hover();
+}
+
 async function verifyCollaborations(alice, bob) {
   const text = "Hello from the packed SDK: 👍 ❤️ 😂 😮 😢 🎉";
   const chatMessage = await invoke(alice, "sendChatMessage", { text });
   if (chatMessage.text !== text) throw new TypeError("Packed SDK chat action returned the wrong message");
   await waitFor(bob, (snapshot, expected) => snapshot.chat.messages.some((message) => message.clientMessageId === expected && message.participantId === "alice"), chatMessage.clientMessageId);
-  await bob.getByRole("toolbar", { name: "Space controls", exact: true }).hover();
+  await showCallControls(bob);
   await bob.getByRole("button", { name: "Chat", exact: true }).click();
   await bob.getByText(text, { exact: true }).waitFor({ state: "visible" });
 
@@ -156,7 +165,7 @@ async function verifyCollaborations(alice, bob) {
 }
 
 async function verifyImageAttachment(sender, receiver, fileName = "packed-upload.png") {
-  await sender.getByRole("toolbar", { name: "Space controls", exact: true }).hover();
+  await showCallControls(sender);
   await sender.getByRole("button", { name: "Chat", exact: true }).click();
   const chooserReady = sender.waitForEvent("filechooser");
   await sender.getByRole("button", { name: "Attach files", exact: true }).click();
