@@ -4,6 +4,7 @@ import { CallCardStyles } from "../call-card/CallCardStyles";
 import { useCan, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { Search01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
+import { Avatar } from "../atomic/Avatar";
 import { AdmissionPanel } from "../admission-panel/AdmissionPanel";
 import { ParticipantRow } from "./participant-row";
 import { useParticipantVolumeContext } from "./participant-volume-context";
@@ -150,8 +151,9 @@ export const ParticipantsPanelSurface = React.memo(
             <h3 className="call-people-section">Raised hands</h3>
             {raised.map((person) => (
               <div className="call-raised-row" key={person.id}>
-                <span>{person.handOrder}</span>
-                <bdi>{person.displayName}</bdi>
+                {person.handOrder !== undefined ? <span className="call-hand-number">{person.handOrder}</span> : null}
+                <Avatar name={person.displayName} src={person.avatarUrl} size="sm" generated={generatedAvatars} className="!h-8 !w-8" />
+                <bdi className="min-w-0 flex-1 truncate">{person.displayName}</bdi>
               </div>
             ))}
             <h3 className="call-people-section">In the call</h3>

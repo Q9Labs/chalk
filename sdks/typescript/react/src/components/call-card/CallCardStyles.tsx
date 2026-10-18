@@ -548,13 +548,23 @@ const styles = `.call-card-tabs {
 }
 .call-raised-row {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
   min-height: 52px;
-  padding: 0 8px;
+  padding: 0 4px 0 8px;
+  border-radius: 12px;
 }
-.call-raised-row > span {
-  color: var(--chalk-warning);
+.call-hand-number {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #dcb740;
+  color: #16140c;
+  font-size: 12px;
+  font-weight: 700;
 }
 .call-chat-messages {
   min-height: 0;
@@ -787,6 +797,11 @@ const styles = `.call-card-tabs {
   .call-composer .call-attach-button {
     min-width: 44px;
     min-height: 44px;
+  }
+  .call-message:not(.on):not(:focus-visible):not(:has(:focus-visible)) .call-reaction-bar {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(3px);
   }
   .call-emoji-picker {
     grid-template-columns: repeat(6, 44px);
