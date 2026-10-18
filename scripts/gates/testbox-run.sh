@@ -7,7 +7,6 @@ shift
 export CI=true DEBIAN_FRONTEND=noninteractive
 export PATH="/usr/local/go/bin:/opt/elixir/bin:/opt/otp/bin:$PATH"
 export GOFLAGS=-buildvcs=false
-source scripts/gates/with-resources.sh
 step() { printf '\nCHALK_PHASE %s %s\n==> %s — %s\n' "$(date +%s.%N)" "$*" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 trap 'status=$?; step "end exit=$status"' EXIT
 version() { awk -v tool="$1" '$1 == tool {print $2}' .tool-versions; }
@@ -30,6 +29,8 @@ if [[ "$(node --version)" != "v$node_version" ]]; then
   tar -xJf "node-v$node_version-linux-x64.tar.xz" -C /usr/local --strip-components=1
   rm "node-v$node_version-linux-x64.tar.xz"
 fi
+# Resource probing uses the Node version provisioned above.
+source scripts/gates/with-resources.sh
 if [[ "$gate" != recorder ]]; then
   step 'Go (CI apps/api/go.mod)'
   go_version="$(awk '$1 == "go" {print $2}' apps/api/go.mod)"
