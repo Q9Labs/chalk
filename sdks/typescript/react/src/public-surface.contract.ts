@@ -25,6 +25,8 @@ type ExpectedChalkProps =
   | "inviteLink"
   | "layout"
   | "onLayoutChange"
+  | "onRejoin"
+  | "onHome"
   | "onJoined"
   | "onLeft"
   | "onEpisodeEnded"

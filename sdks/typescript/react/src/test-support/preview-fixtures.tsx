@@ -6,12 +6,8 @@ import { CommandErrorAlert } from "../components/composite/CommandErrorAlert";
 import type { SpaceLayout } from "../components/chalk/Chalk";
 import { EntranceSurface } from "../components/entrance/EntranceSurface";
 import type { EntranceProps, EntranceSettings } from "../components/entrance/Entrance";
-import { JoinFailedScreen } from "../components/join-failed-screen/JoinFailedScreen";
-import { LeaveDialog } from "../components/leave-dialog/LeaveDialog";
 import { SpaceView, type SpacePanel, type SpaceViewProps } from "../components/space-view/SpaceView";
 import { ChalkProvider } from "../bindings/context";
-import { chalkThemeStyle, type ChalkTheme } from "../theme";
-import { StatusSurface } from "../components/chalk/StatusSurface";
 import { createPreviewClient } from "./preview-client";
 /**
  * DEV-only adapter for the URL-addressable SDK gallery. It deliberately lives
@@ -116,28 +112,6 @@ export function PreviewEntrance({
     />
   );
 }
-export type PreviewStatusState = "failed" | "leaving" | "left";
-export interface PreviewStatusSurfaceProps {
-  readonly state: PreviewStatusState;
-  readonly spaceName: string;
-  readonly error?: string;
-  readonly theme?: ChalkTheme;
-  readonly onRetry?: () => void;
-}
-/** DEV-only adapter for post-live lifecycle states that use Chalk's status surface. */
-export function PreviewStatusSurface({ state, spaceName, error, theme, onRetry }: PreviewStatusSurfaceProps): React.JSX.Element {
-  const colorScheme = theme?.colorScheme === "dark" ? "dark" : "light";
-  const message = state === "leaving" ? `Leaving ${spaceName}…` : state === "left" ? "You have left this Space." : (error ?? "This Space is unavailable.");
-  return (
-    <>
-      <div data-chalk data-chalk-theme={colorScheme} className="chalk-root h-full min-h-0 w-full" style={chalkThemeStyle(theme, colorScheme)}>
-        <StatusSurface message={message} onRetry={state === "leaving" ? undefined : onRetry} />
-      </div>
-    </>
-  );
-}
-export type PreviewStatusProps = PreviewStatusSurfaceProps;
-export const PreviewStatus = PreviewStatusSurface;
 /** The gallery supplies all state and commands; the production Chalk wrapper is never involved. */
 export type PreviewSpaceViewProps = SpaceViewProps & {
   readonly client?: SpaceClient;
@@ -167,29 +141,5 @@ export function PreviewJoiningScreen({ displayName, message, supportingMessages 
     </main>
   );
 }
-export function PreviewEpisodeEnded({ spaceName, duration, participantCount, onRejoin, onGoHome }: { readonly spaceName: string; readonly duration: number; readonly participantCount: number; readonly onRejoin?: () => void; readonly onGoHome?: () => void }): React.JSX.Element {
-  return (
-    <main data-chalk className="chalk-root grid min-h-screen place-items-center bg-[var(--chalk-canvas)] p-6 text-center text-[var(--chalk-text)]">
-      <section className="grid max-w-md gap-4 justify-items-center rounded-lg border border-[var(--chalk-line)] bg-[var(--chalk-surface)] p-8">
-        <h1 className="text-2xl font-semibold">Episode ended</h1>
-        <p className="text-sm text-[var(--chalk-muted-text)]">
-          {spaceName} · {participantCount} Participants · {duration}s
-        </p>
-        <div className="flex gap-3">
-          {onRejoin ? (
-            <button type="button" onClick={onRejoin} className="rounded-md bg-[var(--chalk-accent)] px-4 py-2 text-sm font-semibold text-[var(--chalk-accent-text)]">
-              Enter again
-            </button>
-          ) : null}
-          {onGoHome ? (
-            <button type="button" onClick={onGoHome} className="rounded-md border border-[var(--chalk-line)] px-4 py-2 text-sm font-semibold">
-              Back to Entrance
-            </button>
-          ) : null}
-        </div>
-      </section>
-    </main>
-  );
-}
-export { CommandErrorAlert, JoinFailedScreen, LeaveDialog };
+export { CommandErrorAlert };
 export type { EntranceSettings, SpaceLayout, SpacePanel, SpaceViewProps };

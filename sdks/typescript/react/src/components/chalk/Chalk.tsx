@@ -5,7 +5,7 @@ import { preloadWhiteboardStylesheet } from "@q9labsai/chalk-whiteboard/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { ChalkProvider } from "../../bindings/context";
-import { useCan, useConnection, useMedia, useOffline, useParticipants, useSelf, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
+import { useCan, useConnection, useMedia, useOffline, useSelf, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
 import { chalkThemeStyle, type ChalkColorScheme, type ChalkTheme } from "../../theme";
 import { useWhiteboardSceneSubscription } from "../../internal/useWhiteboardSceneSubscription";
 import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../../whiteboard/wire-adapters";
@@ -68,6 +68,10 @@ export type ChalkProps = SpaceIntegration &
     readonly spaceDescription?: string;
     readonly layout?: SpaceLayout;
     readonly onLayoutChange?: (layout: SpaceLayout) => void;
+    /** Rejoin on the page shown after leaving. Defaults to joining again with the same settings. */
+    readonly onRejoin?: () => void;
+    /** Home on the pages shown after the call. Without it the page has no Home action. */
+    readonly onHome?: () => void;
   };
 export function Chalk(props: ChalkProps): React.JSX.Element {
   const colorScheme = useResolvedColorScheme(props.theme?.colorScheme);
@@ -112,22 +116,16 @@ function SpaceExperience(
   const client = useSpaceClient();
   const connection = useConnection();
   const offline = useOffline();
-  const participants = useParticipants();
   const previousStatus = useRef(connection.status);
   const hasObservedStatus = useRef(false);
   const hasBeenLive = useRef(connection.status === "live" || connection.status === "reconnecting");
   const autoJoinAttempted = useRef(false);
   const previousClient = useRef(client);
   const [joinError, setJoinError] = useState<string | null>(null);
-  const lastEpisode = useRef(connection.episode);
-  const lastParticipantCount = useRef(participants.roster.length);
   const [retryPending, setRetryPending] = useState(false);
   const [episodeEnded, setEpisodeEnded] = useState(false);
-  const [endedAt, setEndedAt] = useState<string | null>(null);
   const entrance = props.entrance ?? true;
   const spaceName = props.spaceName ?? props.space ?? "Space";
-  if (connection.episode) lastEpisode.current = connection.episode;
-  if (participants.roster.length > 0) lastParticipantCount.current = participants.roster.length;
   if (previousClient.current !== client) {
     previousClient.current = client;
     previousStatus.current = connection.status;
@@ -155,13 +153,11 @@ function SpaceExperience(
   useEffect(() => setJoinError(null), [client]);
   useEffect(() => {
     setEpisodeEnded(false);
-    setEndedAt(null);
   }, [client]);
   useEffect(
     () =>
       client.on("episodeEnded", () => {
         setEpisodeEnded(true);
-        setEndedAt(new Date().toISOString());
       }),
     [client],
   );
@@ -179,8 +175,8 @@ function SpaceExperience(
     previousStatus.current = connection.status;
     hasObservedStatus.current = true;
     if (connection.status === "live" || connection.status === "reconnecting") hasBeenLive.current = true;
-    if (connection.status === "left" && previous !== "left") setEndedAt((current) => current ?? new Date().toISOString());
   }, [connection.status, props.onJoined, props.onLeft]);
+  const callName = props.spaceName ?? props.space;
   if (connection.status === "idle") {
     if (!entrance) return <CallLimbo theme={{ ...props.theme, colorScheme: props.resolvedColorScheme }} spaceName={spaceName} message={joinError ?? `Joining ${spaceName}…`} action={joinError ? { label: "Try again", onClick: retryAutomaticJoin, disabled: retryPending } : undefined} />;
     return <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} error={joinError ?? undefined} theme={props.theme} onJoin={join} />;
@@ -192,25 +188,12 @@ function SpaceExperience(
       <CallLimbo theme={{ ...props.theme, colorScheme: props.resolvedColorScheme }} spaceName={spaceName} message={`Joining ${spaceName}…`} />
     );
   if (connection.status === "failed") {
-    const failureMessage = [connection.lastError?.message ?? joinError ?? "Unable to enter this Space.", offline.notice].filter(Boolean).join(" ");
-    if (!hasBeenLive.current && entrance) return <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} error={failureMessage} theme={props.theme} onJoin={join} />;
-    return <StatusSurface phase="failed" message={failureMessage} onRetry={retryAutomaticJoin} retryPending={retryPending} retryError={joinError} />;
+    const failureReason = offline.notice ? "You're offline. Check your connection." : (joinError ?? connection.lastError?.message ?? "Check your connection and try again.");
+    if (!hasBeenLive.current && entrance) return <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} error={failureReason} theme={props.theme} onJoin={join} />;
+    return <StatusSurface phase="failed" callName={callName} reason={failureReason} theme={props.theme} onRetry={retryAutomaticJoin} retryPending={retryPending} />;
   }
-  if (connection.status === "leaving") return <StatusSurface phase="leaving" message={`Leaving ${spaceName}…`} spaceName={spaceName} />;
-  if (connection.status === "left")
-    return (
-      <StatusSurface
-        phase={episodeEnded ? "episode-ended" : "left"}
-        message={[episodeEnded ? "This Episode has ended for everyone." : "Your connection is closed. You can re-enter from here.", offline.notice].filter(Boolean).join(" ")}
-        spaceName={spaceName}
-        episode={lastEpisode.current}
-        endedAt={endedAt}
-        participantCount={lastParticipantCount.current}
-        onRetry={episodeEnded ? undefined : retryAutomaticJoin}
-        retryPending={retryPending}
-        retryError={joinError}
-      />
-    );
+  if (connection.status === "leaving" || connection.status === "left")
+    return <StatusSurface phase={episodeEnded ? "episode-ended" : "left"} callName={callName} theme={props.theme} onRejoin={props.onRejoin ?? retryAutomaticJoin} rejoinDisabled={connection.status === "leaving" || retryPending} onHome={props.onHome} />;
   return (
     <div className="relative h-full min-h-0">
       <SpaceSurface {...props} spaceName={spaceName} />

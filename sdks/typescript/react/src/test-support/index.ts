@@ -5,7 +5,7 @@ export { ToastStack } from "../components/toast-stack/ToastStack";
 export { WhiteboardView } from "../components/whiteboard-view/WhiteboardView";
 export { createPreviewClient, createSnapshot } from "./preview-client";
 export { PREVIEW_DEVICE_FIXTURES, createPreviewMediaDevices } from "./preview-devices";
-export { CommandErrorAlert, LeaveDialog, PreviewEntrance, PreviewEpisodeEnded, PreviewSpaceView, PreviewStatus } from "./preview-fixtures";
+export { CommandErrorAlert, PreviewEntrance, PreviewSpaceView } from "./preview-fixtures";
 export type { Participant } from "../components/participant-grid/ParticipantGrid";
 export type { ReconnectingOverlayProps } from "../components/reconnecting-overlay/ReconnectingOverlay";
 export type { SettingsDialogValue } from "../components/composite/SettingsDialog";

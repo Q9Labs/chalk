@@ -116,7 +116,8 @@ export const CALL_STATES: readonly CallState[] = [
   { id: "settings", title: "Settings", actions: [{ click: "Settings" }], render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
   { id: "device-menu", title: "Microphone menu", actions: [{ click: "Select microphone" }], render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
   { id: "reactions", title: "Reactions", actions: [{ click: "React" }], render: () => <Live snapshot={liveSnapshot({ others: [nora], reactions: true })} /> },
-  { id: "leave", title: "Leave, as host", actions: [{ click: "Leave" }], render: () => <Live snapshot={liveSnapshot({ others: [nora], capabilities: HOST })} /> },
+  { id: "leave", title: "Leave, as guest: leaves at once", actions: [{ click: "Leave call" }], render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
+  { id: "host-leave", title: "Leave, as host: menu", actions: [{ click: "Leave call" }], render: () => <Live snapshot={liveSnapshot({ others: [nora], capabilities: HOST })} /> },
   { id: "media-request", title: "Asked to unmute", render: () => <Live snapshot={liveSnapshot({ self: { microphone: false }, others: [nora], mediaRequest: true })} /> },
   { id: "command-error", title: "Camera busy error", render: () => <Live snapshot={liveSnapshot({ self: { camera: false }, others: [nora], lastError: { code: "media.device_busy", recoverable: true, message: "Your camera is being used by another app." } })} /> },
 
@@ -158,7 +159,7 @@ function Live({ snapshot, layout, then }: { readonly snapshot: SpaceSnapshot; re
   }, [client, transition]);
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
-      <Chalk client={client} entrance={false} displayName={SELF_NAME} logoUrl="/brand/chalk/chalk-logo.svg" spaceName={SPACE_NAME} inviteLink={INVITE_LINK} layout={layout} onLeft={() => undefined} />
+      <Chalk client={client} entrance={false} displayName={SELF_NAME} logoUrl="/brand/chalk/chalk-logo.svg" spaceName={SPACE_NAME} inviteLink={INVITE_LINK} layout={layout} onLeft={() => undefined} onHome={() => undefined} />
     </main>
   );
 }

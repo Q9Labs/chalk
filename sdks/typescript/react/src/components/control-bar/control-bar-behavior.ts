@@ -61,6 +61,7 @@ export interface ControlBarSurfaceProps {
   onOpenMore?: () => void;
   onOpenInfo?: () => void;
   onLeft?: () => void;
+  onEndForEveryone?: () => void;
 
   participantColorSeed?: string;
   participantGradientPreference?: ParticipantGradientPreference;
@@ -88,6 +89,8 @@ export interface ControlBarProps {
   readonly onOpenMore?: () => void;
   readonly onOpenInfo?: () => void;
   readonly onLeaveRequest?: () => void;
+  /** Set for hosts: the leave button opens a menu with Leave call and End call for everyone. */
+  readonly onEndForEveryone?: () => void;
   readonly onLeft?: () => void;
   readonly onCommandError?: (message: string | null) => void;
   readonly participantColorSeed?: string;
@@ -326,6 +329,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     onOpenMore: props.onOpenMore,
     onOpenInfo: props.onOpenInfo,
     onLeft: leave,
+    onEndForEveryone: props.onEndForEveryone,
   };
 
   return { surfaceProps, commandError };

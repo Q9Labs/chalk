@@ -25,31 +25,25 @@ import {
 import { ControlBarButton } from "../atomic";
 import { DevicePopover } from "../device-popover/DevicePopover";
 import { CommandErrorAlert } from "../composite/CommandErrorAlert";
+import { LeaveMenu } from "./LeaveMenu";
 import { formatControlBarDuration, useConnectedControlBarBehavior, useControlBarSurfaceBehavior, type ControlBarButtonName, type ControlBarProps, type ControlBarSurfaceProps } from "./control-bar-behavior";
 
-function FloatingControlBarButton({
-  icon,
-  label,
-  onClick,
-  active = false,
-  danger = false,
-  disabled = false,
-  badge,
-}: {
-  readonly icon: React.ReactNode;
-  readonly label: string;
-  readonly onClick?: () => void;
-  readonly active?: boolean;
-  readonly danger?: boolean;
-  readonly disabled?: boolean;
-  readonly badge?: number;
-}) {
+const FloatingControlBarButton = React.forwardRef<
+  HTMLButtonElement,
+  {
+    readonly icon: React.ReactNode;
+    readonly label: string;
+    readonly active?: boolean;
+    readonly danger?: boolean;
+    readonly badge?: number;
+  } & Omit<React.ComponentPropsWithoutRef<"button">, "children" | "aria-label">
+>(function FloatingControlBarButton({ icon, label, active = false, danger = false, badge, ...buttonProps }, ref) {
   return (
     <Tooltip content={label} position="top">
       <button
+        {...buttonProps}
+        ref={ref}
         type="button"
-        onClick={onClick}
-        disabled={disabled}
         aria-label={label}
         aria-pressed={active}
         className={cn(
@@ -63,7 +57,7 @@ function FloatingControlBarButton({
       </button>
     </Tooltip>
   );
-}
+});
 
 export const ClassicControlBarSurface = React.memo(
   ({
@@ -111,6 +105,7 @@ export const ClassicControlBarSurface = React.memo(
     onOpenMore,
     onOpenInfo,
     onLeft,
+    onEndForEveryone,
     participantColorSeed,
     participantGradientPreference,
     expanded = true,
@@ -407,16 +402,22 @@ export const ClassicControlBarSurface = React.memo(
                   </button>
                 </Tooltip>
               )}
-              <Tooltip content="Leave Space" position="top">
-                <button
-                  type="button"
-                  onClick={onLeft}
-                  className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] border border-[var(--chalk-app-danger)] bg-[var(--chalk-app-danger)] p-0 text-white transition active:scale-95 hover:bg-[var(--chalk-app-danger-hover)] sm:h-[46px] sm:w-[46px]"
-                  aria-label="Leave space"
-                >
-                  <CallEnd01Icon className="w-5 h-5" />
-                </button>
-              </Tooltip>
+              <LeaveMenu
+                onLeave={onLeft}
+                onEndForEveryone={onEndForEveryone}
+                renderButton={(buttonProps) => (
+                  <Tooltip content="Leave call" position="top">
+                    <button
+                      {...buttonProps}
+                      type="button"
+                      className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] border border-[var(--chalk-app-danger)] bg-[var(--chalk-app-danger)] p-0 text-white transition active:scale-95 hover:bg-[var(--chalk-app-danger-hover)] sm:h-[46px] sm:w-[46px]"
+                      aria-label="Leave call"
+                    >
+                      <CallEnd01Icon className="w-5 h-5" />
+                    </button>
+                  </Tooltip>
+                )}
+              />
             </div>
           </div>
         </div>
@@ -523,7 +524,7 @@ export const ClassicControlBarSurface = React.memo(
             >
               <div className="-my-2 flex min-w-0 flex-wrap items-center justify-center gap-2 py-2">{buttonsToRender.filter((button) => button !== "mic" && button !== "video" && button !== "leave").map(floatingButton)}</div>
             </div>
-            {showLeave ? <FloatingControlBarButton icon={<CallEnd01Icon />} label="Leave" onClick={onLeft} danger /> : null}
+            {showLeave ? <LeaveMenu onLeave={onLeft} onEndForEveryone={onEndForEveryone} renderButton={(buttonProps) => <FloatingControlBarButton {...buttonProps} icon={<CallEnd01Icon />} label="Leave call" danger />} /> : null}
           </div>
         </div>
       );
