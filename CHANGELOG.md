@@ -2,6 +2,8 @@
 
 ## 5.0.0 (unreleased)
 
+- React: Export ControlBar and SpaceHeader at the package root. ControlBar command errors retain public `ClientFailure` codes and the originating media source; optional `callLinkOpen` and `onCallLinkToggle` props let the call-link card own its toggle.
+
 - BREAKING: removes Episode diagnostics producers, credentials, backend, CLI and the diagnostics-contracts package.
 - Remove Episode Debugger launch and diagnostic-reference UI props from the React SDK. Local connection diagnostics and recording instrumentation remain.
 

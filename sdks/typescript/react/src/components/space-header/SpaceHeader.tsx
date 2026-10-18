@@ -8,6 +8,7 @@ import { LayoutMenu } from "./LayoutMenu";
 import { CallDetails, CallDialog } from "./CallDetails";
 import { useCallShortcuts } from "./useCallShortcuts";
 import { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
+import { CallLinkIcon } from "../control-bar/CallLinkIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
 export { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
 export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
@@ -58,6 +59,20 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
               {formatDuration(duration)}
             </span>
             <ChalkSheet variant="details" open={open} onOpenChange={setOpen} title="Call details">
+              {props.onCallLinkToggle ? (
+                <button
+                  type="button"
+                  className="chalk-sheet-row"
+                  aria-pressed={props.callLinkOpen ?? false}
+                  onClick={() => {
+                    setOpen(false);
+                    props.onCallLinkToggle?.();
+                  }}
+                >
+                  <CallLinkIcon />
+                  <span>{props.callLinkOpen ? "Hide call link" : "Show call link"}</span>
+                </button>
+              ) : null}
               {content}
             </ChalkSheet>
           </>

@@ -1,7 +1,7 @@
-import type { ScreenShareOptions } from "@q9labsai/chalk-client";
+import { SpaceClientError, type ClientFailure, type MediaSource, type ScreenShareOptions } from "@q9labsai/chalk-client";
 import { readThemePreference, persistThemePreference } from "../lib/theme";
 import { useState } from "react";
-import { Chalk } from "@q9labsai/chalk-react";
+import { Chalk, ChalkProvider, ControlBar, SpaceHeader } from "@q9labsai/chalk-react";
 import { createCallStateClient, HOST, PEOPLE, liveSnapshot } from "./fixtures";
 import type { CallState } from "./states";
 
@@ -72,7 +72,44 @@ function ShellCall({ host = false, report = false, blocked = false }: { readonly
     </main>
   );
 }
+function ShellSeams() {
+  const [open, setOpen] = useState(false);
+  const [failure, setFailure] = useState<(ClientFailure & { source?: MediaSource }) | null>(null);
+  const [client] = useState(() => {
+    const instance = createCallStateClient(liveSnapshot());
+    return {
+      ...instance,
+      media: {
+        ...instance.media,
+        setMicrophoneEnabled: async () => {
+          throw new SpaceClientError({ code: "media.permission_denied", recoverable: true, message: "Microphone access was blocked" });
+        },
+        setCameraEnabled: async () => {
+          throw new SpaceClientError({ code: "media.device_not_found", recoverable: true, message: "Camera was not found" });
+        },
+        setScreenShareEnabled: async () => {
+          throw new Error("Screen capture failed");
+        },
+      },
+    };
+  });
+  const toggle = () => setOpen((current) => !current);
+  return (
+    <main data-chalk data-chalk-theme="dark" data-part="call-frame" className="chalk-root chalk-frame h-dvh">
+      <ChalkProvider client={client}>
+        <SpaceHeader spaceName="Shell seams" callLinkOpen={open} onCallLinkToggle={toggle} />
+        <div className="chalk-frame-dock">
+          <ControlBar buttons={["mic", "video", "screenshare"]} callLinkOpen={open} onCallLinkToggle={toggle} onCommandError={(error, source) => setFailure(error ? { code: error.code, message: error.message, recoverable: error.recoverable, source } : null)} />
+        </div>
+      </ChalkProvider>
+      <output aria-label="Shell failure" className="sr-only">
+        {JSON.stringify(failure)}
+      </output>
+    </main>
+  );
+}
 export const SHELL_STATES: readonly CallState[] = [
+  { id: "shell-seams", title: "Shell merge seams", render: () => <ShellSeams /> },
   { id: "shell-call", title: "Shell guest", render: () => <ShellCall /> },
   { id: "shell-host", title: "Shell host", render: () => <ShellCall host /> },
   { id: "shell-report", title: "Shell report callback", render: () => <ShellCall report /> },

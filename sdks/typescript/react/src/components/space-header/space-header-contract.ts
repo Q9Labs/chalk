@@ -4,6 +4,8 @@ export interface SpaceHeaderProps {
   onTogglePeople?: () => void;
   knockCount?: number;
   shareUrl?: string;
+  callLinkOpen?: boolean;
+  onCallLinkToggle?: () => void;
   diagnostics?: readonly { readonly label: string; readonly value: string }[];
   weakConnection?: boolean;
   onReportProblem?: (report: { readonly description: string; readonly diagnostics?: string }) => void | Promise<void>;

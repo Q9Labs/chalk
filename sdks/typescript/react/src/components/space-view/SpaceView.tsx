@@ -1,5 +1,6 @@
 "use client";
-import type { Reaction } from "@q9labsai/chalk-client";
+import { commandFailure } from "../control-bar/command-failure";
+import type { ClientFailure, Reaction } from "@q9labsai/chalk-client";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useCan, useConnection, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { callDiagnostics } from "../space-header/call-diagnostics";
@@ -52,6 +53,8 @@ export interface SpaceViewProps {
   readonly onColorSchemeChange?: (colorScheme: "light" | "dark") => void;
   readonly spaceName: string;
   readonly shareUrl?: string;
+  readonly callLinkOpen?: boolean;
+  readonly onCallLinkToggle?: () => void;
   readonly onReportProblem?: import("../space-header/SpaceHeader").SpaceHeaderProps["onReportProblem"];
   readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
   readonly stageBackground?: boolean;
@@ -81,6 +84,8 @@ export function SpaceView({
   onColorSchemeChange,
   spaceName,
   shareUrl,
+  callLinkOpen,
+  onCallLinkToggle,
   onReportProblem,
   pickChatFiles,
   stageBackground = true,
@@ -117,7 +122,7 @@ export function SpaceView({
   const [uncontrolledLayout, setUncontrolledLayout] = useState<"grid" | "focus">(controlledLayout ?? "focus");
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(initialPanel);
   const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
-  const [commandError, setCommandError] = useState<string | null>(null);
+  const [commandError, setCommandError] = useState<ClientFailure | null>(null);
   const layout = onLayoutChange ? (controlledLayout ?? uncontrolledLayout) : uncontrolledLayout;
   const feature = (name: keyof SpaceViewFeatures) => features?.[name] !== false;
   const localId = self.participantId ?? "local";
@@ -150,12 +155,12 @@ export function SpaceView({
       await command();
       setCommandError(null);
     } catch (cause) {
-      setCommandError(cause instanceof Error ? cause.message : "This command could not be completed.");
+      setCommandError(commandFailure(cause));
     }
   }, []);
   const leaveCall = onLeft ? () => void runCommand(async () => onLeft()) : undefined;
   const endCallForEveryone = onEndEpisode ? () => void runCommand(async () => onEndEpisode()) : undefined;
-  const displayedCommandError = externalCommandError ?? commandError;
+  const displayedCommandError = externalCommandError ?? commandError?.message;
   const commandToasts: Toast[] = displayedCommandError ? [{ id: "space-command-error", message: displayedCommandError, type: "error" }] : [];
   const dismissCommandError = () => {
     setCommandError(null);
@@ -174,6 +179,8 @@ export function SpaceView({
           onTogglePeople: feature("participants") ? () => setActivePanel((current) => (current === "participants" ? null : "participants")) : undefined,
           knockCount: canManageAdmission ? participantsSlice.admissionQueue.length : 0,
           shareUrl,
+          callLinkOpen,
+          onCallLinkToggle,
           onReportProblem,
           diagnostics: callDiagnostics(connection, media),
           shortcuts: {
@@ -199,6 +206,8 @@ export function SpaceView({
             layout={layout}
             onLayoutChange={updateLayout}
             shareUrl={shareUrl}
+            callLinkOpen={callLinkOpen}
+            onCallLinkToggle={onCallLinkToggle}
             buttons={buttons}
             activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
             onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
@@ -231,7 +240,9 @@ export function SpaceView({
         sidebar={
           <CallCard state={drawer.state} onClose={() => setActivePanel(null)}>
             {drawer.panel === "chat" && feature("chat") && canSendChat ? <ChatPanel variant="sidebar" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} /> : null}
-            {drawer.panel === "participants" && feature("participants") ? <ParticipantsPanel variant="sidebar" admissionEnabled={feature("admission")} generatedAvatars={generatedAvatars} onCommandError={setCommandError} onClose={() => setActivePanel(null)} /> : null}
+            {drawer.panel === "participants" && feature("participants") ? (
+              <ParticipantsPanel variant="sidebar" admissionEnabled={feature("admission")} generatedAvatars={generatedAvatars} onCommandError={(message) => setCommandError(message === null ? null : commandFailure(new Error(message)))} onClose={() => setActivePanel(null)} />
+            ) : null}
             {drawer.panel === "admission" && feature("admission") ? <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} /> : null}
           </CallCard>
         }

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 
-import type { ScreenShareOptions } from "@q9labsai/chalk-client";
+import { commandFailure } from "./command-failure";
+import type { ClientFailure, MediaSource, ScreenShareOptions } from "@q9labsai/chalk-client";
 import { useCan, useChat, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 
@@ -16,6 +17,8 @@ export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | 
 
 export interface ControlBarSurfaceProps {
   shareUrl?: string;
+  callLinkOpen?: boolean;
+  onCallLinkToggle?: () => void;
   layout?: "focus" | "grid";
   onLayoutChange?: (layout: "focus" | "grid") => void;
   density?: "comfortable" | "compact";
@@ -80,6 +83,8 @@ export interface ControlBarSurfaceProps {
 
 export interface ControlBarProps {
   readonly shareUrl?: string;
+  readonly callLinkOpen?: boolean;
+  readonly onCallLinkToggle?: () => void;
   readonly layout?: "focus" | "grid";
   readonly onLayoutChange?: (layout: "focus" | "grid") => void;
   readonly density?: "comfortable" | "compact";
@@ -93,7 +98,7 @@ export interface ControlBarProps {
   /** Set for hosts: the leave button opens a menu with Leave call and End call for everyone. */
   readonly onEndForEveryone?: () => void;
   readonly onLeft?: () => void;
-  readonly onCommandError?: (message: string | null) => void;
+  readonly onCommandError?: (failure: ClientFailure | null, source?: MediaSource) => void;
   readonly participantColorSeed?: string;
   readonly participantGradientPreference?: ParticipantGradientPreference;
   readonly className?: string;
@@ -213,7 +218,7 @@ export function useControlBarSurfaceBehavior({
 
 interface ConnectedControlBarBehavior {
   readonly surfaceProps: ControlBarSurfaceProps;
-  readonly commandError: string | null;
+  readonly commandError: ClientFailure | null;
 }
 
 export function useConnectedControlBarBehavior(props: ControlBarProps): ConnectedControlBarBehavior {
@@ -235,18 +240,18 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const isRecording = recordingStatus === "recording" || recordingStatus === "stopping";
   const isRecordingPending = recordingStatus === "starting" || recordingStatus === "stopping";
   const [noiseSuppression, setNoiseSuppression] = useState(true);
-  const [commandError, setCommandError] = useState<string | null>(null);
+  const [commandError, setCommandError] = useState<ClientFailure | null>(null);
 
   const run = useCallback(
-    async (command: () => Promise<unknown>) => {
+    async (command: () => Promise<unknown>, source?: MediaSource) => {
       setCommandError(null);
-      props.onCommandError?.(null);
+      props.onCommandError?.(null, source);
       try {
         await command();
       } catch (cause) {
-        const message = cause instanceof Error ? cause.message : "This command could not be completed.";
-        if (!props.onCommandError) setCommandError(message);
-        props.onCommandError?.(message);
+        const failure = commandFailure(cause);
+        if (!props.onCommandError) setCommandError(failure);
+        props.onCommandError?.(failure, source);
       }
     },
     [props.onCommandError],
@@ -287,13 +292,13 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
           void run(async () => {
             await media.local.microphone.track?.applyConstraints({ noiseSuppression: enabled });
             setNoiseSuppression(enabled);
-          })
+          }, "microphone")
       : undefined,
     onStartScreenShare: (options) =>
       void run(async () => {
         if (screenSharing) await client.media.setScreenShareEnabled(false);
         await client.media.setScreenShareEnabled(true, options);
-      }),
+      }, "screen"),
     shareUrl: props.shareUrl,
     isMuted: !microphoneEnabled,
     microphonePending: media.local.microphone.state === "requesting",
@@ -341,12 +346,12 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
           await context.close();
         }
       }),
-    onToggleMute: () => void run(() => client.media.setMicrophoneEnabled(!microphoneEnabled)),
-    onToggleVideo: () => void run(() => client.media.setCameraEnabled(!cameraEnabled)),
-    onAudioInputChange: (deviceId) => void run(() => client.media.selectMicrophone(deviceId)),
+    onToggleMute: () => void run(() => client.media.setMicrophoneEnabled(!microphoneEnabled), "microphone"),
+    onToggleVideo: () => void run(() => client.media.setCameraEnabled(!cameraEnabled), "camera"),
+    onAudioInputChange: (deviceId) => void run(() => client.media.selectMicrophone(deviceId), "microphone"),
     onAudioOutputChange: (deviceId) => void run(() => client.media.selectSpeaker(deviceId)),
-    onVideoInputChange: (deviceId) => void run(() => client.media.selectCamera(deviceId)),
-    onToggleScreenShare: () => void run(() => client.media.setScreenShareEnabled(!screenSharing)),
+    onVideoInputChange: (deviceId) => void run(() => client.media.selectCamera(deviceId), "camera"),
+    onToggleScreenShare: () => void run(() => client.media.setScreenShareEnabled(!screenSharing), "screen"),
     onToggleRecording: () => void run(() => (recordingStatus === "recording" ? client.recording.stop() : client.recording.start())),
     onToggleChat: props.onToggleChat,
     onToggleParticipants: props.onToggleParticipants,

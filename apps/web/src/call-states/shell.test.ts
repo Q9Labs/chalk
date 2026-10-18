@@ -20,6 +20,24 @@ try {
  const page=await context.newPage();
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  const load=async(state='shell-call')=>{await page.goto(origin+'/call-states.html?state='+state);await page.locator('[data-part="call-frame"]').waitFor()};
+ await load('shell-seams');
+ for(const [label,code,source] of [['Mute microphone','media.permission_denied','microphone'],['Turn off camera','media.device_not_found','camera'],['Share screen','client.internal_error','screen']]){
+  await page.getByRole('button',{name:label,exact:true}).filter({visible:true}).click();
+  await page.waitForFunction(({code,source})=>{const failure=JSON.parse(document.querySelector('[aria-label="Shell failure"]').textContent);return failure?.code===code&&failure?.source===source},{code,source});
+ }
+
+ await page.getByRole('button',{name:'Show call link',exact:true}).click();
+ assert.equal(await page.getByRole('button',{name:'Hide call link',exact:true}).getAttribute('aria-pressed'),'true');
+ await page.getByRole('button',{name:'Hide call link',exact:true}).click();
+ assert.equal(await page.getByRole('button',{name:'Show call link',exact:true}).getAttribute('aria-pressed'),'false');
+ await page.setViewportSize({width:390,height:844});
+ await page.getByRole('button',{name:'Call details',exact:true}).click();
+ await page.getByRole('dialog',{name:'Call details',exact:true}).getByRole('button',{name:'Show call link',exact:true}).click();
+ await page.getByRole('dialog',{name:'Call details',exact:true}).waitFor({state:'detached'});
+ await page.getByRole('button',{name:'Call details',exact:true}).click();
+ assert.equal(await page.getByRole('dialog',{name:'Call details',exact:true}).getByRole('button',{name:'Hide call link',exact:true}).getAttribute('aria-pressed'),'true');
+ await page.keyboard.press('Escape');
+ await page.setViewportSize({width:1440,height:900});
  await load();
  await page.getByRole('button',{name:'Call details',exact:true}).click();
  await page.getByRole('button',{name:'Copy link',exact:true}).click();
@@ -31,7 +49,7 @@ try {
  for(const name of ['Select microphone','Select camera']){
   await page.getByRole('button',{name,exact:true}).filter({visible:true}).click();
   await page.keyboard.press('ArrowDown');
-  assert.equal(await page.getByRole('menu').evaluate(el=>el.contains(document.activeElement)),true);
+  await page.waitForFunction(()=>document.querySelector('[role=menu]')?.contains(document.activeElement));
   await page.keyboard.press('End');await page.keyboard.press('Escape');
   await page.getByRole('menu').waitFor({state:'detached'});
   assert.equal(await page.getByRole('button',{name,exact:true}).filter({visible:true}).evaluate(el=>el===document.activeElement),true);

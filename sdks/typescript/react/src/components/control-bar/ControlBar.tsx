@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ChalkIconButton, ChalkTooltip } from "../chalk-ui";
 import { cn } from "../../utils/cn";
-import { CallEnd01Icon, CircleIcon, Edit02Icon, Message01Icon, SmileIcon, UserGroupIcon, Maximize01Icon, Share01Icon, HandIcon, Monitor01Icon } from "../../utils/icons";
+import { CallEnd01Icon, CircleIcon, Edit02Icon, Message01Icon, SmileIcon, UserGroupIcon, Maximize01Icon, HandIcon, Monitor01Icon } from "../../utils/icons";
 import { DevicePopover } from "../device-popover/DevicePopover";
 import { CommandErrorAlert } from "../composite/CommandErrorAlert";
+import { CallLinkIcon } from "./CallLinkIcon";
 import { LeaveMenu } from "./LeaveMenu";
 import { DockLayout } from "./DockLayout";
 import { ShareControl } from "./ShareControl";
@@ -43,6 +44,8 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
     void request?.then(() => setFullscreen(Boolean(document.fullscreenElement))).catch(() => props.onFullscreenError?.());
   };
   const chat = has("chat") && (props.onToggleChat || props.displayOnly) ? iconButton("Chat", <Message01Icon />, props.onToggleChat, props.isChatOpen, props.isChatOpen ? 0 : props.unreadChatCount) : null;
+  const copyLink = () => void navigator.clipboard.writeText(props.shareUrl ?? location.href).catch(() => props.onCopyError?.());
+  const linkLabel = props.onCallLinkToggle ? (props.callLinkOpen ? "Hide call link" : "Show call link") : "Copy call link";
   const reactions = has("reactions") && (props.onOpenReactions || props.displayOnly) ? iconButton("Reactions", <SmileIcon />, props.onOpenReactions, undefined, 0, props.isHandRaised) : null;
   return (
     <div ref={dock} data-part="dock" className={cn("chalk-shell-dock", props.className)} role="toolbar" aria-label="Call controls">
@@ -113,9 +116,9 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           }
           camera={<DevicePopover type="video" isActive={props.isVideoEnabled ?? true} onToggle={props.onToggleVideo ?? (() => {})} devices={effectiveVideoInputDevices} selectedDeviceId={props.selectedVideoInput} onDeviceChange={props.onVideoInputChange ?? (() => {})} orientation="down" />}
         >
-          <button type="button" className="chalk-sheet-row" onClick={() => void navigator.clipboard.writeText(props.shareUrl ?? location.href).catch(() => props.onCopyError?.())}>
-            <Share01Icon />
-            <span>Copy link</span>
+          <button type="button" className="chalk-sheet-row" aria-pressed={props.onCallLinkToggle ? (props.callLinkOpen ?? false) : undefined} onClick={props.onCallLinkToggle ?? copyLink}>
+            <CallLinkIcon />
+            <span>{props.onCallLinkToggle ? linkLabel : "Copy link"}</span>
           </button>
           {has("screenshare") ? (
             <button type="button" className="chalk-sheet-row" onClick={props.onToggleScreenShare}>
@@ -154,7 +157,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           )}
         />
       ) : null}
-      <span className="chalk-shell-corner chalk-shell-people">{iconButton("Copy call link", <Share01Icon />, () => void navigator.clipboard.writeText(props.shareUrl ?? location.href).catch(() => props.onCopyError?.()))}</span>
+      <span className="chalk-shell-corner chalk-shell-people">{iconButton(linkLabel, <CallLinkIcon />, props.onCallLinkToggle ?? copyLink, props.onCallLinkToggle ? (props.callLinkOpen ?? false) : undefined)}</span>
       <span className="chalk-shell-corner chalk-shell-chat">{chat}</span>
     </div>
   );
@@ -165,7 +168,7 @@ export function ControlBar(props: ControlBarProps): React.JSX.Element {
   return (
     <>
       <ControlBarSurface {...surfaceProps} />
-      {!props.onCommandError ? <CommandErrorAlert message={commandError ?? undefined} /> : null}
+      {!props.onCommandError ? <CommandErrorAlert message={commandError?.message} /> : null}
     </>
   );
 }
