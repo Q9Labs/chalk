@@ -80,7 +80,7 @@ export function FoundationKit({ scheme, initialNotice = true }: { readonly schem
         Same node
       </div>
       <ChalkSheet open={sheet} onOpenChange={setSheet} title="More">
-        <div style={{ fontSize: 16 }}>
+        <div style={{ fontSize: 16, display: "flex" }}>
           <ChalkSegmentedControl
             label="Layout"
             value={layout}
