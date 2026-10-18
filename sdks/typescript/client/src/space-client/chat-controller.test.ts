@@ -121,6 +121,16 @@ async function setup(initial: readonly MessageFrame[] = [], localParticipantId =
   return { client, collaboration, sent, requests, head, phase, page, drain, beginSend, acknowledge, catchUpRange, sequences: () => client.getSnapshot().chat.messages.map((item) => item.sequence) };
 }
 
+async function withChatHistory(run: (harness: Awaited<ReturnType<typeof setup>>, messages: MessageFrame[]) => Promise<void>) {
+  const harness = await setup();
+  const messages: MessageFrame[] = [];
+  try {
+    await run(harness, messages);
+  } finally {
+    harness.client.dispose();
+  }
+}
+
 describe("Chat controller catch-up", () => {
   it("repairs the peer message skipped by a higher own-send acknowledgement before the head", async () => {
     const harness = await setup();
@@ -216,31 +226,21 @@ describe("Chat controller catch-up", () => {
     }
   });
 
-  it("keeps normal catch-up cost at zero per own message and one per peer head", async () => {
-    const harness = await setup();
-    const messages: MessageFrame[] = [];
-    try {
+  it("keeps normal catch-up cost at zero per own message and one per peer head", () =>
+    withChatHistory(async (harness, messages) => {
       await harness.catchUpRange(messages, 1, 100, "own");
       expect(harness.sent.filter((frame) => frame.type === "chat_page_request")).toHaveLength(0);
       await harness.catchUpRange(messages, 101, 200, "peer");
       expect(harness.sent.filter((frame) => frame.type === "chat_page_request")).toHaveLength(100);
       expect(harness.sequences()).toEqual(messages.map((item) => item.sequence));
-    } finally {
-      harness.client.dispose();
-    }
-  });
+    }));
 
-  it("keeps own-send catch-up cost at zero when a new Episode starts above sequence 1", async () => {
-    const harness = await setup();
-    const messages: MessageFrame[] = [];
-    try {
+  it("keeps own-send catch-up cost at zero when a new Episode starts above sequence 1", () =>
+    withChatHistory(async (harness, messages) => {
       await harness.catchUpRange(messages, 101, 110, "own", 101);
       expect(harness.sent.filter((frame) => frame.type === "chat_page_request")).toHaveLength(0);
       expect(harness.sequences()).toEqual(messages.map((item) => item.sequence));
-    } finally {
-      harness.client.dispose();
-    }
-  });
+    }));
 
   it("converges on both participants under seeded random acknowledgements, deliveries, heads and reconnects", async () => {
     for (let seed = 1; seed <= 40; seed += 1) {

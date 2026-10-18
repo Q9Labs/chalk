@@ -170,16 +170,18 @@ function boardStylesheet(href: string): Element {
   return link;
 }
 
+function isManagedStylesheet(element: Element): element is HTMLLinkElement {
+  return element instanceof HTMLLinkElement && element.id === STYLESHEET_ID;
+}
+
 function useExternalStylesheet(href: string): ExternalStylesheetState {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (typeof document === "undefined") return;
-
     const element = boardStylesheet(href);
     const fail = () => setError(`Failed to load ${href}`);
-    const ownLink = element instanceof HTMLLinkElement && element.id === STYLESHEET_ID;
+    const ownLink = isManagedStylesheet(element);
     if (!ownLink || element.dataset.state === "loaded") {
       setLoaded(true);
       return;
