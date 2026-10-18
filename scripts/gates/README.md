@@ -2,11 +2,17 @@
 
 `pnpm gate` runs tracker generation checks, then `q9gate run` with Chalk's
 existing checks declared as custom lanes in `gate.config.ts`. `pnpm gate:full`
-runs the same tracker checks followed by `q9gate run --full`. Each gate runs
-with `GOMAXPROCS=1`, `VITEST_MAX_WORKERS=1`, `ERL_FLAGS='+S 1:1'`, and
-q9gate concurrency 1. The testbox wrapper invokes the same commit script through
-`pnpm exec` instead of the one-CPU package alias, allowing Go to use the
-allocated CPUs; Vitest and Erlang remain capped at two workers/schedulers.
+runs the same tracker checks followed by `q9gate run --full`. Local gates retain `GOMAXPROCS=1`, `VITEST_MAX_WORKERS=1`,
+`ERL_FLAGS='+S 1:1'`, and q9gate concurrency 1. In CI (including testbox),
+q9gate runs up to four independent checks at once, bounded by available CPUs.
+`scripts/gates/with-resources.sh` gives Go the available CPUs and gives Vitest and
+Erlang half the available CPUs, capped at four workers (at least one), unless the
+caller sets a limit.
+Package aliases preserve those limits instead of resetting them to one.
+Services, tests, browser tests, builds, and publication checks stay exclusive:
+services compile shared code, declaration/browser tests rebuild packages, and
+publication checks read build outputs. The other checks read source, use unique
+temporary directories, or write only their own ignored outputs (recorder OpenTofu).
 `gate.report.json` records every selected/skipped lane.
 
 The pre-commit hook runs `pnpm gate:fast`: tracker check plus the `scope`, `format`,

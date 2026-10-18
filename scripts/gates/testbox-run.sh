@@ -6,8 +6,8 @@ gate="$1"
 shift
 export CI=true DEBIAN_FRONTEND=noninteractive
 export PATH="/usr/local/go/bin:/opt/elixir/bin:/opt/otp/bin:$PATH"
-export GOFLAGS=-buildvcs=false GOMAXPROCS="$(nproc)" VITEST_MAX_WORKERS=2
-export ERL_FLAGS='+S 2:2'
+export GOFLAGS=-buildvcs=false
+source scripts/gates/with-resources.sh
 step() { printf '\nCHALK_PHASE %s %s\n==> %s — %s\n' "$(date +%s.%N)" "$*" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 trap 'status=$?; step "end exit=$status"' EXIT
 version() { awk -v tool="$1" '$1 == tool {print $2}' .tool-versions; }

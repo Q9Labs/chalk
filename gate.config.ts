@@ -1,7 +1,11 @@
+import { availableParallelism } from "node:os";
 import { defineGate, lanes } from "@q9labsai/gates";
 import { createGatePlan, emptyScopeResult, gatePlanOptions, laneEnvironment, laneGroupLanes, laneResult } from "./scripts/gates/chalk-gate-plan.mjs";
 
-const taskIds = ["self-test", "hygiene", "secrets", "generated", "format", "fallow", "semgrep", "boundaries", "osv", "services", "contracts", "image-size", "syncpack", "types", "tests", "browser-tests", "build", "recorder", "publint", "attw"];
+const taskIds = ["self-test", "hygiene", "secrets", "generated", "format", "fallow", "semgrep", "boundaries", "osv", "contracts", "image-size", "syncpack", "types", "recorder", "services", "tests", "browser-tests", "build", "publint", "attw"];
+// Services compile shared code; tests can build declarations; browser tests rebuild packages.
+// Keep their writes, the build, and its publication readers behind exclusive barriers.
+const exclusiveIds = new Set(["services", "tests", "browser-tests", "build", "publint", "attw"]);
 // Format is always on so documentation-only changes are still checked.
 const alwaysIds = new Set(["self-test", "hygiene", "secrets", "generated", "format"]);
 const sharedTargetRoots = [
@@ -38,7 +42,7 @@ const chalkLanes = taskIds.map((id) =>
   lanes.custom({
     id,
     title: `Chalk ${id}`,
-    exclusive: true,
+    exclusive: exclusiveIds.has(id),
     triggers: alwaysIds.has(id) ? "always" : (context) => chalkPlan(context).tasks.some((task) => task.id === id && task.selected),
     run: async (context) => {
       const task = chalkPlan(context).tasks.find((candidate) => candidate.id === id);
@@ -72,7 +76,8 @@ export default defineGate({
     infra: ["infrastructure/"],
     contract: ["contract/"],
   },
-  concurrency: 1,
+  // Local hooks retain their resource limit; CI/testbox overlap only independent checks.
+  concurrency: process.env.CI === "true" || process.env.CI === "1" ? Math.min(4, availableParallelism()) : 1,
   // CI sets GATE_LANE_GROUP to run one lane group per job.
   lanes: laneGroupLanes([emptyScopeLane, ...chalkLanes, lanes.depcruise({ config: ".dependency-cruiser.cjs", source: "." })], process.env.GATE_LANE_GROUP),
 });
