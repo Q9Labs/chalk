@@ -128,6 +128,7 @@ function SpaceExperience(
   const [retryPending, setRetryPending] = useState(false);
   const [episodeEnded, setEpisodeEnded] = useState(false);
   const [handledTerminal, setHandledTerminal] = useState<ChalkProps["terminalState"]>(undefined);
+  useEffect(() => setHandledTerminal(undefined), [props.terminalState]);
   const spaceName = props.spaceName ?? props.space ?? "Space";
   if (previousClient.current !== client) {
     previousClient.current = client;
