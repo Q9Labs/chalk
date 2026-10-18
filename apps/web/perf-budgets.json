@@ -32,7 +32,9 @@
     "jsGzipKiB": 743,
     "cssGzipKiB": 54,
     "routeJsGzipKiB": 464,
-    "routeCssGzipKiB": 32
+    "routeCssGzipKiB": 32,
+    "videoDroppedFramePercent": 5,
+    "layoutShift": 0.05
   },
   "scenarios": {
     "laptop": {
@@ -45,7 +47,9 @@
         "heapMiB": 16,
         "domNodes": 1920,
         "jsGzipKiB": 382,
-        "cssGzipKiB": 54
+        "cssGzipKiB": 54,
+        "videoDroppedFramePercent": 5,
+        "layoutShift": 0.05
       },
       "grid-24": {
         "frameP95Ms": 120,
@@ -56,7 +60,9 @@
         "heapMiB": 16,
         "domNodes": 6543,
         "jsGzipKiB": 382,
-        "cssGzipKiB": 54
+        "cssGzipKiB": 54,
+        "videoDroppedFramePercent": 5,
+        "layoutShift": 0.05
       },
       "panels": {
         "frameP95Ms": 101,
@@ -67,7 +73,9 @@
         "heapMiB": 17,
         "domNodes": 2455,
         "jsGzipKiB": 382,
-        "cssGzipKiB": 54
+        "cssGzipKiB": 54,
+        "videoDroppedFramePercent": 5,
+        "layoutShift": 0.05
       },
       "spotlight-share": {
         "frameP95Ms": 120,
@@ -78,7 +86,9 @@
         "heapMiB": 15,
         "domNodes": 2215,
         "jsGzipKiB": 382,
-        "cssGzipKiB": 54
+        "cssGzipKiB": 54,
+        "videoDroppedFramePercent": 5,
+        "layoutShift": 0.05
       },
       "board": {
         "frameP95Ms": 110,
@@ -89,7 +99,9 @@
         "heapMiB": 19,
         "domNodes": 2290,
         "jsGzipKiB": 743,
-        "cssGzipKiB": 54
+        "cssGzipKiB": 54,
+        "videoDroppedFramePercent": 5,
+        "layoutShift": 0.05
       },
       "reactions": {
         "frameP95Ms": 130,
@@ -100,7 +112,9 @@
         "heapMiB": 16,
         "domNodes": 1993,
         "jsGzipKiB": 382,
-        "cssGzipKiB": 54
+        "cssGzipKiB": 54,
+        "videoDroppedFramePercent": 5,
+        "layoutShift": 0.05
       },
       "reconnect": {
         "frameP95Ms": 130,
@@ -111,7 +125,9 @@
         "heapMiB": 16,
         "domNodes": 1947,
         "jsGzipKiB": 382,
-        "cssGzipKiB": 54
+        "cssGzipKiB": 54,
+        "videoDroppedFramePercent": 5,
+        "layoutShift": 0.05
       },
       "first-load": {
         "frameP95Ms": 159,
@@ -123,7 +139,9 @@
         "domNodes": 1920,
         "firstCallMs": 1861,
         "jsGzipKiB": 382,
-        "cssGzipKiB": 54
+        "cssGzipKiB": 54,
+        "videoDroppedFramePercent": 5,
+        "layoutShift": 0.05
       }
     },
     "phone": {
@@ -136,7 +154,9 @@
         "heapMiB": 15,
         "domNodes": 1968,
         "jsGzipKiB": 382,
-        "cssGzipKiB": 54
+        "cssGzipKiB": 54,
+        "videoDroppedFramePercent": 5,
+        "layoutShift": 0.05
       },
       "grid-24": {
         "frameP95Ms": 47,
@@ -147,7 +167,9 @@
         "heapMiB": 16,
         "domNodes": 6593,
         "jsGzipKiB": 382,
-        "cssGzipKiB": 54
+        "cssGzipKiB": 54,
+        "videoDroppedFramePercent": 5,
+        "layoutShift": 0.05
       },
       "panels": {
         "frameP95Ms": 82,
@@ -158,7 +180,9 @@
         "heapMiB": 17,
         "domNodes": 2318,
         "jsGzipKiB": 382,
-        "cssGzipKiB": 54
+        "cssGzipKiB": 54,
+        "videoDroppedFramePercent": 5,
+        "layoutShift": 0.05
       },
       "spotlight-share": {
         "frameP95Ms": 47,
@@ -169,7 +193,9 @@
         "heapMiB": 16,
         "domNodes": 2233,
         "jsGzipKiB": 382,
-        "cssGzipKiB": 54
+        "cssGzipKiB": 54,
+        "videoDroppedFramePercent": 5,
+        "layoutShift": 0.05
       },
       "board": {
         "frameP95Ms": 44,
@@ -180,7 +206,9 @@
         "heapMiB": 19,
         "domNodes": 2554,
         "jsGzipKiB": 743,
-        "cssGzipKiB": 54
+        "cssGzipKiB": 54,
+        "videoDroppedFramePercent": 5,
+        "layoutShift": 0.05
       },
       "reactions": {
         "frameP95Ms": 47,
@@ -191,7 +219,9 @@
         "heapMiB": 16,
         "domNodes": 2040,
         "jsGzipKiB": 382,
-        "cssGzipKiB": 54
+        "cssGzipKiB": 54,
+        "videoDroppedFramePercent": 5,
+        "layoutShift": 0.05
       },
       "reconnect": {
         "frameP95Ms": 47,
@@ -202,7 +232,9 @@
         "heapMiB": 16,
         "domNodes": 1994,
         "jsGzipKiB": 382,
-        "cssGzipKiB": 54
+        "cssGzipKiB": 54,
+        "videoDroppedFramePercent": 5,
+        "layoutShift": 0.05
       },
       "first-load": {
         "frameP95Ms": 110,
@@ -214,7 +246,55 @@
         "domNodes": 1968,
         "firstCallMs": 2499,
         "jsGzipKiB": 382,
-        "cssGzipKiB": 54
+        "cssGzipKiB": 54,
+        "videoDroppedFramePercent": 5,
+        "layoutShift": 0.05
+      }
+    }
+  },
+  "leaks": {
+    "cycles": 20,
+    "settleMs": 600,
+    "metrics": {
+      "heapMiB": {
+        "perCycle": 0.025,
+        "allowance": 1
+      },
+      "domNodes": {
+        "perCycle": 0.1,
+        "allowance": 8
+      },
+      "listeners": {
+        "perCycle": 0.1,
+        "allowance": 4
+      },
+      "documents": {
+        "perCycle": 0,
+        "allowance": 0
+      },
+      "videos": {
+        "perCycle": 0,
+        "allowance": 0
+      },
+      "audios": {
+        "perCycle": 0,
+        "allowance": 0
+      },
+      "liveTracks": {
+        "perCycle": 0,
+        "allowance": 0
+      },
+      "audioContexts": {
+        "perCycle": 0,
+        "allowance": 0
+      },
+      "intervals": {
+        "perCycle": 0,
+        "allowance": 0
+      },
+      "animationFrames": {
+        "perCycle": 0.05,
+        "allowance": 1
       }
     }
   }

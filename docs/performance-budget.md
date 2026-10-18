@@ -250,3 +250,86 @@ and DOM headroom are deliberately conservative until the integrated redesign is 
 - [CDP CPU slowdown](https://chromedevtools.github.io/devtools-protocol/tot/Emulation/#method-setCPUThrottlingRate).
 - [CDP performance metrics](https://chromedevtools.github.io/devtools-protocol/tot/Performance/#method-getMetrics).
 - [Event Timing specification](https://www.w3.org/TR/event-timing/): 16 ms observation floor and quantized durations.
+
+## Leaks
+
+Full testbox performance gates also run eight lifecycle journeys: leave/rejoin,
+Chat/People open/close, participant join/leave, share start/stop, board open/close,
+reconnecting/recovered, Spotlight/Grid, and a 24-reaction burst. Each runs once to
+warm caches, then 20 times in the **same document**. Leave is sampled while left;
+the next cycle rejoins before leaving again. Other journeys return to their
+initial UI state. No reload can discard evidence between cycles.
+
+Each sample waits 600 ms for effect/animation teardown, collects garbage through
+CDP, yields another 80 ms, and collects again. Reaction cycles additionally wait
+4.3 seconds for the four-second burst expiry. Board warm-up waits for its lazy
+canvas. Counts are collected without holding application objects strongly:
+
+- `heapMiB`: V8 JS heap after collection; excludes GPU, canvas/native video
+  buffers, browser process memory and most decoder memory.
+- `domNodes`, `listeners`, `documents`: CDP DOM counters, including detached
+  nodes/listeners still retained by JavaScript, not just attached DOM queries.
+- `videos`, `audios`: media elements still attached to the document.
+- `liveTracks`: distinct non-ended track wrappers observed through canvas/media
+  capture, media-device calls, stream additions, track cloning and Web Audio
+  destinations. Weak references do not prevent collection. This is not a native
+  media-process census or an instrumentation of arbitrary third-party realms.
+- `audioContexts`: observed AudioContexts that have not closed, including suspended
+  contexts. Closed contexts do not count.
+- `intervals`: scheduled intervals not cancelled. `animationFrames`: outstanding
+  callbacks, including self-rescheduling animation loops. A pending one-shot RAF
+  can vary by one; these counters measure scheduled work, not CPU consumption.
+
+`apps/web/perf-budgets.json` owns the cycle count, settle delay and per-metric
+budgets. Ordinary least-squares slope includes the warm baseline (cycle zero).
+A journey fails if **either** slope exceeds `perCycle` or any subsequent sample
+exceeds baseline plus `allowance`. Thus a fixed leak cannot hide behind a flat
+slope, and slow sustained growth cannot hide behind fixed headroom. After full
+leave, tracks and AudioContexts must be exactly zero even if unchanged from the
+warm baseline. Missing measurements and invalid budgets fail closed.
+
+The fixture owns synthetic canvas sources and paint intervals; full leave clears
+its snapshot, stops those sources and clears their intervals. It does not stop
+SDK-owned track clones, close SDK AudioContexts or clear SDK timers. While joined,
+synthetic camera/share sources are cached under fixed names; warm-up includes
+those caches. These are preview-client UI lifecycles, not a live client's network
+join/leave or WebRTC teardown proof. Excalidraw's first-open module/cache allocation
+belongs before baseline. Growth on later opens must still pass the same limits.
+
+On failure only, `artifacts/call-leaks/*.heapsnapshot` holds a Chromium snapshot.
+Load it in DevTools **Memory → Load**, use Comparison against a separately captured
+baseline when needed, and inspect retainers of detached nodes. The report prints
+native detached-node count and the largest retained object types. Diagnostic
+summaries compute dominators over strong edges: `largestRetainedBytes` is the
+largest individual retained subtree for that type (not a sum of overlapping
+subtrees); `shallowBytes` totals the type's own allocations. Snapshots can contain
+application data: keep artifacts out of Git. Clean runs take no snapshots.
+
+`--self-test` runs panel cycles with two independent faults: an unreleased document
+listener per panel open and retained detached sections per panel open. Each must
+fail its actual count budget and generate evidence. An uninjected panel run must
+then pass. Expected injected failures do not themselves fail the gate.
+
+For calibration (three full repetitions of every journey), after building the
+harness on testbox:
+
+```sh
+node apps/web/scripts/check-call-performance.mjs --skip-build --leaks-only --leak-repeats 3 --self-test --out artifacts/leaks-calibration.json
+```
+
+Leak runs use an unthrottled desktop viewport to reduce timer/teardown timing
+noise; timing scenarios still exercise both CPU-throttled device profiles.
+Budgets are provisional until the calibration evidence below is filled in; do
+not widen a count budget to absorb a real leak. Finite 20-cycle tests cannot
+prove absence of slower leaks, browser/native leaks, production SDK media leaks,
+or leaks triggered only by real transports, device changes or long sessions.
+
+### Additional rendering signals
+
+Timing scenarios also record `videoDroppedFramePercent` from visible videos'
+`getVideoPlaybackQuality()` counter deltas (not compositor frame estimates), and
+`layoutShift` from layout-shift entries during the measurement window. The latter
+includes recent-input entries deliberately: a panel-induced jump is still a jump.
+Transform motion does not contribute. A zero video denominator means no decoded
+frames were measured, not perfect playback; the report retains frame counts.
+The provisional limits are 5% decoder drops and 0.05 cumulative shift per window.
