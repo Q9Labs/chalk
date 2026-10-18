@@ -24,7 +24,7 @@ export function sessionDay(iso: string, now = Date.now()): string {
   const days = daysBefore(iso, now);
   if (days === 0) return "Today";
   if (days === 1) return "Yesterday";
-  return weekdayShort.format(new Date(iso)).replace(",", "");
+  return weekdayShort.format(new Date(iso)).replace(",", "").replace("Sept", "Sep");
 }
 
 /** "Sunday 18 October" */
@@ -35,12 +35,12 @@ export function longDay(iso: string): string {
 /** "12 Oct" this year, "2 Sep 2027" otherwise. */
 export function shortDate(iso: string, now = Date.now()): string {
   const date = new Date(iso);
-  return date.getFullYear() === new Date(now).getFullYear() ? dayMonth.format(date) : dayMonthYear.format(date);
+  return (date.getFullYear() === new Date(now).getFullYear() ? dayMonth.format(date) : dayMonthYear.format(date)).replace("Sept", "Sep");
 }
 
 /** "2 Sep 2027" */
 export function fullDate(iso: string): string {
-  return dayMonthYear.format(new Date(iso));
+  return dayMonthYear.format(new Date(iso)).replace("Sept", "Sep");
 }
 
 /** Whole minutes between two instants: "46 min", "1 h 5 min". */

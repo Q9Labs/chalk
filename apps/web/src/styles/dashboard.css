@@ -1697,6 +1697,14 @@
   max-width: 560px;
 }
 
+.site .dash .sihead .lockup {
+  font-size: 26px;
+}
+
+.site .dash .topb .lockup {
+  font-size: 22px;
+}
+
 @media (max-width: 1365px) {
   .site .dash .main {
     padding: 28px 40px 72px;
@@ -1712,6 +1720,14 @@
 }
 
 @media (max-width: 640px) {
+  .site .dash .sihead .lockup {
+    font-size: 22px;
+  }
+
+  .site .dash .topb .lockup {
+    font-size: 20px;
+  }
+
   .site .dash .btn {
     height: 40px;
   }

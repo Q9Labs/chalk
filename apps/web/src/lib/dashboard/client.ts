@@ -126,8 +126,11 @@ export async function act<P extends DashboardPage, A extends Pages[P]["action"]>
 
 async function send<T>(request: () => Promise<Response>): Promise<T> {
   let response = await request();
-  if (response.status === 401 && errorCode(await readJSON(response.clone())) === "refresh_or_sign_in_required") {
-    await refreshSession();
+  const expired: unknown = response.status === 401 ? await readJSON(response.clone()) : null;
+  if (errorCode(expired) === "refresh_or_sign_in_required") {
+    if (isRefreshRequired(expired)) csrfToken = expired.csrfToken;
+    // Refresh needs the CSRF token; a fresh tab gets it from the session check, which refreshes too.
+    await (csrfToken ? refreshSession() : loadSession());
     response = await request();
   }
   if (!response.ok) throw toError(response, await readJSON(response));
