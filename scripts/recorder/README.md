@@ -10,10 +10,13 @@ artifact bucket. Conditional upload and S3 SHA256 checks bind immutable bytes.
 Media members retain the base snapshot, archive key and SHA256, installed-file
 manifest digest, source and recorder release ID.
 
-The controller signs a ten-minute GET using its host role. Cloud-init stages and
-checks the archive, renames a new release directory, switches `current`, then runs
-the existing bootstrap. Installed-file verification still precedes identity and
-control-plane contact. No AWS credentials are installed on the recorder.
+The controller signs a GET using its host role. The URL lasts for the configured
+startup timeout plus five minutes, and signing fails if the host credentials
+expire sooner. Qualification probes sign for their remaining deadline instead.
+Cloud-init stages and checks the archive, renames a new release directory,
+switches `current`, then runs the existing bootstrap. Installed-file verification
+still precedes identity and control-plane contact. No AWS credentials are
+installed on the recorder.
 
 Promote preserves held media JSON unchanged. It verifies and copies exact archives
 to the production artifact bucket and verifies their SHA256 again. It never
