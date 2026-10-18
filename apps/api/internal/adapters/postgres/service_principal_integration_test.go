@@ -110,6 +110,15 @@ func TestServicePrincipalHTTPIsolationAndAtomicTenantCreation(t *testing.T) {
 	if !bytes.Equal(original, repeated) {
 		t.Fatalf("repeat changed Tenant: %s / %s", original, repeated)
 	}
+	// PostgreSQL text cannot store NUL or invalid UTF-8, so those ids are invalid fields, not server errors.
+	expect(first, "POST", "/v1/tenants", oldSecret, `{"name":"Bad","external_id":"a\u0000b"}`, http.StatusBadRequest)
+	for _, bad := range []string{"a%00b", "a%ffb"} {
+		expect(first, "GET", "/v1/tenants/by-external-id?external_id="+bad, oldSecret, "", http.StatusBadRequest)
+	}
+	// The limits count characters, so 200 three-byte characters (600 bytes) are a valid id.
+	multibyteID := strings.Repeat("\u4e16", 200)
+	expect(first, "POST", "/v1/tenants", oldSecret, fmt.Sprintf(`{"name":"Multibyte","external_id":%q}`, multibyteID), http.StatusCreated)
+	expect(first, "GET", "/v1/tenants/by-external-id?external_id="+url.QueryEscape(multibyteID), oldSecret, "", http.StatusOK)
 	// Every non-CORS field is forbidden by presence, including null and mixed patches.
 	for _, field := range []string{"external_id", "created_by_service_id", "id", "future_setting", "Name", "name", "default_media_plane", "media_plane_provider_config", "storage_provider_config", "logo_key", "website", "transcription_ceiling", "transcription_default_mode", "provider_policy_version", "recording_retention_seconds", "transcript_retention_seconds", "transcription_source_window_seconds"} {
 		for _, patch := range []string{fmt.Sprintf(`{"%s":null}`, field), fmt.Sprintf(`{"cors_allowed_origins":["https://forbidden.example"],"%s":null}`, field)} {

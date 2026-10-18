@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
@@ -358,10 +359,18 @@ func prepareUpdateNullableFields(input *UpdateTenantInput) error {
 }
 
 func ValidServiceID(id string) bool {
-	return len(id) > 0 && len(id) <= 128 && strings.TrimSpace(id) == id
+	return validStoredText(id, 128)
 }
+
 func ValidExternalID(id string) bool {
-	return len(id) > 0 && len(id) <= 512 && strings.TrimSpace(id) == id
+	return validStoredText(id, 512)
+}
+
+// The limits count characters, as PostgreSQL length() and the OpenAPI maxLength do.
+// PostgreSQL text cannot hold NUL or invalid UTF-8, so reject them here instead of at the database.
+func validStoredText(value string, maxCharacters int) bool {
+	characters := utf8.RuneCountInString(value)
+	return characters > 0 && characters <= maxCharacters && strings.TrimSpace(value) == value && utf8.ValidString(value) && !strings.ContainsRune(value, 0)
 }
 
 func (s Service) ListServiceTenants(ctx context.Context, serviceID string, page pagination.PageRequest) (TenantList, error) {
