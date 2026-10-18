@@ -20,3 +20,5 @@ Use `getEpisodeAttendance` (`GET /v1/tenants/{tenant_id}/spaces/{space_id}/episo
 ### Use generated clients carefully
 
 The TypeScript client has generated HTTP and schema modules for server-side use. Keep Tenant credentials and webhook management on the server. For a live Space, use `SpaceClient` and its AccessGrant boundary instead of issuing Participant media or Sync requests directly.
+
+Your backend can call `admitEpisodeParticipant` with `admission: "direct"` to admit a Participant and receive access without applying the Space’s `open`, `knock`, or `members_only` admission gate. Omit `admission` (or send `"policy"`) to retain policy-based admission; direct admission still requires `episodes:write` and all normal Tenant, Episode, role, and capacity checks.

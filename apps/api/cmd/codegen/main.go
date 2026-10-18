@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
+	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
@@ -657,6 +658,10 @@ func requestFieldAllowsEmpty(schemaName string, fieldName string) bool {
 
 func fieldEnum(schemaName string, fieldName string) []string {
 	switch fieldName {
+	case "admission":
+		if schemaName == "AdmitEpisodeParticipantRequest" {
+			return []string{string(episodes.AdmissionPolicy), string(episodes.AdmissionDirect)}
+		}
 	case "role":
 		switch schemaName {
 		case "Membership", "MembershipList", "CreateMembershipRequest", "UpdateMembershipRequest":
