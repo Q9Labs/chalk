@@ -446,7 +446,9 @@ func renderRecorderCloudInit(request recorderfleet.EnsureNodeRequest, archiveURL
 		SHA256         string `json:"sha256"`
 		ReleaseID      string `json:"release_id"`
 		ManifestDigest string `json:"manifest_digest"`
-	}{archiveURL, request.Release.Archive.SHA256, request.Release.ReleaseID, request.Release.ImageDigest})
+		Endpoint       string `json:"endpoint"`
+		BootGeneration uint64 `json:"boot_generation"`
+	}{archiveURL, request.Release.Archive.SHA256, request.Release.ReleaseID, request.Release.ImageDigest, request.Release.BootstrapEndpoint, request.BootGeneration})
 	if err != nil {
 		return "", err
 	}

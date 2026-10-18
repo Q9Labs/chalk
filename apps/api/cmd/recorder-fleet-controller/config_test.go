@@ -45,6 +45,7 @@ func TestLoadCommandConfigFailsClosedWithoutRequiredInputs(t *testing.T) {
 
 	environment = validCommandEnvironment()
 	environment["CHALK_RECORDER_FLEET_ROLE"] = "render"
+	environment["CHALK_RECORDER_FLEET_ARCHIVE_KEY"] = strings.ReplaceAll(environment["CHALK_RECORDER_FLEET_ARCHIVE_KEY"], "/capture/", "/render/")
 	if _, err := loadCommandConfig(nil, func(key string) string { return environment[key] }); !errors.Is(err, recorderfleet.ErrInvalidConfig) {
 		t.Fatalf("render pool with capture limit error = %v", err)
 	}
@@ -60,6 +61,7 @@ func TestLoadCommandConfigBuildsCPURenderPool(t *testing.T) {
 	t.Parallel()
 	environment := validCommandEnvironment()
 	environment["CHALK_RECORDER_FLEET_ROLE"] = "render"
+	environment["CHALK_RECORDER_FLEET_ARCHIVE_KEY"] = strings.ReplaceAll(environment["CHALK_RECORDER_FLEET_ARCHIVE_KEY"], "/capture/", "/render/")
 	environment["CHALK_RECORDER_FLEET_MAX_NODES"] = "10"
 	environment["CHALK_RECORDER_FLEET_SLOTS_PER_NODE"] = "1"
 	environment["CHALK_RECORDER_FLEET_REGION"] = "nyc1"
@@ -178,6 +180,7 @@ func TestNightlyExamplesLoadActualControllerConfig(t *testing.T) {
 				}
 			}
 			environment["CHALK_RECORDER_FLEET_ROLE"] = role
+			environment["CHALK_RECORDER_FLEET_ARCHIVE_KEY"] = "recorder/" + role + "/" + environment["CHALK_RECORDER_FLEET_ARCHIVE_SHA256"] + ".tar.gz"
 			environment["CHALK_RECORDER_FLEET_MAX_NODES"] = "1"
 			environment["CHALK_RECORDER_FLEET_SLOTS_PER_NODE"] = "1"
 			config, err := loadCommandConfig(nil, func(key string) string { return environment[key] })

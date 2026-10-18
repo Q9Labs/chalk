@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/recorderbootstrapprotocol"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
@@ -391,5 +392,85 @@ func TestInspectNodeWaitsForPublicIPButRejectsInvalidInventory(t *testing.T) {
 				t.Fatalf("ready retry = %v/%v", ip, err)
 			}
 		})
+	}
+}
+
+func TestArchiveFailureProofMatchesIssuerProtocol(t *testing.T) {
+	for _, reason := range []string{"archive_download_failed", "archive_verification_failed", "archive_extraction_failed", "archive_install_failed"} {
+		t.Run(reason, func(t *testing.T) {
+			program := string(recorderInstaller) + `
+with tempfile.TemporaryDirectory() as directory:
+    print(json.dumps(signed_diagnostic(dict(release_id='selected-release', manifest_digest='sha256:'+'a'*64, boot_generation=2), '12345', sys.argv[1], Path(directory))))
+`
+			// Load the cloud-init payload without invoking its CLI entrypoint.
+			program = strings.Replace(program, "if __name__ == '__main__':", "if False:", 1)
+			command := exec.Command("python3", "-c", program, reason)
+			output, err := command.CombinedOutput()
+			if err != nil {
+				t.Fatalf("archive diagnostic signing: %v: %s", err, output)
+			}
+			var request recorderbootstrapprotocol.DiagnosticRequest
+			if err := json.Unmarshal(output, &request); err != nil {
+				t.Fatal(err)
+			}
+			if err := recorderbootstrapprotocol.VerifyDiagnosticProof(request); err != nil {
+				t.Fatalf("issuer rejected archive diagnostic: %v", err)
+			}
+			if request.Diagnostic.Step != "install" || request.Diagnostic.LastReasonCode != reason {
+				t.Fatalf("wrong archive failure: %+v", request.Diagnostic)
+			}
+			request.Diagnostic.LastReasonCode = "archive_install_failed_secret_detail"
+			if err := recorderbootstrapprotocol.VerifyDiagnosticProof(request); err == nil {
+				t.Fatal("unbounded failure reason accepted")
+			}
+		})
+	}
+}
+
+func TestArchiveFailureReportsToExistingHTTPSDiagnosticPath(t *testing.T) {
+	retained := make(chan recorderbootstrapprotocol.DiagnosticRequest, 1)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/metadata" {
+			_, _ = w.Write([]byte("12345"))
+			return
+		}
+		if r.Method != http.MethodPost || r.URL.Path != recorderbootstrapprotocol.DiagnosticPath {
+			http.NotFound(w, r)
+			return
+		}
+		var request recorderbootstrapprotocol.DiagnosticRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+			w.WriteHeader(400)
+			return
+		}
+		if err := recorderbootstrapprotocol.VerifyDiagnosticProof(request); err != nil {
+			t.Error(err)
+			w.WriteHeader(403)
+			return
+		}
+		retained <- request
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	caPath := filepath.Join(t.TempDir(), "ca.pem")
+	if err := os.WriteFile(caPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}), 0600); err != nil {
+		t.Fatal(err)
+	}
+	program := strings.Replace(string(recorderInstaller), "if __name__ == '__main__':", "if False:", 1) + `
+report_failure(dict(release_id='selected-release', manifest_digest='sha256:'+'a'*64, boot_generation=2, endpoint=sys.argv[1]+'/ignored/path'), 'archive_download_failed', sys.argv[1]+'/metadata', sys.argv[2])
+`
+	command := exec.Command("python3", "-c", program, server.URL, caPath)
+	command.Env = append(os.Environ(), "SSL_CERT_FILE="+caPath)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("report archive failure: %v: %s", err, output)
+	}
+	select {
+	case request := <-retained:
+		if request.Diagnostic.LastReasonCode != "archive_download_failed" {
+			t.Fatalf("retained wrong diagnostic: %+v", request)
+		}
+	default:
+		t.Fatal("archive failure was not retained")
 	}
 }

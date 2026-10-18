@@ -277,8 +277,10 @@ func Run(ctx context.Context, input Input, token string) (Output, error) {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	defer transport.CloseIdleConnections()
 	adapter, err := digitalocean.NewRecorderFleet(digitalocean.RecorderFleetConfig{
-		PresignArchive: recorderarchive.Presign,
-		Token:          token, Environment: input.Environment, Role: input.Role, OwnerTag: input.OwnerTag,
+		PresignArchive: func(ctx context.Context, archive recorderfleet.ArchiveSpec) (string, error) {
+			return recorderarchive.Presign(ctx, archive, time.Until(input.MutationDeadline))
+		},
+		Token: token, Environment: input.Environment, Role: input.Role, OwnerTag: input.OwnerTag,
 		ProjectID: input.ProjectID, VPCUUID: input.VPCUUID, SSHKeyIDs: input.SSHKeyIDs,
 		HTTPClient: &http.Client{Transport: evidenceTransport{next: transport, path: input.EvidencePath, deadline: input.MutationDeadline, diagnosticSSHKeyID: input.DiagnosticSSHKeyID, evidenceBootCommand: input.EvidenceBootCommand}, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 	})

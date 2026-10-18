@@ -45,7 +45,7 @@ type BootstrapDiagnostic struct {
 func (diagnostic BootstrapDiagnostic) Validate() error {
 	if diagnostic.SchemaVersion != BootstrapDiagnosticSchemaVersion || diagnostic.AttemptCount == 0 ||
 		!slices.Contains([]string{"registration", "challenge", "certificate", "bootstrap", "install"}, diagnostic.Step) ||
-		!slices.Contains([]string{"registration_pending", "registration_deadline_exceeded", "http_status", "deadline_exceeded", "challenge_unavailable", "certificate_unavailable", "bootstrap_unavailable", "bootstrap.challenge_unavailable", "bootstrap.bootstrap_unavailable"}, diagnostic.LastReasonCode) ||
+		!slices.Contains([]string{"registration_pending", "registration_deadline_exceeded", "http_status", "deadline_exceeded", "challenge_unavailable", "certificate_unavailable", "bootstrap_unavailable", "bootstrap.challenge_unavailable", "bootstrap.bootstrap_unavailable", "archive_download_failed", "archive_verification_failed", "archive_extraction_failed", "archive_install_failed"}, diagnostic.LastReasonCode) ||
 		diagnostic.LastHTTPStatus < 0 || diagnostic.LastHTTPStatus > 599 || diagnostic.LastHTTPStatus > 0 && diagnostic.LastHTTPStatus < 100 {
 		return ErrInvalidConfig
 	}
@@ -181,10 +181,13 @@ func (c Config) Validate() error {
 	if err := c.Key.Validate(); err != nil {
 		return err
 	}
-	if !validTag(c.OwnerTag) || c.MaxNodes <= 0 || c.MaxNodes > 21 || c.SlotsPerNode <= 0 || c.SlotsPerNode > 100 || c.DemandMaxAge <= 0 || c.ObservationMaxAge <= 0 || c.StartupTimeout <= 0 || c.DrainTimeout <= 0 || c.HealthRefresh <= 0 || c.HealthRefresh > c.ObservationMaxAge {
+	if !validTag(c.OwnerTag) || c.MaxNodes <= 0 || c.MaxNodes > 21 || c.SlotsPerNode <= 0 || c.SlotsPerNode > 100 || c.DemandMaxAge <= 0 || c.ObservationMaxAge <= 0 || c.StartupTimeout <= 0 || c.StartupTimeout > 7*24*time.Hour-5*time.Minute || c.DrainTimeout <= 0 || c.HealthRefresh <= 0 || c.HealthRefresh > c.ObservationMaxAge {
 		return ErrInvalidConfig
 	}
 	if c.Key.Role == workeridentity.RoleCapture && c.MaxNodes > 11 || c.Key.Role == workeridentity.RoleRender && c.MaxNodes > 10 {
+		return ErrInvalidConfig
+	}
+	if c.Release.Archive.Key != "recorder/"+string(c.Key.Role)+"/"+c.Release.Archive.SHA256+".tar.gz" {
 		return ErrInvalidConfig
 	}
 	return c.Release.Validate()

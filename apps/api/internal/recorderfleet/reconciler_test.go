@@ -408,6 +408,7 @@ func TestReconcilerDrainingIdentityWaitsForLeaseEvidence(t *testing.T) {
 				fixture.config.Now = func() time.Time { return fixture.now }
 				fixture.demand.value = Demand{Revision: "drain", ObservedAt: fixture.now}
 				fixture.config.Key.Role = workeridentity.RoleRender
+				fixture.config.Release.Archive.Key = "recorder/render/" + fixture.config.Release.Archive.SHA256 + ".tar.gz"
 				fixture.config.MaxNodes = 2
 				fixture.config.SlotsPerNode = 1
 				fixture.provider.config = fixture.config
@@ -486,6 +487,7 @@ func TestReconcilerScaleDownPrefersObservedIdleNode(t *testing.T) {
 		t.Run(fmt.Sprintf("busy observed=%t", busyObserved), func(t *testing.T) {
 			fixture := newFleetFixture(t)
 			fixture.config.Key.Role = workeridentity.RoleRender
+			fixture.config.Release.Archive.Key = "recorder/render/" + fixture.config.Release.Archive.SHA256 + ".tar.gz"
 			fixture.config.MaxNodes = 2
 			fixture.config.SlotsPerNode = 1
 			fixture.provider.config = fixture.config
