@@ -9,7 +9,7 @@ import { PEOPLE, SPACE_NAME, createCallStateClient, liveSnapshot } from "./fixtu
 import type { CallState } from "./states";
 
 type Terminal = ChalkProps["terminalState"] | "left" | "episode-ended" | "failed";
-function StatesCall({ terminal, light = false, ready = false, reconnecting = false }: { readonly terminal?: Terminal; readonly light?: boolean; readonly ready?: boolean; readonly reconnecting?: boolean }) {
+function StatesCall({ terminal, light = false, ready = false, reconnecting = false, reportProblem = false }: { readonly terminal?: Terminal; readonly light?: boolean; readonly ready?: boolean; readonly reconnecting?: boolean; readonly reportProblem?: boolean }) {
   const [reason, setReason] = useState(terminal);
   const client = useMemo(() => {
     const initial = liveSnapshot({ others: ready ? [] : PEOPLE.slice(0, 1) });
@@ -34,6 +34,13 @@ function StatesCall({ terminal, light = false, ready = false, reconnecting = fal
         terminalState={terminalState}
         theme={{ colorScheme: light ? "light" : "dark" }}
         onRejoin={rejoin}
+        onReportProblem={
+          reportProblem
+            ? () => {
+                location.hash = "report";
+              }
+            : undefined
+        }
         onHome={() => {
           location.hash = "home";
         }}
@@ -228,5 +235,7 @@ export const STATES_LANE: readonly CallState[] = [
   ...(["left", "episode-ended", "failed", "removed", "full", "elsewhere"] as const).flatMap((terminal) => [
     { id: `states-${terminal}`, title: terminal, render: () => <StatesCall terminal={terminal} /> },
     { id: `states-${terminal}-light`, title: `${terminal} Light`, render: () => <StatesCall terminal={terminal} light /> },
+    { id: `states-${terminal}-report`, title: `${terminal} with report action`, render: () => <StatesCall terminal={terminal} reportProblem /> },
+    { id: `states-${terminal}-light-report`, title: `${terminal} Light with report action`, render: () => <StatesCall terminal={terminal} light reportProblem /> },
   ]),
 ];
