@@ -28,7 +28,9 @@
     "scripts/recorder/source-fingerprint.mjs",
     "scripts/transcription-dispatcher/emit-manifest.mjs",
     "scripts/transcription-dispatcher/source-state.mjs",
-    "scripts/deploy/verify-web-deploy.mjs"
+    "scripts/deploy/verify-web-deploy.mjs",
+    "apps/mobile/src/space/mobile-space-client.ts",
+    "apps/mobile/src/space/mobile-space-features.ts"
   ],
   "publicPackages": ["@q9labsai/chalk-assets", "@q9labsai/chalk-client", "@q9labsai/chalk-react", "@q9labsai/chalk-react-native", "@q9labsai/chalk-ui", "@q9labsai/chalk-whiteboard", "@q9labsai/facehash"],
   "ignorePatterns": ["scripts/gates/fixtures/package-boundaries/**"],
@@ -69,7 +71,10 @@
     "framer-motion",
     "scheduler",
     "@tanstack/devtools-vite",
-    "typescript-7"
+    "typescript-7",
+    "expo-clipboard",
+    "expo-status-bar",
+    "react-native-safe-area-context"
   ],
   "ignoreExports": [
     {
