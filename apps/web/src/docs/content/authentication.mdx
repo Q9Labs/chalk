@@ -4,7 +4,6 @@ Your application remains the identity authority. It asks the Chalk server SDK or
 
 Use a Tenant-scoped API key for customer control-plane requests. The checked-in OpenAPI security scheme does not accept user sessions. Participant media and Sync credentials are short-lived bearer credentials bound to a live Participant generation and Episode.
 
-
 Deployments can optionally configure a server-only service principal with an explicit stable ID, rotation secrets, and scopes; it can create and access only its own Tenants and cannot issue broader API keys. An optional Tenant `external_id` supports atomic find-or-create and service-scoped lookup, so retries and secret rotation preserve the same Tenant.
 
 The calling service is responsible for the request-supplied `external_id` and end-user identity; Tenant ownership is derived only from the authenticated service identity.
