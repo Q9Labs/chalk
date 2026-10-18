@@ -1,46 +1,42 @@
 import { strict as assert } from "node:assert";
 import { createServer } from "node:http";
 import { once } from "node:events";
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, writeFile, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, relative } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
-// The only engine stub implements the two not-yet-landed provisioning calls.
-const tenants = new Map();
+// A recording transport forwards every operation to the real API. Fault injection
+// exercises rate-limit handling only; no engine success response is fabricated.
+assert(process.env.DASHBOARD_TEST_API_ORIGIN, "Run through tests/dashboard/real-engine.sh");
 const requests = [];
 const unsupportedBodies = [];
+let rateLimitPath;
 const engine = createServer(async (request, response) => {
   requests.push(request.url);
-  const url = new URL(request.url, "http://localhost");
-  response.setHeader("Content-Type", "application/json");
-  if (request.headers.authorization !== "Bearer fixture-service-not-a-secret") {
-    response.writeHead(401).end("{}");
+  let body = "";
+  for await (const part of request) body += part;
+  unsupportedBodies.push({ method: request.method, path: new URL(request.url, "http://localhost").pathname, body });
+  if (rateLimitPath && request.url.startsWith(rateLimitPath)) {
+    response.writeHead(429, { "Content-Type": "application/json", "Retry-After": "3600" }).end(JSON.stringify({ error: { code: "request.rate_limited", message: "fixture transport throttle" } }));
     return;
   }
-  if (request.method === "GET" && url.pathname === "/v1/tenants/by-external-id") {
-    const tenant = tenants.get(url.searchParams.get("external_id"));
-    response.writeHead(tenant ? 200 : 404).end(JSON.stringify(tenant ?? {}));
-    return;
+  try {
+    const upstream = await fetch(new URL(request.url, process.env.DASHBOARD_TEST_API_ORIGIN), { method: request.method, headers: request.headers, body: ["GET", "HEAD"].includes(request.method) ? undefined : body, redirect: "manual" });
+    response.writeHead(upstream.status, Object.fromEntries(upstream.headers)).end(Buffer.from(await upstream.arrayBuffer()));
+  } catch {
+    response.writeHead(503).end();
   }
-  if (request.method === "POST" && url.pathname === "/v1/tenants") {
-    let body = "";
-    for await (const part of request) body += part;
-    const input = JSON.parse(body);
-    let tenant = tenants.get(input.external_id);
-    if (!tenant) {
-      tenant = { id: crypto.randomUUID() };
-      tenants.set(input.external_id, tenant);
-    }
-    response.writeHead(201).end(JSON.stringify(tenant));
-    return;
-  }
-  let unsupportedBody = "";
-  for await (const part of request) unsupportedBody += part;
-  unsupportedBodies.push({ method: request.method, path: url.pathname, body: unsupportedBody });
-  response.writeHead(501).end(JSON.stringify({ error: { code: "test.operation_not_stubbed" } }));
 });
+async function tenantFor(person) {
+  const response = await fetch(`${process.env.DASHBOARD_TEST_API_ORIGIN}/v1/tenants/by-external-id?external_id=workos:test:fixture_${person}`, { headers: { Authorization: "Bearer fixture-dashboard-service-token-not-a-secret" } });
+  assert.equal(response.status, 200);
+  return response.json();
+}
+function sql(statement) {
+  return execFileSync("psql", [process.env.CHALK_DATABASE_URL, "-v", "ON_ERROR_STOP=1", "-Atqc", statement], { encoding: "utf8" }).trim();
+}
 const sandbox = await mkdtemp(resolve(tmpdir(), "chalk-dashboard-pages-"));
 const web = resolve(import.meta.dirname, "../..");
 let pages;
@@ -83,7 +79,7 @@ try {
     WORKOS_CLIENT_ID: "fixture-client",
     WORKOS_API_KEY: "fixture-workos-not-a-secret",
     WORKOS_COOKIE_PASSWORD: "fixture-only-cookie-password-32-characters",
-    DASHBOARD_SERVICE_TOKEN: "fixture-service-not-a-secret",
+    DASHBOARD_SERVICE_TOKEN: "fixture-dashboard-service-token-not-a-secret",
     DASHBOARD_IDENTITY_PROVIDER: "fixture",
   };
   const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
@@ -124,6 +120,9 @@ try {
           if (value) cookies.set(key, value);
           else cookies.delete(key);
         }
+        const exposed = (await response.clone().text()) + JSON.stringify([...response.headers]);
+        for (const secret of ["fixture-dashboard-service-token-not-a-secret", "fixture-workos-access-token-not-for-browser", "fixture-workos-refresh-token-not-for-browser", "fixture-workos-not-a-secret", "fixture-local-system-not-a-secret", "fixture-only-cookie-password-32-characters"])
+          assert(!exposed.includes(secret), `Browser exposed ${secret}`);
         assert.equal(response.headers.get("cache-control"), "no-store");
         return response;
       },
@@ -148,7 +147,7 @@ try {
     assert.equal(response.status, 200);
     const dto = await response.json();
     assert.deepEqual(Object.keys(dto).sort(), ["csrfToken", "profile"]);
-    assert(!JSON.stringify(dto).includes("fixture-service-not-a-secret"));
+    assert(!JSON.stringify(dto).includes("fixture-dashboard-service-token-not-a-secret"));
     assert(!JSON.stringify(dto).includes("fixture-workos-not-a-secret"));
     return dto;
   }
@@ -157,16 +156,14 @@ try {
   }
   const ada = browser();
   let session = await signIn(ada, "ada");
-  assert.equal(tenants.size, 1);
-  const firstTenant = [...tenants.values()][0].id;
+  const firstTenant = (await tenantFor("ada")).id;
   await signIn(ada, "ada");
-  assert.equal(tenants.size, 1);
-  assert.equal([...tenants.values()][0].id, firstTenant);
+  assert.equal((await tenantFor("ada")).id, firstTenant);
+  assert.equal(sql("select count(*) from tenants where external_id = 'workos:test:fixture_ada'"), "1");
   session = await (await ada.request("/auth/session")).json();
   const malik = browser();
   const other = await signIn(malik, "malik");
-  assert.equal(tenants.size, 2);
-  const secondTenant = [...tenants.values()].find((tenant) => tenant.id !== firstTenant).id;
+  const secondTenant = (await tenantFor("malik")).id;
   assert.notEqual(other.csrfToken, session.csrfToken);
   assert.equal((await ada.request("/auth/start?provider=google&returnTo=https%3A%2F%2Fevil.example")).status, 400);
   assert.equal((await ada.request("/auth/start?provider=google&returnTo=%2F%2Fevil.example")).status, 400);
@@ -175,11 +172,48 @@ try {
   assert.equal((await post(ada, "/dashboard-api/home", {}, "")).status, 403);
   assert.equal((await post(ada, "/dashboard-api/home", {}, other.csrfToken)).status, 403);
   assert.equal(requests.length, count);
-  // Missing engine operations are not mocked: they reject with 501. This proves
-  // the BFF's Tenant path binding for foreign IDs, not the engine's permissions.
-  const malikTenant = tenants.get("workos:test:fixture_malik").id;
-  const foreign = { spaceId: crypto.randomUUID(), episodeId: crypto.randomUUID(), recordingId: crypto.randomUUID(), transcriptId: crypto.randomUUID(), keyId: crypto.randomUUID(), webhookId: crypto.randomUUID(), deliveryId: crypto.randomUUID() };
+  const malikTenant = secondTenant;
+  const created = await post(ada, "/dashboard-api/home", { action: "create-call", name: "Original", admission: "anyone", idempotencyKey: crypto.randomUUID() }, session.csrfToken);
+  assert.equal(created.status, 200, await created.clone().text());
+  const spaceId = (await created.json()).call.id;
+  for (const action of [
+    { action: "rename-call", spaceId, name: "Renamed" },
+    { action: "set-admission", spaceId, admission: "knock" },
+  ]) {
+    const response = await post(ada, "/dashboard-api/home", action, session.csrfToken);
+    assert.equal(response.status, 200, await response.clone().text());
+  }
+  const storedSpace = JSON.parse(sql(`select row_to_json(s) from spaces s where id='${spaceId}'`));
+  assert.equal(storedSpace.name, "Renamed");
+  assert.equal(storedSpace.admission_policy.mode, "knock");
+  assert.equal(storedSpace.default_episode_duration_seconds, 3600);
+  const keyResponse = await post(ada, "/dashboard-api/developer", { action: "create-key", name: "Test", scopes: ["spaces:read"], expiresAt: "2027-01-01T00:00:00Z", idempotencyKey: crypto.randomUUID() }, session.csrfToken);
+  assert.equal(keyResponse.status, 200, await keyResponse.clone().text());
+  const keyId = (await keyResponse.json()).id;
+  assert.equal((await post(ada, "/dashboard-api/developer", { action: "create-key", name: "Escalation", scopes: ["tenants:write"], expiresAt: "2027-01-01T00:00:00Z", idempotencyKey: crypto.randomUUID() }, session.csrfToken)).status, 400);
+  const hookResponse = await post(ada, "/dashboard-api/developer", { action: "create-webhook", name: "Test", url: "https://example.com/hook", enabled: true, eventTypes: ["episode.ended"], idempotencyKey: crypto.randomUUID() }, session.csrfToken);
+  assert.equal(hookResponse.status, 200, await hookResponse.clone().text());
+  const webhookId = (await hookResponse.json()).webhook.id;
+  const foreign = { spaceId, episodeId: crypto.randomUUID(), recordingId: crypto.randomUUID(), transcriptId: crypto.randomUUID(), keyId, webhookId, deliveryId: crypto.randomUUID() };
+  // Provider artifacts are seeded, not mocked. Every read/authorization uses the
+  // production HTTP server and PostgreSQL repositories; no vendor is contacted.
+  sql(`insert into episodes(id,tenant_id,space_id,status,started_at,ended_at,config_snapshot) values('${foreign.episodeId}','${firstTenant}','${spaceId}','ended',now()-interval '1 hour',now(),'{"roles":{"owner":["subscribe"]},"admission_policy":{"mode":"open"},"default_episode_duration_seconds":3600,"maximum_episode_duration_seconds":86400,"linger_window_seconds":60}');
+  insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider) values('${foreign.recordingId}','${firstTenant}','${spaceId}','${foreign.episodeId}','failed','r2');
+  insert into transcriptions(id,tenant_id,space_id,episode_id,recording_id,status,languages) values('${foreign.transcriptId}','${firstTenant}','${spaceId}','${foreign.episodeId}','${foreign.recordingId}','terminal_failure','{}');
+  insert into participants(id,tenant_id,space_id,episode_id,name,capabilities,generation,status,role,joined_at,first_joined_at) select gen_random_uuid(),'${firstTenant}','${spaceId}','${foreign.episodeId}','Same name',array['subscribe'],1,'active','owner',now()-interval '1 hour',now()-interval '1 hour' from generate_series(1,2);`);
+  const past = await ada.request(`/dashboard-api/past-session?spaceId=${spaceId}&episodeId=${foreign.episodeId}`);
+  assert.equal(past.status, 200, await past.clone().text());
+  const pastDTO = await past.json();
+  assert.equal(pastDTO.attendance.participants.length, 2);
+  assert(pastDTO.attendance.participants.every((p) => p.name === "Same name" && p.kind === "guest" && p.firstJoinedAt && p.lastLeftAt === pastDTO.episode.endedAt));
+  assert.equal(pastDTO.recordings[0].id, foreign.recordingId);
+  const ownTranscripts = await post(ada, "/dashboard-api/past-session", { action: "transcripts", spaceId, episodeId: foreign.episodeId, recordingId: foreign.recordingId }, session.csrfToken);
+  assert.equal(ownTranscripts.status, 200, await ownTranscripts.clone().text());
+  assert.equal((await ownTranscripts.json()).transcripts[0].id, foreign.transcriptId);
+  for (const path of [`/dashboard-api/call?spaceId=${spaceId}`, `/dashboard-api/past-session?spaceId=${spaceId}&episodeId=${foreign.episodeId}`]) assert.equal((await malik.request(path)).status, 404);
   const mutations = [
+    ["call", { action: "rename-call", spaceId: foreign.spaceId, name: "Renamed" }],
+    ["call", { action: "set-admission", spaceId: foreign.spaceId, admission: "knock" }],
     ["home", { action: "rename-call", spaceId: foreign.spaceId, name: "Renamed" }],
     ["home", { action: "set-admission", spaceId: foreign.spaceId, admission: "knock" }],
     ["home", { action: "archive-call", spaceId: foreign.spaceId }],
@@ -187,8 +221,8 @@ try {
     ["call", { action: "join", spaceId: foreign.spaceId, idempotencyKey: crypto.randomUUID() }],
     ["call", { action: "rotate-link", spaceId: foreign.spaceId, idempotencyKey: crypto.randomUUID() }],
     ["call", { action: "end-for-everyone", spaceId: foreign.spaceId, episodeId: foreign.episodeId, idempotencyKey: crypto.randomUUID() }],
-    ["call", { action: "approve-knock", spaceId: foreign.spaceId, requestHandle: "foreign_request_handle", idempotencyKey: crypto.randomUUID() }],
-    ["call", { action: "deny-knock", spaceId: foreign.spaceId, requestHandle: "foreign_request_handle", idempotencyKey: crypto.randomUUID() }],
+    ["call", { action: "approve-knock", spaceId: foreign.spaceId, requestHandle: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() }],
+    ["call", { action: "deny-knock", spaceId: foreign.spaceId, requestHandle: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() }],
     ...["recording-url", "export-recording", "transcripts"].map((action) => [
       "past-session",
       { action, spaceId: foreign.spaceId, episodeId: foreign.episodeId, recordingId: foreign.recordingId, ...(action === "recording-url" ? { download: true } : action === "export-recording" ? { idempotencyKey: crypto.randomUUID() } : {}) },
@@ -207,7 +241,7 @@ try {
   for (const [page, action] of mutations) {
     const offset = requests.length;
     const response = await post(malik, `/dashboard-api/${page}`, action, other.csrfToken);
-    assert(response.status >= 400, `${action.action} unexpectedly succeeded against an unimplemented engine`);
+    assert.equal(response.status, 404, `${action.action}: ${await response.clone().text()}`);
     const attempted = requests.slice(offset).filter((path) => path.startsWith("/v1/tenants/") && !path.startsWith("/v1/tenants/by-external-id"));
     assert(attempted.length > 0, `${action.action} did not exercise an engine path`);
     assert(
@@ -216,13 +250,36 @@ try {
     );
     assert(!attempted.some((path) => path.includes(firstTenant)));
   }
+  assert.equal((await post(malik, "/dashboard-api/call", { action: "refresh-access", spaceId: foreign.spaceId }, other.csrfToken)).status, 401);
   assert.equal((await post(malik, "/dashboard-api/call", { action: "refresh-access", spaceId: foreign.spaceId, participantId: foreign.recordingId }, other.csrfToken)).status, 400);
   assert.equal((await post(malik, "/dashboard-api/home", { action: "archive-call", spaceId: foreign.spaceId, tenantId: firstTenant }, other.csrfToken)).status, 400);
 
-  assert.equal((await post(malik, "/dashboard-api/developer", { action: "set-allowed-websites", origins: ["https://example.test", "http://localhost:3000"] }, other.csrfToken)).status, 502);
+  assert.equal((await post(malik, "/dashboard-api/developer", { action: "set-allowed-websites", origins: ["https://example.test", "http://localhost:3000"] }, other.csrfToken)).status, 200);
   assert.deepEqual(unsupportedBodies.at(-1), { method: "PATCH", path: `/v1/tenants/${secondTenant}`, body: JSON.stringify({ cors_allowed_origins: ["https://chalkmeet.com", "https://example.test", "http://localhost:3000"] }) });
-  assert.equal((await post(malik, "/dashboard-api/developer", { action: "allowed-websites" }, other.csrfToken)).status, 502);
-  assert.equal(unsupportedBodies.at(-1).path, `/v1/tenants/${secondTenant}`);
+  const websites = await post(malik, "/dashboard-api/developer", { action: "allowed-websites" }, other.csrfToken);
+  assert.equal(websites.status, 200);
+  assert.deepEqual((await websites.json()).allowedWebsites, ["https://chalkmeet.com", "https://example.test", "http://localhost:3000"]);
+  assert.deepEqual((await tenantFor("malik")).cors_allowed_origins, ["https://chalkmeet.com", "https://example.test", "http://localhost:3000"]);
+  const home = await ada.request("/dashboard-api/home");
+  assert.equal(home.status, 200, await home.clone().text());
+  assert.equal((await home.json()).live[0].episode, null);
+  rateLimitPath = "/v1/tenants/by-external-id";
+  const beforeThrottle = sql("select count(*) from tenants");
+  const blocked = browser();
+  const start = await blocked.request("/auth/start?provider=google");
+  const authorize = new URL(start.headers.get("location"));
+  authorize.searchParams.set("person", "ada");
+  const authorized = await blocked.request(authorize);
+  const throttled = await blocked.request(authorized.headers.get("location"));
+  assert.equal(throttled.status, 429, await throttled.clone().text());
+  assert.deepEqual((await throttled.json()).error, { code: "engine_rate_limited", retryable: true, retryAfterSeconds: 60 });
+  assert.equal(throttled.headers.get("retry-after"), "60");
+  assert.equal(blocked.cookies.has("local_chalk_session"), false);
+  assert.equal(sql("select count(*) from tenants"), beforeThrottle);
+  assert.equal((await ada.request("/dashboard-api/home")).status, 429);
+  rateLimitPath = `/v1/tenants/${firstTenant}/spaces`;
+  assert.equal((await ada.request("/dashboard-api/home")).status, 429);
+  rateLimitPath = undefined;
   for (const invalid of ["http://example.test:8080", "http://localhost", "https://example.test/path", "https://user@example.test", "https://example.test?query", "http://127.0.0.1:3000"]) {
     assert.equal((await post(ada, "/dashboard-api/developer", { action: "set-allowed-websites", origins: [invalid] }, session.csrfToken)).status, 400, invalid);
   }
@@ -245,11 +302,13 @@ try {
     { action: "update-webhook", webhookId: crypto.randomUUID(), name: "Test", url: "https://example.test/hook", enabled: true, eventTypes: ["episode.ended"], revision: 1, idempotencyKey: crypto.randomUUID() },
     { action: "create-key", name: "Test", scopes: ["spaces:read"], expiresAt: "2027-01-01T00:00:00Z", idempotencyKey: crypto.randomUUID() },
     { action: "create-webhook", name: "Test", url: "https://example.test/hook", enabled: true, eventTypes: ["episode.ended"], idempotencyKey: crypto.randomUUID() },
+    { action: "rotate-key", keyId, expiresAt: "2027-01-01T00:00:00Z", idempotencyKey: crypto.randomUUID() },
+    { action: "rotate-webhook-secret", webhookId, revokePreviousImmediately: true, idempotencyKey: crypto.randomUUID() },
   ];
   const sensitiveOffset = requests.length;
   const sensitiveBodyOffset = unsupportedBodies.length;
   for (const action of sensitive) assert.equal((await post(ada, "/dashboard-api/developer", action, session.csrfToken)).status, 401);
-  assert.equal(unsupportedBodies.length, sensitiveBodyOffset);
+  assert.equal(unsupportedBodies.slice(sensitiveBodyOffset).filter((r) => r.method !== "GET").length, 0);
   assert(!requests.slice(sensitiveOffset).some((path) => /api-keys|webhook-endpoints/.test(path)));
   assert.equal((await post(ada, "/auth/sign-out", {}, session.csrfToken)).status, 200);
   assert.equal((await ada.request("/auth/session")).status, 401);
@@ -257,7 +316,7 @@ try {
   assert.equal((await post(malik, "/auth/refresh", {}, other.csrfToken)).status, 401);
   assert.equal(malik.cookies.size, 0);
   console.log("PASS: real Pages auth, two identities, idempotent Tenant bootstrap, callback replay, return URLs, exact Origin, CSRF, refresh success/transient/terminal, online-gated secrets, sign-out");
-  console.log("PASS: foreign resource IDs stay under the authenticated Tenant path across named mutations; forged Tenant/Participant fields rejected. NOT COVERED: real-engine account isolation/artifacts; requires service-principal lane integration. Only provisioning calls are stubbed here.");
+  console.log("PASS: real API/PostgreSQL A/B isolation across every named resource action, persisted rename/admission/websites, seat attendance, and bounded retryable 429s without provisioning");
 } catch (error) {
   await delay(200);
   console.error(pagesOutput.slice(-8000));

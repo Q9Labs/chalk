@@ -3,7 +3,9 @@
 The static site uses named Cloudflare Pages Functions only under `/auth/*` and
 `/dashboard-api/*`. `server/` is imported only by those Functions. The production
 composition root imports WorkOS, never `tests/dashboard/fixture-provider.ts`.
-There is no dashboard database or generic engine proxy.
+There is no dashboard database or generic engine proxy. The production web build
+emits `dist/client/_worker.js` and its generated `_routes.json`, so the existing
+release archive includes the Functions while site/docs paths remain static.
 
 ## Browser contract
 
@@ -77,40 +79,47 @@ loopback HTTP local/test configurations use `local_chalk_*`, never the productio
 cookie names. Login transaction and CSRF binding cookies are AES-GCM sealed with
 separate authenticated purposes. Both have bounded expiry.
 
-## Engine integration seam
+## Engine integration
 
-Existing operations use the generated `@q9labsai/chalk-client/effect` client.
-Only pending contract operations use `engine.ts`'s typed bridge:
+Every operation uses the generated `@q9labsai/chalk-client/effect` client.
+`resolveTenant` finds the authenticated user's `workos:<environment>:<user id>`
+external ID. Only the sign-in callback provisions on an authoritative 404;
+429s never cause creation and return `engine_rate_limited`, `retryable: true`,
+`retryAfterSeconds: 60`, and `Retry-After: 60`. There are no automatic retries.
+Attendance returns one row per Participant seat, with first join and last leave;
+seats are never merged, and ended-session leave times come from the API.
 
-1. `GET /v1/tenants/by-external-id?external_id=...` -> `{id}`.
-2. `POST /v1/tenants` with `{name, external_id, cors_allowed_origins}` -> `{id}`;
-   the service principal lane must make this atomic and policy-complete.
-3. `GET /v1/tenants/{id}/live-episodes?space_ids=<1–30 UUIDs>` -> the API-reads
-   lane's `listSpaceLiveEpisodes` response.
-4. Intended `GET .../episodes/{id}/attendance` -> the API-reads proposal.
-   This route does not exist yet: a missing implementation returns the explicit
-   `attendance_api_pending` availability DTO, never fabricated empty attendance.
+The API service principal requires exactly:
 
-Move these calls to the generated client after integrating those lane commits.
-The service principal must enforce Tenant ownership and key-scope ceilings;
-there is deliberately no fallback to System or broad platform authority.
+```
+CHALK_API_SERVICE_ID=<stable dashboard service id>
+CHALK_API_SERVICE_SECRETS=<comma-separated rotation secrets>
+CHALK_API_SERVICE_SCOPES=tenants:read,tenants:write,spaces:read,spaces:write,episodes:read,episodes:write,recordings:read,recordings:write,transcriptions:read,transcriptions:write,transcriptions:delete,api_keys:read,api_keys:write,api_keys:delete,webhooks:read,webhooks:write,webhooks:delete
+```
 
-## Local fixture proof
+Pages' `DASHBOARD_SERVICE_TOKEN` must match one service secret. No System token
+is used by Pages. Key creation accepts only the explicit non-Tenant scope enum;
+rotation sends only expiry, never scopes. The engine also refuses rotation of
+legacy keys containing `tenants:write`.
 
-`pnpm --filter web test:dashboard` runs named Pages Functions in real workerd
-using `wrangler pages dev`. The harness copies the real route wrappers to a
-bounded temporary directory and substitutes only the provider composition root.
-It uses the same application, callback, cookie, CSRF, refresh, provisioning and
-page dispatch code. No WorkOS/engine secrets are needed. Only the two pending
-Tenant provisioning calls are stubbed; all other engine calls fail rather than
-being silently mocked. The test's fixtures provide two people, expiring sealed
-sessions, single-use PKCE codes, online revocation, and controlled retryable and
-terminal refresh failures. Both test and deployed composition roots reject
-fixture mode in shared environments; the deployed one rejects it everywhere.
+## Local real-engine proof
 
-The auth proof does not establish real-engine cross-account isolation,
-recording/transcript behavior, real owner call admission, or real Google/Apple setup.
-Those require the service-principal and attendance lanes plus integration proof.
+`bash apps/web/tests/dashboard/real-engine.sh` prepares isolated PostgreSQL,
+runs migrations and the real local API, then drives the named Pages Functions
+in workerd through `wrangler pages dev` using only the fixture identity provider.
+Run heavy checks through `scripts/gates/remote.sh`; PostgreSQL's `psql` client
+must be installed on that disposable box. No WorkOS or vendor secrets are needed.
+The transport records requests and can inject a 429, but forwards all successful
+operations to the production API. Ended Episode/provider Artifact rows are seeded
+in PostgreSQL; no recording or transcription vendor is called, and Sync is not
+needed for those ended-session reads or cross-account rejection checks.
+
+The proof covers two account bootstraps, repeat binding, every named foreign-ID
+mutation, foreign Space/Episode reads, persisted Space rename/admission and
+Allowed websites, seat attendance, Origin/CSRF, refresh/revocation, online-gated
+secret creation/rotation, response credential redaction, and callback throttling.
+Real Google/Apple WorkOS setup and successful live media admission remain separate
+operator smoke checks.
 
 ## Failure evidence
 
@@ -121,16 +130,6 @@ The same request ID is returned in `X-Request-ID`. No raw exception, query,
 request body, cookie, token or provider response is logged. Pages runtime log
 retention/export must be configured by the deployment owner; API and Sync
 retain their existing Axiom trace evidence as described in `docs/observability.md`.
-
-## Known generated-contract blocker
-
-The generated `UpdateSpaceRequestSchema` requires internal `{Set, Value}`
-OptionalInt32 wrappers for the three duration fields, but the real Go PATCH
-endpoint accepts numbers/null or omitted fields. Consequently rename/admission
-PATCH is not usable until the API contract/codegen input is corrected and the
-client regenerated. This lane cannot change `apps/api/` or `contract/`; do not
-ship it or work around the mismatch with an untyped/raw proxy. The scoped review
-verified this wire mismatch. Other mutations are separate operations.
 
 ## Allowed websites
 

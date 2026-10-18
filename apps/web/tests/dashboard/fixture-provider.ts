@@ -21,7 +21,7 @@ function assertLocal(env: DashboardEnvironment): void {
 export function fixtureProvider(env: DashboardEnvironment): IdentityProvider {
   assertLocal(env);
   const load = async (sealed: string) => sessionSchema.parse(await unseal(sealed, env.WORKOS_COOKIE_PASSWORD, "fixture-identity"));
-  const makeSession = async (identity: Identity) => seal({ identity, expiresAt: Date.now() + 300000 }, env.WORKOS_COOKIE_PASSWORD, "fixture-identity");
+  const makeSession = async (identity: Identity) => seal({ identity, accessToken: "fixture-workos-access-token-not-for-browser", refreshToken: "fixture-workos-refresh-token-not-for-browser", expiresAt: Date.now() + 300000 }, env.WORKOS_COOKIE_PASSWORD, "fixture-identity");
   return {
     async start() {
       const state = crypto.randomUUID();
