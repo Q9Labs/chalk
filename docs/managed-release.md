@@ -13,18 +13,28 @@ An expired or unavailable build baseline triggers a full build of the saved enab
 component set instead of forwarding dead artifact IDs. Passed cut records preserve
 recorder enablement for this fallback. A pre-upgrade baseline without readable bytes
 or saved component metadata fails closed rather than silently disabling recording;
-a new explicit manual baseline is required. The changed-input guard still checks
-the baseline source revision.
+a new explicit Release baseline is required.
 A manual dispatch always attempts a cut, including an unchanged source.
 Both paths require the latest master Gate run/attempt for the pinned SHA to pass.
 
-Before builds, the existing component planner checks worker dependencies.
-Renderer workspace inputs and transcription Lambda build inputs must not change.
-Unsupported changes fail with the manual recorder/Lambda release paths.
-The dispatcher fingerprint includes all `infrastructure/` inputs, so these changes
-also fail before a cut can mutate nightly.
-This first rollout does not build or activate new external workers or Lambda code.
-The existing deployment-time dispatcher binding still runs.
+Release builds and inspects capture/render snapshots when their build inputs or
+current environment pins differ, including first install. It builds, tests and
+verifies the dispatcher ZIP when its inputs change or no dispatcher is installed.
+The backend artifact also contains `<release_id>.media.json`: exact image IDs,
+image-manifest digests, source/input hashes, inspection evidence, ZIP SHA256 and
+versioned S3 object identity. Cut records retain its SHA256. Promote verifies this
+sidecar and uses those same images and ZIP bytes; it never rebuilds them.
+Before either fleet pin changes, deployment reads both snapshots from DigitalOcean
+using each environment's existing fleet token. Each snapshot must be available in
+its role's configured region and fit its configured fleet size's disk.
+
+Snapshot v2 contains no environment hostname or CA. Fleet cloud-init installs the
+target environment's public bootstrap CA and hostname before signed bootstrap.
+Production and nightly keep their own certificates, private keys, tags and state.
+After nightly deploy, two isolated cold-boot diagnostics verify signed identity;
+workers cannot take live work during those diagnostics. A failed diagnostic fails
+the cut. Production Promote records the previous media members before mutation,
+including the legacy first-promotion baseline, and rollback restores those pins.
 
 Release builds changed backend images and two target-specific web archives.
 After nightly deployment, the real-call workflow runs `smoke transcript`.
@@ -119,8 +129,8 @@ Configure nightly managed deployment variables and proof Tenant credentials as
 listed in the lane report and the proof workflow. Give nightly its own Pages
 account/project and token. Its recorder configuration must point to PR #268's
 nightly dispatcher caller and nightly state (`transcription/terraform.tfstate`
-in the nightly backend bucket), initially with `scheduler_state=DISABLED`.
-The binding carries the state forward without changing the scheduler policy.
+in the nightly backend bucket), The first Release installs the dispatcher and enables its one-minute scheduler.
+The Cut nightly workflow stays disabled until first-cut approval.
 Never point nightly configuration at production state or credentials.
 
 ## Environment configuration and deployment evidence
@@ -161,3 +171,26 @@ If a build succeeds but deployment fails, fix the cause and redispatch with the
 healthy manifest baseline. Do not bypass CI to turn a failed release green.
 For read-only diagnosis, `deploy-managed-release.mjs --dry-run` validates inputs
 and reads dispatcher configuration/state without sending a host command.
+Release runs this preflight before invalidating a held cut or changing fleet pins.
+The media path rejects changes under `infrastructure/nightly/transcription/`
+before builds or deployment mutations. Installed dispatcher updates reconstruct
+their root from state, so root-input changes require a separately reviewed
+infrastructure migration before updating the supported configuration checksum.
+
+## Media build configuration
+
+The GitHub nightly environment permits only `master` and provides secret
+`DIGITALOCEAN_ACCESS_TOKEN` from the existing builder PAT. Builds run on bounded
+DigitalOcean builders; never put that PAT in runtime SSM. Set
+`CHALK_MEDIA_ARTIFACT_BUCKET` and the approved `CHALK_TRANSCRIPTION_CORPUS_DIGEST`.
+The deploy role must read recorder envs and the public bootstrap CA, update only
+its two recorder env parameters, read the selected versioned source ZIP, write
+its dispatcher artifact/state prefixes, and apply its own dispatcher module.
+Nightly cold-boot checks additionally require scoped host RunShellScript and
+private `bootdiag/` evidence access. No nightly authority may mutate production.
+
+The first Promote after this upgrade replaces production's capture and render
+image pins with the exact snapshots tested on nightly, then deploys nightly's
+ZIP bytes to the production dispatcher and keeps its scheduler enabled. It
+retains production's previous pins and ZIP for rollback. Existing workers drain
+through the normal fleet release lifecycle; no cross-environment deletion is added.

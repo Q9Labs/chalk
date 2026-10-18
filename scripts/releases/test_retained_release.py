@@ -75,29 +75,6 @@ class RetainedReleaseTests(unittest.TestCase):
             self.assertIn('recorder_control=true', values)
             self.assertEqual(api.items[-1]['payload']['channel'], 'nightly-attempt')
 
-    def test_dispatcher_infrastructure_change_is_refused_before_build_or_mutation(self):
-        with tempfile.TemporaryDirectory() as directory:
-            repo = Path(directory)
-            subprocess.run(['git', 'init', '-q', str(repo)], check=True)
-            target = repo / 'infrastructure/opentofu/modules/aws-transcription-dispatcher/main.tf'
-            target.parent.mkdir(parents=True)
-            target.write_text('# old\n')
-            def commit():
-                subprocess.run(['git', '-C', str(repo), 'add', '.'], check=True)
-                subprocess.run(['git', '-C', str(repo), '-c', 'user.name=Test', '-c', 'user.email=test@example.com',
-                                'commit', '-qm', 'fixture'], check=True)
-                return subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip()
-            base = commit()
-            target.write_text('# new\n')
-            head = commit()
-            previous = Path.cwd()
-            try:
-                os.chdir(repo)
-                with self.assertRaisesRegex(ValueError, 'transcription build inputs changed'):
-                    release.guard_runtime(base, head)
-            finally:
-                os.chdir(previous)
-
 
 class DeploymentLookupTests(unittest.TestCase):
     def api(self, respond):

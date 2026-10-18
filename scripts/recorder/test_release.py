@@ -36,12 +36,25 @@ def dispatcher_state_fixture():
 
 
 class ReleaseContracts(unittest.TestCase):
+    def test_provider_uses_the_fleet_token_only_in_child_environment(self):
+        provider = Provider('test-region', None)
+        provider.context = 'private-context'
+        provider.do_token = 'fixture-fleet-token'
+        with patch.dict(os.environ, DIGITALOCEAN_ACCESS_TOKEN='fixture-builder-token'), patch('subprocess.run') as run:
+            run.return_value = subprocess.CompletedProcess([], 0, stdout='[]', stderr='')
+            self.assertEqual(provider.do('compute', 'image', 'get', '123'), [])
+            arguments, options = run.call_args
+            self.assertNotIn('--context', arguments[0])
+            self.assertNotIn('fixture-fleet-token', arguments[0])
+            self.assertEqual(options['env']['DIGITALOCEAN_ACCESS_TOKEN'], 'fixture-fleet-token')
+            self.assertEqual(os.environ['DIGITALOCEAN_ACCESS_TOKEN'], 'fixture-builder-token')
+
     def test_nightly_release_configuration_is_environment_scoped(self):
         from release import parse_args
-        args = parse_args(["plan", "--dry-run", "--environment", "nightly", "--region", "test-region", "--profile", "test-profile"])
+        args = parse_args(["plan", "--state", "/tmp/pipeline-build", "--environment", "nightly", "--region", "test-region", "--profile", "test-profile"])
         self.assertEqual(args.config_parameter, "/chalk/nightly/release/recorder.json")
         with self.assertRaisesRegex(ValueError, "configuration must be under"):
-            parse_args(["plan", "--dry-run", "--environment", "nightly", "--region", "test-region", "--profile", "test-profile", "--config-parameter", "/chalk/production/release/recorder.json"])
+            parse_args(["plan", "--state", "/tmp/pipeline-build", "--environment", "nightly", "--region", "test-region", "--profile", "test-profile", "--config-parameter", "/chalk/production/release/recorder.json"])
         config = {
             "schema_version": 1, "do_context": "chalk-nightly",
             "bootstrap_ca_parameter": "/chalk/nightly/managed-episode/recorder/issuer-server-ca",
@@ -64,62 +77,6 @@ class ReleaseContracts(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "outside selected environment"):
             validate_config(config, "nightly")
 
-
-    def test_planning_accepts_distinct_unchanged_role_profile(self):
-        release = Release.__new__(Release)
-        release.args = Mock(role="render", region="test-region", profile="test-profile")
-        release.config = {"worker": {"size": "small", "region": "test1", "disk_gb": 25},
-                          "builder": {"size": "builder", "region": "test1"}, "runtime": {"instance_id": "test-instance", "parameter_prefix": "/test"},
-                          "dispatcher": {"function_name": "test-function", "scheduler_name": "test-scheduler", "scheduler_group": "default"},
-                          "bootstrap_ca_parameter": "/test-ca"}
-        release.provider = Mock()
-        def parameter(image, size, region):
-            return {"Version": 1, "Value": f"CHALK_RECORDER_FLEET_SIZE={size}\nCHALK_RECORDER_FLEET_REGION={region}\nCHALK_RECORDER_FLEET_IMAGE_ID={image}\nCHALK_RECORDER_FLEET_IMAGE_DIGEST=test"}
-        release.provider.parameter.side_effect = [parameter(123, "capture-size", "other1"), parameter(456, "small", "test1"), {"Value": "test-ca"}]
-        sizes = [{"slug": "capture-size", "disk": 40}, {"slug": "small", "disk": 25, "available": True, "regions": ["test1"]},
-                 {"slug": "builder", "disk": 25, "available": True, "regions": ["test1"]}]
-        release.provider.do.side_effect = [sizes, [{"status": "available", "min_disk_size": 40, "regions": ["other1"]}],
-                                          [{"status": "available", "min_disk_size": 25, "regions": ["test1"]}]]
-        release.provider.aws.side_effect = [{"Reservations": [{"Instances": [{"State": {"Name": "running"}}]}]}, {"State": "ENABLED"},
-                                           {"State": "Active", "LastUpdateStatus": "Successful"}]
-        with patch("release.rebuild_dispatcher", return_value={"module": {"dispatcher": {"function_name": "test-function", "scheduler_state": "ENABLED"}}}):
-            _, pins, _ = release.read_production()
-        self.assertEqual(set(pins), {"capture", "render"})
-
-    def test_verify_existing_state_checks_observed_binding_against_loaded_api(self):
-        release = Release.__new__(Release)
-        release.state = {"published": {"updates": {}}, "role": "capture",
-                         "managed": {"release_id": "managed-old", "source_revision": "a" * 40}}
-        release.args = Mock(region="test-region", profile="test-profile")
-        release.config = {"dispatcher": {}, "runtime": {"instance_id": "test", "user_id": 1000, "parameter_prefix": "/test"}}
-        release.provider = Mock()
-        release.provider.aws.side_effect = [{"Command": {"CommandId": "test"}},
-                                            {"Status": "Success", "StandardOutputContent": '{"result":"PASS"}'}]
-        release.save = Mock()
-        with patch("release.verify_dispatcher", return_value={"release_id": "retained-api", "verified": True}) as binding:
-            release.verify()
-        binding.assert_called_once_with(release.provider, {}, None)
-        command = release.provider.aws.call_args_list[0].kwargs["payload"]["Parameters"]["commands"][0]
-        encoded = command.split("python3 - ", 1)[1].split(" ", 1)[0]
-        self.assertEqual(json.loads(base64.b64decode(encoded))["dispatcher_release_id"], "retained-api")
-
-    def test_already_paused_scheduler_recovery_is_read_only(self):
-        release = Release.__new__(Release)
-        release.config = {"dispatcher": {"scheduler_name": "test", "scheduler_group": "default"}}
-        release.provider = Mock()
-        release.provider.aws.return_value = {"State": "DISABLED"}
-        release.tofu = Mock(side_effect=["", json.dumps({"resource_changes": []})])
-        release.save = Mock()
-        release.state = {}
-        with tempfile.TemporaryDirectory() as directory:
-            release.directory = Path(directory)
-            (release.directory / "dispatcher").mkdir()
-            (release.directory / "dispatcher/main.tf.json").write_text(json.dumps({"module": {"dispatcher": {"scheduler_state": "DISABLED"}}}))
-            with patch("release.dispatcher_root", return_value={"module": {"dispatcher": {"scheduler_state": "DISABLED", "release_id": "current-api-release"}}}):
-                release.set_scheduler("DISABLED")
-            self.assertEqual(json.loads((release.directory / "dispatcher/main.tf.json").read_text())["module"]["dispatcher"]["release_id"], "current-api-release")
-        self.assertEqual(release.state["scheduler_state"], "DISABLED")
-        self.assertFalse(any(call.args[0] == "apply" for call in release.tofu.call_args_list))
 
     def test_guard_retries_read_and_delete_timeouts_with_same_exact_id(self):
         owned = {"id": 123, "name": "chalk-release-builder-test", "created_at": "test-time"}
@@ -167,40 +124,6 @@ class ReleaseContracts(unittest.TestCase):
         self.assertEqual(updated, text.replace("IMAGE_ID=123", "IMAGE_ID=456").replace("RELEASE_ID=old", "RELEASE_ID=new"))
         self.assertEqual(env_values(updated)["SECRET"], "a=b")
 
-    def test_nightly_pin_publication_keeps_bootstrap_claim_bound_to_image(self):
-        old_digest, new_digest = "sha256:" + "a" * 64, "sha256:" + "b" * 64
-        before = "\n".join(["CHALK_RECORDER_FLEET_IMAGE_ID=123", "CHALK_RECORDER_FLEET_RELEASE_ID=old",
-                            "CHALK_RECORDER_FLEET_IMAGE_DIGEST=" + old_digest,
-                            "CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST=" + old_digest]) + "\n"
-        store = {"Name": "/test/render-env", "Type": "SecureString", "Version": 1, "Value": before}
-        release = Release.__new__(Release)
-        release.args = Mock(environment="nightly")
-        release.config = {"worker": {"region": "test1", "size": "c-8"}}
-        release.state = {"role": "render", "image_id": "456", "release_id": "new", "image_digest": new_digest,
-                         "pins": {"render": {"before_version": 1, "before_sha256": digest(before)}}}
-        release.provider, release.save = Mock(), Mock()
-        release.parameter_name = Mock(return_value=store["Name"])
-        release.provider.parameter.side_effect = lambda _name: dict(store)
-
-        def aws(_service, operation, *_args, **kwargs):
-            if operation == "describe-parameters":
-                return {"Parameters": [{}]}
-            self.assertEqual(operation, "put-parameter")
-            store.update(Value=kwargs["payload"]["Value"], Version=2)
-            return {"Version": 2}
-
-        release.provider.aws.side_effect = aws
-        with tempfile.TemporaryDirectory() as directory:
-            release.directory = Path(directory)
-            receipt = b'{"result":"PASS"}'
-            (release.directory / "boot-receipt.json").write_bytes(receipt)
-            release.state["qualification"] = {"receipt_sha256": digest(receipt)}
-            with patch("release.check_qualification"):
-                result = release.publish_pins()
-        values = env_values(store["Value"])
-        self.assertEqual(values["CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST"], new_digest)
-        self.assertIn("CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST", result["changed_keys"])
-
     def test_pin_scope_is_closed(self):
         with self.assertRaises(ValueError):
             replace_pins("SECRET=x\n", {"SECRET": "changed"})
@@ -229,7 +152,7 @@ class ReleaseContracts(unittest.TestCase):
         node = {**owned, "ip": "192.0.2.1", "key_path": "/does-not-exist"}
         release = Release.__new__(Release)
         release.config = {"worker": {"size": "small", "region": "test1", "disk_gb": 25}, "builder": {"size": "large", "region": "test1", "image": "test-image"}}
-        release.state = {"pins": {"render": {}}}
+        release.state = {"planned": True}
         release.directory = Path("/does-not-exist")
         release.provider = Mock()
         release.await_ssh = Mock()

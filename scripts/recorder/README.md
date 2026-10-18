@@ -144,3 +144,11 @@ A live-provider qualification must:
 Provider sessions, paid compute, buckets, and deployments are separate external
 effects. The qualification flag authorizes only the bounded non-production
 provider-connection case; it does not authorize provisioning or deployment.
+
+## Managed image release
+
+[Release, Nightly and Promote](../../docs/managed-release.md) own builds, pin
+publication, dispatcher deployment and rollback. `release.py` is the pipeline's
+bounded image builder, not a separate deployment command. Its plan works without
+existing image pins, API processes or dispatcher state. The pipeline runs static
+image inspection before deploy and cold signed-boot qualification afterwards.

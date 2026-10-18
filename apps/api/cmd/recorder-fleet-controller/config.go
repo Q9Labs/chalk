@@ -60,6 +60,7 @@ type rawCommandConfig struct {
 	size              string
 	firewallID        string
 	bootstrapEndpoint string
+	bootstrapCABase64 string
 	gpu               string
 	sshKeyIDs         string
 }
@@ -100,6 +101,7 @@ func loadCommandConfig(args []string, getenv func(string) string) (commandConfig
 		size:              getenv("CHALK_RECORDER_FLEET_SIZE"),
 		firewallID:        getenv("CHALK_RECORDER_FLEET_FIREWALL_ID"),
 		bootstrapEndpoint: getenv("CHALK_RECORDER_FLEET_BOOTSTRAP_ENDPOINT"),
+		bootstrapCABase64: getenv("CHALK_RECORDER_FLEET_BOOTSTRAP_CA_BASE64"),
 		gpu:               getenv("CHALK_RECORDER_FLEET_GPU"),
 		sshKeyIDs:         getenv("CHALK_RECORDER_FLEET_SSH_KEY_IDS"),
 	}
@@ -213,7 +215,7 @@ func (raw rawCommandConfig) build() (commandConfig, error) {
 		Release: recorderfleet.ReleaseSpec{
 			ReleaseID: trim(raw.releaseID), ImageID: imageID, ImageDigest: trim(raw.imageDigest),
 			Region: trim(raw.region), Size: trim(raw.size), FirewallID: trim(raw.firewallID),
-			BootstrapEndpoint: trim(raw.bootstrapEndpoint), GPU: gpu,
+			BootstrapEndpoint: trim(raw.bootstrapEndpoint), BootstrapCABase64: trim(raw.bootstrapCABase64), GPU: gpu,
 		},
 	}
 	if err := fleetConfig.Validate(); err != nil {

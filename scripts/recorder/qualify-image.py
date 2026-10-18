@@ -24,18 +24,13 @@ def qualify(role, source, release, expected_digest):
         require(path.is_absolute() and ".." not in path.parts and path.parts[1] in ("etc", "opt", "usr"), "invalid manifest path")
         content = os.readlink(path).encode() if entry["type"] == "symlink" else path.read_bytes()
         require(hashlib.sha256(content).hexdigest() == entry["sha256"], "image file digest mismatch")
-    name = manifest["bootstrap_server_name"]
-    tls = subprocess.run(["openssl", "s_client", "-connect", name + ":8444", "-servername", name,
-                          "-verify_hostname", name, "-CAfile", "/etc/chalk-recorder/bootstrap-ca.pem"],
-                         input="", capture_output=True, text=True, timeout=40)
-    require("Verify return code: 0 (ok)" in tls.stdout + tls.stderr, "bootstrap TLS validation failed")
     user = ["setpriv", "--reuid", "chalk-recorder", "--regid", "chalk-recorder", "--clear-groups"]
     worker = "/opt/chalk-recorder/current/bin/recorder-" + role
     subprocess.run(user + ["test", "-x", worker], check=True)
     if role == "render":
         subprocess.run(user + ["test", "-r", "/opt/chalk-recorder/current/renderer/dist/node/compose.js"], check=True)
     subprocess.run(user + [worker, "--help"], check=True, stdout=subprocess.DEVNULL, timeout=20)
-    print(json.dumps({"result": "PASS", "manifest_files_verified": len(manifest["files"]), "tls_verified": True,
+    print(json.dumps({"result": "PASS", "manifest_files_verified": len(manifest["files"]), "portable_trust": manifest["schema_version"] == "chalk_recorder_cpu_image.v2",
                       "runtime_user_execution": True, "fleet_equivalent_signed_boot": False}))
 
 

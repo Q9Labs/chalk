@@ -2,27 +2,23 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: install.sh --bundle <absolute-tar-path> --bundle-sha256 <sha256> --bootstrap-ca <pem> --bootstrap-server-name <name>" >&2
+  echo "usage: install.sh --bundle <absolute-tar-path> --bundle-sha256 <sha256>" >&2
   exit 2
 }
 
 bundle_path=""
 bundle_sha256=""
-bootstrap_ca=""
-bootstrap_server_name=""
 while (($# > 0)); do
   case "$1" in
     --bundle) bundle_path="${2:-}"; shift 2 ;;
     --bundle-sha256) bundle_sha256="${2:-}"; shift 2 ;;
-    --bootstrap-ca) bootstrap_ca="${2:-}"; shift 2 ;;
-    --bootstrap-server-name) bootstrap_server_name="${2:-}"; shift 2 ;;
     *) usage ;;
   esac
 done
 [[ "$(id -u)" == "0" ]] || usage
-[[ "$bundle_path" == /* && -f "$bundle_path" && "$bootstrap_ca" == /* && -f "$bootstrap_ca" ]] || usage
+[[ "$bundle_path" == /* && -f "$bundle_path" ]] || usage
 bundle_sha256="${bundle_sha256#sha256:}"
-[[ "$bundle_sha256" =~ ^[0-9a-f]{64}$ && "$bootstrap_server_name" =~ ^[A-Za-z0-9.-]{1,253}$ ]] || usage
+[[ "$bundle_sha256" =~ ^[0-9a-f]{64}$ ]] || usage
 source /etc/os-release
 [[ "${ID:-}" == "debian" && "${VERSION_ID:-}" == "13" && "$(uname -m)" == "x86_64" ]] || {
   echo "capture image requires Debian 13 x86_64" >&2; exit 1;
@@ -65,15 +61,14 @@ install -d -m 0755 "$image_root/etc/chalk-recorder" "$image_root/etc/systemd/sys
 mv "$release_root" "$image_root/opt/chalk-recorder/releases/$release_id"
 ln -s "releases/$release_id" "$image_root/opt/chalk-recorder/current"
 ln -s /opt/chalk-recorder/current/bin/chalk-recorder-bootstrap "$image_root/usr/local/sbin/chalk-recorder-bootstrap"
-install -m 0644 "$bootstrap_ca" "$image_root/etc/chalk-recorder/bootstrap-ca.pem"
 for unit in chalk-recorder-capture.service chalk-recorder-renew.service chalk-recorder-renew.timer; do
   install -m 0644 "$script_root/../cpu/systemd/$unit" "$image_root/etc/systemd/system/$unit"
 done
 printf 'CHALK_RECORDER_KEYFRAME_INTERVAL=10s\n' >"$image_root/etc/chalk-recorder/capture.env"
 
-python3 - "$image_root" "$release_id" "$source_commit" "$source_tree_sha256" "$bootstrap_server_name" <<'PY'
+python3 - "$image_root" "$release_id" "$source_commit" "$source_tree_sha256" <<'PY'
 import hashlib, json, os, pathlib, sys
-root, release_id, commit, tree, bootstrap_server_name = sys.argv[1:]
+root, release_id, commit, tree = sys.argv[1:]
 files = []
 for directory in ('etc', 'opt', 'usr'):
     for path in pathlib.Path(root, directory).rglob('*'):
@@ -86,10 +81,8 @@ for directory in ('etc', 'opt', 'usr'):
         else:
             continue
         files.append({'path': str(path)[len(root):], 'type': kind, 'sha256': hashlib.sha256(content).hexdigest()})
-manifest = {'schema_version': 'chalk_recorder_cpu_image.v1', 'release_id': release_id,
+manifest = {'schema_version': 'chalk_recorder_cpu_image.v2', 'release_id': release_id,
             'source_commit': commit, 'source_tree_sha256': tree,
-            'bootstrap_server_name': bootstrap_server_name,
-            'bootstrap_ca_sha256': hashlib.sha256(pathlib.Path(root, 'etc/chalk-recorder/bootstrap-ca.pem').read_bytes()).hexdigest(),
             'profile': 'capture-minimal-v1', 'files': sorted(files, key=lambda item: item['path'])}
 pathlib.Path(root, 'opt/chalk-recorder/image-manifest.json').write_text(
     json.dumps(manifest, separators=(',', ':'), sort_keys=True) + '\n', encoding='utf-8')
@@ -101,7 +94,7 @@ CHALK_RECORDER_INSTALLED_RELEASE_ID=$release_id
 CHALK_RECORDER_INSTALLED_IMAGE_DIGEST=$image_digest
 CHALK_RECORDER_IMAGE_MANIFEST=/opt/chalk-recorder/image-manifest.json
 CHALK_RECORDER_BOOTSTRAP_CA_FILE=/etc/chalk-recorder/bootstrap-ca.pem
-CHALK_RECORDER_BOOTSTRAP_SERVER_NAME=$bootstrap_server_name
+CHALK_RECORDER_BOOTSTRAP_SERVER_NAME=unconfigured.invalid
 CHALK_RECORDER_IDENTITY_DIRECTORY=/etc/chalk-recorder/identity
 CHALK_RECORDER_WORKER_ENV_FILE=/etc/chalk-recorder/worker.env
 CHALK_RECORDER_NODE_ENV_FILE=/etc/chalk-recorder/node.env
@@ -121,5 +114,5 @@ chmod 0755 "/opt/chalk-recorder/releases/$release_id/bin/recorder-capture" "/opt
 setpriv --reuid chalk-recorder --regid chalk-recorder --clear-groups test -x "/opt/chalk-recorder/releases/$release_id/bin/recorder-capture" || { echo "recorder-capture is not executable by chalk-recorder" >&2; exit 1; }
 systemctl daemon-reload
 systemctl disable chalk-recorder-capture.service chalk-recorder-renew.timer >/dev/null 2>&1 || true
-printf 'release_id=%s\nsource_commit=%s\nsource_tree_sha256=sha256:%s\nbundle_sha256=sha256:%s\nimage_manifest_digest=%s\nbootstrap_server_name=%s\n' \
-  "$release_id" "$source_commit" "$source_tree_sha256" "$bundle_sha256" "$image_digest" "$bootstrap_server_name"
+printf 'release_id=%s\nsource_commit=%s\nsource_tree_sha256=sha256:%s\nbundle_sha256=sha256:%s\nimage_manifest_digest=%s\n' \
+  "$release_id" "$source_commit" "$source_tree_sha256" "$bundle_sha256" "$image_digest"

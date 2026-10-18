@@ -38,7 +38,7 @@ class MemoryGitHub(GitHub):
     def info(self, run, identity):
         data = json.dumps(dict(release_id=identity, source_revision=SHA)).encode()
         return dict(run_id=run, release_id=identity, applied_release_id=identity,
-                    manifest_artifact_id='10', manifest_sha256=digest(data),
+                    manifest_artifact_id='10', manifest_sha256=digest(data), media_sha256=digest(b'{}'),
                     web=json.dumps({target: dict(artifact_id='20', sha256=digest(self.archive(target)))
                                     for target in ('nightly', 'production')}))
 
@@ -83,6 +83,8 @@ class MemoryGitHub(GitHub):
         return []
 
     def artifact(self, run, identity, name, expected=None):
+        if name.endswith('.media.json'):
+            return b'{}'
         if name == 'managed-deployment.json':
             return json.dumps(dict(release_id='previous', status='deployed', health='passed',
                                    deployment_phase='complete', rolled_back=False)).encode()

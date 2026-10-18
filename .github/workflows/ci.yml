@@ -56,6 +56,12 @@ on:
       manifest_artifact_id:
         description: Exact immutable backend artifact ID (reuse mode)
         type: string
+      rollback_media:
+        description: Retained legacy media JSON from the promotion rollback artifact
+        type: string
+      media_sha256:
+        description: SHA256 of the immutable media release members in reuse mode
+        type: string
       manifest_sha256:
         description: SHA256 of backend manifest bytes (reuse mode)
         type: string
@@ -108,6 +114,10 @@ on:
         type: string
       reuse_release_id:
         type: string
+      media_sha256:
+        type: string
+      rollback_media:
+        type: string
       orchestrated:
         type: boolean
         default: false
@@ -122,6 +132,8 @@ on:
         value: ${{ jobs.prepare-release.outputs.manifest_artifact_id }}
       manifest_sha256:
         value: ${{ jobs.prepare-release.outputs.manifest_sha256 }}
+      media_sha256:
+        value: ${{ jobs.prepare-release.outputs.media_sha256 }}
       web:
         value: ${{ jobs.prepare-web.outputs.web }}
       restored_source_release_id:
@@ -145,33 +157,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  guard-nightly:
-    if: inputs.managed_environment == 'nightly' && inputs.manifest_run_id == '' && !inputs.orchestrated
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: apps/api/go.mod
-          cache-dependency-path: apps/api/go.sum
-      - name: Reject unsupported runtime changes before builds
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          python3 - <<'PYTHON'
-          import os, sys
-          sys.path.insert(0, 'scripts/releases')
-          from github_release import GitHub
-          from release import guard_runtime, previous_production
-          guard_runtime(previous_production(GitHub())['target_sha'], os.environ['TARGET_SHA'])
-          PYTHON
-
   plan-managed:
     name: Plan managed components
-    needs: guard-nightly
-    if: always() && !cancelled() && (needs.guard-nightly.result == 'success' || needs.guard-nightly.result == 'skipped') && (inputs.release_managed || inputs.deploy_managed) && inputs.manifest_run_id == ''
+    if: (inputs.release_managed || inputs.deploy_managed) && inputs.manifest_run_id == ''
     runs-on: ubuntu-24.04
     outputs:
       build_set: ${{ steps.plan.outputs.build_set }}
@@ -190,6 +178,10 @@ jobs:
         with:
           go-version-file: apps/api/go.mod
           cache-dependency-path: apps/api/go.sum
+
+      - name: Reject unsupported installed dispatcher root changes before builds
+        if: inputs.managed_environment == 'nightly'
+        run: python3 scripts/releases/media.py check_configuration --environment nightly
 
       - name: Verify exact release SHA
         env:
@@ -246,13 +238,15 @@ jobs:
 
           stable_manifest=""
           if [[ -n "${{ inputs.stable_manifest_run_id }}" ]]; then
-            mapfile -t manifests < <(find "${{ runner.temp }}/stable-download" -type f -name '*.json' | sort)
+            mapfile -t manifests < <(find "${{ runner.temp }}/stable-download" -type f -name '*.json' ! -name '*.media.json' | sort)
             if [[ "${#manifests[@]}" != 1 ]]; then
               echo "expected exactly one stable release manifest, found ${#manifests[@]}" >&2
               exit 1
             fi
             stable_manifest="$PLAN_ROOT/stable-manifest.json"
             cp "${manifests[0]}" "$stable_manifest"
+            media="${manifests[0]%.json}.media.json"
+            if [[ -f "$media" ]]; then cp "$media" "$PLAN_ROOT/stable-media.json"; fi
             base_sha="$(jq -er '.source_revision' "$stable_manifest")"
             git cat-file -e "${base_sha}^{commit}"
             git merge-base --is-ancestor "$base_sha" "$TARGET_SHA" || {
@@ -270,6 +264,7 @@ jobs:
           fi
 
           recorder_control="$ENABLE_RECORDER_CONTROL"
+          if [[ "${{ inputs.managed_environment }}" == nightly ]]; then recorder_control=true; fi
           if [[ -n "$stable_manifest" ]] && jq -e '.images | has("recorder_control")' "$stable_manifest" >/dev/null; then
             recorder_control=true
           elif [[ "$ENABLE_RECORDER_CONTROL" == true ]]; then
@@ -452,14 +447,113 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+  build-media:
+    name: Build and inspect media release members
+    needs: plan-managed
+    if: needs.plan-managed.outputs.should_publish == 'true' && inputs.managed_environment == 'nightly'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    environment: nightly
+    env:
+      DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      CHALK_MANAGED_RECORDER_CONFIG_PARAMETER: ${{ vars.CHALK_MANAGED_RECORDER_CONFIG_PARAMETER }}
+      CHALK_MEDIA_ARTIFACT_BUCKET: ${{ vars.CHALK_MEDIA_ARTIFACT_BUCKET }}
+      CHALK_TRANSCRIPTION_CORPUS_DIGEST: ${{ vars.CHALK_TRANSCRIPTION_CORPUS_DIGEST }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_sha }}
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.8.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
+          role-duration-seconds: 3600
+      - uses: actions/download-artifact@v4
+        with:
+          name: managed-release-plan-${{ needs.plan-managed.outputs.release_id }}
+          path: ${{ runner.temp }}/media-plan
+      - name: Prefer the qualified environment pins, including a deploy-only first install
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/releases/media.py baseline --output "$RUNNER_TEMP/media-plan/stable-media.json"
+      - name: Build first-install or changed capture image and inspect its installed bytes
+        run: |
+          args=()
+          baseline="$RUNNER_TEMP/media-plan/stable-media.json"
+          if [[ -f "$baseline" ]]; then args+=(--baseline "$baseline"); fi
+          python3 scripts/releases/media.py build_images --role capture "${args[@]}" --directory "$RUNNER_TEMP/media-build" --output "$RUNNER_TEMP/media.json"
+      - name: Refresh credentials before the render build
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
+          role-duration-seconds: 3600
+      - name: Build first-install or changed render image and inspect its installed bytes
+        run: |
+          args=()
+          baseline="$RUNNER_TEMP/media-plan/stable-media.json"
+          if [[ -f "$baseline" ]]; then args+=(--baseline "$baseline"); fi
+          python3 scripts/releases/media.py build_images --role render "${args[@]}" --directory "$RUNNER_TEMP/media-build" --output "$RUNNER_TEMP/media.json"
+      - name: Refresh credentials before dispatcher publication
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
+          role-duration-seconds: 3600
+      - name: Check whether dispatcher inputs changed
+        id: zip-plan
+        run: |
+          args=()
+          baseline="$RUNNER_TEMP/media-plan/stable-media.json"
+          if [[ -f "$baseline" ]]; then args+=(--baseline "$baseline"); fi
+          python3 scripts/releases/media.py zip_needed "${args[@]}"
+      - name: Qualify and build dispatcher ZIP
+        if: steps.zip-plan.outputs.build_zip == 'true'
+        env:
+          ARTIFACT_DIR: ${{ runner.temp }}/media-build
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --dir apps/transcription-dispatcher test
+          scripts/transcription-dispatcher/validate-contract.sh
+          scripts/transcription-dispatcher/build-release.sh '${{ needs.plan-managed.outputs.release_id }}'
+          archive=("$ARTIFACT_DIR"/*.zip)
+          scripts/transcription-dispatcher/verify-artifact.sh "${archive[0]}"
+      - name: Freeze versioned dispatcher ZIP and recorder image identities
+        run: |
+          args=()
+          baseline="$RUNNER_TEMP/media-plan/stable-media.json"
+          if [[ -f "$baseline" ]]; then args+=(--baseline "$baseline"); fi
+          python3 scripts/releases/media.py publish_zip "${args[@]}" --release-id '${{ needs.plan-managed.outputs.release_id }}' --directory "$RUNNER_TEMP/media-build" --output "$RUNNER_TEMP/media.json"
+      - name: Remove this job's builder Droplets, firewalls and SSH keys
+        if: always()
+        run: python3 scripts/releases/media.py cleanup --directory "$RUNNER_TEMP/media-build"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: media-members-${{ needs.plan-managed.outputs.release_id }}
+          path: ${{ runner.temp }}/media.json
+          retention-days: 90
+          if-no-files-found: error
+
   publish-managed-manifest:
     name: Publish managed release manifest
     outputs:
       artifact_id: ${{ steps.manifest-upload.outputs.artifact-id }}
-    needs: [plan-managed, build-managed-images]
+      media_sha256: ${{ steps.media-hash.outputs.sha256 }}
+    needs: [plan-managed, build-managed-images, build-media]
     if: >-
       always() &&
       needs.plan-managed.outputs.should_publish == 'true' &&
+      (needs.build-media.result == 'success' || (needs.build-media.result == 'skipped' && inputs.managed_environment != 'nightly')) &&
       (needs.build-managed-images.result == 'success' || (needs.build-managed-images.result == 'skipped' && needs.plan-managed.outputs.build_set == '[]'))
     runs-on: ubuntu-24.04
     steps:
@@ -482,6 +576,13 @@ jobs:
           pattern: managed-image-*-${{ needs.plan-managed.outputs.release_id }}
           path: ${{ runner.temp }}/managed-images
           merge-multiple: true
+
+      - name: Download immutable media members
+        if: inputs.managed_environment == 'nightly'
+        uses: actions/download-artifact@v4
+        with:
+          name: media-members-${{ needs.plan-managed.outputs.release_id }}
+          path: ${{ runner.temp }}/media-members
 
       - name: Generate component-aware manifest
         env:
@@ -521,12 +622,25 @@ jobs:
           fi
           infrastructure/managed-episode/scripts/generate-release-manifest "${args[@]}"
 
+      - name: Bind media members to the backend artifact
+        id: media-hash
+        env:
+          RELEASE_ID: ${{ needs.plan-managed.outputs.release_id }}
+        run: |
+          destination="infrastructure/managed-episode/generated/$RELEASE_ID.media.json"
+          if [[ -f "$RUNNER_TEMP/media-members/media.json" ]]; then
+            cp "$RUNNER_TEMP/media-members/media.json" "$destination"
+          elif [[ -f "$RUNNER_TEMP/managed-release-plan/stable-media.json" ]]; then
+            cp "$RUNNER_TEMP/managed-release-plan/stable-media.json" "$destination"
+          fi
+          if [[ -f "$destination" ]]; then echo "sha256=$(sha256sum "$destination" | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"; fi
+
       - name: Upload release manifest
         id: manifest-upload
         uses: actions/upload-artifact@v4
         with:
           name: release-manifest-${{ needs.plan-managed.outputs.release_id }}
-          path: infrastructure/managed-episode/generated/${{ needs.plan-managed.outputs.release_id }}.json
+          path: infrastructure/managed-episode/generated/${{ needs.plan-managed.outputs.release_id }}*.json
           retention-days: 90
           if-no-files-found: error
 
@@ -572,13 +686,17 @@ jobs:
           run-id: ${{ needs.prepare-release.outputs.run_id }}
           path: ${{ runner.temp }}/managed-release
 
-      - name: Verify exact backend bytes before credentials
+      - name: Verify exact backend and media bytes before credentials
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         env:
           EXPECTED_SHA256: ${{ needs.prepare-release.outputs.manifest_sha256 }}
+          EXPECTED_MEDIA_SHA256: ${{ needs.prepare-release.outputs.media_sha256 }}
           RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
         run: |
           python -c 'import hashlib,os,pathlib; p=pathlib.Path(os.environ["RUNNER_TEMP"])/"managed-release"/(os.environ["RELEASE_ID"]+".json"); assert hashlib.sha256(p.read_bytes()).hexdigest() == os.environ["EXPECTED_SHA256"]'
+          if [[ -n "$EXPECTED_MEDIA_SHA256" ]]; then
+            python -c 'import hashlib,os,pathlib; p=pathlib.Path(os.environ["RUNNER_TEMP"])/"managed-release"/(os.environ["RELEASE_ID"]+".media.json"); assert hashlib.sha256(p.read_bytes()).hexdigest() == os.environ["EXPECTED_MEDIA_SHA256"]'
+          fi
 
       - name: Retain exact production rollback bytes before host mutation
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && inputs.managed_environment == 'production'
@@ -628,6 +746,18 @@ jobs:
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         uses: ./.github/actions/setup-opentofu
 
+      - name: Install doctl for read-only snapshot validation
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
+        uses: digitalocean/action-doctl@v2
+        with:
+          no_auth: "true"
+
+      - uses: actions/setup-go@v5
+        if: inputs.managed_environment == 'nightly'
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+
       - name: Deploy, health-check, and prove release
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         env:
@@ -637,7 +767,9 @@ jobs:
           CHALK_MANAGED_LOG_GROUP_NAME: ${{ vars.CHALK_MANAGED_LOG_GROUP_NAME }}
           CHALK_MANAGED_PARAMETER_PREFIX: ${{ vars.CHALK_MANAGED_PARAMETER_PREFIX }}
           CHALK_MANAGED_SSM_DOCUMENT_NAME: ${{ vars.CHALK_MANAGED_SSM_DOCUMENT_NAME }}
-          CHALK_MANAGED_RECORDER_CONFIG_PARAMETER: ${{ vars.CHALK_MANAGED_RECORDER_CONFIG_PARAMETER }}
+          CHALK_MANAGED_RECORDER_CONFIG_PARAMETER: ${{ vars.CHALK_MANAGED_RECORDER_CONFIG_PARAMETER || format('/chalk/{0}/release/recorder.json', inputs.managed_environment) }}
+          CHALK_MEDIA_ARTIFACT_BUCKET: ${{ vars.CHALK_MEDIA_ARTIFACT_BUCKET }}
+          DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
           MANAGED_ENVIRONMENT: ${{ inputs.managed_environment }}
           MANAGED_SECRET_EXCLUSIONS: ${{ inputs.managed_secret_exclusions || vars.CHALK_MANAGED_SECRET_EXCLUSIONS }}
           RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
@@ -672,13 +804,24 @@ jobs:
           done < <(printf '%s\n' "$MANAGED_SECRET_EXCLUSIONS" | tr ',' '\n')
 
           if [[ "$MANAGED_ENVIRONMENT" == nightly ]]; then
-            [[ "$CHALK_MANAGED_PARAMETER_PREFIX" == /chalk/nightly && "$CHALK_MANAGED_RECORDER_CONFIG_PARAMETER" == /chalk/nightly/* ]] || {
+            [[ "$CHALK_MANAGED_PARAMETER_PREFIX" == /chalk/nightly/managed-episode && "$CHALK_MANAGED_RECORDER_CONFIG_PARAMETER" == /chalk/nightly/* ]] || {
               echo 'nightly requires its own dispatcher configuration and state (PR #268, scheduler_state=DISABLED initially)' >&2
               exit 1
             }
+          fi
+          node scripts/deploy/deploy-managed-release.mjs "${args[@]}" --dry-run > "$RUNNER_TEMP/managed-preflight.json"
+          if [[ "$MANAGED_ENVIRONMENT" == nightly ]]; then
             python3 scripts/releases/release.py invalidate
           fi
+          media="${manifest%.json}.media.json"
+          if [[ -f "$media" ]]; then
+            python3 scripts/releases/media.py pin_images --manifest "$manifest" --output "$media"
+          fi
           node scripts/deploy/deploy-managed-release.mjs "${args[@]}"
+          if [[ "$MANAGED_ENVIRONMENT" == nightly && -f "$media" ]]; then
+            python3 scripts/releases/media.py qualify --manifest "$manifest" --output "$media" --directory "$RUNNER_TEMP/media-qualification"
+            python3 scripts/releases/media.py record_current --manifest "$manifest" --output "$media" --directory "$RUNNER_TEMP/media-qualification"
+          fi
 
       - name: Capture applied identity under the environment lock
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
@@ -730,12 +873,19 @@ jobs:
           if-no-files-found: ignore
           retention-days: 90
 
+      - name: Retain signed media boot receipts
+        if: always() && inputs.managed_environment == 'nightly'
+        uses: actions/upload-artifact@v4
+        with:
+          name: media-qualification-${{ needs.prepare-release.outputs.release_id }}
+          path: ${{ runner.temp }}/media-qualification/*-receipt.json
+          retention-days: 90
+          if-no-files-found: ignore
+
   build-web:
     name: Build web-${{ matrix.target }} once
-    needs: guard-nightly
     if: >-
-      always() && !cancelled() && inputs.deploy_web && inputs.manifest_run_id == '' &&
-      (needs.guard-nightly.result == 'success' || needs.guard-nightly.result == 'skipped')
+      !cancelled() && inputs.deploy_web && inputs.manifest_run_id == ''
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -791,6 +941,7 @@ jobs:
       release_id: ${{ steps.prepare.outputs.release_id }}
       manifest_artifact_id: ${{ steps.upload.outputs.artifact-id || needs.publish-managed-manifest.outputs.artifact_id }}
       manifest_sha256: ${{ steps.prepare.outputs.manifest_sha256 }}
+      media_sha256: ${{ steps.prepare.outputs.media_sha256 }}
       run_id: ${{ github.run_id }}
     steps:
       - uses: actions/checkout@v4
@@ -806,6 +957,8 @@ jobs:
           SOURCE_RELEASE_ID: ${{ inputs.reuse_release_id || needs.plan-managed.outputs.release_id }}
           SOURCE_ARTIFACT_ID: ${{ inputs.manifest_artifact_id || needs.publish-managed-manifest.outputs.artifact_id }}
           SOURCE_SHA256: ${{ inputs.manifest_sha256 }}
+          SOURCE_MEDIA_SHA256: ${{ inputs.media_sha256 || needs.publish-managed-manifest.outputs.media_sha256 }}
+          ROLLBACK_MEDIA: ${{ inputs.rollback_media }}
           REUSE: ${{ inputs.manifest_run_id != '' }}
         run: |
           args=()
@@ -816,7 +969,7 @@ jobs:
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && (inputs.manifest_run_id != '')
         with:
           name: release-manifest-${{ steps.prepare.outputs.release_id }}
-          path: release-input/${{ steps.prepare.outputs.release_id }}.json
+          path: release-input/${{ steps.prepare.outputs.release_id }}*.json
           retention-days: 90
           if-no-files-found: error
 

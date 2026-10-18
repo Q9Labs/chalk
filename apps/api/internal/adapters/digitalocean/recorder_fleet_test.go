@@ -1,7 +1,9 @@
 package digitalocean
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +18,27 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
+
+func TestPortableRecorderTrustComesFromBootConfiguration(t *testing.T) {
+	server := httptest.NewTLSServer(http.NotFoundHandler())
+	defer server.Close()
+	request := recorderFleetEnsureRequest()
+	request.Release.BootstrapCABase64 = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}))
+	data, err := renderRecorderCloudInit(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(data, "encoding: b64\n    content: "+request.Release.BootstrapCABase64) || !strings.Contains(data, "CHALK_RECORDER_BOOTSTRAP_SERVER_NAME=") {
+		t.Fatal("portable image did not receive its environment's trust")
+	}
+	if strings.Index(data, "/usr/bin/sed") > strings.Index(data, "/usr/local/sbin/chalk-recorder-bootstrap") {
+		t.Fatal("bootstrap ran before trust configuration")
+	}
+	request.Release.BootstrapCABase64 = base64.StdEncoding.EncodeToString([]byte("not a certificate"))
+	if _, err := renderRecorderCloudInit(request); !errors.Is(err, recorderfleet.ErrInvalidConfig) {
+		t.Fatalf("malformed trust accepted: %v", err)
+	}
+}
 
 func TestRecorderCloudInitStopsBeforeWorkerAndCleanupOnBootstrapFailure(t *testing.T) {
 	data, err := renderRecorderCloudInit(recorderFleetEnsureRequest())

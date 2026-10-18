@@ -32,7 +32,7 @@ jobs:
         with:
           go-version-file: apps/api/go.mod
           cache-dependency-path: apps/api/go.sum
-      - name: Pin green master and refuse unsupported changes before builds
+      - name: Pin green master and select the current release baseline
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}

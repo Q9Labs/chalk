@@ -117,6 +117,9 @@ def retain_production(github, args):
     info = dict(channel='production-release', run_id=env('GITHUB_RUN_ID'), target_sha=value['source_revision'],
                 release_id=value['release_id'], manifest_artifact_id=env('MANIFEST_ARTIFACT_ID'),
                 manifest_sha256=digest(data), manifest_base64=base64.b64encode(data).decode())
+    media = source.with_suffix('.media.json')
+    if media.exists():
+        info.update(media_sha256=digest(media.read_bytes()), media_base64=base64.b64encode(media.read_bytes()).decode())
     item = save_production(github, info)
     outputs({'deployment_id': item['id']})
 
@@ -129,22 +132,6 @@ def complete_production(github, args):
     github.request(f"deployments/{env('DEPLOYMENT_ID')}/statuses", {'state': 'success', 'auto_inactive': False})
 
 
-def guard_runtime(base, target):
-    ancestor(base, target)
-    changed = subprocess.check_output(['git', 'diff', '--name-only', base, target], text=True).splitlines()
-    if not changed:
-        return
-    planner = ROOT / 'infrastructure/managed-episode/scripts/plan-release-components'
-    plan = json.loads(subprocess.check_output([str(planner), '--', *changed]))
-    # The planner owns recorder/renderer dependencies; these are additional build inputs.
-    extra = ('infrastructure/recorder/images/capture/', 'scripts/transcription-dispatcher/',
-             'apps/transcription-dispatcher/', 'infrastructure/', '.npmrc', '.pnpmfile.cjs', 'tsconfig.json', 'turbo.json')
-    unsupported = [path for path in changed if path.startswith(extra)]
-    require(not plan['recorder_image_affected'] and not unsupported,
-            'worker, renderer or transcription build inputs changed; use the manual release paths in '
-            'scripts/recorder/README.md and docs/transcription-production-release.md')
-
-
 def plan(github, args):
     target = subprocess.check_output(['git', 'rev-parse', 'origin/master'], text=True).strip()
     records = github.deployments('nightly') + github.deployments('nightly', 'nightly-attempt')
@@ -155,7 +142,6 @@ def plan(github, args):
         github.gate(target)
         held = held_candidates(records, held=False)
         baseline = payload(held[0]) if held else previous_production(github)
-        guard_runtime(baseline['target_sha'], target)
         # Rebuilding all components is safe when an old baseline cannot be read;
         # do not forward dead artifact IDs and wedge every future cut.
         recorder_control = baseline['recorder_control']
@@ -167,7 +153,7 @@ def plan(github, args):
             print(f'Build baseline unavailable; rebuilding all enabled components: {error}')
         else:
             result.update(baseline_run_id=baseline['run_id'], baseline_artifact_id=baseline['manifest_artifact_id'])
-        result['recorder_control'] = recorder_control
+        result['recorder_control'] = True
         github.reserve_cut(target)
     outputs(result)
 
@@ -176,6 +162,7 @@ def validate_choice(github, item):
     info = payload(item)
     require(re.fullmatch('[0-9a-f]{64}', info['manifest_sha256']), 'missing manifest hash')
     manifest_bytes(github, info)
+    require(media_bytes(github, info), 'held nightly has no immutable media members')
     github.gate(info['target_sha'])
     for target in ('nightly', 'production'):
         member = info['web'][target]
@@ -227,11 +214,33 @@ def fresh_envelope(source, output):
     return applied
 
 
+def media_bytes(github, info):
+    checksum = info.get('media_sha256')
+    if not checksum:
+        return None
+    require(re.fullmatch('[0-9a-f]{64}', checksum), 'invalid media checksum')
+    for item in github.deployments('production', 'production-release', sha=info['target_sha'], manifest_sha256=info.get('manifest_sha256')):
+        saved = payload(item)
+        if saved.get('media_sha256') == checksum and saved.get('media_base64'):
+            data = base64.b64decode(saved['media_base64'], validate=True)
+            require(digest(data) == checksum, 'retained media checksum mismatch')
+            return data
+    return github.artifact(info['run_id'], info['manifest_artifact_id'], info['release_id'] + '.media.json', checksum)
+
+
 def prepare(github, args):
     info = dict(run_id=env('SOURCE_RUN_ID'), release_id=env('SOURCE_RELEASE_ID'),
-                manifest_artifact_id=env('SOURCE_ARTIFACT_ID'), manifest_sha256=os.environ.get('SOURCE_SHA256'), target_sha=env('TARGET_SHA'))
+                manifest_artifact_id=env('SOURCE_ARTIFACT_ID'), manifest_sha256=os.environ.get('SOURCE_SHA256'), target_sha=env('TARGET_SHA'),
+                media_sha256=os.environ.get('SOURCE_MEDIA_SHA256'))
     require(not args.reuse or re.fullmatch('[0-9a-f]{64}', info['manifest_sha256']), 'reuse requires source hash')
     data = manifest_bytes(github, info, trusted=args.reuse)
+    media = media_bytes(github, info)
+    if os.environ.get('ROLLBACK_MEDIA'):
+        require(args.reuse and not media, 'rollback snapshot is only for a legacy source')
+        media = os.environ['ROLLBACK_MEDIA'].encode()
+    if media:
+        from media import validate_members
+        validate_members(json.loads(media))
     args.directory.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as directory:
         source = Path(directory) / 'source.json'
@@ -240,7 +249,9 @@ def prepare(github, args):
         value = fresh_envelope(source, output) if args.reuse else json.loads(data)
         applied = args.directory / (value['release_id'] + '.json')
         applied.write_bytes(output.read_bytes() if args.reuse else data)
-    outputs(dict(release_id=value['release_id'], manifest_sha256=digest(applied.read_bytes())))
+    if media:
+        (args.directory / (value['release_id'] + '.media.json')).write_bytes(media)
+    outputs(dict(release_id=value['release_id'], manifest_sha256=digest(applied.read_bytes()), media_sha256=digest(media) if media else ''))
 
 
 def webrefs(github, args):

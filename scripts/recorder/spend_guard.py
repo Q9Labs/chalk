@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import os
 import subprocess
 import time
 from pathlib import Path
@@ -11,7 +12,7 @@ from release_core import builder_identity
 
 
 def expire(identity, context, deadline, stop_file):
-    base = ["doctl", "--context", context, "compute", "droplet"]
+    base = ["doctl", *([] if os.environ.get("DIGITALOCEAN_ACCESS_TOKEN") else ["--context", context]), "compute", "droplet"]
     while time.time() < deadline:
         if Path(stop_file).exists():
             try:

@@ -4,10 +4,8 @@ set -euo pipefail
 source_commit="$1"
 release_id="$2"
 role="$3"
-bootstrap_server_name="$4"
 [[ "$source_commit" =~ ^[a-f0-9]{40}$ && "$release_id" =~ ^[a-z0-9][a-z0-9._-]{0,127}$ ]] || exit 2
 [[ "$role" == capture || "$role" == render ]] || exit 2
-[[ "$bootstrap_server_name" =~ ^[A-Za-z0-9.-]+$ ]] || exit 2
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq git ca-certificates curl jq
@@ -22,8 +20,7 @@ profile=cpu
 "$build_root/source/infrastructure/recorder/images/$profile/build-release.sh" \
   --source "$build_root/source" --release-id "$release_id" --output "$build_root/release.tar.gz"
 "$build_root/source/infrastructure/recorder/images/$profile/install.sh" \
-  --bundle "$build_root/release.tar.gz" --bundle-sha256 "$(sha256sum "$build_root/release.tar.gz" | cut -d ' ' -f1)" \
-  --bootstrap-ca /root/chalk-release-ca.pem --bootstrap-server-name "$bootstrap_server_name"
+  --bundle "$build_root/release.tar.gz" --bundle-sha256 "$(sha256sum "$build_root/release.tar.gz" | cut -d ' ' -f1)"
 setpriv --reuid chalk-recorder --regid chalk-recorder --clear-groups test -x "/opt/chalk-recorder/current/bin/recorder-$role"
 setpriv --reuid chalk-recorder --regid chalk-recorder --clear-groups "/opt/chalk-recorder/current/bin/recorder-$role" --help >/dev/null
 if [[ "$role" == render ]]; then
@@ -34,7 +31,6 @@ base64 -w0 /opt/chalk-recorder/image-manifest.json
 printf '\n'
 install -m 0700 "$build_root/source/infrastructure/recorder/images/cpu/seal.sh" /root/chalk-release-seal.sh
 find "$build_root" -depth -delete
-unlink /root/chalk-release-ca.pem
 unlink /root/chalk-release-build.sh
 bash /root/chalk-release-seal.sh
 unlink /root/chalk-release-seal.sh

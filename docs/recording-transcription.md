@@ -213,66 +213,16 @@ first-party mobile recording/transcript wiring, every regional load ceiling,
 every possible worker-loss timing, or managed observability and notification
 configuration. Those remain separate product and operational milestones.
 
-## Recorder release command
+## Recorder releases
 
-`pnpm release:recorder` replaces private release wrappers. Set `AWS_PROFILE` and
-`AWS_REGION`; production identifiers are read at launch from the non-secret SSM
-String `/chalk/production/release/recorder.json`. Secrets remain at their existing
-parameter paths. The version-1 configuration contains `do_context`,
-`bootstrap_ca_parameter`, `bootstrap_server_name`, `builder` (region, size, image,
-ttl_seconds, ssh_cidr), `worker` (region, size, disk_gb), `runtime` (instance_id,
-parameter_prefix, document_name, log_group, user_id), and `dispatcher` (state_bucket,
-state_key, function_name, scheduler_name, scheduler_group). Keep its values and all
-release evidence outside Git. Update the SSH CIDR when the operator's address changes.
+Use the [Release, Nightly and Promote workflows](managed-release.md).
+There is no separate recorder publish or deploy command. The pipeline builds
+first-install or changed images, records immutable media members, updates only
+the selected environment's pins, deploys the backend and dispatcher, and runs
+cold signed-boot qualification before accepting the nightly cut.
 
-First run `pnpm release:recorder plan --dry-run --role render`. This covers all
-seven phases using provider reads only. Every subcommand accepts `--dry-run`;
-none sends a remote command, creates compute, writes pins, or deploys. A dry run
-does not claim image qualification, zero OpenTofu drift, or loaded-process proof.
-
-For an authorized release, use one new private directory outside the checkout,
-one exact public `--source` commit, and the same `--role` on every invocation:
-
-```sh
-pnpm release:recorder plan --role render --source "$SOURCE_COMMIT" --state "$RELEASE_STATE"
-pnpm release:recorder build --role render --state "$RELEASE_STATE"
-pnpm release:recorder snapshot --role render --state "$RELEASE_STATE"
-pnpm release:recorder qualify --role render --state "$RELEASE_STATE" --boot-check "$BOOT_CHECK"
-pnpm release:recorder publish-pins --role render --state "$RELEASE_STATE"
-```
-
-After pin publication, reload managed API and Sync through the
-[Release workflow](managed-release.md), not `release:recorder deploy` or a local
-SSM command. Use the currently healthy source SHA and manifest run as the
-baseline when only inputs changed. Require CI's host/dispatcher proof and the
-real-call recording/export proof before accepting the new pins.
-
-Snapshot precedes qualification because qualification boots the resulting image.
-The detached build worker and exact-ID deadline guard survive terminal connection
-loss. The uploaded script builds, cleans up and seals itself; never SSH back
-into a sealed builder. Snapshot checks minimum disk, deletes only owned resources,
-confirms Droplet absence, and removes its key files. The guard never scans by tag.
-After interruption, inspect `release.json`, `build-worker.log` and the guard log;
-continue the next phase only after the worker completes. Do not start a second
-builder or cancel its deadline to recover a stalled one.
-
-`BOOT_CHECK` is BOOTDIAG's executable hook, not a RELEASEKIT implementation. It
-receives `--request <json> --receipt <json>` with schema_version, role, source_commit,
-release_id, image_id, image_digest, region and size. It must clean up its resources
-and return those same identities plus `result: "PASS"` and
-`fleet_equivalent_signed_boot: true`. Missing or mismatched evidence blocks pins.
-The executable is `scripts/recorder/boot-check.py`. Run it from a checkout with Go,
-Python 3, AWS CLI, `doctl`, SSH and curl installed. Set
-`CHALK_BOOT_CHECK_AWS_PROFILE`, `CHALK_BOOT_CHECK_AWS_REGION` and
-`CHALK_BOOT_CHECK_DO_CONTEXT`; set `CHALK_BOOT_CHECK_INSTANCE_ID` when the account
-has more than one online managed instance. No controller/issuer private key leaves
-the managed runtime. `CHALK_BOOT_CHECK_PROVIDER` may point to a prebuilt
-`apps/api/cmd/recorder-boot-probe` binary instead of using `go run`.
-
-```sh
-BOOT_CHECK="$PWD/scripts/recorder/boot-check.py"
-pnpm release:recorder qualify --role capture --state "$RELEASE_STATE" --boot-check "$BOOT_CHECK"
-```
+`boot-check.py` remains the pipeline's isolated diagnostic. It receives an exact
+candidate image identity and reads the target environment's fleet configuration.
 
 The hook reads current role settings and uses the fleet's provider adapter and
 controller bootstrap API. It creates a separately named/tagged diagnostic node,
@@ -347,7 +297,7 @@ For a changed API component, it:
    release readback must pass afterward.
 
 The release fails if binding or verification fails, even if the host deployment
-succeeded. The older `release:recorder deploy` wrapper paused the scheduler and
+succeeded. The former separate deploy wrapper paused the scheduler and
 called the controller locally; do not use it for managed deployments. Preserve
 any existing scheduler pause until runtime and binding verification pass.
 If deployment fails, inspect the failure and restore a clean
@@ -358,9 +308,9 @@ scheduler before verification passes.
 Requests already running during a release can briefly receive 401; normal fenced
 retries reconcile them after the binding update.
 
-Both managed release `--dry-run` and recorder `deploy --dry-run
---managed-manifest <path>` report `dispatcher_binding` with the previous/target
-release, retained ZIP digest and planned copy action. Dry runs do not copy,
+Managed release `--dry-run` reports `dispatcher_binding` with the selected
+ZIP digest and version, after artifact readback and a read-only state plan.
+Dry runs do not copy,
 apply, invoke SSM commands or verify loaded processes. Production configuration
 is mandatory. Other configured environments use their own scoped recorder
 configuration; there is no production configuration fallback.

@@ -113,7 +113,7 @@ func TestVerifyImageManifestRejectsUnknownProfile(t *testing.T) {
 	}
 }
 
-func TestBootstrapConfigRejectsBakedIssuerNameMismatch(t *testing.T) {
+func TestBootstrapConfigRejectsIssuerNameMismatch(t *testing.T) {
 	config := Config{
 		Environment: "nightly", Role: workeridentity.RoleCapture,
 		ReleaseID: "release-1", ImageDigest: "sha256:" + strings.Repeat("a", 64), BootGeneration: 1,
@@ -122,7 +122,7 @@ func TestBootstrapConfigRejectsBakedIssuerNameMismatch(t *testing.T) {
 		WorkerEnvironment: "/etc/chalk-recorder/worker.env", NodeEnvironment: "/etc/chalk-recorder/node.env",
 		ImageManifest: "/opt/chalk-recorder/image-manifest.json",
 	}
-	if err := config.Validate(); !errors.Is(err, ErrInvalidConfig) || !strings.Contains(err.Error(), "baked bootstrap server name") {
+	if err := config.Validate(); !errors.Is(err, ErrInvalidConfig) || !strings.Contains(err.Error(), "bootstrap server name") {
 		t.Fatalf("mismatched issuer name error = %v", err)
 	}
 }
@@ -177,5 +177,32 @@ func TestRenewalTimeUsesOneThirdLifetimeLead(t *testing.T) {
 				t.Fatalf("renewal time = %s, want %s", got, test.want)
 			}
 		})
+	}
+}
+
+func TestPortableManifestRejectsBakedTrustButStillVerifiesInstalledFiles(t *testing.T) {
+	directory := t.TempDir()
+	installed := filepath.Join(directory, "worker")
+	if err := os.WriteFile(installed, []byte("worker"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hash := sha256.Sum256([]byte("worker"))
+	manifest := imageManifest{SchemaVersion: "chalk_recorder_cpu_image.v2", ReleaseID: "portable-example",
+		SourceCommit: strings.Repeat("a", 40), SourceTreeSHA256: strings.Repeat("b", 64), Profile: "capture-minimal-v1",
+		Files: []imageManifestFile{{Path: installed, Type: "file", SHA256: hex.EncodeToString(hash[:])}}}
+	path, digest := writeSignedManifest(t, directory, manifest)
+	if err := VerifyImageManifest(path, manifest.ReleaseID, digest, workeridentity.RoleCapture); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(installed, []byte("changed"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyImageManifest(path, manifest.ReleaseID, digest, workeridentity.RoleCapture); !errors.Is(err, ErrInvalidConfig) {
+		t.Fatalf("portable image accepted changed worker: %v", err)
+	}
+	manifest.BootstrapServerName = "nightly.example"
+	path, digest = writeSignedManifest(t, directory, manifest)
+	if _, err := VerifyImageManifestClaims(path, manifest.ReleaseID, digest, workeridentity.RoleCapture); !errors.Is(err, ErrInvalidConfig) {
+		t.Fatalf("portable image accepted baked trust: %v", err)
 	}
 }

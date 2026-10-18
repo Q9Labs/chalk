@@ -6,7 +6,7 @@ import json
 import re
 from pathlib import Path
 
-PHASES = ("plan", "build", "qualify", "snapshot", "publish-pins", "deploy", "verify")
+PHASES = ("plan", "build", "snapshot", "inspect")
 PIN_KEYS = {"CHALK_RECORDER_FLEET_" + key for key in ("IMAGE_ID", "RELEASE_ID", "IMAGE_DIGEST")}
 
 
@@ -72,6 +72,7 @@ def validate_config(config, environment="production"):
     ipaddress.ip_network(config["builder"]["ssh_cidr"], strict=True)
     require(re.fullmatch(r"i-[0-9a-f]{8,17}", config["runtime"]["instance_id"]), "invalid runtime instance")
     require(config["runtime"]["parameter_prefix"].startswith(f"/chalk/{environment}/"), "runtime prefix outside selected environment")
+    require(config["bootstrap_ca_parameter"].startswith(f"/chalk/{environment}/"), "bootstrap CA outside selected environment")
     if environment == "nightly":
         require(isinstance(config["do_context"], str) and config["do_context"].strip(), "invalid nightly DigitalOcean context")
         require(config["runtime"]["parameter_prefix"] == "/chalk/nightly/managed-episode", "invalid nightly runtime prefix")
