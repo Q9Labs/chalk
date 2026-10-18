@@ -15,17 +15,23 @@ interface StageSnapshot {
 
 /** Snapshot before React mutates tile boxes, not after an animation has started. */
 export class StageMotion extends Component<StageMotionProps> {
+  private animationsSupported(): boolean {
+    const root = this.props.rootRef.current;
+    return Boolean(root && typeof root.animate === "function" && typeof root.getAnimations === "function");
+  }
+
   private elements(): HTMLElement[] {
     return Array.from(this.props.rootRef.current?.querySelectorAll<HTMLElement>(":scope > [data-stage-item]") ?? []);
   }
 
   getSnapshotBeforeUpdate(previous: StageMotionProps): StageSnapshot | null {
-    if (!this.props.animate || previous.motionKey === this.props.motionKey) return null;
+    if (!this.props.animate || !this.animationsSupported() || previous.motionKey === this.props.motionKey) return null;
     const elements = this.elements();
     return { play: captureFlip(elements), previous: new Set(elements) };
   }
 
   componentDidUpdate(previous: StageMotionProps, _state: unknown, snapshot: StageSnapshot | null): void {
+    if (!this.animationsSupported()) return;
     if (!this.props.animate && previous.animate) {
       for (const element of this.elements()) for (const animation of element.getAnimations()) animation.cancel();
     }
@@ -55,6 +61,7 @@ export class StageMotion extends Component<StageMotionProps> {
   }
 
   componentWillUnmount(): void {
+    if (!this.animationsSupported()) return;
     for (const element of this.elements()) for (const animation of element.getAnimations()) animation.cancel();
   }
 

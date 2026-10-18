@@ -82,42 +82,44 @@ function StageFixture({ count: initialCount = 6, theme = "dark", layout: initial
     [count, cameras, share, track, aspect, shareState, names],
   );
   return (
-    <SpacePresentation
-      colorScheme={theme}
-      stageBackground
-      header={{ spaceName: "Team", layout, onLayoutChange: setLayout }}
-      stage={
-        <SpaceStage
-          whiteboard={board ? { isOpen: true, props: { canDraw: true, theme } } : undefined}
-          tiles={tiles}
-          layout={layout}
-          onLayoutChange={setLayout}
-          onOverflowClick={() => setPeople(true)}
-          shareCapture={{ surface: "monitor", label: "Entire screen" }}
-          onStopSharing={async () => setShare("none")}
-          onChangeShare={async () => setShare("local")}
-        />
-      }
-      controls={
-        <div className="flex items-center gap-2">
-          <ChalkButton onClick={() => setLayout(layout === "grid" ? "focus" : "grid")}>{layout === "grid" ? "Spotlight" : "Grid"}</ChalkButton>
-          <ChalkButton onClick={() => setShare(share === "none" ? "remote" : "none")}>{share === "none" ? "Start fixture share" : "Stop fixture share"}</ChalkButton>
-          <ChalkButton onClick={() => setCount((value) => value + 1)}>Add participant</ChalkButton>
-          <ChalkButton onClick={() => setCount((value) => Math.max(1, value - 1))}>Remove participant</ChalkButton>
-          <ChalkButton onClick={() => setPeople(!people)}>People</ChalkButton>
-        </div>
-      }
-      sidebar={
-        people ? (
-          <aside className="chalk-drawer" data-state="open" aria-label="People">
-            <button onClick={() => setPeople(false)}>Close People</button>
-            {tiles.map((tile) => (
-              <p key={tile.id}>{tile.displayName}</p>
-            ))}
-          </aside>
-        ) : undefined
-      }
-    />
+    <div className="h-dvh w-full">
+      <SpacePresentation
+        colorScheme={theme}
+        stageBackground
+        header={{ spaceName: "Team", layout, onLayoutChange: setLayout }}
+        stage={
+          <SpaceStage
+            whiteboard={board ? { isOpen: true, props: { canDraw: true, theme } } : undefined}
+            tiles={tiles}
+            layout={layout}
+            onLayoutChange={setLayout}
+            onOverflowClick={() => setPeople(true)}
+            shareCapture={{ surface: "monitor", label: "Entire screen" }}
+            onStopSharing={async () => setShare("none")}
+            onChangeShare={async () => setShare("local")}
+          />
+        }
+        controls={
+          <div className="flex items-center gap-2">
+            <ChalkButton onClick={() => setLayout(layout === "grid" ? "focus" : "grid")}>{layout === "grid" ? "Spotlight" : "Grid"}</ChalkButton>
+            <ChalkButton onClick={() => setShare(share === "none" ? "remote" : "none")}>{share === "none" ? "Start fixture share" : "Stop fixture share"}</ChalkButton>
+            <ChalkButton onClick={() => setCount((value) => value + 1)}>Add participant</ChalkButton>
+            <ChalkButton onClick={() => setCount((value) => Math.max(1, value - 1))}>Remove participant</ChalkButton>
+            <ChalkButton onClick={() => setPeople(!people)}>People</ChalkButton>
+          </div>
+        }
+        sidebar={
+          people ? (
+            <aside className="chalk-drawer" data-state="open" aria-label="People">
+              <button onClick={() => setPeople(false)}>Close People</button>
+              {tiles.map((tile) => (
+                <p key={tile.id}>{tile.displayName}</p>
+              ))}
+            </aside>
+          ) : undefined
+        }
+      />
+    </div>
   );
 }
 

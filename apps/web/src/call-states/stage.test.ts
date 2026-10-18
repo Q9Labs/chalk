@@ -100,7 +100,7 @@ it("shows a live local preview and Stop sharing ends it", async () => {
   await page.getByRole("group", { name: "Your share", exact: true }).waitFor();
   expect(await page.getByText("You’re sharing your screen", { exact: true }).isVisible()).toBe(true);
   const preview = page.locator('[data-stage-item="screen-share:stage-0"] video');
-  await expect.poll(() => preview.evaluate((video) => video.readyState)).toBeGreaterThanOrEqual(2);
+  await expect.poll(() => preview.evaluate((video) => (video instanceof HTMLVideoElement ? video.readyState : 0))).toBeGreaterThanOrEqual(2);
   await page.getByRole("button", { name: "Stop sharing", exact: true }).click();
   await expect.poll(() => page.getByRole("group", { name: "Your share", exact: true }).count()).toBe(0);
 });
