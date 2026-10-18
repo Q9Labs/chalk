@@ -203,6 +203,7 @@ try {
   assert.equal(storedSpace.name, "Renamed");
   assert.equal(storedSpace.admission_policy.mode, "knock");
   assert.equal(storedSpace.default_episode_duration_seconds, 3600);
+  let sourceEpisodeId;
   // Use separate Spaces so the historical attendance fixtures stay independent.
   for (const admission of ["anyone", "knock"]) {
     const createdCall = await post(ada, "/dashboard-api/home", { action: "create-call", name: `Owner ${admission}`, admission, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
@@ -212,6 +213,7 @@ try {
     const joined = await post(ada, "/dashboard-api/call", join, session.csrfToken);
     assert.equal(joined.status, 200, await joined.clone().text());
     const grant = (await joined.json()).access;
+    sourceEpisodeId = grant.subject.episode_id;
     assert(grant.sync.token && grant.media.token);
     assert.equal(grant.subject.tenant_id, firstTenant);
     const replay = await post(ada, "/dashboard-api/call", join, session.csrfToken);
@@ -298,7 +300,7 @@ try {
   const foreign = { spaceId, episodeId: crypto.randomUUID(), recordingId: crypto.randomUUID(), transcriptId: crypto.randomUUID(), keyId, webhookId, deliveryId: crypto.randomUUID() };
   // Provider artifacts are seeded, not mocked. Every read/authorization uses the
   // production HTTP server and PostgreSQL repositories; no vendor is contacted.
-  sql(`insert into episodes(id,tenant_id,space_id,status,started_at,ended_at,config_snapshot) values('${foreign.episodeId}','${firstTenant}','${spaceId}','ended',now()-interval '1 hour',now(),'{"roles":{"owner":["subscribe"]},"admission_policy":{"mode":"open"},"default_episode_duration_seconds":3600,"maximum_episode_duration_seconds":86400,"linger_window_seconds":60}');
+  sql(`insert into episodes(id,tenant_id,space_id,status,started_at,ended_at,config_snapshot) values('${foreign.episodeId}','${firstTenant}','${spaceId}','ended',now()-interval '1 hour',now(),(select config_snapshot from episodes where id='${sourceEpisodeId}'));
   insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider) values('${foreign.recordingId}','${firstTenant}','${spaceId}','${foreign.episodeId}','failed','r2');
   insert into transcriptions(id,tenant_id,space_id,episode_id,recording_id,status,languages) values('${foreign.transcriptId}','${firstTenant}','${spaceId}','${foreign.episodeId}','${foreign.recordingId}','terminal_failure','{en}');
   insert into participants(id,tenant_id,space_id,episode_id,name,capabilities,generation,status,role,joined_at,first_joined_at) select gen_random_uuid(),'${firstTenant}','${spaceId}','${foreign.episodeId}','Same name',array['subscribe'],1,'active','owner',now()-interval '1 hour',now()-interval '1 hour' from generate_series(1,2);`);
