@@ -41,6 +41,7 @@ type APIParameterContract struct {
 }
 
 type APIRouteContract struct {
+	Description    string
 	OperationID    string
 	Method         string
 	Path           string

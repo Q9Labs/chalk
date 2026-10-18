@@ -45,6 +45,7 @@ list only its own Tenants, and use its scopes only within those Tenants.
 `POST /v1/tenants` returns the existing Tenant for a repeated
 `(service ID, external_id)`, without replacing its name, settings, or policies.
 `GET /v1/tenants/by-external-id?external_id=...` looks up only the caller's Tenant.
+The calling service is responsible for the request-supplied `external_id` and end-user identity; Tenant ownership is derived only from the authenticated service identity.
 Keep this credential server-side. It is never System; the local-only System token
 remains unavailable in non-local environments.
 
@@ -52,7 +53,7 @@ With `tenants:read`, services can read their own Tenant including
 `cors_allowed_origins`. With `tenants:write`, they can PATCH only
 `cors_allowed_origins` on their own Tenants. Including any other field returns
 forbidden, even when its value is null. System and Tenant API-key permissions
-are unchanged. There is no command for adopting existing Tenants.
+are unchanged. Services cannot create or rotate API keys containing `tenants:write`, because those keys can change fields beyond CORS. There is no command for adopting existing Tenants.
 
 Set `CHALK_API_TRUSTED_PROXY_CIDRS` to the comma-separated CIDR ranges of the
 load balancers or edge proxies allowed to supply `CF-Connecting-IP` or
