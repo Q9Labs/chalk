@@ -32,3 +32,9 @@
 
 /*
   Cache-Control: public, max-age=0, s-maxage=0, must-revalidate
+
+/.well-known/apple-app-site-association
+  Content-Type: application/json
+
+/.well-known/assetlinks.json
+  Content-Type: application/json

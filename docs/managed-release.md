@@ -156,13 +156,14 @@ artifact, source release ID and hash, plus the prebuilt target web artifact/hash
 Production keeps its existing Pages account/project, credentials and legacy
 `--adopt-existing-release` behavior. New configuration is nightly-only.
 
-Merge real-call proof PR #255 and nightly environment PR #268 before enabling.
-Configure nightly managed deployment variables and proof Tenant credentials as
-listed in the lane report and the proof workflow. Give nightly its own Pages
-account/project and token. Its recorder configuration must point to PR #268's
-nightly dispatcher caller and nightly state (`transcription/terraform.tfstate`
-in the nightly backend bucket), The first Release installs the dispatcher and enables its one-minute scheduler.
-The Cut nightly workflow stays disabled until first-cut approval.
+Before enabling managed nightly deployment, merge the real-call proof and
+nightly environment changes. Configure nightly deployment variables and proof
+Tenant credentials as listed in the lane report and proof workflow. Give nightly
+its own Pages account/project and token. Point its recorder configuration at
+the nightly dispatcher caller and nightly state
+(`transcription/terraform.tfstate` in the nightly backend bucket). The first
+Release installs the dispatcher and enables its one-minute scheduler. Enable
+the Cut nightly workflow only after first-cut approval.
 Never point nightly configuration at production state or credentials.
 
 ## Environment configuration and deployment evidence

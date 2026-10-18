@@ -14,6 +14,8 @@ on:
       - .github/actions/setup-opentofu/**
       - scripts/releases/**
       - scripts/deploy/**
+      - scripts/prod-proof/**
+      - scripts/web-proof/**
       - scripts/recorder/**
       - scripts/transcription-dispatcher/**
       - infrastructure/managed-episode/**

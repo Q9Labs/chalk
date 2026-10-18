@@ -1,16 +1,16 @@
 # Production observability
 
-API request logs and Sync event spans export to Axiom. The local Grafana stack,
-client telemetry, Episode diagnostics and trace CLI are removed. The private
-`observability_journey_events` table remains for webhook and recording lifecycle
-correlation.
+API request logs and Sync event spans export to Axiom. Use W3C trace IDs and
+Space or Episode IDs to correlate them. The private
+`observability_journey_events` table holds the durable correlation record for
+webhook and recording lifecycles.
 
 ## Follow an incident
 
 Start with the Space and Episode IDs from the affected class and the participant
 ID when available. Keep the server error code and trace/request ID from a
 failed join when locating the corresponding request.
-Not every request has an Episode (for example, authentication before joining).
+Tenant-level requests do not have an Episode ID.
 
 In the relevant Axiom API log or Sync trace dataset, run:
 
@@ -30,4 +30,4 @@ recordings and transcripts or exhausted webhooks, and stale collector state.
 The read-only collector and Discord message templates live in
 [infrastructure/observability/production-alerts](../infrastructure/observability/production-alerts/README.md).
 An independent uptime Worker checks API/Sync health and readiness and reports
-failures directly to Discord. No public status projection is maintained.
+failures directly to Discord.

@@ -16,7 +16,6 @@ const CustomUI = lazy(() => import("./content/custom-ui.mdx"));
 const Media = lazy(() => import("./content/media.mdx"));
 const ScreenSharing = lazy(() => import("./content/screen-sharing.mdx"));
 const Chat = lazy(() => import("./content/chat.mdx"));
-const Reactions = lazy(() => import("./content/reactions.mdx"));
 const Whiteboard = lazy(() => import("./content/whiteboard.mdx"));
 const EntranceAndAdmission = lazy(() => import("./content/entrance-and-admission.mdx"));
 const Authentication = lazy(() => import("./content/authentication.mdx"));
@@ -216,29 +215,18 @@ export const DOCS_PAGES = [
     href: "/docs/chat",
     title: "Chat",
     navLabel: "Chat",
-    description: "Send durable Space messages, paginate history, and upload files.",
+    description: "Send durable Space messages, paginate history, upload files, and send reactions.",
     groupId: "features",
-    keywords: ["chat", "messages", "attachments", "pagination", "read receipts"],
+    keywords: ["chat", "messages", "attachments", "pagination", "read receipts", "reactions", "emoji", "sendReaction"],
     layout: "article",
     Content: Chat,
-  },
-  {
-    slug: "reactions",
-    href: "/docs/reactions",
-    title: "Reactions",
-    navLabel: "Reactions",
-    description: "Publish typed, short-lived reactions with a capability check.",
-    groupId: "features",
-    keywords: ["reactions", "emoji", "sendReaction", "active"],
-    layout: "article",
-    Content: Reactions,
   },
   {
     slug: "whiteboard",
     href: "/docs/whiteboard",
     title: "Whiteboard",
     navLabel: "Whiteboard",
-    description: "Add the Excalidraw-backed collaborative whiteboard and file sync.",
+    description: "Add the Excalidraw-backed collaborative whiteboard.",
     groupId: "features",
     keywords: ["whiteboard", "Excalidraw", "WhiteboardCanvas", "scene", "math"],
     layout: "article",

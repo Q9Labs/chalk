@@ -63,10 +63,53 @@ test("hands a release to the pinned SSM document and returns its controller proo
   assert.equal(calls.filter(({ args }) => args.includes("send-command")).length, 1);
   assert.equal(calls.filter(({ args }) => args.includes("get-command-invocation")).length, 2);
   assert.equal(sendCommand.command, "aws");
+  assert.equal(sendCommand.args[sendCommand.args.indexOf("--comment") + 1], `Chalk ${releaseId} (12345.2)`);
   assert.equal(sendCommand.args[sendCommand.args.indexOf("--document-version") + 1], "7");
   const parameters = JSON.parse(sendCommand.args[sendCommand.args.indexOf("--parameters") + 1]);
   assert.deepEqual(parameters.ExcludedSecrets, ['["sync-env"]']);
   assert.deepEqual(parameters.ControllerVersion, ["2"]);
+});
+
+test("observed and maximum-length identities fit SSM comments without changing deployment identity", async () => {
+  const observed = JSON.parse(await readFile(new URL("./tests/fixtures/ssm-comment-validation.json", import.meta.url), "utf8"));
+  assert.ok(observed.rejected_comment.length > observed.maximum_comment_length);
+  for (const environment of ["nightly", "production"]) {
+    for (const identity of [observed, { release_id: "managed-episode-20261018T095630Z-0123456789ab-01234567", request_id: "q".repeat(128) }]) {
+      const manifestPath = await writeManifest(identity.release_id);
+      const arguments_ = requiredArguments(manifestPath);
+      arguments_[arguments_.indexOf("--environment") + 1] = environment;
+      arguments_[arguments_.indexOf("--parameter-prefix") + 1] = `/chalk/${environment}/managed-episode`;
+      arguments_[arguments_.indexOf("--request-id") + 1] = identity.request_id;
+      const controllerResult = { schema_version: 1, status: "deployed", release_id: identity.release_id, request_id: identity.request_id, previous_release_id: null, health: "passed", rolled_back: false };
+      let sent = false;
+      const result = await runManagedRelease({
+        arguments_,
+        allowedSecretIds,
+        commandRunner: async ({ command, args }) => {
+          if (command === "python3") return { stdout: JSON.stringify({ action: "already-bound" }) };
+          if (args.includes("send-command")) {
+            const comment = args[args.indexOf("--comment") + 1];
+            assert.ok(comment.startsWith("Chalk "));
+            assert.ok(comment.length <= observed.maximum_comment_length, observed.provider_error);
+            const parameters = JSON.parse(args[args.indexOf("--parameters") + 1]);
+            assert.deepEqual(parameters.ReleaseId, [identity.release_id]);
+            assert.deepEqual(parameters.RequestId, [identity.request_id]);
+            assert.deepEqual(parameters.Environment, [environment]);
+            assert.equal(JSON.parse(Buffer.from(parameters.ManifestBase64[0], "base64")).release_id, identity.release_id);
+            sent = true;
+            return { stdout: JSON.stringify({ Command: { CommandId: "01234567-89ab-cdef-0123-456789abcdef" } }) };
+          }
+          assert.ok(args.includes("get-command-invocation"));
+          return { stdout: JSON.stringify({ Status: "Success", StandardOutputContent: `RESULT ${JSON.stringify(controllerResult)}\n` }) };
+        },
+        sleep: async () => {},
+        stdout: { write: () => {} },
+      });
+      assert.equal(sent, true);
+      assert.equal(result.release_id, identity.release_id);
+      assert.equal(result.request_id, identity.request_id);
+    }
+  }
 });
 
 test("passes only the operator-controlled deployment flags through CI", async () => {
@@ -105,7 +148,7 @@ function requiredArguments(manifestPath = "/tmp/manifest.json") {
   ];
 }
 
-async function writeManifest() {
+async function writeManifest(manifestReleaseId = releaseId) {
   const directory = await mkdtemp(join(tmpdir(), "chalk-managed-release-test-"));
   temporaryDirectories.push(directory);
   const path = join(directory, "release-manifest.json");
@@ -113,7 +156,7 @@ async function writeManifest() {
     path,
     `${JSON.stringify({
       schema_version: 2,
-      release_id: releaseId,
+      release_id: manifestReleaseId,
       source_revision: sourceRevision,
       images: { recorder_control: `example/control@sha256:${"0".repeat(64)}` },
       runtime_artifacts: { "scripts/chalk-runtime-health": "0".repeat(64) },

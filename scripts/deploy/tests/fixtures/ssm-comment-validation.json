@@ -1,0 +1,8 @@
+{
+  "run_id": "39117223384",
+  "release_id": "managed-episode-20261018T095630Z-99fe4ecd-ce7d329e",
+  "request_id": "39117223384.1.managed-episode-20261018T095630Z-99fe4ecd-ce7d329e",
+  "rejected_comment": "Chalk managed-episode-20261018T095630Z-99fe4ecd-ce7d329e (39117223384.1.managed-episode-20261018T095630Z-99fe4ecd-ce7d329e)",
+  "maximum_comment_length": 100,
+  "provider_error": "An error occurred (ValidationException) when calling the SendCommand operation: 2 validation errors detected: Value 'Chalk managed-episode-20261018T095630Z-99fe4ecd-ce7d329e (39117223384.1.managed-episode-20261018T095630Z-99fe4ecd-ce7d329e)' at 'comment' failed to satisfy constraint: Member must satisfy regular expression pattern: ^.{0,100}$; Value 'Chalk managed-episode-20261018T095630Z-99fe4ecd-ce7d329e (39117223384.1.managed-episode-20261018T095630Z-99fe4ecd-ce7d329e)' at 'comment' failed to satisfy constraint: Member must have length less than or equal to 100"
+}

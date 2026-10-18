@@ -38,16 +38,18 @@ for (const publicPagePath of [indexPath, privacyIndexPath, termsIndexPath]) {
 }
 
 mkdirSync(shellDirectoryPath, { recursive: true });
-cpSync(shellPath, shellIndexPath);
+const spaceShellHtml = readFileSync(shellPath, "utf8");
+// The Space route head belongs in call HTML, not the generic SPA shell reused
+// for invitation links, unknown paths and generated documentation pages.
+const shellHtml = spaceShellHtml.replace(/<meta\b(?=[^>]*\bname=["']apple-itunes-app["'])[^>]*>/gi, "");
+writeFileSync(shellIndexPath, shellHtml);
 rmSync(shellPath);
 
 // Cloudflare Pages: ensure unknown paths and Space deep links load the SPA shell
 // even if a redirect rule is bypassed.
 cpSync(shellIndexPath, fallback404Path);
 mkdirSync(spaceDirPath, { recursive: true });
-cpSync(shellIndexPath, spaceIndexPath);
-
-const shellHtml = readFileSync(shellIndexPath, "utf8");
+writeFileSync(spaceIndexPath, spaceShellHtml);
 
 function escapeHtml(value) {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
