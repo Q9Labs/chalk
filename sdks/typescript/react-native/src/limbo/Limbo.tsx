@@ -64,9 +64,7 @@ export function Limbo({ state, callName, recording }: LimboProps): React.JSX.Ele
           </>
         ) : (
           <>
-            <View style={[styles.holdIcon, { backgroundColor: colors.raised }]} testID="limbo.hold-icon">
-              <Icon color={colors.success} name="earpiece" />
-            </View>
+            <HoldIcon />
             <Title>Your call is on hold</Title>
             <Line>{`You’re on a phone call. You’ll be back in ${callName} when it ends.`}</Line>
           </>
@@ -100,6 +98,18 @@ function Progress({ message }: { readonly message: string }): React.JSX.Element 
       <ChalkText testID="limbo.progress" variant="progress">
         {message}
       </ChalkText>
+    </View>
+  );
+}
+
+/** `.hico`: the earpiece in green on a raised circle. */
+function HoldIcon(): React.JSX.Element {
+  const { colors } = useTheme();
+  const style = [styles.holdIcon, { backgroundColor: colors.raised }];
+  const ref = useMeasuredRef<View>("limbo.hold-icon", style);
+  return (
+    <View ref={ref} style={style} testID="limbo.hold-icon">
+      <Icon color={colors.success} name="earpiece" />
     </View>
   );
 }
