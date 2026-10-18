@@ -67,6 +67,45 @@ call-fixed:
   hand: "#DCB740"
   on-hand: "#16140C"
   scrim: "rgba(0,0,0,0.55)"
+board-surface:
+  chalkboard: "#1C2622"
+  chalkboard-ink: "#F1F0EA"
+  chalkboard-muted: "#AEB9B4"
+  paper-light: "#F5F2EA"
+  paper-dark: "#EAE6DB"
+  paper-ink: "#1B1C1F"
+  paper-muted: "#5D5A52"
+  dot-on-dark: "rgba(255,255,255,0.11)"
+  dot-on-light: "rgba(0,0,0,0.16)"
+  select-on-dark: "#7DB8FF"
+  select-on-light: "#1F6FD0"
+board-pen:
+  red: "#E23240"
+  orange: "#C15A10"
+  green: "#288A51"
+  blue: "#1F7AD6"
+  violet: "#935AE2"
+board-note:
+  ink: "#F6E27A"
+  red: "#F2A3A8"
+  orange: "#F4BE8C"
+  green: "#A8DBB8"
+  blue: "#A9CDF2"
+  violet: "#CDB8F2"
+  text: "#1B1C1F"
+board-person:
+  p1: "#1D70C5"
+  p2: "#8753D0"
+  p3: "#D02E3B"
+  p4: "#257F4B"
+  p5: "#B2530F"
+  p6: "#1B7979"
+  p7: "#C0307A"
+  p8: "#62751D"
+  p9: "#3B6FD4"
+  p10: "#A14FB5"
+  p11: "#B5512C"
+  p12: "#297F65"
 typography:
   display: "Bricolage Grotesque"
   interface: "Figtree"
@@ -92,7 +131,7 @@ Six principles govern the call:
 
 1. **Content owns the stage.** Video, shared screens, and boards take all the space the layout can give them. Shared content is never cropped and never sits between black bars.
 2. **The chrome fades.** After three seconds without pointer movement, the header and dock fade out and return on the next movement, so nothing competes with the people.
-3. **Dark by default, two themes only.** The call opens dark. A Light/Dark switch in the call details popover is the only appearance control. There are no named palettes and no textures.
+3. **Dark by default, two themes only.** The call opens dark. A Light/Dark switch in the call details popover is the only appearance control for the chrome. There are no named palettes and no textures in the chrome. The board's surface is content, not chrome, so each person picks it from the board menu.
 4. **One quiet kit.** Every call surface uses the same few shapes: round and pill buttons, 12px tiles and menus, 16px cards. The call has no glass, no glow, no gradient on chrome, and no colored shadow.
 5. **Color carries meaning.** Red means leave or off, green means healthy, yellow means attention, and blue means unread or yours. Nothing else gets color.
 6. **Small life, no noise.** Faces react, tiles lift two pixels, buttons press, and tiles glide to new places. Each effect confirms something, and each moves only transform and opacity.
@@ -391,7 +430,74 @@ Rejoin, Try again, and Use here return to the Joining state.
 
 ### The board
 
-Excalidraw is the drawing engine, and all of its own interface is hidden. Chalk draws its own tool island over the board: a pill with `44px` round buttons for Select, Pen, Shapes, Text, and Eraser, a divider, then Undo and Redo. The island is styled like the dock: `raised` buttons, the active tool inverted, and a disabled button at `35%` opacity. The board is shared content, so it follows the same placement rules as a shared screen. In Grid it is a real double-width tile that shows the board's live content.
+The board is shared content. Excalidraw is the drawing engine, run in its light theme with all of its own interface hidden. Its dark theme inverts the canvas colors, so Chalk keeps the engine light and owns the palette, the surface, and every control. The board never shows the engine's menus, toolbars, welcome screen, or help. It follows the placement rules of a shared screen: it is contained, never cropped, and has the tile radius (`12px`, `14px` on a phone). In Grid it is a real double-width tile with a "Board" name tag. It shows the board's live content, refreshed about once a second, and a click on it switches to Spotlight.
+
+While the engine loads, the board holds its place with its surface color, a spinner, and "Opening board". The engine then fades in over `200ms`. Opening scales the board in from `97%` over `260ms`, and closing fades it out over `160ms`.
+
+**Surfaces.** Each person picks one of three surfaces for themselves. The choice lives in the board menu and is saved on the device. It is never shared, so two people in one call can see different surfaces. The surface belongs to the board's content, not to the call chrome: the Light/Dark switch does not change it, except that Paper is a little dimmer in the dark call and the Dot grid takes the call's own `surface`. Chalkboard is the default.
+
+| Surface    | Fill                                                    | Ink       | Detail                                                                                                    |
+| ---------- | ------------------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------- |
+| Chalkboard | `#1C2622`                                               | `#F1F0EA` | A faint grain (`5%` white noise) and a soft light at the top. It is the one textured surface in the call. |
+| Paper      | `#F5F2EA` in the light call, `#EAE6DB` in the dark call | `#1B1C1F` | Flat                                                                                                      |
+| Dot grid   | `surface`                                               | `text`    | `1.3px` dots in `rgba(255,255,255,0.11)` or `rgba(0,0,0,0.16)`, `24px` apart at `100%` zoom               |
+
+The dots move with pan and zoom, and their spacing doubles whenever it would fall under `14px`, so the grid never crowds. Moving the dot pattern changes a background offset, which is paint only. It is the one update on the board that is not a transform or an opacity. Selection boxes, the text field border, and the focus ring on the canvas use `#7DB8FF` on the dark surfaces and `#1F6FD0` on the light ones.
+
+**Pens.** The palette has six colors: Ink, Red, Orange, Green, Blue, and Violet. Ink is the surface's own ink, so it turns light or dark with the surface. The other five are the same on every surface and reach `3:1` on all of them: Red `#E23240`, Orange `#C15A10`, Green `#288A51`, Blue `#1F7AD6`, and Violet `#935AE2`. A stroke is Thin, Medium, or Thick, which is `2.5`, `4.5`, or `8` board units, so strokes scale with zoom. The Highlighter draws four times as wide as the pen at `40%` opacity with flat ends, and with Ink chosen it draws orange. The Eraser removes whole shapes. Someone's drawing keeps the pen color they chose, whatever surface you see it on.
+
+**The tool island.** A pill on the `surface` fill with a `26px` radius, `6px` padding, `2px` between buttons, a one-pixel `line-strong` ring, and a shadow of `0 8px 24px rgba(0,0,0,0.35)` (`0.12` in the light theme). Buttons are `40px` and round (`44px` on touch and on a phone) and follow the call kit: `hover` on hover, scale `0.92` on press, the active tool inverted, and a disabled button at `35%` opacity. Hairline separators group the tools. From the start, the island holds:
+
+1. The grip, then Select (V) and Hand (H).
+2. Pen (P), Highlighter (U), and Shapes (R).
+3. Text (T), Sticky note (N), Math (M), and Image (I).
+4. Eraser (E) and Laser pointer (K).
+5. Undo and Redo, which are disabled when there is nothing to undo or redo.
+6. The color button, a `22px` swatch with a ring.
+
+Every button has an accessible name and a tooltip with its key. Shapes opens a menu with Rectangle (R), Ellipse (O), Diamond (D), Arrow (A), and Line (L), and the button shows the shape you used last. The color button opens a small popover with the six `40px` swatches (a `24px` dot, with a `text` ring on the chosen one) over the three stroke widths. A change applies to the current selection as well as to the next stroke. A sticky note takes the pastel of the chosen color. Math opens a `360px` popover with a LaTeX field, a live preview, example chips, and "Cancel" and "Place on board". Image picks a file, and a file can also be dropped or pasted. The Laser pointer leaves a trail that fades in one second.
+
+**Island position.** The island sits at the bottom, at the top, or at the left, and each person chooses for themselves. The default is the bottom. At the bottom and the top it is centered, `12px` from the edge. At the left it is a column, centered on the height, `12px` from the edge, and it scrolls when the board is short. Fit and the first view keep content clear of it. Two things set the position: the "Tool island" tiles in the board menu, and the grip.
+
+- The grip is `22px` by `40px` (`40px` by `22px` at the left) with six dots and a grab cursor. After `4px` of movement, the island follows the pointer with a transform, lifts above the board with a stronger shadow, and three dashed drop zones appear: `70px` bands along the left, bottom, and top edges, with a `2px` dashed border and a `8%` wash in the selection color. The zones show at `45%` opacity, and the one nearest the pointer shows in full.
+- On release, the island snaps to the nearest zone and glides from where it was dropped to its place with a transform and an opacity fade over `300ms`, on the call's `cubic-bezier(0.16, 1, 0.3, 1)` curve. A canceled drag returns to the old place.
+- With the grip focused, Left, Down, and Up arrows move the island, and a polite live region says "Tool island moved to left".
+- The island is compact on a phone and whenever the board is narrower than `1060px`. Compact has no grip and no position choice. It is one `44px` button at the bottom left with the pen icon and a dot in the chosen color. A tap opens the full row, which scrolls sideways and starts with a close button, and a long press (`500ms`) opens the color popover.
+- A person who cannot draw has no island.
+
+**The board menu.** A `40px` round button at the top right (`44px` on a phone) opens a `304px` menu on the call's menu component. In order, it holds Download as PNG and Copy as image; then "Board appearance", with the "Surface" tiles (Chalkboard, Paper, Dot grid) and, outside a phone and for people who can draw, the "Tool island" tiles (Left, Bottom, Top). A tile is a `38px` preview over its name, and the chosen one has a two-pixel `text` border. For hosts, "Who can draw" follows, with the radio rows Everyone and Only hosts, then Bring everyone here and Clear board in `danger-text`. Close board comes last. A guest sees the download items, the appearance section, and Close board.
+
+**People around the board.** The board adds no floating faces and no people pill. People sit in the strip or the column that The call stage picks for shared content. A face never shows that someone is drawing, because the cursor and the strokes already do. While the board is open, a click on a person's tile follows that person instead of pinning, and the followed tile takes a two-pixel `text` ring and the word "following" in its name tag. When more people exist than fit, the last tile reads "+N" and opens a short list of everyone, with a Follow button on each row that reads "Following" when on.
+
+**Cursors.** Each remote person has one cursor, and one color: a rounded arrow, with the avatar below and to the right of its tip, and the name tucked behind the avatar. The arrow is `22px` by `26px` with rounded joins, a white outline, and a soft shadow. The avatar is the call's Facehash, `26px`, with a two-pixel white ring. The name is a `28px` pill with `13px`, `600` white text on the person's color, a `1.5px` white ring, and a small shadow. The name slides out from behind the avatar (`10px` over `300ms`, with a fade) while the person moves, and when your pointer is within `26px` of the cursor. It slides back in `700ms` after they stop. A person is moving above `25px` a second on your screen.
+
+Each person has one of twelve colors, assigned when they join and kept for the whole call. White text reaches at least `4.5:1` on every one. The same color draws the arrow, the name pill, the person's laser trail, and the outline around the shapes they select (`2.5px`, drawn above the shapes). Cursors are hidden from assistive technology, because the people list already names everyone. Positions are in board coordinates, so a cursor stays on its content as you pan and zoom. When you are offline, remote cursors fade out, because their updates have stopped.
+
+Updates arrive about 15 times a second, and not at an even pace. The shown cursor is a spring that chases the newest position on every frame, critically damped so that it never overshoots, and exact for any frame time. Its rate is `16` a second at rest and `24` while the person draws, so it covers 90% of a gap in about a quarter of a second at rest and in about a sixth while the person draws. A cursor never waits for an update, and it never jumps between two.
+
+**Follow and Bring everyone here.** Follow makes your view track another person's view. Click their tile or the Follow button in the "+N" list. Your view eases to theirs and keeps tracking, and a Following chip shows at the top center with a Stop button. Stopping, panning, zooming, or using Fit ends it. A second click on the tile also ends it. Stopping by hand shows the toast "Stopped following Nora". Hosts can choose Bring everyone here in the board menu. It sends everyone to the host's current view, and each person follows the host from there. Anyone can break away by moving their own view.
+
+**Sticky notes.** The first release has plain sticky notes, with no votes, groups, or timers. A click with the Sticky note tool places a `170px` by `150px` note (board units), opens its text field at once, and the note takes the pastel of the chosen color. Text is `18px` in `#1B1C1F`, on a `4px` radius with a soft drop shadow. A note keeps its place when you pan and zoom, like any other shape.
+
+| Color  | Ink       | Red       | Orange    | Green     | Blue      | Violet    |
+| ------ | --------- | --------- | --------- | --------- | --------- | --------- |
+| Pastel | `#F6E27A` | `#F2A3A8` | `#F4BE8C` | `#A8DBB8` | `#A9CDF2` | `#CDB8F2` |
+
+**Who can draw.** Hosts choose Everyone or Only hosts. When a person cannot draw, they have no island and the "Who can draw" and "Tool island" items are not offered to them. They see a "View only" chip at the top left and keep pan, zoom, follow, and export. The empty board reads "Nothing here yet. When someone draws, it shows up here."
+
+**Zoom and pan.** A pill at the bottom right (`40px` high, `52px` on a phone) holds Zoom out, the percentage, Zoom in, and Fit. The percentage resets to `100%`. Zoom runs from `10%` to `400%`. The wheel pans, and the wheel with Ctrl or Cmd, or a pinch, zooms at the pointer. Hand, a middle-button drag, or Space with a drag pans, and two fingers pan and pinch on touch. Fit and the buttons ease over a short move. An empty board shows its hint in the middle: "An empty board. Draw, type or drop in an image." with the keys P, T, and ⌘V.
+
+**Toasts and chips.** An event is a toast, and an ongoing state is a chip. Toasts use the call's toast component without change: the same look, the same place, the same timing, and the same polite live region. Chips use the `surface` fill, a one-pixel `line-strong` ring, and the island's shadow.
+
+- Toasts: "Nora opened the board", "Nora brought everyone to this view", "Everyone is following your view" (for the host who did it), "Stopped following Nora", "Only hosts can draw now" or "Everyone can draw now" (for the host who changed it), "Nora limited drawing to hosts" with "You can still look around." added for guests, "Nora let everyone draw.", "You're offline. Drawing keeps working.", "Back online. Your drawing synced.", "Board cleared" with an Undo pill, "Saved chalk-board.png", and "Copied the board as an image". Undo puts the board back while nothing else has changed. Errors use `role="alert"` with a close button and stay until closed: "The browser blocked copying. Use Download as PNG instead.", "Could not save the image. Try again.", "That file is not an image.", and "That image could not be opened."
+- Toasts keep the call's place, `92px` above the bottom edge (`110px` on a phone). The one exception is the board: when the bottom island or the phone zoom pill would sit under a toast, the toast steps up to sit `8px` above it.
+- Chips: "Following Nora" with a Stop button, and "Offline. Your drawing will sync." Both are `36px` high pills at the top center, `12px` inside the board and `8px` apart. They start `76px` down when the island is at the top. "View only" is a `30px` pill at the top left with a lock icon and `12px`, `600` text in `text-soft`. A chip shows while its state lasts, and a toast tells you when it begins and ends.
+
+**Phone.** The board keeps one hierarchy on a phone. It has a `14px` radius. The island is the compact pen button, and the position choice is not offered. The menu button is `44px`, the zoom pill is `52px` high with `44px` buttons, menu rows are at least `44px` high, and the swatches and widths are `44px`. People sit in the strip below, with a "+N" tile for the rest. Toasts sit `110px` up and step above the zoom pill. Pinch zooms, two fingers pan, and a long press on the pen button opens the color popover.
+
+**Reduced motion.** With `prefers-reduced-motion`, the board opens and closes at once, the island and the people tiles jump to their new places, the engine appears without a fade, and Fit, the zoom buttons, Follow and Bring everyone here jump to the new view instead of easing. The name tucks away with a fade and no slide, toasts and popovers fade in place, and the spinner stops. Cursors still follow their spring, because their movement is the content.
+
+**Keyboard and announcements.** The canvas takes focus, and Space with a drag pans once it has focus. Tools use the keys in the island, Ctrl or Cmd with Z undoes (add Shift to redo), plus and minus zoom, and Esc closes the top layer. A polite live region announces that someone opened the board, that everyone was brought to a view, who can draw, going offline and back online, a cleared board, and a moved island.
 
 ### The site and the dashboard
 
