@@ -114,3 +114,7 @@ controls. The component files own presentation.
 The SDK-owned `@q9labsai/chalk-react/preview` dev-tool entrypoint exposes the
 preview contract used by the first-party gallery. Application previews should
 consume that entrypoint instead of reaching into this package's `src` tree.
+
+### Screen sharing
+
+`useScreenShare()` returns the local screen state, optional `capture: { surface, label }`, and `setEnabled(enabled, options?)`. For example, `await share.setEnabled(true, { surface: "browser", audio: true })` opens the browser picker with a tab hint. `surface` is only a hint; read `capture.surface` for what was actually chosen. `audio` requests browser capture only; screen publication is currently video-only. `useMedia().screenShare` exposes the same capture metadata.

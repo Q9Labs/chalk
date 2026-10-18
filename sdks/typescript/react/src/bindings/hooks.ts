@@ -73,3 +73,10 @@ export function useWhiteboard(): WhiteboardSlice {
 export function useCan(capability: Capability): boolean {
   return useSelf().can(capability);
 }
+
+/** Local capture state and the action that opens the browser's share picker. */
+export function useScreenShare() {
+  const client = useSpaceClient();
+  const { screenShare } = useMedia();
+  return { ...screenShare, setEnabled: client.media.setScreenShareEnabled };
+}

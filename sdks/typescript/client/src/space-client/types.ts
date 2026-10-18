@@ -1,4 +1,4 @@
-import type { MediaSource } from "../media/plane";
+import type { MediaSource, ScreenShareCapture } from "../media/plane";
 import type { ChalkChatAttachment, ChalkChatMessage, ChalkChatReadReceipt, ChalkIncomingMediaRequest, ChalkParticipantMediaState, ChalkReaction, ChalkReactionEvent } from "../collaboration/types";
 import type { ChalkWhiteboardV1Failure } from "../whiteboard/types";
 import type { AccessGrant } from "../access/grant";
@@ -142,6 +142,7 @@ export type RemoteMedia = {
   readonly track: MediaStreamTrack;
 };
 export type IncomingMediaRequest = ChalkIncomingMediaRequest;
+export type { ScreenShareSurface, ScreenShareOptions, ScreenShareCapture } from "../media/plane";
 export type MediaSlice = {
   readonly devices: {
     readonly microphones: readonly MediaDevice[];
@@ -155,7 +156,7 @@ export type MediaSlice = {
   };
   readonly local: Readonly<Record<MediaSource, LocalMedia>>;
   readonly remote: readonly RemoteMedia[];
-  readonly screenShare: LocalMedia;
+  readonly screenShare: LocalMedia & { readonly capture?: ScreenShareCapture };
   readonly incomingRequests: readonly IncomingMediaRequest[];
 };
 export type ChatAttachment = ChalkChatAttachment;

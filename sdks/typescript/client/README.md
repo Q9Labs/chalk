@@ -246,3 +246,14 @@ are ignored and reset probe evidence. Set `watchdog: false` in
 replacement: reason, up to two measured round trips, up to two outstanding probe
 ages (not RTT estimates), and the next back-off. Consumer telemetry exceptions do
 not prevent recovery. Subscription stop detaches without waiting for socket close.
+
+### Screen capture source hints
+
+```ts
+await client.media.setScreenShareEnabled(true, { surface: "window" });
+const { capture } = client.getSnapshot().media.screenShare;
+// capture?.surface is the actual picker selection; capture?.label is its label.
+await client.media.setScreenShareEnabled(false);
+```
+
+`surface` accepts `"monitor"`, `"window"`, or `"browser"`. These are browser hints, not filters or guarantees. The browser's picker always decides; unsupported hints do not prevent capture. The call's own tab is excluded where supported, and source switching is enabled. `audio` defaults to `false`; `true` requests capture audio from the browser. The current single-track screen publication remains video-only (captured audio is not published). Missing source settings or labels are reported as `null`.

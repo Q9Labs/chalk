@@ -2,6 +2,8 @@
 
 ## 5.0.0
 
+- Add `useScreenShare()` and screen source hint/capture types, without changing UI.
+
 - Remove unused icon wrappers: `ArrowLeft02Icon`, `ArrowUp01Icon`, `Calendar01Icon`, `Mail01Icon`, `PictureInPictureIcon`, `ZoomInIcon`, `ZoomOutIcon`, `Link01Icon`, `MoreHorizontalIcon`, `Settings01Icon`, `SparklesIcon`, `UserAdd01Icon`.
 
 - Fold Classic implementations into plain component names; remove Classic-prefixed modules and symbols.
