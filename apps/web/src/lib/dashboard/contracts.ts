@@ -10,7 +10,7 @@ export const callQuery = z.strictObject({ spaceId: id, cursor: z.string().max(10
 export const pastQuery = z.strictObject({ spaceId: id, episodeId: id, cursor: z.string().max(1024).optional() });
 export const developerQuery = z.strictObject({ keyCursor: z.string().max(1024).optional(), webhookCursor: z.string().max(1024).optional() });
 export const homeAction = z.discriminatedUnion("action", [
-  z.strictObject({ action: z.literal("create-call"), name, admission, idempotencyKey }),
+  z.strictObject({ action: z.literal("create-call"), name: name.optional(), admission, idempotencyKey }),
   z.strictObject({ action: z.literal("rename-call"), spaceId: id, name }),
   z.strictObject({ action: z.literal("set-admission"), spaceId: id, admission }),
   z.strictObject({ action: z.literal("archive-call"), spaceId: id }),
@@ -27,6 +27,7 @@ export const callAction = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("deny-knock"), spaceId: id, requestHandle: z.string().regex(/^[A-Za-z0-9_-]{16,128}$/), idempotencyKey }),
 ]);
 export const pastAction = z.discriminatedUnion("action", [
+  z.strictObject({ action: z.literal("create-transcript"), spaceId: id, episodeId: id, recordingId: id, languages: z.array(z.string().trim().min(1).max(32)).min(1).max(16), idempotencyKey }),
   z.strictObject({ action: z.literal("recording-url"), spaceId: id, episodeId: id, recordingId: id, download: z.boolean() }),
   z.strictObject({ action: z.literal("export-recording"), spaceId: id, episodeId: id, recordingId: id, idempotencyKey }),
   z.strictObject({ action: z.literal("transcripts"), spaceId: id, episodeId: id, recordingId: id, cursor: z.string().max(1024).optional() }),
@@ -80,7 +81,7 @@ export const developerAction = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("rotate-key"), keyId: id, expiresAt: z.iso.datetime(), idempotencyKey }),
   z.strictObject({ action: z.literal("revoke-key"), keyId: id }),
   z.strictObject({ action: z.literal("create-webhook"), ...webhookFields, idempotencyKey }),
-  z.strictObject({ action: z.literal("update-webhook"), webhookId: id, ...webhookFields, revision: z.number().int().positive(), idempotencyKey }),
+  z.strictObject({ action: z.literal("update-webhook"), webhookId: id, name: webhookFields.name.optional(), url: webhookFields.url.optional(), enabled: webhookFields.enabled.optional(), eventTypes: webhookFields.eventTypes.optional(), revision: z.number().int().positive(), idempotencyKey }),
   z.strictObject({ action: z.literal("delete-webhook"), webhookId: id, revision: z.number().int().positive(), idempotencyKey }),
   z.strictObject({ action: z.literal("rotate-webhook-secret"), webhookId: id, revokePreviousImmediately: z.boolean(), idempotencyKey }),
   z.strictObject({ action: z.literal("test-webhook"), webhookId: id, idempotencyKey }),
@@ -94,16 +95,26 @@ export type PastSessionAction = z.infer<typeof pastAction>;
 export type DeveloperAction = z.infer<typeof developerAction>;
 export type ProfileDTO = { name: string; email: string; avatarUrl: string | null };
 export type SessionDTO = { profile: ProfileDTO; csrfToken: string };
-export type CallDTO = { id: string; name: string; archived: boolean; admission: "anyone" | "knock"; createdAt: string };
+export type CallDTO = { id: string; name: string; archived: boolean; admission: "anyone" | "knock"; createdAt: string; slug: string };
 export type LiveDTO = { spaceId: string; episode: null | { id: string; count: number; participants: { id: string; name: string }[] } };
 export type EpisodeDTO = { id: string; status: "active" | "ending" | "ended"; startedAt: string; endedAt: string | null };
-export type RecordingDTO = { id: string; status: string; exportStatus: string; createdAt: string };
+export type RecordingDTO = { id: string; status: string; exportStatus: string; createdAt: string; transcripts?: TranscriptDTO[]; transcriptsNextCursor?: string | null };
 export type TranscriptDTO = { id: string; status: string; languages: readonly string[]; createdAt: string };
-export type KeyDTO = { id: string; name: string; prefix: string; scopes: readonly string[]; expiresAt: string; revokedAt: string | null };
-export type WebhookDTO = { id: string; name: string; url: string; enabled: boolean; revision: number; eventTypes: readonly string[] };
-export type AttendanceDTO = { kind: "available"; participants: { id: string; name: string; kind: "user" | "agent" | "guest"; externalId: string | null; firstJoinedAt: string; lastLeftAt: string | null }[] };
-export type HomeDTO = { calls: CallDTO[]; live: LiveDTO[]; nextCursor: string | null };
-export type CallPageDTO = { call: CallDTO; inviteUrl: string; episodes: EpisodeDTO[]; nextCursor: string | null; knocks: { handle: string; name: string; requestedAt: string; expiresAt: string; state: string }[] };
+export type KeyDTO = { id: string; name: string; prefix: string; scopes: readonly string[]; expiresAt: string; revokedAt: string | null; lastUsedAt: string | null };
+export type WebhookDTO = { id: string; name: string; url: string; enabled: boolean; revision: number; eventTypes: readonly string[]; lastDelivery?: DeliveryDTO | null };
+export type AttendanceDTO = { kind: "available"; participants: { id: string; name: string; kind: "user" | "agent" | "guest"; externalId: string | null; isYou: boolean; firstJoinedAt: string; lastLeftAt: string | null }[] };
+export type HomeCallDTO = CallDTO & { inviteUrl: string | null; lastActiveAt: string | null; recentPeople: { id: string; name: string }[] };
+export type CueDTO = { startMs: number; endMs: number; text: string; speaker: { name: string | null; participantRef: string } | null };
+export type DeliveryDTO = { id: string; state: string; createdAt: string; eventType: string; attempts: number; status: number | null };
+export type HomeDTO = { calls: HomeCallDTO[]; live: LiveDTO[]; nextCursor: string | null };
+export type CallPageDTO = {
+  call: CallDTO;
+  inviteUrl: string | null;
+  episodes: (EpisodeDTO & { participantCount: number; recordings: RecordingDTO[]; recordingsNextCursor: string | null })[];
+  live: LiveDTO["episode"];
+  nextCursor: string | null;
+  knocks: { handle: string; name: string; requestedAt: string; expiresAt: string; state: string }[];
+};
 export type PastSessionDTO = { episode: EpisodeDTO; attendance: AttendanceDTO; recordings: RecordingDTO[]; nextCursor: string | null };
 export type AllowedWebsitesDTO = { allowedWebsites: readonly string[] };
 export type DeveloperDTO = AllowedWebsitesDTO & { keys: KeyDTO[]; webhooks: WebhookDTO[]; nextKeyCursor: string | null; nextWebhookCursor: string | null };
