@@ -71,11 +71,7 @@ try {
     await page.waitForTimeout(300);
     const offPage = gridStage.locator(':scope > div > [aria-hidden="true"]');
     assert.ok((await offPage.count()) > 0);
-    assert.equal(
-      await offPage.evaluateAll((elements) => elements.every((element) => getComputedStyle(element).visibility === "hidden" && getComputedStyle(element).pointerEvents === "none")),
-      true,
-      "off-page tiles stay mounted but cannot show or intercept a click while the stage overflows",
-    );
+    assert.equal(await offPage.evaluateAll((elements) => elements.every((element) => getComputedStyle(element).visibility === "hidden" && getComputedStyle(element).pointerEvents === "none")), true, "off-page tiles stay mounted but cannot show or intercept a click while the stage overflows");
     assert.equal(await pageButtons.nth(index).getAttribute("aria-current"), "page");
   }
   await page.goto(`${origin}/call-states.html?state=duo`);
