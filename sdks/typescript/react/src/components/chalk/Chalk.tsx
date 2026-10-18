@@ -185,6 +185,7 @@ function SpaceExperience(
   if (connection.status === "idle")
     return <CallLimbo theme={{ ...props.theme, colorScheme: props.resolvedColorScheme }} recorded={recorded} spaceName={spaceName} message={joinError ?? `Joining ${spaceName}…`} action={joinError ? { label: "Try again", onClick: retryAutomaticJoin, disabled: retryPending } : undefined} />;
   if (connection.status === "joining") return <CallLimbo theme={{ ...props.theme, colorScheme: props.resolvedColorScheme }} recorded={recorded} spaceName={spaceName} message={`Joining ${spaceName}…`} />;
+  if (connection.status === "failed" && connection.lastError?.code === "episode.ended") return <StatusSurface phase="episode-ended" callName={callName} theme={statusTheme} onHome={props.onHome} onReportProblem={props.onReportProblem} />;
   if (connection.status === "failed") {
     return <StatusSurface phase="failed" callName={callName} theme={statusTheme} onHome={props.onHome} onReportProblem={props.onReportProblem} onRetry={retryAutomaticJoin} retryPending={retryPending} />;
   }

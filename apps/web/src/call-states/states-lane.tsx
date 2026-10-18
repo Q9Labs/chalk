@@ -9,12 +9,29 @@ import { PEOPLE, SPACE_NAME, createCallStateClient, liveSnapshot } from "./fixtu
 import type { CallState } from "./states";
 
 type Terminal = ChalkProps["terminalState"] | "left" | "episode-ended" | "failed";
-function StatesCall({ terminal, light = false, ready = false, reconnecting = false, reportProblem = false }: { readonly terminal?: Terminal; readonly light?: boolean; readonly ready?: boolean; readonly reconnecting?: boolean; readonly reportProblem?: boolean }) {
+function StatesCall({
+  terminal,
+  light = false,
+  ready = false,
+  reconnecting = false,
+  reportProblem = false,
+  endedJoin = false,
+}: {
+  readonly terminal?: Terminal;
+  readonly light?: boolean;
+  readonly ready?: boolean;
+  readonly reconnecting?: boolean;
+  readonly reportProblem?: boolean;
+  readonly endedJoin?: boolean;
+}) {
   const [reason, setReason] = useState(terminal);
   const client = useMemo(() => {
     const initial = liveSnapshot({ others: ready ? [] : PEOPLE.slice(0, 1) });
-    return createCallStateClient({ ...initial, connection: { ...initial.connection, status: terminal === "left" || terminal === "failed" ? terminal : reconnecting ? "reconnecting" : "live" } });
-  }, [ready, reconnecting, terminal]);
+    return createCallStateClient({
+      ...initial,
+      connection: { ...initial.connection, lastError: endedJoin ? { code: "episode.ended", recoverable: false, message: "The Episode has ended" } : initial.connection.lastError, status: terminal === "left" || terminal === "failed" ? terminal : reconnecting ? "reconnecting" : "live" },
+    });
+  }, [endedJoin, ready, reconnecting, terminal]);
   useEffect(() => {
     if (terminal === "episode-ended") {
       client.emit("episodeEnded", { episode: null });
@@ -191,6 +208,7 @@ export const STATES_LANE: readonly CallState[] = [
   { id: "states-reconnecting-input", title: "Reconnecting keeps input usable", render: () => <ReconnectingInputFixture /> },
   { id: "states-link-controls", title: "Controlled call link", render: () => <CallLinkFixture /> },
   { id: "states-command-failures", title: "Typed command failures", render: () => <CommandFailureFixture /> },
+  { id: "states-ended-join", title: "Already-ended join", render: () => <StatesCall terminal="failed" endedJoin /> },
   { id: "states-events", title: "Call event journeys", render: () => <StatesCall /> },
   { id: "states-ready", title: "Ready card", render: () => <StatesCall ready /> },
   { id: "states-ready-light", title: "Ready card Light", render: () => <StatesCall ready light /> },

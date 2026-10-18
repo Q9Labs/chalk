@@ -160,3 +160,11 @@ it("names the blocked camera when its error arrives before the media snapshot", 
   expect(await notice.count()).toBe(1);
   expect(await notice.textContent()).toContain("Chalk can’t use your camera. Click the camera icon in the address bar and allow Camera.");
 }, 30_000);
+
+it("shows Ended without retrying an already-ended call", async () => {
+  await page.goto(`${origin}/call-states.html?state=states-ended-join`);
+  await page.getByRole("heading", { name: "The call ended", exact: true }).waitFor();
+  expect(await page.getByRole("button", { name: "Try again", exact: true }).count()).toBe(0);
+  await page.getByRole("button", { name: "Home", exact: true }).click();
+  expect(new URL(page.url()).hash).toBe("#home");
+}, 30_000);
