@@ -61,6 +61,8 @@ try {
   await page.getByRole("button", { name: "Layout: Grid", exact: true }).waitFor();
   await page.setViewportSize({ width: 390, height: 844 });
   const gridStage = page.getByTestId("stage");
+  await page.waitForTimeout(300);
+  assert.equal(await frame.evaluate((element) => getComputedStyle(element).overflow), "clip", "the call clips at its viewport without becoming a scroll container");
   await page.getByRole("button", { name: "Next page", exact: true }).waitFor();
   assert.equal(await gridStage.evaluate((element) => getComputedStyle(element).overflow), "visible", "the stage does not clip FLIP at its temporary fitted edge");
   const pageButtons = page.getByRole("button", { name: /^Go to page / });
