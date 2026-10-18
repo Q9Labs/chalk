@@ -286,11 +286,11 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
     if (scenario.id === "panels") {
       await click("Chat");
       await page.getByRole("complementary", { name: "Chat panel" }).waitFor();
-      await click("Close chat");
+      await click("Close panel");
       await page.getByRole("complementary", { name: "Chat panel" }).waitFor({ state: "hidden" });
       await click("Participants");
-      await page.getByRole("button", { name: "Close participants panel", exact: true }).waitFor();
-      await click("Close participants panel");
+      await page.getByRole("button", { name: "Close panel", exact: true }).waitFor();
+      await click("Close panel");
     }
     if (scenario.id === "board") {
       const canvas = page.locator(".excalidraw canvas").first();
