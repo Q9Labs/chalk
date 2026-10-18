@@ -78,7 +78,7 @@ export function CallCard({ state, onClose, interactive = true, children, panel, 
             >
               {tab === "participants" ? (
                 <>
-                  People <span className="call-card-count">{peopleCount}</span>
+                  People<span className="call-card-count">{peopleCount}</span>
                 </>
               ) : (
                 "Chat"

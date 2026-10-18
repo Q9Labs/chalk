@@ -596,7 +596,8 @@ const styles = `.call-card-tabs {
   gap: 2px;
 }
 .call-attachments .call-file { grid-column: 1/-1; }
-.call-attachments.image-1 .call-photo { border-radius: 14px; }
+.call-attachments.image-1 .call-photo { border-radius: 14px; aspect-ratio: auto; }
+.call-attachments.image-1 .call-photo img { height: auto; min-height: 150px; max-height: 320px; }
 .call-attachments.image-3 .call-photo:nth-child(3) { grid-column: span 2; aspect-ratio: 2; }
 .call-photo-more { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.5); color: #fff; font-size: 20px; font-weight: 600; }
 .call-file > span:not(.call-file-type) {
@@ -828,13 +829,13 @@ const styles = `.call-card-tabs {
   outline-offset: 2px;
 }
 
-.call-composer{display:block;padding:8px 12px 12px;border-top:0}
+.call-composer{display:block;gap:normal;padding:8px 12px 12px;border-top:0}
 .call-composer-field{display:flex;align-items:center;min-height:44px;padding:0 4px;border-radius:999px;background:var(--chalk-raised);border:1px solid var(--chalk-line)}
 .call-composer-field:focus-within{border-color:var(--chalk-text)}
 .call-composer .call-attach-button{width:36px;height:36px;min-width:36px;background:transparent;color:var(--chalk-muted-text)}
-.call-composer .call-send-button{width:36px;height:36px;min-width:36px;transition:transform .15s ease-out}
+.call-composer .call-send-button{width:36px;height:36px;min-width:36px;border:0 solid currentColor;font-weight:400;line-height:1.4;transition:transform .15s ease-out}
 .call-composer .call-send-button:active{transform:scale(.94)}
-.call-composer .call-send-button:disabled{background:var(--chalk-hover);color:var(--chalk-muted-text);cursor:default;transform:none}
+.call-composer .call-send-button:disabled{opacity:1;background:var(--chalk-hover);color:var(--chalk-muted-text);cursor:default;transform:none}
 .call-message-input{min-height:40px;padding:10px 4px;border-radius:0;background:transparent;box-shadow:none!important}
 @media(max-width:640px){.call-composer{padding-bottom:42px}}
 @media(pointer:coarse){.call-composer .call-send-button,.call-composer .call-attach-button{min-width:44px;min-height:44px}}

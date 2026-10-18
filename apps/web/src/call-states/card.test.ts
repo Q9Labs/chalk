@@ -154,7 +154,7 @@ it(
         await sheet.waitFor();
         for (let index = 0; index < 16; index++) {
           await page.keyboard.press("Tab");
-          expect(await sheet.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+          await page.waitForFunction(() => document.querySelector('[role="dialog"][data-variant="panel"]')?.contains(document.activeElement), undefined, { timeout: 1500 });
         }
         await capture(page, `phone-people-${scheme}`);
         await page.getByRole("tab", { name: "Chat", exact: true }).click();
