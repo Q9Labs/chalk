@@ -154,7 +154,7 @@ export function Stage({
       box,
       primary.id,
       ordered.filter((item) => item.id !== primary.id).map((item) => item.id),
-      { ...DEFAULT_SPOTLIGHT_OPTIONS, primaryAspect: aspect, content: primary.kind !== "participant", wideIds, maxPerPage },
+      { ...DEFAULT_SPOTLIGHT_OPTIONS, primaryAspect: aspect, content: primary.kind !== "participant", wideIds: primary.kind === "screen-share" ? ordered.filter((item) => item.kind === "whiteboard").map((item) => item.id) : wideIds, maxPerPage },
     );
   }, [activePinnedId, box, layout, maxPerPage, minTileWidth, ordered, primary, shareAspects]);
   const framesById = useMemo(() => new Map(geometry.frames.map((frame) => [frame.id, frame])), [geometry.frames]);
