@@ -58,18 +58,20 @@ export function CallDialog({
         <Dialog.Portal container={container}>
           <Dialog.Backdrop className="chalk-shell-modal-backdrop" />
           <Dialog.Popup initialFocus={kind === "report" ? reportInput : undefined} finalFocus={returnFocus} className="chalk-shell-modal">
-            <div className="chalk-shell-modal-heading">
-              <Dialog.Title>{kind === "shortcuts" ? "Keyboard shortcuts" : "Report a problem"}</Dialog.Title>
-              <Dialog.Close
-                render={
-                  <ChalkIconButton aria-label="Close" size="sm">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
-                      <path d="m6 6 12 12M6 18 18 6" />
-                    </svg>
-                  </ChalkIconButton>
-                }
-              />
-            </div>
+            {kind === "report" && status === "sent" ? null : (
+              <div className="chalk-shell-modal-heading">
+                <Dialog.Title>{kind === "shortcuts" ? "Keyboard shortcuts" : "Report a problem"}</Dialog.Title>
+                <Dialog.Close
+                  render={
+                    <ChalkIconButton aria-label="Close" size="sm">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
+                        <path d="m6 6 12 12M6 18 18 6" />
+                      </svg>
+                    </ChalkIconButton>
+                  }
+                />
+              </div>
+            )}
             {kind === "shortcuts" ? (
               <dl className="chalk-shell-shortcuts">
                 {CALL_SHORTCUTS.map(([label, keys]) => (
@@ -84,7 +86,16 @@ export function CallDialog({
                 ))}
               </dl>
             ) : status === "sent" ? (
-              <p role="status">Your report was sent. Thank you.</p>
+              <div className="chalk-shell-report-sent" role="status">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="m5 12 4 4L19 6" />
+                </svg>
+                <Dialog.Title>Sent</Dialog.Title>
+                <p>Thanks. We’ll look into it.</p>
+                <ChalkButton variant="solid" onClick={onClose}>
+                  Done
+                </ChalkButton>
+              </div>
             ) : (
               <form
                 className="chalk-shell-report"
@@ -105,9 +116,9 @@ export function CallDialog({
                 }}
               >
                 <label htmlFor="chalk-problem">What went wrong?</label>
-                <textarea ref={reportInput} id="chalk-problem" rows={4} required value={text} onChange={(event) => setText(event.target.value)} placeholder="Tell us what happened…" />
+                <textarea ref={reportInput} id="chalk-problem" rows={4} required disabled={status === "sending"} value={text} onChange={(event) => setText(event.target.value)} placeholder="Tell us what happened…" />
                 <label className="chalk-shell-report-check">
-                  <input type="checkbox" checked={includeDiagnostics} onChange={(event) => setIncludeDiagnostics(event.target.checked)} /> Include diagnostics
+                  <input type="checkbox" disabled={status === "sending"} checked={includeDiagnostics} onChange={(event) => setIncludeDiagnostics(event.target.checked)} /> Include diagnostics
                 </label>
                 {error ? <p role="alert">{error}</p> : null}
                 <div className="chalk-shell-report-actions">

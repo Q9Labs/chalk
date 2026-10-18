@@ -60,6 +60,15 @@ try {
  await page.getByRole('button',{name:'Leave call',exact:true}).filter({visible:true}).click();
  await page.waitForFunction(()=>document.querySelector('output')?.textContent==='Left call');
  assert.equal(await page.getByRole('menu').count(),0);
+ await load('shell-report');
+ await page.getByRole('button',{name:'Call details',exact:true}).click();
+ await page.getByRole('button',{name:'Report a problem',exact:true}).click();
+ await page.getByRole('textbox',{name:'What went wrong?',exact:true}).fill('Audio dropped during the call');
+ await page.getByRole('button',{name:'Send',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector('output')?.textContent==='Reported: Audio dropped during the call');
+ await page.getByRole('dialog',{name:'Sent',exact:true}).waitFor();
+ await page.getByRole('button',{name:'Done',exact:true}).click();
+ await page.getByRole('dialog').waitFor({state:'detached'});
  await load('shell-host');
  await page.getByRole('button',{name:'Leave call',exact:true}).filter({visible:true}).click();
  await page.getByRole('menuitem',{name:'End call for everyone',exact:true}).waitFor();
@@ -69,7 +78,11 @@ try {
  await page.getByRole('button',{name:'Call details',exact:true}).click();
  const sheet=page.getByRole('dialog',{name:'Call details',exact:true});await sheet.waitFor();
  await page.waitForFunction(()=>document.querySelector('[role="dialog"]')?.contains(document.activeElement));
- for(let i=0;i<12;i++){await page.keyboard.press('Tab');assert.equal(await sheet.evaluate(el=>el.contains(document.activeElement)),true)}
+ for(let i=0;i<12;i++){
+  await page.keyboard.press('Tab');
+  await page.waitForFunction(()=>document.querySelector('[role="dialog"]')?.contains(document.activeElement));
+  assert.equal(await sheet.evaluate(el=>el.contains(document.activeElement)),true);
+ }
  await page.keyboard.press('Escape');await sheet.waitFor({state:'detached'});
  assert.equal(await page.getByRole('button',{name:'Call details',exact:true}).evaluate(el=>el===document.activeElement),true);
  await page.getByRole('button',{name:'More options',exact:true}).click();

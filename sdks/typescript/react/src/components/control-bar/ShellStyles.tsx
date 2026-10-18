@@ -364,6 +364,10 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 .chalk-shell-report .chalk-shell-report-check {display:flex;align-items:center;gap:10px;min-height:40px;margin:4px 10px 0;padding:0 4px;font-size:13px;font-weight:600;}
 .chalk-shell-report-check input {width:18px;height:18px;margin:0;accent-color:var(--chalk-text);}
 .chalk-shell-report-actions {display:flex;justify-content:flex-end;gap:8px;margin:4px 6px 0;}
+.chalk-shell-report-sent {display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px 10px 6px;text-align:center;}
+.chalk-shell-report-sent > svg {color:var(--chalk-positive);}
+.chalk-shell-report-sent h2 {font-size:17px;font-weight:600;}
+.chalk-shell-report-sent p {color:var(--chalk-text-soft);margin-bottom:10px;}
 [data-chalk-theme="light"] .chalk-shell-split {
   box-shadow: 0 0 0 1px var(--chalk-line);
 }
