@@ -1393,6 +1393,27 @@
   -webkit-font-smoothing: antialiased;
   user-select: none;
 }
+.chalk-sheet-group {
+  background: var(--chalk-raised);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.chalk-sheet-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 16px;
+  font-size: 16px;
+  text-align: left;
+}
+.chalk-sheet-row > svg:first-child {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  color: var(--chalk-soft-text);
+}
 .chalk-frame-header {
   position: absolute;
   left: 0;

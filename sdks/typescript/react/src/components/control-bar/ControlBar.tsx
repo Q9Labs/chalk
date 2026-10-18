@@ -7,6 +7,7 @@ import { ControlBarButton } from "../atomic";
 import { DevicePopover } from "../device-popover/DevicePopover";
 import { CommandErrorAlert } from "../composite/CommandErrorAlert";
 import { LeaveMenu } from "./LeaveMenu";
+import { DockLayout } from "./DockLayout";
 import { useConnectedControlBarBehavior, useControlBarSurfaceBehavior, type ControlBarButtonName, type ControlBarProps, type ControlBarSurfaceProps } from "./control-bar-behavior";
 
 export type { ControlBarProps, ControlBarButtonName } from "./control-bar-behavior";
@@ -42,6 +43,8 @@ const FloatingControlBarButton = React.forwardRef<
 
 export const ControlBarSurface = React.memo(
   ({
+    layout = "focus",
+    onLayoutChange,
     isMuted = false,
     microphonePending = false,
     cameraPending = false,
@@ -225,6 +228,8 @@ export const ControlBarSurface = React.memo(
                 </Tooltip>
               )}
             </div>
+
+            {onLayoutChange ? <DockLayout layout={layout} onLayoutChange={onLayoutChange} /> : null}
 
             {/* Group 3: Leave */}
             <div className="order-2 flex shrink-0 items-center gap-1 rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] p-1 shadow-[var(--chalk-app-shadow-control)]">

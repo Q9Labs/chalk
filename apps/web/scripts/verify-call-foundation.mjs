@@ -52,6 +52,53 @@ try {
   await page.getByRole("menu").waitFor({ state: "detached" });
   assert.equal(await page.getByRole("menu").count(), 0);
   assert.equal(await page.getByRole("button", { name: "Layout: Spotlight", exact: true }).evaluate((el) => el === document.activeElement), true, "Escape restores the trigger");
+  await page.goto(`${origin}/call-states.html?state=perf-grid`);
+  await page.getByRole("button", { name: "Layout: Grid", exact: true }).click();
+  await page.getByRole("menuitemradio", { name: "Spotlight", exact: true }).click();
+  await page.getByRole("button", { name: "Layout: Spotlight", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Layout: Spotlight", exact: true }).click();
+  await page.getByRole("menuitemradio", { name: "Grid", exact: true }).click();
+  await page.getByRole("button", { name: "Layout: Grid", exact: true }).waitFor();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${origin}/call-states.html?state=duo`);
+  const phoneStage = page.getByTestId("stage");
+  const tilesBefore = await phoneStage.locator(":scope > div > *").elementHandles();
+  const spotlightBox = await tilesBefore[0].boundingBox();
+  await page.getByRole("button", { name: "More options", exact: true }).click();
+  const more = page.getByRole("dialog", { name: "More options", exact: true });
+  await more.getByRole("button", { name: "Grid", exact: true }).click();
+  assert.equal(await more.getByRole("button", { name: "Grid", exact: true }).getAttribute("aria-pressed"), "true");
+  await page.waitForTimeout(300);
+  assert.notDeepEqual(await tilesBefore[0].boundingBox(), spotlightBox, "dock selection re-fits the actual stage");
+  await more.getByRole("button", { name: "Spotlight", exact: true }).click();
+  await page.waitForTimeout(300);
+  const tilesAfter = phoneStage.locator(":scope > div > *");
+  assert.equal(await tilesAfter.first().evaluate((node, original) => node === original, tilesBefore[0]), true, "dock layout changes retain mounted tiles");
+  await page.keyboard.press("Escape");
+  await more.waitFor({ state: "detached" });
+  await page.goto(`${origin}/web-space-journey.html`);
+  await page.getByRole("button", { name: "More options", exact: true }).click();
+  const webMore = page.getByRole("dialog", { name: "More options", exact: true });
+  const webStage = page.getByTestId("stage");
+  const webTiles = await webStage.locator(":scope > div > *").elementHandles();
+  const webSpotlight = await webTiles[0].boundingBox();
+  await webMore.getByRole("button", { name: "Grid", exact: true }).click();
+  await page.waitForTimeout(300);
+  assert.notDeepEqual(await webTiles[0].boundingBox(), webSpotlight, "SpacePage → LocalSpace → Chalk switches to Grid from the dock");
+  await webMore.getByRole("button", { name: "Spotlight", exact: true }).click();
+  await page.waitForTimeout(300);
+  assert.equal(
+    await webStage
+      .locator(":scope > div > *")
+      .first()
+      .evaluate((node, original) => node === original, webTiles[0]),
+    true,
+    "the web product path retains its tile",
+  );
+  assert.deepEqual(await webTiles[0].boundingBox(), webSpotlight, "the web product path switches back to Spotlight");
+  await page.keyboard.press("Escape");
+  await webMore.waitFor({ state: "detached" });
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`${origin}/call-states.html?state=foundation-toast`);
   const toast = page.getByRole("status").filter({ hasText: "Nora joined" });
   await toast.waitFor();

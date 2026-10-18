@@ -59,6 +59,7 @@ export type ChalkProps = SpaceIntegration &
     readonly onColorSchemeChange?: (colorScheme: ChalkColorScheme) => void;
     readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
     readonly spaceName?: string;
+    /** Initial layout without a handler; controlled layout when onLayoutChange is supplied. */
     readonly layout?: SpaceLayout;
     readonly onLayoutChange?: (layout: SpaceLayout) => void;
     /** Rejoin on the page shown after leaving. Defaults to joining again with the same settings. */

@@ -52,6 +52,7 @@ export interface SpaceViewProps {
   readonly spaceName: string;
   readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
   readonly stageBackground?: boolean;
+  /** Initial layout without a handler; controlled layout when onLayoutChange is supplied. */
   readonly layout?: "grid" | "focus";
   readonly onLayoutChange?: (layout: "grid" | "focus") => void;
   readonly initialPanel?: SpacePanel | null;
@@ -106,11 +107,14 @@ export function SpaceView({
   const canManageAdmission = useCan("manageAdmission");
   const canManageRecording = useCan("manageRecording");
   const episodeDuration = useEpisodeDuration();
-  const [uncontrolledLayout, setUncontrolledLayout] = useState<"grid" | "focus">("focus");
+  const [uncontrolledLayout, setUncontrolledLayout] = useState<"grid" | "focus">(controlledLayout ?? "focus");
+  useEffect(() => {
+    if (controlledLayout !== undefined) setUncontrolledLayout(controlledLayout);
+  }, [controlledLayout]);
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(initialPanel);
   const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(null);
-  const layout = controlledLayout ?? uncontrolledLayout;
+  const layout = onLayoutChange ? (controlledLayout ?? uncontrolledLayout) : uncontrolledLayout;
   const feature = (name: keyof SpaceViewFeatures) => features?.[name] !== false;
   const localId = self.participantId ?? "local";
   const tiles = useMemo(() => toVideoParticipants(participantsSlice.roster, media.remote, localId, self.displayName ?? "You", media.local), [localId, media.local, media.remote, participantsSlice.roster, self.displayName]);
@@ -131,7 +135,7 @@ export function SpaceView({
     "leave",
   ];
   const updateLayout = (nextLayout: "grid" | "focus") => {
-    if (controlledLayout === undefined) setUncontrolledLayout(nextLayout);
+    setUncontrolledLayout(nextLayout);
     onLayoutChange?.(nextLayout);
   };
   useSoundCues(feature("sounds") && soundsEnabled);
@@ -185,6 +189,8 @@ export function SpaceView({
         compactControls={
           <ControlBar
             density="compact"
+            layout={layout}
+            onLayoutChange={updateLayout}
             buttons={buttons}
             activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
             onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}

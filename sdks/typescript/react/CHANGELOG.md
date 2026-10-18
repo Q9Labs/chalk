@@ -2,6 +2,8 @@
 
 ## 5.0.0
 
+- Keep layout changes interactive when `layout` is supplied without `onLayoutChange`; the prop initializes local state in that case. A paired prop and handler remain controlled. Add Spotlight/Grid to the phone dock's More sheet.
+
 - Default calls to Dark; `ChalkColorScheme` is now `"light" | "dark"`. Add `Chalk.onColorSchemeChange` and `SpaceView.onColorSchemeChange` for controlled appearance.
 - Replace the call theme tokens with role-based mockup palettes, and share the inset-card frame with recordings.
 - Rebuild call buttons, menus, popovers, tooltips, switches, segmented controls, copy feedback, focus-trapped sheets and toasts. Remove the unused `ChalkCheckbox`, `ChalkControlGroup`, `ChalkRadio`, `ChalkSelect`, `ChalkSlider`, and `ChalkTooltipPanel` exports. `ChalkMenu` now accepts a trigger; its items accept checked state.
