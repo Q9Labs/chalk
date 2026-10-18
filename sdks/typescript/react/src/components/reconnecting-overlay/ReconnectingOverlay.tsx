@@ -1,4 +1,5 @@
 import React from "react";
+import { CallLimbo } from "../call-limbo/CallLimbo";
 import { Spinner } from "@q9labsai/chalk-ui";
 import { WifiOffIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
@@ -16,7 +17,18 @@ export interface ReconnectingOverlayProps {
   showNotice?: boolean;
 }
 
-export const ReconnectingOverlay = React.memo<ReconnectingOverlayProps>(({ isVisible, status, onRetry, onLeft, message, supportCode, className }) => {
+export const ReconnectingOverlay = React.memo<ReconnectingOverlayProps>(({ isVisible, status, onRetry, onLeft, message, supportCode, className, showNotice }) => {
+  const isReconnecting = isVisible && status === "reconnecting";
+  const [escalated, setEscalated] = React.useState(false);
+  React.useEffect(() => {
+    if (!isReconnecting) {
+      setEscalated(false);
+      return;
+    }
+    const timer = setTimeout(() => setEscalated(true), RECONNECTING_NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [isReconnecting]);
+  if (status === "reconnecting") return showNotice === false ? null : <CallLimbo overlay active={isReconnecting && escalated} message={message ?? "Reconnecting…"} />;
   if (!isVisible) return null;
 
   const titles = { connecting: "Connecting", reconnecting: "Reconnecting", failed: "Connection Failed" };

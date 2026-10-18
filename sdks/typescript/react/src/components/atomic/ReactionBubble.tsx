@@ -16,15 +16,6 @@ export interface ReactionBubbleProps {
   className?: string;
 }
 
-interface ConnectedReactionBubbleProps {
-  emoji: string;
-  participantName?: string;
-  onComplete?: () => void;
-  duration?: number;
-  animated?: boolean;
-  className?: string;
-}
-
 type ReactionAnimationStyle = React.CSSProperties & {
   "--primary": string;
   "--float-offset-x"?: string;
@@ -83,7 +74,7 @@ function getParticleStyle(particle: ReturnType<typeof generateParticles>[number]
   };
 }
 
-export const ReactionBubble = React.memo(({ emoji, participantName, onComplete, duration: baseDuration = 3000, animated = true, className }: ConnectedReactionBubbleProps) => {
+export const ReactionBubble = React.memo(({ emoji, participantName, onComplete, duration: baseDuration = 3000, animated = true, className }: ReactionBubbleProps) => {
   const [isVisible, setIsVisible] = useState(true);
   const prefersReducedMotion = usePrefersReducedMotion();
 
