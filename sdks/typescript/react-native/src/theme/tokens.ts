@@ -102,10 +102,28 @@ export const fixed = {
   liveRing: "rgba(255,255,255,0.9)",
   liveRingShade: "rgba(0,0,0,0.35)",
   switchKnob: "#FFFFFF",
+  /** QR codes stay black on white in both themes so every camera reads them. */
+  qrLight: "#FFFFFF",
+  qrDark: "#000000",
   shadow: "#000000",
   transparent: "transparent",
   /** The selected segment of a compact segmented control. */
   segmentShadow: "0px 1px 2px rgba(0,0,0,0.2)",
+} as const;
+
+/** File badges in chat (`.t-pdf` and friends); the same in both themes because the badge carries its own colour. */
+export const fileKindColors = { pdf: "#C42B2B", doc: "#2F5FB3", xls: "#1E7A46", ppt: "#B8481E", other: "#5C5D65" } as const;
+
+/** Shades over chat photos: "+N" on the last thumbnail (`.thm`) and a file still uploading (`.chip.up`). */
+export const chatOverlays = { photoMore: "rgba(0,0,0,0.5)", uploading: "rgba(0,0,0,0.45)", ring: "#FFFFFF" } as const;
+
+/** The photo viewer is dark in both themes (`.lbw`). */
+export const viewer = {
+  backdrop: "rgba(8,8,10,0.94)",
+  text: "#ECECEE",
+  textMuted: "#A1A2A9",
+  button: "rgba(255,255,255,0.08)",
+  buttonPressed: "rgba(255,255,255,0.16)",
 } as const;
 
 /** Avatar backgrounds, chosen by a hash of the person's name. */
@@ -118,13 +136,15 @@ export const identityColors = ["#315F72", "#5C6650", "#6B5B4F", "#64576B", "#496
 export type Elevation = {
   readonly popover: string;
   readonly toast: string;
+  /** The small tile floating over the other person when two are in the call (`.tile.float`). */
+  readonly floatTile: string;
   /** Controls on the canvas (dock buttons, people pill) get a one-pixel ring in light. */
   readonly ringOnCanvas: boolean;
 };
 
 export const elevations: Readonly<Record<ColorScheme, Elevation>> = {
-  dark: { popover: "0px 12px 32px rgba(0,0,0,0.5)", toast: "0px 8px 24px rgba(0,0,0,0.4)", ringOnCanvas: false },
-  light: { popover: "0px 0px 0px 1px rgba(0,0,0,0.09), 0px 12px 32px rgba(0,0,0,0.12)", toast: "0px 0px 0px 1px rgba(0,0,0,0.09), 0px 12px 32px rgba(0,0,0,0.12)", ringOnCanvas: true },
+  dark: { popover: "0px 12px 32px rgba(0,0,0,0.5)", toast: "0px 8px 24px rgba(0,0,0,0.4)", floatTile: "0px 0px 0px 1px rgba(255,255,255,0.14), 0px 6px 18px rgba(0,0,0,0.5)", ringOnCanvas: false },
+  light: { popover: "0px 0px 0px 1px rgba(0,0,0,0.09), 0px 12px 32px rgba(0,0,0,0.12)", toast: "0px 0px 0px 1px rgba(0,0,0,0.09), 0px 12px 32px rgba(0,0,0,0.12)", floatTile: "0px 0px 0px 1px rgba(0,0,0,0.15), 0px 6px 18px rgba(0,0,0,0.5)", ringOnCanvas: true },
 };
 
 export type FontWeight = 400 | 500 | 600 | 700;

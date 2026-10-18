@@ -9,11 +9,8 @@ import type { Frame } from "../motion/MovingFrame";
  */
 export type Arrangement = "portrait" | "landscape" | "pad";
 
-/** The narrowest width that gets the laptop arrangement; Split View at 320 or 375 pt falls back to the phone. */
-const PAD_MIN_WIDTH = 600;
-
+/** The iPad uses the phone layout (portrait or landscape) until the laptop arrangement ships. */
 export function arrangementFor(width: number, height: number): Arrangement {
-  if (width >= PAD_MIN_WIDTH && Math.min(width, height) >= PAD_MIN_WIDTH) return "pad";
   return width > height ? "landscape" : "portrait";
 }
 

@@ -8,6 +8,8 @@ import { ToastProvider } from "../primitives/toast/ToastStack";
 import { releaseSounds } from "../sounds/sounds";
 import { ThemeProvider } from "../theme/theme";
 import type { ColorScheme } from "../theme/tokens";
+import type { Permission } from "../toasts/CallEventToasts";
+import { StageViewProvider } from "../stage/stage-view";
 import { CallFrame } from "./CallFrame";
 import { DeviceLayoutProvider } from "./device-layout";
 import { PortalProvider } from "./portal";
@@ -20,14 +22,24 @@ export type ChalkProps = {
   readonly displayName?: string;
   /** The call's name in the header, such as "Q9 team". */
   readonly callName?: string;
+  /** The call's link, which More and the call details offer to copy, share and show as a QR code. */
+  readonly inviteLink?: string;
   /** Dark by default. Set it with `onColorSchemeChange` to keep the person's choice. */
   readonly colorScheme?: ColorScheme;
   readonly onColorSchemeChange?: (colorScheme: ColorScheme) => void;
   /** Call sounds, on by default. Set it with `onSoundsEnabledChange` to keep the person's choice. */
   readonly soundsEnabled?: boolean;
   readonly onSoundsEnabledChange?: (enabled: boolean) => void;
-  /** Called after the person leaves the call. */
+  /** Called when the person is done with the call: Home on the page that shows after they leave, the call ends, or it fails. */
   readonly onLeave?: () => void;
+  /**
+   * Called just before Open Settings takes the person to the system settings to allow the microphone
+   * or camera. iOS restarts the app when a permission changes, so store the call here and, on the
+   * next launch, open it again with `resumedAfterSettings`.
+   */
+  readonly onOpenSettings?: (permission: Permission) => void;
+  /** Set when the app reopens the call after Open Settings; the call says "Rejoining" and then that it can use the device now. */
+  readonly resumedAfterSettings?: Permission;
 };
 
 /**
@@ -46,7 +58,9 @@ export function Chalk({ client, colorScheme, onColorSchemeChange, soundsEnabled,
                 <PortalProvider>
                   <ToastProvider>
                     <ChalkProvider client={client}>
-                      <CallFrame {...frame} />
+                      <StageViewProvider>
+                        <CallFrame {...frame} />
+                      </StageViewProvider>
                     </ChalkProvider>
                   </ToastProvider>
                 </PortalProvider>

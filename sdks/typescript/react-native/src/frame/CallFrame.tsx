@@ -6,18 +6,21 @@ import { Dock } from "../dock/Dock";
 import { LeaveMenu } from "../dock/LeaveMenu";
 import { MoreSheet } from "../dock/MoreSheet";
 import { haptics } from "../haptics/haptics";
+import { CallDetailsSheet } from "../header/CallDetailsSheet";
 import { Header } from "../header/Header";
 import { useCan, useConnection, useMedia } from "../hooks/space-hooks";
-import { Limbo } from "../limbo/Limbo";
 import { timings } from "../motion/motion";
 import { ToastStack, useToasts } from "../primitives/toast/ToastStack";
-import { PeopleSheet } from "../sheets/people-chat/PeopleSheet";
+import { ChatNotices } from "../sheets/people-chat/ChatNotices";
+import { PeopleChatSheet } from "../sheets/people-chat/PeopleChatSheet";
 import { playSound } from "../sounds/sounds";
 import { Stage } from "../stage/Stage";
-import { StatusPage } from "../status/StatusPage";
+import { CallOverlays } from "../status/CallOverlays";
+import { ArrivalScreen } from "../status/ChalkArrival";
+import { callScreen } from "../status/call-screen";
 import { useTheme } from "../theme/theme";
 import { durations } from "../theme/tokens";
-import { CallEventToasts } from "../toasts/CallEventToasts";
+import { useCallEventToasts, type Permission } from "../toasts/CallEventToasts";
 import { useDevScenario } from "./dev-scenario";
 import { useDeviceLayout } from "./device-layout";
 import { PortalHost, usePortalCount } from "./portal";
@@ -28,17 +31,20 @@ import { frameRegions } from "./regions";
 export type CallFrameProps = {
   readonly displayName?: string;
   readonly callName?: string;
+  readonly inviteLink?: string;
   readonly onLeave?: () => void;
+  readonly onOpenSettings?: (permission: Permission) => void;
+  readonly resumedAfterSettings?: Permission;
 };
 
-type OpenSheet = "more" | "people" | null;
+type OpenSheet = "more" | "people" | "chat" | "details" | null;
 
 /**
  * The call's frame: header, stage and dock regions, then the sheets layer, the limbo and status
  * overlays, the menus layer and the toasts layer, each inside the safe area for the current
  * arrangement. Each region lives in its own folder so the part lanes can work in parallel.
  */
-export function CallFrame({ displayName, callName = "Call", onLeave }: CallFrameProps): React.JSX.Element {
+export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave, onOpenSettings, resumedAfterSettings }: CallFrameProps): React.JSX.Element {
   const client = useSpaceClient();
   const connection = useConnection();
   const media = useMedia();
@@ -46,9 +52,12 @@ export function CallFrame({ displayName, callName = "Call", onLeave }: CallFrame
   const layout = useDeviceLayout();
   const { soundsEnabled } = usePreferences();
   const toasts = useToasts();
+  const callEvents = useCallEventToasts({ onOpenSettings, resumedAfterSettings });
+  const [leftByChoice, setLeftByChoice] = useState(false);
   const [sheet, setSheet] = useState<OpenSheet>(null);
   const moreRef = useRef<View>(null);
   const leaveRef = useRef<View>(null);
+  const nameRef = useRef<View>(null);
   const canEnd = useCan("endEpisode");
   const [leaveMenuOpen, setLeaveMenuOpen] = useState(false);
   const sheetCount = usePortalCount("sheets");
@@ -60,6 +69,7 @@ export function CallFrame({ displayName, callName = "Call", onLeave }: CallFrame
 
   const join = useCallback(() => {
     // A failed join shows up as `connection.status === "failed"` with `lastError`, which the status page reads.
+    setLeftByChoice(false);
     client.join({ displayName, microphone: false, camera: false }).catch(() => undefined);
   }, [client, displayName]);
   useEffect(() => {
@@ -68,27 +78,32 @@ export function CallFrame({ displayName, callName = "Call", onLeave }: CallFrame
 
   const microphoneOn = media.local.microphone.state === "enabled";
   const cameraOn = media.local.camera.state === "enabled";
-  const reportMediaFailure = useCallback(
-    (what: string) => (cause: unknown) => {
-      toasts.show({ kind: "error", dismissible: true, message: cause instanceof Error ? `Couldn't change your ${what}. ${cause.message}` : `Couldn't change your ${what}.` });
-    },
-    [toasts],
-  );
+  const { noteOwnMicrophoneChange, reportMediaFailure } = callEvents;
   const toggleMicrophone = useCallback(() => {
     haptics.mute();
     playSound(microphoneOn ? "mute" : "unmute", soundsEnabled);
-    client.media.setMicrophoneEnabled(!microphoneOn).catch(reportMediaFailure("microphone"));
-  }, [client, microphoneOn, reportMediaFailure, soundsEnabled]);
+    if (microphoneOn) noteOwnMicrophoneChange();
+    const turnOn = () => client.media.setMicrophoneEnabled(true).catch((cause: unknown) => reportMediaFailure("microphone", cause, turnOn));
+    if (microphoneOn) client.media.setMicrophoneEnabled(false).catch(() => toasts.show({ kind: "error", dismissible: true, message: "Couldn’t mute your microphone." }));
+    else void turnOn();
+  }, [client, microphoneOn, noteOwnMicrophoneChange, reportMediaFailure, soundsEnabled, toasts]);
   const toggleCamera = useCallback(() => {
-    client.media.setCameraEnabled(!cameraOn).catch(reportMediaFailure("camera"));
-  }, [cameraOn, client, reportMediaFailure]);
+    const turnOn = () => client.media.setCameraEnabled(true).catch((cause: unknown) => reportMediaFailure("camera", cause, turnOn));
+    if (cameraOn) client.media.setCameraEnabled(false).catch(() => toasts.show({ kind: "error", dismissible: true, message: "Couldn’t turn off your camera." }));
+    else void turnOn();
+  }, [cameraOn, client, reportMediaFailure, toasts]);
   const exit = useCallback(
     (how: "leave" | "end") => {
       setSheet(null);
       setLeaveMenuOpen(false);
-      (how === "end" ? client.endEpisode() : client.leave()).then(() => onLeave?.()).catch(() => toasts.show({ kind: "error", dismissible: true, message: how === "end" ? "Couldn't end the call." : "Couldn't leave the call." }));
+      setLeftByChoice(true);
+      // The status page (A3, A4) follows; its Home button calls `onLeave`.
+      (how === "end" ? client.endEpisode() : client.leave()).catch(() => {
+        setLeftByChoice(false);
+        toasts.show({ kind: "error", dismissible: true, message: how === "end" ? "Couldn’t end the call." : "Couldn’t leave the call." });
+      });
     },
-    [client, onLeave, toasts],
+    [client, toasts],
   );
   const pressLeave = useCallback(() => {
     haptics.leave();
@@ -98,21 +113,22 @@ export function CallFrame({ displayName, callName = "Call", onLeave }: CallFrame
 
   const devScenario = useDevScenario();
   useEffect(() => {
-    if (devScenario.sheet) setSheet(devScenario.sheet);
+    if (devScenario.sheet && devScenario.sheet !== "route") setSheet(devScenario.sheet);
     if (devScenario.menu === "leave") setLeaveMenuOpen(true);
   }, [devScenario]);
 
   const chrome = useLandscapeChrome(layout.arrangement === "landscape" && sheet === null && !layered);
-  const status = connection.status;
+  const forced = devScenario.callState;
+  const screen = forced === "hold" ? { kind: "call" as const } : forced === "left" || forced === "ended" || forced === "failed" || forced === "removed" ? { kind: "status" as const, outcome: forced } : callScreen(connection, leftByChoice);
 
   return (
     <View ref={screenRef} style={screenStyle} testID="frame.screen">
       <StatusBar barStyle={scheme === "dark" ? "light-content" : "dark-content"} />
       <View accessibilityElementsHidden={layered} importantForAccessibility={layered ? "no-hide-descendants" : "auto"} style={StyleSheet.absoluteFill}>
-        <Stage frame={regions.stage} />
+        <Stage frame={regions.stage} onOpenPeople={() => setSheet("people")} />
         {chrome.hidden ? <Pressable accessibilityLabel="Show call controls" onPress={chrome.show} style={StyleSheet.absoluteFill} testID="frame.show-controls" /> : null}
         <Animated.View pointerEvents={chrome.hidden ? "none" : "box-none"} style={[styles.region, frameStyle(regions.header), chrome.style]}>
-          <Header arrangement={layout.arrangement} callName={callName} onOpenDetails={() => setSheet("more")} />
+          <Header arrangement={layout.arrangement} callName={callName} detailsOpen={sheet === "details"} onOpenDetails={() => setSheet("details")} ref={nameRef} />
         </Animated.View>
         <Animated.View pointerEvents={chrome.hidden ? "none" : "box-none"} style={[styles.region, frameStyle(regions.dock), chrome.style]}>
           <Dock
@@ -132,22 +148,24 @@ export function CallFrame({ displayName, callName = "Call", onLeave }: CallFrame
       </View>
       <View pointerEvents="box-none" style={StyleSheet.absoluteFill} testID="frame.sheets">
         {/* Focus goes back to More only once no sheet is open, so switching to People keeps it there. */}
-        <MoreSheet onClose={() => setSheet(null)} onOpenPeople={() => setSheet("people")} open={sheet === "more"} returnFocusRef={sheet === null ? moreRef : undefined} />
-        <PeopleSheet onClose={() => setSheet(null)} open={sheet === "people"} returnFocusRef={sheet === null ? moreRef : undefined} />
+        <MoreSheet inviteLink={inviteLink} onClose={() => setSheet(null)} onOpenChat={() => setSheet("chat")} onOpenPeople={() => setSheet("people")} open={sheet === "more"} returnFocusRef={sheet === null ? moreRef : undefined} />
+        <CallDetailsSheet callName={callName} inviteLink={inviteLink} onClose={() => setSheet(null)} open={sheet === "details"} returnFocusRef={nameRef} />
+        <PeopleChatSheet onClose={() => setSheet(null)} onTabChange={setSheet} open={sheet === "people" || sheet === "chat"} returnFocusRef={sheet === null ? moreRef : undefined} tab={sheet === "chat" ? "chat" : "people"} />
         <PortalHost layer="sheets" />
       </View>
       <View pointerEvents="box-none" style={StyleSheet.absoluteFill} testID="frame.overlays">
-        {status === "joining" || status === "idle" ? <Limbo message="Joining" /> : null}
-        {status === "reconnecting" ? <Limbo message="Reconnecting" /> : null}
-        {status === "left" ? <StatusPage action={{ label: "Rejoin", onPress: join }} title="You left the call" /> : null}
-        {status === "failed" ? <StatusPage action={{ label: "Try again", onPress: join }} detail={connection.lastError?.message} title="Couldn't join the call" /> : null}
+        {forced === "knocking" || forced === "refused" || forced === "full" ? (
+          <ArrivalScreen callName={callName} onCancel={() => onLeave?.()} onRetry={join} state={forced} />
+        ) : (
+          <CallOverlays callName={callName} onHold={forced === "hold"} onHome={() => onLeave?.()} onRejoin={join} rejoining={resumedAfterSettings !== undefined} screen={screen} />
+        )}
       </View>
       <View pointerEvents="box-none" style={StyleSheet.absoluteFill} testID="frame.menus">
         <LeaveMenu anchorRef={leaveRef} onClose={() => setLeaveMenuOpen(false)} onEnd={() => exit("end")} onLeave={() => exit("leave")} open={leaveMenuOpen} />
         <PortalHost layer="menus" />
       </View>
       <ToastStack />
-      <CallEventToasts />
+      <ChatNotices chatVisible={sheet === "chat"} onOpenChat={() => setSheet("chat")} sheetOpen={sheet === "people" || sheet === "chat"} />
     </View>
   );
 }
