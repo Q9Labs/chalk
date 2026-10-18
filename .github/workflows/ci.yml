@@ -750,7 +750,7 @@ jobs:
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         uses: digitalocean/action-doctl@v2
         with:
-          no_auth: 'true'
+          no_auth: "true"
 
       - uses: actions/setup-go@v5
         if: inputs.managed_environment == 'nightly'
