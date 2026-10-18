@@ -217,7 +217,15 @@ def remote(args):
                     run(['keytool', '-genkeypair', '-keystore', str(debug_key), '-storepass', 'android', '-alias', 'androiddebugkey', '-keypass', 'android', '-keyalg', 'RSA', '-keysize', '2048', '-validity', '10000', '-dname', 'CN=Android Debug,O=Android,C=US'])
                 run(['./gradlew', 'assembleDebug', '-PreactNativeArchitectures=arm64-v8a'], cwd=app / 'android')
                 stamp.write_text(signature)
-            run([adb, '-s', serial, 'install', '-r', str(apk)])
+            with (path / 'android-install.log').open('w') as install_log:
+                try:
+                    run([adb, '-s', serial, 'install', '-r', str(apk)], stdout=install_log, stderr=subprocess.STDOUT)
+                except subprocess.CalledProcessError:
+                    if not args.client_cache or 'INSTALL_FAILED_UPDATE_INCOMPATIBLE' not in (path / 'android-install.log').read_text():
+                        raise
+                    print('Replacing differently signed debug app on the leased capture pool', flush=True)
+                    run([adb, '-s', serial, 'uninstall', bundle])
+                    run([adb, '-s', serial, 'install', '-r', str(apk)])
         if args.platform == 'android':
             preferences = '<?xml version="1.0" encoding="utf-8"?><map><string name="debug_http_host">127.0.0.1:' + str(args.port) + '</string></map>'
             run([adb, '-s', serial, 'shell', 'run-as', bundle, 'mkdir', '-p', 'shared_prefs'])
