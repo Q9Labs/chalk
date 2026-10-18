@@ -53,16 +53,7 @@ export async function audioEvidence() {
     stats: reports
       .flatMap((report) => [...report.values()])
       .filter((row) => row.kind === "audio" && ["media-source", "outbound-rtp", "inbound-rtp"].includes(row.type))
-      .map((row) => ({
-        type: row.type,
-        bytesSent: row.bytesSent ?? null,
-        packetsSent: row.packetsSent ?? null,
-        bytesReceived: row.bytesReceived ?? null,
-        packetsReceived: row.packetsReceived ?? null,
-        audioLevel: row.audioLevel ?? null,
-        totalAudioEnergy: row.totalAudioEnergy ?? null,
-        totalSamplesDuration: row.totalSamplesDuration ?? null,
-      })),
+      .map((row) => Object.fromEntries(["type", "bytesSent", "packetsSent", "bytesReceived", "packetsReceived", "audioLevel", "totalAudioEnergy", "totalSamplesDuration"].map((field) => [field, row[field] ?? null]))),
   };
 }
 
