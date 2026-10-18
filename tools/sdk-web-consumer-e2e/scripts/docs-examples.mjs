@@ -20,6 +20,7 @@ export async function checkDocExamples(repository, consumer, run) {
     "getAccess",
     "file",
     "participantId",
+    "messageId",
     "requestId",
     "renderParticipant",
     "statusView",
@@ -62,7 +63,7 @@ export { Chalk } from "@q9labsai/chalk-react";
 export declare const client: SpaceClient, spaceClient: SpaceClient;
 export declare const getAccess: GetAccess;
 export declare const file: File;
-export declare const participantId: string, requestId: string, tenantId: string;
+export declare const participantId: string, messageId: string, requestId: string, tenantId: string;
 export declare const renderParticipant: (value: { name: string; connected: boolean; speaking: boolean }) => void;
 export declare const statusView: { set: (value: SpaceSnapshot["connection"]["status"]) => void };
 export declare const renderConnection: (status: string, error?: unknown) => void;
