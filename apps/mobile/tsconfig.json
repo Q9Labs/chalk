@@ -2,7 +2,7 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "jsx": "react-jsx",
-    "types": ["node", "expo/types"],
+    "types": ["node"],
     "paths": {
       "@/*": ["./src/*"],
       "@q9labsai/chalk-client": ["../../sdks/typescript/client/src/index.ts"],
@@ -18,7 +18,8 @@
       "@q9labsai/chalk-react-native/diagnostics": ["../../sdks/typescript/react-native/src/diagnostics.ts"],
       "@q9labsai/chalk-react-native/dev": ["../../sdks/typescript/react-native/src/dev.ts"],
       "@q9labsai/chalk-react-native/invites": ["../../sdks/typescript/react-native/src/invites.ts"],
-      "@q9labsai/chalk-react-native/runtime": ["../../sdks/typescript/react-native/src/runtime.ts"]
+      "@q9labsai/chalk-react-native/runtime": ["../../sdks/typescript/react-native/src/runtime.ts"],
+      "@q9labsai/chalk-react-native/ui": ["../../sdks/typescript/react-native/src/ui.ts"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx", "**/*.d.ts"]
