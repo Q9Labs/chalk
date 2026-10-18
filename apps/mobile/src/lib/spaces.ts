@@ -238,3 +238,8 @@ function isTerminalArrivalError(value: unknown): boolean {
   if (!("error" in value) || typeof value.error !== "object" || value.error === null || !("code" in value.error)) return false;
   return value.error.code === "arrival.invalid_handle" || value.error.code === "arrival.unavailable" || value.error.code === "space_public_invite.unavailable";
 }
+
+/** The link as people read it: host and path, without the scheme or the invite token. */
+export function displayLink(inviteLink: string): string {
+  return inviteLink.replace(/^[a-z][a-z0-9+.-]*:\/\//iu, "").replace(/[?#].*$/u, "");
+}
