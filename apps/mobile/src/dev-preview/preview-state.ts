@@ -17,7 +17,7 @@ export type SpaceState = (typeof SPACE_STATES)[number];
 
 export type PreviewState = EntranceState | SpaceState;
 
-export const PREVIEW_LAYOUTS = ["focus", "grid", "presentation"] as const;
+export const PREVIEW_LAYOUTS = ["focus", "grid"] as const;
 export type PreviewLayout = (typeof PREVIEW_LAYOUTS)[number];
 
 export const PREVIEW_PANELS = ["none", "chat", "participants"] as const;

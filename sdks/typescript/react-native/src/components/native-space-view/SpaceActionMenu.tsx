@@ -37,8 +37,8 @@ export function SpaceActionMenu({ controller }: { readonly controller: Controlle
         ]
       : []),
     ...(controller.canSettings ? [{ label: "Settings", onPress: () => controller.openPanel("settings") }] : []),
-    ...(["grid", "focus", "presentation"] as const).map((layout) => ({
-      label: `${layout === "grid" ? "Grid" : layout === "focus" ? "Focus" : "Presentation"} layout${controller.layout.layout === layout ? " (selected)" : ""}`,
+    ...(["grid", "focus"] as const).map((layout) => ({
+      label: `${layout === "grid" ? "Grid" : "Spotlight"} layout${controller.layout.layout === layout ? " (selected)" : ""}`,
       onPress: () => {
         controller.layout.setLayout(layout);
         controller.setActionsOpen(false);

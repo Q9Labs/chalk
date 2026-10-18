@@ -211,7 +211,7 @@ function stageItems(snapshot: RecordingPresentationSnapshotV1, joined: readonly 
 
 function stageGeometry(items: readonly StageItem[], layout: RecordingPresentationSnapshotV1["view"]["layout"], stage: Rect) {
   const box: StageBox = { width: stage.width, height: stage.height };
-  const primary = layout === "grid" ? null : choosePrimary(items, { layout, pinnedId: null, lastSpeakerId: null, seenAt: new Map(items.map((item, index) => [item.id, index])) });
+  const primary = layout === "grid" ? null : choosePrimary(items, { layout: "focus", pinnedId: null, lastSpeakerId: null, seenAt: new Map(items.map((item, index) => [item.id, index])) });
   return primary === null
     ? fitGrid(
         box,

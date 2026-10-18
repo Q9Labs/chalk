@@ -110,7 +110,7 @@ function round(value: number): number {
 }
 
 /** Equal tiles that fill the box, centred last row, paged when they would get too small. */
-export function fitGrid(box: StageBox, ids: readonly string[], options: GridFitOptions): StageGeometry {
+export function fitGrid(box: StageBox, ids: readonly string[], options: GridFitOptions, wideIds: readonly string[] = []): StageGeometry {
   const count = ids.length;
   if (count === 0) return EMPTY_GEOMETRY;
   if (count === 1) {
@@ -132,13 +132,15 @@ export function fitGrid(box: StageBox, ids: readonly string[], options: GridFitO
       const rowWidth = rowIds.length * tileWidth + (rowIds.length - 1) * options.gap;
       const offsetX = Math.max(0, (box.width - rowWidth) / 2);
       rowIds.forEach((id, column) => {
+        const width = rowIds.length === 1 && wideIds.includes(id) ? Math.max(tileWidth, Math.min(box.width, tileHeight * options.maxAspect)) : tileWidth;
+        const x = rowIds.length === 1 ? (box.width - width) / 2 : offsetX + column * (tileWidth + options.gap);
         frames.push({
           id,
           role: "grid",
           page,
-          x: round(page * pageStride + offsetX + column * (tileWidth + options.gap)),
+          x: round(page * pageStride + x),
           y: round(offsetY + row * (tileHeight + options.gap)),
-          width: round(tileWidth),
+          width: round(width),
           height: round(tileHeight),
         });
       });

@@ -136,6 +136,7 @@ export function RecordingSpaceView({ frame, resolveMedia, resolveAssetUrl, rende
     const media = mediaNodes.get(source.sourceId);
     return <ScreenSharePresentation sharedByName={item.participant.displayName} media={media} mediaVisible={hasRenderableMedia(media)} />;
   };
+  const layout = frame.view.layout === "grid" ? "grid" : "focus";
   return (
     <>
       <SpacePresentation
@@ -146,12 +147,12 @@ export function RecordingSpaceView({ frame, resolveMedia, resolveAssetUrl, rende
           logoUrl: frame.space.logoAssetId ? resolveAssetUrl(frame.space.logoAssetId) : undefined,
           duration: durationSeconds,
           isRecording: true,
-          layout: frame.view.layout,
+          layout,
         }}
         stage={
           <Stage
             items={items}
-            layout={frame.view.layout}
+            layout={layout}
             interactive={false}
             animate={false}
             generatedAvatars={frame.profile.theme.generatedAvatars}

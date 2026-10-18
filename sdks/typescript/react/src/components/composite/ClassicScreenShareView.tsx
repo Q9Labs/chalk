@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Spinner } from "@q9labsai/chalk-ui";
-import { useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useMedia, useParticipants, useSelf } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
 import { ArrowDown01Icon, ArrowLeft01Icon, ArrowRight01Icon, ArrowUp01Icon, Maximize01Icon, Monitor01Icon, RefreshIcon, ZoomInIcon, ZoomOutIcon } from "../../utils/icons";
 import { ParticipantTile } from "../atomic";
@@ -35,7 +35,7 @@ const getContainedSize = (containerWidth: number, containerHeight: number, video
     height: containerHeight,
   };
 };
-const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByName, participants, onStopShare, showThumbnails = true, thumbnailPosition = "bottom", enableZoom = true, className }: ScreenShareViewSurfaceProps) => {
+const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByName, participants, showThumbnails = true, thumbnailPosition = "bottom", enableZoom = true, className }: ScreenShareViewSurfaceProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   // Loading state
@@ -252,14 +252,6 @@ const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByName, par
         {/* Zoom indicator when zoomed */}
         {zoom > 1 && <div className="absolute bottom-3 right-3 px-1.5 py-0.5 rounded bg-[var(--chalk-stage)] backdrop-blur-sm text-[var(--chalk-text)] text-[10px]">Drag to pan • Scroll to zoom</div>}
 
-        {onStopShare && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button type="button" onClick={onStopShare} className="px-4 py-2 bg-[var(--chalk-danger)] hover:bg-[var(--chalk-danger)] text-[var(--chalk-accent-text)] rounded-md font-medium shadow-lg transition-colors">
-              Stop Sharing
-            </button>
-          </div>
-        )}
-
         {/* Collapse/Expand Toggle Button */}
         {showThumbnails && participants.length > 0 && (
           <button
@@ -313,7 +305,6 @@ const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByName, par
   );
 });
 export function ClassicScreenShareView(props: ScreenShareViewProps): React.JSX.Element {
-  const client = useSpaceClient();
   const self = useSelf();
   const participantsSlice = useParticipants();
   const media = useMedia();
@@ -327,14 +318,6 @@ export function ClassicScreenShareView(props: ScreenShareViewProps): React.JSX.E
       </div>
     );
   }
-  return (
-    <ScreenShareViewSurface
-      {...props}
-      screenShareTrack={active.screenShareTrack}
-      sharedByName={active.displayName}
-      participants={participants}
-      onStopShare={props.onStopShare ?? (() => void (active.isLocal ? client.media.setScreenShareEnabled(false) : client.participants.stopScreenShare(active.id)))}
-    />
-  );
+  return <ScreenShareViewSurface {...props} screenShareTrack={active.screenShareTrack} sharedByName={active.displayName} participants={participants} />;
 }
 ClassicScreenShareView.displayName = "ClassicScreenShareView";

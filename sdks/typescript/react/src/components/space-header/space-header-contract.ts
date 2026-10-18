@@ -4,8 +4,8 @@ export interface SpaceHeaderProps {
   duration?: number;
   isRecording?: boolean;
   isTranscribing?: boolean;
-  layout?: "grid" | "focus" | "presentation";
-  onLayoutChange?: (layout: "grid" | "focus" | "presentation") => void;
+  layout?: "grid" | "focus";
+  onLayoutChange?: (layout: "grid" | "focus") => void;
   onInvite?: () => void;
   onInfo?: () => void;
   onSettings?: () => void;

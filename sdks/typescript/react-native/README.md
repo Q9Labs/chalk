@@ -21,7 +21,7 @@ export function SpaceScreen() {
 
 `Chalk` can instead receive an existing `SpaceClient` through `client`. Set
 `entrance={false}` to join immediately; an absent display name is omitted from
-the join request. The native experience has focus, grid, and presentation
+the join request. The native experience has focus and grid
 layouts, and `features.settings` is enabled unless explicitly set to `false`.
 
 ## Native client adapter

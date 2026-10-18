@@ -28,7 +28,7 @@ export type ChalkTheme = {
   readonly accent?: string;
   readonly tokens?: Partial<ChalkThemeTokens>;
 };
-export type SpaceLayout = "grid" | "focus" | "presentation";
+export type SpaceLayout = "grid" | "focus";
 type ChalkCallbacks = {
   readonly onJoined?: () => void;
   readonly onLeft?: () => void;

@@ -19,7 +19,7 @@ type ExpectedSpaceViewController = {
   readonly canWhiteboard: boolean;
   readonly chat: { readonly unreadCount: number; readonly messages: readonly unknown[] };
   readonly participants: { readonly participants: readonly unknown[]; readonly localParticipant: unknown };
-  readonly layout: { readonly layout: "grid" | "focus" | "presentation"; readonly setLayout: (layout: "grid" | "focus" | "presentation") => void };
+  readonly layout: { readonly layout: "grid" | "focus"; readonly setLayout: (layout: "grid" | "focus") => void };
   readonly setActionsOpen: Dispatch<SetStateAction<boolean>>;
   readonly setReactionPickerOpen: Dispatch<SetStateAction<boolean>>;
   readonly setChatDraft: Dispatch<SetStateAction<string>>;

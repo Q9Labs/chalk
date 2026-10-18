@@ -41,8 +41,8 @@ export interface SpaceViewProps {
   readonly inviteLink?: string;
   readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
   readonly stageBackground?: boolean;
-  readonly layout?: "grid" | "focus" | "presentation";
-  readonly onLayoutChange?: (layout: "grid" | "focus" | "presentation") => void;
+  readonly layout?: "grid" | "focus";
+  readonly onLayoutChange?: (layout: "grid" | "focus") => void;
   readonly initialPanel?: SpacePanel | null;
   readonly features?: SpaceViewFeatures;
   readonly infoDialog?: SpaceViewInfoDialogProps;
