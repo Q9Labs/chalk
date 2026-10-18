@@ -1,5 +1,6 @@
 import { CHALK_REACTIONS, type ChatMessage, type ChatReactionInput, type ChatAttachment, type ChatReadReceipt } from "@q9labsai/chalk-client";
 import React, { useEffect, useRef, useState } from "react";
+import { ArrowLeft01Icon, ArrowRight01Icon, Cancel01Icon, Download01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { Avatar } from "../atomic/Avatar";
 import { ChalkPopover } from "../chalk-ui";
@@ -81,6 +82,11 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
       return () => document.removeEventListener("pointerdown", dismiss);
     }, [reactionBarOpen]);
     const [photo, setPhoto] = useState<ChatAttachment | null>(null);
+    const photos = attachments.filter((file) => file.mimeType.startsWith("image/") && resolvedUrls.has(file.attachmentId));
+    const photoIndex = photos.findIndex((file) => file.attachmentId === photo?.attachmentId);
+    const changePhoto = (step: number) => {
+      if (photos.length > 1) setPhoto(photos[(photoIndex + step + photos.length) % photos.length]!);
+    };
     const viewer = useRef<HTMLDialogElement>(null);
     const react = async (emoji: ChatReactionInput["emoji"]) => {
       if (!onReact || reacting) return;
@@ -272,6 +278,10 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
           aria-label="Photo viewer"
           onKeyDown={(event) => {
             if (event.key === "Escape") event.stopPropagation();
+            if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+              event.preventDefault();
+              changePhoto(event.key === "ArrowLeft" ? -1 : 1);
+            }
           }}
           onClose={() => setPhoto(null)}
           onClick={(event) => {
@@ -279,12 +289,40 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
           }}
         >
           <div className="call-photo-viewer-bar">
-            <span>{photo?.fileName}</span>
-            <button type="button" aria-label="Close photo viewer" onClick={() => viewer.current?.close()}>
-              ×
+            <span className="call-photo-viewer-name">
+              <b dir="auto">{photo?.fileName}</b>
+              <small aria-live="polite">
+                {isLocal ? "You" : senderName}, {displayTime ?? new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(new Date(timestamp))}
+                {photos.length > 1 ? ` · ${photoIndex + 1} of ${photos.length}` : ""}
+              </small>
+            </span>
+            {photo ? (
+              <a className="call-photo-viewer-control" href={resolvedUrls.get(photo.attachmentId)} download={photo.fileName} target="_blank" rel="noopener noreferrer" aria-label={`Download ${photo.fileName}`}>
+                <Download01Icon />
+              </a>
+            ) : null}
+            <button type="button" className="call-photo-viewer-control" aria-label="Close photo viewer" onClick={() => viewer.current?.close()}>
+              <Cancel01Icon />
             </button>
           </div>
-          {photo ? <img src={resolvedUrls.get(photo.attachmentId)} alt={photo.fileName} /> : null}
+          <div
+            className="call-photo-viewer-stage"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) viewer.current?.close();
+            }}
+          >
+            {photo ? <img src={resolvedUrls.get(photo.attachmentId)} alt={photo.fileName} /> : null}
+            {photos.length > 1 ? (
+              <>
+                <button type="button" className="call-photo-viewer-control call-photo-previous" aria-label="Previous image" onClick={() => changePhoto(-1)}>
+                  <ArrowLeft01Icon />
+                </button>
+                <button type="button" className="call-photo-viewer-control call-photo-next" aria-label="Next image" onClick={() => changePhoto(1)}>
+                  <ArrowRight01Icon />
+                </button>
+              </>
+            ) : null}
+          </div>
         </dialog>
       </div>
     );

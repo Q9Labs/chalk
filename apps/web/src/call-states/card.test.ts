@@ -87,7 +87,8 @@ it(
     journey(async (page) => {
       await page.goto(`${origin}/call-states.html?state=card-chat-light`);
       await page.getByRole("button", { name: "Chat", exact: true }).click();
-      await page.getByLabel("Choose attachments").setInputFiles({ name: "sample.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l6cAAAAASUVORK5CYII=", "base64") });
+      const buffer = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l6cAAAAASUVORK5CYII=", "base64");
+      await page.getByLabel("Choose attachments").setInputFiles(["sample.png", "second.png"].map((name) => ({ name, mimeType: "image/png", buffer })));
       await page.getByRole("img", { name: "Preview of sample.png" }).waitFor();
       await page.getByRole("textbox", { name: "Message", exact: true }).fill("Here is the image");
       await page.getByRole("button", { name: "Send message", exact: true }).click();
@@ -96,7 +97,11 @@ it(
       await capture(page, "laptop-chat-image-light");
       await image.click();
       const viewer = page.getByRole("dialog", { name: "Photo viewer" });
-      expect(await viewer.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(11, 12, 14)");
+      expect(await viewer.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgba(8, 8, 10, 0.94)");
+      await page.getByRole("button", { name: "Next image", exact: true }).click();
+      await viewer.getByRole("img", { name: "second.png", exact: true }).waitFor();
+      await page.keyboard.press("ArrowLeft");
+      await viewer.getByRole("img", { name: "sample.png", exact: true }).waitFor();
       await capture(page, "laptop-photo-viewer-light");
       await page.keyboard.press("Escape");
       expect(await image.evaluate((element) => element === document.activeElement)).toBe(true);

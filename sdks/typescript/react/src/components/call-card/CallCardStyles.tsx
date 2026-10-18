@@ -751,40 +751,34 @@ const styles = `.call-card-tabs {
   height: 100dvh;
   max-width: none;
   max-height: none;
-  padding: 16px;
+  padding: 0;
   border: 0;
-  background: #0b0c0e;
+  margin: 0;
+  background: rgba(8, 8, 10, .94);
   color: #ececee;
 }
-.call-photo-viewer::backdrop {
-  background: #0b0c0e;
-}
-.call-photo-viewer[open] {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-.call-photo-viewer-bar {
-  position: absolute;
-  top: 12px;
-  left: 16px;
-  right: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 14px;
-}
-.call-photo-viewer-bar button {
-  height: 44px;
-  width: 44px;
-  border-radius: 50%;
-  font-size: 24px;
-}
-.call-photo-viewer > img {
-  max-width: 100%;
-  max-height: calc(100dvh - 112px);
-  object-fit: contain;
+.call-photo-viewer::backdrop { background: #08080a; }
+.call-photo-viewer[open] { display: flex; flex-direction: column; }
+.call-photo-viewer :focus-visible { outline-color: #ececee; }
+.call-photo-viewer-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 12px 12px 12px 20px; }
+.call-photo-viewer-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.call-photo-viewer-name b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.call-photo-viewer-name small { font-size: 12px; color: #a1a2a9; }
+.call-photo-viewer-control { width: 40px; height: 40px; border-radius: 50%; flex: none; display: grid; place-items: center; color: #ececee; background: rgba(255,255,255,.08); }
+.call-photo-viewer-control svg { width: 20px; height: 20px; }
+.call-photo-viewer-control:hover { background: rgba(255,255,255,.16); }
+.call-photo-viewer-stage { position: relative; flex: 1; min-height: 0; }
+.call-photo-viewer-stage img { position: absolute; inset: 0 76px 36px; margin: auto; max-width: calc(100% - 152px); max-height: calc(100% - 36px); border-radius: 8px; user-select: none; }
+.call-photo-previous, .call-photo-next { position: absolute; top: 50%; width: 44px; height: 44px; margin-top: -40px; }
+.call-photo-previous { left: 16px; }
+.call-photo-next { right: 16px; }
+@media (max-width: 767px) {
+ .call-photo-viewer-bar { padding: 52px 8px 8px 16px; }
+ .call-photo-viewer-control { width: 44px; height: 44px; }
+ .call-photo-viewer-stage img { inset: 0 0 108px; max-width: 100%; max-height: calc(100% - 108px); border-radius: 0; }
+ .call-photo-previous, .call-photo-next { top: auto; bottom: 40px; margin: 0; }
+ .call-photo-previous { left: calc(50% - 60px); }
+ .call-photo-next { right: calc(50% - 60px); }
 }
 @media (pointer: coarse) {
   .call-card-close,
