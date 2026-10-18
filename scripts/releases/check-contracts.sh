@@ -31,6 +31,7 @@ check managed-deploy node --test scripts/deploy/deploy-managed-release.test.mjs
 if [[ "$mode" == --plan ]]; then exit "$failed"; fi
 check workspace-dependencies env CI=true pnpm install --frozen-lockfile
 check deploy-tools node --test scripts/deploy/*.test.mjs
+check proof-tests node --test scripts/prod-proof/*.test.mjs scripts/web-proof/*.test.mjs
 check releases python3 -m unittest discover -s scripts/releases -p 'test_*.py'
 check recorder python3 -m unittest discover -s scripts/recorder -p 'test_*.py'
 check recorder-node node --experimental-import-meta-resolve --test scripts/recorder/*.test.mjs infrastructure/recorder/images/cpu/*.test.mjs

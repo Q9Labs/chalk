@@ -1,20 +1,22 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { ensureDocumentVersion } from "./managed-release-ssm.mjs";
 
+const observedResponse = JSON.parse(await readFile(new URL("./fixtures/ssm-get-document.nightly.json", import.meta.url), "utf8"));
+
 async function fixture(context) {
   const directory = await mkdtemp(join(tmpdir(), "chalk-ssm-content-"));
   context.after(() => rm(directory, { recursive: true, force: true }));
-  const content = JSON.stringify({ schemaVersion: "2.2", description: "fixture", mainSteps: [] });
+  const content = await readFile(new URL("./fixtures/managed-release-document.json", import.meta.url), "utf8");
   const path = join(directory, "document.json");
   await writeFile(path, content);
-  return { content, document: { path, format: "JSON", versionName: "controller-v2-fixture" } };
+  return { content, document: { path, format: "JSON", versionName: "controller-v2-3241b6227e0a0e88" } };
 }
 
-function provider(content, { status = "Active", version = "1", versionName, readError } = {}) {
+function provider(content, { status = observedResponse.Status, version = observedResponse.DocumentVersion, versionName, readError } = {}) {
   const calls = [];
   return {
     calls,
@@ -22,8 +24,8 @@ function provider(content, { status = "Active", version = "1", versionName, read
       const operation = args[4];
       calls.push(operation);
       const responses = {
-        "list-document-versions": { DocumentVersions: [{ DocumentVersion: "1", Status: "Active", VersionName: versionName }] },
-        "get-document": { DocumentVersion: version, Status: status, Content: content },
+        "list-document-versions": { DocumentVersions: [{ DocumentVersion: observedResponse.DocumentVersion, Status: observedResponse.Status, VersionName: versionName }] },
+        "get-document": { ...observedResponse, DocumentVersion: version, Status: status, Content: content },
         "update-document": { DocumentDescription: { DocumentVersion: "2" } },
         "describe-document": { Document: { Status: "Active" } },
       };
@@ -40,7 +42,9 @@ async function ensure(document, boundary) {
 
 test("reuses identical provider content without publishing a duplicate unnamed version", async (context) => {
   const { content, document } = await fixture(context);
-  for (const bytes of [content, JSON.stringify(JSON.parse(content), null, 2)]) {
+  assert.deepEqual(JSON.parse(observedResponse.Content), JSON.parse(content));
+  assert.equal(Object.hasOwn(observedResponse, "VersionName"), false);
+  for (const bytes of [observedResponse.Content, JSON.stringify(JSON.parse(observedResponse.Content), null, 2)]) {
     const boundary = provider(bytes);
     assert.equal(await ensure(document, boundary), "1");
     assert.deepEqual(boundary.calls, ["list-document-versions", "get-document"]);
@@ -48,8 +52,9 @@ test("reuses identical provider content without publishing a duplicate unnamed v
 });
 
 test("publishes changed content and waits for its numeric version to be active", async (context) => {
-  const { document } = await fixture(context);
-  const boundary = provider(JSON.stringify({ schemaVersion: "2.2", description: "old", mainSteps: [] }));
+  const { content, document } = await fixture(context);
+  const previous = { ...JSON.parse(content), description: "Previous managed deployment instructions" };
+  const boundary = provider(JSON.stringify(previous));
   assert.equal(await ensure(document, boundary), "2");
   assert.deepEqual(boundary.calls, ["list-document-versions", "get-document", "update-document", "describe-document"]);
 });
