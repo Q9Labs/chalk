@@ -3,6 +3,9 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+// rehype-slug makes heading ids with github-slugger, so the index uses it too.
+import GithubSlugger from "github-slugger";
+
 const web = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const contentDir = path.join(web, "src/docs/content");
 const outFile = path.join(web, "src/docs/search-index.generated.ts");
@@ -14,17 +17,6 @@ const plain = (markdown) =>
     .replace(/`|\*\*/g, "")
     .replace(/\s+/g, " ")
     .trim();
-
-// Matches github-slugger, which rehype-slug uses for heading ids.
-const slugify = (text, seen) => {
-  const base = text
-    .toLowerCase()
-    .replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, "")
-    .replace(/ /g, "-");
-  const count = seen.get(base) ?? 0;
-  seen.set(base, count + 1);
-  return count ? `${base}-${count}` : base;
-};
 
 const excerptOf = (blocks) => {
   const paragraph = blocks.find((block) => !/^(```|\||<|>)/.test(block));
@@ -42,7 +34,7 @@ for (const file of readdirSync(contentDir)
   const stem = file.replace(/\.mdx$/, "");
   const slug = stem === "why-chalk" ? "" : stem;
   const source = readFileSync(path.join(contentDir, file), "utf8").replace(/^```[\s\S]*?^```$/gm, (fence) => fence.replace(/\n/g, "\u0000"));
-  const seen = new Map();
+  const slugger = new GithubSlugger();
   for (const part of source.split(/^(?=#{2,3} )/m)) {
     const heading = part.match(/^(#{2,3}) (.+)\n/);
     if (!heading) continue;
@@ -52,7 +44,7 @@ for (const file of readdirSync(contentDir)
       .map((block) => block.trim())
       .filter(Boolean);
     const text = plain(heading[2]);
-    sections.push({ slug, heading: text, anchor: slugify(text, seen), excerpt: excerptOf(blocks) });
+    sections.push({ slug, heading: text, anchor: slugger.slug(text), excerpt: excerptOf(blocks) });
   }
 }
 

@@ -11,6 +11,16 @@ type OutlineItem = { readonly id: string; readonly label: string; readonly level
 /** How far below the top bar a heading counts as the one being read. */
 const READING_LINE = 96;
 
+/** A malformed escape in a shared link leaves the page where it is instead of breaking it. */
+function readHashId(): string {
+  const hash = window.location.hash.slice(1);
+  try {
+    return decodeURIComponent(hash);
+  } catch {
+    return hash;
+  }
+}
+
 export function DocsArticle({ page }: { readonly page: DocsPage }) {
   const articleRef = useRef<HTMLElement>(null);
   const [outline, setOutline] = useState<readonly OutlineItem[]>([]);
@@ -22,7 +32,7 @@ export function DocsArticle({ page }: { readonly page: DocsPage }) {
     if (!article) return;
     const headings = () => Array.from(article.querySelectorAll<HTMLHeadingElement>(".art-body h2[id], .art-body h3[id]"));
     // The page content loads after the browser's own jump to the URL hash, so the article makes that jump once it arrives.
-    let pendingHash = decodeURIComponent(window.location.hash.slice(1));
+    let pendingHash = readHashId();
     const readOutline = () => {
       setOutline(
         headings().flatMap((heading) => {
