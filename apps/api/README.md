@@ -48,16 +48,11 @@ list only its own Tenants, and use its scopes only within those Tenants.
 Keep this credential server-side. It is never System; the local-only System token
 remains unavailable in non-local environments.
 
-An operator can adopt an existing unowned Tenant using a direct database owner
-connection. The command refuses a Tenant owned by a different service, and records
-actor, reason, prior ownership and external ID in `tenant_service_ownership_audit`
-in the same statement as the update. The audit intentionally survives Tenant deletion.
-Protect owner credentials and restrict runtime database access to the audit table;
-`--actor` is the operator's assertion, not an authenticated OS identity.
-
-```sh
-CHALK_DATABASE_URL='<direct-owner-url>' go -C apps/api run ./cmd/tenant-service-owner --tenant-id '<tenant-id>' --service-id '<stable-service-id>' --external-id '<external-account-id>' --actor '<operator>' --reason '<reason>'
-```
+With `tenants:read`, services can read their own Tenant including
+`cors_allowed_origins`. With `tenants:write`, they can PATCH only
+`cors_allowed_origins` on their own Tenants. Including any other field returns
+forbidden, even when its value is null. System and Tenant API-key permissions
+are unchanged. There is no command for adopting existing Tenants.
 
 Set `CHALK_API_TRUSTED_PROXY_CIDRS` to the comma-separated CIDR ranges of the
 load balancers or edge proxies allowed to supply `CF-Connecting-IP` or
