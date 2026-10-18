@@ -18,6 +18,13 @@ export CHALK_SYNC_TOKEN_KEY_ID=dashboard-proof
 # Ephemeral local-only signing material: Go's Ed25519 private format is seed+public.
 CHALK_SYNC_TOKEN_PRIVATE_KEY="$(node --input-type=module -e 'import {generateKeyPairSync} from "node:crypto"; const {privateKey}=generateKeyPairSync("ed25519"); const key=privateKey.export({format:"jwk"}); process.stdout.write(Buffer.concat([Buffer.from(key.d,"base64url"),Buffer.from(key.x,"base64url")]).toString("base64url"))')"
 export CHALK_SYNC_TOKEN_PRIVATE_KEY
+export CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID=00000000-0000-4000-8000-000000000001
+export CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE=cf_sfu
+export CHALK_PUBLIC_INVITE_WEB_ORIGIN=http://127.0.0.1:18080
+export CHALK_PUBLIC_INVITE_KEY_ID=dashboard-proof
+export CHALK_PUBLIC_INVITE_PRIVATE_KEY="$CHALK_SYNC_TOKEN_PRIVATE_KEY"
+CHALK_PUBLIC_INVITE_VERIFICATION_KEYS="$(node --input-type=module -e 'process.stdout.write(JSON.stringify({"dashboard-proof":Buffer.from(process.env.CHALK_SYNC_TOKEN_PRIVATE_KEY,"base64url").subarray(32).toString("base64url")}))')"
+export CHALK_PUBLIC_INVITE_VERIFICATION_KEYS
 export CHALK_DEFAULT_MEDIA_PLANE=cf_sfu
 export CHALK_CLOUDFLARE_REALTIME_APP_ID=dashboard-proof
 export CHALK_CLOUDFLARE_REALTIME_APP_SECRET=fixture-cloudflare-not-a-secret

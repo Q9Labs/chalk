@@ -185,6 +185,8 @@ try {
     const response = await post(ada, "/dashboard-api/home", action, session.csrfToken);
     assert.equal(response.status, 200, await response.clone().text());
   }
+  const ownCall = await ada.request(`/dashboard-api/call?spaceId=${spaceId}`);
+  assert.equal(ownCall.status, 200, await ownCall.clone().text());
   const storedSpace = JSON.parse(sql(`select row_to_json(s) from spaces s where id='${spaceId}'`));
   assert.equal(storedSpace.name, "Renamed");
   assert.equal(storedSpace.admission_policy.mode, "knock");
@@ -312,7 +314,7 @@ try {
   assert.deepEqual((await tenantFor("malik")).cors_allowed_origins, ["https://chalkmeet.com", "https://example.test", "http://localhost:3000"]);
   const home = await ada.request("/dashboard-api/home");
   assert.equal(home.status, 200, await home.clone().text());
-  assert.equal((await home.json()).live[0].episode, null);
+  assert.equal((await home.json()).live.find((row) => row.spaceId === spaceId).episode, null);
   rateLimitPath = "/v1/tenants/by-external-id";
   const beforeThrottle = sql("select count(*) from tenants");
   const blocked = browser();
