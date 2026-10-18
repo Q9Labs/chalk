@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import { Platform, Pressable, Share, StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSpaceClient } from "../context/space-client-context";
+import { useMeasuredRef } from "../frame/measurement";
 import { usePreferences } from "../frame/preferences";
 import { haptics } from "../haptics/haptics";
 import { useCan, useChat, useParticipants, useRecording, useSelf } from "../hooks/space-hooks";
@@ -161,21 +162,18 @@ function LayoutRow(): React.JSX.Element {
   return <SheetRow end={<SegmentedControl<StageLayoutChoice> accessibilityLabel="Layout" onChange={setLayout} options={LAYOUTS} testID="more.layout.control" value={layout} />} icon="grid" label="Layout" testID="more.layout" />;
 }
 
+function UnreadDot(): React.JSX.Element {
+  const { colors } = useTheme();
+  const style = [styles.unread, { backgroundColor: colors.info }];
+  const ref = useMeasuredRef<View>("more.chat.unread", style);
+  return <View ref={ref} style={style} testID="more.chat.unread" />;
+}
+
 /** Chat, with the accent dot after its name while messages are unread. */
 function ChatRow({ onPress }: { readonly onPress: () => void }): React.JSX.Element {
   const { colors } = useTheme();
   const unread = useChat().unreadCount > 0;
-  return (
-    <SheetRow
-      accessibilityLabel={unread ? "Chat, new messages" : "Chat"}
-      badge={unread ? <View style={[styles.unread, { backgroundColor: colors.info }]} testID="more.chat.unread" /> : null}
-      end={<Icon color={colors.textMuted} name="right" />}
-      icon="chat"
-      label="Chat"
-      onPress={onPress}
-      testID="more.chat"
-    />
-  );
+  return <SheetRow accessibilityLabel={unread ? "Chat, new messages" : "Chat"} badge={unread ? <UnreadDot /> : null} end={<Icon color={colors.textMuted} name="right" />} icon="chat" label="Chat" onPress={onPress} testID="more.chat" />;
 }
 
 function PeopleCount({ count }: { readonly count: number }): React.JSX.Element {
