@@ -56,9 +56,9 @@ describe("ReconnectingOverlay", () => {
     expect(container.querySelector('[role="status"]')?.textContent).toBe("Reconnecting…");
   });
 
-  it("keeps the failure dialog for failed", async () => {
+  it("shows the status page for failed", async () => {
     await render({ isVisible: true, status: "failed" });
-    expect(container.querySelector("#connection-status-title")?.textContent).toBe("Connection Failed");
+    expect(container.querySelector('[data-chalk-status="failed"] h1')?.textContent).toBe("Couldn’t connect to the call");
     expect(container.querySelector('[data-testid="reconnecting-notice"]')).toBeNull();
   });
 });

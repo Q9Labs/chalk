@@ -77,7 +77,7 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
         transition: reducedMotion ? "none" : "opacity 220ms cubic-bezier(.2,.8,.2,1)",
       }}
     >
-      <div data-part="limbo-message" className="flex max-w-full flex-col items-center gap-2 rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] px-7 py-[22px] text-center">
+      <div data-part={active ? "limbo-message" : undefined} style={{ borderRadius: 16 }} className="flex max-w-full flex-col items-center gap-2 rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] px-7 py-[22px] text-center">
         {message ? (
           <p role={active ? "status" : undefined} className="flex items-center gap-2.5 text-[17px] font-semibold">
             {message.endsWith("…") ? <span aria-hidden="true" className="h-[18px] w-[18px] animate-spin rounded-full border-2 border-[var(--chalk-line-strong)] border-t-[var(--chalk-text)] motion-reduce:animate-none" /> : null}

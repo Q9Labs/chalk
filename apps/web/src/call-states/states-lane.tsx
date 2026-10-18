@@ -193,59 +193,34 @@ export const STATES_LANE: readonly CallState[] = [
       ["muted", "Nora muted you. Unmute when you’re ready.", false],
       ["share-blocked", "Your screen couldn’t be shared. Allow screen recording for your browser in System Settings, then try again.", true],
     ] as const
-  ).flatMap(([id, message, error]) => [
-    {
-      id: `states-toast-${id}`,
-      title: message,
-      render: () => (
-        <ToastFixture
-          message={
-            id === "recording" ? (
-              <>
-                <b style={{ fontWeight: 600 }}>Recording started.</b> Everyone in the call can see it.
-              </>
-            ) : (
-              message
-            )
-          }
-          icon={
-            id === "joined" || id === "muted" ? (
-              <Avatar name="Nora" size="xs" style={{ width: 28, height: 28 }} animated={false} />
-            ) : (
-              <CallEventIcon kind={id === "camera" ? "camera" : id === "share-blocked" ? "screen" : id === "recording" ? "recording" : id === "hand" ? "hand" : "microphone"} error={error || id === "recording"} />
-            )
-          }
-          error={error}
-        />
-      ),
-    },
-    {
-      id: `states-toast-${id}-light`,
-      title: `${message} Light`,
-      render: () => (
-        <ToastFixture
-          message={
-            id === "recording" ? (
-              <>
-                <b style={{ fontWeight: 600 }}>Recording started.</b> Everyone in the call can see it.
-              </>
-            ) : (
-              message
-            )
-          }
-          icon={
-            id === "joined" || id === "muted" ? (
-              <Avatar name="Nora" size="xs" style={{ width: 28, height: 28 }} animated={false} />
-            ) : (
-              <CallEventIcon kind={id === "camera" ? "camera" : id === "share-blocked" ? "screen" : id === "recording" ? "recording" : id === "hand" ? "hand" : "microphone"} error={error || id === "recording"} />
-            )
-          }
-          error={error}
-          light
-        />
-      ),
-    },
-  ]),
+  ).flatMap(([id, message, error]) => {
+    const renderToast = (light: boolean) => (
+      <ToastFixture
+        light={light}
+        message={
+          id === "recording" ? (
+            <>
+              <b style={{ fontWeight: 600 }}>Recording started.</b> Everyone in the call can see it.
+            </>
+          ) : (
+            message
+          )
+        }
+        icon={
+          id === "joined" || id === "muted" ? (
+            <Avatar name="Nora" size="xs" style={{ width: 28, height: 28 }} animated={false} />
+          ) : (
+            <CallEventIcon kind={id === "camera" ? "camera" : id === "share-blocked" ? "screen" : id === "recording" ? "recording" : id === "hand" ? "hand" : "microphone"} error={error || id === "recording"} />
+          )
+        }
+        error={error}
+      />
+    );
+    return [
+      { id: `states-toast-${id}`, title: message, render: () => renderToast(false) },
+      { id: `states-toast-${id}-light`, title: `${message} Light`, render: () => renderToast(true) },
+    ];
+  }),
   ...(["left", "episode-ended", "failed", "removed", "full", "elsewhere"] as const).flatMap((terminal) => [
     { id: `states-${terminal}`, title: terminal, render: () => <StatesCall terminal={terminal} /> },
     { id: `states-${terminal}-light`, title: `${terminal} Light`, render: () => <StatesCall terminal={terminal} light /> },
