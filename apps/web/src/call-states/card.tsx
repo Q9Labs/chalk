@@ -6,7 +6,7 @@ import { HOST, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClien
 
 const photo = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="480" height="480"><rect width="480" height="480" fill="#315f72"/><circle cx="240" cy="210" r="120" fill="#80b879"/><path d="M0 480L240 240L480 480" fill="#d9b641"/></svg>')}`;
 
-export function CardState({ host = false, scheme = "dark", participants = true, knocks = false }: { readonly host?: boolean; readonly scheme?: "dark" | "light"; readonly participants?: boolean; readonly knocks?: boolean }) {
+function CardState({ host = false, scheme = "dark", participants = true, knocks = false }: { readonly host?: boolean; readonly scheme?: "dark" | "light"; readonly participants?: boolean; readonly knocks?: boolean }) {
   const [client] = useState(() => {
     const snapshot = liveSnapshot({
       others: [PEOPLE[0]!, { ...PEOPLE[1]!, handRaised: true }, { id: "rtl", name: "عبد الرحمن محمد الطويل بن أحمد", microphone: false, camera: false, handRaised: true }],
