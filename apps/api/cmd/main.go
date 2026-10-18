@@ -381,7 +381,7 @@ func run() error {
 	}
 	webhookRepository := postgres.NewWebhookRepository(pool, webhookProtector)
 	webhookService := webhooks.NewService(webhookRepository, webhookProtector)
-	tenantAuthz := authorization.NewTenantPolicy(membershipRepository)
+	tenantAuthz := authorization.NewTenantPolicy(membershipRepository, tenantRepository)
 	rateLimitOptions := httpapi.DefaultRateLimitOptions()
 	rateLimitOptions.ClientIP.TrustedProxyCIDRs = cfg.API.TrustedProxyCIDRs
 	if cfg.Observability.Environment != config.DefaultEnvironment {
@@ -530,6 +530,7 @@ func run() error {
 			TenantOrigins:  tenantService,
 		},
 		LocalSystemToken: cfg.API.LocalSystemToken,
+		ServicePrincipal: cfg.API.ServicePrincipal,
 
 		RateLimit:            rateLimitOptions,
 		Readiness:            postgres.Readiness{Pool: pool, RequiredMigration: migrations.LatestVersion},

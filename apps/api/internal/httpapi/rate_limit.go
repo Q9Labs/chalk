@@ -105,6 +105,8 @@ func principalRateLimitKey(principal authentication.Principal) string {
 		return "user:" + principal.UserID.String()
 	case authentication.PrincipalAPIKey:
 		return "api_key:" + principal.APIKeyID.String()
+	case authentication.PrincipalService:
+		return "service:" + principal.ServiceID
 	case authentication.PrincipalSystem:
 		return "system"
 	default:

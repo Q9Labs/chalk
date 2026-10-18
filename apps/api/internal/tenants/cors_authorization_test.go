@@ -81,3 +81,10 @@ func corsAuthorizationTestID(t *testing.T) utilities.ID {
 	}
 	return id
 }
+
+func (r *corsAuthorizationRepository) ListServiceTenants(context.Context, string, pagination.PageRequest) (TenantList, error) {
+	return TenantList{}, nil
+}
+func (r *corsAuthorizationRepository) FindServiceTenant(context.Context, string, string) (Tenant, error) {
+	return Tenant{}, ErrTenantNotFound
+}

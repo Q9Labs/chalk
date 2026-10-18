@@ -2,6 +2,15 @@
 // Do not edit by hand.
 import { Schema, SchemaGetter } from "effect";
 
+const isCodePointLengthBetween = (minimum: number, maximum: number) =>
+  Schema.makeFilter(
+    (input: string) => {
+      const length = Array.from(input).length;
+      return length >= minimum && length <= maximum;
+    },
+    { expected: `a value with ${minimum} to ${maximum} characters, counting each Unicode code point once` },
+  );
+
 export const DateTimeStringSchema = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}T/)).pipe(Schema.brand("DateTimeString"));
 export type DateTimeString = typeof DateTimeStringSchema.Type;
 
@@ -356,6 +365,7 @@ export const CreateTenantRequestSchema = Schema.Struct({
     ).check(Schema.isMaxLength(32)),
   ),
   default_media_plane: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
+  external_id: Schema.optional(Schema.NullOr(Schema.String.check(isCodePointLengthBetween(1, 512)))),
   logo_key: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   media_plane_provider_config: Schema.optional(Schema.NullOr(MediaPlaneProviderConfigSchema)),
   name: Schema.String.check(Schema.isMinLength(1)),
@@ -849,6 +859,7 @@ export const TenantSchema = Schema.Struct({
   ).check(Schema.isMaxLength(32)),
   created_at: DateTimeStringSchema,
   default_media_plane: Schema.NullOr(Schema.String),
+  external_id: Schema.NullOr(Schema.String.check(isCodePointLengthBetween(1, 512))),
   id: TenantIdSchema,
   logo_key: Schema.NullOr(Schema.String),
   media_plane_provider_config: Schema.NullOr(MediaPlaneProviderConfigSchema),
@@ -1575,6 +1586,21 @@ export const FinalizeChatAttachmentUpload429ResponseHeadersSchema = Schema.Struc
 });
 export type FinalizeChatAttachmentUpload429ResponseHeaders = typeof FinalizeChatAttachmentUpload429ResponseHeadersSchema.Type;
 
+export const FindTenantByExternalIDQueryParamsSchema = Schema.Struct({
+  external_id: Schema.String.check(isCodePointLengthBetween(1, 512)),
+});
+export type FindTenantByExternalIDQueryParams = typeof FindTenantByExternalIDQueryParamsSchema.Type;
+
+export const FindTenantByExternalIDResponseSchema = TenantSchema;
+export type FindTenantByExternalIDResponse = typeof FindTenantByExternalIDResponseSchema.Type;
+
+export const FindTenantByExternalID429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type FindTenantByExternalID429ResponseHeaders = typeof FindTenantByExternalID429ResponseHeadersSchema.Type;
+
 export const GetChatAttachmentDownloadPathParamsSchema = Schema.Struct({
   attachmentId: Schema.String,
 });
@@ -1682,6 +1708,13 @@ export type GetTenantPathParams = typeof GetTenantPathParamsSchema.Type;
 
 export const GetTenantResponseSchema = TenantSchema;
 export type GetTenantResponse = typeof GetTenantResponseSchema.Type;
+
+export const GetTenant429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type GetTenant429ResponseHeaders = typeof GetTenant429ResponseHeadersSchema.Type;
 
 export const GetTranscriptPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
@@ -1954,6 +1987,13 @@ export type ListTenantsQueryParams = typeof ListTenantsQueryParamsSchema.Type;
 
 export const ListTenantsResponseSchema = TenantListSchema;
 export type ListTenantsResponse = typeof ListTenantsResponseSchema.Type;
+
+export const ListTenants429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type ListTenants429ResponseHeaders = typeof ListTenants429ResponseHeadersSchema.Type;
 
 export const ListTranscriptsPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
@@ -4668,6 +4708,9 @@ export const FinalizeChatAttachmentUploadErrorSchema = Schema.Union([
 ]);
 export type FinalizeChatAttachmentUploadError = typeof FinalizeChatAttachmentUploadErrorSchema.Type;
 
+export const FindTenantByExternalIDErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidFieldErrorSchema, TenantNotFoundErrorSchema]);
+export type FindTenantByExternalIDError = typeof FindTenantByExternalIDErrorSchema.Type;
+
 export const GetChatAttachmentDownloadErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -4759,7 +4802,7 @@ export const GetSpaceRecordingPreparationErrorSchema = Schema.Union([
 ]);
 export type GetSpaceRecordingPreparationError = typeof GetSpaceRecordingPreparationErrorSchema.Type;
 
-export const GetTenantErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema, TenantNotFoundErrorSchema]);
+export const GetTenantErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema, TenantNotFoundErrorSchema]);
 export type GetTenantError = typeof GetTenantErrorSchema.Type;
 
 export const GetTranscriptDocumentErrorSchema = Schema.Union([
@@ -4977,7 +5020,7 @@ export const ListSpacesErrorSchema = Schema.Union([
 ]);
 export type ListSpacesError = typeof ListSpacesErrorSchema.Type;
 
-export const ListTenantsErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, PaginationInvalidCursorErrorSchema, PaginationInvalidPageSizeErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
+export const ListTenantsErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, PaginationInvalidCursorErrorSchema, PaginationInvalidPageSizeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
 export type ListTenantsError = typeof ListTenantsErrorSchema.Type;
 
 export const ListTranscriptsErrorSchema = Schema.Union([
@@ -5417,10 +5460,12 @@ export const ChalkOperationPolicies = {
   denySpacePublicAdmissionRequest: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   endEpisode: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   finalizeChatAttachmentUpload: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  findTenantByExternalID: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getEpisode: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getEpisodeAttendance: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getSpacePublicInvite: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   getSpacePublicInviteArrival: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  getTenant: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getWebhookDelivery: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   getWebhookEndpoint: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   initiateChatAttachmentUpload: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -5430,6 +5475,7 @@ export const ChalkOperationPolicies = {
   listEpisodes: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   listSpaceLiveEpisodes: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   listSpacePublicAdmissionRequests: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  listTenants: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   listWebhookDeliveries: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   listWebhookEndpoints: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   preparePublicSpaceEntrance: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

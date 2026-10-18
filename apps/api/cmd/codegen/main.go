@@ -22,6 +22,13 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
 )
 
+// A length written with this extension counts Unicode code points, as the server does.
+// Every other length stays a plain string length, which the TypeScript client counts in UTF-16 units.
+const (
+	lengthUnitExtension = "x-chalk-length-unit"
+	codePointLengthUnit = "code-points"
+)
+
 type openAPIDoc struct {
 	OpenAPI    string                    `json:"openapi"`
 	Info       openAPIInfo               `json:"info"`
@@ -150,6 +157,10 @@ func (g *generator) addRoute(route httpapi.APIRouteContract) {
 		"operationId": route.OperationID,
 		"summary":     operationSummary(route.OperationID),
 		"responses":   g.responses(route),
+	}
+
+	if route.Description != "" {
+		operation["description"] = route.Description
 	}
 
 	switch route.Auth {
@@ -301,6 +312,9 @@ func (g *generator) parameterSchema(parameter httpapi.APIParameterContract) map[
 	}
 	if parameter.MaxLength > 0 {
 		schema["maxLength"] = parameter.MaxLength
+	}
+	if parameter.CodePointLength {
+		schema[lengthUnitExtension] = codePointLengthUnit
 	}
 	return schema
 }
@@ -608,6 +622,11 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 		schema["format"] = "uuid"
 		schema["minLength"] = 36
 		schema["maxLength"] = 36
+	}
+	if fieldName == "external_id" {
+		schema["minLength"] = 1
+		schema["maxLength"] = 512
+		schema[lengthUnitExtension] = codePointLengthUnit
 	}
 	if fieldName == "email" {
 		schema["format"] = "email"
@@ -1051,7 +1070,7 @@ func isUUIDField(fieldName string) bool {
 }
 
 func isOpaqueIDField(schemaName string, fieldName string) bool {
-	if fieldName == "publication_id" || fieldName == "track_id" {
+	if fieldName == "publication_id" || fieldName == "track_id" || fieldName == "external_id" {
 		return true
 	}
 	return fieldName == "connection_id" && strings.HasPrefix(schemaName, "CloudflareSFU")

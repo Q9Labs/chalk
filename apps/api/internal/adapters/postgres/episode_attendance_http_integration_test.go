@@ -71,7 +71,7 @@ func TestEpisodeAttendancePublicHTTP(t *testing.T) {
 		return result.RawKey
 	}
 	key, otherKey, noScope := makeKey(tenant, authentication.ScopeEpisodesRead), makeKey(otherTenant, authentication.ScopeEpisodesRead), makeKey(tenant, authentication.ScopeSpacesRead)
-	router := httpapi.NewRouter(httpapi.Options{Episodes: episodes.NewService(NewEpisodeLifecycleRepository(pool)), APIKeyAuthentication: keys, TenantAuthz: authorization.NewTenantPolicy(nil)})
+	router := httpapi.NewRouter(httpapi.Options{Episodes: episodes.NewService(NewEpisodeLifecycleRepository(pool)), APIKeyAuthentication: keys, TenantAuthz: authorization.NewTenantPolicy(nil, nil)})
 	type participant struct {
 		ParticipantID string     `json:"participant_id"`
 		DisplayName   string     `json:"display_name"`
@@ -188,7 +188,7 @@ func TestEpisodeAttendanceSyncFixtureHTTP(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	router := httpapi.NewRouter(httpapi.Options{Episodes: episodes.NewService(NewEpisodeLifecycleRepository(pool)), APIKeyAuthentication: keys, TenantAuthz: authorization.NewTenantPolicy(nil)})
+	router := httpapi.NewRouter(httpapi.Options{Episodes: episodes.NewService(NewEpisodeLifecycleRepository(pool)), APIKeyAuthentication: keys, TenantAuthz: authorization.NewTenantPolicy(nil, nil)})
 	request := httptest.NewRequest(http.MethodGet, "/v1/tenants/"+tenant.String()+"/spaces/"+space.String()+"/episodes/"+episode.String()+"/attendance", nil)
 	request.Header.Set("Authorization", "Bearer "+key.RawKey)
 	response := httptest.NewRecorder()

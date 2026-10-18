@@ -134,7 +134,7 @@ func createAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) En
 
 			return apiKeyWithSecretResponse{}, err
 		}
-		if err := preventAPIKeyScopeEscalation(ctx, request.Body.Scopes); err != nil {
+		if err := preventAPIKeyScopeEscalation(ctx, request.Body.Scopes, true); err != nil {
 
 			return apiKeyWithSecretResponse{}, err
 		}
@@ -197,7 +197,7 @@ func rotateAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) En
 
 			return apiKeyWithSecretResponse{}, err
 		}
-		if err := preventAPIKeyTargetEscalation(ctx, service, request.apiKeyIDsRequest); err != nil {
+		if err := preventAPIKeyTargetEscalation(ctx, service, request.apiKeyIDsRequest, true); err != nil {
 
 			return apiKeyWithSecretResponse{}, err
 		}
@@ -230,7 +230,7 @@ func revokeAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) En
 
 			return noResponse{}, err
 		}
-		if err := preventAPIKeyTargetEscalation(ctx, service, request); err != nil {
+		if err := preventAPIKeyTargetEscalation(ctx, service, request, false); err != nil {
 
 			return noResponse{}, err
 		}
@@ -292,12 +292,12 @@ func decodeRotateAPIKeyRequest(r *http.Request) (rotateAPIKeyRequest, error) {
 	return rotateAPIKeyRequest{apiKeyIDsRequest: ids, RequestKey: requestKey, Body: body}, err
 }
 
-func preventAPIKeyTargetEscalation(ctx context.Context, service APIKeyService, request apiKeyIDsRequest) error {
+func preventAPIKeyTargetEscalation(ctx context.Context, service APIKeyService, request apiKeyIDsRequest, issuingSecret bool) error {
 	principal, ok := authentication.PrincipalFromContext(ctx)
 	if !ok {
 		return apiErrorUnauthenticated
 	}
-	if principal.Kind != authentication.PrincipalAPIKey {
+	if principal.Kind != authentication.PrincipalAPIKey && principal.Kind != authentication.PrincipalService {
 		return nil
 	}
 	key, err := service.Get(ctx, request.TenantID, request.APIKeyID)
@@ -308,19 +308,19 @@ func preventAPIKeyTargetEscalation(ctx context.Context, service APIKeyService, r
 	if err != nil {
 		return apiErrorForbidden
 	}
-	return preventAPIKeyScopeEscalation(ctx, scopes)
+	return preventAPIKeyScopeEscalation(ctx, scopes, issuingSecret)
 }
 
-func preventAPIKeyScopeEscalation(ctx context.Context, scopes []authentication.Scope) error {
+func preventAPIKeyScopeEscalation(ctx context.Context, scopes []authentication.Scope, issuingSecret bool) error {
 	principal, ok := authentication.PrincipalFromContext(ctx)
 	if !ok {
 		return apiErrorUnauthenticated
 	}
-	if principal.Kind != authentication.PrincipalAPIKey {
+	if principal.Kind != authentication.PrincipalAPIKey && principal.Kind != authentication.PrincipalService {
 		return nil
 	}
 	for _, scope := range scopes {
-		if !principal.HasScope(scope) {
+		if !principal.HasScope(scope) || issuingSecret && principal.Kind == authentication.PrincipalService && scope == authentication.ScopeTenantsWrite {
 			return apiErrorForbidden
 		}
 	}

@@ -1338,6 +1338,8 @@ type Tenant struct {
 	Website                  pgtype.Text        `json:"website"`
 	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+	CreatedByServiceID       pgtype.Text        `json:"created_by_service_id"`
+	ExternalID               pgtype.Text        `json:"external_id"`
 }
 
 type TenantArtifactPolicy struct {

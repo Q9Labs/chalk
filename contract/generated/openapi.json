@@ -1361,6 +1361,37 @@
             "description": "Forbidden",
             "x-chalk-error-codes": ["access.forbidden"]
           },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["request.rate_limited"]
+          },
           "500": {
             "content": {
               "application/json": {
@@ -1389,7 +1420,12 @@
             "sessionOrBearer": []
           }
         ],
-        "summary": "List tenants"
+        "summary": "List tenants",
+        "x-chalk-rate-limit": {
+          "limit": 300,
+          "name": "v1.authenticated.read",
+          "window_seconds": 60
+        }
       },
       "post": {
         "operationId": "createTenant",
@@ -1526,6 +1562,145 @@
         }
       }
     },
+    "/v1/tenants/by-external-id": {
+      "get": {
+        "description": "The calling service is responsible for the request-supplied external_id and end-user identity; Tenant ownership is derived only from the authenticated service identity.",
+        "operationId": "findTenantByExternalID",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "external_id",
+            "required": true,
+            "schema": {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string",
+              "x-chalk-length-unit": "code-points"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tenant"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["tenant.invalid_field"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["tenant.not_found"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["request.rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "summary": "Find tenant by external i d",
+        "x-chalk-rate-limit": {
+          "limit": 300,
+          "name": "v1.authenticated.read",
+          "window_seconds": 60
+        }
+      }
+    },
     "/v1/tenants/{tenant_id}": {
       "get": {
         "operationId": "getTenant",
@@ -1594,6 +1769,37 @@
             "description": "Not Found",
             "x-chalk-error-codes": ["tenant.not_found"]
           },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["request.rate_limited"]
+          },
           "500": {
             "content": {
               "application/json": {
@@ -1622,7 +1828,12 @@
             "sessionOrBearer": []
           }
         ],
-        "summary": "Get tenant"
+        "summary": "Get tenant",
+        "x-chalk-rate-limit": {
+          "limit": 300,
+          "name": "v1.authenticated.read",
+          "window_seconds": 60
+        }
       },
       "patch": {
         "operationId": "updateTenant",
@@ -12092,6 +12303,12 @@
             "minLength": 1,
             "type": ["string", "null"]
           },
+          "external_id": {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": ["string", "null"],
+            "x-chalk-length-unit": "code-points"
+          },
           "logo_key": {
             "minLength": 1,
             "type": ["string", "null"]
@@ -13593,6 +13810,12 @@
           "default_media_plane": {
             "type": ["string", "null"]
           },
+          "external_id": {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": ["string", "null"],
+            "x-chalk-length-unit": "code-points"
+          },
           "id": {
             "$ref": "#/components/schemas/TenantId"
           },
@@ -13658,6 +13881,7 @@
           "cors_allowed_origins",
           "created_at",
           "default_media_plane",
+          "external_id",
           "id",
           "logo_key",
           "media_plane_provider_config",
