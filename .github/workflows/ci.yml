@@ -179,32 +179,12 @@ jobs:
           go-version-file: apps/api/go.mod
           cache-dependency-path: apps/api/go.sum
 
-      - name: Reject unsupported installed dispatcher root changes before builds
-        if: inputs.managed_environment == 'nightly'
-        run: python3 scripts/releases/media.py check_configuration --environment nightly
-
-      - name: Verify exact release SHA
+      - name: Validate release source and pre-deploy contracts
         env:
           DEPLOY_MANAGED: ${{ inputs.deploy_managed }}
           RELEASE_MANAGED: ${{ inputs.release_managed }}
-        run: |
-          if [[ ! "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "target_sha must be a full lowercase commit SHA" >&2
-            exit 1
-          fi
-          if [[ "$(git rev-parse HEAD)" != "$TARGET_SHA" ]]; then
-            echo "checkout does not match target_sha" >&2
-            exit 1
-          fi
-          if [[ "$DEPLOY_MANAGED" == "true" && "$RELEASE_MANAGED" != "true" ]]; then
-            echo "deploy_managed requires release_managed" >&2
-            exit 1
-          fi
-
-      - name: Validate managed runtime contracts
-        run: |
-          infrastructure/managed-episode/scripts/test-deployment-controller
-          node --test scripts/deploy/deploy-managed-release.test.mjs
+          MANAGED_ENVIRONMENT: ${{ inputs.managed_environment }}
+        run: scripts/releases/check-contracts.sh --plan
 
       - name: Download stable release manifest
         if: inputs.stable_manifest_run_id != '' && inputs.stable_manifest_artifact_id == ''

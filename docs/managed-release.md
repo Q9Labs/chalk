@@ -17,6 +17,15 @@ a new explicit Release baseline is required.
 A manual dispatch always attempts a cut, including an unchanged source.
 Both paths require the latest master Gate run/attempt for the pinned SHA to pass.
 
+The path-filtered Release contracts PR workflow runs the pre-deploy checks without
+cloud credentials. Release's planning job uses the same `check-contracts.sh --plan`
+entry point for source, controller and managed-deployment checks. The full check
+also covers retained releases, media, recorder validation, dispatcher tests and
+configuration, and workflow lint. It collects all failures before exiting.
+`build-and-seal.sh --validate` checks both image profiles without building or
+sealing. `qualify-image.py --validate --root <image-root>` verifies manifest/file
+bytes without executing a worker; it does not claim signed boot qualification.
+
 Release builds and inspects capture/render snapshots when their build inputs or
 current environment pins differ, including first install. It builds, tests and
 verifies the dispatcher ZIP when its inputs change or no dispatcher is installed.
