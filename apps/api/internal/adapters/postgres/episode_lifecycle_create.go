@@ -210,19 +210,21 @@ func (r EpisodeLifecycleRepository) AdmitParticipant(ctx context.Context, input 
 		if !ok {
 			return episodes.ErrInvalidRole
 		}
-		mode, err := configAdmissionMode(config.AdmissionPolicy)
-		if err != nil {
-			return err
-		}
 		payload := input.Request.Payload()
-		switch mode {
-		case "open":
-		case "knock":
-			return createKnockAdmission(ctx, queries, tx, input, episode, roleCapabilities, payload, &result)
-		case "members_only":
-			return episodes.ErrAdmissionClosed
-		default:
-			return episodes.ErrInvalidAdmissionPolicy
+		if input.Admission != episodes.AdmissionDirect {
+			mode, err := configAdmissionMode(config.AdmissionPolicy)
+			if err != nil {
+				return err
+			}
+			switch mode {
+			case "open":
+			case "knock":
+				return createKnockAdmission(ctx, queries, tx, input, episode, roleCapabilities, payload, &result)
+			case "members_only":
+				return episodes.ErrAdmissionClosed
+			default:
+				return episodes.ErrInvalidAdmissionPolicy
+			}
 		}
 
 		if _, err := queries.ReserveParticipantAdmission(ctx, sqlc.ReserveParticipantAdmissionParams{
