@@ -115,25 +115,23 @@ export const ParticipantsPanelSurface = React.memo(
         <CallCardStyles />
         {onMuteEveryone ? (
           <div className="call-host-controls">
-            {onMuteEveryone ? (
-              <ChalkPopover
-                label="Mute everyone"
-                trigger={
-                  <button type="button" className="call-host-button" disabled={muting || !participants.some((person) => !person.isLocal && !person.isMuted)}>
-                    <MicrophoneOff01Icon aria-hidden="true" />
-                    <span>Mute everyone</span>
-                  </button>
-                }
-              >
-                <div className="call-mute-confirm">
-                  <b>Mute everyone?</b>
-                  <p>Everyone else’s microphone will turn off. They can unmute themselves.</p>
-                  <ChalkButton disabled={muting} onClick={() => void muteEveryone()}>
-                    {muting ? "Muting…" : "Mute everyone"}
-                  </ChalkButton>
-                </div>
-              </ChalkPopover>
-            ) : null}
+            <ChalkPopover
+              label="Mute everyone"
+              trigger={
+                <button type="button" className="call-host-button" disabled={muting || !participants.some((person) => !person.isLocal && !person.isMuted)}>
+                  <MicrophoneOff01Icon aria-hidden="true" />
+                  <span>Mute everyone</span>
+                </button>
+              }
+            >
+              <div className="call-mute-confirm">
+                <b>Mute everyone?</b>
+                <p>Everyone else’s microphone will turn off. They can unmute themselves.</p>
+                <ChalkButton disabled={muting} onClick={() => void muteEveryone()}>
+                  {muting ? "Muting…" : "Mute everyone"}
+                </ChalkButton>
+              </div>
+            </ChalkPopover>
           </div>
         ) : null}
         {error ? <p role="alert">{error}</p> : null}
