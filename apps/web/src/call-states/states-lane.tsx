@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Chalk, CallLimbo, ToastStack, type ChalkProps } from "@q9labsai/chalk-react";
-import { SpaceClientError } from "@q9labsai/chalk-client";
+import { Chalk, CallLimbo, CallReady, ToastStack, type ChalkProps } from "@q9labsai/chalk-react";
+import { SpaceClientError, type ClientFailure } from "@q9labsai/chalk-client";
+import { useCallLink } from "../../../../sdks/typescript/react/src/components/call-limbo/useCallLink";
+import { mediaFailureToast } from "../../../../sdks/typescript/react/src/components/toast-stack/call-events";
 import { PEOPLE, SPACE_NAME, createCallStateClient, liveSnapshot } from "./fixtures";
 import type { CallState } from "./states";
 
@@ -66,12 +68,47 @@ function StatesCall({ terminal, light = false, ready = false, reconnecting = fal
 function ToastFixture({ message, error = false, light = false }: { readonly message: string; readonly error?: boolean; readonly light?: boolean }) {
   const [visible, setVisible] = useState(true);
   return (
-    <main data-chalk data-chalk-theme={light ? "light" : "dark"} className="chalk-root relative h-dvh bg-[var(--chalk-canvas)]">
+    <main data-chalk data-chalk-theme={light ? "light" : "dark"} className="chalk-root relative h-dvh bg-[var(--chalk-canvas)]" style={{ fontSize: 14, lineHeight: 1.4 }}>
       {visible ? <ToastStack toasts={[{ id: "fixture", message, type: error ? "error" : "info", duration: Infinity }]} onDismiss={() => setVisible(false)} /> : null}
     </main>
   );
 }
+function CallLinkFixture() {
+  const [alone, setAlone] = useState(true);
+  const callLink = useCallLink(alone);
+  return (
+    <main data-chalk data-chalk-theme="dark" className="chalk-root relative h-dvh bg-[var(--chalk-canvas)]" style={{ fontSize: 14, lineHeight: 1.4 }}>
+      <button data-call-link-trigger aria-pressed={callLink.open} onClick={callLink.toggle}>
+        {callLink.open ? "Hide call link" : "Show call link"}
+      </button>
+      <button onClick={() => setAlone(false)}>Someone joins</button>
+      <CallReady open={callLink.open} onClose={callLink.close} link="https://chalk.example/join/example" />
+    </main>
+  );
+}
+function CommandFailureFixture() {
+  const [failure, setFailure] = useState<ClientFailure | null>(null);
+  const [source, setSource] = useState<"microphone" | "camera" | "screen">("camera");
+  const toast = mediaFailureToast(failure, source);
+  return (
+    <main data-chalk data-chalk-theme="dark" className="chalk-root relative h-dvh bg-[var(--chalk-canvas)]" style={{ fontSize: 14, lineHeight: 1.4 }}>
+      {(["camera", "microphone", "screen"] as const).map((value) => (
+        <button key={value} onClick={() => setSource(value)}>
+          {value}
+        </button>
+      ))}
+      {(["media.permission_denied", "media.device_not_found", "media.device_busy", "media.device_constraint_invalid", "media.capture_failed", "client.internal_error"] as const).map((code) => (
+        <button key={code} onClick={() => setFailure({ code, message: "The command could not be completed.", recoverable: true })}>
+          {code}
+        </button>
+      ))}
+      <ToastStack toasts={toast ? [{ id: `${source}-${failure?.code}`, ...toast }] : []} onDismiss={() => setFailure(null)} />
+    </main>
+  );
+}
 export const STATES_LANE: readonly CallState[] = [
+  { id: "states-link-controls", title: "Controlled call link", render: () => <CallLinkFixture /> },
+  { id: "states-command-failures", title: "Typed command failures", render: () => <CommandFailureFixture /> },
   { id: "states-events", title: "Call event journeys", render: () => <StatesCall /> },
   { id: "states-ready", title: "Ready card", render: () => <StatesCall ready /> },
   { id: "states-ready-light", title: "Ready card Light", render: () => <StatesCall ready light /> },

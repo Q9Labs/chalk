@@ -1,23 +1,33 @@
 "use client";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useIsMobile, usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { ChalkCopyButton, ChalkSheet } from "../chalk-ui";
 import { inviteQR } from "./qr-code";
 
 export interface CallReadyProps {
-  readonly alone: boolean;
+  readonly open: boolean;
+  readonly onClose: () => void;
   readonly link?: string;
 }
-export function CallReady({ alone, link = typeof location === "undefined" ? "" : location.href }: CallReadyProps) {
-  const [dismissed, setDismissed] = useState(false);
+export function CallReady({ open, onClose, link = typeof location === "undefined" ? "" : location.href }: CallReadyProps) {
   const [showQR, setShowQR] = useState(false);
+  const qrRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLElement>(null);
   const phone = useIsMobile();
   const reducedMotion = usePrefersReducedMotion();
   const [entered, setEntered] = useState(false);
-  const [present, setPresent] = useState(alone);
+  const [present, setPresent] = useState(open);
   const id = useId();
   const qr = showQR ? inviteQR(link) : null;
-  const open = alone && !dismissed;
+  const close = () => {
+    onClose();
+    cardRef.current?.closest("[data-chalk]")?.querySelector<HTMLButtonElement>("[data-call-link-trigger]")?.focus();
+  };
+  useEffect(() => {
+    if (!showQR || reducedMotion) return;
+    const animation = qrRef.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: "ease-out" });
+    return () => animation?.cancel();
+  }, [showQR, reducedMotion]);
   useEffect(() => {
     if (open) setPresent(true);
     const frame = requestAnimationFrame(() => setEntered(open));
@@ -32,16 +42,13 @@ export function CallReady({ alone, link = typeof location === "undefined" ? "" :
       clearTimeout(timer);
     };
   }, [open, reducedMotion]);
-  useEffect(() => {
-    if (!alone) setDismissed(true);
-  }, [alone]);
   const content = (
     <>
       <div className="-mt-1.5 mb-0.5 flex items-center justify-between">
         <h2 id={id} className="text-[15px] font-semibold">
           Your call is ready
         </h2>
-        <button type="button" className="chalk-dismiss max-sm:!h-11 max-sm:!w-11" aria-label="Close call link" onClick={() => setDismissed(true)}>
+        <button type="button" className="chalk-dismiss max-sm:!h-11 max-sm:!w-11" aria-label="Close call link" onClick={close}>
           ×
         </button>
       </div>
@@ -57,7 +64,7 @@ export function CallReady({ alone, link = typeof location === "undefined" ? "" :
           <ChalkCopyButton text={link} announcement="Copied" />
         </span>
       </div>
-      <div id={`${id}-qr`} hidden={!showQR}>
+      <div ref={qrRef} id={`${id}-qr`} hidden={!showQR}>
         <div className="mt-3 flex items-center gap-3.5">
           {qr ? (
             <svg role="img" aria-label="Scan to join this call" width="104" height="104" viewBox={`-4 -4 ${qr.length + 8} ${qr.length + 8}`} className="shrink-0 rounded-lg bg-white p-1" shapeRendering="crispEdges">
@@ -75,15 +82,18 @@ export function CallReady({ alone, link = typeof location === "undefined" ? "" :
         variant="ready"
         open={open}
         onOpenChange={(value) => {
-          if (!value) setDismissed(true);
+          if (!value) onClose();
         }}
         title="Your call is ready"
       >
-        <section aria-labelledby={id}>{content}</section>
+        <section ref={cardRef} aria-labelledby={id}>
+          {content}
+        </section>
       </ChalkSheet>
     );
   return present ? (
     <section
+      ref={cardRef}
       data-part="call-ready"
       aria-labelledby={id}
       aria-hidden={!open}

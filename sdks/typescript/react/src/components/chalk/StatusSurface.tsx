@@ -2,7 +2,6 @@
 
 import type React from "react";
 import { chalkThemeStyle, type ChalkTheme } from "../../theme";
-import { Home01Icon, RefreshIcon } from "../../utils/icons";
 
 export type StatusSurfacePhase = "entering" | "left" | "episode-ended" | "failed" | "removed" | "full" | "elsewhere";
 export interface StatusSurfaceProps {
@@ -32,21 +31,42 @@ export function StatusSurface({ phase, callName = "the call", reason, theme, onR
   const retry = onRejoin ?? onRetry;
   const canRetry = phase === "left" || phase === "failed" || phase === "full" || phase === "elsewhere";
   return (
-    <main data-chalk data-chalk-theme={theme?.colorScheme ?? "dark"} data-chalk-status={phase} style={chalkThemeStyle(theme)} className="chalk-root relative flex h-full min-h-0 w-full flex-col items-center justify-center gap-3 bg-[var(--chalk-canvas)] p-6 text-center text-[var(--chalk-text)]">
+    <main
+      data-chalk
+      data-chalk-theme={theme?.colorScheme ?? "dark"}
+      data-chalk-status={phase}
+      style={{ ...chalkThemeStyle(theme), fontSize: 14, lineHeight: 1.4 }}
+      className="chalk-root relative flex h-full min-h-0 w-full flex-col items-center justify-center gap-3 bg-[var(--chalk-canvas)] p-6 text-center text-[var(--chalk-text)]"
+    >
       <h1 role={phase === "entering" ? "status" : undefined} className="text-[22px] font-semibold">
         {copy.title}
       </h1>
       {reason || copy.detail ? <p className="text-[14px] text-[var(--chalk-muted-text)]">{reason ?? copy.detail}</p> : null}
       <div data-part="status-actions" className="mt-5 flex gap-7">
-        {canRetry && retry ? <StatusAction icon={<RefreshIcon size={20} />} label={phase === "elsewhere" ? "Use here" : phase === "left" ? "Rejoin" : "Try again"} onClick={retry} disabled={rejoinDisabled || retryPending} /> : null}
-        {phase !== "entering" && onHome ? <StatusAction icon={<Home01Icon size={20} />} label="Home" onClick={onHome} /> : null}
+        {canRetry && retry ? <StatusAction icon={<StatusIcon retry />} label={phase === "elsewhere" ? "Use here" : phase === "left" ? "Rejoin" : "Try again"} onClick={retry} disabled={rejoinDisabled || retryPending} /> : null}
+        {phase !== "entering" && onHome ? <StatusAction icon={<StatusIcon />} label="Home" onClick={onHome} /> : null}
       </div>
       {onReportProblem && phase !== "entering" ? (
-        <button type="button" onClick={onReportProblem} className="mt-4 min-h-11 text-xs text-[var(--chalk-muted-text)] underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2">
+        <button type="button" onClick={onReportProblem} className="mt-[18px] px-2.5 py-2 text-[13px] text-[var(--chalk-muted-text)] underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2">
           Report a problem
         </button>
       ) : null}
     </main>
+  );
+}
+
+function StatusIcon({ retry = false }: { readonly retry?: boolean }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      {retry ? (
+        <>
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+          <path d="M3 3v5h5" />
+        </>
+      ) : (
+        <path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" />
+      )}
+    </svg>
   );
 }
 
@@ -56,7 +76,7 @@ function StatusAction({ icon, label, onClick, disabled }: { readonly icon: React
       <span
         aria-hidden="true"
         data-part="status-action-circle"
-        className="grid h-14 w-14 place-items-center rounded-full bg-[var(--chalk-raised)] transition-transform duration-150 ease-out group-hover:bg-[var(--chalk-hover)] group-active:scale-[.94] group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-[var(--chalk-text)] motion-reduce:transition-none"
+        className="grid h-14 w-14 place-items-center rounded-full bg-[var(--chalk-raised)] text-[var(--chalk-text)] transition-transform duration-150 ease-out group-hover:bg-[var(--chalk-hover)] group-active:scale-[.94] group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-[var(--chalk-text)] motion-reduce:transition-none"
       >
         {icon}
       </span>

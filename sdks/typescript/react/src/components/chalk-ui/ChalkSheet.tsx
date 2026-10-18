@@ -21,9 +21,10 @@ export function ChalkSheet({ open, onOpenChange, title, children, variant = "def
         <Dialog.Portal container={container}>
           <Dialog.Backdrop data-part="sheet-scrim" className="chalk-sheet-scrim" />
           <Dialog.Popup
+            finalFocus={variant === "ready" ? () => container.current?.querySelector<HTMLElement>("[data-call-link-trigger]") : undefined}
             data-part={variant === "ready" ? "call-ready" : variant === "panel" ? "panel-card" : "sheet"}
             data-variant={variant}
-            className="chalk-sheet"
+            className={variant === "ready" ? "chalk-sheet data-[starting-style]:!translate-y-8 data-[ending-style]:!translate-y-8" : "chalk-sheet"}
             style={variant === "ready" ? { padding: "8px 20px 46px", borderTop: "1px solid var(--chalk-line)", transitionDuration: "200ms" } : undefined}
           >
             <div data-part="sheet-handle" className="chalk-sheet-handle" />

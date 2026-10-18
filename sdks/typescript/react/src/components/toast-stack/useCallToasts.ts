@@ -22,7 +22,10 @@ export function useCallToasts() {
       previous = next;
     });
     const offError = client.on("error", ({ error }) => {
-      if (error.code.startsWith("media.")) push([mediaFailureToast(error, failedSource)]);
+      if (error.code.startsWith("media.")) {
+        const toast = mediaFailureToast(error, failedSource);
+        if (toast) push([toast]);
+      }
       failedSource = undefined;
     });
     return () => {

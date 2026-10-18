@@ -30,7 +30,7 @@ export function CallEventIcon({ kind, error = false }: { readonly kind: "microph
     ),
   };
   return (
-    <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="shrink-0" style={error ? { color: "var(--chalk-danger-text)" } : undefined}>
+    <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="shrink-0" style={{ color: error ? "var(--chalk-danger-text)" : "var(--chalk-muted-text)" }}>
       {paths[kind]}
     </svg>
   );

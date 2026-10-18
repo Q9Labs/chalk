@@ -3,13 +3,17 @@ import { Avatar } from "../atomic/Avatar";
 import type { ClientFailure, SpaceSnapshot } from "@q9labsai/chalk-client";
 import type { Toast } from "./ToastStack";
 
-export function mediaFailureToast(error: ClientFailure, source?: "microphone" | "camera" | "screen"): Omit<Toast, "id"> {
+export function mediaFailureToast(failure: ClientFailure | null, source?: "microphone" | "camera" | "screen"): Omit<Toast, "id"> | null {
+  if (!failure) return null;
   const device = source ?? "device";
-  if (source === "screen") return { icon: <CallEventIcon kind={source ?? "microphone"} error />, type: "error", message: "Your screen couldn’t be shared. Allow screen recording for your browser in System Settings, then try again." };
-  if (error.code === "media.device_not_found") return { icon: <CallEventIcon kind={source ?? "microphone"} error />, type: "error", message: `No ${device} found. Plug one in, or check that your device can see it in System Settings.` };
-  if (error.code === "media.permission_denied")
-    return { icon: <CallEventIcon kind={source ?? "microphone"} error />, type: "error", message: `Chalk can’t use your ${device}. Click the camera icon in the address bar and allow ${source === "camera" ? "Camera" : source === "microphone" ? "Microphone" : "Camera and Microphone"}.` };
-  return { icon: <CallEventIcon kind={source ?? "microphone"} error />, type: "error", message: error.message };
+  const icon = <CallEventIcon kind={source ?? "microphone"} error />;
+  if (source === "screen" && failure.code.startsWith("media.")) return { icon, type: "error", message: "Your screen couldn’t be shared. Allow screen recording for your browser in System Settings, then try again." };
+  if (failure.code === "media.permission_denied") return { icon, type: "error", message: `Allow ${device} access. Click the camera icon in the address bar and allow ${source === "camera" ? "Camera" : source === "microphone" ? "Microphone" : "Camera and Microphone"}.` };
+  if (failure.code === "media.device_not_found") return { icon, type: "error", message: `No ${device} found. Plug one in, or check that your device can see it in System Settings.` };
+  if (failure.code === "media.device_busy") return { icon, type: "error", message: `Your ${device} is being used by another app. Close it there, then try again.` };
+  if (failure.code === "media.device_constraint_invalid") return { icon, type: "error", message: `Your ${device} doesn’t support these settings. Choose another ${device}, then try again.` };
+  if (failure.code === "media.capture_failed") return { icon, type: "error", message: `Your ${device} couldn’t start. Check that it is connected and available, then try again.` };
+  return { icon, type: "error", message: failure.message };
 }
 
 /** Snapshot changes, not initial history, are events for the person already in the call. */

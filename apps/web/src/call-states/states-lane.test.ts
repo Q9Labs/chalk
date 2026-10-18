@@ -91,3 +91,50 @@ it("takes the call back with Use here and hides the unconfigured report link", a
   await page.getByRole("button", { name: "Use here", exact: true }).click();
   await page.locator('[data-part="call-frame"]').waitFor();
 }, 30_000);
+
+it("maps typed command failures to source-specific recovery guidance", async () => {
+  await page.goto(`${origin}/call-states.html?state=states-command-failures`);
+  for (const source of ["camera", "microphone"]) {
+    await page.getByRole("button", { name: source, exact: true }).click();
+    for (const [code, copy] of [
+      ["media.permission_denied", `Allow ${source} access`],
+      ["media.device_not_found", `No ${source} found`],
+      ["media.device_busy", `Your ${source} is being used by another app`],
+      ["media.device_constraint_invalid", `Your ${source} doesn’t support these settings`],
+      ["media.capture_failed", `Your ${source} couldn’t start`],
+      ["client.internal_error", "The command could not be completed"],
+    ]) {
+      await page.getByRole("button", { name: code, exact: true }).click();
+      await page.getByRole("alert").filter({ hasText: copy }).waitFor();
+    }
+  }
+  await page.getByRole("button", { name: "screen", exact: true }).click();
+  await page.getByRole("button", { name: "media.permission_denied", exact: true }).click();
+  await page.getByRole("alert").filter({ hasText: "Allow screen recording for your browser in System Settings" }).waitFor();
+  await page.getByRole("alert").getByRole("button", { name: "Dismiss" }).click();
+  await page.getByRole("alert").waitFor({ state: "detached" });
+}, 30_000);
+
+it("reopens the controlled call link and restores trigger focus when closed", async () => {
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await page.goto(`${origin}/call-states.html?state=states-link-controls`);
+    await page.getByRole("heading", { name: "Your call is ready" }).first().waitFor();
+    await page.getByRole("button", { name: "Close call link" }).click();
+    const trigger = page.getByRole("button", { name: "Show call link", exact: true });
+    await trigger.waitFor();
+    expect(await trigger.getAttribute("aria-pressed")).toBe("false");
+    await expect.poll(() => trigger.evaluate((element) => element === document.activeElement)).toBe(true);
+    await trigger.click();
+    await page.getByRole("button", { name: "Close call link" }).waitFor();
+    if (width === 1440) await page.getByRole("button", { name: "Hide call link", exact: true }).click();
+    else await page.getByRole("button", { name: "Close call link" }).click();
+    await trigger.waitFor();
+    await trigger.click();
+    if (width === 1440) {
+      await page.getByRole("button", { name: "Someone joins" }).click();
+      await trigger.waitFor();
+    }
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+}, 30_000);

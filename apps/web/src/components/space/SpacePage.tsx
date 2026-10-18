@@ -239,7 +239,7 @@ export function SpacePage({
   );
   if (terminal)
     return (
-      <main className="h-dvh">
+      <main className="relative h-dvh">
         <StatusSurface
           phase={terminal.phase}
           callName={terminal.callName}
@@ -257,7 +257,11 @@ export function SpacePage({
               .catch(() => setError("Couldn’t leave the call. Try again."));
           }}
         />
-        {error ? <p role="alert">{error}</p> : null}
+        {error ? (
+          <p role="alert" className="absolute inset-x-6 bottom-6 text-center text-sm">
+            {error}
+          </p>
+        ) : null}
       </main>
     );
   if (spaceAccess) {

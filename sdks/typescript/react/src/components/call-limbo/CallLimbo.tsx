@@ -48,7 +48,7 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
         if (sibling !== branch && sibling instanceof HTMLElement) {
           siblings.push({ element: sibling, inert: sibling.inert, filter: sibling.style.filter });
           sibling.inert = true;
-          sibling.style.filter = "blur(10px) grayscale(.75) brightness(.6)";
+          sibling.style.filter = root.getAttribute("data-chalk-theme") === "light" ? "blur(10px) grayscale(.75)" : "blur(10px) grayscale(.75) brightness(.6)";
         }
       }
       branch = branch.parentElement;
@@ -72,7 +72,6 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
       className="absolute inset-0 z-50 flex items-center justify-center px-6 text-[var(--chalk-app-text)]"
       style={{
         pointerEvents: active ? "auto" : "none",
-        background: covered ? "color-mix(in srgb, var(--chalk-canvas) 72%, transparent)" : "transparent",
         opacity: covered ? 1 : 0,
         transition: reducedMotion ? "none" : "opacity 220ms cubic-bezier(.2,.8,.2,1)",
       }}
@@ -84,9 +83,9 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
             {message}
           </p>
         ) : null}
-        {detail ? <p className="text-sm text-[var(--chalk-soft-text)]">{detail}</p> : null}
+        {detail ? <p className="text-sm leading-[1.4] text-[var(--chalk-soft-text)]">{detail}</p> : null}
         {recorded ? (
-          <p className="mt-1 flex items-center gap-1.5 text-xs text-[var(--chalk-muted-text)]">
+          <p className="mt-1 flex items-center gap-1.5 text-xs leading-[1.4] text-[var(--chalk-muted-text)]">
             <span className="[&>svg]:h-3.5 [&>svg]:w-3.5">
               <CallEventIcon kind="recording" error />
             </span>
@@ -104,8 +103,8 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
   );
   if (overlay) return layer;
   return (
-    <div data-chalk data-chalk-theme={theme?.colorScheme ?? "dark"} className="chalk-root relative h-full min-h-0 w-full overflow-hidden bg-[var(--chalk-app-canvas)]" style={chalkThemeStyle(theme)}>
-      <div aria-hidden="true" inert className="absolute inset-0 flex flex-col p-5 blur-[18px] brightness-[.7]">
+    <div data-chalk data-chalk-theme={theme?.colorScheme ?? "dark"} className="chalk-root relative h-full min-h-0 w-full overflow-hidden bg-[var(--chalk-app-canvas)]" style={{ ...chalkThemeStyle(theme), fontSize: 14, lineHeight: 1.4 }}>
+      <div aria-hidden="true" inert className="absolute inset-0 flex flex-col p-5" style={{ filter: theme?.colorScheme === "light" ? "blur(18px) brightness(1.03)" : "blur(18px) brightness(.7)" }}>
         <div className="text-sm font-medium text-[var(--chalk-app-text)]">{spaceName}</div>
         <div className="my-5 flex-1 rounded-2xl border border-[var(--chalk-app-line-strong)]" style={{ background: "color-mix(in srgb, var(--chalk-app-text) 12%, var(--chalk-app-stage))" }} />
         <div className="mx-auto flex h-16 items-center gap-3 rounded-2xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-4">
