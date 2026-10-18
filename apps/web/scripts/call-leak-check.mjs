@@ -4,6 +4,7 @@ import { summarizeHeap } from "./call-heap-summary.mjs";
 import { installLeakObservers } from "./call-leak-observers.mjs";
 
 export function growth(values) {
+  if (values.length < 2 || values.some((value) => !Number.isFinite(value))) throw new Error("Growth requires at least two finite samples");
   const center = (values.length - 1) / 2;
   const average = values.reduce((sum, value) => sum + value, 0) / values.length;
   let numerator = 0;
@@ -30,14 +31,27 @@ export function leakFailures(samples, budgets, { left = false } = {}) {
 }
 
 async function sample(page, cdp, settleMs) {
-  // Let effects, animations and browser media teardown run before a second GC.
   await page.waitForTimeout(settleMs);
-  await cdp.send("HeapProfiler.collectGarbage");
-  await page.waitForTimeout(80);
-  await cdp.send("HeapProfiler.collectGarbage");
-  const metrics = Object.fromEntries((await cdp.send("Performance.getMetrics")).metrics.map(({ name, value }) => [name, value]));
-  const counters = await cdp.send("Memory.getDOMCounters");
-  return { heapMiB: metrics.JSHeapUsedSize / 1024 ** 2, domNodes: counters.nodes, listeners: counters.jsEventListeners, documents: counters.documents, ...(await page.evaluate(() => window.__callLeaks())) };
+  let previous;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    await cdp.send("HeapProfiler.collectGarbage");
+    await page.waitForTimeout(200);
+    await cdp.send("HeapProfiler.collectGarbage");
+    const metrics = Object.fromEntries((await cdp.send("Performance.getMetrics")).metrics.map(({ name, value }) => [name, value]));
+    const counters = await cdp.send("Memory.getDOMCounters");
+    const current = { heapMiB: metrics.JSHeapUsedSize / 1024 ** 2, domNodes: counters.nodes, listeners: counters.jsEventListeners, documents: counters.documents, ...(await page.evaluate(() => window.__callLeaks())) };
+    // Do not choose a minimum: require consecutive stable resource counts, then
+    // retain that actual reading. A continuing leak cannot be collected away.
+    if (
+      previous &&
+      Object.keys(current)
+        .filter((metric) => !["heapMiB", "animationFrames"].includes(metric))
+        .every((metric) => current[metric] === previous[metric])
+    )
+      return current;
+    previous = current;
+  }
+  throw new Error(`Resource teardown did not stabilize: ${JSON.stringify(previous)}`);
 }
 
 async function snapshot(cdp, directory, id) {
@@ -66,7 +80,7 @@ export async function checkLeaks({ browser, origin, budgets, directory, boardCss
   }
   await mkdir(directory, { recursive: true });
   const results = [];
-  const journeys = ["leave", "panels", "people", "share", "board", "reconnect", "layout", "reactions"];
+  const journeys = ["idle", "leave", "panels", "people", "share", "board", "reconnect", "layout", "reactions"];
   for (let repeat = 0; repeat < repeats; repeat++) {
     for (const journey of journeys) results.push(await run(journey, null, repeat));
   }
@@ -100,7 +114,10 @@ export async function checkLeaks({ browser, origin, budgets, directory, boardCss
       const fixture = async (name) => page.locator(`[data-perf-${name}]`).dispatchEvent("click");
       const click = async (name) => page.getByRole("button", { name, exact: true }).click();
       const cycle = async () => {
-        if (journey === "leave") {
+        if (journey === "idle") {
+          await page.evaluate(() => undefined);
+          await page.evaluate(() => undefined);
+        } else if (journey === "leave") {
           if ((await page.getByRole("button", { name: "Leave call", exact: true }).count()) === 0) {
             await fixture("join");
             await page.getByRole("button", { name: "Leave call", exact: true }).waitFor();
@@ -110,7 +127,7 @@ export async function checkLeaks({ browser, origin, budgets, directory, boardCss
           await page.getByRole("button", { name: "Leave call", exact: true }).waitFor({ state: "hidden" });
         } else if (journey === "panels") {
           for (const [open, close] of [
-            ["Chat", "Close chat panel"],
+            ["Chat", "Close chat"],
             ["Participants", "Close participants panel"],
           ]) {
             await click(open);
@@ -149,6 +166,12 @@ export async function checkLeaks({ browser, origin, budgets, directory, boardCss
           if (journey === "board") await page.locator(".excalidraw canvas").first().waitFor({ state: "hidden" });
         }
       };
+      // Initial mount is joined. Bring it to the left state so warm-up exercises
+      // the same rejoin path (including Playwright's dispatch helper) as all 20 cycles.
+      if (journey === "leave") {
+        await click("Leave call");
+        await page.getByRole("button", { name: "Leave call", exact: true }).waitFor({ state: "hidden" });
+      }
       await cycle();
       const samples = [await sample(page, cdp, budgets.settleMs)];
       for (let index = 0; index < budgets.cycles; index++) {

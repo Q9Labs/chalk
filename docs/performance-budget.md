@@ -261,7 +261,9 @@ the next cycle rejoins before leaving again. Other journeys return to their
 initial UI state. No reload can discard evidence between cycles.
 
 Each sample waits 600 ms for effect/animation teardown, collects garbage through
-CDP, yields another 80 ms, and collects again. Reaction cycles additionally wait
+CDP, yields another 200 ms, and collects again. It repeats until two consecutive
+resource-count readings agree (up to six pairs); it never selects a minimum.
+Failure to stabilize is a measurement failure. Reaction cycles additionally wait
 4.3 seconds for the four-second burst expiry. Board warm-up waits for its lazy
 canvas. Counts are collected without holding application objects strongly:
 
@@ -269,7 +271,8 @@ canvas. Counts are collected without holding application objects strongly:
   buffers, browser process memory and most decoder memory.
 - `domNodes`, `listeners`, `documents`: CDP DOM counters, including detached
   nodes/listeners still retained by JavaScript, not just attached DOM queries.
-- `videos`, `audios`: media elements still attached to the document.
+- `videos`, `audios`: media elements still alive after GC, including retained detached elements.
+  Creation wrappers and a mutation observer register them weakly.
 - `liveTracks`: distinct non-ended track wrappers observed through canvas/media
   capture, media-device calls, stream additions, track cloning and Web Audio
   destinations. Weak references do not prevent collection. This is not a native
@@ -316,6 +319,9 @@ harness on testbox:
 ```sh
 node apps/web/scripts/check-call-performance.mjs --skip-build --leaks-only --leak-repeats 3 --self-test --out artifacts/leaks-calibration.json
 ```
+
+An additional idle journey runs the same sampling and two no-op evaluations per
+cycle without changing call state. It measures observer/automation heap noise.
 
 Leak runs use an unthrottled desktop viewport to reduce timer/teardown timing
 noise; timing scenarios still exercise both CPU-throttled device profiles.

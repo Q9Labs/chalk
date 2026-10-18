@@ -11,6 +11,7 @@ import { checkLeaks } from "./call-leak-check.mjs";
 import { measureRouteBundle } from "./call-route-bundle.mjs";
 import { validateBudgets, summarize, percentile, budgetFailures, trustedInteractionMs, METRICS, BUNDLE_METRICS } from "./call-performance-metrics.mjs";
 
+const runStarted = performance.now();
 const { values } = parseArgs({
   options: {
     out: { type: "string", default: "artifacts/call-performance.json" },
@@ -137,6 +138,7 @@ try {
   report.errors.push(error.stack ?? String(error));
   console.error(error);
 } finally {
+  report.elapsedMs = performance.now() - runStarted;
   clearTimeout(deadline);
   await browser?.close();
   await new Promise((done) => server.close(done));

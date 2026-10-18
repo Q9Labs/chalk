@@ -4,6 +4,30 @@ export function installLeakObservers() {
   const contexts = new Set();
   const intervals = new Set();
   const frames = new Set();
+  const media = new Set();
+  const knownMedia = new WeakSet();
+  const rememberMedia = (element) => {
+    if (element instanceof HTMLMediaElement && !knownMedia.has(element)) {
+      knownMedia.add(element);
+      media.add(new WeakRef(element));
+    }
+    return element;
+  };
+  for (const name of ["createElement", "createElementNS"]) {
+    const original = Document.prototype[name];
+    Document.prototype[name] = function (...args) {
+      return rememberMedia(original.apply(this, args));
+    };
+  }
+  new MutationObserver((records) => {
+    for (const record of records)
+      for (const node of record.addedNodes) {
+        if (node instanceof Element) {
+          rememberMedia(node);
+          node.querySelectorAll("video,audio").forEach(rememberMedia);
+        }
+      }
+  }).observe(document, { childList: true, subtree: true });
   const rememberTrack = (track) => {
     tracks.add(new WeakRef(track));
     return track;
@@ -36,8 +60,8 @@ export function installLeakObservers() {
   for (const name of ["AudioContext", "webkitAudioContext"]) {
     if (!window[name]) continue;
     window[name] = new Proxy(window[name], {
-      construct(target, args) {
-        const context = Reflect.construct(target, args);
+      construct(target, args, newTarget) {
+        const context = Reflect.construct(target, args, newTarget);
         contexts.add(new WeakRef(context));
         const createDestination = context.createMediaStreamDestination.bind(context);
         context.createMediaStreamDestination = (...parameters) => {
@@ -90,8 +114,8 @@ export function installLeakObservers() {
     return live.size;
   };
   window.__callLeaks = () => ({
-    videos: document.querySelectorAll("video").length,
-    audios: document.querySelectorAll("audio").length,
+    videos: count(media, (element) => element instanceof HTMLVideoElement),
+    audios: count(media, (element) => element instanceof HTMLAudioElement),
     liveTracks: count(tracks, (track) => track.readyState === "live"),
     audioContexts: count(contexts, (context) => context.state !== "closed"),
     intervals: intervals.size,
