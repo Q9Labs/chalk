@@ -1787,18 +1787,9 @@ export interface components {
         | number
         | boolean
         | null;
-      default_episode_duration_seconds: {
-        Set: boolean;
-        Value?: number | null;
-      };
-      linger_window_seconds: {
-        Set: boolean;
-        Value?: number | null;
-      };
-      maximum_episode_duration_seconds: {
-        Set: boolean;
-        Value?: number | null;
-      };
+      default_episode_duration_seconds?: number;
+      linger_window_seconds?: number;
+      maximum_episode_duration_seconds?: number;
       media_plane?: string;
       metadata?:
         | {
