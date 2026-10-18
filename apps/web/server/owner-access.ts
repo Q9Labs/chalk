@@ -65,3 +65,10 @@ export async function ownerAccess(request: Request, env: DashboardEnvironment, e
   );
   return response;
 }
+
+export async function viewerSeat(request: Request, env: DashboardEnvironment, person: Identity, spaceId: string, episodeId: string): Promise<string | null> {
+  const encoded = readCookie(request, env, `seat_${spaceId}`);
+  if (!encoded) return null;
+  const seat = seatSchema.parse(await unseal(encoded, env.WORKOS_COOKIE_PASSWORD, "owner-seat"));
+  return seat.userId === person.userId && seat.sessionId === person.sessionId && seat.spaceId === spaceId && seat.episodeId === episodeId && seat.expiresAt > Date.now() ? seat.participantId : null;
+}

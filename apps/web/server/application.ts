@@ -6,7 +6,7 @@ import { binding, checkCsrf, clearSession, csrfToken, readCookie, seal, setSessi
 import { body, DashboardError, exactOrigin, json, redirect } from "./http";
 import { engine, resolveTenant } from "./engine";
 import { homeMutation, homePage } from "./home";
-import { ownerAccess } from "./owner-access";
+import { ownerAccess, viewerSeat } from "./owner-access";
 import { callMutation, callPage } from "./call";
 import { pastMutation, pastSessionPage } from "./past-session";
 import { developerMutation, developerPage, requiresOnline } from "./developer";
@@ -21,7 +21,7 @@ const startQuery = z.strictObject({
     .default("/dashboard"),
 });
 const callbackQuery = z.strictObject({ code: z.string().min(1).max(4096), state: z.string().min(1).max(1024) });
-const transaction = z.object({ state: z.string(), codeVerifier: z.string(), returnTo: z.string(), expiresAt: z.number() });
+const transaction = z.object({ state: z.string(), codeVerifier: z.string(), returnTo: z.string(), provider: z.enum(["google", "apple"]), expiresAt: z.number() });
 const emptyBody = z.strictObject({});
 function query(request: Request): Record<string, string> {
   const values: Record<string, string> = {};
@@ -51,23 +51,27 @@ async function auth(request: Request, env: DashboardEnvironment, provider: Ident
     const input = startQuery.parse(query(request));
     const login = await provider.start(input.provider);
     const response = redirect(login.url);
-    writeCookie(response, env, "login", await seal({ state: login.state, codeVerifier: login.codeVerifier, returnTo: input.returnTo, expiresAt: Date.now() + 600000 }, env.WORKOS_COOKIE_PASSWORD, "login"), 600);
+    writeCookie(response, env, "login", await seal({ state: login.state, codeVerifier: login.codeVerifier, returnTo: input.returnTo, provider: input.provider, expiresAt: Date.now() + 600000 }, env.WORKOS_COOKIE_PASSWORD, "login"), 600);
     return response;
   }
   if (request.method === "GET" && path === "/auth/callback") {
     let response: Response;
+    let providerName: "google" | "apple" = "google";
     try {
-      const input = callbackQuery.parse(query(request));
       const loginCookie = readCookie(request, env, "login");
       if (!loginCookie) throw new DashboardError(400, "login_state_missing");
       const login = transaction.parse(await unseal(loginCookie, env.WORKOS_COOKIE_PASSWORD, "login"));
+      providerName = login.provider;
+      const input = callbackQuery.parse(query(request));
       if (login.expiresAt <= Date.now() || login.state !== input.state) throw new DashboardError(400, "login_state_rejected");
       const result = await provider.exchange(input.code, login.codeVerifier);
       await resolveTenant(env, result.identity, true);
       response = redirect(startQuery.shape.returnTo.parse(login.returnTo));
       await setSession(response, env, result.sealedSession, result.identity);
     } catch (error) {
-      response = failure(error);
+      const failed = failure(error);
+      response = redirect(`/dashboard/sign-in?failed=${providerName}`);
+      response.headers.set("X-Request-ID", failed.headers.get("X-Request-ID") ?? "");
     }
     writeCookie(response, env, "login", "", 0);
     return response;
@@ -123,7 +127,7 @@ async function dashboard(request: Request, env: DashboardEnvironment, provider: 
       }
       case "/dashboard-api/past-session": {
         const input = pastQuery.parse(query(request));
-        return json(await pastSessionPage(client, input.spaceId, input.episodeId, input.cursor));
+        return json(await pastSessionPage(client, input.spaceId, input.episodeId, input.cursor, await viewerSeat(request, env, person, input.spaceId, input.episodeId)));
       }
       case "/dashboard-api/developer":
         return json(await developerPage(client, developerQuery.parse(query(request))));
