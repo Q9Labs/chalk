@@ -10,12 +10,13 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 from release_core import (PHASES, builder_identity, check_image, digest, env_values, require, sealed_result, validate_config)
-from release_io import Provider, private_json
+from release_io import Provider, droplet_absent, private_json
 
 SCRIPTS = Path(__file__).resolve().parent
 REPO = SCRIPTS.parent.parent
@@ -141,11 +142,12 @@ class Release:
                                         "--inbound-rules", "protocol:tcp,ports:22,address:" + self.config["builder"]["ssh_cidr"],
                                         "--outbound-rules", "protocol:tcp,ports:all,address:0.0.0.0/0 protocol:udp,ports:all,address:0.0.0.0/0")[0]
             self.state[label]["firewall_id"] = firewall["id"]
+            self.save()
             deadline = time.monotonic() + 125
             while time.monotonic() < deadline:
                 droplet = self.provider.do("compute", "droplet", "get", droplet["id"])[0]
                 builder_identity(droplet, self.state[label])
-                public = [net["ip_address"] for net in droplet["networks"]["v4"] if net["type"] == "public"]
+                public = [net["ip_address"] for net in droplet["networks"].get("v4", []) if net["type"] == "public"]
                 if droplet["status"] == "active" and public:
                     self.state[label]["ip"] = public[0]
                     break
@@ -154,6 +156,7 @@ class Release:
             self.save()
             return self.state[label]
         except Exception:
+            traceback.print_exc()
             self.cleanup_node(label)
             raise
 
@@ -181,11 +184,11 @@ class Release:
                 builder_identity(json.loads(result.stdout)[0], node)
                 self.provider.do("compute", "droplet", "delete", node["id"], "--force")
             else:
-                require("404" in result.stderr, "cleanup could not prove exact Droplet absent")
+                require(droplet_absent(result, node["id"]), "cleanup could not prove exact Droplet absent")
             deadline = time.monotonic() + 60
             while time.monotonic() < deadline:
                 observed = subprocess.run(command, capture_output=True, text=True, timeout=15)
-                if observed.returncode and "404" in observed.stderr:
+                if droplet_absent(observed, node["id"]):
                     break
                 require(observed.returncode == 0, "cleanup absence read failed")
                 builder_identity(json.loads(observed.stdout)[0], node)
@@ -215,29 +218,38 @@ class Release:
         # First boot must finish before the power cycle; its own exit status is not this step's concern.
         self.provider.command(["ssh", *self.ssh_options(node), "root@" + node["ip"], "cloud-init status --wait >/dev/null 2>&1; true"], timeout=300)
         self.provider.do("compute", "droplet-action", "shutdown", node["id"], "--wait", timeout=180)
-        droplet = self.provider.do("compute", "droplet", "get", node["id"])[0]
-        builder_identity(droplet, node)
-        require(droplet["status"] == "off", "builder is not powered off")
+        self.await_status(node, "off")
         self.provider.do("compute", "droplet-action", "resize", node["id"], "--size", size, "--wait", timeout=600)
         self.provider.do("compute", "droplet-action", "power-on", node["id"], "--wait", timeout=180)
-        droplet = self.provider.do("compute", "droplet", "get", node["id"])[0]
-        builder_identity(droplet, node)
-        require(droplet["status"] == "active" and droplet["size_slug"] == size and droplet["disk"] == worker["disk_gb"],
-                "builder resize did not keep the fleet disk")
+        self.await_status(node, "active", size)
         self.await_ssh(node)
+
+    def await_status(self, node, status, size=None):
+        deadline = time.monotonic() + 125
+        while time.monotonic() < deadline:
+            droplet = self.provider.do("compute", "droplet", "get", node["id"])[0]
+            builder_identity(droplet, node)
+            require(droplet["disk"] == self.config["worker"]["disk_gb"], "builder resize did not keep the fleet disk")
+            if droplet["status"] == status and (size is None or droplet["size_slug"] == size):
+                return
+            time.sleep(5)
+        raise RuntimeError("exact builder did not reach " + status + " within 125 seconds")
 
     def build(self):
         require(self.state.get("planned"), "run plan first")
         builder = self.config["builder"]
         require(builder["region"] == self.config["worker"]["region"], "builder must use the fleet region")
-        node = self.create_node("builder", builder["image"], self.config["worker"]["size"])
+        # The render installer requires Ubuntu; the minimal capture base is configured separately.
+        image = "ubuntu-24-04-x64" if self.args.role == "render" else builder["image"]
+        node = self.create_node("builder", image, self.config["worker"]["size"])
         try:
             self.await_ssh(node)
             self.grow_builder(node, builder["size"])
             self.provider.command(["scp", *self.ssh_options(node), str(SCRIPTS / "build-and-seal.sh"), "root@" + node["ip"] + ":/root/chalk-release-build.sh"])
             command = ["bash", "/root/chalk-release-build.sh", self.state["source_commit"], self.state["release_id"], self.state["role"]]
             output = self.provider.command(["ssh", *self.ssh_options(node), "root@" + node["ip"], shlex.join(command)],
-                                           timeout=max(1, node["deadline"] - time.time() - 60))
+                                           timeout=max(1, node["deadline"] - time.time() - 60),
+                                           log_path=self.directory / "build-remote.log")
             raw, image_digest = sealed_result(output, self.state["source_commit"], self.state["release_id"], self.state["role"])
             (self.directory / "image-manifest.json").write_bytes(raw)
             (self.directory / "image-manifest.json").chmod(0o600)
@@ -245,6 +257,7 @@ class Release:
             self.save()
             return {"result": "PASS", "phase": "build", "sealed": True, "guard_pid": node["guard_pid"]}
         except Exception:
+            traceback.print_exc()
             self.cleanup_node("builder")
             raise
 
@@ -260,7 +273,7 @@ class Release:
         builder_identity(droplet, node)
         require(time.time() + 840 < node["deadline"], "insufficient time before builder deadline; do not cancel the spend guard")
         self.provider.do("compute", "droplet-action", "power-off", node["id"], "--wait", timeout=180)
-        require(self.provider.do("compute", "droplet", "get", node["id"])[0]["status"] == "off", "builder is not powered off")
+        self.await_status(node, "off")
         self.provider.do("compute", "droplet-action", "snapshot", node["id"], "--snapshot-name", self.state["release_id"], "--wait", timeout=600)
         current = self.provider.do("compute", "droplet", "get", node["id"])[0]
         matches = [self.provider.do("compute", "image", "get", image_id)[0] for image_id in current["snapshot_ids"]]
@@ -299,7 +312,9 @@ def main():
             process = subprocess.Popen([sys.executable, str(SCRIPTS / "release.py"), *sys.argv[1:], "--build-worker"],
                                        stdin=subprocess.DEVNULL, stdout=log, stderr=log, preexec_fn=os.setsid, close_fds=True)
         print(json.dumps({"build_worker_pid": process.pid, "log": str(log_path)}), file=sys.stderr, flush=True)
-        require(process.wait() == 0, "detached build failed; see " + str(log_path))
+        if process.wait() != 0:
+            print(log_path.read_text(), file=sys.stderr)
+            raise RuntimeError("detached build failed; see " + str(log_path))
         result = json.loads(log_path.read_text())
     else:
         require(args.phase == "plan" or release.state, "run plan first")

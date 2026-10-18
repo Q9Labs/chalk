@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -14,6 +15,13 @@ AWS_READS = {("ssm", "get-parameter"), ("ssm", "describe-parameters"), ("ssm", "
              ("sts", "get-caller-identity")}
 DO_READS = {("compute", "image", "get"), ("compute", "size", "list"),
             ("compute", "region", "list"), ("compute", "droplet", "get")}
+
+
+def droplet_absent(result, droplet_id):
+    # doctl's JSON error formatter uses stdout; older versions use stderr.
+    return result.returncode != 0 and re.search(
+        r"GET https://api\.digitalocean\.com/v2/droplets/" + re.escape(str(droplet_id)) + r": 404\b",
+        result.stdout + result.stderr) is not None
 
 
 def private_json(path, value):
@@ -32,11 +40,15 @@ class Provider:
         self.do_token = None
         self.reads = []
 
-    def command(self, arguments, *, timeout=120, input_text=None, read_only=False, environment=None):
+    def command(self, arguments, *, timeout=120, input_text=None, read_only=False, environment=None, log_path=None):
         if self.dry_run:
             require(read_only, "dry-run refused a non-read operation")
         result = subprocess.run(arguments, input=input_text, text=True, capture_output=True, timeout=timeout,
                                 env={**os.environ, "AWS_PAGER": "", "AWS_CLI_AUTO_PROMPT": "off", **(environment or {})})
+        if log_path is not None:
+            with open(log_path, "w", opener=lambda name, flags: os.open(name, flags, 0o600)) as log:
+                log.write(result.stdout)
+                log.write(result.stderr)
         if result.returncode:
             # Provider errors can quote secret payloads. Never echo stdout/stderr here.
             raise RuntimeError(f"{arguments[0]} operation failed (exit {result.returncode}); no payload logged")

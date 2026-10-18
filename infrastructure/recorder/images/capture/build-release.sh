@@ -20,6 +20,8 @@ done
 [[ "$source_root" == /* && -f "$source_root/apps/api/go.mod" ]] || usage
 [[ "$output_path" == /* && ! -e "$output_path" ]] || usage
 [[ "$release_id" =~ ^[a-z0-9][a-z0-9._-]{0,127}$ ]] || usage
+script_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+"$script_root/../cpu/prepare-builder.sh" --capture
 
 source_commit="$(git -C "$source_root" rev-parse HEAD)"
 [[ "$source_commit" =~ ^[0-9a-f]{40}$ ]] || usage

@@ -56,7 +56,8 @@ install -d -m 0755 "$release_root/bin" "$release_root/renderer"
   "${go_environment[@]}" go build -trimpath -ldflags='-s -w' -o "$release_root/bin/recorder-render" ./cmd/recorder-render
   "${go_environment[@]}" go build -trimpath -ldflags='-s -w' -o "$release_root/bin/chalk-recorder-bootstrap" ./cmd/recorder-node-bootstrap
 )
-"${pnpm_environment[@]}" pnpm --dir "$source_root" --filter @chalk/recording-renderer deploy --prod --legacy "$release_root/renderer"
+# The deployed subset omits other workspace projects' patched dependencies.
+"${pnpm_environment[@]}" pnpm --dir "$source_root" --filter @chalk/recording-renderer deploy --prod --legacy --config.allow-unused-patches=true "$release_root/renderer"
 node "$script_root/relocate-renderer.mjs" "$release_root/renderer" "$source_root/apps/recording-renderer"
 rm -rf -- "$release_root/renderer/dist"
 install -d "$release_root/renderer/dist"

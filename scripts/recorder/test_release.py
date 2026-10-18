@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from release_core import (PIN_KEYS, builder_identity, check_fresh, check_image, check_qualification,
@@ -36,6 +37,89 @@ def dispatcher_state_fixture():
 
 
 class ReleaseContracts(unittest.TestCase):
+    def test_builder_waits_for_ipv4_and_persists_the_firewall_before_polling(self):
+        owned = {"id": 123, "name": "owned", "created_at": "time"}
+        provisioning = {**owned, "status": "new", "networks": {}}
+        active = {**owned, "status": "active", "networks": {"v4": [{"type": "public", "ip_address": "192.0.2.1"}]}}
+        for label in ("builder", "qualifier"):
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as directory:
+                release = Release.__new__(Release)
+                release.directory = Path(directory)
+                release.state = {}
+                release.config = {"worker": {"region": "test1"}, "builder": {"ssh_cidr": "192.0.2.2/32"}}
+                release.provider = Mock()
+                release.detach_guard = Mock(return_value={**owned, "deadline": 12345})
+                def provider(*arguments, **kwargs):
+                    if arguments[:3] == ("compute", "ssh-key", "import"):
+                        return [{"id": 456}]
+                    if arguments[:3] == ("compute", "droplet", "create"):
+                        return [owned]
+                    if arguments[:3] == ("compute", "firewall", "create"):
+                        return [{"id": "firewall-fixture"}]
+                    if arguments[:3] == ("compute", "droplet", "get"):
+                        self.assertEqual(json.loads((Path(directory) / "release.json").read_text())[label]["firewall_id"], "firewall-fixture")
+                        return [next(observations)]
+                    self.fail(arguments)
+                observations = iter((provisioning, active))
+                release.provider.do.side_effect = provider
+                with patch("time.sleep"):
+                    self.assertEqual(release.create_node(label, "fixture-image", "small")["ip"], "192.0.2.1")
+
+    def test_public_builder_output_is_retained_on_remote_failure(self):
+        provider = Provider("test1", None)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "build-remote.log"
+            result = subprocess.CompletedProcess([], 1, "build phase output\n", "fixture compiler error\n")
+            with patch("subprocess.run", return_value=result):
+                with self.assertRaisesRegex(RuntimeError, "no payload logged"):
+                    provider.command(["ssh", "fixture", "public-build"], log_path=path)
+            self.assertEqual(path.read_text(), "build phase output\nfixture compiler error\n")
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
+    def test_cleanup_accepts_exact_droplet_404_from_json_stdout(self):
+        owned = {"id": 123, "name": "chalk-release-builder-test", "created_at": "test-time"}
+        absent = subprocess.CompletedProcess([], 1, json.dumps({"errors": [{"detail":
+            'GET https://api.digitalocean.com/v2/droplets/123: 404 (request "fixture") The resource could not be found.'}]}), "")
+        with tempfile.TemporaryDirectory() as directory:
+            release = Release.__new__(Release)
+            release.directory = Path(directory)
+            release.config = {"do_context": "test-context"}
+            release.state = {"builder": {**owned, "key_id": 456, "key_path": str(Path(directory) / "builder.key")}}
+            release.provider = Mock()
+            with patch("subprocess.run", return_value=absent):
+                release.cleanup_node("builder")
+            self.assertTrue(release.state["builder"]["cleaned"])
+            release.provider.do.assert_called_once_with("compute", "ssh-key", "delete", 456, "--force")
+            self.assertTrue((Path(directory) / "builder-guard.stop").exists())
+        with patch("subprocess.run", return_value=absent), patch("builtins.print"):
+            expire(owned, "test-context", 0, "/does-not-exist")
+
+    def test_cleanup_without_a_droplet_receipt_only_removes_the_recorded_key(self):
+        with tempfile.TemporaryDirectory() as directory:
+            release = Release.__new__(Release)
+            release.directory = Path(directory)
+            release.state = {"builder": {"key_id": 456, "key_path": str(Path(directory) / "builder.key")}}
+            release.provider = Mock()
+            with patch("subprocess.run") as run:
+                release.cleanup_node("builder")
+            run.assert_not_called()
+            release.provider.do.assert_called_once_with("compute", "ssh-key", "delete", 456, "--force")
+            self.assertTrue(release.state["builder"]["cleaned"])
+
+    def test_cleanup_refuses_auth_failure_and_a_different_droplets_404(self):
+        with tempfile.TemporaryDirectory() as directory:
+            release = Release.__new__(Release)
+            release.directory = Path(directory)
+            release.config = {"do_context": "test-context"}
+            release.state = {"builder": {"id": 123, "name": "owned", "created_at": "time"}}
+            release.provider = Mock()
+            for error in ("GET https://api.digitalocean.com/v2/droplets/123: 401 Unauthorized",
+                          "GET https://api.digitalocean.com/v2/droplets/456: 404 Not found"):
+                with patch("subprocess.run", return_value=subprocess.CompletedProcess([], 1, error, "")):
+                    with self.assertRaisesRegex(ValueError, "could not prove exact Droplet absent"):
+                        release.cleanup_node("builder")
+                release.provider.do.assert_not_called()
+
     def test_provider_uses_the_fleet_token_only_in_child_environment(self):
         provider = Provider('test-region', None)
         provider.context = 'private-context'
@@ -151,6 +235,7 @@ class ReleaseContracts(unittest.TestCase):
         owned = {"id": 123, "name": "chalk-release-builder-test", "created_at": "test-time"}
         node = {**owned, "ip": "192.0.2.1", "key_path": "/does-not-exist"}
         release = Release.__new__(Release)
+        release.args = SimpleNamespace(role="capture")
         release.config = {"worker": {"size": "small", "region": "test1", "disk_gb": 25}, "builder": {"size": "large", "region": "test1", "image": "test-image"}}
         release.state = {"planned": True}
         release.directory = Path("/does-not-exist")
@@ -160,6 +245,11 @@ class ReleaseContracts(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             release.build()
         release.create_node.assert_called_once_with("builder", "test-image", "small")
+        release.args.role = "render"
+        release.create_node.reset_mock()
+        with self.assertRaises(RuntimeError):
+            release.build()
+        release.create_node.assert_called_once_with("builder", "ubuntu-24-04-x64", "small")
 
         release.grow_builder(node, "small")
         release.provider.do.assert_not_called()
@@ -177,10 +267,28 @@ class ReleaseContracts(unittest.TestCase):
         self.assertIn("cloud-init status --wait", release.provider.command.call_args.args[0][-1])
         release.await_ssh.assert_called_once_with(node)
 
-        for before, after in (({"status": "active"}, {}), ({"id": 456}, {}), ({}, {"disk": 160}), ({}, {"size_slug": "small"}), ({}, {"status": "off"}), ({}, {"id": 456})):
+        for before, after in (({"id": 456}, {}), ({}, {"disk": 160}), ({}, {"id": 456})):
             release.provider.do.side_effect = [None, [{**stopped, **before}], None, None, [{**grown, **after}]]
             with self.assertRaises(ValueError):
                 release.grow_builder(node, "large")
+
+    def test_builder_action_reads_wait_for_provider_state_without_losing_identity_or_disk_guards(self):
+        release = Release.__new__(Release)
+        release.config = {"worker": {"disk_gb": 25}}
+        node = {"id": 123, "name": "owned", "created_at": "time"}
+        active = {**node, "status": "active", "disk": 25, "size_slug": "small"}
+        release.provider = Mock()
+        release.provider.do.side_effect = [[active], [{**active, "status": "off"}]]
+        with patch("time.sleep"):
+            release.await_status(node, "off")
+        self.assertEqual(release.provider.do.call_count, 2)
+        release.provider.do.side_effect = [[{**active, "status": "off"}], [active], [{**active, "size_slug": "large"}]]
+        with patch("time.sleep"):
+            release.await_status(node, "active", "large")
+        release.provider.do.side_effect = [[active]]
+        with patch("time.monotonic", side_effect=[0, 0, 126]), patch("time.sleep"):
+            with self.assertRaisesRegex(RuntimeError, "within 125 seconds"):
+                release.await_status(node, "off")
 
     def test_builder_key_import_uses_the_flag_doctl_accepts(self):
         release = Release.__new__(Release)

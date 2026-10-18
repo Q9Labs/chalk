@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from release_core import builder_identity
+from release_io import droplet_absent
 
 
 def expire(identity, context, deadline, stop_file):
@@ -19,7 +20,7 @@ def expire(identity, context, deadline, stop_file):
                 read = subprocess.run(base + ["get", str(identity["id"]), "--output", "json"], capture_output=True, text=True, timeout=60)
             except subprocess.TimeoutExpired:
                 continue
-            if read.returncode and "404" in read.stderr:
+            if droplet_absent(read, identity["id"]):
                 print("GUARD_CLEANUP_ABSENCE_VERIFIED", flush=True)
                 return
         time.sleep(min(5, max(0, deadline - time.time())))
@@ -32,7 +33,7 @@ def expire(identity, context, deadline, stop_file):
                 raise RuntimeError("guard could not read exact builder after three provider timeouts") from None
             continue
         if read.returncode:
-            if "404" in read.stderr:
+            if droplet_absent(read, identity["id"]):
                 print("GUARD_ALREADY_ABSENT", flush=True)
                 return
             if attempt == 2:
@@ -45,7 +46,7 @@ def expire(identity, context, deadline, stop_file):
                 if attempt == 2:
                     raise RuntimeError("guard exact-builder deletion timed out after three attempts") from None
                 continue
-            if delete.returncode == 0 or "404" in delete.stderr:
+            if delete.returncode == 0:
                 print("GUARD_EXACT_BUILDER_DELETE_ACCEPTED", flush=True)
                 return
         time.sleep(5)

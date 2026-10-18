@@ -7,16 +7,26 @@ node_version="22.23.2"
 node_archive_sha256="d60acfe00a2932254bb0ad20e01b0d74397a0875595de719654b214f4b03f307"
 pnpm_version="12.8.1"
 toolchain_root="/opt/chalk-recorder/toolchains"
+profile="${1:-render}"
+[[ "$profile" == render || "$profile" == --capture ]] || { echo 'usage: prepare-builder.sh [--capture]' >&2; exit 2; }
 
 [[ "$(id -u)" == "0" ]] || { echo "prepare-builder must run as root" >&2; exit 1; }
 [[ "$(uname -s)" == "Linux" && "$(uname -m)" == "x86_64" ]] || { echo "CPU recorder images require Linux x86_64" >&2; exit 1; }
 source /etc/os-release
-[[ "${ID:-}" == "ubuntu" && "${VERSION_ID:-}" == "24.04" ]] || { echo "CPU recorder images require Ubuntu 24.04" >&2; exit 1; }
+if [[ "$profile" == --capture ]]; then
+  [[ "${ID:-}" == debian && "${VERSION_ID:-}" == 13 ]] || { echo 'capture images require Debian 13' >&2; exit 1; }
+else
+  [[ "${ID:-}" == ubuntu && "${VERSION_ID:-}" == 24.04 ]] || { echo 'render images require Ubuntu 24.04' >&2; exit 1; }
+fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 # The native compositor needs emoji glyphs without Chromium's dependencies.
-apt-get install -y -qq ca-certificates curl ffmpeg fonts-noto-color-emoji jq xz-utils
+if [[ "$profile" == --capture ]]; then
+  apt-get install -y -qq --no-install-recommends ca-certificates curl jq python3
+else
+  apt-get install -y -qq ca-certificates curl ffmpeg fonts-noto-color-emoji jq xz-utils
+fi
 
 install -d -m 0755 "$toolchain_root"
 temporary_directory="$(mktemp -d)"
@@ -30,6 +40,8 @@ if [[ ! -x "$toolchain_root/go-${go_version}/bin/go" ]]; then
   mv "$temporary_directory/go-extract/go" "$toolchain_root/go-${go_version}"
 fi
 [[ "$("$toolchain_root/go-${go_version}/bin/go" version)" == "go version go${go_version} linux/amd64" ]] || { echo "installed Go toolchain does not match the pinned version" >&2; exit 1; }
+ln -sfn "$toolchain_root/go-${go_version}/bin/go" /usr/local/bin/go
+[[ "$profile" != --capture ]] || exit 0
 
 if [[ ! -x "$toolchain_root/node-${node_version}/bin/node" ]]; then
   curl -fsSLo "$temporary_directory/node.tar.xz" "https://nodejs.org/dist/v${node_version}/node-v${node_version}-linux-x64.tar.xz"
@@ -40,7 +52,6 @@ if [[ ! -x "$toolchain_root/node-${node_version}/bin/node" ]]; then
 fi
 [[ "$("$toolchain_root/node-${node_version}/bin/node" --version)" == "v${node_version}" ]] || { echo "installed Node.js toolchain does not match the pinned version" >&2; exit 1; }
 
-ln -sfn "$toolchain_root/go-${go_version}/bin/go" /usr/local/bin/go
 for executable in node npm npx corepack; do
   ln -sfn "$toolchain_root/node-${node_version}/bin/$executable" "/usr/local/bin/$executable"
 done

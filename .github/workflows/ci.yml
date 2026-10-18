@@ -517,6 +517,14 @@ jobs:
       - name: Remove this job's builder Droplets, firewalls and SSH keys
         if: always()
         run: python3 scripts/releases/media.py cleanup --directory "$RUNNER_TEMP/media-build"
+      - name: Retain builder and guard logs, including failed builds
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: media-build-logs-${{ needs.plan-managed.outputs.release_id }}
+          path: ${{ runner.temp }}/media-build/*/*.log
+          retention-days: 7
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: media-members-${{ needs.plan-managed.outputs.release_id }}
