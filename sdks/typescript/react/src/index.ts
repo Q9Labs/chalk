@@ -64,3 +64,4 @@ export type { MessageReaction, ReactChatMessage, UseChatResult } from "./binding
 export { CHALK_REACTIONS } from "@q9labsai/chalk-client";
 
 export { CallReady, type CallReadyProps } from "./components/call-limbo/CallReady";
+export { StatusSurface, type StatusSurfaceProps, type StatusSurfacePhase } from "./components/chalk/StatusSurface";

@@ -59,6 +59,7 @@ export type ChalkProps = SpaceIntegration &
     readonly onColorSchemeChange?: (colorScheme: ChalkColorScheme) => void;
     readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
     readonly spaceName?: string;
+    readonly inviteLink?: string;
     /** Initial layout without a handler; controlled layout when onLayoutChange is supplied. */
     readonly layout?: SpaceLayout;
     readonly onLayoutChange?: (layout: SpaceLayout) => void;
@@ -256,6 +257,7 @@ function SpaceSurface(
       colorScheme={props.resolvedColorScheme}
       onColorSchemeChange={props.onColorSchemeChange}
       spaceName={props.spaceName}
+      inviteLink={props.inviteLink}
       pickChatFiles={props.pickChatFiles}
       commandError={commandError ?? undefined}
       onDismissCommandError={() => setCommandError(null)}

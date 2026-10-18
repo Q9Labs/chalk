@@ -60,7 +60,7 @@ export function CallReady({ alone, link = typeof location === "undefined" ? "" :
       <div id={`${id}-qr`} hidden={!showQR}>
         <div className="mt-3 flex items-center gap-3.5">
           {qr ? (
-            <svg role="img" aria-label="Scan to join this call" width="104" height="104" viewBox="-4 -4 45 45" className="shrink-0 rounded-lg bg-white p-1" shapeRendering="crispEdges">
+            <svg role="img" aria-label="Scan to join this call" width="104" height="104" viewBox={`-4 -4 ${qr.length + 8} ${qr.length + 8}`} className="shrink-0 rounded-lg bg-white p-1" shapeRendering="crispEdges">
               <path fill="#000" d={qr.flatMap((row, y) => row.flatMap((dark, x) => (dark ? [`M${x} ${y}h1v1h-1z`] : []))).join("")} />
             </svg>
           ) : null}

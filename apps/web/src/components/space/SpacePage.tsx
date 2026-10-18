@@ -1,7 +1,7 @@
 import { useTheme } from "../../lib/theme-context";
 import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
-import { Chalk, CallLimbo, ChalkButton } from "@q9labsai/chalk-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Chalk, CallLimbo, ChalkButton, StatusSurface } from "@q9labsai/chalk-react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPreparedPublicSpace, createPublicInviteClient, joinDashboardSpace, resumePublicSpace, type AccountSpaceCredential, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
 import { getAccount, listAllAccountTenants } from "../../lib/account-api";
 import { canonicalSpaceInviteLink, clearDashboardSpaceEntry, hasDashboardSpaceEntry, spaceInviteToken, verifiedSpaceInviteLink } from "../../lib/named-space-route";
@@ -10,6 +10,7 @@ type WebJoinSettings = Required<Pick<JoinOptions, "displayName" | "microphone" |
 const displayNameStorageKey = "chalk.display-name";
 const devicesOff = { microphone: false, camera: false };
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
+type ExitPhase = "left" | "episode-ended" | "failed";
 export function SpacePage({
   slug,
   navigatePublicSpace = replacePublicSpaceHistory,
@@ -17,6 +18,8 @@ export function SpacePage({
   readonly slug?: string;
   readonly navigatePublicSpace?: (canonicalSlug: string, inviteLink: string) => Promise<void>;
 } = {}) {
+  const { mode } = useTheme();
+  const [terminal, setTerminal] = useState<{ readonly phase: ExitPhase; readonly callName: string; readonly reason: string | undefined; readonly cleanup: () => Promise<void> } | null>(null);
   const client = useMemo(() => createPublicInviteClient(), []);
   const [reloadMarker] = useState(() => {
     if (!slug) return null;
@@ -234,6 +237,29 @@ export function SpacePage({
     },
     [spaceAccess],
   );
+  if (terminal)
+    return (
+      <main className="h-dvh">
+        <StatusSurface
+          phase={terminal.phase}
+          callName={terminal.callName}
+          reason={terminal.reason}
+          theme={{ colorScheme: mode }}
+          rejoinDisabled={Boolean(spaceAccess) || preparing}
+          onRejoin={() => {
+            setTerminal(null);
+            start(entranceSettings ?? defaultJoinOptions);
+          }}
+          onHome={() => {
+            void terminal
+              .cleanup()
+              .then(() => globalThis.location.assign("/"))
+              .catch(() => setError("Couldn’t leave the call. Try again."));
+          }}
+        />
+        {error ? <p role="alert">{error}</p> : null}
+      </main>
+    );
   if (spaceAccess) {
     const settings = entranceSettings ?? defaultJoinOptions;
     return (
@@ -246,6 +272,11 @@ export function SpacePage({
         connectionAccess={spaceAccess.prepared.connectionAccess}
         onFinish={finish}
         spaceName={spaceAccess.spaceName}
+        inviteLink={spaceAccess.inviteLink}
+        onTerminal={(phase, cleanup, reason) => {
+          setTerminal({ phase, cleanup, reason, callName: spaceAccess.spaceName });
+          void cleanup().catch(() => setError("Couldn’t leave the call. Try Home again."));
+        }}
       />
     );
   }
@@ -388,6 +419,8 @@ function LocalSpace({
   connectionAccess,
   onFinish,
   spaceName,
+  inviteLink,
+  onTerminal,
 }: {
   readonly reloadMarker: SpaceEntryAccess["reloadMarker"];
   readonly credential: PublicSpaceCredential | AccountSpaceCredential;
@@ -401,13 +434,33 @@ function LocalSpace({
   readonly inviteLink?: string;
   readonly onFinish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
   readonly spaceName: string;
+  readonly onTerminal: (phase: ExitPhase, cleanup: () => Promise<void>, reason?: string) => void;
 }) {
   const { mode, setPreference } = useTheme();
   const client = useMemo(() => createLocalSpaceClient({ credential, getAccess, connectionAccess }), [connectionAccess, credential, getAccess]);
   const release = useMemo(() => createLocalSpaceRelease(client, () => onFinish()), [client, onFinish]);
   const [homeError, setHomeError] = useState<string | null>(null);
+  const connection = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection;
   const pendingRelease = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(undefined);
   const intentionallyLeft = useRef(false);
+  const endObserved = useRef(false);
+  const releaseFromLifecycle = useCallback(
+    (phase: ExitPhase, reason?: string) => {
+      if (endObserved.current) return;
+      endObserved.current = true;
+      intentionallyLeft.current = true;
+      try {
+        globalThis.sessionStorage.removeItem(reloadRejoinStorageKey);
+      } catch {
+        /* Storage may be disabled. */
+      }
+      onTerminal(phase, release, reason);
+    },
+    [onTerminal, release],
+  );
+  useEffect(() => {
+    if (connection.status === "failed") releaseFromLifecycle("failed", connection.lastError?.message);
+  }, [connection, releaseFromLifecycle]);
 
   useEffect(() => {
     if (pendingRelease.current !== undefined) {
@@ -452,17 +505,9 @@ function LocalSpace({
         displayName={displayName}
         defaults={defaults}
         spaceName={spaceName}
-        onEpisodeEnded={() => {
-          intentionallyLeft.current = true;
-        }}
-        onLeft={() => {
-          intentionallyLeft.current = true;
-          try {
-            globalThis.sessionStorage.removeItem(reloadRejoinStorageKey);
-          } catch {
-            /* Storage may be disabled. */
-          }
-        }}
+        inviteLink={inviteLink}
+        onEpisodeEnded={() => releaseFromLifecycle("episode-ended")}
+        onLeft={() => releaseFromLifecycle("left")}
         onJoined={() => {
           intentionallyLeft.current = false;
         }}

@@ -3,11 +3,13 @@ import { Avatar } from "../atomic/Avatar";
 import type { ClientFailure, SpaceSnapshot } from "@q9labsai/chalk-client";
 import type { Toast } from "./ToastStack";
 
-export function mediaFailureToast(error: ClientFailure, source: "microphone" | "camera" | "screen" = "microphone"): Omit<Toast, "id"> {
-  if (source === "screen") return { icon: <CallEventIcon kind={source} error />, type: "error", message: "Your screen couldn’t be shared. Allow screen recording for your browser in System Settings, then try again." };
-  if (error.code === "media.device_not_found") return { icon: <CallEventIcon kind={source} error />, type: "error", message: `No ${source} found. Plug one in, or check that your device can see it in System Settings.` };
-  if (error.code === "media.permission_denied") return { icon: <CallEventIcon kind={source} error />, type: "error", message: `Chalk can’t use your ${source}. Click the camera icon in the address bar and allow ${source === "camera" ? "Camera" : "Microphone"}.` };
-  return { icon: <CallEventIcon kind={source} error />, type: "error", message: error.message };
+export function mediaFailureToast(error: ClientFailure, source?: "microphone" | "camera" | "screen"): Omit<Toast, "id"> {
+  const device = source ?? "device";
+  if (source === "screen") return { icon: <CallEventIcon kind={source ?? "microphone"} error />, type: "error", message: "Your screen couldn’t be shared. Allow screen recording for your browser in System Settings, then try again." };
+  if (error.code === "media.device_not_found") return { icon: <CallEventIcon kind={source ?? "microphone"} error />, type: "error", message: `No ${device} found. Plug one in, or check that your device can see it in System Settings.` };
+  if (error.code === "media.permission_denied")
+    return { icon: <CallEventIcon kind={source ?? "microphone"} error />, type: "error", message: `Chalk can’t use your ${device}. Click the camera icon in the address bar and allow ${source === "camera" ? "Camera" : source === "microphone" ? "Microphone" : "Camera and Microphone"}.` };
+  return { icon: <CallEventIcon kind={source ?? "microphone"} error />, type: "error", message: error.message };
 }
 
 /** Snapshot changes, not initial history, are events for the person already in the call. */
@@ -48,7 +50,7 @@ export function callEventToasts(previous: SpaceSnapshot, next: SpaceSnapshot): O
     if (previous.media.selection[source] !== next.media.selection[source]) {
       const devices = source === "camera" ? next.media.devices.cameras : next.media.devices.microphones;
       const selected = devices.find((device) => device.deviceId === next.media.selection[source]);
-      if (selected) events.push({ icon: <CallEventIcon kind={source} />, message: `Switched to ${selected.label || source}` });
+      if (selected) events.push({ icon: <CallEventIcon kind={source ?? "microphone"} />, message: `Switched to ${selected.label || source}` });
     }
   }
   return events;

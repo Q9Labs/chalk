@@ -52,6 +52,7 @@ export interface SpaceViewProps {
   readonly colorScheme?: "light" | "dark";
   readonly onColorSchemeChange?: (colorScheme: "light" | "dark") => void;
   readonly spaceName: string;
+  readonly inviteLink?: string;
   readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
   readonly stageBackground?: boolean;
   /** Initial layout without a handler; controlled layout when onLayoutChange is supplied. */
@@ -79,6 +80,7 @@ export function SpaceView({
   colorScheme = "dark",
   onColorSchemeChange,
   spaceName,
+  inviteLink,
   pickChatFiles,
   stageBackground = true,
   layout: controlledLayout,
@@ -233,7 +235,7 @@ export function SpaceView({
         }
         overlays={
           <>
-            <CallReady alone={participantsSlice.roster.length <= 1} />
+            <CallReady alone={participantsSlice.roster.length <= 1} link={inviteLink} />
             {overlay}
             {reconnecting && reconnecting.status !== "reconnecting" ? <ReconnectingOverlay {...reconnecting} /> : null}
             <OfflineActions reconnecting={reconnecting?.status === "reconnecting" && reconnecting.isVisible} />

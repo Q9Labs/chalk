@@ -10,18 +10,20 @@ export function useCallToasts() {
   useEffect(() => {
     setToasts([]);
     let previous = client.getSnapshot();
+    let failedSource: "microphone" | "camera" | "screen" | undefined;
     const push = (events: readonly Omit<Toast, "id">[]) => {
       if (events.length) setToasts((current) => [...current, ...events.map((event) => ({ ...event, id: `call-event-${++sequence.current}` }))].slice(-20));
     };
     const unsubscribe = client.subscribe(() => {
       const next = client.getSnapshot();
+      for (const source of ["microphone", "camera"] as const) if (previous.media.local[source].state !== "failed" && next.media.local[source].state === "failed") failedSource = source;
+      if (previous.media.screenShare.state !== "failed" && next.media.screenShare.state === "failed") failedSource = "screen";
       push(callEventToasts(previous, next));
       previous = next;
     });
     const offError = client.on("error", ({ error }) => {
-      const snapshot = client.getSnapshot();
-      const source = snapshot.media.screenShare.state === "failed" ? "screen" : snapshot.media.local.camera.state === "failed" ? "camera" : "microphone";
-      push([mediaFailureToast(error, source)]);
+      if (error.code.startsWith("media.")) push([mediaFailureToast(error, failedSource)]);
+      failedSource = undefined;
     });
     return () => {
       unsubscribe();
