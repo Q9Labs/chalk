@@ -20,7 +20,6 @@ export async function runManagedRelease({ arguments_, commandRunner = runCommand
   }
 
   const release = await prepareRelease({ allowedSecretIds, now, options });
-  if (options.environment === "nightly" && !release.manifest.images?.recorder_control) options.dispatcherConfigParameter = undefined;
   const binding = await dispatcherBinding({ commandRunner, options, dryRun: true });
   if (options.dryRun) {
     const proof = { ...buildDryRunProof({ ...release, options }), dispatcher_binding: binding };
@@ -90,6 +89,7 @@ async function dispatcherBinding({ commandRunner, options, dryRun }) {
 
 async function prepareRelease({ allowedSecretIds, now, options }) {
   const manifest = await loadManifest(options.manifestPath);
+  if (options.environment === "nightly" && !manifest.images?.recorder_control) options.dispatcherConfigParameter = undefined;
   const secretIds = await resolveAllowedSecretIds(allowedSecretIds);
   const exclusions = normalizeExclusions(options.excludedSecrets, secretIds);
   const requestedAt = now().toISOString();
