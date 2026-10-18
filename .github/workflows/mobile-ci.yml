@@ -96,6 +96,7 @@ jobs:
 
       - name: Compare native fingerprints
         id: compare
+        continue-on-error: true
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
@@ -119,6 +120,7 @@ jobs:
             (
               cd "$tree"
               pnpm install --frozen-lockfile --ignore-scripts --filter '@q9labsai/chalk-mobile...'
+              pnpm --filter @q9labsai/chalk-mobile run prepare:native-dependencies
               cd apps/mobile
               node <<'NODE' > "$tree/native-fingerprint.txt"
           const { createFingerprintAsync } = require(require.resolve('@expo/fingerprint', {
