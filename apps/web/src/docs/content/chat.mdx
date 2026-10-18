@@ -21,3 +21,17 @@ The checked-in contract permits up to five attachments per message and a maximum
 ### Pagination and recovery
 
 `chat.loadOlder()` can report `chat.cursor_reset_required` when the retained history floor moves. Reset the local cursor, render the retained history boundary, and load again. A pending send has `sending` or `failed` state; keep failed text visible so the user can choose whether to retry.
+
+### Transient reactions
+
+`client.reactions.send` publishes one of six typed reactions. The `reactions.active` snapshot contains visible events and their expiry; it is not a durable message stream.
+
+```ts
+await client.reactions.send("🎉");
+
+const active = client.getSnapshot().reactions.active;
+```
+
+The allowed values are `👍`, `❤️`, `😂`, `😮`, `😢`, and `🎉`. A Participant needs the `sendReaction` capability. Disable the affordance when `self.can("sendReaction")` is false and still handle a capability change between rendering and sending.
+
+Use the snapshot to render current reactions and let expired entries disappear. For durable feedback, send a chat message or persist the action in your backend.
