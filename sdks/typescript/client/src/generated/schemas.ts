@@ -356,6 +356,7 @@ export const CreateTenantRequestSchema = Schema.Struct({
     ).check(Schema.isMaxLength(32)),
   ),
   default_media_plane: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
+  external_id: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512)))),
   logo_key: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   media_plane_provider_config: Schema.optional(Schema.NullOr(MediaPlaneProviderConfigSchema)),
   name: Schema.String.check(Schema.isMinLength(1)),
@@ -812,6 +813,7 @@ export const TenantSchema = Schema.Struct({
   ).check(Schema.isMaxLength(32)),
   created_at: DateTimeStringSchema,
   default_media_plane: Schema.NullOr(Schema.String),
+  external_id: Schema.NullOr(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512))),
   id: TenantIdSchema,
   logo_key: Schema.NullOr(Schema.String),
   media_plane_provider_config: Schema.NullOr(MediaPlaneProviderConfigSchema),
@@ -1546,6 +1548,14 @@ export const FinalizeChatAttachmentUpload429ResponseHeadersSchema = Schema.Struc
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type FinalizeChatAttachmentUpload429ResponseHeaders = typeof FinalizeChatAttachmentUpload429ResponseHeadersSchema.Type;
+
+export const FindTenantByExternalIDQueryParamsSchema = Schema.Struct({
+  external_id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512)),
+});
+export type FindTenantByExternalIDQueryParams = typeof FindTenantByExternalIDQueryParamsSchema.Type;
+
+export const FindTenantByExternalIDResponseSchema = TenantSchema;
+export type FindTenantByExternalIDResponse = typeof FindTenantByExternalIDResponseSchema.Type;
 
 export const GetChatAttachmentDownloadPathParamsSchema = Schema.Struct({
   attachmentId: Schema.String,
@@ -4583,6 +4593,9 @@ export const FinalizeChatAttachmentUploadErrorSchema = Schema.Union([
   ServiceUnavailableErrorSchema,
 ]);
 export type FinalizeChatAttachmentUploadError = typeof FinalizeChatAttachmentUploadErrorSchema.Type;
+
+export const FindTenantByExternalIDErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidFieldErrorSchema, TenantNotFoundErrorSchema]);
+export type FindTenantByExternalIDError = typeof FindTenantByExternalIDErrorSchema.Type;
 
 export const GetChatAttachmentDownloadErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,

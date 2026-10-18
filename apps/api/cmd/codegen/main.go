@@ -591,6 +591,10 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 		schema["minLength"] = 36
 		schema["maxLength"] = 36
 	}
+	if fieldName == "external_id" {
+		schema["minLength"] = 1
+		schema["maxLength"] = 512
+	}
 	if fieldName == "email" {
 		schema["format"] = "email"
 	}
@@ -1028,7 +1032,7 @@ func isUUIDField(fieldName string) bool {
 }
 
 func isOpaqueIDField(schemaName string, fieldName string) bool {
-	if fieldName == "publication_id" || fieldName == "track_id" {
+	if fieldName == "publication_id" || fieldName == "track_id" || fieldName == "external_id" {
 		return true
 	}
 	return fieldName == "connection_id" && strings.HasPrefix(schemaName, "CloudflareSFU")
