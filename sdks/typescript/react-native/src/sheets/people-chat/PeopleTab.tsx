@@ -1,5 +1,5 @@
 import type { AdmissionRequest, Participant } from "@q9labsai/chalk-client";
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState, type RefObject } from "react";
 import { FlatList, Pressable, StyleSheet, View, type ListRenderItemInfo } from "react-native";
 import Animated from "react-native-reanimated";
 import { FaceAvatar } from "../../avatar/FaceAvatar";
@@ -86,7 +86,7 @@ export function PeopleTab(): React.JSX.Element {
     <View>
       {canMute ? (
         <View style={styles.controls}>
-          <HostChip disabled={loud.length === 0} expanded={confirmMuteAll} onPress={() => setConfirmMuteAll(true)} ref={muteAllRef} />
+          <HostChip disabled={loud.length === 0} expanded={confirmMuteAll} buttonRef={muteAllRef} onPress={() => setConfirmMuteAll(true)} />
         </View>
       ) : null}
       {roster.length >= SEARCH_FROM ? (
@@ -119,14 +119,14 @@ export function PeopleTab(): React.JSX.Element {
 
 const NONE: readonly AdmissionRequest[] = [];
 
-type HostChipProps = { readonly disabled: boolean; readonly expanded: boolean; readonly onPress: () => void; readonly ref: React.Ref<View> };
+type HostChipProps = { readonly disabled: boolean; readonly expanded: boolean; readonly onPress: () => void; readonly buttonRef: RefObject<View | null> };
 
 /** `.hcb`: Mute everyone, dimmed once everyone else is muted. */
-function HostChip({ disabled, expanded, onPress, ref }: HostChipProps): React.JSX.Element {
+function HostChip({ disabled, expanded, onPress, buttonRef }: HostChipProps): React.JSX.Element {
   const { colors } = useTheme();
   const press = usePressAnimation("pill");
   return (
-    <Pressable accessibilityHint="Asks you to confirm" accessibilityLabel="Mute everyone" accessibilityRole="button" accessibilityState={{ disabled, expanded }} disabled={disabled} onPress={onPress} onPressIn={press.onPressIn} onPressOut={press.onPressOut} ref={ref} testID="people.mute-all">
+    <Pressable accessibilityHint="Asks you to confirm" accessibilityLabel="Mute everyone" accessibilityRole="button" accessibilityState={{ disabled, expanded }} disabled={disabled} onPress={onPress} onPressIn={press.onPressIn} onPressOut={press.onPressOut} ref={buttonRef} testID="people.mute-all">
       {({ pressed }) => (
         <Animated.View style={[styles.chip, { backgroundColor: pressed || expanded ? colors.hover : colors.raised }, disabled ? styles.disabled : press.scaleStyle]}>
           <Icon color={colors.textMuted} name="micOff" size={16} />

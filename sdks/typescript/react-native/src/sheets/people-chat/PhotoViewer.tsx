@@ -1,5 +1,5 @@
 import type { ChatAttachment } from "@q9labsai/chalk-client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 import { AccessibilityInfo, findNodeHandle, Image, Pressable, StyleSheet, View } from "react-native";
 import Animated, { ReduceMotion, withTiming, type EntryExitAnimationFunction } from "react-native-reanimated";
 import { useBackHandler } from "../../frame/back-handler";
@@ -60,7 +60,7 @@ export function PhotoViewer({ viewing, onChange, onClose }: PhotoViewerProps): R
             </ChalkText>
           </View>
           <ViewerButton icon="dl" label={`Download ${photo.fileName}`} onPress={() => download(photo)} testID="chat.viewer.download" />
-          <ViewerButton icon="x" label="Close" onPress={onClose} ref={closeRef} testID="chat.viewer.close" />
+          <ViewerButton icon="x" label="Close" buttonRef={closeRef} onPress={onClose} testID="chat.viewer.close" />
         </View>
         <Pressable accessible={false} onPress={onClose} style={styles.stage}>
           <Photo attachment={photo} />
@@ -90,14 +90,14 @@ type ViewerButtonProps = {
   readonly label: string;
   readonly onPress: () => void;
   readonly testID: string;
-  readonly ref?: React.Ref<View>;
+  readonly buttonRef?: RefObject<View | null>;
 };
 
 /** `.lbb` on the phone: 44 pt, a faint white disc that brightens while pressed. */
-function ViewerButton({ icon, label, onPress, testID, ref }: ViewerButtonProps): React.JSX.Element {
+function ViewerButton({ icon, label, onPress, testID, buttonRef }: ViewerButtonProps): React.JSX.Element {
   const press = usePressAnimation("round");
   return (
-    <Pressable accessibilityLabel={label} accessibilityRole="button" onPress={onPress} onPressIn={press.onPressIn} onPressOut={press.onPressOut} ref={ref} testID={testID}>
+    <Pressable accessibilityLabel={label} accessibilityRole="button" onPress={onPress} onPressIn={press.onPressIn} onPressOut={press.onPressOut} ref={buttonRef} testID={testID}>
       {({ pressed }) => (
         <Animated.View style={[styles.button, { backgroundColor: pressed ? viewer.buttonPressed : viewer.button }, press.scaleStyle]}>
           <Icon color={viewer.text} name={icon} size={20} />
