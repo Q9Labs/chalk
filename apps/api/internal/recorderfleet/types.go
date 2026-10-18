@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -137,8 +138,10 @@ type ArchiveSpec struct {
 	Region string `json:"region"`
 }
 
+var archiveBucketPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$`)
+
 func (a ArchiveSpec) Validate() error {
-	if len(a.Bucket) < 3 || len(a.Bucket) > 63 || !validSlug(a.Bucket, 63) || !validSlug(a.Region, 32) || !validDigest("sha256:"+a.SHA256) {
+	if !archiveBucketPattern.MatchString(a.Bucket) || !validSlug(a.Region, 32) || !validDigest("sha256:"+a.SHA256) {
 		return ErrInvalidConfig
 	}
 	if a.Key != "recorder/capture/"+a.SHA256+".tar.gz" && a.Key != "recorder/render/"+a.SHA256+".tar.gz" {
