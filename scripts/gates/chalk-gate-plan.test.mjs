@@ -122,3 +122,12 @@ test("scoped builds include workspace dependencies without widening other lanes"
   assert.equal(docs.tasks.find((task) => task.id === "build").command, null);
   assert.deepEqual(docs.services, { api: false, sync: false });
 });
+
+test("call performance budgets follow call renderers and full gates", () => {
+  for (const file of ["apps/web/src/components/space/SpacePage.tsx", "sdks/typescript/react/src/index.ts", "packages/ui/src/button.tsx", "packages/whiteboard/src/index.ts", "pnpm-lock.yaml"]) {
+    const lane = createGatePlan([file]).tasks.find((task) => task.id === "call-performance");
+    assert.equal(lane.selected, true, file);
+    assert.deepEqual(lane.command, ["node", "apps/web/scripts/check-call-performance.mjs", "--gate"]);
+  }
+  assert.equal(createGatePlan(["docs/performance-budget.md"]).tasks.find((task) => task.id === "call-performance").selected, false);
+});

@@ -92,6 +92,8 @@ jobs:
       - name: Install browser runtime
         run: pnpm --dir sdks/typescript/client exec playwright install --with-deps chromium
 
+      # call-performance runs in the root gate for call rendering changes;
+      # GitHub enforces gzip budgets, while testbox enforces timing too.
       # API and Sync have their own jobs below, so the root gate leaves its service lane out.
       - name: Run the root gate against the pull request base
         env:

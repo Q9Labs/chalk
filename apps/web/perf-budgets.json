@@ -1,0 +1,221 @@
+{
+  "baselineCommit": "d3cb32526401f033327b8449d01050e600c84cd7",
+  "repeats": 5,
+  "sampleMs": 3000,
+  "devices": {
+    "laptop": {
+      "viewport": {
+        "width": 1366,
+        "height": 768
+      },
+      "cpu": 4,
+      "touch": false
+    },
+    "phone": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "cpu": 6,
+      "touch": true
+    }
+  },
+  "limits": {
+    "frameP95Ms": 159,
+    "droppedFramePercent": 82,
+    "longTasks": 11,
+    "blockingMs": 1308,
+    "interactionMs": 530,
+    "heapMiB": 19,
+    "domNodes": 6593,
+    "firstCallMs": 2499,
+    "jsGzipKiB": 743,
+    "cssGzipKiB": 54,
+    "routeJsGzipKiB": 464,
+    "routeCssGzipKiB": 32
+  },
+  "scenarios": {
+    "laptop": {
+      "calm-six": {
+        "frameP95Ms": 89,
+        "droppedFramePercent": 61,
+        "longTasks": 2,
+        "blockingMs": 25,
+        "interactionMs": 24,
+        "heapMiB": 16,
+        "domNodes": 1920,
+        "jsGzipKiB": 382,
+        "cssGzipKiB": 54
+      },
+      "grid-24": {
+        "frameP95Ms": 120,
+        "droppedFramePercent": 67,
+        "longTasks": 2,
+        "blockingMs": 25,
+        "interactionMs": 24,
+        "heapMiB": 16,
+        "domNodes": 6543,
+        "jsGzipKiB": 382,
+        "cssGzipKiB": 54
+      },
+      "panels": {
+        "frameP95Ms": 101,
+        "droppedFramePercent": 71,
+        "longTasks": 9,
+        "blockingMs": 160,
+        "interactionMs": 530,
+        "heapMiB": 17,
+        "domNodes": 2455,
+        "jsGzipKiB": 382,
+        "cssGzipKiB": 54
+      },
+      "spotlight-share": {
+        "frameP95Ms": 120,
+        "droppedFramePercent": 66,
+        "longTasks": 2,
+        "blockingMs": 25,
+        "interactionMs": 24,
+        "heapMiB": 15,
+        "domNodes": 2215,
+        "jsGzipKiB": 382,
+        "cssGzipKiB": 54
+      },
+      "board": {
+        "frameP95Ms": 110,
+        "droppedFramePercent": 63,
+        "longTasks": 2,
+        "blockingMs": 25,
+        "interactionMs": 337,
+        "heapMiB": 19,
+        "domNodes": 2290,
+        "jsGzipKiB": 743,
+        "cssGzipKiB": 54
+      },
+      "reactions": {
+        "frameP95Ms": 130,
+        "droppedFramePercent": 82,
+        "longTasks": 2,
+        "blockingMs": 25,
+        "interactionMs": 24,
+        "heapMiB": 16,
+        "domNodes": 1993,
+        "jsGzipKiB": 382,
+        "cssGzipKiB": 54
+      },
+      "reconnect": {
+        "frameP95Ms": 130,
+        "droppedFramePercent": 66,
+        "longTasks": 4,
+        "blockingMs": 58,
+        "interactionMs": 24,
+        "heapMiB": 16,
+        "domNodes": 1947,
+        "jsGzipKiB": 382,
+        "cssGzipKiB": 54
+      },
+      "first-load": {
+        "frameP95Ms": 159,
+        "droppedFramePercent": 72,
+        "longTasks": 9,
+        "blockingMs": 842,
+        "interactionMs": 24,
+        "heapMiB": 14,
+        "domNodes": 1920,
+        "firstCallMs": 1861,
+        "jsGzipKiB": 382,
+        "cssGzipKiB": 54
+      }
+    },
+    "phone": {
+      "calm-six": {
+        "frameP95Ms": 47,
+        "droppedFramePercent": 53,
+        "longTasks": 2,
+        "blockingMs": 25,
+        "interactionMs": 24,
+        "heapMiB": 15,
+        "domNodes": 1968,
+        "jsGzipKiB": 382,
+        "cssGzipKiB": 54
+      },
+      "grid-24": {
+        "frameP95Ms": 47,
+        "droppedFramePercent": 53,
+        "longTasks": 4,
+        "blockingMs": 39,
+        "interactionMs": 24,
+        "heapMiB": 16,
+        "domNodes": 6593,
+        "jsGzipKiB": 382,
+        "cssGzipKiB": 54
+      },
+      "panels": {
+        "frameP95Ms": 82,
+        "droppedFramePercent": 56,
+        "longTasks": 11,
+        "blockingMs": 351,
+        "interactionMs": 420,
+        "heapMiB": 17,
+        "domNodes": 2318,
+        "jsGzipKiB": 382,
+        "cssGzipKiB": 54
+      },
+      "spotlight-share": {
+        "frameP95Ms": 47,
+        "droppedFramePercent": 53,
+        "longTasks": 2,
+        "blockingMs": 25,
+        "interactionMs": 24,
+        "heapMiB": 16,
+        "domNodes": 2233,
+        "jsGzipKiB": 382,
+        "cssGzipKiB": 54
+      },
+      "board": {
+        "frameP95Ms": 44,
+        "droppedFramePercent": 9,
+        "longTasks": 2,
+        "blockingMs": 25,
+        "interactionMs": 144,
+        "heapMiB": 19,
+        "domNodes": 2554,
+        "jsGzipKiB": 743,
+        "cssGzipKiB": 54
+      },
+      "reactions": {
+        "frameP95Ms": 47,
+        "droppedFramePercent": 53,
+        "longTasks": 2,
+        "blockingMs": 25,
+        "interactionMs": 24,
+        "heapMiB": 16,
+        "domNodes": 2040,
+        "jsGzipKiB": 382,
+        "cssGzipKiB": 54
+      },
+      "reconnect": {
+        "frameP95Ms": 47,
+        "droppedFramePercent": 54,
+        "longTasks": 6,
+        "blockingMs": 136,
+        "interactionMs": 24,
+        "heapMiB": 16,
+        "domNodes": 1994,
+        "jsGzipKiB": 382,
+        "cssGzipKiB": 54
+      },
+      "first-load": {
+        "frameP95Ms": 110,
+        "droppedFramePercent": 63,
+        "longTasks": 9,
+        "blockingMs": 1308,
+        "interactionMs": 24,
+        "heapMiB": 15,
+        "domNodes": 1968,
+        "firstCallMs": 2499,
+        "jsGzipKiB": 382,
+        "cssGzipKiB": 54
+      }
+    }
+  }
+}

@@ -12,7 +12,9 @@
     "sync:public": "pnpm exec tsx scripts/sync-public-assets.ts",
     "preview": "vite preview",
     "test": "pnpm exec vitest run --config ./vitest.config.ts",
-    "check-types": "tsc-rs --project tsconfig.check-types.json --noEmit"
+    "check-types": "tsc-rs --project tsconfig.check-types.json --noEmit",
+    "perf:call": "node scripts/check-call-performance.mjs",
+    "perf:call:propose": "node scripts/propose-call-budgets.mjs"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.43.0",
