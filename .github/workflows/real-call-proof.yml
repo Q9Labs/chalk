@@ -1,6 +1,10 @@
 name: Real-call proof
 
 on:
+  schedule:
+    # Production otherwise gets a real call only on promote. Scheduled runs have
+    # no inputs, so they take the production and "smoke transcript" fallbacks below.
+    - cron: "41 5 * * *"
   workflow_dispatch:
     inputs:
       environment:
