@@ -1038,6 +1038,8 @@ export interface components {
       };
     };
     AdmitEpisodeParticipantRequest: {
+      /** @enum {string} */
+      admission?: "policy" | "direct";
       identity_id?: components["schemas"]["UUID"];
       metadata?:
         | {

@@ -174,7 +174,15 @@ func (r Request) Payload() json.RawMessage {
 	return payload
 }
 
+type AdmissionMode string
+
+const (
+	AdmissionPolicy AdmissionMode = "policy"
+	AdmissionDirect AdmissionMode = "direct"
+)
+
 type AdmitParticipantInput struct {
+	Admission     AdmissionMode
 	TenantID      utilities.ID
 	SpaceID       utilities.ID
 	EpisodeID     utilities.ID

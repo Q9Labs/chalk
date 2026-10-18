@@ -11227,6 +11227,10 @@
       "AdmitEpisodeParticipantRequest": {
         "additionalProperties": false,
         "properties": {
+          "admission": {
+            "enum": ["policy", "direct"],
+            "type": "string"
+          },
           "identity_id": {
             "$ref": "#/components/schemas/UUID"
           },
