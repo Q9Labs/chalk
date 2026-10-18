@@ -48,7 +48,8 @@ export function BottomSheet({ open, onClose, accessibilityLabel, children, title
   const { colors } = useTheme();
   const layout = useDeviceLayout();
   const reduceMotion = useReducedMotion();
-  const keyboard = useAnimatedKeyboard({ isStatusBarTranslucentAndroid: true, isNavigationBarTranslucentAndroid: true });
+  // Expo 55 apps are edge-to-edge on Android, so the keyboard height already counts from the screen edge.
+  const keyboard = useAnimatedKeyboard();
   const [mounted, setMounted] = useState(open);
   const height = useSharedValue(0);
   const offset = useSharedValue(layout.height);
