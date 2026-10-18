@@ -8,6 +8,14 @@ export type DevScenario = {
   readonly menu?: "leave";
   /** Content drawn in a tile in place of the camera, keyed by participant id. */
   readonly videoSlots?: Readonly<Record<string, ReactNode>>;
+  /** Content drawn in place of a person's shared screen, keyed by the sharer's participant id. */
+  readonly screenSlots?: Readonly<Record<string, ReactNode>>;
+  /** The shared screen's width over height (S1 to S4). A real share is drawn as 16:9. */
+  readonly shareAspect?: number;
+  /** Spotlight (G1) or Grid (G2), as if the user had chosen it. */
+  readonly layout?: "spotlight" | "grid";
+  /** Pins this participant, as if the user had pinned them. */
+  readonly pinned?: string;
 };
 
 const empty: DevScenario = {};

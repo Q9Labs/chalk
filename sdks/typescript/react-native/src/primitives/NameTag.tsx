@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { StyleSheet, View } from "react-native";
 import { useMeasuredRef } from "../frame/measurement";
-import { Icon } from "../icons/Icon";
+import { Icon, type IconName } from "../icons/Icon";
 import { fixed, fontFamilies, type } from "../theme/tokens";
 import { ChalkText } from "./ChalkText";
 
@@ -9,6 +9,8 @@ export type NameTagProps = {
   readonly name: string;
   readonly muted?: boolean;
   readonly pinned?: boolean;
+  /** A leading icon for a tile that isn't a person, such as `share` on a shared screen or `pen` on the board. */
+  readonly icon?: IconName;
   /** Raised hand; `handOrder` shows the place in the queue when more than one hand is up. */
   readonly handRaised?: boolean;
   readonly handOrder?: number;
@@ -16,12 +18,13 @@ export type NameTagProps = {
 };
 
 /** The mockup's name tag (`.tag`): bottom-left of a tile, white on the dark overlay in both themes. */
-export const NameTag = memo(function NameTag({ name, muted = false, pinned = false, handRaised = false, handOrder, testID }: NameTagProps): React.JSX.Element {
+export const NameTag = memo(function NameTag({ name, muted = false, pinned = false, icon, handRaised = false, handOrder, testID }: NameTagProps): React.JSX.Element {
   const tagRef = useMeasuredRef<View>(testID, styles.tag);
   return (
     <View pointerEvents="none" style={styles.slot}>
       <View ref={tagRef} style={styles.tag} testID={testID}>
         {pinned ? <Icon color={fixed.overlayText} name="pin" size={14} /> : null}
+        {icon ? <Icon color={fixed.overlayText} name={icon} size={14} /> : null}
         <ChalkText color={fixed.overlayText} numberOfLines={1} style={styles.name} variant="label">
           {name}
         </ChalkText>
