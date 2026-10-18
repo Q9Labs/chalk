@@ -15,13 +15,14 @@ const escapePathForRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&
 // Watching the entire monorepo makes cold iOS development bundles unnecessarily slow.
 config.watchFolders = [workspaceNodeModules, chalkClientRoot, sdkReactNativeRoot, facehashRoot, whiteboardRoot];
 config.resolver.nodeModulesPaths = [appNodeModules, workspaceNodeModules];
+// Native modules must load once. pnpm links the SDK its own copies of its peers, so Metro skips
+// those and resolves every one from the app.
+const appOwnedPeers = ["@hugeicons/core-free-icons", "@hugeicons/react-native", "expo-audio", "expo-haptics", "react-native-gesture-handler", "react-native-reanimated", "react-native-safe-area-context", "react-native-svg", "react-native-worklets"];
 config.resolver.extraNodeModules = {
-  "@hugeicons/core-free-icons": path.resolve(appNodeModules, "@hugeicons/core-free-icons"),
-  "@hugeicons/react-native": path.resolve(appNodeModules, "@hugeicons/react-native"),
   "@q9labsai/chalk-whiteboard": whiteboardRoot,
-  "react-native-svg": path.resolve(appNodeModules, "react-native-svg"),
+  ...Object.fromEntries(appOwnedPeers.map((name) => [name, path.resolve(appNodeModules, name)])),
 };
-config.resolver.blockList = [...(config.resolver.blockList ?? []), new RegExp(`^${escapePathForRegex(path.join(sdkNodeModules, "react-native-svg"))}\\/.*$`), new RegExp(`^${escapePathForRegex(path.join(sdkNodeModules, "@hugeicons"))}\\/.*$`)];
+config.resolver.blockList = [...(config.resolver.blockList ?? []), ...appOwnedPeers.map((name) => new RegExp(`^${escapePathForRegex(path.join(sdkNodeModules, name))}\\/.*$`))];
 config.transformer = {
   ...config.transformer,
   getTransformOptions: async () => ({
