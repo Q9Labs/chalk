@@ -164,7 +164,9 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.Lifecycle do
   def activate_lifecycle_participant do
     """
     update participants
-    set status = 'active', joined_at = now(), updated_at = now()
+    set status = 'active', joined_at = now(), left_at = null,
+        first_joined_at = coalesce(first_joined_at, now()),
+        last_left_reason = null, updated_at = now()
     where tenant_id = $1
       and space_id = $2
       and episode_id = $3
@@ -178,7 +180,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.Lifecycle do
   def complete_lifecycle_participant do
     """
     update participants
-    set status = 'left', left_at = now(), updated_at = now()
+    set status = 'left', left_at = now(), last_left_reason = 'left', updated_at = now()
     where tenant_id = $1
       and space_id = $2
       and episode_id = $3
@@ -226,7 +228,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.Lifecycle do
       for update
     ), completed as (
       update participants p
-      set status = 'left', left_at = $4, updated_at = now()
+      set status = 'left', left_at = $4, last_left_reason = 'episode_ended', updated_at = now()
       from departing d
       where p.id = d.id
       returning p.id, p.identity_id, p.space_id, p.episode_id, p.name, p.status,
