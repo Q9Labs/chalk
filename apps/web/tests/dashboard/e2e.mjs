@@ -222,7 +222,7 @@ try {
     }
     // A deliberate rejoin after a leave gets a fresh seat, not the replay seat.
     // Sync is not running in this harness; seed its completed leave state.
-    sql(`update participants set status='left', last_left_at=now() where id='${grant.subject.participant_id}'`);
+    sql(`update participants set status='left', left_at=now() where id='${grant.subject.participant_id}'`);
     const rejoin = await post(ada, "/dashboard-api/call", { ...join, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
     assert.equal(rejoin.status, 200, await rejoin.clone().text());
     assert.notEqual((await rejoin.json()).access.subject.participant_id, grant.subject.participant_id);
