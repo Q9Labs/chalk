@@ -45,6 +45,7 @@ the job's fencing generation, retaining the Capture epoch. The grant is never
 reusable, and the recovery lease and its heartbeats cannot exceed source expiry.
 
 A successful command means the attempt is queued, not that completion succeeded.
-Inspect the Capture job and Recording through the existing diagnostics. A failed
-or expired recovery stays terminal; it does not receive another retry budget.
+Inspect the Capture job and Recording in the API logs and Sync spans described
+in [Production observability](../observability.md). A failed or expired recovery
+stays terminal; it does not receive another retry budget.
 Runtime rollback preserves the audit migration.

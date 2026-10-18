@@ -1,12 +1,11 @@
 # Chalk API
 
 Go control-plane API. Keep `cmd/main.go` thin; put router, response helpers,
-middleware, and domain packages under `internal/*`. Follow
-`docs/redesign/north-star.md`: composable hexagonal boundaries, swappable
-`MediaPlane` / `SyncEngine` ports, provider details in adapters, public REST
-routes under one `/v1` boundary while operational routes like `/healthz` stay
-unversioned. Existing domains include identity, tenancy, Spaces, Episode
-lifecycle, recordings, transcripts, and webhooks.
+middleware, and domain packages under `internal/*`. Keep composable boundaries
+and swappable `MediaPlane` and `SyncEngine` ports. Put provider details in
+adapters. Keep public REST routes under `/v1`; leave operational routes such as
+`/healthz` unversioned. Existing domains include identity, tenancy, Spaces,
+Episode lifecycle, recordings, transcripts, and webhooks.
 
 ## Development
 

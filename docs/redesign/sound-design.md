@@ -6,7 +6,7 @@ Status: aspirational design reference. Chalk currently ships no sound asset set;
 the ten interchangeable sets and full prompt catalog below are exploration, not
 a description of the implemented product contract.
 
-_Companion to [north-star.md](./north-star.md). Sound is part of value #2, **Fast**: every state signal feels instant, and a well-placed 90ms tone lands before any pixel does. This doc defines the event vocabulary, the shared musical grammar, ten sound sets, and every sound as a copy-paste-ready ElevenLabs prompt._
+_Companion to [theory.md](../../theory.md). This doc defines the event vocabulary, the shared musical grammar, ten sound sets, and each sound as an ElevenLabs prompt._
 
 ---
 

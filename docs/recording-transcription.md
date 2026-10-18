@@ -1,34 +1,10 @@
 # Recording and transcription
 
-Chalk's managed recording path is implemented and has end-to-end evidence from
-a separate qualification environment. The production-placement delta below is
-not yet deployed or cloud-qualified. An
-Episode can move from a durable start command through encrypted capture,
-rendering, download, managed transcription, and deletion of temporary source
-objects. This document records the architecture, the decisions behind it, the
-measured cost model, and the boundary of that qualification.
+Recordings move from a durable start command through encrypted capture,
+rendering, download, transcription, and temporary-source cleanup. This document
+describes the architecture, processing flow, cost model, and release boundaries.
 
-## Production implementation status (2026-09-17)
-
-| Area                                                            | Implemented                                                                                                                                                                              | Remaining evidence and its scope                                                               |
-| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Existing encrypted capture, rendering, verification and cleanup | Preserved; real end-to-end qualification described below                                                                                                                                 | Reuse that evidence; recheck boundaries changed by the selected release                        |
-| Shared backend controls                                         | Separate capture/render fleet processes and direct-TLS issuer; dedicated control image, rootless units, private persistent state, per-state process locks, versioned inputs and rollback | Host headroom, direct peer identity and restart proof in the approved environment              |
-| Capacity                                                        | Zero spare; ten capture and ten render nodes; rendering does not consume live-capture admission                                                                                          | Ten-way measurements substantiate capacity/throughput claims, not baseline correctness         |
-| Startup cadence                                                 | Successful durable transitions fast-follow at 100 ms for at most 32 steps; idle/error polling remains 5 seconds                                                                          | Recheck changed control placement; fast-follow is not a seconds-level provider-ready guarantee |
-| Scheduled Space preparation                                     | Durable revision-fenced prepare/get/cancel; five-minute lead and five-minute no-show grace; atomic consumption on real recording start                                                   | Integration adoption and scheduled smoke                                                       |
-| ASR                                                             | Direct DeepInfra native Whisper turbo; explicit optional Cloudflare fallback, disabled in the cost-first profile                                                                         | Approved provider corpus, privacy acceptance and exact adapter qualification                   |
-| Smaller capture profile                                         | Ordered 1 GiB / 2 GiB shared-CPU candidates, disabled without evidence; `c-2` retained                                                                                                   | Paced cloud comparison required only before enabling a smaller candidate                       |
-
-Earlier automated reviews timed out without a verdict and provide no review
-coverage. The GPT-6 Astra/xhigh review of `79174929` against `c0272cc4` completed
-on 2026-09-17. Its three verified findings are addressed by follow-up fixes:
-cropped ASR timestamps stay chunk-relative, deadline-driven capture completion
-uses the scoped reservation deadline as durable authority, and render-claim
-replay validates the same render deadline as the initial claim. Regression
-coverage includes later audio chunks, deadline/epoch rejection and completion
-replay, and replay of a lost render-claim response. This code review does not
-replace the changed-boundary release evidence listed above.
+## Space recording preparation
 
 Preparation uses the tenant-scoped Space `recording-preparation` resource.
 `PATCH` accepts `starts_at` and `expected_revision` (`0` for the initial intent);
@@ -183,36 +159,6 @@ Sources: [DigitalOcean Droplet pricing](https://www.digitalocean.com/pricing/dro
 [Cloudflare R2 pricing](https://developers.cloudflare.com/r2/pricing/), and
 [AWS KMS pricing](https://aws.amazon.com/kms/pricing/).
 
-## Prior qualification environment
-
-The 2026-09-10 qualification used the immutable recorder release built from
-commit `0f2c5d0a` and exercised the real API, Sync, Cloudflare SFU/R2/Workers AI,
-AWS KMS/Lambda, and DigitalOcean pools:
-
-- two browser participants exchanged bidirectional audio and video while a real
-  capture worker subscribed through the SFU;
-- ordered audio/video bundles and eleven contiguous explicit gap bundles closed
-  without a timeline discontinuity;
-- the CPU renderer completed on its first attempt and produced a 22,823,192-byte
-  MP4 with a 556.372-second probed duration;
-- API list, get, and signed download returned the same bytes as the independently
-  read R2 object;
-- two transcription chunks completed on their first attempt, finalization
-  produced a 19-cue transcript, and API/download bytes matched R2;
-- all five cleanup jobs completed on their first attempt and every temporary
-  transcript/source object returned not found;
-- capture and render returned naturally to zero active jobs, reservations, and
-  nodes, with future demand cleared.
-
-The proof also caught and corrected a coupled-release failure: the render worker
-image and API's allowed presentation UI hash must move together. That invariant
-is now treated as part of the release tuple, not mutable deployment trivia.
-
-This qualification does **not** claim completion of live in-Space captions,
-first-party mobile recording/transcript wiring, every regional load ceiling,
-every possible worker-loss timing, or managed observability and notification
-configuration. Those remain separate product and operational milestones.
-
 ## Recorder releases
 
 Use the [Release, Nightly and Promote workflows](managed-release.md).
@@ -297,9 +243,8 @@ For a changed API component, it:
    release readback must pass afterward.
 
 The release fails if binding or verification fails, even if the host deployment
-succeeded. The former separate deploy wrapper paused the scheduler and
-called the controller locally; do not use it for managed deployments. Preserve
-any existing scheduler pause until runtime and binding verification pass.
+succeeded. Preserve any existing scheduler pause until runtime and binding
+verification pass.
 If deployment fails, inspect the failure and restore a clean
 baseline before retrying with the same manifest. A failed Lambda apply after
 the log-tag step can leave that tag ahead of the bound release; restore the tag

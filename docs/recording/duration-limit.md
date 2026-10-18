@@ -53,8 +53,3 @@ by an unrelated job timeout or a failed Capture.
   "export": { "status": "none", "retryable": false }
 }
 ```
-
-The existing Recording webhook is unchanged. An integrator can read the
-Recording to inspect its source stop reason. This change preserves captured
-media on future clean duration stops; it does not recover old terminal failures
-or guarantee success when provider cleanup, storage or lease authority fails.

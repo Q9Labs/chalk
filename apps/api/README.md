@@ -2,10 +2,8 @@
 
 Go control-plane API for Chalk.
 
-The architecture follows
-[`../../docs/redesign/north-star.md`](../../docs/redesign/north-star.md):
-thin process wiring in `cmd/main.go`, HTTP as an inbound adapter, domain logic
-behind composable boundaries, and provider-specific details kept in adapters.
+Keep process wiring thin in `cmd/main.go`, HTTP in inbound adapters, domain
+logic behind composable boundaries, and provider-specific details in adapters.
 
 Public REST routes live under one `/v1` boundary. Operational routes stay
 unversioned:
