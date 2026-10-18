@@ -69,7 +69,8 @@ try {
   const pageCount = await pageButtons.count();
   assert.ok(pageCount >= 3, "the phone grid exercises first, middle and last pages");
   for (const index of [0, 1, pageCount - 1]) {
-    await pageButtons.nth(index).click();
+    await pageButtons.nth(index).focus();
+    await page.keyboard.press("Enter");
     await page.waitForTimeout(300);
     const offPage = gridStage.locator(':scope > div > [aria-hidden="true"]');
     assert.ok((await offPage.count()) > 0);
