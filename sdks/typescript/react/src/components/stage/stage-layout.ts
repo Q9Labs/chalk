@@ -33,7 +33,7 @@ export interface SpotlightFitOptions {
   readonly minStripHeight: number;
   readonly maxStripHeight: number;
   readonly stripAspect: number;
-  readonly primaryAspect?: number;
+  readonly primaryAspect?: number | null;
   readonly content?: boolean;
   readonly wideIds?: readonly string[];
   readonly maxPerPage?: number;
@@ -134,7 +134,8 @@ export function fitGrid(box: StageBox, ids: readonly string[], options: GridFitO
   return { frames, pageCount: 1, perPage: keys.length, overflowCount };
 }
 
-function contain(box: StageBox, aspect: number): StageBox {
+function contain(box: StageBox, aspect: number | null): StageBox {
+  if (aspect === null) return box;
   const width = Math.min(box.width, box.height * aspect);
   return { width, height: width / aspect };
 }
@@ -142,7 +143,7 @@ function contain(box: StageBox, aspect: number): StageBox {
 /** Content takes whichever placement gives it more visible area; people justify into the remainder. */
 export function fitSpotlight(box: StageBox, primaryId: string, stripIds: readonly string[], options: SpotlightFitOptions): StageGeometry {
   const phone = box.width <= 640;
-  const aspect = options.primaryAspect ?? WIDESCREEN;
+  const aspect = options.primaryAspect === undefined ? WIDESCREEN : options.primaryAspect;
   if (!stripIds.length) {
     const aspect = clamp(box.width / box.height, 4 / 3, WIDESCREEN);
     const fitted = contain(box, aspect);

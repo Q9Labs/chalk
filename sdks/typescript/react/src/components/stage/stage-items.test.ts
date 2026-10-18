@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { choosePrimary, type StageItem, type PrimaryContext } from "./stage-items";
-import { DEFAULT_GRID_OPTIONS, fitGrid } from "./stage-layout";
+import { DEFAULT_GRID_OPTIONS, DEFAULT_SPOTLIGHT_OPTIONS, fitGrid, fitSpotlight } from "./stage-layout";
 
 const person: StageItem = { kind: "participant", id: "person", participant: { id: "person", displayName: "Nora", isActiveSpeaker: true } };
 const board: StageItem = { kind: "whiteboard", id: "whiteboard" };
@@ -67,4 +67,12 @@ describe("Justified rows", () => {
     expect(board?.width).toBeCloseTo((neighbor?.width ?? 0) * 2 + 8);
     expect(neighbor?.x).toBeCloseTo((board?.width ?? 0) + 8);
   });
+});
+
+it("lets a phone board fill its allotted area instead of forcing a video aspect", () => {
+  const box = { width: 358, height: 692 };
+  const geometry = fitSpotlight(box, "whiteboard", ["a", "b", "c", "d", "e", "f"], { ...DEFAULT_SPOTLIGHT_OPTIONS, content: true, primaryAspect: null });
+  const board = geometry.frames[0];
+  expect(board?.width).toBe(box.width);
+  expect(board?.height).toBe(box.height - Math.round(box.height * 0.3) - 8);
 });
