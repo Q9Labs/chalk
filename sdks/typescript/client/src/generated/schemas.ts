@@ -1655,6 +1655,13 @@ export type GetTenantPathParams = typeof GetTenantPathParamsSchema.Type;
 export const GetTenantResponseSchema = TenantSchema;
 export type GetTenantResponse = typeof GetTenantResponseSchema.Type;
 
+export const GetTenant429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type GetTenant429ResponseHeaders = typeof GetTenant429ResponseHeadersSchema.Type;
+
 export const GetTranscriptPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
   transcript_id: TranscriptIdSchema,
@@ -1906,6 +1913,13 @@ export type ListTenantsQueryParams = typeof ListTenantsQueryParamsSchema.Type;
 
 export const ListTenantsResponseSchema = TenantListSchema;
 export type ListTenantsResponse = typeof ListTenantsResponseSchema.Type;
+
+export const ListTenants429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type ListTenants429ResponseHeaders = typeof ListTenants429ResponseHeadersSchema.Type;
 
 export const ListTranscriptsPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
@@ -4682,7 +4696,7 @@ export const GetSpaceRecordingPreparationErrorSchema = Schema.Union([
 ]);
 export type GetSpaceRecordingPreparationError = typeof GetSpaceRecordingPreparationErrorSchema.Type;
 
-export const GetTenantErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema, TenantNotFoundErrorSchema]);
+export const GetTenantErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema, TenantNotFoundErrorSchema]);
 export type GetTenantError = typeof GetTenantErrorSchema.Type;
 
 export const GetTranscriptDocumentErrorSchema = Schema.Union([
@@ -4888,7 +4902,7 @@ export const ListSpacesErrorSchema = Schema.Union([
 ]);
 export type ListSpacesError = typeof ListSpacesErrorSchema.Type;
 
-export const ListTenantsErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, PaginationInvalidCursorErrorSchema, PaginationInvalidPageSizeErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
+export const ListTenantsErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, PaginationInvalidCursorErrorSchema, PaginationInvalidPageSizeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
 export type ListTenantsError = typeof ListTenantsErrorSchema.Type;
 
 export const ListTranscriptsErrorSchema = Schema.Union([
@@ -5332,6 +5346,7 @@ export const ChalkOperationPolicies = {
   getEpisode: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getSpacePublicInvite: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   getSpacePublicInviteArrival: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  getTenant: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getWebhookDelivery: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   getWebhookEndpoint: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   initiateChatAttachmentUpload: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -5340,6 +5355,7 @@ export const ChalkOperationPolicies = {
   leaveSpacePublicInviteArrival: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   listEpisodes: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   listSpacePublicAdmissionRequests: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  listTenants: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   listWebhookDeliveries: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   listWebhookEndpoints: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   preparePublicSpaceEntrance: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

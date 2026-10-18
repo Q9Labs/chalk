@@ -189,6 +189,7 @@ func listTenantsEndpoint(service TenantService) Endpoint[listTenantsRequest, ten
 		return response, nil
 	}).
 		Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedReadRateLimit).
 		Parameters(
 			APIParameterContract{Name: "page_size", In: "query", Type: "integer", Required: false},
 			APIParameterContract{Name: "cursor", In: "query", Type: "string", Required: false},
@@ -200,6 +201,7 @@ func listTenantsEndpoint(service TenantService) Endpoint[listTenantsRequest, ten
 			apiErrorServiceUnavailable,
 			apiErrorInvalidPageSize,
 			apiErrorInvalidCursor,
+			apiErrorRateLimited,
 			apiErrorInternal,
 		).
 		MapErrors(tenantEndpointAPIError)
@@ -223,6 +225,7 @@ func getTenantEndpoint(service TenantService, authorizer TenantAuthorizer) Endpo
 		return newTenantResponse(tenant), nil
 	}).
 		Auth(APIAuthSessionOrBearer).
+		RateLimit(authenticatedReadRateLimit).
 		Parameters(APIParameterContract{Name: "tenant_id", In: "path", Type: "string", Required: true}).
 		Responds(http.StatusOK, "Tenant", tenantResponse{}).
 		Errors(
@@ -231,6 +234,7 @@ func getTenantEndpoint(service TenantService, authorizer TenantAuthorizer) Endpo
 			apiErrorServiceUnavailable,
 			apiErrorInvalidTenantID,
 			apiErrorTenantNotFound,
+			apiErrorRateLimited,
 			apiErrorInternal,
 		).
 		MapErrors(tenantEndpointAPIError)
