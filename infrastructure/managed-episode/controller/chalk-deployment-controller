@@ -157,7 +157,7 @@ reject_symlink_components() {
     if [[ -L "$current" ]]; then
       case "$current" in
         /tmp|/var) ;;
-        *) fail "path contains a symlink" ;;
+        *) fail "path contains a symlink: ${current}" ;;
       esac
     fi
   done
@@ -626,6 +626,8 @@ validate_host_quadlets() {
 install_runtime_files() {
   local runtime_source="$1"
   require_directory "$runtime_source"
+  reject_symlink_components "${runtime_home}/.config/containers"
+  reject_symlink_components "${runtime_home}/.config/systemd"
   if [[ "$direct_user_commands" != true ]]; then
     install -d -m 0700 -o "$runtime_user" -g "$(id -gn "$runtime_user")" \
       "${runtime_home}/.config" "${runtime_home}/.config/containers" "${runtime_home}/.config/systemd"

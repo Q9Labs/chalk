@@ -395,6 +395,19 @@ if group_enabled runtime-ownership; then
           runuser -u nobody -- test -r "$file" || fail "runtime user cannot read $file"
         done
       done
+      for linked_parent in .config .config/containers .config/systemd; do
+        rm -rf -- "${TEST_RUNTIME_HOME}/.config"
+        target="${fixture_root}/symlink-target-${linked_parent//\//-}"
+        install -d -m 0755 -o root -g root "$target"
+        install -d -m 0700 -o nobody -g "$(id -gn nobody)" "$(dirname "${TEST_RUNTIME_HOME}/${linked_parent}")"
+        runuser -u nobody -- ln -s "$target" "${TEST_RUNTIME_HOME}/${linked_parent}"
+        state="${fixture_root}/symlink-state-${linked_parent//\//-}"
+        mkdir -p "$state"
+        expect_failure run_controller "$state" "${fixture_root}/request.json" "$manifest" ok
+        grep -F "path contains a symlink: ${TEST_RUNTIME_HOME}/${linked_parent}" "${fixture_root}/expected-failure.log" >/dev/null || fail "symlinked runtime parent was not rejected: $linked_parent"
+        [[ "$(stat -c '%u:%g:%a' "$target")" == 0:0:755 ]] || fail "symlink target ownership or permissions changed: $linked_parent"
+        [[ ! -e "${state}/active-release.json" ]] || fail "symlinked runtime parent was activated: $linked_parent"
+      done
     )
   else
     printf 'SKIP runtime-ownership requires Linux root and runuser\n'
