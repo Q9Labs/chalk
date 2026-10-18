@@ -129,7 +129,7 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
         ) : null}
         {status === "connecting" ? (
           <div role="status" className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--chalk-tile)] text-[var(--chalk-muted-text)]">
-            <span className="h-6 w-6 rounded-full border-2 border-current border-t-transparent motion-safe:animate-spin" />
+            <span className="h-[18px] w-[18px] rounded-full border-2 border-[var(--chalk-line-strong)] border-t-[var(--chalk-text)] motion-safe:animate-spin motion-safe:[animation-duration:.9s] motion-reduce:border-t-[var(--chalk-muted-text)]" />
             <p className="font-medium text-[var(--chalk-text)]">Connecting to {sharedByName}’s screen…</p>
           </div>
         ) : null}
