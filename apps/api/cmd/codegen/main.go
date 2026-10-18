@@ -375,8 +375,12 @@ func (g *generator) schemaFromType(t reflect.Type, request bool, currentName str
 			"items": map[string]any{"type": "string"},
 		}
 	}
-	if isOptionalInt64(t) || isOptionalInt32(t) {
+	if isOptionalInt64(t) {
 		return map[string]any{"type": []string{"integer", "null"}}
+	}
+	// The Space service rejects an explicit null for these durations.
+	if isOptionalInt32(t) {
+		return map[string]any{"type": "integer"}
 	}
 	if isOptionalCORSOrigins(t) {
 		return map[string]any{
@@ -731,10 +735,10 @@ func nullableHelperField(schemaName string, fieldName string, t reflect.Type) bo
 	if isOptionalStrings(t) {
 		return false
 	}
-	if isOptionalInt64(t) || isOptionalInt32(t) {
+	if isOptionalInt64(t) {
 		return true
 	}
-	if isOptionalCORSOrigins(t) {
+	if isOptionalInt32(t) || isOptionalCORSOrigins(t) {
 		return false
 	}
 	return isOptionalJSON(t) || isOptionalTimeRequest(t)

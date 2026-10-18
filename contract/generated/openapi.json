@@ -13554,13 +13554,13 @@
             "type": ["object", "array", "string", "number", "boolean", "null"]
           },
           "default_episode_duration_seconds": {
-            "type": ["integer", "null"]
+            "type": "integer"
           },
           "linger_window_seconds": {
-            "type": ["integer", "null"]
+            "type": "integer"
           },
           "maximum_episode_duration_seconds": {
-            "type": ["integer", "null"]
+            "type": "integer"
           },
           "media_plane": {
             "minLength": 1,

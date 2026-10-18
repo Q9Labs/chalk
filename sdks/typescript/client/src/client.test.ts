@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import { createChalkEffectClient } from "./client";
-import { RecordingIdSchema, TenantIdSchema, TranscriptSchema } from "./generated/schemas";
+import { RecordingIdSchema, SpaceIdSchema, TenantIdSchema, TranscriptSchema, UpdateSpaceRequestBodySchema } from "./generated/schemas";
 
 // Production Transcript list shape, with synthetic IDs, timestamps and artifact details.
 const transcript = {
@@ -49,5 +49,70 @@ describe("generated Transcript contract", () => {
 
   it("still rejects an unknown Transcript state", () => {
     expect(() => Schema.decodeUnknownSync(TranscriptSchema)({ ...transcript, status: "unknown" })).toThrow();
+  });
+});
+
+// The API accepts a bare number or an omitted field for these durations and rejects an explicit null.
+const spaceDurationFields = ["default_episode_duration_seconds", "maximum_episode_duration_seconds", "linger_window_seconds"] as const;
+
+const space = {
+  id: "22222222-2222-4222-8222-222222222222",
+  tenant_id: "11111111-1111-4111-8111-111111111111",
+  created_by_user_id: null,
+  name: "Renamed",
+  slug: "weekly-sync",
+  media_plane: "cloudflare_sfu",
+  recording_policy: "off",
+  transcription_policy: "off",
+  admission_policy: {},
+  metadata: {},
+  recurring_policy: {},
+  roles: [],
+  archived: false,
+  default_episode_duration_seconds: 3600,
+  maximum_episode_duration_seconds: 86400,
+  linger_window_seconds: 300,
+  created_at: "2026-10-02T08:00:00Z",
+  updated_at: "2026-10-02T09:00:00Z",
+};
+
+describe("generated Space update contract", () => {
+  const decodeUpdate = Schema.decodeUnknownSync(UpdateSpaceRequestBodySchema);
+
+  it("renames a Space through the client with a name-only body", async () => {
+    const bodies: unknown[] = [];
+    const client = await Effect.runPromise(
+      createChalkEffectClient({
+        baseUrl: "https://chalk.test",
+        fetch: async (input, init) => {
+          bodies.push(await new Request(input, init).json());
+          return Response.json(space);
+        },
+      }),
+    );
+    const result = await Effect.runPromise(
+      client.spaces.updateSpace({
+        params: { tenant_id: Schema.decodeUnknownSync(TenantIdSchema)(space.tenant_id), space_id: Schema.decodeUnknownSync(SpaceIdSchema)(space.id) },
+        payload: { name: "Renamed" },
+      }),
+    );
+    expect(bodies).toEqual([{ name: "Renamed" }]);
+    expect(result.name).toBe("Renamed");
+  });
+
+  it("accepts a body that omits every duration", () => {
+    expect(decodeUpdate({ name: "Renamed" })).toEqual({ name: "Renamed" });
+  });
+
+  it.each(spaceDurationFields)("accepts a number for %s", (field) => {
+    expect(decodeUpdate({ [field]: 3600 })).toEqual({ [field]: 3600 });
+  });
+
+  it.each(spaceDurationFields)("rejects null for %s", (field) => {
+    expect(() => decodeUpdate({ name: "Renamed", [field]: null })).toThrow();
+  });
+
+  it.each(spaceDurationFields)("rejects the internal {Set, Value} object for %s", (field) => {
+    expect(() => decodeUpdate({ [field]: { Set: true, Value: 3600 } })).toThrow();
   });
 });
