@@ -114,9 +114,11 @@ export function BottomSheet({ open, onClose, accessibilityLabel, children, title
   const onLayout = useCallback(
     (event: LayoutChangeEvent) => {
       const first = height.value === 0;
-      height.value = event.nativeEvent.layout.height;
+      const measured = event.nativeEvent.layout.height;
+      height.value = measured;
       if (!first || !open) return;
-      offset.value = reduceMotion ? 0 : height.value;
+      // A JS-thread write reaches the UI thread later, so reading height.value back here would still give 0.
+      offset.value = reduceMotion ? 0 : measured;
       show();
     },
     [height, offset, open, reduceMotion, show],
