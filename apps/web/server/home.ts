@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { SpaceIdSchema } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
-import { attendance, live, run } from "./engine";
+import { attendance, live, publicInvite, run } from "./engine";
 import { callDTO } from "./dto";
 import type { HomeAction, HomeDTO } from "../src/lib/dashboard/contracts";
 export async function homePage(engine: Engine, cursor?: string): Promise<HomeDTO> {
@@ -10,12 +10,12 @@ export async function homePage(engine: Engine, cursor?: string): Promise<HomeDTO
     calls: await Promise.all(
       result.spaces.map(async (space) => {
         const params = { tenant_id: engine.tenantId, space_id: space.id };
-        const [invite, episodes] = await Promise.all([run(engine.api.spaces.getSpacePublicInvite({ params })), run(engine.api.episodes.listEpisodes({ params, query: { page_size: 1 } }))]);
+        const [invite, episodes] = await Promise.all([publicInvite(engine, params), run(engine.api.episodes.listEpisodes({ params, query: { page_size: 1 } }))]);
         const latest = episodes.episodes[0];
         const people = latest ? await attendance(engine, { ...params, episode_id: latest.id }) : null;
         return {
           ...callDTO(space),
-          inviteUrl: invite.canonical_url,
+          inviteUrl: invite?.canonical_url ?? null,
           lastActiveAt: latest ? (latest.ended_at ?? latest.started_at) : null,
           recentPeople: people
             ? people.participants

@@ -186,6 +186,19 @@ try {
   const unnamed = await post(ada, "/dashboard-api/home", { action: "create-call", admission: "anyone", idempotencyKey: crypto.randomUUID() }, session.csrfToken);
   assert.equal(unnamed.status, 200, await unnamed.clone().text());
   assert.equal((await unnamed.json()).call.name, "New call");
+  const unicode = await post(ada, "/dashboard-api/home", { action: "create-call", name: "اجتماع Réunion", admission: "anyone", idempotencyKey: crypto.randomUUID() }, session.csrfToken);
+  assert.equal(unicode.status, 200, await unicode.clone().text());
+  const unicodeId = (await unicode.json()).call.id;
+  const rawInvite = await fetch(`${process.env.DASHBOARD_TEST_API_ORIGIN}/v1/tenants/${firstTenant}/spaces/${unicodeId}/public-invite`, { headers: { Authorization: "Bearer fixture-dashboard-service-token-not-a-secret" } });
+  assert.equal(rawInvite.status, 400, "Reproduce engine Unicode invite rejection");
+  const unicodeHome = await ada.request("/dashboard-api/home");
+  assert.equal(unicodeHome.status, 200, await unicodeHome.clone().text());
+  assert.equal((await unicodeHome.json()).calls.find((call) => call.id === unicodeId).inviteUrl, null);
+  const unicodeCall = await ada.request(`/dashboard-api/call?spaceId=${unicodeId}`);
+  assert.equal(unicodeCall.status, 200, await unicodeCall.clone().text());
+  assert.equal((await unicodeCall.json()).inviteUrl, null);
+  // Remove the regression fixture from later Home pagination assertions.
+  assert.equal((await post(ada, "/dashboard-api/home", { action: "archive-call", spaceId: unicodeId }, session.csrfToken)).status, 200);
   const malikTenant = secondTenant;
   const created = await post(ada, "/dashboard-api/home", { action: "create-call", name: "Original", admission: "anyone", idempotencyKey: crypto.randomUUID() }, session.csrfToken);
   assert.equal(created.status, 200, await created.clone().text());
@@ -276,6 +289,8 @@ try {
   const ownDeliveries = await post(ada, "/dashboard-api/developer", { action: "webhook-deliveries", webhookId }, session.csrfToken);
   assert.equal(ownDeliveries.status, 200, await ownDeliveries.clone().text());
   assert.deepEqual((await ownDeliveries.json()).deliveries, []);
+  const enabledHook = await post(ada, "/dashboard-api/developer", { action: "update-webhook", webhookId, revision: (await updatedHook.json()).webhook.revision, enabled: true, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
+  assert.equal(enabledHook.status, 200, await enabledHook.clone().text());
   const testDelivery = await post(ada, "/dashboard-api/developer", { action: "test-webhook", webhookId, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
   assert.equal(testDelivery.status, 200, await testDelivery.clone().text());
   const testDeliveryId = (await testDelivery.json()).deliveryId;

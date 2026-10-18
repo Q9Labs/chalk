@@ -103,13 +103,13 @@ export type TranscriptDTO = { id: string; status: string; languages: readonly st
 export type KeyDTO = { id: string; name: string; prefix: string; scopes: readonly string[]; expiresAt: string; revokedAt: string | null; lastUsedAt: string | null };
 export type WebhookDTO = { id: string; name: string; url: string; enabled: boolean; revision: number; eventTypes: readonly string[]; lastDelivery?: DeliveryDTO | null };
 export type AttendanceDTO = { kind: "available"; participants: { id: string; name: string; kind: "user" | "agent" | "guest"; externalId: string | null; isYou: boolean; firstJoinedAt: string; lastLeftAt: string | null }[] };
-export type HomeCallDTO = CallDTO & { inviteUrl: string; lastActiveAt: string | null; recentPeople: { id: string; name: string }[] };
+export type HomeCallDTO = CallDTO & { inviteUrl: string | null; lastActiveAt: string | null; recentPeople: { id: string; name: string }[] };
 export type CueDTO = { startMs: number; endMs: number; text: string; speaker: { name: string | null; participantRef: string } | null };
 export type DeliveryDTO = { id: string; state: string; createdAt: string; eventType: string; attempts: number; status: number | null };
 export type HomeDTO = { calls: HomeCallDTO[]; live: LiveDTO[]; nextCursor: string | null };
 export type CallPageDTO = {
   call: CallDTO;
-  inviteUrl: string;
+  inviteUrl: string | null;
   episodes: (EpisodeDTO & { participantCount: number; recordings: RecordingDTO[]; recordingsNextCursor: string | null })[];
   live: LiveDTO["episode"];
   nextCursor: string | null;
