@@ -28,6 +28,35 @@ export async function incomingAudioLevel() {
   return Math.max(0, ...audio.map((row) => row.audioLevel ?? 0));
 }
 
+// Chromium receives packets without a sink, but only decodes audio (and updates
+// inbound audioLevel/energy) while the received track is being played.
+export async function playIncomingAudio() {
+  const tracks = window.proofClient
+    .getSnapshot()
+    .media.remote.filter((entry) => entry.track.kind === "audio")
+    .map((entry) => entry.track);
+  if (!tracks.length) throw new Error("SDK guest has no received audio track to play");
+  const audio = document.createElement("audio");
+  audio.srcObject = new MediaStream(tracks);
+  document.body.append(audio);
+  await audio.play();
+}
+
+export async function audioEvidence() {
+  const reports = await Promise.all(window.proofConnections.map((connection) => connection.getStats()));
+  return {
+    contextState: window.proofAudio?.context.state,
+    tracks: window.proofConnections
+      .flatMap((connection) => connection.getSenders())
+      .filter((sender) => sender.track?.kind === "audio")
+      .map(({ track }) => ({ enabled: track.enabled, muted: track.muted, readyState: track.readyState })),
+    stats: reports
+      .flatMap((report) => [...report.values()])
+      .filter((row) => row.kind === "audio" && ["media-source", "outbound-rtp", "inbound-rtp"].includes(row.type))
+      .map((row) => ({ type: row.type, bytesSent: row.bytesSent, packetsSent: row.packetsSent, bytesReceived: row.bytesReceived, packetsReceived: row.packetsReceived, audioLevel: row.audioLevel, totalAudioEnergy: row.totalAudioEnergy, totalSamplesDuration: row.totalSamplesDuration })),
+  };
+}
+
 export function remoteVideoFrames() {
   const tile = document.querySelector('[aria-label="Video tile for Proof guest 1"]');
   const video = tile?.querySelector("video");

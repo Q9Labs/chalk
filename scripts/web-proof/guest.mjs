@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { createRun, loadConfig } from "../prod-proof/runtime.mjs";
 import { launchGuests, stats } from "../prod-proof/media.mjs";
+import { save } from "../prod-proof/runtime.mjs";
+import { playIncomingAudio } from "./media.mjs";
 
 export async function prepareGuest(directory) {
   const run = await createRun(await loadConfig(), directory, undefined, process.env.CHALK_E2E_RUN_ID);
@@ -12,6 +14,15 @@ export async function prepareGuest(directory) {
   ready.catch(() => {});
   return {
     ready,
+    async playAudio() {
+      const guest = await ready;
+      await save(`${directory}/sdk-before-playback.json`, await stats(guest.pages));
+      await guest.pages[0].evaluate(playIncomingAudio);
+    },
+    async evidence(web) {
+      const guest = await ready;
+      await save(`${directory}/media.json`, { web, sdk: await stats(guest.pages) });
+    },
     async media() {
       const guest = await ready;
       const [rows] = await stats(guest.pages);
@@ -24,10 +35,11 @@ export async function prepareGuest(directory) {
       const guest = await ready;
       await guest.pages[0].evaluate(() => {
         document.body.style.cssText = "background:#0f172a;color:white;font:24px sans-serif;padding:24px";
-        document.body.replaceChildren();
+        const view = document.createElement("main");
+        document.body.append(view);
         const heading = document.createElement("h1");
         heading.textContent = "SDK proof participant — receiving the real web app";
-        document.body.append(heading);
+        view.append(heading);
         const snapshot = window.proofClient.getSnapshot();
         for (const entry of snapshot.media.remote.filter((entry) => entry.track.kind === "video")) {
           const video = document.createElement("video");
@@ -35,7 +47,7 @@ export async function prepareGuest(directory) {
           video.muted = true;
           video.style.cssText = "width:90%;max-width:1000px";
           video.srcObject = new MediaStream([entry.track]);
-          document.body.append(video);
+          view.append(video);
           void video.play();
         }
       });

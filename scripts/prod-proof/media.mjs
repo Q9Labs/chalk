@@ -153,6 +153,7 @@ function browserStats() {
       trackIdentifier: row.trackIdentifier,
       bytesSent: row.bytesSent,
       bytesReceived: row.bytesReceived,
+      packetsReceived: row.packetsReceived,
       framesEncoded: row.framesEncoded,
       framesDecoded: row.framesDecoded,
       frameWidth: row.frameWidth,
@@ -161,6 +162,7 @@ function browserStats() {
       qualityLimitationReason: row.qualityLimitationReason,
       audioLevel: row.audioLevel,
       totalAudioEnergy: row.totalAudioEnergy,
+      totalSamplesDuration: row.totalSamplesDuration,
     };
   }
   return (async () => {

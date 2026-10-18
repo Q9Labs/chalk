@@ -1,7 +1,7 @@
 import { expect } from "e2e";
 import { test } from "@e2e-dev/web";
 import { prepareGuest } from "../scripts/web-proof/guest.mjs";
-import { incomingAudioLevel, remoteVideoFrames } from "../scripts/web-proof/media.mjs";
+import { audioEvidence, incomingAudioLevel, remoteVideoFrames } from "../scripts/web-proof/media.mjs";
 
 // The web app has invite entry, not account sign-in. The runner authenticates to
 // the proof Tenant to create this Space; the browser never receives its API key.
@@ -24,9 +24,11 @@ test("the real web app and SDK guest receive live video and audio", async ({ app
     await expect.poll(() => guest.media().then((media) => media.frames), { timeout: 30_000 }).toBeGreaterThan(5);
     const received = await guest.media();
     await expect.poll(() => guest.media().then((media) => media.frames), { timeout: 15_000 }).toBeGreaterThan(received.frames + 5);
+    await guest.playAudio();
     await app.screenshot("participant-a");
     await guest.screenshot();
     await expect.poll(() => guest.media().then((media) => media.audioLevel), { timeout: 30_000 }).toBeGreaterThan(0);
+    await guest.evidence(await browser.evaluate(audioEvidence));
     await screen.getByRole("button", /^(Leave|Leave space)$/).click();
     await screen.getByRole("button", "Leave Space").click();
     await guest.leave();
