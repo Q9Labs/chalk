@@ -121,9 +121,9 @@ export function SpaceView({
   const [commandError, setCommandError] = useState<string | ClientFailure | null>(null);
   const [commandSource, setCommandSource] = useState<"microphone" | "camera" | "screen">();
   const onCommandError = (failure: ClientFailure | string | null, source?: "microphone" | "camera" | "screen") => {
+    if (!failure && commandError && typeof commandError === "object") callToasts.dismissFailure(commandError.code);
     setCommandError(failure);
     setCommandSource(source);
-    if (failure && typeof failure !== "string") playSound("error");
   };
   const layout = onLayoutChange ? (controlledLayout ?? uncontrolledLayout) : uncontrolledLayout;
   const feature = (name: keyof SpaceViewFeatures) => features?.[name] !== false;
@@ -149,7 +149,7 @@ export function SpaceView({
     setUncontrolledLayout(nextLayout);
     onLayoutChange?.(nextLayout);
   };
-  const playSound = useSoundCues(feature("sounds") && soundsEnabled);
+  useSoundCues(feature("sounds") && soundsEnabled);
   const prefersReducedMotion = usePrefersReducedMotion();
   const drawer = useDrawerPresence(activePanel, prefersReducedMotion ? 0 : DRAWER_EXIT_MS);
   const runCommand = useCallback(async (command: () => Promise<unknown>) => {
@@ -181,6 +181,7 @@ export function SpaceView({
       ? [{ id: "space-command-error", message: displayedCommandError, type: "error" }]
       : [];
   const dismissCommandError = () => {
+    if (commandError && typeof commandError === "object") callToasts.dismissFailure(commandError.code);
     setCommandError(null);
     onDismissCommandError?.();
   };
@@ -252,7 +253,12 @@ export function SpaceView({
             {drawer.panel === "admission" && feature("admission") ? <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} /> : null}
           </CallCard>
         }
-        toasts={<ToastStack toasts={[...callToasts.toasts, ...commandToasts]} onDismiss={(id) => (id === "space-command-error" ? dismissCommandError() : callToasts.dismiss(id))} />}
+        toasts={
+          <ToastStack
+            toasts={[...callToasts.toasts.filter((toast) => !(typeof displayedCommandError === "object" && displayedCommandError && toast.failureCode === displayedCommandError.code)), ...commandToasts]}
+            onDismiss={(id) => (id === "space-command-error" ? dismissCommandError() : callToasts.dismiss(id))}
+          />
+        }
         mediaOutput={
           <div className="[&>div]:top-[68px] [&>div>button]:h-11 [&>div>button]:shadow-[0_8px_24px_rgba(0,0,0,.4)]">
             <AudioOutput resumeAudioLabel="Your browser paused the sound. Click to hear the call" />

@@ -23,7 +23,7 @@ export function mediaFailureToast(failure: ClientFailure | null, source?: "micro
       type: "error",
       message: (
         <>
-          <b style={{ fontWeight: 600 }}>Allow {device} access.</b> Click the camera icon in the address bar and allow {source === "camera" ? "Camera" : source === "microphone" ? "Microphone" : "Camera and Microphone"}.
+          <b style={{ fontWeight: 600 }}>Chalk can’t use your {device}.</b> Click the camera icon in the address bar and allow {source === "camera" ? "Camera" : source === "microphone" ? "Microphone" : "Camera and Microphone"}.
         </>
       ),
     };
@@ -75,18 +75,6 @@ export function callEventToasts(previous: SpaceSnapshot, next: SpaceSnapshot): O
           </>
         ),
       });
-    if (old && old.role !== person.role && person.role === "host")
-      events.push({
-        icon: <CallEventIcon kind="host" />,
-        message: (
-          <>
-            <b style={{ fontWeight: 600 }} dir="auto">
-              {person.displayName}
-            </b>{" "}
-            is now the host
-          </>
-        ),
-      });
     if (old?.media.screenShare === "active" && person.media.screenShare === "inactive")
       events.push({
         icon: <CallEventIcon kind="screen" />,
@@ -100,8 +88,26 @@ export function callEventToasts(previous: SpaceSnapshot, next: SpaceSnapshot): O
         ),
       });
   }
+  const departedHost = previous.participants.roster.find((person) => person.role === "host" && !after.has(person.participantId));
+  if (previous.self.role !== "host" && next.self.role === "host")
+    events.push({
+      icon: <CallEventIcon kind="host" />,
+      message: (
+        <>
+          {departedHost ? (
+            <>
+              <b style={{ fontWeight: 600 }} dir="auto">
+                {departedHost.displayName}
+              </b>{" "}
+              left.{" "}
+            </>
+          ) : null}
+          You’re now the host.
+        </>
+      ),
+    });
   for (const person of previous.participants.roster)
-    if (!after.has(person.participantId) && person.participantId !== next.self.participantId)
+    if (!after.has(person.participantId) && person.participantId !== next.self.participantId && !(person === departedHost && previous.self.role !== "host" && next.self.role === "host"))
       events.push({
         icon: <Avatar name={person.displayName} size="xs" style={{ width: 28, height: 28 }} generated animated={false} />,
         message: (
@@ -129,8 +135,19 @@ export function callEventToasts(previous: SpaceSnapshot, next: SpaceSnapshot): O
   for (const source of ["microphone", "camera"] as const) {
     if (previous.media.selection[source] !== next.media.selection[source]) {
       const devices = source === "camera" ? next.media.devices.cameras : next.media.devices.microphones;
+      const oldDevices = source === "camera" ? previous.media.devices.cameras : previous.media.devices.microphones;
+      const disconnected = oldDevices.find((device) => device.deviceId === previous.media.selection[source]);
+      if (!disconnected || devices.some((device) => device.deviceId === disconnected.deviceId)) continue;
       const selected = devices.find((device) => device.deviceId === next.media.selection[source]);
-      if (selected) events.push({ icon: <CallEventIcon kind={source ?? "microphone"} />, message: `Switched to ${selected.label || source}` });
+      if (selected)
+        events.push({
+          icon: <CallEventIcon kind={source} />,
+          message: (
+            <>
+              {disconnected.label || source} disconnected. Switched to <b style={{ fontWeight: 600 }}>{selected.label || source}</b>
+            </>
+          ),
+        });
     }
   }
   return events;

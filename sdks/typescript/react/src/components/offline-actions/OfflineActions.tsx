@@ -25,8 +25,11 @@ export function OfflineActions({ reconnecting: requestedReconnecting = false }: 
     void client.offline.setPolicy("send");
   }, [client]);
 
+  const count = offline.pending.length;
+  const messagesOnly = offline.pending.every((action) => action.kind === "chat_message");
+  const pendingDetail = count ? `${count} ${messagesOnly ? (count === 1 ? "message" : "messages") : count === 1 ? "action" : "actions"} will send when you’re back` : undefined;
   // Keep the layer mounted so recovery lifts the blur rather than removing it abruptly.
-  if (reconnecting || (!offline.decisionNeeded && !offline.notice)) return <CallLimbo overlay blocking={false} active={reconnectingNoticeDue} message={offlineNoticeText(offline.pending.length, online)} />;
+  if (reconnecting || (!offline.decisionNeeded && !offline.notice)) return <CallLimbo overlay blocking={false} active={reconnectingNoticeDue} message={offlineNoticeText(0, online)} detail={pendingDetail} />;
   if (offline.notice && offline.notice !== dismissedNotice) return <ToastStack toasts={[{ id: "offline-notice", message: offline.notice }]} onDismiss={() => setDismissedNotice(offline.notice ?? null)} />;
   return null;
 }

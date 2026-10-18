@@ -5,7 +5,7 @@ import { preloadWhiteboardStylesheet } from "@q9labsai/chalk-whiteboard/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { ChalkProvider } from "../../bindings/context";
-import { useCan, useConnection, useMedia, useOffline, useRecording, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
+import { useCan, useConnection, useMedia, useRecording, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
 import { chalkThemeStyle, type ChalkColorScheme, type ChalkTheme } from "../../theme";
 import { useWhiteboardSceneSubscription } from "../../internal/useWhiteboardSceneSubscription";
 import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../../whiteboard/wire-adapters";
@@ -119,7 +119,6 @@ function SpaceExperience(
   const client = useSpaceClient();
   const connection = useConnection();
   const recorded = useRecording().current?.status === "recording";
-  const offline = useOffline();
   const previousStatus = useRef(connection.status);
   const hasObservedStatus = useRef(false);
   const autoJoinAttempted = useRef(false);
@@ -187,8 +186,7 @@ function SpaceExperience(
     return <CallLimbo theme={{ ...props.theme, colorScheme: props.resolvedColorScheme }} recorded={recorded} spaceName={spaceName} message={joinError ?? `Joining ${spaceName}…`} action={joinError ? { label: "Try again", onClick: retryAutomaticJoin, disabled: retryPending } : undefined} />;
   if (connection.status === "joining") return <CallLimbo theme={{ ...props.theme, colorScheme: props.resolvedColorScheme }} recorded={recorded} spaceName={spaceName} message={`Joining ${spaceName}…`} />;
   if (connection.status === "failed") {
-    const failureReason = offline.notice ? "You're offline. Check your connection." : (joinError ?? connection.lastError?.message ?? "Check your connection and try again.");
-    return <StatusSurface phase="failed" callName={callName} reason={failureReason} theme={statusTheme} onHome={props.onHome} onReportProblem={props.onReportProblem} onRetry={retryAutomaticJoin} retryPending={retryPending} />;
+    return <StatusSurface phase="failed" callName={callName} theme={statusTheme} onHome={props.onHome} onReportProblem={props.onReportProblem} onRetry={retryAutomaticJoin} retryPending={retryPending} />;
   }
   if (connection.status === "leaving" || connection.status === "left")
     return <StatusSurface phase={episodeEnded ? "episode-ended" : "left"} callName={callName} theme={statusTheme} onReportProblem={props.onReportProblem} onRejoin={props.onRejoin ?? retryAutomaticJoin} rejoinDisabled={connection.status === "leaving" || retryPending} onHome={props.onHome} />;

@@ -53,7 +53,7 @@ describe("OfflineActions", () => {
     vi.useFakeTimers();
     const { container } = await mount(withOffline("reconnecting", {}));
     await act(async () => vi.advanceTimersByTime(RECONNECTING_GRACE_MS));
-    expect(container.querySelector('[data-call-limbo][aria-hidden="false"] [role="status"]')?.textContent).toBe("Reconnecting. 2 actions will send when you're back.");
+    expect(container.querySelector('[data-call-limbo][aria-hidden="false"] [role="status"]')?.textContent).toContain("Reconnecting…");
     expect(container.querySelector("[role=dialog]")).toBeNull();
     expect(offlineNoticeText(1, false)).toBe("You're offline. 1 action will send when you're back.");
     expect(offlineNoticeText(0, false)).toBe("You're offline. Reconnecting…");

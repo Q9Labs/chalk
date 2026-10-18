@@ -5,7 +5,7 @@ import type { Toast } from "./ToastStack";
 
 export function useCallToasts() {
   const client = useSpaceClient();
-  const [toasts, setToasts] = useState<readonly Toast[]>([]);
+  const [toasts, setToasts] = useState<readonly (Toast & { readonly failureCode?: string })[]>([]);
   const sequence = useRef(0);
   useEffect(() => {
     setToasts([]);
@@ -21,18 +21,40 @@ export function useCallToasts() {
       push(callEventToasts(previous, next));
       previous = next;
     });
+    let disposed = false;
     const offError = client.on("error", ({ error }) => {
-      if (error.code.startsWith("media.")) {
+      if (!error.code.startsWith("media.")) return;
+      // The client emits its error before publishing the changed media snapshot.
+      queueMicrotask(() => {
+        if (disposed) return;
         const toast = mediaFailureToast(error, failedSource);
-        if (toast) push([toast]);
-      }
-      failedSource = undefined;
+        if (toast) {
+          const id = `call-event-${++sequence.current}`;
+          const action =
+            failedSource === "screen" && error.recoverable
+              ? {
+                  label: "Try again",
+                  onClick: () => {
+                    // The client error event owns any retry failure and its sound.
+                    void client.media.setScreenShareEnabled(true).then(
+                      () => setToasts((current) => current.filter((event) => event.id !== id)),
+                      () => undefined,
+                    );
+                  },
+                }
+              : undefined;
+          setToasts((current) => [...current, { ...toast, action, failureCode: error.code, id }].slice(-20));
+        }
+        failedSource = undefined;
+      });
     });
     return () => {
+      disposed = true;
       unsubscribe();
       offError();
     };
   }, [client]);
   const dismiss = useCallback((id: string) => setToasts((current) => current.filter((toast) => toast.id !== id)), []);
-  return { toasts, dismiss };
+  const dismissFailure = useCallback((code: string) => setToasts((current) => current.filter((toast) => toast.failureCode !== code)), []);
+  return { toasts, dismiss, dismissFailure };
 }

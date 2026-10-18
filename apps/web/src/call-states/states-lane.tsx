@@ -3,8 +3,7 @@ import { Chalk, CallLimbo, CallReady, ToastStack, type ChalkProps } from "@q9lab
 import { SpaceClientError, type ClientFailure } from "@q9labsai/chalk-client";
 import { useCallLink } from "../../../../sdks/typescript/react/src/components/call-limbo/useCallLink";
 import { Avatar } from "../../../../sdks/typescript/react/src/components/atomic/Avatar";
-import { CallEventIcon } from "../../../../sdks/typescript/react/src/components/toast-stack/CallEventIcon";
-import { mediaFailureToast } from "../../../../sdks/typescript/react/src/components/toast-stack/call-events";
+import { callEventToasts, mediaFailureToast } from "../../../../sdks/typescript/react/src/components/toast-stack/call-events";
 import { ReconnectingOverlay } from "../../../../sdks/typescript/react/src/components/reconnecting-overlay/ReconnectingOverlay";
 import { PEOPLE, SPACE_NAME, createCallStateClient, liveSnapshot } from "./fixtures";
 import type { CallState } from "./states";
@@ -63,8 +62,8 @@ function StatesCall({ terminal, light = false, ready = false, reconnecting = fal
           <button onClick={() => void client.recording.start()}>Simulate recording</button>
           <button
             onClick={() => {
-              client.updateSnapshot((current) => ({ ...current, media: { ...current.media, local: { ...current.media.local, camera: { ...current.media.local.camera, state: "failed" } } } }));
               client.emit("error", { error: new SpaceClientError({ code: "media.permission_denied", recoverable: true, message: "Camera blocked" }) });
+              client.updateSnapshot((current) => ({ ...current, media: { ...current.media, local: { ...current.media.local, camera: { ...current.media.local.camera, state: "failed" } } } }));
             }}
           >
             Simulate blocked camera
@@ -75,7 +74,46 @@ function StatesCall({ terminal, light = false, ready = false, reconnecting = fal
     </div>
   );
 }
-function ToastFixture({ message, icon, error = false, light = false }: { readonly message: ReactNode; readonly icon?: ReactNode; readonly error?: boolean; readonly light?: boolean }) {
+function toastForFixture(id: string) {
+  if (id === "camera" || id === "share-blocked") return mediaFailureToast({ code: "media.permission_denied", message: "Blocked", recoverable: true }, id === "camera" ? "camera" : "screen") ?? { message: "" };
+  if (id === "muted")
+    return {
+      message: (
+        <>
+          <b style={{ fontWeight: 600 }}>Nora</b> muted you. Unmute when you’re ready.
+        </>
+      ),
+      icon: <Avatar name="Nora" size="xs" style={{ width: 28, height: 28 }} animated={false} />,
+    };
+  const previous = liveSnapshot({ others: id === "joined" ? [] : PEOPLE.slice(0, 1) });
+  if (id === "host") {
+    const before = { ...previous, participants: { ...previous.participants, roster: previous.participants.roster.map((p) => (p.participantId === previous.self.participantId ? p : { ...p, role: "host", displayName: "Nora" })) } };
+    const next = { ...previous, self: { ...previous.self, role: "host" }, participants: { ...previous.participants, roster: previous.participants.roster.filter((p) => p.participantId === previous.self.participantId) } };
+    const toast = callEventToasts(before, next)[0];
+    if (!toast) throw new Error("No host transfer event");
+    return toast;
+  }
+  if (id === "device") {
+    const old = { deviceId: "airpods", label: "AirPods Pro" };
+    const selected = { deviceId: "built-in", label: "MacBook Air Microphone" };
+    const before = { ...previous, media: { ...previous.media, selection: { ...previous.media.selection, microphone: old.deviceId }, devices: { ...previous.media.devices, microphones: [old, selected] } } };
+    const next = { ...before, media: { ...before.media, selection: { ...before.media.selection, microphone: selected.deviceId }, devices: { ...before.media.devices, microphones: [selected] } } };
+    const toast = callEventToasts(before, next)[0];
+    if (!toast) throw new Error("No device disconnect event");
+    return toast;
+  }
+  const populated = liveSnapshot({ others: PEOPLE.slice(0, 1) });
+  const next =
+    id === "hand"
+      ? { ...previous, participants: { ...previous.participants, roster: previous.participants.roster.map((p) => (p.participantId === previous.self.participantId ? p : { ...p, handRaised: true })) } }
+      : id === "recording"
+        ? { ...previous, recording: { ...previous.recording, current: { recordingId: "fixture", status: "recording" satisfies "recording", failureCode: null } } }
+        : populated;
+  const toast = callEventToasts(previous, next)[0];
+  if (!toast) throw new Error(`No production event for ${id}`);
+  return toast;
+}
+function ToastFixture({ message, icon, action, error = false, light = false }: { readonly message: ReactNode; readonly icon?: ReactNode; readonly action?: { readonly label: string; readonly onClick: () => void }; readonly error?: boolean; readonly light?: boolean }) {
   const [visible, setVisible] = useState(true);
   return (
     <main data-chalk data-chalk-theme={light ? "light" : "dark"} className="chalk-root relative h-dvh bg-[var(--chalk-canvas)]" style={{ fontSize: 14, lineHeight: 1.4 }}>
@@ -95,6 +133,7 @@ function ToastFixture({ message, icon, error = false, light = false }: { readonl
               icon,
               type: error ? "error" : "info",
               duration: Infinity,
+              action,
             },
           ]}
           onDismiss={() => setVisible(false)}
@@ -190,32 +229,16 @@ export const STATES_LANE: readonly CallState[] = [
       ["hand", "Nora raised a hand", false],
       ["recording", "Recording started. Everyone in the call can see it.", false],
       ["camera", "Chalk can’t use your camera. Click the camera icon in the address bar and allow Camera.", true],
+      ["host", "Nora left. You’re now the host.", false],
+      ["device", "AirPods Pro disconnected. Switched to MacBook Air Microphone", false],
       ["muted", "Nora muted you. Unmute when you’re ready.", false],
       ["share-blocked", "Your screen couldn’t be shared. Allow screen recording for your browser in System Settings, then try again.", true],
     ] as const
   ).flatMap(([id, message, error]) => {
-    const renderToast = (light: boolean) => (
-      <ToastFixture
-        light={light}
-        message={
-          id === "recording" ? (
-            <>
-              <b style={{ fontWeight: 600 }}>Recording started.</b> Everyone in the call can see it.
-            </>
-          ) : (
-            message
-          )
-        }
-        icon={
-          id === "joined" || id === "muted" ? (
-            <Avatar name="Nora" size="xs" style={{ width: 28, height: 28 }} animated={false} />
-          ) : (
-            <CallEventIcon kind={id === "camera" ? "camera" : id === "share-blocked" ? "screen" : id === "recording" ? "recording" : id === "hand" ? "hand" : "microphone"} error={error || id === "recording"} />
-          )
-        }
-        error={error}
-      />
-    );
+    const renderToast = (light: boolean) => {
+      const toast = toastForFixture(id);
+      return <ToastFixture light={light} message={toast.message} icon={toast.icon} action={id === "share-blocked" ? { label: "Try again", onClick: () => undefined } : undefined} error={error} />;
+    };
     return [
       { id: `states-toast-${id}`, title: message, render: () => renderToast(false) },
       { id: `states-toast-${id}-light`, title: `${message} Light`, render: () => renderToast(true) },

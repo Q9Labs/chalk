@@ -97,7 +97,7 @@ it("maps typed command failures to source-specific recovery guidance", async () 
   for (const source of ["camera", "microphone"]) {
     await page.getByRole("button", { name: source, exact: true }).click();
     for (const [code, copy] of [
-      ["media.permission_denied", `Allow ${source} access`],
+      ["media.permission_denied", `Chalk can’t use your ${source}. Click the camera icon in the address bar and allow ${source === "camera" ? "Camera" : "Microphone"}.`],
       ["media.device_not_found", `No ${source} found`],
       ["media.device_busy", `Your ${source} is being used by another app`],
       ["media.device_constraint_invalid", `Your ${source} doesn’t support these settings`],
@@ -150,4 +150,13 @@ it("waits two seconds for reconnecting without blocking message input", async ()
   await message.fill("Still writing while reconnecting");
   expect(await message.inputValue()).toBe("Still writing while reconnecting");
   expect(await message.evaluate((element) => element === document.activeElement)).toBe(true);
+}, 30_000);
+
+it("names the blocked camera when its error arrives before the media snapshot", async () => {
+  await page.goto(`${origin}/call-states.html?state=states-events`);
+  await page.getByRole("button", { name: "Simulate blocked camera", exact: true }).click();
+  const notice = page.getByRole("alert");
+  await notice.waitFor();
+  expect(await notice.count()).toBe(1);
+  expect(await notice.textContent()).toContain("Chalk can’t use your camera. Click the camera icon in the address bar and allow Camera.");
 }, 30_000);

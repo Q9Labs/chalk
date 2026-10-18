@@ -63,7 +63,10 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
         <span className="flex gap-0.5">
           <button type="button" className="chalk-copy" aria-label={showQR ? "Hide QR code" : "Show QR code"} aria-expanded={showQR} aria-controls={`${id}-qr`} onClick={() => setShowQR(!showQR)}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
-              <path d="M3 3h6v6H3zM15 3h6v6h-6zM3 15h6v6H3zM15 15h2v2h-2zM19 15h2v6h-6v-2" />
+              <rect x="3" y="3" width="7" height="7" rx="1.5" />
+              <rect x="14" y="3" width="7" height="7" rx="1.5" />
+              <rect x="3" y="14" width="7" height="7" rx="1.5" />
+              <path d="M14 14h3v3M21 14v.01M14 21h3M21 17v4h-1" />
             </svg>
           </button>
           <ChalkCopyButton text={link} announcement="Copied" />
