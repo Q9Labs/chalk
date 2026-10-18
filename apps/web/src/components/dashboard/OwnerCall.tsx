@@ -23,12 +23,12 @@ function mediaToken(access: OwnerAccessDTO["access"]): string | undefined {
 function ownerAccess(spaceId: string): GetAccess {
   const joinKey = intentKey();
   let current: string | undefined;
-  return async ({ reason }) => {
+  return async ({ reason, replaceMediaConnection }) => {
     const { access } =
       reason === "join"
         ? await act("call", { action: "join", spaceId, idempotencyKey: joinKey })
-        : // A retry asks for a new media connection, so it sends no token.
-          await act("call", { action: "refresh-access", spaceId, ...(reason === "refresh" && current ? { currentMediaToken: current } : {}) });
+        : // Without the current token the server replaces the media connection.
+          await act("call", { action: "refresh-access", spaceId, ...(!replaceMediaConnection && current ? { currentMediaToken: current } : {}) });
     current = mediaToken(access);
     return access;
   };

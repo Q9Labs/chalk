@@ -2,12 +2,12 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 
 import type { CallPageDTO, EpisodeDTO } from "../../lib/dashboard/contracts";
-import { act, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
+import { act, errorMessage, readPage } from "../../lib/dashboard/client";
 import { clock, displayLink, duration, sessionDay } from "../../lib/dashboard/format";
 import { Icon } from "../site/Icon";
 import { useLoad } from "./AppShell";
 import { RenameDialog } from "./HomePage";
-import { CopyAction, ErrorPanel, Menu, MenuItem, Seg, Sk, SkeletonRows, usePhone, useToast } from "./kit";
+import { CopyAction, ErrorPanel, Menu, MenuItem, MoreButton, Seg, Sk, SkeletonRows, useIntentKeys, usePhone, useToast } from "./kit";
 
 type Admission = CallPageDTO["call"]["admission"];
 const ADMISSION: readonly (readonly [Admission, string])[] = [
@@ -18,9 +18,9 @@ const ADMISSION: readonly (readonly [Admission, string])[] = [
 export function CallPage({ spaceId }: { readonly spaceId: string }) {
   const { state, reload, update } = useLoad(() => readPage("call", { spaceId }), `call:${spaceId}`);
   const [renaming, setRenaming] = useState(false);
-  const [loadingOlder, setLoadingOlder] = useState(false);
   const toast = useToast();
   const navigate = useNavigate();
+  const intents = useIntentKeys();
   const back = (
     <Link className="back" to="/dashboard">
       <Icon name="left" />
@@ -66,23 +66,12 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
 
   async function answerKnock(handle: string, allow: boolean) {
     try {
-      await act("call", { action: allow ? "approve-knock" : "deny-knock", spaceId, requestHandle: handle, idempotencyKey: intentKey() });
+      const intent = `${allow ? "approve" : "deny"}:${handle}`;
+      await act("call", { action: allow ? "approve-knock" : "deny-knock", spaceId, requestHandle: handle, idempotencyKey: intents.key(intent) });
+      intents.done(intent);
       update((data) => ({ ...data, knocks: data.knocks.filter((knock) => knock.handle !== handle) }));
     } catch (error) {
       toast(errorMessage(error), { icon: "alert" });
-    }
-  }
-
-  async function older() {
-    if (!nextCursor) return;
-    setLoadingOlder(true);
-    try {
-      const page = await readPage("call", { spaceId, cursor: nextCursor });
-      update((data) => ({ ...data, episodes: [...data.episodes, ...page.episodes], nextCursor: page.nextCursor }));
-    } catch (error) {
-      toast(errorMessage(error), { icon: "alert" });
-    } finally {
-      setLoadingOlder(false);
     }
   }
 
@@ -186,13 +175,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
               <SessionRow key={episode.id} spaceId={spaceId} episode={episode} />
             ))}
           </div>
-          {nextCursor ? (
-            <div className="more-row">
-              <button type="button" className="btn sec sm" disabled={loadingOlder} onClick={() => void older()}>
-                Show older sessions
-              </button>
-            </div>
-          ) : null}
+          {nextCursor ? <MoreButton label="Show older sessions" cursor={nextCursor} load={(cursor) => readPage("call", { spaceId, cursor })} onLoaded={(page) => update((data) => ({ ...data, episodes: [...data.episodes, ...page.episodes], nextCursor: page.nextCursor }))} /> : null}
         </>
       )}
       {renaming ? <RenameDialog call={call} page="call" onClose={() => setRenaming(false)} onRenamed={(renamed) => update((data) => ({ ...data, call: renamed }))} /> : null}

@@ -2,10 +2,10 @@ import { useRef, useState } from "react";
 
 import type { DeveloperAction, KeyDTO, WebhookDTO } from "../../lib/dashboard/contracts";
 import { dashboardWebsiteOrigin } from "../../lib/dashboard/contracts";
-import { act, errorMessage, intentKey } from "../../lib/dashboard/client";
+import { act, errorMessage } from "../../lib/dashboard/client";
 import { fullDate } from "../../lib/dashboard/format";
 import { Icon } from "../site/Icon";
-import { CopyAction, Dialog, Seg, useToast } from "./kit";
+import { CopyAction, Dialog, Seg, useIntentKeys, useToast } from "./kit";
 
 type CreateKey = Extract<DeveloperAction, { action: "create-key" }>;
 type Scope = CreateKey["scopes"][number];
@@ -111,7 +111,8 @@ export function CreateKeyDialog({ onClose, onCreated }: { readonly onClose: () =
   const [custom, setCustom] = useState<readonly Scope[]>([]);
   const [errors, setErrors] = useState<{ name?: boolean; scopes?: boolean }>({});
   const [saving, setSaving] = useState(false);
-  const intent = useRef(intentKey());
+  // Keyed by the request itself: a retry reuses the key, a changed request gets a new one.
+  const intents = useIntentKeys();
   const nameInput = useRef<HTMLInputElement>(null);
   const toast = useToast();
   const expiresAt = inDays(Number(expiry));
@@ -126,7 +127,8 @@ export function CreateKeyDialog({ onClose, onCreated }: { readonly onClose: () =
     }
     setSaving(true);
     try {
-      const { secret } = await act("developer", { action: "create-key", name: trimmed, scopes: [...scopes], expiresAt, idempotencyKey: intent.current });
+      const request = { name: trimmed, scopes: [...scopes], expiresAt };
+      const { secret } = await act("developer", { action: "create-key", ...request, idempotencyKey: intents.key(JSON.stringify(request)) });
       onCreated(secret);
     } catch (error) {
       toast(errorMessage(error), { icon: "alert" });
@@ -227,7 +229,8 @@ function ScopeRow({ resource, label, chosen, onChange }: { readonly resource: (t
 }
 
 export function RotateKeyDialog({ apiKey, onClose, onRotated }: { readonly apiKey: KeyDTO; readonly onClose: () => void; readonly onRotated: (secret: string) => void }) {
-  const intent = useRef(intentKey());
+  // Keyed by the request itself: a retry reuses the key, a changed request gets a new one.
+  const intents = useIntentKeys();
   const toast = useToast();
   return (
     <Dialog
@@ -242,7 +245,7 @@ export function RotateKeyDialog({ apiKey, onClose, onRotated }: { readonly apiKe
             type="button"
             className="btn pri"
             onClick={() =>
-              act("developer", { action: "rotate-key", keyId: apiKey.id, expiresAt: apiKey.expiresAt, idempotencyKey: intent.current }).then(
+              act("developer", { action: "rotate-key", keyId: apiKey.id, expiresAt: apiKey.expiresAt, idempotencyKey: intents.key("rotate") }).then(
                 ({ secret }) => onRotated(secret),
                 (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
               )
@@ -294,7 +297,8 @@ export function AddEndpointDialog({ onClose, onCreated }: { readonly onClose: ()
   const [events, setEvents] = useState<readonly EventType[]>(["episode.started", "episode.ended"]);
   const [errors, setErrors] = useState<{ name?: boolean; url?: boolean; events?: boolean }>({});
   const [saving, setSaving] = useState(false);
-  const intent = useRef(intentKey());
+  // Keyed by the request itself: a retry reuses the key, a changed request gets a new one.
+  const intents = useIntentKeys();
   const toast = useToast();
 
   async function save() {
@@ -306,7 +310,8 @@ export function AddEndpointDialog({ onClose, onCreated }: { readonly onClose: ()
     }
     setSaving(true);
     try {
-      const { webhook, secret } = await act("developer", { action: "create-webhook", name: name.trim(), url: url.trim(), enabled: true, eventTypes: [...events], idempotencyKey: intent.current });
+      const request = { name: name.trim(), url: url.trim(), enabled: true, eventTypes: [...events] };
+      const { webhook, secret } = await act("developer", { action: "create-webhook", ...request, idempotencyKey: intents.key(JSON.stringify(request)) });
       onCreated(webhook, secret);
     } catch (error) {
       toast(errorMessage(error), { icon: "alert" });
@@ -389,7 +394,8 @@ export function AddEndpointDialog({ onClose, onCreated }: { readonly onClose: ()
 
 export function RotateWebhookDialog({ webhook, onClose, onRotated }: { readonly webhook: WebhookDTO; readonly onClose: () => void; readonly onRotated: (secret: string, stoppedOld: boolean) => void }) {
   const [now, setNow] = useState(false);
-  const intent = useRef(intentKey());
+  // Keyed by the request itself: a retry reuses the key, a changed request gets a new one.
+  const intents = useIntentKeys();
   const toast = useToast();
   return (
     <Dialog
@@ -404,7 +410,7 @@ export function RotateWebhookDialog({ webhook, onClose, onRotated }: { readonly 
             type="button"
             className={now ? "btn dz" : "btn pri"}
             onClick={() =>
-              act("developer", { action: "rotate-webhook-secret", webhookId: webhook.id, revokePreviousImmediately: now, idempotencyKey: intent.current }).then(
+              act("developer", { action: "rotate-webhook-secret", webhookId: webhook.id, revokePreviousImmediately: now, idempotencyKey: intents.key(String(now)) }).then(
                 ({ secret }) => onRotated(secret, now),
                 (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
               )

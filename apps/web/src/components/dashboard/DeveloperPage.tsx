@@ -2,12 +2,12 @@ import { useState } from "react";
 
 import type { DeveloperDTO, KeyDTO, WebhookDTO } from "../../lib/dashboard/contracts";
 import { dashboardWebsiteOrigin } from "../../lib/dashboard/contracts";
-import { act, errorMessage, intentKey, readPage, type DeliveryDTO } from "../../lib/dashboard/client";
+import { act, errorMessage, readPage, type DeliveryDTO } from "../../lib/dashboard/client";
 import { clock, expiresSoon, fullDate, sessionDay } from "../../lib/dashboard/format";
 import { Icon } from "../site/Icon";
 import { useLoad } from "./AppShell";
 import { accessLabel, AddEndpointDialog, AddWebsiteDialog, CreateKeyDialog, RemoveWebsiteDialog, RevokeKeyDialog, RotateKeyDialog, RotateWebhookDialog, SecretDialog, type Secret } from "./DeveloperDialogs";
-import { ErrorPanel, Menu, MenuItem, Sk, SkeletonRows, usePhone, useToast } from "./kit";
+import { ErrorPanel, Menu, MenuItem, MoreButton, Sk, SkeletonRows, useIntentKeys, usePhone, useToast } from "./kit";
 
 type Open =
   | null
@@ -77,6 +77,7 @@ export function DeveloperPage() {
         </button>
       </div>
       <KeysTable keys={keys} onRotate={(apiKey) => setOpen({ kind: "rotate-key", apiKey })} onRevoke={(apiKey) => setOpen({ kind: "revoke-key", apiKey })} />
+      {data.nextKeyCursor ? <MoreButton label="Show more keys" cursor={data.nextKeyCursor} load={(keyCursor) => readPage("developer", { keyCursor })} onLoaded={(page) => update((value) => ({ ...value, keys: [...value.keys, ...page.keys], nextKeyCursor: page.nextKeyCursor }))} /> : null}
 
       <div className="secth" style={{ marginTop: 48 }}>
         <h2>Allowed websites</h2>
@@ -122,6 +123,9 @@ export function DeveloperPage() {
           ))}
         </div>
       )}
+      {data.nextWebhookCursor ? (
+        <MoreButton label="Show more endpoints" cursor={data.nextWebhookCursor} load={(webhookCursor) => readPage("developer", { webhookCursor })} onLoaded={(page) => update((value) => ({ ...value, webhooks: [...value.webhooks, ...page.webhooks], nextWebhookCursor: page.nextWebhookCursor }))} />
+      ) : null}
 
       {open?.kind === "create-key" ? (
         <CreateKeyDialog
@@ -276,6 +280,7 @@ const deliveryState = (state: string) => DELIVERY[state] ?? (["d-mu", state] as 
 function Endpoint({ webhook, open, onToggle, onRotate }: { readonly webhook: WebhookDTO; readonly open: boolean; readonly onToggle: () => void; readonly onRotate: () => void }) {
   const phone = usePhone();
   const toast = useToast();
+  const intents = useIntentKeys();
   const { state, reload, update } = useLoad(() => act("developer", { action: "webhook-deliveries", webhookId: webhook.id }), `deliveries:${webhook.id}`);
   const deliveries = state.kind === "ready" ? state.data.deliveries : null;
   const last = deliveries?.[0];
@@ -283,7 +288,8 @@ function Endpoint({ webhook, open, onToggle, onRotate }: { readonly webhook: Web
 
   async function test() {
     try {
-      await act("developer", { action: "test-webhook", webhookId: webhook.id, idempotencyKey: intentKey() });
+      await act("developer", { action: "test-webhook", webhookId: webhook.id, idempotencyKey: intents.key("test") });
+      intents.done("test");
       toast("Test event sent. It shows in recent deliveries.", { icon: "send" });
       reload();
     } catch (error) {
@@ -292,7 +298,8 @@ function Endpoint({ webhook, open, onToggle, onRotate }: { readonly webhook: Web
   }
   async function redeliver(delivery: DeliveryDTO) {
     try {
-      await act("developer", { action: "redeliver-webhook", webhookId: webhook.id, deliveryId: delivery.id, idempotencyKey: intentKey() });
+      await act("developer", { action: "redeliver-webhook", webhookId: webhook.id, deliveryId: delivery.id, idempotencyKey: intents.key(`redeliver:${delivery.id}`) });
+      intents.done(`redeliver:${delivery.id}`);
       update((value) => ({ ...value, deliveries: value.deliveries.map((item) => (item.id === delivery.id ? { ...item, state: "pending" } : item)) }));
       toast("The delivery is queued again");
     } catch (error) {

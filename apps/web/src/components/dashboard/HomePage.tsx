@@ -7,7 +7,7 @@ import { displayLink, shortDate } from "../../lib/dashboard/format";
 import { Avatar, Faces } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { useLoad } from "./AppShell";
-import { CopyAction, Dialog, ErrorPanel, Menu, MenuItem, SkeletonRows, usePhone, useToast } from "./kit";
+import { CopyAction, Dialog, ErrorPanel, Menu, MenuItem, MoreButton, SkeletonRows, usePhone, useToast } from "./kit";
 
 /** A call's shareable link. Home doesn't carry it, so it's read from the call's page on demand. */
 async function inviteLink(spaceId: string): Promise<string> {
@@ -83,11 +83,16 @@ export function HomePage() {
           </div>
         </div>
       ) : (
-        <div className="list">
-          {state.data.calls.map((call) => (
-            <CallRow key={call.id} call={call} live={liveFor(state.data, call.id)} onRename={() => setDialog({ kind: "rename", call })} onArchive={() => void archive(call)} />
-          ))}
-        </div>
+        <>
+          <div className="list">
+            {state.data.calls.map((call) => (
+              <CallRow key={call.id} call={call} live={liveFor(state.data, call.id)} onRename={() => setDialog({ kind: "rename", call })} onArchive={() => void archive(call)} />
+            ))}
+          </div>
+          {state.data.nextCursor ? (
+            <MoreButton label="Show more calls" cursor={state.data.nextCursor} load={(cursor) => readPage("home", { cursor })} onLoaded={(page) => update((data) => ({ calls: [...data.calls, ...page.calls], live: [...data.live, ...page.live], nextCursor: page.nextCursor }))} />
+          ) : null}
+        </>
       )}
       {dialog?.kind === "ready" ? <CallReadyDialog link={dialog.link} onJoin={() => void navigate({ to: "/dashboard/call/$spaceId/join", params: { spaceId: dialog.call.id } })} onClose={() => setDialog(null)} /> : null}
       {dialog?.kind === "join" ? <JoinLinkDialog onClose={() => setDialog(null)} /> : null}
@@ -218,14 +223,14 @@ function CallReadyDialog({ link, onJoin, onClose }: { readonly link: string; rea
 
 const CALL_LINK = /^\/(?:space\/)?[a-z0-9-]+\/?$/i;
 
-/** The call link as typed, made absolute, if it's a Chalk call link. */
+/** The call link as typed, made absolute, if it's a Chalk call link on chalkmeet.com or this site. */
 function parseCallLink(value: string): string | null {
   const text = value.trim();
   if (!text) return null;
   try {
     const url = new URL(/^https?:\/\//i.test(text) ? text : `https://${text}`);
-    const host = url.hostname.replace(/^www\./, "");
-    if (host !== "chalkmeet.com" && url.host !== window.location.host) return null;
+    const chalk = url.protocol === "https:" && !url.port && url.hostname.replace(/^www\./, "") === "chalkmeet.com";
+    if ((!chalk && url.origin !== window.location.origin) || url.username || url.password) return null;
     return CALL_LINK.test(url.pathname) ? url.href : null;
   } catch {
     return null;

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 
+import { errorMessage } from "../../lib/dashboard/client";
 import { trapDialogFocus } from "../docs/dialog-focus";
 import { Icon, type IconName } from "../site/Icon";
 
@@ -33,7 +34,11 @@ export function Menu({ label, trigger, icon = "more", align, children }: MenuPro
   const wrap = useRef<HTMLSpanElement>(null);
   const id = useId();
 
-  const close = useCallback(() => setOpen(false), []);
+  // Focus goes back to the trigger first, so a dialog opened from the menu returns focus there too.
+  const close = useCallback(() => {
+    wrap.current?.querySelector<HTMLElement>("[aria-haspopup=menu]")?.focus();
+    setOpen(false);
+  }, []);
   useEffect(() => {
     if (!open) return;
     wrap.current?.querySelector<HTMLElement>("[role=menu] [role^=menuitem]")?.focus();
@@ -175,6 +180,46 @@ export function Dialog({ title, description, alert, wide, onClose, onSubmit, chi
           {inner}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ---------- idempotency: one key per user intent, kept until it succeeds ---------- */
+
+/** `key(intent)` returns the same key until `done(intent)`, so a retry after a failure replays the same request. */
+export function useIntentKeys() {
+  const keys = useRef(new Map<string, string>());
+  const key = useCallback((intent: string) => {
+    const existing = keys.current.get(intent);
+    if (existing) return existing;
+    const created = crypto.randomUUID();
+    keys.current.set(intent, created);
+    return created;
+  }, []);
+  const done = useCallback((intent: string) => void keys.current.delete(intent), []);
+  return { key, done };
+}
+
+/* ---------- the next page of a list ---------- */
+
+export function MoreButton<T>({ label, cursor, load, onLoaded }: { readonly label: string; readonly cursor: string; readonly load: (cursor: string) => Promise<T>; readonly onLoaded: (page: T) => void }) {
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+  return (
+    <div className="more-row">
+      <button
+        type="button"
+        className="btn sec sm"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          load(cursor)
+            .then(onLoaded, (error: unknown) => toast(errorMessage(error), { icon: "alert" }))
+            .finally(() => setBusy(false));
+        }}
+      >
+        {label}
+      </button>
     </div>
   );
 }
