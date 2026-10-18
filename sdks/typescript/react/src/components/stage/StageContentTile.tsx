@@ -48,7 +48,7 @@ export const StageContentTile = React.memo(function StageContentTile({ item, act
     <StageContentTileSurface
       item={item}
       {...props}
-      state={item.kind === "screen-share" ? item.participant.screenShareState ?? (status === "muted" ? "paused" : undefined) : undefined}
+      state={item.kind === "screen-share" ? (item.participant.screenShareState ?? (status === "muted" ? "paused" : undefined)) : undefined}
       media={item.kind === "screen-share" ? <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-contain" /> : undefined}
       mediaVisible={status === "playing" || status === "muted"}
     />
@@ -56,7 +56,28 @@ export const StageContentTile = React.memo(function StageContentTile({ item, act
 });
 
 export const StageContentTileSurface = React.memo(function StageContentTileSurface({ item, pinned, onClick, onDoubleClick, className, style, hidden, media, mediaVisible, primary, state, onStopSharing, onChangeShare, capture, switcher }: StageContentTileSurfaceProps) {
-  if (item.kind === "screen-share") return <ScreenSharePresentation sharedByName={item.participant.displayName} media={media} mediaVisible={mediaVisible} state={state ?? item.participant.screenShareState} isLocal={item.participant.isLocal} hasAudio={item.participant.screenShareHasAudio} primary={primary} pinned={pinned} onClick={onClick} onDoubleClick={onDoubleClick} className={className} style={style} hidden={hidden} onStopSharing={onStopSharing} onChangeShare={onChangeShare} capture={capture} switcher={switcher} />;
+  if (item.kind === "screen-share")
+    return (
+      <ScreenSharePresentation
+        sharedByName={item.participant.displayName}
+        media={media}
+        mediaVisible={mediaVisible}
+        state={state ?? item.participant.screenShareState}
+        isLocal={item.participant.isLocal}
+        hasAudio={item.participant.screenShareHasAudio}
+        primary={primary}
+        pinned={pinned}
+        onClick={onClick}
+        onDoubleClick={onDoubleClick}
+        className={className}
+        style={style}
+        hidden={hidden}
+        onStopSharing={onStopSharing}
+        onChangeShare={onChangeShare}
+        capture={capture}
+        switcher={switcher}
+      />
+    );
   const accentColor = BOARD_ACCENT;
   const Icon = Edit02Icon;
 
@@ -71,12 +92,14 @@ export const StageContentTileSurface = React.memo(function StageContentTileSurfa
       style={style}
       dataTour="video-grid"
       hidden={hidden}
-      chip={primary ? null : (
-        <>
-          <Icon size={14} className="shrink-0" />
-          <span className="min-w-0 truncate">{contentTileName(item)}</span>
-        </>
-      )}
+      chip={
+        primary ? null : (
+          <>
+            <Icon size={14} className="shrink-0" />
+            <span className="min-w-0 truncate">{contentTileName(item)}</span>
+          </>
+        )
+      }
     >
       <div className="relative z-10 block h-full w-full overflow-hidden bg-[var(--chalk-app-tile-base)] [&>*]:h-full [&>*]:w-full [&>*]:object-contain">{media}</div>
       {!mediaVisible && (

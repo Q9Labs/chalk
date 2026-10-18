@@ -114,9 +114,9 @@ export function Stage({
 
   const handOrderRef = useRef<readonly string[]>([]);
   const handOrders = useMemo(() => {
-    const raised = ordered.filter(item => item.kind === "participant" && item.participant.isHandRaised).map(item => item.id);
-    const survivors = handOrderRef.current.filter(id => raised.includes(id));
-    const next = [...survivors, ...raised.filter(id => !survivors.includes(id))];
+    const raised = ordered.filter((item) => item.kind === "participant" && item.participant.isHandRaised).map((item) => item.id);
+    const survivors = handOrderRef.current.filter((id) => raised.includes(id));
+    const next = [...survivors, ...raised.filter((id) => !survivors.includes(id))];
     handOrderRef.current = next;
     return new Map(next.map((id, index) => [id, index + 1]));
   }, [ordered]);
@@ -127,34 +127,47 @@ export function Stage({
     if (speaking) lastSpeakerRef.current = speaking.id;
   }, [ordered]);
 
-
   const primary = useMemo(() => (layout === "grid" ? null : choosePrimary(ordered, { layout, pinnedId: activePinnedId, lastSpeakerId: interactive ? lastSpeakerRef.current : null, seenAt: seenAtRef.current })), [activePinnedId, interactive, layout, ordered]);
 
   const geometry: StageGeometry = useMemo(() => {
     if (!ordered.length) return EMPTY_GEOMETRY;
-    const wideIds = ordered.filter(isContentItem).map(item => item.id);
+    const wideIds = ordered.filter(isContentItem).map((item) => item.id);
     if (layout === "grid" || !primary) {
       const sorted = gridOrder(ordered, activePinnedId);
       const content = sorted.filter(isContentItem);
-      const people = sorted.filter(item => !isContentItem(item));
-      return fitGrid(box, [...content, ...people].map(item => item.id), { ...DEFAULT_GRID_OPTIONS, maxPerPage, minTileWidth: box.width <= 640 ? 88 : minTileWidth, minTileHeight: box.width <= 640 ? 72 : 96 }, wideIds);
+      const people = sorted.filter((item) => !isContentItem(item));
+      return fitGrid(
+        box,
+        [...content, ...people].map((item) => item.id),
+        { ...DEFAULT_GRID_OPTIONS, maxPerPage, minTileWidth: box.width <= 640 ? 88 : minTileWidth, minTileHeight: box.width <= 640 ? 72 : 96 },
+        wideIds,
+      );
     }
     const track = primary.kind === "screen-share" ? primary.participant.screenShareTrack : null;
     const settings = track?.getSettings();
     const aspect = primary.kind === "screen-share" && primary.participant.screenShareAspect ? primary.participant.screenShareAspect : settings?.width && settings.height ? settings.width / settings.height : 16 / 9;
-    return fitSpotlight(box, primary.id, ordered.filter(item => item.id !== primary.id).map(item => item.id), { ...DEFAULT_SPOTLIGHT_OPTIONS, primaryAspect: aspect, content: primary.kind !== "participant", wideIds, maxPerPage });
+    return fitSpotlight(
+      box,
+      primary.id,
+      ordered.filter((item) => item.id !== primary.id).map((item) => item.id),
+      { ...DEFAULT_SPOTLIGHT_OPTIONS, primaryAspect: aspect, content: primary.kind !== "participant", wideIds, maxPerPage },
+    );
   }, [activePinnedId, box, layout, maxPerPage, minTileWidth, ordered, primary]);
-  const framesById = useMemo(() => new Map(geometry.frames.map(frame => [frame.id, frame])), [geometry.frames]);
+  const framesById = useMemo(() => new Map(geometry.frames.map((frame) => [frame.id, frame])), [geometry.frames]);
   const animate = animateOverride ?? !prefersReducedMotion;
-  const [displayed, setDisplayed] = useState<{ source: readonly StageItem[]; geometry: StageGeometry; tiles: readonly { item: StageItem; frame: StageFrame | undefined; leaving: boolean }[] }>({ source: ordered, geometry, tiles: ordered.map(item => ({ item, frame: framesById.get(item.id), leaving: false })) });
+  const [displayed, setDisplayed] = useState<{ source: readonly StageItem[]; geometry: StageGeometry; tiles: readonly { item: StageItem; frame: StageFrame | undefined; leaving: boolean }[] }>({
+    source: ordered,
+    geometry,
+    tiles: ordered.map((item) => ({ item, frame: framesById.get(item.id), leaving: false })),
+  });
   if (displayed.source !== ordered || displayed.geometry !== geometry) {
-    const present = new Set(ordered.map(item => item.id));
-    const tiles = ordered.map(item => ({ item, frame: framesById.get(item.id), leaving: false }));
-    setDisplayed({ source: ordered, geometry, tiles: [...tiles, ...(animate ? displayed.tiles.filter(tile => !present.has(tile.item.id)).map(tile => ({ ...tile, leaving: true })) : [])] });
+    const present = new Set(ordered.map((item) => item.id));
+    const tiles = ordered.map((item) => ({ item, frame: framesById.get(item.id), leaving: false }));
+    setDisplayed({ source: ordered, geometry, tiles: [...tiles, ...(animate ? displayed.tiles.filter((tile) => !present.has(tile.item.id)).map((tile) => ({ ...tile, leaving: true })) : [])] });
   }
   useEffect(() => {
-    if (!displayed.tiles.some(tile => tile.leaving)) return;
-    const timer = setTimeout(() => setDisplayed(current => ({ ...current, tiles: current.tiles.filter(tile => !tile.leaving) })), 160);
+    if (!displayed.tiles.some((tile) => tile.leaving)) return;
+    const timer = setTimeout(() => setDisplayed((current) => ({ ...current, tiles: current.tiles.filter((tile) => !tile.leaving) })), 160);
     return () => clearTimeout(timer);
   }, [displayed]);
   const tilesRef = useRef<HTMLDivElement>(null);
@@ -164,9 +177,17 @@ export function Stage({
     const elements = Array.from(tilesRef.current?.querySelectorAll<HTMLElement>(":scope > [data-stage-item]") ?? []);
     if (animate) {
       playRef.current?.();
-      if (mountedRef.current.size) for (const element of elements) {
-        if (!mountedRef.current.has(element) && element.getAttribute("aria-hidden") !== "true") element.animate([{ opacity: 0, transform: "scale(.97)" }, { opacity: 1, transform: "none" }], { duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" });
-      }
+      if (mountedRef.current.size)
+        for (const element of elements) {
+          if (!mountedRef.current.has(element) && element.getAttribute("aria-hidden") !== "true")
+            element.animate(
+              [
+                { opacity: 0, transform: "scale(.97)" },
+                { opacity: 1, transform: "none" },
+              ],
+              { duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" },
+            );
+        }
     }
     mountedRef.current = new Set(elements);
     playRef.current = captureFlip(elements);
@@ -208,14 +229,7 @@ export function Stage({
 
   return (
     <div className={cn("relative h-full w-full", className)} data-tour="video-grid">
-      <div
-        ref={boxRef}
-        className="relative h-full w-full outline-none"
-        role="group"
-        aria-label={`Stage with ${participantCount} ${participantCount === 1 ? "participant" : "participants"}`}
-        aria-disabled={interactive ? undefined : true}
-        data-testid="stage"
-      >
+      <div ref={boxRef} className="relative h-full w-full outline-none" role="group" aria-label={`Stage with ${participantCount} ${participantCount === 1 ? "participant" : "participants"}`} aria-disabled={interactive ? undefined : true} data-testid="stage">
         <div ref={tilesRef} className="relative h-full w-full">
           {displayed.tiles.map(({ item, frame, leaving }) => {
             const onPage = Boolean(frame) && !leaving;
@@ -227,8 +241,22 @@ export function Stage({
             const renderContext: StageTileRenderContext = { active: onPage, primary: frame?.role === "primary", pinned, hidden: !frame, style, onClick: click, onDoubleClick: doubleClick };
             let content: ReactNode;
             if (item.kind === "participant") {
-              content = renderParticipant ? renderParticipant(item, renderContext) : (
-                <ParticipantTile participant={item.participant.isHandRaised && item.participant.handRaiseOrder === undefined ? { ...item.participant, handRaiseOrder: handOrders.get(item.id) } : item.participant} videoTrack={frame ? item.participant.videoTrack : null} aspectRatio="fill" primary={frame?.role === "primary"} pinned={pinned} onClick={click} onDoubleClick={doubleClick} style={style} hidden={!frame} generatedAvatars={generatedAvatars} gradientPreference={gradientPreference} />
+              content = renderParticipant ? (
+                renderParticipant(item, renderContext)
+              ) : (
+                <ParticipantTile
+                  participant={item.participant.isHandRaised && item.participant.handRaiseOrder === undefined ? { ...item.participant, handRaiseOrder: handOrders.get(item.id) } : item.participant}
+                  videoTrack={frame ? item.participant.videoTrack : null}
+                  aspectRatio="fill"
+                  primary={frame?.role === "primary"}
+                  pinned={pinned}
+                  onClick={click}
+                  onDoubleClick={doubleClick}
+                  style={style}
+                  hidden={!frame}
+                  generatedAvatars={generatedAvatars}
+                  gradientPreference={gradientPreference}
+                />
               );
             } else if (renderContentTile) {
               content = renderContentTile(item, renderContext);
@@ -237,9 +265,43 @@ export function Stage({
             } else {
               content = <StageContentTile item={item} {...renderContext} />;
             }
-            return <div key={item.id} ref={element => { if (element && leaving && animate && !element.getAnimations().some(animation => animation.id === "stage-exit")) { const exit = element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: "ease-out", fill: "forwards" }); exit.id = "stage-exit"; } }} data-stage-item={item.id} data-stage-role={frame?.role} data-pinned={pinned || undefined} aria-hidden={!frame || undefined} inert={!onPage ? true : undefined} data-leaving={leaving || undefined} style={frame ? { ...frameStyle(frame), pointerEvents: leaving ? "none" : undefined } : { display: "none" }}>{content}</div>;
+            return (
+              <div
+                key={item.id}
+                ref={(element) => {
+                  if (element && leaving && animate && !element.getAnimations().some((animation) => animation.id === "stage-exit")) {
+                    const exit = element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: "ease-out", fill: "forwards" });
+                    exit.id = "stage-exit";
+                  }
+                }}
+                data-stage-item={item.id}
+                data-stage-role={frame?.role}
+                data-pinned={pinned || undefined}
+                aria-hidden={!frame || undefined}
+                inert={!onPage ? true : undefined}
+                data-leaving={leaving || undefined}
+                style={frame ? { ...frameStyle(frame), pointerEvents: leaving ? "none" : undefined } : { display: "none" }}
+              >
+                {content}
+              </div>
+            );
           })}
-          {geometry.frames.filter(frame => frame.id === MORE_TILE_ID).map(frame => <button key={frame.id} type="button" data-stage-item={MORE_TILE_ID} style={frameStyle(frame)} onClick={onOverflowClick} disabled={!interactive} aria-label={`Show ${geometry.overflowCount} more participants`} className="grid place-items-center rounded-[12px] bg-[var(--chalk-raised)] text-[22px] font-semibold text-[var(--chalk-text)] hover:bg-[var(--chalk-hover)] max-[640px]:rounded-[14px]">+{geometry.overflowCount}</button>)}
+          {geometry.frames
+            .filter((frame) => frame.id === MORE_TILE_ID)
+            .map((frame) => (
+              <button
+                key={frame.id}
+                type="button"
+                data-stage-item={MORE_TILE_ID}
+                style={frameStyle(frame)}
+                onClick={onOverflowClick}
+                disabled={!interactive}
+                aria-label={`Show ${geometry.overflowCount} more participants`}
+                className="grid place-items-center rounded-[12px] bg-[var(--chalk-raised)] text-[22px] font-semibold text-[var(--chalk-text)] hover:bg-[var(--chalk-hover)] max-[640px]:rounded-[14px]"
+              >
+                +{geometry.overflowCount}
+              </button>
+            ))}
         </div>
       </div>
     </div>

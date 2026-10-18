@@ -39,15 +39,22 @@ describe("Spotlight primary content", () => {
 });
 
 describe("Justified rows", () => {
-  it.each([3, 5, 7, 12])("fills all rows for %i people without holes", count => {
+  it.each([3, 5, 7, 12])("fills all rows for %i people without holes", (count) => {
     const box = { width: 1408, height: 756 };
-    const geometry = fitGrid(box, Array.from({ length: count }, (_, index) => String(index)), DEFAULT_GRID_OPTIONS);
-    const rows = Array.from(new Set(geometry.frames.map(frame => frame.y)), y => geometry.frames.filter(frame => frame.y === y));
+    const geometry = fitGrid(
+      box,
+      Array.from({ length: count }, (_, index) => String(index)),
+      DEFAULT_GRID_OPTIONS,
+    );
+    const rows = Array.from(new Set(geometry.frames.map((frame) => frame.y)), (y) => geometry.frames.filter((frame) => frame.y === y));
     let coveredHeight = 0;
     for (const frames of rows.values()) {
       expect(frames[0]?.x).toBeCloseTo(0);
       let edge = 0;
-      for (const frame of frames) { expect(frame.x).toBeCloseTo(edge); edge = frame.x + frame.width + 8; }
+      for (const frame of frames) {
+        expect(frame.x).toBeCloseTo(edge);
+        edge = frame.x + frame.width + 8;
+      }
       expect(edge - 8).toBeCloseTo(box.width);
       coveredHeight += frames[0]?.height ?? 0;
     }
@@ -55,8 +62,8 @@ describe("Justified rows", () => {
   });
   it("gives content two real units, without overlapping its neighbor", () => {
     const geometry = fitGrid({ width: 1408, height: 756 }, ["whiteboard", "a", "b", "c", "d"], DEFAULT_GRID_OPTIONS, ["whiteboard"]);
-    const board = geometry.frames.find(frame => frame.id === "whiteboard");
-    const neighbor = geometry.frames.find(frame => frame.id === "a");
+    const board = geometry.frames.find((frame) => frame.id === "whiteboard");
+    const neighbor = geometry.frames.find((frame) => frame.id === "a");
     expect(board?.width).toBeCloseTo((neighbor?.width ?? 0) * 2 + 8);
     expect(neighbor?.x).toBeCloseTo((board?.width ?? 0) + 8);
   });

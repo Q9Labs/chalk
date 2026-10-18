@@ -91,8 +91,14 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
   const phone = useMediaQuery("(max-width:640px)");
   const [optionsOpen, setOptionsOpen] = useState(false);
   const returnFocus = useRef<HTMLElement | null>(null);
-  const openOptions = () => { returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setOptionsOpen(true); };
-  const closeOptions = () => { setOptionsOpen(false); queueMicrotask(() => returnFocus.current?.focus()); };
+  const openOptions = () => {
+    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setOptionsOpen(true);
+  };
+  const closeOptions = () => {
+    setOptionsOpen(false);
+    queueMicrotask(() => returnFocus.current?.focus());
+  };
   const mirrored = mirror ?? participant.isLocal === true;
   const colors = useMemo(() => getParticipantColor(participant.displayName || participant.id, gradientPreference), [gradientPreference, participant.displayName, participant.id]);
   const recipe = useMemo(() => getParticipantAvatarRecipe(participant.displayName || participant.id, gradientPreference), [participant.displayName, participant.id, gradientPreference]);
@@ -111,10 +117,30 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       style={style}
       dataTour={participant.isLocal ? "local-video" : "video-grid"}
       hidden={hidden}
-      corner={<>
-        {showStatus && hasPoorConnection ? <span role="img" aria-label={`${participant.displayName} has a weak connection`} className="pointer-events-none absolute top-2 left-2 z-30 flex h-6 items-center rounded-[6px] bg-[rgba(12,14,18,.75)] px-[7px]"><SignalBars /></span> : null}
-        {onClick && !phone ? <span className="absolute top-2 right-2 z-30 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 focus-within:opacity-100"><ChalkMenu trigger={<button type="button" aria-label={`More options for ${participant.displayName}`} className="grid h-8 w-8 place-items-center rounded-full bg-[rgba(12,14,18,.75)] text-white outline-none hover:bg-[rgba(40,42,48,.95)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]"><MoreVerticalIcon size={18} /></button>}><ChalkMenuItem onClick={onClick}>{pinned ? "Unpin" : "Pin"} {participant.displayName}</ChalkMenuItem></ChalkMenu></span> : null}
-      </>}
+      corner={
+        <>
+          {showStatus && hasPoorConnection ? (
+            <span role="img" aria-label={`${participant.displayName} has a weak connection`} className="pointer-events-none absolute top-2 left-2 z-30 flex h-6 items-center rounded-[6px] bg-[rgba(12,14,18,.75)] px-[7px]">
+              <SignalBars />
+            </span>
+          ) : null}
+          {onClick && !phone ? (
+            <span className="absolute top-2 right-2 z-30 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 focus-within:opacity-100">
+              <ChalkMenu
+                trigger={
+                  <button type="button" aria-label={`More options for ${participant.displayName}`} className="grid h-8 w-8 place-items-center rounded-full bg-[rgba(12,14,18,.75)] text-white outline-none hover:bg-[rgba(40,42,48,.95)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]">
+                    <MoreVerticalIcon size={18} />
+                  </button>
+                }
+              >
+                <ChalkMenuItem onClick={onClick}>
+                  {pinned ? "Unpin" : "Pin"} {participant.displayName}
+                </ChalkMenuItem>
+              </ChalkMenu>
+            </span>
+          ) : null}
+        </>
+      }
       chip={
         showName || showStatus ? (
           <>
@@ -126,7 +152,12 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
               </span>
             )}
             {showStatus && participant.isMuted && <MicrophoneOff01Icon size={14} className="shrink-0 text-[#ff6b6b]" aria-label="Muted" />}
-            {showStatus && participant.isHandRaised && <span className="flex shrink-0 items-center text-[#e2bd3a]" role="img" aria-label={`Hand raised${participant.handRaiseOrder ? `, number ${participant.handRaiseOrder}` : ""}`}><HandIcon size={14} />{participant.handRaiseOrder ? <b className="ml-px text-[11px] font-bold">{participant.handRaiseOrder}</b> : null}</span>}
+            {showStatus && participant.isHandRaised && (
+              <span className="flex shrink-0 items-center text-[#e2bd3a]" role="img" aria-label={`Hand raised${participant.handRaiseOrder ? `, number ${participant.handRaiseOrder}` : ""}`}>
+                <HandIcon size={14} />
+                {participant.handRaiseOrder ? <b className="ml-px text-[11px] font-bold">{participant.handRaiseOrder}</b> : null}
+              </span>
+            )}
           </>
         ) : null
       }
@@ -134,12 +165,54 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       <div className={cn("absolute inset-0 overflow-hidden motion-safe:transition-opacity motion-safe:duration-200 [&>*]:h-full [&>*]:w-full [&>*]:object-cover", mirrored && "scale-x-[-1]", mediaVisible ? "opacity-100" : "opacity-0")}>{media}</div>
       {!mediaVisible && showAvatar && (
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 grid place-items-center">
-          <div aria-hidden="true" className={cn("overflow-hidden rounded-full motion-safe:transition-transform motion-safe:duration-[90ms]", participant.isSpeaking && !participant.isMuted && !prefersReducedMotion && "-translate-y-[5px] scale-[1.04]")} style={{ width: "clamp(32px,42cqmin,150px)", height: "clamp(32px,42cqmin,150px)" }}>
-            {generatedAvatars && !participant.avatarUrl ? <Facehash role="img" aria-label={`Avatar for ${participant.displayName}`} name={participant.displayName || participant.id} size="100%" variant="flat" intensity3d="dramatic" interactive={!prefersReducedMotion && animatedAvatars} enableBlink={!prefersReducedMotion && animatedAvatars} colors={recipe.facehashColors} /> : <Avatar name={participant.displayName} src={participant.avatarUrl} size="xl" generated={false} style={{ width: "100%", height: "100%" }} />}
+          <div
+            aria-hidden="true"
+            className={cn("overflow-hidden rounded-full motion-safe:transition-transform motion-safe:duration-[90ms]", participant.isSpeaking && !participant.isMuted && !prefersReducedMotion && "-translate-y-[5px] scale-[1.04]")}
+            style={{ width: "clamp(32px,42cqmin,150px)", height: "clamp(32px,42cqmin,150px)" }}
+          >
+            {generatedAvatars && !participant.avatarUrl ? (
+              <Facehash
+                role="img"
+                aria-label={`Avatar for ${participant.displayName}`}
+                name={participant.displayName || participant.id}
+                size="100%"
+                variant="flat"
+                intensity3d="dramatic"
+                interactive={!prefersReducedMotion && animatedAvatars}
+                enableBlink={!prefersReducedMotion && animatedAvatars}
+                colors={recipe.facehashColors}
+              />
+            ) : (
+              <Avatar name={participant.displayName} src={participant.avatarUrl} size="xl" generated={false} style={{ width: "100%", height: "100%" }} />
+            )}
           </div>
         </div>
       )}
-      {phone && onClick ? <ChalkSheet open={optionsOpen} onOpenChange={open => { if (open) openOptions(); else closeOptions(); }} title={`Options for ${participant.displayName}`}><div className="flex items-center gap-3 px-2 pt-1 pb-3.5 text-base font-semibold"><Avatar name={participant.displayName} size="sm" />{participant.displayName}</div><button type="button" className="min-h-11 w-full rounded-xl px-4 text-left hover:bg-[var(--chalk-hover)]" onClick={() => { onClick(); closeOptions(); }}>{pinned ? "Unpin" : "Pin"} {participant.displayName}</button></ChalkSheet> : null}
+      {phone && onClick ? (
+        <ChalkSheet
+          open={optionsOpen}
+          onOpenChange={(open) => {
+            if (open) openOptions();
+            else closeOptions();
+          }}
+          title={`Options for ${participant.displayName}`}
+        >
+          <div className="flex items-center gap-3 px-2 pt-1 pb-3.5 text-base font-semibold">
+            <Avatar name={participant.displayName} size="sm" />
+            {participant.displayName}
+          </div>
+          <button
+            type="button"
+            className="min-h-11 w-full rounded-xl px-4 text-left hover:bg-[var(--chalk-hover)]"
+            onClick={() => {
+              onClick();
+              closeOptions();
+            }}
+          >
+            {pinned ? "Unpin" : "Pin"} {participant.displayName}
+          </button>
+        </ChalkSheet>
+      ) : null}
       {children}
     </TileShell>
   );
@@ -150,5 +223,11 @@ ParticipantTileSurface.displayName = "ParticipantTileSurface";
 
 /** The weak-connection cue shares the mockup's three compact signal bars. */
 export function SignalBars(): React.JSX.Element {
-  return <span aria-hidden="true" className="inline-flex h-3 items-end gap-0.5">{[5, 8, 12].map((height, index) => <i key={height} className="block w-[3px] rounded-[1px]" style={{ height, background: index === 0 ? "#e2bd3a" : "rgba(255,255,255,.3)" }} />)}</span>;
+  return (
+    <span aria-hidden="true" className="inline-flex h-3 items-end gap-0.5">
+      {[5, 8, 12].map((height, index) => (
+        <i key={height} className="block w-[3px] rounded-[1px]" style={{ height, background: index === 0 ? "#e2bd3a" : "rgba(255,255,255,.3)" }} />
+      ))}
+    </span>
+  );
 }
