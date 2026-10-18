@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useState } from "react";
 
-export const RECENT_CALLS_STORAGE_KEY = "chalk.mobile.recent-calls.v1";
+const RECENT_CALLS_STORAGE_KEY = "chalk.mobile.recent-calls.v1";
 const MAX_RECENT_CALLS = 20;
 
 /** A call this device joined, kept on the device only. `link` is the full invite link and identifies the call. */
@@ -13,7 +13,7 @@ export type RecentCall = {
   readonly people: readonly string[];
 };
 
-export function parseRecentCalls(value: string | null): readonly RecentCall[] {
+function parseRecentCalls(value: string | null): readonly RecentCall[] {
   if (!value) return [];
   try {
     const parsed: unknown = JSON.parse(value);
@@ -30,7 +30,7 @@ function isRecentCall(value: unknown): value is RecentCall {
 }
 
 /** Puts `call` first, replacing any earlier entry for the same link. */
-export function withRecentCall(calls: readonly RecentCall[], call: RecentCall): readonly RecentCall[] {
+function withRecentCall(calls: readonly RecentCall[], call: RecentCall): readonly RecentCall[] {
   return [call, ...calls.filter((entry) => entry.link !== call.link)].slice(0, MAX_RECENT_CALLS);
 }
 

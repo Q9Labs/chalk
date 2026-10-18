@@ -6,8 +6,6 @@ import * as SecureStore from "expo-secure-store";
 const ARRIVAL_KEY_PREFIX = "chalk_mobile_public_arrival_v1.";
 const ARRIVAL_INDEX_PREFIX = "chalk_mobile_public_arrival_index_v1.";
 
-export type MobileRoute = { readonly kind: "home" } | SpaceRoute;
-
 export type SpaceRoute = {
   readonly kind: "space";
   readonly space: string;
@@ -52,12 +50,6 @@ export function parseSpaceLink(input: string): SpaceRoute | null {
     inviteLink,
     source: "space-link",
   };
-}
-
-export function getClipboardSpaceSuggestion(clipboardText: string | null | undefined, currentInput = ""): string | null {
-  const candidate = clipboardText?.trim();
-  if (!candidate || candidate === currentInput.trim()) return null;
-  return parseSpaceLink(candidate) ? candidate : null;
 }
 
 export async function createPublicSpaceRoute({ apiBaseURL, displayName, onOperation }: { readonly apiBaseURL: string; readonly displayName: string; readonly onOperation?: SpaceOperationObserver }): Promise<{ readonly arrival: MobileSpaceArrival; readonly route: SpaceRoute }> {
@@ -145,13 +137,6 @@ export async function cleanupSpaceArrival({ apiBaseURL, credential, onOperation 
     onOperation?.("leave", "succeeded");
   }
   await clearArrival(credential);
-}
-
-export async function clearSpaceContext(route?: SpaceRoute): Promise<void> {
-  if (!route) return;
-
-  const arrivalHandle = await SecureStore.getItemAsync(`${ARRIVAL_INDEX_PREFIX}${route.spaceInviteToken}`);
-  await Promise.all([...(arrivalHandle ? [SecureStore.deleteItemAsync(`${ARRIVAL_KEY_PREFIX}${arrivalHandle}`)] : []), SecureStore.deleteItemAsync(`${ARRIVAL_INDEX_PREFIX}${route.spaceInviteToken}`)]);
 }
 
 function publicClient(apiBaseURL: string, guestCredential?: string) {

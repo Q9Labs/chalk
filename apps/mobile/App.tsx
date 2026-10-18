@@ -66,13 +66,13 @@ export default function App(): React.JSX.Element {
   }, [reportError]);
 
   const ready = preferences && recentCalls && name !== undefined && openedLink !== undefined;
+  // The launch screen stays until the first real screen is ready; the JS splash covers only the gap.
+  useEffect(() => {
+    if (ready) SplashScreen.hideAsync().catch(reportError("hide-splash"));
+  }, [ready, reportError]);
   return (
     <ChalkUI colorScheme={preferences?.colorScheme ?? "dark"}>
-      {ready ? (
-        <Shell apiBaseURL={apiBaseURL} diagnosticsEnabled={diagnosticsEnabled} name={name} onNameChange={setName} openedLink={openedLink} preferences={preferences} recentCalls={recentCalls} reportError={reportError} buildProfile={diagnosticsMode.buildProfile} />
-      ) : (
-        <Splash onLayout={() => void SplashScreen.hideAsync()} />
-      )}
+      {ready ? <Shell apiBaseURL={apiBaseURL} diagnosticsEnabled={diagnosticsEnabled} name={name} onNameChange={setName} openedLink={openedLink} preferences={preferences} recentCalls={recentCalls} reportError={reportError} buildProfile={diagnosticsMode.buildProfile} /> : <Splash />}
       {/* Dev states: the harness lane mounts its route on the next line. */}
     </ChalkUI>
   );

@@ -2,7 +2,7 @@ import { fontFamilies, useTheme } from "@q9labsai/chalk-react-native/ui";
 import { forwardRef, useState } from "react";
 import { StyleSheet, TextInput, type TextInputProps } from "react-native";
 
-export type TextFieldProps = Omit<TextInputProps, "style"> & {
+type TextFieldProps = Omit<TextInputProps, "style"> & {
   /** `sheet` is the 48 pt sheet field (`.tin`); `card` is the 44 pt name card field (`.lcard input`). */
   readonly size: "sheet" | "card";
   readonly invalid?: boolean;
@@ -33,7 +33,7 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(function TextFiel
 });
 
 const styles = StyleSheet.create({
-  field: { flex: 1, paddingHorizontal: 14, borderWidth: 1, fontFamily: fontFamilies[400], fontSize: 16 },
-  sheet: { height: 48, borderRadius: 12 },
-  card: { flexGrow: 0, height: 44, borderRadius: 10, fontSize: 14 },
+  field: { paddingHorizontal: 14, borderWidth: 1, fontFamily: fontFamilies[400], fontSize: 16 },
+  sheet: { flex: 1, height: 48, borderRadius: 12 },
+  card: { height: 44, borderRadius: 10, fontSize: 14 },
 });

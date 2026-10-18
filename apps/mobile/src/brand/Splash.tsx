@@ -3,10 +3,10 @@ import { StyleSheet, View } from "react-native";
 import { ChalkMark } from "./ChalkMark";
 
 /** A8: the mark alone on the call background, matching the native launch screen, while the app loads. */
-export function Splash({ onLayout }: { readonly onLayout?: () => void }): React.JSX.Element {
+export function Splash(): React.JSX.Element {
   const { colors } = useTheme();
   return (
-    <View accessibilityLabel="Chalk is starting" onLayout={onLayout} style={[styles.root, { backgroundColor: colors.canvas }]} testID="app.splash">
+    <View accessibilityLabel="Chalk is starting" style={[styles.root, { backgroundColor: colors.canvas }]} testID="app.splash">
       <ChalkMark color={colors.text} size={112} />
     </View>
   );

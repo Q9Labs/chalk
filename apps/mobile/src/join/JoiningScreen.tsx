@@ -21,7 +21,7 @@ type JoiningScreenProps = {
   readonly onFailed: (cause: unknown) => void;
 };
 
-export function joiningName(target: JoinTarget, displayName: string): string {
+function joiningName(target: JoinTarget, displayName: string): string {
   if (target.kind === "link") return target.route.spaceName ?? target.route.space;
   return `${displayName.split(/\s+/u)[0]}’s call`;
 }
@@ -56,7 +56,7 @@ export function JoiningScreen({ apiBaseURL, target, displayName, onArrived, onFa
 }
 
 /** T1 as drawn: the limbo on the call background. */
-export function Joining({ callName }: { readonly callName: string }): React.JSX.Element {
+function Joining({ callName }: { readonly callName: string }): React.JSX.Element {
   const { colors } = useTheme();
   return (
     <View style={[styles.root, { backgroundColor: colors.canvas }]} testID="join.joining">
