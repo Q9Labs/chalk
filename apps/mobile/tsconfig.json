@@ -2,23 +2,55 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "jsx": "react-jsx",
-    "types": ["node", "expo/types"],
+    "types": [
+      "node",
+      "expo/types"
+    ],
     "paths": {
-      "@/*": ["./src/*"],
-      "@q9labsai/chalk-client": ["../../sdks/typescript/client/src/index.ts"],
-      "@q9labsai/chalk-client/access": ["../../sdks/typescript/client/src/access/grant.ts"],
-      "@q9labsai/chalk-client/effect": ["../../sdks/typescript/client/src/effect.ts"],
-      "@q9labsai/chalk-client/invites": ["../../sdks/typescript/client/src/public-invites/index.ts"],
-      "@q9labsai/chalk-whiteboard/embedded": ["../../packages/whiteboard/src/embedded/index.ts"],
-      "@q9labsai/facehash/react-native": ["../../packages/facehash/src/index.native.ts"],
-      "@q9labsai/chalk-react-native": ["../../sdks/typescript/react-native/src/index.ts"],
-      "@q9labsai/chalk-react-native/client": ["../../sdks/typescript/react-native/src/client.ts"],
-      "@q9labsai/chalk-react-native/clipboard": ["../../sdks/typescript/react-native/src/clipboard.ts"],
-      "@q9labsai/chalk-react-native/diagnostics": ["../../sdks/typescript/react-native/src/diagnostics.ts"],
-      "@q9labsai/chalk-react-native/invites": ["../../sdks/typescript/react-native/src/invites.ts"],
-      "@q9labsai/chalk-react-native/runtime": ["../../sdks/typescript/react-native/src/runtime.ts"],
-      "@q9labsai/chalk-react-native/theme": ["../../sdks/typescript/react-native/src/ui/theme.ts"]
+      "@/*": [
+        "./src/*"
+      ],
+      "@q9labsai/chalk-client": [
+        "../../sdks/typescript/client/src/index.ts"
+      ],
+      "@q9labsai/chalk-client/access": [
+        "../../sdks/typescript/client/src/access/grant.ts"
+      ],
+      "@q9labsai/chalk-client/effect": [
+        "../../sdks/typescript/client/src/effect.ts"
+      ],
+      "@q9labsai/chalk-client/invites": [
+        "../../sdks/typescript/client/src/public-invites/index.ts"
+      ],
+      "@q9labsai/chalk-whiteboard/embedded": [
+        "../../packages/whiteboard/src/embedded/index.ts"
+      ],
+      "@q9labsai/facehash/react-native": [
+        "../../packages/facehash/src/index.native.ts"
+      ],
+      "@q9labsai/chalk-react-native": [
+        "../../sdks/typescript/react-native/src/index.ts"
+      ],
+      "@q9labsai/chalk-react-native/client": [
+        "../../sdks/typescript/react-native/src/client.ts"
+      ],
+      "@q9labsai/chalk-react-native/clipboard": [
+        "../../sdks/typescript/react-native/src/clipboard.ts"
+      ],
+      "@q9labsai/chalk-react-native/diagnostics": [
+        "../../sdks/typescript/react-native/src/diagnostics.ts"
+      ],
+      "@q9labsai/chalk-react-native/invites": [
+        "../../sdks/typescript/react-native/src/invites.ts"
+      ],
+      "@q9labsai/chalk-react-native/runtime": [
+        "../../sdks/typescript/react-native/src/runtime.ts"
+      ]
     }
   },
-  "include": ["**/*.ts", "**/*.tsx", "**/*.d.ts"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "**/*.d.ts"
+  ]
 }
