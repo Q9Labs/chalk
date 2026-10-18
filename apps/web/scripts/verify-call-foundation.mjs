@@ -63,6 +63,7 @@ try {
   await page.goto(`${origin}/call-states.html?state=duo`);
   const phoneStage = page.getByTestId("stage");
   await phoneStage.locator(":scope > div > *").first().waitFor();
+  await page.waitForTimeout(300);
   const tilesBefore = await phoneStage.locator(":scope > div > *").elementHandles();
   const spotlightBox = await tilesBefore[0].boundingBox();
   await page.getByRole("button", { name: "More options", exact: true }).click();
@@ -80,6 +81,7 @@ try {
   await page.goto(`${origin}/web-space-journey.html`);
   await page.getByRole("button", { name: "More options", exact: true }).click();
   const webMore = page.getByRole("dialog", { name: "More options", exact: true });
+  await page.waitForTimeout(300);
   const webStage = page.getByTestId("stage");
   const webTiles = await webStage.locator(":scope > div > *").elementHandles();
   const webSpotlight = await webTiles[0].boundingBox();
