@@ -5,6 +5,7 @@ import { EmbeddedWhiteboard } from "../components/EmbeddedWhiteboard";
 import { RtcVideoView } from "../components/RtcVideoView";
 import { useSpaceClient } from "../context/space-client-context";
 import { useDevScenario } from "../frame/dev-scenario";
+import { useMeasuredRef } from "../frame/measurement";
 import { Icon } from "../icons/Icon";
 import { createNativeMediaStream } from "../media/native-webrtc";
 import type { Frame } from "../motion/MovingFrame";
@@ -28,8 +29,10 @@ export type ContentTileProps = {
 /** The shared screen or board as one stage tile (`.tile.content`), kept mounted while it moves. */
 export const ContentTile = memo(function ContentTile({ content, inner, mini, onShowInSpotlight }: ContentTileProps): React.JSX.Element {
   const { colors } = useTheme();
+  const tileStyle = [styles.tile, { backgroundColor: colors.tile }];
+  const tileRef = useMeasuredRef<View>("tile.content", tileStyle);
   return (
-    <View style={[styles.tile, { backgroundColor: colors.tile }]} testID="tile.content">
+    <View ref={tileRef} style={tileStyle} testID="tile.content">
       {content.kind === "screen" ? <ScreenShare inner={inner} mini={mini} onShowInSpotlight={onShowInSpotlight} sharerId={content.sharerId} /> : <Board mini={mini} onShowInSpotlight={onShowInSpotlight} />}
     </View>
   );
@@ -63,6 +66,8 @@ function Board({ mini, onShowInSpotlight }: { readonly mini: boolean; readonly o
   const client = useSpaceClient();
   const { colors, scheme } = useTheme();
   const status = useSpaceSelector(selectBoard);
+  const chipStyle = [styles.viewOnly, { backgroundColor: colors.surface, borderColor: colors.lineStrong }];
+  const chipRef = useMeasuredRef<View>("tile.content.view-only", chipStyle);
   // The transport changes when the engine resubscribes.
   const transport = useMemo(() => client.whiteboard.transport(), [client, status]);
   const journeyId = useRef(`board-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`).current;
@@ -76,7 +81,7 @@ function Board({ mini, onShowInSpotlight }: { readonly mini: boolean; readonly o
           <NameTag icon="pen" name="Board" testID="tile.content.name" />
         </>
       ) : (
-        <View accessibilityLiveRegion="polite" accessibilityRole="text" accessible style={[styles.viewOnly, { backgroundColor: colors.surface, borderColor: colors.lineStrong }]} testID="tile.content.view-only">
+        <View accessibilityLiveRegion="polite" accessibilityRole="text" accessible ref={chipRef} style={chipStyle} testID="tile.content.view-only">
           <Icon color={colors.textMuted} name="lock" size={16} />
           <ChalkText tone="textSoft" variant="section">
             View only

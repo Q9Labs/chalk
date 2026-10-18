@@ -134,8 +134,10 @@ function StageTile({ item, content, pinned, mirror, peopleCount, onOpenTile, onO
 /** `.more`: the last tile when the rest don't fit, showing how many more people there are. */
 const MoreTile = memo(function MoreTile({ count, peopleCount, onPress }: { readonly count: number; readonly peopleCount: number; readonly onPress: () => void }): React.JSX.Element {
   const { colors } = useTheme();
+  const restStyle = [styles.more, { backgroundColor: colors.raised }];
+  const moreRef = useMeasuredRef<View>("tile.more", restStyle);
   return (
-    <Pressable accessibilityLabel={`Show all ${peopleCount} people`} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.more, { backgroundColor: pressed ? colors.hover : colors.raised }]} testID="tile.more">
+    <Pressable accessibilityLabel={`Show all ${peopleCount} people`} accessibilityRole="button" onPress={onPress} ref={moreRef} style={({ pressed }) => (pressed ? [styles.more, { backgroundColor: colors.hover }] : restStyle)} testID="tile.more">
       <ChalkText style={styles.moreText}>{`+${count}`}</ChalkText>
     </Pressable>
   );

@@ -7,6 +7,7 @@ import { tileAvatarSize } from "../avatar/tile-avatar-size";
 import { RtcVideoView } from "../components/RtcVideoView";
 import { useSpaceClient } from "../context/space-client-context";
 import { useDevScenario } from "../frame/dev-scenario";
+import { useMeasuredRef } from "../frame/measurement";
 import { Icon } from "../icons/Icon";
 import { createNativeMediaStream } from "../media/native-webrtc";
 import { timings } from "../motion/motion";
@@ -75,6 +76,7 @@ export const ParticipantTile = memo(function ParticipantTile({ id, width, height
   const video = tileVideo(slot, streamURL, tile.isSelf && !tile.back && mirror);
   const name = tile.isSelf ? (float ? "You" : `${tile.name} (You)`) : tile.name;
   const state = `${tile.muted ? ", microphone off" : ""}${tile.handRaised ? ", hand raised" : ""}`;
+  const hitRef = useMeasuredRef<View>(`tile.${id}.open`, StyleSheet.absoluteFill);
   const label = `Options for ${tile.name}${tile.isSelf ? " (you)" : ""}${pinned ? ", pinned" : ""}${state}`;
 
   return (
@@ -84,7 +86,7 @@ export const ParticipantTile = memo(function ParticipantTile({ id, width, height
           <FaceAvatar level={level} lookAround name={tile.name} size={tileAvatarSize(width, height)} style="bold" />
         </View>
       )}
-      <Pressable accessibilityHint="Opens a sheet" accessibilityLabel={label} accessibilityRole="button" onPress={() => onOpen(id)} style={StyleSheet.absoluteFill} testID={`tile.${id}.open`} />
+      <Pressable accessibilityHint="Opens a sheet" accessibilityLabel={label} accessibilityRole="button" onPress={() => onOpen(id)} ref={hitRef} style={StyleSheet.absoluteFill} testID={`tile.${id}.open`} />
       <NameTag handRaised={tile.handRaised} muted={tile.muted} name={name} pinned={pinned} testID={`tile.${id}.name`} />
       {tile.isSelf && video !== null ? <FlipCameraButton back={tile.back} float={float} testID={`tile.${id}.flip`} /> : null}
     </TileShell>
