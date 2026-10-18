@@ -297,6 +297,6 @@ func transcriptArtifactAPIError(err error) (APIError, bool) {
 	case errors.Is(err, transcripts.ErrArtifactRepository):
 		return apiErrorServiceUnavailable, true
 	default:
-		return APIError{}, false
+		return authorizationAPIError(err), true
 	}
 }
