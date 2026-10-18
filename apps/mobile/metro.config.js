@@ -17,7 +17,7 @@ config.watchFolders = [workspaceNodeModules, chalkClientRoot, sdkReactNativeRoot
 config.resolver.nodeModulesPaths = [appNodeModules, workspaceNodeModules];
 // Native modules must load once. pnpm links the SDK its own copies of its peers, so Metro skips
 // those and resolves every one from the app.
-const appOwnedPeers = ["@hugeicons/core-free-icons", "@hugeicons/react-native", "expo-audio", "expo-haptics", "react-native-gesture-handler", "react-native-reanimated", "react-native-safe-area-context", "react-native-svg", "react-native-worklets"];
+const appOwnedPeers = ["expo-audio", "expo-haptics", "react-native-gesture-handler", "react-native-reanimated", "react-native-safe-area-context", "react-native-svg", "react-native-worklets"];
 config.resolver.extraNodeModules = {
   "@q9labsai/chalk-whiteboard": whiteboardRoot,
   ...Object.fromEntries(appOwnedPeers.map((name) => [name, path.resolve(appNodeModules, name)])),
