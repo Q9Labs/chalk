@@ -20,7 +20,7 @@ function playFlip(previous: readonly { element: HTMLElement; box: DOMRect }[]): 
         { transformOrigin: "0 0", transform: `translate(${box.x - boxAfter.x}px, ${box.y - boxAfter.y}px) ${base} scale(${box.width / boxAfter.width}, ${box.height / boxAfter.height})` },
         { transformOrigin: "0 0", transform },
       ],
-      { duration: 220, easing: "cubic-bezier(.16,1,.3,1)" },
+      { duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" },
     );
     moves.set(element, animation);
   }

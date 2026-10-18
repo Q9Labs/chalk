@@ -1471,6 +1471,13 @@
 .chalk-frame:has(.chalk-drawer[data-state="open"]) .chalk-stage-layout {
   right: 368px;
 }
+.chalk-stage-layout [data-testid="stage"] {
+  overflow: visible;
+}
+.chalk-stage-layout [data-testid="stage"] > div > [aria-hidden="true"] {
+  visibility: hidden;
+  pointer-events: none;
+}
 .chalk-frame-dock {
   position: absolute;
   left: 0;

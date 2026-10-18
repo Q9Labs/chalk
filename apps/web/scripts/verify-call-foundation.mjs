@@ -60,6 +60,24 @@ try {
   await page.getByRole("menuitemradio", { name: "Grid", exact: true }).click();
   await page.getByRole("button", { name: "Layout: Grid", exact: true }).waitFor();
   await page.setViewportSize({ width: 390, height: 844 });
+  const gridStage = page.getByTestId("stage");
+  await page.getByRole("button", { name: "Next page", exact: true }).waitFor();
+  assert.equal(await gridStage.evaluate((element) => getComputedStyle(element).overflow), "visible", "the stage does not clip FLIP at its temporary fitted edge");
+  const pageButtons = page.getByRole("button", { name: /^Go to page / });
+  const pageCount = await pageButtons.count();
+  assert.ok(pageCount >= 3, "the phone grid exercises first, middle and last pages");
+  for (const index of [0, 1, pageCount - 1]) {
+    await pageButtons.nth(index).click();
+    await page.waitForTimeout(300);
+    const offPage = gridStage.locator(':scope > div > [aria-hidden="true"]');
+    assert.ok((await offPage.count()) > 0);
+    assert.equal(
+      await offPage.evaluateAll((elements) => elements.every((element) => getComputedStyle(element).visibility === "hidden" && getComputedStyle(element).pointerEvents === "none")),
+      true,
+      "off-page tiles stay mounted but cannot show or intercept a click while the stage overflows",
+    );
+    assert.equal(await pageButtons.nth(index).getAttribute("aria-current"), "page");
+  }
   await page.goto(`${origin}/call-states.html?state=duo`);
   const phoneStage = page.getByTestId("stage");
   assert.equal(await page.locator('[data-part="dock-more-glyph"]').getAttribute("d"), "M5 12h.01M12 12h.01M19 12h.01");
@@ -148,6 +166,7 @@ try {
   await page.getByRole("button", { name: "Move fixture", exact: true }).click();
   assert.equal(await moving.evaluate((node, original) => node === original, identity), true, "FLIP preserves the mounted node");
   assert.equal(await moving.evaluate((node) => node.getAnimations()[0]?.effect.getTiming().duration), 220);
+  assert.equal(await moving.evaluate((node) => node.getAnimations()[0]?.effect.getTiming().easing), "cubic-bezier(0.2, 0.8, 0.2, 1)");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.getByRole("button", { name: "Move fixture", exact: true }).click();
   assert.equal(await moving.evaluate((node) => node.getAnimations().filter((animation) => animation.playState === "running").length), 0, "reduced motion is instant");
