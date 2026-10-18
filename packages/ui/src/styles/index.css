@@ -1569,9 +1569,6 @@
   .chalk-toasts {
     bottom: 110px;
   }
-  .chalk-toast {
-    max-width: calc(100% - 24px);
-  }
   .chalk-drawer {
     inset: auto 0 0;
     width: 100%;
@@ -1636,8 +1633,10 @@
 .chalk-call-details {
   z-index: 85;
   width: 368px;
-  max-height: calc(100vh - 150px);
+  max-height: calc(100% - 150px);
   overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--chalk-pressed) transparent;
   padding: 8px 8px 10px;
   animation: none;
   transition:
@@ -1727,6 +1726,9 @@
   border: 1px solid var(--chalk-line-strong);
   border-width: 1px 0 0;
   box-shadow: 0 12px 32px var(--chalk-menu-shadow-color);
+  transform: translateY(32px);
+  scrollbar-width: thin;
+  scrollbar-color: var(--chalk-pressed) transparent;
   transition:
     opacity 0.18s var(--chalk-ease-out-expo),
     transform 0.18s var(--chalk-ease-out-expo);

@@ -76,7 +76,7 @@ try {
   await sheet.waitFor();
   await sheet.evaluate(async (element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
   const sheetBox = await sheet.boundingBox();
-  assert.ok(sheetBox && Math.abs(sheetBox.x) < 1 && Math.abs(sheetBox.width - 390) < 1 && Math.abs(sheetBox.y + sheetBox.height - 844) < 1, "phone sheet anchors to the call viewport, not its header trigger");
+  assert.ok(sheetBox && Math.abs(sheetBox.x) < 1 && Math.abs(sheetBox.width - 390) < 1 && Math.abs(sheetBox.y + sheetBox.height - 876) < 1, "phone details anchors to the call viewport with the mockup's 32px translation, not its header trigger");
   const scrimBox = await page.locator('[data-part="sheet-scrim"]').boundingBox();
   assert.deepEqual(scrimBox, { x: 0, y: 0, width: 390, height: 844 }, "sheet scrim covers the call viewport");
   for (let i = 0; i < 8; i++) {
