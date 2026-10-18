@@ -127,6 +127,10 @@ def remote(args):
                 run(['xcodebuild', '-workspace', str(workspaces[0]), '-scheme', 'Chalk', '-configuration', 'Debug', '-sdk', 'iphonesimulator', '-destination', f'id={device}', '-derivedDataPath', str(path / 'native-build'), 'IPHONEOS_DEPLOYMENT_TARGET=15.1', 'build'], stdout=open(path / 'xcodebuild.log', 'w'), stderr=subprocess.STDOUT)
                 stamp.write_text(signature)
             run(['xcrun', 'simctl', 'install', device, str(built)])
+            app_data = Path(subprocess.check_output(['xcrun', 'simctl', 'get_app_container', device, bundle, 'data'], text=True).strip())
+            preferences = app_data / 'Library/Preferences'
+            preferences.mkdir(parents=True, exist_ok=True)
+            run(['defaults', 'write', str(preferences / bundle), 'RCT_jsLocation', '-string', '127.0.0.1:8081'])
         else:
             sdk = Path.home() / 'Library/Android/sdk'
             os.environ['ANDROID_HOME'] = str(sdk)
@@ -162,9 +166,11 @@ def remote(args):
             apk = app / 'android/app/build/outputs/apk/debug/app-debug.apk'
             if not prepared or not apk.exists():
                 run(['pnpm', '--dir', str(app), 'exec', 'expo', 'prebuild', '--platform', 'android', '--no-install'])
-                run(['./gradlew', 'assembleDebug'], cwd=app / 'android')
+                run(['./gradlew', 'assembleDebug', '-PreactNativeArchitectures=arm64-v8a'], cwd=app / 'android')
                 stamp.write_text(signature)
             run([adb, '-s', 'emulator-5580', 'install', '-r', str(apk)])
+            run([adb, '-s', 'emulator-5580', 'shell', 'run-as', bundle, 'mkdir', '-p', 'shared_prefs'])
+            run([adb, '-s', 'emulator-5580', 'shell', 'run-as', bundle, 'tee', f'shared_prefs/{bundle}_preferences.xml'], input='<map><string name="debug_http_host">localhost:8081</string></map>', text=True)
         metro = start(['pnpm', '--dir', str(app), 'exec', 'expo', 'start', '--localhost', '--port', str(args.port)], 'metro.log')
         import urllib.request
         deadline = time.monotonic() + 120
@@ -180,15 +186,23 @@ def remote(args):
         out = path / 'captures'
         out.mkdir(exist_ok=True)
         for index, codes in enumerate(args.states):
-            from urllib.parse import urlencode
+            from urllib.parse import urlencode, urlsplit, urlunsplit
             query = {'codes': codes}
             if args.dump:
-                query.update(dump=args.dump, ids=args.ids)
+                endpoint = args.dump
+                if args.platform == 'android':
+                    target = urlsplit(endpoint)
+                    if target.scheme != 'http' or target.hostname not in ['localhost', '127.0.0.1', '10.0.2.2']:
+                        raise ValueError('Dump endpoint must be local HTTP')
+                    dump_port = target.port or 80
+                    run([adb, '-s', 'emulator-5580', 'reverse', f'tcp:{dump_port}', f'tcp:{dump_port}'])
+                    endpoint = urlunsplit(('http', f'127.0.0.1:{dump_port}', target.path, target.query, ''))
+                query.update(dump=endpoint, ids=args.ids)
             url = 'chalk://dev/states?' + urlencode(query)
             light = 'V2' in codes.split(',')
             if args.platform == 'ios':
                 run(['xcrun', 'simctl', 'ui', device, 'appearance', 'light' if light else 'dark'])
-                start(['xcrun', 'simctl', 'launch', '--console', device, bundle], 'app-console.log')
+                start(['xcrun', 'simctl', 'launch', '--console', device, bundle, '-RCT_jsLocation', '127.0.0.1:8081'], 'app-console.log')
                 import shutil
                 if not shutil.which(args.maestro):
                     raise RuntimeError('iOS deep-link confirmation requires Maestro; pass --maestro /path/on/M4')
