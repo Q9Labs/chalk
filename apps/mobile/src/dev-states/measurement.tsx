@@ -8,7 +8,7 @@ const registry = new Map<string, () => Promise<Measurement>>();
 function expanded(style: ViewStyle | TextStyle) {
   return {
     backgroundColor: "transparent",
-    borderRadius: 0,
+    borderRadius: style.borderRadius ?? ([style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomRightRadius, style.borderBottomLeftRadius].some((value) => value !== undefined) ? undefined : 0),
     borderWidth: 0,
     borderColor: "transparent",
     opacity: 1,

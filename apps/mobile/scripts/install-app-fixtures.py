@@ -19,5 +19,5 @@ for relative in ['home/HomeScreen.tsx', 'join/NameStep.tsx', 'call/ReadySheet.ts
     if relative == 'join/JoiningScreen.tsx':
         text = text.replace('function Joining({', 'export function Joining({')
     if relative == 'join/NameStep.tsx':
-        text = text.replace('<MeasuredView style={styles.card}', '<MeasuredView testID="join.name-card" style={styles.card}')
+        text = text.replace('<MeasuredView style={[styles.card,', '<MeasuredView testID="join.name-card" style={[styles.card,')
     path.write_text(text)

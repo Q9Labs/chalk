@@ -35,14 +35,30 @@ export function DevStates({ url }: { url: string }) {
     setError(null);
     const sheet = params.get("sheet");
     const menu = params.get("menu");
-    if ((sheet && sheet !== "more" && sheet !== "people") || (menu && menu !== "leave")) {
+    if ((sheet && !["more", "people", "chat", "details", "route"].includes(sheet)) || (menu && !["leave", "route"].includes(menu))) {
       setError(`SDK scenario adapter does not support sheet=${sheet}, menu=${menu}`);
       return;
     }
     const forced: DevScenario = {
       ...callStateForScreen(state.screen),
-      ...(sheet === "more" || sheet === "people" ? { sheet } : {}),
-      ...(menu === "leave" ? { menu } : {}),
+      ...(sheet === "more" || sheet === "people" || sheet === "chat" || sheet === "details" || sheet === "route" ? { sheet } : {}),
+      ...(menu === "leave" || menu === "route" ? { menu } : {}),
+      layout: state.layout === "grid" ? "grid" : "spotlight",
+      shareAspect: state.aspect,
+      ...(params.get("pinned") ? { pinned: params.get("pinned") ?? undefined } : {}),
+      screenSlots: scenario.codes.includes("C2")
+        ? {
+            "person-1": (
+              <View style={{ flex: 1, backgroundColor: "#273A56" }}>
+                <Text style={{ color: "white" }}>Quarterly plan</Text>
+              </View>
+            ),
+          }
+        : {},
+      audioRoutes: {
+        routes: [{ id: "earpiece", kind: "earpiece", name: "Phone" }, { id: "speaker", kind: "speaker", name: "Speaker" }, ...(scenario.codes.includes("K3") ? [{ id: "bluetooth", kind: "bluetooth" as const, name: "AirPods Pro" }] : [])],
+        selected: scenario.codes.includes("K3") ? "bluetooth" : "speaker",
+      },
       videoSlots: Object.fromEntries(client.getSnapshot().participants.roster.map((person, index) => [person.participantId, <View key={person.participantId} style={{ flex: 1, backgroundColor: index % 2 ? "#49645D" : "#4D5D73" }} />])),
     };
     dev?.setDevScenario(forced);
@@ -57,18 +73,18 @@ export function DevStates({ url }: { url: string }) {
       clearTimeout(timer);
       dev?.setDevScenario(null);
     };
-  }, [client, params, state.events, state.screen]);
+  }, [client, params, state.events, state.screen, state.layout, state.aspect, scenario.codes]);
   useEffect(() => {
     const endpoint = params.get("dump");
     if (!endpoint || scenario.error) return;
     const timer = setTimeout(() => {
-      void sendMeasurements(endpoint, (params.get("ids") ?? "").split(",").filter(Boolean), scenario.codes.join(","), appSurface ? "app" : "sdk").catch((cause) => setError(String(cause)));
+      void sendMeasurements(endpoint, (params.get("ids") ?? "").split(",").filter(Boolean), params.get("capture") ?? scenario.codes.join(","), appSurface ? "app" : "sdk").catch((cause) => setError(String(cause)));
     }, 800);
     return () => clearTimeout(timer);
   }, [params, scenario, appSurface]);
   if (scenario.error || error) return <Text accessibilityRole="alert">{scenario.error ?? error}</Text>;
   if (!supportsCallState && ["knocking", "refused", "hold", "full", "ended", "removed"].includes(state.screen)) return <Text accessibilityRole="alert">This fixture requires the mobile-redesign-states SDK callState seam.</Text>;
-  const supported: readonly ScenarioCode[] = ["D1", "D2", "O1", "P1", "P2", "P3", "P4", "U1", "U2", "V1", "V2", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "T1", "T2", "T3", "T4", "T5", "T6", "C1", "F5", "F6"];
+  const supported: readonly ScenarioCode[] = ["D1", "D2", "O1", "O2", "P1", "P2", "P3", "P4", "U1", "U2", "V1", "V2", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "T1", "T2", "T3", "T4", "T5", "T6", "C1", "C2", "C3", "G1", "G2", "S1", "S2", "S3", "S4", "W1", "K3", "K8", "F4", "F5", "F6"];
   const unsupported = scenario.codes.filter((code) => !supported.includes(code));
   if (unsupported.length) return <Text accessibilityRole="alert">SDK scenario adapter does not support: {unsupported.join(",")}</Text>;
   return (

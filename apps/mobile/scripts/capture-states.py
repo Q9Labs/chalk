@@ -55,13 +55,14 @@ def remote(args):
         watcher = subprocess.Popen([sys.executable, str(Path(__file__).with_name('capture-owner-watch.py')), str(owner_state)], stdin=subprocess.PIPE, stdout=cleanup_log, stderr=subprocess.STDOUT, start_new_session=True, pass_fds=(lock.fileno(),))
     def run(command, **kwargs):
         data = kwargs.pop('input', None)
+        timeout = kwargs.pop('timeout', None)
         if data is not None:
             kwargs['stdin'] = subprocess.PIPE
         proc = subprocess.Popen(command, start_new_session=True, **kwargs)
         processes.append(proc)
         remember()
         try:
-            proc.communicate(data)
+            proc.communicate(data, timeout=timeout)
             if proc.returncode:
                 raise subprocess.CalledProcessError(proc.returncode, command)
             return proc
@@ -116,9 +117,16 @@ def remote(args):
         app = path / 'apps/mobile'
         # Package exports resolve dist: rebuilding it is required even when native binaries are cached.
         run(['pnpm', '--dir', str(app), 'run', 'prepare:native-dependencies'])
-        native_inputs = [path / item for item in ['pnpm-lock.yaml', 'apps/mobile/package.json', 'apps/mobile/app.config.ts', 'sdks/typescript/react-native/package.json']]
-        native_inputs += sorted((app / 'assets').rglob('*'))
-        signature = hashlib.sha256(b''.join(item.read_bytes() for item in native_inputs if item.is_file())).hexdigest()
+        native_inputs = json.loads((path / 'native-inputs.json').read_text())
+        digest = hashlib.sha256()
+        for relative in native_inputs:
+            content = (path / relative).read_bytes()
+            if relative.endswith('/package.json'):
+                package = json.loads(content)
+                package.pop('scripts', None)
+                content = json.dumps(package, sort_keys=True, separators=(',', ':')).encode()
+            digest.update(relative.encode() + b'\0' + content + b'\0')
+        signature = digest.hexdigest()
         stamp = path / ('native-' + args.platform + '.stamp')
         prepared = stamp.exists() and stamp.read_text() == signature
         cache = Path(args.client_cache) if args.client_cache else path
@@ -142,7 +150,11 @@ def remote(args):
             if args.client_cache and not built.exists():
                 raise RuntimeError('Shared iOS client missing')
             if not args.client_cache and (not prepared or not built.exists()):
-                run(['pnpm', '--dir', str(app), 'exec', 'expo', 'prebuild', '--platform', 'ios', '--no-install'])
+                if not (app / 'ios/Chalk.xcodeproj').exists():
+                    run(['pnpm', '--dir', str(app), 'exec', 'expo', 'prebuild', '--platform', 'ios', '--no-install'])
+                if args.ios_proof_overlay:
+                    run(['python3', args.ios_proof_overlay, str(app)])
+                    (path / 'native-proof.json').write_text(json.dumps({'ios_overlay_sha256': hashlib.sha256(Path(args.ios_proof_overlay).read_bytes()).hexdigest(), 'kind': 'M4-only; excluded from release source'}))
                 run(['pod', 'install'], cwd=app / 'ios')
                 workspaces = list((app / 'ios').glob('*.xcworkspace'))
                 if len(workspaces) != 1:
@@ -197,7 +209,8 @@ def remote(args):
             if args.client_cache and not apk.exists():
                 raise RuntimeError('Shared Android client missing')
             if not args.client_cache and (not prepared or not apk.exists()):
-                run(['pnpm', '--dir', str(app), 'exec', 'expo', 'prebuild', '--platform', 'android', '--no-install'])
+                if not (app / 'android/gradlew').exists():
+                    run(['pnpm', '--dir', str(app), 'exec', 'expo', 'prebuild', '--platform', 'android', '--no-install'])
                 run(['./gradlew', 'assembleDebug', '-PreactNativeArchitectures=arm64-v8a'], cwd=app / 'android')
                 stamp.write_text(signature)
             run([adb, '-s', serial, 'install', '-r', str(apk)])
@@ -205,7 +218,7 @@ def remote(args):
             preferences = '<?xml version="1.0" encoding="utf-8"?><map><string name="debug_http_host">127.0.0.1:' + str(args.port) + '</string></map>'
             run([adb, '-s', serial, 'shell', 'run-as', bundle, 'mkdir', '-p', 'shared_prefs'])
             run([adb, '-s', serial, 'shell', 'run-as', bundle, 'sh', '-c', shlex.quote('cat > shared_prefs/' + bundle + '_preferences.xml')], input=preferences, text=True)
-        metro = start(['pnpm', '--dir', str(app), 'exec', 'expo', 'start', '--localhost', '--port', str(args.port)], 'metro.log')
+        metro = start(['pnpm', '--dir', str(app), 'exec', 'expo', 'start', '--clear', '--localhost', '--port', str(args.port)], 'metro.log')
         import urllib.request
         deadline = time.monotonic() + 120
         while True:
@@ -241,85 +254,114 @@ def remote(args):
             run([adb, '-s', serial, 'reverse', f'tcp:{measurement_port}', f'tcp:{measurement_port}'])
         else:
             start(['xcrun', 'simctl', 'spawn', device, 'log', 'stream', '--style', 'compact', '--predicate', 'process == "Chalk"'], 'app-console.log')
+        orientation = 'portrait'
+        failures = []
+        payload = {}
+        actual = None
         for index, state in enumerate(args.states):
-            from urllib.parse import parse_qsl, urlencode
-            codes, _, options = state.partition('?')
-            query = {'codes': codes}
-            query.update(parse_qsl(options, strict_parsing=True))
-            if args.sheet:
-                query['sheet'] = args.sheet
-            if args.menu:
-                query['menu'] = args.menu
-            requested_ids = list(dict.fromkeys(['frame.screen', *filter(None, args.ids.split(','))]))
-            query.update(dump=f'http://127.0.0.1:{measurement_port}/dump', ids=','.join(requested_ids))
-            received.pop(codes, None)
-            url = 'chalk://dev/states?' + urlencode(query)
-            light = 'V2' in codes.split(',')
-            if args.platform == 'ios':
-                run(['xcrun', 'simctl', 'ui', device, 'appearance', 'light' if light else 'dark'])
-                if index == 0:
-                    subprocess.run(['xcrun', 'simctl', 'terminate', device, bundle], capture_output=True)
-                    run(['xcrun', 'simctl', 'launch', device, bundle, '-RCT_jsLocation', f'127.0.0.1:{args.port}'])
-                run(['xcrun', 'simctl', 'openurl', device, url])
-            else:
-                run([adb, '-s', serial, 'reverse', f'tcp:{args.port}', f'tcp:{args.port}'])
-                run([adb, '-s', serial, 'shell', 'cmd', 'uimode', 'night', 'no' if light else 'yes'])
-                run([adb, '-s', serial, 'shell', shlex.join(['am', 'start', '-a', 'android.intent.action.VIEW', '-d', url, bundle])])
-            deadline = time.monotonic() + 180
-            warm_deliveries = [time.monotonic() + delay for delay in [10, 30, 60]] if index == 0 and args.platform == 'ios' else []
-            while codes not in received:
-                if metro.poll() is not None or time.monotonic() > deadline:
-                    raise RuntimeError(f'No native SDK measurement upload for {state}; inspect app-console.log/metro.log')
-                receiver.handle_request()
-                if codes not in received and warm_deliveries and time.monotonic() >= warm_deliveries[0]:
-                    # A cold native launch may deliver the URL before JS installs its Linking listener.
-                    run(['xcrun', 'simctl', 'openurl', device, url])
-                    warm_deliveries.pop(0)
-            payload = received.pop(codes)
-            (out / f'{index}-measurements.json').write_text(json.dumps(payload, indent=2))
-            if payload.get('platform') != args.platform or not payload.get('root', {}).get('frame') or not payload.get('measurements', {}).get('frame.screen', {}).get('frame'):
-                raise RuntimeError(f'Native {payload.get("surface", "sdk")} root is not mounted for {state}: {payload}; inspect unsupported-state errors and native startup logs')
-            expected = [393, 852] if args.platform == 'ios' else [412, 915]
-            actual = [payload.get('screen', {}).get('width'), payload.get('screen', {}).get('height')]
-            if actual != expected or payload.get('scale') != 3:
-                raise RuntimeError(f'Wrong native device: expected {expected} at 3x, received {actual} at {payload.get("scale")}x')
-            print(f'Native SDK ready: {state}', flush=True)
-            if args.dump:
-                request = urllib.request.Request(args.dump, data=json.dumps(payload).encode(), headers={'Content-Type': 'application/json'}, method='POST')
-                with urllib.request.urlopen(request, timeout=10) as response:
-                    response.read()
-            time.sleep(args.settle)
-            if args.platform == 'android':
-                run([adb, '-s', serial, 'shell', 'uiautomator', 'dump', '/sdcard/chalk-capture-ui.xml'])
-                hierarchy = subprocess.check_output([adb, '-s', serial, 'exec-out', 'cat', '/sdcard/chalk-capture-ui.xml'], text=True)
-                if "isn't responding" in hierarchy or 'isn\u2019t responding' in hierarchy:
-                    raise RuntimeError('Android ANR dialog covers the app; capture rejected')
-            if args.flow:
-                import shutil
-                if not shutil.which(args.maestro):
-                    raise RuntimeError('Scripted tap/drag capture needs Maestro on the M4')
+            try:
+                from urllib.parse import parse_qsl, urlencode
+                codes, _, options = state.partition('?')
+                query = {'codes': codes}
+                query.update(parse_qsl(options, strict_parsing=True))
+                if args.sheet:
+                    query['sheet'] = args.sheet
+                if args.menu:
+                    query['menu'] = args.menu
+                requested_ids = list(dict.fromkeys(['frame.screen', *filter(None, args.ids.split(','))]))
+                query.update(dump=f'http://127.0.0.1:{measurement_port}/dump', ids=','.join(requested_ids), capture=state)
+                received.pop(state, None)
+                url = 'chalk://dev/states?' + urlencode(query)
+                light = 'V2' in codes.split(',')
                 if args.platform == 'ios':
-                    recorder = start(['xcrun', 'simctl', 'io', device, 'recordVideo', str(out / f'{index}.mp4')], 'recording.log')
+                    run(['xcrun', 'simctl', 'ui', device, 'appearance', 'light' if light else 'dark'])
+                    if index == 0:
+                        subprocess.run(['xcrun', 'simctl', 'terminate', device, bundle], capture_output=True)
+                        run(['xcrun', 'simctl', 'launch', device, bundle, '-RCT_jsLocation', f'127.0.0.1:{args.port}'])
+                    next_orientation = 'landscape' if 'O2' in codes.split(',') else 'portrait'
+                    if next_orientation != orientation:
+                        flow = out / 'orientation.yaml'
+                        flow.write_text('appId: ' + bundle + '\n---\n- setOrientation: ' + ('LANDSCAPE_LEFT' if next_orientation == 'landscape' else 'PORTRAIT') + '\n')
+                        run([args.maestro, '--device', device, 'test', '--driver-host-port', str(driver_port), str(flow)], timeout=300)
+                        orientation = next_orientation
+                    run(['xcrun', 'simctl', 'openurl', device, url])
                 else:
-                    recorder = start([adb, '-s', serial, 'shell', 'screenrecord', '--time-limit', '120', '/sdcard/chalk-feel.mp4'], 'recording.log')
-                try:
-                    run([args.maestro, '--device', device if args.platform == 'ios' else serial, 'test', '--driver-host-port', str(driver_port), args.flow])
-                finally:
-                    if recorder.poll() is None:
-                        if args.platform == 'android':
-                            run([adb, '-s', serial, 'shell', 'pkill', '-2', 'screenrecord'])
-                        else:
-                            os.killpg(recorder.pid, signal.SIGINT)
-                        recorder.wait(timeout=15)
+                    run([adb, '-s', serial, 'reverse', f'tcp:{args.port}', f'tcp:{args.port}'])
+                    run([adb, '-s', serial, 'shell', 'cmd', 'uimode', 'night', 'no' if light else 'yes'])
+                    run([adb, '-s', serial, 'shell', 'settings', 'put', 'system', 'accelerometer_rotation', '0'])
+                    run([adb, '-s', serial, 'shell', 'settings', 'put', 'system', 'user_rotation', '1' if 'O2' in codes.split(',') else '0'])
+                    run([adb, '-s', serial, 'shell', shlex.join(['am', 'start', '-a', 'android.intent.action.VIEW', '-d', url, bundle])])
+                deadline = time.monotonic() + 180
+                warm_deliveries = [time.monotonic() + delay for delay in [10, 30, 60]] if index == 0 and args.platform == 'ios' else []
+                while state not in received:
+                    if metro.poll() is not None or time.monotonic() > deadline:
+                        raise RuntimeError(f'No native SDK measurement upload for {state}; inspect app-console.log/metro.log')
+                    receiver.handle_request()
+                    if state not in received and warm_deliveries and time.monotonic() >= warm_deliveries[0]:
+                        # A cold native launch may deliver the URL before JS installs its Linking listener.
+                        run(['xcrun', 'simctl', 'openurl', device, url])
+                        warm_deliveries.pop(0)
+                payload = received.pop(state)
+                (out / f'{index}-measurements.json').write_text(json.dumps(payload, indent=2))
+                if payload.get('platform') != args.platform or not payload.get('root', {}).get('frame') or not payload.get('measurements', {}).get('frame.screen', {}).get('frame'):
+                    raise RuntimeError(f'Native {payload.get("surface", "sdk")} root is not mounted for {state}: {payload}; inspect unsupported-state errors and native startup logs')
+                expected = [393, 852] if args.platform == 'ios' else [412, 915]
+                if 'O2' in codes.split(','):
+                    expected.reverse()
+                actual = [payload.get('screen', {}).get('width'), payload.get('screen', {}).get('height')]
+                if actual != expected or payload.get('scale') != 3:
+                    raise RuntimeError(f'Wrong native device: expected {expected} at 3x, received {actual} at {payload.get("scale")}x')
+                print(f'Native SDK ready: {state}', flush=True)
+                if args.dump:
+                    request = urllib.request.Request(args.dump, data=json.dumps(payload).encode(), headers={'Content-Type': 'application/json'}, method='POST')
+                    with urllib.request.urlopen(request, timeout=10) as response:
+                        response.read()
+                time.sleep(args.settle)
                 if args.platform == 'android':
-                    run([adb, '-s', serial, 'pull', '/sdcard/chalk-feel.mp4', str(out / f'{index}.mp4')])
-            target = out / f'{index}-{codes.replace(",", "-")}.png'
-            if args.platform == 'ios':
-                run(['xcrun', 'simctl', 'io', device, 'screenshot', str(target)])
-            else:
-                with target.open('wb') as output:
-                    run([adb, '-s', serial, 'exec-out', 'screencap', '-p'], stdout=output)
-        (out / 'manifest.json').write_text(json.dumps({'platform': args.platform, 'states': args.states, 'screen': actual, 'scale': payload['scale'], 'slot': slot, 'device': device if args.platform == 'ios' else serial, 'metro_port': args.port}, indent=2))
+                    run([adb, '-s', serial, 'shell', 'uiautomator', 'dump', '/sdcard/chalk-capture-ui.xml'])
+                    hierarchy = subprocess.check_output([adb, '-s', serial, 'exec-out', 'cat', '/sdcard/chalk-capture-ui.xml'], text=True)
+                    if "isn't responding" in hierarchy or 'isn\u2019t responding' in hierarchy:
+                        raise RuntimeError('Android ANR dialog covers the app; capture rejected')
+                if args.flow:
+                    import shutil
+                    if not shutil.which(args.maestro):
+                        raise RuntimeError('Scripted tap/drag capture needs Maestro on the M4')
+                    if args.platform == 'ios':
+                        recorder = start(['xcrun', 'simctl', 'io', device, 'recordVideo', str(out / f'{index}.mp4')], 'recording.log')
+                    else:
+                        recorder = start([adb, '-s', serial, 'shell', 'screenrecord', '--time-limit', '120', '/sdcard/chalk-feel.mp4'], 'recording.log')
+                    try:
+                        run([args.maestro, '--device', device if args.platform == 'ios' else serial, 'test', '--driver-host-port', str(driver_port), args.flow])
+                    finally:
+                        if recorder.poll() is None:
+                            if args.platform == 'android':
+                                run([adb, '-s', serial, 'shell', 'pkill', '-2', 'screenrecord'])
+                            else:
+                                os.killpg(recorder.pid, signal.SIGINT)
+                            recorder.wait(timeout=15)
+                    if args.platform == 'android':
+                        run([adb, '-s', serial, 'pull', '/sdcard/chalk-feel.mp4', str(out / f'{index}.mp4')])
+                target = out / f'{index}-{codes.replace(",", "-")}.png'
+                if args.platform == 'ios':
+                    run(['xcrun', 'simctl', 'io', device, 'screenshot', str(target)])
+                else:
+                    with target.open('wb') as output:
+                        run([adb, '-s', serial, 'exec-out', 'screencap', '-p'], stdout=output)
+            except Exception as cause:
+                diagnostic = out / f'{index}-failure.png'
+                if args.platform == 'ios':
+                    subprocess.run(['xcrun', 'simctl', 'io', device, 'screenshot', str(diagnostic)])
+                else:
+                    with diagnostic.open('wb') as output:
+                        subprocess.run([adb, '-s', serial, 'exec-out', 'screencap', '-p'], stdout=output)
+                failures.append({'state': state, 'error': str(cause)})
+                (out / 'failures.json').write_text(json.dumps(failures, indent=2))
+                print(f'CAPTURE FAILED {state}: {cause}', flush=True)
+                if not args.keep_going:
+                    raise
+        (out / 'manifest.json').write_text(json.dumps({'platform': args.platform, 'states': args.states, 'screen': actual, 'scale': payload.get('scale'), 'slot': slot, 'device': device if args.platform == 'ios' else serial, 'metro_port': args.port}, indent=2))
+        if failures:
+            raise RuntimeError(f'{len(failures)} states failed; see captures/failures.json')
     finally:
         if receiver:
             receiver.server_close()
@@ -334,7 +376,7 @@ def remote(args):
 
 def owned_copy(args, dest, host):
     # Hold a per-copy lease BEFORE rsync, including cleanup. EOF releases it after owner loss.
-    lease_code = "import fcntl,sys; f=open(sys.argv[1],'a+'); fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB); print('READY',flush=True); sys.stdin.read()"
+    lease_code = "import fcntl,signal,sys; signal.alarm(2400); f=open(sys.argv[1],'a+'); fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB); print('READY',flush=True); sys.stdin.read()"
     lease = subprocess.Popen([*SSH, host, shlex.join(['python3', '-c', lease_code, dest + '.lease'])], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     try:
         if lease.stdout.readline().strip() != 'READY':
@@ -355,15 +397,17 @@ def main():
     p.add_argument('--port', type=int, default=8081)
     p.add_argument('--emulator-port', type=int, default=5582)
     p.add_argument('--android-gpu', choices=['auto', 'host', 'software'], default='auto')
-    p.add_argument('--sheet', choices=['more', 'people'])
-    p.add_argument('--menu', choices=['leave'])
+    p.add_argument('--sheet', choices=['more', 'people', 'chat', 'details', 'route'])
+    p.add_argument('--menu', choices=['leave', 'route'])
     p.add_argument('--slot', choices=['ios-1', 'ios-2', 'ios-3', 'android-1'])
     p.add_argument('--client-cache', help='M4 prepared copy containing the shared native build and fingerprint')
+    p.add_argument('--ios-proof-overlay', help='Local proof-only Python overlay applied to the M4 iOS copy, never the checkout')
     p.add_argument('--settle', type=float, default=4)
     p.add_argument('--dump')
     p.add_argument('--ids', default='')
     p.add_argument('--maestro', default='maestro', help='Maestro executable path on the M4')
     p.add_argument('--flow', help='Maestro YAML: tapOn accessibility text, swipe and waitForAnimationToEnd')
+    p.add_argument('--keep-going', action='store_true', help='Record per-state failures and continue the remaining captures')
     p.add_argument('--cleanup', action='store_true')
     p.add_argument('--remote', help=argparse.SUPPRESS)
     args = p.parse_args()
@@ -383,9 +427,9 @@ def main():
     for state in args.states:
         _, _, options = state.partition('?')
         for key, value in parse_qsl(options, strict_parsing=True):
-            if (key == 'sheet' and value in ['more', 'people']) or (key == 'menu' and value == 'leave') or (key == 'app' and value == 'ready'):
+            if (key == 'sheet' and value in ['more', 'people', 'chat', 'details', 'route']) or (key == 'menu' and value in ['leave', 'route']) or (key == 'app' and value == 'ready') or (key == 'pinned' and value.startswith('person-') and value[7:].isdigit()):
                 continue
-            p.error('State query supports only sheet=more|people, menu=leave and app=ready')
+            p.error('Unsupported capture state query option')
     if args.remote:
         remote(args)
         return
@@ -403,7 +447,9 @@ def perform_copy(args, dest, host):
         run([*SSH, host, shlex.join(['python3', '-c', cleanup, dest])])
         return
     if not args.cleanup:
-        run(['rsync', '-az', '-e', shlex.join(SSH), '--delete', '--exclude=/native-build', '--exclude=/native-*.stamp', '--exclude=/captures', '--exclude=*.log', '--exclude=.expo', '--exclude=node_modules', '--exclude=.git', '--exclude=.worktrees', '--exclude=.env*', '--exclude=scratchpad', '--exclude=/apps/mobile/ios', '--exclude=/apps/mobile/android', '--exclude=artifacts', '--exclude=dist', str(Path(args.worktree).resolve()) + '/', host + ':' + dest + '/'])
+        run(['rsync', '-az', '-e', shlex.join(SSH), '--delete', '--exclude=/native-build', '--exclude=/native-*.stamp', '--exclude=/captures', '--exclude=*.log', '--exclude=.expo', '--exclude=node_modules', '--exclude=.git', '--exclude=.worktrees', '--exclude=.env*', '--exclude=scratchpad', '--exclude=Pods', '--exclude=.gradle', '--exclude=.cxx', '--exclude=/apps/mobile/ios/build', '--exclude=/apps/mobile/android/build', '--exclude=/apps/mobile/android/app/build', '--exclude=artifacts', '--exclude=dist', str(Path(args.worktree).resolve()) + '/', host + ':' + dest + '/'])
+        inputs = subprocess.check_output(['git', '-C', args.worktree, 'ls-files', '-z', '--', 'pnpm-lock.yaml', 'apps/mobile/package.json', 'apps/mobile/app.config.ts', 'apps/mobile/assets', 'apps/mobile/plugins', 'apps/mobile/ios', 'apps/mobile/android', 'sdks/typescript/react-native/package.json', 'sdks/typescript/react-native/Q9ChalkReactNative.podspec', 'sdks/typescript/react-native/ios', 'sdks/typescript/react-native/android']).decode().strip('\0').split('\0')
+        run([*SSH, host, shlex.join(['python3', '-c', 'import pathlib,sys; pathlib.Path(sys.argv[1]).write_bytes(sys.stdin.buffer.read())', dest + '/native-inputs.json'])], input=json.dumps(sorted(inputs)).encode())
     if not args.cleanup:
         run([*SCP, str(Path(__file__)), str(Path(__file__).with_name('capture-owner-watch.py')), host + ':' + dest + '/apps/mobile/scripts/'])
         if not (Path(args.worktree) / 'apps/mobile/src/dev-states').is_dir():
@@ -420,6 +466,12 @@ def perform_copy(args, dest, host):
     command = ['python3', dest + '/apps/mobile/scripts/capture-states.py', '--remote', dest, '--platform', args.platform, '--port', str(args.port), '--settle', str(args.settle), '--maestro', args.maestro, '--states', *args.states]
     command += ['--emulator-port', str(args.emulator_port)]
     command += ['--android-gpu', args.android_gpu]
+    if args.ios_proof_overlay:
+        overlay = dest + '/apps/mobile/scripts/proof-ios-overlay.py'
+        run([*SCP, args.ios_proof_overlay, host + ':' + overlay])
+        command += ['--ios-proof-overlay', overlay]
+    if args.keep_going:
+        command.append('--keep-going')
     if args.sheet:
         command += ['--sheet', args.sheet]
     if args.menu:
