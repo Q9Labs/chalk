@@ -1,0 +1,152 @@
+import { spawn, type ChildProcess } from "node:child_process";
+import { mkdir } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { chromium, type Browser, type Page } from "playwright";
+import { afterAll, beforeAll, expect, it } from "vitest";
+
+const origin = "http://127.0.0.1:3098";
+let server: ChildProcess;
+let browser: Browser;
+let deadline: ReturnType<typeof setTimeout>;
+
+beforeAll(async () => {
+  const occupied = await fetch(origin, { signal: AbortSignal.timeout(1000) }).then(
+    () => true,
+    () => false,
+  );
+  if (occupied) throw new Error(`Card harness port is occupied: ${origin}`);
+  server = spawn("pnpm", ["exec", "vite", "--config", "vite.call-states.config.ts", "--port", "3098", "--strictPort"], { cwd: fileURLToPath(new URL("../..", import.meta.url)), detached: true, stdio: "ignore" });
+  deadline = setTimeout(() => {
+    if (server.pid) process.kill(-server.pid, "SIGTERM");
+  }, 180_000);
+  let ready = false;
+  for (let attempt = 0; attempt < 150; attempt++) {
+    if (server.exitCode !== null) throw new Error(`Card harness exited: ${server.exitCode}`);
+    ready = await fetch(`${origin}/call-states.html`).then(
+      (response) => response.ok,
+      () => false,
+    );
+    if (ready) break;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  if (!ready) throw new Error("Card harness did not become ready");
+  browser = await chromium.launch({ headless: true });
+}, 60_000);
+
+afterAll(async () => {
+  clearTimeout(deadline);
+  await browser?.close();
+  if (server?.pid && server.exitCode === null) process.kill(-server.pid, "SIGTERM");
+});
+
+async function journey(run: (page: Page) => Promise<void>, phone = false) {
+  const context = await browser.newContext({ viewport: phone ? { width: 390, height: 844 } : { width: 1440, height: 900 }, isMobile: phone, hasTouch: phone });
+  try {
+    await run(await context.newPage());
+  } finally {
+    await context.close();
+  }
+}
+
+async function openPeople(page: Page, state = "card-people") {
+  await page.goto(`${origin}/call-states.html?state=${state}`);
+  await page.getByRole("button", { name: "Participants", exact: true }).click();
+  await page.getByRole("tab", { name: /^People/ }).waitFor();
+}
+
+it(
+  "opens People and Chat by keyboard, then Escape returns to the dock",
+  async () =>
+    journey(async (page) => {
+      await page.goto(`${origin}/call-states.html?state=card-people`);
+      const opener = page.getByRole("button", { name: "Participants", exact: true });
+      await opener.focus();
+      await page.keyboard.press("Enter");
+      const people = page.getByRole("tab", { name: /^People/ });
+      await people.focus();
+      await page.keyboard.press("ArrowRight");
+      expect(await page.getByRole("tab", { name: "Chat", exact: true }).getAttribute("aria-selected")).toBe("true");
+      await page.keyboard.press("Escape");
+      await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Participants");
+      expect(await opener.getAttribute("aria-pressed")).toBe("false");
+    }),
+  30_000,
+);
+
+it(
+  "previews an image, sends it, and opens a dark photo viewer in Light",
+  async () =>
+    journey(async (page) => {
+      await page.goto(`${origin}/call-states.html?state=card-chat-light`);
+      await page.getByRole("button", { name: "Chat", exact: true }).click();
+      await page.getByLabel("Choose attachments").setInputFiles({ name: "sample.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l6cAAAAASUVORK5CYII=", "base64") });
+      await page.getByRole("img", { name: "Preview of sample.png" }).waitFor();
+      await page.getByRole("textbox", { name: "Message", exact: true }).fill("Here is the image");
+      await page.getByRole("button", { name: "Send message", exact: true }).click();
+      const image = page.getByRole("button", { name: "View sample.png", exact: true });
+      await image.waitFor();
+      await image.click();
+      const viewer = page.getByRole("dialog", { name: "Photo viewer" });
+      expect(await viewer.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(11, 12, 14)");
+      await page.keyboard.press("Escape");
+      expect(await image.evaluate((element) => element === document.activeElement)).toBe(true);
+    }),
+  30_000,
+);
+
+it(
+  "adds and removes a message reaction with its count",
+  async () =>
+    journey(async (page) => {
+      await page.goto(`${origin}/call-states.html?state=card-chat`);
+      await page.getByRole("button", { name: "Chat", exact: true }).click();
+      const message = page.locator(".call-message").first();
+      await message.focus();
+      const reaction = message.getByRole("button", { name: /^React with / }).first();
+      const emoji = (await reaction.getAttribute("aria-label"))!.replace("React with ", "");
+      await reaction.click();
+      const chip = message.getByRole("button", { name: `${emoji}, 1: You`, exact: true });
+      await chip.waitFor();
+      expect(await chip.getAttribute("aria-pressed")).toBe("true");
+      await chip.click();
+      await chip.waitFor({ state: "detached" });
+    }),
+  30_000,
+);
+
+it(
+  "lets a host admit a knock and hides host controls from a guest",
+  async () =>
+    journey(async (page) => {
+      await openPeople(page);
+      await page.getByRole("button", { name: "Admit Rania Aziz", exact: true }).click();
+      await page.getByRole("button", { name: "Admit Rania Aziz", exact: true }).waitFor({ state: "detached" });
+      await openPeople(page, "card-guest");
+      expect(await page.getByRole("button", { name: "Mute everyone", exact: true }).count()).toBe(0);
+      expect(await page.getByRole("button", { name: "Who can join", exact: true }).count()).toBe(0);
+    }),
+  30_000,
+);
+
+it(
+  "keeps phone focus inside its sheet and captures both themes",
+  async () =>
+    journey(async (page) => {
+      await openPeople(page);
+      const sheet = page.getByRole("dialog", { name: "People and Chat" });
+      await sheet.waitFor();
+      for (let index = 0; index < 16; index++) {
+        await page.keyboard.press("Tab");
+        expect(await sheet.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+      }
+      if (process.env.CARD_ARTIFACTS) {
+        await mkdir(process.env.CARD_ARTIFACTS, { recursive: true });
+        await page.screenshot({ path: `${process.env.CARD_ARTIFACTS}/phone-people-dark.png` });
+        await page.getByRole("tab", { name: "Chat", exact: true }).click();
+        await page.screenshot({ path: `${process.env.CARD_ARTIFACTS}/phone-chat-dark.png` });
+      }
+      await page.keyboard.press("Escape");
+      await sheet.waitFor({ state: "hidden" });
+    }, true),
+  30_000,
+);
