@@ -1585,6 +1585,13 @@ export type FindTenantByExternalIDQueryParams = typeof FindTenantByExternalIDQue
 export const FindTenantByExternalIDResponseSchema = TenantSchema;
 export type FindTenantByExternalIDResponse = typeof FindTenantByExternalIDResponseSchema.Type;
 
+export const FindTenantByExternalID429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type FindTenantByExternalID429ResponseHeaders = typeof FindTenantByExternalID429ResponseHeadersSchema.Type;
+
 export const GetChatAttachmentDownloadPathParamsSchema = Schema.Struct({
   attachmentId: Schema.String,
 });
@@ -4678,7 +4685,7 @@ export const FinalizeChatAttachmentUploadErrorSchema = Schema.Union([
 ]);
 export type FinalizeChatAttachmentUploadError = typeof FinalizeChatAttachmentUploadErrorSchema.Type;
 
-export const FindTenantByExternalIDErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidFieldErrorSchema, TenantNotFoundErrorSchema]);
+export const FindTenantByExternalIDErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidFieldErrorSchema, TenantNotFoundErrorSchema]);
 export type FindTenantByExternalIDError = typeof FindTenantByExternalIDErrorSchema.Type;
 
 export const GetChatAttachmentDownloadErrorSchema = Schema.Union([
@@ -5430,6 +5437,7 @@ export const ChalkOperationPolicies = {
   denySpacePublicAdmissionRequest: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   endEpisode: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   finalizeChatAttachmentUpload: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  findTenantByExternalID: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getEpisode: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getEpisodeAttendance: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getSpacePublicInvite: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

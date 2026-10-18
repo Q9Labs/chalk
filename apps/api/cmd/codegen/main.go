@@ -152,6 +152,10 @@ func (g *generator) addRoute(route httpapi.APIRouteContract) {
 		"responses":   g.responses(route),
 	}
 
+	if route.Description != "" {
+		operation["description"] = route.Description
+	}
+
 	switch route.Auth {
 	case httpapi.APIAuthSessionOrBearer:
 		operation["security"] = []map[string][]string{

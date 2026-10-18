@@ -166,7 +166,10 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Find tenant by external i d */
+    /**
+     * Find tenant by external i d
+     * @description The calling service is responsible for the request-supplied external_id and end-user identity; Tenant ownership is derived only from the authenticated service identity.
+     */
     get: operations["findTenantByExternalID"];
     put?: never;
     post?: never;
@@ -3123,6 +3126,18 @@ export interface operations {
       /** @description Not Found */
       404: {
         headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
           [name: string]: unknown;
         };
         content: {

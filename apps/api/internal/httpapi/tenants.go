@@ -490,8 +490,10 @@ func findServiceTenantEndpoint(service TenantService) Endpoint[findServiceTenant
 		}
 		return newTenantResponse(tenant), nil
 	}).Auth(APIAuthSessionOrBearer).
+		Description("The calling service is responsible for the request-supplied external_id and end-user identity; Tenant ownership is derived only from the authenticated service identity.").
+		RateLimit(authenticatedReadRateLimit).
 		Parameters(APIParameterContract{Name: "external_id", In: "query", Type: "string", Required: true, MinLength: 1, MaxLength: 512}).
 		Responds(http.StatusOK, "Tenant", tenantResponse{}).
-		Errors(apiErrorUnauthenticated, apiErrorForbidden, apiErrorServiceUnavailable, apiErrorInvalidTenantField, apiErrorTenantNotFound, apiErrorInternal).
+		Errors(apiErrorRateLimited, apiErrorUnauthenticated, apiErrorForbidden, apiErrorServiceUnavailable, apiErrorInvalidTenantField, apiErrorTenantNotFound, apiErrorInternal).
 		MapErrors(tenantEndpointAPIError)
 }
