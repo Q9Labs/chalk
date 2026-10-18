@@ -1,5 +1,8 @@
 export { Chalk } from "./frame/Chalk";
 export type { ChalkProps } from "./frame/Chalk";
+export { ChalkArrival } from "./status/ChalkArrival";
+export type { ArrivalState, ChalkArrivalProps } from "./status/ChalkArrival";
+export type { Permission } from "./toasts/CallEventToasts";
 export type { ColorScheme, Palette } from "./theme/tokens";
 export { ChalkProvider, useSpaceClient } from "./context/space-client-context";
 export type { ChalkProviderProps } from "./context/space-client-context";

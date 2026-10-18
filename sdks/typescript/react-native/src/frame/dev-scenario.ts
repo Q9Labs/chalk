@@ -1,4 +1,6 @@
 import { useSyncExternalStore, type ReactNode } from "react";
+import type { ArrivalState } from "../status/ChalkArrival";
+import type { CallOutcome } from "../status/StatusPage";
 
 /** UI-only state a development harness forces on the call. Nothing sets it in a real call. */
 export type DevScenario = {
@@ -8,6 +10,8 @@ export type DevScenario = {
   readonly menu?: "leave";
   /** Content drawn in a tile in place of the camera, keyed by participant id. */
   readonly videoSlots?: Readonly<Record<string, ReactNode>>;
+  /** Shows a call state the fixture client can't reach: a screen before joining, a status page, or a phone call holding the call. */
+  readonly callState?: ArrivalState | CallOutcome | "hold";
 };
 
 const empty: DevScenario = {};
