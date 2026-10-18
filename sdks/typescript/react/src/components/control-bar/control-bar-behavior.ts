@@ -212,7 +212,6 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const recordingStatus = recording.current?.status;
   const isRecording = recordingStatus === "recording" || recordingStatus === "stopping";
   const isRecordingPending = recordingStatus === "starting" || recordingStatus === "stopping";
-  const measuredEpisodeDuration = useEpisodeDuration();
   const [commandError, setCommandError] = useState<string | null>(null);
 
   const run = useCallback(

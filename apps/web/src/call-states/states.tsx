@@ -1,5 +1,5 @@
 import type { SpaceSnapshot } from "@q9labsai/chalk-client";
-import { CallLimbo, Chalk, Entrance, type SpaceLayout } from "@q9labsai/chalk-react";
+import { CallLimbo, Chalk, type SpaceLayout } from "@q9labsai/chalk-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { NameNeeded } from "../components/space/SpacePage";
 import { HOST, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type CallStateClient, type Person } from "./fixtures";
@@ -49,12 +49,6 @@ export const CALL_STATES: readonly CallState[] = [
     ),
   },
   { id: "joining-complete", title: "Blur lifting on admission", render: () => <JoiningComplete /> },
-  { id: "entrance", title: "Entrance, no name yet", render: () => <WebEntrance /> },
-  { id: "entrance-named", title: "Entrance, name typed", render: () => <WebEntrance name={SELF_NAME} /> },
-  { id: "entrance-devices-off", title: "Entrance, mic and camera off", render: () => <WebEntrance name={SELF_NAME} microphone={false} camera={false} /> },
-  { id: "entrance-camera-blocked", title: "Entrance, camera blocked by the browser", cameraBlocked: true, render: () => <WebEntrance name={SELF_NAME} /> },
-  { id: "entrance-joining", title: "Entrance, asking to enter", render: () => <WebEntrance name={SELF_NAME} joining /> },
-  { id: "entrance-error", title: "Entrance, invite link failed", render: () => <WebEntrance name={SELF_NAME} error="This Space is unavailable. Please check the invite link and try again." /> },
   { id: "waiting-for-host", title: "Waiting for the host to let you in", render: () => <WaitingForHost /> },
   { id: "entering", title: "Entering after access is granted", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null } }} /> },
 
@@ -144,31 +138,6 @@ export const CALL_STATES: readonly CallState[] = [
 function withStatus(snapshot: SpaceSnapshot, status: SpaceSnapshot["connection"]["status"]): SpaceSnapshot {
   const lastError = status === "failed" ? { code: "connection.sync_recovery_exhausted" as const, recoverable: false, message: "Chalk could not reconnect to this Space." } : null;
   return { ...snapshot, connection: { ...snapshot.connection, status, lastError } };
-}
-
-/** Mirrors SpacePage's LocalSpace: the SDK's Chalk root, with the app's own entrance already done. */
-function Live({ snapshot, layout, then }: { readonly snapshot: SpaceSnapshot; readonly layout?: SpaceLayout; readonly then?: (client: CallStateClient) => void }) {
-  const [client] = useState(() => createCallStateClient(snapshot));
-  const [transition] = useState(() => then);
-  useEffect(() => {
-    if (!transition) return;
-    const timer = setTimeout(() => transition(client), 200);
-    return () => clearTimeout(timer);
-  }, [client, transition]);
-  return (
-    <main className="h-dvh min-h-0 w-full overflow-hidden">
-      <Chalk client={client} displayName={SELF_NAME} spaceName={SPACE_NAME} layout={layout} onLeft={() => undefined} onHome={() => undefined} />
-    </main>
-  );
-}
-
-/** Mirrors SpacePage's entrance: the slug stands in for the Space name until the invite is verified. */
-function WebEntrance({ name = "", microphone = true, camera = true, joining = false, error }: { readonly name?: string; readonly microphone?: boolean; readonly camera?: boolean; readonly joining?: boolean; readonly error?: string }) {
-  return (
-    <main className="h-dvh min-h-0 w-full overflow-hidden">
-      <Entrance spaceName="q9-team" defaultDisplayName={name} defaults={{ microphone, camera }} joining={joining} error={error} onJoin={() => undefined} onPrepare={async () => undefined} />
-    </main>
-  );
 }
 
 function WaitingForHost() {

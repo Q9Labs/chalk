@@ -3,8 +3,6 @@ import {
   ArrowDown01Icon as ArrowDown01IconSvg,
   ArrowLeft01Icon as ArrowLeft01IconSvg,
   ArrowRight01Icon as ArrowRight01IconSvg,
-  ArrowUp01Icon as ArrowUp01IconSvg,
-  Calendar01Icon as Calendar01IconSvg,
   CallEnd01Icon as CallEnd01IconSvg,
   CancelCircleIcon as CancelCircleIconSvg,
   CheckmarkCircle02Icon as CheckmarkCircle02IconSvg,
@@ -32,7 +30,6 @@ import {
 import type { HugeiconsProps, IconSvgElement } from "@hugeicons/react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
-  ArrowLeft02Icon as StaticArrowLeft02Icon,
   Cancel01Icon as StaticCancel01Icon,
   Clock01Icon as StaticClock01Icon,
   Copy01Icon as StaticCopy01Icon,
@@ -44,7 +41,6 @@ import {
   Image01Icon as StaticImage01Icon,
   InformationCircleIcon as StaticInformationCircleIcon,
   Link01Icon as StaticLink01Icon,
-  Mail01Icon as StaticMail01Icon,
   MaximizeScreenIcon as StaticMaximize01Icon,
   Message01Icon as StaticMessage01Icon,
   Mic01Icon as StaticMicrophone01Icon,
@@ -73,8 +69,6 @@ import {
   Video01Icon as StaticVideo01Icon,
   VolumeHighIcon as StaticVolumeHighIcon,
   VolumeMute01Icon as StaticVolumeMute01Icon,
-  ZoomInAreaIcon as StaticZoomInIcon,
-  ZoomOutAreaIcon as StaticZoomOutIcon,
 } from "@hugeicons/core-free-icons";
 
 type IconProps = Omit<HugeiconsProps, "icon">;
@@ -87,10 +81,7 @@ const createIcon = (iconSvg: IconSvgElement) => {
 export const Alert02Icon = createIcon(Alert02IconSvg);
 export const ArrowDown01Icon = createIcon(ArrowDown01IconSvg);
 export const ArrowLeft01Icon = createIcon(ArrowLeft01IconSvg);
-export const ArrowLeft02Icon = createIcon(StaticArrowLeft02Icon);
 export const ArrowRight01Icon = createIcon(ArrowRight01IconSvg);
-export const ArrowUp01Icon = createIcon(ArrowUp01IconSvg);
-export const Calendar01Icon = createIcon(Calendar01IconSvg);
 export const CallEnd01Icon = createIcon(CallEnd01IconSvg);
 export const Cancel01Icon = createIcon(StaticCancel01Icon);
 export const CancelCircleIcon = createIcon(CancelCircleIconSvg);
@@ -113,7 +104,6 @@ export const LayoutGridIcon = createIcon(LayoutGridIconSvg);
 export const LayoutTableIcon = createIcon(LayoutTableIconSvg);
 export const Link01Icon = createIcon(StaticLink01Icon);
 export const Loading01Icon = createIcon(Loading01IconSvg);
-export const Mail01Icon = createIcon(StaticMail01Icon);
 export const Maximize01Icon = createIcon(StaticMaximize01Icon);
 export const Message01Icon = createIcon(StaticMessage01Icon);
 export const Microphone01Icon = createIcon(StaticMicrophone01Icon);
@@ -124,7 +114,6 @@ export const MonitorOffIcon = createIcon(MonitorOffIconSvg);
 export const MoreHorizontalIcon = createIcon(StaticMoreHorizontalIcon);
 export const MoreVerticalIcon = createIcon(StaticMoreVerticalIcon);
 export const PauseIcon = createIcon(StaticPauseIcon);
-export const PictureInPictureIcon = createIcon(LayoutTableIconSvg);
 export const Pin01Icon = createIcon(StaticPin01Icon);
 export const PlayIcon = createIcon(StaticPlayIcon);
 export const PlusSignIcon = createIcon(StaticPlusSignIcon);
@@ -143,7 +132,6 @@ export const SquareIcon = createIcon(SquareIconSvg);
 export const StarIcon = createIcon(StaticStarIcon);
 export const Sun02Icon = createIcon(Sun02IconSvg);
 export const TextIcon = createIcon(TextIconSvg);
-export const ThumbsUpIcon = createIcon(StaticThumbsUpIcon);
 export const Tick01Icon = createIcon(Tick01IconSvg);
 export const TickDouble01Icon = createIcon(TickDouble01IconSvg);
 export const Upload01Icon = createIcon(StaticUpload01Icon);
@@ -155,5 +143,5 @@ export const VideoOffIcon = createIcon(VideoOffIconSvg);
 export const VolumeHighIcon = createIcon(StaticVolumeHighIcon);
 export const VolumeMute01Icon = createIcon(StaticVolumeMute01Icon);
 export const WifiOffIcon = createIcon(WifiOffIconSvg);
-export const ZoomInIcon = createIcon(StaticZoomInIcon);
-export const ZoomOutIcon = createIcon(StaticZoomOutIcon);
+
+export const ThumbsUpIcon = createIcon(StaticThumbsUpIcon);

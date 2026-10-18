@@ -1,7 +1,7 @@
 import React from "react";
 import { Tooltip } from "@q9labsai/chalk-ui";
 import { cn } from "../../utils/cn";
-import { CallEnd01Icon, CircleIcon, Edit02Icon, HandIcon, Message01Icon, Microphone01Icon, MicrophoneOff01Icon, Monitor01Icon, MonitorOffIcon, UserGroupIcon, Video01Icon, VideoOffIcon } from "../../utils/icons";
+import { CallEnd01Icon, CircleIcon, Edit02Icon, HandIcon, Message01Icon, Microphone01Icon, MicrophoneOff01Icon, Monitor01Icon, MonitorOffIcon, SmileIcon, ThumbsUpIcon, UserGroupIcon, Video01Icon, VideoOffIcon } from "../../utils/icons";
 import { ControlBarButton } from "../atomic";
 import { DevicePopover } from "../device-popover/DevicePopover";
 import { CommandErrorAlert } from "../composite/CommandErrorAlert";
@@ -174,7 +174,9 @@ export const ControlBarSurface = React.memo(
               )}
               {buttonsToRender.includes("reactions") && onOpenReactions && (
                 <Tooltip content="Reactions" position="top">
-                  <button type="button" onClick={onOpenReactions} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-control-active-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="Reactions"></button>
+                  <button type="button" onClick={onOpenReactions} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-control-active-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="Reactions">
+                    <ThumbsUpIcon className="w-5 h-5" />
+                  </button>
                 </Tooltip>
               )}
               {buttonsToRender.includes("whiteboard") && onToggleWhiteboard && (
@@ -276,6 +278,8 @@ export const ControlBarSurface = React.memo(
             if (!onToggleChat && !displayOnly) return null;
             return <FloatingControlBarButton key={type} icon={<Message01Icon />} label="Chat" onClick={onToggleChat} active={isChatOpen} badge={!isChatOpen ? unreadChatCount : 0} />;
           case "reactions":
+            if (!onOpenReactions && !displayOnly) return null;
+            return <FloatingControlBarButton key={type} icon={<SmileIcon />} label="React" onClick={onOpenReactions} />;
 
           case "record":
             if (!onToggleRecording && !displayOnly) return null;

@@ -5,7 +5,7 @@ import { preloadWhiteboardStylesheet } from "@q9labsai/chalk-whiteboard/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { ChalkProvider } from "../../bindings/context";
-import { useCan, useConnection, useMedia, useOffline, useSelf, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
+import { useCan, useConnection, useMedia, useOffline, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
 import { chalkThemeStyle, type ChalkColorScheme, type ChalkTheme } from "../../theme";
 import { useWhiteboardSceneSubscription } from "../../internal/useWhiteboardSceneSubscription";
 import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../../whiteboard/wire-adapters";
@@ -189,7 +189,6 @@ function SpaceSurface(
 ): React.JSX.Element {
   const client = useSpaceClient();
   const connection = useConnection();
-  const self = useSelf();
   const media = useMedia();
   const whiteboardState = useWhiteboard();
   const canEndEpisode = useCan("endEpisode");

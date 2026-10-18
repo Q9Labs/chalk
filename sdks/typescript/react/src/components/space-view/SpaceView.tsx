@@ -16,7 +16,6 @@ import { ParticipantsPanel } from "../participants-panel/ParticipantsPanel";
 import { ParticipantVolumeProvider } from "../participants-panel/participant-volume-context";
 import { OfflineActions } from "../offline-actions/OfflineActions";
 import { ReconnectingOverlay } from "../reconnecting-overlay/ReconnectingOverlay";
-import { TranscriptPanel } from "../transcript-panel/TranscriptPanel";
 import { ToastStack, type Toast } from "../toast-stack/ToastStack";
 import { SpaceDrawer } from "./SpaceDrawer";
 import { SpacePresentation } from "./SpacePresentation";
@@ -26,7 +25,7 @@ import type { ChatUploadFile } from "@q9labsai/chalk-client";
 import { type ReconnectingOverlayProps } from "../reconnecting-overlay/ReconnectingOverlay";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 
-export type SpacePanel = "chat" | "participants" | "transcript" | "admission";
+export type SpacePanel = "chat" | "participants" | "admission";
 
 export interface SpaceViewFeatures {
   readonly chat?: boolean;
@@ -37,7 +36,6 @@ export interface SpaceViewFeatures {
   readonly whiteboard?: boolean;
   readonly reactions?: boolean;
   readonly handRaise?: boolean;
-  readonly transcript?: boolean;
   /** Join / leave / message / hand-raise / reaction cues. */
   readonly sounds?: boolean;
 }
@@ -212,7 +210,6 @@ export function SpaceView({
           <SpaceDrawer state={drawer.state} onClose={() => setActivePanel(null)}>
             {drawer.panel === "chat" && feature("chat") && canSendChat ? <ChatPanel variant="sidebar" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} /> : null}
             {drawer.panel === "participants" && feature("participants") ? <ParticipantsPanel variant="sidebar" admissionEnabled={feature("admission")} generatedAvatars={generatedAvatars} onCommandError={setCommandError} onClose={() => setActivePanel(null)} /> : null}
-            {drawer.panel === "transcript" && feature("transcript") ? <TranscriptPanel variant="sidebar" onClose={() => setActivePanel(null)} /> : null}
             {drawer.panel === "admission" && feature("admission") ? <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} /> : null}
           </SpaceDrawer>
         }

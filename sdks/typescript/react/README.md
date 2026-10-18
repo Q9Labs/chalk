@@ -108,9 +108,8 @@ returns it unchanged, and `SpaceClient` handles refresh and recovery.
 
 ## Component maintenance
 
-`transcript-panel-behavior.ts` and
-`control-bar-behavior.ts` own the shared contracts, state, and commands for their
-components. The component files own presentation.
+`control-bar-behavior.ts` owns the shared contracts, state, and commands for the
+controls. The component files own presentation.
 
 The SDK-owned `@q9labsai/chalk-react/preview` dev-tool entrypoint exposes the
 preview contract used by the first-party gallery. Application previews should

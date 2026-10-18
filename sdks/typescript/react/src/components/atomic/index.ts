@@ -7,7 +7,5 @@ export * from "./HandRaiseIndicator";
 export * from "./NameTag";
 export * from "./ReactionBubble";
 export * from "./StatusBadge";
-export * from "./TourHighlight";
-export * from "./TranscriptLine";
 export * from "./VolumeSlider";
 export * from "./Waveform";
