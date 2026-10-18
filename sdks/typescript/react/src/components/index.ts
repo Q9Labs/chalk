@@ -42,3 +42,6 @@ export { Entrance } from "./entrance/Entrance";
 export type { EntranceProps, EntranceSettings } from "./entrance/Entrance";
 export { Logo } from "./logo/Logo";
 export type { LogoProps, LogoVariant } from "./logo/Logo";
+
+export { CallLimbo } from "./call-limbo/CallLimbo";
+export type { CallLimboProps } from "./call-limbo/CallLimbo";

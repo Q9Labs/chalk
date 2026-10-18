@@ -1,7 +1,7 @@
 import type { SpaceSnapshot } from "@q9labsai/chalk-client";
-import { Chalk, Entrance, type SpaceLayout } from "@q9labsai/chalk-react";
+import { CallLimbo, Chalk, Entrance, type SpaceLayout } from "@q9labsai/chalk-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { SpaceArrival } from "../components/space/SpacePage";
+import { NameNeeded } from "../components/space/SpacePage";
 import { HOST, INVITE_LINK, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type CallStateClient, type Person } from "./fixtures";
 
 /** A step the capture script performs after the state mounts, by accessible role and name. */
@@ -27,6 +27,28 @@ const openChat: Action = { click: "Chat" };
 const openLayout: Action = { click: "Layout" };
 
 export const CALL_STATES: readonly CallState[] = [
+  { id: "joining", title: "Joining with devices off", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null } }} /> },
+  { id: "name-needed", title: "Name needed", render: () => <JoinName /> },
+  { id: "knocking", title: "Asking the host to join", render: () => <WaitingForHost /> },
+  {
+    id: "knock-denied",
+    title: "Host declined the request",
+    render: () => (
+      <main className="h-dvh">
+        <CallLimbo spaceName={SPACE_NAME} message="The host declined your request to join." action={{ label: "Ask again", onClick: () => undefined }} />
+      </main>
+    ),
+  },
+  {
+    id: "knock-expired",
+    title: "Request expired",
+    render: () => (
+      <main className="h-dvh">
+        <CallLimbo spaceName={SPACE_NAME} message="Your request to join expired or is no longer available." action={{ label: "Ask again", onClick: () => undefined }} />
+      </main>
+    ),
+  },
+  { id: "joining-complete", title: "Blur lifting on admission", render: () => <JoiningComplete /> },
   { id: "entrance", title: "Entrance, no name yet", render: () => <WebEntrance /> },
   { id: "entrance-named", title: "Entrance, name typed", render: () => <WebEntrance name={SELF_NAME} /> },
   { id: "entrance-devices-off", title: "Entrance, mic and camera off", render: () => <WebEntrance name={SELF_NAME} microphone={false} camera={false} /> },
@@ -98,8 +120,8 @@ export const CALL_STATES: readonly CallState[] = [
   { id: "media-request", title: "Asked to unmute", render: () => <Live snapshot={liveSnapshot({ self: { microphone: false }, others: [nora], mediaRequest: true })} /> },
   { id: "command-error", title: "Camera busy error", render: () => <Live snapshot={liveSnapshot({ self: { camera: false }, others: [nora], lastError: { code: "media.device_busy", recoverable: true, message: "Your camera is being used by another app." } })} /> },
 
-  { id: "reconnecting", title: "Reconnecting, first seconds", render: () => <Live snapshot={liveSnapshot({ others: [nora], status: "reconnecting" })} /> },
-  { id: "reconnecting-short", title: "Reconnecting, after 3 seconds", actions: [{ wait: 1_500 }], render: () => <Live snapshot={liveSnapshot({ others: [nora], status: "reconnecting" })} /> },
+  { id: "reconnecting", title: "Reconnecting after the grace period", actions: [{ wait: 2_100 }], render: () => <Live snapshot={liveSnapshot({ others: [nora], status: "reconnecting" })} /> },
+  { id: "reconnecting-short", title: "Reconnecting, after 3 seconds", actions: [{ wait: 2_100 }], render: () => <Live snapshot={liveSnapshot({ others: [nora], status: "reconnecting" })} /> },
   { id: "reconnecting-long", title: "Reconnecting, after 10 seconds", actions: [{ wait: 10_500 }], render: () => <Live snapshot={liveSnapshot({ others: [nora], status: "reconnecting" })} /> },
   { id: "offline-actions", title: "Back online with unsent actions", render: () => <Live snapshot={liveSnapshot({ others: [nora], offlinePending: true })} /> },
   { id: "failed", title: "Connection lost", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} then={(client) => client.updateSnapshot((current) => withStatus(current, "failed"))} /> },
@@ -151,6 +173,30 @@ function WebEntrance({ name = "", microphone = true, camera = true, joining = fa
 }
 
 function WaitingForHost() {
-  const [displayName, setDisplayName] = useState(SELF_NAME);
-  return <SpaceArrival displayName={displayName} error={null} pending preparing={false} onCancel={async () => undefined} onDisplayNameChange={setDisplayName} onEnter={() => undefined} />;
+  return (
+    <main className="h-dvh">
+      <CallLimbo spaceName={SPACE_NAME} message={`Asking to join ${SPACE_NAME}`} detail="The host will let you in." action={{ label: "Cancel", onClick: () => undefined }} />
+    </main>
+  );
+}
+
+function JoinName() {
+  const [name, setName] = useState("");
+  return (
+    <main className="h-dvh">
+      <NameNeeded spaceName={SPACE_NAME} displayName={name} onDisplayNameChange={setName} onJoin={() => undefined} />
+    </main>
+  );
+}
+
+function JoiningComplete() {
+  const [client] = useState(() => createCallStateClient({ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null } }));
+  return (
+    <main className="h-dvh">
+      <button hidden data-complete-join onClick={() => client.updateSnapshot(() => liveSnapshot({ self: { camera: false, microphone: false } }))}>
+        Complete join
+      </button>
+      <Chalk client={client} entrance={false} displayName={SELF_NAME} spaceName={SPACE_NAME} />
+    </main>
+  );
 }

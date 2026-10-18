@@ -73,3 +73,6 @@ export type {
   ChalkTone,
   ChalkTooltipPanelProps,
 } from "./components/chalk-ui";
+
+export { CallLimbo } from "./components/call-limbo/CallLimbo";
+export type { CallLimboProps } from "./components/call-limbo/CallLimbo";

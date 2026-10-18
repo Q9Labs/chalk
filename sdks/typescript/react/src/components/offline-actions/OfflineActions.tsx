@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { useConnection, useOffline, useSpaceClient } from "../../bindings/hooks";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
-import { WifiOffIcon } from "../../utils/icons";
+import { CallLimbo } from "../call-limbo/CallLimbo";
 import { ChalkBackdrop, ChalkButton, ChalkCheckbox, ChalkDialogPanel } from "../chalk-ui";
 import { useOfflineActionsPolicy } from "./offline-actions-policy";
 
@@ -28,18 +28,6 @@ export function offlineNoticeText(pendingCount: number, online: boolean): string
   const state = online ? "Reconnecting" : "You're offline";
   if (pendingCount === 0) return online ? "Reconnecting…" : "You're offline. Reconnecting…";
   return `${state}. ${pendingCount === 1 ? "1 action" : `${pendingCount} actions`} will send when you're back.`;
-}
-
-/** Calm, non-blocking notice shown while the connection recovers. */
-export function OfflineNotice({ pendingCount, online }: { readonly pendingCount: number; readonly online: boolean }): React.JSX.Element {
-  return (
-    <div className="pointer-events-none absolute inset-x-0 top-3 z-40 flex justify-center px-4">
-      <p role="status" className="pointer-events-auto flex items-center gap-2 rounded-xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-3.5 py-2 text-sm text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]">
-        {online ? null : <WifiOffIcon size={16} className="shrink-0 text-[var(--chalk-app-text-muted)]" />}
-        <span>{offlineNoticeText(pendingCount, online)}</span>
-      </p>
-    </div>
-  );
 }
 
 /** Asks whether to send or discard the actions that waited while the user was offline. */
@@ -93,13 +81,13 @@ export function OfflineDecisionDialog({ actions, now, onSend, onDiscard }: { rea
 }
 
 /** Applies the remembered choice to the client, shows the offline notice, and asks when there is no remembered choice. */
-export function OfflineActions(): React.JSX.Element | null {
+export function OfflineActions({ reconnecting: requestedReconnecting = false }: { readonly reconnecting?: boolean } = {}): React.JSX.Element | null {
   const client = useSpaceClient();
   const connection = useConnection();
   const offline = useOffline();
   const [policy, setPolicy] = useOfflineActionsPolicy();
   const online = useSyncExternalStore(subscribeToOnline, readOnline, () => true);
-  const reconnecting = connection.status === "reconnecting";
+  const reconnecting = requestedReconnecting || connection.status === "reconnecting";
   const reconnectingNoticeDue = useTrueFor(reconnecting, RECONNECTING_GRACE_MS);
 
   useEffect(() => {
@@ -111,8 +99,8 @@ export function OfflineActions(): React.JSX.Element | null {
     void (decision === "send" ? client.offline.send() : client.offline.discard());
   };
 
-  // A known outage or a queued message shows at once; a plain blip gets the grace period first.
-  if (reconnecting) return !online || offline.pending.length > 0 || reconnectingNoticeDue ? <OfflineNotice pendingCount={offline.pending.length} online={online} /> : null;
+  // Keep the layer mounted so recovery lifts the blur rather than removing it abruptly.
+  if (reconnecting || (!offline.decisionNeeded && !offline.notice)) return <CallLimbo overlay active={reconnectingNoticeDue} message={offlineNoticeText(offline.pending.length, online)} />;
   if (offline.decisionNeeded) return <OfflineDecisionDialog actions={offline.pending} now={Date.now()} onSend={(remember) => decide("send", remember)} onDiscard={(remember) => decide("discard", remember)} />;
   if (offline.notice)
     return (

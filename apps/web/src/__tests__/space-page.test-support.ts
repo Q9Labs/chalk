@@ -1,40 +1,6 @@
-import { createElement, useEffect, useState, type ChangeEvent } from "react";
+import { createElement } from "react";
+import type { CallLimboProps, ChalkButtonProps } from "@q9labsai/chalk-react";
 import { vi } from "vitest";
-function MockEntrance({
-  defaultDisplayName = "",
-  joining = false,
-  defaults,
-  error,
-  onJoin,
-  onPrepare,
-}: {
-  readonly defaultDisplayName?: string;
-  readonly defaults?: {
-    readonly microphone?: boolean;
-    readonly camera?: boolean;
-  };
-  readonly joining?: boolean;
-  readonly error?: string;
-  readonly onPrepare?: () => Promise<void>;
-  readonly onJoin: (settings: { readonly displayName: string; readonly microphone: boolean; readonly camera: boolean }) => void | Promise<void>;
-}) {
-  useEffect(() => {
-    void onPrepare?.().catch(() => undefined);
-  }, [onPrepare]);
-  const [displayName, setDisplayName] = useState(defaultDisplayName);
-  const [microphone, setMicrophone] = useState(defaults?.microphone ?? true);
-  const [camera, setCamera] = useState(defaults?.camera ?? true);
-  return createElement(
-    "main",
-    null,
-    createElement("label", { htmlFor: "mock-entrance-name" }, "Your name"),
-    createElement("input", { id: "mock-entrance-name", "aria-label": "Your name", value: displayName, onChange: (event: ChangeEvent<HTMLInputElement>) => setDisplayName(event.target.value) }),
-    createElement("button", { onClick: () => setMicrophone(!microphone) }, `Microphone ${microphone ? "On" : "Off"}`),
-    createElement("button", { onClick: () => setCamera(!camera) }, `Camera ${camera ? "On" : "Off"}`),
-    error ? createElement("p", { role: "alert" }, error) : null,
-    createElement("button", { type: "button", onClick: () => void onJoin({ displayName: displayName.trim(), microphone, camera }), disabled: joining || !displayName.trim() }, joining ? "Joining…" : "Continue"),
-  );
-}
 const spacePageTestMocks = vi.hoisted(() => {
   const holder: {
     chalkProps?: Record<string, unknown>;
@@ -73,6 +39,9 @@ const spacePageTestMocks = vi.hoisted(() => {
       holder.chalkProps = props;
       return null;
     }),
+    getAccount: vi.fn<() => Promise<{ name: string }>>(async () => {
+      throw new Error("Not signed in");
+    }),
     listAllAccountTenants: vi.fn(async () => [{ tenant: { id: "tenant-1" } }]),
     listSpaces: vi.fn(async () => ({ spaces: [], pagination: { page_size: 100, next_cursor: null, has_more: false } })),
     prepareDashboardEntrance: vi.fn(async () => undefined),
@@ -82,10 +51,9 @@ const spacePageTestMocks = vi.hoisted(() => {
 });
 vi.mock("@q9labsai/chalk-react", () => ({
   Chalk: getSpacePageTestMocks().Chalk,
-  Entrance: (props: Record<string, unknown>) => {
-    getSpacePageTestMocks().holder.entranceProps = props;
-    return createElement(MockEntrance, props as Parameters<typeof MockEntrance>[0]);
-  },
+  CallLimbo: ({ message, detail, children, action }: CallLimboProps) =>
+    createElement("section", null, createElement("p", { role: "status" }, message), detail ? createElement("p", null, detail) : null, children, action ? createElement("button", { type: "button", onClick: action.onClick, disabled: action.disabled }, action.label) : null),
+  ChalkButton: ({ children, type, disabled, onClick }: ChalkButtonProps) => createElement("button", { type, disabled, onClick }, children),
 }));
 vi.mock("../lib/chalk-access", () => ({
   createPublicInviteClient: getSpacePageTestMocks().createPublicInviteClient,
@@ -94,7 +62,7 @@ vi.mock("../lib/chalk-access", () => ({
   joinDashboardSpace: getSpacePageTestMocks().joinDashboardSpace,
   resumePublicSpace: getSpacePageTestMocks().resumePublicSpace,
 }));
-vi.mock("../lib/account-api", () => ({ listAllAccountTenants: getSpacePageTestMocks().listAllAccountTenants, listSpaces: getSpacePageTestMocks().listSpaces }));
+vi.mock("../lib/account-api", () => ({ getAccount: getSpacePageTestMocks().getAccount, listAllAccountTenants: getSpacePageTestMocks().listAllAccountTenants, listSpaces: getSpacePageTestMocks().listSpaces }));
 vi.mock("../lib/local-space-client", () => ({
   createLocalSpaceClient: getSpacePageTestMocks().createLocalSpaceClient,
   createLocalSpaceRelease: getSpacePageTestMocks().createLocalSpaceRelease,
@@ -114,6 +82,9 @@ export function resetSpacePageTestMocks(): void {
   spacePageTestMocks.publicClient.prepareSpaceEntrance.mockClear();
   spacePageTestMocks.prepareDashboardEntrance.mockClear();
   window.sessionStorage.clear();
+  const names = new Map<string, string>();
+  vi.stubGlobal("localStorage", { getItem: (key: string) => names.get(key) ?? null, setItem: (key: string, value: string) => names.set(key, value) });
+  spacePageTestMocks.getAccount.mockReset().mockRejectedValue(new Error("Not signed in"));
   spacePageTestMocks.resumePublicSpace.mockReset().mockResolvedValue(spacePageTestMocks.prepared);
   window.history.replaceState({}, "", "/space");
   spacePageTestMocks.holder.chalkProps = undefined;

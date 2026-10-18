@@ -260,8 +260,8 @@ export function ClassicSpaceView({
             {settingsDialogIsControlled ? settingsContent : null}
             {overlay}
             <ToastStack toasts={commandToasts} onDismiss={dismissCommandError} position="bottom-right" />
-            {reconnecting ? <ReconnectingOverlay {...reconnecting} /> : null}
-            <OfflineActions />
+            {reconnecting && reconnecting.status !== "reconnecting" ? <ReconnectingOverlay {...reconnecting} /> : null}
+            <OfflineActions reconnecting={reconnecting?.status === "reconnecting" && reconnecting.isVisible} />
           </>
         }
         dialogs={

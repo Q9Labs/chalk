@@ -33,41 +33,27 @@ describe("ReconnectingOverlay", () => {
     vi.useRealTimers();
   });
 
-  it("shows a non-blocking status notice for the first 10 seconds", async () => {
+  it("waits two seconds, then keeps the same limbo for long interruptions", async () => {
     await render({ isVisible: true, status: "reconnecting" });
     await act(async () => vi.advanceTimersByTime(RECONNECTING_NOTICE_MS - 1));
-    const notice = container.querySelector('[data-testid="reconnecting-notice"]');
-    expect(notice?.textContent).toBe("Reconnecting…");
-    expect(notice?.getAttribute("aria-live")).toBe("polite");
+    expect(container.querySelector('[role="status"]')).toBeNull();
+    await act(async () => vi.advanceTimersByTime(1));
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("Reconnecting…");
+    await act(async () => vi.advanceTimersByTime(10_000));
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("Reconnecting…");
     expect(container.querySelector('[role="alertdialog"]')).toBeNull();
   });
 
-  it("does not block pointer events or take focus", async () => {
+  it("lifts on recovery and restarts the grace period on the next drop", async () => {
     await render({ isVisible: true, status: "reconnecting" });
-    const notice = container.querySelector('[data-testid="reconnecting-notice"]');
-    expect(notice?.className).toContain("pointer-events-none");
-    expect(notice?.parentElement?.className).toContain("pointer-events-none");
-    expect(notice?.hasAttribute("tabindex")).toBe(false);
-    expect(container.querySelector("button")?.textContent).toBe("Mute");
-    expect(document.activeElement).toBe(document.body);
-  });
-
-  it("switches to the Reconnecting modal at 10 seconds", async () => {
-    await render({ isVisible: true, status: "reconnecting" });
-    await act(async () => vi.advanceTimersByTime(RECONNECTING_NOTICE_MS));
-    expect(container.querySelector('[data-testid="reconnecting-notice"]')).toBeNull();
-    expect(container.querySelector('[role="alertdialog"]')).not.toBeNull();
-    expect(container.querySelector("#connection-status-title")?.textContent).toBe("Reconnecting");
-  });
-
-  it("removes the notice when the connection is live again and restarts the timer on the next drop", async () => {
-    await render({ isVisible: true, status: "reconnecting" });
-    await act(async () => vi.advanceTimersByTime(5_000));
+    await act(async () => vi.advanceTimersByTime(3_000));
     await render({ isVisible: false, status: "reconnecting" });
-    expect(container.querySelector('[data-testid="reconnecting-notice"]')).toBeNull();
+    expect(container.querySelector('[role="status"]')).toBeNull();
     await render({ isVisible: true, status: "reconnecting" });
-    await act(async () => vi.advanceTimersByTime(7_000));
-    expect(container.querySelector('[data-testid="reconnecting-notice"]')).not.toBeNull();
+    await act(async () => vi.advanceTimersByTime(RECONNECTING_NOTICE_MS - 1));
+    expect(container.querySelector('[role="status"]')).toBeNull();
+    await act(async () => vi.advanceTimersByTime(1));
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("Reconnecting…");
   });
 
   it("keeps the failure dialog for failed", async () => {

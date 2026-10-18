@@ -1,4 +1,5 @@
 "use client";
+import { CallLimbo } from "../call-limbo/CallLimbo";
 import { createSpaceClient, type ChalkWhiteboardV1Transport, type ChatUploadFile, type ClientEventMap, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
 import { preloadWhiteboardStylesheet } from "@q9labsai/chalk-whiteboard/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -181,11 +182,15 @@ function SpaceExperience(
     if (connection.status === "left" && previous !== "left") setEndedAt((current) => current ?? new Date().toISOString());
   }, [connection.status, props.onJoined, props.onLeft]);
   if (connection.status === "idle") {
-    if (!entrance) return <StatusSurface message={joinError ?? `Entering ${spaceName}…`} onRetry={joinError ? retryAutomaticJoin : undefined} retryPending={retryPending} retryError={joinError} />;
+    if (!entrance) return <CallLimbo theme={{ ...props.theme, colorScheme: props.resolvedColorScheme }} spaceName={spaceName} message={joinError ?? `Joining ${spaceName}…`} action={joinError ? { label: "Try again", onClick: retryAutomaticJoin, disabled: retryPending } : undefined} />;
     return <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} error={joinError ?? undefined} theme={props.theme} onJoin={join} />;
   }
   if (connection.status === "joining")
-    return entrance ? <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} joining error={joinError ?? undefined} theme={props.theme} onJoin={join} /> : <StatusSurface message={`Entering ${spaceName}…`} />;
+    return entrance ? (
+      <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} joining error={joinError ?? undefined} theme={props.theme} onJoin={join} />
+    ) : (
+      <CallLimbo theme={{ ...props.theme, colorScheme: props.resolvedColorScheme }} spaceName={spaceName} message={`Joining ${spaceName}…`} />
+    );
   if (connection.status === "failed") {
     const failureMessage = [connection.lastError?.message ?? joinError ?? "Unable to enter this Space.", offline.notice].filter(Boolean).join(" ");
     if (!hasBeenLive.current && entrance) return <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} error={failureMessage} theme={props.theme} onJoin={join} />;
@@ -206,7 +211,12 @@ function SpaceExperience(
         retryError={joinError}
       />
     );
-  return <SpaceSurface {...props} spaceName={spaceName} />;
+  return (
+    <div className="relative h-full min-h-0">
+      <SpaceSurface {...props} spaceName={spaceName} />
+      <CallLimbo overlay active={false} initiallyCovered message="" />
+    </div>
+  );
 }
 function SpaceSurface(
   props: ChalkProps & {

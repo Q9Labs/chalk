@@ -1,9 +1,9 @@
 import React from "react";
 import { ClassicReconnectingOverlay } from "./ClassicReconnectingOverlay";
-import { ReconnectingNotice } from "./ReconnectingNotice";
+import { CallLimbo } from "../call-limbo/CallLimbo";
 
-/** A reconnecting state shorter than this shows a non-blocking notice; longer shows the modal. */
-export const RECONNECTING_NOTICE_MS = 10_000;
+/** Brief interruptions do not obscure the call. */
+export const RECONNECTING_NOTICE_MS = 2_000;
 
 export interface ReconnectingOverlayProps {
   isVisible: boolean;
@@ -29,7 +29,7 @@ export const ReconnectingOverlay = React.memo<ReconnectingOverlayProps>((props: 
     return () => clearTimeout(timer);
   }, [isReconnecting]);
 
-  if (isReconnecting && !escalated) return props.showNotice === false ? null : <ReconnectingNotice className={props.className} />;
+  if (props.status === "reconnecting") return props.showNotice === false ? null : <CallLimbo overlay active={isReconnecting && escalated} message={props.message ?? "Reconnecting…"} />;
   return <ClassicReconnectingOverlay {...props} />;
 });
 

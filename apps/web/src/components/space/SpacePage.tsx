@@ -1,10 +1,12 @@
 import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
-import { Chalk, Entrance, type EntranceSettings } from "@q9labsai/chalk-react";
+import { Chalk, CallLimbo, ChalkButton, type EntranceSettings } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { createPreparedPublicSpace, createPublicInviteClient, prepareDashboardEntrance, joinDashboardSpace, resumePublicSpace, type AccountSpaceCredential, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
-import { listAllAccountTenants, listSpaces } from "../../lib/account-api";
-import { canonicalSpaceInviteLink, clearDashboardSpaceEntry, dashboardSpaceEntryUsesDevicesOff, hasDashboardSpaceEntry, spaceInviteToken, verifiedSpaceInviteLink } from "../../lib/named-space-route";
+import { createPreparedPublicSpace, createPublicInviteClient, joinDashboardSpace, resumePublicSpace, type AccountSpaceCredential, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
+import { getAccount, listAllAccountTenants, listSpaces } from "../../lib/account-api";
+import { canonicalSpaceInviteLink, clearDashboardSpaceEntry, hasDashboardSpaceEntry, spaceInviteToken, verifiedSpaceInviteLink } from "../../lib/named-space-route";
 import { createLocalSpaceClient, createLocalSpaceRelease } from "../../lib/local-space-client";
+const displayNameStorageKey = "chalk.display-name";
+const devicesOff = { microphone: false, camera: false };
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
 export function SpacePage({
   slug,
@@ -23,10 +25,20 @@ export function SpacePage({
     }
   });
   const [dashboardEntry] = useState(() => hasDashboardSpaceEntry() || Boolean(reloadMarker?.tenantId));
-  const initialDisplayName = useMemo(() => new URLSearchParams(globalThis.location?.search ?? "").get("name") ?? "", []);
-  const entranceDeviceDefaults = useMemo(() => (dashboardSpaceEntryUsesDevicesOff() ? { microphone: false, camera: false } : { microphone: true, camera: true }), []);
-  const [displayName, setDisplayName] = useState(reloadMarker?.displayName ?? initialDisplayName);
-  const [entranceSettings, setEntranceSettings] = useState<EntranceSettings | null>(reloadMarker ? { displayName: reloadMarker.displayName, microphone: reloadMarker.microphone, camera: reloadMarker.camera } : null);
+  const [automaticName, setAutomaticName] = useState(() => {
+    const queryName = new URLSearchParams(globalThis.location?.search ?? "").get("name")?.trim();
+    if (queryName) return queryName;
+    try {
+      return globalThis.localStorage.getItem(displayNameStorageKey)?.trim() ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const [displayName, setDisplayName] = useState(reloadMarker?.displayName ?? automaticName);
+  const [entranceSettings, setEntranceSettings] = useState<EntranceSettings | null>(reloadMarker ? { displayName: reloadMarker.displayName, ...devicesOff } : null);
+  const [callName, setCallName] = useState(slug ?? "Call");
+  const autoArrivalAttempted = useRef(false);
+  const nameEdited = useRef(false);
   const [spaceAccess, setSpaceAccess] = useState<JoinedSpaceAccess | null>(null);
   const [pending, setPending] = useState<PendingArrival | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +47,7 @@ export function SpacePage({
   const reloadAttempted = useRef(false);
   const pendingRef = useRef<PendingArrival | null>(null);
   const cleanupPromise = useRef<Promise<void> | undefined>(undefined);
-  const defaultEntranceSettings = useMemo<EntranceSettings>(() => ({ displayName, ...entranceDeviceDefaults }), [displayName, entranceDeviceDefaults]);
+  const defaultEntranceSettings = useMemo<EntranceSettings>(() => ({ displayName, ...devicesOff }), [displayName]);
   useEffect(() => {
     active.current = true;
     return () => {
@@ -44,26 +56,6 @@ export function SpacePage({
       if (arrival?.arrival.arrival_handle) void client.leaveSpacePublicInviteArrival(arrival.arrival.arrival_handle).catch(() => undefined);
     };
   }, [client]);
-  const prepareEntrance = useCallback(async () => {
-    const token = spaceInviteToken();
-    if (token) {
-      await client.prepareSpaceEntrance(token);
-      return;
-    }
-    if (!slug || !dashboardEntry) return;
-    const tenantID = await resolveTenantID();
-    if (!tenantID) return;
-    let cursor: string | undefined;
-    do {
-      const page = await listSpaces({ tenantID, cursor, pageSize: 100 });
-      const space = page.spaces.find((candidate) => candidate.slug === slug);
-      if (space) {
-        await prepareDashboardEntrance(tenantID, space.id);
-        return;
-      }
-      cursor = page.pagination.has_more ? (page.pagination.next_cursor ?? undefined) : undefined;
-    } while (cursor);
-  }, [client, dashboardEntry, slug]);
   const complete = useCallback((prepared: SpaceEntryAccess, inviteLink: string | undefined, spaceName: string) => {
     if (!active.current) {
       void prepared.finish().catch(() => undefined);
@@ -83,7 +75,7 @@ export function SpacePage({
     reloadAttempted.current = true;
     const marker = reloadMarker;
     setDisplayName(marker.displayName);
-    setEntranceSettings({ displayName: marker.displayName, microphone: marker.microphone, camera: marker.camera });
+    setEntranceSettings({ displayName: marker.displayName, ...devicesOff });
     setPreparing(true);
     const recovery = marker.arrivalHandle ? resumePublicSpace(client, marker).then((prepared) => ({ prepared, spaceName: slug })) : prepareDashboardSpace(slug, marker.displayName, marker).then((result) => ({ prepared: result.access, spaceName: result.spaceName }));
     void recovery
@@ -101,7 +93,12 @@ export function SpacePage({
       const inviteToken = spaceInviteToken();
       if (!normalizedDisplayName || spaceAccess || pending || preparing) return;
       setDisplayName(normalizedDisplayName);
-      setEntranceSettings(settings);
+      setEntranceSettings({ displayName: normalizedDisplayName, ...devicesOff });
+      try {
+        globalThis.localStorage.setItem(displayNameStorageKey, normalizedDisplayName);
+      } catch {
+        /* Joining works with storage disabled. */
+      }
       const accountEntry = Boolean(slug && !inviteToken && dashboardEntry);
       if (slug && !inviteToken && !accountEntry) {
         setError(neutralSpaceError);
@@ -127,13 +124,14 @@ export function SpacePage({
             return;
           }
           const { arrival, inviteLink, spaceName } = result;
+          setCallName(spaceName);
           if (arrival.state === "pending") {
             const nextPending = { arrival, inviteLink, spaceName } satisfies PendingArrival;
             pendingRef.current = nextPending;
             setPending(nextPending);
             return;
           }
-          if (arrival.state !== "admitted") throw new Error(neutralSpaceError);
+          if (arrival.state !== "admitted") throw new AdmissionError(arrival.state);
           const prepared = result.prepared ?? createPreparedPublicSpace(client, arrival);
           complete(prepared, inviteLink, spaceName);
         })
@@ -147,6 +145,26 @@ export function SpacePage({
     [client, complete, dashboardEntry, defaultEntranceSettings, navigatePublicSpace, pending, preparing, slug, spaceAccess],
   );
   useEffect(() => {
+    if (automaticName || reloadMarker) return;
+    let cancelled = false;
+    void getAccount()
+      .then((account) => {
+        if (!cancelled && !nameEdited.current && account.name.trim()) {
+          setDisplayName((current) => current || account.name);
+          setAutomaticName(account.name);
+        }
+      })
+      .catch(() => undefined); // Anonymous visitors supply their own name.
+    return () => {
+      cancelled = true;
+    };
+  }, [automaticName, reloadMarker]);
+  useEffect(() => {
+    if (!automaticName || reloadMarker || autoArrivalAttempted.current) return;
+    autoArrivalAttempted.current = true;
+    start({ displayName: automaticName, ...devicesOff });
+  }, [automaticName, reloadMarker, start]);
+  useEffect(() => {
     pendingRef.current = pending;
     if (!pending?.arrival.arrival_handle) return;
     let cancelled = false;
@@ -159,7 +177,7 @@ export function SpacePage({
           timer = globalThis.setTimeout(poll, retryDelay(arrival.retry_after));
           return;
         }
-        if (arrival.state !== "admitted") throw new Error(neutralSpaceError);
+        if (arrival.state !== "admitted") throw new AdmissionError(arrival.state);
         const resumed = arrival.access ? arrival : await resumePendingArrival(client, pending, displayName);
         const prepared = createPreparedPublicSpace(client, resumed);
         if (cancelled || !active.current) {
@@ -232,27 +250,25 @@ export function SpacePage({
       />
     );
   }
-  if (reloadMarker && preparing)
-    return (
-      <main className="flex h-dvh items-center justify-center" role="status">
-        Returning to the Episode…
-      </main>
-    );
-  if (pending) return <SpaceArrival displayName={displayName} error={error} pending preparing={preparing} onCancel={cancel} onDisplayNameChange={setDisplayName} onEnter={() => start()} />;
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
-      <Entrance
-        spaceName={slug ?? "Space"}
-        defaultDisplayName={displayName}
-        defaults={entranceSettings ?? defaultEntranceSettings}
-        selectedAudioInput={entranceSettings?.audioInputDeviceId}
-        selectedVideoInput={entranceSettings?.videoInputDeviceId}
-        selectedAudioOutput={entranceSettings?.audioOutputDeviceId}
-        joining={preparing}
-        error={error ?? undefined}
-        onJoin={start}
-        onPrepare={prepareEntrance}
-      />
+      {pending ? (
+        <CallLimbo spaceName={pending.spaceName} message={error ?? `Asking to join ${pending.spaceName}`} detail={error ? undefined : "The host will let you in."} action={{ label: "Cancel", onClick: () => void cancel(), disabled: preparing }} />
+      ) : preparing || (!reloadMarker && automaticName && !autoArrivalAttempted.current) ? (
+        <CallLimbo spaceName={callName} message={`Joining ${callName}…`} />
+      ) : error ? (
+        <CallLimbo spaceName={callName} message={error} action={{ label: "Ask again", onClick: () => start() }} />
+      ) : (
+        <NameNeeded
+          spaceName={callName}
+          displayName={displayName}
+          onDisplayNameChange={(name) => {
+            nameEdited.current = true;
+            setDisplayName(name);
+          }}
+          onJoin={() => start()}
+        />
+      )}
     </main>
   );
 }
@@ -361,7 +377,17 @@ async function resumePendingArrival(client: PublicInviteClient, pending: Pending
   if (!inviteToken || !arrivalHandle) throw new Error(neutralSpaceError);
   return client.arriveBySpacePublicInvite(inviteToken, displayName.trim(), { arrivalHandle });
 }
+class AdmissionError extends Error {
+  constructor(readonly state: string) {
+    super(state);
+  }
+}
 function neutralMessage(cause: unknown): string {
+  if (cause instanceof AdmissionError) {
+    if (cause.state === "rejected") return "The host declined your request to join.";
+    if (cause.state === "unavailable") return "Your request to join expired or is no longer available.";
+    return "Your request to join is no longer active.";
+  }
   if (cause && typeof cause === "object" && "status" in cause) {
     if (cause.status === 404 || cause.status === 410) return neutralSpaceError;
     if (cause.status === 401) return "Sign in again, then enter this Space.";
@@ -479,61 +505,32 @@ function selectEntranceDevices(client: ReturnType<typeof createLocalSpaceClient>
     void item.select().catch(() => {});
   }
 }
-export function SpaceArrival({
-  displayName,
-  error,
-  pending,
-  preparing,
-  onCancel,
-  onDisplayNameChange,
-  onEnter,
-}: {
-  readonly displayName: string;
-  readonly error: string | null;
-  readonly pending: boolean;
-  readonly preparing: boolean;
-  readonly onCancel: () => Promise<void>;
-  readonly onDisplayNameChange: (displayName: string) => void;
-  readonly onEnter: () => void;
-}) {
+/** The web asks only for identity. Devices are requested inside the admitted call. */
+export function NameNeeded({ spaceName, displayName, onDisplayNameChange, onJoin }: { readonly spaceName: string; readonly displayName: string; readonly onDisplayNameChange: (name: string) => void; readonly onJoin: () => void }) {
   return (
-    <main className="grid min-h-dvh place-items-center bg-[#f7f6f2] p-6 text-center text-[#0c0e12]">
-      <section className="w-full max-w-md rounded-lg border border-[#deddd7] bg-white p-6 text-left shadow-[0_22px_54px_rgba(12,14,18,0.08)]">
-        <h1 className="text-2xl font-semibold">{pending ? "Waiting to enter" : "Enter this Space"}</h1>
-        <p className="mt-2 text-sm leading-6 text-[#555b65]">{pending ? "The host must approve your arrival." : "Choose the name other Participants will see."}</p>
-        {!pending ? (
-          <>
-            <label className="mt-6 block text-sm font-medium" htmlFor="display-name">
-              Your name
-            </label>
-            <input
-              id="display-name"
-              autoComplete="name"
-              value={displayName}
-              onChange={(event) => onDisplayNameChange(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") onEnter();
-              }}
-              className="mt-2 h-11 w-full rounded-md border border-[#deddd7] px-3 text-sm outline-none focus-visible:border-[#74b7cf]"
-              placeholder="Enter your name"
-            />
-          </>
-        ) : null}
-        {error ? (
-          <p role="alert" className="mt-4 text-sm text-[#b94c4c]">
-            {error}
-          </p>
-        ) : null}
-        {pending ? (
-          <button type="button" className="mt-6 h-11 w-full rounded-md border border-[#deddd7] text-sm font-medium" onClick={() => void onCancel()} disabled={preparing}>
-            Cancel
-          </button>
-        ) : (
-          <button type="button" className="mt-6 h-11 w-full rounded-md bg-[#0c0e12] text-sm font-medium text-white disabled:opacity-50" onClick={onEnter} disabled={!displayName.trim() || preparing}>
-            {preparing ? "Preparing…" : "Continue"}
-          </button>
-        )}
-      </section>
-    </main>
+    <CallLimbo spaceName={spaceName} message={`Join ${spaceName}`}>
+      <form
+        className="mt-6"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (displayName.trim()) onJoin();
+        }}
+      >
+        <label htmlFor="join-display-name" className="mb-2 block text-sm text-[var(--chalk-app-text-muted)]">
+          Your name
+        </label>
+        <input
+          id="join-display-name"
+          autoComplete="name"
+          autoFocus
+          value={displayName}
+          onChange={(event) => onDisplayNameChange(event.target.value)}
+          className="h-11 w-full rounded-xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-3 text-center text-[var(--chalk-app-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]"
+        />
+        <ChalkButton type="submit" variant="outline" className="mt-4 !h-11" disabled={!displayName.trim()}>
+          Join
+        </ChalkButton>
+      </form>
+    </CallLimbo>
   );
 }
