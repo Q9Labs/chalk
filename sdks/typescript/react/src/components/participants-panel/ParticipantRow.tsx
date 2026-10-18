@@ -6,7 +6,7 @@ import { cn } from "../../utils/cn";
 import { ParticipantOptionsMenu } from "./participant-options-menu";
 import type { ParticipantRowProps } from "./participant-row";
 
-export function ClassicParticipantRow({
+export function ParticipantRow({
   participant,
   variant,
   canManageParticipants,

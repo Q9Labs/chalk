@@ -1,6 +1,6 @@
 import type { ParticipantGradientPreference } from "../../utils/colorGenerator";
 import type { ParticipantListParticipant, ParticipantListVariant } from "./ParticipantsPanel";
-import { ClassicParticipantRow } from "./ClassicParticipantRow";
+import { ParticipantRow } from "./ParticipantRow";
 
 export interface ParticipantRowProps {
   participant: ParticipantListParticipant;
@@ -23,5 +23,5 @@ export interface ParticipantRowProps {
 }
 
 export function ParticipantRow(props: ParticipantRowProps) {
-  return <ClassicParticipantRow {...props} />;
+  return <ParticipantRow {...props} />;
 }

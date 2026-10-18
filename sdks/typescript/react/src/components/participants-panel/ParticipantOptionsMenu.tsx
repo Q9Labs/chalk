@@ -3,7 +3,7 @@ import { cn } from "../../utils/cn";
 import { VolumeSlider } from "../atomic";
 import { runParticipantAction, type ParticipantOptionsMenuProps } from "./participant-options-menu-contract";
 
-export function ClassicParticipantOptionsMenu({
+export function ParticipantOptionsMenu({
   participant,
   variant,
   canManageParticipants,

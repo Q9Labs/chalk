@@ -16,7 +16,7 @@ export const CLASSIC_FOCUS_CLASSES = "focus-visible:outline-none focus-visible:r
 export const CLASSIC_FOCUS_WITHIN_CLASSES =
   "focus-within:border-[var(--chalk-app-control-active-line,var(--chalk-focus))] focus-within:ring-2 focus-within:ring-[var(--chalk-app-control-active-line,var(--chalk-focus))] focus-within:ring-offset-1 focus-within:ring-offset-[var(--chalk-app-canvas,var(--chalk-canvas))]";
 
-type ClassicToneClasses = {
+type ToneClasses = {
   readonly border: string;
   readonly text: string;
   readonly background: string;
@@ -26,7 +26,7 @@ type ClassicToneClasses = {
   readonly solidHover: string;
 };
 
-const CLASSIC_TONE_CLASSES: Record<ChalkTone, ClassicToneClasses> = {
+const CLASSIC_TONE_CLASSES: Record<ChalkTone, ToneClasses> = {
   neutral: {
     border: "border-[var(--chalk-app-line-strong,var(--chalk-line))]",
     text: "text-[var(--chalk-app-text,var(--chalk-text))]",
@@ -65,9 +65,9 @@ const CLASSIC_TONE_CLASSES: Record<ChalkTone, ClassicToneClasses> = {
   },
 };
 
-type ClassicButtonVariantClasses = Record<ChalkButtonVariant, string>;
+type ButtonVariantClasses = Record<ChalkButtonVariant, string>;
 
-function createClassicButtonClasses(toneClasses: ClassicToneClasses): ClassicButtonVariantClasses {
+function createButtonClasses(toneClasses: ToneClasses): ButtonVariantClasses {
   return {
     outline: `border ${toneClasses.border} ${toneClasses.background} ${toneClasses.text} hover:bg-[var(--chalk-app-control-hover,var(--chalk-stage))]`,
     solid: `border ${toneClasses.solidBorder} ${toneClasses.solidBackground} ${toneClasses.solidText} ${toneClasses.solidHover}`,
@@ -75,11 +75,11 @@ function createClassicButtonClasses(toneClasses: ClassicToneClasses): ClassicBut
   };
 }
 
-const CLASSIC_BUTTON_CLASSES: Record<ChalkTone, ClassicButtonVariantClasses> = {
-  neutral: createClassicButtonClasses(CLASSIC_TONE_CLASSES.neutral),
-  accent: createClassicButtonClasses(CLASSIC_TONE_CLASSES.accent),
-  danger: createClassicButtonClasses(CLASSIC_TONE_CLASSES.danger),
-  success: createClassicButtonClasses(CLASSIC_TONE_CLASSES.success),
+const CLASSIC_BUTTON_CLASSES: Record<ChalkTone, ButtonVariantClasses> = {
+  neutral: createButtonClasses(CLASSIC_TONE_CLASSES.neutral),
+  accent: createButtonClasses(CLASSIC_TONE_CLASSES.accent),
+  danger: createButtonClasses(CLASSIC_TONE_CLASSES.danger),
+  success: createButtonClasses(CLASSIC_TONE_CLASSES.success),
 };
 
 export function classicToneSurfaceClasses(tone: ChalkTone): string {

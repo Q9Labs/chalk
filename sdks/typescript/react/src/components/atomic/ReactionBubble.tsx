@@ -1,5 +1,8 @@
-import React from "react";
-import { ClassicReactionBubble } from "./ClassicReactionBubble";
+import React, { useEffect, useState, useMemo } from "react";
+import { cn } from "../../utils/cn";
+import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
+import { getParticipantColor } from "../../utils/colorGenerator";
+import { CELEBRATION_EMOJIS } from "@q9labsai/chalk-ui/reactions";
 
 export interface ReactionBubbleProps {
   emoji: string;
@@ -13,8 +16,124 @@ export interface ReactionBubbleProps {
   className?: string;
 }
 
-export const ReactionBubble = React.memo((props: ReactionBubbleProps) => {
-  return <ClassicReactionBubble {...props} />;
+interface ConnectedReactionBubbleProps {
+  emoji: string;
+  participantName?: string;
+  onComplete?: () => void;
+  duration?: number;
+  animated?: boolean;
+  className?: string;
+}
+
+type ReactionAnimationStyle = React.CSSProperties & {
+  "--primary": string;
+  "--float-offset-x"?: string;
+  "--float-travel-y"?: string;
+  "--float-rotation"?: string;
+  "--float-scale"?: number;
+  "--float-duration"?: string;
+};
+
+type ParticleStyle = React.CSSProperties & {
+  "--particle-x": string;
+  "--particle-y": string;
+};
+
+const BASE_PARTICLE_COLORS = ["#14b8a6", "#f59e0b", "#ec4899", "#8b5cf6", "#06b6d4", "#22c55e"];
+
+const generateAnimationProps = () => ({
+  offsetX: Math.random() * 120 - 60,
+  travelY: 80 + Math.random() * 70,
+  rotation: Math.random() * 40 - 20,
+  scale: 1 + Math.random() * 0.3,
+  duration: 2500 + Math.random() * 1000,
+  delay: Math.random() * 100,
+});
+
+const generateParticles = (primaryColor: string) => {
+  const particleColors = [...BASE_PARTICLE_COLORS, primaryColor, primaryColor];
+  return Array.from({ length: 16 }, (_, i) => {
+    const angle = (360 / 16) * i + (Math.random() * 20 - 10);
+    const radians = (angle * Math.PI) / 180;
+    const distance = 35 + Math.random() * 25;
+    return {
+      id: i,
+      x: Math.cos(radians) * distance,
+      y: Math.sin(radians) * distance,
+      size: 4 + Math.random() * 5,
+      color: particleColors[Math.floor(Math.random() * particleColors.length)],
+      delay: Math.random() * 150,
+      duration: 600 + Math.random() * 300,
+    };
+  });
+};
+
+function getParticleStyle(particle: ReturnType<typeof generateParticles>[number]): ParticleStyle {
+  return {
+    width: particle.size,
+    height: particle.size,
+    backgroundColor: particle.color,
+    left: "50%",
+    top: "50%",
+    marginLeft: -particle.size / 2,
+    marginTop: -particle.size / 2,
+    animation: `chalk-particle-explode ${particle.duration}ms ease-out ${particle.delay}ms forwards`,
+    "--particle-x": `${particle.x}px`,
+    "--particle-y": `${particle.y}px`,
+  };
+}
+
+export const ReactionBubble = React.memo(({ emoji, participantName, onComplete, duration: baseDuration = 3000, animated = true, className }: ConnectedReactionBubbleProps) => {
+  const [isVisible, setIsVisible] = useState(true);
+  const prefersReducedMotion = usePrefersReducedMotion();
+
+  const participantColors = useMemo(() => getParticipantColor(participantName || "unknown"), [participantName]);
+  const isCelebration = CELEBRATION_EMOJIS.includes(emoji);
+  const animProps = useMemo(() => (animated ? generateAnimationProps() : null), [animated]);
+  const particles = useMemo(() => (animated && isCelebration ? generateParticles(participantColors.primary) : []), [animated, isCelebration, participantColors.primary]);
+  const timeoutMs = baseDuration;
+  const floatDurationMs = prefersReducedMotion || !animProps ? baseDuration : animProps.duration;
+
+  useEffect(() => {
+    if (!animated) return;
+    const timer = setTimeout(() => {
+      setIsVisible(false);
+      onComplete?.();
+    }, timeoutMs);
+
+    return () => clearTimeout(timer);
+  }, [animated, timeoutMs, onComplete]);
+
+  if (!isVisible) return null;
+
+  const animationStyle: ReactionAnimationStyle = prefersReducedMotion
+    ? { "--primary": participantColors.primary }
+    : {
+        "--primary": participantColors.primary,
+        "--float-offset-x": `${animProps?.offsetX ?? 0}px`,
+        "--float-travel-y": `${animProps?.travelY ?? 0}px`,
+        "--float-rotation": `${animProps?.rotation ?? 0}deg`,
+        "--float-scale": animProps?.scale ?? 1,
+        "--float-duration": `${floatDurationMs}ms`,
+        animationDelay: `${animProps?.delay ?? 0}ms`,
+      };
+
+  return (
+    <div className={cn("pointer-events-none relative w-16 h-16 flex items-center justify-center", animated && !prefersReducedMotion && "chalk-animate-reaction-float", className)} style={animationStyle} role="presentation" aria-hidden="true">
+      {animated && isCelebration && !prefersReducedMotion && particles.map((particle) => <div key={particle.id} className="absolute rounded-full" style={getParticleStyle(particle)} />)}
+
+      <div className={cn("relative z-10 text-5xl", animated && !prefersReducedMotion && "chalk-animate-reaction-bounce-in", animated && !prefersReducedMotion && "chalk-animate-reaction-wiggle")}>{emoji}</div>
+
+      {participantName && participantName.toLowerCase() !== "unknown" && (
+        <div
+          className={cn("absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium text-[var(--chalk-accent-text)] border border-[var(--chalk-line)] shadow-sm", animated && !prefersReducedMotion && "animate-in fade-in duration-300")}
+          style={{ backgroundColor: participantColors.primary }}
+        >
+          {participantName}
+        </div>
+      )}
+    </div>
+  );
 });
 
 ReactionBubble.displayName = "ReactionBubble";

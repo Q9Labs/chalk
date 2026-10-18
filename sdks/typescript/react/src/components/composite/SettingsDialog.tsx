@@ -1,9 +1,339 @@
+import { Dialog } from "@base-ui/react/dialog";
 import React from "react";
-import { ClassicSettingsDialog } from "./ClassicSettingsDialog";
-import { type SettingsDialogProps } from "./settings-dialog-behavior";
+import { IconButton, Input } from "@q9labsai/chalk-ui";
+import { cn } from "../../utils/cn";
+import { ArrowLeft02Icon, Cancel01Icon, PictureInPictureIcon, Search01Icon, Settings01Icon, VolumeHighIcon } from "../../utils/icons";
+import { VolumeSlider } from "../atomic";
+import { OfflineActionsSetting } from "../offline-actions/OfflineActionsSetting";
+import { ChalkToggle } from "../chalk-ui";
+import { DeviceSelector } from "./DeviceSelector";
+import { NoiseSuppressionToggle } from "./NoiseSuppressionToggle";
+import { SETTINGS_SECTIONS, useSettingsDialogBehavior, type SettingsDialogProps } from "./settings-dialog-behavior";
 
 export type { SettingsDialogValue } from "./settings-dialog-behavior";
 
-export const SettingsDialog = React.memo((props: SettingsDialogProps): React.JSX.Element => <ClassicSettingsDialog {...props} />);
+function SectionCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-[10px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] p-3.5 shadow-none sm:p-4">
+      <div className="mb-3">
+        <h3 className="text-sm font-semibold text-[var(--chalk-app-text)]">{title}</h3>
+        <p className="mt-1 text-xs text-[var(--chalk-app-text-muted)]">{description}</p>
+      </div>
+      <div className="space-y-3">{children}</div>
+    </section>
+  );
+}
+
+function ToggleRow({ title, description, checked, onChange }: { title: string; description: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  const titleId = React.useId();
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-[10px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] p-3">
+      <div className="min-w-0 flex-1">
+        <div id={titleId} className="text-sm font-medium text-[var(--chalk-app-text)]">
+          {title}
+        </div>
+        <div className="text-xs text-[var(--chalk-app-text-muted)]">{description}</div>
+      </div>
+      <ChalkToggle pressed={checked} onPressedChange={onChange} aria-labelledby={titleId} />
+    </div>
+  );
+}
+
+export const SettingsDialog = React.memo(
+  ({
+    isOpen,
+    onClose,
+    settings,
+    onUpdateIdentity,
+    onUpdateJoin,
+    onUpdateAudio,
+    onUpdateVideo,
+    onUpdateAppearance,
+    onUpdateExperience,
+    enablePictureInPicture = false,
+    isPictureInPictureSupported = false,
+    isPictureInPictureActive = false,
+    onOpenPictureInPicture,
+    audioInputDevices = [],
+    audioOutputDevices = [],
+    videoInputDevices = [],
+    audioLevel = 0,
+    videoTrack,
+    reducedMotion = false,
+    participantColorSeed,
+    isDarkMode = false,
+    initialSection = "audio-video",
+  }: SettingsDialogProps) => {
+    const { disableMotion, isDesktop, resolvedTheme, activeSection, setActiveSection, isNavOpen, setIsNavOpen, searchQuery, setSearchQuery, effectiveAudioInputDevices, effectiveAudioOutputDevices, effectiveVideoInputDevices, settingsChromeVariables, filteredSections } = useSettingsDialogBehavior({
+      isOpen,
+      settings,
+      audioInputDevices,
+      audioOutputDevices,
+      videoInputDevices,
+      reducedMotion,
+      participantColorSeed,
+      isDarkMode,
+      initialSection,
+    });
+    const renderSectionContent = () => {
+      switch (activeSection) {
+        case "audio-video":
+          return (
+            <div className="space-y-4 sm:space-y-5">
+              <SectionCard title="Microphone" description="Choose the live input device and clean up background noise.">
+                <DeviceSelector
+                  type="audioinput"
+                  devices={effectiveAudioInputDevices}
+                  selectedDeviceId={settings.audio.selectedInput}
+                  onChange={(deviceId) => onUpdateAudio({ selectedInput: deviceId })}
+                  label="Input device"
+                  audioLevel={audioLevel}
+                  participantColorSeed={participantColorSeed}
+                  participantGradientPreference={settings.appearance.profileGradient}
+                />
+                <NoiseSuppressionToggle enabled={settings.audio.noiseSuppression} onChange={(enabled) => onUpdateAudio({ noiseSuppression: enabled })} level="medium" />
+              </SectionCard>
+
+              <SectionCard title="Speakers" description="Route audio where you want it and tune playback volume.">
+                <DeviceSelector
+                  type="audiooutput"
+                  devices={effectiveAudioOutputDevices}
+                  selectedDeviceId={settings.audio.selectedOutput}
+                  onChange={(deviceId) => onUpdateAudio({ selectedOutput: deviceId })}
+                  label="Output device"
+                  participantColorSeed={participantColorSeed}
+                  participantGradientPreference={settings.appearance.profileGradient}
+                />
+                <div className="rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] p-4">
+                  <div className="mb-3 flex items-center gap-2 text-sm font-medium text-[var(--chalk-text)]">
+                    <VolumeHighIcon className="h-4 w-4 text-[var(--chalk-accent)]" />
+                    Output volume
+                  </div>
+                  <VolumeSlider value={settings.audio.outputVolume} onChange={(value) => onUpdateAudio({ outputVolume: value })} showValue />
+                </div>
+              </SectionCard>
+              <SectionCard title="Camera" description="Pick the active camera and confirm the preview before teaching.">
+                <DeviceSelector
+                  type="videoinput"
+                  devices={effectiveVideoInputDevices}
+                  selectedDeviceId={settings.video.selectedInput}
+                  onChange={(deviceId) => onUpdateVideo({ selectedInput: deviceId })}
+                  label="Camera"
+                  previewTrack={videoTrack}
+                  participantColorSeed={participantColorSeed}
+                  participantGradientPreference={settings.appearance.profileGradient}
+                />
+              </SectionCard>
+            </div>
+          );
+        case "appearance":
+          return (
+            <div className="space-y-5">
+              <SectionCard title="Avatars" description="Choose generated avatars or plain initials.">
+                <ToggleRow title="Fun avatars" description="Use generated avatars when no photo is set." checked={settings.appearance.generatedAvatars} onChange={(checked) => onUpdateAppearance({ generatedAvatars: checked })} />
+              </SectionCard>
+              <SectionCard title="Motion" description="Keep movement comfortable.">
+                <ToggleRow title="Reduced motion" description="Turn down transitions." checked={settings.appearance.reducedMotion} onChange={(checked) => onUpdateAppearance({ reducedMotion: checked })} />
+              </SectionCard>
+            </div>
+          );
+        case "experience":
+          return (
+            <div className="space-y-5">
+              <SectionCard title="Identity & join" description="Set the name and join state Chalk should remember for this browser.">
+                <div className="rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] p-4">
+                  <label htmlFor="chalk-settings-display-name" className="mb-2 block text-sm font-medium text-[var(--chalk-text)]">
+                    Default display name
+                  </label>
+                  <Input
+                    id="chalk-settings-display-name"
+                    value={settings.identity.displayName}
+                    onChange={(event) => onUpdateIdentity({ displayName: event.target.value })}
+                    placeholder="How your name appears when you join"
+                    fullWidth
+                    className="rounded-2xl border-[var(--chalk-line)] bg-[var(--chalk-canvas)]"
+                  />
+                  <p className="mt-2 text-xs text-[var(--chalk-muted-text)]">Used as the starting name in the Entrance and settings preview.</p>
+                </div>
+                <ToggleRow title="Join muted" description="Start with your microphone off the next time you enter a space." checked={!settings.join.audioEnabled} onChange={(checked) => onUpdateJoin({ audioEnabled: !checked })} />
+                <ToggleRow title="Join with video off" description="Start with your camera off the next time you enter a space." checked={!settings.join.videoEnabled} onChange={(checked) => onUpdateJoin({ videoEnabled: !checked })} />
+              </SectionCard>
+
+              <SectionCard title="Offline actions" description="Messages and hand raises you make while offline wait to send. Choose what happens when you reconnect.">
+                <OfflineActionsSetting />
+              </SectionCard>
+
+              <SectionCard title="In-space defaults" description="Choose what opens by default the next time you enter a space.">
+                <ToggleRow title="Show invite toast" description="Keep the share reminder visible when the space loads." checked={settings.experience.showInviteToast} onChange={(checked) => onUpdateExperience({ showInviteToast: checked })} />
+                <ToggleRow title="Open chat by default" description="Start with the chat drawer open." checked={settings.experience.defaultOpenChat} onChange={(checked) => onUpdateExperience({ defaultOpenChat: checked })} />
+                <ToggleRow
+                  title="Open people by default"
+                  description="Start with the participant list open."
+                  checked={settings.experience.defaultOpenParticipants}
+                  onChange={(checked) =>
+                    onUpdateExperience({
+                      defaultOpenParticipants: checked,
+                    })
+                  }
+                />
+                <ToggleRow
+                  title="Open transcript by default"
+                  description="Start with the transcript panel open."
+                  checked={settings.experience.defaultOpenTranscription}
+                  onChange={(checked) =>
+                    onUpdateExperience({
+                      defaultOpenTranscription: checked,
+                    })
+                  }
+                />
+                <ToggleRow title="Sounds" description="Play a cue when someone joins, leaves, messages, raises a hand or reacts." checked={settings.experience.sounds} onChange={(checked) => onUpdateExperience({ sounds: checked })} />
+                {enablePictureInPicture ? (
+                  <ToggleRow
+                    title="Auto-open Picture-in-Picture"
+                    description="Try to open PiP automatically when the space loads. Some browsers may wait for your first interaction."
+                    checked={settings.experience.autoOpenPictureInPicture}
+                    onChange={(checked) =>
+                      onUpdateExperience({
+                        autoOpenPictureInPicture: checked,
+                      })
+                    }
+                  />
+                ) : null}
+              </SectionCard>
+              {enablePictureInPicture ? (
+                <SectionCard title="Picture in Picture" description="Fallback controls if automatic opening is blocked by the browser.">
+                  <div className="rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] p-4">
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium text-[var(--chalk-text)]">Manual open</div>
+                        <div className="text-xs text-[var(--chalk-muted-text)]">
+                          {isPictureInPictureSupported ? (isPictureInPictureActive ? "Picture-in-Picture is already open." : "Open PiP manually if the browser blocked automatic opening.") : "Picture-in-Picture is not supported in this browser."}
+                        </div>
+                      </div>
+                      <PictureInPictureIcon className="h-5 w-5 shrink-0 text-[var(--chalk-accent)]" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void onOpenPictureInPicture?.();
+                      }}
+                      disabled={!isPictureInPictureSupported || isPictureInPictureActive || !onOpenPictureInPicture}
+                      className={cn(
+                        "inline-flex h-10 items-center justify-center rounded-full px-4 text-sm font-medium transition-colors outline-none",
+                        "focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)] focus-visible:ring-offset-2",
+                        "disabled:cursor-not-allowed disabled:opacity-50",
+                        "bg-[var(--chalk-accent)] text-[var(--chalk-accent-text)] hover:bg-[var(--chalk-accent)]",
+                      )}
+                      aria-label="Open Picture-in-Picture now"
+                    >
+                      Open Picture-in-Picture now
+                    </button>
+                  </div>
+                </SectionCard>
+              ) : null}
+            </div>
+          );
+      }
+    };
+    const showSidebar = isDesktop || isNavOpen;
+    const showContent = isDesktop || !isNavOpen;
+    return (
+      <>
+        <Dialog.Root
+          open={isOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              onClose();
+            }
+          }}
+        >
+          <Dialog.Portal>
+            <Dialog.Backdrop className={cn("fixed inset-0 z-[100] bg-[var(--chalk-stage)] backdrop-blur-[1px]", !disableMotion && "animate-in fade-in duration-200")} />
+            <Dialog.Popup
+              data-chalk
+              data-chalk-theme={resolvedTheme}
+              className={cn(
+                "chalk-root",
+                "fixed inset-4 z-[101] m-auto flex max-h-[min(700px,calc(100dvh-32px))] w-auto max-w-[760px] flex-col overflow-hidden rounded-[14px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-chrome)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-control)] md:inset-0",
+                !disableMotion && "animate-in fade-in duration-300 ease-out",
+                !disableMotion && "slide-in-from-bottom-10 md:zoom-in-95",
+              )}
+              style={settingsChromeVariables}
+            >
+              <Dialog.Title className="sr-only">Space settings</Dialog.Title>
+              <div className="flex h-full flex-col md:flex-row">
+                <aside className={cn("flex w-full shrink-0 flex-col border-[var(--chalk-app-line)] bg-[var(--chalk-app-control-group)] md:w-48 md:border-r", !showSidebar && "hidden")}>
+                  <div className="p-3 pb-2">
+                    <div className="mb-5 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Settings01Icon className="h-5 w-5 text-[var(--chalk-app-text-muted)]" />
+                        <div>
+                          <div className="text-base font-semibold">Settings</div>
+                          <div className="text-xs text-[var(--chalk-app-text-muted)]">Local to this browser</div>
+                        </div>
+                      </div>
+                      <IconButton icon={<Cancel01Icon className="h-5 w-5" />} variant="ghost" onClick={onClose} aria-label="Close settings" className="md:hidden" />
+                    </div>
+                    <Input
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder="Search settings"
+                      icon={<Search01Icon className="h-4 w-4" />}
+                      fullWidth
+                      className="rounded-[8px] border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-input)]"
+                      aria-label="Search settings"
+                    />
+                  </div>
+                  <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-6">
+                    {filteredSections.map((section) => {
+                      const Icon = section.icon;
+                      return (
+                        <button
+                          key={section.id}
+                          type="button"
+                          onClick={() => {
+                            setActiveSection(section.id);
+                            setIsNavOpen(false);
+                          }}
+                          className={cn(
+                            "flex w-full items-start gap-2.5 rounded-[8px] px-3 py-2.5 text-left transition-colors",
+                            activeSection === section.id ? "bg-[var(--chalk-app-control)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-xs)]" : "text-[var(--chalk-app-text-muted)] hover:text-[var(--chalk-app-text)]",
+                          )}
+                        >
+                          <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium">{section.label}</span>
+                            <span className="block text-xs opacity-80">{section.description}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                    {filteredSections.length === 0 && <div className="rounded-[8px] border border-dashed border-[var(--chalk-app-line)] px-4 py-8 text-center text-sm text-[var(--chalk-app-text-muted)]">No matching settings.</div>}
+                  </nav>
+                </aside>
+
+                <div className={cn("flex min-h-0 flex-1 flex-col", !showContent && "hidden")}>
+                  <div className="flex items-start justify-between border-b border-[var(--chalk-app-line)] bg-[var(--chalk-app-chrome)] px-5 py-4 md:px-6">
+                    <div className="flex items-center gap-3">
+                      <IconButton icon={<ArrowLeft02Icon className="h-5 w-5" />} variant="ghost" onClick={() => setIsNavOpen(true)} className="md:hidden" aria-label="Back to sections" />
+                      <div>
+                        <h2 className="text-lg font-semibold text-[var(--chalk-app-text)] md:text-xl">{SETTINGS_SECTIONS.find((section) => section.id === activeSection)?.label}</h2>
+                        <p className="mt-0.5 text-xs text-[var(--chalk-app-text-muted)] md:mt-1 md:text-sm">Changes apply to this device.</p>
+                      </div>
+                    </div>
+                    <IconButton icon={<Cancel01Icon className="h-5 w-5" />} variant="ghost" onClick={onClose} aria-label="Close settings" />
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--chalk-app-chrome)] px-5 py-5 md:px-6">
+                    <div className="mx-auto max-w-[560px] pb-10 md:pb-0">{renderSectionContent()}</div>
+                  </div>
+                </div>
+              </div>
+            </Dialog.Popup>
+          </Dialog.Portal>
+        </Dialog.Root>
+      </>
+    );
+  },
+);
 
 SettingsDialog.displayName = "SettingsDialog";
