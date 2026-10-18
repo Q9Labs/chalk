@@ -211,6 +211,10 @@ def remote(args):
             if not args.client_cache and (not prepared or not apk.exists()):
                 if not (app / 'android/gradlew').exists():
                     run(['pnpm', '--dir', str(app), 'exec', 'expo', 'prebuild', '--platform', 'android', '--no-install'])
+                debug_key = app / 'android/app/debug.keystore'
+                if not debug_key.exists():
+                    # Public Android debug signing credentials, never a release key.
+                    run(['keytool', '-genkeypair', '-keystore', str(debug_key), '-storepass', 'android', '-alias', 'androiddebugkey', '-keypass', 'android', '-keyalg', 'RSA', '-keysize', '2048', '-validity', '10000', '-dname', 'CN=Android Debug,O=Android,C=US'])
                 run(['./gradlew', 'assembleDebug', '-PreactNativeArchitectures=arm64-v8a'], cwd=app / 'android')
                 stamp.write_text(signature)
             run([adb, '-s', serial, 'install', '-r', str(apk)])
