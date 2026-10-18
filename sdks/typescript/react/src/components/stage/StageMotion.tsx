@@ -46,21 +46,27 @@ export class StageMotion extends Component<StageMotionProps> {
       if (!element.hasAttribute("data-leaving")) for (const animation of element.getAnimations()) if (animation.id === "stage-exit") animation.cancel();
     }
     play?.();
+    // ResizeObserver runs after animation sampling. Use its current frame rather
+    // than letting pending WAAPI moves start one compositor frame after the card.
+    const frameTime = document.timeline.currentTime;
     for (const element of elements) {
+      for (const animation of element.getAnimations()) if (animation.startTime === null) animation.startTime = frameTime;
       if (element.getAttribute("aria-hidden") === "true") continue;
       if (element.hasAttribute("data-leaving")) {
         if (element.getAnimations().some((animation) => animation.id === "stage-exit")) continue;
         const exit = element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: "ease-out", fill: "forwards" });
         exit.id = "stage-exit";
+        exit.startTime = frameTime;
       } else if (entering.has(element)) {
         const transform = getComputedStyle(element).transform;
-        element.animate(
+        const enter = element.animate(
           [
             { opacity: 0, transform: `${transform} scale(.97)` },
             { opacity: 1, transform },
           ],
           { duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" },
         );
+        enter.startTime = frameTime;
       }
     }
   }
