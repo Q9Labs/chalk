@@ -184,7 +184,23 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
           {nextCursor ? <MoreButton label="Show older sessions" cursor={nextCursor} load={(cursor) => readPage("call", { spaceId, cursor })} onLoaded={(page) => update((data) => ({ ...data, episodes: [...data.episodes, ...page.episodes], nextCursor: page.nextCursor }))} /> : null}
         </>
       )}
-      {renaming ? <RenameDialog call={call} page="call" link={inviteUrl ?? undefined} onClose={() => setRenaming(false)} onRenamed={(renamed) => update((data) => ({ ...data, call: renamed }))} /> : null}
+      {renaming ? (
+        <RenameDialog
+          call={call}
+          page="call"
+          link={inviteUrl ?? undefined}
+          onClose={() => setRenaming(false)}
+          onRenamed={(renamed) => {
+            update((data) => ({ ...data, call: renamed }));
+            // A new name can make a link possible where the old one couldn't.
+            if (!inviteUrl)
+              readPage("call", { spaceId }).then(
+                (page) => update((data) => ({ ...data, inviteUrl: page.inviteUrl })),
+                (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
+              );
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -206,7 +222,7 @@ function kept(recordings: readonly RecordingDTO[]): Kept {
   if (!recording) return { recording: false, transcript: "none" };
   const transcripts = recording.transcripts ?? [];
   if (transcripts.some((item) => item.status === "completed")) return { recording: true, transcript: "ready" };
-  if (recording.status !== "completed" || transcripts.some((item) => item.status !== "failed" && item.status !== "deleted")) return { recording: true, transcript: "processing" };
+  if (transcripts.some((item) => item.status !== "failed" && item.status !== "deleted")) return { recording: true, transcript: "processing" };
   return { recording: true, transcript: "none" };
 }
 

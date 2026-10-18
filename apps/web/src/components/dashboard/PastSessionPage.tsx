@@ -159,9 +159,18 @@ const languageName = (code: string) => {
   }
 };
 
+const TRANSCRIPT_CHECK_MS = 15000;
+
 function useTranscript(ids: Ids, recording: RecordingDTO | undefined): readonly [Transcript, (next: Transcript) => void] {
   const [state, setState] = useState<Transcript>({ kind: "loading" });
+  const [check, setCheck] = useState(0);
   const recordingId = recording?.status === "completed" ? recording.id : null;
+  // A transcript being made is checked again until it's done, so it shows without a reload.
+  useEffect(() => {
+    if (state.kind !== "processing" || !recordingId) return;
+    const timer = window.setTimeout(() => setCheck((value) => value + 1), TRANSCRIPT_CHECK_MS);
+    return () => window.clearTimeout(timer);
+  }, [state, recordingId]);
   useEffect(() => {
     if (!recordingId) return;
     let current = true;
@@ -180,7 +189,7 @@ function useTranscript(ids: Ids, recording: RecordingDTO | undefined): readonly 
     return () => {
       current = false;
     };
-  }, [ids, recordingId]);
+  }, [ids, recordingId, check]);
   return [state, setState];
 }
 

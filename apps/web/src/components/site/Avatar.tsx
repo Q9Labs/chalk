@@ -25,8 +25,9 @@ export function Avatar({ name, size = 28, tile = false }: { readonly name: strin
 export function Faces({ names, size = 28, max = 3 }: { readonly names: readonly string[]; readonly size?: number; readonly max?: number }) {
   return (
     <span className="faces">
-      {names.slice(0, max).map((name) => (
-        <Avatar key={name} name={name} size={size} />
+      {names.slice(0, max).map((name, index) => (
+        // Two people can share a name, so the position keeps the keys apart.
+        <Avatar key={`${index}:${name}`} name={name} size={size} />
       ))}
       {names.length > max ? <span className="more num">+{names.length - max}</span> : null}
     </span>
