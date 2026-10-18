@@ -197,7 +197,7 @@ esac
 if [[ "$environment" == nightly ]]; then
   for file in "$api_env" "$sync_env"; do
     [[ "$(env_value "$file" CHALK_SYNC_TOKEN_ISSUER)" == https://nightly-api.chalkmeet.com ]] || fail "nightly token issuer mismatch"
-    [[ "$(env_value "$file" CHALK_SYNC_TOKEN_AUDIENCE)" == chalk-nightly-sync ]] || fail "nightly token audience mismatch"
+    [[ "$(env_value "$file" CHALK_SYNC_TOKEN_AUDIENCE)" == chalk-sync ]] || fail "nightly token audience mismatch"
   done
   [[ "$(env_value "$api_env" CHALK_API_CORS_ALLOWED_ORIGINS)" == https://nightly.chalkmeet.com ]] || fail "nightly CORS origin mismatch"
   [[ "$(env_value "$api_env" CHALK_R2_BUCKET)" == chalk-recorder-nightly ]] || fail "nightly recording bucket mismatch"
