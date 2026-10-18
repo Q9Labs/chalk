@@ -24,7 +24,8 @@ class ReleasePlan(unittest.TestCase):
             (download / 'fixture.json').write_text(json.dumps(manifest))
             if duplicate:
                 (download / 'duplicate.json').write_text(json.dumps(manifest))
-        result = subprocess.run(['bash', '-e', '-o', 'pipefail'], cwd=ROOT, input=script, text=True, capture_output=True,
+        # Run a script, not stdin: the component planner also reads stdin for paths.
+        result = subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', script], cwd=ROOT, stdin=subprocess.DEVNULL, text=True, capture_output=True,
                                 env=dict(os.environ, TARGET_SHA=head, DEPLOY_MANAGED='true', ENABLE_RECORDER_CONTROL='false',
                                          PLAN_ROOT=str(root / 'plan'), GITHUB_OUTPUT=str(root / 'output')))
         return result

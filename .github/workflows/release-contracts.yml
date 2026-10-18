@@ -68,6 +68,8 @@ jobs:
       - uses: ./.github/actions/setup-opentofu
       - name: Install pinned workflow lint
         run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ripgrep
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Check every release contract without cloud credentials
