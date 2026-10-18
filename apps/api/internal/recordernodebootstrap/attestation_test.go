@@ -113,7 +113,7 @@ func TestVerifyImageManifestRejectsUnknownProfile(t *testing.T) {
 	}
 }
 
-func TestBootstrapConfigRejectsBakedIssuerNameMismatch(t *testing.T) {
+func TestBootstrapConfigRejectsIssuerNameMismatch(t *testing.T) {
 	config := Config{
 		Environment: "nightly", Role: workeridentity.RoleCapture,
 		ReleaseID: "release-1", ImageDigest: "sha256:" + strings.Repeat("a", 64), BootGeneration: 1,
