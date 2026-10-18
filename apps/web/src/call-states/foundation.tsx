@@ -9,6 +9,7 @@ export function FoundationKit({ scheme, initialNotice = true }: { readonly schem
   const [sounds, setSounds] = useState(true);
   const [sheet, setSheet] = useState(false);
   const [flipped, setFlipped] = useState(false);
+  const [layout, setLayout] = useState("spotlight");
   const moving = useRef<HTMLDivElement>(null);
   return (
     <main data-chalk data-chalk-theme={theme} className="chalk-root chalk-frame" style={{ padding: 24 }}>
@@ -79,6 +80,17 @@ export function FoundationKit({ scheme, initialNotice = true }: { readonly schem
         Same node
       </div>
       <ChalkSheet open={sheet} onOpenChange={setSheet} title="More">
+        <div style={{ fontSize: 16 }}>
+          <ChalkSegmentedControl
+            label="Layout"
+            value={layout}
+            options={[
+              { value: "spotlight", label: "Spotlight" },
+              { value: "grid", label: "Grid" },
+            ]}
+            onValueChange={setLayout}
+          />
+        </div>
         <ChalkButton>Copy link</ChalkButton>
       </ChalkSheet>
       <ToastStack toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />
