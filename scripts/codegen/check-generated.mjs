@@ -10,6 +10,7 @@ const checks = [
   { name: "sqlc", command: ["bash", "apps/api/scripts/db-generate.sh", "check"] },
   { name: "Migration LatestVersion", command: ["node", "scripts/codegen/migration-latest-version.mjs"] },
   { name: "Tracker views", command: ["pnpm", "run", "check:tracker"] },
+  { name: "Docs search index", command: ["node", "apps/web/scripts/docs-search-index.mjs"] },
 ];
 
 function run({ name, command, fix }) {

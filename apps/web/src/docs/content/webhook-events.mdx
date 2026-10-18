@@ -13,11 +13,18 @@ Create an endpoint with a version, URL, enabled flag, and event list. The manage
 
 ```ts
 import { Effect, Schema } from "effect";
-import { createChalkEffectClient, TenantIdSchema } from "@q9labsai/chalk-client/effect";
+import {
+  createChalkEffectClient,
+  TenantIdSchema,
+} from "@q9labsai/chalk-client/effect";
 
-const tenantId = Schema.decodeUnknownSync(TenantIdSchema)("01900000-0000-7000-8000-000000000001");
+const tenantId = Schema.decodeUnknownSync(TenantIdSchema)(
+  "01900000-0000-7000-8000-000000000001",
+);
 const createEndpoint = Effect.gen(function* () {
-  const chalk = yield* createChalkEffectClient({ baseUrl: "https://api.chalkmeet.com" });
+  const chalk = yield* createChalkEffectClient({
+    baseUrl: "https://api.chalkmeet.com",
+  });
   return yield* chalk.default.createWebhookEndpoint({
     params: { tenant_id: tenantId },
     headers: { "Idempotency-Key": crypto.randomUUID() },

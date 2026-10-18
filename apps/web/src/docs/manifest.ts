@@ -29,7 +29,7 @@ const Troubleshooting = lazy(() => import("./content/troubleshooting.mdx"));
 
 type DocsContent = LazyExoticComponent<MDXContent>;
 
-export type DocsGroup = {
+type DocsGroup = {
   readonly id: string;
   readonly label: string;
 };

@@ -80,7 +80,7 @@ export function EmbedSection() {
             <h4>
               Algebra 7B<span>Today, 16:00</span>
             </h4>
-            <CallPreview label="The same call, rendered by the Chalk component inside the tutoring app" name="Algebra 7B" time="08:41" people={CLASS_CALL} initialWidth={633} />
+            <CallPreview label="The same call, rendered by the Chalk component inside the tutoring app" name="Algebra 7B" time="08:41" people={CLASS_CALL} initialWidth={633} height={860} />
           </div>
         </figure>
       </div>

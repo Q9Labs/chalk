@@ -10,7 +10,15 @@ pnpm add @q9labsai/chalk-client @q9labsai/chalk-react-native
 import { Chalk } from "@q9labsai/chalk-react-native";
 
 export function SpaceScreen() {
-  return <Chalk displayName="Taylor" getAccess={getAccess} logoUrl="https://example.com/logo.png" space="design-review" theme={{ colorScheme: "dark", accent: "#14b8a6" }} />;
+  return (
+    <Chalk
+      displayName="Taylor"
+      getAccess={getAccess}
+      logoUrl="https://example.com/logo.png"
+      space="design-review"
+      theme={{ colorScheme: "dark", accent: "#14b8a6" }}
+    />
+  );
 }
 ```
 

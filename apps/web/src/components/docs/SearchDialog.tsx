@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
-import { DOCS_GROUPS, DOCS_PAGES } from "../../docs/manifest";
 import { Icon } from "../site/Icon";
 import { trapDialogFocus } from "./dialog-focus";
-import { searchDocsPages } from "./search";
+import { searchDocs } from "./search";
 
 function highlight(text: string, query: string): ReactNode {
   const words = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
@@ -16,7 +15,7 @@ export function SearchDialog({ onClose }: { readonly onClose: () => void }) {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  const results = useMemo(() => searchDocsPages(DOCS_PAGES, DOCS_GROUPS, query), [query]);
+  const results = useMemo(() => searchDocs(query), [query]);
   const active = Math.min(activeIndex, Math.max(results.length - 1, 0));
 
   useEffect(() => {
@@ -37,10 +36,11 @@ export function SearchDialog({ onClose }: { readonly onClose: () => void }) {
       return;
     }
     if (event.key === "Enter" && event.target === inputRef.current) {
-      const page = results[active];
-      if (!page) return;
+      const result = results[active];
+      if (!result) return;
       event.preventDefault();
-      window.location.assign(page.href);
+      onClose();
+      window.location.assign(result.href);
       return;
     }
     trapDialogFocus(event);
@@ -85,13 +85,13 @@ export function SearchDialog({ onClose }: { readonly onClose: () => void }) {
                   Suggested
                 </p>
               )}
-              {results.map((page, index) => (
-                <a key={page.slug} id={`docs-search-result-${index}`} className="sr1" href={page.href} role="option" aria-selected={index === active} tabIndex={-1} onMouseEnter={() => setActiveIndex(index)}>
+              {results.map((result, index) => (
+                <a key={result.href} id={`docs-search-result-${index}`} className="sr1" href={result.href} role="option" aria-selected={index === active} tabIndex={-1} onMouseEnter={() => setActiveIndex(index)} onClick={onClose}>
                   <Icon name="file" />
                   <span>
-                    <b>{highlight(page.navLabel, query)}</b>
+                    <b>{highlight(result.title, query)}</b>
                     <span>
-                      {DOCS_GROUPS.find((group) => group.id === page.groupId)?.label} · {highlight(page.description, query)}
+                      {result.context} · {highlight(result.excerpt, query)}
                     </span>
                   </span>
                 </a>
