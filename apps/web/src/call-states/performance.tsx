@@ -40,7 +40,7 @@ function PerformanceCall({ count, share = false, board = false }: { readonly cou
       >
         Reaction burst
       </button>
-      <Chalk theme={{ colorScheme: "dark" }} client={client} entrance={false} displayName={SELF_NAME} spaceName={SPACE_NAME} layout={count === 24 ? "grid" : "focus"} onLeft={() => undefined} />
+      <Chalk theme={{ colorScheme: "dark" }} client={client} displayName={SELF_NAME} spaceName={SPACE_NAME} layout={count === 24 ? "grid" : "focus"} onLeft={() => undefined} />
     </main>
   );
 }
