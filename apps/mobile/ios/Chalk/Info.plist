@@ -71,6 +71,13 @@
     <true/>
     <key>RTCAppScreenSharingExtension</key>
     <string>ai.q9labs.chalk.mobile.screenshare</string>
+    <key>UIAppFonts</key>
+    <array>
+      <string>Figtree-Regular.ttf</string>
+      <string>Figtree-Medium.ttf</string>
+      <string>Figtree-SemiBold.ttf</string>
+      <string>Figtree-Bold.ttf</string>
+    </array>
     <key>UIBackgroundModes</key>
     <array>
       <string>audio</string>
