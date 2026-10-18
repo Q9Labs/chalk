@@ -8,6 +8,7 @@ import type {
   V1AdmissionPolicy,
   V1AssignableRole,
   V1CollaborationEvent,
+  V1CollaborationClient,
   V1CommandResult,
   V1DirectedRequest,
   V1DirectedRequestResult,
@@ -152,6 +153,10 @@ export class FixtureSyncClient {
     return result.message;
   }
 
+  reactToChatMessage: V1CollaborationClient["reactToChatMessage"] = async () => {
+    throw new TypeError("The packed fixture negotiates collaboration_v1; message reactions require collaboration_v2");
+  };
+
   async markChatRead(sequence: string) {
     return {
       participantId: this.#access.subject.participantId,
@@ -273,6 +278,7 @@ export function bindFixtureSyncClient(client: FixtureSyncClient) {
     subscribeCollaboration: client.subscribeCollaboration,
     sendReaction: client.sendReaction.bind(client),
     sendChatMessage: client.sendChatMessage.bind(client),
+    reactToChatMessage: client.reactToChatMessage,
     markChatRead: client.markChatRead.bind(client),
     readChatPage: client.readChatPage.bind(client),
     onDirectedRequest: client.onDirectedRequest,
