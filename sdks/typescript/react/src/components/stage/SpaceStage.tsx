@@ -62,7 +62,7 @@ export function SpaceStage({ tiles, layout, onLayoutChange, generatedAvatars = t
     [onLayoutChange],
   );
 
-  return <Stage items={items} layout={layout} renderPrimaryContent={renderPrimaryContent} renderContentTile={renderContentTile} onItemClick={focusContent} generatedAvatars={generatedAvatars} emptyState={<QuietSpace />} className={className} />;
+  return <Stage animate={false} items={items} layout={layout} renderPrimaryContent={renderPrimaryContent} renderContentTile={renderContentTile} onItemClick={focusContent} generatedAvatars={generatedAvatars} emptyState={<QuietSpace />} className={className} />;
 }
 
 SpaceStage.displayName = "SpaceStage";

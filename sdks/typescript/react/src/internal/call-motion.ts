@@ -4,22 +4,47 @@ const moves = new WeakMap<HTMLElement, Animation>();
 /** Measure all old boxes before the layout update, then call play after the DOM commit. */
 export function captureFlip(elements: Iterable<HTMLElement>): () => void {
   const previous = Array.from(elements, (element) => ({ element, box: element.getBoundingClientRect() }));
-  return () => {
-    for (const { element } of previous) moves.get(element)?.cancel();
-    if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const next = previous.filter(({ element }) => element.isConnected).map((item) => ({ ...item, next: item.element.getBoundingClientRect() }));
-    for (const { element, box, next: boxAfter } of next) {
-      if (!boxAfter.width || !boxAfter.height || !box.width || !box.height) continue;
-      const animation = element.animate(
-        [
-          { transformOrigin: "0 0", transform: `translate(${box.x - boxAfter.x}px, ${box.y - boxAfter.y}px) scale(${box.width / boxAfter.width}, ${box.height / boxAfter.height})` },
-          { transformOrigin: "0 0", transform: "none" },
-        ],
-        { duration: 220, easing: "cubic-bezier(.16,1,.3,1)" },
-      );
-      moves.set(element, animation);
-    }
-  };
+  return () => playFlip(previous);
+}
+function playFlip(previous: readonly { element: HTMLElement; box: DOMRect }[]): { element: HTMLElement; box: DOMRect }[] {
+  for (const { element } of previous) moves.get(element)?.cancel();
+  const reduced = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const next = previous.filter(({ element }) => element.isConnected).map((item) => ({ ...item, next: item.element.getBoundingClientRect(), transform: getComputedStyle(item.element).transform }));
+  for (const { element, box, next: boxAfter, transform } of next) {
+    if (reduced) continue;
+    if (!boxAfter.width || !boxAfter.height || !box.width || !box.height) continue;
+    if (Math.abs(box.x - boxAfter.x) < 0.5 && Math.abs(box.y - boxAfter.y) < 0.5 && Math.abs(box.width - boxAfter.width) < 0.5 && Math.abs(box.height - boxAfter.height) < 0.5) continue;
+    const base = transform === "none" ? "" : transform;
+    const animation = element.animate(
+      [
+        { transformOrigin: "0 0", transform: `translate(${box.x - boxAfter.x}px, ${box.y - boxAfter.y}px) ${base} scale(${box.width / boxAfter.width}, ${box.height / boxAfter.height})` },
+        { transformOrigin: "0 0", transform },
+      ],
+      { duration: 220, easing: "cubic-bezier(.16,1,.3,1)" },
+    );
+    moves.set(element, animation);
+  }
+  return next.map(({ element, next: box }) => ({ element, box }));
+}
+/** Bridge the current stage fitter to FLIP; the stage lane can call captureFlip directly around its own commits. */
+export function useStageRefit(root: RefObject<HTMLElement | null>): void {
+  useEffect(() => {
+    const container = root.current;
+    if (!container) return;
+    let previous: { element: HTMLElement; box: DOMRect }[] = [];
+    const measure = () => Array.from(container.querySelectorAll<HTMLElement>('[data-testid="stage"] > div > *'), (element) => ({ element, box: element.getBoundingClientRect() }));
+    previous = measure();
+    const observer = new MutationObserver((records) => {
+      if (!records.some((record) => record.type === "childList" || (record.target instanceof Element && record.target.matches('[data-testid="stage"] > div > *')))) return;
+      const old = new Map(previous.map(({ element, box }) => [element, box]));
+      previous = playFlip(measure().map(({ element, box }) => ({ element, box: old.get(element) ?? box })));
+    });
+    observer.observe(container, { attributes: true, attributeFilter: ["style"], childList: true, subtree: true });
+    return () => {
+      observer.disconnect();
+      for (const { element } of previous) moves.get(element)?.cancel();
+    };
+  }, [root]);
 }
 /** Chrome stays visible while a layer is open, on touch, and for keyboard focus. */
 export function useIdleChrome(root: RefObject<HTMLElement | null>, enabled: boolean): boolean {

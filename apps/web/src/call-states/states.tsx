@@ -31,6 +31,8 @@ const openLayout: Action = { click: "Layout: Spotlight" };
 
 export const CALL_STATES: readonly CallState[] = [
   ...PERFORMANCE_STATES,
+  { id: "foundation-motion-dark", title: "Foundation motion Dark", render: () => <FoundationKit scheme="dark" initialNotice={false} /> },
+  { id: "foundation-motion-light", title: "Foundation motion Light", render: () => <FoundationKit scheme="light" initialNotice={false} /> },
   { id: "foundation-kit-dark", title: "Foundation primitives Dark", render: () => <FoundationKit scheme="dark" /> },
   { id: "foundation-kit-light", title: "Foundation primitives Light", render: () => <FoundationKit scheme="light" /> },
   { id: "foundation-dark", title: "Foundation call Dark", render: () => <Live initialColorScheme="dark" snapshot={liveSnapshot({ others: [nora] })} /> },

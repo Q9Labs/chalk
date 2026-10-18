@@ -1,10 +1,11 @@
 import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { captureFlip, ChalkButton, ChalkCopyButton, ChalkIconButton, ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkPopover, ChalkSegmentedControl, ChalkSheet, ChalkToggle, ChalkTooltip, ToastStack } from "@q9labsai/chalk-react";
+import { captureFlip, ChalkButton, ChalkCopyButton, ChalkIconButton, ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkPopover, ChalkSegmentedControl, ChalkSheet, ChalkToggle, ChalkTooltip, ToastStack, type Toast } from "@q9labsai/chalk-react";
 
 /** Real primitives, in isolation, for the foundation parity and interaction checks. */
-export function FoundationKit({ scheme }: { readonly scheme: "dark" | "light" }) {
+export function FoundationKit({ scheme, initialNotice = true }: { readonly scheme: "dark" | "light"; readonly initialNotice?: boolean }) {
   const [theme, setTheme] = useState(scheme);
+  const [toasts, setToasts] = useState<Toast[]>(initialNotice ? [{ id: "foundation-join", message: "Nora joined", duration: Infinity }] : []);
   const [sounds, setSounds] = useState(true);
   const [sheet, setSheet] = useState(false);
   const [flipped, setFlipped] = useState(false);
@@ -48,6 +49,7 @@ export function FoundationKit({ scheme }: { readonly scheme: "dark" | "light" })
           ]}
           onValueChange={setTheme}
         />
+        <ChalkButton onClick={() => setToasts([{ id: "foundation-event", message: "Nora joined" }])}>Foundation toast</ChalkButton>
         <ChalkButton onClick={() => setSheet(true)}>Foundation sheet</ChalkButton>
       </div>
       <ChalkButton
@@ -65,7 +67,7 @@ export function FoundationKit({ scheme }: { readonly scheme: "dark" | "light" })
       <ChalkSheet open={sheet} onOpenChange={setSheet} title="More">
         <ChalkButton>Copy link</ChalkButton>
       </ChalkSheet>
-      <ToastStack toasts={[{ id: "foundation-join", message: "Nora joined", duration: Infinity }]} onDismiss={() => undefined} />
+      <ToastStack toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />
     </main>
   );
 }

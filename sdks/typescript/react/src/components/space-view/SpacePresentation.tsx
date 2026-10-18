@@ -1,6 +1,6 @@
 "use client";
 import { useRef, type ReactNode } from "react";
-import { useIdleChrome } from "../../internal/call-motion";
+import { useIdleChrome, useStageRefit } from "../../internal/call-motion";
 import { cn } from "../../utils/cn";
 import { SpaceHeader, type SpaceHeaderProps } from "../space-header/SpaceHeader";
 export interface SpacePresentationProps {
@@ -27,6 +27,7 @@ export interface SpacePresentationProps {
 export function SpacePresentation({ colorScheme = "dark", stageBackground, header, stage, controls, compactControls, stageOverlay, sidebar, mediaOutput, toasts, overlays, dialogs, renderToken, interactive = true, className }: SpacePresentationProps): React.JSX.Element {
   const root = useRef<HTMLElement>(null);
   const idle = useIdleChrome(root, interactive);
+  useStageRefit(root);
   return (
     <main ref={root} data-chalk data-part="call-frame" data-idle={idle} data-chalk-theme={colorScheme} data-recording-space-render-token={renderToken} inert={interactive ? undefined : true} className={cn("chalk-root chalk-frame", className)}>
       {mediaOutput}
@@ -34,7 +35,7 @@ export function SpacePresentation({ colorScheme = "dark", stageBackground, heade
         <SpaceHeader {...header} />
       </div>
       <section data-part="stage-region" data-stage-background={stageBackground} className="chalk-frame-stage" aria-label="Space stage">
-        <div className="chalk-stage-layout">
+        <div data-part="stage-layout" className="chalk-stage-layout">
           {stage}
           {stageOverlay}
         </div>
