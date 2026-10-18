@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { isDeepStrictEqual } from "node:util";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { errorMessage, parseJson } from "./managed-release-support.mjs";
@@ -28,7 +30,7 @@ export async function ensureDocumentVersion({ commandRunner, document, documentN
   if (!document) throw new Error("managed deployment document is required");
   const versions = await listDocumentVersions({ commandRunner, documentName, region });
   if (!versions) return createDocumentVersion({ commandRunner, document, documentName, region, sleep });
-  const matching = versions.find((version) => version?.VersionName === document.versionName);
+  const matching = await findReusableDocumentVersion({ commandRunner, document, documentName, region, versions });
   if (matching) return reuseDocumentVersion({ commandRunner, documentName, matching, region, sleep });
   return updateDocumentVersion({ commandRunner, document, documentName, region, sleep });
 }
@@ -110,6 +112,16 @@ async function listDocumentVersions({ commandRunner, documentName, region }) {
     if (errorMessage(error).includes("InvalidDocument")) return undefined;
     throw error;
   }
+}
+
+async function findReusableDocumentVersion({ commandRunner, document, documentName, region, versions }) {
+  const named = versions.find((version) => version?.VersionName === document.versionName);
+  if (named) return named;
+  const result = await commandRunner(awsCommand(region, ["ssm", "get-document", "--name", documentName, "--document-version", "$LATEST", "--document-format", document.format, "--output", "json"]));
+  const existing = parseJson(result.stdout, "SSM get-document returned invalid JSON");
+  const content = parseJson(existing.Content, "SSM document content is invalid JSON");
+  const requested = parseJson(await readFile(document.path, "utf8"), "managed deployment document is invalid JSON");
+  return isDeepStrictEqual(content, requested) ? existing : undefined;
 }
 
 async function createDocumentVersion({ commandRunner, document, documentName, region, sleep }) {
