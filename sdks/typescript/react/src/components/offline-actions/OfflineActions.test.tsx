@@ -123,10 +123,12 @@ it("restores call controls after recovery with SpaceView's public reconnecting p
   }
 });
 
-it.each(["left", "failed"] as const)("explains dropped offline actions on the %s screen", (status) => {
+it.each(["left", "failed"] as const)("keeps the %s screen to one calm status message", (status) => {
   const snapshot = withOffline(status, { pending: [], notice: "Your offline actions were not sent because the Episode ended or the connection closed." });
   const html = renderToStaticMarkup(<Chalk client={createPreviewClient(snapshot)} />);
-  expect(html).toContain("Your offline actions were not sent");
+  expect(html).toContain(status === "left" ? "You left the call" : "Couldn&#x27;t connect to the call");
+  expect(html).not.toContain("Your offline actions were not sent");
+  if (status === "failed") expect(html).toContain("You&#x27;re offline. Check your connection.");
 });
 
 function isInert(element: HTMLElement): boolean {
