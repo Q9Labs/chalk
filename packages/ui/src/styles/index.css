@@ -1414,6 +1414,9 @@
   flex: none;
   color: var(--chalk-soft-text);
 }
+.chalk-sheet-row[data-part="dock-layout-row"] {
+  box-shadow: inset 0 1px 0 var(--chalk-line);
+}
 .chalk-frame-header {
   position: absolute;
   left: 0;
