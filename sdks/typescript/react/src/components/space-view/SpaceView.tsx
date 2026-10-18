@@ -1,5 +1,5 @@
 "use client";
-import type { ClientFailure, Reaction } from "@q9labsai/chalk-client";
+import { SpaceClientError, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useCan, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
@@ -164,7 +164,22 @@ export function SpaceView({
   const endCallForEveryone = onEndEpisode ? () => void runCommand(async () => onEndEpisode()) : undefined;
   const displayedCommandError = externalCommandError ?? commandError;
   const mappedFailure = mediaFailureToast(typeof displayedCommandError === "object" ? displayedCommandError : null, commandSource);
-  const commandToasts: Toast[] = mappedFailure ? [{ id: "space-command-error", ...mappedFailure }] : typeof displayedCommandError === "string" ? [{ id: "space-command-error", message: displayedCommandError, type: "error" }] : [];
+  const retryMedia = async () => {
+    try {
+      if (commandSource === "screen") await client.media.setScreenShareEnabled(true);
+      else if (commandSource === "camera") await client.media.setCameraEnabled(true);
+      else if (commandSource === "microphone") await client.media.setMicrophoneEnabled(true);
+      onCommandError(null);
+    } catch (cause) {
+      onCommandError(cause instanceof SpaceClientError ? cause : { code: "client.internal_error", recoverable: true, message: "Your device couldn’t start. Try again." }, commandSource);
+    }
+  };
+  const retryableMedia = commandSource && typeof displayedCommandError === "object" && displayedCommandError?.recoverable && (commandSource === "screen" || displayedCommandError.code === "media.device_busy");
+  const commandToasts: Toast[] = mappedFailure
+    ? [{ id: "space-command-error", ...mappedFailure, action: retryableMedia ? { label: "Try again", onClick: () => void retryMedia() } : undefined }]
+    : typeof displayedCommandError === "string"
+      ? [{ id: "space-command-error", message: displayedCommandError, type: "error" }]
+      : [];
   const dismissCommandError = () => {
     setCommandError(null);
     onDismissCommandError?.();
