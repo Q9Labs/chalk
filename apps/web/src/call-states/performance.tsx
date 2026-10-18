@@ -1,4 +1,4 @@
-import { Chalk } from "@q9labsai/chalk-react";
+import { Chalk, type SpaceLayout } from "@q9labsai/chalk-react";
 import { useRef, useState } from "react";
 import { createCallStateClient, liveSnapshot, PEOPLE, SELF_NAME, SPACE_NAME } from "./fixtures";
 import { releaseFakeMedia } from "./media";
@@ -21,6 +21,7 @@ function PerformanceCall({ count, share = false, board = false }: { readonly cou
     ),
   );
   const [joined, setJoined] = useState(true);
+  const [layout, setLayout] = useState<SpaceLayout>(count === 24 ? "grid" : "focus");
   const personSequence = useRef(0);
   const [generation, setGeneration] = useState(0);
   const updateRoster = (extra: boolean, sharing = false) => {
@@ -85,7 +86,8 @@ function PerformanceCall({ count, share = false, board = false }: { readonly cou
           client={client}
           displayName={SELF_NAME}
           spaceName={SPACE_NAME}
-          layout={count === 24 ? "grid" : "focus"}
+          layout={layout}
+          onLayoutChange={setLayout}
           onLeft={() => {
             setJoined(false);
             // The preview client has no media engine. Release its snapshot and owned sources here.
