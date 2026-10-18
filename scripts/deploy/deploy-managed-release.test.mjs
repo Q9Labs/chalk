@@ -115,6 +115,7 @@ async function writeManifest() {
       schema_version: 2,
       release_id: releaseId,
       source_revision: sourceRevision,
+      images: { recorder_control: `example/control@sha256:${"0".repeat(64)}` },
       runtime_artifacts: { "scripts/chalk-runtime-health": "0".repeat(64) },
     })}\n`,
     { mode: 0o600 },
@@ -137,6 +138,30 @@ async function dispatcherDryRun(environment) {
   });
   return { proof, calls };
 }
+
+test("backend-only nightly skips dispatcher preflight and final binding", async () => {
+  const manifestPath = await writeManifest();
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  delete manifest.images.recorder_control;
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  for (const dryRun of [true, false]) {
+    const calls = [];
+    const result = await runManagedRelease({
+      arguments_: requiredArguments(manifestPath).concat(dryRun ? ["--dry-run"] : []),
+      allowedSecretIds,
+      commandRunner: async (command) => {
+        calls.push(command);
+        assert.equal(command.command, "aws");
+        if (command.args.includes("send-command")) return { stdout: JSON.stringify({ Command: { CommandId: "01234567-89ab-cdef-0123-456789abcdef" } }) };
+        return { stdout: JSON.stringify({ Status: "Success", StandardOutputContent: `RESULT ${JSON.stringify({ schema_version: 1, status: "deployed", release_id: releaseId, request_id: "12345.2", previous_release_id: null, health: "passed", rolled_back: false })}` }) };
+      },
+      stdout: { write: () => {} },
+      stderr: { write: () => {} },
+    });
+    assert.deepEqual(result.dispatcher_binding, { action: "not-configured", environment: "nightly" });
+    assert.equal(calls.length, dryRun ? 0 : 2);
+  }
+});
 
 test("production dry run includes the dispatcher rebind without deploying", async () => {
   const { proof, calls } = await dispatcherDryRun("production");

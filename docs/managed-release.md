@@ -4,6 +4,16 @@
 Manual `managed_environment` defaults to **nightly**, never production.
 Choose `production` explicitly for an operator production release.
 
+For backend-only nightly bring-up, set `enable_recorder_control=false`. Release
+omits recorder control, media builds and dispatcher binding, even if the build
+baseline enabled them. Set `CHALK_RECORDING_ENABLED=false` and
+`CHALK_TRANSCRIPTION_ENABLED=false` in nightly's API runtime configuration first;
+this input does not rewrite SSM values. This mode is not a held nightly. Cut still
+enables recording and requires `smoke transcript` plus the web-call proof.
+Promote rejects held records without immutable media. Release also rejects any
+production manifest without both recorder control and valid immutable media
+before writing the deployment envelope or acquiring deployment credentials.
+
 ## Nightly cut
 
 `Cut nightly` runs daily at 02:17 UTC on master.
