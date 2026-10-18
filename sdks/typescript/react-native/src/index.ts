@@ -1,13 +1,6 @@
-export { Chalk } from "./components/Chalk";
-export type { ChalkFeatures, ChalkProps, ChalkTheme, ChalkThemeTokens, SpaceLayout } from "./components/Chalk";
-export { Entrance } from "./components/Entrance";
-export type { EntranceProps, EntranceSettings } from "./components/Entrance";
-export { Logo } from "./components/logo/Logo";
-export type { LogoProps, LogoVariant } from "./components/logo/Logo";
 export { ChalkProvider, useSpaceClient } from "./context/space-client-context";
 export type { ChalkProviderProps } from "./context/space-client-context";
 export { useCan, useChat, useConnection, useMedia, useParticipants, useReactions, useRecording, useSelf, useWhiteboard } from "./hooks/space-hooks";
-export { Theme, createNativeTheme } from "./ui/theme";
 export { extractSpaceInviteFromLink, getClipboardInviteSuggestion, parseSpaceInviteLink } from "./invites";
 export type { SpaceInviteLink } from "./invites";
 export { buildChalkInviteLink } from "./utils/build-chalk-invite-link";

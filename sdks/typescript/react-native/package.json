@@ -22,21 +22,6 @@
   "types": "./dist/index.d.ts",
   "typesVersions": {
     "*": {
-      "android": [
-        "./dist/android.d.ts"
-      ],
-      "ios": [
-        "./dist/ios.d.ts"
-      ],
-      "ios-phone": [
-        "./dist/ios-phone.d.ts"
-      ],
-      "ios-pad": [
-        "./dist/ios-pad.d.ts"
-      ],
-      "macos": [
-        "./dist/macos.d.ts"
-      ],
       "runtime": [
         "./dist/runtime.d.ts"
       ],
@@ -68,36 +53,6 @@
       "import": "./dist/index.js",
       "require": "./dist/index.js",
       "default": "./dist/index.js"
-    },
-    "./android": {
-      "types": "./dist/android.d.ts",
-      "react-native": "./dist/android.js",
-      "import": "./dist/android.js",
-      "default": "./dist/android.js"
-    },
-    "./ios": {
-      "types": "./dist/ios.d.ts",
-      "react-native": "./dist/ios.js",
-      "import": "./dist/ios.js",
-      "default": "./dist/ios.js"
-    },
-    "./ios-phone": {
-      "types": "./dist/ios-phone.d.ts",
-      "react-native": "./dist/ios-phone.js",
-      "import": "./dist/ios-phone.js",
-      "default": "./dist/ios-phone.js"
-    },
-    "./ios-pad": {
-      "types": "./dist/ios-pad.d.ts",
-      "react-native": "./dist/ios-pad.js",
-      "import": "./dist/ios-pad.js",
-      "default": "./dist/ios-pad.js"
-    },
-    "./macos": {
-      "types": "./dist/macos.d.ts",
-      "react-native": "./dist/macos.js",
-      "import": "./dist/macos.js",
-      "default": "./dist/macos.js"
     },
     "./runtime": {
       "types": "./dist/runtime.d.ts",
@@ -141,7 +96,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "rm -rf ./dist && tsup ./src/index.ts ./src/client.ts ./src/android.ts ./src/ios.ts ./src/ios-phone.ts ./src/ios-pad.ts ./src/macos.ts ./src/runtime.ts ./src/clipboard.ts ./src/diagnostics.ts ./src/invites.ts ./src/ui/theme.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external react-native-webview --external @q9labsai/chalk-whiteboard --external @cloudflare/react-native-webrtc && pnpm run build:types && pnpm run sync:whiteboard-assets",
+    "build": "rm -rf ./dist && tsup ./src/index.ts ./src/client.ts ./src/runtime.ts ./src/clipboard.ts ./src/diagnostics.ts ./src/invites.ts ./src/ui/theme.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external react-native-webview --external @q9labsai/chalk-whiteboard --external @cloudflare/react-native-webrtc && pnpm run build:types && pnpm run sync:whiteboard-assets",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --build tsconfig.json",
     "dev": "tsup ./src/index.ts ./src/client.ts ./src/android.ts ./src/ios.ts ./src/ios-phone.ts ./src/ios-pad.ts ./src/macos.ts ./src/runtime.ts ./src/clipboard.ts ./src/diagnostics.ts ./src/invites.ts ./src/ui/theme.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external react-native-webview --external @q9labsai/chalk-whiteboard --external @cloudflare/react-native-webrtc --watch",
     "sync:whiteboard-assets": "node ./scripts/sync-whiteboard-assets.mjs",
