@@ -84,11 +84,24 @@ export function PortalHost({ layer }: { readonly layer: PortalLayer }): React.JS
   );
 }
 
-export function usePortalEntries(layer: PortalLayer): readonly Entry[] {
+function usePortalEntries(layer: PortalLayer): readonly Entry[] {
   const store = usePortalStore();
   return useSyncExternalStore(
     store.subscribe,
     () => store.entries(layer),
     () => store.entries(layer),
+  );
+}
+
+/**
+ * How many portals a layer holds. Portals publish on every render, so an ancestor of a portal must
+ * read this count, not the entries, or each publish re-renders the portal and loops.
+ */
+export function usePortalCount(layer: PortalLayer): number {
+  const store = usePortalStore();
+  return useSyncExternalStore(
+    store.subscribe,
+    () => store.entries(layer).length,
+    () => store.entries(layer).length,
   );
 }

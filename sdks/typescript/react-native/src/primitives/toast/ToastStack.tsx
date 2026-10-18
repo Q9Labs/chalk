@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useSyncExternalStore, type ReactNo
 import { StyleSheet, View } from "react-native";
 import Animated, { ReduceMotion, useReducedMotion, withTiming, type EntryExitAnimationFunction } from "react-native-reanimated";
 import { useDeviceLayout } from "../../frame/device-layout";
-import { usePortalEntries } from "../../frame/portal";
+import { usePortalCount } from "../../frame/portal";
 import { timings } from "../../motion/motion";
 import { Toast } from "./Toast";
 import { createToastStore, type ToastStore } from "./toast-store";
@@ -30,7 +30,7 @@ export function ToastStack(): React.JSX.Element {
   if (!store) throw new Error("ToastStack must be inside <Chalk>.");
   const toasts = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const layout = useDeviceLayout();
-  const sheetUp = usePortalEntries("sheets").length > 0;
+  const sheetUp = usePortalCount("sheets") > 0;
   const reduceMotion = useReducedMotion();
   const atTop = layout.phone && sheetUp;
   const offset = layout.arrangement === "pad" ? 88 : layout.arrangement === "landscape" ? 70 : 76;
