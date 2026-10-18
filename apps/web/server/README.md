@@ -118,7 +118,16 @@ The proof covers two account bootstraps, repeat binding, every named foreign-ID
 mutation, foreign Space/Episode reads, persisted Space rename/admission and
 Allowed websites, seat attendance, Origin/CSRF, refresh/revocation, online-gated
 secret creation/rotation, response credential redaction, and callback throttling.
-Real Google/Apple WorkOS setup and successful live media admission remain separate
+The owner join path uses generated direct admission only after resolving the
+signed-in person's Tenant. Its server-derived UUIDv8 Participant ID hashes a
+versioned domain, Tenant, owner, Space, Episode and idempotency key. Retrying a
+join with the same key returns the same seat; a deliberate new join uses a new
+key. Guests and invites retain policy admission. The proof checks owner grants
+for open and knock Episodes, guest policy waiting and same-key replay. Ephemeral
+Ed25519 signing keys and a strict local Cloudflare session-allocation endpoint
+exercise actual API signing without vendor credentials. The completed leave
+state for a new-seat check is a database fixture, not a Sync handshake.
+Real Google/Apple WorkOS setup, live Sync and vendor media remain separate
 operator smoke checks.
 
 ## Failure evidence
@@ -134,3 +143,10 @@ retain their existing Axiom trace evidence as described in `docs/observability.m
 ## Allowed websites
 
 Developer GET includes `allowedWebsites`. POST `allowed-websites` reads only that setting; POST `set-allowed-websites` takes `origins` and requires an online WorkOS session. Both use the generated public Tenant operations under the authenticated Tenant. Updates accept only HTTPS origins or `http://localhost:<port>` (no credentials, paths, queries or fragments), deduplicate origins, and always retain `https://chalkmeet.com` within the API's 32-origin limit. First sign-in provisions that permanent origin and the environment's dashboard origin. Sign-up is open: no allowlist or waitlist.
+
+## Webhook edits
+
+`update-webhook` requires `webhookId`, `revision` and `idempotencyKey`; `name`,
+`url`, `enabled` and `eventTypes` are optional patches. Send only fields the person
+changed. In particular, omit `url` unless a new destination was entered: the DTO
+contains a redacted URL and must never be submitted as the real destination.
