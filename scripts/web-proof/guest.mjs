@@ -1,11 +1,12 @@
 import { readFile } from "node:fs/promises";
-import { createRun, loadConfig } from "../prod-proof/runtime.mjs";
+import { createRun } from "../prod-proof/runtime.mjs";
 import { launchGuests, stats } from "../prod-proof/media.mjs";
 import { save } from "../prod-proof/runtime.mjs";
 import { playIncomingAudio } from "./media.mjs";
+import { guestConfig } from "./environment.mjs";
 
 export async function prepareGuest(directory) {
-  const run = await createRun(await loadConfig(), directory, undefined, process.env.CHALK_E2E_RUN_ID);
+  const run = await createRun(guestConfig(process.env), directory, undefined, process.env.CHALK_E2E_RUN_ID);
   run.apiKey = process.env.CHALK_E2E_API_KEY;
   const space = JSON.parse(await readFile(`${directory}/space.json`, "utf8"));
   const episode = JSON.parse(await readFile(`${directory}/episode.json`, "utf8"));

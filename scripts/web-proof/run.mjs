@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 import { createRun, loadConfig, save, maskCredentials, publicFailure, errorEvidence, check } from "../prod-proof/runtime.mjs";
 import { prepareIntegration } from "../prod-proof/proofs.mjs";
 import { cleanupRun, runLabel } from "../prod-proof/cleanup.mjs";
+import { childEnvironment } from "./environment.mjs";
 
 const runId = process.env.CHALK_PROOF_RUN_ID ?? `web-${randomUUID()}`;
 runLabel(runId);
@@ -59,7 +60,7 @@ try {
     child = spawn("pnpm", ["exec", "e2e", "run"], {
       detached: true,
       stdio: "inherit",
-      env: { ...process.env, E2E_TELEMETRY_DISABLED: "1", CHALK_PROOF_WEB_URL: web.origin, CHALK_E2E_INVITE: entry, CHALK_E2E_DIRECTORY: directory, CHALK_E2E_API_KEY: run.apiKey, CHALK_E2E_RUN_ID: runId },
+      env: childEnvironment(process.env, { config: run.config, apiKey: run.apiKey, invite: entry, directory, runId, webUrl: web.origin }),
     });
     const timer = setTimeout(stop, 300_000);
     child.once("error", (error) => {

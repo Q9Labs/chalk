@@ -147,3 +147,38 @@ test("hosted empty proof lists fail with a bounded configuration reason", async 
   assert.equal(result.stdout, "");
   assert.equal(result.stderr.trim(), "PROOF configuration: failed (empty-proof-list)");
 });
+
+test("e2e child receives temporary access, never bootstrap or unrelated credentials", async () => {
+  const { childEnvironment, guestConfig } = await import("../web-proof/environment.mjs");
+  const { spawnSync } = await import("node:child_process");
+  const permanent = "chalk_sk_permanent_test_key";
+  const config = { api_key: permanent, tenant_id: "proof-tenant", api_url: "https://api.example.invalid", web_url: "https://web.example.invalid", proof_origin: "https://proof.example.invalid", webhook_service_url: "https://webhook.example.invalid", webhook_endpoint_id: "bootstrap-endpoint" };
+  const environment = childEnvironment(
+    { ...process.env, CHALK_PROOF_API_KEY: permanent, CHALK_PROOF_FUTURE_SECRET: "future-secret", CHALK_PROOF_CONFIG_SOURCE: "env", CHALK_PROOF_WEBHOOK_ENDPOINT_ID: config.webhook_endpoint_id, GITHUB_TOKEN: "github-test-token", NODE_OPTIONS: "--invalid-test-option", CHALK_E2E_API_KEY: "stale-key" },
+    { config, apiKey: "chalk_sk_temporary_test_key", invite: "/space/proof#invite", directory: "/tmp/proof", runId: "web-test", webUrl: config.web_url },
+  );
+  assert.equal(environment.CHALK_PROOF_API_KEY, undefined);
+  const child = spawnSync(process.execPath, ["-e", "process.stdout.write(JSON.stringify(process.env))"], { env: environment, encoding: "utf8" });
+  assert.equal(child.status, 0, child.stderr);
+  const received = JSON.parse(child.stdout);
+  assert.equal(received.CHALK_E2E_API_KEY, "chalk_sk_temporary_test_key");
+  assert.deepEqual(
+    Object.keys(received).filter((name) => name.startsWith("CHALK_PROOF_")),
+    ["CHALK_PROOF_WEB_URL"],
+  );
+  for (const name of ["GITHUB_TOKEN", "NODE_OPTIONS"]) assert.equal(received[name], undefined);
+  assert.equal(Object.values(received).includes(permanent), false);
+  assert.equal(received.PATH, process.env.PATH);
+  assert.equal(received.HOME, process.env.HOME);
+  assert.equal(received.CI, process.env.CI);
+  assert.equal(received.E2E_TELEMETRY_DISABLED, "1");
+  assert.equal(received.CHALK_E2E_INVITE, "/space/proof#invite");
+  assert.equal(received.CHALK_E2E_DIRECTORY, "/tmp/proof");
+  assert.equal(received.CHALK_E2E_RUN_ID, "web-test");
+  assert.deepEqual(guestConfig(received), { api_key: "chalk_sk_temporary_test_key", api_url: config.api_url, tenant_id: config.tenant_id, web_url: config.web_url, proof_origin: config.proof_origin });
+});
+
+test("SDK guest refuses missing temporary access instead of using a bootstrap key", async () => {
+  const { guestConfig } = await import("../web-proof/environment.mjs");
+  assert.throws(() => guestConfig({ CHALK_PROOF_API_KEY: "chalk_sk_permanent_test_key" }), /SDK guest configuration is missing api_key/);
+});
