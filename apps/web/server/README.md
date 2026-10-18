@@ -194,6 +194,9 @@ present. Missing identity returns `null`; missing speaker name stays `null`.
 
 `create-call` accepts an omitted name and uses `New call`. `create-transcript`
 requests transcription for an owned recording using the generated operation and
-a stable idempotency key. The engine rejects requests when any transcript already
+a stable idempotency key and one to sixteen explicit languages. Omitted languages
+produce an engine success response with an empty languages array, which violates
+the generated response schema. There is no silent English default. The dashboard
+rejects omitted languages before sending the mutation. The engine rejects requests when any transcript already
 exists for that recording. A failed-transcript retry therefore still needs an
 engine endpoint. Deleting a transcript does not remove that restriction.

@@ -25,7 +25,7 @@ const engine = createServer(async (request, response) => {
   try {
     const upstream = await fetch(new URL(request.url, process.env.DASHBOARD_TEST_API_ORIGIN), { method: request.method, headers: request.headers, body: ["GET", "HEAD"].includes(request.method) ? undefined : body, redirect: "manual" });
     const result = Buffer.from(await upstream.arrayBuffer());
-    if (request.method === "GET" && new URL(request.url, "http://localhost").pathname.endsWith("/transcripts") && upstream.status === 200) {
+    if (["GET", "POST"].includes(request.method) && new URL(request.url, "http://localhost").pathname.endsWith("/transcripts") && upstream.status < 300) {
       await writeFile(resolve(import.meta.dirname, "../../../../artifacts/dashboard-engine-transcripts.json"), result);
     }
     if (upstream.status >= 400) console.error("Engine failure:", request.method, new URL(request.url, "http://localhost").pathname, upstream.status, result.toString().slice(0, 2048));
@@ -339,7 +339,7 @@ try {
   assert.equal(historical.participantCount, 2);
   assert.equal(historical.recordings[0].status, "failed");
   assert.equal(historical.recordings[0].transcripts[0].status, "terminal_failure");
-  const retry = await post(ada, "/dashboard-api/past-session", { action: "create-transcript", spaceId, episodeId: foreign.episodeId, recordingId: foreign.recordingId, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
+  const retry = await post(ada, "/dashboard-api/past-session", { action: "create-transcript", languages: ["en"], spaceId, episodeId: foreign.episodeId, recordingId: foreign.recordingId, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
   assert.equal(retry.status, 409, await retry.clone().text());
   assert(unsupportedBodies.some((r) => r.method === "POST" && r.path.endsWith(`/recordings/${foreign.recordingId}/transcripts`)));
   const documentFixture = JSON.stringify({
@@ -378,7 +378,12 @@ try {
   values('${freshRecordingId}','${firstTenant}','transcription/source/${freshRecordingId}/manifest.json',decode(repeat('00',32),'hex'),1,'application/json',1,now(),1,decode(repeat('00',32),'hex'),decode(repeat('00',32),'hex'),'ready',now()+interval '1 hour');
   insert into recording_transcription_source_chunks(id,recording_id,tenant_id,chunk_index,generation,start_ms,end_ms,source_start_ms,source_end_ms,participant_ref,participant_generation,track_id,track_epoch,identity_kind,track_class,display_name_snapshot,overlap,storage_key,checksum,size,content_type)
   values(gen_random_uuid(),'${freshRecordingId}','${firstTenant}',0,1,0,1000,0,1000,'participant-1',1,'track-1','1','participant','microphone','Speaker',false,'transcription/source/${freshRecordingId}/chunk-0.flac',decode(repeat('00',32),'hex'),1,'audio/flac')`);
-  const transcriptRequest = { action: "create-transcript", spaceId, episodeId: foreign.episodeId, recordingId: freshRecordingId, idempotencyKey: crypto.randomUUID() };
+  const transcriptRequest = { action: "create-transcript", languages: ["en"], spaceId, episodeId: foreign.episodeId, recordingId: freshRecordingId, idempotencyKey: crypto.randomUUID() };
+  const beforeMissingLanguages = unsupportedBodies.filter((request) => request.method === "POST" && request.path.endsWith(`/recordings/${freshRecordingId}/transcripts`)).length;
+  const { languages: requestedLanguages, ...withoutLanguages } = transcriptRequest;
+  assert.deepEqual(requestedLanguages, ["en"]);
+  assert.equal((await post(ada, "/dashboard-api/past-session", withoutLanguages, session.csrfToken)).status, 400);
+  assert.equal(unsupportedBodies.filter((request) => request.method === "POST" && request.path.endsWith(`/recordings/${freshRecordingId}/transcripts`)).length, beforeMissingLanguages);
   const requestedTranscript = await post(ada, "/dashboard-api/past-session", transcriptRequest, session.csrfToken);
   assert.equal(requestedTranscript.status, 200, await requestedTranscript.clone().text());
   const transcriptId = (await requestedTranscript.json()).transcript.id;
@@ -400,7 +405,14 @@ try {
     ["call", { action: "deny-knock", spaceId: foreign.spaceId, requestHandle: crypto.randomUUID(), idempotencyKey: crypto.randomUUID() }],
     ...["recording-url", "export-recording", "transcripts", "create-transcript"].map((action) => [
       "past-session",
-      { action, spaceId: foreign.spaceId, episodeId: foreign.episodeId, recordingId: foreign.recordingId, ...(action === "recording-url" ? { download: true } : action === "export-recording" || action === "create-transcript" ? { idempotencyKey: crypto.randomUUID() } : {}) },
+      {
+        action,
+        spaceId: foreign.spaceId,
+        episodeId: foreign.episodeId,
+        recordingId: foreign.recordingId,
+        ...(action === "create-transcript" ? { languages: ["en"] } : {}),
+        ...(action === "recording-url" ? { download: true } : action === "export-recording" || action === "create-transcript" ? { idempotencyKey: crypto.randomUUID() } : {}),
+      },
     ]),
     ...["transcript-document", "transcript-url", "delete-transcript"].map((action) => ["past-session", { action, spaceId: foreign.spaceId, episodeId: foreign.episodeId, transcriptId: foreign.transcriptId }]),
     ["developer", { action: "rotate-key", keyId: foreign.keyId, expiresAt: "2027-01-01T00:00:00Z", idempotencyKey: crypto.randomUUID() }],
