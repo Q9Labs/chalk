@@ -34,6 +34,50 @@ defmodule ChalkSync.Retention.CleanupWorkerTest do
     end
   end
 
+  test "attendance survives verified Episode journal cleanup", %{connections: connections} do
+    connection = hd(connections)
+    fixture = seed_ended_episode(connection, @retention_seconds + 1)
+    cleanup_fixture(connection, fixture)
+
+    attendance_sql =
+      "select id, name, first_joined_at, left_at, last_left_reason from participants where tenant_id = $1 and episode_id = $2 order by first_joined_at, id"
+
+    before = Postgrex.query!(connection, attendance_sql, episode_ids(fixture)).rows
+    assert [[_id, "Pending Participant", %DateTime{}, %DateTime{}, "episode_ended"]] = before
+    before_http = attendance_http_probe(fixture)
+
+    assert {:ok, %Result{episodes: 1, event_rows: 2}} = run_cleanup(connection)
+    assert [0, 0] = history_counts(connection, fixture)
+    assert checkpointed?(connection, fixture)
+    assert Postgrex.query!(connection, attendance_sql, episode_ids(fixture)).rows == before
+    assert attendance_http_probe(fixture) == before_http
+  end
+
+  defp attendance_http_probe(fixture) do
+    case System.get_env("CHALK_ATTENDANCE_HTTP_PROBE") do
+      nil ->
+        :not_configured
+
+      executable ->
+        {output, status} =
+          System.cmd(executable, ["-test.run=^TestEpisodeAttendanceSyncFixtureHTTP$", "-test.v"],
+            env: [
+              {"CHALK_ATTENDANCE_TENANT_ID", fixture.episode.tenant_id},
+              {"CHALK_ATTENDANCE_SPACE_ID", fixture.episode.space_id},
+              {"CHALK_ATTENDANCE_EPISODE_ID", fixture.episode.episode_id}
+            ],
+            stderr_to_stdout: true
+          )
+
+        assert status == 0, output
+
+        output
+        |> String.split("\n")
+        |> Enum.find(&String.starts_with?(&1, "ATTENDANCE_JSON="))
+        |> tap(fn response -> assert is_binary(response) end)
+    end
+  end
+
   test "rolls back when the independent fold detects corruption", %{
     connections: connections
   } do
