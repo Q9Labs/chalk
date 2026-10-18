@@ -45,7 +45,7 @@ export async function playIncomingAudio() {
 export async function audioEvidence() {
   const reports = await Promise.all(window.proofConnections.map((connection) => connection.getStats()));
   return {
-    contextState: window.proofAudio?.context.state,
+    contextState: window.proofAudio?.context.state ?? null,
     tracks: window.proofConnections
       .flatMap((connection) => connection.getSenders())
       .filter((sender) => sender.track?.kind === "audio")
@@ -53,7 +53,16 @@ export async function audioEvidence() {
     stats: reports
       .flatMap((report) => [...report.values()])
       .filter((row) => row.kind === "audio" && ["media-source", "outbound-rtp", "inbound-rtp"].includes(row.type))
-      .map((row) => ({ type: row.type, bytesSent: row.bytesSent, packetsSent: row.packetsSent, bytesReceived: row.bytesReceived, packetsReceived: row.packetsReceived, audioLevel: row.audioLevel, totalAudioEnergy: row.totalAudioEnergy, totalSamplesDuration: row.totalSamplesDuration })),
+      .map((row) => ({
+        type: row.type,
+        bytesSent: row.bytesSent ?? null,
+        packetsSent: row.packetsSent ?? null,
+        bytesReceived: row.bytesReceived ?? null,
+        packetsReceived: row.packetsReceived ?? null,
+        audioLevel: row.audioLevel ?? null,
+        totalAudioEnergy: row.totalAudioEnergy ?? null,
+        totalSamplesDuration: row.totalSamplesDuration ?? null,
+      })),
   };
 }
 
