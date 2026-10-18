@@ -708,17 +708,19 @@ const styles = `.call-card-tabs {
 .call-staged-file {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 14px;
+  gap: 10px;
+  min-height: 44px;
+  padding: 4px 4px 4px 6px;
+  border-radius: 12px;
   background: var(--chalk-raised);
+  border: 1px solid var(--chalk-line);
   width: 100%;
   min-width: 0;
 }
 .call-staged-file img {
-  height: 40px;
-  width: 40px;
-  border-radius: 8px;
+  height: 32px;
+  width: 32px;
+  border-radius: 7px;
   object-fit: cover;
 }
 .call-staged-file > span {
@@ -735,11 +737,13 @@ const styles = `.call-card-tabs {
 }
 .call-staged-file small {
   font-size: 12px;
+  line-height: 1.25;
   color: var(--chalk-muted-text);
 }
 .call-staged-file button {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
   display: grid;
   place-items: center;
   flex: none;
@@ -787,6 +791,7 @@ const styles = `.call-card-tabs {
   .call-card-close,
   .call-host-button,
   .call-person-row button,
+  .call-staged-file button,
   .call-reaction,
   .call-reaction-bar button,
   .call-emoji-picker button,
