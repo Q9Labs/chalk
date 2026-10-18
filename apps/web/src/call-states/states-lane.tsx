@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Chalk, CallLimbo, CallReady, ToastStack, type ChalkProps } from "@q9labsai/chalk-react";
 import { SpaceClientError, type ClientFailure } from "@q9labsai/chalk-client";
 import { useCallLink } from "../../../../sdks/typescript/react/src/components/call-limbo/useCallLink";
+import { Avatar } from "../../../../sdks/typescript/react/src/components/atomic/Avatar";
 import { CallEventIcon } from "../../../../sdks/typescript/react/src/components/toast-stack/CallEventIcon";
 import { mediaFailureToast } from "../../../../sdks/typescript/react/src/components/toast-stack/call-events";
 import { PEOPLE, SPACE_NAME, createCallStateClient, liveSnapshot } from "./fixtures";
@@ -70,7 +71,27 @@ function ToastFixture({ message, icon, error = false, light = false }: { readonl
   const [visible, setVisible] = useState(true);
   return (
     <main data-chalk data-chalk-theme={light ? "light" : "dark"} className="chalk-root relative h-dvh bg-[var(--chalk-canvas)]" style={{ fontSize: 14, lineHeight: 1.4 }}>
-      {visible ? <ToastStack toasts={[{ id: "fixture", message, icon, type: error ? "error" : "info", duration: Infinity }]} onDismiss={() => setVisible(false)} /> : null}
+      {visible ? (
+        <ToastStack
+          toasts={[
+            {
+              id: "fixture",
+              message:
+                error && typeof message === "string" && message.includes(". ") ? (
+                  <>
+                    <b>{message.slice(0, message.indexOf(". ") + 1)}</b> {message.slice(message.indexOf(". ") + 2)}
+                  </>
+                ) : (
+                  message
+                ),
+              icon,
+              type: error ? "error" : "info",
+              duration: Infinity,
+            },
+          ]}
+          onDismiss={() => setVisible(false)}
+        />
+      ) : null}
     </main>
   );
 }
@@ -142,7 +163,13 @@ export const STATES_LANE: readonly CallState[] = [
               message
             )
           }
-          icon={<CallEventIcon kind={id === "camera" ? "camera" : id === "share-blocked" ? "screen" : id === "recording" ? "recording" : id === "hand" ? "hand" : "microphone"} error={error || id === "recording"} />}
+          icon={
+            id === "joined" || id === "muted" ? (
+              <Avatar name="Nora" size="xs" style={{ width: 28, height: 28 }} animated={false} />
+            ) : (
+              <CallEventIcon kind={id === "camera" ? "camera" : id === "share-blocked" ? "screen" : id === "recording" ? "recording" : id === "hand" ? "hand" : "microphone"} error={error || id === "recording"} />
+            )
+          }
           error={error}
         />
       ),
@@ -161,7 +188,13 @@ export const STATES_LANE: readonly CallState[] = [
               message
             )
           }
-          icon={<CallEventIcon kind={id === "camera" ? "camera" : id === "share-blocked" ? "screen" : id === "recording" ? "recording" : id === "hand" ? "hand" : "microphone"} error={error || id === "recording"} />}
+          icon={
+            id === "joined" || id === "muted" ? (
+              <Avatar name="Nora" size="xs" style={{ width: 28, height: 28 }} animated={false} />
+            ) : (
+              <CallEventIcon kind={id === "camera" ? "camera" : id === "share-blocked" ? "screen" : id === "recording" ? "recording" : id === "hand" ? "hand" : "microphone"} error={error || id === "recording"} />
+            )
+          }
           error={error}
           light
         />
