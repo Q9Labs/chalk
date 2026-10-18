@@ -181,6 +181,9 @@ func TestServicePrincipalHTTPIsolationAndAtomicTenantCreation(t *testing.T) {
 	key := expect(first, "POST", "/v1/tenants/"+id+"/api-keys", oldSecret, keyBody, http.StatusCreated)
 	var createdKey struct {
 		Secret string `json:"secret"`
+		APIKey struct {
+			ID string `json:"id"`
+		} `json:"api_key"`
 	}
 	if err := json.Unmarshal(key, &createdKey); err != nil || createdKey.Secret == "" {
 		t.Fatalf("invalid key: %s", key)
@@ -188,11 +191,20 @@ func TestServicePrincipalHTTPIsolationAndAtomicTenantCreation(t *testing.T) {
 	expect(disabled, "GET", "/v1/tenants/"+id, createdKey.Secret, "", http.StatusOK)
 	expect(disabled, "GET", "/v1/tenants/"+otherID, createdKey.Secret, "", http.StatusForbidden)
 	writeKeyBody := fmt.Sprintf(`{"name":"Tenant writer","scopes":["tenants:read","tenants:write"],"expires_at":%q}`, expires)
-	writeKey := expect(first, "POST", "/v1/tenants/"+id+"/api-keys", oldSecret, writeKeyBody, http.StatusCreated)
+	denied := expect(first, "POST", "/v1/tenants/"+id+"/api-keys", oldSecret, writeKeyBody, http.StatusForbidden)
+	if !bytes.Contains(denied, []byte(`"code":"access.forbidden"`)) {
+		t.Fatalf("key creation did not return normal forbidden error: %s", denied)
+	}
+	writeKey := expect(first, "POST", "/v1/tenants/"+id+"/api-keys", "local-test-system", writeKeyBody, http.StatusCreated)
 	if err := json.Unmarshal(writeKey, &createdKey); err != nil {
 		t.Fatal(err)
 	}
+	denied = expect(first, "POST", "/v1/tenants/"+id+"/api-keys/"+createdKey.APIKey.ID+"/rotate", oldSecret, `{}`, http.StatusForbidden)
+	if !bytes.Contains(denied, []byte(`"code":"access.forbidden"`)) {
+		t.Fatalf("key rotation did not return normal forbidden error: %s", denied)
+	}
 	expect(disabled, "PATCH", "/v1/tenants/"+id, createdKey.Secret, `{"name":"Tenant key can still rename"}`, http.StatusOK)
+	expect(first, "DELETE", "/v1/tenants/"+id+"/api-keys/"+createdKey.APIKey.ID, oldSecret, "", http.StatusNoContent)
 	keyBody = fmt.Sprintf(`{"name":"Too broad","scopes":["spaces:write"],"expires_at":%q}`, expires)
 	expect(first, "POST", "/v1/tenants/"+id+"/api-keys", oldSecret, keyBody, http.StatusForbidden)
 	broad := expect(first, "POST", "/v1/tenants/"+id+"/api-keys", "local-test-system", keyBody, http.StatusCreated)
