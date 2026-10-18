@@ -7,7 +7,7 @@ import { cpus, loadavg, platform, arch } from "node:os";
 import { parseArgs } from "node:util";
 import { chromium } from "playwright";
 import { serveBuild } from "./call-performance-server.mjs";
-import { checkLeaks } from "./call-leak-check.mjs";
+import { checkLeaks, LEAK_JOURNEYS } from "./call-leak-check.mjs";
 import { measureRouteBundle } from "./call-route-bundle.mjs";
 import { validateBudgets, summarize, percentile, budgetFailures, trustedInteractionMs, METRICS, BUNDLE_METRICS } from "./call-performance-metrics.mjs";
 
@@ -21,15 +21,17 @@ const { values } = parseArgs({
     "self-test": { type: "boolean" },
     smoke: { type: "boolean" },
     "leaks-only": { type: "boolean" },
+    "leak-journey": { type: "string" },
     "leak-repeats": { type: "string", default: "1" },
     diagnostics: { type: "boolean" },
     shots: { type: "string", default: process.env.CALL_PERFORMANCE_SHOTS },
     "record-baseline": { type: "boolean" },
   },
 });
-if (values.gate && (values.smoke || values["record-baseline"])) throw new Error("Gate runs cannot collect a smoke test or unenforced baseline");
+if (values.gate && (values.smoke || values["record-baseline"] || values["leaks-only"] || values["leak-journey"])) throw new Error("Gate runs cannot skip timing checks or collect an unenforced baseline");
 if (values.gate && !process.env.TESTBOX_SOURCE_COMMIT) values["bundle-only"] = true;
 if (values.gate && !values["bundle-only"]) values["self-test"] = true;
+if (values["leak-journey"] && !LEAK_JOURNEYS.includes(values["leak-journey"])) throw new Error("Unknown leak journey");
 const web = resolve(import.meta.dirname, "..");
 const root = resolve(web, "../..");
 const dist = resolve(web, ".call-performance");
@@ -78,10 +80,13 @@ const origin = `http://127.0.0.1:${server.address().port}`;
 let browser;
 let deadline;
 try {
-  deadline = setTimeout(() => {
-    report.errors.push("Performance check exceeded 20 minutes");
-    void browser?.close();
-  }, 1_200_000);
+  deadline = setTimeout(
+    () => {
+      report.errors.push("Performance check exceeded its deadline");
+      void browser?.close();
+    },
+    values["leaks-only"] ? Math.max(1_200_000, (Number(values["leak-repeats"]) * 10 + 5) * 60_000) : 1_200_000,
+  );
   browser = await chromium.launch({ headless: true });
   report.browser = browser.version();
   if (!values["leaks-only"]) {
@@ -131,7 +136,16 @@ try {
   if (!values["bundle-only"]) {
     const repeats = Number(values["leak-repeats"]);
     if (!Number.isInteger(repeats) || repeats < 1) throw new Error("Invalid leak repeats");
-    report.leaks = await checkLeaks({ browser, origin, budgets: budgets.leaks, directory: resolve(root, "artifacts/call-leaks"), boardCss: resolve(root, "packages/whiteboard/node_modules/@excalidraw/excalidraw/dist/prod/index.css"), selfTest: values["self-test"], repeats });
+    report.leaks = await checkLeaks({
+      browser,
+      origin,
+      budgets: budgets.leaks,
+      directory: resolve(root, "artifacts/call-leaks"),
+      boardCss: resolve(root, "packages/whiteboard/node_modules/@excalidraw/excalidraw/dist/prod/index.css"),
+      selfTest: values["self-test"],
+      repeats,
+      journeys: values["leak-journey"] ? [values["leak-journey"]] : undefined,
+    });
     report.failures.push(...report.leaks.failures);
   }
 } catch (error) {

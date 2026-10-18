@@ -62,3 +62,9 @@ test("heap diagnostics compute dominator retained sizes without double-counting 
   assert.equal(summary.largestRetainedTypes.find((entry) => entry.type === "object: owner").largestRetainedBytes, 30);
   assert.equal(summary.largestRetainedTypes.find((entry) => entry.type === "object: shared").largestRetainedBytes, 30);
 });
+
+test("a generous startup heap allowance does not disable the late-cycle guard", async () => {
+  const { leakFailures } = await import("../../apps/web/scripts/call-leak-check.mjs");
+  const samples = Array.from({ length: 21 }, (_, index) => ({ heapMiB: index < 11 ? 0 : (index - 10) * 0.06 }));
+  assert.deepEqual(leakFailures(samples, { metrics: { heapMiB: { perCycle: 0.1, allowance: 3, tailPerCycle: 0.05 } } }), ["heapMiB: late slope 0.0600 > 0.05/cycle"]);
+});

@@ -277,6 +277,12 @@ canvas. Counts are collected without holding application objects strongly:
   capture, media-device calls, stream additions, track cloning and Web Audio
   destinations. Weak references do not prevent collection. This is not a native
   media-process census or an instrumentation of arbitrary third-party realms.
+- `rosterCacheKeys`: distinct departed synthetic guest IDs still present as keys
+  in a live Map. Guest IDs change each join, while fake camera names stay fixed
+  so source caching stays bounded. Map registration is weak and does not keep a
+  cache alive. A one-key allowance covers an alternate React render; sustained
+  growth fails. This focused counter catches the confirmed first-seen map leak
+  even though each entry is too small to separate reliably from heap noise.
 - `audioContexts`: observed AudioContexts that have not closed, including suspended
   contexts. Closed contexts do not count.
 - `intervals`: scheduled intervals not cancelled. `animationFrames`: outstanding
@@ -286,7 +292,9 @@ canvas. Counts are collected without holding application objects strongly:
 `apps/web/perf-budgets.json` owns the cycle count, settle delay and per-metric
 budgets. Ordinary least-squares slope includes the warm baseline (cycle zero).
 A journey fails if **either** slope exceeds `perCycle` or any subsequent sample
-exceeds baseline plus `allowance`. Thus a fixed leak cannot hide behind a flat
+exceeds baseline plus `allowance`. Heap also checks the last ten samples against
+`tailPerCycle` (0.05 MiB/cycle), so startup headroom cannot mask ongoing growth.
+The whole-run heap limits are 0.1 MiB/cycle and 3 MiB above baseline. Thus a fixed leak cannot hide behind a flat
 slope, and slow sustained growth cannot hide behind fixed headroom. After full
 leave, tracks and AudioContexts must be exactly zero even if unchanged from the
 warm baseline. Missing measurements and invalid budgets fail closed.
@@ -311,7 +319,11 @@ application data: keep artifacts out of Git. Clean runs take no snapshots.
 `--self-test` runs panel cycles with two independent faults: an unreleased document
 listener per panel open and retained detached sections per panel open. Each must
 fail its actual count budget and generate evidence. An uninjected panel run must
-then pass. Expected injected failures do not themselves fail the gate.
+then pass. These fault probes use five cycles each; all ordinary journeys still
+use 20. Expected injected failures do not themselves fail the gate. A separate blank-page
+resource probe also proves that detached media elements, tracks, an AudioContext,
+an interval and a self-rescheduling RAF are observed while live and return to zero
+after teardown.
 
 For calibration (three full repetitions of every journey), after building the
 harness on testbox:
@@ -325,8 +337,10 @@ cycle without changing call state. It measures observer/automation heap noise.
 
 Leak runs use an unthrottled desktop viewport to reduce timer/teardown timing
 noise; timing scenarios still exercise both CPU-throttled device profiles.
-Budgets are provisional until the calibration evidence below is filled in; do
-not widen a count budget to absorb a real leak. Finite 20-cycle tests cannot
+For a focused diagnostic, add `--leak-journey people`; gate mode rejects this and
+`--leaks-only` so neither can silently narrow a shipping check.
+
+Do not widen a count budget to absorb a real leak. Finite 20-cycle tests cannot
 prove absence of slower leaks, browser/native leaks, production SDK media leaks,
 or leaks triggered only by real transports, device changes or long sessions.
 

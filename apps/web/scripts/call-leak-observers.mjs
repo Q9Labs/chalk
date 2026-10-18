@@ -6,6 +6,18 @@ export function installLeakObservers() {
   const frames = new Set();
   const media = new Set();
   const knownMedia = new WeakSet();
+  // Synthetic guest IDs are unique per join. At sampling time every such guest
+  // has left, so keys still in a live Map expose caches below heap-noise size.
+  const rosterMaps = new Set();
+  const knownRosterMaps = new WeakSet();
+  const mapSet = Map.prototype.set;
+  Map.prototype.set = function (key, value) {
+    if (typeof key === "string" && key.startsWith("perf-join-") && !knownRosterMaps.has(this)) {
+      knownRosterMaps.add(this);
+      rosterMaps.add(new WeakRef(this));
+    }
+    return mapSet.call(this, key, value);
+  };
   const rememberMedia = (element) => {
     if (element instanceof HTMLMediaElement && !knownMedia.has(element)) {
       knownMedia.add(element);
@@ -113,7 +125,17 @@ export function installLeakObservers() {
     }
     return live.size;
   };
+  const rosterCacheKeys = () => {
+    const keys = new Set();
+    for (const reference of rosterMaps) {
+      const map = reference.deref();
+      if (!map) rosterMaps.delete(reference);
+      else for (const key of map.keys()) if (typeof key === "string" && key.startsWith("perf-join-")) keys.add(key);
+    }
+    return keys.size;
+  };
   window.__callLeaks = () => ({
+    rosterCacheKeys: rosterCacheKeys(),
     videos: count(media, (element) => element instanceof HTMLVideoElement),
     audios: count(media, (element) => element instanceof HTMLAudioElement),
     liveTracks: count(tracks, (track) => track.readyState === "live"),

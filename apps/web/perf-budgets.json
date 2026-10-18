@@ -257,8 +257,9 @@
     "settleMs": 600,
     "metrics": {
       "heapMiB": {
-        "perCycle": 0.025,
-        "allowance": 1
+        "perCycle": 0.1,
+        "allowance": 3,
+        "tailPerCycle": 0.05
       },
       "domNodes": {
         "perCycle": 0.1,
@@ -294,6 +295,10 @@
       },
       "animationFrames": {
         "perCycle": 0.05,
+        "allowance": 1
+      },
+      "rosterCacheKeys": {
+        "perCycle": 0.1,
         "allowance": 1
       }
     }

@@ -1,5 +1,5 @@
 import { Chalk } from "@q9labsai/chalk-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createCallStateClient, liveSnapshot, PEOPLE, SELF_NAME, SPACE_NAME } from "./fixtures";
 import { releaseFakeMedia } from "./media";
 import type { CallState } from "./states";
@@ -21,9 +21,11 @@ function PerformanceCall({ count, share = false, board = false }: { readonly cou
     ),
   );
   const [joined, setJoined] = useState(true);
+  const personSequence = useRef(0);
   const [generation, setGeneration] = useState(0);
   const updateRoster = (extra: boolean, sharing = false) => {
-    const next = liveSnapshot({ others: Array.from({ length: count - 1 + (extra ? 1 : 0) }, (_, index) => ({ id: `perf-${index}`, name: `Camera ${index + 1}`, sharing: sharing && index === 0 })) });
+    if (extra) personSequence.current++;
+    const next = liveSnapshot({ others: Array.from({ length: count - 1 + (extra ? 1 : 0) }, (_, index) => ({ id: extra && index === count - 1 ? `perf-join-${personSequence.current}` : `perf-${index}`, name: `Camera ${index + 1}`, sharing: sharing && index === 0 })) });
     client.updateSnapshot((current) => ({ ...current, participants: next.participants, media: next.media }));
   };
   return (
