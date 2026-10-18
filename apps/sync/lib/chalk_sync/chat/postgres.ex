@@ -173,7 +173,10 @@ defmodule ChalkSync.Chat.Repository.Postgres do
           else
             {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
           end
-        end, timeout: @transaction_timeout_ms, commit_comment: "chalk sync chat reaction")
+        end,
+        timeout: @transaction_timeout_ms,
+        commit_comment: "chalk sync chat reaction"
+      )
       |> transaction_result()
     else
       _ -> {:error, :invalid_payload}

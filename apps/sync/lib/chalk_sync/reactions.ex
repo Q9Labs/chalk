@@ -13,6 +13,7 @@ defmodule ChalkSync.Reactions do
           repository: module(),
           fanout: GenServer.server(),
           admission: GenServer.server(),
+          version: 1 | 2,
           clock: (-> DateTime.t())
         ]
 
@@ -72,8 +73,14 @@ defmodule ChalkSync.Reactions do
       "error_code" => error_code(reason)
     }
 
-  defp validate_reaction(reaction, options),
-    do: if(reaction in @reactions, do: :ok, else: {:error, :invalid_payload})
+  defp validate_reaction(reaction, options) do
+    allowed =
+      if Keyword.get(options, :version, 2) == 1,
+        do: ["👍", "❤️", "😂", "😮", "😢", "🎉"],
+        else: @reactions
+
+    if reaction in allowed, do: :ok, else: {:error, :invalid_payload}
+  end
 
   defp validate_operation_id(value),
     do: if(byte_size(value) in 16..64, do: :ok, else: {:error, :invalid_payload})

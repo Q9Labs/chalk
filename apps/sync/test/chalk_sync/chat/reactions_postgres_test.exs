@@ -48,7 +48,10 @@ defmodule ChalkSync.Chat.ReactionsPostgresTest do
     peer =
       spawn_link(fn ->
         {:ok, _welcome} =
-          Chat.negotiate(second, %{after_sequence: nil, retained_floor_sequence: nil}, self(),
+          Chat.negotiate(
+            second,
+            %{extension: "collaboration_v2", after_sequence: nil, retained_floor_sequence: nil},
+            self(),
             fanout: fanout
           )
 
@@ -140,7 +143,9 @@ defmodule ChalkSync.Chat.ReactionsPostgresTest do
           direction: "older",
           cursor_sequence: nil,
           limit: 100
-        }, version: 1)
+        },
+        version: 1
+      )
 
     [wire] = page["messages"]
     refute Map.has_key?(wire, "reactions")
@@ -148,16 +153,23 @@ defmodule ChalkSync.Chat.ReactionsPostgresTest do
     state = %{collaboration_version: 1}
 
     assert {:ok, ^state} =
-             ChalkSync.Transport.Socket.handle_info(
+             ChalkSync.Transport.SocketV1.handle_info(
                {:collaboration_frame,
                 %{"type" => "chat_reactions", "message_id" => message.message_id}},
                state
              )
 
     assert {:ok, ^state} =
-             ChalkSync.Transport.Socket.handle_info(
+             ChalkSync.Transport.SocketV1.handle_info(
                {:collaboration_frame, %{"type" => "reaction", "reaction" => "👏"}},
                state
+             )
+
+    assert {:ok, %{"outcome" => "rejected", "error_code" => "invalid_payload"}} =
+             ChalkSync.Reactions.send(
+               first,
+               %{operation_id: "legacy-reaction-operation", reaction: "👏"},
+               version: 1
              )
   end
 
