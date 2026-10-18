@@ -516,7 +516,7 @@ insert into participants (
     1,
     'joining'
 )
-returning id, name, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at
+returning id, name, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at, first_joined_at, last_left_reason
 `
 
 type CreateLifecycleParticipantParams struct {
@@ -563,6 +563,8 @@ func (q *Queries) CreateLifecycleParticipant(ctx context.Context, arg CreateLife
 		&i.LeftAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.FirstJoinedAt,
+		&i.LastLeftReason,
 	)
 	return i, err
 }
@@ -1408,7 +1410,7 @@ func (q *Queries) LockLifecycleIntentForRequestForUpdate(ctx context.Context, ar
 }
 
 const lockLifecycleParticipantForUpdate = `-- name: LockLifecycleParticipantForUpdate :one
-select id, name, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at
+select id, name, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at, first_joined_at, last_left_reason
 from participants
 where
     tenant_id = $1
@@ -1452,6 +1454,8 @@ func (q *Queries) LockLifecycleParticipantForUpdate(ctx context.Context, arg Loc
 		&i.LeftAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.FirstJoinedAt,
+		&i.LastLeftReason,
 	)
 	return i, err
 }
@@ -1741,7 +1745,7 @@ where
     and id = $4
     and generation = $5
     and status = 'active'
-returning id, name, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at
+returning id, name, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at, first_joined_at, last_left_reason
 `
 
 type MarkLifecycleParticipantLeavingParams struct {
@@ -1780,6 +1784,8 @@ func (q *Queries) MarkLifecycleParticipantLeaving(ctx context.Context, arg MarkL
 		&i.LeftAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.FirstJoinedAt,
+		&i.LastLeftReason,
 	)
 	return i, err
 }

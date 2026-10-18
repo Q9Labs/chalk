@@ -4208,6 +4208,11 @@ create trigger recording_completion_recoveries_no_truncate
 before truncate on recording_completion_recoveries
 for each statement execute function reject_recording_completion_recovery_mutation();
 
+-- Participant attendance survives Episode journal retention.
+alter table participants
+    add column first_joined_at timestamptz,
+    add column last_left_reason text check (last_left_reason in ('left', 'episode_ended'));
+
 ALTER TABLE tenants
     ADD COLUMN created_by_service_id text,
     ADD COLUMN external_id text,

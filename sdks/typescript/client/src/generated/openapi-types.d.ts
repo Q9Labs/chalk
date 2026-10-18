@@ -249,6 +249,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/tenants/{tenant_id}/live-episodes": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List space live episodes */
+    get: operations["listSpaceLiveEpisodes"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}/memberships": {
     parameters: {
       query?: never;
@@ -466,6 +483,23 @@ export interface paths {
     };
     /** Get episode */
     get: operations["getEpisode"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/attendance": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get episode attendance */
+    get: operations["getEpisodeAttendance"];
     put?: never;
     post?: never;
     delete?: never;
@@ -1329,6 +1363,19 @@ export interface components {
       tenant_id: components["schemas"]["TenantId"];
       updated_at: components["schemas"]["DateTimeString"];
     };
+    EpisodeAttendance: {
+      episode_id: components["schemas"]["EpisodeId"];
+      participants: {
+        display_name: string;
+        external_id: string | null;
+        first_joined_at: components["schemas"]["DateTimeString"];
+        /** @enum {string} */
+        identity_kind: "user" | "agent" | "guest";
+        last_left_at: components["schemas"]["DateTimeString"] | null;
+        left_reason: ("left" | "episode_ended") | null;
+        participant_id: components["schemas"]["ParticipantId"];
+      }[];
+    };
     EpisodeDeadline: components["schemas"]["EpisodeEnd"];
     EpisodeEnd: {
       episode_id: components["schemas"]["EpisodeId"];
@@ -1668,6 +1715,19 @@ export interface components {
     SpaceList: {
       pagination: components["schemas"]["Pagination"];
       spaces: components["schemas"]["Space"][];
+    };
+    SpaceLiveEpisodeList: {
+      spaces: {
+        live_episode: {
+          episode_id: components["schemas"]["EpisodeId"];
+          participant_count: number;
+          participants: {
+            display_name: string;
+            participant_id: components["schemas"]["ParticipantId"];
+          }[];
+        } | null;
+        space_id: components["schemas"]["SpaceId"];
+      }[];
     };
     SpacePublicInvite: {
       admission_mode: string;
@@ -3681,6 +3741,84 @@ export interface operations {
       };
     };
   };
+  listSpaceLiveEpisodes: {
+    parameters: {
+      query: {
+        space_ids: string;
+      };
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SpaceLiveEpisodeList"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
   listMemberships: {
     parameters: {
       query?: {
@@ -5180,6 +5318,84 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["Episode"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getEpisodeAttendance: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["EpisodeAttendance"];
         };
       };
       /** @description Bad Request */

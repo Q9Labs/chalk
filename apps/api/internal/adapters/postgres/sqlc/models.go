@@ -185,6 +185,8 @@ type Participant struct {
 	LeftAt                    pgtype.Timestamptz `json:"left_at"`
 	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+	FirstJoinedAt             pgtype.Timestamptz `json:"first_joined_at"`
+	LastLeftReason            pgtype.Text        `json:"last_left_reason"`
 }
 
 type PasswordReset struct {

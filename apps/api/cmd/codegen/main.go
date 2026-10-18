@@ -470,6 +470,19 @@ func (g *generator) objectSchema(t reflect.Type, request bool, currentName strin
 
 func (g *generator) fieldSchema(schemaName string, fieldName string, field reflect.StructField, request bool) map[string]any {
 	fieldType := field.Type
+	if schemaName == "EpisodeAttendance" {
+		switch fieldName {
+		case "external_id":
+			return map[string]any{"type": "string"}
+		case "identity_kind":
+			return map[string]any{"type": "string", "enum": []string{"user", "agent", "guest"}}
+		case "left_reason":
+			return map[string]any{"anyOf": []map[string]any{
+				{"type": "string", "enum": []string{"left", "episode_ended"}},
+				{"type": "null"},
+			}}
+		}
+	}
 	if schemaName == "Recording" && fieldName == "source" {
 		return schemaReference("RecordingSource")
 	}
