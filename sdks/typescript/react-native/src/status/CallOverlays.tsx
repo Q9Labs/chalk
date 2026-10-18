@@ -1,8 +1,10 @@
+import { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
 import { useBackHandler } from "../frame/back-handler";
 import { useChat, useRecording } from "../hooks/space-hooks";
 import { Limbo, type LimboState } from "../limbo/Limbo";
 import { Veil, type VeilLevel } from "../limbo/Veil";
+import { useToasts } from "../primitives/toast/ToastStack";
 import type { CallScreen } from "./call-screen";
 import { StatusPage } from "./StatusPage";
 
@@ -25,6 +27,12 @@ export function CallOverlays({ screen, callName, rejoining, onHold, onRejoin, on
   const recording = useRecording().current?.status === "recording";
   const queuedMessages = useChat().pendingSends.filter((send) => send.status === "queued").length;
   useBackHandler(screen.kind === "status", onHome);
+  // Notices belong to the live call; a status page or a fresh join starts without them.
+  const { clear } = useToasts();
+  const clearsNotices = screen.kind === "status" || screen.kind === "joining";
+  useEffect(() => {
+    if (clearsNotices) clear();
+  }, [clear, clearsNotices]);
 
   const limbo: LimboState | null = screen.kind === "joining" ? { kind: "joining", rejoining } : screen.kind === "reconnecting" ? { kind: "reconnecting", queuedMessages } : screen.kind === "call" && onHold ? { kind: "hold" } : null;
   const veil: VeilLevel = limbo === null ? "none" : limbo.kind === "joining" ? "limbo" : "paused";
