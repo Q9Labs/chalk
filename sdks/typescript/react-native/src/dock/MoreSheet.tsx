@@ -158,7 +158,7 @@ const LAYOUTS = [
 /** Layout (`#mLay`): Spotlight or Grid for the stage, switched in place without closing the sheet. */
 function LayoutRow(): React.JSX.Element {
   const { layout, setLayout } = useStageView();
-  return <SheetRow end={<SegmentedControl<StageLayoutChoice> accessibilityLabel="Layout" onChange={setLayout} options={LAYOUTS} value={layout} />} icon="grid" label="Layout" testID="more.layout" />;
+  return <SheetRow end={<SegmentedControl<StageLayoutChoice> accessibilityLabel="Layout" onChange={setLayout} options={LAYOUTS} testID="more.layout.control" value={layout} />} icon="grid" label="Layout" testID="more.layout" />;
 }
 
 /** Chat, with the accent dot after its name while messages are unread. */
