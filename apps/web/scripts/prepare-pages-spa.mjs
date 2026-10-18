@@ -157,7 +157,7 @@ async function readFromCache(request) {
 }
 
 async function writeToCache(request, response) {
-  if (!response || !response.ok) {
+  if (!response || !response.ok || response.headers.get("Cache-Control")?.split(",").some((directive) => directive.trim().toLowerCase() === "no-store")) {
     return response;
   }
 
@@ -209,7 +209,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
+  if (["/api", "/auth", "/dashboard-api", "/dashboard"].some((prefix) => url.pathname === prefix || url.pathname.startsWith(prefix + "/"))) {
     return;
   }
 

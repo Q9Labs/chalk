@@ -14,18 +14,10 @@ function client(env: DashboardEnvironment) {
 export async function resolveTenant(env: DashboardEnvironment, person: Identity, provision = false) {
   const api = await client(env);
   const externalId = `workos:${env.CHALK_ENVIRONMENT}:${person.userId}`;
-  const tenant = await run(
-    api.tenants.findTenantByExternalID({ query: { external_id: externalId } }).pipe(
-      Effect.catchIf(
-        (error) => {
-          const failure = apiFailure.safeParse(error);
-          return failure.success && failure.data.error.code === "tenant.not_found";
-        },
-        () => (provision ? api.tenants.createTenant({ payload: { name: person.name || "Personal", external_id: externalId, cors_allowed_origins: [...new Set([dashboardWebsiteOrigin, env.DASHBOARD_ORIGIN])] } }) : Effect.fail(new DashboardError(409, "account_not_provisioned"))),
-      ),
-    ),
-  );
-  return tenant.id;
+  const tenant = await run(api.tenants.findTenantByExternalID({ query: { external_id: externalId } }).pipe(Effect.catchTag("TenantNotFoundError", () => Effect.succeed(null))));
+  if (tenant) return tenant.id;
+  if (!provision) throw new DashboardError(409, "account_not_provisioned");
+  return (await run(api.tenants.createTenant({ payload: { name: person.name || "Personal", external_id: externalId, cors_allowed_origins: [...new Set([dashboardWebsiteOrigin, env.DASHBOARD_ORIGIN])] } }))).id;
 }
 export async function engine(env: DashboardEnvironment, person: Identity) {
   const tenantId = await resolveTenant(env, person);
@@ -43,7 +35,6 @@ export async function run<A, E>(operation: Effect.Effect<A, E>): Promise<A> {
     ),
   );
   if (result.kind === "success") return result.value;
-  if (result.error instanceof DashboardError) throw result.error;
   const status = z.object({ response: z.object({ status: z.number() }) }).safeParse(result.error);
   if (status.success && status.data.response.status === 429) throw new DashboardError(429, "engine_rate_limited");
   const failure = apiFailure.safeParse(result.error);
