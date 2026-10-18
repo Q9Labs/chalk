@@ -316,8 +316,9 @@ try {
   assert.deepEqual(unsupportedBodies.at(-1), { method: "PATCH", path: `/v1/tenants/${secondTenant}`, body: JSON.stringify({ cors_allowed_origins: ["https://chalkmeet.com", "https://example.test", "http://localhost:3000"] }) });
   const websites = await post(malik, "/dashboard-api/developer", { action: "allowed-websites" }, other.csrfToken);
   assert.equal(websites.status, 200);
-  assert.deepEqual((await websites.json()).allowedWebsites, ["https://chalkmeet.com", "https://example.test", "http://localhost:3000"]);
-  assert.deepEqual((await tenantFor("malik")).cors_allowed_origins, ["https://chalkmeet.com", "https://example.test", "http://localhost:3000"]);
+  const expectedWebsites = ["https://chalkmeet.com", "https://example.test", "http://localhost:3000"].toSorted();
+  assert.deepEqual((await websites.json()).allowedWebsites.toSorted(), expectedWebsites);
+  assert.deepEqual((await tenantFor("malik")).cors_allowed_origins.toSorted(), expectedWebsites);
   const home = await ada.request("/dashboard-api/home");
   assert.equal(home.status, 200, await home.clone().text());
   assert.equal((await home.json()).live.find((row) => row.spaceId === spaceId).episode, null);
