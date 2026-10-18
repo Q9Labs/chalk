@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { ChatAttachmentMimeTypeSchema } from "../generated/sync";
+import { ReactionSchema, UuidSchema, ChatAttachmentMimeTypeSchema } from "../generated/sync";
 
 /** Synchronous storage seam; native consumers can supply MMKV or a hydrated adapter. */
 export type OfflineActionsStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -18,11 +18,12 @@ export function browserOfflineActionsStorage(): OfflineActionsStorage | undefine
 const attachment = Schema.Struct({ attachmentId: Schema.String, fileName: Schema.String, mimeType: ChatAttachmentMimeTypeSchema, byteLength: Schema.Number });
 export const StoredOfflineAction = Schema.Struct({
   id: Schema.String,
-  kind: Schema.Literals(["chat_message", "hand_raise", "hand_lower"]),
+  kind: Schema.Literals(["chat_message", "chat_reaction", "hand_raise", "hand_lower"]),
   text: Schema.NullOr(Schema.String),
   queuedAt: Schema.Number,
   clientMessageId: Schema.optional(Schema.String),
   attachments: Schema.optional(Schema.Array(attachment)),
+  reaction: Schema.optional(Schema.Struct({ messageId: UuidSchema, emoji: ReactionSchema, on: Schema.Boolean })),
 });
 export type StoredOfflineAction = typeof StoredOfflineAction.Type;
 export const StoredOfflineActions = Schema.Struct({

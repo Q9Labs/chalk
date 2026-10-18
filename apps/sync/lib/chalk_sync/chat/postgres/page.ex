@@ -2,6 +2,7 @@ defmodule ChalkSync.Chat.Repository.Postgres.Page do
   @moduledoc false
 
   alias ChalkSync.Chat.Repository.Message
+  alias ChalkSync.Chat.Repository.Reactions
   alias ChalkSync.Chat.Repository.SQL
   alias ChalkSync.Contract.GeneratedV1
   alias ChalkSync.Database
@@ -92,6 +93,7 @@ defmodule ChalkSync.Chat.Repository.Postgres.Page do
         connection
         |> query(params, direction, cursor, limit, head_sequence, retained_floor)
         |> Enum.map(&Message.from_row/1)
+        |> then(&Reactions.attach(connection, params, &1))
 
       page_if_contiguous(messages, direction, limit, head_sequence, retained_floor)
     end

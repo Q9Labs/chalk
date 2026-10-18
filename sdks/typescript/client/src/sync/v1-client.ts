@@ -1,6 +1,6 @@
 import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame } from "../generated/sync";
 import type { ClientMediaPlane } from "../media/plane";
-import type { ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
+import type { ChalkChatReactionInput, ChalkChatReactions, ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
 import { encodeV1ClientFrame, decodeV1ServerFrame } from "./v1-codec";
 import { V1CollaborationState } from "./v1-collaboration-state";
 import { V1CommandScheduler, type V1OperationFrameFactory } from "./v1-command-scheduler";
@@ -222,6 +222,10 @@ export class V1SyncClient implements V1CollaborationClient {
   sendChatMessage(input: ChalkSendChatMessageInput): Promise<ChalkChatMessage> {
     return this.#collaborationState.sendChatMessage(input);
   }
+  reactToChatMessage(input: ChalkChatReactionInput): Promise<ChalkChatReactions> {
+    return this.#collaborationState.reactToChatMessage(input);
+  }
+
   markChatRead(sequence: string): Promise<ChalkChatReadReceipt> {
     return this.#collaborationState.markChatRead(sequence);
   }
@@ -456,6 +460,12 @@ export class V1SyncClient implements V1CollaborationClient {
       case "chat_head":
         this.#collaborationState.chatHead(frame);
         return;
+      case "chat_reactions":
+        this.#collaborationState.chatReactions(frame);
+        break;
+      case "chat_reaction_result":
+        this.#collaborationState.chatReactionResult(frame);
+        break;
       case "chat_read_receipt":
         this.#collaborationState.chatReadReceipt(frame);
         return;

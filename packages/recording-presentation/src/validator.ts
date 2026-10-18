@@ -15,7 +15,7 @@ import {
   type RecordingSharedContentV1,
 } from "./types.js";
 
-const REACTIONS = new Set(["👍", "❤️", "😂", "😮", "😢", "🎉"]);
+const REACTIONS = new Set(["👍", "❤️", "😂", "😮", "🎉", "👏", "😀", "😅", "🙏", "🔥", "✅", "👀", "💯", "🤔", "😢", "🙌", "🚀", "👌", "😍", "🤝", "💡", "⭐", "😎", "🥳"]);
 const ASSET_KINDS = new Set(["logo", "avatar", "chat_attachment", "whiteboard_state", "whiteboard_file", "font"]);
 const MEDIA_SOURCE_KINDS = new Set(["microphone", "camera", "screen_share"]);
 const THEME_SKINS = new Set(["classic", "chalk"]);

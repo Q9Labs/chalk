@@ -17,7 +17,7 @@ var themePalettes = map[string]struct{}{
 	"chalkboard-atelier": {}, "prism-nocturne": {}, "cosmic-chalk": {}, "oled-signal": {},
 }
 
-var reactionValues = map[string]struct{}{"👍": {}, "❤️": {}, "😂": {}, "😮": {}, "😢": {}, "🎉": {}}
+var reactionValues = map[string]struct{}{"👍": {}, "❤️": {}, "😂": {}, "😮": {}, "🎉": {}, "👏": {}, "😀": {}, "😅": {}, "🙏": {}, "🔥": {}, "✅": {}, "👀": {}, "💯": {}, "🤔": {}, "😢": {}, "🙌": {}, "🚀": {}, "👌": {}, "😍": {}, "🤝": {}, "💡": {}, "⭐": {}, "😎": {}, "🥳": {}}
 var assetKinds = map[string]struct{}{
 	"logo": {}, "avatar": {}, "chat_attachment": {}, "whiteboard_state": {}, "whiteboard_file": {}, "font": {},
 }

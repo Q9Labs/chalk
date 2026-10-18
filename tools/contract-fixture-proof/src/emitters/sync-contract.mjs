@@ -493,7 +493,15 @@ function validateSyncContractDocument(value) {
     requireArrayProperty(frame, "exactFields", `directedRequestFrames.${property}.exactFields are required`);
   }
   const collaboration = requireObjectProperty(value, "collaboration", "collaboration are required");
-  if (collaboration.extension !== "collaboration_v1" || JSON.stringify(collaboration.capabilities) !== JSON.stringify(["sendReaction", "sendChat"]) || JSON.stringify(collaboration.reactions) !== JSON.stringify(["👍", "❤️", "😂", "😮", "😢", "🎉"])) {
+  if (
+    collaboration.extension !== "collaboration_v1" ||
+    collaboration.messageReactionsExtension !== "collaboration_v2" ||
+    JSON.stringify(collaboration.capabilities) !== JSON.stringify(["sendReaction", "sendChat"]) ||
+    !Array.isArray(collaboration.reactions) ||
+    collaboration.reactions.length !== 24 ||
+    new Set(collaboration.reactions).size !== 24 ||
+    !collaboration.reactions.every((emoji) => typeof emoji === "string" && emoji.length > 0)
+  ) {
     throw new Error("Invalid sync v1 contract: collaboration negotiation, capabilities, and reactions must be exhaustive");
   }
   const attachmentMimeTypes = requireArrayProperty(collaboration, "attachmentMimeTypes", "collaboration.attachmentMimeTypes are required");
@@ -509,13 +517,13 @@ function validateSyncContractDocument(value) {
   requireArrayProperty(helloExtension, "exactFields", "collaboration.helloExtension exact fields are required");
   requireArrayProperty(welcomeExtension, "exactFields", "collaboration.welcomeExtension exact fields are required");
   const collaborationClientFrames = requireObjectProperty(collaboration, "clientFrames", "collaboration.clientFrames are required");
-  for (const property of ["sendReaction", "sendChat", "readChatPage", "setChatRead"]) {
+  for (const property of ["sendReaction", "sendChat", "readChatPage", "setChatRead", "setChatReaction"]) {
     const frame = requireObjectProperty(collaborationClientFrames, property, `collaboration.clientFrames.${property} is required`);
     requireStringProperty(frame, "type", `collaboration.clientFrames.${property}.type is required`);
     requireArrayProperty(frame, "exactFields", `collaboration.clientFrames.${property}.exactFields are required`);
   }
   const collaborationServerFrames = requireObjectProperty(collaboration, "serverFrames", "collaboration.serverFrames are required");
-  for (const property of ["reaction", "reactionResult", "chatMessage", "chatSendResult", "chatPage", "chatHead", "chatReadReceipt", "chatReadResult"]) {
+  for (const property of ["reaction", "reactionResult", "chatMessage", "chatSendResult", "chatPage", "chatHead", "chatReadReceipt", "chatReadResult", "chatReactions", "chatReactionResult"]) {
     const frame = requireObjectProperty(collaborationServerFrames, property, `collaboration.serverFrames.${property} is required`);
     requireStringProperty(frame, "type", `collaboration.serverFrames.${property}.type is required`);
   }

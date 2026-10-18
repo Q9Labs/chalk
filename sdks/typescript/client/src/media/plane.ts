@@ -1,3 +1,12 @@
+export type ScreenShareSurface = "monitor" | "window" | "browser";
+export type ScreenShareOptions = {
+  readonly surface?: ScreenShareSurface;
+  readonly audio?: boolean;
+};
+export type ScreenShareCapture = {
+  readonly surface: ScreenShareSurface | null;
+  readonly label: string | null;
+};
 export type MediaSource = "microphone" | "camera" | "screen";
 
 export type MediaPublication = {

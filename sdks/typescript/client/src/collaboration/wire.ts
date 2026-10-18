@@ -1,5 +1,5 @@
 import type { SyncV1ServerFrame } from "../generated/sync";
-import type { ChalkChatMessage, ChalkChatReadReceipt, ChalkReactionEvent } from "./types";
+import type { ChalkChatReaction, ChalkChatReactions, ChalkChatMessage, ChalkChatReadReceipt, ChalkReactionEvent } from "./types";
 
 type ReactionFrame = Extract<SyncV1ServerFrame, { readonly type: "reaction" }>;
 type ChatMessageFrame = Extract<SyncV1ServerFrame, { readonly type: "chat_message" }>;
@@ -18,6 +18,8 @@ export function reactionFromFrame(frame: ReactionFrame): ChalkReactionEvent {
 
 export function chatMessageFromFrame(frame: ChatMessageFrame): ChalkChatMessage {
   return {
+    reactions: chatReactionsFromWire(frame.reactions ?? []),
+    reactionRevision: frame.reaction_revision ?? "0",
     messageId: frame.message_id,
     clientMessageId: frame.client_message_id,
     sequence: frame.sequence,
@@ -44,4 +46,11 @@ export function chatReadReceiptFromFrame(frame: ChatReadReceiptFrame): ChalkChat
     readThroughSequence: frame.sequence,
     readAt: frame.read_at,
   };
+}
+
+export function chatReactionsFromWire(groups: readonly { readonly emoji: ChalkChatReaction["emoji"]; readonly participant_ids: readonly string[] }[]): readonly ChalkChatReaction[] {
+  return groups.map((group) => ({ emoji: group.emoji, count: group.participant_ids.length, participantIds: [...group.participant_ids] }));
+}
+export function chatReactionsFromFrame(frame: Extract<SyncV1ServerFrame, { readonly type: "chat_reactions" }>): ChalkChatReactions {
+  return { messageId: frame.message_id, revision: frame.revision, reactions: chatReactionsFromWire(frame.reactions) };
 }

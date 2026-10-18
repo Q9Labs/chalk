@@ -221,6 +221,36 @@ describe("SpaceClient media convergence", () => {
     }
   });
 
+  it.each(["monitor", "window", "browser"] as const)("forwards a %s picker hint through the public share action and reports the actual source", async (surface) => {
+    const platform = createCoreTestPlatform();
+    const track = Object.assign(mediaTrack(), { kind: "video", label: "Slides", getSettings: () => ({ displaySurface: "window" }), stop: vi.fn() });
+    const stream = Object.assign(mediaStream(track), { getVideoTracks: () => [track], getAudioTracks: () => [] });
+    const getDisplayMedia = vi.fn(async (_constraints: DisplayMediaStreamOptions) => stream);
+    const client = createSpaceClientForPlatform(
+      { space: "space-1", getAccess: async () => opaqueAccessGrant("share-hint") },
+      {
+        ...platform,
+        dependencies: {
+          ...platform.dependencies,
+          mediaDevices: { ...platform.dependencies.mediaDevices, getDisplayMedia },
+          createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), prepareLocalTrack: () => undefined, clearPreparedLocalTrack: async () => undefined }),
+          createSyncClient: () => ({ ...platform.sync, setScreenShareEnabled: async () => ({ operationId: "share-hint", name: "set_screen_share_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" }) }),
+        },
+      },
+    );
+    try {
+      await client.join({ microphone: false, camera: false });
+      await client.media.setScreenShareEnabled(true, { surface, audio: surface === "browser" });
+      expect(getDisplayMedia).toHaveBeenCalledWith({ video: { displaySurface: surface }, audio: surface === "browser", selfBrowserSurface: "exclude", surfaceSwitching: "include" });
+      expect(client.getSnapshot().media.screenShare.capture).toEqual({ surface: "window", label: "Slides" });
+      await client.media.setScreenShareEnabled(false);
+      expect(client.getSnapshot().media.screenShare.capture).toBeUndefined();
+      expect(track.stop).toHaveBeenCalled();
+    } finally {
+      client.dispose();
+    }
+  });
+
   it("sends an authoritative stop even when no local screen capture is retained", async () => {
     const platform = createCoreTestPlatform();
     const stop = vi.fn<ConnectionSyncClient["setScreenShareEnabled"]>().mockResolvedValue({ operationId: "stop-1", name: "set_screen_share_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" });

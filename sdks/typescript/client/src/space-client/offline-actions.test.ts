@@ -29,6 +29,9 @@ function setup(options: { storage?: ReturnType<typeof storage>; subject?: typeof
           sendChatMessage: async (input: unknown) => {
             sent.push(input);
           },
+          reactToChatMessage: async (input: unknown) => {
+            sent.push(input);
+          },
           setHandRaised: async (raised: boolean) => {
             sent.push(raised);
           },
@@ -269,4 +272,23 @@ describe("held actions across reload", () => {
     expect(() => second.setState("live")).not.toThrow();
     expect(second.store.getSnapshot().offline.pending).toEqual([]);
   });
+});
+
+it("persists and restores explicit message reactions in the offline queue", async () => {
+  const saved = storage();
+  const first = setup({ storage: saved });
+  first.setState("reconnecting");
+  const reaction = { messageId: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21", emoji: "👍", on: false } as const;
+  const held = first.offline.hold({ kind: "chat_reaction", reaction }, () => Effect.void);
+  if (!held) throw new Error("Reaction was not queued");
+  const pending = Effect.runPromiseExit(held);
+  await settled();
+  expect(first.store.getSnapshot().offline.pending[0]?.kind).toBe("chat_reaction");
+  const second = setup({ storage: saved });
+  await Effect.runPromise(second.offline.send());
+  await settled();
+  expect(second.sent).toEqual([reaction]);
+  first.offline.dispose();
+  second.offline.dispose();
+  await pending;
 });

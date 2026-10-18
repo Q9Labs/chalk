@@ -53,7 +53,7 @@ defmodule ChalkSync.Chat.Repository.Message do
     |> byte_size()
   end
 
-  def wire(message) do
+  def wire(message, version \\ 2) do
     frame = %{
       "type" => "chat_message",
       "message_id" => message.message_id,
@@ -62,8 +62,12 @@ defmodule ChalkSync.Chat.Repository.Message do
       "participant_id" => message.participant_id,
       "display_name" => message.display_name,
       "text" => message.text,
-      "created_at" => message.created_at
+      "created_at" => message.created_at,
+      "reactions" => Map.get(message, :reactions, []),
+      "reaction_revision" => Map.get(message, :reaction_revision, "0")
     }
+
+    frame = if version == 2, do: frame, else: Map.drop(frame, ["reactions", "reaction_revision"])
 
     Map.put(
       frame,
