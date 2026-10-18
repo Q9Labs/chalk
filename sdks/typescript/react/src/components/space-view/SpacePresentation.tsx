@@ -31,9 +31,7 @@ export function SpacePresentation({ colorScheme = "dark", stageBackground, heade
   return (
     <main ref={root} data-chalk data-part="call-frame" data-idle={idle} data-chalk-theme={colorScheme} data-recording-space-render-token={renderToken} inert={interactive ? undefined : true} className={cn("chalk-root chalk-frame", className)}>
       {mediaOutput}
-      <div data-part="header-region" className="chalk-frame-header">
-        <SpaceHeader {...header} />
-      </div>
+      <SpaceHeader {...header} className={cn("chalk-frame-header", header.className)} />
       <section data-part="stage-region" data-stage-background={stageBackground} className="chalk-frame-stage" aria-label="Space stage">
         <div data-part="stage-layout" className="chalk-stage-layout">
           {stage}

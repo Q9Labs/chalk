@@ -48,7 +48,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>(({ spaceName, duration =
     </div>
   );
   return (
-    <header data-part="header" className={cn("chalk-header", className)} role="banner">
+    <header data-part="header-region" className={cn("chalk-header", className)} role="banner">
       <div ref={menuHost} className="absolute top-0 left-0" />
       <div className="chalk-header-title flex min-w-0 items-center gap-3">
         {phone ? (
@@ -67,7 +67,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>(({ spaceName, duration =
             </ChalkSheet>
           </>
         ) : (
-          <ChalkPopover trigger={trigger} label="Call details" className="chalk-call-details">
+          <ChalkPopover trigger={trigger} label="Call details" className="chalk-call-details" alignOffset={-2}>
             {content}
           </ChalkPopover>
         )}

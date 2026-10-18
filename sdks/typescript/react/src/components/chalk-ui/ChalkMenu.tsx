@@ -8,9 +8,14 @@ export interface ChalkMenuProps {
   readonly className?: string;
 }
 export function ChalkMenu({ trigger, children, side = "bottom", className }: ChalkMenuProps) {
-  const container = useRef<HTMLSpanElement>(null);
+  const container = useRef<HTMLElement>(null);
   return (
-    <span ref={container} style={{ display: "contents" }}>
+    <span
+      ref={(element) => {
+        container.current = element?.closest<HTMLElement>("[data-chalk]") ?? element;
+      }}
+      style={{ display: "contents" }}
+    >
       <Menu.Root>
         <Menu.Trigger render={trigger} />
         <Menu.Portal container={container}>

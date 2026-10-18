@@ -9,9 +9,14 @@ export interface ChalkSheetProps {
 }
 /** Base UI owns the focus trap, Escape, outside press and return to the opener. */
 export function ChalkSheet({ open, onOpenChange, title, children, variant = "default" }: ChalkSheetProps) {
-  const container = useRef<HTMLSpanElement>(null);
+  const container = useRef<HTMLElement>(null);
   return (
-    <span ref={container} style={{ display: "contents" }}>
+    <span
+      ref={(element) => {
+        container.current = element?.closest<HTMLElement>("[data-chalk]") ?? element;
+      }}
+      style={{ display: "contents" }}
+    >
       <Dialog.Root open={open} onOpenChange={onOpenChange}>
         <Dialog.Portal container={container}>
           <Dialog.Backdrop data-part="sheet-scrim" className="chalk-sheet-scrim" />

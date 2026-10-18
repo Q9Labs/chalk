@@ -1427,7 +1427,6 @@
   background: var(--chalk-raised);
 }
 .chalk-call-name:active {
-  background: var(--chalk-hover);
   transform: scale(0.97);
 }
 .chalk-call-timer {
@@ -1640,6 +1639,7 @@
   height: 18px;
 }
 .chalk-call-details {
+  z-index: 85;
   width: 368px;
   max-height: calc(100vh - 150px);
   overflow: auto;
@@ -1811,4 +1811,8 @@
 .chalk-sheet-heading h2 {
   font-size: 15px;
   font-weight: 600;
+}
+
+.chalk-call-name-phone:is(:hover, [aria-expanded="true"]) {
+  background: transparent;
 }

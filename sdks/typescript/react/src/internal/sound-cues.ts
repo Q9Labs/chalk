@@ -3,7 +3,6 @@ export type SoundCue = "join" | "leave" | "message" | "hand-raise" | "reaction" 
 /** Cues raised by a snapshot change; the player decides whether they are audible. */
 export const SNAPSHOT_SOUND_CUES = ["join", "leave", "message", "hand-raise", "reaction", "knock", "mute", "unmute", "recording"] as const satisfies readonly SoundCue[];
 
-/** Two cues of the same kind closer than this are collapsed into one so a burst of joins does not stutter. */
 export function idsOf<T>(items: readonly T[], id: (item: T) => string): Set<string> {
   return new Set(items.map(id));
 }
