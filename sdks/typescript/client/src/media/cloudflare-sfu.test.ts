@@ -381,6 +381,31 @@ describe("remote publication recovery", () => {
       { replaceMediaConnection },
     );
   });
+  it("does not let a local publish restart a failed remote recovery", async () => {
+    const replaceMediaConnection = vi.fn(async () => bootstrap(`replacement-${replaceMediaConnection.mock.calls.length}`));
+    await withTimedHarness(
+      async (harness) => {
+        await harness.client.start(fakeStream(new FakeTrack("camera", "video")));
+        harness.transport.snapshot = publicationSnapshot(1, 1, "remote|missing");
+        rejectRemotePulls(harness, (track) => track.location === "remote");
+        await expect(harness.client.refreshRemotePublications()).rejects.toThrow("unavailable");
+        expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
+
+        harness.client.prepareLocalTrack("microphone", new FakeTrack("microphone", "audio") as unknown as MediaStreamTrack);
+        await expect(harness.client.setLocalPublicationTarget({ operationId: "enable-microphone", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+        // The server drops the replaced connection's publications and advances its sequence.
+        harness.transport.localPublications.clear();
+        harness.transport.snapshot = publicationSnapshot(1, 2, "remote|missing");
+        const remoteAttempts = () => vi.mocked(harness.transport.addTracks).mock.calls.filter(([input]) => input.tracks.some((track) => track.location === "remote")).length;
+        const attemptsBeforeRetry = remoteAttempts();
+        await vi.advanceTimersByTimeAsync(120_000);
+        expect(remoteAttempts()).toBeGreaterThan(attemptsBeforeRetry);
+        expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
+        expect(harness.peers).toHaveLength(2);
+      },
+      { replaceMediaConnection },
+    );
+  });
 });
 function rejectRemotePulls(harness: ReturnType<typeof createHarness>, shouldReject: (track: CloudflareSFUTrackRequest) => boolean): void {
   const addTracks = harness.transport.addTracks.bind(harness.transport);

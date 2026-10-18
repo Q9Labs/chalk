@@ -73,6 +73,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #generation = 0;
   #negotiatedGeneration: number | null = null;
   #replacementAttemptedGeneration: number | null = null;
+  #remoteRecoveryGeneration: number | null = null;
   #polling = false;
   #pollAfterCurrent = false;
   #pollFailures = 0;
@@ -347,7 +348,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     try {
       await this.#publishPreparedTracks(states, generation);
       this.#requireGeneration(generation);
-      this.#replacementAttemptedGeneration = null;
+      if (this.#remoteRecoveryGeneration !== generation) this.#replacementAttemptedGeneration = null;
       this.#started = true;
       this.#setPhase("live", null);
       this.#schedulePoll(0);
@@ -414,9 +415,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const generation = this.#generation;
     try {
       await this.#publishPreparedTracks([state], generation);
-      // A completed local request restores the budget; remote recovery's
-      // intermediate republish must retain it until remote media is healthy.
-      this.#replacementAttemptedGeneration = null;
+      // A completed local request restores the budget, except while a remote
+      // recovery that spent it is still unresolved: restoring it then lets every
+      // poll replace the healthy connection again for the same bad publication.
+      if (this.#remoteRecoveryGeneration !== generation) this.#replacementAttemptedGeneration = null;
     } catch (error) {
       state.desiredEnabled = false;
       state.enabled = false;
@@ -614,6 +616,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     for (const [key, publication] of next) this.#remoteTracks.set(key, publication);
     this.#cursor = cursor;
     this.#remotePullIncomplete = participantRevision !== this.#remoteParticipantRevision || next.size !== desired.size;
+    if (!this.#remotePullIncomplete) this.#remoteRecoveryGeneration = null;
     if (!this.#remotePullIncomplete && this.#hasLiveRemoteTracks()) this.#replacementAttemptedGeneration = null;
     for (const publication of pulled) {
       this.#subscribedPublicationIds.add(publication.publicationId);
@@ -684,6 +687,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     return [...this.#remoteTracks.values()].some((publication) => publication.track.readyState === "live");
   }
   async #retryRemotePullOnReplacement(publications: readonly CloudflareSFUPublication[], cursor: PublicationCursor, generation: number): Promise<readonly CloudflareSFURemoteTrack[] | null> {
+    this.#remoteRecoveryGeneration = generation;
     try {
       await this.#replaceMediaConnectionForRecovery(generation);
       await this.#republishPreparedTracksAfterRecovery(generation);
