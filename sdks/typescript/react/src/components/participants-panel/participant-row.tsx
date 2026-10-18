@@ -11,6 +11,8 @@ export function ParticipantRow({
   participant,
   variant,
   canManageParticipants,
+  onAssignRole,
+  onStopParticipantScreenShare,
   onMuteParticipant,
   onRequestUnmute,
   onStopParticipantCamera,
@@ -86,9 +88,10 @@ export function ParticipantRow({
                 <bdi>{participant.displayName}</bdi>
               </span>
             )}
+            {participant.role === "host" && !isEditing ? <span className="shrink-0 text-xs text-[var(--chalk-app-text-muted)]">Host</span> : null}
             {participant.isLocal && !isEditing && (
               <span className="flex shrink-0 items-center gap-1 text-xs text-[var(--chalk-app-text-muted)]">
-                You
+                (You)
                 {onUpdateDisplayName && (
                   <button type="button" onClick={() => setIsEditing(true)} aria-label="Edit your name" className="call-edit-name">
                     <Edit02Icon className="w-3 h-3" />
@@ -129,6 +132,8 @@ export function ParticipantRow({
                     variant={variant}
                     canManageParticipants={canManageParticipants}
                     onClose={onMenuClose}
+                    onAssignRole={onAssignRole}
+                    onStopParticipantScreenShare={onStopParticipantScreenShare}
                     onMuteParticipant={onMuteParticipant}
                     onRequestUnmute={onRequestUnmute}
                     onStopParticipantCamera={onStopParticipantCamera}
@@ -160,6 +165,8 @@ export interface ParticipantRowProps {
   participant: ParticipantListParticipant;
   variant: ParticipantListVariant;
   canManageParticipants: boolean;
+  onAssignRole?: (id: string, role: string) => Promise<unknown>;
+  onStopParticipantScreenShare?: (id: string) => Promise<unknown>;
   onMuteParticipant?: (id: string) => void;
   onRequestUnmute?: (id: string) => void | Promise<unknown>;
   onStopParticipantCamera?: (id: string) => void;

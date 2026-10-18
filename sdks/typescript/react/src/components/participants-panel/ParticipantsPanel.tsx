@@ -13,6 +13,9 @@ import { type ParticipantGradientPreference } from "../../utils/colorGenerator";
 export interface ParticipantListParticipant {
   id: string;
   displayName: string;
+  role?: string;
+  eligibleRoles?: readonly string[];
+  isScreenSharing?: boolean;
   isLocal?: boolean;
   isMuted?: boolean;
   isVideoEnabled?: boolean;
@@ -49,6 +52,8 @@ export interface ParticipantsPanelProps {
 
 interface ParticipantsPanelSurfaceProps extends ParticipantsPanelProps {
   readonly participants: ParticipantListParticipant[];
+  readonly onAssignRole?: (id: string, role: string) => Promise<unknown>;
+  readonly onStopParticipantScreenShare?: (id: string) => Promise<unknown>;
   readonly onMuteParticipant?: (id: string) => void;
   readonly onRequestUnmute?: (id: string) => void | Promise<unknown>;
   readonly onStopParticipantCamera?: (id: string) => void;
@@ -73,6 +78,8 @@ export const ParticipantsPanelSurface = React.memo(
     searchable = true,
     className,
     variant = "default",
+    onAssignRole,
+    onStopParticipantScreenShare,
     onMuteParticipant,
     onRequestUnmute,
     onStopParticipantCamera,
@@ -166,6 +173,8 @@ export const ParticipantsPanelSurface = React.memo(
               participant={participant}
               variant={variant}
               canManageParticipants={canManageParticipants}
+              onAssignRole={onAssignRole}
+              onStopParticipantScreenShare={onStopParticipantScreenShare}
               onMuteParticipant={onMuteParticipant}
               onRequestUnmute={onRequestUnmute}
               onStopParticipantCamera={onStopParticipantCamera}
@@ -194,6 +203,8 @@ export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): Rea
   const client = useSpaceClient();
   const self = useSelf();
   const participantsSlice = useParticipants();
+  const canAssignRoles = useCan("assignRoles");
+  const canStopScreenOthers = useCan("stopScreenOthers");
   const canMuteOthers = useCan("muteOthers");
   const canStopVideoOthers = useCan("stopVideoOthers");
   const canRequestMedia = useCan("requestMediaOthers");
@@ -218,6 +229,9 @@ export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): Rea
       participantsSlice.roster.map((participant) => ({
         id: participant.participantId,
         displayName: participant.displayName,
+        role: participant.role,
+        eligibleRoles: participant.eligibleRoles,
+        isScreenSharing: participant.media.screenShare === "active",
         isLocal: participant.participantId === self.participantId,
         isMuted: participant.media.microphone !== "active",
         isVideoEnabled: participant.media.camera === "active",
@@ -232,7 +246,9 @@ export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): Rea
       participantVolumes={participantVolumes}
       onParticipantVolumeChange={onParticipantVolumeChange}
       participants={participants}
-      canManageParticipants={canMuteOthers || canStopVideoOthers || canRequestMedia || canRemoveParticipants}
+      canManageParticipants={canMuteOthers || canStopVideoOthers || canRequestMedia || canRemoveParticipants || canAssignRoles || canStopScreenOthers}
+      onAssignRole={canAssignRoles ? (id, role) => client.participants.assignRole(id, role) : undefined}
+      onStopParticipantScreenShare={canStopScreenOthers ? (id) => client.participants.stopScreenShare(id) : undefined}
       canManageAdmission={canManageAdmission}
       admissionCount={canManageAdmission ? participantsSlice.admissionQueue.length : 0}
       onMuteEveryone={
