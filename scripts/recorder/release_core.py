@@ -72,6 +72,7 @@ def validate_config(config, environment="production"):
     ipaddress.ip_network(config["builder"]["ssh_cidr"], strict=True)
     require(re.fullmatch(r"i-[0-9a-f]{8,17}", config["runtime"]["instance_id"]), "invalid runtime instance")
     require(config["runtime"]["parameter_prefix"].startswith(f"/chalk/{environment}/"), "runtime prefix outside selected environment")
+    require(config["bootstrap_ca_parameter"].startswith(f"/chalk/{environment}/"), "bootstrap CA outside selected environment")
     if environment == "nightly":
         require(isinstance(config["do_context"], str) and config["do_context"].strip(), "invalid nightly DigitalOcean context")
         require(config["runtime"]["parameter_prefix"] == "/chalk/nightly/managed-episode", "invalid nightly runtime prefix")

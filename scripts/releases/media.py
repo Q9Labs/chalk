@@ -188,7 +188,7 @@ def publish_zip(args):
         archive = args.directory / 'retained.zip'
         provider.aws('s3api', 'get-object', '--bucket', previous['bucket'], '--key', previous['key'], '--version-id', previous['version_id'], archive)
         require(digest(archive.read_bytes()) == previous['sha256'], 'retained dispatcher ZIP changed')
-        result['dispatcher'] = previous
+        result['dispatcher'] = dict(previous, corpus_digest=os.environ['CHALK_TRANSCRIPTION_CORPUS_DIGEST'])
     else:
         archives = list(args.directory.glob('transcription-dispatcher-*.zip'))
         require(len(archives) == 1, 'expected one verified dispatcher ZIP')
@@ -224,9 +224,7 @@ def write_parameter(provider, parameter, value):
 def pin_images(args):
     provider, config = settings(args)
     media = validate_members(json.loads(args.output.read_text()))
-    # Older manual-build metadata named the controller client CA. Worker bootstrap
-    # verifies the issuer's server certificate using the runtime contract's CA.
-    ca = provider.parameter(config['runtime']['parameter_prefix'] + '/recorder/issuer-server-ca')['Value']
+    ca = provider.parameter(config['bootstrap_ca_parameter'])['Value']
     for role in ('capture', 'render'):
         parameter = provider.parameter(config['runtime']['parameter_prefix'] + '/recorder/' + role + '.env')
         image = media[role]

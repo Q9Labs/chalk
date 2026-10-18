@@ -20,6 +20,26 @@ def members():
 
 
 class MediaIdentities(unittest.TestCase):
+    def test_corpus_approval_refreshes_without_rebuilding_or_changing_zip(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        value = members()
+        archive = value['dispatcher']
+        archive.update(sha256=digest(b'ZIP'), input_sha256='same-inputs')
+        provider = Mock()
+        provider.aws.side_effect = lambda *args: args[-1].write_bytes(b'ZIP')
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory, 'media.json')
+            prior = Path(directory, 'baseline.json')
+            output.write_text(json.dumps(value))
+            prior.write_text(json.dumps(value))
+            args = SimpleNamespace(directory=Path(directory), output=output, baseline=prior)
+            with patch.object(media, 'settings', return_value=(provider, {})), patch.object(media, 'fingerprint', return_value='same-inputs'), patch.object(media, 'dispatcher_matches', return_value=True), patch.dict(os.environ, CHALK_TRANSCRIPTION_CORPUS_DIGEST='f' * 64):
+                media.publish_zip(args)
+            current = json.loads(output.read_text())['dispatcher']
+            self.assertEqual(current, dict(archive, corpus_digest='f' * 64))
+            self.assertEqual(provider.aws.call_count, 1)
+
     def test_renderer_fingerprint_changes_with_root_config_and_headless_sdk(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(media, 'ROOT', Path(directory)):
             def git(*args):
