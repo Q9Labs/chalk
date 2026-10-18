@@ -75,7 +75,9 @@
     "check:tracker": "node scripts/generate-tracker.mjs --check",
     "test:tracker": "node --test scripts/tracker.node-test.mjs",
     "prod:proof": "node scripts/prod-proof/index.mjs",
-    "tenant:purge": "cd apps/api && go run ./cmd/tenant-purge"
+    "tenant:purge": "cd apps/api && go run ./cmd/tenant-purge",
+    "web:proof": "node scripts/web-proof/run.mjs",
+    "test:e2e": "e2e run"
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -85,11 +87,13 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.3",
+    "@e2e-dev/web": "0.15.0",
     "@q9labsai/config-depcruise": "^0.3.0",
     "@q9labsai/gates": "^0.3.0",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.14",
     "dependency-cruiser": "18.2.0",
+    "e2e": "0.21.0",
     "fallow": "^2.96.0",
     "js-yaml": "^4.3.2",
     "lefthook": "^2.1.9",

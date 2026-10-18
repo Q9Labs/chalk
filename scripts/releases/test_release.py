@@ -98,6 +98,25 @@ class MemoryGitHub(GitHub):
 
 class CutTests(unittest.TestCase):
     @patch.dict(os.environ, GITHUB_OUTPUT=os.devnull, TARGET_SHA=SHA)
+    @patch.dict(os.environ, GITHUB_RUN_ID='1')
+    def test_cut_requires_both_proofs_and_records_each_result(self):
+        for real_call, web_e2e, expected in [('passed', 'passed', True), ('failed', 'passed', False),
+                                             ('passed', 'failed', False), ('passed', '', False),
+                                             ('passed', 'cancelled', False)]:
+            with self.subTest(real_call=real_call, web_e2e=web_e2e):
+                api = MemoryGitHub()
+                with patch.dict(os.environ, RELEASE_ID='A'):
+                    release.invalidate(api, None)
+                with patch.dict(os.environ, RELEASE=json.dumps(api.info('1', 'A')),
+                                DEPLOY_RESULT='success', PROOF_RESULT=real_call, WEB_E2E_RESULT=web_e2e):
+                    release.record(api, None)
+                cut = api.items[-1]
+                self.assertEqual(cut['latest_status'], 'success' if expected else 'failure')
+                self.assertEqual(cut['payload']['real_call_proof_result'], real_call)
+                self.assertEqual(cut['payload']['web_e2e_result'], web_e2e)
+                self.assertEqual(cut['payload']['proof_result'], 'passed' if expected else 'failed')
+
+    @patch.dict(os.environ, GITHUB_OUTPUT=os.devnull, TARGET_SHA=SHA)
     def test_old_web_retry_cannot_replace_new_backend_or_held_nightly(self):
         api = MemoryGitHub()
         for run, identity in [('1', 'A'), ('2', 'B')]:
@@ -106,17 +125,17 @@ class CutTests(unittest.TestCase):
                 if identity == 'B':
                     with patch.dict(os.environ, EXPECTED_BACKEND_RELEASE_ID=identity):
                         release.invalidate(api, None)
-                    with patch.dict(os.environ, RELEASE=json.dumps(api.info(run, identity)), DEPLOY_RESULT='success', PROOF_RESULT='passed'):
+                    with patch.dict(os.environ, RELEASE=json.dumps(api.info(run, identity)), DEPLOY_RESULT='success', PROOF_RESULT='passed', WEB_E2E_RESULT='passed'):
                         release.record(api, None)
         before = json.dumps(api.items)
         with patch.dict(os.environ, GITHUB_RUN_ID='1', EXPECTED_BACKEND_RELEASE_ID='A'):
             with self.assertRaisesRegex(ValueError, "a newer nightly write replaced this run's backend"):
                 release.invalidate(api, None)
         self.assertEqual(json.dumps(api.items), before)
-        with patch.dict(os.environ, GITHUB_RUN_ID='1', RELEASE=json.dumps(api.info('1', 'A')), DEPLOY_RESULT='success', PROOF_RESULT='passed'):
+        with patch.dict(os.environ, GITHUB_RUN_ID='1', RELEASE=json.dumps(api.info('1', 'A')), DEPLOY_RESULT='success', PROOF_RESULT='passed', WEB_E2E_RESULT='passed'):
             with self.assertRaisesRegex(ValueError, 'newer nightly write'):
                 release.record(api, None)
-        with patch.dict(os.environ, GITHUB_RUN_ID='2', RELEASE=json.dumps(api.info('2', 'B')), DEPLOY_RESULT='success', PROOF_RESULT='passed'):
+        with patch.dict(os.environ, GITHUB_RUN_ID='2', RELEASE=json.dumps(api.info('2', 'B')), DEPLOY_RESULT='success', PROOF_RESULT='passed', WEB_E2E_RESULT='passed'):
             release.record(api, None)
         self.assertEqual({item['payload']['release_id'] for item in held_candidates(api.items)}, {'B'})
         with tempfile.TemporaryDirectory() as directory:
@@ -144,10 +163,10 @@ class CutTests(unittest.TestCase):
             with patch.dict(os.environ, GITHUB_RUN_ID=run, RELEASE_ID=identity, TARGET_SHA=SHA):
                 release.invalidate(api, None)
                 if identity == 'B':
-                    with patch.dict(os.environ, RELEASE=json.dumps(api.info(run, identity)), DEPLOY_RESULT='success', PROOF_RESULT='passed'):
+                    with patch.dict(os.environ, RELEASE=json.dumps(api.info(run, identity)), DEPLOY_RESULT='success', PROOF_RESULT='passed', WEB_E2E_RESULT='passed'):
                         release.record(api, None)
         with patch.dict(os.environ, GITHUB_RUN_ID='1', TARGET_SHA=SHA, RELEASE=json.dumps(api.info('1', 'A')),
-                        DEPLOY_RESULT='success', PROOF_RESULT='passed'):
+                        DEPLOY_RESULT='success', PROOF_RESULT='passed', WEB_E2E_RESULT='passed'):
             with self.assertRaisesRegex(ValueError, 'newer nightly write'):
                 release.record(api, None)
         self.assertEqual([item['payload']['release_id'] for item in held_candidates(api.items)], ['B'])
@@ -157,7 +176,7 @@ class CutTests(unittest.TestCase):
         api = MemoryGitHub()
         with patch.dict(os.environ, GITHUB_RUN_ID='1', RELEASE_ID='A'):
             release.invalidate(api, None)
-            with patch.dict(os.environ, RELEASE=json.dumps(api.info('1', 'A')), DEPLOY_RESULT='success', PROOF_RESULT='passed'):
+            with patch.dict(os.environ, RELEASE=json.dumps(api.info('1', 'A')), DEPLOY_RESULT='success', PROOF_RESULT='passed', WEB_E2E_RESULT='passed'):
                 release.record(api, None)
         # Simulate API loss after the durable marker but before the inactive status.
         request = api.request
@@ -178,7 +197,7 @@ class CutTests(unittest.TestCase):
         release.invalidate(api, None)  # backend
         with patch.dict(os.environ, EXPECTED_BACKEND_RELEASE_ID='A'):
             release.invalidate(api, None)  # web
-        with patch.dict(os.environ, RELEASE=json.dumps(api.info('1', 'A')), DEPLOY_RESULT='success', PROOF_RESULT='passed'):
+        with patch.dict(os.environ, RELEASE=json.dumps(api.info('1', 'A')), DEPLOY_RESULT='success', PROOF_RESULT='passed', WEB_E2E_RESULT='passed'):
             release.record(api, None)
         self.assertEqual([item['payload']['release_id'] for item in held_candidates(api.items)], ['A'])
 
@@ -328,7 +347,7 @@ class RecoveryTests(unittest.TestCase):
     def test_passing_promotion_does_not_require_recovery(self):
         with tempfile.TemporaryDirectory() as directory:
             with patch.dict(os.environ, GITHUB_STEP_SUMMARY=str(Path(directory) / 'summary'), DEPLOY_RESULT='success',
-                            PROOF_RESULT='passed', SELECTION=json.dumps(dict(previous={}, selection={'release_id': 'nightly'}))):
+                            PROOF_RESULT='passed', WEB_E2E_RESULT='passed', SELECTION=json.dumps(dict(previous={}, selection={'release_id': 'nightly'}))):
                 result = self.run_result(directory)
                 self.assertEqual(result.returncode, 0, result.stderr)
 
