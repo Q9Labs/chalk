@@ -89,7 +89,7 @@ test("production Pages app associations", { timeout: 180_000 }, async (t) => {
         assert.ok(!tags[0].includes("#"));
       }
     }
-    const shell = await readFile(new URL("../dist/client/space/index.html", import.meta.url), "utf8");
+    const shell = await readFile(`${webDirectory}dist/client/space/index.html`, "utf8");
     assert.equal((shell.match(/<meta\b(?=[^>]*\bname=["']apple-itunes-app["'])[^>]*>/gi) ?? []).length, 1);
   });
 
