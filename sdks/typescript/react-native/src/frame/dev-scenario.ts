@@ -5,7 +5,7 @@ import type { CallOutcome } from "../status/StatusPage";
 /** UI-only state a development harness forces on the call. Nothing sets it in a real call. */
 export type DevScenario = {
   /** Opens this sheet as if the user had opened it; the user can still close it. */
-  readonly sheet?: "more" | "people";
+  readonly sheet?: "more" | "people" | "chat";
   /** Opens this menu as if the user had opened it. */
   readonly menu?: "leave";
   /** Content drawn in a tile in place of the camera, keyed by participant id. */

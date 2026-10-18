@@ -10,7 +10,8 @@ import { Header } from "../header/Header";
 import { useCan, useConnection, useMedia } from "../hooks/space-hooks";
 import { timings } from "../motion/motion";
 import { ToastStack, useToasts } from "../primitives/toast/ToastStack";
-import { PeopleSheet } from "../sheets/people-chat/PeopleSheet";
+import { ChatNotices } from "../sheets/people-chat/ChatNotices";
+import { PeopleChatSheet } from "../sheets/people-chat/PeopleChatSheet";
 import { playSound } from "../sounds/sounds";
 import { Stage } from "../stage/Stage";
 import { CallOverlays } from "../status/CallOverlays";
@@ -34,7 +35,7 @@ export type CallFrameProps = {
   readonly resumedAfterSettings?: Permission;
 };
 
-type OpenSheet = "more" | "people" | null;
+type OpenSheet = "more" | "people" | "chat" | null;
 
 /**
  * The call's frame: header, stage and dock regions, then the sheets layer, the limbo and status
@@ -145,7 +146,7 @@ export function CallFrame({ displayName, callName = "Call", onLeave, onOpenSetti
       <View pointerEvents="box-none" style={StyleSheet.absoluteFill} testID="frame.sheets">
         {/* Focus goes back to More only once no sheet is open, so switching to People keeps it there. */}
         <MoreSheet onClose={() => setSheet(null)} onOpenPeople={() => setSheet("people")} open={sheet === "more"} returnFocusRef={sheet === null ? moreRef : undefined} />
-        <PeopleSheet onClose={() => setSheet(null)} open={sheet === "people"} returnFocusRef={sheet === null ? moreRef : undefined} />
+        <PeopleChatSheet onClose={() => setSheet(null)} onTabChange={setSheet} open={sheet === "people" || sheet === "chat"} returnFocusRef={sheet === null ? moreRef : undefined} tab={sheet === "chat" ? "chat" : "people"} />
         <PortalHost layer="sheets" />
       </View>
       <View pointerEvents="box-none" style={StyleSheet.absoluteFill} testID="frame.overlays">
@@ -160,6 +161,7 @@ export function CallFrame({ displayName, callName = "Call", onLeave, onOpenSetti
         <PortalHost layer="menus" />
       </View>
       <ToastStack />
+      <ChatNotices chatVisible={sheet === "chat"} onOpenChat={() => setSheet("chat")} sheetOpen={sheet === "people" || sheet === "chat"} />
     </View>
   );
 }

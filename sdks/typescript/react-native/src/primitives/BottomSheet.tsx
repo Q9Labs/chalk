@@ -23,6 +23,12 @@ export type BottomSheetProps = {
   readonly heightRatio?: number;
   /** Side padding: 12 for menu-like sheets (`.sheet`), 20 for card-like ones (`.ready`). */
   readonly inset?: 12 | 14 | 20;
+  /**
+   * `card` is the People and Chat card (`.phone .card`): no side padding, the grabber 8 pt from the
+   * top with nothing under it, and no bottom padding, because its content runs to the bottom edge
+   * and pads itself for the safe area.
+   */
+  readonly variant?: "sheet" | "card";
   /** Where accessibility focus returns when the sheet closes, usually the button that opened it. */
   readonly returnFocusRef?: RefObject<View | null>;
   readonly testID?: string;
@@ -43,7 +49,7 @@ const SheetDragContext = createContext<SheetDrag | null>(null);
  * down to close; the sheet follows the finger on the UI thread. It rides above the keyboard,
  * Android back closes the top sheet, and accessibility focus moves in and back out.
  */
-export function BottomSheet({ open, onClose, accessibilityLabel, children, title, heightRatio, inset = 12, returnFocusRef, testID }: BottomSheetProps): React.JSX.Element | null {
+export function BottomSheet({ open, onClose, accessibilityLabel, children, title, heightRatio, inset = 12, variant = "sheet", returnFocusRef, testID }: BottomSheetProps): React.JSX.Element | null {
   const { colors } = useTheme();
   const layout = useDeviceLayout();
   const reduceMotion = useReducedMotion();
@@ -115,11 +121,12 @@ export function BottomSheet({ open, onClose, accessibilityLabel, children, title
     [height, offset, open, reduceMotion, show],
   );
 
+  const card = variant === "card";
   const sheetStyle = useAnimatedStyle(() => {
     "worklet";
     return {
       opacity: reduceMotion ? shown.value : 1,
-      paddingBottom: keyboard.height.value > 0 ? KEYBOARD_PADDING : layout.insets.bottom + BOTTOM_PADDING,
+      paddingBottom: card ? 0 : keyboard.height.value > 0 ? KEYBOARD_PADDING : layout.insets.bottom + BOTTOM_PADDING,
       maxHeight: layout.height - layout.insets.top - 8 - keyboard.height.value,
       transform: [{ translateY: offset.value + drag.value - keyboard.height.value }],
     };
@@ -130,7 +137,7 @@ export function BottomSheet({ open, onClose, accessibilityLabel, children, title
   });
 
   const width = layout.arrangement === "pad" ? 440 : layout.arrangement === "landscape" ? 460 : layout.width;
-  const surfaceStyle = [styles.sheet, { backgroundColor: colors.surface, width, left: (layout.width - width) / 2, paddingHorizontal: inset }, heightRatio ? { height: layout.height * heightRatio } : null];
+  const surfaceStyle = [styles.sheet, { backgroundColor: colors.surface, width, left: (layout.width - width) / 2, paddingHorizontal: card ? 0 : inset }, card ? { borderTopWidth: 1, borderColor: colors.line } : null, heightRatio ? { height: layout.height * heightRatio } : null];
   const surfaceRef = useMeasuredRef<View>(testID, surfaceStyle);
 
   if (!mounted) return null;
@@ -143,7 +150,7 @@ export function BottomSheet({ open, onClose, accessibilityLabel, children, title
         <Animated.View accessibilityLabel={accessibilityLabel} accessibilityViewIsModal onAccessibilityEscape={onClose} onLayout={onLayout} ref={surfaceRef} style={[surfaceStyle, sheetStyle]} testID={testID}>
           <SheetDragRegion>
             {/* Without a title, the grabber is where screen-reader focus lands, announced by the sheet's label. */}
-            <View accessibilityLabel={title ? undefined : accessibilityLabel} accessibilityRole={title ? undefined : "header"} accessible={!title} ref={title ? undefined : titleRef} style={styles.grabArea} testID={testID ? `${testID}.grabber` : undefined}>
+            <View accessibilityLabel={title ? undefined : accessibilityLabel} accessibilityRole={title ? undefined : "header"} accessible={!title} ref={title ? undefined : titleRef} style={card ? styles.cardGrabArea : styles.grabArea} testID={testID ? `${testID}.grabber` : undefined}>
               <View style={[styles.grabber, { backgroundColor: colors.lineStrong }]} />
             </View>
             {title ? (
@@ -189,6 +196,7 @@ export function SheetDragRegion({ children }: { readonly children: ReactNode }):
 const styles = StyleSheet.create({
   sheet: { position: "absolute", bottom: 0, paddingTop: 8, borderTopLeftRadius: radii.sheet, borderTopRightRadius: radii.sheet },
   grabArea: { alignItems: "center", paddingTop: 4, paddingBottom: 12 },
+  cardGrabArea: { alignItems: "center" },
   grabber: { width: 36, height: 5, borderRadius: 3 },
   header: { flexDirection: "row", alignItems: "center", gap: 12, paddingTop: 4, paddingHorizontal: 8, paddingBottom: 14 },
 });

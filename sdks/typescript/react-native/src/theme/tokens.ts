@@ -108,6 +108,21 @@ export const fixed = {
   segmentShadow: "0px 1px 2px rgba(0,0,0,0.2)",
 } as const;
 
+/** File badges in chat (`.t-pdf` and friends); the same in both themes because the badge carries its own colour. */
+export const fileKindColors = { pdf: "#C42B2B", doc: "#2F5FB3", xls: "#1E7A46", ppt: "#B8481E", other: "#5C5D65" } as const;
+
+/** Shades over chat photos: "+N" on the last thumbnail (`.thm`) and a file still uploading (`.chip.up`). */
+export const chatOverlays = { photoMore: "rgba(0,0,0,0.5)", uploading: "rgba(0,0,0,0.45)", ring: "#FFFFFF" } as const;
+
+/** The photo viewer is dark in both themes (`.lbw`). */
+export const viewer = {
+  backdrop: "rgba(8,8,10,0.94)",
+  text: "#ECECEE",
+  textMuted: "#A1A2A9",
+  button: "rgba(255,255,255,0.08)",
+  buttonPressed: "rgba(255,255,255,0.16)",
+} as const;
+
 /** Avatar backgrounds, chosen by a hash of the person's name. */
 export const identityColors = ["#315F72", "#5C6650", "#6B5B4F", "#64576B", "#49645D", "#665D42", "#4D5D73", "#6D5158"] as const;
 
