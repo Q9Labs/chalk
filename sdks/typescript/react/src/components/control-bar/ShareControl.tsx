@@ -29,7 +29,7 @@ function SourceIcon({ source }: { readonly source: ScreenShareSurface }) {
 
 export function ShareControl({ sharing, onToggle, onStart }: { readonly sharing: boolean; readonly onToggle?: () => void; readonly onStart?: (options: ScreenShareOptions) => void }) {
   const [surface, setSurface] = useState<ScreenShareSurface>("window");
-  const [audio, setAudio] = useState(false);
+  const [audio, setAudio] = useState(true);
   const [replace, setReplace] = useState(false);
   const start = (next: ScreenShareSurface) => {
     setSurface(next);

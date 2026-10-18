@@ -289,7 +289,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
+  translate: -50% -50%;
   z-index: 97;
   width: 400px;
   max-width: calc(100% - 32px);
@@ -298,9 +298,9 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   border: 1px solid var(--chalk-line-strong);
   border-radius: 16px;
   box-shadow: 0 16px 40px rgba(0,0,0,.5);
-  transition:translate .2s cubic-bezier(.16,1,.3,1);
+  transition:transform .2s cubic-bezier(.16,1,.3,1);
 }
-.chalk-shell-modal[data-starting-style],.chalk-shell-modal[data-ending-style] {translate:0 8px;}
+.chalk-shell-modal[data-starting-style],.chalk-shell-modal[data-ending-style] {transform:translateY(8px);}
 .chalk-shell-modal-backdrop {transition:opacity .18s ease-out;}
 .chalk-shell-modal-backdrop[data-starting-style],.chalk-shell-modal-backdrop[data-ending-style] {opacity:0;}
 [data-chalk-theme="light"] .chalk-shell-modal {box-shadow:0 0 0 1px var(--chalk-line),0 12px 32px rgba(0,0,0,.12);}
@@ -344,6 +344,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-top: 8px;
 }
 .chalk-shell-report textarea {
   min-height: 96px;
@@ -414,6 +415,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
     top: auto;
     bottom: 0;
     left: 0;
+    translate: none;
     transform: none;
     width: 100%;
     max-width: none;

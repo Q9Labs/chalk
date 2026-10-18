@@ -106,7 +106,7 @@ export function CallDialog({
                 <label htmlFor="chalk-problem">What went wrong?</label>
                 <textarea id="chalk-problem" required value={text} onChange={(event) => setText(event.target.value)} placeholder="Tell us what happened…" />
                 <label className="chalk-shell-report-check">
-                  <input type="checkbox" checked={includeDiagnostics} onChange={(event) => setIncludeDiagnostics(event.target.checked)} /> Include call diagnostics
+                  <input type="checkbox" checked={includeDiagnostics} onChange={(event) => setIncludeDiagnostics(event.target.checked)} /> Include diagnostics
                 </label>
                 {error ? <p role="alert">{error}</p> : null}
                 <div className="chalk-shell-report-actions">

@@ -114,5 +114,6 @@ export const SHELL_STATES: readonly CallState[] = [
   { id: "shell-light", title: "Shell guest in Light", render: () => <ShellCall initialColorScheme="light" /> },
   { id: "shell-host", title: "Shell host", render: () => <ShellCall host /> },
   { id: "shell-report", title: "Shell report callback", render: () => <ShellCall report /> },
+  { id: "shell-report-light", title: "Shell report callback, Light", render: () => <ShellCall report initialColorScheme="light" /> },
   { id: "shell-blocked", title: "Shell devices unavailable", render: () => <ShellCall blocked /> },
 ];
