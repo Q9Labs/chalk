@@ -1,6 +1,7 @@
 package digitalocean
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
@@ -24,7 +25,7 @@ func TestPortableRecorderTrustComesFromBootConfiguration(t *testing.T) {
 	defer server.Close()
 	request := recorderFleetEnsureRequest()
 	request.Release.BootstrapCABase64 = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}))
-	data, err := renderRecorderCloudInit(request)
+	data, err := renderRecorderCloudInit(request, "https://example.invalid/archive")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,61 +36,67 @@ func TestPortableRecorderTrustComesFromBootConfiguration(t *testing.T) {
 		t.Fatal("bootstrap ran before trust configuration")
 	}
 	request.Release.BootstrapCABase64 = base64.StdEncoding.EncodeToString([]byte("not a certificate"))
-	if _, err := renderRecorderCloudInit(request); !errors.Is(err, recorderfleet.ErrInvalidConfig) {
+	if _, err := renderRecorderCloudInit(request, "https://example.invalid/archive"); !errors.Is(err, recorderfleet.ErrInvalidConfig) {
 		t.Fatalf("malformed trust accepted: %v", err)
 	}
 }
 
-func TestRecorderCloudInitStopsBeforeWorkerAndCleanupOnBootstrapFailure(t *testing.T) {
-	data, err := renderRecorderCloudInit(recorderFleetEnsureRequest())
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, commands, ok := strings.Cut(data, "\nruncmd:\n")
-	if !ok {
-		t.Fatal("missing cloud-init commands")
-	}
-	directory := t.TempDir()
-	marker := filepath.Join(directory, "worker-or-cleanup-ran")
-	bootstrap := filepath.Join(directory, "bootstrap")
-	next := filepath.Join(directory, "next")
-	if err := os.WriteFile(bootstrap, []byte("#!/bin/sh\nexit 23\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(next, []byte("#!/bin/sh\nprintf ran > \""+marker+"\"\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	// cloud-init shellifies scalar commands directly and quotes array arguments.
-	var script strings.Builder
-	script.WriteString("#!/bin/sh\n")
-	for _, line := range strings.Split(strings.TrimSpace(commands), "\n") {
-		command := strings.TrimPrefix(strings.TrimSpace(line), "- ")
-		if !strings.HasPrefix(command, "[") {
-			script.WriteString(command + "\n")
-			continue
-		}
-		var args []string
-		if err := json.Unmarshal([]byte(command), &args); err != nil {
-			t.Fatal(err)
-		}
-		if args[0] == "/usr/local/sbin/chalk-recorder-bootstrap" {
-			args[0] = bootstrap
-		} else {
-			args[0] = next
-		}
-		for _, arg := range args {
-			script.WriteString("'" + strings.ReplaceAll(arg, "'", "'\\''") + "' ")
-		}
-		script.WriteByte('\n')
-	}
-	run := exec.Command("/bin/sh", "-c", script.String())
-	err = run.Run()
-	var exited *exec.ExitError
-	if !errors.As(err, &exited) || exited.ExitCode() != 23 {
-		t.Fatalf("failed bootstrap was hidden: %v", err)
-	}
-	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("worker/cleanup ran after failed bootstrap: %v", err)
+func TestRecorderCloudInitStopsBeforeWorkerAndCleanupOnInstallOrBootstrapFailure(t *testing.T) {
+	for _, failureCommand := range []string{"/usr/bin/python3", "/usr/local/sbin/chalk-recorder-bootstrap"} {
+		t.Run(failureCommand, func(t *testing.T) {
+			data, err := renderRecorderCloudInit(recorderFleetEnsureRequest(), "https://example.invalid/archive")
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, commands, ok := strings.Cut(data, "\nruncmd:\n")
+			if !ok {
+				t.Fatal("missing cloud-init commands")
+			}
+			directory := t.TempDir()
+			marker := filepath.Join(directory, "worker-or-cleanup-ran")
+			bootstrap := filepath.Join(directory, "bootstrap")
+			next := filepath.Join(directory, "next")
+			if err := os.WriteFile(bootstrap, []byte("#!/bin/sh\nexit 23\n"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(next, []byte("#!/bin/sh\nprintf ran > \""+marker+"\"\n"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			// cloud-init shellifies scalar commands directly and quotes array arguments.
+			var script strings.Builder
+			script.WriteString("#!/bin/sh\n")
+			for _, line := range strings.Split(strings.TrimSpace(commands), "\n") {
+				command := strings.TrimPrefix(strings.TrimSpace(line), "- ")
+				if !strings.HasPrefix(command, "[") {
+					script.WriteString(command + "\n")
+					continue
+				}
+				var args []string
+				if err := json.Unmarshal([]byte(command), &args); err != nil {
+					t.Fatal(err)
+				}
+				if args[0] == failureCommand {
+					args[0] = bootstrap
+				} else if args[0] == "/usr/bin/python3" || args[0] == "/usr/local/sbin/chalk-recorder-bootstrap" {
+					args[0] = "/bin/true"
+				} else {
+					args[0] = next
+				}
+				for _, arg := range args {
+					script.WriteString("'" + strings.ReplaceAll(arg, "'", "'\\''") + "' ")
+				}
+				script.WriteByte('\n')
+			}
+			run := exec.Command("/bin/sh", "-c", script.String())
+			err = run.Run()
+			var exited *exec.ExitError
+			if !errors.As(err, &exited) || exited.ExitCode() != 23 {
+				t.Fatalf("failed bootstrap was hidden: %v", err)
+			}
+			if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("worker/cleanup ran after failed bootstrap: %v", err)
+			}
+		})
 	}
 }
 
@@ -241,6 +248,9 @@ func TestRecorderFleetErrorsNeverExposeTokenOrProviderBody(t *testing.T) {
 func TestNewRecorderFleetAcceptsCPURenderPool(t *testing.T) {
 	t.Parallel()
 	adapter, err := NewRecorderFleet(RecorderFleetConfig{
+		PresignArchive: func(context.Context, recorderfleet.ArchiveSpec) (string, error) {
+			return "https://example.invalid/archive", nil
+		},
 		Token: "token", BaseURL: "https://api.digitalocean.com", Environment: "nightly",
 		Role: workeridentity.RoleRender, OwnerTag: "chalk-recorder-owned", GPU: false,
 	})
@@ -280,6 +290,9 @@ func TestRecorderFleetInspectNodeReturnsFreshExactInventoryAndExclusivePublicIP(
 func recorderFleetAdapter(t *testing.T, server *httptest.Server, token string) *RecorderFleet {
 	t.Helper()
 	adapter, err := NewRecorderFleet(RecorderFleetConfig{
+		PresignArchive: func(context.Context, recorderfleet.ArchiveSpec) (string, error) {
+			return "https://example.invalid/archive", nil
+		},
 		Token: token, BaseURL: server.URL, HTTPClient: server.Client(),
 		Environment: "nightly", Role: workeridentity.RoleCapture,
 		OwnerTag: "chalk-recorder-owned", ProjectID: "project-1", VPCUUID: "vpc-1", SSHKeyIDs: []int64{17},
@@ -292,7 +305,7 @@ func recorderFleetAdapter(t *testing.T, server *httptest.Server, token string) *
 
 func recorderFleetEnsureRequest() recorderfleet.EnsureNodeRequest {
 	key := recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture}
-	release := recorderfleet.ReleaseSpec{
+	release := recorderfleet.ReleaseSpec{Archive: recorderfleet.ArchiveSpec{Bucket: "example-artifacts", Region: "ap-southeast-1", SHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Key: "recorder/capture/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.tar.gz"},
 		ReleaseID: "release-1", ImageID: 1234,
 		ImageDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		Region:      "sgp1", Size: "c-2", FirewallID: "firewall-1",

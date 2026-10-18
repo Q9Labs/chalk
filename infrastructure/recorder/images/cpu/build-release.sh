@@ -51,7 +51,7 @@ release_root="$stage_root/release"
 install -d -m 0755 "$release_root/bin" "$release_root/renderer"
 (
   cd "$source_root/apps/api"
-  go_environment=(env -i PATH="$PATH" LANG=C.UTF-8 GOENV=off GOCACHE="$build_cache_root/go-build" GOMODCACHE="$build_cache_root/go-mod" GOPATH="$build_cache_root/go-path" CGO_ENABLED=0 GOOS=linux GOARCH=amd64)
+  go_environment=(env -i PATH="$PATH" LANG=C.UTF-8 GOENV=off GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="$source_root" GOCACHE="$build_cache_root/go-build" GOMODCACHE="$build_cache_root/go-mod" GOPATH="$build_cache_root/go-path" CGO_ENABLED=0 GOOS=linux GOARCH=amd64)
   "${go_environment[@]}" go build -trimpath -ldflags='-s -w' -o "$release_root/bin/recorder-capture" ./cmd/recorder-capture
   "${go_environment[@]}" go build -trimpath -ldflags='-s -w' -o "$release_root/bin/recorder-render" ./cmd/recorder-render
   "${go_environment[@]}" go build -trimpath -ldflags='-s -w' -o "$release_root/bin/chalk-recorder-bootstrap" ./cmd/recorder-node-bootstrap

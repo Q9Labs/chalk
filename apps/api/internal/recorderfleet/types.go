@@ -117,23 +117,47 @@ func (d Demand) Validate() error {
 // ReleaseSpec contains only non-secret, immutable boot inputs. A bootstrap
 // assertion or provider credential must never be added to this contract.
 type ReleaseSpec struct {
-	ReleaseID         string `json:"release_id"`
-	ImageID           int64  `json:"image_id"`
-	ImageDigest       string `json:"image_digest"`
-	Region            string `json:"region"`
-	Size              string `json:"size"`
-	FirewallID        string `json:"firewall_id"`
-	BootstrapEndpoint string `json:"bootstrap_endpoint"`
-	BootstrapCABase64 string `json:"bootstrap_ca_base64,omitempty"`
-	GPU               bool   `json:"gpu"`
+	ReleaseID string `json:"release_id"`
+	// ImageID selects the unchanged base snapshot; ImageDigest attests the installed archive.
+	ImageID           int64       `json:"image_id"`
+	ImageDigest       string      `json:"image_digest"`
+	Archive           ArchiveSpec `json:"archive"`
+	Region            string      `json:"region"`
+	Size              string      `json:"size"`
+	FirewallID        string      `json:"firewall_id"`
+	BootstrapEndpoint string      `json:"bootstrap_endpoint"`
+	BootstrapCABase64 string      `json:"bootstrap_ca_base64,omitempty"`
+	GPU               bool        `json:"gpu"`
 }
 
-func (r ReleaseSpec) Validate() error {
+type ArchiveSpec struct {
+	Bucket string `json:"bucket"`
+	Key    string `json:"key"`
+	SHA256 string `json:"sha256"`
+	Region string `json:"region"`
+}
+
+func (a ArchiveSpec) Validate() error {
+	if len(a.Bucket) < 3 || len(a.Bucket) > 63 || !validSlug(a.Bucket, 63) || !validSlug(a.Region, 32) || !validDigest("sha256:"+a.SHA256) {
+		return ErrInvalidConfig
+	}
+	if a.Key != "recorder/capture/"+a.SHA256+".tar.gz" && a.Key != "recorder/render/"+a.SHA256+".tar.gz" {
+		return ErrInvalidConfig
+	}
+	return nil
+}
+
+func (r ReleaseSpec) Validate() error { return r.validate(false) }
+
+func (r ReleaseSpec) validate(allowHistoricalSnapshot bool) error {
 	endpoint, err := url.Parse(r.BootstrapEndpoint)
 	if !validToken(r.ReleaseID, 128) || r.ImageID <= 0 || !validDigest(r.ImageDigest) || !validSlug(r.Region, 32) || !validToken(r.Size, 64) || !validToken(r.FirewallID, 128) || len(r.BootstrapEndpoint) > 2048 || err != nil || endpoint.Scheme != "https" || endpoint.Host == "" || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" {
 		return ErrInvalidConfig
 	}
-	return nil
+	if allowHistoricalSnapshot && r.Archive == (ArchiveSpec{}) {
+		return nil
+	}
+	return r.Archive.Validate()
 }
 
 type Config struct {
@@ -239,14 +263,16 @@ type EnsureNodeRequest struct {
 	RequiredTags   []string    `json:"required_tags"`
 }
 
-func (request EnsureNodeRequest) Validate() error {
+func (request EnsureNodeRequest) Validate() error { return request.validate(false) }
+
+func (request EnsureNodeRequest) validate(allowHistoricalSnapshot bool) error {
 	if err := request.Key.Validate(); err != nil {
 		return err
 	}
 	if strings.TrimSpace(request.Name) == "" || len(request.Name) > 255 || !validTag(request.OwnerTag) || request.BootGeneration == 0 || len(request.RequiredTags) < 5 {
 		return ErrInvalidConfig
 	}
-	if err := request.Release.Validate(); err != nil {
+	if err := request.Release.validate(allowHistoricalSnapshot); err != nil {
 		return err
 	}
 	for _, tag := range request.RequiredTags {
@@ -363,7 +389,8 @@ func (j Journal) Validate(key PoolKey) error {
 		return ErrInvalidJournal
 	}
 	if j.PendingCreate != nil {
-		if err := j.PendingCreate.Request.Validate(); err != nil || j.PendingCreate.Request.Key != key {
+		// A pre-upgrade intent must load so reconciliation can retire it, never replay it.
+		if err := j.PendingCreate.Request.validate(true); err != nil || j.PendingCreate.Request.Key != key {
 			return ErrInvalidJournal
 		}
 	}

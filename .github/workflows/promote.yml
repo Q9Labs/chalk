@@ -57,7 +57,7 @@ jobs:
           PREVIOUS_MEDIA_SHA256: ${{ fromJSON(needs.select.outputs.selection).previous.media_sha256 }}
         run: |
           if [[ -z "$PREVIOUS_MEDIA_SHA256" ]]; then
-            python3 scripts/releases/media.py snapshot --environment production --output previous-media.json
+            python3 scripts/releases/media.py retain_runtime --environment production --output previous-media.json
             echo "members=$(jq -c . previous-media.json)" >> "$GITHUB_OUTPUT"
           fi
       - name: Save the live production Pages deployment before any upload

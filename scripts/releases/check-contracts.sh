@@ -37,13 +37,10 @@ check recorder-node node --experimental-import-meta-resolve --test scripts/recor
 check dispatcher-artifacts bash -O failglob -c 'node --test scripts/transcription-dispatcher/*.test.mjs'
 check dispatcher-tests pnpm --dir apps/transcription-dispatcher test
 check dispatcher-contract scripts/transcription-dispatcher/validate-contract.sh
-check image-shell bash -c 'for path in scripts/recorder/build-and-seal.sh infrastructure/recorder/images/{cpu,capture}/*.sh; do bash -n "$path" || exit; done'
-for role in capture render; do
-  check "$role-build-validation" bash scripts/recorder/build-and-seal.sh --validate "$(git rev-parse HEAD)" contract-check "$role"
-done
+check image-shell bash -c 'for path in infrastructure/recorder/images/{cpu,capture}/*.sh; do bash -n "$path" || exit; done'
 check dispatcher-init tofu -chdir=infrastructure/nightly/transcription init -backend=false -input=false -upgrade=false
 check dispatcher-validate tofu -chdir=infrastructure/nightly/transcription validate -no-color
-check workflow-lint actionlint .github/workflows/ci.yml .github/workflows/nightly.yml .github/workflows/promote.yml .github/workflows/media-cleanup.yml .github/workflows/release-contracts.yml
+check workflow-lint actionlint .github/workflows/ci.yml .github/workflows/nightly.yml .github/workflows/promote.yml .github/workflows/release-contracts.yml
 # GitHub supports queue:max; actionlint 1.7.12 has not added that schema key yet.
 # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#concurrency
 check proof-workflow-lint actionlint -ignore '^unexpected key "queue" for "concurrency" section' .github/workflows/real-call-proof.yml .github/workflows/web-call-proof.yml

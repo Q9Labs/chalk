@@ -645,7 +645,7 @@ func newFleetFixture(t *testing.T) *fleetFixture {
 		OwnerTag: "chalk-recorder-owned", MaxNodes: 11, SlotsPerNode: 4,
 		DemandMaxAge: time.Minute, ObservationMaxAge: 2 * time.Minute,
 		StartupTimeout: 2 * time.Minute, DrainTimeout: 30 * time.Second, HealthRefresh: 30 * time.Second,
-		Release: ReleaseSpec{
+		Release: ReleaseSpec{Archive: ArchiveSpec{Bucket: "example-artifacts", Region: "ap-southeast-1", SHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Key: "recorder/capture/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.tar.gz"},
 			ReleaseID: "release-1", ImageID: 1234,
 			ImageDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			Region:      "sgp1", Size: "c-2", FirewallID: "firewall-1",
@@ -866,4 +866,24 @@ func (f *fakeRuntime) CloseAdmission(_ context.Context, identity NodeIdentity) e
 func (f *fakeRuntime) PublishPool(_ context.Context, projection PoolProjection) error {
 	f.published = append(f.published, projection)
 	return nil
+}
+
+func TestArchiveUpgradeRetiresHistoricalSnapshotIntentWithoutCreating(t *testing.T) {
+	fixture := newFleetFixture(t)
+	request := fixture.ensureRequest(1)
+	request.Release.Archive = ArchiveSpec{}
+	if request.Validate() == nil {
+		t.Fatal("new create accepted missing archive")
+	}
+	state := NewJournal()
+	state.NextBootGeneration = 2
+	state.PendingCreate = &PendingCreate{Request: request}
+	if err := state.Validate(fixture.config.Key); err != nil {
+		t.Fatalf("historical intent cannot load: %v", err)
+	}
+	fixture.journal.state, fixture.journal.found = state, true
+	result := fixture.step(t, fixture.reconciler(t))
+	if result.Action != ActionMissingNodeReconciled || fixture.provider.ensureCalls != 0 || fixture.journal.state.PendingCreate != nil {
+		t.Fatalf("historical intent replayed: %+v", result)
+	}
 }

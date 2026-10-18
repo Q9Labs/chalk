@@ -35,17 +35,27 @@ cloud credentials. Release's planning job uses the same `check-contracts.sh --pl
 entry point for source, controller and managed-deployment checks. The full check
 also covers retained releases, media, recorder validation, dispatcher tests and
 configuration, and workflow lint. It collects all failures before exiting.
-`build-and-seal.sh --validate` checks both image profiles without building or
-sealing. `qualify-image.py --validate --root <image-root>` verifies manifest/file
-bytes without executing a worker; it does not claim signed boot qualification.
+`qualify-image.py --validate --root <image-root>` verifies manifest/file bytes
+without executing a worker; it does not claim signed boot qualification.
 
-Release builds and inspects capture/render snapshots when their build inputs or
-current environment pins differ, including first install. It builds, tests and
-verifies the dispatcher ZIP when its inputs change or no dispatcher is installed.
-The backend artifact also contains `<release_id>.media.json`: exact image IDs,
-image-manifest digests, source/input hashes, inspection evidence, ZIP SHA256 and
-versioned S3 object identity. Cut records retain its SHA256. Promote verifies this
-sidecar and uses those same images and ZIP bytes; it never rebuilds them.
+Release builds capture and render archives on the Ubuntu 24.04 runner. The base
+snapshots stay unchanged. Capture carries static Go; render includes pinned Node,
+the compositor and its native modules. New nodes run no build preparation.
+Archives are conditional uploads to `recorder/<role>/<sha256>.tar.gz` in the
+existing media artifact bucket. The controller uses its host role to issue a
+short-lived GET; no AWS credentials go on a recorder. Cloud-init verifies the
+archive, stages a release directory and switches `current` before the unchanged
+bootstrap verifies installed files and obtains identity.
+
+The backend artifact includes `<release_id>.media.json`: base snapshot IDs,
+archive keys and SHA256, installed-manifest digests, recorder release IDs,
+source/input hashes and the versioned dispatcher ZIP identity. Promote retains
+this sidecar unchanged, copies and verifies exact archives into the production
+bucket, and selects that bucket through runtime pins. It never rebuilds payloads.
+`retain_runtime` reads existing production pins only for the first promotion's
+legacy rollback source; it does not create or modify a snapshot. Base rebuilds
+remain separate infrastructure operations.
+
 Before either fleet pin changes, deployment reads both snapshots from DigitalOcean
 using each environment's existing fleet token. Each snapshot must be available in
 its role's configured region and fit its configured fleet size's disk.
@@ -201,18 +211,20 @@ infrastructure migration before updating the supported configuration checksum.
 
 ## Media build configuration
 
-The GitHub nightly environment permits only `master` and provides secret
-`DIGITALOCEAN_ACCESS_TOKEN` from the existing builder PAT. Builds run on bounded
-DigitalOcean builders; never put that PAT in runtime SSM. Set
+The GitHub nightly environment permits only `master`. Recorder archive builds
+run on the GitHub runner without DigitalOcean credentials. Cold-boot qualification
+still uses the environment-scoped provider credentials. Set
 `CHALK_MEDIA_ARTIFACT_BUCKET` and the approved `CHALK_TRANSCRIPTION_CORPUS_DIGEST`.
-The deploy role must read recorder envs and the public bootstrap CA, update only
+The host role must read both `recorder/capture/*` and `recorder/render/*` object
+prefixes. The deploy role must read source recorder archives and conditionally
+write target recorder archives. It must read recorder envs and the public bootstrap CA, update only
 its two recorder env parameters, read the selected versioned source ZIP, write
 its dispatcher artifact/state prefixes, and apply its own dispatcher module.
 Nightly cold-boot checks additionally require scoped host RunShellScript and
 private `bootdiag/` evidence access. No nightly authority may mutate production.
 
 The first Promote after this upgrade replaces production's capture and render
-image pins with the exact snapshots tested on nightly, then deploys nightly's
+base and archive pins with the exact payloads tested on nightly, then deploys nightly's
 ZIP bytes to the production dispatcher and keeps its scheduler enabled. It
 retains production's previous pins and ZIP for rollback. Existing workers drain
 through the normal fleet release lifecycle; no cross-environment deletion is added.

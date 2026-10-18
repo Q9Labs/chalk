@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/adapters/aws/recorderarchive"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/digitalocean"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/recorderfleetcontrol"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/recorderfleetjournal"
@@ -40,6 +41,7 @@ func buildReconciler(config commandConfig) (*recorderfleet.Reconciler, error) {
 			return http.ErrUseLastResponse
 		},
 	}
+	config.Provider.PresignArchive = recorderarchive.Presign
 	provider, err := digitalocean.NewRecorderFleet(config.Provider)
 	if err != nil {
 		return nil, fmt.Errorf("create DigitalOcean recorder fleet: %w", err)
