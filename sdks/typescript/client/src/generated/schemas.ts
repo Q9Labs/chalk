@@ -425,6 +425,22 @@ export const EpisodeSchema = Schema.Struct({
 });
 export type Episode = typeof EpisodeSchema.Type;
 
+export const EpisodeAttendanceSchema = Schema.Struct({
+  episode_id: EpisodeIdSchema,
+  participants: Schema.Array(
+    Schema.Struct({
+      display_name: Schema.String,
+      external_id: Schema.NullOr(Schema.String),
+      first_joined_at: DateTimeStringSchema,
+      identity_kind: Schema.Literals(["user", "agent", "guest"]),
+      last_left_at: Schema.NullOr(DateTimeStringSchema),
+      left_reason: Schema.NullOr(Schema.Literals(["left", "episode_ended"])),
+      participant_id: ParticipantIdSchema,
+    }),
+  ),
+});
+export type EpisodeAttendance = typeof EpisodeAttendanceSchema.Type;
+
 export const EpisodeEndSchema = Schema.Struct({
   episode_id: EpisodeIdSchema,
   external_operation: Schema.Struct({
@@ -1583,6 +1599,16 @@ export type GetEpisodePathParams = typeof GetEpisodePathParamsSchema.Type;
 
 export const GetEpisodeResponseSchema = EpisodeSchema;
 export type GetEpisodeResponse = typeof GetEpisodeResponseSchema.Type;
+
+export const GetEpisodeAttendancePathParamsSchema = Schema.Struct({
+  episode_id: EpisodeIdSchema,
+  space_id: SpaceIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type GetEpisodeAttendancePathParams = typeof GetEpisodeAttendancePathParamsSchema.Type;
+
+export const GetEpisodeAttendanceResponseSchema = EpisodeAttendanceSchema;
+export type GetEpisodeAttendanceResponse = typeof GetEpisodeAttendanceResponseSchema.Type;
 
 export const GetRecordingPathParamsSchema = Schema.Struct({
   recording_id: RecordingIdSchema,
@@ -4645,6 +4671,9 @@ export const GetChatAttachmentDownloadErrorSchema = Schema.Union([
 ]);
 export type GetChatAttachmentDownloadError = typeof GetChatAttachmentDownloadErrorSchema.Type;
 
+export const GetEpisodeAttendanceErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, EpisodeInvalidIdErrorSchema, EpisodeNotFoundErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, SpaceInvalidIdErrorSchema, TenantInvalidIdErrorSchema]);
+export type GetEpisodeAttendanceError = typeof GetEpisodeAttendanceErrorSchema.Type;
+
 export const GetEpisodeErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -5356,6 +5385,7 @@ export const ChalkOperationPolicies = {
   endEpisode: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   finalizeChatAttachmentUpload: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   getEpisode: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
+  getEpisodeAttendance: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getSpacePublicInvite: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   getSpacePublicInviteArrival: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   getWebhookDelivery: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
