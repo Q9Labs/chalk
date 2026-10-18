@@ -786,6 +786,9 @@ importers:
       react-native:
         specifier: '>=0.77'
         version: 0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2)
+      uqr:
+        specifier: ^0.1.3
+        version: 0.1.3
     devDependencies:
       '@types/node':
         specifier: ^26.2.0
@@ -796,6 +799,9 @@ importers:
       expo-audio:
         specifier: ~55.0.18
         version: 55.0.18(expo-asset@55.0.10(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2))(react@19.2.7)(supports-color@10.2.2)(typescript@6.0.3))(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2))(react@19.2.7)
+      expo-clipboard:
+        specifier: ~55.0.9
+        version: 55.0.9(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2))(react@19.2.7)
       expo-haptics:
         specifier: ~55.0.18
         version: 55.0.18(expo@55.0.9)
@@ -8466,6 +8472,9 @@ packages:
     peerDependencies:
       browserslist: ^4.28.7
 
+  uqr@0.1.3:
+    resolution: {integrity: sha512-0rjE8iEJe4YmT9TOhwsZtqCMRLc5DXZUI2UEYUUg63ikBkqqE5EYWaI0etFe/5KUcmcYwLih2RND1kq+hrUJXA==}
+
   uri-js-replace@1.0.1:
     resolution: {integrity: sha512-W+C9NWNLFOoBI2QWDp4UT9pv65r2w5Cx+3sTYFvtMdDBxkKt1syCqsUdSFAChbEe1uK5TfS04wt/nGwmaeIQ0g==}
 
@@ -14508,6 +14517,12 @@ snapshots:
       react: 19.2.7
       react-native: 0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.7)(supports-color@10.2.2)
 
+  expo-clipboard@55.0.9(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2))(react@19.2.7):
+    dependencies:
+      expo: 55.0.9(@babel/core@7.29.7(supports-color@10.2.2))(@expo/dom-webview@55.0.3)(react-dom@19.2.7(react@19.2.7))(react-native-webview@13.16.1(react-native@0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2))(react@19.2.7))(react-native@0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2))(react@19.2.7)(supports-color@10.2.2)(typescript@6.0.3)
+      react: 19.2.7
+      react-native: 0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2)
+
   expo-constants@55.0.9(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.7)(supports-color@10.2.2))(supports-color@10.2.2)(typescript@5.9.3):
     dependencies:
       '@expo/config': 55.0.11(supports-color@10.2.2)(typescript@5.9.3)
@@ -18235,6 +18250,8 @@ snapshots:
       browserslist: 4.28.7
       escalade: 3.2.0
       picocolors: 1.1.1
+
+  uqr@0.1.3: {}
 
   uri-js-replace@1.0.1: {}
 
