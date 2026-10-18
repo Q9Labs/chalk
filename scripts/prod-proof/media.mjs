@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { installFixture } from "./fixture.mjs";
-import { check, save, waitFor } from "./runtime.mjs";
+import { check, save, waitFor, maskCredentials } from "./runtime.mjs";
 
 const requireSDK = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url));
 const { chromium } = requireSDK("playwright");
@@ -18,6 +18,7 @@ window.proofJoin=async(space,baseUrl,displayName)=>{
       resolveDir: process.cwd(),
       sourcefile: "proof.ts",
     },
+    logLevel: "silent",
     bundle: true,
     write: false,
     format: "iife",
@@ -28,26 +29,40 @@ window.proofJoin=async(space,baseUrl,displayName)=>{
 export async function launchGuests(run, space, episode, speech, origin, tones = false) {
   const bundle = await sdkBundle();
   const serverPath = `${run.directory}/sdk-server.mjs`;
-  await build({ entryPoints: [new URL("../../sdks/typescript/client/src/server/index.ts", import.meta.url).pathname], bundle: true, outfile: serverPath, format: "esm", platform: "node" });
+  await build({ logLevel: "silent", entryPoints: [new URL("../../sdks/typescript/client/src/server/index.ts", import.meta.url).pathname], bundle: true, outfile: serverPath, format: "esm", platform: "node" });
   const { createChalkServerClient, getAccessRefreshState } = await import(pathToFileURL(serverPath).href);
   const chalk = createChalkServerClient({ apiKey: run.apiKey, tenantId: run.config.tenant_id, apiBaseURL: run.config.api_url, headers: { "User-Agent": "Chalk-Production-Proof/1.0" }, fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(30_000) }) });
   const pages = [];
   const reopen = [];
+  const close = [];
   const participants = [];
   for (let guest = 0; guest < 2; guest++) {
     const admission = await chalk.participants.admit(space.id, episode.id, { name: `Proof guest ${guest + 1}`, role: "owner" });
     let grant = admission.access;
+    maskCredentials(grant);
     let first = true;
     let queue = Promise.resolve();
     const open = async (replacing = false) => {
       let replaceOnNextAccess = replacing;
-      const browser = await chromium.launch({
+      const server = await chromium.launchServer({
         headless: true,
         handleSIGINT: false,
         handleSIGTERM: false,
         args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required", "--auto-select-tab-capture-source-by-title=Chalk proof screen share", "--enable-usermedia-screen-capturing"],
       });
-      run.resources.push({ kind: "headless-browser", dispose: () => browser.close() });
+      close[guest] = () => server.close();
+      run.resources.push({
+        kind: "headless-browser",
+        dispose: close[guest],
+        force: () => {
+          try {
+            process.kill(-server.process().pid, "SIGKILL");
+          } catch (error) {
+            if (error.code !== "ESRCH") throw error;
+          }
+        },
+      });
+      const browser = await chromium.connect(server.wsEndpoint());
       const context = await browser.newContext({ permissions: ["camera", "microphone"] });
       await context.addInitScript(installFixture, { speech, guest, tones });
       const page = await context.newPage();
@@ -71,6 +86,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
             return grant;
           }
           grant = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, getAccessRefreshState(grant), { replaceMediaConnection: replaceOnNextAccess || request.replaceMediaConnection });
+          maskCredentials(grant);
           replaceOnNextAccess = false;
           return grant;
         });
@@ -108,7 +124,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
     participants,
     rejoin: async (guest) => {
       // Closing the entire browser drops transports without an SDK leave request.
-      await pages[guest].context().browser().close();
+      await close[guest]();
       await run.wait(2000);
       pages[guest] = await reopen[guest](true);
       await ready();

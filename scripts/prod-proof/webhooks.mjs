@@ -4,7 +4,8 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { shareHTML } from "./fixture.mjs";
-import { check, save, waitFor } from "./runtime.mjs";
+import { check, save, waitFor, maskCredentials, saveOwnership } from "./runtime.mjs";
+import { rotateAndPatchEndpoint } from "./webhook-endpoint.mjs";
 
 const { build } = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url))("esbuild");
 export async function proofServer(run) {
@@ -22,6 +23,10 @@ export async function proofServer(run) {
   await once(server, "listening");
   run.resources.push({
     kind: "proof-http-server",
+    force: () => {
+      server.closeAllConnections();
+      server.close();
+    },
     dispose: async () => {
       server.closeAllConnections();
       await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
@@ -82,6 +87,7 @@ function startCollector(run, receiver, collect) {
   })();
   run.resources.push({
     kind: "webhook-collector",
+    force: () => controller.abort(),
     dispose: async () => {
       controller.abort();
       await completion;
@@ -89,25 +95,21 @@ function startCollector(run, receiver, collect) {
   });
 }
 export async function exposeWebhook(run, receiver) {
-  check(run.config.webhook_service_url, "1Password item is missing webhook_service_url");
+  check(run.config.webhook_service_url, "Proof configuration is missing webhook_service_url");
+  check(run.config.webhook_endpoint_id, "Proof configuration is missing webhook_endpoint_id");
   const base = run.config.webhook_service_url;
   const token = await (await catcherRequest(base, "/token", "POST", { default_status: 204, request_limit: 50 }, run.signal)).json();
-  run.resources.push({
-    kind: "webhook-catcher",
-    dispose: async () => {
-      await catcherRequest(base, `/token/${token.uuid}`, "DELETE");
-    },
-  });
-  const endpoint = await run.ownerRequest("POST", `${run.tenantPath}/webhook-endpoints`, {
-    name: "Production proof",
+  maskCredentials({ token: token.uuid });
+  run.ownership.webhook = { id: run.config.webhook_endpoint_id, catcherId: token.uuid };
+  await saveOwnership(run);
+  const endpoint = await rotateAndPatchEndpoint(run.ownerRequest, `${run.tenantPath}/webhook-endpoints/${run.config.webhook_endpoint_id}`, {
     url: new URL(`/${token.uuid}`, base).href,
     enabled: true,
     api_version: 1,
     event_types: ["episode.started", "episode.ended", "recording.started", "recording.completed", "transcript.completed"],
   });
-  run.resources.push({ kind: "webhook-endpoint", dispose: () => run.ownerRequest("DELETE", `${run.tenantPath}/webhook-endpoints/${endpoint.id}`, undefined, { "If-Match": `"${endpoint.revision}"` }) });
   const path = `${run.directory}/sdk-webhooks.mjs`;
-  await build({ entryPoints: [new URL("../../sdks/typescript/client/src/webhooks/index.ts", import.meta.url).pathname], bundle: true, outfile: path, format: "esm", platform: "node" });
+  await build({ logLevel: "silent", entryPoints: [new URL("../../sdks/typescript/client/src/webhooks/index.ts", import.meta.url).pathname], bundle: true, outfile: path, format: "esm", platform: "node" });
   const { verifyWebhook } = await import(pathToFileURL(path).href);
   const seen = new Set();
   startCollector(run, receiver, (signal) => collectEvents(run, receiver, token, endpoint, verifyWebhook, signal, seen));
