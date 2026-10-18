@@ -28,7 +28,7 @@ export interface Participant {
 }
 
 export interface ParticipantGridProps {
-  layout?: "grid" | "focus" | "presentation";
+  layout?: "grid" | "focus";
   /** Mobile variant allows narrower tiles; defaults from the viewport. */
   variant?: "desktop" | "mobile";
   pinnedParticipantId?: string;

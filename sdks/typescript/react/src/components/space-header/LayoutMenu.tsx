@@ -2,7 +2,7 @@ import { Menu } from "@base-ui/react/menu";
 import React, { type RefObject } from "react";
 
 import { cn } from "../../utils/cn";
-import { ArrowDown01Icon, LayoutGridIcon, Maximize01Icon, Monitor01Icon } from "../../utils/icons";
+import { ArrowDown01Icon, LayoutGridIcon, Maximize01Icon } from "../../utils/icons";
 import type { SpaceHeaderProps } from "./space-header-contract";
 
 export type StageLayoutValue = NonNullable<SpaceHeaderProps["layout"]>;
@@ -11,8 +11,7 @@ type LayoutIcon = (props: { size?: number; className?: string }) => React.ReactN
 
 export const LAYOUT_OPTIONS = [
   { value: "focus", label: "Spotlight", description: "One large tile with others beside it", Icon: Maximize01Icon },
-  { value: "grid", label: "Grid", description: "Everyone gets one equally sized tile", Icon: LayoutGridIcon },
-  { value: "presentation", label: "Presentation", description: "Shared content with people alongside", Icon: Monitor01Icon },
+  { value: "grid", label: "Grid", description: "People and shared content together", Icon: LayoutGridIcon },
 ] as const satisfies readonly { value: StageLayoutValue; label: string; description: string; Icon: LayoutIcon }[];
 
 const isLayoutValue = (value: unknown): value is StageLayoutValue => LAYOUT_OPTIONS.some((option) => option.value === value);
@@ -30,7 +29,7 @@ const POPUP =
   "z-50 w-[320px] max-w-[calc(100vw-24px)] origin-[var(--transform-origin)] rounded-[12px] bg-[var(--chalk-app-panel)] p-1.5 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)] ring-1 ring-[var(--chalk-app-line)] outline-none transition-[opacity,transform] duration-[220ms] ease-[cubic-bezier(0.22,1,0.36,1)] data-[ending-style]:translate-y-[-2px] data-[ending-style]:scale-[0.98] data-[ending-style]:opacity-0 data-[starting-style]:translate-y-[-2px] data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0 motion-reduce:transition-none";
 const ITEM = "relative z-10 flex h-[54px] cursor-pointer items-center gap-3 rounded-[8px] px-2.5 text-sm outline-none select-none";
 
-/** Single header button showing the current stage layout; opens a menu with the three layouts. */
+/** Single header button showing the current stage layout; opens a menu with the two layouts. */
 export function LayoutMenu({ layout, onLayoutChange, container }: LayoutMenuProps): React.JSX.Element {
   const current = LAYOUT_OPTIONS.find((option) => option.value === layout) ?? LAYOUT_OPTIONS[0];
   const selectedIndex = LAYOUT_OPTIONS.findIndex((option) => option.value === current.value);
@@ -54,7 +53,7 @@ export function LayoutMenu({ layout, onLayoutChange, container }: LayoutMenuProp
                 style={{ transform: `translate3d(0, ${selectedIndex * 54}px, 0)` }}
               />
               {LAYOUT_OPTIONS.map(({ value, label: optionLabel, description, Icon }) => (
-                <Menu.RadioItem key={value} value={value} className={cn(ITEM, value !== layout && "data-[highlighted]:bg-[var(--chalk-app-control-hover)]")} closeOnClick={false}>
+                <Menu.RadioItem closeOnClick key={value} value={value} className={cn(ITEM, value !== layout && "data-[highlighted]:bg-[var(--chalk-app-control-hover)]")}>
                   <span
                     className={cn(
                       "grid h-8 w-8 shrink-0 place-items-center rounded-[8px] bg-[var(--chalk-app-control-group)] text-[var(--chalk-app-text-muted)] transition-[background-color,color] duration-200 motion-reduce:transition-none",

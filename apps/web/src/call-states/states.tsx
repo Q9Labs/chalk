@@ -24,7 +24,7 @@ const sofia: Person = PEOPLE[2]!;
 const crowd = (count: number): Person[] => Array.from({ length: count }, (_, index) => ({ ...PEOPLE[index % PEOPLE.length]!, id: `p${index}`, name: index < PEOPLE.length ? PEOPLE[index]!.name : `${PEOPLE[index % PEOPLE.length]!.name.split(" ")[0]} ${index}` }));
 
 const openChat: Action = { click: "Chat" };
-const openLayout: Action = { click: "Layout" };
+const openLayout: Action = { click: "Layout: Spotlight" };
 
 export const CALL_STATES: readonly CallState[] = [
   { id: "joining", title: "Joining with devices off", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null } }} /> },
@@ -158,7 +158,7 @@ function Live({ snapshot, layout, then }: { readonly snapshot: SpaceSnapshot; re
   }, [client, transition]);
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
-      <Chalk client={client} entrance={false} displayName={SELF_NAME} logoUrl="/brand/chalk/chalk-logo.svg" spaceName={SPACE_NAME} inviteLink={INVITE_LINK} layout={layout} />
+      <Chalk client={client} entrance={false} displayName={SELF_NAME} logoUrl="/brand/chalk/chalk-logo.svg" spaceName={SPACE_NAME} inviteLink={INVITE_LINK} layout={layout} onLeft={() => undefined} />
     </main>
   );
 }

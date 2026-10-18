@@ -27,7 +27,6 @@ import { SpaceDrawer } from "./SpaceDrawer";
 import { SpacePresentation } from "./SpacePresentation";
 import { SpaceStage } from "./SpaceStage";
 import { DRAWER_EXIT_MS, useDrawerPresence } from "./useDrawerPresence";
-import { useContentLayoutSwitch } from "./useContentLayoutSwitch";
 const DEFAULT_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🎉"] as const;
 export function ClassicSpaceView({
   colorScheme = "light",
@@ -67,7 +66,7 @@ export function ClassicSpaceView({
   const canManageAdmission = useCan("manageAdmission");
   const canManageRecording = useCan("manageRecording");
   const episodeDuration = useEpisodeDuration();
-  const [uncontrolledLayout, setUncontrolledLayout] = useState<"grid" | "focus" | "presentation">("focus");
+  const [uncontrolledLayout, setUncontrolledLayout] = useState<"grid" | "focus">("focus");
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(initialPanel);
   const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
   const [isLeaveDialogOpen, setLeaveDialogOpen] = useState(false);
@@ -96,12 +95,10 @@ export function ClassicSpaceView({
     ...(feature("whiteboard") && canDrawWhiteboard ? ["whiteboard" as const] : []),
     "leave",
   ];
-  const updateLayout = (nextLayout: "grid" | "focus" | "presentation") => {
+  const updateLayout = (nextLayout: "grid" | "focus") => {
     if (controlledLayout === undefined) setUncontrolledLayout(nextLayout);
     onLayoutChange?.(nextLayout);
   };
-  const hasStageContent = whiteboard?.isOpen === true || tiles.some((tile) => tile.isScreenSharing === true && Boolean(tile.screenShareTrack));
-  useContentLayoutSwitch(hasStageContent, layout, updateLayout);
   useSoundCues(feature("sounds"));
   const prefersReducedMotion = usePrefersReducedMotion();
   const settingsDialogIsControlled =
@@ -194,7 +191,7 @@ export function ClassicSpaceView({
           onInfo: infoDialog ? () => infoDialog.onOpenChange(true) : undefined,
           onSettings: feature("settings") ? openSettings : undefined,
         }}
-        stage={<SpaceStage tiles={tiles} layout={layout} generatedAvatars={generatedAvatars} whiteboard={whiteboard} className="h-full" />}
+        stage={<SpaceStage tiles={tiles} layout={layout} onLayoutChange={updateLayout} generatedAvatars={generatedAvatars} whiteboard={whiteboard} className="h-full" />}
         controls={
           <ControlBar
             placement="floating"

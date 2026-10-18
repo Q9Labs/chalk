@@ -2,11 +2,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { cn } from "../../utils/cn";
 import { ArrowDown01Icon, ArrowLeft01Icon, ArrowRight01Icon, ArrowUp01Icon, Maximize01Icon, Monitor01Icon, RefreshIcon, ZoomInIcon, ZoomOutIcon } from "../../utils/icons";
 import { ParticipantTile } from "../atomic";
-import { ChalkBadge, ChalkButton, ChalkControlGroup, ChalkDivider, ChalkEmptyState, ChalkIconButton, ChalkPanel, ChalkSpinner } from "../chalk-ui";
+import { ChalkBadge, ChalkControlGroup, ChalkDivider, ChalkEmptyState, ChalkIconButton, ChalkPanel, ChalkSpinner } from "../chalk-ui";
 import { ClassicScreenShareView } from "./ClassicScreenShareView";
 import type { Participant } from "../participant-grid/ParticipantGrid";
 export interface ScreenShareViewProps {
-  onStopShare?: () => void;
   showThumbnails?: boolean;
   thumbnailPosition?: "bottom" | "right";
   enableZoom?: boolean;
@@ -66,7 +65,7 @@ const getContainedSize = (containerWidth: number, containerHeight: number, video
     height: containerHeight,
   };
 };
-export const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByName, participants, onStopShare, showThumbnails = true, thumbnailPosition = "bottom", enableZoom = true, className }: ScreenShareViewSurfaceProps) => {
+export const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByName, participants, showThumbnails = true, thumbnailPosition = "bottom", enableZoom = true, className }: ScreenShareViewSurfaceProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   // Loading state
@@ -271,14 +270,6 @@ export const ScreenShareViewSurface = React.memo(({ screenShareTrack, sharedByNa
             <ChalkBadge tone="neutral" className="absolute bottom-3 right-3 rounded text-[10px]">
               Drag to pan • Scroll to zoom
             </ChalkBadge>
-          )}
-
-          {onStopShare && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-              <ChalkButton type="button" onClick={onStopShare} tone="danger" variant="solid" className="font-medium shadow-lg">
-                Stop Sharing
-              </ChalkButton>
-            </div>
           )}
 
           {/* Collapse/Expand Toggle Button */}

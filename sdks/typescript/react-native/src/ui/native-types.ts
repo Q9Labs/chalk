@@ -1,6 +1,6 @@
 import type { ChatAttachment, ChatReadReceipt, Participant, Reaction } from "@q9labsai/chalk-client";
 
-export type Layout = "grid" | "focus" | "presentation";
+export type Layout = "grid" | "focus";
 export type NativePanel = "chat" | "participants" | "whiteboard" | null;
 export type ParticipantGradientPreference = "auto" | "subtle" | "vivid" | "mono";
 

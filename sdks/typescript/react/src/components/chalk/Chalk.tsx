@@ -15,7 +15,7 @@ import { Entrance } from "../entrance/Entrance";
 import { SpaceView } from "../space-view/SpaceView";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 import { StatusSurface } from "./StatusSurface";
-export type SpaceLayout = "focus" | "grid" | "presentation";
+export type SpaceLayout = "focus" | "grid";
 export type ChalkFeatures = {
   readonly chat?: boolean;
   readonly participants?: boolean;
@@ -298,7 +298,7 @@ function SpaceSurface(
       generatedAvatars={settings.appearance.generatedAvatars}
       commandError={commandError ?? undefined}
       onDismissCommandError={() => setCommandError(null)}
-      layout={settings.appearance.layout === "focus" || settings.appearance.layout === "grid" || settings.appearance.layout === "presentation" ? settings.appearance.layout : (props.layout ?? "focus")}
+      layout={settings.appearance.layout === "focus" || settings.appearance.layout === "grid" ? settings.appearance.layout : (props.layout ?? "focus")}
       onLayoutChange={(nextLayout) => {
         setSettings((current) => ({ ...current, appearance: { ...current.appearance, layout: nextLayout } }));
         props.onLayoutChange?.(nextLayout);
@@ -360,7 +360,7 @@ function SpaceSurface(
               const next = { ...current, appearance: { ...current.appearance, ...updates } };
               settingsRef.current = next;
               setSettings(next);
-              if (updates.layout === "focus" || updates.layout === "grid" || updates.layout === "presentation") props.onLayoutChange?.(updates.layout);
+              if (updates.layout === "focus" || updates.layout === "grid") props.onLayoutChange?.(updates.layout);
             }}
             onUpdateExperience={(updates) => setSettings((current) => ({ ...current, experience: { ...current.experience, ...updates } }))}
             audioInputDevices={media.devices.microphones.map((device) => ({ ...device, kind: "audioinput" as const }))}

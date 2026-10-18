@@ -77,7 +77,7 @@ function frameStyle(frame: StageFrame, currentPage: number, stride: number, anim
 
 /**
  * Single renderer for every layout: a flat list of tiles positioned by the pure fitter, so
- * switching between grid, focus and presentation never remounts a video element.
+ * switching between grid and focus never remounts a video element.
  */
 export function Stage({
   items,
@@ -138,6 +138,7 @@ export function Stage({
           target,
           gridOrder(ordered, activePinnedId).map((item) => item.id),
           { ...DEFAULT_GRID_OPTIONS, maxPerPage, minTileWidth },
+          ordered.filter(isContentItem).map((item) => item.id),
         );
       }
       return fitSpotlight(
@@ -160,11 +161,11 @@ export function Stage({
 
   const togglePin = useCallback(
     (item: StageItem) => {
-      const next = activePinnedId === item.id ? null : item.id;
+      const next = activePinnedId === item.id && !(layout === "grid" && isContentItem(item)) ? null : item.id;
       if (pinnedId === undefined) setUncontrolledPinnedId(next);
       onPinnedChange?.(next);
     },
-    [activePinnedId, onPinnedChange, pinnedId],
+    [activePinnedId, layout, onPinnedChange, pinnedId],
   );
 
   // Stable per-tile props: without these, every Stage render (speaker flips,
