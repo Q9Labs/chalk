@@ -140,6 +140,22 @@ function withStatus(snapshot: SpaceSnapshot, status: SpaceSnapshot["connection"]
   return { ...snapshot, connection: { ...snapshot.connection, status, lastError } };
 }
 
+/** Mirrors SpacePage's LocalSpace: the SDK's Chalk root, with the app's own entrance already done. */
+function Live({ snapshot, layout, then }: { readonly snapshot: SpaceSnapshot; readonly layout?: SpaceLayout; readonly then?: (client: CallStateClient) => void }) {
+  const [client] = useState(() => createCallStateClient(snapshot));
+  const [transition] = useState(() => then);
+  useEffect(() => {
+    if (!transition) return;
+    const timer = setTimeout(() => transition(client), 200);
+    return () => clearTimeout(timer);
+  }, [client, transition]);
+  return (
+    <main className="h-dvh min-h-0 w-full overflow-hidden">
+      <Chalk client={client} displayName={SELF_NAME} spaceName={SPACE_NAME} layout={layout} onLeft={() => undefined} onHome={() => undefined} />
+    </main>
+  );
+}
+
 function WaitingForHost() {
   return (
     <main className="h-dvh">
