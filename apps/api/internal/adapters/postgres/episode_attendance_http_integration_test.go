@@ -42,7 +42,7 @@ func TestEpisodeAttendancePublicHTTP(t *testing.T) {
 		exec(`update episodes set status='ended',ended_at=now() where id=$1`, uuid(id))
 	}
 	exec(`update episodes set status='active',ended_at=null where id=$1`, uuid(episode))
-	guest, user, agent, neverJoined := accountTenantIntegrationID(t), accountTenantIntegrationID(t), accountTenantIntegrationID(t), accountTenantIntegrationID(t)
+	guest, user, agent, neverJoined, legacy := accountTenantIntegrationID(t), accountTenantIntegrationID(t), accountTenantIntegrationID(t), accountTenantIntegrationID(t), accountTenantIntegrationID(t)
 	userIdentity, agentIdentity := accountTenantIntegrationID(t), accountTenantIntegrationID(t)
 	exec(`insert into identities(id,tenant_id,kind,external_id,display_name) values($1,$2,'user','user-1','User'),($3,$2,'agent','agent-1','Agent')`, uuid(userIdentity), uuid(tenant), uuid(agentIdentity))
 	first := time.Now().UTC().Truncate(time.Second).Add(-time.Hour)
@@ -55,6 +55,9 @@ func TestEpisodeAttendancePublicHTTP(t *testing.T) {
 		exec(`insert into participants(id,tenant_id,space_id,episode_id,generation,status,role,capabilities,name,identity_id,joined_at,first_joined_at) values($1,$2,$3,$4,1,$5,'observer','{subscribe}',$6,$7,$8,$8)`, uuid(seat.id), uuid(tenant), uuid(space), uuid(episode), seat.status, seat.name, uuid(seat.identity), joined)
 	}
 	exec(`update participants set joined_at=null,first_joined_at=null where id=$1`, uuid(neverJoined))
+	// A seat admitted before first_joined_at existed has only joined_at; it counts from that join.
+	legacyJoin := first.Add(5 * time.Minute)
+	exec(`insert into participants(id,tenant_id,space_id,episode_id,generation,status,role,capabilities,name,joined_at) values($1,$2,$3,$4,1,'active','observer','{subscribe}','Legacy',$5)`, uuid(legacy), uuid(tenant), uuid(space), uuid(episode), legacyJoin)
 	// A current seat may retain the previous departure in left_at after rejoining.
 	exec(`update participants set joined_at=$2,left_at=$3 where id=$1`, uuid(guest), latestJoin, first.Add(10*time.Minute))
 	exec(`update participants set left_at=$2,last_left_reason='left' where id=$1`, uuid(user), explicitLeave)
@@ -102,10 +105,10 @@ func TestEpisodeAttendancePublicHTTP(t *testing.T) {
 		return result
 	}
 	live := read(tenant, space, episode, key, http.StatusOK)
-	if live.EpisodeID != episode.String() || len(live.Participants) != 3 {
+	if live.EpisodeID != episode.String() || len(live.Participants) != 4 {
 		t.Fatalf("unexpected attendance: %+v", live)
 	}
-	g, u, a := live.Participants[0], live.Participants[1], live.Participants[2]
+	g, u, a, l := live.Participants[0], live.Participants[1], live.Participants[2], live.Participants[3]
 	if g.ParticipantID != guest.String() || g.DisplayName != "Guest" || g.IdentityKind != "guest" || g.ExternalID != nil || !g.FirstJoinedAt.Equal(first) || g.LastLeftAt != nil || g.LeftReason != nil {
 		t.Fatalf("unexpected rejoined Guest: %+v", g)
 	}
@@ -115,10 +118,13 @@ func TestEpisodeAttendancePublicHTTP(t *testing.T) {
 	if a.IdentityKind != "agent" || a.ExternalID == nil || *a.ExternalID != "agent-1" {
 		t.Fatalf("unexpected Agent: %+v", a)
 	}
+	if l.ParticipantID != legacy.String() || l.DisplayName != "Legacy" || !l.FirstJoinedAt.Equal(legacyJoin) || l.LastLeftAt != nil || l.LeftReason != nil {
+		t.Fatalf("unexpected seat without first_joined_at: %+v", l)
+	}
 	// End fallback covers a seat whose explicit departure never arrived.
 	exec(`update episodes set status='ended',ended_at=$2 where id=$1`, uuid(episode), end)
 	ended := read(tenant, space, episode, key, http.StatusOK)
-	for _, index := range []int{0, 2} {
+	for _, index := range []int{0, 2, 3} {
 		p := ended.Participants[index]
 		if p.LastLeftAt == nil || !p.LastLeftAt.Equal(end) || p.LeftReason == nil || *p.LeftReason != "episode_ended" {
 			t.Fatalf("unclosed ended seat: %+v", p)
