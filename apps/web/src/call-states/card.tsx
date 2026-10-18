@@ -8,9 +8,16 @@ const photo = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w
 
 export function CardState({ host = false, scheme = "dark", participants = true, knocks = false }: { readonly host?: boolean; readonly scheme?: "dark" | "light"; readonly participants?: boolean; readonly knocks?: boolean }) {
   const [client] = useState(() => {
-    const snapshot = liveSnapshot({ others: [PEOPLE[0]!, { ...PEOPLE[1]!, handRaised: true }, { id: "rtl", name: "عبد الرحمن محمد الطويل بن أحمد", microphone: false, camera: false, handRaised: true }], ...(host ? { capabilities: HOST, admission: knocks } : {}), chat: chatMessages() });
+    const snapshot = liveSnapshot({
+      others: [PEOPLE[0]!, { ...PEOPLE[1]!, handRaised: true }, { id: "rtl", name: "عبد الرحمن محمد الطويل بن أحمد", microphone: false, camera: false, handRaised: true }],
+      ...(host ? { capabilities: HOST, admission: knocks } : {}),
+      chat: chatMessages().map((message) => (message.messageId === "m3" ? { ...message, attachments: [...message.attachments, { attachmentId: "a2", fileName: "alternative.jpg", mimeType: "image/jpeg", byteLength: 240_000 }] } : message)),
+    });
     const preview = createCallStateClient(snapshot);
-    const urls = new Map<string, string>([["a1", photo]]);
+    const urls = new Map<string, string>([
+      ["a1", photo],
+      ["a2", photo.replace("315f72", "785342")],
+    ]);
     let attachment = 0;
     const upload = async (file: ChatUploadFile) => {
       const fileName = "name" in file ? file.name : file.fileName;
