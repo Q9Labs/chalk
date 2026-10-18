@@ -23,7 +23,7 @@ function useHydrated(): boolean {
  * The site's theme follows the call's: one saved preference, dark until someone picks light.
  * During hydration it reports dark, so the first client render matches the prerendered HTML.
  */
-function useSiteTheme(): { readonly theme: ThemePreference; readonly setTheme: (theme: ThemePreference) => void } {
+export function useSiteTheme(): { readonly theme: ThemePreference; readonly setTheme: (theme: ThemePreference) => void } {
   const { preference, setPreference } = useTheme();
   const hydrated = useHydrated();
   return { theme: hydrated ? preference : "dark", setTheme: setPreference };

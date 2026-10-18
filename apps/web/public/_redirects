@@ -1,4 +1,6 @@
 /space/* /space/ 200
+/dashboard /_shell/ 200
+/dashboard/* /_shell/ 200
 /docs/reactions /docs/chat 301
 
 /invitations/accept /_shell/ 200

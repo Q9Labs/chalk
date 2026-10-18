@@ -13,10 +13,10 @@ type Pages = {
 };
 export type DashboardPage = keyof Pages;
 
-export type Ok = { ok: true };
+type Ok = { ok: true };
 export type CueDTO = { startMs: number; endMs: number; text: string };
 export type DeliveryDTO = { id: string; state: string; createdAt: string };
-export type DeliveryDetailDTO = { id: string; state: string; attempts: { status: number | null; errorCode: string | null; finishedAt: string | null }[] };
+type DeliveryDetailDTO = { id: string; state: string; attempts: { status: number | null; errorCode: string | null; finishedAt: string | null }[] };
 
 /** What each action returns, as the server branch's handlers build it. The contract doesn't export these yet. */
 type Results = {
@@ -53,7 +53,7 @@ type Results = {
 };
 
 /** A failed dashboard request, with the server's error code. */
-export class DashboardRequestError extends Error {
+class DashboardRequestError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
@@ -126,16 +126,13 @@ export async function act<P extends DashboardPage, A extends Pages[P]["action"]>
 
 async function send<T>(request: () => Promise<Response>): Promise<T> {
   let response = await request();
-  let body = await readJSON(response);
-  if (response.status === 401 && errorCode(body) === "refresh_or_sign_in_required") {
+  if (response.status === 401 && errorCode(await readJSON(response.clone())) === "refresh_or_sign_in_required") {
     await refreshSession();
     response = await request();
-    body = await readJSON(response);
   }
-  if (!response.ok) throw toError(response, body);
+  if (!response.ok) throw toError(response, await readJSON(response));
   // The server's handlers build these shapes from the contract types, on this same origin.
-  const data: T = body;
-  return data;
+  return response.json();
 }
 
 function post(path: string, body: object): Promise<Response> {
@@ -147,7 +144,7 @@ function post(path: string, body: object): Promise<Response> {
   });
 }
 
-async function readJSON(response: Response) {
+async function readJSON(response: Response): Promise<unknown> {
   try {
     return await response.json();
   } catch {

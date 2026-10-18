@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as DocsRouteImport } from './routes/docs'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as PrivacyRouteImport } from './routes/privacy'
@@ -18,14 +19,26 @@ import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as SignUpRouteImport } from './routes/sign-up'
 import { Route as SpaceRouteImport } from './routes/space'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as DashboardAppRouteImport } from './routes/dashboard._app'
+import { Route as DashboardSignInRouteImport } from './routes/dashboard.sign-in'
 import { Route as DocsIndexRouteImport } from './routes/docs.index'
 import { Route as DocsSlugRouteImport } from './routes/docs.$slug'
 import { Route as SpaceIndexRouteImport } from './routes/space.index'
 import { Route as SpaceSlugRouteImport } from './routes/space.$slug'
+import { Route as DashboardAppIndexRouteImport } from './routes/dashboard._app.index'
+import { Route as DashboardAppDeveloperRouteImport } from './routes/dashboard._app.developer'
+import { Route as DashboardCallSpaceIdJoinRouteImport } from './routes/dashboard_.call.$spaceId.join'
+import { Route as DashboardAppCallSpaceIdIndexRouteImport } from './routes/dashboard._app.call.$spaceId.index'
+import { Route as DashboardAppCallSpaceIdSessionEpisodeIdRouteImport } from './routes/dashboard._app.call.$spaceId.session.$episodeId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DocsRoute = DocsRouteImport.update({
@@ -68,6 +81,15 @@ const TermsRoute = TermsRouteImport.update({
   path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardAppRoute = DashboardAppRouteImport.update({
+  id: '/_app',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardSignInRoute = DashboardSignInRouteImport.update({
+  id: '/sign-in',
+  path: '/sign-in',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DocsIndexRoute = DocsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -88,9 +110,38 @@ const SpaceSlugRoute = SpaceSlugRouteImport.update({
   path: '/$slug',
   getParentRoute: () => SpaceRoute,
 } as any)
+const DashboardAppIndexRoute = DashboardAppIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DashboardAppRoute,
+} as any)
+const DashboardAppDeveloperRoute = DashboardAppDeveloperRouteImport.update({
+  id: '/developer',
+  path: '/developer',
+  getParentRoute: () => DashboardAppRoute,
+} as any)
+const DashboardCallSpaceIdJoinRoute =
+  DashboardCallSpaceIdJoinRouteImport.update({
+    id: '/dashboard_/call/$spaceId/join',
+    path: '/dashboard/call/$spaceId/join',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const DashboardAppCallSpaceIdIndexRoute =
+  DashboardAppCallSpaceIdIndexRouteImport.update({
+    id: '/call/$spaceId/',
+    path: '/call/$spaceId/',
+    getParentRoute: () => DashboardAppRoute,
+  } as any)
+const DashboardAppCallSpaceIdSessionEpisodeIdRoute =
+  DashboardAppCallSpaceIdSessionEpisodeIdRouteImport.update({
+    id: '/call/$spaceId/session/$episodeId',
+    path: '/call/$spaceId/session/$episodeId',
+    getParentRoute: () => DashboardAppRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRouteWithChildren
   '/docs': typeof DocsRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/privacy': typeof PrivacyRoute
@@ -99,27 +150,40 @@ export interface FileRoutesByFullPath {
   '/sign-up': typeof SignUpRoute
   '/space': typeof SpaceRouteWithChildren
   '/terms': typeof TermsRoute
+  '/dashboard/sign-in': typeof DashboardSignInRoute
   '/docs/$slug': typeof DocsSlugRoute
   '/space/$slug': typeof SpaceSlugRoute
   '/docs/': typeof DocsIndexRoute
   '/space/': typeof SpaceIndexRoute
+  '/dashboard/developer': typeof DashboardAppDeveloperRoute
+  '/dashboard/': typeof DashboardAppIndexRoute
+  '/dashboard/call/$spaceId/join': typeof DashboardCallSpaceIdJoinRoute
+  '/dashboard/call/$spaceId/': typeof DashboardAppCallSpaceIdIndexRoute
+  '/dashboard/call/$spaceId/session/$episodeId': typeof DashboardAppCallSpaceIdSessionEpisodeIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardAppIndexRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
   '/terms': typeof TermsRoute
+  '/dashboard/sign-in': typeof DashboardSignInRoute
   '/docs/$slug': typeof DocsSlugRoute
   '/space/$slug': typeof SpaceSlugRoute
   '/docs': typeof DocsIndexRoute
   '/space': typeof SpaceIndexRoute
+  '/dashboard/developer': typeof DashboardAppDeveloperRoute
+  '/dashboard/call/$spaceId/join': typeof DashboardCallSpaceIdJoinRoute
+  '/dashboard/call/$spaceId': typeof DashboardAppCallSpaceIdIndexRoute
+  '/dashboard/call/$spaceId/session/$episodeId': typeof DashboardAppCallSpaceIdSessionEpisodeIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRouteWithChildren
   '/docs': typeof DocsRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/privacy': typeof PrivacyRoute
@@ -128,15 +192,23 @@ export interface FileRoutesById {
   '/sign-up': typeof SignUpRoute
   '/space': typeof SpaceRouteWithChildren
   '/terms': typeof TermsRoute
+  '/dashboard/_app': typeof DashboardAppRouteWithChildren
+  '/dashboard/sign-in': typeof DashboardSignInRoute
   '/docs/$slug': typeof DocsSlugRoute
   '/space/$slug': typeof SpaceSlugRoute
   '/docs/': typeof DocsIndexRoute
   '/space/': typeof SpaceIndexRoute
+  '/dashboard/_app/developer': typeof DashboardAppDeveloperRoute
+  '/dashboard/_app/': typeof DashboardAppIndexRoute
+  '/dashboard_/call/$spaceId/join': typeof DashboardCallSpaceIdJoinRoute
+  '/dashboard/_app/call/$spaceId/': typeof DashboardAppCallSpaceIdIndexRoute
+  '/dashboard/_app/call/$spaceId/session/$episodeId': typeof DashboardAppCallSpaceIdSessionEpisodeIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/dashboard'
     | '/docs'
     | '/forgot-password'
     | '/privacy'
@@ -145,26 +217,39 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/space'
     | '/terms'
+    | '/dashboard/sign-in'
     | '/docs/$slug'
     | '/space/$slug'
     | '/docs/'
     | '/space/'
+    | '/dashboard/developer'
+    | '/dashboard/'
+    | '/dashboard/call/$spaceId/join'
+    | '/dashboard/call/$spaceId/'
+    | '/dashboard/call/$spaceId/session/$episodeId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/dashboard'
     | '/forgot-password'
     | '/privacy'
     | '/reset-password'
     | '/sign-in'
     | '/sign-up'
     | '/terms'
+    | '/dashboard/sign-in'
     | '/docs/$slug'
     | '/space/$slug'
     | '/docs'
     | '/space'
+    | '/dashboard/developer'
+    | '/dashboard/call/$spaceId/join'
+    | '/dashboard/call/$spaceId'
+    | '/dashboard/call/$spaceId/session/$episodeId'
   id:
     | '__root__'
     | '/'
+    | '/dashboard'
     | '/docs'
     | '/forgot-password'
     | '/privacy'
@@ -173,14 +258,22 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/space'
     | '/terms'
+    | '/dashboard/_app'
+    | '/dashboard/sign-in'
     | '/docs/$slug'
     | '/space/$slug'
     | '/docs/'
     | '/space/'
+    | '/dashboard/_app/developer'
+    | '/dashboard/_app/'
+    | '/dashboard_/call/$spaceId/join'
+    | '/dashboard/_app/call/$spaceId/'
+    | '/dashboard/_app/call/$spaceId/session/$episodeId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DashboardRoute: typeof DashboardRouteWithChildren
   DocsRoute: typeof DocsRouteWithChildren
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   PrivacyRoute: typeof PrivacyRoute
@@ -189,6 +282,7 @@ export interface RootRouteChildren {
   SignUpRoute: typeof SignUpRoute
   SpaceRoute: typeof SpaceRouteWithChildren
   TermsRoute: typeof TermsRoute
+  DashboardCallSpaceIdJoinRoute: typeof DashboardCallSpaceIdJoinRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -198,6 +292,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/docs': {
@@ -256,6 +357,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dashboard/_app': {
+      id: '/dashboard/_app'
+      path: ''
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardAppRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/sign-in': {
+      id: '/dashboard/sign-in'
+      path: '/sign-in'
+      fullPath: '/dashboard/sign-in'
+      preLoaderRoute: typeof DashboardSignInRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/docs/': {
       id: '/docs/'
       path: '/'
@@ -284,8 +399,76 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SpaceSlugRouteImport
       parentRoute: typeof SpaceRoute
     }
+    '/dashboard/_app/': {
+      id: '/dashboard/_app/'
+      path: '/'
+      fullPath: '/dashboard/'
+      preLoaderRoute: typeof DashboardAppIndexRouteImport
+      parentRoute: typeof DashboardAppRoute
+    }
+    '/dashboard/_app/developer': {
+      id: '/dashboard/_app/developer'
+      path: '/developer'
+      fullPath: '/dashboard/developer'
+      preLoaderRoute: typeof DashboardAppDeveloperRouteImport
+      parentRoute: typeof DashboardAppRoute
+    }
+    '/dashboard_/call/$spaceId/join': {
+      id: '/dashboard_/call/$spaceId/join'
+      path: '/dashboard/call/$spaceId/join'
+      fullPath: '/dashboard/call/$spaceId/join'
+      preLoaderRoute: typeof DashboardCallSpaceIdJoinRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard/_app/call/$spaceId/': {
+      id: '/dashboard/_app/call/$spaceId/'
+      path: '/call/$spaceId'
+      fullPath: '/dashboard/call/$spaceId/'
+      preLoaderRoute: typeof DashboardAppCallSpaceIdIndexRouteImport
+      parentRoute: typeof DashboardAppRoute
+    }
+    '/dashboard/_app/call/$spaceId/session/$episodeId': {
+      id: '/dashboard/_app/call/$spaceId/session/$episodeId'
+      path: '/call/$spaceId/session/$episodeId'
+      fullPath: '/dashboard/call/$spaceId/session/$episodeId'
+      preLoaderRoute: typeof DashboardAppCallSpaceIdSessionEpisodeIdRouteImport
+      parentRoute: typeof DashboardAppRoute
+    }
   }
 }
+
+interface DashboardAppRouteChildren {
+  DashboardAppDeveloperRoute: typeof DashboardAppDeveloperRoute
+  DashboardAppIndexRoute: typeof DashboardAppIndexRoute
+  DashboardAppCallSpaceIdIndexRoute: typeof DashboardAppCallSpaceIdIndexRoute
+  DashboardAppCallSpaceIdSessionEpisodeIdRoute: typeof DashboardAppCallSpaceIdSessionEpisodeIdRoute
+}
+
+const DashboardAppRouteChildren: DashboardAppRouteChildren = {
+  DashboardAppDeveloperRoute: DashboardAppDeveloperRoute,
+  DashboardAppIndexRoute: DashboardAppIndexRoute,
+  DashboardAppCallSpaceIdIndexRoute: DashboardAppCallSpaceIdIndexRoute,
+  DashboardAppCallSpaceIdSessionEpisodeIdRoute:
+    DashboardAppCallSpaceIdSessionEpisodeIdRoute,
+}
+
+const DashboardAppRouteWithChildren = DashboardAppRoute._addFileChildren(
+  DashboardAppRouteChildren,
+)
+
+interface DashboardRouteChildren {
+  DashboardAppRoute: typeof DashboardAppRouteWithChildren
+  DashboardSignInRoute: typeof DashboardSignInRoute
+}
+
+const DashboardRouteChildren: DashboardRouteChildren = {
+  DashboardAppRoute: DashboardAppRouteWithChildren,
+  DashboardSignInRoute: DashboardSignInRoute,
+}
+
+const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
+  DashboardRouteChildren,
+)
 
 interface DocsRouteChildren {
   DocsSlugRoute: typeof DocsSlugRoute
@@ -313,6 +496,7 @@ const SpaceRouteWithChildren = SpaceRoute._addFileChildren(SpaceRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DashboardRoute: DashboardRouteWithChildren,
   DocsRoute: DocsRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,
   PrivacyRoute: PrivacyRoute,
@@ -321,6 +505,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignUpRoute: SignUpRoute,
   SpaceRoute: SpaceRouteWithChildren,
   TermsRoute: TermsRoute,
+  DashboardCallSpaceIdJoinRoute: DashboardCallSpaceIdJoinRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
