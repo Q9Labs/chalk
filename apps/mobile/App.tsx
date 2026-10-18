@@ -67,5 +67,11 @@ export default function App(): React.JSX.Element {
     };
   }, [diagnosticsEnabled]);
 
-  return <Text>Chalk mobile is being rebuilt — {isBooting ? "booting: " : ""}{route.kind}{route.kind === "space" ? `: ${route.space}` : ""}</Text>;
+  return (
+    <Text>
+      Chalk mobile is being rebuilt — {isBooting ? "booting: " : ""}
+      {route.kind}
+      {route.kind === "space" ? `: ${route.space}` : ""}
+    </Text>
+  );
 }

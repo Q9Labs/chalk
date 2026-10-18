@@ -2,6 +2,30 @@
 
 ## 5.0.0 (unreleased)
 
+### Removed (React Native)
+
+- Removed the React Native `Chalk` public export.
+- Removed the React Native `ChalkFeatures` public export.
+- Removed the React Native `ChalkProps` public export.
+- Removed the React Native `ChalkTheme` public export.
+- Removed the React Native `ChalkThemeTokens` public export.
+- Removed the React Native `SpaceLayout` public export.
+- Removed the React Native `Entrance` public export.
+- Removed the React Native `EntranceProps` public export.
+- Removed the React Native `EntranceSettings` public export.
+- Removed the React Native `Logo` public export.
+- Removed the React Native `LogoProps` public export.
+- Removed the React Native `LogoVariant` public export.
+- Removed the React Native `Theme` public export.
+- Removed the React Native `createNativeTheme` public export.
+- Removed the React Native `@q9labsai/chalk-react-native/android` entry point.
+- Removed the React Native `@q9labsai/chalk-react-native/ios` entry point.
+- Removed the React Native `@q9labsai/chalk-react-native/ios-phone` entry point.
+- Removed the React Native `@q9labsai/chalk-react-native/ios-pad` entry point.
+- Removed the React Native `@q9labsai/chalk-react-native/macos` entry point.
+- Removed the React Native `@q9labsai/chalk-react-native/theme` entry point.
+
+
 - BREAKING: removes Episode diagnostics producers, credentials, backend, CLI and the diagnostics-contracts package.
 - Remove Episode Debugger launch and diagnostic-reference UI props from the React SDK. Local connection diagnostics and recording instrumentation remain.
 

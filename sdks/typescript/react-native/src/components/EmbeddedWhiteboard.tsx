@@ -171,7 +171,6 @@ export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracesta
         style={{ flex: 1 }}
         webviewDebuggingEnabled={typeof __DEV__ !== "undefined" && __DEV__}
       />
-
     </View>
   );
 }
@@ -179,4 +178,3 @@ export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracesta
 function createRendererGeneration(): string {
   return globalThis.crypto?.randomUUID?.() ?? `whiteboard-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
-
