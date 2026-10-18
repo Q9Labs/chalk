@@ -398,6 +398,10 @@ def main():
 
 def perform_copy(args, dest, host):
     run([*SSH, host, 'df -h /'])
+    if args.cleanup:
+        cleanup = "import pathlib,shutil,sys; p=pathlib.Path(sys.argv[1]); assert p.parent==pathlib.Path('/tmp') and p.name.startswith('chalk-mobile-') and not p.is_symlink(); shutil.rmtree(p) if p.exists() else None"
+        run([*SSH, host, shlex.join(['python3', '-c', cleanup, dest])])
+        return
     if not args.cleanup:
         run(['rsync', '-az', '-e', shlex.join(SSH), '--delete', '--exclude=/native-build', '--exclude=/native-*.stamp', '--exclude=/captures', '--exclude=*.log', '--exclude=.expo', '--exclude=node_modules', '--exclude=.git', '--exclude=.worktrees', '--exclude=.env*', '--exclude=scratchpad', '--exclude=/apps/mobile/ios', '--exclude=/apps/mobile/android', '--exclude=artifacts', '--exclude=dist', str(Path(args.worktree).resolve()) + '/', host + ':' + dest + '/'])
     if not args.cleanup:
