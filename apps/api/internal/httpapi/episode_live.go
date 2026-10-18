@@ -87,7 +87,7 @@ func listSpaceLiveEpisodesEndpoint(service EpisodeLifecycleService, authorizer T
 	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
 		Parameters(tenantIDParameter(), APIParameterContract{Name: "space_ids", In: "query", Type: "string", Required: true}).
 		Responds(http.StatusOK, "SpaceLiveEpisodeList", spaceLiveEpisodeListResponse{}).
-		Errors(lifecycleReadErrors(apiErrorInvalidSpaceIDs, apiErrorSpaceNotFound)...).MapErrors(func(err error) (APIError, bool) {
+		Errors(lifecycleReadErrors(apiErrorInvalidSpaceIDs, apiErrorSpaceNotFound, apiErrorRateLimited)...).MapErrors(func(err error) (APIError, bool) {
 		if errors.Is(err, episodes.ErrInvalidSpaceIDs) {
 			return apiErrorInvalidSpaceIDs, true
 		}

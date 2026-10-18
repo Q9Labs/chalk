@@ -8,7 +8,7 @@ select e.id as episode_id, p.id as participant_id, p.name as display_name,
           when e.status = 'ended' then coalesce(p.left_at, e.ended_at)
           when p.status = 'left' then p.left_at
           else null end)::timestamptz as last_left_at,
-    coalesce((case when e.status = 'ended' and (p.status != 'left' or p.left_at is null or p.last_left_reason = 'episode_ended') then 'episode_ended'
+    coalesce((case when e.status = 'ended' and (p.status != 'left' or p.left_at is null or p.last_left_reason = 'episode_ended' or (p.last_left_reason is null and p.left_at = e.ended_at)) then 'episode_ended'
           when p.status = 'left' then 'left'
           else null end), '')::text as left_reason
 from episodes e

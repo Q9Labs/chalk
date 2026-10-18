@@ -145,7 +145,7 @@ func TestDirectAdmissionHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(httpapi.NewRouter(httpapi.Options{
-		APIKeyAuthentication: keys, TenantAuthz: authorization.NewTenantPolicy(nil), Episodes: episodes.NewService(repository),
+		APIKeyAuthentication: keys, TenantAuthz: authorization.NewTenantPolicy(nil, nil), Episodes: episodes.NewService(repository),
 		Spaces: spaces.NewService(NewSpaceRepository(queries, pool)), Tenants: tenants.NewService(NewTenantRepository(queries)),
 		SyncTokens: syncTokens, ParticipantMediaIssuer: mediaTokens, ParticipantGeneration: accessgrants.NewActiveAuthorizer(repository), MediaPlane: media,
 	}))
@@ -177,6 +177,20 @@ func TestDirectAdmissionHTTP(t *testing.T) {
 		}
 		return out
 	}
+	// The durable journey root is the record an investigation reads to learn
+	// whether a caller asked to skip the admission gate.
+	journeyRoot := func(t *testing.T, intentID string) string {
+		t.Helper()
+		var raw []byte
+		if err := pool.QueryRow(ctx, `select e.attributes from observability_journey_events e join sync_lifecycle_intents i on i.journey_id=e.journey_id where i.lifecycle_intent_id=$1 and e.name='participant.admission_requested'`, intentID).Scan(&raw); err != nil {
+			t.Fatal(err)
+		}
+		var attributes map[string]string
+		if err := json.Unmarshal(raw, &attributes); err != nil {
+			t.Fatal(err)
+		}
+		return fmt.Sprint(attributes)
+	}
 	for _, mode := range []string{"knock", "members_only", "open"} {
 		t.Run(mode, func(t *testing.T) {
 			spaceID := accountTenantIntegrationID(t)
@@ -201,6 +215,9 @@ func TestDirectAdmissionHTTP(t *testing.T) {
 			}
 			if admitted.Participant.Role != "custom_guest" || len(admitted.Participant.Capabilities) != 1 || admitted.Participant.Capabilities[0] != "sendChat" {
 				t.Fatal("direct admission did not use the snapshot role capabilities")
+			}
+			if got, want := journeyRoot(t, admitted.Intent.ID), "map[admission:direct request:participant.admission_requested]"; got != want {
+				t.Fatalf("direct admission journey root = %s, want %s", got, want)
 			}
 			var payload json.RawMessage
 			if err := pool.QueryRow(ctx, `select payload from sync_lifecycle_intents where lifecycle_intent_id=$1`, admitted.Intent.ID).Scan(&payload); err != nil {
@@ -253,6 +270,9 @@ func TestDirectAdmissionHTTP(t *testing.T) {
 					queued := post(t, path, writer, policyKey, policyBody, http.StatusCreated)
 					if queued.AdmissionRequest == nil || queued.Access != nil || queued.SyncToken != "" {
 						t.Fatalf("policy admission did not knock: %+v", queued)
+					}
+					if got, want := journeyRoot(t, queued.Intent.ID), "map[request:participant.admission_requested]"; got != want {
+						t.Fatalf("policy admission journey root = %s, want %s", got, want)
 					}
 					equivalent := policyBody
 					if !explicit {

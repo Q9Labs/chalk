@@ -2,6 +2,15 @@
 // Do not edit by hand.
 import { Schema, SchemaGetter } from "effect";
 
+const isCodePointLengthBetween = (minimum: number, maximum: number) =>
+  Schema.makeFilter(
+    (input: string) => {
+      const length = Array.from(input).length;
+      return length >= minimum && length <= maximum;
+    },
+    { expected: `a value with ${minimum} to ${maximum} characters, counting each Unicode code point once` },
+  );
+
 export const DateTimeStringSchema = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}T/)).pipe(Schema.brand("DateTimeString"));
 export type DateTimeString = typeof DateTimeStringSchema.Type;
 
@@ -357,7 +366,7 @@ export const CreateTenantRequestSchema = Schema.Struct({
     ).check(Schema.isMaxLength(32)),
   ),
   default_media_plane: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
-  external_id: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512)))),
+  external_id: Schema.optional(Schema.NullOr(Schema.String.check(isCodePointLengthBetween(1, 512)))),
   logo_key: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   media_plane_provider_config: Schema.optional(Schema.NullOr(MediaPlaneProviderConfigSchema)),
   name: Schema.String.check(Schema.isMinLength(1)),
@@ -851,7 +860,7 @@ export const TenantSchema = Schema.Struct({
   ).check(Schema.isMaxLength(32)),
   created_at: DateTimeStringSchema,
   default_media_plane: Schema.NullOr(Schema.String),
-  external_id: Schema.NullOr(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512))),
+  external_id: Schema.NullOr(Schema.String.check(isCodePointLengthBetween(1, 512))),
   id: TenantIdSchema,
   logo_key: Schema.NullOr(Schema.String),
   media_plane_provider_config: Schema.NullOr(MediaPlaneProviderConfigSchema),
@@ -959,9 +968,9 @@ export type UpdateSpacePublicInviteRequest = typeof UpdateSpacePublicInviteReque
 
 export const UpdateSpaceRequestSchema = Schema.Struct({
   admission_policy: Schema.optional(Schema.Unknown),
-  default_episode_duration_seconds: Schema.optional(Schema.NullOr(Schema.Number)),
-  linger_window_seconds: Schema.optional(Schema.NullOr(Schema.Number)),
-  maximum_episode_duration_seconds: Schema.optional(Schema.NullOr(Schema.Number)),
+  default_episode_duration_seconds: Schema.optional(Schema.Number),
+  linger_window_seconds: Schema.optional(Schema.Number),
+  maximum_episode_duration_seconds: Schema.optional(Schema.Number),
   media_plane: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
   metadata: Schema.optional(Schema.Unknown),
   name: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
@@ -1579,7 +1588,7 @@ export const FinalizeChatAttachmentUpload429ResponseHeadersSchema = Schema.Struc
 export type FinalizeChatAttachmentUpload429ResponseHeaders = typeof FinalizeChatAttachmentUpload429ResponseHeadersSchema.Type;
 
 export const FindTenantByExternalIDQueryParamsSchema = Schema.Struct({
-  external_id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512)),
+  external_id: Schema.String.check(isCodePointLengthBetween(1, 512)),
 });
 export type FindTenantByExternalIDQueryParams = typeof FindTenantByExternalIDQueryParamsSchema.Type;
 
@@ -1627,6 +1636,13 @@ export type GetEpisodeAttendancePathParams = typeof GetEpisodeAttendancePathPara
 
 export const GetEpisodeAttendanceResponseSchema = EpisodeAttendanceSchema;
 export type GetEpisodeAttendanceResponse = typeof GetEpisodeAttendanceResponseSchema.Type;
+
+export const GetEpisodeAttendance429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type GetEpisodeAttendance429ResponseHeaders = typeof GetEpisodeAttendance429ResponseHeadersSchema.Type;
 
 export const GetRecordingPathParamsSchema = Schema.Struct({
   recording_id: RecordingIdSchema,
@@ -1920,6 +1936,13 @@ export type ListSpaceLiveEpisodesQueryParams = typeof ListSpaceLiveEpisodesQuery
 
 export const ListSpaceLiveEpisodesResponseSchema = SpaceLiveEpisodeListSchema;
 export type ListSpaceLiveEpisodesResponse = typeof ListSpaceLiveEpisodesResponseSchema.Type;
+
+export const ListSpaceLiveEpisodes429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type ListSpaceLiveEpisodes429ResponseHeaders = typeof ListSpaceLiveEpisodes429ResponseHeadersSchema.Type;
 
 export const ListSpacePublicAdmissionRequestsPathParamsSchema = Schema.Struct({
   space_id: SpaceIdSchema,
@@ -4706,7 +4729,17 @@ export const GetChatAttachmentDownloadErrorSchema = Schema.Union([
 ]);
 export type GetChatAttachmentDownloadError = typeof GetChatAttachmentDownloadErrorSchema.Type;
 
-export const GetEpisodeAttendanceErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, EpisodeInvalidIdErrorSchema, EpisodeNotFoundErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, SpaceInvalidIdErrorSchema, TenantInvalidIdErrorSchema]);
+export const GetEpisodeAttendanceErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  EpisodeInvalidIdErrorSchema,
+  EpisodeNotFoundErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
 export type GetEpisodeAttendanceError = typeof GetEpisodeAttendanceErrorSchema.Type;
 
 export const GetEpisodeErrorSchema = Schema.Union([
@@ -4948,7 +4981,16 @@ export const ListRecordingsErrorSchema = Schema.Union([
 ]);
 export type ListRecordingsError = typeof ListRecordingsErrorSchema.Type;
 
-export const ListSpaceLiveEpisodesErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, EpisodeInvalidSpaceIdsErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, SpaceNotFoundErrorSchema, TenantInvalidIdErrorSchema]);
+export const ListSpaceLiveEpisodesErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  EpisodeInvalidSpaceIdsErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceNotFoundErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
 export type ListSpaceLiveEpisodesError = typeof ListSpaceLiveEpisodesErrorSchema.Type;
 
 export const ListSpacePublicAdmissionRequestsErrorSchema = Schema.Union([

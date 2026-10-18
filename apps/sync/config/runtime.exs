@@ -22,7 +22,7 @@ if config_env() == :prod do
     for {key, expected} <- [
           {"CHALK_API_URL", "https://nightly-api.chalkmeet.com"},
           {"CHALK_SYNC_TOKEN_ISSUER", "https://nightly-api.chalkmeet.com"},
-          {"CHALK_SYNC_TOKEN_AUDIENCE", "chalk-nightly-sync"}
+          {"CHALK_SYNC_TOKEN_AUDIENCE", "chalk-sync"}
         ] do
       if System.get_env(key) != expected, do: raise("#{key} must select nightly")
     end

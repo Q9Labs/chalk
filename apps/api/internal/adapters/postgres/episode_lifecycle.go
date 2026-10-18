@@ -260,7 +260,16 @@ func lifecycleJourneyFromContext(ctx context.Context) (lifecycleJourney, error) 
 }
 
 func persistLifecycleJourneyRoot(ctx context.Context, tx pgx.Tx, journey lifecycleJourney, name string) error {
-	attributes, err := json.Marshal(map[string]any{"request": name})
+	return persistLifecycleJourneyRootWith(ctx, tx, journey, name, nil)
+}
+
+// persistLifecycleJourneyRootWith stores extra bounded string attributes beside the request name.
+func persistLifecycleJourneyRootWith(ctx context.Context, tx pgx.Tx, journey lifecycleJourney, name string, extra map[string]string) error {
+	root := map[string]string{"request": name}
+	for key, value := range extra {
+		root[key] = value
+	}
+	attributes, err := json.Marshal(root)
 	if err != nil {
 		return err
 	}

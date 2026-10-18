@@ -1574,7 +1574,8 @@
             "schema": {
               "maxLength": 512,
               "minLength": 1,
-              "type": "string"
+              "type": "string",
+              "x-chalk-length-unit": "code-points"
             }
           }
         ],
@@ -2680,6 +2681,37 @@
             },
             "description": "Not Found",
             "x-chalk-error-codes": ["space.not_found"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["request.rate_limited"]
           },
           "500": {
             "content": {
@@ -5246,6 +5278,37 @@
             },
             "description": "Not Found",
             "x-chalk-error-codes": ["episode.not_found"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["request.rate_limited"]
           },
           "500": {
             "content": {
@@ -12247,7 +12310,8 @@
           "external_id": {
             "maxLength": 512,
             "minLength": 1,
-            "type": ["string", "null"]
+            "type": ["string", "null"],
+            "x-chalk-length-unit": "code-points"
           },
           "logo_key": {
             "minLength": 1,
@@ -13753,7 +13817,8 @@
           "external_id": {
             "maxLength": 512,
             "minLength": 1,
-            "type": ["string", "null"]
+            "type": ["string", "null"],
+            "x-chalk-length-unit": "code-points"
           },
           "id": {
             "$ref": "#/components/schemas/TenantId"
@@ -14117,13 +14182,13 @@
             "type": ["object", "array", "string", "number", "boolean", "null"]
           },
           "default_episode_duration_seconds": {
-            "type": ["integer", "null"]
+            "type": "integer"
           },
           "linger_window_seconds": {
-            "type": ["integer", "null"]
+            "type": "integer"
           },
           "maximum_episode_duration_seconds": {
-            "type": ["integer", "null"]
+            "type": "integer"
           },
           "media_plane": {
             "minLength": 1,

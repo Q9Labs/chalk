@@ -53,7 +53,7 @@ defmodule ChalkSync.Operations.ProductionConfigTest do
     System.put_env("CHALK_API_ENV", "nightly")
     System.put_env("CHALK_API_URL", "https://nightly-api.chalkmeet.com")
     System.put_env("CHALK_SYNC_TOKEN_ISSUER", "https://nightly-api.chalkmeet.com")
-    System.put_env("CHALK_SYNC_TOKEN_AUDIENCE", "chalk-nightly-sync")
+    System.put_env("CHALK_SYNC_TOKEN_AUDIENCE", "chalk-sync")
     System.put_env("CHALK_SYNC_REQUIRE_SYNCHRONOUS_STANDBY", "false")
     config = read_config()
     assert config[:enforce_production_boot_checks]

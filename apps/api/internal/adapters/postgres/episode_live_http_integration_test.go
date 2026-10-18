@@ -56,7 +56,7 @@ func TestSpaceLiveEpisodesPublicHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	router := httpapi.NewRouter(httpapi.Options{Episodes: episodes.NewService(NewEpisodeLifecycleRepository(pool)), APIKeyAuthentication: keys, TenantAuthz: authorization.NewTenantPolicy(nil)})
+	router := httpapi.NewRouter(httpapi.Options{Episodes: episodes.NewService(NewEpisodeLifecycleRepository(pool)), APIKeyAuthentication: keys, TenantAuthz: authorization.NewTenantPolicy(nil, nil)})
 	request := func(tenant utilities.ID, ids, token string, want int) []byte {
 		t.Helper()
 		r := httptest.NewRequest(http.MethodGet, "/v1/tenants/"+tenant.String()+"/live-episodes?space_ids="+ids, nil)

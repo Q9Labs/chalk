@@ -49,6 +49,8 @@ write_files:
         dpkg -i "$work/ssm.deb"
         systemctl enable --now amazon-ssm-agent
       fi
+      # Create user service paths as their owner before the first deployment.
+      runuser -u chalk -- sh -c 'umask 077; mkdir -p -m 0700 /home/chalk/.config/containers/systemd /home/chalk/.config/systemd/user'
       loginctl enable-linger chalk
       user_id=$(id -u chalk)
       systemctl start "user@$user_id.service"
