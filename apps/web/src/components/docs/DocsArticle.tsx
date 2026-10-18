@@ -21,23 +21,30 @@ export function DocsArticle({ page }: { readonly page: DocsPage }) {
     const article = articleRef.current;
     if (!article) return;
     const headings = () => Array.from(article.querySelectorAll<HTMLHeadingElement>(".art-body h2[id], .art-body h3[id]"));
-    const readOutline = () =>
+    // The page content loads after the browser's own jump to the URL hash, so the article makes that jump once it arrives.
+    let pendingHash = decodeURIComponent(window.location.hash.slice(1));
+    const readOutline = () => {
       setOutline(
         headings().flatMap((heading) => {
           const label = heading.textContent?.trim();
           return label ? [{ id: heading.id, label, level: heading.tagName === "H3" ? 3 : 2 }] : [];
         }),
       );
+      const target = pendingHash ? document.getElementById(pendingHash) : null;
+      if (!target) return;
+      pendingHash = "";
+      target.scrollIntoView();
+    };
     let frame = 0;
     const readPosition = () => {
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() =>
-        setCurrentId(
-          headings()
-            .filter((heading) => heading.getBoundingClientRect().top < READING_LINE)
-            .at(-1)?.id,
-        ),
-      );
+      frame = requestAnimationFrame(() => {
+        const all = headings();
+        const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+        const passed = all.filter((heading) => heading.getBoundingClientRect().top < READING_LINE);
+        // At the bottom of the page the last sections can't reach the reading line, so the outline marks the last one.
+        setCurrentId((atBottom && window.scrollY > 0 ? all : passed).at(-1)?.id);
+      });
     };
     readOutline();
     readPosition();
