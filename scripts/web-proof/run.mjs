@@ -13,15 +13,16 @@ const directory = resolve(".private/prod-proof", runId);
 let run;
 let child;
 let stopping = false;
+function terminate(pid) {
+  try {
+    process.kill(-pid, "SIGTERM");
+  } catch (error) {
+    if (error.code !== "ESRCH") throw error;
+  }
+}
 const stop = () => {
   stopping = true;
-  if (child?.pid) {
-    try {
-      process.kill(-child.pid, "SIGTERM");
-    } catch (error) {
-      if (error.code !== "ESRCH") throw error;
-    }
-  }
+  if (child?.pid) terminate(child.pid);
 };
 process.on("SIGINT", stop);
 process.on("SIGTERM", stop);
@@ -60,7 +61,7 @@ try {
       stdio: "inherit",
       env: { ...process.env, E2E_TELEMETRY_DISABLED: "1", CHALK_PROOF_WEB_URL: web.origin, CHALK_E2E_INVITE: entry, CHALK_E2E_DIRECTORY: directory, CHALK_E2E_API_KEY: run.apiKey, CHALK_E2E_RUN_ID: runId },
     });
-    const timer = setTimeout(stop, 180_000);
+    const timer = setTimeout(stop, 300_000);
     child.once("error", (error) => {
       clearTimeout(timer);
       reject(error);

@@ -24,9 +24,9 @@ test("the real web app and SDK guest receive live video and audio", async ({ app
     await expect.poll(() => guest.media().then((media) => media.frames), { timeout: 30_000 }).toBeGreaterThan(5);
     const received = await guest.media();
     await expect.poll(() => guest.media().then((media) => media.frames), { timeout: 15_000 }).toBeGreaterThan(received.frames + 5);
-    await expect.poll(() => guest.media().then((media) => media.audioLevel), { timeout: 30_000 }).toBeGreaterThan(0);
     await app.screenshot("participant-a");
     await guest.screenshot();
+    await expect.poll(() => guest.media().then((media) => media.audioLevel), { timeout: 30_000 }).toBeGreaterThan(0);
     await screen.getByRole("button", /^(Leave|Leave space)$/).click();
     await screen.getByRole("button", "Leave Space").click();
     await guest.leave();

@@ -15,9 +15,10 @@ export async function prepareGuest(directory) {
     async media() {
       const guest = await ready;
       const [rows] = await stats(guest.pages);
-      const video = rows.find((row) => row.type === "inbound-rtp" && row.kind === "video");
-      const audio = rows.find((row) => row.type === "inbound-rtp" && row.kind === "audio");
-      return { frames: video?.framesDecoded ?? 0, audioLevel: audio?.audioLevel ?? 0 };
+      const inbound = rows.filter((row) => row.type === "inbound-rtp");
+      const video = inbound.filter((row) => row.kind === "video");
+      const audio = inbound.filter((row) => row.kind === "audio");
+      return { frames: Math.max(0, ...video.map((row) => row.framesDecoded ?? 0)), audioLevel: Math.max(0, ...audio.map((row) => row.audioLevel ?? 0)) };
     },
     async screenshot() {
       const guest = await ready;

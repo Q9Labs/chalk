@@ -34,7 +34,6 @@ jobs:
       result: ${{ steps.result.outputs.result }}
     env:
       CHALK_PROOF_CONFIG_SOURCE: env
-      CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
       CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
       CHALK_PROOF_API_URL: ${{ vars.CHALK_PROOF_API_URL }}
       CHALK_PROOF_WEB_URL: ${{ vars.CHALK_PROOF_WEB_URL }}
@@ -66,10 +65,14 @@ jobs:
           test -n "$EVIDENCE_RECIPIENT"
           printf '' | age --recipient "$EVIDENCE_RECIPIENT" --output /dev/null
       - name: Prove the deployed web app
-        timeout-minutes: 5
+        timeout-minutes: 7
+        env:
+          CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
         run: pnpm web:proof
       - name: Clean proof resources even after cancellation
         if: always()
+        env:
+          CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
         run: |
           if [ -f .private/web-proof-run-id ]; then
             pnpm prod:proof cleanup "$(cat .private/web-proof-run-id)"

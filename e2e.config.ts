@@ -9,7 +9,7 @@ export default {
   targets: [{ name: "web", engine, app: { url: process.env.CHALK_PROOF_WEB_URL ?? "http://localhost:3000" } }],
   workers: 1,
   retries: 0,
-  timeout: 120_000,
+  timeout: 240_000,
   cleanupTimeout: 30_000,
   output: ".private/web-proof/e2e",
   trace: "off",

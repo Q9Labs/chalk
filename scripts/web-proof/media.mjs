@@ -4,6 +4,15 @@ import { installFixture } from "../prod-proof/fixture.mjs";
 export function webMediaFixture(guest) {
   return `(() => {
     if (!navigator.mediaDevices) return;
+    // Entrance requests preview audio before a gesture. Resume every generated
+    // context on the user's click, including one whose first resume is pending.
+    const NativeAudioContext = window.AudioContext;
+    window.AudioContext = class extends NativeAudioContext {
+      constructor(...args) {
+        super(...args);
+        document.addEventListener("pointerdown", () => { void this.resume(); }, { once: true });
+      }
+    };
     navigator.mediaDevices.getUserMedia = async () => new MediaStream();
     navigator.mediaDevices.enumerateDevices = async () => [
       { deviceId: "proof-camera", groupId: "proof", kind: "videoinput", label: "Proof camera", toJSON() { return {}; } },
@@ -14,13 +23,9 @@ export function webMediaFixture(guest) {
 }
 
 export async function incomingAudioLevel() {
-  let level = 0;
-  for (const connection of window.proofConnections) {
-    for (const row of (await connection.getStats()).values()) {
-      if (row.type === "inbound-rtp" && row.kind === "audio") level = Math.max(level, row.audioLevel ?? 0);
-    }
-  }
-  return level;
+  const reports = await Promise.all(window.proofConnections.map((connection) => connection.getStats()));
+  const audio = reports.flatMap((report) => [...report.values()]).filter((row) => row.type === "inbound-rtp" && row.kind === "audio");
+  return Math.max(0, ...audio.map((row) => row.audioLevel ?? 0));
 }
 
 export function remoteVideoFrames() {
