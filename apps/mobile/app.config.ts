@@ -24,7 +24,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       userInterfaceStyle: "automatic",
       assetBundlePatterns: ["**/*"],
       experiments: { tsconfigPaths: false },
-      plugins: ["expo-secure-store", ["expo-font", { fonts: FIGTREE_WEIGHTS.map((weight) => `./assets/fonts/Figtree-${weight}.ttf`) }]],
+      plugins: ["expo-secure-store", ["expo-font", { fonts: FIGTREE_WEIGHTS.map((weight) => `./assets/fonts/Figtree-${weight}.ttf`) }], "./plugins/with-worklets-legacy-output.js"],
       splash: { image: "./assets/splash-logo.png", resizeMode: "contain", backgroundColor: "#F7F6F2" },
       ios: {
         jsEngine: "jsc",
