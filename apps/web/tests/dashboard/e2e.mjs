@@ -294,7 +294,7 @@ try {
   const testDelivery = await post(ada, "/dashboard-api/developer", { action: "test-webhook", webhookId, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
   assert.equal(testDelivery.status, 200, await testDelivery.clone().text());
   const testDeliveryId = (await testDelivery.json()).deliveryId;
-  sql(`update webhook_deliveries set attempt_count=1 where id='${testDeliveryId}';
+  sql(`update webhook_deliveries set attempt_count=1, state='succeeded', next_attempt_at=null, terminal_at=now() where id='${testDeliveryId}';
   insert into webhook_delivery_attempts(id,tenant_id,delivery_id,attempt_number,started_at,finished_at,latency_milliseconds,outcome,http_status) values(gen_random_uuid(),'${firstTenant}','${testDeliveryId}',1,now(),now(),1,'succeeded',204);
   update api_keys set last_used_at='2026-10-18T00:00:00Z' where id='${keyId}'`);
   const developer = await ada.request("/dashboard-api/developer");
