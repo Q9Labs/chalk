@@ -2,7 +2,7 @@
 
 ## 5.0.0
 
-- Remove unused icon wrappers: `ArrowLeft02Icon`, `ArrowUp01Icon`, `Calendar01Icon`, `Mail01Icon`, `PictureInPictureIcon`, `ZoomInIcon`, `ZoomOutIcon`.
+- Remove unused icon wrappers: `ArrowLeft02Icon`, `ArrowUp01Icon`, `Calendar01Icon`, `Mail01Icon`, `PictureInPictureIcon`, `ZoomInIcon`, `ZoomOutIcon`, `Link01Icon`, `MoreHorizontalIcon`, `Settings01Icon`, `SparklesIcon`, `UserAdd01Icon`.
 
 - Fold Classic implementations into plain component names; remove Classic-prefixed modules and symbols.
 - Remove SettingsDialog, SettingsPanel, DeviceSelector, NoiseSuppressionToggle, and their props, types, and lazy exports.

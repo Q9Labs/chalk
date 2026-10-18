@@ -40,12 +40,10 @@ import {
   Logout01Icon as StaticLogout01Icon,
   Image01Icon as StaticImage01Icon,
   InformationCircleIcon as StaticInformationCircleIcon,
-  Link01Icon as StaticLink01Icon,
   MaximizeScreenIcon as StaticMaximize01Icon,
   Message01Icon as StaticMessage01Icon,
   Mic01Icon as StaticMicrophone01Icon,
   Moon02Icon as StaticMoon02Icon,
-  MoreHorizontalIcon as StaticMoreHorizontalIcon,
   MoreVerticalIcon as StaticMoreVerticalIcon,
   PauseIcon as StaticPauseIcon,
   PinIcon as StaticPin01Icon,
@@ -55,15 +53,12 @@ import {
   RefreshIcon as StaticRefreshIcon,
   Search01Icon as StaticSearch01Icon,
   SentIcon as StaticSentIcon,
-  Settings01Icon as StaticSettings01Icon,
   Share08Icon as StaticShare01Icon,
   Shield02Icon as StaticShield01Icon,
   SmileIcon as StaticSmileIcon,
-  SparklesIcon as StaticSparklesIcon,
   StarIcon as StaticStarIcon,
   ThumbsUpIcon as StaticThumbsUpIcon,
   Upload01Icon as StaticUpload01Icon,
-  UserAdd01Icon as StaticUserAdd01Icon,
   UserGroupIcon as StaticUserGroupIcon,
   UserRemove01Icon as StaticUserRemove01Icon,
   Video01Icon as StaticVideo01Icon,
@@ -102,7 +97,6 @@ export const Image01Icon = createIcon(StaticImage01Icon);
 export const InformationCircleIcon = createIcon(StaticInformationCircleIcon);
 export const LayoutGridIcon = createIcon(LayoutGridIconSvg);
 export const LayoutTableIcon = createIcon(LayoutTableIconSvg);
-export const Link01Icon = createIcon(StaticLink01Icon);
 export const Loading01Icon = createIcon(Loading01IconSvg);
 export const Maximize01Icon = createIcon(StaticMaximize01Icon);
 export const Message01Icon = createIcon(StaticMessage01Icon);
@@ -111,7 +105,6 @@ export const MicrophoneOff01Icon = createIcon(MicrophoneOff01IconSvg);
 export const Moon02Icon = createIcon(StaticMoon02Icon);
 export const Monitor01Icon = createIcon(Monitor01IconSvg);
 export const MonitorOffIcon = createIcon(MonitorOffIconSvg);
-export const MoreHorizontalIcon = createIcon(StaticMoreHorizontalIcon);
 export const MoreVerticalIcon = createIcon(StaticMoreVerticalIcon);
 export const PauseIcon = createIcon(StaticPauseIcon);
 export const Pin01Icon = createIcon(StaticPin01Icon);
@@ -122,12 +115,10 @@ export const Radio01Icon = createIcon(Radio01IconSvg);
 export const RefreshIcon = createIcon(StaticRefreshIcon);
 export const Search01Icon = createIcon(StaticSearch01Icon);
 export const SentIcon = createIcon(StaticSentIcon);
-export const Settings01Icon = createIcon(StaticSettings01Icon);
 export const Share01Icon = createIcon(StaticShare01Icon);
 export const Shield01Icon = createIcon(StaticShield01Icon);
 export const SignalFull02Icon = createIcon(SignalFull02IconSvg);
 export const SmileIcon = createIcon(StaticSmileIcon);
-export const SparklesIcon = createIcon(StaticSparklesIcon);
 export const SquareIcon = createIcon(SquareIconSvg);
 export const StarIcon = createIcon(StaticStarIcon);
 export const Sun02Icon = createIcon(Sun02IconSvg);
@@ -135,7 +126,6 @@ export const TextIcon = createIcon(TextIconSvg);
 export const Tick01Icon = createIcon(Tick01IconSvg);
 export const TickDouble01Icon = createIcon(TickDouble01IconSvg);
 export const Upload01Icon = createIcon(StaticUpload01Icon);
-export const UserAdd01Icon = createIcon(StaticUserAdd01Icon);
 export const UserGroupIcon = createIcon(StaticUserGroupIcon);
 export const UserRemove01Icon = createIcon(StaticUserRemove01Icon);
 export const Video01Icon = createIcon(StaticVideo01Icon);
