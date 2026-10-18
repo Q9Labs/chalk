@@ -254,7 +254,12 @@ func (r EpisodeLifecycleRepository) AdmitParticipant(ctx context.Context, input 
 		if err != nil {
 			return err
 		}
-		if err := persistLifecycleJourneyRoot(ctx, tx, journey, "participant.admission_requested"); err != nil {
+		// Policy admissions keep their record; absence of the attribute means policy.
+		var rootAttributes map[string]string
+		if input.Admission == episodes.AdmissionDirect {
+			rootAttributes = map[string]string{"admission": string(episodes.AdmissionDirect)}
+		}
+		if err := persistLifecycleJourneyRootWith(ctx, tx, journey, "participant.admission_requested", rootAttributes); err != nil {
 			return err
 		}
 		intent, err = queries.CreateLifecycleIntent(ctx, sqlc.CreateLifecycleIntentParams{
