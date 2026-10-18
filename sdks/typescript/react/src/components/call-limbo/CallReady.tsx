@@ -48,7 +48,7 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
   const content = (
     <>
       <div className="-mt-1.5 mb-0.5 flex items-center justify-between">
-        <h2 id={id} style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.4 }}>
+        <h2 id={id} style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.4, fontFamily: "inherit", letterSpacing: "normal", textWrap: "wrap" }}>
           Your call is ready
         </h2>
         <button type="button" className="chalk-dismiss max-sm:!h-11 max-sm:!w-11" aria-label="Close call link" onClick={close}>

@@ -38,7 +38,7 @@ export function StatusSurface({ phase, callName = "the call", reason, theme, onR
       style={{ ...chalkThemeStyle(theme), fontSize: 14, lineHeight: 1.4 }}
       className="chalk-root relative flex h-full min-h-0 w-full flex-col items-center justify-center gap-3 bg-[var(--chalk-canvas)] p-6 text-center text-[var(--chalk-text)]"
     >
-      <h1 role={phase === "entering" ? "status" : undefined} style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.4 }}>
+      <h1 role={phase === "entering" ? "status" : undefined} style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.4, fontFamily: "inherit", letterSpacing: "normal", textWrap: "wrap" }}>
         {copy.title}
       </h1>
       {reason || copy.detail ? <p className="text-[14px] text-[var(--chalk-muted-text)]">{reason ?? copy.detail}</p> : null}
