@@ -95,7 +95,7 @@ function ShellSeams() {
   });
   const toggle = () => setOpen((current) => !current);
   return (
-    <main data-chalk data-chalk-theme="dark" data-part="call-frame" className="chalk-root chalk-frame h-dvh">
+    <main data-chalk data-chalk-theme="dark" data-part="call-frame" className="chalk-root chalk-frame" style={{ height: "100dvh" }}>
       <ChalkProvider client={client}>
         <SpaceHeader spaceName="Shell seams" callLinkOpen={open} onCallLinkToggle={toggle} />
         <div className="chalk-frame-dock">

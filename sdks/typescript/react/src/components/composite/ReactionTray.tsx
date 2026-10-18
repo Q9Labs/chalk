@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
-import { HandIcon } from "../../utils/icons";
 import { ShellStyles } from "../control-bar/ShellStyles";
 import { useHaptics } from "../../internal/useHaptics";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
@@ -68,7 +67,7 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
     </button>
   ));
 
-  const trayClassName = cn("absolute left-1/2 z-50 -translate-x-1/2", position === "top" ? "bottom-full mb-3" : "top-full mt-3", !prefersReducedMotion && "animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200", className);
+  const trayClassName = cn("absolute left-1/2 z-50 -translate-x-1/2", position === "top" ? "bottom-full mb-3" : "top-full mt-3", !prefersReducedMotion && "chalk-shell-reactions-enter", className);
 
   return (
     <>
@@ -78,7 +77,10 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
         <div ref={listRef} className={cn(trayClassName, "chalk-shell-reactions", more && "chalk-shell-reactions-expanded")} role="toolbar" aria-label="Reactions" onKeyDown={handleKeyDown}>
           {onToggleHandRaise ? (
             <button type="button" className="chalk-shell-raise" aria-pressed={isHandRaised} onClick={onToggleHandRaise}>
-              <HandIcon />
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8" />
+                <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-6-2.3l-3.6-3.6a2 2 0 0 1 2.8-2.8L7 15" />
+              </svg>
               {isHandRaised ? "Lower hand" : "Raise hand"}
             </button>
           ) : null}

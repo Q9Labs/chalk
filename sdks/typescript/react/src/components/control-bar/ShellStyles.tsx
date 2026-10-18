@@ -218,15 +218,13 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   align-items: center;
   gap: 14px;
   margin: 10px 6px 2px;
-  font-size: 13px;
-  color: var(--chalk-soft-text);
 }
+.chalk-shell-qr-row p {font-size:13px;color:var(--chalk-soft-text);}
 .chalk-shell-qr {
   width: 112px;
   height: 112px;
   flex: none;
   border-radius: 8px;
-  background: #fff;
   fill: #111;
 }
 .chalk-shell-diagnostics {
@@ -256,7 +254,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   padding: 0 10px;
   gap: 10px;
   border-radius: 9px;
-  font-size: 15px;
+  font-size: 14px;
   text-align: start;
 }
 .chalk-shell-detail-action:hover {
@@ -373,6 +371,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
     gap: 0;
     padding-inline: 22px;
   }
+  .chalk-frame-dock .chalk-shell-dock {width:calc(100% + 44px);margin-inline:-22px;}
   .chalk-shell-dock .chalk-shell-desktop,
   .chalk-shell-corner {
     display: none;
@@ -383,8 +382,9 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   .chalk-shell-split {
     height: 52px;
     background: none !important;
-    box-shadow: none !important;
+    box-shadow: none;
   }
+  [data-chalk-theme="light"] .chalk-shell-split {box-shadow:0 0 0 1px var(--chalk-line);}
   .chalk-shell-split .chalk-shell-main {
     width: 52px;
     height: 52px;
@@ -486,6 +486,8 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   background: var(--chalk-popover);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
 }
+.chalk-shell-reactions-enter {animation:chalk-shell-reactions-in .18s cubic-bezier(.16,1,.3,1);}
+@keyframes chalk-shell-reactions-in {from{opacity:0;translate:0 4px;}}
 .chalk-shell-emoji {
   width: 40px;
   height: 40px;
@@ -514,6 +516,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   white-space: nowrap;
   font-size: 14px;
 }
+.chalk-shell-raise svg {width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;}
 .chalk-shell-raise[aria-pressed="true"] {
   background: var(--chalk-warning, #dcb740);
   color: #16140c;
@@ -535,6 +538,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   }
   .chalk-shell-raise {
     width: 100%;
+    min-height:48px;
     justify-content: center;
     margin: 0 0 4px;
   }
