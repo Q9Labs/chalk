@@ -67,7 +67,9 @@ revision first. Do not remove pre-existing endpoints as part of proof setup.
 ### GitHub Actions
 
 `real-call-proof.yml` accepts an environment through manual dispatch or
-`workflow_call`. There is no proof timer: nightly and promote own the calls. A caller uses
+`workflow_call`, and a timer runs it on production every day at 05:41 UTC. A failed timer run
+posts its run link to the production alerts Discord channel (`CHALK_ALERTS_DISCORD_WEBHOOK_URL`
+in the `production` environment). A caller uses
 `./.github/workflows/real-call-proof.yml` with `environment: nightly` (or
 `production`) and grants `contents: read`. The job reads its own environment's
 secrets. Reusable callers must also satisfy the declared secret contract using
@@ -76,7 +78,7 @@ Both triggers accept a space-separated `proofs` string (default `smoke transcrip
 The reusable workflow exposes `result` (`passed` or `failed`); a failed job still fails
 the caller. `result` may be absent on cancellation or runner loss. Callers must
 fail closed: require job success **and** `result == 'passed'` (as promote does).
-Runs for the same environment queue without cancelling an active call.
+Runs for the same environment queue in order (`queue: max`), so no run cancels another.
 
 Create these separately in **each** GitHub environment (`production`, `nightly`):
 

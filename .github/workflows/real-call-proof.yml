@@ -30,6 +30,9 @@ on:
       CHALK_PROOF_API_KEY:
         description: Bootstrap key for the environment proof Tenant
         required: true
+      CHALK_ALERTS_DISCORD_WEBHOOK_URL:
+        description: Production alerts Discord webhook; only timer runs use it
+        required: false
     outputs:
       result:
         description: passed or failed; may be absent on cancellation or runner loss
@@ -41,6 +44,9 @@ permissions:
 concurrency:
   group: real-call-proof-${{ inputs.environment || 'production' }}
   cancel-in-progress: false
+  # The default keeps one pending run, so a timer run would cancel a waiting
+  # Promote proof, and Promote rolls back on any proof that did not pass.
+  queue: max
 
 jobs:
   smoke:
@@ -170,3 +176,11 @@ jobs:
           else
             echo 'result=failed' >> "$GITHUB_OUTPUT"
           fi
+      - name: Alert Discord about a failed daily production call
+        if: always() && job.status != 'success' && github.event_name == 'schedule' && (inputs.environment || 'production') == 'production'
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.CHALK_ALERTS_DISCORD_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          jq -n --arg content "Daily production real-call proof failed: $RUN_URL" '{content: $content}' \
+            | curl --fail --silent --show-error -H 'Content-Type: application/json' --data @- "$DISCORD_WEBHOOK_URL"
