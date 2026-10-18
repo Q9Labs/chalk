@@ -1167,6 +1167,11 @@
   border-width: 2.5px;
 }
 
+.site .dash .pnote svg.site-icon {
+  display: block;
+  margin-inline: auto;
+}
+
 .site .dash .pnote b {
   display: block;
   font-size: 17px;
@@ -1301,6 +1306,10 @@
   text-align: center;
   color: var(--chalk-muted-text);
   font-size: 14.5px;
+}
+
+.site .dash .tempty p {
+  margin: 0 0 14px;
 }
 
 .site .dash .side2 > section + section {
