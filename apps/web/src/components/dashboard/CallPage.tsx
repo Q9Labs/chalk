@@ -178,7 +178,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
           {nextCursor ? <MoreButton label="Show older sessions" cursor={nextCursor} load={(cursor) => readPage("call", { spaceId, cursor })} onLoaded={(page) => update((data) => ({ ...data, episodes: [...data.episodes, ...page.episodes], nextCursor: page.nextCursor }))} /> : null}
         </>
       )}
-      {renaming ? <RenameDialog call={call} page="call" onClose={() => setRenaming(false)} onRenamed={(renamed) => update((data) => ({ ...data, call: renamed }))} /> : null}
+      {renaming ? <RenameDialog call={call} page="call" link={inviteUrl} onClose={() => setRenaming(false)} onRenamed={(renamed) => update((data) => ({ ...data, call: renamed }))} /> : null}
     </div>
   );
 }

@@ -296,7 +296,7 @@ function JoinLinkDialog({ onClose }: { readonly onClose: () => void }) {
   );
 }
 
-export function RenameDialog({ call, page, onClose, onRenamed }: { readonly call: CallDTO; readonly page: "home" | "call"; readonly onClose: () => void; readonly onRenamed: (call: CallDTO) => void }) {
+export function RenameDialog({ call, page, link, onClose, onRenamed }: { readonly call: CallDTO; readonly page: "home" | "call"; readonly link?: string; readonly onClose: () => void; readonly onRenamed: (call: CallDTO) => void }) {
   const [value, setValue] = useState(call.name);
   const [bad, setBad] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -322,7 +322,7 @@ export function RenameDialog({ call, page, onClose, onRenamed }: { readonly call
   return (
     <Dialog
       title="Rename call"
-      description="The link stays the same."
+      description={link ? `The link stays ${displayLink(link)}.` : "The link stays the same."}
       onClose={onClose}
       onSubmit={() => void save()}
       actions={
