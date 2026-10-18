@@ -218,22 +218,3 @@ where id = sqlc.arg(id);
 -- name: FindServiceTenantID :one
 SELECT id FROM tenants
 WHERE created_by_service_id = sqlc.arg(service_id) AND external_id = sqlc.arg(external_id);
-
--- name: AdoptServiceTenant :one
-WITH previous AS (
-    SELECT tenants.id, tenants.created_by_service_id, tenants.external_id FROM tenants
-    WHERE tenants.id = sqlc.arg(tenant_id) FOR UPDATE
-), adopted AS (
-    UPDATE tenants SET created_by_service_id = sqlc.arg(service_id),
-        external_id = sqlc.narg(external_id), updated_at = now()
-    FROM previous
-    WHERE tenants.id = previous.id
-      AND (previous.created_by_service_id IS NULL OR previous.created_by_service_id = sqlc.arg(service_id))
-    RETURNING tenants.id, previous.created_by_service_id AS previous_service_id,
-        previous.external_id AS previous_external_id
-)
-INSERT INTO tenant_service_ownership_audit
-    (tenant_id, service_id, external_id, previous_service_id, previous_external_id, actor, reason)
-SELECT adopted.id, sqlc.arg(service_id), sqlc.narg(external_id), adopted.previous_service_id,
-    adopted.previous_external_id, sqlc.arg(actor), sqlc.arg(reason) FROM adopted
-RETURNING tenant_service_ownership_audit.id;

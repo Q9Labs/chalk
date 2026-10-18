@@ -11,47 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const adoptServiceTenant = `-- name: AdoptServiceTenant :one
-WITH previous AS (
-    SELECT tenants.id, tenants.created_by_service_id, tenants.external_id FROM tenants
-    WHERE tenants.id = $5 FOR UPDATE
-), adopted AS (
-    UPDATE tenants SET created_by_service_id = $1,
-        external_id = $2, updated_at = now()
-    FROM previous
-    WHERE tenants.id = previous.id
-      AND (previous.created_by_service_id IS NULL OR previous.created_by_service_id = $1)
-    RETURNING tenants.id, previous.created_by_service_id AS previous_service_id,
-        previous.external_id AS previous_external_id
-)
-INSERT INTO tenant_service_ownership_audit
-    (tenant_id, service_id, external_id, previous_service_id, previous_external_id, actor, reason)
-SELECT adopted.id, $1, $2, adopted.previous_service_id,
-    adopted.previous_external_id, $3, $4 FROM adopted
-RETURNING tenant_service_ownership_audit.id
-`
-
-type AdoptServiceTenantParams struct {
-	ServiceID  string      `json:"service_id"`
-	ExternalID pgtype.Text `json:"external_id"`
-	Actor      string      `json:"actor"`
-	Reason     string      `json:"reason"`
-	TenantID   pgtype.UUID `json:"tenant_id"`
-}
-
-func (q *Queries) AdoptServiceTenant(ctx context.Context, arg AdoptServiceTenantParams) (int64, error) {
-	row := q.db.QueryRow(ctx, adoptServiceTenant,
-		arg.ServiceID,
-		arg.ExternalID,
-		arg.Actor,
-		arg.Reason,
-		arg.TenantID,
-	)
-	var id int64
-	err := row.Scan(&id)
-	return id, err
-}
-
 const createTenant = `-- name: CreateTenant :one
 with inserted as (
 insert into tenants (

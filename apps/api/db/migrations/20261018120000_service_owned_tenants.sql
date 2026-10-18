@@ -12,20 +12,7 @@ ALTER TABLE tenants
 
 CREATE INDEX tenants_service_created_at_id_idx ON tenants(created_by_service_id, created_at DESC, id DESC);
 
-CREATE TABLE tenant_service_ownership_audit (
-    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    tenant_id uuid NOT NULL,
-    service_id text NOT NULL,
-    external_id text,
-    previous_service_id text,
-    previous_external_id text,
-    actor text NOT NULL CHECK (btrim(actor) <> ''),
-    reason text NOT NULL CHECK (btrim(reason) <> ''),
-    created_at timestamptz NOT NULL DEFAULT now()
-);
-
 -- +goose Down
-DROP TABLE tenant_service_ownership_audit;
 DROP INDEX tenants_service_created_at_id_idx;
 ALTER TABLE tenants DROP CONSTRAINT tenants_service_external_id_key,
     DROP CONSTRAINT tenants_external_id_check, DROP CONSTRAINT tenants_service_id_check,

@@ -1361,18 +1361,6 @@ type TenantOnboardingRequest struct {
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
-type TenantServiceOwnershipAudit struct {
-	ID                 int64              `json:"id"`
-	TenantID           pgtype.UUID        `json:"tenant_id"`
-	ServiceID          string             `json:"service_id"`
-	ExternalID         pgtype.Text        `json:"external_id"`
-	PreviousServiceID  pgtype.Text        `json:"previous_service_id"`
-	PreviousExternalID pgtype.Text        `json:"previous_external_id"`
-	Actor              string             `json:"actor"`
-	Reason             string             `json:"reason"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-}
-
 type TenantSigningKey struct {
 	ID                pgtype.UUID        `json:"id"`
 	TenantID          pgtype.UUID        `json:"tenant_id"`
