@@ -10,7 +10,7 @@ export default function CaptureApp() {
   useEffect(() => {
     let mounted = true;
     const open = (value: string | null) => {
-      if (mounted) setURL(value?.startsWith("chalk://dev/states") ? value : null);
+      if (mounted && value) setURL(value.startsWith("chalk://dev/states") ? value : null);
     };
     void Linking.getInitialURL().then(open).catch((cause: unknown) => {
       if (mounted) setError(cause instanceof Error ? cause.message : String(cause));
