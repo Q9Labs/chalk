@@ -128,12 +128,12 @@ export const ParticipantsPanelSurface = React.memo(
             >
               <div className="call-mute-confirm">
                 <b>Mute everyone?</b>
-                <p>{unmutedCount} {unmutedCount === 1 ? "person" : "people"} will be muted. They can unmute themselves.</p>
+                <p>
+                  {unmutedCount} {unmutedCount === 1 ? "person" : "people"} will be muted. They can unmute themselves.
+                </p>
                 <div className="call-mute-actions">
                   <Popover.Close render={<ChalkButton disabled={muting} />}>Cancel</Popover.Close>
-                  <Popover.Close render={<ChalkButton variant="solid" disabled={muting} onClick={() => void muteEveryone()} />}>
-                    {muting ? "Muting…" : "Mute everyone"}
-                  </Popover.Close>
+                  <Popover.Close render={<ChalkButton variant="solid" disabled={muting} onClick={() => void muteEveryone()} />}>{muting ? "Muting…" : "Mute everyone"}</Popover.Close>
                 </div>
               </div>
             </ChalkPopover>
