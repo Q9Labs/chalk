@@ -379,6 +379,16 @@ the SDK is fixed. The measurement lane deliberately does not edit SDK components
 Full leave clears the map by unmounting; repeated guest departure while the call
 stays mounted is the failing journey.
 
+The dedicated reference run also measured laptop panel layout shift at a median
+0.3287 (five samples: 0.2544–0.3477), above the unchanged 0.05 limit. Attribution
+includes the drawer's changing width and the call controls moving horizontally
+(one recorded controls rectangle moved from x=215 to x=378.47). These entries
+have recent input, which this interaction-focused signal intentionally includes.
+Do not interpret it as standard Core Web Vitals CLS. The same run's phone
+first-load frame p95 exceeded its existing timing limit (116.6 ms versus 110 ms);
+that limit was not widened either. The combined command took 18.79 minutes,
+confirming the need for the separate leak lane.
+
 ### Additional rendering signals
 
 Timing scenarios also record `videoDroppedFramePercent` from visible videos'
