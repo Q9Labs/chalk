@@ -21,7 +21,7 @@ const toEntry = (result: DocsSearchResult, ...extra: readonly string[]): Entry =
   haystack: [result.title, result.context, result.excerpt, ...extra].join(" ").toLocaleLowerCase(),
 });
 
-const pageOrder = new Map(DOCS_PAGES.map((page, index) => [page.slug, index]));
+const pageOrder = new Map<string, number>(DOCS_PAGES.map((page, index) => [page.slug, index]));
 const sectionEntries = [...DOCS_SECTIONS]
   .sort((a, b) => (pageOrder.get(a.slug) ?? 0) - (pageOrder.get(b.slug) ?? 0))
   .flatMap((section) => {
@@ -35,7 +35,7 @@ const pageEntries = DOCS_PAGES.map((page) => toEntry({ href: page.href, title: p
 // Sections come first, as in the design: a query usually names something inside a page.
 const ENTRIES = [...sectionEntries, ...pageEntries];
 
-export const SUGGESTED_RESULTS: readonly DocsSearchResult[] = SUGGESTED_HREFS.flatMap((href) => ENTRIES.filter((entry) => entry.href === href));
+const SUGGESTED_RESULTS: readonly DocsSearchResult[] = SUGGESTED_HREFS.flatMap((href) => ENTRIES.filter((entry) => entry.href === href));
 
 /** Every word of the query must appear in the result's title, page, excerpt or keywords. */
 export function searchDocs(query: string): readonly DocsSearchResult[] {
