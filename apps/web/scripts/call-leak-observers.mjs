@@ -1,0 +1,146 @@
+// Installed before application code. Weak references must not retain the objects being measured.
+export function installLeakObservers() {
+  const tracks = new Set();
+  const contexts = new Set();
+  const intervals = new Set();
+  const frames = new Set();
+  const media = new Set();
+  const knownMedia = new WeakSet();
+  // Synthetic guest IDs are unique per join. At sampling time every such guest
+  // has left, so keys still in a live Map expose caches below heap-noise size.
+  const rosterMaps = new Set();
+  const knownRosterMaps = new WeakSet();
+  const mapSet = Map.prototype.set;
+  Map.prototype.set = function (key, value) {
+    if (typeof key === "string" && key.startsWith("perf-join-") && !knownRosterMaps.has(this)) {
+      knownRosterMaps.add(this);
+      rosterMaps.add(new WeakRef(this));
+    }
+    return mapSet.call(this, key, value);
+  };
+  const rememberMedia = (element) => {
+    if (element instanceof HTMLMediaElement && !knownMedia.has(element)) {
+      knownMedia.add(element);
+      media.add(new WeakRef(element));
+    }
+    return element;
+  };
+  for (const name of ["createElement", "createElementNS"]) {
+    const original = Document.prototype[name];
+    Document.prototype[name] = function (...args) {
+      return rememberMedia(original.apply(this, args));
+    };
+  }
+  new MutationObserver((records) => {
+    for (const record of records)
+      for (const node of record.addedNodes) {
+        if (node instanceof Element) {
+          rememberMedia(node);
+          node.querySelectorAll("video,audio").forEach(rememberMedia);
+        }
+      }
+  }).observe(document, { childList: true, subtree: true });
+  const rememberTrack = (track) => {
+    tracks.add(new WeakRef(track));
+    return track;
+  };
+  const rememberStream = (stream) => {
+    stream.getTracks().forEach(rememberTrack);
+    return stream;
+  };
+  for (const prototype of [HTMLCanvasElement.prototype, HTMLMediaElement.prototype]) {
+    if (!prototype.captureStream) continue;
+    const original = prototype.captureStream;
+    prototype.captureStream = function (...args) {
+      return rememberStream(original.apply(this, args));
+    };
+  }
+  const clone = MediaStreamTrack.prototype.clone;
+  MediaStreamTrack.prototype.clone = function () {
+    return rememberTrack(clone.call(this));
+  };
+  const addTrack = MediaStream.prototype.addTrack;
+  MediaStream.prototype.addTrack = function (track) {
+    rememberTrack(track);
+    return addTrack.call(this, track);
+  };
+  for (const method of ["getUserMedia", "getDisplayMedia"]) {
+    if (!navigator.mediaDevices?.[method]) continue;
+    const original = navigator.mediaDevices[method].bind(navigator.mediaDevices);
+    navigator.mediaDevices[method] = async (...args) => rememberStream(await original(...args));
+  }
+  for (const name of ["AudioContext", "webkitAudioContext"]) {
+    if (!window[name]) continue;
+    window[name] = new Proxy(window[name], {
+      construct(target, args, newTarget) {
+        const context = Reflect.construct(target, args, newTarget);
+        contexts.add(new WeakRef(context));
+        const createDestination = context.createMediaStreamDestination.bind(context);
+        context.createMediaStreamDestination = (...parameters) => {
+          const destination = createDestination(...parameters);
+          rememberStream(destination.stream);
+          return destination;
+        };
+        return context;
+      },
+    });
+  }
+  const interval = window.setInterval.bind(window);
+  const clear = window.clearInterval.bind(window);
+  window.setInterval = (...args) => {
+    const id = interval(...args);
+    intervals.add(id);
+    return id;
+  };
+  window.clearInterval = (id) => {
+    intervals.delete(id);
+    return clear(id);
+  };
+  // clearTimeout is permitted to cancel an interval, and vice versa.
+  const clearTimeout = window.clearTimeout.bind(window);
+  window.clearTimeout = (id) => {
+    intervals.delete(id);
+    return clearTimeout(id);
+  };
+  const request = window.requestAnimationFrame.bind(window);
+  const cancel = window.cancelAnimationFrame.bind(window);
+  window.requestAnimationFrame = (callback) => {
+    const id = request((at) => {
+      frames.delete(id);
+      callback(at);
+    });
+    frames.add(id);
+    return id;
+  };
+  window.cancelAnimationFrame = (id) => {
+    frames.delete(id);
+    return cancel(id);
+  };
+  const count = (references, predicate) => {
+    const live = new Set();
+    for (const reference of references) {
+      const value = reference.deref();
+      if (!value) references.delete(reference);
+      else if (predicate(value)) live.add(value);
+    }
+    return live.size;
+  };
+  const rosterCacheKeys = () => {
+    const keys = new Set();
+    for (const reference of rosterMaps) {
+      const map = reference.deref();
+      if (!map) rosterMaps.delete(reference);
+      else for (const key of map.keys()) if (typeof key === "string" && key.startsWith("perf-join-")) keys.add(key);
+    }
+    return keys.size;
+  };
+  window.__callLeaks = () => ({
+    rosterCacheKeys: rosterCacheKeys(),
+    videos: count(media, (element) => element instanceof HTMLVideoElement),
+    audios: count(media, (element) => element instanceof HTMLAudioElement),
+    liveTracks: count(tracks, (track) => track.readyState === "live"),
+    audioContexts: count(contexts, (context) => context.state !== "closed"),
+    intervals: intervals.size,
+    animationFrames: frames.size,
+  });
+}
