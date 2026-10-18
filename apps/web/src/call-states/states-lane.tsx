@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Chalk, CallLimbo, CallReady, ToastStack, type ChalkProps } from "@q9labsai/chalk-react";
-import { SpaceClientError, type ClientFailure } from "@q9labsai/chalk-client";
+import { SpaceClientError, type ClientFailure, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { useCallLink } from "../../../../sdks/typescript/react/src/components/call-limbo/useCallLink";
 import { Avatar } from "../../../../sdks/typescript/react/src/components/atomic/Avatar";
 import { callEventToasts, mediaFailureToast } from "../../../../sdks/typescript/react/src/components/toast-stack/call-events";
@@ -103,7 +103,7 @@ function toastForFixture(id: string) {
     return toast;
   }
   const populated = liveSnapshot({ others: PEOPLE.slice(0, 1) });
-  const next =
+  const next: SpaceSnapshot =
     id === "hand"
       ? { ...previous, participants: { ...previous.participants, roster: previous.participants.roster.map((p) => (p.participantId === previous.self.participantId ? p : { ...p, handRaised: true })) } }
       : id === "recording"

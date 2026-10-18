@@ -128,7 +128,7 @@ it.each(["left", "failed"] as const)("keeps the %s screen to one calm status mes
   const html = renderToStaticMarkup(<Chalk client={createPreviewClient(snapshot)} />);
   expect(html).toContain(status === "left" ? "You left the call" : "Couldn’t connect to the call");
   expect(html).not.toContain("Your offline actions were not sent");
-  if (status === "failed") expect(html).toContain("You&#x27;re offline. Check your connection.");
+  if (status === "failed") expect(html).toContain("Check your internet connection, then try again.");
 });
 
 function isInert(element: HTMLElement): boolean {
