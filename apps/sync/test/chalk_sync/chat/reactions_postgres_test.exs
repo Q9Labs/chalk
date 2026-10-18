@@ -5,8 +5,10 @@ defmodule ChalkSync.Chat.ReactionsPostgresTest do
   alias ChalkSync.Chat.Repository.Postgres, as: Repository
   alias ChalkSync.Contract.GeneratedV1
   alias ChalkSync.Fanout.Collaboration
+  alias ChalkSync.Reactions
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
+  alias ChalkSync.Transport.SocketV1
   alias ChalkSync.UUID
 
   @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
@@ -153,20 +155,20 @@ defmodule ChalkSync.Chat.ReactionsPostgresTest do
     state = %{collaboration_version: 1}
 
     assert {:ok, ^state} =
-             ChalkSync.Transport.SocketV1.handle_info(
+             SocketV1.handle_info(
                {:collaboration_frame,
                 %{"type" => "chat_reactions", "message_id" => message.message_id}},
                state
              )
 
     assert {:ok, ^state} =
-             ChalkSync.Transport.SocketV1.handle_info(
+             SocketV1.handle_info(
                {:collaboration_frame, %{"type" => "reaction", "reaction" => "👏"}},
                state
              )
 
     assert {:ok, %{"outcome" => "rejected", "error_code" => "invalid_payload"}} =
-             ChalkSync.Reactions.send(
+             Reactions.send(
                first,
                %{operation_id: "legacy-reaction-operation", reaction: "👏"},
                version: 1

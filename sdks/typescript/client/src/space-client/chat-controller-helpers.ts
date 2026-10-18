@@ -9,6 +9,7 @@ const MAX_CHAT_TEXT_BYTES = 16_384;
 const MAX_CHAT_TEXT_SCALARS = 4_000;
 const encoder = new TextEncoder();
 const allowedMimeTypes = new Set<string>(CHALK_CHAT_ATTACHMENT_MIME_TYPES);
+const chatMessageFields = ["reactionRevision", "messageId", "clientMessageId", "sequence", "participantId", "displayName", "text", "createdAt"] as const;
 
 export function validateChatMessage(input: ChatSendInput): string | null {
   const attachments = input.attachments ?? [];
@@ -71,14 +72,7 @@ function validateChatAttachment(attachment: ChatAttachment): string | null {
 
 function sameChatMessage(left: ChatMessage, right: ChatMessage): boolean {
   return (
-    left.reactionRevision === right.reactionRevision &&
-    left.messageId === right.messageId &&
-    left.clientMessageId === right.clientMessageId &&
-    left.sequence === right.sequence &&
-    left.participantId === right.participantId &&
-    left.displayName === right.displayName &&
-    left.text === right.text &&
-    left.createdAt === right.createdAt &&
+    chatMessageFields.every((field) => left[field] === right[field]) &&
     left.attachments.length === right.attachments.length &&
     left.attachments.every((attachment, index) => {
       const candidate = right.attachments[index];

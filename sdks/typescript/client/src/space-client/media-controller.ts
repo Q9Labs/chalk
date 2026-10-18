@@ -715,13 +715,10 @@ function activeLocalMediaState(connectionState: ReturnType<ConnectionLifecycleCa
 function sameMediaSlice(left: MediaSlice, right: MediaSlice): boolean {
   if (left.selection !== right.selection || !sameDevices(left.devices, right.devices)) return false;
   for (const source of MEDIA_SOURCES) if (!sameLocalMedia(left.local[source], right.local[source])) return false;
-  return (
-    left.screenShare.capture?.surface === right.screenShare.capture?.surface &&
-    left.screenShare.capture?.label === right.screenShare.capture?.label &&
-    sameLocalMedia(left.screenShare, right.screenShare) &&
-    sameRemoteMedia(left.remote, right.remote) &&
-    sameRequests(left.incomingRequests, right.incomingRequests)
-  );
+  return sameScreenShare(left.screenShare, right.screenShare) && sameRemoteMedia(left.remote, right.remote) && sameRequests(left.incomingRequests, right.incomingRequests);
+}
+function sameScreenShare(left: MediaSlice["screenShare"], right: MediaSlice["screenShare"]): boolean {
+  return sameLocalMedia(left, right) && left.capture?.surface === right.capture?.surface && left.capture?.label === right.capture?.label;
 }
 function sameLocalMedia(left: MediaSlice["local"][MediaSource], right: MediaSlice["local"][MediaSource]): boolean {
   return left.source === right.source && left.state === right.state && left.track === right.track;
