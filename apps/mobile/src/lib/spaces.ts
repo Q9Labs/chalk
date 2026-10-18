@@ -58,15 +58,16 @@ export async function createPublicSpaceRoute({ apiBaseURL, displayName, onOperat
     const client = publicClient(apiBaseURL);
     const created = await client.createPublicSpace({ displayName }, { idempotencyKey: idempotencyKey() });
     const invite = parseSpaceLink(created.invite_link);
-    if (!invite) throw new Error("Chalk returned an invalid Space invite link.");
+    if (!invite) throw new Error("Chalk returned an invalid call link.");
 
     const arrival = storedArrival(created.arrival, { slug: invite.space, spaceInviteToken: invite.spaceInviteToken }, created.guest_credential);
     await persistArrival(arrival);
     const access = requiredAccess(created.arrival);
+    const spaceName = callName(created.space.name, invite);
     onOperation?.("create", "succeeded");
     return {
-      arrival: { access, credential: arrival, defaults: { camera: true, microphone: true }, displayName, spaceName: created.space.name },
-      route: { ...invite, source: "created-space", spaceName: created.space.name },
+      arrival: { access, credential: arrival, defaults: { camera: true, microphone: true }, displayName, spaceName },
+      route: { ...invite, source: "created-space", spaceName },
     };
   } catch (cause) {
     onOperation?.("create", "failed");
@@ -74,7 +75,16 @@ export async function createPublicSpaceRoute({ apiBaseURL, displayName, onOperat
   }
 }
 
-export async function prepareSpaceArrival({ apiBaseURL, route, displayName, onOperation }: { readonly apiBaseURL: string; readonly route: SpaceRoute; readonly displayName: string; readonly onOperation?: SpaceOperationObserver }): Promise<MobileSpaceArrival> {
+/**
+ * Where an arrival stands: let in, waiting for the host to let them in, turned away, or the call is
+ * full. The names match `ChalkArrival`'s states.
+ */
+export type SpaceArrivalStep =
+  | { readonly state: "admitted"; readonly arrival: MobileSpaceArrival }
+  | { readonly state: "knocking"; readonly credential: StoredSpaceArrival; readonly retryAfterMs: number; readonly spaceName: string }
+  | { readonly state: "refused" | "full"; readonly spaceName: string };
+
+export async function prepareSpaceArrival({ apiBaseURL, route, displayName, onOperation }: { readonly apiBaseURL: string; readonly route: SpaceRoute; readonly displayName: string; readonly onOperation?: SpaceOperationObserver }): Promise<SpaceArrivalStep> {
   onOperation?.("arrive", "observed");
   const stored = await loadArrival(route.spaceInviteToken);
   const client = publicClient(apiBaseURL, stored?.guestCredential);
@@ -85,12 +95,7 @@ export async function prepareSpaceArrival({ apiBaseURL, route, displayName, onOp
       if (status.state === "left" || status.state === "expired" || status.state === "rejected" || status.state === "unavailable") {
         await clearArrival(stored);
       } else {
-        const resumed = await client.arriveBySpacePublicInvite({ displayName, spaceInviteToken: route.spaceInviteToken }, { arrivalHandle: stored.arrivalHandle, guestCredential: stored.guestCredential, idempotencyKey: idempotencyKey() });
-        const arrival = storedArrival(resumed, { slug: route.space, spaceInviteToken: route.spaceInviteToken }, stored.guestCredential);
-        await persistArrival(arrival);
-        const access = requiredAccessForOperation(resumed, onOperation);
-        onOperation?.("arrive", "succeeded");
-        return { access, credential: arrival, defaults: { camera: true, microphone: true }, displayName, spaceName: route.spaceName ?? route.space };
+        return await resumeArrival({ apiBaseURL, route, displayName, credential: stored, onOperation });
       }
     } catch (cause) {
       if (!isTerminalArrivalError(cause)) throw cause;
@@ -98,12 +103,68 @@ export async function prepareSpaceArrival({ apiBaseURL, route, displayName, onOp
     }
   }
 
-  const arrived = await publicClient(apiBaseURL).arriveBySpacePublicInvite({ displayName, spaceInviteToken: route.spaceInviteToken }, { idempotencyKey: idempotencyKey() });
-  const arrival = storedArrival(arrived, { slug: route.space, spaceInviteToken: route.spaceInviteToken });
+  try {
+    const arrived = await publicClient(apiBaseURL).arriveBySpacePublicInvite({ displayName, spaceInviteToken: route.spaceInviteToken }, { idempotencyKey: idempotencyKey() });
+    const arrival = storedArrival(arrived, { slug: route.space, spaceInviteToken: route.spaceInviteToken });
+    await persistArrival(arrival);
+    return arrivalStep(arrived, { route, displayName, credential: arrival, onOperation });
+  } catch (cause) {
+    if (arrivalErrorCode(cause) !== "episode.capacity_exceeded") throw cause;
+    onOperation?.("arrive", "failed");
+    return { state: "full", spaceName: route.spaceName ?? route.space };
+  }
+}
+
+/** Checks a knocking arrival once more, after the `retryAfterMs` its last step asked for. */
+export async function waitForAdmission({
+  apiBaseURL,
+  route,
+  displayName,
+  credential,
+  onOperation,
+}: {
+  readonly apiBaseURL: string;
+  readonly route: SpaceRoute;
+  readonly displayName: string;
+  readonly credential: StoredSpaceArrival;
+  readonly onOperation?: SpaceOperationObserver;
+}): Promise<SpaceArrivalStep> {
+  const status = await publicClient(apiBaseURL, credential.guestCredential).getSpacePublicInviteArrival({ arrivalHandle: credential.arrivalHandle, guestCredential: credential.guestCredential });
+  // An admitted arrival without access gets it by arriving again with the same handle.
+  if (status.state === "admitted" && !status.access) return resumeArrival({ apiBaseURL, route, displayName, credential, onOperation });
+  return arrivalStep(status, { route, displayName, credential, onOperation });
+}
+
+async function resumeArrival({ apiBaseURL, route, displayName, credential, onOperation }: { readonly apiBaseURL: string; readonly route: SpaceRoute; readonly displayName: string; readonly credential: StoredSpaceArrival; readonly onOperation?: SpaceOperationObserver }): Promise<SpaceArrivalStep> {
+  const resumed = await publicClient(apiBaseURL, credential.guestCredential).arriveBySpacePublicInvite({ displayName, spaceInviteToken: route.spaceInviteToken }, { arrivalHandle: credential.arrivalHandle, guestCredential: credential.guestCredential, idempotencyKey: idempotencyKey() });
+  const arrival = storedArrival(resumed, { slug: route.space, spaceInviteToken: route.spaceInviteToken }, credential.guestCredential);
   await persistArrival(arrival);
-  const access = requiredAccessForOperation(arrived, onOperation);
-  onOperation?.("arrive", "succeeded");
-  return { access, credential: arrival, defaults: { camera: true, microphone: true }, displayName, spaceName: route.spaceName ?? route.space };
+  return arrivalStep(resumed, { route, displayName, credential: arrival, onOperation });
+}
+
+function arrivalStep(value: PublicSpaceArrival, { route, displayName, credential, onOperation }: { readonly route: SpaceRoute; readonly displayName: string; readonly credential: StoredSpaceArrival; readonly onOperation?: SpaceOperationObserver }): SpaceArrivalStep {
+  const spaceName = callName(value.space?.name, route);
+  if (value.access) {
+    onOperation?.("arrive", "succeeded");
+    return { state: "admitted", arrival: { access: value.access, credential, defaults: { camera: true, microphone: true }, displayName, spaceName } };
+  }
+  if (value.state === "pending") {
+    onOperation?.("pending", "observed");
+    return { state: "knocking", credential, retryAfterMs: retryDelay(value.retry_after), spaceName };
+  }
+  onOperation?.("arrive", "failed");
+  if (value.state === "rejected") return { state: "refused", spaceName };
+  throw new Error("Chalk did not return call access.");
+}
+
+/** The call's name, or the link's code for a call without one, as link previews show it. */
+function callName(name: string | undefined, route: Pick<SpaceRoute, "space" | "spaceName">): string {
+  return name?.trim() || route.spaceName || route.space;
+}
+
+function retryDelay(retryAfter: number | undefined): number {
+  if (typeof retryAfter !== "number" || !Number.isFinite(retryAfter) || retryAfter < 0) return 1000;
+  return Math.min(Math.max(retryAfter * 1000, 250), 30000);
 }
 
 export function createGuestAccessGetter({ apiBaseURL, credential, initialAccess, onOperation }: { readonly apiBaseURL: string; readonly credential: StoredSpaceArrival; readonly initialAccess: AccessGrant; readonly onOperation?: SpaceOperationObserver }): GetAccess {
@@ -151,18 +212,8 @@ function storedArrival(value: PublicSpaceArrival, route: SpaceInvite, guestCrede
 }
 
 function requiredAccess(value: PublicSpaceArrival): AccessGrant {
-  if (!value.access) throw new Error(value.state === "pending" ? "This Space is waiting for approval." : "Chalk did not return Space access.");
+  if (!value.access) throw new Error("Chalk did not return call access.");
   return value.access;
-}
-
-function requiredAccessForOperation(value: PublicSpaceArrival, onOperation?: SpaceOperationObserver): AccessGrant {
-  try {
-    return requiredAccess(value);
-  } catch (cause) {
-    if (value.state === "pending") onOperation?.("pending", "observed");
-    else onOperation?.("arrive", "failed");
-    throw cause;
-  }
 }
 
 function mediaProof(value: AccessGrant): string {
@@ -220,8 +271,15 @@ function idempotencyKey(): string {
 function isTerminalArrivalError(value: unknown): boolean {
   if (typeof value !== "object" || value === null) return false;
   if ("status" in value && (value.status === 404 || value.status === 410)) return true;
-  if (!("error" in value) || typeof value.error !== "object" || value.error === null || !("code" in value.error)) return false;
-  return value.error.code === "arrival.invalid_handle" || value.error.code === "arrival.unavailable" || value.error.code === "space_public_invite.unavailable";
+  const code = arrivalErrorCode(value);
+  return code === "arrival.invalid_handle" || code === "arrival.unavailable" || code === "space_public_invite.unavailable";
+}
+
+function arrivalErrorCode(value: unknown): unknown {
+  if (typeof value !== "object" || value === null || !("error" in value)) return undefined;
+  const error: unknown = value.error;
+  if (typeof error !== "object" || error === null || !("code" in error)) return undefined;
+  return error.code;
 }
 
 /** The link as people read it: host and path, without the scheme or the invite token. */
