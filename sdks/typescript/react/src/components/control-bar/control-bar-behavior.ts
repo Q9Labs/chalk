@@ -14,6 +14,8 @@ export interface MediaDevice {
 export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "handraise" | "reactions" | "whiteboard" | "leave";
 
 export interface ControlBarSurfaceProps {
+  layout?: "focus" | "grid";
+  onLayoutChange?: (layout: "focus" | "grid") => void;
   density?: "comfortable" | "compact";
   buttons?: ControlBarButtonName[];
 
@@ -61,6 +63,8 @@ export interface ControlBarSurfaceProps {
 }
 
 export interface ControlBarProps {
+  readonly layout?: "focus" | "grid";
+  readonly onLayoutChange?: (layout: "focus" | "grid") => void;
   readonly density?: "comfortable" | "compact";
   readonly buttons?: ControlBarButtonName[];
   readonly activePanel?: "chat" | "participants" | null;

@@ -33,9 +33,7 @@ describe("public Space entry", () => {
     render(<SpacePage slug="design-lab" />);
     await act(async () => enterName("Ada"));
     await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
-    const onLeft = mocks.holder.chalkProps?.onLeft;
-    if (typeof onLeft !== "function") throw new Error("Missing Leave callback");
-    await act(async () => onLeft());
+    await leaveCall();
     await screen.findByLabelText("Your name");
     await act(async () => enterName("Ada"));
     await waitFor(() => expect(mocks.joinDashboardSpace).toHaveBeenCalledTimes(2));
@@ -194,6 +192,12 @@ describe("public Space entry", () => {
   });
 });
 
+async function leaveCall(): Promise<void> {
+  const onLeft = mocks.holder.chalkProps?.onLeft;
+  if (typeof onLeft !== "function") throw new Error("Missing Leave callback");
+  await act(async () => onLeft());
+}
+
 function enterName(displayName: string): void {
   fireEvent.change(screen.getByLabelText("Your name"), { target: { value: displayName } });
   fireEvent.click(screen.getByRole("button", { name: "Join" }));
@@ -245,9 +249,7 @@ describe("reload rejoin", () => {
     writeReloadRejoin(window.sessionStorage, marker);
     render(<SpacePage slug="design-lab" />);
     await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
-    const onLeft = mocks.holder.chalkProps?.onLeft;
-    if (typeof onLeft !== "function") throw new Error("Missing Leave callback");
-    await act(async () => onLeft());
+    await leaveCall();
     expect(await screen.findByLabelText("Your name")).toBeDefined();
     expect(mocks.resumePublicSpace).toHaveBeenCalledOnce();
   });

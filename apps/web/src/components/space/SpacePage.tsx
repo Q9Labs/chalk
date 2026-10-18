@@ -1,3 +1,4 @@
+import { useTheme } from "../../lib/theme-context";
 import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
 import { Chalk, CallLimbo, ChalkButton } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -401,6 +402,7 @@ function LocalSpace({
   readonly onFinish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
   readonly spaceName: string;
 }) {
+  const { mode, setPreference } = useTheme();
   const client = useMemo(() => createLocalSpaceClient({ credential, getAccess, connectionAccess }), [connectionAccess, credential, getAccess]);
   const release = useMemo(() => createLocalSpaceRelease(client, () => onFinish()), [client, onFinish]);
   const connection = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection;
@@ -453,7 +455,7 @@ function LocalSpace({
   }, [client, credential.space, displayName, onFinish, reloadMarker]);
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
-      <Chalk client={client} displayName={displayName} defaults={defaults} spaceName={spaceName} onEpisodeEnded={releaseFromLifecycle} onLeft={releaseFromLifecycle} />
+      <Chalk theme={{ colorScheme: mode }} onColorSchemeChange={setPreference} client={client} displayName={displayName} defaults={defaults} spaceName={spaceName} onEpisodeEnded={releaseFromLifecycle} onLeft={releaseFromLifecycle} />
     </main>
   );
 }

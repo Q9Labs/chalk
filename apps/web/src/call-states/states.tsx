@@ -1,6 +1,8 @@
+import { FoundationKit } from "./foundation";
+import { readThemePreference, persistThemePreference } from "../lib/theme";
 import { PERFORMANCE_STATES } from "./performance";
 import type { SpaceSnapshot } from "@q9labsai/chalk-client";
-import { CallLimbo, Chalk, type SpaceLayout } from "@q9labsai/chalk-react";
+import { CallLimbo, Chalk, ToastStack, type SpaceLayout } from "@q9labsai/chalk-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { NameNeeded } from "../components/space/SpacePage";
 import { HOST, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type CallStateClient, type Person } from "./fixtures";
@@ -29,6 +31,21 @@ const openLayout: Action = { click: "Layout: Spotlight" };
 
 export const CALL_STATES: readonly CallState[] = [
   ...PERFORMANCE_STATES,
+  { id: "foundation-motion-dark", title: "Foundation motion Dark", render: () => <FoundationKit scheme="dark" initialNotice={false} /> },
+  { id: "foundation-motion-light", title: "Foundation motion Light", render: () => <FoundationKit scheme="light" initialNotice={false} /> },
+  { id: "foundation-kit-dark", title: "Foundation primitives Dark", render: () => <FoundationKit scheme="dark" /> },
+  { id: "foundation-kit-light", title: "Foundation primitives Light", render: () => <FoundationKit scheme="light" /> },
+  { id: "foundation-dark", title: "Foundation call Dark", render: () => <Live initialColorScheme="dark" snapshot={liveSnapshot({ others: [nora] })} /> },
+  { id: "foundation-light", title: "Foundation call Light", render: () => <Live initialColorScheme="light" snapshot={liveSnapshot({ others: [nora] })} /> },
+  {
+    id: "foundation-toast",
+    title: "Foundation toast announcement",
+    render: () => (
+      <main data-chalk className="h-dvh">
+        <ToastStack toasts={[{ id: "join", message: "Nora joined", duration: Infinity }]} onDismiss={() => undefined} />
+      </main>
+    ),
+  },
   { id: "joining", title: "Joining with devices off", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null } }} /> },
   { id: "name-needed", title: "Name needed", render: () => <JoinName /> },
   { id: "knocking", title: "Asking the host to join", render: () => <WaitingForHost /> },
@@ -143,8 +160,9 @@ function withStatus(snapshot: SpaceSnapshot, status: SpaceSnapshot["connection"]
 }
 
 /** Mirrors SpacePage's LocalSpace: the SDK's Chalk root, with the app's own entrance already done. */
-function Live({ snapshot, layout, then }: { readonly snapshot: SpaceSnapshot; readonly layout?: SpaceLayout; readonly then?: (client: CallStateClient) => void }) {
+function Live({ snapshot, layout, then, initialColorScheme }: { readonly initialColorScheme?: "light" | "dark"; readonly snapshot: SpaceSnapshot; readonly layout?: SpaceLayout; readonly then?: (client: CallStateClient) => void }) {
   const [client] = useState(() => createCallStateClient(snapshot));
+  const [colorScheme, setColorScheme] = useState(() => initialColorScheme ?? readThemePreference(document.cookie));
   const [transition] = useState(() => then);
   useEffect(() => {
     if (!transition) return;
@@ -153,7 +171,19 @@ function Live({ snapshot, layout, then }: { readonly snapshot: SpaceSnapshot; re
   }, [client, transition]);
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
-      <Chalk client={client} displayName={SELF_NAME} spaceName={SPACE_NAME} layout={layout} onLeft={() => undefined} onHome={() => undefined} />
+      <Chalk
+        theme={{ colorScheme }}
+        onColorSchemeChange={(next) => {
+          setColorScheme(next);
+          persistThemePreference(next);
+        }}
+        client={client}
+        displayName={SELF_NAME}
+        spaceName={SPACE_NAME}
+        layout={layout}
+        onLeft={() => undefined}
+        onHome={() => undefined}
+      />
     </main>
   );
 }

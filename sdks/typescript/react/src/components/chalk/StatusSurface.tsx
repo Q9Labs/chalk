@@ -27,7 +27,7 @@ export function StatusSurface({ phase, callName, reason, theme, onRejoin, onHome
   const name = callName ?? "the call";
   const title = phase === "entering" ? `Joining ${name}…` : phase === "left" ? `You left ${name}` : phase === "episode-ended" ? "The call ended" : `Couldn't connect to ${name}`;
   return (
-    <main data-chalk data-chalk-theme="dark" data-chalk-status={phase} style={chalkThemeStyle(theme, "dark")} className="chalk-root grid h-full min-h-0 w-full place-items-center bg-[var(--chalk-canvas)] p-6 text-center text-[var(--chalk-text)]">
+    <main data-chalk data-chalk-theme={theme?.colorScheme ?? "dark"} data-chalk-status={phase} style={chalkThemeStyle(theme)} className="chalk-root grid h-full min-h-0 w-full place-items-center bg-[var(--chalk-canvas)] p-6 text-center text-[var(--chalk-text)]">
       <div className="grid max-w-md justify-items-center gap-6">
         <div className="grid justify-items-center gap-2">
           <h1 role={phase === "entering" ? "status" : undefined} className="text-xl font-semibold tracking-[-0.01em] [text-wrap:balance]">

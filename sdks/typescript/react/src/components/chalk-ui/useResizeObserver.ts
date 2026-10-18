@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
+import { useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 
 export interface ChalkDimensions {
   readonly width: number;
@@ -19,10 +19,13 @@ export function useResizeObserver<T extends Element>(fallback: ChalkDimensions =
   const [dimensions, setDimensions] = useState(stableFallback);
   const ref = useRef<T>(null);
 
-  useEffect(() => {
-    setDimensions(stableFallback);
+  useLayoutEffect(() => {
     const element = ref.current;
     if (!element || typeof ResizeObserver === "undefined") return;
+    const style = getComputedStyle(element);
+    const width = element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const height = element.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+    setDimensions(normaliseDimensions({ width, height }));
     const observer = new ResizeObserver(([entry]) => {
       const next = entry ? normaliseDimensions({ width: entry.contentRect.width, height: entry.contentRect.height }) : stableFallback;
       setDimensions((current) => (current.width === next.width && current.height === next.height ? current : next));

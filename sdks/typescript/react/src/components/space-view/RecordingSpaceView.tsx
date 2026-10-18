@@ -12,7 +12,7 @@ import { QuietSpace } from "../participant-grid/ParticipantGrid";
 import { Stage, type StageItem } from "../stage/Stage";
 import { StageContentTileSurface } from "../stage/StageContentTile";
 import { screenShareItemId, WHITEBOARD_ITEM_ID } from "../stage/stage-items";
-import { SpaceDrawer } from "./SpaceDrawer";
+import { CallCard } from "../call-card/CallCard";
 import { SpacePresentation } from "./SpacePresentation";
 export interface RecordingMediaRenderContext {
   readonly participant: RecordingPresentationParticipantV1;
@@ -184,7 +184,7 @@ export function RecordingSpaceView({ frame, resolveMedia, resolveAssetUrl, rende
         controls={<ControlBarPresentation density="comfortable" buttons={RECORDING_TOOLBAR_BUTTONS} isRecording isChatOpen isWhiteboardOpen={sharedContent.kind === "whiteboard"} expanded detectDevices={false} displayOnly />}
         stageOverlay={<ReactionsOverlayPresentation reactions={frame.reactions} elapsedMs={frame.elapsedMs} />}
         sidebar={
-          <SpaceDrawer state="open" interactive={false}>
+          <CallCard state="open" interactive={false}>
             <ChatPanelPresentation
               messages={messages}
               participantNames={participantNames}
@@ -198,7 +198,7 @@ export function RecordingSpaceView({ frame, resolveMedia, resolveAssetUrl, rende
               generatedAvatars={frame.profile.theme.generatedAvatars}
               disabled
             />
-          </SpaceDrawer>
+          </CallCard>
         }
         renderToken={renderToken}
         interactive={false}

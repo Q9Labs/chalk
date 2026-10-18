@@ -23,37 +23,13 @@ export type { RecordingWhiteboardBinaryFileInput, RecordingWhiteboardFileReferen
 export { Logo } from "./components/logo/Logo";
 export type { LogoProps, LogoVariant } from "./components/logo/Logo";
 export type { ChalkTheme, ChalkThemeTokens } from "./theme";
-export {
-  ChalkAlert,
-  ChalkBackdrop,
-  ChalkBadge,
-  ChalkButton,
-  ChalkCheckbox,
-  ChalkControlGroup,
-  ChalkDialogPanel,
-  ChalkDivider,
-  ChalkEmptyState,
-  ChalkIconButton,
-  ChalkInput,
-  ChalkMenu,
-  ChalkMenuItem,
-  ChalkPanel,
-  ChalkRadio,
-  ChalkSelect,
-  ChalkSlider,
-  ChalkSpinner,
-  ChalkTextarea,
-  ChalkToggle,
-  ChalkTooltipPanel,
-} from "./components/chalk-ui";
+export { ChalkAlert, ChalkBackdrop, ChalkBadge, ChalkButton, ChalkDialogPanel, ChalkDivider, ChalkEmptyState, ChalkIconButton, ChalkInput, ChalkMenu, ChalkMenuItem, ChalkPanel, ChalkSpinner, ChalkTextarea, ChalkToggle } from "./components/chalk-ui";
 export type {
   ChalkAlertProps,
   ChalkBackdropProps,
   ChalkBadgeProps,
   ChalkButtonProps,
   ChalkButtonVariant,
-  ChalkCheckboxProps,
-  ChalkControlGroupProps,
   ChalkDialogPanelProps,
   ChalkDividerProps,
   ChalkEmptyStateProps,
@@ -62,18 +38,23 @@ export type {
   ChalkMenuItemProps,
   ChalkMenuProps,
   ChalkPanelProps,
-  ChalkRadioProps,
-  ChalkSelectProps,
-  ChalkSliderProps,
   ChalkSpinnerProps,
   ChalkTextareaProps,
   ChalkToggleProps,
   ChalkTone,
-  ChalkTooltipPanelProps,
 } from "./components/chalk-ui";
 
 export { CallLimbo } from "./components/call-limbo/CallLimbo";
 export type { CallLimboProps } from "./components/call-limbo/CallLimbo";
+
+export { ChalkPopover, ChalkSegmentedControl, ChalkCopyButton, ChalkSheet, ChalkToast, ChalkMenuLabel, ChalkTooltip } from "./components/chalk-ui";
+
+export { ToastStack } from "./components/toast-stack/ToastStack";
+export type { Toast, ToastStackProps } from "./components/toast-stack/ToastStack";
+
+export { captureFlip } from "./internal/call-motion";
+
+export type { ChalkSheetProps, ChalkToastProps } from "./components/chalk-ui";
 
 export type { ScreenShareOptions, ScreenShareSurface, ScreenShareCapture } from "@q9labsai/chalk-client";
 

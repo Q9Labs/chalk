@@ -90,7 +90,7 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
   );
   if (overlay) return layer;
   return (
-    <div data-chalk data-chalk-theme={theme?.colorScheme === "dark" ? "dark" : "light"} className="chalk-root relative h-full min-h-0 w-full overflow-hidden bg-[var(--chalk-app-canvas)]" style={chalkThemeStyle(theme)}>
+    <div data-chalk data-chalk-theme={theme?.colorScheme ?? "dark"} className="chalk-root relative h-full min-h-0 w-full overflow-hidden bg-[var(--chalk-app-canvas)]" style={chalkThemeStyle(theme)}>
       <div aria-hidden="true" inert className="absolute inset-0 flex flex-col p-5">
         <div className="text-sm font-medium text-[var(--chalk-app-text)]">{spaceName}</div>
         <div className="my-5 flex-1 rounded-2xl border border-[var(--chalk-app-line-strong)]" style={{ background: "color-mix(in srgb, var(--chalk-app-text) 12%, var(--chalk-app-stage))" }} />

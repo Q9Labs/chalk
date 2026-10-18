@@ -1,3 +1,4 @@
+import { ChalkIconButton, ChalkTooltip } from "../chalk-ui";
 import React from "react";
 import { Tooltip } from "@q9labsai/chalk-ui";
 import { cn } from "../../utils/cn";
@@ -6,6 +7,7 @@ import { ControlBarButton } from "../atomic";
 import { DevicePopover } from "../device-popover/DevicePopover";
 import { CommandErrorAlert } from "../composite/CommandErrorAlert";
 import { LeaveMenu } from "./LeaveMenu";
+import { DockLayout } from "./DockLayout";
 import { useConnectedControlBarBehavior, useControlBarSurfaceBehavior, type ControlBarButtonName, type ControlBarProps, type ControlBarSurfaceProps } from "./control-bar-behavior";
 
 export type { ControlBarProps, ControlBarButtonName } from "./control-bar-behavior";
@@ -26,28 +28,23 @@ const FloatingControlBarButton = React.forwardRef<
   } & Omit<React.ComponentPropsWithoutRef<"button">, "children" | "aria-label">
 >(function FloatingControlBarButton({ icon, label, active = false, danger = false, badge, ...buttonProps }, ref) {
   return (
-    <Tooltip content={label} position="top">
-      <button
-        {...buttonProps}
-        ref={ref}
-        type="button"
-        aria-label={label}
-        aria-pressed={active}
-        className={cn(
-          "relative flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-control)] transition hover:-translate-y-0.5 hover:border-[var(--chalk-app-line-strong)] hover:bg-[var(--chalk-app-control-hover)]",
-          active && "border-[var(--chalk-app-control-active-line)] bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] ring-2 ring-[var(--chalk-app-control-active-line)] ring-offset-2 ring-offset-[var(--chalk-app-canvas)]",
-          danger && "ml-2 border-[var(--chalk-app-danger)] bg-[var(--chalk-app-danger)] !text-white hover:border-[var(--chalk-app-danger-hover)] hover:bg-[var(--chalk-app-danger-hover)]",
-        )}
-      >
-        {icon}
-        {badge && badge > 0 ? <span className="absolute top-1.5 right-1.5 grid min-h-[17px] min-w-[17px] place-items-center rounded-full bg-[var(--chalk-app-danger)] px-1 text-[10px] !text-white">{badge > 99 ? "99+" : badge}</span> : null}
-      </button>
-    </Tooltip>
+    <ChalkTooltip
+      trigger={
+        <ChalkIconButton {...buttonProps} size="lg" tone={danger ? "danger" : "neutral"} ref={ref} type="button" aria-label={label} aria-pressed={active}>
+          {icon}
+          {badge && badge > 0 ? <span className="absolute top-1.5 right-1.5 grid min-h-[17px] min-w-[17px] place-items-center rounded-full bg-[var(--chalk-app-danger)] px-1 text-[10px] !text-white">{badge > 99 ? "99+" : badge}</span> : null}
+        </ChalkIconButton>
+      }
+    >
+      {label}
+    </ChalkTooltip>
   );
 });
 
 export const ControlBarSurface = React.memo(
   ({
+    layout = "focus",
+    onLayoutChange,
     isMuted = false,
     microphonePending = false,
     cameraPending = false,
@@ -232,6 +229,8 @@ export const ControlBarSurface = React.memo(
               )}
             </div>
 
+            {onLayoutChange ? <DockLayout layout={layout} onLayoutChange={onLayoutChange} /> : null}
+
             {/* Group 3: Leave */}
             <div className="order-2 flex shrink-0 items-center gap-1 rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] p-1 shadow-[var(--chalk-app-shadow-control)]">
               <LeaveMenu
@@ -300,8 +299,8 @@ export const ControlBarSurface = React.memo(
       };
 
       return (
-        <div className="pointer-events-none flex w-full items-end justify-center px-3 pb-5">
-          <div className={cn("group pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-2 overflow-visible", className)} style={themeVariables as React.CSSProperties} role="toolbar" aria-label="Space controls">
+        <div className="pointer-events-none flex w-full items-end justify-center">
+          <div className={cn("group pointer-events-auto flex max-w-full items-center justify-center gap-2 overflow-visible", className)} style={themeVariables as React.CSSProperties} data-part="dock" role="toolbar" aria-label="Space controls">
             {buttonsToRender.includes("mic") ? (
               <DevicePopover
                 type="mic"

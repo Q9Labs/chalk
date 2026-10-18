@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useCan, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
+import { useSoundsSetting } from "../../internal/useSoundsSetting";
 import { useSoundCues } from "../../internal/useSoundCues";
 import { toVideoParticipants } from "../../selectors/space-selectors";
 import { AudioOutput } from "../audio-output/AudioOutput";
@@ -17,9 +18,9 @@ import { ParticipantVolumeProvider } from "../participants-panel/participant-vol
 import { OfflineActions } from "../offline-actions/OfflineActions";
 import { ReconnectingOverlay } from "../reconnecting-overlay/ReconnectingOverlay";
 import { ToastStack, type Toast } from "../toast-stack/ToastStack";
-import { SpaceDrawer } from "./SpaceDrawer";
+import { CallCard } from "../call-card/CallCard";
 import { SpacePresentation } from "./SpacePresentation";
-import { SpaceStage } from "./SpaceStage";
+import { SpaceStage } from "../stage/SpaceStage";
 import { DRAWER_EXIT_MS, useDrawerPresence } from "./useDrawerPresence";
 import type { ChatUploadFile } from "@q9labsai/chalk-client";
 import { type ReconnectingOverlayProps } from "../reconnecting-overlay/ReconnectingOverlay";
@@ -47,9 +48,11 @@ export interface SpaceViewWhiteboard {
 
 export interface SpaceViewProps {
   readonly colorScheme?: "light" | "dark";
+  readonly onColorSchemeChange?: (colorScheme: "light" | "dark") => void;
   readonly spaceName: string;
   readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
   readonly stageBackground?: boolean;
+  /** Initial layout without a handler; controlled layout when onLayoutChange is supplied. */
   readonly layout?: "grid" | "focus";
   readonly onLayoutChange?: (layout: "grid" | "focus") => void;
   readonly initialPanel?: SpacePanel | null;
@@ -71,7 +74,8 @@ export interface SpaceViewProps {
 const DEFAULT_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🎉"] as const;
 
 export function SpaceView({
-  colorScheme = "light",
+  colorScheme = "dark",
+  onColorSchemeChange,
   spaceName,
   pickChatFiles,
   stageBackground = true,
@@ -90,6 +94,7 @@ export function SpaceView({
   onEndEpisode,
   className,
 }: SpaceViewProps): React.JSX.Element {
+  const [soundsEnabled] = useSoundsSetting();
   const client = useSpaceClient();
   const self = useSelf();
   const participantsSlice = useParticipants();
@@ -102,11 +107,11 @@ export function SpaceView({
   const canManageAdmission = useCan("manageAdmission");
   const canManageRecording = useCan("manageRecording");
   const episodeDuration = useEpisodeDuration();
-  const [uncontrolledLayout, setUncontrolledLayout] = useState<"grid" | "focus">("focus");
+  const [uncontrolledLayout, setUncontrolledLayout] = useState<"grid" | "focus">(controlledLayout ?? "focus");
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(initialPanel);
   const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(null);
-  const layout = controlledLayout ?? uncontrolledLayout;
+  const layout = onLayoutChange ? (controlledLayout ?? uncontrolledLayout) : uncontrolledLayout;
   const feature = (name: keyof SpaceViewFeatures) => features?.[name] !== false;
   const localId = self.participantId ?? "local";
   const tiles = useMemo(() => toVideoParticipants(participantsSlice.roster, media.remote, localId, self.displayName ?? "You", media.local), [localId, media.local, media.remote, participantsSlice.roster, self.displayName]);
@@ -127,10 +132,10 @@ export function SpaceView({
     "leave",
   ];
   const updateLayout = (nextLayout: "grid" | "focus") => {
-    if (controlledLayout === undefined) setUncontrolledLayout(nextLayout);
+    setUncontrolledLayout(nextLayout);
     onLayoutChange?.(nextLayout);
   };
-  useSoundCues(feature("sounds"));
+  useSoundCues(feature("sounds") && soundsEnabled);
   const prefersReducedMotion = usePrefersReducedMotion();
   const drawer = useDrawerPresence(activePanel, prefersReducedMotion ? 0 : DRAWER_EXIT_MS);
   const runCommand = useCallback(async (command: () => Promise<unknown>) => {
@@ -155,6 +160,8 @@ export function SpaceView({
         colorScheme={colorScheme}
         stageBackground={stageBackground}
         header={{
+          colorScheme,
+          onColorSchemeChange,
           spaceName,
           duration: episodeDuration,
           isRecording: recording.current?.status === "recording",
@@ -179,6 +186,8 @@ export function SpaceView({
         compactControls={
           <ControlBar
             density="compact"
+            layout={layout}
+            onLayoutChange={updateLayout}
             buttons={buttons}
             activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
             onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
@@ -207,17 +216,17 @@ export function SpaceView({
           </>
         }
         sidebar={
-          <SpaceDrawer state={drawer.state} onClose={() => setActivePanel(null)}>
+          <CallCard state={drawer.state} onClose={() => setActivePanel(null)}>
             {drawer.panel === "chat" && feature("chat") && canSendChat ? <ChatPanel variant="sidebar" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} /> : null}
             {drawer.panel === "participants" && feature("participants") ? <ParticipantsPanel variant="sidebar" admissionEnabled={feature("admission")} generatedAvatars={generatedAvatars} onCommandError={setCommandError} onClose={() => setActivePanel(null)} /> : null}
             {drawer.panel === "admission" && feature("admission") ? <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} /> : null}
-          </SpaceDrawer>
+          </CallCard>
         }
+        toasts={<ToastStack toasts={commandToasts} onDismiss={dismissCommandError} />}
         mediaOutput={<AudioOutput />}
         overlays={
           <>
             {overlay}
-            <ToastStack toasts={commandToasts} onDismiss={dismissCommandError} position="bottom-right" />
             {reconnecting && reconnecting.status !== "reconnecting" ? <ReconnectingOverlay {...reconnecting} /> : null}
             <OfflineActions reconnecting={reconnecting?.status === "reconnecting" && reconnecting.isVisible} />
           </>

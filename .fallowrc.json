@@ -1,6 +1,15 @@
 {
   "entry": [
     "gate.config.ts",
+    "apps/web/src/call-states/main.tsx",
+    "apps/web/src/call-states/web-space-journey.tsx",
+    "apps/web/src/call-states/web-space-boundary.ts",
+    "apps/web/src/call-states/performance.tsx",
+    "apps/web/vite.call-states.config.ts",
+    "apps/web/vite.call-performance.config.ts",
+    "apps/web/scripts/capture-call-states.mjs",
+    "apps/web/scripts/capture-join-sequence.mjs",
+    "apps/web/scripts/verify-call-layouts.mjs",
     "**/*.test.ts",
     "**/*.test.tsx",
     "**/*.test.mjs",

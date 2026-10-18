@@ -133,7 +133,7 @@ function settleJoin(connection: HarnessConnection, resolveJoin: () => void, reje
 
 installHarness(client);
 
-createRoot(document.getElementById("root")!).render(<Chalk client={client} entrance={false} displayName={fixtureUser ?? "Packed user"} spaceName="Packed SDK consumer" features={{ chat: true, participants: true, screenShare: true, reactions: true, handRaise: true }} />);
+createRoot(document.getElementById("root")!).render(<Chalk client={client} displayName={fixtureUser ?? "Packed user"} spaceName="Packed SDK consumer" features={{ chat: true, participants: true, screenShare: true, reactions: true, handRaise: true }} />);
 
 function publicSnapshot(snapshot: SpaceSnapshot) {
   return {

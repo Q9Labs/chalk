@@ -13,17 +13,16 @@
     whiteboard: true,
     reactions: true,
     handRaise: true,
-    settings: true,
   }}
   layout="focus"
 />
 ```
 
-Web and React Native expose the same feature names: `chat`, `participants`, `admission`, `screenShare`, `whiteboard`, `reactions`, `handRaise`, `info`, and `settings`. Web also exposes `sounds` for join, leave, message, hand-raise, and reaction cues.
+Web and React Native share the `chat`, `participants`, `admission`, `screenShare`, `whiteboard`, `reactions`, and `handRaise` feature flags. Web also exposes `recording` and `sounds`; React Native also exposes `info` and `settings`. The `sounds` flag controls join, leave, message, hand-raise, and reaction cues.
 
 ### Theme the boundary
 
-The `theme` prop is the styling door. Web supports `colorScheme: "light" | "dark" | "system"`, an accent, and typed token overrides. Native maps the same token names to platform styles.
+The `theme` prop is the styling door. Web supports `colorScheme: "light" | "dark"` (dark by default), an accent, and typed token overrides. Use `onColorSchemeChange` to persist the Light/Dark choice. Native maps the same token names to platform styles.
 
 ```tsx
 <Chalk

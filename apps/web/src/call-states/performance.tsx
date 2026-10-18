@@ -83,10 +83,9 @@ function PerformanceCall({ count, share = false, board = false }: { readonly cou
           key={generation}
           theme={{ colorScheme: "dark" }}
           client={client}
-          entrance={false}
           displayName={SELF_NAME}
           spaceName={SPACE_NAME}
-          layout={count === 24 ? "grid" : "focus"}
+          {...(count === 24 ? { layout: "grid" } : {})}
           onLeft={() => {
             setJoined(false);
             // The preview client has no media engine. Release its snapshot and owned sources here.

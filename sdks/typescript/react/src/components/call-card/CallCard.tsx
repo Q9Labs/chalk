@@ -1,10 +1,11 @@
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
 
 import { cn } from "../../utils/cn";
-import { ChalkBackdrop } from "../chalk-ui";
-import type { DrawerState } from "./useDrawerPresence";
+import { useIsMobile } from "../../internal/useMediaQuery";
+import { ChalkSheet } from "../chalk-ui";
+import type { DrawerState } from "../space-view/useDrawerPresence";
 
-export interface SpaceDrawerProps {
+export interface CallCardProps {
   readonly state: DrawerState;
   readonly onClose?: () => void;
   readonly interactive?: boolean;
@@ -12,11 +13,11 @@ export interface SpaceDrawerProps {
 }
 
 /**
- * The right-hand home for the Space's side panels. Below `lg` it is a sheet over the stage with a
- * scrim; from `lg` up it docks beside the stage and pushes it. Escape closes it and focus returns to
+ * The inset card for desktop panels and the focus-trapped bottom sheet on phones. Escape closes it and focus returns to
  * where it came from. Panels keep their own landmarks, so the drawer itself carries no role.
  */
-export function SpaceDrawer({ state, onClose, interactive = true, children }: SpaceDrawerProps) {
+export function CallCard({ state, onClose, interactive = true, children }: CallCardProps) {
+  const phone = useIsMobile();
   const drawerRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
 
@@ -35,6 +36,19 @@ export function SpaceDrawer({ state, onClose, interactive = true, children }: Sp
     if (opener?.isConnected) opener.focus({ preventScroll: true });
   }, [interactive, state]);
 
+  if (phone && interactive)
+    return (
+      <ChalkSheet
+        variant="panel"
+        open={state === "open"}
+        onOpenChange={(open) => {
+          if (!open) onClose?.();
+        }}
+        title="People and Chat"
+      >
+        {children}
+      </ChalkSheet>
+    );
   if (state === "closed") return null;
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -45,9 +59,10 @@ export function SpaceDrawer({ state, onClose, interactive = true, children }: Sp
 
   return (
     <>
-      <ChalkBackdrop className="chalk-drawer-scrim !bg-[color-mix(in_srgb,var(--chalk-app-canvas)_55%,transparent)]" onClick={interactive ? onClose : undefined} />
-      <div ref={drawerRef} tabIndex={interactive ? -1 : undefined} data-state={state} data-chalk-drawer onKeyDown={interactive ? handleKeyDown : undefined} aria-disabled={interactive ? undefined : true} className="chalk-drawer min-h-0 outline-none focus-visible:outline-none">
-        <div className={cn("chalk-drawer-content flex min-h-0 flex-col overflow-hidden bg-[var(--chalk-app-panel)] text-[var(--chalk-app-text)]", "shadow-[var(--chalk-app-shadow-xs)]")}>{children}</div>
+      <div ref={drawerRef} data-part="panel-card" tabIndex={interactive ? -1 : undefined} data-state={state} data-chalk-drawer onKeyDown={interactive ? handleKeyDown : undefined} aria-disabled={interactive ? undefined : true} className="chalk-drawer min-h-0 outline-none focus-visible:outline-none">
+        <div data-part="panel-content" className={cn("chalk-drawer-content flex min-h-0 flex-col overflow-hidden bg-[var(--chalk-app-panel)] text-[var(--chalk-app-text)]")}>
+          {children}
+        </div>
       </div>
     </>
   );

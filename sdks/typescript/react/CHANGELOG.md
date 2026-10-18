@@ -4,6 +4,14 @@
 
 - Publish and play shared tab audio separately from microphones, with share-audio state and coupled screen-share lifecycle.
 
+- Keep layout changes interactive when `layout` is supplied without `onLayoutChange`; the prop initializes local state in that case. A paired prop and handler remain controlled. Add Spotlight/Grid to the phone dock's More sheet.
+
+- Default calls to Dark; `ChalkColorScheme` is now `"light" | "dark"`. Add `Chalk.onColorSchemeChange` and `SpaceView.onColorSchemeChange` for controlled appearance.
+- Replace the call theme tokens with role-based mockup palettes, and share the inset-card frame with recordings.
+- Rebuild call buttons, menus, popovers, tooltips, switches, segmented controls, copy feedback, focus-trapped sheets and toasts. Remove the unused `ChalkCheckbox`, `ChalkControlGroup`, `ChalkRadio`, `ChalkSelect`, `ChalkSlider`, and `ChalkTooltipPanel` exports. `ChalkMenu` now accepts a trigger; its items accept checked state.
+- Add `captureFlip` for transform-only, reduced-motion-aware moves that preserve the mounted element.
+- Use synthesized call sounds with a persistent Sounds switch; remove the unused Sonner `toast` re-export from the toast stack.
+
 - Expose per-message reactions, count, participant IDs, `isMine`, and `react(input)` from `useChat()`; export the shared 24-emoji set and reaction types.
 
 - Add `useScreenShare()` and screen source hint/capture types, without changing UI.
