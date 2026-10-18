@@ -1,4 +1,4 @@
-import type { CloudflareSFUBootstrap, CloudflareSFULocalTrack, CloudflareSFURemoteTrack, CloudflareSFUSnapshot, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaSource } from "@q9labsai/chalk-client";
+import type { CloudflareSFUBootstrap, CloudflareSFULocalTrack, CloudflareSFURemoteTrack, CloudflareSFUSnapshot, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaPublicationSource, MediaSource } from "@q9labsai/chalk-client";
 
 import type { ServerMessage } from "./protocol";
 import { registerPeer, registerSocket, releasePeer, releaseTrack } from "./resource-ledger";
@@ -55,13 +55,17 @@ export class FixtureMediaClient {
   getSnapshot = () => this.#snapshot;
   subscribe = (listener: () => void) => (this.#listeners.add(listener), () => this.#listeners.delete(listener));
 
-  prepareLocalTrack(source: MediaSource, track: MediaStreamTrack): void {
+  // This consumer checks the packed SDK's published sources; shared tab audio is
+  // proved by scripts/dev/share-audio-proof.mjs, so the fake doesn't send it.
+  prepareLocalTrack(source: MediaPublicationSource, track: MediaStreamTrack): void {
+    if (source === "screen_audio") return;
     this.#local.set(source, { track, enabled: false });
     if (source === "screen") track.addEventListener("ended", this.#onScreenEnded, { once: true });
     this.#publish();
   }
 
-  async clearPreparedLocalTrack(source: MediaSource): Promise<void> {
+  async clearPreparedLocalTrack(source: MediaPublicationSource): Promise<void> {
+    if (source === "screen_audio") return;
     const local = this.#local.get(source);
     if (!local) return;
     local.enabled = false;
