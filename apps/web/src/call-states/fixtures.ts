@@ -148,8 +148,9 @@ export function createCallStateClient(snapshot: SpaceSnapshot) {
   };
   const transport = boardTransport((presenting) => client.updateSnapshot((current) => ({ ...current, whiteboard: { open: presenting, engine: { ...current.whiteboard.engine, status: "ready", sceneId: "scene-1", revision: "1", presenting } } })));
   // The live client goes from leaving to left once the connection closes; the preview client stops at leaving.
+  const previewLeave = client.leave.bind(client);
   const leave = async () => {
-    await client.leave();
+    await previewLeave();
     client.updateSnapshot((current) => ({ ...current, connection: { ...current.connection, status: "left" } }));
   };
   return Object.assign(client, { on, emit, leave, whiteboard: { transport: () => transport } });
