@@ -6,12 +6,16 @@ import { parseSpaceLink, type MobileRoute } from "./src/lib/spaces";
 import { getApiBaseURL } from "./src/lib/mobile-config";
 import { loadOnboardingState } from "./src/screens/onboarding-store";
 
+// Metro removes this branch before collecting release dependencies.
+const DevStates: typeof import("./src/dev-states").DevStates | null = __DEV__ ? require("./src/dev-states").DevStates : null;
+
 export default function App(): React.JSX.Element {
   const apiBaseURL = useMemo(() => getApiBaseURL(), []);
   const diagnosticsMode = useMemo(() => resolveDevDiagnosticsMode({ isDevRuntime: __DEV__, apiBaseURL }), [apiBaseURL]);
   const diagnosticsEnabled = diagnosticsMode.enabled;
   const [route, setRoute] = useState<MobileRoute>({ kind: "home" });
   const [isBooting, setIsBooting] = useState(true);
+  const [devStateURL, setDevStateURL] = useState<string | null>(null);
   const defaultDisplayName = useRef<string | null>(null);
 
   useEffect(() => {
@@ -35,6 +39,11 @@ export default function App(): React.JSX.Element {
     let mounted = true;
     const openURL = (url: string | null) => {
       if (!url || !mounted) return;
+      if (__DEV__ && url.startsWith("chalk://dev/states")) {
+        setDevStateURL(url);
+        return;
+      }
+      setDevStateURL(null);
       const nextRoute = parseSpaceLink(url);
       if (nextRoute) setRoute(nextRoute);
     };
@@ -66,6 +75,8 @@ export default function App(): React.JSX.Element {
       mounted = false;
     };
   }, [diagnosticsEnabled]);
+
+  if (__DEV__ && DevStates && devStateURL) return <DevStates key={devStateURL} url={devStateURL} />;
 
   return (
     <Text>
