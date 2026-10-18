@@ -331,7 +331,7 @@ export async function transcriptProof(run, receiver) {
     .replace(/\s+/g, " ");
   const phrases = ["purple lantern", "quiet river", "screen sharing", "transcription"];
   for (const phrase of phrases) check(text.includes(phrase), `Spoken words missing from Transcript: ${phrase}`);
-  const events = await proveWebhookEvents(receiver, [{ event: "transcript.completed", objectId: transcript.id }]);
+  const events = await proveWebhookEvents(receiver, [{ event: "transcript.completed", objectId: transcript.id }], run.signal);
   await save(`${run.directory}/signed-webhooks.json`, events);
   return { wallSeconds: (Date.now() - started) / 1000, phrases, transcriptId: transcript.id, signedEvents: events.map((event) => event.event) };
 }

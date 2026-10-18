@@ -114,7 +114,7 @@ export async function exposeWebhook(run, receiver) {
   const seen = new Set();
   startCollector(run, receiver, (signal) => collectEvents(run, receiver, token, endpoint, verifyWebhook, signal, seen));
 }
-export async function proveWebhookEvents(receiver, expected) {
+export async function proveWebhookEvents(receiver, expected, signal) {
   await waitFor(
     "signed lifecycle webhooks",
     () => {
@@ -122,6 +122,8 @@ export async function proveWebhookEvents(receiver, expected) {
       return expected.every(({ event, objectId }) => [...receiver.events.values()].some((value) => value.event === event && value.data.object.id === objectId));
     },
     180_000,
+    2000,
+    signal,
   );
   return [...receiver.events.values()].map((event) => ({ event: event.event, objectId: event.data.object.id, verified: true }));
 }
