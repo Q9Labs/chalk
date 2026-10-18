@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Chalk, CallLimbo, CallReady, ToastStack, type ChalkProps } from "@q9labsai/chalk-react";
 import { SpaceClientError, type ClientFailure, type SpaceSnapshot } from "@q9labsai/chalk-client";
+import { ChalkProvider } from "../../../../sdks/typescript/react/src/bindings/context";
+import { useSoundCues } from "../../../../sdks/typescript/react/src/internal/useSoundCues";
 import { useCallLink } from "../../../../sdks/typescript/react/src/components/call-limbo/useCallLink";
 import { Avatar } from "../../../../sdks/typescript/react/src/components/atomic/Avatar";
 import { callEventToasts, mediaFailureToast } from "../../../../sdks/typescript/react/src/components/toast-stack/call-events";
@@ -184,6 +186,45 @@ function ReconnectingInputFixture() {
     </main>
   );
 }
+function FailureSoundFixture() {
+  const client = useMemo(() => {
+    const base = createCallStateClient(liveSnapshot());
+    return { ...base, media: { ...base.media, setCameraEnabled: () => Promise.reject(new SpaceClientError({ code: "media.permission_denied", recoverable: true, message: "Camera blocked" })) } };
+  }, []);
+  return (
+    <ChalkProvider client={client}>
+      <FailureSoundControls client={client} />
+    </ChalkProvider>
+  );
+}
+function FailureSoundControls({ client }: { readonly client: ReturnType<typeof createCallStateClient> }) {
+  const [cues, setCues] = useState<readonly string[]>([]);
+  const play = useSoundCues(true, () => ({ play: (cue) => setCues((current) => [...current, cue]), dispose: () => undefined }));
+  const failure = () => new SpaceClientError({ code: "media.permission_denied", recoverable: true, message: "Camera blocked" });
+  return (
+    <main>
+      <button onClick={() => client.emit("error", { error: failure() })}>Emit join error</button>
+      <button
+        onClick={() =>
+          void client.media.setCameraEnabled(true).catch((error: unknown) => {
+            if (error instanceof SpaceClientError) play("error", error);
+          })
+        }
+      >
+        Reject in-call camera
+      </button>
+      <button
+        onClick={() => {
+          client.emit("error", { error: failure() });
+          play("error", failure());
+        }}
+      >
+        Emit both failure routes
+      </button>
+      <output aria-label="Error cue count">{cues.filter((cue) => cue === "error").length}</output>
+    </main>
+  );
+}
 function CommandFailureFixture() {
   const [failure, setFailure] = useState<ClientFailure | null>(null);
   const [source, setSource] = useState<"microphone" | "camera" | "screen">("camera");
@@ -208,6 +249,7 @@ export const STATES_LANE: readonly CallState[] = [
   { id: "states-reconnecting-input", title: "Reconnecting keeps input usable", render: () => <ReconnectingInputFixture /> },
   { id: "states-link-controls", title: "Controlled call link", render: () => <CallLinkFixture /> },
   { id: "states-command-failures", title: "Typed command failures", render: () => <CommandFailureFixture /> },
+  { id: "states-failure-sounds", title: "Failure cue ownership", render: () => <FailureSoundFixture /> },
   { id: "states-ended-join", title: "Already-ended join", render: () => <StatesCall terminal="failed" endedJoin /> },
   { id: "states-events", title: "Call event journeys", render: () => <StatesCall /> },
   { id: "states-ready", title: "Ready card", render: () => <StatesCall ready /> },

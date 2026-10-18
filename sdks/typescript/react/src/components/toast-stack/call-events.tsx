@@ -33,7 +33,7 @@ export function mediaFailureToast(failure: ClientFailure | null, source?: "micro
       type: "error",
       message: (
         <>
-          <b style={{ fontWeight: 600 }}>No {device} found.</b> Plug one in, or check that your device can see it in System Settings.
+          <b style={{ fontWeight: 600 }}>No {device} found.</b> Plug one in, or check that your Mac can see it in System Settings.
         </>
       ),
     };
@@ -141,7 +141,7 @@ export function callEventToasts(previous: SpaceSnapshot, next: SpaceSnapshot): O
       const selected = devices.find((device) => device.deviceId === next.media.selection[source]);
       if (selected)
         events.push({
-          icon: <CallEventIcon kind={source} />,
+          icon: <CallEventIcon kind={source === "microphone" ? "microphone-on" : source} />,
           message: (
             <>
               {disconnected.label || source} disconnected. Switched to <b style={{ fontWeight: 600 }}>{selected.label || source}</b>

@@ -168,3 +168,13 @@ it("shows Ended without retrying an already-ended call", async () => {
   await page.getByRole("button", { name: "Home", exact: true }).click();
   expect(new URL(page.url()).hash).toBe("#home");
 }, 30_000);
+
+it("plays exactly one error cue for join, rejected in-call toggle, and overlapping routes", async () => {
+  await page.goto(`${origin}/call-states.html?state=states-failure-sounds`);
+  const count = page.getByLabel("Error cue count");
+  for (const [index, control] of ["Emit join error", "Reject in-call camera", "Emit both failure routes"].entries()) {
+    await page.getByRole("button", { name: control, exact: true }).click();
+    await page.waitForTimeout(50);
+    expect(await count.textContent()).toBe(String(index + 1));
+  }
+}, 30_000);

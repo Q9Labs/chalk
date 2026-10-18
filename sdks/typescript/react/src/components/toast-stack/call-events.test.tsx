@@ -2,7 +2,7 @@ import type { Participant, SpaceSnapshot } from "@q9labsai/chalk-client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
 import { createSnapshot } from "../../test-support";
-import { callEventToasts } from "./call-events";
+import { callEventToasts, mediaFailureToast } from "./call-events";
 
 function live(): SpaceSnapshot {
   const base = createSnapshot();
@@ -28,4 +28,11 @@ it("does not announce manual device selection, but explains an unplugged device 
   const events = callEventToasts(before, unplugged);
   expect(events).toHaveLength(1);
   expect(renderToStaticMarkup(<>{events[0]?.message}</>)).toContain("AirPods Pro disconnected. Switched to <b");
+});
+
+it("explains a missing camera with the canonical device recovery copy", () => {
+  const toast = mediaFailureToast({ code: "media.device_not_found", recoverable: true, message: "Missing input" }, "camera");
+  const text = renderToStaticMarkup(<>{toast?.message}</>);
+  expect(text).toContain("No camera found.");
+  expect(text).toContain("Plug one in, or check that your Mac can see it in System Settings.");
 });
