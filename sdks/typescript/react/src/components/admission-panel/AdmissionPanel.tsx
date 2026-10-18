@@ -4,8 +4,6 @@ import { useCan, useParticipants, useSpaceClient } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
 import { Cancel01Icon } from "../../utils/icons";
 import { Avatar } from "../atomic";
-import { UserAdd01Icon } from "../../utils/icons";
-import { ChalkBadge, ChalkButton, ChalkIconButton, ChalkPanel, ChalkSpinner } from "../chalk-ui";
 
 export interface AdmissionParticipant {
   id: string;
@@ -21,10 +19,6 @@ export interface AdmissionPanelProps {
   /** Render the requests as a section inside another surface. */
   inline?: boolean;
 }
-
-const ROW_CLASS = "flex min-h-14 items-center gap-3 px-1 py-2";
-
-const BULK_BUTTON_CLASS = "h-8 min-h-0 rounded-[8px] px-2.5 text-xs font-semibold";
 
 interface AdmissionPanelSurfaceProps extends AdmissionPanelProps {
   readonly participants: AdmissionParticipant[];

@@ -10,8 +10,6 @@ import { chalkThemeStyle, type ChalkColorScheme, type ChalkTheme } from "../../t
 import { useWhiteboardSceneSubscription } from "../../internal/useWhiteboardSceneSubscription";
 import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../../whiteboard/wire-adapters";
 import { MediaRequestDialog } from "../media-request-dialog/MediaRequestDialog";
-import { SettingsDialog, type SettingsDialogValue } from "../composite/SettingsDialog";
-import { Entrance } from "../entrance/Entrance";
 import { SpaceView } from "../space-view/SpaceView";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 import { StatusSurface } from "./StatusSurface";
@@ -25,9 +23,7 @@ export type ChalkFeatures = {
   readonly whiteboard?: boolean;
   readonly reactions?: boolean;
   readonly handRaise?: boolean;
-  readonly info?: boolean;
-  readonly settings?: boolean;
-  /** Join / leave / message / hand-raise / reaction cues. The user can still mute them from Settings. */
+  /** Join / leave / message / hand-raise / reaction cues. */
   readonly sounds?: boolean;
 };
 type SpaceIntegration =
@@ -53,7 +49,6 @@ type SpaceEventCallbacks = {
 };
 export type ChalkProps = SpaceIntegration &
   SpaceEventCallbacks & {
-    readonly entrance?: boolean;
     readonly defaults?: {
       readonly microphone?: boolean;
       readonly camera?: boolean;
@@ -62,10 +57,7 @@ export type ChalkProps = SpaceIntegration &
     readonly features?: ChalkFeatures;
     readonly theme?: ChalkTheme;
     readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
-    readonly logoUrl?: string;
     readonly spaceName?: string;
-    readonly inviteLink?: string;
-    readonly spaceDescription?: string;
     readonly layout?: SpaceLayout;
     readonly onLayoutChange?: (layout: SpaceLayout) => void;
     /** Rejoin on the page shown after leaving. Defaults to joining again with the same settings. */
@@ -118,19 +110,16 @@ function SpaceExperience(
   const offline = useOffline();
   const previousStatus = useRef(connection.status);
   const hasObservedStatus = useRef(false);
-  const hasBeenLive = useRef(connection.status === "live" || connection.status === "reconnecting");
   const autoJoinAttempted = useRef(false);
   const previousClient = useRef(client);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [retryPending, setRetryPending] = useState(false);
   const [episodeEnded, setEpisodeEnded] = useState(false);
-  const entrance = props.entrance ?? true;
   const spaceName = props.spaceName ?? props.space ?? "Space";
   if (previousClient.current !== client) {
     previousClient.current = client;
     previousStatus.current = connection.status;
     hasObservedStatus.current = false;
-    hasBeenLive.current = connection.status === "live" || connection.status === "reconnecting";
     autoJoinAttempted.current = false;
   }
   useClientEvents(client, props);
@@ -162,10 +151,10 @@ function SpaceExperience(
     [client],
   );
   useEffect(() => {
-    if (entrance || connection.status !== "idle" || autoJoinAttempted.current) return;
+    if (connection.status !== "idle" || autoJoinAttempted.current) return;
     autoJoinAttempted.current = true;
     void join(defaultJoinOptions(props));
-  }, [connection.status, entrance, join, props.defaults?.camera, props.defaults?.microphone, props.displayName]);
+  }, [connection.status, join, props.defaults?.camera, props.defaults?.microphone, props.displayName]);
   useEffect(() => {
     const previous = previousStatus.current;
     if (hasObservedStatus.current) {
@@ -174,22 +163,13 @@ function SpaceExperience(
     }
     previousStatus.current = connection.status;
     hasObservedStatus.current = true;
-    if (connection.status === "live" || connection.status === "reconnecting") hasBeenLive.current = true;
   }, [connection.status, props.onJoined, props.onLeft]);
   const callName = props.spaceName ?? props.space;
-  if (connection.status === "idle") {
-    if (!entrance) return <CallLimbo theme={{ ...props.theme, colorScheme: props.resolvedColorScheme }} spaceName={spaceName} message={joinError ?? `Joining ${spaceName}…`} action={joinError ? { label: "Try again", onClick: retryAutomaticJoin, disabled: retryPending } : undefined} />;
-    return <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} error={joinError ?? undefined} theme={props.theme} onJoin={join} />;
-  }
-  if (connection.status === "joining")
-    return entrance ? (
-      <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} joining error={joinError ?? undefined} theme={props.theme} onJoin={join} />
-    ) : (
-      <CallLimbo theme={{ ...props.theme, colorScheme: props.resolvedColorScheme }} spaceName={spaceName} message={`Joining ${spaceName}…`} />
-    );
+  if (connection.status === "idle")
+    return <CallLimbo theme={{ ...props.theme, colorScheme: props.resolvedColorScheme }} spaceName={spaceName} message={joinError ?? `Joining ${spaceName}…`} action={joinError ? { label: "Try again", onClick: retryAutomaticJoin, disabled: retryPending } : undefined} />;
+  if (connection.status === "joining") return <CallLimbo theme={{ ...props.theme, colorScheme: props.resolvedColorScheme }} spaceName={spaceName} message={`Joining ${spaceName}…`} />;
   if (connection.status === "failed") {
     const failureReason = offline.notice ? "You're offline. Check your connection." : (joinError ?? connection.lastError?.message ?? "Check your connection and try again.");
-    if (!hasBeenLive.current && entrance) return <Entrance spaceName={spaceName} logoUrl={props.logoUrl} defaultDisplayName={props.displayName} defaults={props.defaults} error={failureReason} theme={props.theme} onJoin={join} />;
     return <StatusSurface phase="failed" callName={callName} reason={failureReason} theme={props.theme} onRetry={retryAutomaticJoin} retryPending={retryPending} />;
   }
   if (connection.status === "leaving" || connection.status === "left")
@@ -214,22 +194,7 @@ function SpaceSurface(
   const whiteboardState = useWhiteboard();
   const canEndEpisode = useCan("endEpisode");
   const canDrawWhiteboard = useCan("drawWhiteboard");
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsInitialSection, setSettingsInitialSection] = useState<"appearance" | undefined>();
-  const [infoOpen, setInfoOpen] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(() => (connection.lastError?.recoverable && connection.lastError.code.startsWith("media.") ? connection.lastError.message : null));
-  const [settings, setSettings] = useState<SettingsDialogValue>(() => createSettings(self.displayName ?? "", props.layout ?? "focus", props.resolvedColorScheme));
-  const settingsRef = useRef(settings);
-  settingsRef.current = settings;
-  useEffect(() => {
-    setSettings((current) => ({
-      ...current,
-      identity: { displayName: self.displayName ?? current.identity.displayName },
-      join: { audioEnabled: media.local.microphone.state === "enabled" || media.local.microphone.state === "requesting", videoEnabled: media.local.camera.state === "enabled" || media.local.camera.state === "requesting" },
-      audio: { ...current.audio, selectedInput: media.selection.microphone ?? undefined, selectedOutput: media.selection.speaker ?? undefined },
-      video: { ...current.video, selectedInput: media.selection.camera ?? undefined },
-    }));
-  }, [media.local.camera.state, media.local.microphone.state, media.selection.camera, media.selection.microphone, media.selection.speaker, self.displayName]);
   const runCommand = useCallback(async (command: () => Promise<unknown>) => {
     try {
       await command();
@@ -275,85 +240,14 @@ function SpaceSurface(
     <SpaceView
       colorScheme={props.resolvedColorScheme}
       spaceName={props.spaceName}
-      logoUrl={props.logoUrl}
-      inviteLink={props.inviteLink}
       pickChatFiles={props.pickChatFiles}
-      generatedAvatars={settings.appearance.generatedAvatars}
       commandError={commandError ?? undefined}
       onDismissCommandError={() => setCommandError(null)}
-      layout={settings.appearance.layout === "focus" || settings.appearance.layout === "grid" ? settings.appearance.layout : (props.layout ?? "focus")}
-      onLayoutChange={(nextLayout) => {
-        setSettings((current) => ({ ...current, appearance: { ...current.appearance, layout: nextLayout } }));
-        props.onLayoutChange?.(nextLayout);
-      }}
-      features={{ ...props.features, sounds: props.features?.sounds !== false && settings.experience.sounds }}
+      layout={props.layout}
+      onLayoutChange={props.onLayoutChange}
+      features={props.features}
       whiteboard={whiteboard}
       onToggleWhiteboard={canDrawWhiteboard && setWhiteboardPresentation ? () => void runCommand(() => setWhiteboardPresentation(!whiteboardState.engine.presenting)) : undefined}
-      infoDialog={
-        props.features?.info !== false && (props.inviteLink || props.spaceDescription)
-          ? {
-              isOpen: infoOpen,
-              onOpenChange: setInfoOpen,
-              spaceName: props.spaceName,
-              spaceDescription: props.spaceDescription,
-              inviteLink: props.inviteLink,
-              onCopyLink: props.inviteLink ? () => void navigator.clipboard?.writeText(props.inviteLink!) : undefined,
-            }
-          : undefined
-      }
-      onOpenSettings={
-        props.features?.settings !== false
-          ? () => {
-              setSettingsInitialSection(undefined);
-              setSettingsOpen(true);
-            }
-          : undefined
-      }
-      settingsDialog={
-        props.features?.settings !== false ? (
-          <SettingsDialog
-            isOpen={settingsOpen}
-            onClose={() => {
-              setSettingsOpen(false);
-              setSettingsInitialSection(undefined);
-            }}
-            initialSection={settingsInitialSection}
-            settings={settings}
-            onUpdateIdentity={(updates) => {
-              setSettings((current) => ({ ...current, identity: { ...current.identity, ...updates } }));
-              const nextDisplayName = updates.displayName?.trim();
-              if (nextDisplayName) void runCommand(() => client.participants.renameSelf(nextDisplayName));
-            }}
-            onUpdateJoin={(updates) => {
-              setSettings((current) => ({ ...current, join: { ...current.join, ...updates } }));
-              if (updates.audioEnabled !== undefined) runCommand(() => client.media.setMicrophoneEnabled(updates.audioEnabled!));
-              if (updates.videoEnabled !== undefined) runCommand(() => client.media.setCameraEnabled(updates.videoEnabled!));
-            }}
-            onUpdateAudio={(updates) => {
-              setSettings((current) => ({ ...current, audio: { ...current.audio, ...updates } }));
-              if (updates.selectedInput) runCommand(() => client.media.selectMicrophone(updates.selectedInput!));
-              if (updates.selectedOutput) runCommand(() => client.media.selectSpeaker(updates.selectedOutput!));
-            }}
-            onUpdateVideo={(updates) => {
-              setSettings((current) => ({ ...current, video: { ...current.video, ...updates } }));
-              if (updates.selectedInput) runCommand(() => client.media.selectCamera(updates.selectedInput!));
-            }}
-            onUpdateAppearance={(updates) => {
-              const current = settingsRef.current;
-              const next = { ...current, appearance: { ...current.appearance, ...updates } };
-              settingsRef.current = next;
-              setSettings(next);
-              if (updates.layout === "focus" || updates.layout === "grid") props.onLayoutChange?.(updates.layout);
-            }}
-            onUpdateExperience={(updates) => setSettings((current) => ({ ...current, experience: { ...current.experience, ...updates } }))}
-            audioInputDevices={media.devices.microphones.map((device) => ({ ...device, kind: "audioinput" as const }))}
-            audioOutputDevices={media.devices.speakers.map((device) => ({ ...device, kind: "audiooutput" as const }))}
-            videoInputDevices={media.devices.cameras.map((device) => ({ ...device, kind: "videoinput" as const }))}
-            videoTrack={media.local.camera.track}
-            participantColorSeed={self.displayName ?? undefined}
-          />
-        ) : undefined
-      }
       onLeft={() => runCommand(() => client.leave())}
       onEndEpisode={canEndEpisode ? () => runCommand(() => client.endEpisode()) : undefined}
       reconnecting={{ isVisible: connection.status === "reconnecting", status: "reconnecting", showNotice: false }}
@@ -399,14 +293,4 @@ function useClientEvents(client: SpaceClient, callbacks: SpaceEventCallbacks): v
   useEffect(() => client.on("screenShareStarted", (event) => callbacks.onScreenShareStarted?.(event)), [callbacks.onScreenShareStarted, client]);
   useEffect(() => client.on("screenShareStopped", (event) => callbacks.onScreenShareStopped?.(event)), [callbacks.onScreenShareStopped, client]);
   useEffect(() => client.on("error", (event) => callbacks.onError?.(event)), [callbacks.onError, client]);
-}
-function createSettings(displayName: string, layout: SpaceLayout, colorScheme: "light" | "dark"): SettingsDialogValue {
-  return {
-    identity: { displayName },
-    join: { videoEnabled: true, audioEnabled: true },
-    audio: { outputVolume: 100, noiseSuppression: false, echoCancellation: true, autoGainControl: true },
-    video: { quality: "auto" },
-    appearance: { layout, theme: colorScheme, gradient: "default", showFilmstrip: true, reducedMotion: false, generatedAvatars: true, profileGradient: { mode: "auto" }, ambientBackground: true },
-    experience: { captions: false, compactMode: false, showInviteToast: true, defaultOpenChat: false, defaultOpenParticipants: false, defaultOpenTranscription: false, autoOpenPictureInPicture: false, sounds: true },
-  };
 }

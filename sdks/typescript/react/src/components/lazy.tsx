@@ -3,7 +3,6 @@ import { Spinner } from "@q9labsai/chalk-ui";
 
 export const LazyChatPanel = lazy(() => import("./composite/ChatPanel").then((m) => ({ default: m.ChatPanel })));
 export const LazyTranscriptPanel = lazy(() => import("./transcript-panel/TranscriptPanel").then((m) => ({ default: m.TranscriptPanel })));
-export const LazySettingsPanel = lazy(() => import("./composite/SettingsPanel").then((m) => ({ default: m.SettingsPanel })));
 
 export function withSuspense<P extends object>(LazyComponent: ComponentType<P>, fallback?: React.ReactNode) {
   return function SuspenseWrapper(props: P) {
@@ -17,4 +16,3 @@ export function withSuspense<P extends object>(LazyComponent: ComponentType<P>, 
 
 export const SuspenseChatPanel = withSuspense(LazyChatPanel);
 export const SuspenseTranscriptPanel = withSuspense(LazyTranscriptPanel);
-export const SuspenseSettingsPanel = withSuspense(LazySettingsPanel);

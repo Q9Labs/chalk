@@ -1,10 +1,11 @@
-import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
-import { Chalk, CallLimbo, ChalkButton, type EntranceSettings } from "@q9labsai/chalk-react";
+import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
+import { Chalk, CallLimbo, ChalkButton } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPreparedPublicSpace, createPublicInviteClient, joinDashboardSpace, resumePublicSpace, type AccountSpaceCredential, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
-import { getAccount, listAllAccountTenants, listSpaces } from "../../lib/account-api";
+import { getAccount, listAllAccountTenants } from "../../lib/account-api";
 import { canonicalSpaceInviteLink, clearDashboardSpaceEntry, hasDashboardSpaceEntry, spaceInviteToken, verifiedSpaceInviteLink } from "../../lib/named-space-route";
 import { createLocalSpaceClient, createLocalSpaceRelease } from "../../lib/local-space-client";
+type WebJoinSettings = Required<Pick<JoinOptions, "displayName" | "microphone" | "camera">>;
 const displayNameStorageKey = "chalk.display-name";
 const devicesOff = { microphone: false, camera: false };
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
@@ -35,7 +36,7 @@ export function SpacePage({
     }
   });
   const [displayName, setDisplayName] = useState(reloadMarker?.displayName ?? automaticName);
-  const [entranceSettings, setEntranceSettings] = useState<EntranceSettings | null>(reloadMarker ? { displayName: reloadMarker.displayName, ...devicesOff } : null);
+  const [entranceSettings, setEntranceSettings] = useState<WebJoinSettings | null>(reloadMarker ? { displayName: reloadMarker.displayName, ...devicesOff } : null);
   const [callName, setCallName] = useState(slug ?? "Call");
   const autoArrivalAttempted = useRef(false);
   const nameEdited = useRef(false);
@@ -47,7 +48,7 @@ export function SpacePage({
   const reloadAttempted = useRef(false);
   const pendingRef = useRef<PendingArrival | null>(null);
   const cleanupPromise = useRef<Promise<void> | undefined>(undefined);
-  const defaultEntranceSettings = useMemo<EntranceSettings>(() => ({ displayName, ...devicesOff }), [displayName]);
+  const defaultJoinOptions = useMemo<WebJoinSettings>(() => ({ displayName, ...devicesOff }), [displayName]);
   useEffect(() => {
     active.current = true;
     return () => {
@@ -88,7 +89,7 @@ export function SpacePage({
       });
   }, [client, complete, reloadMarker, slug]);
   const start = useCallback(
-    (settings: EntranceSettings = defaultEntranceSettings) => {
+    (settings: WebJoinSettings = defaultJoinOptions) => {
       const normalizedDisplayName = settings.displayName.trim();
       const inviteToken = spaceInviteToken();
       if (!normalizedDisplayName || spaceAccess || pending || preparing) return;
@@ -142,7 +143,7 @@ export function SpacePage({
           if (active.current) setPreparing(false);
         });
     },
-    [client, complete, dashboardEntry, defaultEntranceSettings, navigatePublicSpace, pending, preparing, slug, spaceAccess],
+    [client, complete, dashboardEntry, defaultJoinOptions, navigatePublicSpace, pending, preparing, slug, spaceAccess],
   );
   useEffect(() => {
     if (automaticName || reloadMarker) return;
@@ -233,20 +234,17 @@ export function SpacePage({
     [spaceAccess],
   );
   if (spaceAccess) {
-    const settings = entranceSettings ?? defaultEntranceSettings;
+    const settings = entranceSettings ?? defaultJoinOptions;
     return (
       <LocalSpace
         reloadMarker={spaceAccess.prepared.reloadMarker}
         credential={spaceAccess.prepared.credential}
         displayName={settings.displayName}
         defaults={{ microphone: settings.microphone, camera: settings.camera }}
-        deviceSelection={settings}
         getAccess={spaceAccess.prepared.getAccess}
         connectionAccess={spaceAccess.prepared.connectionAccess}
-        inviteLink={spaceAccess.inviteLink}
         onFinish={finish}
         spaceName={spaceAccess.spaceName}
-        spaceDescription={spaceAccess.prepared.spaceDescription}
       />
     );
   }
@@ -280,7 +278,6 @@ type JoinedSpaceAccess = {
 type SpaceEntryAccess = Pick<PreparedPublicSpace, "credential" | "getAccess"> & {
   readonly reloadMarker: () => Pick<ReloadRejoinMarker, "episodeId" | "participantId" | "participantGeneration" | "mediaProof" | "arrivalHandle" | "tenantId">;
   readonly connectionAccess?: PreparedPublicSpace["connectionAccess"];
-  readonly spaceDescription?: string;
   readonly finish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
 };
 type PendingArrival = {
@@ -329,25 +326,9 @@ async function replacePublicSpaceHistory(_canonicalSlug: string, inviteLink: str
 async function prepareDashboardSpace(slug: string, displayName: string, reload?: ReloadRejoinMarker): Promise<DashboardPreparation> {
   const tenantID = reload?.tenantId ?? (await resolveTenantID());
   if (!tenantID) throw new Error(neutralSpaceError);
-  const [access, spaceDescription] = await Promise.all([reload ? joinDashboardSpace(tenantID, slug, displayName, reload) : joinDashboardSpace(tenantID, slug, displayName), findSpaceDescription(tenantID, slug).catch(() => undefined)]);
+  const access = await (reload ? joinDashboardSpace(tenantID, slug, displayName, reload) : joinDashboardSpace(tenantID, slug, displayName));
   clearDashboardSpaceEntry();
-  return { kind: "dashboard", access: { credential: access.credential, getAccess: access.getAccess, reloadMarker: access.reloadMarker, spaceDescription, finish: access.leave }, inviteLink: access.inviteLink, spaceName: slug };
-}
-async function findSpaceDescription(tenantID: string, slug: string): Promise<string | undefined> {
-  let cursor: string | undefined;
-  do {
-    const page = await listSpaces({ tenantID, cursor, pageSize: 100 });
-    const space = page.spaces.find((candidate) => candidate.slug === slug);
-    if (space) return descriptionFromMetadata(space.metadata);
-    cursor = page.pagination.has_more ? (page.pagination.next_cursor ?? undefined) : undefined;
-  } while (cursor);
-  return undefined;
-}
-function descriptionFromMetadata(metadata: unknown): string | undefined {
-  if (typeof metadata !== "object" || metadata === null) return undefined;
-  const value = Reflect.get(metadata, "description");
-  if (typeof value !== "string") return undefined;
-  return value.trim() || undefined;
+  return { kind: "dashboard", access: { credential: access.credential, getAccess: access.getAccess, reloadMarker: access.reloadMarker, finish: access.leave }, inviteLink: access.inviteLink, spaceName: slug };
 }
 async function resolveTenantID(): Promise<string> {
   let hint: string | undefined;
@@ -402,13 +383,10 @@ function LocalSpace({
   credential,
   displayName,
   defaults,
-  deviceSelection,
   getAccess,
   connectionAccess,
-  inviteLink,
   onFinish,
   spaceName,
-  spaceDescription,
 }: {
   readonly reloadMarker: SpaceEntryAccess["reloadMarker"];
   readonly credential: PublicSpaceCredential | AccountSpaceCredential;
@@ -417,19 +395,13 @@ function LocalSpace({
     readonly microphone: boolean;
     readonly camera: boolean;
   };
-  readonly deviceSelection?: Pick<EntranceSettings, "audioInputDeviceId" | "videoInputDeviceId" | "audioOutputDeviceId">;
   readonly getAccess: PreparedPublicSpace["getAccess"];
   readonly connectionAccess?: PreparedPublicSpace["connectionAccess"];
   readonly inviteLink?: string;
   readonly onFinish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
   readonly spaceName: string;
-  readonly spaceDescription?: string;
 }) {
-  const client = useMemo(() => {
-    const nextClient = createLocalSpaceClient({ credential, getAccess, connectionAccess });
-    selectEntranceDevices(nextClient, deviceSelection);
-    return nextClient;
-  }, [connectionAccess, credential, deviceSelection, getAccess]);
+  const client = useMemo(() => createLocalSpaceClient({ credential, getAccess, connectionAccess }), [connectionAccess, credential, getAccess]);
   const release = useMemo(() => createLocalSpaceRelease(client, () => onFinish()), [client, onFinish]);
   const connection = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection;
   const pendingRelease = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(undefined);
@@ -481,29 +453,9 @@ function LocalSpace({
   }, [client, credential.space, displayName, onFinish, reloadMarker]);
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
-      <Chalk client={client} entrance={false} displayName={displayName} defaults={defaults} logoUrl="/brand/chalk/chalk-logo.svg" spaceName={spaceName} spaceDescription={spaceDescription} inviteLink={inviteLink} onEpisodeEnded={releaseFromLifecycle} onLeft={releaseFromLifecycle} />
+      <Chalk client={client} displayName={displayName} defaults={defaults} spaceName={spaceName} onEpisodeEnded={releaseFromLifecycle} onLeft={releaseFromLifecycle} />
     </main>
   );
-}
-function selectEntranceDevices(client: ReturnType<typeof createLocalSpaceClient>, selection: Pick<EntranceSettings, "audioInputDeviceId" | "videoInputDeviceId" | "audioOutputDeviceId"> | undefined): void {
-  const audioInputDeviceId = selection?.audioInputDeviceId;
-  const videoInputDeviceId = selection?.videoInputDeviceId;
-  const audioOutputDeviceId = selection?.audioOutputDeviceId;
-  const requested = [
-    audioInputDeviceId ? { kind: "microphone", select: () => client.media.selectMicrophone(audioInputDeviceId) } : undefined,
-    videoInputDeviceId ? { kind: "camera", select: () => client.media.selectCamera(videoInputDeviceId) } : undefined,
-    audioOutputDeviceId ? { kind: "speaker", select: () => client.media.selectSpeaker(audioOutputDeviceId) } : undefined,
-  ].filter(
-    (
-      item,
-    ): item is {
-      readonly kind: "microphone" | "camera" | "speaker";
-      readonly select: () => Promise<void>;
-    } => item !== undefined,
-  );
-  for (const item of requested) {
-    void item.select().catch(() => {});
-  }
 }
 /** The web asks only for identity. Devices are requested inside the admitted call. */
 export function NameNeeded({ spaceName, displayName, onDisplayNameChange, onJoin }: { readonly spaceName: string; readonly displayName: string; readonly onDisplayNameChange: (name: string) => void; readonly onJoin: () => void }) {

@@ -144,7 +144,6 @@ export function RecordingSpaceView({ frame, resolveMedia, resolveAssetUrl, rende
         stageBackground={frame.profile.theme.stageBackground}
         header={{
           spaceName: frame.space.name,
-          logoUrl: frame.space.logoAssetId ? resolveAssetUrl(frame.space.logoAssetId) : undefined,
           duration: durationSeconds,
           isRecording: true,
           layout,
@@ -182,7 +181,7 @@ export function RecordingSpaceView({ frame, resolveMedia, resolveAssetUrl, rende
             className="h-full"
           />
         }
-        controls={<ControlBarPresentation placement="floating" density="comfortable" duration={durationSeconds} buttons={RECORDING_TOOLBAR_BUTTONS} isRecording isChatOpen isWhiteboardOpen={sharedContent.kind === "whiteboard"} expanded detectDevices={false} displayOnly />}
+        controls={<ControlBarPresentation density="comfortable" buttons={RECORDING_TOOLBAR_BUTTONS} isRecording isChatOpen isWhiteboardOpen={sharedContent.kind === "whiteboard"} expanded detectDevices={false} displayOnly />}
         stageOverlay={<ReactionsOverlayPresentation reactions={frame.reactions} elapsedMs={frame.elapsedMs} />}
         sidebar={
           <SpaceDrawer state="open" interactive={false}>

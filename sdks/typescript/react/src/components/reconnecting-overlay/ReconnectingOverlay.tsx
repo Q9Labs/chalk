@@ -2,7 +2,6 @@ import React from "react";
 import { Spinner } from "@q9labsai/chalk-ui";
 import { WifiOffIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
-import { CallLimbo } from "../call-limbo/CallLimbo";
 
 export const RECONNECTING_NOTICE_MS = 2_000;
 

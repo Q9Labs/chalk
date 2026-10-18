@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 
 import { useCan, useChat, useMedia, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
-import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 
 export interface MediaDevice {
@@ -12,13 +11,10 @@ export interface MediaDevice {
   groupId?: string;
 }
 
-export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "transcription" | "handraise" | "reactions" | "whiteboard" | "pip" | "settings" | "more" | "info" | "thumbsup" | "leave";
+export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "handraise" | "reactions" | "whiteboard" | "leave";
 
 export interface ControlBarSurfaceProps {
-  position?: "bottom" | "top";
-  placement?: "inline" | "floating";
   density?: "comfortable" | "compact";
-  showLabels?: boolean;
   buttons?: ControlBarButtonName[];
 
   isMuted?: boolean;
@@ -30,11 +26,8 @@ export interface ControlBarSurfaceProps {
   isRecordingPending?: boolean;
   isChatOpen?: boolean;
   isParticipantsOpen?: boolean;
-  isTranscriptionEnabled?: boolean;
   isHandRaised?: boolean;
   isWhiteboardOpen?: boolean;
-  isPictureInPictureActive?: boolean;
-  duration?: number;
   unreadChatCount?: number;
   audioInputDevices?: readonly MediaDevice[];
   audioOutputDevices?: readonly MediaDevice[];
@@ -52,14 +45,9 @@ export interface ControlBarSurfaceProps {
   onToggleRecording?: () => void;
   onToggleChat?: () => void;
   onToggleParticipants?: () => void;
-  onToggleTranscription?: () => void;
   onToggleHandRaise?: () => void;
   onToggleWhiteboard?: () => void;
-  onTogglePictureInPicture?: () => Promise<void> | void;
   onOpenReactions?: () => void;
-  onOpenSettings?: () => void;
-  onOpenMore?: () => void;
-  onOpenInfo?: () => void;
   onLeft?: () => void;
   onEndForEveryone?: () => void;
 
@@ -73,21 +61,13 @@ export interface ControlBarSurfaceProps {
 }
 
 export interface ControlBarProps {
-  readonly position?: "bottom" | "top";
-  readonly placement?: "inline" | "floating";
   readonly density?: "comfortable" | "compact";
-  /** A shared Episode clock supplied by the owning Space surface. */
-  readonly duration?: number;
-  readonly showLabels?: boolean;
   readonly buttons?: ControlBarButtonName[];
   readonly activePanel?: "chat" | "participants" | null;
   readonly onToggleChat?: () => void;
   readonly onToggleParticipants?: () => void;
   readonly onToggleWhiteboard?: () => void;
   readonly onOpenReactions?: () => void;
-  readonly onOpenSettings?: () => void;
-  readonly onOpenMore?: () => void;
-  readonly onOpenInfo?: () => void;
   readonly onLeaveRequest?: () => void;
   /** Set for hosts: the leave button opens a menu with Leave call and End call for everyone. */
   readonly onEndForEveryone?: () => void;
@@ -98,18 +78,7 @@ export interface ControlBarProps {
   readonly className?: string;
 }
 
-export const DEFAULT_CONTROL_BAR_BUTTONS: ControlBarButtonName[] = ["mic", "video", "screenshare", "record", "whiteboard", "handraise", "leave", "participants", "chat", "thumbsup", "pip", "settings"];
-
-export function formatControlBarDuration(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = seconds % 60;
-
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-  }
-  return `${minutes}:${String(secs).padStart(2, "0")}`;
-}
+export const DEFAULT_CONTROL_BAR_BUTTONS: ControlBarButtonName[] = ["mic", "video", "screenshare", "record", "whiteboard", "handraise", "leave", "participants", "chat", "reactions"];
 
 interface DeviceGroups {
   readonly audioinput: MediaDevice[];
@@ -142,7 +111,6 @@ function withSelectedDeviceFallback(devices: readonly MediaDevice[] | undefined,
 }
 
 interface ControlBarSurfaceBehaviorOptions {
-  readonly placement: "inline" | "floating";
   readonly density: "comfortable" | "compact";
   readonly buttons?: ControlBarButtonName[];
   readonly audioInputDevices?: readonly MediaDevice[];
@@ -163,12 +131,9 @@ interface ControlBarSurfaceBehavior {
   readonly effectiveAudioOutputDevices: readonly MediaDevice[];
   readonly effectiveVideoInputDevices: readonly MediaDevice[];
   readonly showLeave: boolean;
-  readonly mediaButtons: readonly ControlBarButtonName[];
-  readonly interactionButtons: readonly ControlBarButtonName[];
 }
 
 export function useControlBarSurfaceBehavior({
-  placement,
   density,
   buttons,
   audioInputDevices,
@@ -186,7 +151,7 @@ export function useControlBarSurfaceBehavior({
   const buttonsToRender = buttons ?? DEFAULT_CONTROL_BAR_BUTTONS;
 
   useEffect(() => {
-    if (!detectDevices || placement !== "floating" || density !== "comfortable" || !navigator.mediaDevices?.enumerateDevices) return;
+    if (!detectDevices || density !== "comfortable" || !navigator.mediaDevices?.enumerateDevices) return;
     let cancelled = false;
     const syncDevices = async () => {
       try {
@@ -208,14 +173,12 @@ export function useControlBarSurfaceBehavior({
       cancelled = true;
       navigator.mediaDevices.removeEventListener?.("devicechange", syncDevices);
     };
-  }, [density, detectDevices, placement]);
+  }, [density, detectDevices]);
 
   const effectiveAudioInputDevices = withSelectedDeviceFallback(mergeDevices(audioInputDevices, detectedDevices.audioinput), selectedAudioInput, "Current microphone", "audioinput");
   const effectiveAudioOutputDevices = withSelectedDeviceFallback(mergeDevices(audioOutputDevices, detectedDevices.audiooutput), selectedAudioOutput, "Current speaker", "audiooutput");
   const effectiveVideoInputDevices = withSelectedDeviceFallback(mergeDevices(videoInputDevices, detectedDevices.videoinput), selectedVideoInput, "Current camera", "videoinput");
   const showLeave = buttonsToRender.includes("leave");
-  const mediaButtons = buttonsToRender.filter((button) => button === "mic" || button === "video" || button === "screenshare" || button === "record" || button === "whiteboard" || button === "handraise");
-  const interactionButtons = buttonsToRender.filter((button) => button === "participants" || button === "chat" || button === "transcription" || button === "thumbsup" || button === "pip" || button === "reactions" || button === "settings" || button === "more" || button === "info");
 
   return {
     themeVariables,
@@ -224,8 +187,6 @@ export function useControlBarSurfaceBehavior({
     effectiveAudioOutputDevices,
     effectiveVideoInputDevices,
     showLeave,
-    mediaButtons,
-    interactionButtons,
   };
 }
 
@@ -252,7 +213,6 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const isRecording = recordingStatus === "recording" || recordingStatus === "stopping";
   const isRecordingPending = recordingStatus === "starting" || recordingStatus === "stopping";
   const measuredEpisodeDuration = useEpisodeDuration();
-  const episodeDuration = props.duration ?? measuredEpisodeDuration;
   const [commandError, setCommandError] = useState<string | null>(null);
 
   const run = useCallback(
@@ -283,7 +243,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
 
   const buttons = (props.buttons ?? DEFAULT_CONTROL_BAR_BUTTONS).filter((button) => {
     if (button === "screenshare") return canPublishScreen;
-    if (button === "reactions" || button === "thumbsup") return canSendReaction;
+    if (button === "reactions") return canSendReaction;
     if (button === "handraise") return canRaiseHand;
     if (button === "whiteboard") return canDrawWhiteboard;
     if (button === "record") return canManageRecording;
@@ -295,7 +255,6 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const surfaceProps: ControlBarSurfaceProps = {
     ...props,
     buttons,
-    duration: episodeDuration,
     isMuted: !microphoneEnabled,
     microphonePending: media.local.microphone.state === "requesting",
     cameraPending: media.local.camera.state === "requesting",
@@ -325,9 +284,6 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     onToggleHandRaise: () => void run(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())),
     onToggleWhiteboard: props.onToggleWhiteboard,
     onOpenReactions: props.onOpenReactions,
-    onOpenSettings: props.onOpenSettings,
-    onOpenMore: props.onOpenMore,
-    onOpenInfo: props.onOpenInfo,
     onLeft: leave,
     onEndForEveryone: props.onEndForEveryone,
   };

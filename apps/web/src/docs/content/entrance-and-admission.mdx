@@ -1,14 +1,6 @@
-## Entrance prepares a Participant and admission controls entry
+## Joining and admission
 
-`Entrance` is the place where a visitor chooses a display name and devices before joining a Space. `<Chalk />` renders it by default; set `entrance={false}` to join immediately with the supplied defaults.
-
-```tsx
-import { Entrance } from "@q9labsai/chalk-react";
-
-<Entrance spaceName="Design review" defaults={{ microphone: true, camera: false }} onJoin={(settings) => spaceClient.join(settings)} />;
-```
-
-The callback receives `displayName`, `microphone`, and `camera`. Your application can own the client and render this step separately, or let `<Chalk />` own both.
+The React call joins directly with the supplied display name and device defaults. CallLimbo shows progress while joining. The web app collects a name before mounting the call; microphone and camera popovers remain available inside it.
 
 ### Admission policy
 
@@ -21,7 +13,3 @@ await client.participants.deny(requestId);
 ```
 
 Admission is distinct from identity. A Guest can be admitted to the current Episode without becoming a Member. A Member keeps standing Space access across Episodes.
-
-<Callout tone="note" title="One entry surface">
-  Entrance covers device preparation and waiting for admission in one place. Your product can style it or replace it with a custom panel while keeping the same `join` options.
-</Callout>

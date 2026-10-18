@@ -2,7 +2,7 @@ import type { SpaceSnapshot } from "@q9labsai/chalk-client";
 import { CallLimbo, Chalk, Entrance, type SpaceLayout } from "@q9labsai/chalk-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { NameNeeded } from "../components/space/SpacePage";
-import { HOST, INVITE_LINK, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type CallStateClient, type Person } from "./fixtures";
+import { HOST, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type CallStateClient, type Person } from "./fixtures";
 
 /** A step the capture script performs after the state mounts, by accessible role and name. */
 export type Action = { readonly click: string; readonly role?: "button" | "menuitemradio" } | { readonly wait: number };
@@ -112,8 +112,6 @@ export const CALL_STATES: readonly CallState[] = [
   },
   { id: "admission", title: "Someone is waiting to be let in", render: () => <Live snapshot={liveSnapshot({ others: [nora], capabilities: HOST, admission: true })} /> },
   { id: "layout-menu", title: "Layout menu", actions: [openLayout], render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
-  { id: "info", title: "Call details", actions: [{ click: "Space information" }], render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
-  { id: "settings", title: "Settings", actions: [{ click: "Settings" }], render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
   { id: "device-menu", title: "Microphone menu", actions: [{ click: "Select microphone" }], render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
   { id: "reactions", title: "Reactions", actions: [{ click: "React" }], render: () => <Live snapshot={liveSnapshot({ others: [nora], reactions: true })} /> },
   { id: "leave", title: "Leave, as guest: leaves at once", actions: [{ click: "Leave call" }], render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
@@ -159,7 +157,7 @@ function Live({ snapshot, layout, then }: { readonly snapshot: SpaceSnapshot; re
   }, [client, transition]);
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
-      <Chalk client={client} entrance={false} displayName={SELF_NAME} logoUrl="/brand/chalk/chalk-logo.svg" spaceName={SPACE_NAME} inviteLink={INVITE_LINK} layout={layout} onLeft={() => undefined} onHome={() => undefined} />
+      <Chalk client={client} displayName={SELF_NAME} spaceName={SPACE_NAME} layout={layout} onLeft={() => undefined} onHome={() => undefined} />
     </main>
   );
 }
@@ -197,7 +195,7 @@ function JoiningComplete() {
       <button hidden data-complete-join onClick={() => client.updateSnapshot(() => liveSnapshot({ self: { camera: false, microphone: false } }))}>
         Complete join
       </button>
-      <Chalk client={client} entrance={false} displayName={SELF_NAME} spaceName={SPACE_NAME} />
+      <Chalk client={client} displayName={SELF_NAME} spaceName={SPACE_NAME} />
     </main>
   );
 }

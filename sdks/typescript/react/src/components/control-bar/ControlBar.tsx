@@ -1,32 +1,12 @@
 import React from "react";
 import { Tooltip } from "@q9labsai/chalk-ui";
 import { cn } from "../../utils/cn";
-import {
-  CallEnd01Icon,
-  CircleIcon,
-  Edit02Icon,
-  FileTextIcon,
-  HandIcon,
-  InformationCircleIcon,
-  Message01Icon,
-  Microphone01Icon,
-  MicrophoneOff01Icon,
-  Monitor01Icon,
-  MonitorOffIcon,
-  MoreHorizontalIcon,
-  PictureInPictureIcon,
-  Settings01Icon,
-  SmileIcon,
-  ThumbsUpIcon,
-  UserGroupIcon,
-  Video01Icon,
-  VideoOffIcon,
-} from "../../utils/icons";
+import { CallEnd01Icon, CircleIcon, Edit02Icon, HandIcon, Message01Icon, Microphone01Icon, MicrophoneOff01Icon, Monitor01Icon, MonitorOffIcon, UserGroupIcon, Video01Icon, VideoOffIcon } from "../../utils/icons";
 import { ControlBarButton } from "../atomic";
 import { DevicePopover } from "../device-popover/DevicePopover";
 import { CommandErrorAlert } from "../composite/CommandErrorAlert";
 import { LeaveMenu } from "./LeaveMenu";
-import { formatControlBarDuration, useConnectedControlBarBehavior, useControlBarSurfaceBehavior, type ControlBarButtonName, type ControlBarProps, type ControlBarSurfaceProps } from "./control-bar-behavior";
+import { useConnectedControlBarBehavior, useControlBarSurfaceBehavior, type ControlBarButtonName, type ControlBarProps, type ControlBarSurfaceProps } from "./control-bar-behavior";
 
 export type { ControlBarProps, ControlBarButtonName } from "./control-bar-behavior";
 
@@ -77,11 +57,8 @@ export const ControlBarSurface = React.memo(
     isRecordingPending = false,
     isChatOpen = false,
     isParticipantsOpen = false,
-    isTranscriptionEnabled = false,
     isHandRaised = false,
     isWhiteboardOpen = false,
-    isPictureInPictureActive = false,
-    duration = 0,
     unreadChatCount = 0,
     audioInputDevices,
     audioOutputDevices,
@@ -89,8 +66,6 @@ export const ControlBarSurface = React.memo(
     selectedAudioInput,
     selectedAudioOutput,
     selectedVideoInput,
-    showLabels = false,
-    placement = "inline",
     density = "comfortable",
     buttons,
 
@@ -103,14 +78,9 @@ export const ControlBarSurface = React.memo(
     onToggleRecording,
     onToggleChat,
     onToggleParticipants,
-    onToggleTranscription,
     onToggleHandRaise,
     onToggleWhiteboard,
-    onTogglePictureInPicture,
     onOpenReactions,
-    onOpenSettings,
-    onOpenMore,
-    onOpenInfo,
     onLeft,
     onEndForEveryone,
     participantColorSeed,
@@ -121,8 +91,7 @@ export const ControlBarSurface = React.memo(
 
     className,
   }: ControlBarSurfaceProps) => {
-    const { themeVariables, buttonsToRender, effectiveAudioInputDevices, effectiveAudioOutputDevices, effectiveVideoInputDevices, showLeave, mediaButtons, interactionButtons } = useControlBarSurfaceBehavior({
-      placement,
+    const { themeVariables, buttonsToRender, effectiveAudioInputDevices, effectiveAudioOutputDevices, effectiveVideoInputDevices, showLeave } = useControlBarSurfaceBehavior({
       density,
       buttons,
       audioInputDevices,
@@ -136,157 +105,20 @@ export const ControlBarSurface = React.memo(
       detectDevices,
     });
 
-    const renderButton = (type: ControlBarButtonName) => {
-      switch (type) {
-        case "mic":
-          return <ControlBarButton key="mic" icon={isMuted ? <MicrophoneOff01Icon className="text-[var(--chalk-app-danger)]" /> : <Microphone01Icon />} label={isMuted ? "Unmute" : "Mute"} onClick={onToggleMute} active={!isMuted} showLabel={showLabels} data-tour="controls-mic" />;
-        case "video":
-          return (
-            <ControlBarButton key="video" icon={isVideoEnabled ? <Video01Icon /> : <VideoOffIcon className="text-[var(--chalk-app-danger)]" />} label={isVideoEnabled ? "Stop Video" : "Start Video"} onClick={onToggleVideo} active={isVideoEnabled} showLabel={showLabels} data-tour="controls-video" />
-          );
-        case "screenshare":
-          return (
-            <ControlBarButton
-              key="screenshare"
-              icon={isScreenSharing ? <MonitorOffIcon /> : <Monitor01Icon />}
-              label={isScreenSharing ? "Stop Share" : "Share Screen"}
-              onClick={onToggleScreenShare}
-              active={isScreenSharing}
-              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] ring-2 ring-[var(--chalk-app-control-active-line)] ring-offset-2 ring-offset-[var(--chalk-app-canvas)] hover:bg-[var(--chalk-app-control-hover)]"
-              showLabel={showLabels}
-              data-tour="controls-screenshare"
-            />
-          );
-        case "record":
-          if (!onToggleRecording) return null;
-          return (
-            <ControlBarButton
-              key="record"
-              icon={<CircleIcon className={isRecording ? "fill-current" : ""} />}
-              label={isRecordingPending ? (isRecording ? "Stopping…" : "Starting…") : isRecording ? "Stop Recording" : "Record"}
-              onClick={onToggleRecording}
-              active={isRecording}
-              disabled={isRecordingPending}
-              showLabel={showLabels}
-              data-tour="controls-record"
-            />
-          );
-        case "chat":
-          if (!onToggleChat) return null;
-          return (
-            <div key="chat" className="relative">
-              <ControlBarButton
-                icon={<Message01Icon />}
-                label="Chat"
-                onClick={onToggleChat}
-                active={isChatOpen}
-                activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] ring-2 ring-[var(--chalk-app-control-active-line)] ring-offset-2 ring-offset-[var(--chalk-app-canvas)] hover:bg-[var(--chalk-app-control-hover)]"
-                showLabel={showLabels}
-                data-tour="controls-chat"
-              />
-              {unreadChatCount > 0 && !isChatOpen && (
-                <span className="absolute -top-1 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--chalk-app-danger)] px-1 text-[10px] font-semibold text-white shadow-sm">{unreadChatCount > 99 ? "99+" : unreadChatCount}</span>
-              )}
-            </div>
-          );
-        case "participants":
-          if (!onToggleParticipants) return null;
-          return (
-            <ControlBarButton
-              key="participants"
-              icon={<UserGroupIcon />}
-              label="Participants"
-              onClick={onToggleParticipants}
-              active={isParticipantsOpen}
-              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] ring-2 ring-[var(--chalk-app-control-active-line)] ring-offset-2 ring-offset-[var(--chalk-app-canvas)] hover:bg-[var(--chalk-app-control-hover)]"
-              showLabel={showLabels}
-              data-tour="controls-participants"
-            />
-          );
-        case "transcription":
-          if (!onToggleTranscription) return null;
-          return (
-            <ControlBarButton
-              key="transcription"
-              icon={<FileTextIcon />}
-              label="Transcript"
-              onClick={onToggleTranscription}
-              active={isTranscriptionEnabled}
-              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] ring-2 ring-[var(--chalk-app-control-active-line)] ring-offset-2 ring-offset-[var(--chalk-app-canvas)] hover:bg-[var(--chalk-app-control-hover)]"
-              showLabel={showLabels}
-            />
-          );
-        case "handraise":
-          if (!onToggleHandRaise) return null;
-          return (
-            <ControlBarButton
-              key="handraise"
-              icon={<HandIcon />}
-              label={isHandRaised ? "Lower Hand" : "Raise Hand"}
-              onClick={onToggleHandRaise}
-              active={isHandRaised}
-              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] ring-2 ring-[var(--chalk-app-control-active-line)] ring-offset-2 ring-offset-[var(--chalk-app-canvas)] hover:bg-[var(--chalk-app-control-hover)]"
-              showLabel={showLabels}
-            />
-          );
-        case "reactions":
-          if (!onOpenReactions) return null;
-          return <ControlBarButton key="reactions" icon={<SmileIcon />} label="Reactions" onClick={onOpenReactions} showLabel={showLabels} />;
-        case "whiteboard":
-          if (!onToggleWhiteboard) return null;
-          return (
-            <ControlBarButton
-              key="whiteboard"
-              icon={<Edit02Icon />}
-              label="Whiteboard"
-              onClick={onToggleWhiteboard}
-              active={isWhiteboardOpen}
-              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] ring-2 ring-[var(--chalk-app-control-active-line)] ring-offset-2 ring-offset-[var(--chalk-app-canvas)] hover:bg-[var(--chalk-app-control-hover)]"
-              showLabel={showLabels}
-            />
-          );
-        case "pip":
-          if (!onTogglePictureInPicture) {
-            return null;
-          }
-          return (
-            <ControlBarButton
-              key="pip"
-              icon={<PictureInPictureIcon size={20} />}
-              label={isPictureInPictureActive ? "Close picture in picture" : "Open picture in picture"}
-              onClick={
-                onTogglePictureInPicture
-                  ? () => {
-                      void onTogglePictureInPicture();
-                    }
-                  : undefined
-              }
-              active={isPictureInPictureActive}
-              activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] ring-2 ring-[var(--chalk-app-control-active-line)] ring-offset-2 ring-offset-[var(--chalk-app-canvas)] hover:bg-[var(--chalk-app-control-hover)]"
-              showLabel={showLabels}
-            />
-          );
-        case "settings":
-          if (!onOpenSettings) return null;
-          return <ControlBarButton key="settings" icon={<Settings01Icon size={20} />} label="Settings" onClick={onOpenSettings} showLabel={showLabels} />;
-        case "more":
-          if (!onOpenMore) return null;
-          return <ControlBarButton key="more" icon={<MoreHorizontalIcon />} label="More" onClick={onOpenMore} showLabel={showLabels} />;
-        case "leave":
-          return null; // Handled explicitly in the layout
-        case "info":
-          if (!onOpenInfo) return null;
-          return <ControlBarButton key="info" icon={<InformationCircleIcon size={20} />} label="Info" onClick={onOpenInfo} noBorder />;
-        case "thumbsup":
-          if (!onOpenReactions) return null;
-          return <ControlBarButton key="thumbsup" icon={<ThumbsUpIcon size={20} className="text-[var(--chalk-app-control-active-text)]" />} label="Reactions" onClick={onOpenReactions} />;
-        default:
-          return null;
-      }
-    };
+    const screenShareButton = (
+      <ControlBarButton
+        key="screenshare"
+        icon={isScreenSharing ? <MonitorOffIcon /> : <Monitor01Icon />}
+        label={isScreenSharing ? "Stop Share" : "Share Screen"}
+        onClick={onToggleScreenShare}
+        active={isScreenSharing}
+        activeClassName="bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)] ring-2 ring-[var(--chalk-app-control-active-line)] ring-offset-2 ring-offset-[var(--chalk-app-canvas)] hover:bg-[var(--chalk-app-control-hover)]"
+        data-tour="controls-screenshare"
+      />
+    );
 
     // Compact floating layout matching the screenshot
-    if (placement === "floating" && density === "compact") {
+    if (density === "compact") {
       return (
         <div
           className={cn("flex w-full flex-wrap items-center gap-2 bg-transparent px-2 py-3 sm:px-4", className)}
@@ -323,7 +155,7 @@ export const ControlBarSurface = React.memo(
 
             {/* Group 2: Interactions */}
             <div className="order-3 flex shrink-0 items-center gap-1 rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] p-1 shadow-[var(--chalk-app-shadow-control)]">
-              {buttonsToRender.includes("screenshare") ? renderButton("screenshare") : null}
+              {buttonsToRender.includes("screenshare") ? screenShareButton : null}
               {buttonsToRender.includes("handraise") && onToggleHandRaise && (
                 <Tooltip content={isHandRaised ? "Lower hand" : "Raise hand"} position="top">
                   <button
@@ -342,9 +174,7 @@ export const ControlBarSurface = React.memo(
               )}
               {buttonsToRender.includes("reactions") && onOpenReactions && (
                 <Tooltip content="Reactions" position="top">
-                  <button type="button" onClick={onOpenReactions} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-control-active-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="Reactions">
-                    <ThumbsUpIcon className="w-5 h-5" />
-                  </button>
+                  <button type="button" onClick={onOpenReactions} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-control-active-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="Reactions"></button>
                 </Tooltip>
               )}
               {buttonsToRender.includes("whiteboard") && onToggleWhiteboard && (
@@ -400,15 +230,8 @@ export const ControlBarSurface = React.memo(
               )}
             </div>
 
-            {/* Group 3: More & Leave */}
+            {/* Group 3: Leave */}
             <div className="order-2 flex shrink-0 items-center gap-1 rounded-[8px] border border-[var(--chalk-app-line)] bg-[var(--chalk-app-control)] p-1 shadow-[var(--chalk-app-shadow-control)]">
-              {buttonsToRender.includes("more") && onOpenMore && (
-                <Tooltip content="More options" position="top">
-                  <button type="button" onClick={onOpenMore} className="flex h-[44px] w-[44px] items-center justify-center rounded-[6px] text-[var(--chalk-app-text)] transition active:scale-95 sm:h-[46px] sm:w-[46px]" aria-label="More options">
-                    <MoreHorizontalIcon className="w-5 h-5" />
-                  </button>
-                </Tooltip>
-              )}
               <LeaveMenu
                 onLeave={onLeft}
                 onEndForEveryone={onEndForEveryone}
@@ -431,7 +254,7 @@ export const ControlBarSurface = React.memo(
       );
     }
 
-    if (placement === "floating" && density === "comfortable") {
+    {
       const floatingButton = (type: ControlBarButtonName): React.ReactNode => {
         switch (type) {
           case "mic":
@@ -453,9 +276,7 @@ export const ControlBarSurface = React.memo(
             if (!onToggleChat && !displayOnly) return null;
             return <FloatingControlBarButton key={type} icon={<Message01Icon />} label="Chat" onClick={onToggleChat} active={isChatOpen} badge={!isChatOpen ? unreadChatCount : 0} />;
           case "reactions":
-          case "thumbsup":
-            if (!onOpenReactions && !displayOnly) return null;
-            return <FloatingControlBarButton key={type} icon={<SmileIcon />} label="React" onClick={onOpenReactions} />;
+
           case "record":
             if (!onToggleRecording && !displayOnly) return null;
             return (
@@ -468,20 +289,7 @@ export const ControlBarSurface = React.memo(
                 disabled={isRecordingPending}
               />
             );
-          case "transcription":
-            if (!onToggleTranscription) return null;
-            return <FloatingControlBarButton key={type} icon={<FileTextIcon />} label="Transcript" onClick={onToggleTranscription} active={isTranscriptionEnabled} />;
-          case "pip":
-            return onTogglePictureInPicture ? <FloatingControlBarButton key={type} icon={<PictureInPictureIcon />} label="Picture in picture" onClick={() => void onTogglePictureInPicture()} active={isPictureInPictureActive} /> : null;
-          case "settings":
-            if (!onOpenSettings) return null;
-            return <FloatingControlBarButton key={type} icon={<Settings01Icon />} label="Settings" onClick={onOpenSettings} />;
-          case "more":
-            if (!onOpenMore) return null;
-            return <FloatingControlBarButton key={type} icon={<MoreHorizontalIcon />} label="More" onClick={onOpenMore} />;
-          case "info":
-            if (!onOpenInfo) return null;
-            return <FloatingControlBarButton key={type} icon={<InformationCircleIcon />} label="Info" onClick={onOpenInfo} />;
+
           default:
             return null;
         }
@@ -536,31 +344,6 @@ export const ControlBarSurface = React.memo(
         </div>
       );
     }
-
-    return (
-      <div className={cn("flex items-center justify-between w-full px-6 py-4", className)} style={themeVariables as React.CSSProperties} role="toolbar" aria-label="Space controls">
-        {/* Left: Timer section */}
-        <div className="flex items-center rounded-full border border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] px-5 py-2.5 shadow-[var(--chalk-app-shadow-xs)]">
-          <div className="flex items-center gap-3">
-            <div className="w-2.5 h-2.5 rounded-full bg-[var(--chalk-positive)] shadow-[0_0_14px_var(--chalk-positive)]" />
-            <span className="text-[var(--chalk-app-text)] text-[14px] font-semibold tracking-wide tabular-nums">{formatControlBarDuration(duration)}</span>
-          </div>
-        </div>
-
-        {/* Middle: Media controls */}
-        <div className="flex items-center gap-3">
-          {mediaButtons.map(renderButton)}
-          {showLeave && (
-            <div className="ml-2">
-              <ControlBarButton key="leave" icon={<CallEnd01Icon size={20} />} label="Leave" onClick={onLeft} danger data-tour="controls-leave" />
-            </div>
-          )}
-        </div>
-
-        {/* Right: Interaction controls */}
-        <div className="flex items-center gap-4">{interactionButtons.map(renderButton)}</div>
-      </div>
-    );
   },
 );
 

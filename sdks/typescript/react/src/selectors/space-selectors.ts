@@ -4,7 +4,7 @@ import type { AudioParticipant } from "../components/audio-output/AudioOutput";
 import type { Participant } from "../components/participant-grid/ParticipantGrid";
 import type { ParticipantListParticipant } from "../components/participants-panel/ParticipantsPanel";
 
-/** Returns the first participant with a live screen-share track for presentation mode. */
+/** Returns the first participant with a live screen-share track for the Spotlight layout. */
 export function toActiveScreenShare(participants: readonly Participant[]): Participant | undefined {
   return participants.find((participant) => participant.isScreenSharing && participant.screenShareTrack != null);
 }
