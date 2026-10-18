@@ -307,7 +307,8 @@ those caches. These are preview-client UI lifecycles, not a live client's networ
 join/leave or WebRTC teardown proof. Excalidraw's first-open module/cache allocation
 belongs before baseline. Growth on later opens must still pass the same limits.
 
-On failure only, `artifacts/call-leaks/*.heapsnapshot` holds a Chromium snapshot.
+On failure only, `artifacts/call-leaks/run-*/*.heapsnapshot` holds a Chromium snapshot. Each invocation gets its own directory, so a
+calibration and a subsequent gate cannot overwrite each other’s evidence.
 Load it in DevTools **Memory → Load**, use Comparison against a separately captured
 baseline when needed, and inspect retainers of detached nodes. The report prints
 native detached-node count and the largest retained object types. Diagnostic
@@ -319,8 +320,8 @@ application data: keep artifacts out of Git. Clean runs take no snapshots.
 `--self-test` runs panel cycles with two independent faults: an unreleased document
 listener per panel open and retained detached sections per panel open. Each must
 fail its actual count budget and generate evidence. An uninjected panel run must
-then pass. These fault probes use five cycles each; all ordinary journeys still
-use 20. Expected injected failures do not themselves fail the gate. A separate blank-page
+then pass. The two injected probes use five cycles each; the uninjected comparison and all
+ordinary journeys use 20. Expected injected failures do not themselves fail the gate. A separate blank-page
 resource probe also proves that detached media elements, tracks, an AudioContext,
 an interval and a self-rescheduling RAF are observed while live and return to zero
 after teardown.

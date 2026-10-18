@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { summarizeHeap } from "./call-heap-summary.mjs";
 import { installLeakObservers } from "./call-leak-observers.mjs";
@@ -83,6 +83,7 @@ export async function checkLeaks({ browser, origin, budgets, directory, boardCss
     if (!limit || !Number.isFinite(limit.perCycle) || !Number.isFinite(limit.allowance) || limit.perCycle < 0 || limit.allowance < 0 || (limit.tailPerCycle !== undefined && (!Number.isFinite(limit.tailPerCycle) || limit.tailPerCycle < 0))) throw new Error(`Missing/invalid leak budget ${metric}`);
   }
   await mkdir(directory, { recursive: true });
+  directory = await mkdtemp(resolve(directory, "run-"));
   const results = [];
   for (let repeat = 0; repeat < repeats; repeat++) {
     for (const journey of journeys) results.push(await run(journey, null, repeat));
@@ -97,9 +98,9 @@ export async function checkLeaks({ browser, origin, budgets, directory, boardCss
       const metric = injection === "listener" ? "listeners" : "domNodes";
       tests.push({ injection, detected: result.failures.some((failure) => failure.startsWith(`${metric}:`)), result });
     }
-    const clean = await run("panels", null, repeats, selfTestCycles);
+    const clean = await run("panels", null, repeats);
     results.push(clean);
-    tests.push({ injection: "none", detected: clean.samples.length === selfTestCycles + 1 && clean.failures.length === 0, result: clean });
+    tests.push({ injection: "none", detected: clean.samples.length === budgets.cycles + 1 && clean.failures.length === 0, result: clean });
   }
   return { results, selfTest: tests, failures: [...results.flatMap((result) => result.failures.map((failure) => `${result.journey}/${result.repeat}: ${failure}`)), ...tests.filter((test) => !test.detected).map((test) => `Leak self-test failed: ${test.injection}`)] };
 
