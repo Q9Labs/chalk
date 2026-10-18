@@ -315,8 +315,17 @@ const server = createServer(async (request, response) => {
         return send(response, 200, { ok: true });
       }
       if (path === "/__fixture/video.mp4" && existsSync(VIDEO)) {
-        response.writeHead(200, { "Content-Type": "video/mp4" });
-        return response.end(readFileSync(VIDEO));
+        // Byte ranges, as signed storage URLs serve them, so the player can seek.
+        const video = readFileSync(VIDEO);
+        const range = /^bytes=(\d+)-(\d*)$/.exec(request.headers.range ?? "");
+        if (!range) {
+          response.writeHead(200, { "Content-Type": "video/mp4", "Accept-Ranges": "bytes", "Content-Length": video.length });
+          return response.end(video);
+        }
+        const start = Number(range[1]);
+        const end = range[2] ? Math.min(Number(range[2]), video.length - 1) : video.length - 1;
+        response.writeHead(206, { "Content-Type": "video/mp4", "Accept-Ranges": "bytes", "Content-Range": `bytes ${start}-${end}/${video.length}`, "Content-Length": end - start + 1 });
+        return response.end(video.subarray(start, end + 1));
       }
       if (path === "/__fixture/transcript.txt") {
         response.writeHead(200, { "Content-Type": "text/plain" });

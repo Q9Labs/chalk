@@ -23,6 +23,7 @@ export function HomePage() {
   const startKey = useRef(intentKey());
 
   async function startCall() {
+    if (starting) return;
     setStarting(true);
     try {
       // The contract needs a name; the person can rename it from the row.
@@ -59,7 +60,7 @@ export function HomePage() {
   return (
     <div className="wrap">
       <div className="hact">
-        <button type="button" className="btn pri" disabled={starting} onClick={() => void startCall()}>
+        <button type="button" className="btn pri" aria-busy={starting || undefined} onClick={() => void startCall()}>
           <Icon name="plus" />
           Start a call
         </button>

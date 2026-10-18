@@ -1,4 +1,4 @@
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { ProfileDTO } from "../../lib/dashboard/contracts";
@@ -9,11 +9,14 @@ import { Lockup } from "../site/Lockup";
 import { useSiteTheme } from "../site/theme";
 import { ErrorPanel, Menu, MenuItem, Seg, useToast } from "./kit";
 
-/** Sends the person to sign in, coming back to where they were. */
+/** Sends the person to sign in, coming back to where they were. Stable, and does nothing once there. */
 function useSignInRedirect(): () => void {
-  const navigate = useNavigate();
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
-  return useCallback(() => void navigate({ to: "/dashboard/sign-in", search: { returnTo: pathname } }), [navigate, pathname]);
+  const router = useRouter();
+  return useCallback(() => {
+    const returnTo = router.state.location.pathname;
+    if (returnTo.startsWith("/dashboard/sign-in")) return;
+    void router.navigate({ to: "/dashboard/sign-in", search: { returnTo } });
+  }, [router]);
 }
 
 type Load<T> = { readonly kind: "loading" } | { readonly kind: "error"; readonly error: unknown } | { readonly kind: "ready"; readonly data: T };

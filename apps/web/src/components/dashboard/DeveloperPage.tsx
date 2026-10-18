@@ -131,7 +131,11 @@ export function DeveloperPage() {
         <CreateKeyDialog
           onClose={close}
           onCreated={(secret) => {
-            reload();
+            // Refetch in place: a full reload would unmount the button the secret dialog returns focus to.
+            readPage("developer", {}).then(
+              (page) => update((value) => ({ ...value, keys: page.keys, nextKeyCursor: page.nextKeyCursor })),
+              (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
+            );
             setOpen({ kind: "secret", secret: { kind: "key", secret } });
           }}
         />
