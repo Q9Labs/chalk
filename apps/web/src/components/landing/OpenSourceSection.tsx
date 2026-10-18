@@ -22,7 +22,9 @@ export function OpenSourceSection() {
             <GitHubMark size={28} />
             <div>
               <b>Q9Labs/chalk</b>
-              <span className="mono mu">git clone {GITHUB_URL}</span>
+              <span className="mono mu">
+                git clone <span>{GITHUB_URL}</span>
+              </span>
             </div>
             <a className="btn" href={GITHUB_URL}>
               View on GitHub

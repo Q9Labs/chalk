@@ -163,14 +163,17 @@ type CallPreviewProps = {
   readonly initialWidth: number;
   /** A fixed width; without it the preview fills its container. */
   readonly width?: number;
+  /** The height the call is drawn at, for a window taller than the layout's own. */
+  readonly height?: number;
 };
 
 /**
  * A still drawing of the call in the call's real proportions. It is drawn at the call's own size and scaled to fit,
  * so the landing page shows the call without loading the call itself.
  */
-export function CallPreview({ label, layout = "desktop", people = TEAM_CALL, name = "Q9 team", time = "12:08", initialWidth, width }: CallPreviewProps) {
-  const stage = layout === "phone" ? PHONE : layout === "still" ? STILL : DESKTOP;
+export function CallPreview({ label, layout = "desktop", people = TEAM_CALL, name = "Q9 team", time = "12:08", initialWidth, width, height }: CallPreviewProps) {
+  const base = layout === "phone" ? PHONE : layout === "still" ? STILL : DESKTOP;
+  const stage = height ? { ...base, height } : base;
   const frame = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState((width ?? initialWidth) / stage.width);
 

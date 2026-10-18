@@ -1701,6 +1701,10 @@ html:has(.site[data-chalk-theme="light"]) {
     & .hostbar .when-wide {
       display: none;
     }
+
+    & .ghrow .mono > span {
+      display: block;
+    }
   }
 }
 
