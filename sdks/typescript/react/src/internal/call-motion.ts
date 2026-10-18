@@ -49,7 +49,7 @@ export function useStageRefit(root: RefObject<HTMLElement | null>): void {
 /** Chrome stays visible while a layer is open, on touch, and for keyboard focus. */
 export function useIdleChrome(root: RefObject<HTMLElement | null>, enabled: boolean): boolean {
   const [idle, setIdle] = useState(false);
-  const fine = useMediaQuery("(pointer:fine)");
+  const fine = useMediaQuery("(pointer:fine) and (min-width:641px)");
   useEffect(() => {
     const element = root.current;
     if (!element || !enabled || !fine) return;

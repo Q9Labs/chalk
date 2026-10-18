@@ -22,7 +22,7 @@ export function ChalkSheet({ open, onOpenChange, title, children, variant = "def
             ) : (
               <div className="chalk-sheet-heading">
                 <Dialog.Title>{title}</Dialog.Title>
-                <Dialog.Close className="chalk-dismiss" aria-label="Close">
+                <Dialog.Close data-part="sheet-dismiss" className="chalk-dismiss" aria-label="Close">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="m6 6 12 12M6 18 18 6" />
                   </svg>

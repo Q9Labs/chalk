@@ -14,7 +14,7 @@ export function ChalkMenu({ trigger, children, side = "bottom", className }: Cha
       <Menu.Root>
         <Menu.Trigger render={trigger} />
         <Menu.Portal container={container}>
-          <Menu.Positioner side={side} align="start" sideOffset={8} collisionPadding={8} className="chalk-menu-positioner">
+          <Menu.Positioner side={side} align={side === "top" ? "center" : "end"} sideOffset={side === "top" ? 10 : 6} collisionPadding={8} className="chalk-menu-positioner">
             <Menu.Popup data-part="menu" className={cn("chalk-menu", className)}>
               {children}
             </Menu.Popup>

@@ -82,6 +82,8 @@ try {
   await page.keyboard.press("Escape");
   await sheet.waitFor({ state: "detached" });
   assert.equal(await page.getByRole("button", { name: "Call details", exact: true }).evaluate((el) => el === document.activeElement), true);
+  await page.waitForTimeout(3300);
+  assert.notEqual(await frame.getAttribute("data-idle"), "true", "phone chrome never fades for an idle pointer");
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`${origin}/call-states.html?state=foundation-kit-dark`);
   const moving = page.locator('[data-part="flip-fixture"]');
