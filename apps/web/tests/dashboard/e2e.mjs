@@ -26,7 +26,7 @@ const engine = createServer(async (request, response) => {
     const upstream = await fetch(new URL(request.url, process.env.DASHBOARD_TEST_API_ORIGIN), { method: request.method, headers: request.headers, body: ["GET", "HEAD"].includes(request.method) ? undefined : body, redirect: "manual" });
     const result = Buffer.from(await upstream.arrayBuffer());
     if (request.method === "GET" && new URL(request.url, "http://localhost").pathname.endsWith("/transcripts") && upstream.status === 200) {
-      await writeFile(resolve("artifacts/dashboard-engine-transcripts.json"), result);
+      await writeFile(resolve(import.meta.dirname, "../../../../artifacts/dashboard-engine-transcripts.json"), result);
     }
     if (upstream.status >= 400) console.error("Engine failure:", request.method, new URL(request.url, "http://localhost").pathname, upstream.status, result.toString().slice(0, 2048));
     response.writeHead(upstream.status, Object.fromEntries(upstream.headers)).end(result);
