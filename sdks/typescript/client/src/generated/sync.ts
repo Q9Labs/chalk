@@ -33,7 +33,7 @@ export const SyncProtocolMetadata = {
     },
     {
       id: "live",
-      accepts: ["command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "ping"],
+      accepts: ["command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "ping"],
       heartbeat: {
         intervalMs: 20000,
         missedDeadlinesBeforeClose: 2,
@@ -155,6 +155,7 @@ export const SyncProtocolMetadata = {
     chatAttachmentFileNameUtf8Bytes: 255,
     chatAttachmentMaxBytes: 26214400,
     chatPageMaxMessages: 100,
+    chatReactionMaxMemberships: 128,
     chatPageEncodedBytes: 131072,
     reactionTtlMs: 5000,
     reactionRateWindowMs: 10000,
@@ -163,8 +164,9 @@ export const SyncProtocolMetadata = {
   },
   collaboration: {
     extension: "collaboration_v1",
+    messageReactionsExtension: "collaboration_v2",
     capabilities: ["sendReaction", "sendChat"],
-    reactions: ["👍", "❤️", "😂", "😮", "😢", "🎉"],
+    reactions: ["👍", "❤️", "😂", "😮", "🎉", "👏", "😀", "😅", "🙏", "🔥", "✅", "👀", "💯", "🤔", "😢", "🙌", "🚀", "👌", "😍", "🤝", "💡", "⭐", "😎", "🥳"],
     attachmentMimeTypes: [
       "image/png",
       "image/jpeg",
@@ -194,6 +196,10 @@ export const SyncProtocolMetadata = {
       exactFields: ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"],
     },
     clientFrames: {
+      setChatReaction: {
+        type: "chat_reaction_set",
+        exactFields: ["type", "request_id", "message_id", "emoji", "on"],
+      },
       sendReaction: {
         type: "reaction_send",
         exactFields: ["type", "operation_id", "reaction"],
@@ -213,6 +219,16 @@ export const SyncProtocolMetadata = {
       },
     },
     serverFrames: {
+      chatReactions: {
+        type: "chat_reactions",
+        exactFields: ["type", "message_id", "revision", "reactions"],
+      },
+      chatReactionResult: {
+        type: "chat_reaction_result",
+        acceptedFields: ["type", "request_id", "outcome", "state"],
+        rejectedFields: ["type", "request_id", "outcome", "error_code"],
+        outcomes: ["accepted", "rejected"],
+      },
       reaction: {
         type: "reaction",
         exactFields: ["type", "event_id", "participant_id", "display_name", "reaction", "occurred_at", "expires_at"],
@@ -226,6 +242,7 @@ export const SyncProtocolMetadata = {
       chatMessage: {
         type: "chat_message",
         exactFields: ["type", "message_id", "client_message_id", "sequence", "participant_id", "display_name", "text", "attachments", "created_at"],
+        optionalFields: ["reactions", "reaction_revision"],
       },
       chatSendResult: {
         type: "chat_send_result",
@@ -402,7 +419,7 @@ function strictCommand(value: Record<string, unknown>): boolean {
   }
 }
 function strictCollaborationsHelloExtension(value: unknown): boolean {
-  return exactObject(value, ["name", "chat_cursor"]) && value.name === "collaboration_v1" && exactObject(value.chat_cursor, ["after_sequence", "retained_floor_sequence"]);
+  return exactObject(value, ["name", "chat_cursor"]) && ["collaboration_v1", "collaboration_v2"].includes(String(value.name)) && exactObject(value.chat_cursor, ["after_sequence", "retained_floor_sequence"]);
 }
 function strictHello(value: Record<string, unknown>): boolean {
   const base = exactObjectWithCorrelation(value, ["type", "protocol", "token", "streams"]);
@@ -421,7 +438,12 @@ function strictHello(value: Record<string, unknown>): boolean {
   );
 }
 function strictChatMessage(value: unknown): boolean {
-  return exactObjectWithCorrelation(value, ["type", "message_id", "client_message_id", "sequence", "participant_id", "display_name", "text", "attachments", "created_at"]) && Array.isArray(value.attachments) && value.attachments.every(strictChatAttachment);
+  return (
+    isObject(value) &&
+    exactObjectWithCorrelation(value, ["type", "message_id", "client_message_id", "sequence", "participant_id", "display_name", "text", "attachments", "created_at"].concat(["reactions", "reaction_revision"].filter((key) => key in value))) &&
+    Array.isArray(value.attachments) &&
+    value.attachments.every(strictChatAttachment)
+  );
 }
 function strictChatAttachment(value: unknown): boolean {
   return exactObject(value, ["attachment_id", "file_name", "mime_type", "byte_length"]);
@@ -481,6 +503,8 @@ function strictClientFrame(value: unknown): boolean {
       return exactObject(value, ["type", "client_message_id", "text", "attachment_ids"]);
     case "chat_page_request":
       return exactObject(value, ["type", "request_id", "direction", "cursor_sequence", "limit"]);
+    case "chat_reaction_set":
+      return exactObject(value, ["type", "request_id", "message_id", "emoji", "on"]);
     case "chat_read_set":
       return exactObject(value, ["type", "request_id", "sequence"]);
     case "delivery_ack":
@@ -576,7 +600,8 @@ function strictProjection(value: Record<string, unknown>): boolean {
 function strictWelcome(value: Record<string, unknown>): boolean {
   const base = ["type", "protocol", "participant_id", "participant_generation", "recovery_id", "head", "mode"];
   const extension = Array.isArray(value.extensions) && value.extensions.length === 1 ? value.extensions[0] : undefined;
-  const extensionValid = isObject(extension) && extension.name === "collaboration_v1" && exactObject(extension, ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"]) && Array.isArray(extension.read_receipts);
+  const extensionValid =
+    isObject(extension) && ["collaboration_v1", "collaboration_v2"].includes(String(extension.name)) && exactObject(extension, ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"]) && Array.isArray(extension.read_receipts);
   const fields = extensionValid ? [...base, "extensions"] : base;
   if (!strictCursor(value.head)) return false;
   if (value.mode === "snapshot") return exactObjectWithCorrelation(value, [...fields, "snapshot"]) && strictSnapshot(value.snapshot);
@@ -639,6 +664,10 @@ function strictServerFrame(value: unknown): boolean {
       return strictReaction(value);
     case "reaction_result":
       return value.outcome === "accepted" ? exactObjectWithCorrelation(value, ["type", "operation_id", "outcome", "reaction"]) && strictReaction(value.reaction) : value.outcome === "rejected" && exactObjectWithCorrelation(value, ["type", "operation_id", "outcome", "error_code"]);
+    case "chat_reactions":
+      return exactObjectWithCorrelation(value, ["type", "message_id", "revision", "reactions"]);
+    case "chat_reaction_result":
+      return value.outcome === "accepted" ? exactObjectWithCorrelation(value, ["type", "request_id", "outcome", "state"]) && strictServerFrame(value.state) : exactObjectWithCorrelation(value, ["type", "request_id", "outcome", "error_code"]);
     case "chat_message":
       return strictChatMessage(value);
     case "chat_send_result":
@@ -771,7 +800,7 @@ const NullCursorStreamSchema = Schema.Struct({ cursor: Schema.Null }).check(exac
 const StreamsSchema = Schema.Struct({ control: Schema.Struct({ cursor: Schema.NullOr(ControlCursorSchema) }).check(exactKeys(["cursor"])), media: NullCursorStreamSchema, presence: NullCursorStreamSchema, requests: NullCursorStreamSchema });
 export const HelloFrameSchema = Schema.Struct({ type: Schema.Literal("hello"), protocol: Schema.Literal(1), token: boundedUtf8String(8192), streams: StreamsSchema, ...HelloCorrelationFields }).check(boundedFrame(65536));
 export const ChatCursorSchema = Schema.Struct({ after_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema) }).check(exactKeys(["after_sequence", "retained_floor_sequence"]));
-export const CollaborationHelloExtensionSchema = Schema.Struct({ name: Schema.Literal("collaboration_v1"), chat_cursor: ChatCursorSchema }).check(exactKeys(["name", "chat_cursor"]));
+export const CollaborationHelloExtensionSchema = Schema.Struct({ name: Schema.Literals(["collaboration_v1", "collaboration_v2"]), chat_cursor: ChatCursorSchema }).check(exactKeys(["name", "chat_cursor"]));
 export const ExtendedHelloFrameSchema = Schema.Struct({ type: Schema.Literal("hello"), protocol: Schema.Literal(1), token: boundedUtf8String(8192), streams: StreamsSchema, extensions: Schema.Tuple([CollaborationHelloExtensionSchema]), ...HelloCorrelationFields }).check(boundedFrame(65536));
 export const DeliveryAckFrameSchema = Schema.Struct({ type: Schema.Literal("delivery_ack"), stream: Schema.Literal("control"), revision: PositiveIntegerSchema, state_digest: StateDigestSchema });
 export const RecoveryAckFrameSchema = Schema.Struct({ type: Schema.Literal("recovery_ack"), recovery_id: UuidSchema, revision: NonNegativeIntegerSchema, state_digest: StateDigestSchema });
@@ -829,7 +858,33 @@ export const LiveTargetFrameSchema = Schema.Struct({ type: Schema.Literal("live_
 export const DirectedRequestNameSchema = Schema.Union([Schema.Literal("request_unmute"), Schema.Literal("request_start_camera")]);
 export const DirectedRequestSendFrameSchema = Schema.Struct({ type: Schema.Literal("directed_request"), request_id: RequestIdSchema, name: DirectedRequestNameSchema, target_participant_id: UuidSchema });
 export const RequestAckFrameSchema = Schema.Struct({ type: Schema.Literal("request_ack"), request_id: RequestIdSchema });
-export const ReactionSchema = Schema.Union([Schema.Literal("👍"), Schema.Literal("❤️"), Schema.Literal("😂"), Schema.Literal("😮"), Schema.Literal("😢"), Schema.Literal("🎉")]);
+export const ReactionValues = ["👍", "❤️", "😂", "😮", "🎉", "👏", "😀", "😅", "🙏", "🔥", "✅", "👀", "💯", "🤔", "😢", "🙌", "🚀", "👌", "😍", "🤝", "💡", "⭐", "😎", "🥳"] as const;
+export const ReactionSchema = Schema.Union([
+  Schema.Literal("👍"),
+  Schema.Literal("❤️"),
+  Schema.Literal("😂"),
+  Schema.Literal("😮"),
+  Schema.Literal("🎉"),
+  Schema.Literal("👏"),
+  Schema.Literal("😀"),
+  Schema.Literal("😅"),
+  Schema.Literal("🙏"),
+  Schema.Literal("🔥"),
+  Schema.Literal("✅"),
+  Schema.Literal("👀"),
+  Schema.Literal("💯"),
+  Schema.Literal("🤔"),
+  Schema.Literal("😢"),
+  Schema.Literal("🙌"),
+  Schema.Literal("🚀"),
+  Schema.Literal("👌"),
+  Schema.Literal("😍"),
+  Schema.Literal("🤝"),
+  Schema.Literal("💡"),
+  Schema.Literal("⭐"),
+  Schema.Literal("😎"),
+  Schema.Literal("🥳"),
+]);
 export const ReactionSendFrameSchema = Schema.Struct({ type: Schema.Literal("reaction_send"), operation_id: RequestIdSchema, reaction: ReactionSchema }).check(boundedFrame(SyncProtocolLimits.collaborationFrameBytes));
 export const ChatTextSchema = boundedUtf8String(16384).check(Schema.makeFilter((value) => (Array.from(value).length <= 4000 ? undefined : { path: ["text"], issue: "must fit the Unicode scalar limit" })));
 export const ChatAttachmentMimeTypeSchema = Schema.Union([
@@ -857,6 +912,7 @@ export const ChatSendFrameSchema = Schema.Struct({ type: Schema.Literal("chat_se
   Schema.makeFilter((frame) => (frame.text.length > 0 || frame.attachment_ids.length > 0 ? undefined : { path: [], issue: "must contain text or at least one attachment" })),
   boundedFrame(SyncProtocolLimits.collaborationFrameBytes),
 );
+export const ChatReactionSetFrameSchema = Schema.Struct({ type: Schema.Literal("chat_reaction_set"), request_id: RequestIdSchema, message_id: UuidSchema, emoji: ReactionSchema, on: Schema.Boolean }).check(boundedFrame(SyncProtocolLimits.collaborationFrameBytes));
 export const ChatReadSetFrameSchema = Schema.Struct({ type: Schema.Literal("chat_read_set"), request_id: RequestIdSchema, sequence: UnsignedDecimalSchema }).check(boundedFrame(SyncProtocolLimits.collaborationFrameBytes));
 export const ChatPageDirectionSchema = Schema.Union([Schema.Literal("older"), Schema.Literal("newer")]);
 export const ChatPageRequestFrameSchema = Schema.Struct({ type: Schema.Literal("chat_page_request"), request_id: RequestIdSchema, direction: ChatPageDirectionSchema, cursor_sequence: Schema.NullOr(UnsignedDecimalSchema), limit: PositiveIntegerSchema }).check(
@@ -1192,7 +1248,7 @@ export const CollaborationCapabilitiesSchema = Schema.Array(CollaborationCapabil
 export const ChatReadReceiptSchema = Schema.Struct({ participant_id: UuidSchema, participant_generation: PositiveIntegerSchema, sequence: UnsignedDecimalSchema, read_at: boundedUtf8String(64, 1) }).check(exactKeys(["participant_id", "participant_generation", "sequence", "read_at"]));
 export type ChatReadReceipt = typeof ChatReadReceiptSchema.Type;
 export const CollaborationWelcomeExtensionSchema = Schema.Struct({
-  name: Schema.Literal("collaboration_v1"),
+  name: Schema.Literals(["collaboration_v1", "collaboration_v2"]),
   capabilities: CollaborationCapabilitiesSchema,
   participant_capabilities: Schema.Record(UuidSchema, CollaborationCapabilitiesSchema),
   chat_head_sequence: Schema.NullOr(UnsignedDecimalSchema),
@@ -1318,6 +1374,20 @@ export const ChatAttachmentSchema = Schema.Struct({ attachment_id: UuidSchema, f
   exactKeys(["attachment_id", "file_name", "mime_type", "byte_length"]),
 );
 export type ChatAttachment = typeof ChatAttachmentSchema.Type;
+export const ChatReactionSchema = Schema.Struct({ emoji: ReactionSchema, participant_ids: Schema.Array(UuidSchema).check(Schema.isMinLength(1), Schema.isMaxLength(SyncProtocolLimits.chatReactionMaxMemberships)) }).check(exactKeys(["emoji", "participant_ids"]));
+export const ChatReactionsSchema = Schema.Array(ChatReactionSchema).check(
+  Schema.isMaxLength(24),
+  Schema.makeFilter((groups) =>
+    new Set(groups.map((group) => group.emoji)).size === groups.length && groups.reduce((count, group) => count + group.participant_ids.length, 0) <= SyncProtocolLimits.chatReactionMaxMemberships && groups.every((group) => new Set(group.participant_ids).size === group.participant_ids.length)
+      ? undefined
+      : { path: [], issue: "must contain unique bounded reaction memberships" },
+  ),
+);
+export const ChatReactionsFrameSchema = Schema.Struct({ type: Schema.Literal("chat_reactions"), message_id: UuidSchema, revision: UnsignedDecimalSchema, reactions: ChatReactionsSchema, ...ServerCorrelationFields }).check(boundedFrame(SyncProtocolLimits.collaborationFrameBytes));
+export const ChatReactionResultFrameSchema = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("chat_reaction_result"), request_id: RequestIdSchema, outcome: Schema.Literal("accepted"), state: ChatReactionsFrameSchema, ...ServerCorrelationFields }),
+  Schema.Struct({ type: Schema.Literal("chat_reaction_result"), request_id: RequestIdSchema, outcome: Schema.Literal("rejected"), error_code: CollaborationErrorCodeSchema, ...ServerCorrelationFields }),
+]);
 export const ChatMessageFrameSchema = Schema.Struct({
   type: Schema.Literal("chat_message"),
   message_id: UuidSchema,
@@ -1326,6 +1396,8 @@ export const ChatMessageFrameSchema = Schema.Struct({
   participant_id: UuidSchema,
   display_name: boundedUtf8String(256, 1),
   text: ChatTextSchema,
+  reactions: Schema.optional(ChatReactionsSchema),
+  reaction_revision: Schema.optional(UnsignedDecimalSchema),
   attachments: Schema.Array(ChatAttachmentSchema).check(Schema.isMaxLength(SyncProtocolLimits.chatAttachmentMaxItems)),
   created_at: boundedUtf8String(64, 1),
   ...ServerCorrelationFields,
@@ -1399,6 +1471,7 @@ export const SyncV1ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((f
         ChatSendFrameSchema,
         ChatPageRequestFrameSchema,
         ChatReadSetFrameSchema,
+        ChatReactionSetFrameSchema,
         DeliveryAckFrameSchema,
         RecoveryAckFrameSchema,
         PingFrameSchema,
@@ -1431,6 +1504,8 @@ export const SyncV1ServerFrameSchema = Schema.Unknown.check(Schema.makeFilter((f
         ChatHeadFrameSchema,
         ChatReadReceiptFrameSchema,
         ChatReadResultFrameSchema,
+        ChatReactionsFrameSchema,
+        ChatReactionResultFrameSchema,
         RetryableErrorFrameSchema,
         ErrorFrameSchema,
         PongFrameSchema,

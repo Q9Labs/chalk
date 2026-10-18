@@ -2,6 +2,8 @@
 
 ## 5.0.0
 
+- Expose per-message reactions, count, participant IDs, `isMine`, and `react(input)` from `useChat()`; export the shared 24-emoji set and reaction types.
+
 - Add `useScreenShare()` and screen source hint/capture types, without changing UI.
 
 - Remove unused icon wrappers: `ArrowLeft02Icon`, `ArrowUp01Icon`, `Calendar01Icon`, `Mail01Icon`, `PictureInPictureIcon`, `ZoomInIcon`, `ZoomOutIcon`, `Link01Icon`, `MoreHorizontalIcon`, `Settings01Icon`, `SparklesIcon`, `UserAdd01Icon`.

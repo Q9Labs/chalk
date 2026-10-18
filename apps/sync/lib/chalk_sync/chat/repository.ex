@@ -83,6 +83,8 @@ defmodule ChalkSync.Chat.Repository do
               {:ok, %{outcome: :committed | :duplicate, message: message()}}
               | {:error, error_code()}
 
+  @callback react(Identity.t(), map()) :: {:ok, map()} | {:error, error_code()}
+
   @callback head(EpisodeKey.t()) :: {:ok, head()} | {:error, error_code()}
 
   @callback read_receipts(EpisodeKey.t()) ::

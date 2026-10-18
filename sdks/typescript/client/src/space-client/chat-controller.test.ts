@@ -23,7 +23,7 @@ async function setup(initial: readonly MessageFrame[] = [], localParticipantId =
   const sendRequests = new Map<string, (frame: SendRequest) => void>();
   let requestId = 1000;
   const collaboration = new V1CollaborationState({
-    request: undefined,
+    request: { name: "collaboration_v2", chatCursor: { afterSequence: null, retainedFloorSequence: null } },
     requestIds: { next: () => id(++requestId) },
     maxPendingRequests: undefined,
     isLive: () => platform.sync.getSnapshot().connection.phase === "live",
@@ -45,7 +45,7 @@ async function setup(initial: readonly MessageFrame[] = [], localParticipantId =
     recovery_id: id(999),
     mode: "up_to_date",
     head: { revision: 0, state_schema_version: 1, state_digest: "0".repeat(64) },
-    extensions: [{ name: "collaboration_v1", capabilities: ["sendChat"], participant_capabilities: {}, chat_head_sequence: initial.at(-1)?.sequence ?? null, retained_floor_sequence: initial[0]?.sequence ?? null, read_receipts: [] }],
+    extensions: [{ name: "collaboration_v2", capabilities: ["sendChat"], participant_capabilities: {}, chat_head_sequence: initial.at(-1)?.sequence ?? null, retained_floor_sequence: initial[0]?.sequence ?? null, read_receipts: [] }],
   });
   const sync = {
     ...platform.sync,
@@ -56,6 +56,7 @@ async function setup(initial: readonly MessageFrame[] = [], localParticipantId =
     getCollaborationExtensionState: () => collaboration.getState(),
     subscribeCollaboration: collaboration.subscribe.bind(collaboration),
     sendChatMessage: collaboration.sendChatMessage.bind(collaboration),
+    reactToChatMessage: collaboration.reactToChatMessage.bind(collaboration),
     readChatPage: collaboration.readChatPage.bind(collaboration),
   };
   const access = opaqueAccessGrant("chat-catch-up");
@@ -304,4 +305,60 @@ describe("Chat controller catch-up", () => {
       }
     }
   }, 60_000);
+});
+
+describe("message reactions", () => {
+  it("sets an explicit reaction and never rolls a snapshot backward", async () => {
+    const h = await setup([message(1)]);
+    try {
+      const input = { messageId: id(1), emoji: "👏", on: true } as const;
+      const pending = h.client.chat.react(input);
+      await settle();
+      const request = h.sent.findLast((frame) => frame.type === "chat_reaction_set");
+      expect(request).toMatchObject({ type: "chat_reaction_set", message_id: id(1), emoji: "👏", on: true });
+      if (!request || request.type !== "chat_reaction_set") throw new Error("Missing reaction request");
+      const state = { type: "chat_reactions", message_id: id(1), revision: "2", reactions: [{ emoji: "👏", participant_ids: [participantId, peerId] }] } as const;
+      h.collaboration.chatReactionResult({ type: "chat_reaction_result", request_id: request.request_id, outcome: "accepted", state });
+      await expect(pending).resolves.toMatchObject({ reactions: [{ emoji: "👏", count: 2, participantIds: [participantId, peerId] }] });
+      h.collaboration.chatReactions({ ...state, revision: "1", reactions: [] });
+      h.collaboration.chatMessage(message(1));
+      expect(h.client.getSnapshot().chat.messages[0]?.reactions).toEqual([{ emoji: "👏", count: 2, participantIds: [participantId, peerId] }]);
+    } finally {
+      h.client.dispose();
+    }
+  });
+
+  it("keeps a reaction that arrives before the message history page", async () => {
+    const h = await setup([], participantId, false);
+    try {
+      h.collaboration.chatReactions({ type: "chat_reactions", message_id: id(1), revision: "1", reactions: [{ emoji: "👍", participant_ids: [peerId] }] });
+      h.collaboration.chatMessage(message(1));
+      expect(h.client.getSnapshot().chat.messages[0]?.reactions).toMatchObject([{ emoji: "👍", count: 1 }]);
+    } finally {
+      h.client.dispose();
+    }
+  });
+
+  it("refreshes loaded message reactions when collaboration reconnects", async () => {
+    const h = await setup([message(1)]);
+    try {
+      h.collaboration.disconnect("test");
+      h.phase("recovering");
+      h.collaboration.acceptWelcome({
+        type: "welcome",
+        protocol: 1,
+        participant_id: participantId,
+        participant_generation: 1,
+        recovery_id: id(999),
+        mode: "up_to_date",
+        head: { revision: 0, state_schema_version: 1, state_digest: "0".repeat(64) },
+        extensions: [{ name: "collaboration_v2", capabilities: ["sendChat"], participant_capabilities: {}, chat_head_sequence: "1", retained_floor_sequence: "1", read_receipts: [] }],
+      });
+      h.phase("live");
+      await h.drain([{ ...message(1), reaction_revision: "1", reactions: [{ emoji: "❤️", participant_ids: [peerId] }] }]);
+      expect(h.client.getSnapshot().chat.messages[0]?.reactions).toMatchObject([{ emoji: "❤️", count: 1 }]);
+    } finally {
+      h.client.dispose();
+    }
+  });
 });

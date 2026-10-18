@@ -4205,3 +4205,17 @@ for each row execute function reject_recording_completion_recovery_mutation();
 create trigger recording_completion_recoveries_no_truncate
 before truncate on recording_completion_recoveries
 for each statement execute function reject_recording_completion_recovery_mutation();
+
+alter table sync_chat_messages add column reaction_revision bigint not null default 0 check (reaction_revision >= 0);
+
+create table sync_chat_message_reactions (
+    tenant_id uuid not null,
+    space_id uuid not null,
+    message_id uuid not null,
+    participant_id uuid not null,
+    emoji text not null,
+    primary key (tenant_id, space_id, message_id, participant_id, emoji),
+    foreign key (tenant_id, space_id, message_id)
+        references sync_chat_messages(tenant_id, space_id, message_id) on delete cascade,
+    check (emoji in ('👍', '❤️', '😂', '😮', '🎉', '👏', '😀', '😅', '🙏', '🔥', '✅', '👀', '💯', '🤔', '😢', '🙌', '🚀', '👌', '😍', '🤝', '💡', '⭐', '😎', '🥳'))
+);

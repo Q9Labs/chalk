@@ -1,3 +1,4 @@
+import { ReactionValues, type ReactionSchema } from "../generated/sync";
 export type ChalkSyncV1CollaborationCapability = "sendReaction" | "sendChat";
 export type ChalkWhiteboardV1Capability = "drawWhiteboard" | "manageWhiteboard";
 export type ChalkCollaborationCapability = ChalkSyncV1CollaborationCapability | ChalkWhiteboardV1Capability;
@@ -9,7 +10,11 @@ export type ChalkParticipantMediaState = {
   readonly screenShare: "active" | "inactive" | "unknown";
 };
 
-export type ChalkReaction = "👍" | "❤️" | "😂" | "😮" | "😢" | "🎉";
+export const CHALK_REACTIONS = ReactionValues;
+export type ChalkReaction = typeof ReactionSchema.Type;
+export type ChalkChatReactionInput = { readonly messageId: string; readonly emoji: ChalkReaction; readonly on: boolean };
+export type ChalkChatReaction = { readonly emoji: ChalkReaction; readonly count: number; readonly participantIds: readonly string[] };
+export type ChalkChatReactions = { readonly messageId: string; readonly revision: string; readonly reactions: readonly ChalkChatReaction[] };
 
 export type ChalkReactionEvent = {
   readonly eventId: string;
@@ -61,6 +66,8 @@ export type ChalkChatReadReceipt = {
 };
 
 export type ChalkChatMessage = {
+  readonly reactions?: readonly ChalkChatReaction[];
+  readonly reactionRevision?: string;
   readonly messageId: string;
   readonly clientMessageId: string;
   readonly sequence: string;

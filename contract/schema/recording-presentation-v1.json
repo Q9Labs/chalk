@@ -177,7 +177,7 @@
         "id": { "$ref": "#/$defs/id" },
         "participantId": { "$ref": "#/$defs/id" },
         "displayName": { "type": "string", "minLength": 1, "maxLength": 256 },
-        "value": { "enum": ["👍", "❤️", "😂", "😮", "😢", "🎉"] },
+        "value": { "enum": ["👍", "❤️", "😂", "😮", "🎉", "👏", "😀", "😅", "🙏", "🔥", "✅", "👀", "💯", "🤔", "😢", "🙌", "🚀", "👌", "😍", "🤝", "💡", "⭐", "😎", "🥳"] },
         "occurredAtMs": { "$ref": "#/$defs/nonNegativeInteger" },
         "expiresAtMs": { "$ref": "#/$defs/positiveInteger" }
       }

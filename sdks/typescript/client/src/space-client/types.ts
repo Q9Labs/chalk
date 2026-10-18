@@ -161,8 +161,11 @@ export type MediaSlice = {
 };
 export type ChatAttachment = ChalkChatAttachment;
 export type ChatMessage = ChalkChatMessage;
+export type ChatReactionInput = import("../collaboration/types").ChalkChatReactionInput;
+export type ChatReaction = import("../collaboration/types").ChalkChatReaction;
+export type ChatReactions = import("../collaboration/types").ChalkChatReactions;
 export type ChatReadReceipt = ChalkChatReadReceipt;
-export type OfflineActionKind = "chat_message" | "hand_raise" | "hand_lower";
+export type OfflineActionKind = "chat_message" | "chat_reaction" | "hand_raise" | "hand_lower";
 export type OfflineActionsPolicy = "ask" | "send" | "discard";
 export type OfflineAction = {
   readonly id: string;

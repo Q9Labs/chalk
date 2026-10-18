@@ -30,6 +30,7 @@ export type PreviewClientCommand =
   | { readonly type: "lowerHand" }
   | { readonly type: "renameSelf"; readonly displayName: string }
   | { readonly type: "sendReaction"; readonly reaction: Reaction }
+  | { readonly type: "reactToMessage"; readonly input: import("@q9labsai/chalk-client").ChatReactionInput }
   | { readonly type: "sendChat"; readonly input: ChatSendInput }
   | { readonly type: "markChatRead"; readonly messageId: string };
 
@@ -82,6 +83,11 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
       declineRequest: (requestId: string) => dispatch({ type: "declineRequest", requestId }),
     },
     chat: {
+      react: async (input: import("@q9labsai/chalk-client").ChatReactionInput) => {
+        await dispatch({ type: "reactToMessage", input });
+        const message = snapshot.chat.messages.find((message) => message.messageId === input.messageId);
+        return { messageId: input.messageId, revision: message?.reactionRevision ?? "0", reactions: message?.reactions ?? [] };
+      },
       files: {
         upload: async (file: ChatUploadFile) => {
           const fileName = "name" in file ? file.name : file.fileName;
@@ -207,6 +213,22 @@ function applyPreviewCommand(snapshot: SpaceSnapshot, command: PreviewClientComm
       return updateLocalMedia(snapshot, "microphone", command.enabled);
     case "setCameraEnabled":
       return updateLocalMedia(snapshot, "camera", command.enabled);
+    case "reactToMessage": {
+      const participantId = snapshot.self.participantId;
+      if (!participantId) return snapshot;
+      const messages = snapshot.chat.messages.map((message) => {
+        if (message.messageId !== command.input.messageId) return message;
+        const reactions = message.reactions ?? [];
+        const existing = reactions.find((reaction) => reaction.emoji === command.input.emoji);
+        const ids = existing?.participantIds ?? [];
+        if (ids.includes(participantId) === command.input.on) return message;
+        const participantIds = command.input.on ? [...ids, participantId] : ids.filter((id) => id !== participantId);
+        const next = reactions.filter((reaction) => reaction.emoji !== command.input.emoji);
+        if (participantIds.length) next.push({ emoji: command.input.emoji, count: participantIds.length, participantIds });
+        return { ...message, reactions: next, reactionRevision: String(BigInt(message.reactionRevision ?? "0") + 1n) };
+      });
+      return { ...snapshot, chat: { ...snapshot.chat, messages } };
+    }
     case "setScreenShareEnabled":
       return updateScreenShare(snapshot, command.enabled);
     case "startRecording":

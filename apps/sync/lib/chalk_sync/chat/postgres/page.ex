@@ -92,6 +92,7 @@ defmodule ChalkSync.Chat.Repository.Postgres.Page do
         connection
         |> query(params, direction, cursor, limit, head_sequence, retained_floor)
         |> Enum.map(&Message.from_row/1)
+        |> then(&ChalkSync.Chat.Repository.Reactions.attach(connection, params, &1))
 
       page_if_contiguous(messages, direction, limit, head_sequence, retained_floor)
     end

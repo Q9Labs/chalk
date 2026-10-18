@@ -31,7 +31,12 @@ export function chatDigest(bytes: ArrayBuffer): string {
 }
 
 export function chatMessageFor(message: ChalkChatMessage): ChatMessage {
-  return Object.freeze({ ...message, attachments: Object.freeze([...message.attachments]) });
+  return Object.freeze({
+    ...message,
+    reactionRevision: message.reactionRevision ?? "0",
+    reactions: Object.freeze((message.reactions ?? []).map((reaction) => Object.freeze({ ...reaction, participantIds: Object.freeze([...reaction.participantIds]) }))),
+    attachments: Object.freeze([...message.attachments]),
+  });
 }
 
 export function chatReceiptFor(receipt: ChalkChatReadReceipt): ChatReadReceipt {
@@ -39,6 +44,7 @@ export function chatReceiptFor(receipt: ChalkChatReadReceipt): ChatReadReceipt {
 }
 
 export function mergeChatMessage(messages: readonly ChatMessage[], existing: ChatMessage, incoming: ChatMessage): readonly ChatMessage[] {
+  if (compareChatSequence(existing.reactionRevision ?? "0", incoming.reactionRevision ?? "0") > 0) incoming = { ...incoming, reactions: existing.reactions, reactionRevision: existing.reactionRevision };
   if (sameChatMessage(existing, incoming)) return messages;
   return Object.freeze(
     messages
@@ -65,6 +71,7 @@ function validateChatAttachment(attachment: ChatAttachment): string | null {
 
 function sameChatMessage(left: ChatMessage, right: ChatMessage): boolean {
   return (
+    left.reactionRevision === right.reactionRevision &&
     left.messageId === right.messageId &&
     left.clientMessageId === right.clientMessageId &&
     left.sequence === right.sequence &&

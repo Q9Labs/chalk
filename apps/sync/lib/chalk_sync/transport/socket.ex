@@ -150,10 +150,22 @@ defmodule ChalkSync.Transport.SocketV1 do
   end
 
   def handle_info(
+        {:collaboration_frame, %{"type" => "chat_reactions"}},
+        %{collaboration_version: version} = state
+      )
+      when version != 2, do: {:ok, state}
+
+  def handle_info(
+        {:collaboration_frame, %{"type" => "reaction", "reaction" => emoji}},
+        %{collaboration_version: 1} = state
+      )
+      when emoji not in ["👍", "❤️", "😂", "😮", "😢", "🎉"], do: {:ok, state}
+
+  def handle_info(
         {:collaboration_frame, %{"type" => "chat_read_receipt"}},
         %{collaboration_version: version} = state
       )
-      when version != 1,
+      when version not in [1, 2],
       do: {:ok, state}
 
   def handle_info(
@@ -163,13 +175,14 @@ defmodule ChalkSync.Transport.SocketV1 do
       do: enqueue_collaboration(frame, state)
 
   def handle_info(
-        {:collaboration_frame, %{"type" => "chat_read_receipt"} = frame},
+        {:collaboration_frame, %{"type" => type} = frame},
         %{
           phase: :recovering,
           collaboration_negotiated: true,
-          collaboration_version: 1
+          collaboration_version: version
         } = state
-      ),
+      )
+      when version in [1, 2] and type in ["chat_read_receipt", "chat_reactions"],
       do: buffer_collaboration(frame, state)
 
   def handle_info({:collaboration_frame, _frame}, state), do: {:ok, state}
@@ -467,7 +480,7 @@ defmodule ChalkSync.Transport.SocketV1 do
          {:reaction_send, input},
          %{phase: :live, identity: identity, collaboration_negotiated: true} = state
        ) do
-    with {:ok, frame} <- Reactions.send(identity, input) do
+    with {:ok, frame} <- Reactions.send(identity, input, version: state.collaboration_version) do
       state = observe_collaboration(state, "reaction.send", frame["outcome"])
       enqueue_collaboration(frame, state)
     end
@@ -479,12 +492,28 @@ defmodule ChalkSync.Transport.SocketV1 do
            phase: :live,
            identity: identity,
            collaboration_negotiated: true,
-           collaboration_version: 1
+           collaboration_version: version
          } = state
-       ) do
+       )
+       when version in [1, 2] do
     with {:ok, frame} <-
            Chat.mark_chat_read(identity, input, observability: state.observability) do
       state = observe_collaboration(state, "chat.read", frame["outcome"])
+      enqueue_collaboration(frame, state)
+    end
+  end
+
+  defp handle_frame(
+         {:chat_reaction_set, input},
+         %{
+           phase: :live,
+           identity: identity,
+           collaboration_negotiated: true,
+           collaboration_version: 2
+         } = state
+       ) do
+    with {:ok, frame} <- Chat.react(identity, input, observability: state.observability) do
+      state = observe_collaboration(state, "chat.react", frame["error_code"] || frame["outcome"])
       enqueue_collaboration(frame, state)
     end
   end
@@ -522,7 +551,13 @@ defmodule ChalkSync.Transport.SocketV1 do
   end
 
   defp handle_frame({name, _input}, state)
-       when name in [:reaction_send, :chat_send, :chat_page_request, :chat_read_set],
+       when name in [
+              :reaction_send,
+              :chat_send,
+              :chat_page_request,
+              :chat_read_set,
+              :chat_reaction_set
+            ],
        do: protocol_error(:collaboration_not_negotiated, state)
 
   defp handle_frame(:ping, state),
@@ -736,7 +771,8 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp negotiate_collaboration(identity, chat_cursor, observability) do
     case Chat.negotiate(identity, chat_cursor, self(), observability: observability) do
       {:ok, extension} ->
-        {:ok, %{collaboration_extension: extension}, true, 1}
+        {:ok, %{collaboration_extension: extension}, true,
+         if(extension["name"] == "collaboration_v2", do: 2, else: 1)}
 
       {:error, reason} ->
         {:error, reason}

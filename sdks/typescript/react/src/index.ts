@@ -76,3 +76,8 @@ export { CallLimbo } from "./components/call-limbo/CallLimbo";
 export type { CallLimboProps } from "./components/call-limbo/CallLimbo";
 
 export type { ScreenShareOptions, ScreenShareSurface, ScreenShareCapture } from "@q9labsai/chalk-client";
+
+export type { ChatReactionInput, ChatReaction, ChatReactions } from "@q9labsai/chalk-client";
+
+export type { MessageReaction, ReactChatMessage, UseChatResult } from "./bindings/hooks";
+export { CHALK_REACTIONS } from "@q9labsai/chalk-client";

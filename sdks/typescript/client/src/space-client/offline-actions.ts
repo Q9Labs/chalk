@@ -20,7 +20,10 @@ export type OfflineActionsControllerEffects = {
 /** Internal seam used by the chat and participants controllers. */
 export type OfflineActionsHold = {
   /** Returns the held version of `run`, or null when the connection is live and nothing is waiting. */
-  readonly hold: <A, E>(input: { readonly kind: OfflineActionKind; readonly text?: string; readonly clientMessageId?: string; readonly attachments?: import("./types").ChatSendInput["attachments"] }, run: () => Effect.Effect<A, E>) => Effect.Effect<A, E | SpaceClientError> | null;
+  readonly hold: <A, E>(
+    input: { readonly kind: OfflineActionKind; readonly text?: string; readonly reaction?: import("./types").ChatReactionInput; readonly clientMessageId?: string; readonly attachments?: import("./types").ChatSendInput["attachments"] },
+    run: () => Effect.Effect<A, E>,
+  ) => Effect.Effect<A, E | SpaceClientError> | null;
 };
 
 export class OfflineActionsService extends Context.Service<OfflineActionsService, OfflineActionsControllerEffects & OfflineActionsHold>()("@chalk/client/OfflineActions") {}
@@ -30,7 +33,10 @@ const sameSubject = (current: AccessSubject | null, saved: AccessSubject | null)
 
 const terminalConnection = (snapshot: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>): boolean => snapshot.state === "left" || snapshot.state === "leaving" || (snapshot.state === "failed" && !snapshot.failure?.recoverable);
 const validStoredAction = (action: StoredOfflineAction, now: number): boolean =>
-  Number.isFinite(action.queuedAt) && action.queuedAt <= now && (action.kind !== "chat_message" || (!!action.clientMessageId && action.text !== null && validateChatMessage({ text: action.text, attachments: action.attachments }) === null));
+  (action.kind !== "chat_reaction" || action.reaction !== undefined) &&
+  Number.isFinite(action.queuedAt) &&
+  action.queuedAt <= now &&
+  (action.kind !== "chat_message" || (!!action.clientMessageId && action.text !== null && validateChatMessage({ text: action.text, attachments: action.attachments }) === null));
 
 const discardedError = () => new SpaceClientError({ code: "offline.discarded", recoverable: false, message: "This action was not sent." });
 
@@ -77,7 +83,10 @@ class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineA
       else this.#publish();
     });
 
-  hold = <A, E>(input: { readonly kind: OfflineActionKind; readonly text?: string; readonly clientMessageId?: string; readonly attachments?: import("./types").ChatSendInput["attachments"] }, run: () => Effect.Effect<A, E>): Effect.Effect<A, E | SpaceClientError> | null => {
+  hold = <A, E>(
+    input: { readonly kind: OfflineActionKind; readonly text?: string; readonly reaction?: import("./types").ChatReactionInput; readonly clientMessageId?: string; readonly attachments?: import("./types").ChatSendInput["attachments"] },
+    run: () => Effect.Effect<A, E>,
+  ): Effect.Effect<A, E | SpaceClientError> | null => {
     if (this.#connection.getSnapshot().state !== "reconnecting" && !this.#decisionNeeded) return null;
     const queuedSubject = this.#connection.getSnapshot().subject;
     const action: StoredOfflineAction = Object.freeze({ ...input, id: this.#connection.createId(), text: input.text ?? null, queuedAt: this.#connection.nowUnsafe() });
@@ -202,7 +211,12 @@ class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineA
       resume: (permission) => {
         const command = this.#connection.runCommand(({ sync }) =>
           Effect.tryPromise({
-            try: () => (action.kind === "chat_message" ? sync.sendChatMessage({ text: action.text ?? "", clientMessageId: action.clientMessageId ?? action.id, attachments: action.attachments ?? [] }).then(() => undefined) : sync.setHandRaised(action.kind === "hand_raise")),
+            try: () =>
+              action.kind === "chat_reaction" && action.reaction
+                ? sync.reactToChatMessage(action.reaction).then(() => undefined)
+                : action.kind === "chat_message"
+                  ? sync.sendChatMessage({ text: action.text ?? "", clientMessageId: action.clientMessageId ?? action.id, attachments: action.attachments ?? [] }).then(() => undefined)
+                  : sync.setHandRaised(action.kind === "hand_raise"),
             catch: () => discardedError(),
           }),
         );

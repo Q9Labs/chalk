@@ -152,6 +152,39 @@ defmodule ChalkSync.Chat.Repository.Postgres do
   def mark_read(%Identity{}, _sequence), do: {:error, :invalid_payload}
 
   @impl true
+  def react(%Identity{} = identity, input) do
+    with {:ok, _decoded} <-
+           ChalkSync.Contract.GeneratedV1.decode_client_frame(%{
+             "type" => "chat_reaction_set",
+             "request_id" => input.request_id,
+             "message_id" => input.message_id,
+             "emoji" => input.emoji,
+             "on" => input.on
+           }) do
+      Postgrex.transaction(
+        Database.connection(identity.episode),
+        fn connection ->
+          configure_transaction(connection)
+
+          with {:ok, profile} <- lock_authority(connection, identity),
+               :ok <- require_capability(profile, "sendChat") do
+            Postgrex.query!(connection, SQL.lock_stream(), space_params(identity.episode))
+            ChalkSync.Chat.Repository.Reactions.set(connection, identity, input)
+          else
+            {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
+          end
+        end, timeout: @transaction_timeout_ms, commit_comment: "chalk sync chat reaction")
+      |> transaction_result()
+    else
+      _ -> {:error, :invalid_payload}
+    end
+  rescue
+    _exception -> {:error, :dependency_unavailable}
+  catch
+    :exit, _reason -> {:error, :dependency_unavailable}
+  end
+
+  @impl true
   defdelegate read_page(episode, request), to: Page, as: :read
 
   defp mark_read_transaction(connection, identity, sequence) do

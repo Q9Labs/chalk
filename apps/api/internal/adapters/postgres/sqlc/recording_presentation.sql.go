@@ -192,7 +192,7 @@ select boundary.presentation_handle, boundary.tenant_id, boundary.space_id, boun
             ), '[]'::jsonb)
         ) order by messages.sequence)
         from (
-            select messages.tenant_id, messages.space_id, messages.episode_id, messages.sequence, messages.message_id, messages.participant_id, messages.participant_generation, messages.client_message_id, messages.request_fingerprint, messages.display_name, messages.message_text, messages.encoded_bytes, messages.created_at
+            select messages.tenant_id, messages.space_id, messages.episode_id, messages.sequence, messages.message_id, messages.participant_id, messages.participant_generation, messages.client_message_id, messages.request_fingerprint, messages.display_name, messages.message_text, messages.encoded_bytes, messages.created_at, messages.reaction_revision
             from sync_chat_messages messages
             where messages.tenant_id = boundary.tenant_id
               and messages.space_id = boundary.space_id

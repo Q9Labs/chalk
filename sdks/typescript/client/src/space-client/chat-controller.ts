@@ -1,3 +1,5 @@
+import { Schema } from "effect";
+import { ChatReactionSetFrameSchema } from "../generated/sync";
 import { Context, Effect, Layer, Scope } from "effect";
 import type { ChalkChatFileTransport } from "../chat-files";
 import type { ChalkChatPageResult } from "../collaboration/types";
@@ -6,10 +8,11 @@ import { chatDigest, chatMessageFor, chatReceiptFor, compareChatSequence, MAX_CH
 import { failureFromError, normalizeClientError, SpaceClientError } from "./errors";
 import type { OfflineActionsHold } from "./offline-actions";
 import { SpaceStore } from "./store";
-import type { ChatAttachment, ChatMessage, ChatReadReceipt, ChatSendInput, ChatSlice, ChatUploadFile, PendingChatSend } from "./types";
+import type { ChatAttachment, ChatMessage, ChatReadReceipt, ChatReactionInput, ChatReactions, ChatSendInput, ChatSlice, ChatUploadFile, PendingChatSend } from "./types";
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 type Fork = (effect: Effect.Effect<void, unknown>) => void;
 export type ChatControllerEffects = {
+  readonly react: (input: ChatReactionInput) => ClientEffect<ChatReactions>;
   readonly send: (input: ChatSendInput) => ClientEffect<ChatMessage>;
   readonly loadOlder: () => ClientEffect<ChalkChatPageResult>;
   readonly markRead: (messageId: string) => ClientEffect<ChatReadReceipt | null>;
@@ -52,6 +55,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
   readonly #fetch: typeof globalThis.fetch;
   readonly #fork: Fork;
   readonly #offline: OfflineActionsHold | undefined;
+  readonly #reactionStates = new Map<string, ChatReactions>();
   #catchUpRunning = false;
   #catchUpRequested = false;
   #contiguousSequence: string | null = null;
@@ -105,6 +109,19 @@ class ChatControllerRuntime implements ChatControllerEffects {
       Effect.mapError(normalizeClientError),
     );
   };
+  react = (input: ChatReactionInput): ClientEffect<ChatReactions> =>
+    Effect.try({
+      try: () => Schema.decodeUnknownSync(ChatReactionSetFrameSchema)({ type: "chat_reaction_set", request_id: this.#connection.createId(), message_id: input.messageId, emoji: input.emoji, on: input.on }),
+      catch: () => chatError("The message reaction is invalid"),
+    }).pipe(
+      Effect.flatMap(() => {
+        const sendNow = () => this.#connection.runCommand(({ sync }) => foreign(() => sync.reactToChatMessage(input)));
+        return (this.#offline?.hold({ kind: "chat_reaction", reaction: input }, sendNow) ?? sendNow()).pipe(
+          Effect.tap((state) => Effect.sync(() => this.#mergeReactions(state))),
+          Effect.mapError(normalizeClientError),
+        );
+      }),
+    );
   loadOlder = (): ClientEffect<ChalkChatPageResult> => {
     this.#status = "loading";
     this.#lastError = null;
@@ -134,7 +151,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
       }
       this.#applyLocalReadThrough(message.sequence);
       const ports = this.#ports;
-      if (!ports || ports.sync.getCollaborationExtensionState().version !== 1) {
+      if (!ports || ports.sync.getCollaborationExtensionState().version === null) {
         return Effect.succeed(null);
       }
       return this.#connection
@@ -210,12 +227,45 @@ class ChatControllerRuntime implements ChatControllerEffects {
     this.#initialCatchUpComplete = this.#contiguousSequence !== null;
     this.#unsubscribeEvents = ports.sync.subscribeCollaboration((event) => {
       if (event.type === "chat_message") this.#observeMessage(chatMessageFor(event.message), this.#initialCatchUpComplete);
+      else if (event.type === "chat_reactions") this.#mergeReactions(event.state);
       else if (event.type === "chat_read_receipt") this.#mergeReceipt(chatReceiptFor(event.receipt));
       else if (event.type === "chat_cursor_reset") this.#applyCursorReset(event.retainedFloorSequence);
     });
-    this.#unsubscribeSnapshot = ports.sync.subscribe(() => this.#scheduleCatchUp());
+    let wasReady = ports.sync.getCollaborationExtensionState().negotiated && ports.sync.getSnapshot().connection.phase === "live";
+    this.#unsubscribeSnapshot = ports.sync.subscribe(() => {
+      const ready = ports.sync.getCollaborationExtensionState().negotiated && ports.sync.getSnapshot().connection.phase === "live";
+      if (ready && !wasReady) this.#refreshLoaded(ports);
+      wasReady = ready;
+      this.#scheduleCatchUp();
+    });
+    this.#refreshLoaded(ports);
     this.#scheduleCatchUp();
     this.#publish();
+  }
+  #refreshLoaded(ports: ConnectionPorts): void {
+    const first = this.#messages[0];
+    const last = this.#messages.at(-1);
+    if (!first || !last || ports.sync.getCollaborationExtensionState().version !== 2 || ports.sync.getSnapshot().connection.phase !== "live") return;
+    const owner = this;
+    this.#fork(
+      Effect.gen(function* () {
+        let cursor = String(BigInt(first.sequence) - 1n);
+        for (let page = 0; page < MAX_LOADED_CHAT_MESSAGES && owner.#ports === ports; page++) {
+          const result = yield* foreign(() => ports.sync.readChatPage({ afterSequence: cursor, limit: MAX_CHAT_PAGE_SIZE }));
+          if (result.status !== "loaded" || result.count === 0) break;
+          const next = owner.#messages.filter((message) => compareChatSequence(message.sequence, cursor) > 0).at(Math.min(result.count, MAX_LOADED_CHAT_MESSAGES) - 1)?.sequence;
+          if (!next || compareChatSequence(next, cursor) <= 0 || compareChatSequence(next, last.sequence) >= 0) break;
+          cursor = next;
+        }
+      }).pipe(
+        Effect.catch((cause) =>
+          Effect.sync(() => {
+            this.#lastError = failureFromError(normalizeClientError(cause));
+            this.#publish();
+          }),
+        ),
+      ),
+    );
   }
   #scheduleCatchUp(): void {
     const ports = this.#ports;
@@ -332,6 +382,8 @@ class ChatControllerRuntime implements ChatControllerEffects {
     this.#contiguousSequence = String(sequence);
   }
   #observeMessage(message: ChatMessage, countUnread: boolean): ChatMessage {
+    const cached = this.#reactionStates.get(message.messageId);
+    if (cached && compareChatSequence(cached.revision, message.reactionRevision ?? "0") > 0) message = chatMessageFor({ ...message, reactions: cached.reactions, reactionRevision: cached.revision });
     const existing = this.#messages.find((candidate) => candidate.messageId === message.messageId || candidate.sequence === message.sequence);
     const next = this.#messagesWith(message, existing);
     const pendingSends = this.#pendingSends.filter((pending) => pending.clientMessageId !== message.clientMessageId);
@@ -358,6 +410,17 @@ class ChatControllerRuntime implements ChatControllerEffects {
   }
   #messageStateMatches(messages: readonly ChatMessage[], pendingSends: readonly PendingChatSend[], unread: number): boolean {
     return messages === this.#messages && pendingSends.length === this.#pendingSends.length && unread === this.#unreadCount && this.#status === "ready" && this.#lastError === null;
+  }
+  #mergeReactions(state: ChatReactions): void {
+    const cached = this.#reactionStates.get(state.messageId);
+    if (cached && compareChatSequence(cached.revision, state.revision) >= 0) return;
+    this.#reactionStates.delete(state.messageId);
+    this.#reactionStates.set(state.messageId, state);
+    if (this.#reactionStates.size > MAX_LOADED_CHAT_MESSAGES) this.#reactionStates.delete(this.#reactionStates.keys().next().value!);
+    const existing = this.#messages.find((message) => message.messageId === state.messageId);
+    if (!existing || compareChatSequence(state.revision, existing.reactionRevision ?? "0") <= 0) return;
+    this.#messages = mergeChatMessage(this.#messages, existing, chatMessageFor({ ...existing, reactions: state.reactions, reactionRevision: state.revision }));
+    this.#publish();
   }
   #mergeReceipt(receipt: ChatReadReceipt): void {
     const existing = this.#readReceipts.find((candidate) => candidate.participantId === receipt.participantId && candidate.participantGeneration === receipt.participantGeneration);
@@ -388,6 +451,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
     this.#publish();
   }
   #reset(): void {
+    this.#reactionStates.clear();
     this.#catchUpRequested = false;
     this.#contiguousSequence = null;
     this.#hasOlder = false;
