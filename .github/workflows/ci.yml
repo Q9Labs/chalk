@@ -18,7 +18,7 @@ on:
         default: false
         type: boolean
       enable_recorder_control:
-        description: Include recorder control and media (required for production; false permits backend-only nightly bring-up)
+        description: Include recorder control and media on nightly; production also preserves an enabled baseline
         required: true
         default: false
         type: boolean
@@ -244,7 +244,10 @@ jobs:
           fi
 
           recorder_control="$ENABLE_RECORDER_CONTROL"
-          if [[ "$recorder_control" != true && -n "$stable_manifest" ]]; then
+          if [[ "${{ inputs.managed_environment }}" != nightly && -n "$stable_manifest" ]] && jq -e '.images | has("recorder_control")' "$stable_manifest" >/dev/null; then
+            recorder_control=true
+          fi
+          if [[ "${{ inputs.managed_environment }}" == nightly && "$recorder_control" != true && -n "$stable_manifest" ]]; then
             jq 'del(.images.recorder_control)' "$stable_manifest" > "$PLAN_ROOT/backend-baseline.json"
             mv "$PLAN_ROOT/backend-baseline.json" "$stable_manifest"
           elif [[ "$recorder_control" == true ]] && { [[ -z "$stable_manifest" ]] || ! jq -e '.images | has("recorder_control")' "$stable_manifest" >/dev/null; }; then

@@ -11,8 +11,11 @@ baseline enabled them. Set `CHALK_RECORDING_ENABLED=false` and
 this input does not rewrite SSM values. This mode is not a held nightly. Cut still
 enables recording and requires `smoke transcript` plus the web-call proof.
 Promote rejects held records without immutable media. Release also rejects any
-production manifest without both recorder control and valid immutable media
+production manifest without recorder control
 before writing the deployment envelope or acquiring deployment credentials.
+Production preserves recorder control from its baseline even when the input is
+false. Legacy direct production releases need no media sidecar; Promote still
+requires one for a selected nightly.
 
 ## Nightly cut
 

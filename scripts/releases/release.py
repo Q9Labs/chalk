@@ -241,8 +241,7 @@ def prepare(github, args):
         require(args.reuse and not media, 'rollback snapshot is only for a legacy source')
         media = os.environ['ROLLBACK_MEDIA'].encode()
     if environment == 'production':
-        require(media and 'recorder_control' in json.loads(data).get('images', {}),
-                'production requires recorder control and immutable media members')
+        require('recorder_control' in json.loads(data).get('images', {}), 'production requires recorder control')
     if media:
         from media import validate_members
         validate_members(json.loads(media))

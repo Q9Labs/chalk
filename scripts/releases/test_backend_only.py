@@ -24,7 +24,7 @@ def workflow_step(name):
 
 
 class PreparationTests(unittest.TestCase):
-    def test_full_production_reuse_and_legacy_rollback_keep_exact_media(self):
+    def test_production_default_plan_preserves_legacy_control_and_prepares_without_media(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             repo = root / 'repo'
@@ -41,22 +41,39 @@ class PreparationTests(unittest.TestCase):
             data = source.read_bytes()
             original = json.loads(data)
             archive = json.dumps(members()).encode()
-            for legacy in (False, True):
-                with self.subTest(legacy=legacy):
-                    output = root / str(legacy)
+            download = root / 'stable-download'
+            download.mkdir()
+            (download / 'legacy.json').write_bytes(data)
+            script = workflow_step('Plan changed components')
+            for key, value in {'runner.temp': directory, 'inputs.stable_manifest_run_id': '1',
+                               'inputs.managed_environment': 'production'}.items():
+                script = script.replace('${{ ' + key + ' }}', value)
+            env = dict(os.environ, DEPLOY_MANAGED='true', ENABLE_RECORDER_CONTROL='false',
+                       PLAN_ROOT=str(root / 'plan'), TARGET_SHA=SHA, GITHUB_OUTPUT=str(root / 'output'))
+            planned = subprocess.run(['bash', '-c', script], cwd=release.ROOT, env=env, capture_output=True, text=True)
+            self.assertEqual(planned.returncode, 0, planned.stderr)
+            self.assertIn('recorder_control=true', (root / 'output').read_text())
+            self.assertEqual((root / 'plan/stable-manifest.json').read_bytes(), data)
+            for mode, reuse in [('sidecar', True), ('rollback', True), ('legacy', True), ('legacy', False)]:
+                with self.subTest(mode=mode, reuse=reuse):
+                    output = root / (mode + str(reuse))
                     api = MemoryGitHub()
                     with patch.dict(os.environ, MANAGED_ENVIRONMENT='production', SOURCE_RUN_ID='1',
                                     SOURCE_RELEASE_ID=original['release_id'], SOURCE_ARTIFACT_ID='2', SOURCE_SHA256=digest(data),
-                                    SOURCE_MEDIA_SHA256='' if legacy else digest(archive), TARGET_SHA=SHA, GITHUB_OUTPUT=os.devnull,
-                                    ROLLBACK_MEDIA=archive.decode() if legacy else ''):
+                                    SOURCE_MEDIA_SHA256=digest(archive) if mode == 'sidecar' else '', TARGET_SHA=SHA, GITHUB_OUTPUT=os.devnull,
+                                    ROLLBACK_MEDIA=archive.decode() if mode == 'rollback' else ''):
                         with patch.object(release, 'ROOT', repo), patch.object(api, 'artifact', side_effect=lambda run, identity, name, expected=None: archive if name.endswith('.media.json') else data):
-                            release.prepare(api, SimpleNamespace(reuse=True, directory=output))
+                            release.prepare(api, SimpleNamespace(reuse=reuse, directory=output))
                     manifest = next(path for path in output.glob('*.json') if not path.name.endswith('.media.json'))
                     applied = json.loads(manifest.read_bytes())
-                    self.assertNotEqual(applied['release_id'], original['release_id'])
+                    self.assertEqual(applied['release_id'] == original['release_id'], not reuse)
                     self.assertEqual(applied['images'], original['images'])
                     self.assertEqual(applied['runtime_artifacts'], original['runtime_artifacts'])
-                    self.assertEqual(manifest.with_suffix('.media.json').read_bytes(), archive)
+                    sidecar = manifest.with_suffix('.media.json')
+                    if mode == 'legacy':
+                        self.assertFalse(sidecar.exists())
+                    else:
+                        self.assertEqual(sidecar.read_bytes(), archive)
 
     def test_unknown_or_mixed_case_environment_cannot_bypass_production_guard(self):
         for environment in ('Production', 'PRODUCTION', 'staging'):
@@ -68,7 +85,7 @@ class PreparationTests(unittest.TestCase):
         for environment, control, media, reuse in [('nightly', False, False, False), ('production', False, False, False),
                                                     ('production', True, False, False), ('production', False, True, False),
                                                     ('production', True, True, False), ('production', False, False, True),
-                                                    ('production', True, False, True), ('production', False, True, True)]:
+                                                    ('production', False, True, True)]:
             with self.subTest(environment=environment, control=control, media=media, reuse=reuse), tempfile.TemporaryDirectory() as directory:
                 data = json.dumps(dict(release_id='source', source_revision=SHA,
                                        images={'recorder_control': 'example/control@sha256:' + 'a' * 64} if control else {})).encode()
@@ -86,8 +103,8 @@ class PreparationTests(unittest.TestCase):
                                 SOURCE_ARTIFACT_ID='2', SOURCE_SHA256=digest(data), SOURCE_MEDIA_SHA256=digest(archive) if media else '',
                                 TARGET_SHA=SHA, GITHUB_OUTPUT=os.devnull, ROLLBACK_MEDIA=''):
                     args = SimpleNamespace(reuse=reuse, directory=output)
-                    if environment == 'production' and not (control and media):
-                        with self.assertRaisesRegex(ValueError, 'production requires recorder control and immutable media members'):
+                    if environment == 'production' and not control:
+                        with self.assertRaisesRegex(ValueError, 'production requires recorder control'):
                             release.prepare(Artifacts(), args)
                         self.assertFalse(output.exists())
                     else:
