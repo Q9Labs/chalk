@@ -3,6 +3,7 @@ package postgres
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -169,6 +170,64 @@ func TestServiceTenantLookupRotatedSecretsShareReadBudget(t *testing.T) {
 		}
 		if result.err != nil || result.status != want {
 			t.Fatalf("lookup %d: status=%d error=%v body=%s want=%d", i+1, result.status, result.err, result.body, want)
+		}
+	}
+}
+
+func TestTenantReadRoutesLimitServiceAndExemptSystem(t *testing.T) {
+	pool := accountTenantIntegrationPool(t)
+	repository := NewTenantRepository(sqlc.New(pool))
+	serviceID := "read-budget-" + accountTenantIntegrationID(t).String()
+	oldSecret, newSecret := strings.Repeat("o", 32), strings.Repeat("n", 32)
+	const systemToken = "local-test-system"
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if _, err := pool.Exec(cleanupCtx, `delete from tenants where created_by_service_id = $1`, serviceID); err != nil {
+			t.Errorf("cleanup service fixtures: %v", err)
+		}
+	})
+	// Every route gets its own server, so each starts with a full budget at the same fixed time.
+	serve := func() *httptest.Server {
+		limits := httpapi.DefaultRateLimitOptions()
+		limits.Now = func() time.Time { return time.Date(2026, 10, 18, 0, 0, 0, 0, time.UTC) }
+		server := httptest.NewServer(httpapi.NewRouter(httpapi.Options{
+			LocalSystemToken: systemToken,
+			ServicePrincipal: authentication.ServiceCredential{ID: serviceID, Secrets: []string{oldSecret, newSecret}, Scopes: []authentication.Scope{authentication.ScopeTenantsRead, authentication.ScopeTenantsWrite}},
+			Tenants:          tenants.NewService(repository), TenantAuthz: authorization.NewTenantPolicy(nil, repository), RateLimit: limits,
+		}))
+		t.Cleanup(server.Close)
+		return server
+	}
+	created := serviceHTTPRequest(http.DefaultClient, "POST", serve().URL+"/v1/tenants", oldSecret, `{"name":"Read budget","external_id":"read-budget-person"}`)
+	var tenant struct {
+		ID string `json:"id"`
+	}
+	if created.err != nil || created.status != http.StatusCreated || json.Unmarshal(created.body, &tenant) != nil || tenant.ID == "" {
+		t.Fatalf("create owned Tenant: status=%d error=%v body=%s", created.status, created.err, created.body)
+	}
+	for _, path := range []string{"/v1/tenants", "/v1/tenants/" + tenant.ID} {
+		server := serve()
+		for i := 0; i < 301; i++ {
+			secret := oldSecret
+			if i%2 == 1 {
+				secret = newSecret
+			}
+			result := serviceHTTPRequest(server.Client(), "GET", server.URL+path, secret, "")
+			want := http.StatusOK
+			if i == 300 {
+				want = http.StatusTooManyRequests
+			}
+			if result.err != nil || result.status != want {
+				t.Fatalf("service GET %s request %d: status=%d error=%v body=%s want=%d", path, i+1, result.status, result.err, result.body, want)
+			}
+		}
+		system := serve()
+		for i := 0; i < 305; i++ {
+			result := serviceHTTPRequest(system.Client(), "GET", system.URL+path, systemToken, "")
+			if result.err != nil || result.status != http.StatusOK {
+				t.Fatalf("System GET %s request %d: status=%d error=%v body=%s", path, i+1, result.status, result.err, result.body)
+			}
 		}
 	}
 }
