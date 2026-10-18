@@ -26,21 +26,45 @@ export function callEventToasts(previous: SpaceSnapshot, next: SpaceSnapshot): O
     const old = before.get(person.participantId);
     if (!old && person.participantId !== next.self.participantId)
       events.push({
-        icon: <Avatar name={person.displayName} size="xs" generated animated={false} />,
+        icon: <Avatar name={person.displayName} size="xs" style={{ width: 28, height: 28 }} generated animated={false} />,
         message: (
           <>
             <b dir="auto">{person.displayName}</b> joined
           </>
         ),
       });
-    if (old && !old.handRaised && person.handRaised) events.push({ icon: <CallEventIcon kind="hand" />, message: `${person.displayName} raised a hand` });
-    if (old && old.role !== person.role && person.role === "host") events.push({ icon: <CallEventIcon kind="host" />, message: `${person.displayName} is now the host` });
-    if (old?.media.screenShare === "active" && person.media.screenShare === "inactive") events.push({ icon: <CallEventIcon kind="screen" />, message: `${person.displayName} stopped sharing` });
+    if (old && !old.handRaised && person.handRaised)
+      events.push({
+        icon: <CallEventIcon kind="hand" />,
+        message: (
+          <>
+            <b dir="auto">{person.displayName}</b> raised a hand
+          </>
+        ),
+      });
+    if (old && old.role !== person.role && person.role === "host")
+      events.push({
+        icon: <CallEventIcon kind="host" />,
+        message: (
+          <>
+            <b dir="auto">{person.displayName}</b> is now the host
+          </>
+        ),
+      });
+    if (old?.media.screenShare === "active" && person.media.screenShare === "inactive")
+      events.push({
+        icon: <CallEventIcon kind="screen" />,
+        message: (
+          <>
+            <b dir="auto">{person.displayName}</b> stopped sharing
+          </>
+        ),
+      });
   }
   for (const person of previous.participants.roster)
     if (!after.has(person.participantId) && person.participantId !== next.self.participantId)
       events.push({
-        icon: <Avatar name={person.displayName} size="xs" generated animated={false} />,
+        icon: <Avatar name={person.displayName} size="xs" style={{ width: 28, height: 28 }} generated animated={false} />,
         message: (
           <>
             <b dir="auto">{person.displayName}</b> left
@@ -49,7 +73,17 @@ export function callEventToasts(previous: SpaceSnapshot, next: SpaceSnapshot): O
       });
   const wasRecording = previous.recording.current?.status === "recording";
   const isRecording = next.recording.current?.status === "recording";
-  if (wasRecording !== isRecording) events.push({ icon: <CallEventIcon kind="recording" error={isRecording} />, message: isRecording ? "Recording started. Everyone in the call can see it." : "Recording stopped" });
+  if (wasRecording !== isRecording)
+    events.push({
+      icon: <CallEventIcon kind="recording" error={isRecording} />,
+      message: isRecording ? (
+        <>
+          <b>Recording started.</b> Everyone in the call can see it.
+        </>
+      ) : (
+        "Recording stopped"
+      ),
+    });
   for (const source of ["microphone", "camera"] as const) {
     if (previous.media.selection[source] !== next.media.selection[source]) {
       const devices = source === "camera" ? next.media.devices.cameras : next.media.devices.microphones;

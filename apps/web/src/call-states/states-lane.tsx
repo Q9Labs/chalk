@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Chalk, CallLimbo, CallReady, ToastStack, type ChalkProps } from "@q9labsai/chalk-react";
 import { SpaceClientError, type ClientFailure } from "@q9labsai/chalk-client";
 import { useCallLink } from "../../../../sdks/typescript/react/src/components/call-limbo/useCallLink";
+import { CallEventIcon } from "../../../../sdks/typescript/react/src/components/toast-stack/CallEventIcon";
 import { mediaFailureToast } from "../../../../sdks/typescript/react/src/components/toast-stack/call-events";
 import { PEOPLE, SPACE_NAME, createCallStateClient, liveSnapshot } from "./fixtures";
 import type { CallState } from "./states";
@@ -65,11 +66,11 @@ function StatesCall({ terminal, light = false, ready = false, reconnecting = fal
     </div>
   );
 }
-function ToastFixture({ message, error = false, light = false }: { readonly message: string; readonly error?: boolean; readonly light?: boolean }) {
+function ToastFixture({ message, icon, error = false, light = false }: { readonly message: ReactNode; readonly icon?: ReactNode; readonly error?: boolean; readonly light?: boolean }) {
   const [visible, setVisible] = useState(true);
   return (
     <main data-chalk data-chalk-theme={light ? "light" : "dark"} className="chalk-root relative h-dvh bg-[var(--chalk-canvas)]" style={{ fontSize: 14, lineHeight: 1.4 }}>
-      {visible ? <ToastStack toasts={[{ id: "fixture", message, type: error ? "error" : "info", duration: Infinity }]} onDismiss={() => setVisible(false)} /> : null}
+      {visible ? <ToastStack toasts={[{ id: "fixture", message, icon, type: error ? "error" : "info", duration: Infinity }]} onDismiss={() => setVisible(false)} /> : null}
     </main>
   );
 }
@@ -113,8 +114,10 @@ export const STATES_LANE: readonly CallState[] = [
   { id: "states-ready", title: "Ready card", render: () => <StatesCall ready /> },
   { id: "states-ready-light", title: "Ready card Light", render: () => <StatesCall ready light /> },
   { id: "states-joining", title: "Joining", render: () => <CallLimbo message={`Joining ${SPACE_NAME}…`} /> },
+  { id: "states-joining-light", title: "Joining Light", render: () => <CallLimbo theme={{ colorScheme: "light" }} message={`Joining ${SPACE_NAME}…`} /> },
   { id: "states-joining-recorded", title: "Joining recorded call", render: () => <CallLimbo recorded message={`Joining ${SPACE_NAME}…`} /> },
   { id: "states-reconnecting", title: "Reconnecting", render: () => <StatesCall reconnecting /> },
+  { id: "states-reconnecting-light", title: "Reconnecting Light", render: () => <StatesCall reconnecting light /> },
   ...(
     [
       ["joined", "Nora joined", false],
@@ -125,8 +128,45 @@ export const STATES_LANE: readonly CallState[] = [
       ["share-blocked", "Your screen couldn’t be shared. Allow screen recording for your browser in System Settings, then try again.", true],
     ] as const
   ).flatMap(([id, message, error]) => [
-    { id: `states-toast-${id}`, title: message, render: () => <ToastFixture message={message} error={error} /> },
-    { id: `states-toast-${id}-light`, title: `${message} Light`, render: () => <ToastFixture message={message} error={error} light /> },
+    {
+      id: `states-toast-${id}`,
+      title: message,
+      render: () => (
+        <ToastFixture
+          message={
+            id === "recording" ? (
+              <>
+                <b>Recording started.</b> Everyone in the call can see it.
+              </>
+            ) : (
+              message
+            )
+          }
+          icon={<CallEventIcon kind={id === "camera" ? "camera" : id === "share-blocked" ? "screen" : id === "recording" ? "recording" : id === "hand" ? "hand" : "microphone"} error={error || id === "recording"} />}
+          error={error}
+        />
+      ),
+    },
+    {
+      id: `states-toast-${id}-light`,
+      title: `${message} Light`,
+      render: () => (
+        <ToastFixture
+          message={
+            id === "recording" ? (
+              <>
+                <b>Recording started.</b> Everyone in the call can see it.
+              </>
+            ) : (
+              message
+            )
+          }
+          icon={<CallEventIcon kind={id === "camera" ? "camera" : id === "share-blocked" ? "screen" : id === "recording" ? "recording" : id === "hand" ? "hand" : "microphone"} error={error || id === "recording"} />}
+          error={error}
+          light
+        />
+      ),
+    },
   ]),
   ...(["left", "episode-ended", "failed", "removed", "full", "elsewhere"] as const).flatMap((terminal) => [
     { id: `states-${terminal}`, title: terminal, render: () => <StatesCall terminal={terminal} /> },
