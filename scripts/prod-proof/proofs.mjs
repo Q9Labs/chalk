@@ -291,7 +291,7 @@ export async function exportProof(run, execute = command) {
   await save(`${run.directory}/export-proof.json`, result);
   return result;
 }
-export async function transcriptProof(run) {
+export async function transcriptProof(run, receiver) {
   const started = Date.now();
   await waitFor(
     "Transcript audio preparation",
@@ -331,7 +331,9 @@ export async function transcriptProof(run) {
     .replace(/\s+/g, " ");
   const phrases = ["purple lantern", "quiet river", "screen sharing", "transcription"];
   for (const phrase of phrases) check(text.includes(phrase), `Spoken words missing from Transcript: ${phrase}`);
-  return { wallSeconds: (Date.now() - started) / 1000, phrases, transcriptId: transcript.id };
+  const events = await proveWebhookEvents(receiver, [{ event: "transcript.completed", objectId: transcript.id }]);
+  await save(`${run.directory}/signed-webhooks.json`, events);
+  return { wallSeconds: (Date.now() - started) / 1000, phrases, transcriptId: transcript.id, signedEvents: events.map((event) => event.event) };
 }
 export async function smokeProof(run, receiver) {
   const events = await proveWebhookEvents(receiver, [
