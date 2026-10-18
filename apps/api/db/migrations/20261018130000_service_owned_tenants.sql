@@ -13,6 +13,15 @@ ALTER TABLE tenants
 CREATE INDEX tenants_service_created_at_id_idx ON tenants(created_by_service_id, created_at DESC, id DESC);
 
 -- +goose Down
+-- Dropping the columns would erase which Tenants each service owns, so refuse once any are recorded.
+-- +goose StatementBegin
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM tenants WHERE created_by_service_id IS NOT NULL OR external_id IS NOT NULL) THEN
+        RAISE EXCEPTION 'cannot roll back service_owned_tenants: Tenants record a service owner or external_id';
+    END IF;
+END $$;
+-- +goose StatementEnd
 DROP INDEX tenants_service_created_at_id_idx;
 ALTER TABLE tenants DROP CONSTRAINT tenants_service_external_id_key,
     DROP CONSTRAINT tenants_external_id_check, DROP CONSTRAINT tenants_service_id_check,

@@ -60,4 +60,21 @@ func TestServiceTenantMigrationUpDownUpPreservesExistingTenant(t *testing.T) {
 	if err := tx.QueryRow(ctx, `select created_by_service_id,external_id from tenants where id=$1`, uuid(id)).Scan(&owner, &external); err != nil || owner != nil || external != nil {
 		t.Fatalf("old Tenant got service ownership: %v, %v, %v", owner, external, err)
 	}
+
+	// Once a Tenant records a service owner, the rollback must fail instead of erasing it.
+	if _, err := tx.Exec(ctx, `update tenants set created_by_service_id='service', external_id='person' where id=$1`, uuid(id)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `savepoint before_rollback`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, down); err == nil {
+		t.Fatal("rollback succeeded while a Tenant recorded a service owner")
+	}
+	if _, err := tx.Exec(ctx, `rollback to savepoint before_rollback`); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.QueryRow(ctx, `select created_by_service_id,external_id from tenants where id=$1`, uuid(id)).Scan(&owner, &external); err != nil || owner == nil || external == nil {
+		t.Fatalf("refused rollback lost service ownership: %v, %v, %v", owner, external, err)
+	}
 }
