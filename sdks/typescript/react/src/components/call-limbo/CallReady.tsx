@@ -48,7 +48,7 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
   const content = (
     <>
       <div className="-mt-1.5 mb-0.5 flex items-center justify-between">
-        <h2 id={id} className="text-[15px] font-semibold">
+        <h2 id={id} style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.4 }}>
           Your call is ready
         </h2>
         <button type="button" className="chalk-dismiss max-sm:!h-11 max-sm:!w-11" aria-label="Close call link" onClick={close}>
@@ -56,7 +56,7 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
         </button>
       </div>
       <p className="mr-1 text-[13px] text-[var(--chalk-muted-text)]">Share this link with people you want in the call</p>
-      <div data-part="ready-link" className="mt-3 flex h-11 items-center justify-between gap-2 rounded-full bg-[var(--chalk-raised)] pl-3.5 pr-1 font-medium">
+      <div data-part="ready-link" style={{ borderRadius: 999 }} className="mt-3 flex h-11 items-center justify-between gap-2 bg-[var(--chalk-raised)] pl-3.5 pr-1 font-medium">
         <span className="min-w-0 truncate">{link.replace(/^https?:\/\//, "")}</span>
         <span className="flex gap-0.5">
           <button type="button" className="chalk-copy" aria-label={showQR ? "Hide QR code" : "Show QR code"} aria-expanded={showQR} aria-controls={`${id}-qr`} onClick={() => setShowQR(!showQR)}>
@@ -101,7 +101,7 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
       aria-labelledby={id}
       aria-hidden={!open}
       inert={!open}
-      style={{ opacity: entered ? 1 : 0, transform: entered ? "none" : "translateY(8px)", transition: reducedMotion ? "none" : "opacity .2s cubic-bezier(.16,1,.3,1), transform .2s cubic-bezier(.16,1,.3,1)" }}
+      style={{ borderRadius: 16, opacity: entered ? 1 : 0, transform: entered ? "none" : "translateY(8px)", transition: reducedMotion ? "none" : "opacity .2s cubic-bezier(.16,1,.3,1), transform .2s cubic-bezier(.16,1,.3,1)" }}
       className="absolute bottom-[76px] left-5 z-40 w-80 rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] pb-4 pl-4 pr-3 pt-3.5 text-[var(--chalk-text)]"
     >
       {content}

@@ -38,7 +38,7 @@ export function StatusSurface({ phase, callName = "the call", reason, theme, onR
       style={{ ...chalkThemeStyle(theme), fontSize: 14, lineHeight: 1.4 }}
       className="chalk-root relative flex h-full min-h-0 w-full flex-col items-center justify-center gap-3 bg-[var(--chalk-canvas)] p-6 text-center text-[var(--chalk-text)]"
     >
-      <h1 role={phase === "entering" ? "status" : undefined} className="text-[22px] font-semibold">
+      <h1 role={phase === "entering" ? "status" : undefined} style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.4 }}>
         {copy.title}
       </h1>
       {reason || copy.detail ? <p className="text-[14px] text-[var(--chalk-muted-text)]">{reason ?? copy.detail}</p> : null}
@@ -72,10 +72,11 @@ function StatusIcon({ retry = false }: { readonly retry?: boolean }) {
 
 function StatusAction({ icon, label, onClick, disabled }: { readonly icon: React.ReactNode; readonly label: string; readonly onClick: () => void; readonly disabled?: boolean }): React.JSX.Element {
   return (
-    <button type="button" onClick={onClick} disabled={disabled} className="group flex flex-col items-center gap-2 text-[13px] font-medium text-[var(--chalk-soft-text)] outline-none disabled:pointer-events-none disabled:opacity-50">
+    <button type="button" onClick={onClick} disabled={disabled} style={{ fontSize: 13, fontWeight: 500, lineHeight: 1.4 }} className="group flex flex-col items-center gap-2 text-[var(--chalk-soft-text)] outline-none disabled:pointer-events-none disabled:opacity-50">
       <span
         aria-hidden="true"
         data-part="status-action-circle"
+        style={{ borderRadius: "50%", color: "var(--chalk-text)" }}
         className="grid h-14 w-14 place-items-center rounded-full bg-[var(--chalk-raised)] text-[var(--chalk-text)] transition-transform duration-150 ease-out group-hover:bg-[var(--chalk-hover)] group-active:scale-[.94] group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-[var(--chalk-text)] motion-reduce:transition-none"
       >
         {icon}

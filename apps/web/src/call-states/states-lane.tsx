@@ -79,7 +79,7 @@ function ToastFixture({ message, icon, error = false, light = false }: { readonl
               message:
                 error && typeof message === "string" && message.includes(". ") ? (
                   <>
-                    <b>{message.slice(0, message.indexOf(". ") + 1)}</b> {message.slice(message.indexOf(". ") + 2)}
+                    <b style={{ fontWeight: 600 }}>{message.slice(0, message.indexOf(". ") + 1)}</b> {message.slice(message.indexOf(". ") + 2)}
                   </>
                 ) : (
                   message
@@ -134,9 +134,33 @@ export const STATES_LANE: readonly CallState[] = [
   { id: "states-events", title: "Call event journeys", render: () => <StatesCall /> },
   { id: "states-ready", title: "Ready card", render: () => <StatesCall ready /> },
   { id: "states-ready-light", title: "Ready card Light", render: () => <StatesCall ready light /> },
-  { id: "states-joining", title: "Joining", render: () => <CallLimbo message={`Joining ${SPACE_NAME}…`} /> },
-  { id: "states-joining-light", title: "Joining Light", render: () => <CallLimbo theme={{ colorScheme: "light" }} message={`Joining ${SPACE_NAME}…`} /> },
-  { id: "states-joining-recorded", title: "Joining recorded call", render: () => <CallLimbo recorded message={`Joining ${SPACE_NAME}…`} /> },
+  {
+    id: "states-joining",
+    title: "Joining",
+    render: () => (
+      <div className="h-dvh">
+        <CallLimbo message={`Joining ${SPACE_NAME}…`} />
+      </div>
+    ),
+  },
+  {
+    id: "states-joining-light",
+    title: "Joining Light",
+    render: () => (
+      <div className="h-dvh">
+        <CallLimbo theme={{ colorScheme: "light" }} message={`Joining ${SPACE_NAME}…`} />
+      </div>
+    ),
+  },
+  {
+    id: "states-joining-recorded",
+    title: "Joining recorded call",
+    render: () => (
+      <div className="h-dvh">
+        <CallLimbo recorded message={`Joining ${SPACE_NAME}…`} />
+      </div>
+    ),
+  },
   { id: "states-reconnecting", title: "Reconnecting", render: () => <StatesCall reconnecting /> },
   { id: "states-reconnecting-light", title: "Reconnecting Light", render: () => <StatesCall reconnecting light /> },
   ...(
@@ -157,7 +181,7 @@ export const STATES_LANE: readonly CallState[] = [
           message={
             id === "recording" ? (
               <>
-                <b>Recording started.</b> Everyone in the call can see it.
+                <b style={{ fontWeight: 600 }}>Recording started.</b> Everyone in the call can see it.
               </>
             ) : (
               message
@@ -182,7 +206,7 @@ export const STATES_LANE: readonly CallState[] = [
           message={
             id === "recording" ? (
               <>
-                <b>Recording started.</b> Everyone in the call can see it.
+                <b style={{ fontWeight: 600 }}>Recording started.</b> Everyone in the call can see it.
               </>
             ) : (
               message

@@ -13,7 +13,7 @@ export function mediaFailureToast(failure: ClientFailure | null, source?: "micro
       type: "error",
       message: (
         <>
-          <b>Your screen couldn’t be shared.</b> Allow screen recording for your browser in System Settings, then try again.
+          <b style={{ fontWeight: 600 }}>Your screen couldn’t be shared.</b> Allow screen recording for your browser in System Settings, then try again.
         </>
       ),
     };
@@ -23,7 +23,7 @@ export function mediaFailureToast(failure: ClientFailure | null, source?: "micro
       type: "error",
       message: (
         <>
-          <b>Allow {device} access.</b> Click the camera icon in the address bar and allow {source === "camera" ? "Camera" : source === "microphone" ? "Microphone" : "Camera and Microphone"}.
+          <b style={{ fontWeight: 600 }}>Allow {device} access.</b> Click the camera icon in the address bar and allow {source === "camera" ? "Camera" : source === "microphone" ? "Microphone" : "Camera and Microphone"}.
         </>
       ),
     };
@@ -33,7 +33,7 @@ export function mediaFailureToast(failure: ClientFailure | null, source?: "micro
       type: "error",
       message: (
         <>
-          <b>No {device} found.</b> Plug one in, or check that your device can see it in System Settings.
+          <b style={{ fontWeight: 600 }}>No {device} found.</b> Plug one in, or check that your device can see it in System Settings.
         </>
       ),
     };
@@ -56,7 +56,10 @@ export function callEventToasts(previous: SpaceSnapshot, next: SpaceSnapshot): O
         icon: <Avatar name={person.displayName} size="xs" style={{ width: 28, height: 28 }} generated animated={false} />,
         message: (
           <>
-            <b dir="auto">{person.displayName}</b> joined
+            <b style={{ fontWeight: 600 }} dir="auto">
+              {person.displayName}
+            </b>{" "}
+            joined
           </>
         ),
       });
@@ -65,7 +68,10 @@ export function callEventToasts(previous: SpaceSnapshot, next: SpaceSnapshot): O
         icon: <CallEventIcon kind="hand" />,
         message: (
           <>
-            <b dir="auto">{person.displayName}</b> raised a hand
+            <b style={{ fontWeight: 600 }} dir="auto">
+              {person.displayName}
+            </b>{" "}
+            raised a hand
           </>
         ),
       });
@@ -74,7 +80,10 @@ export function callEventToasts(previous: SpaceSnapshot, next: SpaceSnapshot): O
         icon: <CallEventIcon kind="host" />,
         message: (
           <>
-            <b dir="auto">{person.displayName}</b> is now the host
+            <b style={{ fontWeight: 600 }} dir="auto">
+              {person.displayName}
+            </b>{" "}
+            is now the host
           </>
         ),
       });
@@ -83,7 +92,10 @@ export function callEventToasts(previous: SpaceSnapshot, next: SpaceSnapshot): O
         icon: <CallEventIcon kind="screen" />,
         message: (
           <>
-            <b dir="auto">{person.displayName}</b> stopped sharing
+            <b style={{ fontWeight: 600 }} dir="auto">
+              {person.displayName}
+            </b>{" "}
+            stopped sharing
           </>
         ),
       });
@@ -94,7 +106,10 @@ export function callEventToasts(previous: SpaceSnapshot, next: SpaceSnapshot): O
         icon: <Avatar name={person.displayName} size="xs" style={{ width: 28, height: 28 }} generated animated={false} />,
         message: (
           <>
-            <b dir="auto">{person.displayName}</b> left
+            <b style={{ fontWeight: 600 }} dir="auto">
+              {person.displayName}
+            </b>{" "}
+            left
           </>
         ),
       });
@@ -105,7 +120,7 @@ export function callEventToasts(previous: SpaceSnapshot, next: SpaceSnapshot): O
       icon: <CallEventIcon kind="recording" error={isRecording} />,
       message: isRecording ? (
         <>
-          <b>Recording started.</b> Everyone in the call can see it.
+          <b style={{ fontWeight: 600 }}>Recording started.</b> Everyone in the call can see it.
         </>
       ) : (
         "Recording stopped"
