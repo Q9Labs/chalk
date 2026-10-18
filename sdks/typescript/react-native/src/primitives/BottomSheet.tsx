@@ -172,7 +172,11 @@ export function SheetDragRegion({ children }: { readonly children: ReactNode }):
       if (drag.value > CLOSE_DISTANCE) runOnJS(close)();
       else drag.value = withTiming(0, timings.sheet);
     });
-  return <GestureDetector gesture={gesture}>{children}</GestureDetector>;
+  return (
+    <GestureDetector gesture={gesture}>
+      <View collapsable={false}>{children}</View>
+    </GestureDetector>
+  );
 }
 
 const styles = StyleSheet.create({
