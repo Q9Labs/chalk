@@ -26,9 +26,10 @@ export type BottomSheetProps = {
   /**
    * `card` is the People and Chat card (`.phone .card`): no side padding, the grabber 8 pt from the
    * top with nothing under it, and no bottom padding, because its content runs to the bottom edge
-   * and pads itself for the safe area.
+   * and pads itself for the safe area. `popover` is call details (`.phone .infop`): the popover surface
+   * with a top border.
    */
-  readonly variant?: "sheet" | "card";
+  readonly variant?: "sheet" | "card" | "popover";
   /** Where accessibility focus returns when the sheet closes, usually the button that opened it. */
   readonly returnFocusRef?: RefObject<View | null>;
   readonly testID?: string;
@@ -137,7 +138,13 @@ export function BottomSheet({ open, onClose, accessibilityLabel, children, title
   });
 
   const width = layout.arrangement === "pad" ? 440 : layout.arrangement === "landscape" ? 460 : layout.width;
-  const surfaceStyle = [styles.sheet, { backgroundColor: colors.surface, width, left: (layout.width - width) / 2, paddingHorizontal: card ? 0 : inset }, card ? { borderTopWidth: 1, borderColor: colors.line } : null, heightRatio ? { height: layout.height * heightRatio } : null];
+  const surfaceStyle = [
+    styles.sheet,
+    { backgroundColor: variant === "popover" ? colors.popover : colors.surface, width, left: (layout.width - width) / 2, paddingHorizontal: card ? 0 : inset },
+    card ? { borderTopWidth: 1, borderColor: colors.line } : null,
+    variant === "popover" ? { borderTopWidth: 1, borderColor: colors.lineStrong } : null,
+    heightRatio ? { height: layout.height * heightRatio } : null,
+  ];
   const surfaceRef = useMeasuredRef<View>(testID, surfaceStyle);
 
   if (!mounted) return null;

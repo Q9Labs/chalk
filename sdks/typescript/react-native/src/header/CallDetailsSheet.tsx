@@ -43,7 +43,7 @@ export function CallDetailsSheet({ open, onClose, callName, inviteLink, returnFo
   // `.dev .infop` keeps its top 58 pt under the safe area on a phone too, so the sheet runs from there to the bottom edge.
   const heightRatio = (layout.height - layout.insets.top - DETAILS_TOP) / layout.height;
   return (
-    <BottomSheet accessibilityLabel={callName} heightRatio={heightRatio} inset={14} onClose={onClose} open={open} returnFocusRef={returnFocusRef} testID="sheet.details">
+    <BottomSheet accessibilityLabel={callName} heightRatio={heightRatio} inset={14} onClose={onClose} open={open} returnFocusRef={returnFocusRef} testID="sheet.details" variant="popover">
       <View style={styles.heading}>
         <ChalkText accessibilityRole="header" numberOfLines={1} style={styles.title} variant="cardTitle">
           {callName}
