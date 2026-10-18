@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { shareHTML } from "./fixture.mjs";
 import { check, save, waitFor, maskCredentials, saveOwnership } from "./runtime.mjs";
+import { catcherRequest } from "./webhook-transport.mjs";
 import { rotateAndPatchEndpoint } from "./webhook-endpoint.mjs";
 
 const { build } = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url))("esbuild");
@@ -34,16 +35,7 @@ export async function proofServer(run) {
   });
   return { origin: origin.origin, events: new Map() };
 }
-async function catcherRequest(base, path, method = "GET", body, signal) {
-  const response = await fetch(new URL(path, base), {
-    method,
-    headers: { "Content-Type": "application/json" },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    signal: AbortSignal.any([AbortSignal.timeout(15_000), ...(signal ? [signal] : [])]),
-  });
-  check(response.ok, `Webhook transport ${method} failed: HTTP ${response.status}`);
-  return response;
-}
+
 function originalHeaders(values) {
   const headers = new Headers();
   for (const [name, entries] of Object.entries(values)) {
