@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { routeCallFixtureAssets } from "./call-fixture-routes.mjs";
 import { readFile, mkdir, writeFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { gzipSync } from "node:zlib";
@@ -242,8 +243,7 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
     if (["script", "stylesheet"].includes(response.request().resourceType())) resources.set(response.url(), response);
   });
   const boardCss = resolve(root, "packages/whiteboard/node_modules/@excalidraw/excalidraw/dist/prod/index.css");
-  await page.route("https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@*/dist/prod/index.css", (route) => route.fulfill({ path: boardCss, contentType: "text/css" }));
-  await page.route(/https:\/\/fonts\.(googleapis|gstatic)\.com\//, (route) => route.fulfill({ body: "", contentType: "text/css" }));
+  await routeCallFixtureAssets(page, boardCss);
   try {
     await stat(boardCss);
     await page.goto(`${origin}/call-states.html?state=${scenario.state}`, { waitUntil: "load" });
