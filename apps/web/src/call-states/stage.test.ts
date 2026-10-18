@@ -174,8 +174,8 @@ it("uses supplied voice level for the ring and mirrors only the self camera", as
   await expect.poll(() => ring.evaluate((element) => Number(getComputedStyle(element).opacity))).toBeCloseTo(0.37);
   await page.getByRole("button", { name: "Change fixture voice level", exact: true }).click();
   await expect.poll(() => ring.evaluate((element) => Number(getComputedStyle(element).opacity))).toBeCloseTo(0.93);
-  expect(await page.locator('[data-stage-item="stage-0"] video').evaluate((video) => (video.parentElement ? getComputedStyle(video.parentElement).transform : null))).toBe("matrix(-1, 0, 0, 1, 0, 0)");
-  expect(await page.locator('[data-stage-item="stage-1"] video').evaluate((video) => (video.parentElement ? getComputedStyle(video.parentElement).transform : null))).toBe("none");
+  expect(await page.locator('[data-stage-item="stage-0"] video').evaluate((video) => (video.parentElement ? getComputedStyle(video.parentElement).scale.split(" ")[0] : null))).toBe("-1");
+  expect(await page.locator('[data-stage-item="stage-1"] video').evaluate((video) => (video.parentElement ? getComputedStyle(video.parentElement).scale.split(" ")[0] : null))).toBe("none");
 });
 
 it("pins from the phone options row and refits instantly with reduced motion", async () => {
