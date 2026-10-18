@@ -72,3 +72,11 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Check every release contract without cloud credentials
         run: scripts/releases/check-contracts.sh
+      - name: Keep complete contract logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-contract-logs
+          path: ${{ runner.temp }}/chalk-release-contracts
+          retention-days: 7
+          if-no-files-found: ignore
