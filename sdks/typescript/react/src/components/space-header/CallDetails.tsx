@@ -1,5 +1,5 @@
 import { Dialog } from "@base-ui/react/dialog";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { ChalkButton, ChalkCopyButton, ChalkIconButton, ChalkSegmentedControl, ChalkToggle } from "../chalk-ui";
 import { shareQr } from "./share-qr";
 import type { SpaceHeaderProps } from "./space-header-contract";
@@ -16,12 +16,31 @@ export const CALL_SHORTCUTS = [
   ["Close a menu or panel", "Esc"],
 ] as const;
 
-export function CallDialog({ kind, onClose, onReportProblem, diagnostics }: { readonly kind: "shortcuts" | "report" | null; readonly onClose: () => void; readonly onReportProblem?: SpaceHeaderProps["onReportProblem"]; readonly diagnostics: string }) {
+export function CallDialog({
+  kind,
+  onClose,
+  onReportProblem,
+  diagnostics,
+  returnFocus,
+}: {
+  readonly kind: "shortcuts" | "report" | null;
+  readonly onClose: () => void;
+  readonly onReportProblem?: SpaceHeaderProps["onReportProblem"];
+  readonly diagnostics: string;
+  readonly returnFocus: RefObject<HTMLButtonElement | null>;
+}) {
   const container = useRef<HTMLElement>(null);
   const [text, setText] = useState("");
   const [includeDiagnostics, setIncludeDiagnostics] = useState(true);
   const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
   const [error, setError] = useState("");
+  useEffect(() => {
+    if (kind === "report") {
+      setText("");
+      setError("");
+      setStatus("idle");
+    }
+  }, [kind]);
   return (
     <span
       ref={(element) => {
@@ -37,7 +56,7 @@ export function CallDialog({ kind, onClose, onReportProblem, diagnostics }: { re
       >
         <Dialog.Portal container={container}>
           <Dialog.Backdrop className="chalk-shell-modal-backdrop" />
-          <Dialog.Popup className="chalk-shell-modal">
+          <Dialog.Popup finalFocus={returnFocus} className="chalk-shell-modal">
             <div className="chalk-shell-modal-heading">
               <Dialog.Title>{kind === "shortcuts" ? "Keyboard shortcuts" : "Report a problem"}</Dialog.Title>
               <Dialog.Close
@@ -112,6 +131,7 @@ export function CallDetails({
 }: Pick<SpaceHeaderProps, "shareUrl" | "diagnostics" | "colorScheme" | "onColorSchemeChange" | "onReportProblem"> & { readonly sounds: boolean; readonly onSoundsChange: (enabled: boolean) => void; readonly onDialog: (kind: "shortcuts" | "report") => void }) {
   const link = shareUrl ?? (typeof location === "undefined" ? "" : location.href);
   const qr = shareQr(link);
+  const [details, setDetails] = useState(false);
   return (
     <div className="chalk-details">
       <section className="chalk-shell-section">
@@ -136,16 +156,24 @@ export function CallDetails({
       </section>
       {diagnostics.length ? (
         <section className="chalk-shell-section">
-          <h3 className="chalk-shell-label">Diagnostics</h3>
-          <dl className="chalk-shell-diagnostics">
-            {diagnostics.map(({ label, value }) => (
-              <div key={label} style={{ display: "contents" }}>
-                <dt>{label}</dt>
-                <dd>{value}</dd>
-              </div>
-            ))}
-          </dl>
-          <ChalkCopyButton text={diagnostics.map(({ label, value }) => `${label}: ${value}`).join("\n")} label="Copy diagnostics" />
+          <button type="button" className="chalk-shell-detail-action" aria-expanded={details} onClick={() => setDetails(!details)}>
+            Connection: {diagnostics[0]?.value.toLowerCase()}
+            <span>{details ? "Hide details" : "Details"}</span>
+          </button>
+          {details ? (
+            <>
+              <dl className="chalk-shell-diagnostics">
+                {diagnostics.map(({ label, value }) => (
+                  <div key={label} style={{ display: "contents" }}>
+                    <dt>{label}</dt>
+                    <dd>{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              <ChalkCopyButton text={diagnostics.map(({ label, value }) => `${label}: ${value}`).join("\n")} label="Copy diagnostics" announcement="Diagnostics copied" />
+              <span>Copy diagnostics</span>
+            </>
+          ) : null}
         </section>
       ) : null}
       <section className="chalk-shell-section">

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { cn } from "../../utils/cn";
 import { useMediaQuery } from "../../internal/useMediaQuery";
 import { useSoundsSetting } from "../../internal/useSoundsSetting";
@@ -8,11 +8,12 @@ import { LayoutMenu } from "./LayoutMenu";
 import { CallDetails, CallDialog } from "./CallDetails";
 import { useCallShortcuts } from "./useCallShortcuts";
 import { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
-import "../control-bar/shell.css";
+import { ShellStyles } from "../control-bar/ShellStyles";
 export { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
 export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   const { spaceName, duration = 0, isRecording = false, layout = "focus", onLayoutChange, className, weakConnection } = props;
   const [sounds, setSounds] = useSoundsSetting();
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<"shortcuts" | "report" | null>(null);
   const showShortcuts = useCallback(() => setDialog("shortcuts"), []);
@@ -24,7 +25,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
     </svg>
   );
   const trigger = (
-    <button type="button" data-part="call-name" aria-label="Call details" className="chalk-call-name">
+    <button ref={triggerRef} type="button" data-part="call-name" aria-label="Call details" className="chalk-call-name">
       <span dir="auto">{spaceName}</span>
       <span data-part="call-timer" className="chalk-call-timer">
         {formatDuration(duration)}
@@ -45,10 +46,11 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   );
   return (
     <header data-part="header-region" className={cn("chalk-header", className)} role="banner">
+      <ShellStyles />
       <div className="chalk-header-title flex min-w-0 items-center gap-3">
         {phone ? (
           <>
-            <button type="button" data-part="call-name" className="chalk-call-name chalk-call-name-phone" aria-label="Call details" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
+            <button ref={triggerRef} type="button" data-part="call-name" className="chalk-call-name chalk-call-name-phone" aria-label="Call details" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
               <span dir="auto">{spaceName}</span>
               {chevron}
             </button>
@@ -60,7 +62,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
             </ChalkSheet>
           </>
         ) : (
-          <ChalkPopover tooltip="Call details" trigger={trigger} label="Call details" className="chalk-call-details" alignOffset={-2}>
+          <ChalkPopover open={open} onOpenChange={setOpen} tooltip="Call details" trigger={trigger} label="Call details" className="chalk-call-details" alignOffset={-2}>
             {content}
           </ChalkPopover>
         )}
@@ -92,7 +94,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
         ) : null}
         {onLayoutChange ? <LayoutMenu layout={layout} onLayoutChange={onLayoutChange} /> : null}
       </div>
-      <CallDialog kind={dialog} onClose={() => setDialog(null)} onReportProblem={props.onReportProblem} diagnostics={(props.diagnostics ?? []).map(({ label, value }) => `${label}: ${value}`).join("\n")} />
+      <CallDialog returnFocus={triggerRef} kind={dialog} onClose={() => setDialog(null)} onReportProblem={props.onReportProblem} diagnostics={(props.diagnostics ?? []).map(({ label, value }) => `${label}: ${value}`).join("\n")} />
     </header>
   );
 });

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import { HandIcon } from "../../utils/icons";
-import "../control-bar/shell.css";
+import { ShellStyles } from "../control-bar/ShellStyles";
 import { useHaptics } from "../../internal/useHaptics";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
@@ -72,6 +72,7 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
 
   return (
     <>
+      <ShellStyles />
       <div className="fixed inset-0 z-20" onClick={onClose} aria-hidden="true" />
       {
         <div ref={listRef} className={cn(trayClassName, "chalk-shell-reactions", more && "chalk-shell-reactions-expanded")} role="toolbar" aria-label="Reactions" onKeyDown={handleKeyDown}>

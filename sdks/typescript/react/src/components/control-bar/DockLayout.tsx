@@ -11,7 +11,13 @@ export function DockLayout({ layout, onLayoutChange, children, microphone, camer
         </svg>
       </ChalkIconButton>
       <ChalkSheet title="More options" open={open} onOpenChange={setOpen}>
-        <div data-part="dock-layout-group" className="chalk-sheet-group">
+        <div
+          data-part="dock-layout-group"
+          className="chalk-sheet-group"
+          onClick={(event) => {
+            if (event.target instanceof Element && event.target.closest("button.chalk-sheet-row")) setOpen(false);
+          }}
+        >
           {children}
           <div data-part="dock-layout-row" className="chalk-sheet-row">
             <svg data-part="dock-layout-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

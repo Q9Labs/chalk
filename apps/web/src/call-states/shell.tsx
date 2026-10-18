@@ -1,3 +1,5 @@
+import type { ScreenShareOptions } from "@q9labsai/chalk-client";
+import { readThemePreference, persistThemePreference } from "../lib/theme";
 import { useState } from "react";
 import { Chalk } from "@q9labsai/chalk-react";
 import { createCallStateClient, HOST, PEOPLE, liveSnapshot } from "./fixtures";
@@ -5,6 +7,7 @@ import type { CallState } from "./states";
 
 function ShellCall({ host = false, report = false, blocked = false }: { readonly host?: boolean; readonly report?: boolean; readonly blocked?: boolean }) {
   const [command, setCommand] = useState("");
+  const [colorScheme, setColorScheme] = useState(() => readThemePreference(document.cookie));
   const [client] = useState(() => {
     const snapshot = liveSnapshot({ others: PEOPLE.slice(0, 7), capabilities: host ? HOST : undefined });
     const instance = createCallStateClient({
@@ -26,21 +29,30 @@ function ShellCall({ host = false, report = false, blocked = false }: { readonly
         local: blocked ? { ...snapshot.media.local, microphone: { ...snapshot.media.local.microphone, state: "failed" }, camera: { ...snapshot.media.local.camera, state: "unavailable" } } : snapshot.media.local,
       },
     });
-    const share = instance.media.setScreenShareEnabled;
-    instance.media.setScreenShareEnabled = async (enabled, options) => {
-      setCommand(JSON.stringify({ enabled, ...options }));
-      await share(enabled, options);
+    return {
+      ...instance,
+      media: {
+        ...instance.media,
+        setScreenShareEnabled: async (enabled: boolean, options?: ScreenShareOptions) => {
+          setCommand(JSON.stringify({ enabled, ...options }));
+          await instance.media.setScreenShareEnabled(enabled, options);
+        },
+      },
+      endEpisode: async () => {
+        setCommand("Ended call");
+        await instance.endEpisode();
+      },
     };
-    instance.endEpisode = async () => {
-      setCommand("Ended call");
-    };
-    return instance;
   });
   return (
-    <>
+    <main className="h-dvh min-h-0 w-full overflow-hidden">
       <Chalk
+        theme={{ colorScheme }}
+        onColorSchemeChange={(next) => {
+          setColorScheme(next);
+          persistThemePreference(next);
+        }}
         client={client}
-        entrance={false}
         spaceName="Team call"
         shareUrl="https://chalkmeet.com/team-call"
         onReportProblem={
@@ -57,7 +69,7 @@ function ShellCall({ host = false, report = false, blocked = false }: { readonly
       <output className="sr-only" aria-label="Last shell command">
         {command}
       </output>
-    </>
+    </main>
   );
 }
 export const SHELL_STATES: readonly CallState[] = [

@@ -5,7 +5,7 @@ import { Microphone01Icon, MicrophoneOff01Icon, Video01Icon, VideoOffIcon, Arrow
 import { cn } from "../../utils/cn";
 import type { HapticInput } from "../../internal/useHaptics";
 import type { MediaDevice } from "../control-bar/control-bar-behavior";
-import "../control-bar/shell.css";
+import { ShellStyles } from "../control-bar/ShellStyles";
 
 export interface DevicePopoverProps {
   type: "mic" | "video";
@@ -120,6 +120,7 @@ export function DevicePopover({
   const label = mic ? (isActive ? "Mute microphone" : "Unmute microphone") : isActive ? "Turn off camera" : "Turn on camera";
   return (
     <div data-part={`${type}-split`} className={cn("chalk-shell-split", className)} data-off={!isActive}>
+      <ShellStyles />
       <ChalkTooltip
         trigger={
           <button type="button" className="chalk-shell-main" aria-label={busy ? `Updating ${mic ? "microphone" : "camera"}` : label} aria-pressed={isActive} disabled={disabled || busy} onClick={onToggle}>

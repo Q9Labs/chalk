@@ -15,6 +15,7 @@ export interface MediaDevice {
 export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "handraise" | "reactions" | "whiteboard" | "leave";
 
 export interface ControlBarSurfaceProps {
+  shareUrl?: string;
   layout?: "focus" | "grid";
   onLayoutChange?: (layout: "focus" | "grid") => void;
   density?: "comfortable" | "compact";
@@ -78,6 +79,7 @@ export interface ControlBarSurfaceProps {
 }
 
 export interface ControlBarProps {
+  readonly shareUrl?: string;
   readonly layout?: "focus" | "grid";
   readonly onLayoutChange?: (layout: "focus" | "grid") => void;
   readonly density?: "comfortable" | "compact";
@@ -292,6 +294,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
         if (screenSharing) await client.media.setScreenShareEnabled(false);
         await client.media.setScreenShareEnabled(true, options);
       }),
+    shareUrl: props.shareUrl,
     isMuted: !microphoneEnabled,
     microphonePending: media.local.microphone.state === "requesting",
     cameraPending: media.local.camera.state === "requesting",

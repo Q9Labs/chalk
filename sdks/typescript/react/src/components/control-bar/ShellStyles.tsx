@@ -1,4 +1,11 @@
-.chalk-shell-dock {
+export function ShellStyles() {
+  return (
+    <style href="chalk-call-shell" precedence="default">
+      {CALL_SHELL_CSS}
+    </style>
+  );
+}
+const CALL_SHELL_CSS = `.chalk-shell-dock {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -517,3 +524,4 @@
     transition: none;
   }
 }
+`;

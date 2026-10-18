@@ -2,6 +2,7 @@
 import type { Reaction } from "@q9labsai/chalk-client";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useCan, useConnection, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { callDiagnostics } from "../space-header/call-diagnostics";
 import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { useSoundsSetting } from "../../internal/useSoundsSetting";
@@ -108,6 +109,7 @@ export function SpaceView({
   const canPublishScreen = useCan("publishScreen");
   const canSendChat = useCan("sendChat");
   const canSendReaction = useCan("sendReaction");
+  const canRaiseHand = useCan("raiseHand");
   const canDrawWhiteboard = useCan("drawWhiteboard");
   const canManageAdmission = useCan("manageAdmission");
   const canManageRecording = useCan("manageRecording");
@@ -173,17 +175,12 @@ export function SpaceView({
           knockCount: canManageAdmission ? participantsSlice.admissionQueue.length : 0,
           shareUrl,
           onReportProblem,
-          diagnostics: [
-            { label: "Connection", value: connection.status },
-            ...(media.local.microphone.track ? [{ label: "Microphone", value: media.local.microphone.track.label }] : []),
-            ...(media.local.camera.track ? [{ label: "Camera", value: media.local.camera.track.label }] : []),
-            ...(media.screenShare.capture?.label ? [{ label: "Sharing", value: media.screenShare.capture.label }] : []),
-          ],
+          diagnostics: callDiagnostics(connection, media),
           shortcuts: {
             isMuted: media.local.microphone.state !== "enabled",
             onToggleMute: () => void runCommand(() => client.media.setMicrophoneEnabled(media.local.microphone.state !== "enabled")),
             onToggleVideo: () => void runCommand(() => client.media.setCameraEnabled(media.local.camera.state !== "enabled")),
-            onToggleHand: feature("handRaise") ? () => void runCommand(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())) : undefined,
+            onToggleHand: feature("handRaise") && canRaiseHand ? () => void runCommand(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())) : undefined,
             onToggleChat: feature("chat") && canSendChat ? () => setActivePanel((current) => (current === "chat" ? null : "chat")) : undefined,
             onTogglePeople: feature("participants") ? () => setActivePanel((current) => (current === "participants" ? null : "participants")) : undefined,
             onToggleLayout: () => updateLayout(layout === "grid" ? "focus" : "grid"),
@@ -199,22 +196,9 @@ export function SpaceView({
         controls={
           <ControlBar
             density="comfortable"
-            buttons={buttons}
-            activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
-            onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
-            onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
-            onToggleWhiteboard={onToggleWhiteboard}
-            onOpenReactions={() => setReactionPickerOpen((current) => !current)}
-            onCommandError={setCommandError}
-            onLeaveRequest={leaveCall}
-            onEndForEveryone={endCallForEveryone}
-          />
-        }
-        compactControls={
-          <ControlBar
-            density="compact"
             layout={layout}
             onLayoutChange={updateLayout}
+            shareUrl={shareUrl}
             buttons={buttons}
             activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
             onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
@@ -233,7 +217,7 @@ export function SpaceView({
               <div className="absolute bottom-24 left-1/2 z-50 -translate-x-1/2">
                 <ReactionPicker
                   isHandRaised={self.handRaised}
-                  onToggleHandRaise={feature("handRaise") ? () => void runCommand(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())) : undefined}
+                  onToggleHandRaise={feature("handRaise") && canRaiseHand ? () => void runCommand(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())) : undefined}
                   isOpen={isReactionPickerOpen}
                   onClose={() => setReactionPickerOpen(false)}
                   allowedReactions={[...DEFAULT_REACTIONS]}

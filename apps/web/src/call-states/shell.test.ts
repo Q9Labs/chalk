@@ -40,7 +40,7 @@ try {
  await page.getByRole('menuitemradio',{name:'Browser tab',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('output')?.textContent?.includes('"surface":"browser"'));
  await page.getByRole('button',{name:'Leave call',exact:true}).filter({visible:true}).click();
- await page.getByRole('status').filter({hasText:'left'}).count();
+ await page.waitForFunction(()=>document.querySelector('output')?.textContent==='Left call');
  assert.equal(await page.getByRole('menu').count(),0);
  await load('shell-host');
  await page.getByRole('button',{name:'Leave call',exact:true}).filter({visible:true}).click();
