@@ -13,6 +13,7 @@ import hashlib
 import fcntl
 
 SSH = ['ssh', '-o', 'ControlMaster=no', '-o', 'ControlPath=none', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=3']
+SCP = ['scp', *SSH[1:]]
 
 def run(args, **kwargs):
     return subprocess.run(args, check=True, **kwargs)
@@ -400,13 +401,13 @@ def perform_copy(args, dest, host):
     if not args.cleanup:
         run(['rsync', '-az', '-e', shlex.join(SSH), '--delete', '--exclude=/native-build', '--exclude=/native-*.stamp', '--exclude=/captures', '--exclude=*.log', '--exclude=.expo', '--exclude=node_modules', '--exclude=.git', '--exclude=.worktrees', '--exclude=.env*', '--exclude=scratchpad', '--exclude=/apps/mobile/ios', '--exclude=/apps/mobile/android', '--exclude=artifacts', '--exclude=dist', str(Path(args.worktree).resolve()) + '/', host + ':' + dest + '/'])
     if not args.cleanup:
-        run(['scp', str(Path(__file__)), str(Path(__file__).with_name('capture-owner-watch.py')), host + ':' + dest + '/apps/mobile/scripts/'])
+        run([*SCP, str(Path(__file__)), str(Path(__file__).with_name('capture-owner-watch.py')), host + ':' + dest + '/apps/mobile/scripts/'])
         if not (Path(args.worktree) / 'apps/mobile/src/dev-states').is_dir():
             print('Installing dev-only capture route in the remote copy; product source remains unchanged', flush=True)
             source = Path(__file__).resolve().parents[1] / 'src/dev-states'
             run(['rsync', '-az', '-e', shlex.join(SSH), str(source), host + ':' + dest + '/apps/mobile/src/'])
             run([*SSH, host, shlex.join(['cp', dest + '/apps/mobile/App.tsx', dest + '/apps/mobile/App.product.tsx'])])
-            run(['scp', str(Path(__file__).with_name('capture-entry.tsx.template')), host + ':' + dest + '/apps/mobile/App.tsx'])
+            run([*SCP, str(Path(__file__).with_name('capture-entry.tsx.template')), host + ':' + dest + '/apps/mobile/App.tsx'])
     command = ['python3', dest + '/apps/mobile/scripts/capture-states.py', '--remote', dest, '--platform', args.platform, '--port', str(args.port), '--settle', str(args.settle), '--maestro', args.maestro, '--states', *args.states]
     command += ['--emulator-port', str(args.emulator_port)]
     command += ['--android-gpu', args.android_gpu]
@@ -425,15 +426,16 @@ def perform_copy(args, dest, host):
     if args.ids:
         command += ['--ids', args.ids]
     if args.flow:
-        run(['scp', args.flow, host + ':' + dest + '/capture-flow.yaml'])
+        run([*SCP, args.flow, host + ':' + dest + '/capture-flow.yaml'])
         command += ['--flow', dest + '/capture-flow.yaml']
     try:
         run([*SSH, host, shlex.join(command)])
     finally:
         if not args.cleanup:
+            failed = sys.exc_info()[0] is not None
             Path(args.output).mkdir(parents=True, exist_ok=True)
-            subprocess.run(['rsync', '-az', '--delete', host + ':' + dest + '/captures/', args.output + '/'])
-            subprocess.run(['rsync', '-az', '--include=*.log', '--exclude=*', host + ':' + dest + '/', args.output + '/'])
+            subprocess.run(['rsync', '-az', '-e', shlex.join(SSH), '--delete', host + ':' + dest + '/captures/', args.output + '/'], check=not failed)
+            subprocess.run(['rsync', '-az', '-e', shlex.join(SSH), '--include=*.log', '--exclude=*', host + ':' + dest + '/', args.output + '/'], check=not failed)
 
 
 if __name__ == '__main__':
