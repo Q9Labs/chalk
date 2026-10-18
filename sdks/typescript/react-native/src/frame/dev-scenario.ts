@@ -1,13 +1,14 @@
 import { useSyncExternalStore, type ReactNode } from "react";
 import type { ArrivalState } from "../status/ChalkArrival";
 import type { CallOutcome } from "../status/StatusPage";
+import type { AudioRoutes } from "../dock/audio-route";
 
 /** UI-only state a development harness forces on the call. Nothing sets it in a real call. */
 export type DevScenario = {
   /** Opens this sheet as if the user had opened it; the user can still close it. */
-  readonly sheet?: "more" | "people" | "chat";
+  readonly sheet?: "more" | "people" | "chat" | "details" | "route";
   /** Opens this menu as if the user had opened it. */
-  readonly menu?: "leave";
+  readonly menu?: "leave" | "route";
   /** Content drawn in a tile in place of the camera, keyed by participant id. */
   readonly videoSlots?: Readonly<Record<string, ReactNode>>;
   /** Shows a call state the fixture client can't reach: a screen before joining, a status page, or a phone call holding the call. */
@@ -20,6 +21,8 @@ export type DevScenario = {
   readonly layout?: "spotlight" | "grid";
   /** Pins this participant, as if the user had pinned them. */
   readonly pinned?: string;
+  /** Audio outputs in place of the device's, such as a Bluetooth headset on a simulator (K3). */
+  readonly audioRoutes?: AudioRoutes;
 };
 
 const empty: DevScenario = {};

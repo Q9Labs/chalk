@@ -6,6 +6,7 @@ import { Dock } from "../dock/Dock";
 import { LeaveMenu } from "../dock/LeaveMenu";
 import { MoreSheet } from "../dock/MoreSheet";
 import { haptics } from "../haptics/haptics";
+import { CallDetailsSheet } from "../header/CallDetailsSheet";
 import { Header } from "../header/Header";
 import { useCan, useConnection, useMedia } from "../hooks/space-hooks";
 import { timings } from "../motion/motion";
@@ -30,19 +31,20 @@ import { frameRegions } from "./regions";
 export type CallFrameProps = {
   readonly displayName?: string;
   readonly callName?: string;
+  readonly inviteLink?: string;
   readonly onLeave?: () => void;
   readonly onOpenSettings?: (permission: Permission) => void;
   readonly resumedAfterSettings?: Permission;
 };
 
-type OpenSheet = "more" | "people" | "chat" | null;
+type OpenSheet = "more" | "people" | "chat" | "details" | null;
 
 /**
  * The call's frame: header, stage and dock regions, then the sheets layer, the limbo and status
  * overlays, the menus layer and the toasts layer, each inside the safe area for the current
  * arrangement. Each region lives in its own folder so the part lanes can work in parallel.
  */
-export function CallFrame({ displayName, callName = "Call", onLeave, onOpenSettings, resumedAfterSettings }: CallFrameProps): React.JSX.Element {
+export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave, onOpenSettings, resumedAfterSettings }: CallFrameProps): React.JSX.Element {
   const client = useSpaceClient();
   const connection = useConnection();
   const media = useMedia();
@@ -55,6 +57,7 @@ export function CallFrame({ displayName, callName = "Call", onLeave, onOpenSetti
   const [sheet, setSheet] = useState<OpenSheet>(null);
   const moreRef = useRef<View>(null);
   const leaveRef = useRef<View>(null);
+  const nameRef = useRef<View>(null);
   const canEnd = useCan("endEpisode");
   const [leaveMenuOpen, setLeaveMenuOpen] = useState(false);
   const sheetCount = usePortalCount("sheets");
@@ -110,7 +113,7 @@ export function CallFrame({ displayName, callName = "Call", onLeave, onOpenSetti
 
   const devScenario = useDevScenario();
   useEffect(() => {
-    if (devScenario.sheet) setSheet(devScenario.sheet);
+    if (devScenario.sheet && devScenario.sheet !== "route") setSheet(devScenario.sheet);
     if (devScenario.menu === "leave") setLeaveMenuOpen(true);
   }, [devScenario]);
 
@@ -125,7 +128,7 @@ export function CallFrame({ displayName, callName = "Call", onLeave, onOpenSetti
         <Stage frame={regions.stage} onOpenPeople={() => setSheet("people")} />
         {chrome.hidden ? <Pressable accessibilityLabel="Show call controls" onPress={chrome.show} style={StyleSheet.absoluteFill} testID="frame.show-controls" /> : null}
         <Animated.View pointerEvents={chrome.hidden ? "none" : "box-none"} style={[styles.region, frameStyle(regions.header), chrome.style]}>
-          <Header arrangement={layout.arrangement} callName={callName} onOpenDetails={() => setSheet("more")} />
+          <Header arrangement={layout.arrangement} callName={callName} detailsOpen={sheet === "details"} onOpenDetails={() => setSheet("details")} ref={nameRef} />
         </Animated.View>
         <Animated.View pointerEvents={chrome.hidden ? "none" : "box-none"} style={[styles.region, frameStyle(regions.dock), chrome.style]}>
           <Dock
@@ -145,7 +148,8 @@ export function CallFrame({ displayName, callName = "Call", onLeave, onOpenSetti
       </View>
       <View pointerEvents="box-none" style={StyleSheet.absoluteFill} testID="frame.sheets">
         {/* Focus goes back to More only once no sheet is open, so switching to People keeps it there. */}
-        <MoreSheet onClose={() => setSheet(null)} onOpenPeople={() => setSheet("people")} open={sheet === "more"} returnFocusRef={sheet === null ? moreRef : undefined} />
+        <MoreSheet inviteLink={inviteLink} onClose={() => setSheet(null)} onOpenChat={() => setSheet("chat")} onOpenPeople={() => setSheet("people")} open={sheet === "more"} returnFocusRef={sheet === null ? moreRef : undefined} />
+        <CallDetailsSheet callName={callName} inviteLink={inviteLink} onClose={() => setSheet(null)} open={sheet === "details"} returnFocusRef={nameRef} />
         <PeopleChatSheet onClose={() => setSheet(null)} onTabChange={setSheet} open={sheet === "people" || sheet === "chat"} returnFocusRef={sheet === null ? moreRef : undefined} tab={sheet === "chat" ? "chat" : "people"} />
         <PortalHost layer="sheets" />
       </View>

@@ -22,6 +22,8 @@ export type ChalkProps = {
   readonly displayName?: string;
   /** The call's name in the header, such as "Q9 team". */
   readonly callName?: string;
+  /** The call's link, which More and the call details offer to copy, share and show as a QR code. */
+  readonly inviteLink?: string;
   /** Dark by default. Set it with `onColorSchemeChange` to keep the person's choice. */
   readonly colorScheme?: ColorScheme;
   readonly onColorSchemeChange?: (colorScheme: ColorScheme) => void;
