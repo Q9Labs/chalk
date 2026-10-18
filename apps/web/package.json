@@ -28,7 +28,8 @@
     "nitro": "latest",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "unenv": "^1.10.0"
+    "unenv": "^1.10.0",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260701.1",
