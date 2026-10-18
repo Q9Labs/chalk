@@ -276,10 +276,10 @@ const deliveryState = (state: string) => DELIVERY[state] ?? (["d-mu", state] as 
 function Endpoint({ webhook, open, onToggle, onRotate }: { readonly webhook: WebhookDTO; readonly open: boolean; readonly onToggle: () => void; readonly onRotate: () => void }) {
   const phone = usePhone();
   const toast = useToast();
-  const { state, reload, update } = useLoad(() => (open ? act("developer", { action: "webhook-deliveries", webhookId: webhook.id }) : Promise.resolve(null)), `deliveries:${webhook.id}:${open}`);
-  const deliveries = state.kind === "ready" && state.data ? state.data.deliveries : null;
+  const { state, reload, update } = useLoad(() => act("developer", { action: "webhook-deliveries", webhookId: webhook.id }), `deliveries:${webhook.id}`);
+  const deliveries = state.kind === "ready" ? state.data.deliveries : null;
   const last = deliveries?.[0];
-  const [dot, label] = last ? deliveryState(last.state) : webhook.enabled ? ["d-mu", deliveries ? "No deliveries yet" : ""] : ["d-mu", "Paused"];
+  const [dot, label] = !webhook.enabled ? ["d-mu", "Paused"] : last ? deliveryState(last.state) : ["d-mu", deliveries ? "No deliveries yet" : ""];
 
   async function test() {
     try {
@@ -293,7 +293,7 @@ function Endpoint({ webhook, open, onToggle, onRotate }: { readonly webhook: Web
   async function redeliver(delivery: DeliveryDTO) {
     try {
       await act("developer", { action: "redeliver-webhook", webhookId: webhook.id, deliveryId: delivery.id, idempotencyKey: intentKey() });
-      update((value) => (value ? { ...value, deliveries: value.deliveries.map((item) => (item.id === delivery.id ? { ...item, state: "pending" } : item)) } : value));
+      update((value) => ({ ...value, deliveries: value.deliveries.map((item) => (item.id === delivery.id ? { ...item, state: "pending" } : item)) }));
       toast("The delivery is queued again");
     } catch (error) {
       toast(errorMessage(error), { icon: "alert" });

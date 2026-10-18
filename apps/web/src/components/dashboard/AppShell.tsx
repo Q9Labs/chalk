@@ -98,7 +98,7 @@ function TopBar({ profile }: { readonly profile: ProfileDTO | null }) {
         <Lockup />
       </Link>
       <nav className="ttabs" aria-label="Dashboard">
-        <Link to="/dashboard" aria-current={developer ? undefined : "page"}>
+        <Link to="/dashboard" activeOptions={{ exact: true }} aria-current={developer ? undefined : "page"}>
           Home
         </Link>
         <Link to="/dashboard/developer" aria-current={developer ? "page" : undefined}>
