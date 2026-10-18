@@ -1,6 +1,6 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { ChalkButton, ChalkCopyButton, ChalkIconButton, ChalkSegmentedControl, ChalkToggle } from "../chalk-ui";
+import { ChalkButton, ChalkCopyButton, ChalkIconButton, ChalkSegmentedControl } from "../chalk-ui";
 import { shareQr } from "./share-qr";
 import type { SpaceHeaderProps } from "./space-header-contract";
 
@@ -121,6 +121,8 @@ export function CallDialog({
 
 export function CallDetails({
   shareUrl,
+  spaceName,
+  onClose,
   diagnostics = [],
   colorScheme = "dark",
   onColorSchemeChange,
@@ -128,16 +130,27 @@ export function CallDetails({
   onSoundsChange,
   onDialog,
   onReportProblem,
-}: Pick<SpaceHeaderProps, "shareUrl" | "diagnostics" | "colorScheme" | "onColorSchemeChange" | "onReportProblem"> & { readonly sounds: boolean; readonly onSoundsChange: (enabled: boolean) => void; readonly onDialog: (kind: "shortcuts" | "report") => void }) {
+}: Pick<SpaceHeaderProps, "spaceName" | "shareUrl" | "diagnostics" | "colorScheme" | "onColorSchemeChange" | "onReportProblem"> & {
+  readonly onClose: () => void;
+  readonly sounds: boolean;
+  readonly onSoundsChange: (enabled: boolean) => void;
+  readonly onDialog: (kind: "shortcuts" | "report") => void;
+}) {
   const link = shareUrl ?? (typeof location === "undefined" ? "" : location.href);
   const qr = shareQr(link);
   const [details, setDetails] = useState(false);
   return (
     <div className="chalk-details">
+      <div className="chalk-shell-details-heading">
+        <h2>{spaceName}</h2>
+        <ChalkIconButton aria-label="Close" size="sm" onClick={onClose}>
+          ×
+        </ChalkIconButton>
+      </div>
       <section className="chalk-shell-section">
         <h3 className="chalk-shell-label">Share</h3>
         <div className="chalk-shell-link">
-          <span dir="ltr">{link}</span>
+          <span dir="ltr">{link.replace(/^https?:\/\//, "")}</span>
           <ChalkCopyButton text={link} label="Copy link" />
         </div>
         {qr ? (
@@ -146,11 +159,7 @@ export function CallDetails({
               <rect width="100%" height="100%" fill="white" />
               <path d={qr.flatMap((row, y) => row.flatMap((dark, x) => (dark ? [`M${x + 4},${y + 4}h1v1h-1z`] : []))).join("")} />
             </svg>
-            <p>
-              Scan to join
-              <br />
-              on another device
-            </p>
+            <p>Scan with a phone camera to join this call.</p>
           </div>
         ) : null}
       </section>
@@ -170,8 +179,9 @@ export function CallDetails({
                   </div>
                 ))}
               </dl>
-              <ChalkCopyButton text={diagnostics.map(({ label, value }) => `${label}: ${value}`).join("\n")} label="Copy diagnostics" announcement="Diagnostics copied" />
-              <span>Copy diagnostics</span>
+              <div className="chalk-shell-diagnostics-copy">
+                <ChalkCopyButton text={diagnostics.map(({ label, value }) => `${label}: ${value}`).join("\n")} label="Copy diagnostics" announcement="Diagnostics copied" showLabel />
+              </div>
             </>
           ) : null}
         </section>
@@ -190,10 +200,12 @@ export function CallDetails({
             onValueChange={(next) => onColorSchemeChange?.(next)}
           />
         </div>
-        <div className="chalk-details-row">
+        <button type="button" role="switch" aria-label="Sounds" aria-checked={sounds} className="chalk-shell-detail-action" onClick={() => onSoundsChange(!sounds)}>
           <span>Sounds</span>
-          <ChalkToggle aria-label="Sounds" pressed={sounds} onPressedChange={onSoundsChange} />
-        </div>
+          <span className="chalk-switch" aria-checked={sounds} aria-hidden="true">
+            <span />
+          </span>
+        </button>
         <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={() => onDialog("shortcuts")}>
           Keyboard shortcuts<span aria-hidden="true">›</span>
         </button>

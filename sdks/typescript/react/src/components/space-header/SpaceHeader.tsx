@@ -37,6 +37,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   const content = (
     <CallDetails
       {...props}
+      onClose={() => setOpen(false)}
       sounds={sounds}
       onSoundsChange={setSounds}
       onDialog={(kind) => {

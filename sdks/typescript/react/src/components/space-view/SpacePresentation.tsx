@@ -39,7 +39,9 @@ export function SpacePresentation({ colorScheme = "dark", stageBackground, heade
         </div>
       </section>
       <div data-part="dock-region" className="chalk-frame-dock">
-        <div className={compactControls ? "chalk-frame-regular" : undefined}>{controls}</div>
+        <div className={compactControls ? "chalk-frame-regular" : undefined} style={compactControls ? undefined : { display: "contents" }}>
+          {controls}
+        </div>
         {compactControls ? <div className="chalk-frame-compact">{compactControls}</div> : null}
       </div>
       {sidebar}

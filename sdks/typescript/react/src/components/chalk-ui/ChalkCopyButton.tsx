@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "../../utils/cn";
-export function ChalkCopyButton({ text, label = "Copy link", announcement = "Link copied" }: { readonly text: string; readonly label?: string; readonly announcement?: string }) {
+export function ChalkCopyButton({ text, label = "Copy link", announcement = "Link copied", showLabel = false }: { readonly text: string; readonly label?: string; readonly announcement?: string; readonly showLabel?: boolean }) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -28,6 +28,7 @@ export function ChalkCopyButton({ text, label = "Copy link", announcement = "Lin
             <path d="M20 6L9 17l-5-5" />
           </svg>
         </span>
+        {showLabel ? <span className="chalk-copy-label">{label}</span> : null}
       </button>
       <span role="status" aria-live="polite" className="sr-only">
         {error ? "Could not copy. Try again." : copied ? announcement : ""}
