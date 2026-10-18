@@ -33,6 +33,7 @@ jobs:
     environment: production
     outputs:
       pages_deployment_id: ${{ steps.pages.outputs.pages_deployment_id }}
+      rollback_media: ${{ steps.media.outputs.members }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -45,6 +46,20 @@ jobs:
       - name: Select the explicit production Pages destination
         run: |
           node --input-type=module -e 'import { PRODUCTION_PROJECT } from "./scripts/deploy/deploy-web-release.mjs"; console.log("PAGES_PROJECT=" + PRODUCTION_PROJECT)' >> "$GITHUB_ENV"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
+      - name: Retain the live media pins before the first promotion changes them
+        id: media
+        env:
+          CHALK_MANAGED_RECORDER_CONFIG_PARAMETER: ${{ vars.CHALK_MANAGED_RECORDER_CONFIG_PARAMETER || '/chalk/production/release/recorder.json' }}
+          PREVIOUS_MEDIA_SHA256: ${{ fromJSON(needs.select.outputs.selection).previous.media_sha256 }}
+        run: |
+          if [[ -z "$PREVIOUS_MEDIA_SHA256" ]]; then
+            python3 scripts/releases/media.py snapshot --environment production --output previous-media.json
+            echo "members=$(jq -c . previous-media.json)" >> "$GITHUB_OUTPUT"
+          fi
       - name: Save the live production Pages deployment before any upload
         id: pages
         env:
@@ -62,7 +77,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: promotion-rollback-${{ github.run_attempt }}
-          path: rollback.json
+          path: |
+            rollback.json
+            previous-media.json
           retention-days: 90
   release:
     needs: [select, approve]
@@ -78,6 +95,7 @@ jobs:
       manifest_artifact_id: ${{ fromJSON(needs.select.outputs.selection).selection.manifest_artifact_id }}
       manifest_sha256: ${{ fromJSON(needs.select.outputs.selection).selection.manifest_sha256 }}
       reuse_release_id: ${{ fromJSON(needs.select.outputs.selection).selection.release_id }}
+      media_sha256: ${{ fromJSON(needs.select.outputs.selection).selection.media_sha256 }}
       web_artifact: ${{ toJSON(fromJSON(needs.select.outputs.selection).selection.web.production) }}
     secrets: inherit
   proof:
@@ -104,6 +122,8 @@ jobs:
       manifest_artifact_id: ${{ fromJSON(needs.select.outputs.selection).previous.manifest_artifact_id }}
       manifest_sha256: ${{ fromJSON(needs.select.outputs.selection).previous.manifest_sha256 }}
       reuse_release_id: ${{ fromJSON(needs.select.outputs.selection).previous.release_id }}
+      media_sha256: ${{ fromJSON(needs.select.outputs.selection).previous.media_sha256 }}
+      rollback_media: ${{ needs.approve.outputs.rollback_media }}
       pages_rollback_id: ${{ needs.approve.outputs.pages_deployment_id }}
     secrets: inherit
   result:
@@ -121,6 +141,7 @@ jobs:
           APPLIED_RELEASE: ${{ needs.release.outputs.applied_release_id }}
           ROLLBACK: ${{ toJSON(needs.rollback.outputs) }}
           PAGES_ID: ${{ needs.approve.outputs.pages_deployment_id }}
+          ROLLBACK_MEDIA: ${{ needs.approve.outputs.rollback_media }}
         run: |
           python3 - <<'PYRESULT'
           import json
@@ -150,7 +171,8 @@ jobs:
                       manual = dict(target_sha=previous['target_sha'], release_managed=False, deploy_managed=True,
                                     managed_environment='production', deploy_web=True, manifest_run_id=previous['run_id'],
                                     manifest_artifact_id=previous['manifest_artifact_id'], manifest_sha256=previous['manifest_sha256'],
-                                    reuse_release_id=previous['release_id'], pages_rollback_id=os.environ['PAGES_ID'])
+                                    reuse_release_id=previous['release_id'], pages_rollback_id=os.environ['PAGES_ID'],
+                                    media_sha256=previous.get('media_sha256', ''), rollback_media=os.environ.get('ROLLBACK_MEDIA', ''))
                       summary.write(json.dumps(manual, indent=2) + '\n```\n')
           if not passed:
               sys.exit('promotion failed; consult the recovery evidence and manual Release inputs in the summary')

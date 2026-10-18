@@ -193,7 +193,7 @@ Validate the exact snapshot and size in a nightly Capture boot before promotion.
 daemons, the native Node compositor, and the node bootstrap/renewal
 agent. Build the public artifact on a machine with sufficient CPU, then install
 it on a clean builder whose disk is the fleet's, so the resulting DigitalOcean
-snapshot can launch the fleet's nodes. `pnpm release:recorder build` creates the
+snapshot can launch the fleet's nodes. the Release workflow creates the
 builder at the fleet size and raises only its CPU and memory to the configured
 builder size, because a region may offer no larger size with the fleet's disk:
 
@@ -220,85 +220,11 @@ entire VM filesystem. Cloud-init supplies that exact value as
 manifest and every listed file before it generates a node key or contacts the
 issuer.
 
-The manifest also attests the baked bootstrap TLS server name and CA SHA-256.
-Copy `/opt/chalk-recorder/image-manifest.json` off the image builder alongside
-the printed digest. For each Capture and Render pool, run:
-
-```bash
-images/verify-bootstrap-name.py \
-  --manifest <local-manifest-path> \
-  --image-digest <printed-image-manifest-digest> \
-  --bootstrap-endpoint <fleet-bootstrap-endpoint>
-```
-
-It fails on a digest or endpoint-host mismatch and prints two bounded
-`CHALK_RECORDER_FLEET_*` assignments. Put those assignments in that pool's
-existing `recorder/capture.env` or `recorder/render.env` runtime input, with
-the same digest in `CHALK_RECORDER_FLEET_IMAGE_DIGEST`. Nothing is required
-from the publisher for the next release: when both claim inputs are absent,
-controller startup logs one warning and continues. Adding
-both assignments enables strict validation: incomplete or stale claims, or a
-baked name differing from the endpoint host, reject startup before
-reconciliation. The worker independently compares its
-actual baked name and CA with the attested manifest before contacting the
-issuer. No new runtime mount or SSM parameter is needed.
-
-Before snapshotting, stop any worker and run `sudo images/cpu/seal.sh` from this
-directory. It removes bootstrap/runtime identity files, operator authorized
-keys, SSH host keys, cloud-init state, machine identity, histories, journals,
-and temporary build material. Shut down the builder, create the immutable
-snapshot, and configure both controllers with its numeric image ID and the
-printed manifest digest. The first boot regenerates host/machine identity; the
-external reconciler's cloud-init runs the one-time bootstrap and starts only the
-role named by the fenced pool release.
-
-Each sealed render image composes the `recording_presentation.v1` timeline
-natively with Node and FFmpeg. The capture service uses the same credential
-delivery path. A renewal timer derives its lead time as one third of each issued
-certificate lifetime, atomically replaces the leaf, and both workers swap to a
-fresh HTTP connection pool on the next control request without stopping an
-active attempt.
-
-### Deferred Export compatibility and release order
-
-The database constrains both presentation baselines and finalized presentations
-to `recording_presentation.v1`. The native compositor reads that version for
-all stored Recordings, including existing digest-bearing profiles. New baselines
-and finalized presentations omit the retired `uiBuildSha256`; native Render does
-not select or install a UI build. The API no longer reads
-`CHALK_RECORDING_UI_BUILD_SHA256`, and managed-runtime preflight does not require
-it. No database column or old presentation is rewritten.
-
-Rollback targets must support digest-free v1 profiles (#113 or later). API and
-Render releases predating that cutover require the old digest and cannot process
-new profiles. Rolling back to a browser image also requires that image's retained
-UI build. Remove any obsolete profile storage only in a later migration.
-
-Capture bundles are private R2 objects under
-`tenants/<tenant>/recordings/<recording>/capture/...`. They are deleted by the
-Recording source cleanup queue after the Episode's Recording retention window
-(30 days by default), measured from Capture completion or terminal failure.
-Failed Captures and their presentation objects are cleaned up through the same
-queue, leaving that window for manual recovery. These objects, other retained
-Recording objects under `tenants/<tenant>/recordings/...`, and transcripts under
-`tenants/<tenant>/transcripts/...` do not match the `temporary/` lifecycle rule.
-Incomplete
-multipart uploads are eligible for abort after seven days. Previously issued
-allocation keys under `recordings/...` remain readable for replay compatibility,
-but are outside the `temporary/` lifecycle rule and require separate cleanup
-after their processing window. The AWS KMS key is in Singapore, rotates
-automatically, and permits data-key
-generation/decryption only to the control-plane role when the authenticated
-context contains the fixed environment, tenant, Episode, recording,
-recording-job, bundle-schema, capture-epoch, and recorder-envelope-digest keys.
-Workers receive neither KMS credentials nor reusable R2 or DigitalOcean
-credentials.
-
-KMS context cutover: the control-plane producer must emit `chalk.episode`
-before this IaC revision is applied. Existing ciphertext encrypted with
-`chalk.session` requires retained old-policy access through a separately
-coordinated transition and rollback plan; a blind apply will deny those
-operations.
+Portable v2 images do not contain an environment's hostname or CA. Release
+provides the selected environment's public bootstrap trust through cloud-init.
+The image manifest still attests the worker binaries and installed files.
+Promote selects the same snapshot IDs; it does not rebuild for production.
+See [managed releases](../../docs/managed-release.md) for deployment and rollback.
 
 ## Production KMS context cutover
 

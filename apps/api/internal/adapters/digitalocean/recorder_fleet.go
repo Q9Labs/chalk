@@ -3,6 +3,8 @@ package digitalocean
 import (
 	"bytes"
 	"context"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -433,7 +435,19 @@ func renderRecorderCloudInit(request recorderfleet.EnsureNodeRequest) (string, e
 		"CHALK_RECORDER_GPU=" + quoteEnv(strconv.FormatBool(request.Release.GPU)),
 		"CHALK_RECORDER_BOOTSTRAP_ASSERTION_SOURCE=" + quoteEnv("external-reconciler"),
 	}
-	return "#cloud-config\nwrite_files:\n  - path: /etc/chalk-recorder/bootstrap.env\n    permissions: \"0400\"\n    owner: root:root\n    content: |\n      " + strings.Join(values, "\n      ") + "\nruncmd:\n  - set -e\n  - [ \"/usr/local/sbin/chalk-recorder-bootstrap\", \"--one-time\", \"--require-signed-assertion\", \"--require-droplet-inventory-match\", \"--require-boot-generation\", \"--env-file\", \"/etc/chalk-recorder/bootstrap.env\" ]\n  - [ \"/bin/systemctl\", \"enable\", \"--now\", \"" + workerUnit + "\", \"chalk-recorder-renew.timer\" ]\n  - [ \"/usr/bin/rm\", \"-f\", \"/etc/chalk-recorder/bootstrap.env\" ]\n", nil
+	trust := ""
+	configureTrust := ""
+	if request.Release.BootstrapCABase64 != "" {
+		ca, err := base64.StdEncoding.DecodeString(request.Release.BootstrapCABase64)
+		roots := x509.NewCertPool()
+		if err != nil || !roots.AppendCertsFromPEM(ca) {
+			return "", recorderfleet.ErrInvalidConfig
+		}
+		endpoint, _ := url.Parse(request.Release.BootstrapEndpoint)
+		trust = "  - path: /etc/chalk-recorder/bootstrap-ca.pem\n    permissions: \"0444\"\n    owner: root:root\n    encoding: b64\n    content: " + request.Release.BootstrapCABase64 + "\n"
+		configureTrust = "  - [ \"/usr/bin/sed\", \"-i\", \"s/^CHALK_RECORDER_BOOTSTRAP_SERVER_NAME=.*/CHALK_RECORDER_BOOTSTRAP_SERVER_NAME=" + endpoint.Hostname() + "/\", \"/etc/chalk-recorder/image.env\" ]\n"
+	}
+	return "#cloud-config\nwrite_files:\n  - path: /etc/chalk-recorder/bootstrap.env\n    permissions: \"0400\"\n    owner: root:root\n    content: |\n      " + strings.Join(values, "\n      ") + "\n" + trust + "runcmd:\n  - set -e\n" + configureTrust + "  - [ \"/usr/local/sbin/chalk-recorder-bootstrap\", \"--one-time\", \"--require-signed-assertion\", \"--require-droplet-inventory-match\", \"--require-boot-generation\", \"--env-file\", \"/etc/chalk-recorder/bootstrap.env\" ]\n  - [ \"/bin/systemctl\", \"enable\", \"--now\", \"" + workerUnit + "\", \"chalk-recorder-renew.timer\" ]\n  - [ \"/usr/bin/rm\", \"-f\", \"/etc/chalk-recorder/bootstrap.env\" ]\n", nil
 }
 
 func quoteEnv(value string) string { return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'" }

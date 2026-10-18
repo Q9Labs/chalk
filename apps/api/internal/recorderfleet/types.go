@@ -124,6 +124,7 @@ type ReleaseSpec struct {
 	Size              string `json:"size"`
 	FirewallID        string `json:"firewall_id"`
 	BootstrapEndpoint string `json:"bootstrap_endpoint"`
+	BootstrapCABase64 string `json:"bootstrap_ca_base64,omitempty"`
 	GPU               bool   `json:"gpu"`
 }
 

@@ -6,7 +6,7 @@ import json
 import re
 from pathlib import Path
 
-PHASES = ("plan", "build", "qualify", "snapshot", "publish-pins", "deploy", "verify")
+PHASES = ("plan", "build", "snapshot", "inspect")
 PIN_KEYS = {"CHALK_RECORDER_FLEET_" + key for key in ("IMAGE_ID", "RELEASE_ID", "IMAGE_DIGEST")}
 
 

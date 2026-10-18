@@ -14,7 +14,7 @@ Use `nightly` as the deployment identity. Sync still builds with `MIX_ENV=prod`.
 | Sync               | `https://nightly-sync.chalkmeet.com`, issuer `https://nightly-api.chalkmeet.com`, audience `chalk-nightly-sync`, instance `chalk-nightly-sync-1`. |
 | Redis              | Host-local `redis://redis:6379/0`, no public port or persistence.                                                                                 |
 | Database           | New empty `chalk-nightly` database, `main` branch, Postgres 18, separate API, direct Sync and direct migrator roles.                              |
-| Recorder           | DigitalOcean team `Chalk Nightly`, project `Chalk Nightly Recording`, owner tag `chalk-nightly-recorder-owner`.                                   |
+| Recorder           | Shared DigitalOcean team via `collabez`, project `Chalk Nightly Recording`, owner tag `chalk-nightly-recorder-owner`.                                   |
 | Capture and render | BLR1 `c-2` capture and CPU `c-8` render, one node and one slot per pool, no spare or reservations.                                                |
 | Recorder TLS       | `nightly-recording-control.chalkmeet.com`, worker control port 8443, issuer port 8444.                                                            |
 | Storage            | Private R2 `chalk-recorder-nightly`, separate credentials and Singapore recording KEK.                                                            |
@@ -22,7 +22,7 @@ Use `nightly` as the deployment identity. Sync still builds with `MIX_ENV=prod`.
 | Scheduler          | `chalk-nightly-transcription-reconcile` in group `chalk-nightly`, initially disabled.                                                             |
 | Release metadata   | `/chalk/nightly/release/recorder.json`, with explicit nightly host, DO context and state coordinates.                                             |
 | Uptime             | `wrangler.nightly.toml`, separate Worker secrets and explicit nightly API and Sync targets.                                                       |
-| External services  | Separate SFU application, tunnel, Axiom datasets and tokens, Resend key and sender, Google OAuth client.                                          |
+| External services  | Separate SFU application, tunnel, Axiom datasets and tokens, and Google OAuth client; no email sender.                                          |
 
 The controller's existing [runtime input contract](../managed-episode/contracts/runtime-inputs.json)
 is the exact ID-to-SSM-suffix map. Prefix every suffix with
@@ -33,9 +33,11 @@ SPIFFE identities, but never share a production signing key or trust root.
 
 Start from the [API example](../managed-episode/env/api.nightly.env.example),
 [Sync example](../managed-episode/env/sync.nightly.env.example) and recorder examples
-in `env/`. Supply all placeholders privately. Recorder release metadata must select doctl context `chalk-nightly`, scoped to the dedicated team. The host controller injects release
-identities and mounted certificate paths. Use only the dedicated DO team's tokens,
-project ID, VPC UUID, firewall IDs and qualified image pins.
+in `env/`. Supply all placeholders privately. Recorder release metadata selects the existing `collabez` context in the shared team.
+The host controller injects release identities and mounted certificate paths.
+Nightly keeps its own project, VPC UUID, firewall IDs, fleet tags and certificates.
+Nightly and production select the same qualified image IDs; boot-time configuration
+supplies each environment's own issuer CA and server name.
 
 ## Host bootstrap and memory
 
@@ -82,22 +84,17 @@ acceptance and a qualified corpus digest before the module can plan.
 
 ## Transcription caller
 
-Copy `transcription/backend.hcl.example` to a private file and replace its account
-placeholder with the approved nightly state bucket. Initialize the caller with
-`tofu -chdir=infrastructure/nightly/transcription init -backend-config=/private/backend.hcl`.
-The backend has no production default. Its fixed key is
-`transcription/terraform.tfstate`, with S3 locking and encryption enabled.
+Release builds and qualifies a dispatcher ZIP when its inputs changed or nightly
+has no complete dispatcher installation. It initializes this caller using the
+nightly state bucket, imports the two provisioned IAM roles if absent from state,
+and applies a non-destructive first-install plan. A retry resumes partial state.
+The module references the provisioned `chalk-nightly` scheduler group.
 
-Supply `release_id`, `release_manifest_digest`, `config_digest`, `artifact_s3_key`,
-`artifact_s3_object_version`, `artifact_sha256`, `artifact_sha256_base64`,
-`deepinfra_corpus_digest`, `privacy_gate_accepted` and, when needed,
-`ssm_kms_key_arns` through private inputs. The caller derives nightly artifact and
-SSM names from the authenticated account. It creates no bucket, secret or Scheduler
-group. Provisioning owns `chalk-nightly` outside this dispatcher state; the caller
-and release rebinder reference that group by name.
-Keep `scheduler_state=DISABLED` until the API release, workload secret and signed
-control proof agree. Normal Release deployment rebinds the existing dispatcher
-through the same scoped recorder metadata as production.
+After the backend is healthy, Release deploys the exact versioned ZIP and enables
+the reconciler before the signed recorder boot and transcript proof. Promote
+copies the same ZIP bytes to production without building them again. Normal
+updates permit only code, release binding metadata and scheduler state changes.
+The nightly cron remains disabled until the lead authorizes the first cut.
 
 Set recorder policy inputs `environment=nightly`, `staging_evidence_digest`,
 `ready_spare=0`, zero capture reservations and `render_desired_nodes=0`.

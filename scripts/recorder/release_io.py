@@ -58,7 +58,7 @@ class Provider:
         read_only = tuple(arguments[:3]) in DO_READS
         if read_only:
             self.reads.append("do:" + ":".join(arguments[:3]))
-        return json.loads(self.command(["doctl", "--context", self.context, *map(str, arguments), "--output", "json"],
+        return json.loads(self.command(["doctl", *([] if os.environ.get("DIGITALOCEAN_ACCESS_TOKEN") else ["--context", self.context]), *map(str, arguments), "--output", "json"],
                                        timeout=timeout, read_only=read_only) or "null")
 
     def parameter(self, name):

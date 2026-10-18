@@ -104,8 +104,8 @@ class Services:
         self.profile = os.environ.get("CHALK_BOOT_CHECK_AWS_PROFILE", os.environ.get("AWS_PROFILE", ""))
         self.region = os.environ.get("CHALK_BOOT_CHECK_AWS_REGION", os.environ.get("AWS_REGION", ""))
         self.context = os.environ.get("CHALK_BOOT_CHECK_DO_CONTEXT", "")
-        require(self.profile and self.region and self.context, "configure BOOT_CHECK AWS profile/region and DigitalOcean context")
-        self.token = command(["doctl", "--context", self.context, "auth", "token"]).strip()
+        require(self.region and self.context, "configure BOOT_CHECK AWS region and DigitalOcean context")
+        self.token = os.environ.get("DIGITALOCEAN_ACCESS_TOKEN") or command(["doctl", "--context", self.context, "auth", "token"]).strip()
         require(self.token, "DigitalOcean context has no token")
         self.instance = os.environ.get("CHALK_BOOT_CHECK_INSTANCE_ID", "")
         self.http = urllib.request.build_opener(NoRedirect())
@@ -128,7 +128,7 @@ class Services:
             raise RuntimeError(f"DigitalOcean {method} failed HTTP {error.code}; payload suppressed") from None
 
     def aws(self, service, operation, *args, timeout=60):
-        raw = command(["aws", "--profile", self.profile, "--region", self.region, service, operation,
+        raw = command(["aws", *(["--profile", self.profile] if self.profile else []), "--region", self.region, service, operation,
                        *map(str, args), "--output", "json"], timeout=timeout)
         return json.loads(raw) if raw.strip() else {}
 
@@ -464,7 +464,7 @@ def run(request_path, receipt_path):
             public = services.aws("s3api", "get-public-access-block", "--bucket", bucket)["PublicAccessBlockConfiguration"]
             require(all(public.get(k) for k in ("BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets")), "guest evidence bucket must block public access")
             services.aws("s3api", "get-bucket-encryption", "--bucket", bucket)
-            credentials = json.loads(command(["aws", "--profile", services.profile, "configure", "export-credentials", "--format", "process"]))
+            credentials = json.loads(command(["aws", *(["--profile", services.profile] if services.profile else []), "configure", "export-credentials", "--format", "process"]))
             if credentials.get("Expiration"):
                 require(datetime.fromisoformat(credentials["Expiration"].replace("Z", "+00:00")).timestamp() > started + hard_seconds, "upload credentials expire before diagnostic deadline")
             key = "bootdiag/" + name + "/guest.json"
@@ -501,7 +501,7 @@ def run(request_path, receipt_path):
                             "owner_tag": live["OWNER_TAG"], "boot_generation": generation, "required_tags": tags,
                             "release": {"release_id": request["release_id"], "image_id": request["image_id"], "image_digest": request["image_digest"],
                                         "region": request["region"], "size": request["size"], "firewall_id": created["id"],
-                                        "bootstrap_endpoint": live["BOOTSTRAP_ENDPOINT"], "gpu": False}}}
+                                        "bootstrap_endpoint": live["BOOTSTRAP_ENDPOINT"], "bootstrap_ca_base64": live["BOOTSTRAP_CA_BASE64"], "gpu": False}}}
         if evidence_command:
             base["evidence_boot_command"] = evidence_command
         all_firewalls = services.do("GET", "/firewalls?per_page=200")["firewalls"]
