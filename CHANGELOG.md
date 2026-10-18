@@ -30,9 +30,7 @@
 
 ### Removed (React Native)
 
-- Removed the React Native `Chalk` public export.
 - Removed the React Native `ChalkFeatures` public export.
-- Removed the React Native `ChalkProps` public export.
 - Removed the React Native `ChalkTheme` public export.
 - Removed the React Native `ChalkThemeTokens` public export.
 - Removed the React Native `SpaceLayout` public export.
