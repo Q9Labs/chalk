@@ -2,6 +2,7 @@ import { setStringAsync } from "expo-clipboard";
 import type { RefObject } from "react";
 import { Platform, Pressable, Share, StyleSheet, View } from "react-native";
 import Animated from "react-native-reanimated";
+import { useDeviceLayout } from "../frame/device-layout";
 import { usePreferences } from "../frame/preferences";
 import { Icon } from "../icons/Icon";
 import { usePressAnimation } from "../motion/press";
@@ -25,6 +26,8 @@ export type CallDetailsSheetProps = {
   readonly returnFocusRef?: RefObject<View | null>;
 };
 
+const DETAILS_TOP = 58;
+
 const SCHEMES = [
   { value: "dark", label: "Dark", testID: "details.appearance.dark" },
   { value: "light", label: "Light", testID: "details.appearance.light" },
@@ -36,8 +39,11 @@ const SCHEMES = [
  */
 export function CallDetailsSheet({ open, onClose, callName, inviteLink, returnFocusRef }: CallDetailsSheetProps): React.JSX.Element {
   const preferences = usePreferences();
+  const layout = useDeviceLayout();
+  // `.dev .infop` keeps its top 58 pt under the safe area on a phone too, so the sheet runs from there to the bottom edge.
+  const heightRatio = (layout.height - layout.insets.top - DETAILS_TOP) / layout.height;
   return (
-    <BottomSheet accessibilityLabel={callName} inset={14} onClose={onClose} open={open} returnFocusRef={returnFocusRef} testID="sheet.details">
+    <BottomSheet accessibilityLabel={callName} heightRatio={heightRatio} inset={14} onClose={onClose} open={open} returnFocusRef={returnFocusRef} testID="sheet.details">
       <View style={styles.heading}>
         <ChalkText accessibilityRole="header" numberOfLines={1} style={styles.title} variant="cardTitle">
           {callName}
