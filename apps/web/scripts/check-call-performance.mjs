@@ -7,6 +7,7 @@ import { cpus, loadavg, platform, arch } from "node:os";
 import { parseArgs } from "node:util";
 import { chromium } from "playwright";
 import { serveBuild } from "./call-performance-server.mjs";
+import { installVideoQualityObserver, videoCounterDelta } from "./call-video-quality.mjs";
 import { checkLeaks, LEAK_JOURNEYS } from "./call-leak-check.mjs";
 import { measureRouteBundle } from "./call-route-bundle.mjs";
 import { validateBudgets, summarize, percentile, budgetFailures, trustedInteractionMs, METRICS, BUNDLE_METRICS } from "./call-performance-metrics.mjs";
@@ -164,10 +165,19 @@ try {
 if (report.errors.length || report.selfTest?.detected === false || (!values["record-baseline"] && report.failures.length)) process.exitCode = 1;
 
 function installObservers() {
-  const data = { frames: [], tasks: [], events: [], start: performance.now(), last: null, clicks: 0, trustedInputs: [], layoutShift: 0 };
+  const data = { frames: [], tasks: [], events: [], start: performance.now(), last: null, clicks: 0, trustedInputs: [], layoutShift: 0, layoutShifts: [] };
   window.__callPerf = data;
   new PerformanceObserver((list) => {
-    for (const entry of list.getEntries()) if (entry.startTime >= data.start) data.layoutShift += entry.value;
+    for (const entry of list.getEntries())
+      if (entry.startTime >= data.start) {
+        data.layoutShift += entry.value;
+        data.layoutShifts.push({
+          value: entry.value,
+          startTime: entry.startTime,
+          hadRecentInput: entry.hadRecentInput,
+          sources: (entry.sources ?? []).map((source) => ({ tag: source.node?.nodeName, class: source.node?.getAttribute?.("class")?.slice(0, 160), previousRect: source.previousRect.toJSON(), currentRect: source.currentRect.toJSON() })),
+        });
+      }
   }).observe({ type: "layout-shift", buffered: true });
   const frame = (at) => {
     if (data.last !== null) data.frames.push(at - data.last);
@@ -202,6 +212,7 @@ async function newPage(device) {
   await cdp.send("Network.enable");
   await cdp.send("Network.setCacheDisabled", { cacheDisabled: true });
   await page.addInitScript(installObservers);
+  await page.addInitScript({ content: `(${installVideoQualityObserver.toString()})(${videoCounterDelta.toString()})` });
   return { context, page, cdp };
 }
 async function calibrate(device) {
@@ -245,10 +256,10 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
     if (pauseVideo) await page.evaluate(() => document.querySelectorAll("video").forEach((video) => video.pause()));
     if (scenario.id !== "first-load") {
       await page.waitForTimeout(1000);
-      await page.evaluate(() => Object.assign(window.__callPerf, { frames: [], tasks: [], events: [], start: performance.now(), last: null, clicks: 0, trustedInputs: [], layoutShift: 0 }));
+      await page.evaluate(() => Object.assign(window.__callPerf, { frames: [], tasks: [], events: [], start: performance.now(), last: null, clicks: 0, trustedInputs: [], layoutShift: 0, layoutShifts: [] }));
     }
     await page.evaluate(() => {
-      window.__videoQualityStart = new WeakMap([...document.querySelectorAll("video")].map((video) => [video, video.getVideoPlaybackQuality()]));
+      window.__callVideoQuality.reset();
     });
     if (inject)
       await page.evaluate(
@@ -303,16 +314,7 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
     await page.waitForTimeout(budgets.sampleMs);
     const data = await page.evaluate(() => ({
       ...window.__callPerf,
-      videoQuality: [...document.querySelectorAll("video")]
-        .filter((video) => {
-          const box = video.getBoundingClientRect();
-          return box.width > 0 && box.height > 0 && box.right > 0 && box.left < innerWidth && box.bottom > 0 && box.top < innerHeight;
-        })
-        .map((video) => {
-          const start = window.__videoQualityStart.get(video);
-          const end = video.getVideoPlaybackQuality();
-          return { total: end.totalVideoFrames - (start?.totalVideoFrames ?? 0), dropped: end.droppedVideoFrames - (start?.droppedVideoFrames ?? 0) };
-        }),
+      videoQuality: window.__callVideoQuality.snapshot(),
       supported: PerformanceObserver.supportedEntryTypes,
       durationMs: performance.now() - window.__callPerf.start,
       videos: [...document.querySelectorAll("video")].map((video) => ({ paused: video.paused, readyState: video.readyState, frames: video.getVideoPlaybackQuality().totalVideoFrames, droppedFrames: video.getVideoPlaybackQuality().droppedVideoFrames })),
@@ -340,7 +342,9 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
     const missed = data.frames.reduce((sum, ms) => sum + Math.max(0, Math.round(ms / (1000 / 60)) - 1), 0);
     return {
       layoutShift: data.layoutShift,
-      videoDroppedFramePercent: data.videoQuality.reduce((sum, quality) => sum + quality.total, 0) ? (100 * data.videoQuality.reduce((sum, quality) => sum + quality.dropped, 0)) / data.videoQuality.reduce((sum, quality) => sum + quality.total, 0) : 0,
+      layoutShifts: data.layoutShifts,
+      videoDroppedFramePercent: data.videoQuality.frames ? (100 * data.videoQuality.dropped) / data.videoQuality.frames : data.videoQuality.dropped ? 100 : 0,
+      videoQuality: data.videoQuality,
       frameP95Ms: data.frames.length ? percentile(data.frames, 0.95) : null,
       droppedFramePercent: data.frames.length ? (100 * missed) / (missed + data.frames.length) : null,
       longTasks: data.tasks.length,

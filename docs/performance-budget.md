@@ -353,4 +353,10 @@ Timing scenarios also record `videoDroppedFramePercent` from visible videos'
 includes recent-input entries deliberately: a panel-induced jump is still a jump.
 Transform motion does not contribute. A zero video denominator means no decoded
 frames were measured, not perfect playback; the report retains frame counts.
-The provisional limits are 5% decoder drops and 0.05 cumulative shift per window.
+Playback is sampled at 4 Hz with weak per-element state. Decoder counters can
+reset while the same video element survives a panel change; reset generations
+contribute their new counts rather than negative deltas. The report retains
+frame/drop counts, observed resets and sample counts. Visibility is sampled,
+not continuous; multiple resets between samples can lose frames. Layout-shift
+entries retain source rectangles and recent-input flags for diagnosis.
+The limits are 5% decoder drops and 0.05 cumulative shift per window.

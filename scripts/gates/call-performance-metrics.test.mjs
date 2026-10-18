@@ -68,3 +68,10 @@ test("a generous startup heap allowance does not disable the late-cycle guard", 
   const samples = Array.from({ length: 21 }, (_, index) => ({ heapMiB: index < 11 ? 0 : (index - 10) * 0.06 }));
   assert.deepEqual(leakFailures(samples, { metrics: { heapMiB: { perCycle: 0.1, allowance: 3, tailPerCycle: 0.05 } } }), ["heapMiB: late slope 0.0600 > 0.05/cycle"]);
 });
+
+test("decoder restarts contribute a new generation instead of negative playback deltas", async () => {
+  const { videoCounterDelta } = await import("../../apps/web/scripts/call-video-quality.mjs");
+  const previous = { totalVideoFrames: 100, droppedVideoFrames: 3 };
+  assert.deepEqual(videoCounterDelta(previous, { totalVideoFrames: 110, droppedVideoFrames: 4 }), { frames: 10, dropped: 1, resets: 0 });
+  assert.deepEqual(videoCounterDelta(previous, { totalVideoFrames: 5, droppedVideoFrames: 1 }), { frames: 5, dropped: 1, resets: 1 });
+});
