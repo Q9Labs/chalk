@@ -35,12 +35,21 @@ describe("allowed websites boundary", () => {
       origins: ["https://chalkmeet.com", "https://example.test", "http://localhost:80", "http://localhost:3000"],
     });
   });
-  it.each(["http://example.test:8080", "http://localhost", "http://127.0.0.1:3000", "http://localhost:65536", "https://user@example.test", "https://example.test/path", "https://example.test?query", "https://example.test#fragment", "https://example.test/\n"])(
-    "rejects non-origin or disallowed website %s",
-    (origin) => {
-      expect(developerAction.safeParse({ action: "set-allowed-websites", origins: [origin] }).success).toBe(false);
-    },
-  );
+  it.each([
+    "http://example.test:8080",
+    "http://localhost",
+    "http://127.0.0.1:3000",
+    "http://localhost:65536",
+    "https://user@example.test",
+    "https://example.test/path",
+    String.raw`https://example.test\path`,
+    String.raw`https://example.test\\`,
+    "https://example.test?query",
+    "https://example.test#fragment",
+    "https://example.test/\n",
+  ])("rejects non-origin or disallowed website %s", (origin) => {
+    expect(developerAction.safeParse({ action: "set-allowed-websites", origins: [origin] }).success).toBe(false);
+  });
   it("reserves one of the API's 32 origins for chalkmeet.com", () => {
     const origins = Array.from({ length: 32 }, (_, index) => `https://site${index}.test`);
     expect(developerAction.safeParse({ action: "set-allowed-websites", origins }).success).toBe(false);

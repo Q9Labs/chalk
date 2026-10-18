@@ -59,7 +59,7 @@ const websiteOrigin = z
   .refine((value) => {
     try {
       const url = new URL(value);
-      return !url.username && !url.password && ((url.protocol === "https:" && /^https:\/\/[^/?#\s]+$/.test(value)) || (url.protocol === "http:" && url.hostname === "localhost" && /^http:\/\/localhost:[0-9]+$/.test(value)));
+      return !value.includes("\\") && !url.username && !url.password && url.pathname === "/" && !url.search && !url.hash && ((url.protocol === "https:" && /^https:\/\/[^/?#\s]+$/.test(value)) || (url.protocol === "http:" && url.hostname === "localhost" && /^http:\/\/localhost:[0-9]+$/.test(value)));
     } catch {
       return false;
     }
