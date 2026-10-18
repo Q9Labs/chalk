@@ -5,6 +5,23 @@ function isScreenCode(code: ScenarioCode): code is keyof typeof screens {
   return code in screens;
 }
 
+/** Matches the states lane's dev-only CallFrame seam; joining/reconnecting use connection.status. */
+export function callStateForScreen(screen: string): { callState?: "knocking" | "refused" | "hold" | "full" | "left" | "ended" | "failed" | "removed" } {
+  switch (screen) {
+    case "knocking":
+    case "refused":
+    case "hold":
+    case "full":
+    case "left":
+    case "ended":
+    case "failed":
+    case "removed":
+      return { callState: screen };
+    default:
+      return {};
+  }
+}
+
 /** UI-only states remain explicit: SpaceSnapshot has no name/knock/hold variants. */
 export function scenarioForCodes(codes: readonly ScenarioCode[]) {
   const screenCode = codes.findLast(isScreenCode);

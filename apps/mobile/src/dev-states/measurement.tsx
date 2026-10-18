@@ -1,6 +1,6 @@
 import type { MeasurementRegistry } from "@q9labsai/chalk-react-native/dev";
 import { useCallback, useEffect, useRef, type RefObject } from "react";
-import { Dimensions, PixelRatio, Platform, StyleSheet, View, type TextStyle, type ViewProps, type ViewStyle } from "react-native";
+import { Dimensions, KeyboardAvoidingView, PixelRatio, Platform, StyleSheet, View, type KeyboardAvoidingViewProps, type TextStyle, type ViewProps, type ViewStyle } from "react-native";
 
 type Measurement = { frame: { x: number; y: number; width: number; height: number }; style: ReturnType<typeof StyleSheet.flatten> };
 const registry = new Map<string, () => Promise<Measurement>>();
@@ -31,7 +31,7 @@ export const registerSDKMeasurement: MeasurementRegistry = (testID, read) => {
   };
 };
 
-function useMeasurement(testID: string, ref: RefObject<View | null>, style: ViewStyle | TextStyle) {
+function useMeasurement(testID: string | undefined, ref: RefObject<Pick<View, "measureInWindow"> | null>, style: ViewStyle | TextStyle) {
   const measure = useCallback(
     () =>
       new Promise<Measurement>((resolve, reject) => {
@@ -44,18 +44,25 @@ function useMeasurement(testID: string, ref: RefObject<View | null>, style: View
     [style, testID],
   );
   useEffect(() => {
+    if (!testID) return;
     registry.set(testID, measure);
     return () => {
-      registry.delete(testID);
+      if (registry.get(testID) === measure) registry.delete(testID);
     };
   }, [testID, measure]);
 }
 
 /** Declared props (expanded shorthands), not computed/inherited native styles. */
-export function MeasuredView({ testID, style, ...props }: ViewProps & { testID: string }) {
+export function MeasuredView({ testID, style, ...props }: ViewProps) {
   const ref = useRef<View>(null);
   useMeasurement(testID, ref, StyleSheet.flatten(style) ?? {});
   return <View {...props} testID={testID} style={style} ref={ref} collapsable={false} />;
+}
+
+export function MeasuredKeyboardAvoidingView({ testID, style, ...props }: KeyboardAvoidingViewProps) {
+  const ref = useRef<KeyboardAvoidingView>(null);
+  useMeasurement(testID, ref, StyleSheet.flatten(style) ?? {});
+  return <KeyboardAvoidingView {...props} testID={testID} style={style} ref={ref} />;
 }
 
 async function readMeasurement(id: string) {
@@ -76,13 +83,18 @@ async function readMeasurement(id: string) {
   }
 }
 
-export async function sendMeasurements(endpoint: string, ids: string[], codes: string) {
+export async function sendMeasurements(endpoint: string, ids: string[], codes: string, surface: "app" | "sdk" = "sdk") {
   const url = new URL(endpoint);
   if (url.protocol !== "http:" || !["localhost", "127.0.0.1", "10.0.2.2"].includes(url.hostname)) throw new Error("Measurement endpoint must be a local HTTP host");
-  const deadline = Date.now() + 10000;
-  while (!registry.has("frame.screen") && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100));
+  // Registration alone doesn't mean Android's native view has mounted after a cold reload.
+  const deadline = Date.now() + 60000;
+  let screen = await readMeasurement("frame.screen");
+  while (("error" in screen || screen.frame.width <= 0 || screen.frame.height <= 0) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    screen = await readMeasurement("frame.screen");
+  }
   const measurements = Object.fromEntries(await Promise.all(ids.map(async (id) => [id, await readMeasurement(id)])));
   const root = await readMeasurement("harness.ready");
-  const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ codes, platform: Platform.OS, screen: Dimensions.get("screen"), scale: PixelRatio.get(), root, measurements }) });
+  const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ codes, surface, platform: Platform.OS, screen: Dimensions.get("screen"), scale: PixelRatio.get(), root, measurements }) });
   if (!response.ok) throw new Error(`Parity upload failed: ${response.status}`);
 }

@@ -5,11 +5,16 @@ import { test } from "node:test";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { parseCodes } = require("../src/dev-states/codes.ts");
-const { scenarioForCodes } = require("../src/dev-states/scenario.ts");
+const { scenarioForCodes, callStateForScreen } = require("../src/dev-states/scenario.ts");
 const { createFixtureClient, snapshotForCodes } = require("../src/dev-states/fixtures.ts");
 
 test("unknown codes fail instead of silently changing the scenario", () => {
   assert.throws(() => parseCodes("D1,P3,TYPO"), /Unknown mockup code: TYPO/);
+});
+test("states lane codes select their SDK call-state fixture", () => {
+  for (const [code, screen] of Object.entries({ T3: "knocking", T4: "refused", T6: "hold", A3: "left", A4: "ended", A5: "failed", A6: "removed", A7: "full" })) {
+    assert.deepEqual(callStateForScreen(scenarioForCodes(parseCodes(code)).screen), { callState: screen });
+  }
 });
 test("the mockup people counts and terminal states project into the client", () => {
   for (const [code, count] of [

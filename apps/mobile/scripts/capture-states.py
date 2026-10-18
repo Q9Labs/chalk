@@ -278,7 +278,7 @@ def remote(args):
             payload = received.pop(codes)
             (out / f'{index}-measurements.json').write_text(json.dumps(payload, indent=2))
             if payload.get('platform') != args.platform or not payload.get('root', {}).get('frame') or not payload.get('measurements', {}).get('frame.screen', {}).get('frame'):
-                raise RuntimeError(f'Native SDK root is not mounted for {state}: {payload}')
+                raise RuntimeError(f'Native {payload.get("surface", "sdk")} root is not mounted for {state}: {payload}; inspect unsupported-state errors and native startup logs')
             expected = [393, 852] if args.platform == 'ios' else [412, 915]
             actual = [payload.get('screen', {}).get('width'), payload.get('screen', {}).get('height')]
             if actual != expected or payload.get('scale') != 3:
@@ -383,9 +383,9 @@ def main():
     for state in args.states:
         _, _, options = state.partition('?')
         for key, value in parse_qsl(options, strict_parsing=True):
-            if (key == 'sheet' and value in ['more', 'people']) or (key == 'menu' and value == 'leave'):
+            if (key == 'sheet' and value in ['more', 'people']) or (key == 'menu' and value == 'leave') or (key == 'app' and value == 'ready'):
                 continue
-            p.error('State query supports only sheet=more|people and menu=leave')
+            p.error('State query supports only sheet=more|people, menu=leave and app=ready')
     if args.remote:
         remote(args)
         return
@@ -412,6 +412,11 @@ def perform_copy(args, dest, host):
             run(['rsync', '-az', '-e', shlex.join(SSH), str(source), host + ':' + dest + '/apps/mobile/src/'])
             run([*SSH, host, shlex.join(['cp', dest + '/apps/mobile/App.tsx', dest + '/apps/mobile/App.product.tsx'])])
             run([*SCP, str(Path(__file__).with_name('capture-entry.tsx.template')), host + ':' + dest + '/apps/mobile/App.tsx'])
+        # One authoritative harness, including fixes made after a lane branched.
+        source = Path(__file__).resolve().parents[1] / 'src/dev-states'
+        run(['rsync', '-az', '-e', shlex.join(SSH), str(source) + '/', host + ':' + dest + '/apps/mobile/src/dev-states/'])
+        run([*SCP, str(Path(__file__).with_name('install-app-fixtures.py')), str(Path(__file__).with_name('app-states.tsx.template')), host + ':' + dest + '/apps/mobile/scripts/'])
+        run([*SSH, host, shlex.join(['python3', dest + '/apps/mobile/scripts/install-app-fixtures.py', dest + '/apps/mobile'])])
     command = ['python3', dest + '/apps/mobile/scripts/capture-states.py', '--remote', dest, '--platform', args.platform, '--port', str(args.port), '--settle', str(args.settle), '--maestro', args.maestro, '--states', *args.states]
     command += ['--emulator-port', str(args.emulator_port)]
     command += ['--android-gpu', args.android_gpu]
