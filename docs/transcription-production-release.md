@@ -46,13 +46,15 @@ those account details do not belong in this repository.
 
 ## Release path
 
-Use [Nightly and Promote](managed-release.md), not a manual ZIP build/upload or
-OpenTofu apply. The pipeline tests and verifies each changed dispatcher build,
-records its SHA256 and versioned S3 identity with the backend release, and deploys
-it after the target API is healthy. First install creates the dispatcher from
-the nightly module and enables reconciliation. Promote copies the exact verified
-ZIP bytes to the production artifact bucket with a new object version, never a
-rebuild. Rollback selects the prior recorded ZIP and image pins.
+Use [Nightly and Promote](managed-release.md) for production releases. Do not
+publish or deploy a ZIP manually or apply OpenTofu directly; those paths bypass
+the workflow's build binding, proof, and rollback guards. The pipeline tests
+and verifies each changed dispatcher build, records its SHA256 and versioned S3
+identity with the backend release, and deploys it after the target API is
+healthy. First install creates the dispatcher from the nightly module and
+enables reconciliation. Promote copies the exact verified ZIP bytes to the
+production artifact bucket with a new object version. Rollback selects the
+prior recorded ZIP and image pins. Never rebuild the ZIP during Promote.
 
 Each environment retains its own module inputs, SSM credential references,
 workload audience, roles, queues and alarms. The release requires the existing

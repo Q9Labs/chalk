@@ -1,23 +1,15 @@
-# Chalk mobile store listing draft
+# Chalk mobile store listing
 
-First-submission draft for Android and iOS (`ai.q9labs.chalk.mobile`). Copy
-centers on joining a Space from an invite link. Reconcile release scope with
+Copy for the Android and iOS listings. Check each claim against
 [tracker.yaml](../tracker.yaml) and the final native build before submission.
 
-## Pre-submission blockers (fix before publishing)
+## Pre-submission checklist
 
-- Verify the published privacy policy URL in the submission environment;
-  the old capability inventory is not current proof that the route is absent.
-- No store screenshots or promo assets exist yet; the redesign mockups are
-  design references, not store captures.
-- The checked-in iOS Info.plist declares Face ID, photo-library, and
-  local-network permission strings that the production Expo config does not
-  supply; inspect the final uploaded archive and drop any that are unused.
-- No standing test-Space invite URL exists for reviewer access; both stores
-  require functional review access, so create one before submission (the
-  TODO markers below).
-- The tracker retains real-device native media as uncertain; verify on
-  hardware before going live.
+- Verify the published privacy-policy URL in the submission environment.
+- Inspect the final archive's permissions and remove declarations the app does
+  not need.
+- Prepare store screenshots and functional reviewer access with an invite link.
+- Verify native media on physical devices before publishing.
 
 ## Title
 
@@ -32,8 +24,7 @@ Live video Spaces from an invite link: chat, reactions, and screen share.
 The Space goes live in two minutes and you're not at your desk. Tap the
 invite link: you're in.
 
-Chalk is made for joining from your phone. No sign-in flow in the app: an
-invite link is your ticket.
+Chalk is made for joining from your phone. Open a Space invite link to enter.
 
 Join in seconds
 
@@ -79,8 +70,8 @@ included.
 The Space goes live in two minutes and you're not at your desk. Tap the
 invite link: you're in.
 
-Chalk is made for joining from your iPhone or iPad. No sign-in flow in the
-app: an invite link is your ticket.
+Chalk is made for joining from your iPhone or iPad. Open a Space invite link
+to enter.
 
 Join in seconds:
 
@@ -109,28 +100,13 @@ Next time someone sends a Chalk link, don't scramble for a laptop. Tap it.
 
 ## Google testing instructions
 
-No account or sign-in flow. Reviewers need an invite link to join a Space.
-TODO: supply a standing test-Space URL created from the Chalk web app. Open
-the link (or paste it in the app), grant camera and microphone at the
-Entrance, and join. Screen share uses Android media projection and prompts
-before capturing.
+Provide a test-Space invite URL. Reviewers can open the link or paste it in
+the app, grant camera and microphone at the Entrance, and join. Screen share
+uses Android media projection and prompts before capturing.
 
 ## Apple review notes
 
-No account or sign-in flow; the app joins a Space via invite links. TODO:
-supply a standing test-Space URL created from the Chalk web app, plus a
-second device as another Participant. Camera and microphone are used only at
-the Entrance and while live; screen sharing uses ReplayKit and is
-user-initiated; the app declares the audio and VoIP background modes for
-live media.
-
-## Claims deliberately avoided (keep it this way)
-
-"Available on Play/App Store" until actually live; Space creation on mobile
-(unless proven in the final release build); whiteboard on mobile; durable
-chat history or file attachments; recording, captions, or transcription in the mobile
-flow; end-to-end encryption (explicitly false); "completely private" or "no
-data collected"; offline use; macOS support; pricing claims ("free forever",
-"no ads"); Participant counts, HD/4K, latency, or reliability guarantees;
-"no account required" as an absolute (say "no sign-in flow in the mobile
-app").
+Provide a test-Space invite URL and a second device as another Participant.
+Reviewers can open the link to join. Camera and microphone are used at the
+Entrance and while live. Screen sharing uses ReplayKit and is user-initiated;
+the app declares the audio and VoIP background modes for live media.
