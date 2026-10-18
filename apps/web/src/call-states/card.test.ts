@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, expect, it } from "vitest";
@@ -41,10 +41,20 @@ afterAll(async () => {
 
 async function journey(run: (page: Page) => Promise<void>, phone = false) {
   const context = await browser.newContext({ viewport: phone ? { width: 390, height: 844 } : { width: 1440, height: 900 }, isMobile: phone, hasTouch: phone });
+  const artifacts = process.env.CARD_ARTIFACTS;
+  const trace = phone && artifacts ? `${artifacts}/phone-focus.zip` : undefined;
+  if (trace && artifacts) {
+    await mkdir(artifacts, { recursive: true });
+    await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
+  }
   try {
     await run(await context.newPage());
   } finally {
-    await context.close();
+    try {
+      if (trace) await context.tracing.stop({ path: trace });
+    } finally {
+      await context.close();
+    }
   }
 }
 
@@ -154,7 +164,14 @@ it(
         await sheet.waitFor();
         for (let index = 0; index < 16; index++) {
           await page.keyboard.press("Tab");
-          await page.waitForFunction(() => document.querySelector('[role="dialog"][data-variant="panel"]')?.contains(document.activeElement), undefined, { timeout: 1500 });
+          const immediate = await sheet.evaluate((element) => ({ inside: element.contains(document.activeElement), active: document.activeElement?.outerHTML.slice(0, 300) }));
+          const began = Date.now();
+          try {
+            await page.waitForFunction(() => document.querySelector('[role="dialog"][data-variant="panel"]')?.contains(document.activeElement), undefined, { timeout: 1500 });
+          } finally {
+            const settled = await sheet.evaluate((element) => ({ inside: element.contains(document.activeElement), active: document.activeElement?.outerHTML.slice(0, 300) }));
+            if (process.env.CARD_ARTIFACTS) await writeFile(`${process.env.CARD_ARTIFACTS}/focus-${scheme}-${index}.json`, JSON.stringify({ scheme, index, immediate, settled, waitMs: Date.now() - began }, null, 2));
+          }
         }
         await capture(page, `phone-people-${scheme}`);
         await page.getByRole("tab", { name: "Chat", exact: true }).click();
