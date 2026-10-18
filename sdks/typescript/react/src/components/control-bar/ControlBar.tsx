@@ -19,6 +19,8 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
   const { buttonsToRender, effectiveAudioInputDevices, effectiveAudioOutputDevices, effectiveVideoInputDevices, showLeave } = useControlBarSurfaceBehavior({ ...props, density: props.density ?? "comfortable", detectDevices: props.detectDevices ?? true });
   const dock = useRef<HTMLDivElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  const [canCaptureDisplay, setCanCaptureDisplay] = useState(false);
+  useEffect(() => setCanCaptureDisplay(typeof navigator.mediaDevices?.getDisplayMedia === "function"), []);
   useEffect(() => {
     const changed = () => setFullscreen(Boolean(document.fullscreenElement));
     document.addEventListener("fullscreenchange", changed);
@@ -111,16 +113,33 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
               secondaryDevices={effectiveAudioOutputDevices}
               selectedSecondaryDeviceId={props.selectedAudioOutput}
               onSecondaryDeviceChange={props.onAudioOutputChange}
+              track={props.microphoneTrack}
+              noiseSuppression={props.noiseSuppression}
+              onNoiseSuppressionChange={props.onNoiseSuppressionChange}
+              onTestSpeaker={props.onTestSpeaker}
               orientation="down"
             />
           }
-          camera={<DevicePopover type="video" isActive={props.isVideoEnabled ?? true} onToggle={props.onToggleVideo ?? (() => {})} devices={effectiveVideoInputDevices} selectedDeviceId={props.selectedVideoInput} onDeviceChange={props.onVideoInputChange ?? (() => {})} orientation="down" />}
+          camera={
+            <DevicePopover
+              type="video"
+              isActive={props.isVideoEnabled ?? true}
+              onToggle={props.onToggleVideo ?? (() => {})}
+              devices={effectiveVideoInputDevices}
+              selectedDeviceId={props.selectedVideoInput}
+              onDeviceChange={props.onVideoInputChange ?? (() => {})}
+              track={props.cameraTrack}
+              mirrored={props.mirrored}
+              onMirrorChange={props.onMirrorChange}
+              orientation="down"
+            />
+          }
         >
           <button type="button" className="chalk-sheet-row" aria-pressed={props.onCallLinkToggle ? (props.callLinkOpen ?? false) : undefined} onClick={props.onCallLinkToggle ?? copyLink}>
             <CallLinkIcon />
             <span>{props.onCallLinkToggle ? linkLabel : "Copy link"}</span>
           </button>
-          {has("screenshare") ? (
+          {has("screenshare") && canCaptureDisplay ? (
             <button type="button" className="chalk-sheet-row" onClick={props.onToggleScreenShare}>
               <Monitor01Icon />
               <span>{props.isScreenSharing ? "Stop sharing" : "Share screen"}</span>

@@ -62,7 +62,9 @@ export function CallDialog({
               <Dialog.Close
                 render={
                   <ChalkIconButton aria-label="Close" size="sm">
-                    ×
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
+                      <path d="m6 6 12 12M6 18 18 6" />
+                    </svg>
                   </ChalkIconButton>
                 }
               />
@@ -103,13 +105,18 @@ export function CallDialog({
               >
                 <label htmlFor="chalk-problem">What went wrong?</label>
                 <textarea id="chalk-problem" required value={text} onChange={(event) => setText(event.target.value)} placeholder="Tell us what happened…" />
-                <label>
+                <label className="chalk-shell-report-check">
                   <input type="checkbox" checked={includeDiagnostics} onChange={(event) => setIncludeDiagnostics(event.target.checked)} /> Include call diagnostics
                 </label>
                 {error ? <p role="alert">{error}</p> : null}
-                <ChalkButton type="submit" disabled={!text.trim() || status === "sending"}>
-                  {status === "sending" ? "Sending…" : "Send report"}
-                </ChalkButton>
+                <div className="chalk-shell-report-actions">
+                  <ChalkButton onClick={onClose} disabled={status === "sending"}>
+                    Cancel
+                  </ChalkButton>
+                  <ChalkButton type="submit" variant="solid" disabled={!text.trim() || status === "sending"}>
+                    {status === "sending" ? "Sending…" : "Send"}
+                  </ChalkButton>
+                </div>
               </form>
             )}
           </Dialog.Popup>
