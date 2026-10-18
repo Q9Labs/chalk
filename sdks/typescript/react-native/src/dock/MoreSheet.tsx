@@ -6,15 +6,17 @@ import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSpaceClient } from "../context/space-client-context";
 import { usePreferences } from "../frame/preferences";
 import { haptics } from "../haptics/haptics";
-import { useCan, useChat, useMedia, useParticipants, useRecording, useSelf } from "../hooks/space-hooks";
+import { useCan, useChat, useParticipants, useRecording, useSelf } from "../hooks/space-hooks";
 import { Icon } from "../icons/Icon";
 import { usePressAnimation } from "../motion/press";
 import { announce } from "../primitives/announce";
 import { BottomSheet } from "../primitives/BottomSheet";
 import { ChalkText } from "../primitives/ChalkText";
+import { SegmentedControl } from "../primitives/SegmentedControl";
 import { SheetGroup, SheetRow } from "../primitives/SheetGroup";
 import { useToasts } from "../primitives/toast/ToastStack";
 import { playSound } from "../sounds/sounds";
+import { useStageView, type StageLayoutChoice } from "../stage/stage-view";
 import { useTheme } from "../theme/theme";
 import { durations, fixed } from "../theme/tokens";
 
@@ -40,7 +42,7 @@ const REACTIONS: readonly (readonly [Reaction, string])[] = [
 
 /**
  * More (`#more`): raise hand and reactions on top, then the call's link, recording for hosts,
- * Chat, People and switching camera. Actions that change the call close the sheet; copying keeps it open.
+ * Chat, People and the stage layout. Actions that change the call close the sheet; copying keeps it open.
  */
 export function MoreSheet({ open, onClose, onOpenPeople, onOpenChat, inviteLink, returnFocusRef }: MoreSheetProps): React.JSX.Element {
   const client = useSpaceClient();
@@ -85,7 +87,7 @@ export function MoreSheet({ open, onClose, onOpenPeople, onOpenChat, inviteLink,
         <RecordingRow onDone={onClose} />
         <ChatRow onPress={onOpenChat} />
         <SheetRow end={<PeopleCount count={people} />} icon="users" label="People" onPress={onOpenPeople} testID="more.people" />
-        <SwitchCameraRow onDone={onClose} />
+        <LayoutRow />
       </SheetGroup>
     </BottomSheet>
   );
@@ -148,6 +150,17 @@ function CopyLinkRow({ link }: { readonly link: string }): React.JSX.Element {
   return <SheetRow icon={copied ? "check" : "copy"} label="Copy link" onPress={() => void copy()} testID="more.copy" />;
 }
 
+const LAYOUTS = [
+  { value: "spotlight", label: "Spotlight", testID: "more.layout.spotlight" },
+  { value: "grid", label: "Grid", testID: "more.layout.grid" },
+] as const;
+
+/** Layout (`#mLay`): Spotlight or Grid for the stage, switched in place without closing the sheet. */
+function LayoutRow(): React.JSX.Element {
+  const { layout, setLayout } = useStageView();
+  return <SheetRow end={<SegmentedControl<StageLayoutChoice> accessibilityLabel="Layout" onChange={setLayout} options={LAYOUTS} testID="more.layout.control" value={layout} />} icon="grid" label="Layout" testID="more.layout" />;
+}
+
 /** Chat, with the accent dot after its name while messages are unread. */
 function ChatRow({ onPress }: { readonly onPress: () => void }): React.JSX.Element {
   const { colors } = useTheme();
@@ -207,26 +220,6 @@ function RecordingRow({ onDone }: { readonly onDone: () => void }): React.JSX.El
       .catch(() => toasts.show({ kind: "error", dismissible: true, message: "Couldn't start recording." }));
   };
   return <SheetRow icon="rec" label={recording ? "Stop recording" : "Start recording"} onPress={toggle} testID="more.recording" />;
-}
-
-/** Switches between the front and back cameras while the camera is on. */
-function SwitchCameraRow({ onDone }: { readonly onDone: () => void }): React.JSX.Element | null {
-  const client = useSpaceClient();
-  const toasts = useToasts();
-  const media = useMedia();
-  const cameras = media.devices.cameras;
-  if (media.local.camera.state !== "enabled" || cameras.length < 2) return null;
-  const index = cameras.findIndex((camera) => camera.deviceId === media.selection.camera);
-  const next = cameras[(index + 1) % cameras.length];
-  if (!next) return null;
-  const flip = () => {
-    onDone();
-    client.media
-      .selectCamera(next.deviceId)
-      .then(() => announce(`Switched to the ${next.label || "other camera"}`))
-      .catch(() => toasts.show({ kind: "error", dismissible: true, message: "Couldn't switch camera." }));
-  };
-  return <SheetRow icon="flip" label="Switch camera" onPress={flip} testID="more.flip" />;
 }
 
 const styles = StyleSheet.create({
