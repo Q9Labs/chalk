@@ -102,6 +102,9 @@ export const fixed = {
   liveRing: "rgba(255,255,255,0.9)",
   liveRingShade: "rgba(0,0,0,0.35)",
   switchKnob: "#FFFFFF",
+  /** QR codes stay black on white in both themes so every camera reads them. */
+  qrLight: "#FFFFFF",
+  qrDark: "#000000",
   shadow: "#000000",
   transparent: "transparent",
   /** The selected segment of a compact segmented control. */
