@@ -123,6 +123,7 @@ export function SpaceView({
   const onCommandError = (failure: ClientFailure | string | null, source?: "microphone" | "camera" | "screen") => {
     setCommandError(failure);
     setCommandSource(source);
+    if (failure && typeof failure !== "string") playSound("error");
   };
   const layout = onLayoutChange ? (controlledLayout ?? uncontrolledLayout) : uncontrolledLayout;
   const feature = (name: keyof SpaceViewFeatures) => features?.[name] !== false;
@@ -148,7 +149,7 @@ export function SpaceView({
     setUncontrolledLayout(nextLayout);
     onLayoutChange?.(nextLayout);
   };
-  useSoundCues(feature("sounds") && soundsEnabled);
+  const playSound = useSoundCues(feature("sounds") && soundsEnabled);
   const prefersReducedMotion = usePrefersReducedMotion();
   const drawer = useDrawerPresence(activePanel, prefersReducedMotion ? 0 : DRAWER_EXIT_MS);
   const runCommand = useCallback(async (command: () => Promise<unknown>) => {
