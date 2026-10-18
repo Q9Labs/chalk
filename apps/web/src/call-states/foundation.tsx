@@ -50,6 +50,7 @@ export function FoundationKit({ scheme, initialNotice = true }: { readonly schem
           onValueChange={setTheme}
         />
         <ChalkButton onClick={() => setToasts([{ id: "foundation-event", message: "Nora joined" }])}>Foundation toast</ChalkButton>
+        <ChalkButton onClick={() => setToasts([{ id: "foundation-error", message: "Something went wrong", type: "error" }])}>Foundation error</ChalkButton>
         <ChalkButton onClick={() => setSheet(true)}>Foundation sheet</ChalkButton>
       </div>
       <ChalkButton

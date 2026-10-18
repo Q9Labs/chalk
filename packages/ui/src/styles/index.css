@@ -1563,10 +1563,6 @@
   .chalk-frame-compact {
     display: block;
   }
-  .chalk-copy {
-    width: 44px;
-    height: 44px;
-  }
   .chalk-menu-item {
     min-height: 48px;
   }
@@ -1575,7 +1571,6 @@
   }
   .chalk-toast {
     max-width: calc(100% - 24px);
-    font-size: 13px;
   }
   .chalk-drawer {
     inset: auto 0 0;
@@ -1688,10 +1683,10 @@
   background: var(--chalk-danger-pressed);
 }
 @media (pointer: coarse) {
-  :is(.chalk-switch, .chalk-segmented button, .chalk-pill-button, .chalk-dismiss) {
+  :is(.chalk-switch, .chalk-segmented button, .chalk-pill-button, .chalk-dismiss, .chalk-copy) {
     position: relative;
   }
-  :is(.chalk-switch, .chalk-segmented button, .chalk-pill-button, .chalk-dismiss)::before {
+  :is(.chalk-switch, .chalk-segmented button, .chalk-pill-button, .chalk-dismiss, .chalk-copy)::before {
     content: "";
     position: absolute;
     left: 50%;
@@ -1758,6 +1753,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transform: translateY(32px);
 }
 .chalk-sheet[data-variant="panel"]:is([data-starting-style], [data-ending-style]) {
   opacity: 0;
@@ -1784,6 +1780,7 @@
     height: 44px;
     padding: 0 6px;
     margin-left: -6px;
+    transition: all 0s ease;
   }
   .chalk-call-name-phone > svg {
     width: 16px;
