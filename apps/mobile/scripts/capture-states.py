@@ -335,7 +335,7 @@ def remote(args):
                     else:
                         recorder = start([adb, '-s', serial, 'shell', 'screenrecord', '--time-limit', '120', '/sdcard/chalk-feel.mp4'], 'recording.log')
                     try:
-                        run([args.maestro, '--device', device if args.platform == 'ios' else serial, 'test', '--driver-host-port', str(driver_port), args.flow])
+                        run([args.maestro, '--device', device if args.platform == 'ios' else serial, 'test', '--driver-host-port', str(driver_port), '--debug-output', str(out / f'maestro-{index}'), '--test-output-dir', str(out / f'journey-{index}'), '--format', 'junit', '--output', str(out / f'journey-{index}.xml'), args.flow])
                     finally:
                         if recorder.poll() is None:
                             if args.platform == 'android':
