@@ -66,11 +66,6 @@ export function SpacePage({
       void prepared.finish().catch(() => undefined);
       return;
     }
-    try {
-    } catch (cause) {
-      void prepared.finish().catch(() => undefined);
-      throw cause;
-    }
     pendingRef.current = null;
     setPending(null);
     setSpaceAccess({ prepared, inviteLink, spaceName });
