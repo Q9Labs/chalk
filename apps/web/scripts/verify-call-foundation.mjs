@@ -74,6 +74,11 @@ try {
   await page.getByRole("button", { name: "Call details", exact: true }).click();
   const sheet = page.getByRole("dialog", { name: "Call details" });
   await sheet.waitFor();
+  await sheet.evaluate(async (element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+  const sheetBox = await sheet.boundingBox();
+  assert.ok(sheetBox && Math.abs(sheetBox.x) < 1 && Math.abs(sheetBox.width - 390) < 1 && Math.abs(sheetBox.y + sheetBox.height - 844) < 1, "phone sheet anchors to the call viewport, not its header trigger");
+  const scrimBox = await page.locator('[data-part="sheet-scrim"]').boundingBox();
+  assert.deepEqual(scrimBox, { x: 0, y: 0, width: 390, height: 844 }, "sheet scrim covers the call viewport");
   for (let i = 0; i < 8; i++) {
     await page.keyboard.press("Tab");
     await page.waitForFunction(() => document.querySelector('[data-part="sheet"]')?.contains(document.activeElement));
