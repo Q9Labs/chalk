@@ -16,6 +16,8 @@ interface StageFixtureProps {
   readonly aspect?: number;
   readonly shareState?: ScreenShareState;
   readonly cameras?: boolean;
+  readonly board?: boolean;
+  readonly names?: readonly string[];
 }
 const NAMES = ["You", "Nora", "Akash", "Sofia", "Malik", "Priya", "Eli", "June", "Tomás", "Lena", "Kenji", "Amara"];
 
@@ -51,7 +53,7 @@ function useScreenTrack(aspect: number): MediaStreamTrack | null {
 }
 
 /** The actual frame and stage, with deterministic media and observable roster/share controls. */
-export function StageFixture({ count: initialCount = 6, theme = "dark", layout: initialLayout = "focus", share: initialShare = "none", aspect = 16 / 9, shareState = "live", cameras = true }: StageFixtureProps) {
+function StageFixture({ count: initialCount = 6, theme = "dark", layout: initialLayout = "focus", share: initialShare = "none", aspect = 16 / 9, shareState = "live", cameras = true, board = false, names = NAMES }: StageFixtureProps) {
   const [count, setCount] = useState(initialCount);
   const [layout, setLayout] = useState(initialLayout);
   const [share, setShare] = useState(initialShare);
@@ -61,7 +63,7 @@ export function StageFixture({ count: initialCount = 6, theme = "dark", layout: 
     () =>
       Array.from({ length: count }, (_, index) => ({
         id: `stage-${index}`,
-        displayName: NAMES[index] ?? `Guest ${index + 1}`,
+        displayName: names[index] ?? `Guest ${index + 1}`,
         isLocal: index === 0,
         isMuted: index === 2,
         isVideoEnabled: cameras,
@@ -77,14 +79,25 @@ export function StageFixture({ count: initialCount = 6, theme = "dark", layout: 
         screenShareAspect: aspect,
         screenShareState: shareState,
       })),
-    [count, cameras, share, track, aspect, shareState],
+    [count, cameras, share, track, aspect, shareState, names],
   );
   return (
     <SpacePresentation
       colorScheme={theme}
       stageBackground
       header={{ spaceName: "Team", layout, onLayoutChange: setLayout }}
-      stage={<SpaceStage tiles={tiles} layout={layout} onLayoutChange={setLayout} onOverflowClick={() => setPeople(true)} shareCapture={{ surface: "monitor", label: "Entire screen" }} onStopSharing={async () => setShare("none")} onChangeShare={async () => setShare("local")} />}
+      stage={
+        <SpaceStage
+          whiteboard={board ? { isOpen: true, props: { canDraw: true, theme } } : undefined}
+          tiles={tiles}
+          layout={layout}
+          onLayoutChange={setLayout}
+          onOverflowClick={() => setPeople(true)}
+          shareCapture={{ surface: "monitor", label: "Entire screen" }}
+          onStopSharing={async () => setShare("none")}
+          onChangeShare={async () => setShare("local")}
+        />
+      }
       controls={
         <div className="flex items-center gap-2">
           <ChalkButton onClick={() => setLayout(layout === "grid" ? "focus" : "grid")}>{layout === "grid" ? "Spotlight" : "Grid"}</ChalkButton>
@@ -109,10 +122,13 @@ export function StageFixture({ count: initialCount = 6, theme = "dark", layout: 
 }
 
 export const STAGE_STATES: readonly CallState[] = [
-  ...[3, 5, 6, 7, 12, 30].map((count) => ({ id: `stage-grid-${count}`, title: `${count} people in justified Grid`, render: () => <StageFixture count={count} layout="grid" /> })),
+  ...[3, 5, 6, 7, 12, 24, 30].map((count) => ({ id: `stage-grid-${count}`, title: `${count} people in justified Grid`, render: () => <StageFixture count={count} layout="grid" /> })),
   { id: "stage-spotlight", title: "Spotlight", render: () => <StageFixture /> },
   { id: "stage-duo", title: "Two-person phone picture-in-picture", render: () => <StageFixture count={2} /> },
   { id: "stage-avatars", title: "Bold speaking Facehash tiles", render: () => <StageFixture cameras={false} layout="grid" /> },
+  { id: "stage-board", title: "Board in Spotlight", render: () => <StageFixture board /> },
+  { id: "stage-board-grid", title: "Double-width board in Grid", render: () => <StageFixture board layout="grid" /> },
+  { id: "stage-long-names", title: "Long and right-to-left tile names", render: () => <StageFixture count={3} layout="grid" cameras={false} names={["You", "نورا عبد الرحمن الحسيني", "Alexander Montgomery-Wellington"]} /> },
   { id: "stage-share-grid", title: "Double-width screen in Grid", render: () => <StageFixture share="remote" layout="grid" /> },
   ...[9 / 16, 4 / 3, 16 / 9, 21 / 9].map((aspect, index) => ({ id: `stage-share-aspect-${index}`, title: `Content-aware Spotlight ${aspect}`, render: () => <StageFixture share="remote" aspect={aspect} /> })),
   ...(["connecting", "paused", "low-quality"] as const).map((shareState) => ({ id: `stage-share-${shareState}`, title: `Screen ${shareState}`, render: () => <StageFixture share="remote" shareState={shareState} /> })),

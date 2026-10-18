@@ -40,7 +40,7 @@ export interface SpotlightFitOptions {
 }
 export const WIDESCREEN = 16 / 9;
 export const MORE_TILE_ID = "stage:more";
-export const DEFAULT_GRID_OPTIONS: GridFitOptions = { gap: 8, minTileWidth: 150, minTileHeight: 96, maxPerPage: 25, minAspect: 0.8, maxAspect: 2 };
+export const DEFAULT_GRID_OPTIONS: GridFitOptions = { gap: 8, minTileWidth: 150, minTileHeight: 96, maxPerPage: Number.POSITIVE_INFINITY, minAspect: 0.8, maxAspect: 2 };
 export const DEFAULT_SPOTLIGHT_OPTIONS: SpotlightFitOptions = { gap: 8, stripRatio: 0.17, minStripHeight: 104, maxStripHeight: 150, stripAspect: WIDESCREEN };
 export const EMPTY_GEOMETRY: StageGeometry = { frames: [], pageCount: 0, perPage: 0 };
 const HARD_MIN = 0.6;

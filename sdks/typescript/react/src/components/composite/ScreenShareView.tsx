@@ -82,7 +82,7 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
       chip={
         <>
           <StageIcon name="share" size={14} className="shrink-0" />
-          <span dir="auto" className="min-w-0 truncate">
+          <span dir="auto" className="min-w-0 truncate [unicode-bidi:plaintext]">
             {name}
           </span>
           {hasAudio ? <StageIcon name="volume" size={14} aria-label="With share audio" className="shrink-0" /> : null}
@@ -128,7 +128,7 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
             {onChangeShare ? (
               <ChalkMenu
                 trigger={
-                  <ChalkButton disabled={pending} className="!h-8 !bg-white/[.14] !px-3 !text-white">
+                  <ChalkButton disabled={pending} className="!h-8 !bg-white/[.14] !px-3 !text-white hover:!bg-white/[.22]">
                     Change
                   </ChalkButton>
                 }
@@ -147,7 +147,7 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
               </ChalkMenu>
             ) : null}
             {onStopSharing ? (
-              <ChalkButton disabled={pending} tone="danger" className="!h-8 !px-3" onClick={() => void run(onStopSharing)}>
+              <ChalkButton disabled={pending} tone="danger" className="!h-8 !bg-[var(--chalk-danger)] !px-3 !text-white hover:!bg-[var(--chalk-danger-hover)]" onClick={() => void run(onStopSharing)}>
                 Stop sharing
               </ChalkButton>
             ) : null}
@@ -185,7 +185,7 @@ function ShareControl({ label, pressed, onClick, children }: { readonly label: s
       aria-label={label}
       aria-pressed={pressed}
       onClick={onClick}
-      className="grid h-8 w-8 place-items-center rounded-full bg-[rgba(12,14,18,.75)] text-white outline-none hover:bg-[rgba(40,42,48,.95)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)] [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11"
+      className="grid h-8 w-8 place-items-center rounded-full bg-[rgba(12,14,18,.75)] text-white outline-none hover:bg-[rgba(40,42,48,.95)] aria-pressed:bg-white aria-pressed:text-[#0b0c0e] motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-out active:scale-[.92] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)] [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11"
     >
       {children}
     </button>

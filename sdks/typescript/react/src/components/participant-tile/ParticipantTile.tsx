@@ -146,7 +146,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
           <>
             {pinned && <StageIcon name="pin" size={14} aria-label="Pinned" />}
             {showName && (
-              <span dir="auto" className="min-w-0 truncate" title={participant.displayName}>
+              <span dir="auto" className="min-w-0 truncate [unicode-bidi:plaintext]" title={participant.displayName}>
                 {participant.displayName}
                 {participant.isLocal && participant.displayName !== "You" && <span className="text-white"> (You)</span>}
               </span>
@@ -165,21 +165,24 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       <div className={cn("absolute inset-0 overflow-hidden motion-safe:transition-opacity motion-safe:duration-200 [&>*]:h-full [&>*]:w-full [&>*]:object-cover", mirrored && "scale-x-[-1]", mediaVisible ? "opacity-100" : "opacity-0")}>{media}</div>
       {!mediaVisible && showAvatar && (
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 grid place-items-center">
-          <div
-            aria-hidden="true"
-            className={cn("overflow-hidden rounded-full motion-safe:transition-transform motion-safe:duration-[90ms]", participant.isSpeaking && !participant.isMuted && !prefersReducedMotion && "-translate-y-[5px] scale-[1.04]")}
-            style={{ width: "clamp(32px,42cqmin,150px)", height: "clamp(32px,42cqmin,150px)" }}
-          >
+          <div aria-hidden="true" className="overflow-hidden rounded-full" style={{ width: "clamp(32px,42cqmin,150px)", height: "clamp(32px,42cqmin,150px)" }}>
             {generatedAvatars && !participant.avatarUrl ? (
               <Facehash
                 role="img"
                 aria-label={`Avatar for ${participant.displayName}`}
+                className={cn(
+                  !phone &&
+                    !prefersReducedMotion &&
+                    animatedAvatars &&
+                    "group-hover/tile:[&_svg>g]:!transform-none [&_svg>g]:transition-[translate] [&_svg>g]:duration-[90ms] [&_svg>g]:ease-linear [&_text]:origin-bottom [&_text]:[transform-box:fill-box] [&_text]:transition-[scale] [&_text]:duration-[90ms] [&_text]:ease-linear",
+                  !phone && !prefersReducedMotion && participant.isSpeaking && !participant.isMuted && "[&_svg>g]:-translate-y-[5px] [&_text]:scale-y-[1.55]",
+                )}
                 name={participant.displayName || participant.id}
                 size="100%"
                 variant="flat"
                 intensity3d="dramatic"
-                interactive={!prefersReducedMotion && animatedAvatars}
-                enableBlink={!prefersReducedMotion && animatedAvatars}
+                interactive={!phone && !prefersReducedMotion && animatedAvatars}
+                enableBlink={!phone && !prefersReducedMotion && animatedAvatars}
                 colors={recipe.facehashColors}
               />
             ) : (
@@ -225,7 +228,7 @@ ParticipantTileSurface.displayName = "ParticipantTileSurface";
 export function SignalBars(): React.JSX.Element {
   return (
     <span aria-hidden="true" className="inline-flex h-3 items-end gap-0.5">
-      {[5, 8, 12].map((height, index) => (
+      {[6, 9, 12, 15].map((height, index) => (
         <i key={height} className="block w-[3px] rounded-[1px]" style={{ height, background: index === 0 ? "#e2bd3a" : "rgba(255,255,255,.3)" }} />
       ))}
     </span>
