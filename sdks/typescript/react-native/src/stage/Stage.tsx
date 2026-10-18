@@ -30,13 +30,12 @@ export const Stage = memo(function Stage({ frame }: StageProps): React.JSX.Eleme
   const self = useSelf();
   const media = useMedia();
   const frames = useMemo(() => evenGrid(frame, roster.length), [frame, roster.length]);
-  const stageStyle = [styles.region, { left: frame.x, top: frame.y, width: frame.width, height: frame.height }];
-  const stageRef = useMeasuredRef<View>("frame.stage", stageStyle);
+  // Like the mockup's `.stage`, the stage is a full-screen layer: tiles are placed in screen points
+  // inside `frame`, so they can move across regions.
+  const stageRef = useMeasuredRef<View>("frame.stage", styles.layer);
 
   return (
-    <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-      {/* The stage box itself; tiles are placed in screen points so they can move across regions. */}
-      <View pointerEvents="none" ref={stageRef} style={stageStyle} testID="frame.stage" />
+    <View pointerEvents="box-none" ref={stageRef} style={styles.layer} testID="frame.stage">
       {roster.map((participant, index) => {
         const tileFrame = frames[index];
         if (!tileFrame) return null;
@@ -93,6 +92,6 @@ function tileVideo(slot: ReactNode, streamURL: string | null, isSelf: boolean): 
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  region: { position: "absolute" },
+  layer: StyleSheet.absoluteFillObject,
   center: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
 });
