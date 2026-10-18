@@ -120,3 +120,19 @@ it("cancels a departing tile's fade when the same participant immediately rejoin
   expect(await returning.evaluate((tile) => tile.getAnimations().some((animation) => animation.id === "stage-exit"))).toBe(false);
   await page.emulateMedia({ reducedMotion: "reduce" });
 });
+
+it("removes departed cameras even while the remaining call keeps changing layout", async () => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await open("stage-grid-6");
+  await page.getByRole("button", { name: "Remove participant", exact: true }).click();
+  await page.evaluate(async () => {
+    const until = performance.now() + 400;
+    while (performance.now() < until) {
+      const button = Array.from(document.querySelectorAll("button")).find((element) => element.textContent === "Grid" || element.textContent === "Spotlight");
+      button?.click();
+      await new Promise((done) => setTimeout(done, 30));
+    }
+  });
+  expect(await page.locator('[data-stage-item="stage-5"]').count()).toBe(0);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+});

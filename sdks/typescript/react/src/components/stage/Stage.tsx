@@ -159,7 +159,7 @@ export function Stage({
   }, [activePinnedId, box, layout, maxPerPage, minTileWidth, ordered, primary, shareAspects]);
   const framesById = useMemo(() => new Map(geometry.frames.map((frame) => [frame.id, frame])), [geometry.frames]);
   const animate = animateOverride ?? !prefersReducedMotion;
-  const [displayed, setDisplayed] = useState<{ source: readonly StageItem[]; geometry: StageGeometry; tiles: readonly { item: StageItem; frame: StageFrame | undefined; leaving: boolean }[] }>({
+  const [displayed, setDisplayed] = useState<{ source: readonly StageItem[]; geometry: StageGeometry; tiles: readonly { item: StageItem; frame: StageFrame | undefined; leaving: boolean; departedAt?: number }[] }>({
     source: ordered,
     geometry,
     tiles: ordered.map((item) => ({ item, frame: framesById.get(item.id), leaving: false })),
@@ -167,11 +167,13 @@ export function Stage({
   if (displayed.source !== ordered || displayed.geometry !== geometry) {
     const present = new Set(ordered.map((item) => item.id));
     const tiles = ordered.map((item) => ({ item, frame: framesById.get(item.id), leaving: false }));
-    setDisplayed({ source: ordered, geometry, tiles: [...tiles, ...(animate ? displayed.tiles.filter((tile) => !present.has(tile.item.id)).map((tile) => ({ ...tile, leaving: true })) : [])] });
+    setDisplayed({ source: ordered, geometry, tiles: [...tiles, ...(animate ? displayed.tiles.filter((tile) => !present.has(tile.item.id)).map((tile) => ({ ...tile, leaving: true, departedAt: tile.departedAt ?? performance.now() })) : [])] });
   }
   useEffect(() => {
-    if (!displayed.tiles.some((tile) => tile.leaving)) return;
-    const timer = setTimeout(() => setDisplayed((current) => ({ ...current, tiles: current.tiles.filter((tile) => !tile.leaving) })), 160);
+    const departing = displayed.tiles.filter((tile) => tile.leaving);
+    if (!departing.length) return;
+    const nextExpiry = Math.min(...departing.map((tile) => (tile.departedAt ?? 0) + 160));
+    const timer = setTimeout(() => setDisplayed((current) => ({ ...current, tiles: current.tiles.filter((tile) => !tile.leaving || (tile.departedAt ?? 0) + 160 > performance.now()) })), Math.max(0, nextExpiry - performance.now()));
     return () => clearTimeout(timer);
   }, [displayed]);
   const tilesRef = useRef<HTMLDivElement>(null);
