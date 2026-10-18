@@ -344,7 +344,7 @@ export function createGatePlan(files, options = {}) {
   const formatCommand = formattedFiles.length > 0 ? ["pnpm", "exec", "oxfmt", "--check", ...formattedFiles] : null;
   const semgrepCommand = explicitFull || (full && scope !== "staged") ? ["bash", "scripts/gates/semgrep.sh"] : sourceFiles.length > 0 ? ["bash", "scripts/gates/semgrep.sh", ...sourceFiles] : null;
   const tasks = [
-    task("self-test", "Gate routing and Sync reliability self-tests", true, "always required", ["node", "--test", "scripts/gates/chalk-gate-plan.test.mjs", "apps/sync/scripts/reliability_harness.test.mjs"]),
+    task("self-test", "Gate routing and Sync reliability self-tests", true, "always required", ["node", "--test", "scripts/gates/chalk-gate-plan.test.mjs", "apps/sync/scripts/reliability_harness.test.mjs", "scripts/gates/call-performance-metrics.test.mjs"]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: scope, GITLEAKS_BASE_REF: base }),
     task("generated", "Generated files are current", true, "always required", ["pnpm", "run", "check:generated"]),
@@ -370,6 +370,11 @@ export function createGatePlan(files, options = {}) {
     task("types", "Affected workspace type checks", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", filteredPnpmCommand(selectedWorkspaces, "check-types", [], ["--workspace-concurrency=1", "--sort"])),
     task("tests", "Affected workspace tests with coverage", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", filteredPnpmCommand(selectedWorkspaces, "test", ["--coverage"], ["--workspace-concurrency=1", "--sort"])),
     task("build", "Affected workspace builds", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", workspaceBuildCommand(selectedWorkspaces)),
+    task("call-performance", "Call performance budgets", full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/web", "sdks/typescript/react", "packages/ui", "packages/whiteboard"])), "call rendering inputs or full gate", [
+      "node",
+      "apps/web/scripts/check-call-performance.mjs",
+      "--gate",
+    ]),
     task("recorder", "Recorder infrastructure", recorder, recorder ? "recorder inputs changed" : "no recorder inputs changed", ["pnpm", "run", "recorder:gate"]),
     task(
       "publint",
