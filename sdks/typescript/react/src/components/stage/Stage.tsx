@@ -150,10 +150,12 @@ export function Stage({
     const settings = track?.getSettings();
     const observedAspect = shareAspects.get(primary.id);
     const aspect = primary.kind === "whiteboard" ? null : (observedAspect ?? (primary.kind === "screen-share" && primary.participant.screenShareAspect ? primary.participant.screenShareAspect : settings?.width && settings.height ? settings.width / settings.height : 16 / 9));
+    const remaining = ordered.filter((item) => item.id !== primary.id);
+    const strip = isContentItem(primary) ? [...remaining.filter(isContentItem), ...remaining.filter((item) => !isContentItem(item))] : remaining;
     return fitSpotlight(
       box,
       primary.id,
-      ordered.filter((item) => item.id !== primary.id).map((item) => item.id),
+      strip.map((item) => item.id),
       { ...DEFAULT_SPOTLIGHT_OPTIONS, primaryAspect: aspect, content: primary.kind !== "participant", wideIds: primary.kind === "screen-share" ? ordered.filter((item) => item.kind === "whiteboard").map((item) => item.id) : wideIds, maxPerPage },
     );
   }, [activePinnedId, box, layout, maxPerPage, minTileWidth, ordered, primary, shareAspects]);

@@ -27,7 +27,11 @@ export function TileShell({ label, accentColor, pinned = false, speaking = false
   return (
     <div
       data-part="stage-tile"
-      className={cn("group/tile relative overflow-clip rounded-[12px] bg-[var(--chalk-app-tile-base)] max-[640px]:rounded-[14px] motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-out", onClick && lift && "min-[641px]:[@media(hover:hover)]:hover:-translate-y-0.5", className)}
+      className={cn(
+        "group/tile relative overflow-clip rounded-[12px] bg-[var(--chalk-app-tile-base)] max-[640px]:rounded-[14px] motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-[ease-out]",
+        onClick && lift && "min-[641px]:[@media(hover:hover)]:hover:-translate-y-0.5",
+        className,
+      )}
       style={vars}
       data-tour={dataTour}
       aria-hidden={hidden || undefined}

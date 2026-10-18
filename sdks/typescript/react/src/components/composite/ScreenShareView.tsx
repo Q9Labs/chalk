@@ -110,9 +110,9 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
           if (primary && event.pointerType !== "mouse" && !(event.target instanceof Element && event.target.closest("button"))) setControlsOpen((open) => !open);
         }}
       >
-        <div data-part="share-media" className={cn("absolute inset-0 overflow-hidden motion-safe:transition-opacity motion-safe:duration-300 motion-safe:ease-out", poppedOut ? "opacity-0" : status === "paused" ? "opacity-35" : "opacity-100")}>
+        <div data-part="share-media" className={cn("absolute inset-0 overflow-hidden motion-safe:transition-opacity motion-safe:duration-300 motion-safe:ease-[ease-out]", poppedOut ? "opacity-0" : status === "paused" ? "opacity-35" : "opacity-100")}>
           <div
-            className={cn("h-full w-full motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-out [&>*]:h-full [&>*]:w-full", status === "low-quality" && "blur-[2.5px]", fill ? "[&>*]:object-cover" : "[&>*]:object-contain")}
+            className={cn("h-full w-full motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-[ease-out] [&>*]:h-full [&>*]:w-full", status === "low-quality" && "blur-[2.5px]", fill ? "[&>*]:object-cover" : "[&>*]:object-contain")}
             style={{ transform: zoom ? "scale(2)" : undefined }}
           >
             {media}
@@ -129,13 +129,13 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
         ) : null}
         {status === "connecting" ? (
           <div role="status" className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--chalk-tile)] text-[var(--chalk-muted-text)]">
-            <span className="h-[18px] w-[18px] rounded-full border-2 border-[var(--chalk-line-strong)] border-t-[var(--chalk-text)] motion-safe:animate-spin motion-safe:[animation-duration:.9s] motion-reduce:border-t-[var(--chalk-muted-text)]" />
+            <span className="h-[18px] w-[18px] rounded-[50%] border-2 border-[var(--chalk-line-strong)] border-t-[var(--chalk-text)] motion-safe:animate-spin motion-safe:[animation-duration:.9s] motion-reduce:border-t-[var(--chalk-muted-text)]" />
             <p className="font-medium text-[var(--chalk-text)]">Connecting to {sharedByName}’s screen…</p>
           </div>
         ) : null}
         {status === "paused" ? (
           <div role="status" className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 text-white">
-            <span className="grid h-12 w-12 place-items-center rounded-full bg-[rgba(12,14,18,.82)]">
+            <span className="grid h-12 w-12 place-items-center rounded-[50%] bg-[rgba(12,14,18,.82)]">
               <StageIcon name="pause" size={24} />
             </span>
             <p className="rounded-[8px] bg-[rgba(12,14,18,.82)] px-3 py-1.5 font-semibold">{sharedByName} paused sharing</p>
@@ -214,7 +214,7 @@ function ShareControl({ label, pressed, onClick, children }: { readonly label: s
       aria-label={label}
       aria-pressed={pressed}
       onClick={onClick}
-      className="relative grid h-8 w-8 place-items-center rounded-full bg-[rgba(12,14,18,.75)] text-white outline-none hover:bg-[rgba(40,42,48,.95)] aria-pressed:bg-white aria-pressed:text-[#0b0c0e] motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-out active:scale-[.92] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)] [@media(pointer:coarse)]:before:absolute [@media(pointer:coarse)]:before:-inset-1.5"
+      className="relative grid h-8 w-8 place-items-center rounded-[50%] bg-[rgba(12,14,18,.75)] text-white outline-none hover:bg-[rgba(40,42,48,.95)] aria-pressed:bg-white aria-pressed:text-[#0b0c0e] motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-[ease-out] active:scale-[.92] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)] [@media(pointer:coarse)]:before:absolute [@media(pointer:coarse)]:before:-inset-1.5"
     >
       {children}
     </button>
