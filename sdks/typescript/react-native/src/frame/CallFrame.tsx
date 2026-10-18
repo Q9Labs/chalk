@@ -131,8 +131,9 @@ export function CallFrame({ displayName, callName = "Call", onLeave }: CallFrame
         </Animated.View>
       </View>
       <View pointerEvents="box-none" style={StyleSheet.absoluteFill} testID="frame.sheets">
-        <MoreSheet onClose={() => setSheet(null)} onOpenPeople={() => setSheet("people")} open={sheet === "more"} returnFocusRef={moreRef} />
-        <PeopleSheet onClose={() => setSheet(null)} open={sheet === "people"} />
+        {/* Focus goes back to More only once no sheet is open, so switching to People keeps it there. */}
+        <MoreSheet onClose={() => setSheet(null)} onOpenPeople={() => setSheet("people")} open={sheet === "more"} returnFocusRef={sheet === null ? moreRef : undefined} />
+        <PeopleSheet onClose={() => setSheet(null)} open={sheet === "people"} returnFocusRef={sheet === null ? moreRef : undefined} />
         <PortalHost layer="sheets" />
       </View>
       <View pointerEvents="box-none" style={StyleSheet.absoluteFill} testID="frame.overlays">

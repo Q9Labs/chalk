@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { AccessibilityInfo, findNodeHandle, Pressable, StyleSheet, View, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, { ReduceMotion, runOnJS, useAnimatedKeyboard, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
+import Animated, { runOnJS, useAnimatedKeyboard, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
 import { useBackHandler } from "../frame/back-handler";
 import { useDeviceLayout } from "../frame/device-layout";
 import { Portal } from "../frame/portal";
@@ -9,7 +9,7 @@ import { useMeasuredRef } from "../frame/measurement";
 import { haptics } from "../haptics/haptics";
 import { timings } from "../motion/motion";
 import { useTheme } from "../theme/theme";
-import { durations, easings, fixed, radii } from "../theme/tokens";
+import { durations, fixed, radii } from "../theme/tokens";
 import { ChalkText } from "./ChalkText";
 
 export type BottomSheetProps = {
@@ -33,7 +33,6 @@ const CLOSE_DISTANCE = 80;
 /** Padding under the content: on top of the safe area when the keyboard is down, alone when it's up. */
 const BOTTOM_PADDING = 10;
 const KEYBOARD_PADDING = 12;
-const FADE = { duration: durations.scrim, easing: easings.easeOut, reduceMotion: ReduceMotion.Never };
 
 type SheetDrag = { readonly drag: SharedValue<number>; readonly close: () => void };
 const SheetDragContext = createContext<SheetDrag | null>(null);
@@ -63,7 +62,7 @@ export function BottomSheet({ open, onClose, accessibilityLabel, children, title
     drag.value = 0;
     if (reduceMotion) {
       offset.value = 0;
-      shown.value = withTiming(1, FADE);
+      shown.value = 1;
     } else {
       offset.value = withTiming(0, timings.sheet);
       shown.value = withTiming(1, timings.scrim);
@@ -73,12 +72,18 @@ export function BottomSheet({ open, onClose, accessibilityLabel, children, title
   }, [drag, offset, reduceMotion, shown]);
 
   const hide = useCallback(() => {
+    if (reduceMotion) {
+      shown.value = 0;
+      offset.value = height.value || layout.height;
+      setMounted(false);
+      return;
+    }
     const finish = (finished?: boolean) => {
       "worklet";
       if (finished) runOnJS(setMounted)(false);
     };
-    shown.value = withTiming(0, reduceMotion ? FADE : timings.scrim, reduceMotion ? finish : undefined);
-    if (!reduceMotion) offset.value = withTiming(height.value || layout.height, timings.sheet, finish);
+    shown.value = withTiming(0, timings.scrim);
+    offset.value = withTiming(height.value || layout.height, timings.sheet, finish);
   }, [height, layout.height, offset, reduceMotion, shown]);
 
   const wasOpen = useRef(open);
@@ -137,7 +142,8 @@ export function BottomSheet({ open, onClose, accessibilityLabel, children, title
       <SheetDragContext.Provider value={{ drag, close: onClose }}>
         <Animated.View accessibilityLabel={accessibilityLabel} accessibilityViewIsModal onAccessibilityEscape={onClose} onLayout={onLayout} ref={surfaceRef} style={[surfaceStyle, sheetStyle]} testID={testID}>
           <SheetDragRegion>
-            <View style={styles.grabArea} testID={testID ? `${testID}.grabber` : undefined}>
+            {/* Without a title, the grabber is where screen-reader focus lands, announced by the sheet's label. */}
+            <View accessibilityLabel={title ? undefined : accessibilityLabel} accessibilityRole={title ? undefined : "header"} accessible={!title} ref={title ? undefined : titleRef} style={styles.grabArea} testID={testID ? `${testID}.grabber` : undefined}>
               <View style={[styles.grabber, { backgroundColor: colors.lineStrong }]} />
             </View>
             {title ? (

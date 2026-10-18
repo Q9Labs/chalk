@@ -1,9 +1,11 @@
 import type { SpaceClient } from "@q9labsai/chalk-client";
+import { useEffect } from "react";
 import { StyleSheet } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ChalkProvider } from "../context/space-client-context";
 import { ToastProvider } from "../primitives/toast/ToastStack";
+import { releaseSounds } from "../sounds/sounds";
 import { ThemeProvider } from "../theme/theme";
 import type { ColorScheme } from "../theme/tokens";
 import { CallFrame } from "./CallFrame";
@@ -33,6 +35,7 @@ export type ChalkProps = {
  * off, and draws everything inside the safe area in portrait, landscape and on iPad.
  */
 export function Chalk({ client, colorScheme, onColorSchemeChange, soundsEnabled, onSoundsEnabledChange, ...frame }: ChalkProps): React.JSX.Element {
+  useEffect(() => releaseSounds, []);
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>

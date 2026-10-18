@@ -54,6 +54,14 @@ export function Menu({ open, onClose, anchorRef, accessibilityLabel, children, m
     anchorRef.current?.measureInWindow((x, y, width, height) => setTrigger({ x, y, width, height }));
   }, [anchorRef, open, shown]);
 
+  // Like iOS menus, an open menu closes when the screen rotates or resizes, because its trigger moved.
+  const viewport = `${layout.width}x${layout.height}`;
+  const openedIn = useRef(viewport);
+  useEffect(() => {
+    if (!open) openedIn.current = viewport;
+    else if (viewport !== openedIn.current) onClose();
+  }, [onClose, open, viewport]);
+
   const wasOpen = useRef(open);
   useEffect(() => {
     const closed = wasOpen.current && !open;
@@ -68,9 +76,9 @@ export function Menu({ open, onClose, anchorRef, accessibilityLabel, children, m
       if (!trigger || placement) return;
       const { width, height } = event.nativeEvent.layout;
       setPlacement(placeMenu(trigger, { width, height }, layout, layout.insets, keyboardHeight));
-      shown.value = withTiming(1, timings.menu);
+      shown.value = reduceMotion ? 1 : withTiming(1, timings.menu);
     },
-    [keyboardHeight, layout, placement, shown, trigger],
+    [keyboardHeight, layout, placement, reduceMotion, shown, trigger],
   );
 
   useEffect(() => {

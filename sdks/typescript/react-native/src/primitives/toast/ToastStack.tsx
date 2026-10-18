@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useSyncExternalStore, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
-import Animated, { ReduceMotion, useReducedMotion, withTiming, type EntryExitAnimationFunction } from "react-native-reanimated";
+import Animated, { useReducedMotion, withTiming, type EntryExitAnimationFunction } from "react-native-reanimated";
 import { useDeviceLayout } from "../../frame/device-layout";
 import { usePortalCount } from "../../frame/portal";
 import { timings } from "../../motion/motion";
@@ -39,7 +39,7 @@ export function ToastStack(): React.JSX.Element {
   return (
     <View pointerEvents="box-none" style={[styles.stack, position]} testID="frame.toasts">
       {toasts.map((toast) => (
-        <Animated.View entering={reduceMotion ? fadeIn : toastEntering} exiting={reduceMotion ? fadeOut : toastExiting} key={toast.id} style={{ maxWidth: layout.width - 32 }}>
+        <Animated.View entering={reduceMotion ? undefined : toastEntering} exiting={reduceMotion ? undefined : toastExiting} key={toast.id} style={{ maxWidth: layout.width - 32 }}>
           <Toast onDismiss={() => store.dismiss(toast.id)} toast={toast} />
         </Animated.View>
       ))}
@@ -61,16 +61,6 @@ const toastExiting: EntryExitAnimationFunction = () => {
     initialValues: { opacity: 1, transform: [{ translateY: 0 }] },
     animations: { opacity: withTiming(0, timings.toastOut), transform: [{ translateY: withTiming(4, timings.toastOut) }] },
   };
-};
-
-const fadeIn: EntryExitAnimationFunction = () => {
-  "worklet";
-  return { initialValues: { opacity: 0 }, animations: { opacity: withTiming(1, { ...timings.toastIn, reduceMotion: ReduceMotion.Never }) } };
-};
-
-const fadeOut: EntryExitAnimationFunction = () => {
-  "worklet";
-  return { initialValues: { opacity: 1 }, animations: { opacity: withTiming(0, { ...timings.toastOut, reduceMotion: ReduceMotion.Never }) } };
 };
 
 const styles = StyleSheet.create({

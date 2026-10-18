@@ -11,7 +11,7 @@ export type MoreSheetProps = {
   readonly open: boolean;
   readonly onClose: () => void;
   readonly onOpenPeople: () => void;
-  readonly returnFocusRef: RefObject<View | null>;
+  readonly returnFocusRef?: RefObject<View | null>;
 };
 
 const SCHEMES = [
