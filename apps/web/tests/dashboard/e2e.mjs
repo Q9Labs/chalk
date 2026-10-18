@@ -24,7 +24,9 @@ const engine = createServer(async (request, response) => {
   }
   try {
     const upstream = await fetch(new URL(request.url, process.env.DASHBOARD_TEST_API_ORIGIN), { method: request.method, headers: request.headers, body: ["GET", "HEAD"].includes(request.method) ? undefined : body, redirect: "manual" });
-    response.writeHead(upstream.status, Object.fromEntries(upstream.headers)).end(Buffer.from(await upstream.arrayBuffer()));
+    const result = Buffer.from(await upstream.arrayBuffer());
+    if (upstream.status >= 400) console.error("Engine failure:", request.method, new URL(request.url, "http://localhost").pathname, upstream.status, result.toString().slice(0, 2048));
+    response.writeHead(upstream.status, Object.fromEntries(upstream.headers)).end(result);
   } catch {
     response.writeHead(503).end();
   }

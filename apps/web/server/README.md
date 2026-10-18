@@ -97,6 +97,8 @@ CHALK_API_SERVICE_SECRETS=<comma-separated rotation secrets>
 CHALK_API_SERVICE_SCOPES=tenants:read,tenants:write,spaces:read,spaces:write,episodes:read,episodes:write,recordings:read,recordings:write,transcriptions:read,transcriptions:write,transcriptions:delete,api_keys:read,api_keys:write,api_keys:delete,webhooks:read,webhooks:write,webhooks:delete
 ```
 
+Configure `CHALK_DEFAULT_MEDIA_PLANE=cf_sfu` and the matching Cloudflare SFU
+credentials on the engine so owned calls can use its deployment default.
 Pages' `DASHBOARD_SERVICE_TOKEN` must match one service secret. No System token
 is used by Pages. Key creation accepts only the explicit non-Tenant scope enum;
 rotation sends only expiry, never scopes. The engine also refuses rotation of
