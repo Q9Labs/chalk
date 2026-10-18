@@ -1,4 +1,6 @@
 const PUBLIC_WEB_HOSTS: readonly string[] = ["chalkmeet.com", "chalk.q9labs.ai"];
+// The call's typeface, embedded at build time so the first frame already uses it.
+const FIGTREE_WEIGHTS = ["Regular", "Medium", "SemiBold", "Bold"] as const;
 
 export type MobileExpoExtra = {
   readonly buildProfile: string;
@@ -22,7 +24,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       userInterfaceStyle: "automatic",
       assetBundlePatterns: ["**/*"],
       experiments: { tsconfigPaths: false },
-      plugins: ["expo-secure-store"],
+      plugins: ["expo-secure-store", ["expo-font", { fonts: FIGTREE_WEIGHTS.map((weight) => `./assets/fonts/Figtree-${weight}.ttf`) }]],
       splash: { image: "./assets/splash-logo.png", resizeMode: "contain", backgroundColor: "#F7F6F2" },
       ios: {
         jsEngine: "jsc",
