@@ -23,13 +23,13 @@ export const Icon = memo(function Icon({ name, color, size = 20, strokeWidth = 1
 });
 
 function renderElement(element: IconElement, key: number, color: string): React.JSX.Element {
-  const shared = { fill: element.fill === "currentColor" ? color : "none", strokeWidth: element.strokeWidth, transform: element.transform, key };
+  const shared = { fill: element.fill === "currentColor" ? color : "none", strokeWidth: element.strokeWidth, transform: element.transform };
   switch (element.kind) {
     case "path":
-      return <Path {...shared} d={element.d} />;
+      return <Path key={key} {...shared} d={element.d} />;
     case "rect":
-      return <Rect {...shared} height={element.height} rx={element.rx} width={element.width} x={element.x} y={element.y} />;
+      return <Rect key={key} {...shared} height={element.height} rx={element.rx} width={element.width} x={element.x} y={element.y} />;
     case "circle":
-      return <Circle {...shared} cx={element.cx} cy={element.cy} r={element.r} />;
+      return <Circle key={key} {...shared} cx={element.cx} cy={element.cy} r={element.r} />;
   }
 }

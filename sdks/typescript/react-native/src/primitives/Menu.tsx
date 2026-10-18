@@ -79,7 +79,10 @@ export function Menu({ open, onClose, anchorRef, accessibilityLabel, children, m
     if (node) AccessibilityInfo.setAccessibilityFocus(node);
   }, [placement]);
 
-  const surfaceStyle = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ translateY: reduceMotion ? 0 : (1 - shown.value) * 4 }] }));
+  const surfaceStyle = useAnimatedStyle(() => {
+    "worklet";
+    return { opacity: shown.value, transform: [{ translateY: reduceMotion ? 0 : (1 - shown.value) * 4 }] };
+  });
   const focus = useMemo<MenuFocus>(
     () => ({
       claim: (node) => {

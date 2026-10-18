@@ -27,6 +27,9 @@ export function usePressAnimation(family: keyof typeof pressScale): PressAnimati
     down.value = 0;
     scale.value = withTiming(1, timings.press);
   }, [down, scale]);
-  const scaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const scaleStyle = useAnimatedStyle(() => {
+    "worklet";
+    return { transform: [{ scale: scale.value }] };
+  });
   return { down, onPressIn, onPressOut, scaleStyle };
 }

@@ -37,7 +37,10 @@ function Spinner(): React.JSX.Element {
     turn.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.linear }), -1);
     return () => cancelAnimation(turn);
   }, [reduceMotion, turn]);
-  const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.value * 360}deg` }] }));
+  const style = useAnimatedStyle(() => {
+    "worklet";
+    return { transform: [{ rotate: `${turn.value * 360}deg` }] };
+  });
   return <Animated.View style={[styles.spinner, { borderColor: colors.lineStrong, borderTopColor: reduceMotion ? colors.textMuted : colors.text }, style]} />;
 }
 

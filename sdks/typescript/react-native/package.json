@@ -94,8 +94,9 @@
     "test": "pnpm exec vitest run",
     "check-types": "tsc-rs --project tsconfig.check-types.json --noEmit",
     "check:tokens": "node ./scripts/check-tokenized-styles.mjs",
+    "check:worklets": "node ./scripts/check-worklet-directives.mjs",
     "check:client-package": "node ./scripts/check-client-package.mjs",
-    "lint": "pnpm run check:tokens && pnpm exec oxfmt --check . && tsc --project tsconfig.check-types.json --noEmit",
+    "lint": "pnpm run check:tokens && pnpm run check:worklets && pnpm exec oxfmt --check . && tsc --project tsconfig.check-types.json --noEmit",
     "clean": "rm -rf dist"
   },
   "dependencies": {

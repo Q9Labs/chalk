@@ -19,7 +19,10 @@ export const Switch = memo(function Switch({ value, onValueChange, accessibility
   useEffect(() => {
     on.value = withTiming(value ? 1 : 0, timings.switch);
   }, [on, value]);
-  const knobStyle = useAnimatedStyle(() => ({ transform: [{ translateX: on.value * 14 }] }));
+  const knobStyle = useAnimatedStyle(() => {
+    "worklet";
+    return { transform: [{ translateX: on.value * 14 }] };
+  });
 
   return (
     <Pressable accessibilityLabel={accessibilityLabel} accessibilityRole="switch" accessibilityState={{ checked: value }} hitSlop={11} onPress={() => onValueChange(!value)} testID={testID}>

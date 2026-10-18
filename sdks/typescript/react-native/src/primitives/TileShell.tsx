@@ -30,7 +30,10 @@ export const TileShell = memo(function TileShell({ children, speaking = false, c
   useEffect(() => {
     live.value = withTiming(showRing ? 1 : 0, timings.scrim);
   }, [live, showRing]);
-  const ringStyle = useAnimatedStyle(() => ({ opacity: live.value * (0.3 + 0.7 * (level ? level.value : 1)) }));
+  const ringStyle = useAnimatedStyle(() => {
+    "worklet";
+    return { opacity: live.value * (0.3 + 0.7 * (level ? level.value : 1)) };
+  });
 
   return (
     <View style={[styles.tile, { borderRadius: radius, backgroundColor: colors.tile }]} testID={testID}>

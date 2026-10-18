@@ -38,11 +38,20 @@ export const CopyButton = memo(function CopyButton({ onCopy, accessibilityLabel,
     reset.current = setTimeout(() => setCopied(false), durations.copyReset);
   }, [announcement, onCopy]);
 
-  const copyIconStyle = useAnimatedStyle(() => ({ opacity: 1 - done.value, transform: [{ scale: 1 - 0.6 * done.value }, { rotate: `${20 * done.value}deg` }] }));
-  const checkIconStyle = useAnimatedStyle(() => ({ opacity: done.value, transform: [{ scale: 0.4 + 0.6 * done.value }, { rotate: `${-20 * (1 - done.value)}deg` }] }));
+  const copyIconStyle = useAnimatedStyle(() => {
+    "worklet";
+    return { opacity: 1 - done.value, transform: [{ scale: 1 - 0.6 * done.value }, { rotate: `${20 * done.value}deg` }] };
+  });
+  const checkIconStyle = useAnimatedStyle(() => {
+    "worklet";
+    return { opacity: done.value, transform: [{ scale: 0.4 + 0.6 * done.value }, { rotate: `${-20 * (1 - done.value)}deg` }] };
+  });
   const { down } = press;
   const pressed = colors.pressed;
-  const backgroundStyle = useAnimatedStyle(() => ({ backgroundColor: down.value ? pressed : fixed.transparent }));
+  const backgroundStyle = useAnimatedStyle(() => {
+    "worklet";
+    return { backgroundColor: down.value ? pressed : fixed.transparent };
+  });
 
   return (
     <Pressable accessibilityLabel={accessibilityLabel} accessibilityRole="button" hitSlop={4} onPress={copy} onPressIn={press.onPressIn} onPressOut={press.onPressOut} testID={testID}>

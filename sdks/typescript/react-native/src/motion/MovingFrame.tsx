@@ -74,6 +74,7 @@ export function MovingFrame({ frame, children, style, testID }: MovingFrameProps
   }, [x, y, width, height, reduceMotion, from, progress, target]);
 
   const animatedStyle = useAnimatedStyle(() => {
+    "worklet";
     const next = target.value;
     const start = from.value;
     const rest = 1 - progress.value;

@@ -164,7 +164,10 @@ function useLandscapeChrome(fades: boolean): { readonly hidden: boolean; readonl
     setHidden(false);
     setShownAt(Date.now());
   }, []);
-  const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  const style = useAnimatedStyle(() => {
+    "worklet";
+    return { opacity: opacity.value };
+  });
   return { hidden, show, style };
 }
 

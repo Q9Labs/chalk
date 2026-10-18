@@ -42,7 +42,10 @@ export const IconButton = memo(
     const { down } = press;
     const roundStyle = [styles.round, { width: size, height: size, borderRadius: size / 2 }, ring ? { boxShadow: `0px 0px 0px 1px ${colors.line}` } : null, disabled ? styles.disabled : null];
     const roundRef = useMeasuredRef<ViewType>(testID, [roundStyle, { backgroundColor: base }]);
-    const background = useAnimatedStyle(() => ({ backgroundColor: down.value ? pressedColor : base }));
+    const background = useAnimatedStyle(() => {
+      "worklet";
+      return { backgroundColor: down.value ? pressedColor : base };
+    });
 
     return (
       <Pressable

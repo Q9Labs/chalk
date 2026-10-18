@@ -109,13 +109,19 @@ export function BottomSheet({ open, onClose, accessibilityLabel, children, title
     [height, offset, open, reduceMotion, show],
   );
 
-  const sheetStyle = useAnimatedStyle(() => ({
-    opacity: reduceMotion ? shown.value : 1,
-    paddingBottom: keyboard.height.value > 0 ? KEYBOARD_PADDING : layout.insets.bottom + BOTTOM_PADDING,
-    maxHeight: layout.height - layout.insets.top - 8 - keyboard.height.value,
-    transform: [{ translateY: offset.value + drag.value - keyboard.height.value }],
-  }));
-  const scrimStyle = useAnimatedStyle(() => ({ opacity: shown.value }));
+  const sheetStyle = useAnimatedStyle(() => {
+    "worklet";
+    return {
+      opacity: reduceMotion ? shown.value : 1,
+      paddingBottom: keyboard.height.value > 0 ? KEYBOARD_PADDING : layout.insets.bottom + BOTTOM_PADDING,
+      maxHeight: layout.height - layout.insets.top - 8 - keyboard.height.value,
+      transform: [{ translateY: offset.value + drag.value - keyboard.height.value }],
+    };
+  });
+  const scrimStyle = useAnimatedStyle(() => {
+    "worklet";
+    return { opacity: shown.value };
+  });
 
   const width = layout.arrangement === "pad" ? 440 : layout.arrangement === "landscape" ? 460 : layout.width;
   const surfaceStyle = [styles.sheet, { backgroundColor: colors.surface, width, left: (layout.width - width) / 2, paddingHorizontal: inset }, heightRatio ? { height: layout.height * heightRatio } : null];
@@ -156,11 +162,13 @@ export function SheetDragRegion({ children }: { readonly children: ReactNode }):
   const gesture = Gesture.Pan()
     .activeOffsetY(4)
     .onUpdate((event) => {
+      "worklet";
       const next = Math.max(0, event.translationY);
       if (next > CLOSE_DISTANCE !== drag.value > CLOSE_DISTANCE) runOnJS(haptics.sheetDetent)();
       drag.value = next;
     })
     .onEnd(() => {
+      "worklet";
       if (drag.value > CLOSE_DISTANCE) runOnJS(close)();
       else drag.value = withTiming(0, timings.sheet);
     });

@@ -78,17 +78,33 @@ export const FaceAvatar = memo(function FaceAvatar({ name, size, style = "subtle
     blink.value = withSequence(withTiming(CLOSED, { duration: 150, easing: easings.standard }), withTiming(1, { duration: 150, easing: easings.standard }));
   }, [blink, lookX, lookY, reduceMotion, turned]);
 
-  const bobStyle = useAnimatedStyle(() => ({ transform: [{ translateY: level ? -level.value * BOB * unit : 0 }] }));
+  const bobStyle = useAnimatedStyle(() => {
+    "worklet";
+    return { transform: [{ translateY: level ? -level.value * BOB * unit : 0 }] };
+  });
   const poseStyle = useAnimatedStyle(() => {
+    "worklet";
     const t = turned.value;
     return {
       transform: [{ translateX: projection.translateX * unit * t }, { translateY: projection.translateY * unit * t }, { skewX: `${projection.skewX * t}deg` }, { skewY: `${projection.skewY * t}deg` }, { scaleX: 1 + (projection.scaleX - 1) * t }, { scaleY: 1 + (projection.scaleY - 1) * t }],
     };
   });
-  const eyesLookStyle = useAnimatedStyle(() => ({ transform: [{ translateX: lookX.value * unit }, { translateY: lookY.value * unit }] }));
-  const mouthLookStyle = useAnimatedStyle(() => ({ transform: [{ translateX: (lookX.value / 2) * unit }, { translateY: (lookY.value / 2) * unit }] }));
-  const blinkStyle = useAnimatedStyle(() => ({ transform: [{ scaleY: blink.value }] }));
-  const mouthStyle = useAnimatedStyle(() => ({ transform: [{ scaleY: 1 + (level ? level.value : 0) * MOUTH }] }));
+  const eyesLookStyle = useAnimatedStyle(() => {
+    "worklet";
+    return { transform: [{ translateX: lookX.value * unit }, { translateY: lookY.value * unit }] };
+  });
+  const mouthLookStyle = useAnimatedStyle(() => {
+    "worklet";
+    return { transform: [{ translateX: (lookX.value / 2) * unit }, { translateY: (lookY.value / 2) * unit }] };
+  });
+  const blinkStyle = useAnimatedStyle(() => {
+    "worklet";
+    return { transform: [{ scaleY: blink.value }] };
+  });
+  const mouthStyle = useAnimatedStyle(() => {
+    "worklet";
+    return { transform: [{ scaleY: 1 + (level ? level.value : 0) * MOUTH }] };
+  });
 
   const faceTransform = `translate(${box.x} ${box.y}) scale(${box.width / geometry.viewBox.width} ${box.height / geometry.viewBox.height})`;
 
