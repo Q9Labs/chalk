@@ -13,3 +13,6 @@ count.txt
 .vinxi
 todos.json
 public/vendor
+
+# Production call performance harness
+.call-performance/

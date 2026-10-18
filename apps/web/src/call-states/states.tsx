@@ -1,3 +1,4 @@
+import { PERFORMANCE_STATES } from "./performance";
 import type { SpaceSnapshot } from "@q9labsai/chalk-client";
 import { CallLimbo, Chalk, Entrance, type SpaceLayout } from "@q9labsai/chalk-react";
 import { useEffect, useState, type ReactNode } from "react";
@@ -27,6 +28,7 @@ const openChat: Action = { click: "Chat" };
 const openLayout: Action = { click: "Layout: Spotlight" };
 
 export const CALL_STATES: readonly CallState[] = [
+  ...PERFORMANCE_STATES,
   { id: "joining", title: "Joining with devices off", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null } }} /> },
   { id: "name-needed", title: "Name needed", render: () => <JoinName /> },
   { id: "knocking", title: "Asking the host to join", render: () => <WaitingForHost /> },
