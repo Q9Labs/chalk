@@ -260,8 +260,11 @@ def record(github, args):
     info = json.loads(env('RELEASE'))
     info['target_sha'] = env('TARGET_SHA')
     info['web'] = json.loads(info.get('web') or '{}')
-    passed = os.environ.get('DEPLOY_RESULT') == 'success' and os.environ.get('PROOF_RESULT') == 'passed'
-    info.update(channel='nightly-cut', proof_result='passed' if passed else 'failed', proof_run_id=env('GITHUB_RUN_ID'))
+    real_call = os.environ.get('PROOF_RESULT', 'failed')
+    web_e2e = os.environ.get('WEB_E2E_RESULT', 'failed')
+    passed = os.environ.get('DEPLOY_RESULT') == 'success' and real_call == 'passed' and web_e2e == 'passed'
+    info.update(channel='nightly-cut', proof_result='passed' if passed else 'failed',
+                real_call_proof_result=real_call, web_e2e_result=web_e2e, proof_run_id=env('GITHUB_RUN_ID'))
     if passed:
         require(info['release_id'] == info['applied_release_id'], 'deploy result identity mismatch')
         require_current_write(github.deployments('nightly', 'nightly-write'), info)

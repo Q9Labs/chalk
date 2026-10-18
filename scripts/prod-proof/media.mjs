@@ -26,7 +26,7 @@ window.proofJoin=async(space,baseUrl,displayName)=>{
   });
   return result.outputFiles[0].text;
 }
-export async function launchGuests(run, space, episode, speech, origin, tones = false) {
+export async function launchGuests(run, space, episode, speech, origin, tones = false, guestCount = 2) {
   const bundle = await sdkBundle();
   const serverPath = `${run.directory}/sdk-server.mjs`;
   await build({ logLevel: "silent", entryPoints: [new URL("../../sdks/typescript/client/src/server/index.ts", import.meta.url).pathname], bundle: true, outfile: serverPath, format: "esm", platform: "node" });
@@ -36,7 +36,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
   const reopen = [];
   const close = [];
   const participants = [];
-  for (let guest = 0; guest < 2; guest++) {
+  for (let guest = 0; guest < guestCount; guest++) {
     const admission = await chalk.participants.admit(space.id, episode.id, { name: `Proof guest ${guest + 1}`, role: "owner" });
     let grant = admission.access;
     maskCredentials(grant);
@@ -118,7 +118,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       }
       return true;
     });
-  await ready();
+  if (guestCount > 1) await ready();
   return {
     pages,
     participants,
@@ -153,6 +153,7 @@ function browserStats() {
       trackIdentifier: row.trackIdentifier,
       bytesSent: row.bytesSent,
       bytesReceived: row.bytesReceived,
+      packetsReceived: row.packetsReceived,
       framesEncoded: row.framesEncoded,
       framesDecoded: row.framesDecoded,
       frameWidth: row.frameWidth,
@@ -161,6 +162,7 @@ function browserStats() {
       qualityLimitationReason: row.qualityLimitationReason,
       audioLevel: row.audioLevel,
       totalAudioEnergy: row.totalAudioEnergy,
+      totalSamplesDuration: row.totalSamplesDuration,
     };
   }
   return (async () => {
