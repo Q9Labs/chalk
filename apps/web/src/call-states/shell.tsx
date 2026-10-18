@@ -1,13 +1,13 @@
 import { SpaceClientError, type ClientFailure, type MediaSource, type ScreenShareOptions } from "@q9labsai/chalk-client";
-import { readThemePreference, persistThemePreference } from "../lib/theme";
+import { readThemePreference, persistThemePreference, type ThemePreference } from "../lib/theme";
 import { useState } from "react";
 import { Chalk, ChalkProvider, ControlBar, SpaceHeader } from "@q9labsai/chalk-react";
 import { createCallStateClient, HOST, PEOPLE, liveSnapshot } from "./fixtures";
 import type { CallState } from "./states";
 
-function ShellCall({ host = false, report = false, blocked = false }: { readonly host?: boolean; readonly report?: boolean; readonly blocked?: boolean }) {
+function ShellCall({ host = false, report = false, blocked = false, initialColorScheme }: { readonly host?: boolean; readonly report?: boolean; readonly blocked?: boolean; readonly initialColorScheme?: ThemePreference }) {
   const [command, setCommand] = useState("");
-  const [colorScheme, setColorScheme] = useState(() => readThemePreference(document.cookie));
+  const [colorScheme, setColorScheme] = useState(() => initialColorScheme ?? readThemePreference(document.cookie));
   const [client] = useState(() => {
     const snapshot = liveSnapshot({ others: PEOPLE.slice(0, 7), capabilities: host ? HOST : undefined });
     const instance = createCallStateClient({
@@ -111,6 +111,7 @@ function ShellSeams() {
 export const SHELL_STATES: readonly CallState[] = [
   { id: "shell-seams", title: "Shell merge seams", render: () => <ShellSeams /> },
   { id: "shell-call", title: "Shell guest", render: () => <ShellCall /> },
+  { id: "shell-light", title: "Shell guest in Light", render: () => <ShellCall initialColorScheme="light" /> },
   { id: "shell-host", title: "Shell host", render: () => <ShellCall host /> },
   { id: "shell-report", title: "Shell report callback", render: () => <ShellCall report /> },
   { id: "shell-blocked", title: "Shell devices unavailable", render: () => <ShellCall blocked /> },

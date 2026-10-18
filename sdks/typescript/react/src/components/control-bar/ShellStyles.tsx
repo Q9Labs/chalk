@@ -356,6 +356,13 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 [data-chalk-theme="light"] .chalk-shell-split {
   box-shadow: 0 0 0 1px var(--chalk-line);
 }
+[data-chalk-theme="light"] .chalk-shell-dock .chalk-icon-button:not([data-chalk-tone="danger"]),
+[data-chalk-theme="light"] .chalk-shell-people-pill {
+  box-shadow: 0 0 0 1px var(--chalk-line);
+}
+[data-chalk-theme="light"] .chalk-shell-reactions {
+  box-shadow: 0 0 0 1px var(--chalk-line), 0 12px 32px rgba(0, 0, 0, 0.12);
+}
 @media (max-width: 640px) {
   .chalk-shell-details-heading {display:none;}
   .chalk-shell-detail-action {min-height:48px;}
