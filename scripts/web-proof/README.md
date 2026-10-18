@@ -21,6 +21,9 @@ Use the environment variables documented in [the proof kit](../prod-proof/README
 and set `CHALK_PROOF_CONFIG_SOURCE=env`. `CHALK_PROOF_WEB_URL` selects the deployed
 web base URL; its build must target the same API as `CHALK_PROOF_API_URL`.
 The same test runs on nightly and production without changing selectors.
+The API must be ready, but recording and transcription can be disabled: this
+proof tests the live web call, not media processing. The separate recording and
+transcript proofs still require both media capabilities before a nightly can hold.
 
 Run browser suites on testbox, not a developer laptop. For hosted runs,
 `web-call-proof.yml` accepts an environment and returns `result=passed` only
