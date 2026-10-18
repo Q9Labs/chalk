@@ -5,7 +5,7 @@ export default mergeConfig(
   viteConfig,
   defineConfig({
     test: {
-      exclude: [...configDefaults.exclude, "scripts/app-links.production.test.mjs"],
+      exclude: configDefaults.exclude,
       maxWorkers: 2,
     },
   }),

@@ -3,11 +3,26 @@ import { createServer } from "node:http";
 import { test } from "node:test";
 import { verifyWebDeploy } from "./verify-web-deploy.mjs";
 
+const appLinkPages = {
+  "/.well-known/apple-app-site-association": ["application/json", "{}"],
+  "/.well-known/assetlinks.json": ["application/json", "[]"],
+  "/space/": ["text/html", '<head><meta name="apple-itunes-app" content="app-id=1"></head>'],
+};
+
+function serveAppLinks(req, res) {
+  const page = appLinkPages[req.url];
+  if (!page) return false;
+  res.writeHead(200, { "content-type": page[0] });
+  res.end(page[1]);
+  return true;
+}
+
 test("verifies the web revision and retained API health without the account proxy", async () => {
   const sha = "a".repeat(40);
   const requests = [];
   const server = createServer((req, res) => {
     requests.push(req.url);
+    if (serveAppLinks(req, res)) return;
     if (req.url.startsWith("/sw.js")) res.end(JSON.stringify({ commitHash: sha }));
     else if (req.url === "/healthz") res.end(JSON.stringify({ status: "ok" }));
     else {
@@ -19,18 +34,19 @@ test("verifies the web revision and retained API health without the account prox
   try {
     const origin = `http://127.0.0.1:${server.address().port}`;
     await verifyWebDeploy({ baseURL: origin, apiBaseURL: origin, expectedSHA: sha, deadlineMs: 2_000 });
-    assert.deepEqual(requests, [`/sw.js?cb=${sha}`, "/healthz"]);
+    assert.deepEqual(requests, [`/sw.js?cb=${sha}`, "/healthz", ...Object.keys(appLinkPages)]);
   } finally {
     await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
 });
 
-test("a correct marker cannot hide stale service-worker or unhealthy API evidence", async () => {
+test("a correct marker cannot hide stale service-worker, unhealthy API or missing app-link evidence", async () => {
   const sha = "a".repeat(40);
   const cases = [
     { commit: "b".repeat(40), health: "ok", target: "nightly", message: /service worker has commit/ },
     { commit: sha, health: "unhealthy", target: "nightly", message: /API health did not report/ },
     { commit: sha, health: "ok", target: "production", message: /served web release mismatch/ },
+    { commit: sha, health: "ok", target: "nightly", message: /apple-app-site-association must be served as JSON/ },
   ];
   for (const { commit, health, target, message } of cases) {
     const responses = { "/sw.js": { commitHash: commit }, "/healthz": { status: health }, "/release.json": { environment: target, commit: sha } };
@@ -65,7 +81,7 @@ test("retries propagation and checks the explicitly selected target API", async 
       return { environment: "nightly", commit: markers === 1 ? "b".repeat(40) : sha };
     },
   };
-  const web = createServer((req, res) => res.end(JSON.stringify(responses[new URL(req.url, "http://localhost").pathname]())));
+  const web = createServer((req, res) => serveAppLinks(req, res) || res.end(JSON.stringify(responses[new URL(req.url, "http://localhost").pathname]())));
   await Promise.all([api, web].map((server) => new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))));
   try {
     await verifyWebDeploy({ baseURL: `http://127.0.0.1:${web.address().port}`, apiBaseURL: `http://127.0.0.1:${api.address().port}`, expectedSHA: sha, expectedEnvironment: "nightly", deadlineMs: 2_000, retryDelayMs: 1 });
