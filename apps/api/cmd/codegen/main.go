@@ -15,6 +15,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -374,7 +375,7 @@ func (g *generator) schemaFromType(t reflect.Type, request bool, currentName str
 			"items": map[string]any{"type": "string"},
 		}
 	}
-	if isOptionalInt64(t) {
+	if isOptionalInt64(t) || isOptionalInt32(t) {
 		return map[string]any{"type": []string{"integer", "null"}}
 	}
 	if isOptionalCORSOrigins(t) {
@@ -715,6 +716,7 @@ func isOptionalRequestField(t reflect.Type) bool {
 		isOptionalJSON(t) ||
 		isOptionalStrings(t) ||
 		isOptionalInt64(t) ||
+		isOptionalInt32(t) ||
 		isOptionalCORSOrigins(t) ||
 		isOptionalTimeRequest(t)
 }
@@ -729,7 +731,7 @@ func nullableHelperField(schemaName string, fieldName string, t reflect.Type) bo
 	if isOptionalStrings(t) {
 		return false
 	}
-	if isOptionalInt64(t) {
+	if isOptionalInt64(t) || isOptionalInt32(t) {
 		return true
 	}
 	if isOptionalCORSOrigins(t) {
@@ -764,6 +766,10 @@ func isOptionalStrings(t reflect.Type) bool {
 
 func isOptionalInt64(t reflect.Type) bool {
 	return dereference(t) == reflect.TypeOf(tenants.OptionalInt64{})
+}
+
+func isOptionalInt32(t reflect.Type) bool {
+	return dereference(t) == reflect.TypeOf(spaces.OptionalInt32{})
 }
 
 func isOptionalCORSOrigins(t reflect.Type) bool {
