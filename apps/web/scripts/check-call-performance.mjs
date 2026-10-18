@@ -288,7 +288,7 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
       await page.getByRole("complementary", { name: "Chat panel" }).waitFor();
       await click("Close chat");
       await page.getByRole("complementary", { name: "Chat panel" }).waitFor({ state: "hidden" });
-      await click("Participants");
+      await click(/^People, \d+$/);
       await page.getByRole("button", { name: "Close participants panel", exact: true }).waitFor();
       await click("Close participants panel");
     }
