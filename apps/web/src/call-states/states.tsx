@@ -24,7 +24,7 @@ const sofia: Person = PEOPLE[2]!;
 const crowd = (count: number): Person[] => Array.from({ length: count }, (_, index) => ({ ...PEOPLE[index % PEOPLE.length]!, id: `p${index}`, name: index < PEOPLE.length ? PEOPLE[index]!.name : `${PEOPLE[index % PEOPLE.length]!.name.split(" ")[0]} ${index}` }));
 
 const openChat: Action = { click: "Chat" };
-const openLayout: Action = { click: "Layout" };
+const openLayout: Action = { click: "Layout: Spotlight" };
 
 export const CALL_STATES: readonly CallState[] = [
   { id: "entrance", title: "Entrance, no name yet", render: () => <WebEntrance /> },
@@ -99,7 +99,7 @@ export const CALL_STATES: readonly CallState[] = [
   { id: "command-error", title: "Camera busy error", render: () => <Live snapshot={liveSnapshot({ self: { camera: false }, others: [nora], lastError: { code: "media.device_busy", recoverable: true, message: "Your camera is being used by another app." } })} /> },
 
   { id: "reconnecting", title: "Reconnecting, first seconds", render: () => <Live snapshot={liveSnapshot({ others: [nora], status: "reconnecting" })} /> },
-  { id: "reconnecting-short", title: "Reconnecting, after 3 seconds", actions: [{ wait: 1_500 }], render: () => <Live snapshot={liveSnapshot({ others: [nora], status: "reconnecting" })} /> },
+  { id: "reconnecting-short", title: "Reconnecting, after 3 seconds", actions: [{ wait: 2_200 }], render: () => <Live snapshot={liveSnapshot({ others: [nora], status: "reconnecting" })} /> },
   { id: "reconnecting-long", title: "Reconnecting, after 10 seconds", actions: [{ wait: 10_500 }], render: () => <Live snapshot={liveSnapshot({ others: [nora], status: "reconnecting" })} /> },
   { id: "offline-actions", title: "Back online with unsent actions", render: () => <Live snapshot={liveSnapshot({ others: [nora], offlinePending: true })} /> },
   { id: "failed", title: "Connection lost", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} then={(client) => client.updateSnapshot((current) => withStatus(current, "failed"))} /> },
@@ -136,7 +136,7 @@ function Live({ snapshot, layout, then }: { readonly snapshot: SpaceSnapshot; re
   }, [client, transition]);
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
-      <Chalk client={client} entrance={false} displayName={SELF_NAME} logoUrl="/brand/chalk/chalk-logo.svg" spaceName={SPACE_NAME} inviteLink={INVITE_LINK} layout={layout} />
+      <Chalk client={client} entrance={false} displayName={SELF_NAME} logoUrl="/brand/chalk/chalk-logo.svg" spaceName={SPACE_NAME} inviteLink={INVITE_LINK} layout={layout} onLeft={() => undefined} />
     </main>
   );
 }
