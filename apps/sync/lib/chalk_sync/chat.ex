@@ -6,6 +6,7 @@ defmodule ChalkSync.Chat do
   alias ChalkSync.Fanout.Collaboration.PostgresNotifications
   alias ChalkSync.Stateholder.Identity
   @extension "collaboration_v1"
+  @reactions_extension "collaboration_v2"
   @type options :: [repository: module(), fanout: GenServer.server(), observability: term()]
   @spec negotiate(Identity.t(), map(), pid()) :: {:ok, map()} | {:error, atom()}
   def negotiate(%Identity{} = identity, chat_cursor, socket) when is_pid(socket) do
@@ -81,7 +82,7 @@ defmodule ChalkSync.Chat do
            "type" => "chat_send_result",
            "client_message_id" => client_message_id,
            "outcome" => "accepted",
-           "message" => Message.wire(message)
+           "message" => Message.wire(message, Keyword.get(options, :version, 2))
          }}
 
       {:error, reason} ->
@@ -98,6 +99,30 @@ defmodule ChalkSync.Chat do
       end
 
     {:ok, rejected_chat(client_message_id, :invalid_payload)}
+  end
+
+  def react(%Identity{} = identity, input, options \\ []) do
+    case repository(options).react(identity, input) do
+      {:ok, state} ->
+        Collaboration.publish_chat_reactions(fanout(options), identity.episode, state)
+
+        {:ok,
+         %{
+           "type" => "chat_reaction_result",
+           "request_id" => input.request_id,
+           "outcome" => "accepted",
+           "state" => state
+         }}
+
+      {:error, reason} ->
+        {:ok,
+         %{
+           "type" => "chat_reaction_result",
+           "request_id" => input.request_id,
+           "outcome" => "rejected",
+           "error_code" => error_code(reason)
+         }}
+    end
   end
 
   @spec read_chat_page(Identity.t(), map()) :: {:ok, map()} | {:error, atom()}
@@ -123,7 +148,7 @@ defmodule ChalkSync.Chat do
       }
 
       case repository.read_page(identity.episode, request) do
-        {:ok, page} -> {:ok, loaded_page(request_id, page)}
+        {:ok, page} -> {:ok, loaded_page(request_id, page, options)}
         {:cursor_reset, floor} -> {:ok, cursor_reset_page(request_id, floor)}
         {:error, reason} -> {:error, reason}
       end
@@ -208,12 +233,12 @@ defmodule ChalkSync.Chat do
     end
   end
 
-  defp loaded_page(request_id, page) do
+  defp loaded_page(request_id, page, options) do
     %{
       "type" => "chat_page",
       "request_id" => request_id,
       "outcome" => "loaded",
-      "messages" => Enum.map(page.messages, &Message.wire/1),
+      "messages" => Enum.map(page.messages, &Message.wire(&1, Keyword.get(options, :version, 2))),
       "has_more" => page.has_more,
       "head_sequence" => page.head_sequence,
       "retained_floor_sequence" => page.retained_floor_sequence
@@ -297,19 +322,22 @@ defmodule ChalkSync.Chat do
     :invalid
   end
 
-  defp negotiation(%{extension: @extension} = cursor) do
-    {@extension, Map.delete(cursor, :extension)}
+  defp negotiation(%{extension: extension} = cursor)
+       when extension in [@extension, @reactions_extension] do
+    {extension, Map.delete(cursor, :extension)}
   end
 
   defp negotiation(cursor) do
     {@extension, cursor}
   end
 
-  defp negotiated_receipts(repository, identity, @extension) do
+  defp negotiated_receipts(repository, identity, extension)
+       when extension in [@extension, @reactions_extension] do
     repository.read_receipts(identity.episode)
   end
 
-  defp maybe_put_receipts(extension, @extension, receipts) do
+  defp maybe_put_receipts(extension, name, receipts)
+       when name in [@extension, @reactions_extension] do
     Map.put(extension, "read_receipts", Enum.map(receipts, &receipt_body/1))
   end
 

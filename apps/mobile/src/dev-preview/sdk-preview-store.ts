@@ -124,6 +124,9 @@ export function createPreviewStore(search: PreviewSearch): SpaceClient {
       declineRequest: async (requestId) => update((current) => ({ ...current, media: { ...current.media, incomingRequests: current.media.incomingRequests.filter((request) => request.requestId !== requestId) } })),
     },
     chat: {
+      react: async () => {
+        throw new Error("Message reactions are unavailable in the local Space fixture.");
+      },
       files: {
         upload: async () => {
           throw new Error("File transfer is unavailable in the local Space fixture.");

@@ -114,3 +114,22 @@ controls. The component files own presentation.
 The SDK-owned `@q9labsai/chalk-react/preview` dev-tool entrypoint exposes the
 preview contract used by the first-party gallery. Application previews should
 consume that entrypoint instead of reaching into this package's `src` tree.
+
+### Screen sharing
+
+`useScreenShare()` returns the local screen state, optional `capture: { surface, label }`, and `setEnabled(enabled, options?)`. For example, `await share.setEnabled(true, { surface: "browser", audio: true })` opens the browser picker with a tab hint. `surface` is only a hint; read `capture.surface` for what was actually chosen. `audio` requests browser capture only; screen publication is currently video-only. `useMedia().screenShare` exposes the same capture metadata.
+
+### Message reactions
+
+```ts
+await client.chat.react({ messageId, emoji: "👏", on: true });
+await client.chat.react({ messageId, emoji: "👏", on: false });
+```
+
+The action sets a desired state, never toggles it. Retrying the same request leaves one membership (or none). Anyone with `sendChat` may react. `CHALK_REACTIONS` exports the fixed 24-emoji set shared with call reactions. Unsupported emoji are rejected. A message has at most 128 reaction memberships across all emoji; adding another returns `overloaded`, while removal remains available.
+
+Each message's `reactions` contains `{ emoji, count, participantIds }`; IDs identify who reacted and can be resolved through the participant roster. Old messages/servers may omit the wire fields; the client normalizes them to an empty list and revision `"0"`. New history includes current reactions. Loaded messages update live, and reconnecting reloads their reaction snapshots. Revisions keep delayed broadcasts/history responses from rolling state backward. Actions taken while reconnecting use the same persisted, participant-scoped offline queue as chat messages. They are cleared if the participant or Episode changes and fail if the message has expired. Deleting a message cascades to its reactions under existing retention.
+
+Message reactions are stored separately from recording facts and are not rendered or added to recording timelines yet. Recording validators accept all 24 call-reaction emoji.
+
+`useChat()` returns the same state and `react(input)` action. Each hook message always has a reactions array; each group adds `isMine` for the current participant. Public types are `MessageReaction`, `ReactChatMessage`, and `UseChatResult`. No reaction UI is added by this change.

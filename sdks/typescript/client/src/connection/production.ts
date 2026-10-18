@@ -121,6 +121,7 @@ function createSyncClient(syncURL: string, input: ConnectionSyncFactoryInput) {
     url: syncURL,
     token: input.token,
     mediaPlane: input.media,
+    collaboration: { name: "collaboration_v2", chatCursor: { afterSequence: null, retainedFloorSequence: null } },
     persistenceScope: `${input.access.subject.tenantId}:${input.access.subject.episodeId}:${input.access.subject.participantId}`,
   });
 }

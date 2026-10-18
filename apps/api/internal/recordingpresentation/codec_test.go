@@ -1,6 +1,7 @@
 package recordingpresentation
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -51,4 +52,30 @@ func fixture(t *testing.T, name string) []byte {
 		t.Fatalf("read fixture: %v", err)
 	}
 	return contents
+}
+
+func TestRecordingAcceptsSharedCallReactionSet(t *testing.T) {
+	t.Parallel()
+	contents, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "contract", "schema", "sync-v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var contract struct {
+		Collaboration struct {
+			Reactions []string `json:"reactions"`
+		} `json:"collaboration"`
+	}
+	if err := json.Unmarshal(contents, &contract); err != nil {
+		t.Fatal(err)
+	}
+	timeline, err := Decode(fixture(t, "minimal-valid.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, emoji := range contract.Collaboration.Reactions {
+		timeline.Initial.Reactions = []Reaction{{ID: "reaction-1", ParticipantID: timeline.Initial.Participants[0].ID, DisplayName: "Sam", Value: emoji, OccurredAtMillis: 0, ExpiresAtMillis: 500}}
+		if _, err := Encode(timeline); err != nil {
+			t.Errorf("encode reaction %q: %v", emoji, err)
+		}
+	}
 }

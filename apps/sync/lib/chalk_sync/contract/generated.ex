@@ -73,6 +73,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     "chatAttachmentFileNameUtf8Bytes" => 255,
     "chatAttachmentMaxBytes" => 26_214_400,
     "chatPageMaxMessages" => 100,
+    "chatReactionMaxMemberships" => 128,
     "chatPageEncodedBytes" => 131_072,
     "reactionTtlMs" => 5000,
     "reactionRateWindowMs" => 10_000,
@@ -137,6 +138,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
           "chat_send",
           "chat_page_request",
           "chat_read_set",
+          "chat_reaction_set",
           "ping"
         ],
         "heartbeat" => %{"intervalMs" => 20_000, "missedDeadlinesBeforeClose" => 2}
@@ -248,6 +250,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
       "chatAttachmentFileNameUtf8Bytes" => 255,
       "chatAttachmentMaxBytes" => 26_214_400,
       "chatPageMaxMessages" => 100,
+      "chatReactionMaxMemberships" => 128,
       "chatPageEncodedBytes" => 131_072,
       "reactionTtlMs" => 5000,
       "reactionRateWindowMs" => 10_000,
@@ -256,8 +259,34 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     },
     "collaboration" => %{
       "extension" => "collaboration_v1",
+      "messageReactionsExtension" => "collaboration_v2",
       "capabilities" => ["sendReaction", "sendChat"],
-      "reactions" => ["👍", "❤️", "😂", "😮", "😢", "🎉"],
+      "reactions" => [
+        "👍",
+        "❤️",
+        "😂",
+        "😮",
+        "🎉",
+        "👏",
+        "😀",
+        "😅",
+        "🙏",
+        "🔥",
+        "✅",
+        "👀",
+        "💯",
+        "🤔",
+        "😢",
+        "🙌",
+        "🚀",
+        "👌",
+        "😍",
+        "🤝",
+        "💡",
+        "⭐",
+        "😎",
+        "🥳"
+      ],
       "attachmentMimeTypes" => [
         "image/png",
         "image/jpeg",
@@ -292,6 +321,10 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         ]
       },
       "clientFrames" => %{
+        "setChatReaction" => %{
+          "type" => "chat_reaction_set",
+          "exactFields" => ["type", "request_id", "message_id", "emoji", "on"]
+        },
         "sendReaction" => %{
           "type" => "reaction_send",
           "exactFields" => ["type", "operation_id", "reaction"]
@@ -311,6 +344,16 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         }
       },
       "serverFrames" => %{
+        "chatReactions" => %{
+          "type" => "chat_reactions",
+          "exactFields" => ["type", "message_id", "revision", "reactions"]
+        },
+        "chatReactionResult" => %{
+          "type" => "chat_reaction_result",
+          "acceptedFields" => ["type", "request_id", "outcome", "state"],
+          "rejectedFields" => ["type", "request_id", "outcome", "error_code"],
+          "outcomes" => ["accepted", "rejected"]
+        },
         "reaction" => %{
           "type" => "reaction",
           "exactFields" => [
@@ -341,7 +384,8 @@ defmodule ChalkSync.Contract.GeneratedV1 do
             "text",
             "attachments",
             "created_at"
-          ]
+          ],
+          "optionalFields" => ["reactions", "reaction_revision"]
         },
         "chatSendResult" => %{
           "type" => "chat_send_result",
@@ -533,7 +577,32 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     "rate_limited"
   ]
   @collaboration_capabilities ["sendReaction", "sendChat"]
-  @reactions ["👍", "❤️", "😂", "😮", "😢", "🎉"]
+  @reactions [
+    "👍",
+    "❤️",
+    "😂",
+    "😮",
+    "🎉",
+    "👏",
+    "😀",
+    "😅",
+    "🙏",
+    "🔥",
+    "✅",
+    "👀",
+    "💯",
+    "🤔",
+    "😢",
+    "🙌",
+    "🚀",
+    "👌",
+    "😍",
+    "🤝",
+    "💡",
+    "⭐",
+    "😎",
+    "🥳"
+  ]
   @collaboration_error_codes [
     "capability_denied",
     "invalid_payload",
@@ -573,6 +642,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         "directed_request" -> decode_directed_request(frame)
         "request_ack" -> decode_request_ack(frame)
         "reaction_send" -> decode_reaction_send(frame)
+        "chat_reaction_set" -> decode_chat_reaction_set(frame)
         "chat_send" -> decode_chat_send(frame)
         "chat_page_request" -> decode_chat_page_request(frame)
         "chat_read_set" -> decode_chat_read_set(frame)
@@ -798,6 +868,14 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   end
   defp decode_chat_page_request(_frame), do: {:error, :invalid_chat_page_request}
 
+  defp decode_chat_reaction_set(%{"request_id" => request_id, "message_id" => message_id,
+      "emoji" => emoji, "on" => on} = frame) do
+    if exact_keys?(frame, ["type", "request_id", "message_id", "emoji", "on"]) and
+        valid_request_id?(request_id) and valid_uuid?(message_id) and emoji in @reactions and
+        is_boolean(on), do: {:ok, {:chat_reaction_set, %{request_id: request_id,
+        message_id: message_id, emoji: emoji, on: on}}}, else: {:error, :invalid_chat_reaction}
+  end
+  defp decode_chat_reaction_set(_frame), do: {:error, :invalid_chat_reaction}
   defp decode_chat_read_set(%{"request_id" => request_id, "sequence" => sequence} = frame) do
     if exact_keys?(frame, ["type", "request_id", "sequence"]) and
         valid_request_id?(request_id) and valid_unsigned_decimal?(sequence), do: {:ok,
@@ -854,6 +932,9 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   def valid_server_frame?(%{"type" => "chat_head"} = frame), do: valid_chat_head?(frame)
   def valid_server_frame?(%{"type" => "chat_read_receipt"} = frame),
       do: valid_chat_read_receipt?(frame)
+  def valid_server_frame?(%{"type" => "chat_reactions"} = frame), do: valid_chat_reactions?(frame)
+  def valid_server_frame?(%{"type" => "chat_reaction_result"} = frame),
+      do: valid_chat_reaction_result?(frame)
   def valid_server_frame?(%{"type" => "chat_read_result"} = frame),
       do: valid_chat_read_result?(frame)
   def valid_server_frame?(%{"type" => "retryable_error", "command_id" => id,
@@ -876,7 +957,8 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   defp valid_streams?(_streams), do: false
 
   defp valid_collaborations_hello_extensions?([%{"name" => name,
-      "chat_cursor" => cursor} = extension]) when name == "collaboration_v1" do
+      "chat_cursor" => cursor} = extension]) when name in ["collaboration_v1",
+      "collaboration_v2"] do
     exact_keys?(extension, ["name", "chat_cursor"]) and valid_chat_cursor?(cursor)
   end
   defp valid_collaborations_hello_extensions?(_extensions), do: false
@@ -904,10 +986,11 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   end
   defp valid_welcome?(_frame), do: false
 
-  defp valid_collaborations_welcome_extensions?([%{"name" => "collaboration_v1",
+  defp valid_collaborations_welcome_extensions?([%{"name" => name,
       "capabilities" => capabilities, "participant_capabilities" => participant_capabilities,
       "chat_head_sequence" => head, "retained_floor_sequence" => floor,
-      "read_receipts" => receipts} = extension]) do
+      "read_receipts" => receipts} = extension]) when name in ["collaboration_v1",
+      "collaboration_v2"] do
     exact_keys?(extension, ["name", "capabilities", "participant_capabilities",
         "chat_head_sequence", "retained_floor_sequence", "read_receipts"]) and
         valid_collaboration_capabilities?(capabilities) and is_map(participant_capabilities) and
@@ -1289,8 +1372,10 @@ defmodule ChalkSync.Contract.GeneratedV1 do
       "client_message_id" => client_message_id, "sequence" => sequence,
       "participant_id" => participant_id, "display_name" => display_name, "text" => text,
       "attachments" => attachments, "created_at" => created_at} = frame),
-      do: correlation_exact_keys?(frame, ["type", "message_id", "client_message_id", "sequence",
-      "participant_id", "display_name", "text", "attachments", "created_at"]) and
+      do: correlation_exact_keys?(Map.drop(frame, ["reactions", "reaction_revision"]), ["type",
+      "message_id", "client_message_id", "sequence", "participant_id", "display_name", "text",
+      "attachments", "created_at"]) and valid_reaction_groups?(Map.get(frame, "reactions",
+      [])) and valid_unsigned_decimal?(Map.get(frame, "reaction_revision", "0")) and
       valid_uuid?(message_id) and valid_request_id?(client_message_id) and
       valid_unsigned_decimal?(sequence) and valid_uuid?(participant_id) and
       bounded_string?(display_name, 1, 256) and is_list(attachments) and
@@ -1298,6 +1383,30 @@ defmodule ChalkSync.Contract.GeneratedV1 do
       Enum.all?(attachments, &valid_chat_attachment?/1) and valid_iso_timestamp?(created_at) and
       frame_within_limit?(frame, @limits["collaborationFrameBytes"])
   defp valid_chat_message?(_frame), do: false
+  defp valid_reaction_groups?(groups) when is_list(groups) do
+    length(groups) <= 24 and Enum.all?(groups, &valid_reaction_group?/1) and
+        length(Enum.uniq_by(groups, & &1["emoji"])) == length(groups) and
+        Enum.sum(Enum.map(groups,
+        &length(&1["participant_ids"]))) <= @limits["chatReactionMaxMemberships"]
+  end
+  defp valid_reaction_groups?(_groups), do: false
+  defp valid_reaction_group?(%{"emoji" => emoji, "participant_ids" => ids} = group),
+      do: exact_keys?(group, ["emoji", "participant_ids"]) and emoji in @reactions and
+      is_list(ids) and length(ids) in 1..128 and Enum.all?(ids, &valid_uuid?/1) and
+      length(Enum.uniq(ids)) == length(ids)
+  defp valid_reaction_group?(_group), do: false
+  defp valid_chat_reactions?(%{"message_id" => message_id, "revision" => revision,
+      "reactions" => reactions} = frame), do: correlation_exact_keys?(frame, ["type",
+      "message_id", "revision", "reactions"]) and valid_uuid?(message_id) and
+      valid_unsigned_decimal?(revision) and valid_reaction_groups?(reactions)
+  defp valid_chat_reactions?(_frame), do: false
+  defp valid_chat_reaction_result?(%{"outcome" => "accepted", "request_id" => id,
+      "state" => state} = frame), do: correlation_exact_keys?(frame, ["type", "request_id",
+      "outcome", "state"]) and valid_request_id?(id) and valid_chat_reactions?(state)
+  defp valid_chat_reaction_result?(%{"outcome" => "rejected", "request_id" => id,
+      "error_code" => code} = frame), do: correlation_exact_keys?(frame, ["type", "request_id",
+      "outcome", "error_code"]) and valid_request_id?(id) and code in @collaboration_error_codes
+  defp valid_chat_reaction_result?(_frame), do: false
   defp valid_chat_attachment?(%{"attachment_id" => id, "file_name" => file_name,
       "mime_type" => mime_type, "byte_length" => byte_length} = attachment),
       do: exact_keys?(attachment, ["attachment_id", "file_name", "mime_type", "byte_length"]) and

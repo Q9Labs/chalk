@@ -37,7 +37,11 @@ defmodule ChalkSync.Fanout.Collaboration.PostgresNotifications do
 
   @impl true
   def publish_reaction(_adapter, %EpisodeKey{} = episode, event) do
-    publish_transient(episode, "reaction", event)
+    publish_transient(
+      episode,
+      if(event["type"] == "chat_reactions", do: "chat_reactions", else: "reaction"),
+      event
+    )
   end
 
   @impl true
@@ -55,7 +59,9 @@ defmodule ChalkSync.Fanout.Collaboration.PostgresNotifications do
         "event" => event
       })
 
-    if byte_size(payload) <= @transient_payload_bytes,
+    limit = if kind == "chat_reactions", do: 7_900, else: @transient_payload_bytes
+
+    if byte_size(payload) <= limit,
       do: notify(episode, @transient_channel, payload),
       else: {:error, :payload_too_large}
   end
@@ -100,8 +106,13 @@ defmodule ChalkSync.Fanout.Collaboration.PostgresNotifications do
          @transient_channel,
          %{"kind" => kind, "event" => event} = payload
        )
-       when kind in ["reaction", "chat_read_receipt"] do
-    decoded_kind = if kind == "reaction", do: :reaction, else: :chat_read_receipt
+       when kind in ["reaction", "chat_read_receipt", "chat_reactions"] do
+    decoded_kind =
+      case kind do
+        "reaction" -> :reaction
+        "chat_reactions" -> :chat_reactions
+        "chat_read_receipt" -> :chat_read_receipt
+      end
 
     if exact_keys?(payload, ["kind", "tenant_id", "space_id", "episode_id", "event"]) and
          GeneratedV1.valid_server_frame?(event),
