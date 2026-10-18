@@ -100,7 +100,7 @@ function StageFixture({ count: initialCount = 6, theme = "dark", layout: initial
           />
         }
         controls={
-          <div className="flex items-center gap-2">
+          <div className="flex max-w-[calc(100vw_-_32px)] items-center gap-2 overflow-x-auto [&>button]:shrink-0">
             <ChalkButton onClick={() => setLayout(layout === "grid" ? "focus" : "grid")}>{layout === "grid" ? "Spotlight" : "Grid"}</ChalkButton>
             <ChalkButton onClick={() => setShare(share === "none" ? "remote" : "none")}>{share === "none" ? "Start fixture share" : "Stop fixture share"}</ChalkButton>
             <ChalkButton onClick={() => setCount((value) => value + 1)}>Add participant</ChalkButton>
