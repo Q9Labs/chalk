@@ -2,10 +2,14 @@
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import type { ExcalidrawImperativeAPI } from "./types";
 
-beforeAll(() => {
+beforeAll(async () => {
   window.matchMedia = vi.fn(() => ({ matches: false, media: "", onchange: null, addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: () => false }));
   Object.defineProperty(HTMLCanvasElement.prototype, "getContext", { configurable: true, value: vi.fn(() => ({ filter: "none", measureText: () => ({ width: 0 }) })) });
-});
+  // Excalidraw's cold import takes seconds in jsdom on a loaded runner. Load it once
+  // here, so each test's timeout covers only its own work.
+  await import("@excalidraw/excalidraw");
+  await import("./engine");
+}, 60_000);
 
 it.each(["snapshot", "clear update"])("discards the retired scene after a new-scene %s", async (kind) => {
   const { restoreAppState, restoreElements } = await import("@excalidraw/excalidraw");
