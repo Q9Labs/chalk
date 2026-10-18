@@ -82,6 +82,23 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
       return () => document.removeEventListener("pointerdown", dismiss);
     }, [reactionBarOpen]);
     const [photo, setPhoto] = useState<ChatAttachment | null>(null);
+    const [photoClosing, setPhotoClosing] = useState(false);
+    const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(
+      () => () => {
+        if (closeTimer.current) clearTimeout(closeTimer.current);
+      },
+      [],
+    );
+    const closePhotoViewer = () => {
+      if (closeTimer.current) return;
+      setPhotoClosing(true);
+      const delay = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 180;
+      closeTimer.current = setTimeout(() => {
+        viewer.current?.close();
+        closeTimer.current = null;
+      }, delay);
+    };
     const photos = attachments.filter((file) => file.mimeType.startsWith("image/") && resolvedUrls.has(file.attachmentId));
     const imageFiles = attachments.filter((file) => file.mimeType.startsWith("image/"));
     const visibleAttachments = [...imageFiles.slice(0, 4), ...attachments.filter((file) => !file.mimeType.startsWith("image/"))];
@@ -208,6 +225,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
                         key={file.attachmentId}
                         aria-label={`View ${file.fileName}`}
                         onClick={() => {
+                          setPhotoClosing(false);
                           setPhoto(file);
                           viewer.current?.showModal();
                         }}
@@ -280,6 +298,11 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
         <dialog
           ref={viewer}
           className="call-photo-viewer"
+          data-closing={photoClosing ? "" : undefined}
+          onCancel={(event) => {
+            event.preventDefault();
+            closePhotoViewer();
+          }}
           aria-label="Photo viewer"
           onKeyDown={(event) => {
             if (event.key === "Escape") event.stopPropagation();
@@ -290,7 +313,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
           }}
           onClose={() => setPhoto(null)}
           onClick={(event) => {
-            if (event.target === event.currentTarget) viewer.current?.close();
+            if (event.target === event.currentTarget) closePhotoViewer();
           }}
         >
           <div className="call-photo-viewer-bar">
@@ -306,14 +329,14 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
                 <Download01Icon />
               </a>
             ) : null}
-            <button type="button" className="call-photo-viewer-control" aria-label="Close photo viewer" onClick={() => viewer.current?.close()}>
+            <button type="button" className="call-photo-viewer-control" aria-label="Close photo viewer" onClick={closePhotoViewer}>
               <Cancel01Icon />
             </button>
           </div>
           <div
             className="call-photo-viewer-stage"
             onClick={(event) => {
-              if (event.target === event.currentTarget) viewer.current?.close();
+              if (event.target === event.currentTarget) closePhotoViewer();
             }}
           >
             {photo ? <img src={resolvedUrls.get(photo.attachmentId)} alt={photo.fileName} /> : null}

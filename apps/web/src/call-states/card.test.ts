@@ -104,7 +104,7 @@ it(
       await viewer.getByRole("img", { name: "sample.png", exact: true }).waitFor();
       await capture(page, "laptop-photo-viewer-light");
       await page.keyboard.press("Escape");
-      expect(await image.evaluate((element) => element === document.activeElement)).toBe(true);
+      await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "View sample.png");
     }),
   30_000,
 );
@@ -159,6 +159,12 @@ it(
         await capture(page, `phone-people-${scheme}`);
         await page.getByRole("tab", { name: "Chat", exact: true }).click();
         await capture(page, `phone-chat-${scheme}`);
+        await page.getByRole("button", { name: "View q9labs-logo-lockup-white-on-black.jpg", exact: true }).click();
+        const photo = page.getByRole("dialog", { name: "Photo viewer" });
+        await photo.waitFor();
+        await page.keyboard.press("Escape");
+        await photo.waitFor({ state: "hidden" });
+        expect(await sheet.isVisible()).toBe(true);
         await page.keyboard.press("Escape");
         await sheet.waitFor({ state: "hidden" });
       }
