@@ -7,9 +7,12 @@ import { cpus, loadavg, platform, arch } from "node:os";
 import { parseArgs } from "node:util";
 import { chromium } from "playwright";
 import { serveBuild } from "./call-performance-server.mjs";
+import { installVideoQualityObserver, videoCounterDelta } from "./call-video-quality.mjs";
+import { checkLeaks, LEAK_JOURNEYS } from "./call-leak-check.mjs";
 import { measureRouteBundle } from "./call-route-bundle.mjs";
 import { validateBudgets, summarize, percentile, budgetFailures, trustedInteractionMs, METRICS, BUNDLE_METRICS } from "./call-performance-metrics.mjs";
 
+const runStarted = performance.now();
 const { values } = parseArgs({
   options: {
     out: { type: "string", default: "artifacts/call-performance.json" },
@@ -18,14 +21,20 @@ const { values } = parseArgs({
     "bundle-only": { type: "boolean" },
     "self-test": { type: "boolean" },
     smoke: { type: "boolean" },
+    "leaks-only": { type: "boolean" },
+    "timing-only": { type: "boolean" },
+    "leak-journey": { type: "string" },
+    "leak-repeats": { type: "string", default: "1" },
     diagnostics: { type: "boolean" },
     shots: { type: "string", default: process.env.CALL_PERFORMANCE_SHOTS },
     "record-baseline": { type: "boolean" },
   },
 });
-if (values.gate && (values.smoke || values["record-baseline"])) throw new Error("Gate runs cannot collect a smoke test or unenforced baseline");
+if (values["leaks-only"] && values["timing-only"]) throw new Error("Choose either leaks-only or timing-only");
+if (values.gate && (values.smoke || values["record-baseline"] || values["leak-journey"])) throw new Error("Gate runs cannot narrow journeys or collect an unenforced baseline");
 if (values.gate && !process.env.TESTBOX_SOURCE_COMMIT) values["bundle-only"] = true;
 if (values.gate && !values["bundle-only"]) values["self-test"] = true;
+if (values["leak-journey"] && !LEAK_JOURNEYS.includes(values["leak-journey"])) throw new Error("Unknown leak journey");
 const web = resolve(import.meta.dirname, "..");
 const root = resolve(web, "../..");
 const dist = resolve(web, ".call-performance");
@@ -60,7 +69,7 @@ const report = {
   baselineCommit: budgets.baselineCommit,
   recordedAt: new Date().toISOString(),
   machine: { platform: platform(), arch: arch(), cpu: cpus()[0].model, cores: cpus().length, load: loadavg() },
-  mode: values["bundle-only"] ? "bundle-only" : "full",
+  mode: values["bundle-only"] ? "bundle-only" : values["leaks-only"] ? "leaks-only" : values["timing-only"] ? "timing-only" : "full",
   devices: budgets.devices,
   calibration: [],
   results: [],
@@ -74,58 +83,79 @@ const origin = `http://127.0.0.1:${server.address().port}`;
 let browser;
 let deadline;
 try {
-  deadline = setTimeout(() => {
-    report.errors.push("Performance check exceeded 20 minutes");
-    void browser?.close();
-  }, 1_200_000);
+  deadline = setTimeout(
+    () => {
+      report.errors.push("Performance check exceeded its deadline");
+      void browser?.close();
+    },
+    values["leaks-only"] ? Math.max(1_200_000, (Number(values["leak-repeats"]) * 10 + 5) * 60_000) : 1_200_000,
+  );
   browser = await chromium.launch({ headless: true });
   report.browser = browser.version();
-  report.routeBundle = await measureRouteBundle({ browser, web });
-  for (const metric of ["routeJsGzipKiB", "routeCssGzipKiB"]) {
-    const value = report.routeBundle[metric];
-    console.log(`Production route ${metric}: ${value.toFixed(1)}/${budgets.limits[metric]}`);
-    if (value > budgets.limits[metric]) report.failures.push(`${metric} ${value.toFixed(2)} > ${budgets.limits[metric]}`);
-  }
-  if (values.diagnostics) {
-    for (const [deviceName, device] of Object.entries(budgets.devices)) {
-      for (const mode of ["paused-video", "unthrottled"]) {
-        const sample = await measure(mode === "unthrottled" ? { ...device, cpu: 1 } : device, { id: "calm-six", state: "perf-six" }, { pauseVideo: mode === "paused-video" });
-        report.diagnostics.push({ device: deviceName, mode, sample });
-        console.log(`Diagnostic ${deviceName}/${mode}: frame p95 ${sample.frameP95Ms.toFixed(1)} ms`);
+  if (!values["leaks-only"]) {
+    report.routeBundle = await measureRouteBundle({ browser, web });
+    for (const metric of ["routeJsGzipKiB", "routeCssGzipKiB"]) {
+      const value = report.routeBundle[metric];
+      console.log(`Production route ${metric}: ${value.toFixed(1)}/${budgets.limits[metric]}`);
+      if (value > budgets.limits[metric]) report.failures.push(`${metric} ${value.toFixed(2)} > ${budgets.limits[metric]}`);
+    }
+    if (values.diagnostics) {
+      for (const [deviceName, device] of Object.entries(budgets.devices)) {
+        for (const mode of ["paused-video", "unthrottled"]) {
+          const sample = await measure(mode === "unthrottled" ? { ...device, cpu: 1 } : device, { id: "calm-six", state: "perf-six" }, { pauseVideo: mode === "paused-video" });
+          report.diagnostics.push({ device: deviceName, mode, sample });
+          console.log(`Diagnostic ${deviceName}/${mode}: frame p95 ${sample.frameP95Ms.toFixed(1)} ms`);
+        }
       }
     }
-  }
-  for (const [deviceName, device] of Object.entries(budgets.devices)) {
-    const calibration = await calibrate(device);
-    report.calibration.push({ device: deviceName, ...calibration });
-    if (!values["bundle-only"] && (calibration.frameP95Ms > 25 || calibration.frameMedianMs < 12)) throw new Error(`Unusable headless frame clock on ${deviceName}: ${JSON.stringify(calibration)}`);
-    for (const scenario of scenarios) {
-      const samples = [];
-      const repeats = values["bundle-only"] || values.smoke ? 1 : budgets.repeats;
-      for (let repeat = 0; repeat < repeats; repeat++) samples.push(await measure(device, scenario, { capture: repeat === 0 ? `${deviceName}-${scenario.id}` : null }));
-      const summary = summarize(samples);
-      const limits = { ...budgets.limits, ...budgets.scenarios?.[deviceName]?.[scenario.id] };
-      const checked = values["bundle-only"] ? BUNDLE_METRICS : METRICS.filter((metric) => metric !== "firstCallMs" || scenario.id === "first-load");
-      const failures = budgetFailures(summary, limits, checked).map((failure) => `${deviceName}/${scenario.id}: ${failure}`);
-      report.results.push({ device: deviceName, scenario: scenario.id, samples, summary, limits, failures });
-      report.failures.push(...failures);
-      console.log(`${deviceName.padEnd(7)} ${scenario.id.padEnd(16)} ${checked.map((metric) => `${metric}=${summary[metric].median.toFixed(1)}/${limits[metric]}`).join(" ")}`);
+    for (const [deviceName, device] of Object.entries(budgets.devices)) {
+      const calibration = await calibrate(device);
+      report.calibration.push({ device: deviceName, ...calibration });
+      if (!values["bundle-only"] && (calibration.frameP95Ms > 25 || calibration.frameMedianMs < 12)) throw new Error(`Unusable headless frame clock on ${deviceName}: ${JSON.stringify(calibration)}`);
+      for (const scenario of scenarios) {
+        const samples = [];
+        const repeats = values["bundle-only"] || values.smoke ? 1 : budgets.repeats;
+        for (let repeat = 0; repeat < repeats; repeat++) samples.push(await measure(device, scenario, { capture: repeat === 0 ? `${deviceName}-${scenario.id}` : null }));
+        const summary = summarize(samples);
+        const limits = { ...budgets.limits, ...budgets.scenarios?.[deviceName]?.[scenario.id] };
+        const checked = values["bundle-only"] ? BUNDLE_METRICS : METRICS.filter((metric) => metric !== "firstCallMs" || scenario.id === "first-load");
+        const failures = budgetFailures(summary, limits, checked).map((failure) => `${deviceName}/${scenario.id}: ${failure}`);
+        report.results.push({ device: deviceName, scenario: scenario.id, samples, summary, limits, failures });
+        report.failures.push(...failures);
+        console.log(`${deviceName.padEnd(7)} ${scenario.id.padEnd(16)} ${checked.map((metric) => `${metric}=${summary[metric].median.toFixed(1)}/${limits[metric]}`).join(" ")}`);
+      }
+    }
+    if (values["self-test"]) {
+      const limits = { ...budgets.limits, ...budgets.scenarios?.laptop?.panels };
+      const injectionMs = Math.max(250, limits.interactionMs + 100, limits.blockingMs / 4 + 100);
+      const injected = await measure(budgets.devices.laptop, { id: "panels", state: "perf-six" }, { inject: injectionMs });
+      const failures = budgetFailures(summarize([injected]), limits, ["interactionMs", "blockingMs"]);
+      const detected = failures.length > 0 && injected.blockingMs > 150 && injected.interactionMs >= 200;
+      report.selfTest = { detected, injectionMs, injected, failures, expected: "A busy loop above the configured click budget must fail the ordinary budget evaluator." };
+      if (!detected) report.failures.push("Self-test did not detect the injected click slowdown");
+      console.log(`Self-test: ${detected ? "PASS (injected regression detected)" : "FAIL"}`);
     }
   }
-  if (values["self-test"]) {
-    const limits = { ...budgets.limits, ...budgets.scenarios?.laptop?.panels };
-    const injectionMs = Math.max(250, limits.interactionMs + 100, limits.blockingMs / 4 + 100);
-    const injected = await measure(budgets.devices.laptop, { id: "panels", state: "perf-six" }, { inject: injectionMs });
-    const failures = budgetFailures(summarize([injected]), limits, ["interactionMs", "blockingMs"]);
-    const detected = failures.length > 0 && injected.blockingMs > 150 && injected.interactionMs >= 200;
-    report.selfTest = { detected, injectionMs, injected, failures, expected: "A busy loop above the configured click budget must fail the ordinary budget evaluator." };
-    if (!detected) report.failures.push("Self-test did not detect the injected click slowdown");
-    console.log(`Self-test: ${detected ? "PASS (injected regression detected)" : "FAIL"}`);
+  if (!values["bundle-only"] && !values["timing-only"]) {
+    const repeats = Number(values["leak-repeats"]);
+    if (!Number.isInteger(repeats) || repeats < 1) throw new Error("Invalid leak repeats");
+    report.leaks = await checkLeaks({
+      browser,
+      origin,
+      budgets: budgets.leaks,
+      directory: resolve(root, "artifacts/call-leaks"),
+      boardCss: resolve(root, "packages/whiteboard/node_modules/@excalidraw/excalidraw/dist/prod/index.css"),
+      selfTest: values["self-test"],
+      repeats,
+      journeys: values["leak-journey"] ? [values["leak-journey"]] : undefined,
+    });
+    report.failures.push(...report.leaks.failures);
   }
 } catch (error) {
   report.errors.push(error.stack ?? String(error));
   console.error(error);
 } finally {
+  report.elapsedMs = performance.now() - runStarted;
   clearTimeout(deadline);
   await browser?.close();
   await new Promise((done) => server.close(done));
@@ -137,8 +167,20 @@ try {
 if (report.errors.length || report.selfTest?.detected === false || (!values["record-baseline"] && report.failures.length)) process.exitCode = 1;
 
 function installObservers() {
-  const data = { frames: [], tasks: [], events: [], start: performance.now(), last: null, clicks: 0, trustedInputs: [] };
+  const data = { frames: [], tasks: [], events: [], start: performance.now(), last: null, clicks: 0, trustedInputs: [], layoutShift: 0, layoutShifts: [] };
   window.__callPerf = data;
+  new PerformanceObserver((list) => {
+    for (const entry of list.getEntries())
+      if (entry.startTime >= data.start) {
+        data.layoutShift += entry.value;
+        data.layoutShifts.push({
+          value: entry.value,
+          startTime: entry.startTime,
+          hadRecentInput: entry.hadRecentInput,
+          sources: (entry.sources ?? []).map((source) => ({ tag: source.node?.nodeName, class: source.node?.getAttribute?.("class")?.slice(0, 160), previousRect: source.previousRect.toJSON(), currentRect: source.currentRect.toJSON() })),
+        });
+      }
+  }).observe({ type: "layout-shift", buffered: true });
   const frame = (at) => {
     if (data.last !== null) data.frames.push(at - data.last);
     data.last = at;
@@ -172,6 +214,7 @@ async function newPage(device) {
   await cdp.send("Network.enable");
   await cdp.send("Network.setCacheDisabled", { cacheDisabled: true });
   await page.addInitScript(installObservers);
+  await page.addInitScript({ content: `(${installVideoQualityObserver.toString()})(${videoCounterDelta.toString()})` });
   return { context, page, cdp };
 }
 async function calibrate(device) {
@@ -215,8 +258,11 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
     if (pauseVideo) await page.evaluate(() => document.querySelectorAll("video").forEach((video) => video.pause()));
     if (scenario.id !== "first-load") {
       await page.waitForTimeout(1000);
-      await page.evaluate(() => Object.assign(window.__callPerf, { frames: [], tasks: [], events: [], start: performance.now(), last: null, clicks: 0, trustedInputs: [] }));
+      await page.evaluate(() => Object.assign(window.__callPerf, { frames: [], tasks: [], events: [], start: performance.now(), last: null, clicks: 0, trustedInputs: [], layoutShift: 0, layoutShifts: [] }));
     }
+    await page.evaluate(() => {
+      window.__callVideoQuality.reset();
+    });
     if (inject)
       await page.evaluate(
         (busyMs) =>
@@ -270,9 +316,10 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
     await page.waitForTimeout(budgets.sampleMs);
     const data = await page.evaluate(() => ({
       ...window.__callPerf,
+      videoQuality: window.__callVideoQuality.snapshot(),
       supported: PerformanceObserver.supportedEntryTypes,
       durationMs: performance.now() - window.__callPerf.start,
-      videos: [...document.querySelectorAll("video")].map((video) => ({ paused: video.paused, readyState: video.readyState, frames: video.getVideoPlaybackQuality().totalVideoFrames })),
+      videos: [...document.querySelectorAll("video")].map((video) => ({ paused: video.paused, readyState: video.readyState, frames: video.getVideoPlaybackQuality().totalVideoFrames, droppedFrames: video.getVideoPlaybackQuality().droppedVideoFrames })),
     }));
     if (!values["bundle-only"] && (!data.supported.includes("event") || !data.supported.includes("longtask") || data.frames.length < 2)) throw new Error(`Missing performance observations for ${scenario.id}: ${JSON.stringify(data)}`);
     if (scenario.id === "panels" && data.clicks !== 4) throw new Error(`Expected four trusted panel clicks, got ${data.clicks}`);
@@ -296,6 +343,10 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
     }
     const missed = data.frames.reduce((sum, ms) => sum + Math.max(0, Math.round(ms / (1000 / 60)) - 1), 0);
     return {
+      layoutShift: data.layoutShift,
+      layoutShifts: data.layoutShifts,
+      videoDroppedFramePercent: data.videoQuality.frames ? (100 * data.videoQuality.dropped) / data.videoQuality.frames : data.videoQuality.dropped ? 100 : 0,
+      videoQuality: data.videoQuality,
       frameP95Ms: data.frames.length ? percentile(data.frames, 0.95) : null,
       droppedFramePercent: data.frames.length ? (100 * missed) / (missed + data.frames.length) : null,
       longTasks: data.tasks.length,

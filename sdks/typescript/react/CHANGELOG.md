@@ -8,6 +8,10 @@
 - Add `captureFlip` for transform-only, reduced-motion-aware moves that preserve the mounted element.
 - Use synthesized call sounds with a persistent Sounds switch; remove the unused Sonner `toast` re-export from the toast stack.
 
+- Expose per-message reactions, count, participant IDs, `isMine`, and `react(input)` from `useChat()`; export the shared 24-emoji set and reaction types.
+
+- Add `useScreenShare()` and screen source hint/capture types, without changing UI.
+
 - Remove unused icon wrappers: `ArrowLeft02Icon`, `ArrowUp01Icon`, `Calendar01Icon`, `Mail01Icon`, `PictureInPictureIcon`, `ZoomInIcon`, `ZoomOutIcon`, `Link01Icon`, `MoreHorizontalIcon`, `Settings01Icon`, `SparklesIcon`, `UserAdd01Icon`.
 
 - Fold Classic implementations into plain component names; remove Classic-prefixed modules and symbols.

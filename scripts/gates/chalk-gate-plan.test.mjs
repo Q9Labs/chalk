@@ -123,11 +123,16 @@ test("scoped builds include workspace dependencies without widening other lanes"
   assert.deepEqual(docs.services, { api: false, sync: false });
 });
 
-test("call performance budgets follow call renderers and full gates", () => {
+test("separate call timing and leak budgets follow call renderers and full gates", () => {
   for (const file of ["apps/web/src/components/space/SpacePage.tsx", "sdks/typescript/react/src/index.ts", "packages/ui/src/button.tsx", "packages/whiteboard/src/index.ts", "pnpm-lock.yaml"]) {
     const lane = createGatePlan([file]).tasks.find((task) => task.id === "call-performance");
     assert.equal(lane.selected, true, file);
-    assert.deepEqual(lane.command, ["node", "apps/web/scripts/check-call-performance.mjs", "--gate"]);
+    assert.deepEqual(lane.command, ["node", "apps/web/scripts/check-call-performance.mjs", "--gate", "--timing-only"]);
+    const leaks = createGatePlan([file]).tasks.find((task) => task.id === "call-leaks");
+    assert.equal(leaks.selected, true, file);
+    assert.deepEqual(leaks.command, ["node", "apps/web/scripts/check-call-performance.mjs", "--gate", "--leaks-only", "--out", "artifacts/call-leaks.json"]);
   }
   assert.equal(createGatePlan(["docs/performance-budget.md"]).tasks.find((task) => task.id === "call-performance").selected, false);
+  assert.equal(createGatePlan(["docs/performance-budget.md"]).tasks.find((task) => task.id === "call-leaks").selected, false);
+  assert.equal(createGatePlan([], { full: true }).tasks.find((task) => task.id === "call-leaks").selected, true);
 });

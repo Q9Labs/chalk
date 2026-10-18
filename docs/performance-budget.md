@@ -13,10 +13,11 @@ Run heavy work through testbox, not on the laptop:
 python3 ~/.agents/skills/testbox/testbox.py run --repo "$PWD" --region blr1 --size c-8 --ttl 3600 --budget 0.35 --command 'pnpm install --frozen-lockfile && node apps/web/scripts/check-call-performance.mjs --self-test'
 ```
 
-The focused gate is `pnpm run gate -- --lane call-performance --files
-apps/web/src/call-states/performance.tsx`, also run on testbox. The root gate
-selects it for web, React SDK, UI, whiteboard and dependency changes, and full
-gates. The PR Gate workflow already runs this root gate and installs Chromium.
+The focused timing gate is `pnpm run gate -- --lane call-performance --files
+apps/web/src/call-states/performance.tsx`; the lifecycle gate uses `--lane
+call-leaks` instead. Run both on testbox. The root gate selects both for web,
+React SDK, UI, whiteboard and dependency changes, and full gates. The PR Gate
+workflow already runs this root gate and installs Chromium.
 The pre-commit fast profile deliberately does not run browser measurements.
 
 `--gate` enforces all limits on testbox (identified by `TESTBOX_SOURCE_COMMIT`).
@@ -250,3 +251,167 @@ and DOM headroom are deliberately conservative until the integrated redesign is 
 - [CDP CPU slowdown](https://chromedevtools.github.io/devtools-protocol/tot/Emulation/#method-setCPUThrottlingRate).
 - [CDP performance metrics](https://chromedevtools.github.io/devtools-protocol/tot/Performance/#method-getMetrics).
 - [Event Timing specification](https://www.w3.org/TR/event-timing/): 16 ms observation floor and quantized durations.
+
+## Leaks
+
+Full testbox performance gates also run eight lifecycle journeys: leave/rejoin,
+Chat/People open/close, participant join/leave, share start/stop, board open/close,
+reconnecting/recovered, Spotlight/Grid, and a 24-reaction burst. Each runs once to
+warm caches, then 20 times in the **same document**. Leave is sampled while left;
+the next cycle rejoins before leaving again. Other journeys return to their
+initial UI state. No reload can discard evidence between cycles.
+
+Each sample waits 600 ms for effect/animation teardown, collects garbage through
+CDP, yields another 200 ms, and collects again. It repeats until two consecutive
+resource-count readings agree (up to six pairs); it never selects a minimum.
+Failure to stabilize is a measurement failure. Reaction cycles additionally wait
+4.3 seconds for the four-second burst expiry. Board warm-up waits for its lazy
+canvas. Counts are collected without holding application objects strongly:
+
+- `heapMiB`: V8 JS heap after collection; excludes GPU, canvas/native video
+  buffers, browser process memory and most decoder memory.
+- `domNodes`, `listeners`, `documents`: CDP DOM counters, including detached
+  nodes/listeners still retained by JavaScript, not just attached DOM queries.
+- `videos`, `audios`: media elements still alive after GC, including retained detached elements.
+  Creation wrappers and a mutation observer register them weakly.
+- `liveTracks`: distinct non-ended track wrappers observed through canvas/media
+  capture, media-device calls, stream additions, track cloning and Web Audio
+  destinations. Weak references do not prevent collection. This is not a native
+  media-process census or an instrumentation of arbitrary third-party realms.
+- `rosterCacheKeys`: distinct departed synthetic guest IDs still present as keys
+  in a live Map. Guest IDs change each join, while fake camera names stay fixed
+  so source caching stays bounded. Map registration is weak and does not keep a
+  cache alive. A one-key allowance covers an alternate React render; sustained
+  growth fails. This focused counter catches the confirmed first-seen map leak
+  even though each entry is too small to separate reliably from heap noise.
+- `audioContexts`: observed AudioContexts that have not closed, including suspended
+  contexts. Closed contexts do not count.
+- `intervals`: scheduled intervals not cancelled. `animationFrames`: outstanding
+  callbacks, including self-rescheduling animation loops. A pending one-shot RAF
+  can vary by one; these counters measure scheduled work, not CPU consumption.
+
+`apps/web/perf-budgets.json` owns the cycle count, settle delay and per-metric
+budgets. Ordinary least-squares slope includes the warm baseline (cycle zero).
+A journey fails if **either** slope exceeds `perCycle` or any subsequent sample
+exceeds baseline plus `allowance`. Heap also checks the last ten samples against
+`tailPerCycle` (0.05 MiB/cycle), so startup headroom cannot mask ongoing growth.
+The whole-run heap limits are 0.1 MiB/cycle and 3 MiB above baseline. Thus a fixed leak cannot hide behind a flat
+slope, and slow sustained growth cannot hide behind fixed headroom. After full
+leave, tracks and AudioContexts must be exactly zero even if unchanged from the
+warm baseline. Missing measurements and invalid budgets fail closed.
+
+The fixture owns synthetic canvas sources and paint intervals; full leave clears
+its snapshot, stops those sources and clears their intervals. It does not stop
+SDK-owned track clones, close SDK AudioContexts or clear SDK timers. While joined,
+synthetic camera/share sources are cached under fixed names; warm-up includes
+those caches. These are preview-client UI lifecycles, not a live client's network
+join/leave or WebRTC teardown proof. Excalidraw's first-open module/cache allocation
+belongs before baseline. Growth on later opens must still pass the same limits.
+
+On failure only, `artifacts/call-leaks/run-*/*.heapsnapshot` holds a Chromium snapshot. Each invocation gets its own directory, so a
+calibration and a subsequent gate cannot overwrite each other’s evidence.
+Load it in DevTools **Memory → Load**, use Comparison against a separately captured
+baseline when needed, and inspect retainers of detached nodes. The report prints
+native detached-node count and the largest retained object types. Diagnostic
+summaries compute dominators over strong edges: `largestRetainedBytes` is the
+largest individual retained subtree for that type (not a sum of overlapping
+subtrees); `shallowBytes` totals the type's own allocations. Snapshots can contain
+application data: keep artifacts out of Git. Passing uninjected journeys take no
+snapshots; the self-test's deliberate failures do produce snapshots.
+
+`--self-test` runs panel cycles with two independent faults: an unreleased document
+listener per panel open and retained detached sections per panel open. Each must
+fail its actual count budget and generate evidence. An uninjected panel run must
+then pass. The two injected probes use five cycles each; the uninjected comparison and all
+ordinary journeys use 20. Expected injected failures do not themselves fail the gate. A separate blank-page
+resource probe also proves that detached media elements, tracks, an AudioContext,
+an interval and a self-rescheduling RAF are observed while live and return to zero
+after teardown.
+
+For calibration (three full repetitions of every journey), after building the
+harness on testbox:
+
+```sh
+node apps/web/scripts/check-call-performance.mjs --skip-build --leaks-only --leak-repeats 3 --self-test --out artifacts/leaks-calibration.json
+```
+
+An additional idle journey runs the same sampling and two no-op evaluations per
+cycle without changing call state. It measures observer/automation heap noise.
+
+Leak runs use an unthrottled desktop viewport to reduce timer/teardown timing
+noise; timing scenarios still exercise both CPU-throttled device profiles.
+For a focused diagnostic, add `--leak-journey people`; gate mode rejects narrowed
+journeys. The root gate invokes `--gate --timing-only` and `--gate --leaks-only`
+as separate required lanes, with different JSON reports. A direct invocation
+without either flag still runs both. The combined reference run passed 11 minutes
+before starting leak cycles, so leaks have their own lane to keep timing checks
+under about 15 minutes. Each lane builds its own harness; no build-directory
+sharing or background server is required.
+
+Do not widen a count budget to absorb a real leak. Finite 20-cycle tests cannot
+prove absence of slower leaks, browser/native leaks, production SDK media leaks,
+or leaks triggered only by real transports, device changes or long sessions.
+
+### Calibration and known findings (2026-10-18)
+
+Count calibration used shared 4-vCPU testboxes; timing verification uses the
+dedicated `c-8` reference runner described above. Shared-run timing numbers are
+not comparable with the reference budgets. Only complete 21-sample journeys
+count toward the calibration spread; an interrupted three-repeat command is not
+a successful full run.
+
+Blank-page controls measured heap slopes of 0.000012 MiB/sample without the
+observer and 0.000852 with it. The idle call without instrumentation initially
+grew by 0.0386 MiB/sample over 20 cycles, but over 120 cycles its overall slope was
+0.00440 and its final 21-sample slope was 0.00312. Panel and layout controls over
+60 cycles had final 21-sample slopes of 0.0172 and 0.00946 respectively. These
+controls expose startup/JIT/cache growth, not a zero-allocation call. Across
+completed ordinary journey observations, early whole-run heap slopes reached
+about 0.073 MiB/cycle and final-ten slopes about 0.044. The 0.1/3 MiB whole-run
+limits and 0.05 tail limit leave headroom above those observations; the fixed
+count budgets independently catch smaller retained resources.
+
+Fresh guest IDs expose a real failure in the current SDK: the stage's
+`seenAtRef` map retains departed participant IDs. One warm guest plus 20 cycles
+leaves 21 guest keys, growing by one per cycle. The `rosterCacheKeys` budget stays
+at 0.1 keys/cycle with a fixed allowance of one, so the gate remains red until
+the SDK is fixed. The measurement lane deliberately does not edit SDK components.
+Full leave clears the map by unmounting; repeated guest departure while the call
+stays mounted is the failing journey.
+
+The dedicated reference run also measured laptop panel layout shift at a median
+0.3287 (five samples: 0.2544–0.3477), above the unchanged 0.05 limit. Attribution
+includes the drawer's changing width and the call controls moving horizontally
+(one recorded controls rectangle moved from x=215 to x=378.47). These entries
+have recent input, which this interaction-focused signal intentionally includes.
+Do not interpret it as standard Core Web Vitals CLS. The same run's phone
+first-load frame p95 exceeded its existing timing limit (116.6 ms versus 110 ms);
+that limit was not widened either. The combined command took 18.79 minutes,
+confirming the need for the separate leak lane.
+
+The final separate reference lanes took 9.98 minutes for timing and 8.94 for
+leaks, including their builds and self-tests. Both reported no measurement
+errors. Timing failed only the panel shift (median 0.3388); leaks failed only
+the retained guest keys. The phone first-load timing passed that repetition.
+All 22 focused metric/routing tests, resource lifecycle probes, injected fault
+checks, the uninjected 20-cycle panel comparison and the web typecheck passed.
+At least four complete observations cover every ordinary journey's original
+counters; the newer guest-key counter has five People observations and at least two per
+other ordinary journey. This finite spread is calibration evidence, not a claim
+that all counts were collected on every earlier revision.
+
+### Additional rendering signals
+
+Timing scenarios also record `videoDroppedFramePercent` from visible videos'
+`getVideoPlaybackQuality()` counter deltas (not compositor frame estimates), and
+`layoutShift` from layout-shift entries during the measurement window. The latter
+includes recent-input entries deliberately: a panel-induced jump is still a jump.
+Transform motion does not contribute. A zero video denominator means no decoded
+frames were measured, not perfect playback; the report retains frame counts.
+Playback is sampled at 4 Hz with weak per-element state. Decoder counters can
+reset while the same video element survives a panel change; reset generations
+contribute their new counts rather than negative deltas. The report retains
+frame/drop counts, observed resets and sample counts. Visibility is sampled,
+not continuous; multiple resets between samples can lose frames. Layout-shift
+entries retain source rectangles and recent-input flags for diagnosis.
+The limits are 5% decoder drops and 0.05 cumulative shift per window.

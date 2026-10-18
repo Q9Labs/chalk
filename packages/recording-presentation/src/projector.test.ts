@@ -58,3 +58,11 @@ describe("recording_presentation.v1", () => {
     expect(() => cursor.at(4999)).toThrow(RangeError);
   });
 });
+
+it("accepts the full shared call-reaction set in recording validation", () => {
+  const timeline = parseRecordingPresentationTimelineV1(fixture("minimal-valid.json"));
+  const contract = JSON.parse(readFileSync(new URL("../../../contract/schema/sync-v1.json", import.meta.url), "utf8"));
+  for (const value of contract.collaboration.reactions) {
+    expect(isRecordingPresentationTimelineV1({ ...timeline, initial: { ...timeline.initial, reactions: [{ id: "reaction-1", participantId: timeline.initial.participants[0]?.id, displayName: "Sam", value, occurredAtMs: 0, expiresAtMs: 500 }] } })).toBe(true);
+  }
+});

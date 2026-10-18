@@ -5,6 +5,15 @@ const CAMERA_SIZE = { width: 640, height: 360 };
 const SCREEN_SIZE = { width: 1280, height: 720 };
 
 const tracks = new Map<string, MediaStreamTrack>();
+const painters = new Map<string, ReturnType<typeof setInterval>>();
+
+/** Only releases synthetic source ownership, never SDK-owned clones or contexts. */
+export function releaseFakeMedia(): void {
+  for (const interval of painters.values()) clearInterval(interval);
+  painters.clear();
+  for (const track of tracks.values()) track.stop();
+  tracks.clear();
+}
 
 export function cameraTrack(name: string, background: string): MediaStreamTrack {
   return cachedTrack(`camera:${name}`, CAMERA_SIZE, (context) => paintCamera(context, background));
@@ -50,7 +59,10 @@ function cachedTrack(key: string, size: { readonly width: number; readonly heigh
   if (!context) throw new Error("Canvas 2D is unavailable for the call-state harness.");
   paint(context);
   // captureStream only emits frames on change, so repaint the same picture to keep the track live.
-  setInterval(() => paint(context), 500);
+  painters.set(
+    key,
+    setInterval(() => paint(context), 500),
+  );
   const [track] = canvas.captureStream(4).getVideoTracks();
   if (!track) throw new Error("Canvas capture produced no video track.");
   tracks.set(key, track);

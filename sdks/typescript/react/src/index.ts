@@ -1,6 +1,6 @@
 export { ChalkProvider } from "./bindings/context";
 export type { ChalkProviderProps } from "./bindings/context";
-export { useCan, useChat, useConnection, useMedia, useOffline, useParticipants, useReactions, useRecording, useSelf, useSpaceClient, useWhiteboard } from "./bindings/hooks";
+export { useCan, useChat, useConnection, useMedia, useScreenShare, useOffline, useParticipants, useReactions, useRecording, useSelf, useSpaceClient, useWhiteboard } from "./bindings/hooks";
 export { Chalk } from "./components/chalk/Chalk";
 export type { ChalkFeatures, ChalkProps, SpaceLayout } from "./components/chalk/Chalk";
 export { RecordingSpaceView } from "./components/space-view/RecordingSpaceView";
@@ -55,3 +55,10 @@ export type { Toast, ToastStackProps } from "./components/toast-stack/ToastStack
 export { captureFlip } from "./internal/call-motion";
 
 export type { ChalkSheetProps, ChalkToastProps } from "./components/chalk-ui";
+
+export type { ScreenShareOptions, ScreenShareSurface, ScreenShareCapture } from "@q9labsai/chalk-client";
+
+export type { ChatReactionInput, ChatReaction, ChatReactions } from "@q9labsai/chalk-client";
+
+export type { MessageReaction, ReactChatMessage, UseChatResult } from "./bindings/hooks";
+export { CHALK_REACTIONS } from "@q9labsai/chalk-client";

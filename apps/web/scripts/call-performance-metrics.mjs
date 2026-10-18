@@ -1,4 +1,4 @@
-export const METRICS = ["frameP95Ms", "droppedFramePercent", "longTasks", "blockingMs", "interactionMs", "heapMiB", "domNodes", "firstCallMs", "jsGzipKiB", "cssGzipKiB"];
+export const METRICS = ["videoDroppedFramePercent", "layoutShift", "frameP95Ms", "droppedFramePercent", "longTasks", "blockingMs", "interactionMs", "heapMiB", "domNodes", "firstCallMs", "jsGzipKiB", "cssGzipKiB"];
 export const BUNDLE_METRICS = ["jsGzipKiB", "cssGzipKiB"];
 
 export function validateBudgets(budgets) {

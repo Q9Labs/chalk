@@ -105,6 +105,7 @@ export function Stage({
   const [page, setPage] = useState(0);
   const orderRef = useRef<readonly string[]>([]);
   const seenAtRef = useRef(new Map<string, number>());
+  const nextSeenRef = useRef(0);
   const lastSpeakerRef = useRef<string | null>(null);
 
   const ordered = useMemo(() => {
@@ -113,10 +114,15 @@ export function Stage({
     // non-interactive renders would make a seek depend on prior rendered frames.
     if (!interactive) {
       seenAtRef.current = new Map(items.map((item, index) => [item.id, index]));
+      nextSeenRef.current = items.length;
       return [...items];
     }
+    // Departed ids are dropped so long calls don't retain every past guest; the
+    // counter keeps growing so a later share still ranks as the newest.
     const seenAt = seenAtRef.current;
-    for (const item of items) if (!seenAt.has(item.id)) seenAt.set(item.id, seenAt.size);
+    const present = new Set(items.map((item) => item.id));
+    for (const id of seenAt.keys()) if (!present.has(id)) seenAt.delete(id);
+    for (const item of items) if (!seenAt.has(item.id)) seenAt.set(item.id, nextSeenRef.current++);
     return stabilizeOrder(orderRef.current, items);
   }, [interactive, items]);
 
