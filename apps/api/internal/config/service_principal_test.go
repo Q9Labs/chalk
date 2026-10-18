@@ -17,6 +17,9 @@ func TestServicePrincipalConfigurationIsOptInAndFailClosed(t *testing.T) {
 		{name: "missing scopes", id: "dashboard", secrets: strings.Repeat("a", 32), invalid: true},
 		{name: "unknown scope", id: "dashboard", secrets: strings.Repeat("a", 32), scopes: "*", invalid: true},
 		{name: "short secret", id: "dashboard", secrets: "short", scopes: "tenants:read", invalid: true},
+		{name: "short multibyte secret", id: "dashboard", secrets: strings.Repeat("😀", 8), scopes: "tenants:read", invalid: true},
+		{name: "invalid UTF-8 secret", id: "dashboard", secrets: strings.Repeat("\xff", 32), scopes: "tenants:read", invalid: true},
+		{name: "multibyte secret of 32 characters", id: "dashboard", secrets: strings.Repeat("😀", 32), scopes: "tenants:read"},
 		{name: "API key collision", id: "dashboard", secrets: "chalk_sk_" + strings.Repeat("a", 32), scopes: "tenants:read", invalid: true},
 		{name: "system collision", id: "dashboard", secrets: strings.Repeat("s", 32), scopes: "tenants:read", invalid: true},
 	} {
