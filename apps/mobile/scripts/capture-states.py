@@ -12,7 +12,7 @@ import socket
 import hashlib
 import fcntl
 
-SSH = ['ssh', '-o', 'ControlMaster=no', '-o', 'ControlPath=none', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=3']
+SSH = ['ssh', '-o', 'ControlMaster=no', '-o', 'ControlPath=none', '-o', 'ConnectTimeout=15', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=3']
 SCP = ['scp', *SSH[1:]]
 
 def run(args, **kwargs):
@@ -296,7 +296,7 @@ def remote(args):
                     run([adb, '-s', serial, 'shell', 'settings', 'put', 'system', 'user_rotation', '1' if 'O2' in codes.split(',') else '0'])
                     run([adb, '-s', serial, 'shell', shlex.join(['am', 'start', '-a', 'android.intent.action.VIEW', '-d', url, bundle])])
                 deadline = time.monotonic() + 180
-                warm_deliveries = [time.monotonic() + delay for delay in [10, 30, 60]] if index == 0 and args.platform == 'ios' else []
+                warm_deliveries = [time.monotonic() + delay for delay in range(10, 180, 10)] if index == 0 and args.platform == 'ios' else []
                 while state not in received:
                     if metro.poll() is not None or time.monotonic() > deadline:
                         raise RuntimeError(f'No native SDK measurement upload for {state}; inspect app-console.log/metro.log')
@@ -384,7 +384,8 @@ def owned_copy(args, dest, host):
     lease = subprocess.Popen([*SSH, host, shlex.join(['python3', '-c', lease_code, dest + '.lease'])], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     try:
         if lease.stdout.readline().strip() != 'READY':
-            raise RuntimeError('Prepared copy is in use; choose a unique --name')
+            status = lease.wait(timeout=15)
+            raise RuntimeError('M4 SSH connection failed before the copy lease' if status == 255 else 'Prepared copy is in use; choose a unique --name')
         perform_copy(args, dest, host)
     finally:
         lease.stdin.close()

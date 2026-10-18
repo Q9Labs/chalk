@@ -2,7 +2,8 @@ import type { MeasurementRegistry } from "@q9labsai/chalk-react-native/dev";
 import { useCallback, useEffect, useRef, type RefObject } from "react";
 import { Dimensions, PixelRatio, Platform, StyleSheet, View, type TextStyle, type ViewProps, type ViewStyle } from "react-native";
 
-type Measurement = { frame: { x: number; y: number; width: number; height: number }; style: ReturnType<typeof StyleSheet.flatten> };
+type Frame = { x: number; y: number; width: number; height: number };
+type Measurement = { frame: Frame; viewportFrame?: Frame; style: ReturnType<typeof StyleSheet.flatten> };
 const registry = new Map<string, () => Promise<Measurement>>();
 
 function expanded(style: ViewStyle | TextStyle) {
@@ -31,7 +32,7 @@ export const registerSDKMeasurement: MeasurementRegistry = (testID, read) => {
   };
 };
 
-function useMeasurement(testID: string | undefined, ref: RefObject<Pick<View, "measureInWindow"> | null>, style: ViewStyle | TextStyle) {
+function useMeasurement(testID: string | undefined, ref: RefObject<Pick<View, "measureInWindow" | "measure"> | null>, style: ViewStyle | TextStyle) {
   const measure = useCallback(
     () =>
       new Promise<Measurement>((resolve, reject) => {
@@ -39,7 +40,10 @@ function useMeasurement(testID: string | undefined, ref: RefObject<Pick<View, "m
           reject(new Error(`Unmounted testID: ${testID}`));
           return;
         }
-        ref.current.measureInWindow((x, y, width, height) => resolve({ frame: { x, y, width, height }, style: expanded(style) }));
+        const host = ref.current;
+        host.measureInWindow((x, y, width, height) => {
+          host.measure((_left, _top, viewportWidth, viewportHeight, pageX, pageY) => resolve({ frame: { x, y, width, height }, viewportFrame: { x: pageX, y: pageY, width: viewportWidth, height: viewportHeight }, style: expanded(style) }));
+        });
       }),
     [style, testID],
   );
