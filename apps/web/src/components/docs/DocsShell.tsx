@@ -25,6 +25,7 @@ export function DocsShell() {
       const typing = event.target instanceof HTMLElement && event.target.matches("input, textarea, select, [contenteditable='true']");
       if ((event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) || (event.key === "/" && !typing && !event.metaKey && !event.ctrlKey && !event.altKey)) {
         event.preventDefault();
+        setMenuOpen(false);
         setSearchOpen(true);
       }
     };

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { GitHubMark } from "./GitHubMark";
 import { Icon } from "./Icon";
@@ -9,11 +9,14 @@ import { ThemeButton } from "./theme";
 /** The site's top bar: the lockup, three links, the theme switch and both ways in. */
 export function SiteNav() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!menuOpen) return;
     const close = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMenuOpen(false);
+      if (event.key !== "Escape") return;
+      setMenuOpen(false);
+      menuButton.current?.focus();
     };
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
@@ -42,7 +45,7 @@ export function SiteNav() {
           <a className="btn pri" href={START_CALL_HREF}>
             Start a call
           </a>
-          <button type="button" className="ib nav-menu" aria-expanded={menuOpen} aria-controls="site-menu" aria-label={menuOpen ? "Close menu" : "Open menu"} onClick={() => setMenuOpen((open) => !open)}>
+          <button ref={menuButton} type="button" className="ib nav-menu" aria-expanded={menuOpen} aria-controls="site-menu" aria-label={menuOpen ? "Close menu" : "Open menu"} onClick={() => setMenuOpen((open) => !open)}>
             <Icon name={menuOpen ? "x" : "menu"} />
           </button>
         </div>

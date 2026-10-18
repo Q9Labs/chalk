@@ -658,12 +658,12 @@ html:has(.site[data-chalk-theme="light"]) {
     color: var(--chalk-text);
   }
 
-  & .ctabs button[aria-selected="true"] {
+  & .ctabs button[aria-pressed="true"] {
     background: var(--chalk-pressed);
     color: var(--chalk-text);
   }
 
-  &[data-chalk-theme="light"] .ctabs button[aria-selected="true"] {
+  &[data-chalk-theme="light"] .ctabs button[aria-pressed="true"] {
     background: var(--chalk-surface);
     box-shadow: 0 0 0 1px var(--chalk-line);
   }

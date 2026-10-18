@@ -37,9 +37,9 @@ export function CodeBlock({ tabs, label }: { readonly tabs: readonly [CodeTab, .
       <div className="ch">
         {tabs.length > 1 ? (
           <>
-            <div className="ctabs" role="tablist" aria-label={label}>
+            <div className="ctabs" role="group" aria-label={label}>
               {tabs.map((tab, i) => (
-                <button key={tab.label} type="button" role="tab" aria-selected={i === index} onClick={() => setIndex(i)}>
+                <button key={tab.label} type="button" aria-pressed={i === index} onClick={() => setIndex(i)}>
                   {tab.label}
                 </button>
               ))}
