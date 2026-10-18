@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
-import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -35,7 +35,14 @@ beforeAll(async () => {
   }
   browser = await chromium.launch({ headless: true });
   page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+  page.on("pageerror", (error) => console.error("Stage harness page error:", error.message));
 }, 60_000);
+afterEach(async () => {
+  if (!process.env.STAGE_ARTIFACTS || !page || page.isClosed()) return;
+  await mkdir(process.env.STAGE_ARTIFACTS, { recursive: true });
+  const name = (expect.getState().currentTestName ?? "stage").replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+  await page.screenshot({ path: resolve(process.env.STAGE_ARTIFACTS, `${name}.png`) });
+});
 afterAll(async () => {
   await browser?.close();
   clearTimeout(deadline);
