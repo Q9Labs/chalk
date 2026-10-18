@@ -29,19 +29,66 @@ export CHALK_DEFAULT_MEDIA_PLANE=cf_sfu
 export CHALK_CLOUDFLARE_REALTIME_APP_ID=dashboard-proof
 export CHALK_CLOUDFLARE_REALTIME_APP_SECRET=fixture-cloudflare-not-a-secret
 export CHALK_CLOUDFLARE_REALTIME_BASE_URL=http://127.0.0.1:18081
+# Enable the real historical-artifact routes without contacting vendor services.
+export CHALK_RECORDING_ENABLED=true
+export CHALK_TRANSCRIPTION_ENABLED=true
+export CHALK_R2_BUCKET=dashboard-proof
+export CHALK_R2_ENDPOINT=http://127.0.0.1:18081
+export CHALK_R2_ACCESS_KEY_ID=fixture-r2-key
+export CHALK_R2_SECRET_ACCESS_KEY=fixture-r2-not-a-secret
+export CHALK_RECORDING_KMS_KEY_ID=alias/dashboard-proof
+export CHALK_RECORDING_KMS_REGION=us-east-1
+export CHALK_TRANSCRIPTION_WORKLOAD_AUTH_SECRET=fixture-transcription-auth-secret-at-least-32-bytes
+export CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME=dashboard-proof
+export AWS_ACCESS_KEY_ID=fixture-aws-key
+export AWS_SECRET_ACCESS_KEY=fixture-aws-not-a-secret
+export AWS_EC2_METADATA_DISABLED=true
+export AWS_ENDPOINT_URL=http://127.0.0.1:18081
 export GOFLAGS=-buildvcs=false
 (cd apps/api && go build -o ../../artifacts/dashboard-api ./cmd)
 api_pid=""
 vendor_pid=""
 watchdog_pid=""
+redis_container=""
+certificate_dir=""
 cleanup() {
   [[ -z "$vendor_pid" ]] || kill "$vendor_pid" 2>/dev/null || true
   [[ -z "$api_pid" ]] || kill "$api_pid" 2>/dev/null || true
   [[ -z "$watchdog_pid" ]] || kill "$watchdog_pid" 2>/dev/null || true
   [[ -z "$vendor_pid" ]] || wait "$vendor_pid" 2>/dev/null || true
   [[ -z "$api_pid" ]] || wait "$api_pid" 2>/dev/null || true
+  [[ -z "$redis_container" ]] || docker stop --time 1 "$redis_container" >/dev/null 2>&1 || true
+  if [[ -n "$certificate_dir" ]]; then
+    rm -f "$certificate_dir"/{ca.key,ca.pem,ca.srl,server.key,server.csr,server.pem,server.ext}
+    rmdir "$certificate_dir"
+  fi
 }
 trap cleanup EXIT INT TERM
+certificate_dir="$(mktemp -d /tmp/dashboard-capability-identity.XXXXXX)"
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=dashboard-proof-ca \
+  -addext basicConstraints=critical,CA:TRUE \
+  -keyout "$certificate_dir/ca.key" -out "$certificate_dir/ca.pem" > artifacts/dashboard-certificates.log 2>&1
+openssl req -newkey rsa:2048 -nodes -subj /CN=localhost \
+  -keyout "$certificate_dir/server.key" -out "$certificate_dir/server.csr" >> artifacts/dashboard-certificates.log 2>&1
+cat > "$certificate_dir/server.ext" <<'CERT'
+subjectAltName=DNS:localhost,IP:127.0.0.1,URI:spiffe://chalk.local/api
+extendedKeyUsage=serverAuth
+CERT
+openssl x509 -req -in "$certificate_dir/server.csr" -CA "$certificate_dir/ca.pem" \
+  -CAkey "$certificate_dir/ca.key" -CAcreateserial -days 1 \
+  -extfile "$certificate_dir/server.ext" -out "$certificate_dir/server.pem" >> artifacts/dashboard-certificates.log 2>&1
+export CHALK_PROVIDER_BRIDGE_ADDRESS=127.0.0.1:18444
+export CHALK_PROVIDER_BRIDGE_SERVER_CERT_FILE="$certificate_dir/server.pem"
+export CHALK_PROVIDER_BRIDGE_SERVER_KEY_FILE="$certificate_dir/server.key"
+export CHALK_PROVIDER_BRIDGE_CLIENT_CA_FILE="$certificate_dir/ca.pem"
+export CHALK_PROVIDER_BRIDGE_SPIFFE_TRUST_DOMAIN=chalk.local
+redis_container="$(docker run -d --rm -p 127.0.0.1::6379 redis:8.10.0-alpine redis-server --save '' --appendonly no)"
+export CHALK_REDIS_URL="redis://$(docker port "$redis_container" 6379/tcp)/0"
+for attempt in {1..50}; do
+  if docker exec "$redis_container" redis-cli ping >/dev/null 2>&1; then break; fi
+  sleep 0.1
+done
+docker exec "$redis_container" redis-cli ping >/dev/null
 node apps/web/tests/dashboard/vendor-fixture.mjs "$BASHPID" > artifacts/dashboard-vendor.log 2>&1 &
 vendor_pid=$!
 for attempt in {1..50}; do
@@ -53,15 +100,16 @@ kill -0 "$vendor_pid"
 artifacts/dashboard-api > artifacts/dashboard-api.log 2>&1 &
 api_pid=$!
 # Owner loss and a hard deadline also reap the server if the driver is killed.
-python3 - "$BASHPID" "$api_pid" <<'PY' &
-import os, signal, sys, time
-owner, child = map(int, sys.argv[1:])
+python3 - "$BASHPID" "$api_pid" "$redis_container" <<'PY' &
+import os, signal, subprocess, sys, time
+owner, child = map(int, sys.argv[1:3])
 for _ in range(240):
     try: os.kill(owner, 0)
     except ProcessLookupError: break
     time.sleep(1)
 try: os.kill(child, signal.SIGTERM)
 except ProcessLookupError: pass
+subprocess.run(["docker", "stop", "--time", "1", sys.argv[3]], timeout=15, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 PY
 watchdog_pid=$!
 for attempt in {1..100}; do
