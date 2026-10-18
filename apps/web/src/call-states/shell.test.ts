@@ -68,6 +68,7 @@ try {
  await page.setViewportSize({width:390,height:844});await load('shell-paged');
  await page.getByRole('button',{name:'Call details',exact:true}).click();
  const sheet=page.getByRole('dialog',{name:'Call details',exact:true});await sheet.waitFor();
+ await page.waitForFunction(()=>document.querySelector('[role="dialog"]')?.contains(document.activeElement));
  for(let i=0;i<12;i++){await page.keyboard.press('Tab');assert.equal(await sheet.evaluate(el=>el.contains(document.activeElement)),true)}
  await page.keyboard.press('Escape');await sheet.waitFor({state:'detached'});
  assert.equal(await page.getByRole('button',{name:'Call details',exact:true}).evaluate(el=>el===document.activeElement),true);

@@ -359,8 +359,9 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 .chalk-shell-report label {
   font-size: 13px;
 }
+.chalk-shell-report textarea:focus {border-color:var(--chalk-text);}
 .chalk-shell-report > label {font-weight:600;margin:4px 10px 0;}
-.chalk-shell-report .chalk-shell-report-check {display:flex;align-items:center;gap:10px;min-height:40px;margin:0 6px;padding:0 4px;font-size:14px;font-weight:400;}
+.chalk-shell-report .chalk-shell-report-check {display:flex;align-items:center;gap:10px;min-height:40px;margin:4px 10px 0;padding:0 4px;font-size:13px;font-weight:600;}
 .chalk-shell-report-check input {width:18px;height:18px;margin:0;accent-color:var(--chalk-text);}
 .chalk-shell-report-actions {display:flex;justify-content:flex-end;gap:8px;margin:4px 6px 0;}
 [data-chalk-theme="light"] .chalk-shell-split {

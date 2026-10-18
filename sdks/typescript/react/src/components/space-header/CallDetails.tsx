@@ -30,6 +30,7 @@ export function CallDialog({
   readonly returnFocus: RefObject<HTMLButtonElement | null>;
 }) {
   const container = useRef<HTMLElement>(null);
+  const reportInput = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState("");
   const [includeDiagnostics, setIncludeDiagnostics] = useState(true);
   const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
@@ -56,7 +57,7 @@ export function CallDialog({
       >
         <Dialog.Portal container={container}>
           <Dialog.Backdrop className="chalk-shell-modal-backdrop" />
-          <Dialog.Popup finalFocus={returnFocus} className="chalk-shell-modal">
+          <Dialog.Popup initialFocus={kind === "report" ? reportInput : undefined} finalFocus={returnFocus} className="chalk-shell-modal">
             <div className="chalk-shell-modal-heading">
               <Dialog.Title>{kind === "shortcuts" ? "Keyboard shortcuts" : "Report a problem"}</Dialog.Title>
               <Dialog.Close
@@ -104,7 +105,7 @@ export function CallDialog({
                 }}
               >
                 <label htmlFor="chalk-problem">What went wrong?</label>
-                <textarea id="chalk-problem" required value={text} onChange={(event) => setText(event.target.value)} placeholder="Tell us what happened…" />
+                <textarea ref={reportInput} id="chalk-problem" rows={4} required value={text} onChange={(event) => setText(event.target.value)} placeholder="Tell us what happened…" />
                 <label className="chalk-shell-report-check">
                   <input type="checkbox" checked={includeDiagnostics} onChange={(event) => setIncludeDiagnostics(event.target.checked)} /> Include diagnostics
                 </label>
