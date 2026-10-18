@@ -72,7 +72,9 @@ export async function developerMutation(engine: Engine, action: DeveloperAction)
       return { deliveryId: result.delivery_id };
     }
     case "webhook-deliveries": {
-      const result = await run(api.listWebhookDeliveries({ params: { ...params, endpoint_id: Schema.decodeUnknownSync(UUIDSchema)(action.webhookId) }, query: { page_size: 30, cursor: action.cursor } }));
+      const endpointParams = { ...params, endpoint_id: Schema.decodeUnknownSync(UUIDSchema)(action.webhookId) };
+      await run(api.getWebhookEndpoint({ params: endpointParams }));
+      const result = await run(api.listWebhookDeliveries({ params: endpointParams, query: { page_size: 30, cursor: action.cursor } }));
       return { deliveries: result.deliveries.map((d) => ({ id: d.id, state: d.state, createdAt: d.created_at })), nextCursor: result.page.next_cursor };
     }
     case "webhook-delivery": {

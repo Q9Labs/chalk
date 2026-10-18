@@ -249,6 +249,9 @@ try {
   const targetAfter = sql(`select current_target_revision from webhook_endpoints where id='${webhookId}'`);
   assert.equal(sql(`select encode(url_ciphertext,'hex') from webhook_endpoint_revisions where endpoint_id='${webhookId}' and revision=${targetAfter}`), urlBefore);
   console.log("PASS: partial webhook update omits URL and preserves the actual encrypted destination");
+  const ownDeliveries = await post(ada, "/dashboard-api/developer", { action: "webhook-deliveries", webhookId }, session.csrfToken);
+  assert.equal(ownDeliveries.status, 200, await ownDeliveries.clone().text());
+  assert.deepEqual((await ownDeliveries.json()).deliveries, []);
   const foreign = { spaceId, episodeId: crypto.randomUUID(), recordingId: crypto.randomUUID(), transcriptId: crypto.randomUUID(), keyId, webhookId, deliveryId: crypto.randomUUID() };
   // Provider artifacts are seeded, not mocked. Every read/authorization uses the
   // production HTTP server and PostgreSQL repositories; no vendor is contacted.
