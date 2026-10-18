@@ -4,6 +4,8 @@ import { parseArgs } from "node:util";
 const DEFAULT_DEADLINE_MS = 90_000;
 const DEFAULT_RETRY_DELAY_MS = 5_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+const APP_LINK_FILES = ["/.well-known/apple-app-site-association", "/.well-known/assetlinks.json"];
+const SMART_APP_BANNER = /<meta\b[^>]*\bname=["']apple-itunes-app["']/i;
 
 export async function verifyWebDeploy({ baseURL, expectedSHA, deadlineMs = DEFAULT_DEADLINE_MS, retryDelayMs = DEFAULT_RETRY_DELAY_MS, requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, apiBaseURL = "https://api.chalkmeet.com", expectedEnvironment }) {
   const origin = normalizeBaseURL(baseURL);
@@ -46,6 +48,7 @@ async function verifyOnce(baseURL, apiBaseURL, expectedSHA, requestTimeoutMs, ex
   await verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs, deadlineSignal);
   await verifyAPIHealth(apiBaseURL, requestTimeoutMs, deadlineSignal);
   if (expectedEnvironment) await verifyReleaseMarker(baseURL, expectedSHA, expectedEnvironment, requestTimeoutMs, deadlineSignal);
+  await verifyAppLinks(baseURL, requestTimeoutMs, deadlineSignal);
 }
 
 async function verifyReleaseMarker(baseURL, expectedSHA, expectedEnvironment, requestTimeoutMs, deadlineSignal) {
@@ -65,6 +68,22 @@ async function verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs, deadl
   if (deployedSHA !== expectedSHA) {
     throw new Error(`service worker has commit ${deployedSHA ?? "unknown"}, expected ${expectedSHA}`);
   }
+}
+
+// iOS and Android open call links in the app only after these files verify it.
+async function verifyAppLinks(baseURL, requestTimeoutMs, deadlineSignal) {
+  for (const pathname of APP_LINK_FILES) await verifyJSONFile(endpointURL(baseURL, pathname), requestTimeoutMs, deadlineSignal);
+  const space = await request(endpointURL(baseURL, "/space/"), requestTimeoutMs, deadlineSignal);
+  requireStatus(space, 200, "Space page");
+  if (!SMART_APP_BANNER.test(await space.text())) throw new Error("Space page has no Smart App Banner tag");
+}
+
+async function verifyJSONFile(url, requestTimeoutMs, deadlineSignal) {
+  const response = await request(url, requestTimeoutMs, deadlineSignal);
+  requireStatus(response, 200, url.pathname);
+  const contentType = response.headers.get("content-type") ?? "";
+  if (response.redirected || !contentType.startsWith("application/json")) throw new Error(`${url.pathname} must be served as JSON without a redirect`);
+  await readJSON(response, url.pathname);
 }
 
 async function verifyAPIHealth(baseURL, requestTimeoutMs, deadlineSignal) {
