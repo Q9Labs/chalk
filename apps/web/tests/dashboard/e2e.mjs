@@ -236,7 +236,7 @@ try {
     sql(`update participants set status='active', joined_at=now(), first_joined_at=now() where id='${grant.subject.participant_id}';
     insert into sync_episode_control(tenant_id,space_id,episode_id,folded_state,state_schema_version,state_digest,snapshot_bytes)
     values('${firstTenant}','${ownerSpaceId}','${grant.subject.episode_id}','{"participants":[{"participant_id":"${grant.subject.participant_id}","display_name":"Owner"}]}',1,decode(repeat('00',32),'hex'),2)
-    on conflict(tenant_id,space_id,episode_id) do update set folded_state=excluded.folded_state`);
+    on conflict(tenant_id,space_id,episode_id) do update set folded_state=jsonb_set(sync_episode_control.folded_state,'{participants}',excluded.folded_state->'participants')`);
     const liveOffset = requests.length;
     const liveCall = await ada.request(`/dashboard-api/call?spaceId=${ownerSpaceId}`);
     assert.equal(liveCall.status, 200, await liveCall.clone().text());
@@ -248,7 +248,9 @@ try {
     const ownPast = await ada.request(`/dashboard-api/past-session?spaceId=${ownerSpaceId}&episodeId=${grant.subject.episode_id}`);
     assert.equal(ownPast.status, 200, await ownPast.clone().text());
     assert.equal((await ownPast.json()).attendance.participants[0].isYou, true);
-    sql(`update participants set status='joining', joined_at=null where id='${grant.subject.participant_id}'; delete from sync_episode_control where tenant_id='${firstTenant}' and episode_id='${grant.subject.episode_id}'`);
+    sql(
+      `update participants set status='joining', joined_at=null, first_joined_at=null where id='${grant.subject.participant_id}'; update sync_episode_control set folded_state=jsonb_set(folded_state,'{participants}','[]'::jsonb) where tenant_id='${firstTenant}' and episode_id='${grant.subject.episode_id}'`,
+    );
     const refreshedAccess = await post(ada, "/dashboard-api/call", { action: "refresh-access", spaceId: ownerSpaceId }, session.csrfToken);
     // Before Sync has committed participant_joined, refresh must fail closed.
     assert.equal(refreshedAccess.status, 404, await refreshedAccess.clone().text());
