@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -44,7 +45,7 @@ type BootstrapDiagnostic struct {
 func (diagnostic BootstrapDiagnostic) Validate() error {
 	if diagnostic.SchemaVersion != BootstrapDiagnosticSchemaVersion || diagnostic.AttemptCount == 0 ||
 		!slices.Contains([]string{"registration", "challenge", "certificate", "bootstrap", "install"}, diagnostic.Step) ||
-		!slices.Contains([]string{"registration_pending", "registration_deadline_exceeded", "http_status", "deadline_exceeded", "challenge_unavailable", "certificate_unavailable", "bootstrap_unavailable", "bootstrap.challenge_unavailable", "bootstrap.bootstrap_unavailable"}, diagnostic.LastReasonCode) ||
+		!slices.Contains([]string{"registration_pending", "registration_deadline_exceeded", "http_status", "deadline_exceeded", "challenge_unavailable", "certificate_unavailable", "bootstrap_unavailable", "bootstrap.challenge_unavailable", "bootstrap.bootstrap_unavailable", "archive_download_failed", "archive_verification_failed", "archive_extraction_failed", "archive_install_failed"}, diagnostic.LastReasonCode) ||
 		diagnostic.LastHTTPStatus < 0 || diagnostic.LastHTTPStatus > 599 || diagnostic.LastHTTPStatus > 0 && diagnostic.LastHTTPStatus < 100 {
 		return ErrInvalidConfig
 	}
@@ -117,23 +118,49 @@ func (d Demand) Validate() error {
 // ReleaseSpec contains only non-secret, immutable boot inputs. A bootstrap
 // assertion or provider credential must never be added to this contract.
 type ReleaseSpec struct {
-	ReleaseID         string `json:"release_id"`
-	ImageID           int64  `json:"image_id"`
-	ImageDigest       string `json:"image_digest"`
-	Region            string `json:"region"`
-	Size              string `json:"size"`
-	FirewallID        string `json:"firewall_id"`
-	BootstrapEndpoint string `json:"bootstrap_endpoint"`
-	BootstrapCABase64 string `json:"bootstrap_ca_base64,omitempty"`
-	GPU               bool   `json:"gpu"`
+	ReleaseID string `json:"release_id"`
+	// ImageID selects the unchanged base snapshot; ImageDigest attests the installed archive.
+	ImageID           int64       `json:"image_id"`
+	ImageDigest       string      `json:"image_digest"`
+	Archive           ArchiveSpec `json:"archive"`
+	Region            string      `json:"region"`
+	Size              string      `json:"size"`
+	FirewallID        string      `json:"firewall_id"`
+	BootstrapEndpoint string      `json:"bootstrap_endpoint"`
+	BootstrapCABase64 string      `json:"bootstrap_ca_base64,omitempty"`
+	GPU               bool        `json:"gpu"`
 }
 
-func (r ReleaseSpec) Validate() error {
+type ArchiveSpec struct {
+	Bucket string `json:"bucket"`
+	Key    string `json:"key"`
+	SHA256 string `json:"sha256"`
+	Region string `json:"region"`
+}
+
+var archiveBucketPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$`)
+
+func (a ArchiveSpec) Validate() error {
+	if !archiveBucketPattern.MatchString(a.Bucket) || !validSlug(a.Region, 32) || !validDigest("sha256:"+a.SHA256) {
+		return ErrInvalidConfig
+	}
+	if a.Key != "recorder/capture/"+a.SHA256+".tar.gz" && a.Key != "recorder/render/"+a.SHA256+".tar.gz" {
+		return ErrInvalidConfig
+	}
+	return nil
+}
+
+func (r ReleaseSpec) Validate() error { return r.validate(false) }
+
+func (r ReleaseSpec) validate(allowHistoricalSnapshot bool) error {
 	endpoint, err := url.Parse(r.BootstrapEndpoint)
 	if !validToken(r.ReleaseID, 128) || r.ImageID <= 0 || !validDigest(r.ImageDigest) || !validSlug(r.Region, 32) || !validToken(r.Size, 64) || !validToken(r.FirewallID, 128) || len(r.BootstrapEndpoint) > 2048 || err != nil || endpoint.Scheme != "https" || endpoint.Host == "" || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" {
 		return ErrInvalidConfig
 	}
-	return nil
+	if allowHistoricalSnapshot && r.Archive == (ArchiveSpec{}) {
+		return nil
+	}
+	return r.Archive.Validate()
 }
 
 type Config struct {
@@ -154,10 +181,13 @@ func (c Config) Validate() error {
 	if err := c.Key.Validate(); err != nil {
 		return err
 	}
-	if !validTag(c.OwnerTag) || c.MaxNodes <= 0 || c.MaxNodes > 21 || c.SlotsPerNode <= 0 || c.SlotsPerNode > 100 || c.DemandMaxAge <= 0 || c.ObservationMaxAge <= 0 || c.StartupTimeout <= 0 || c.DrainTimeout <= 0 || c.HealthRefresh <= 0 || c.HealthRefresh > c.ObservationMaxAge {
+	if !validTag(c.OwnerTag) || c.MaxNodes <= 0 || c.MaxNodes > 21 || c.SlotsPerNode <= 0 || c.SlotsPerNode > 100 || c.DemandMaxAge <= 0 || c.ObservationMaxAge <= 0 || c.StartupTimeout <= 0 || c.StartupTimeout > 7*24*time.Hour-5*time.Minute || c.DrainTimeout <= 0 || c.HealthRefresh <= 0 || c.HealthRefresh > c.ObservationMaxAge {
 		return ErrInvalidConfig
 	}
 	if c.Key.Role == workeridentity.RoleCapture && c.MaxNodes > 11 || c.Key.Role == workeridentity.RoleRender && c.MaxNodes > 10 {
+		return ErrInvalidConfig
+	}
+	if c.Release.Archive.Key != "recorder/"+string(c.Key.Role)+"/"+c.Release.Archive.SHA256+".tar.gz" {
 		return ErrInvalidConfig
 	}
 	return c.Release.Validate()
@@ -239,14 +269,16 @@ type EnsureNodeRequest struct {
 	RequiredTags   []string    `json:"required_tags"`
 }
 
-func (request EnsureNodeRequest) Validate() error {
+func (request EnsureNodeRequest) Validate() error { return request.validate(false) }
+
+func (request EnsureNodeRequest) validate(allowHistoricalSnapshot bool) error {
 	if err := request.Key.Validate(); err != nil {
 		return err
 	}
 	if strings.TrimSpace(request.Name) == "" || len(request.Name) > 255 || !validTag(request.OwnerTag) || request.BootGeneration == 0 || len(request.RequiredTags) < 5 {
 		return ErrInvalidConfig
 	}
-	if err := request.Release.Validate(); err != nil {
+	if err := request.Release.validate(allowHistoricalSnapshot); err != nil {
 		return err
 	}
 	for _, tag := range request.RequiredTags {
@@ -363,7 +395,8 @@ func (j Journal) Validate(key PoolKey) error {
 		return ErrInvalidJournal
 	}
 	if j.PendingCreate != nil {
-		if err := j.PendingCreate.Request.Validate(); err != nil || j.PendingCreate.Request.Key != key {
+		// A pre-upgrade intent must load so reconciliation can retire it, never replay it.
+		if err := j.PendingCreate.Request.validate(true); err != nil || j.PendingCreate.Request.Key != key {
 			return ErrInvalidJournal
 		}
 	}

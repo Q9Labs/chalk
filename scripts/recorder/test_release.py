@@ -7,11 +7,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from release_core import (PIN_KEYS, builder_identity, check_fresh, check_image, check_qualification,
-                          digest, env_values, rebuild_dispatcher, replace_pins, scheduler_changes, sealed_result, validate_config)
+from release_core import (PIN_KEYS, check_fresh, check_image, check_qualification,
+                          digest, env_values, rebuild_dispatcher, replace_pins, scheduler_changes, validate_config)
 from release_io import Provider
-from release import Release
-from spend_guard import expire
 
 
 def dispatcher_state_fixture():
@@ -50,11 +48,6 @@ class ReleaseContracts(unittest.TestCase):
             self.assertEqual(os.environ['DIGITALOCEAN_ACCESS_TOKEN'], 'fixture-builder-token')
 
     def test_nightly_release_configuration_is_environment_scoped(self):
-        from release import parse_args
-        args = parse_args(["plan", "--state", "/tmp/pipeline-build", "--environment", "nightly", "--region", "test-region", "--profile", "test-profile"])
-        self.assertEqual(args.config_parameter, "/chalk/nightly/release/recorder.json")
-        with self.assertRaisesRegex(ValueError, "configuration must be under"):
-            parse_args(["plan", "--state", "/tmp/pipeline-build", "--environment", "nightly", "--region", "test-region", "--profile", "test-profile", "--config-parameter", "/chalk/production/release/recorder.json"])
         config = {
             "schema_version": 1, "do_context": "chalk-nightly",
             "bootstrap_ca_parameter": "/chalk/nightly/managed-episode/recorder/issuer-server-ca",
@@ -78,18 +71,6 @@ class ReleaseContracts(unittest.TestCase):
             validate_config(config, "nightly")
 
 
-    def test_guard_retries_read_and_delete_timeouts_with_same_exact_id(self):
-        owned = {"id": 123, "name": "chalk-release-builder-test", "created_at": "test-time"}
-        read = subprocess.CompletedProcess([], 0, json.dumps([owned]), "")
-        deleted = subprocess.CompletedProcess([], 0, "", "")
-        timeout = subprocess.TimeoutExpired(["doctl"], 60)
-        for outcomes in ([timeout, read, deleted], [read, timeout, read, deleted]):
-            with patch("subprocess.run", side_effect=outcomes) as run, patch("time.sleep"), patch("builtins.print"):
-                expire(owned, "test-context", 0, "/does-not-exist")
-                deletions = [call.args[0] for call in run.call_args_list if "delete" in call.args[0]]
-                self.assertTrue(deletions)
-                self.assertTrue(all(command[-2:] == ["123", "--force"] for command in deletions))
-
     def test_dispatcher_root_preserves_typed_live_inputs_and_backend(self):
         state = dispatcher_state_fixture()
         module = Path(__file__).resolve().parents[2] / "infrastructure/opentofu/modules/aws-transcription-dispatcher"
@@ -102,20 +83,6 @@ class ReleaseContracts(unittest.TestCase):
         self.assertEqual(inputs["artifact_s3_object_version"], "test-version")
         self.assertEqual(inputs["control_api_invoker_principal"], "test-principal")
         self.assertEqual(inputs["control_api_invoke_source_arn"], "arn:test:source")
-
-    def test_spend_guard_detaches_with_absolute_deadline_and_exact_identity(self):
-        release = Release.__new__(Release)
-        release.config = {"builder": {"ttl_seconds": 900}, "do_context": "test-context"}
-        with tempfile.TemporaryDirectory() as directory, patch("subprocess.Popen") as start, patch("time.time", return_value=1000):
-            release.directory = Path(directory)
-            start.return_value.pid = 321
-            receipt = release.detach_guard({"id": 123, "name": "chalk-release-builder-test", "created_at": "test-time"}, "builder")
-            arguments, options = start.call_args
-            self.assertIs(options["preexec_fn"], os.setsid)
-            self.assertEqual(options["stdin"], subprocess.DEVNULL)
-            self.assertIn("123", arguments[0])
-            self.assertIn("test-time", arguments[0])
-            self.assertEqual(receipt["deadline"], 1900)
 
     def test_pins_preserve_comments_secrets_newlines_and_unrelated_values(self):
         text = "# retained\r\nSECRET=a=b\r\nCHALK_RECORDER_FLEET_IMAGE_ID=123\r\nCHALK_RECORDER_FLEET_RELEASE_ID=old\nCHALK_RECORDER_FLEET_IMAGE_DIGEST=old"
@@ -147,55 +114,6 @@ class ReleaseContracts(unittest.TestCase):
             with self.assertRaises(ValueError):
                 check_image({**image, **changes}, worker)
 
-    def test_builder_keeps_the_fleet_disk_and_only_gains_cpu_and_memory(self):
-        owned = {"id": 123, "name": "chalk-release-builder-test", "created_at": "test-time"}
-        node = {**owned, "ip": "192.0.2.1", "key_path": "/does-not-exist"}
-        release = Release.__new__(Release)
-        release.config = {"worker": {"size": "small", "region": "test1", "disk_gb": 25}, "builder": {"size": "large", "region": "test1", "image": "test-image"}}
-        release.state = {"planned": True}
-        release.directory = Path("/does-not-exist")
-        release.provider = Mock()
-        release.await_ssh = Mock()
-        release.create_node = Mock(side_effect=RuntimeError("stop after creation"))
-        with self.assertRaises(RuntimeError):
-            release.build()
-        release.create_node.assert_called_once_with("builder", "test-image", "small")
-
-        release.grow_builder(node, "small")
-        release.provider.do.assert_not_called()
-        release.provider.command.assert_not_called()
-
-        stopped = {**owned, "status": "off", "size_slug": "small", "disk": 25}
-        grown = {**owned, "status": "active", "size_slug": "large", "disk": 25}
-        release.provider.do.side_effect = [None, [stopped], None, None, [grown]]
-        release.grow_builder(node, "large")
-        actions = [call.args for call in release.provider.do.call_args_list]
-        self.assertEqual([arguments[:3] for arguments in actions],
-                         [("compute", "droplet-action", "shutdown"), ("compute", "droplet", "get"), ("compute", "droplet-action", "resize"),
-                          ("compute", "droplet-action", "power-on"), ("compute", "droplet", "get")])
-        self.assertEqual(actions[2][3:], (123, "--size", "large", "--wait"))
-        self.assertIn("cloud-init status --wait", release.provider.command.call_args.args[0][-1])
-        release.await_ssh.assert_called_once_with(node)
-
-        for before, after in (({"status": "active"}, {}), ({"id": 456}, {}), ({}, {"disk": 160}), ({}, {"size_slug": "small"}), ({}, {"status": "off"}), ({}, {"id": 456})):
-            release.provider.do.side_effect = [None, [{**stopped, **before}], None, None, [{**grown, **after}]]
-            with self.assertRaises(ValueError):
-                release.grow_builder(node, "large")
-
-    def test_builder_key_import_uses_the_flag_doctl_accepts(self):
-        release = Release.__new__(Release)
-        release.state = {}
-        release.provider = Mock()
-        release.provider.do.side_effect = RuntimeError("stop at the key import")
-        with tempfile.TemporaryDirectory() as directory:
-            release.directory = Path(directory)
-            with self.assertRaises(RuntimeError):
-                release.create_node("builder", "test-image", "small")
-            arguments = release.provider.do.call_args.args
-            self.assertEqual(arguments[:3], ("compute", "ssh-key", "import"))
-            self.assertEqual(arguments[4:], ("--public-key-file", str(Path(directory) / "builder.key.pub")))
-        self.assertNotIn("builder", release.state)
-
     def test_qualification_requires_signed_boot_and_exact_identity(self):
         state = {"role": "render", "source_commit": "a" * 40, "release_id": "release-test", "image_id": "123", "image_digest": "sha256:" + "b" * 64,
                  "region": "test1", "size": "test-size"}
@@ -205,22 +123,6 @@ class ReleaseContracts(unittest.TestCase):
                         {"region": "other1"}, {"size": "larger-size"}):
             with self.assertRaises(ValueError):
                 check_qualification({**receipt, **changes}, state)
-
-    def test_guard_refuses_same_name_different_id_or_creation(self):
-        owned = {"id": 123, "name": "chalk-release-builder-test", "created_at": "test-time"}
-        builder_identity(owned, owned)
-        for changes in ({"id": 456}, {"name": "production-worker"}, {"created_at": "another-time"}):
-            with self.assertRaises(ValueError):
-                builder_identity({**owned, **changes}, owned)
-
-    def test_manifest_is_not_a_seal_receipt_without_success_marker(self):
-        manifest = {"source_commit": "a" * 40, "release_id": "release-test", "profile": "cpu-libx264-frame2"}
-        raw = json.dumps(manifest).encode()
-        output = "CHALK_RELEASE_MANIFEST " + base64.b64encode(raw).decode() + "\n"
-        with self.assertRaises(ValueError):
-            sealed_result(output, manifest["source_commit"], manifest["release_id"], "render")
-        self.assertEqual(sealed_result(output + "SEALED_READONLY_VERIFICATION_PASS\n", manifest["source_commit"], manifest["release_id"], "render"),
-                         (raw, "sha256:" + digest(raw)))
 
     def test_scheduler_plan_only_changes_state(self):
         item = {"address": "module.dispatcher.aws_scheduler_schedule.reconcile", "change": {

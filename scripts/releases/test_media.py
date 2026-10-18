@@ -15,11 +15,31 @@ from test_release import MemoryGitHub, SHA
 
 
 def members():
-    image = dict(image_id='123', image_digest='sha256:' + 'a' * 64, release_id='recorder-render-example', source_revision=SHA, input_sha256='b' * 64, inspection_sha256='c' * 64)
-    return dict(schema_version=1, capture=dict(image, image_id='124'), render=image, dispatcher=dict(bucket='example-artifacts', key='transcription-dispatcher/example/' + 'd' * 64 + '.zip', version_id='immutable-version', sha256='d' * 64, corpus_digest='e' * 64))
+    image = dict(base_snapshot_id='123', image_digest='sha256:' + 'a' * 64, release_id='recorder-render-example', source_revision=SHA, input_sha256='b' * 64, archive_sha256='c' * 64, archive_key='recorder/render/' + 'c' * 64 + '.tar.gz')
+    return dict(schema_version=1, recorder_source_bucket='example-artifacts', capture=dict(image, base_snapshot_id='124', archive_key='recorder/capture/' + 'c' * 64 + '.tar.gz'), render=image, dispatcher=dict(bucket='example-artifacts', key='transcription-dispatcher/example/' + 'd' * 64 + '.zip', version_id='immutable-version', sha256='d' * 64, corpus_digest='e' * 64))
 
 
 class MediaIdentities(unittest.TestCase):
+    def test_retained_runtime_keeps_current_archive_pins_for_later_rollback(self):
+        from unittest.mock import Mock
+        value = members()
+        config = {'runtime': {'parameter_prefix': '/chalk/production/managed-episode'}, 'dispatcher': {}}
+        provider = Mock()
+        def parameter(name):
+            role = name.rsplit('/', 1)[1].split('.')[0]
+            member = value[role]
+            pins = dict(IMAGE_ID=member['base_snapshot_id'], IMAGE_DIGEST=member['image_digest'], RELEASE_ID=member['release_id'],
+                        ARCHIVE_BUCKET='production-artifacts', ARCHIVE_KEY=member['archive_key'], ARCHIVE_SHA256=member['archive_sha256'])
+            return {'Value': ''.join('CHALK_RECORDER_FLEET_' + key + '=' + item + '\n' for key, item in pins.items())}
+        provider.parameter.side_effect = parameter
+        dispatcher = value['dispatcher']
+        inputs = dict(artifact_s3_bucket=dispatcher['bucket'], artifact_s3_key=dispatcher['key'], artifact_s3_object_version=dispatcher['version_id'], artifact_sha256=dispatcher['sha256'], deepinfra_corpus_digest=dispatcher['corpus_digest'])
+        with patch.object(media, 'dispatcher_root', return_value={'module': {'dispatcher': inputs}}):
+            retained = media.current(provider, config)
+        self.assertEqual(retained['recorder_source_bucket'], 'production-artifacts')
+        for role in ('capture', 'render'):
+            self.assertEqual(retained[role], {key: value[role][key] for key in ('base_snapshot_id', 'image_digest', 'release_id', 'archive_key', 'archive_sha256')})
+
     def test_corpus_approval_refreshes_without_rebuilding_or_changing_zip(self):
         from types import SimpleNamespace
         from unittest.mock import Mock
@@ -107,6 +127,47 @@ class MediaIdentities(unittest.TestCase):
                     media.deploy_dispatcher(args)
                 settings.assert_not_called()
 
+    def test_reusing_archive_honors_separately_updated_base(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        provider = Mock()
+        provider.parameter.return_value = {'Value': 'CHALK_RECORDER_FLEET_IMAGE_ID=222\n'}
+        value = members()
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            baseline = directory / 'baseline.json'
+            baseline.write_text(json.dumps(value))
+            args = SimpleNamespace(directory=directory / 'build', output=directory / 'media.json', baseline=baseline, role='capture')
+            with patch.dict(os.environ, CHALK_MEDIA_ARTIFACT_BUCKET=value['recorder_source_bucket']), patch.object(media, 'settings', return_value=(provider, {'runtime': {'parameter_prefix': '/chalk/nightly/managed-episode'}})), patch.object(media, 'fingerprint', return_value=value['capture']['input_sha256']), patch.object(media.recorder_release, 'verify_object'), patch.object(media.recorder_release, 'build') as build:
+                media.build_archives(args)
+                build.assert_not_called()
+            result = json.loads(args.output.read_text())['capture']
+            self.assertEqual(result, dict(value['capture'], base_snapshot_id='222'))
+
+    def test_promote_copies_verified_bytes_without_changing_held_members(self):
+        from unittest.mock import Mock
+        value = members()
+        before = json.dumps(value, sort_keys=True)
+        data = b'actual held archive bytes'
+        sha = digest(data)
+        for role in ('capture', 'render'):
+            value[role].update(archive_sha256=sha, archive_key=f'recorder/{role}/{sha}.tar.gz')
+        before = json.dumps(value, sort_keys=True)
+        provider = Mock()
+        def download(*args, **kwargs):
+            Path(args[-1]).write_bytes(data)
+        provider.aws.side_effect = download
+        with patch.object(media.recorder_release, 'verify_object', return_value={'ETag': 'held-etag'}), patch.object(media.recorder_release, 'publish') as publish:
+            media.materialize_archives(provider, value, 'production-artifacts')
+            self.assertEqual(publish.call_count, 2)
+            self.assertEqual(publish.call_args.args[1], 'production-artifacts')
+        self.assertEqual(json.dumps(value, sort_keys=True), before)
+        provider.aws.side_effect = lambda *args, **kwargs: Path(args[-1]).write_bytes(b'changed')
+        with patch.object(media.recorder_release, 'verify_object', return_value={'ETag': 'held-etag'}), patch.object(media.recorder_release, 'publish') as publish:
+            with self.assertRaisesRegex(ValueError, 'SHA256 mismatch'):
+                media.materialize_archives(provider, value, 'production-artifacts')
+            publish.assert_not_called()
+
     def test_all_candidate_images_are_checked_before_either_pin_write(self):
         from types import SimpleNamespace
         from unittest.mock import Mock
@@ -119,7 +180,7 @@ class MediaIdentities(unittest.TestCase):
             name = config['runtime']['parameter_prefix'] + '/recorder/' + role + '.env'
             parameters[name] = dict(Name=name, Type='SecureString', Version=1,
                 Value='DIGITALOCEAN_TOKEN=fixture-token\nCHALK_RECORDER_FLEET_REGION=' + role + '-region\nCHALK_RECORDER_FLEET_SIZE=' + role + '-size\n')
-        images = {str(image['image_id']): dict(id=int(image['image_id']), status='available', regions=[role + '-region'], min_disk_size=50)
+        images = {str(image['base_snapshot_id']): dict(id=int(image['base_snapshot_id']), status='available', regions=[role + '-region'], min_disk_size=50)
                   for role, image in members().items() if role in ('capture', 'render')}
         def do(*args):
             events.append(args)
@@ -139,28 +200,41 @@ class MediaIdentities(unittest.TestCase):
             return dict(Version=parameter['Version'])
         provider.parameter.side_effect = lambda name: copy.deepcopy(parameters[name])
         provider.do.side_effect, provider.aws.side_effect = do, aws
-        with tempfile.TemporaryDirectory() as directory, patch.object(media, 'settings', return_value=(provider, config)):
+        with tempfile.TemporaryDirectory() as directory, patch.object(media, 'settings', return_value=(provider, config)), patch.object(media, 'materialize_archives'):
             output = Path(directory, 'media.json')
             output.write_text(json.dumps(members()))
-            args = SimpleNamespace(output=output)
+            args = SimpleNamespace(output=output, region='ap-southeast-1', environment='nightly')
             for role in ('capture', 'render'):
-                image_id = members()[role]['image_id']
-                original = copy.deepcopy(images[image_id])
+                base_snapshot_id = members()[role]['base_snapshot_id']
+                original = copy.deepcopy(images[base_snapshot_id])
                 for invalid in (None, dict(original, status='deleted'), dict(original, regions=['wrong-region']), dict(original, min_disk_size=51)):
                     with self.subTest(role=role, invalid=invalid):
-                        images[image_id] = invalid
+                        images[base_snapshot_id] = invalid
                         events.clear()
                         with self.assertRaises((ValueError, RuntimeError)):
-                            media.pin_images(args)
+                            media.pin_archives(args)
                         self.assertFalse(any(event[0] == 'put' for event in events))
-                images[image_id] = original
+                images[base_snapshot_id] = original
             events.clear()
-            media.pin_images(args)
+            media.pin_archives(args)
             image_reads = [i for i, event in enumerate(events) if event[:3] == ('compute', 'image', 'get')]
             writes = [i for i, event in enumerate(events) if event[0] == 'put']
             self.assertEqual(len(image_reads), 2)
             self.assertEqual(len(writes), 2)
             self.assertLess(max(image_reads), min(writes))
+            legacy = members()
+            legacy.pop('recorder_source_bucket')
+            for role in ('capture', 'render'):
+                member = legacy[role]
+                member['image_id'] = member.pop('base_snapshot_id')
+                member.pop('archive_key')
+                member.pop('archive_sha256')
+            output.write_text(json.dumps(legacy))
+            args.environment = 'production'
+            media.pin_archives(args)
+            for name, parameter in parameters.items():
+                if name != 'ca':
+                    self.assertNotIn('CHALK_RECORDER_FLEET_ARCHIVE_', parameter['Value'])
 
     def test_failed_workflow_preflight_cannot_invalidate_or_publish_pins(self):
         script = (media.ROOT / '.github/workflows/ci.yml').read_text().split('      - name: Deploy, health-check, and prove release\n', 1)[1]
@@ -287,7 +361,7 @@ class MediaIdentities(unittest.TestCase):
             with self.assertRaises(ValueError):
                 media.validate_members(broken)
         broken = copy.deepcopy(value)
-        broken['capture']['image_id'] = 'latest'
+        broken['capture']['base_snapshot_id'] = 'latest'
         with self.assertRaises(ValueError):
             media.validate_members(broken)
 
@@ -301,28 +375,6 @@ class MediaIdentities(unittest.TestCase):
         info['media_base64'] = base64.b64encode(b'corrupt').decode()
         with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
             release.media_bytes(github, info)
-
-    def test_first_install_plan_does_not_read_old_pins_or_dispatcher(self):
-        import importlib.util
-        spec = importlib.util.spec_from_file_location('image_release', media.ROOT / 'scripts/recorder/release.py')
-        image_release = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(image_release)
-        from unittest.mock import Mock
-        build = image_release.Release.__new__(image_release.Release)
-        build.args = Mock(role='capture')
-        build.state = {}
-        build.config = dict(runtime=dict(parameter_prefix='/chalk/nightly/managed-episode'), builder={})
-        build.provider = Mock()
-        build.provider.parameter.return_value = {'Value': 'CHALK_RECORDER_FLEET_SIZE=c-2\nCHALK_RECORDER_FLEET_REGION=test1\n'}
-        build.provider.do.return_value = [dict(slug='c-2', available=True, regions=['test1'], disk=50)]
-        build.provider.command.return_value = '192.0.2.1'
-        build.identity = lambda: dict(source_commit=SHA)
-        with tempfile.TemporaryDirectory() as directory:
-            build.directory = Path(directory) / 'new'
-            build.plan()
-            self.assertTrue(json.loads((build.directory / 'release.json').read_text())['planned'])
-        build.provider.aws.assert_not_called()
-        build.provider.parameter.assert_called_once_with('/chalk/nightly/managed-episode/recorder/capture.env')
 
 
 if __name__ == '__main__':

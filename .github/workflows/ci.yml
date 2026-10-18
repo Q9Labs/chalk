@@ -431,14 +431,13 @@ jobs:
           if-no-files-found: error
 
   build-media:
-    name: Build and inspect media release members
+    name: Build immutable media release archives
     needs: plan-managed
     if: needs.plan-managed.outputs.should_publish == 'true' && needs.plan-managed.outputs.recorder_control == 'true' && inputs.managed_environment == 'nightly'
     runs-on: ubuntu-24.04
-    timeout-minutes: 150
+    timeout-minutes: 90
     environment: nightly
     env:
-      DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       CHALK_MANAGED_RECORDER_CONFIG_PARAMETER: ${{ vars.CHALK_MANAGED_RECORDER_CONFIG_PARAMETER }}
       CHALK_MEDIA_ARTIFACT_BUCKET: ${{ vars.CHALK_MEDIA_ARTIFACT_BUCKET }}
       CHALK_TRANSCRIPTION_CORPUS_DIGEST: ${{ vars.CHALK_TRANSCRIPTION_CORPUS_DIGEST }}
@@ -447,15 +446,15 @@ jobs:
         with:
           ref: ${{ inputs.target_sha }}
           fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/api/go.mod
       - uses: pnpm/action-setup@v4
         with:
           version: 12.8.1
       - uses: actions/setup-node@v4
         with:
           node-version-file: .tool-versions
-      - uses: digitalocean/action-doctl@v2
-        with:
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
@@ -469,24 +468,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/releases/media.py baseline --output "$RUNNER_TEMP/media-plan/stable-media.json"
-      - name: Build first-install or changed capture image and inspect its installed bytes
+      - name: Build first-install or changed capture archive
         run: |
           args=()
           baseline="$RUNNER_TEMP/media-plan/stable-media.json"
           if [[ -f "$baseline" ]]; then args+=(--baseline "$baseline"); fi
-          python3 scripts/releases/media.py build_images --role capture "${args[@]}" --directory "$RUNNER_TEMP/media-build" --output "$RUNNER_TEMP/media.json"
+          python3 scripts/releases/media.py build_archives --role capture "${args[@]}" --directory "$RUNNER_TEMP/media-build" --output "$RUNNER_TEMP/media.json"
       - name: Refresh credentials before the render build
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
           role-duration-seconds: 3600
-      - name: Build first-install or changed render image and inspect its installed bytes
+      - name: Build first-install or changed render archive
         run: |
           args=()
           baseline="$RUNNER_TEMP/media-plan/stable-media.json"
           if [[ -f "$baseline" ]]; then args+=(--baseline "$baseline"); fi
-          python3 scripts/releases/media.py build_images --role render "${args[@]}" --directory "$RUNNER_TEMP/media-build" --output "$RUNNER_TEMP/media.json"
+          python3 scripts/releases/media.py build_archives --role render "${args[@]}" --directory "$RUNNER_TEMP/media-build" --output "$RUNNER_TEMP/media.json"
       - name: Refresh credentials before dispatcher publication
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -517,9 +516,6 @@ jobs:
           baseline="$RUNNER_TEMP/media-plan/stable-media.json"
           if [[ -f "$baseline" ]]; then args+=(--baseline "$baseline"); fi
           python3 scripts/releases/media.py publish_zip "${args[@]}" --release-id '${{ needs.plan-managed.outputs.release_id }}' --directory "$RUNNER_TEMP/media-build" --output "$RUNNER_TEMP/media.json"
-      - name: Remove this job's builder Droplets, firewalls and SSH keys
-        if: always()
-        run: python3 scripts/releases/media.py cleanup --directory "$RUNNER_TEMP/media-build"
       - uses: actions/upload-artifact@v4
         with:
           name: media-members-${{ needs.plan-managed.outputs.release_id }}
@@ -806,7 +802,7 @@ jobs:
           fi
           media="${manifest%.json}.media.json"
           if [[ -f "$media" ]]; then
-            python3 scripts/releases/media.py pin_images --manifest "$manifest" --output "$media"
+            python3 scripts/releases/media.py pin_archives --manifest "$manifest" --output "$media"
           fi
           node scripts/deploy/deploy-managed-release.mjs "${args[@]}"
           if [[ "$MANAGED_ENVIRONMENT" == nightly && -f "$media" ]]; then

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Immutable recorder images and dispatcher ZIP members of a managed release."""
+"""Immutable recorder archives and dispatcher ZIP members of a managed release."""
 import argparse
 import base64
 import copy
@@ -15,6 +15,10 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT / 'scripts/recorder'))
 from release_core import check_image, digest, env_values, require, validate_config
 from release_io import Provider, private_json
+import importlib.util
+_recorder_spec = importlib.util.spec_from_file_location("recorder_archive_release", ROOT / "scripts/recorder/release.py")
+recorder_release = importlib.util.module_from_spec(_recorder_spec)
+_recorder_spec.loader.exec_module(recorder_release)
 from dispatcher_binding import dispatcher_root, binding_target, verify_dispatcher, MODULE
 from github_release import GitHub, payload
 
@@ -33,12 +37,18 @@ def fingerprint(member):
 
 
 def validate_members(value):
-    require(value.get('schema_version') == 1 and set(value) == {'schema_version', 'capture', 'render', 'dispatcher'}, 'invalid media members')
+    require(value.get('schema_version') == 1 and set(value) in ({'schema_version', 'recorder_source_bucket', 'capture', 'render', 'dispatcher'}, {'schema_version', 'capture', 'render', 'dispatcher'}), 'invalid media members')
+    portable = 'recorder_source_bucket' in value
     for role in ('capture', 'render'):
         image = value[role]
-        require(re.fullmatch(r'[1-9][0-9]*', str(image['image_id'])), 'invalid recorder image ID')
+        require(re.fullmatch(r'[1-9][0-9]*', str(image['base_snapshot_id' if portable else 'image_id'])), 'invalid recorder image ID')
+        if portable:
+            require(re.fullmatch(r'[0-9a-f]{64}', image['archive_sha256']), 'invalid recorder archive SHA256')
+            require(image['archive_key'] == f"recorder/{role}/{image['archive_sha256']}.tar.gz", 'invalid recorder archive key')
         require(re.fullmatch(r'sha256:[0-9a-f]{64}', image['image_digest']), 'invalid recorder digest')
         require(re.fullmatch(r'[a-z0-9][a-z0-9._-]{0,127}', image['release_id']), 'invalid recorder release')
+    if portable:
+        require(re.fullmatch(r'[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]', value['recorder_source_bucket']), 'invalid recorder source bucket')
     archive = value['dispatcher']
     require(re.fullmatch(r'[0-9a-f]{64}', archive['sha256']), 'invalid dispatcher ZIP digest')
     require(archive['version_id'] and archive['version_id'] != 'null', 'dispatcher ZIP must be version-pinned')
@@ -63,12 +73,18 @@ def current(provider, config):
     for role in ('capture', 'render'):
         values = env_values(provider.parameter(prefix + '/recorder/' + role + '.env')['Value'])
         result[role] = {key.lower(): values['CHALK_RECORDER_FLEET_' + key] for key in ('IMAGE_ID', 'IMAGE_DIGEST', 'RELEASE_ID')}
+        if values.get('CHALK_RECORDER_FLEET_ARCHIVE_KEY'):
+            result[role]['base_snapshot_id'] = result[role].pop('image_id')
+            result[role].update({key.lower(): values['CHALK_RECORDER_FLEET_' + key] for key in ('ARCHIVE_KEY', 'ARCHIVE_SHA256')})
+            bucket = values['CHALK_RECORDER_FLEET_ARCHIVE_BUCKET']
+            require(result.get('recorder_source_bucket', bucket) == bucket, 'recorder archive buckets differ')
+            result['recorder_source_bucket'] = bucket
     inputs = dispatcher_root(provider, config['dispatcher'])['module']['dispatcher']
     result['dispatcher'] = dict(bucket=inputs['artifact_s3_bucket'], key=inputs['artifact_s3_key'], version_id=inputs['artifact_s3_object_version'], sha256=inputs['artifact_sha256'], corpus_digest=inputs['deepinfra_corpus_digest'])
     return validate_members(result)
 
 
-def snapshot(args):
+def retain_runtime(args):
     provider, config = settings(args)
     private_json(args.output, current(provider, config))
 
@@ -81,7 +97,9 @@ def baseline(args):
         saved = payload(records[0])
         data = base64.b64decode(saved['media_base64'], validate=True)
         require(digest(data) == saved['media_sha256'], 'current media checksum mismatch')
-        private_json(args.output, validate_members(json.loads(data)))
+        previous = validate_members(json.loads(data))
+        if 'recorder_source_bucket' in previous:
+            private_json(args.output, previous)
 
 
 def check_configuration(args):
@@ -99,66 +117,41 @@ def record_current(args):
                      required_contexts=[], payload=dict(channel='media-current', media_sha256=digest(data), media_base64=base64.b64encode(data).decode())))
 
 
-def cleanup_cloud(args):
-    # Runs in a separate workflow after the owning workflow has finished, including cancellation.
-    run = os.environ['COMPLETED_MEDIA_RUN_ID']
-    require(re.fullmatch(r'[0-9]+', run), 'invalid completed workflow identity')
-    provider = Provider(args.region or 'ap-southeast-1', None)
-    provider.context = 'github-actions'
-    pattern = re.compile(r'chalk-release-(builder|qualifier)-' + run + r'-[0-9a-f]{12}')
-    droplets = provider.do('compute', 'droplet', 'list')
-    for node in droplets:
-        if pattern.fullmatch(node['name']):
-            observed = provider.do('compute', 'droplet', 'get', node['id'])[0]
-            require(all(observed[key] == node[key] for key in ('id', 'name', 'created_at')), 'cleanup builder identity changed')
-            provider.do('compute', 'droplet', 'delete', node['id'], '--force')
-    for resource in ('firewall', 'ssh-key'):
-        for item in provider.do('compute', resource, 'list'):
-            if pattern.fullmatch(item['name']):
-                provider.do('compute', resource, 'delete', item['id'], '--force')
-    for resource in ('droplet', 'firewall', 'ssh-key'):
-        require(not any(pattern.fullmatch(item['name']) for item in provider.do('compute', resource, 'list')), 'owned media resource remains after cleanup')
-    print(json.dumps({'run_id': run, 'cleanup_verified': True}))
-
-
-def cleanup(args):
-    import importlib.util
-    spec = importlib.util.spec_from_file_location('recorder_image_release', ROOT / 'scripts/recorder/release.py')
-    image_release = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(image_release)
-    for role in ('capture', 'render'):
-        state = args.directory / role
-        if not (state / 'release.json').exists():
-            continue
-        options = image_release.parse_args(['plan', '--environment', args.environment, '--region', args.region, '--config-parameter', args.config_parameter, '--role', role, '--state', str(state)])
-        release = image_release.Release(options)
-        for label in ('builder', 'qualifier'):
-            if label in release.state and not release.state[label].get('cleaned'):
-                release.cleanup_node(label)
-
-
-def build_images(args):
+def build_archives(args):
     provider, config = settings(args)
     args.directory.mkdir(parents=True, exist_ok=True)
-    result = json.loads(args.output.read_text()) if args.output.exists() else {'schema_version': 1}
+    bucket = os.environ['CHALK_MEDIA_ARTIFACT_BUCKET']
+    result = json.loads(args.output.read_text()) if args.output.exists() else {'schema_version': 1, 'recorder_source_bucket': bucket}
     previous = json.loads(args.baseline.read_text()) if args.baseline else {}
-    source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
     for role in (args.role,) if args.role else ('capture', 'render'):
         checksum = fingerprint(role)
         old = previous.get(role, {})
         values = env_values(provider.parameter(config['runtime']['parameter_prefix'] + '/recorder/' + role + '.env')['Value'])
-        pinned = all(str(old.get(key.lower(), '')) == values.get('CHALK_RECORDER_FLEET_' + key) for key in ('IMAGE_ID', 'IMAGE_DIGEST', 'RELEASE_ID'))
-        if old.get('input_sha256') == checksum and pinned:
-            result[role] = old
+        if old.get('input_sha256') == checksum and old.get('archive_key') and previous.get('recorder_source_bucket') == bucket:
+            recorder_release.verify_object(provider, previous['recorder_source_bucket'], old['archive_key'], old['archive_sha256'])
+            result[role] = dict(old, base_snapshot_id=values['CHALK_RECORDER_FLEET_IMAGE_ID'])
+            result['recorder_source_bucket'] = previous['recorder_source_bucket']
             continue
-        state = args.directory / role
-        for phase in ('plan', 'build', 'snapshot', 'inspect'):
-            subprocess.run([sys.executable, str(ROOT / 'scripts/recorder/release.py'), phase, '--environment', args.environment,
-                            '--region', args.region, '--config-parameter', args.config_parameter, '--role', role, '--source', source, '--state', str(state)], check=True)
-        built = json.loads((state / 'release.json').read_text())
-        result[role] = {key: built[key] for key in ('release_id', 'image_id', 'image_digest', 'inspection_sha256')}
-        result[role].update(source_revision=source, input_sha256=checksum)
+        built, path = recorder_release.build(role, args.directory / role)
+        key = recorder_release.publish(provider, bucket, role, built, path)
+        result[role] = dict(built, base_snapshot_id=values['CHALK_RECORDER_FLEET_IMAGE_ID'], archive_key=key, input_sha256=checksum)
     private_json(args.output, result)
+
+
+def materialize_archives(provider, media, bucket):
+    source = media['recorder_source_bucket']
+    for role in ('capture', 'render'):
+        member = media[role]
+        key, sha = member['archive_key'], member['archive_sha256']
+        observed = recorder_release.verify_object(provider, source, key, sha)
+        if source != bucket:
+            with tempfile.TemporaryDirectory(prefix='chalk-recorder-promote-') as directory:
+                path = Path(directory) / 'archive.tar.gz'
+                provider.aws('s3api', 'get-object', '--bucket', source, '--key', key,
+                             '--if-match', observed['ETag'], path, timeout=600)
+                require(digest(path.read_bytes()) == sha, 'promoted recorder archive SHA256 mismatch')
+                recorder_release.publish(provider, bucket, role, member, path)
+        recorder_release.verify_object(provider, bucket, key, sha)
 
 
 def installed_dispatcher(provider, config):
@@ -230,9 +223,14 @@ def write_parameter(provider, parameter, value):
     require(after['Version'] == result['Version'] and after['Value'] == value, 'fleet pin readback mismatch')
 
 
-def pin_images(args):
+def pin_archives(args):
     provider, config = settings(args)
     media = validate_members(json.loads(args.output.read_text()))
+    portable = 'recorder_source_bucket' in media
+    require(portable or args.environment == 'production', 'legacy media is production rollback only')
+    bucket = os.environ.get('CHALK_MEDIA_ARTIFACT_BUCKET', '')
+    if portable:
+        materialize_archives(provider, media, bucket)
     parameters = {role: provider.parameter(config['runtime']['parameter_prefix'] + '/recorder/' + role + '.env') for role in ('capture', 'render')}
     for role, parameter in parameters.items():
         values = env_values(parameter['Value'])
@@ -241,18 +239,27 @@ def pin_images(args):
         size = next((item for item in sizes if item['slug'] == values['CHALK_RECORDER_FLEET_SIZE']), None)
         region = values['CHALK_RECORDER_FLEET_REGION']
         require(size and size['available'] and region in size['regions'], role + ' fleet size unavailable')
-        images = provider.do('compute', 'image', 'get', media[role]['image_id'])
-        require(len(images) == 1 and str(images[0]['id']) == str(media[role]['image_id']), role + ' candidate snapshot not found')
+        images = provider.do('compute', 'image', 'get', media[role]['base_snapshot_id' if portable else 'image_id'])
+        require(len(images) == 1 and str(images[0]['id']) == str(media[role]['base_snapshot_id' if portable else 'image_id']), role + ' candidate snapshot not found')
         check_image(images[0], dict(region=region, disk_gb=size['disk']))
     ca = provider.parameter(config['bootstrap_ca_parameter'])['Value']
     for role, parameter in parameters.items():
         image = media[role]
-        updates = { 'CHALK_RECORDER_FLEET_' + key.upper(): str(image[key]) for key in ('image_id', 'image_digest', 'release_id') }
+        updates = { 'CHALK_RECORDER_FLEET_' + key.upper(): str(image[key]) for key in ('image_digest', 'release_id') }
+        updates['CHALK_RECORDER_FLEET_IMAGE_ID'] = str(image['base_snapshot_id' if portable else 'image_id'])
+        if portable:
+            updates.update(
+                       CHALK_RECORDER_FLEET_ARCHIVE_BUCKET=bucket, CHALK_RECORDER_FLEET_ARCHIVE_KEY=image['archive_key'],
+                       CHALK_RECORDER_FLEET_ARCHIVE_SHA256=image['archive_sha256'], CHALK_RECORDER_FLEET_ARCHIVE_REGION=args.region,
+            )
         updates.update(CHALK_RECORDER_FLEET_BOOTSTRAP_CA_BASE64=base64.b64encode(ca.encode()).decode(),
                        CHALK_RECORDER_FLEET_BOOTSTRAP_SERVER_NAME=config['bootstrap_server_name'],
                        CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST=image['image_digest'])
         lines = parameter['Value'].splitlines()
-        value = '\n'.join(line for line in lines if line.split('=', 1)[0] not in updates) + '\n'
+        removed = set(updates)
+        if not portable:
+            removed.update('CHALK_RECORDER_FLEET_ARCHIVE_' + key for key in ('BUCKET', 'KEY', 'SHA256', 'REGION'))
+        value = '\n'.join(line for line in lines if line.split('=', 1)[0] not in removed) + '\n'
         value += ''.join(key + '=' + item + '\n' for key, item in updates.items())
         write_parameter(provider, parameter, value)
 
@@ -381,7 +388,7 @@ def qualify(args):
     for role in ('capture', 'render'):
         values = env_values(provider.parameter(config['runtime']['parameter_prefix'] + '/recorder/' + role + '.env')['Value'])
         image = media[role]
-        request = dict(schema_version=1, role=role, source_commit=image['source_revision'], release_id=image['release_id'], image_id=int(image['image_id']), image_digest=image['image_digest'], region=values['CHALK_RECORDER_FLEET_REGION'], size=values['CHALK_RECORDER_FLEET_SIZE'])
+        request = dict(schema_version=1, role=role, source_commit=image['source_revision'], release_id=image['release_id'], image_id=int(image['base_snapshot_id']), archive=dict(bucket=os.environ['CHALK_MEDIA_ARTIFACT_BUCKET'], key=image['archive_key'], sha256=image['archive_sha256'], region=args.region), image_digest=image['image_digest'], region=values['CHALK_RECORDER_FLEET_REGION'], size=values['CHALK_RECORDER_FLEET_SIZE'])
         path, receipt = args.directory / (role + '-request.json'), args.directory / (role + '-receipt.json')
         private_json(path, request)
         subprocess.run([sys.executable, str(ROOT / 'scripts/recorder/boot-check.py'), '--request', str(path), '--receipt', str(receipt)], check=True,
@@ -390,7 +397,7 @@ def qualify(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('check_configuration', 'baseline', 'record_current', 'cleanup_cloud', 'cleanup', 'snapshot', 'build_images', 'publish_zip', 'zip_needed', 'pin_images', 'deploy_dispatcher', 'qualify'))
+    parser.add_argument('command', choices=('retain_runtime', 'check_configuration', 'baseline', 'record_current', 'build_archives', 'publish_zip', 'zip_needed', 'pin_archives', 'deploy_dispatcher', 'qualify'))
     parser.add_argument('--environment', choices=('nightly', 'production'), default=os.environ.get('MANAGED_ENVIRONMENT', 'nightly'))
     parser.add_argument('--region', default=os.environ.get('AWS_REGION'))
     parser.add_argument('--config-parameter', default=os.environ.get('CHALK_MANAGED_RECORDER_CONFIG_PARAMETER'))
