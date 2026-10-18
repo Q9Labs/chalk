@@ -205,7 +205,8 @@ try {
     assert.equal((await replay.json()).access.subject.participant_id, grant.subject.participant_id);
     assert.equal(sql(`select count(*) from participants where episode_id='${grant.subject.episode_id}'`), "1");
     const refreshedAccess = await post(ada, "/dashboard-api/call", { action: "refresh-access", spaceId: ownerSpaceId }, session.csrfToken);
-    assert.equal(refreshedAccess.status, 200, await refreshedAccess.clone().text());
+    // Before Sync has committed participant_joined, refresh must fail closed.
+    assert.equal(refreshedAccess.status, 404, await refreshedAccess.clone().text());
     if (admission === "knock") {
       const guest = await fetch(`${process.env.DASHBOARD_TEST_API_ORIGIN}/v1/tenants/${firstTenant}/spaces/${ownerSpaceId}/episodes/${grant.subject.episode_id}/participants`, {
         method: "POST",
@@ -224,7 +225,7 @@ try {
     assert.equal(rejoin.status, 200, await rejoin.clone().text());
     assert.notEqual((await rejoin.json()).access.subject.participant_id, grant.subject.participant_id);
   }
-  console.log("PASS: owner open/knock direct grants, same-key seat replay, access refresh, new-key rejoin seat, guest knock still waits");
+  console.log("PASS: owner open/knock direct grants, same-key seat replay, pre-Sync refresh rejection, new-key rejoin seat, guest knock still waits");
   const keyResponse = await post(ada, "/dashboard-api/developer", { action: "create-key", name: "Test", scopes: ["spaces:read"], expiresAt: "2027-01-01T00:00:00Z", idempotencyKey: crypto.randomUUID() }, session.csrfToken);
   assert.equal(keyResponse.status, 200, await keyResponse.clone().text());
   const keyId = (await keyResponse.json()).id;
