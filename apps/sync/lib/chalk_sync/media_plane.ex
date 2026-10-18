@@ -23,7 +23,7 @@ defmodule ChalkSync.MediaPlane do
           | :ambiguous
   @type publication :: %{
           participant_id: String.t(),
-          source: source(),
+          source: source() | :screen_audio,
           enabled: boolean(),
           publication_id: String.t() | nil
         }

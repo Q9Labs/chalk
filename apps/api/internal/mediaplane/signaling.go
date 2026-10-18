@@ -190,7 +190,7 @@ func requireCloseTracksRequest(input *CloseTracksRequest, provider Provider) err
 }
 
 func validMediaSource(source string) bool {
-	return source == "microphone" || source == "camera" || source == "screen"
+	return source == "microphone" || source == "camera" || source == "screen" || source == "screen_audio"
 }
 
 func requireRenegotiateRequest(input *RenegotiateRequest) error {

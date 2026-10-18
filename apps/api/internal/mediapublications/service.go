@@ -99,7 +99,7 @@ func (s Service) RecordPublicationAvailability(ctx context.Context, input Availa
 		return ErrUnavailable
 	}
 	if input.TenantID.IsZero() || input.EpisodeID.IsZero() || input.ParticipantID.IsZero() ||
-		input.PublicationID == "" || (input.Source != "camera" && input.Source != "microphone" && input.Source != "screen") {
+		input.PublicationID == "" || (input.Source != "camera" && input.Source != "microphone" && input.Source != "screen" && input.Source != "screen_audio") {
 		return ErrInvalidPublication
 	}
 	for attempt := 0; attempt < maxAppendAttempts; attempt++ {
@@ -397,7 +397,7 @@ func validateInput(input *RecordInput) error {
 		track.Source = strings.TrimSpace(track.Source)
 		track.MID = strings.TrimSpace(track.MID)
 		track.TrackName = strings.TrimSpace(track.TrackName)
-		if (track.Source != "microphone" && track.Source != "camera" && track.Source != "screen") || track.MID == "" || track.TrackName == "" || strings.Contains(track.TrackName, "|") {
+		if (track.Source != "microphone" && track.Source != "camera" && track.Source != "screen" && track.Source != "screen_audio") || track.MID == "" || track.TrackName == "" || strings.Contains(track.TrackName, "|") {
 			return ErrInvalidPublication
 		}
 		if _, exists := seen[track.Source]; exists {
@@ -416,7 +416,7 @@ func validateCloseInput(input *CloseInput) error {
 	if input.TenantID.IsZero() || input.EpisodeID.IsZero() || input.ParticipantID.IsZero() || input.ParticipantGeneration <= 0 || input.ConnectionID == "" || strings.Contains(input.ConnectionID, "|") {
 		return ErrInvalidPublication
 	}
-	if input.Source != "microphone" && input.Source != "camera" && input.Source != "screen" {
+	if input.Source != "microphone" && input.Source != "camera" && input.Source != "screen" && input.Source != "screen_audio" {
 		return ErrInvalidPublication
 	}
 	reference, err := ParseReference(input.PublicationID)
