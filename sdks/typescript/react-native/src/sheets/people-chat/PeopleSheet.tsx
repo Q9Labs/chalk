@@ -17,12 +17,12 @@ export function PeopleSheet({ open, onClose }: PeopleSheetProps): React.JSX.Elem
   const { roster } = useParticipants();
   const self = useSelf();
   return (
-    <BottomSheet accessibilityLabel="People" heightRatio={0.78} onClose={onClose} open={open} testID="chalk-sheet-people" title={`People ${roster.length}`}>
+    <BottomSheet accessibilityLabel="People" heightRatio={0.78} onClose={onClose} open={open} testID="sheet.people" title={`People ${roster.length}`}>
       <FlatList
         data={roster}
         keyExtractor={(participant) => participant.participantId}
         renderItem={({ item }) => (
-          <View accessible style={styles.row} testID={`chalk-people-row-${item.participantId}`}>
+          <View accessible style={styles.row} testID={`people.row.${item.participantId}`}>
             <FaceAvatar name={item.displayName} size={32} />
             <ChalkText numberOfLines={1} style={styles.name} variant="bodyMedium">
               {item.participantId === self.participantId ? `${item.displayName} (You)` : item.displayName}

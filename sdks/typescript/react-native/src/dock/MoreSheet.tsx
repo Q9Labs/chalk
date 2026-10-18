@@ -15,8 +15,8 @@ export type MoreSheetProps = {
 };
 
 const SCHEMES = [
-  { value: "dark", label: "Dark", testID: "chalk-appearance-dark" },
-  { value: "light", label: "Light", testID: "chalk-appearance-light" },
+  { value: "dark", label: "Dark", testID: "more.appearance.dark" },
+  { value: "light", label: "Light", testID: "more.appearance.light" },
 ] as const;
 
 /**
@@ -26,11 +26,11 @@ const SCHEMES = [
 export function MoreSheet({ open, onClose, onOpenPeople, returnFocusRef }: MoreSheetProps): React.JSX.Element {
   const preferences = usePreferences();
   return (
-    <BottomSheet accessibilityLabel="More options" onClose={onClose} open={open} returnFocusRef={returnFocusRef} testID="chalk-sheet-more">
+    <BottomSheet accessibilityLabel="More options" onClose={onClose} open={open} returnFocusRef={returnFocusRef} testID="sheet.more">
       <SheetGroup>
-        <SheetRow icon="users" label="People" onPress={onOpenPeople} testID="chalk-more-people" />
-        <SheetRow end={<SegmentedControl<ColorScheme> accessibilityLabel="Appearance" onChange={preferences.setColorScheme} options={SCHEMES} testID="chalk-appearance" value={preferences.colorScheme} />} icon="moon" label="Appearance" />
-        <SheetRow end={<Switch accessibilityLabel="Sounds" onValueChange={preferences.setSoundsEnabled} testID="chalk-sounds" value={preferences.soundsEnabled} />} icon="vol" label="Sounds" />
+        <SheetRow icon="users" label="People" onPress={onOpenPeople} testID="more.people" />
+        <SheetRow end={<SegmentedControl<ColorScheme> accessibilityLabel="Appearance" onChange={preferences.setColorScheme} options={SCHEMES} testID="more.appearance" value={preferences.colorScheme} />} icon="moon" label="Appearance" />
+        <SheetRow end={<Switch accessibilityLabel="Sounds" onValueChange={preferences.setSoundsEnabled} testID="more.sounds" value={preferences.soundsEnabled} />} icon="vol" label="Sounds" />
       </SheetGroup>
     </BottomSheet>
   );

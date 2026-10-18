@@ -1,4 +1,5 @@
 import { Text, type TextProps } from "react-native";
+import { useMeasuredRef } from "../frame/measurement";
 import { useTheme } from "../theme/theme";
 import { type, type Palette, type TypeStyle } from "../theme/tokens";
 
@@ -14,7 +15,9 @@ export type ChalkTextProps = TextProps & {
 /** Figtree text in one of the call's type styles. */
 export function ChalkText({ variant = "body", tone = "text", color, tabular = false, style, ...rest }: ChalkTextProps): React.JSX.Element {
   const { colors } = useTheme();
-  return <Text {...rest} style={[type[variant], { color: color ?? colors[tone] }, tabular ? TABULAR : null, style]} />;
+  const textStyle = [type[variant], { color: color ?? colors[tone] }, tabular ? TABULAR : null, style];
+  const ref = useMeasuredRef<Text>(rest.testID, textStyle);
+  return <Text {...rest} ref={ref} style={textStyle} />;
 }
 
 const TABULAR = { fontVariant: ["tabular-nums" as const] };

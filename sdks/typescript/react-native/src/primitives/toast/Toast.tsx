@@ -1,5 +1,6 @@
 import { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { useMeasuredRef } from "../../frame/measurement";
 import { useTheme } from "../../theme/theme";
 import { fontFamilies } from "../../theme/tokens";
 import { ChalkText } from "../ChalkText";
@@ -16,13 +17,11 @@ export type ToastProps = {
 export const Toast = memo(function Toast({ toast, onDismiss }: ToastProps): React.JSX.Element {
   const { colors, elevation } = useTheme();
   const parts = typeof toast.message === "string" ? [toast.message] : toast.message;
+  const testID = toast.testID ?? `toast.${toast.id}`;
+  const toastStyle = [styles.toast, { backgroundColor: colors.popover, borderColor: colors.line, boxShadow: elevation.toast }];
+  const ref = useMeasuredRef<View>(testID, toastStyle);
   return (
-    <View
-      accessibilityLiveRegion={toast.kind === "error" ? "assertive" : "polite"}
-      accessibilityRole={toast.kind === "error" ? "alert" : "summary"}
-      style={[styles.toast, { backgroundColor: colors.popover, borderColor: colors.line, boxShadow: elevation.toast }]}
-      testID={toast.testID ?? `chalk-toast-${toast.id}`}
-    >
+    <View accessibilityLiveRegion={toast.kind === "error" ? "assertive" : "polite"} accessibilityRole={toast.kind === "error" ? "alert" : "summary"} ref={ref} style={toastStyle} testID={testID}>
       {toast.leading}
       <ChalkText numberOfLines={toast.wrap ? undefined : 1} style={[styles.message, toast.wrap ? styles.wrapped : null]}>
         {parts.map((part, index) =>

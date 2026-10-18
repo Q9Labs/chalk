@@ -3,10 +3,11 @@ import { Pressable, StatusBar, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSpaceClient } from "../context/space-client-context";
 import { Dock } from "../dock/Dock";
+import { LeaveMenu } from "../dock/LeaveMenu";
 import { MoreSheet } from "../dock/MoreSheet";
 import { haptics } from "../haptics/haptics";
 import { Header } from "../header/Header";
-import { useConnection, useMedia } from "../hooks/space-hooks";
+import { useCan, useConnection, useMedia } from "../hooks/space-hooks";
 import { Limbo } from "../limbo/Limbo";
 import { timings } from "../motion/motion";
 import { ToastStack, useToasts } from "../primitives/toast/ToastStack";
@@ -19,6 +20,7 @@ import { durations } from "../theme/tokens";
 import { CallEventToasts } from "../toasts/CallEventToasts";
 import { useDeviceLayout } from "./device-layout";
 import { PortalHost, usePortalEntries } from "./portal";
+import { useMeasuredRef } from "./measurement";
 import { usePreferences } from "./preferences";
 import { frameRegions } from "./regions";
 
@@ -45,10 +47,15 @@ export function CallFrame({ displayName, callName = "Call", onLeave }: CallFrame
   const toasts = useToasts();
   const [sheet, setSheet] = useState<OpenSheet>(null);
   const moreRef = useRef<View>(null);
+  const leaveRef = useRef<View>(null);
+  const canEnd = useCan("endEpisode");
+  const [leaveMenuOpen, setLeaveMenuOpen] = useState(false);
   const sheetEntries = usePortalEntries("sheets");
   const menuEntries = usePortalEntries("menus");
   const layered = sheetEntries.length > 0 || menuEntries.length > 0;
   const regions = useMemo(() => frameRegions(layout.arrangement, layout.width, layout.height, layout.insets), [layout]);
+  const screenStyle = [styles.root, { backgroundColor: colors.canvas }];
+  const screenRef = useMeasuredRef<View>("frame.screen", screenStyle);
 
   const join = useCallback(() => {
     // A failed join shows up as `connection.status === "failed"` with `lastError`, which the status page reads.
@@ -74,43 +81,61 @@ export function CallFrame({ displayName, callName = "Call", onLeave }: CallFrame
   const toggleCamera = useCallback(() => {
     client.media.setCameraEnabled(!cameraOn).catch(reportMediaFailure("camera"));
   }, [cameraOn, client, reportMediaFailure]);
-  const leave = useCallback(() => {
+  const exit = useCallback(
+    (how: "leave" | "end") => {
+      setSheet(null);
+      setLeaveMenuOpen(false);
+      (how === "end" ? client.endEpisode() : client.leave()).then(() => onLeave?.()).catch(() => toasts.show({ kind: "error", dismissible: true, message: how === "end" ? "Couldn't end the call." : "Couldn't leave the call." }));
+    },
+    [client, onLeave, toasts],
+  );
+  const pressLeave = useCallback(() => {
     haptics.leave();
-    setSheet(null);
-    client
-      .leave()
-      .then(() => onLeave?.())
-      .catch(reportMediaFailure("call"));
-  }, [client, onLeave, reportMediaFailure]);
+    if (canEnd) setLeaveMenuOpen((open) => !open);
+    else exit("leave");
+  }, [canEnd, exit]);
 
   const chrome = useLandscapeChrome(layout.arrangement === "landscape" && sheet === null && !layered);
   const status = connection.status;
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.canvas }]} testID="chalk-call">
+    <View ref={screenRef} style={screenStyle} testID="frame.screen">
       <StatusBar barStyle={scheme === "dark" ? "light-content" : "dark-content"} />
       <View accessibilityElementsHidden={layered} importantForAccessibility={layered ? "no-hide-descendants" : "auto"} style={StyleSheet.absoluteFill}>
         <Stage frame={regions.stage} />
-        {chrome.hidden ? <Pressable accessibilityLabel="Show call controls" onPress={chrome.show} style={StyleSheet.absoluteFill} testID="chalk-show-controls" /> : null}
+        {chrome.hidden ? <Pressable accessibilityLabel="Show call controls" onPress={chrome.show} style={StyleSheet.absoluteFill} testID="frame.show-controls" /> : null}
         <Animated.View pointerEvents={chrome.hidden ? "none" : "box-none"} style={[styles.region, frameStyle(regions.header), chrome.style]}>
           <Header arrangement={layout.arrangement} callName={callName} onOpenDetails={() => setSheet("more")} />
         </Animated.View>
         <Animated.View pointerEvents={chrome.hidden ? "none" : "box-none"} style={[styles.region, frameStyle(regions.dock), chrome.style]}>
-          <Dock arrangement={layout.arrangement} cameraOn={cameraOn} microphoneOn={microphoneOn} moreOpen={sheet === "more"} onLeave={leave} onOpenMore={() => setSheet("more")} onToggleCamera={toggleCamera} onToggleMicrophone={toggleMicrophone} ref={moreRef} />
+          <Dock
+            arrangement={layout.arrangement}
+            cameraOn={cameraOn}
+            microphoneOn={microphoneOn}
+            leaveOpen={canEnd ? leaveMenuOpen : undefined}
+            leaveRef={leaveRef}
+            moreOpen={sheet === "more"}
+            moreRef={moreRef}
+            onLeave={pressLeave}
+            onOpenMore={() => setSheet("more")}
+            onToggleCamera={toggleCamera}
+            onToggleMicrophone={toggleMicrophone}
+          />
         </Animated.View>
       </View>
-      <View pointerEvents="box-none" style={StyleSheet.absoluteFill} testID="chalk-sheets">
+      <View pointerEvents="box-none" style={StyleSheet.absoluteFill} testID="frame.sheets">
         <MoreSheet onClose={() => setSheet(null)} onOpenPeople={() => setSheet("people")} open={sheet === "more"} returnFocusRef={moreRef} />
         <PeopleSheet onClose={() => setSheet(null)} open={sheet === "people"} />
         <PortalHost layer="sheets" />
       </View>
-      <View pointerEvents="box-none" style={StyleSheet.absoluteFill} testID="chalk-overlays">
+      <View pointerEvents="box-none" style={StyleSheet.absoluteFill} testID="frame.overlays">
         {status === "joining" || status === "idle" ? <Limbo message="Joining" /> : null}
         {status === "reconnecting" ? <Limbo message="Reconnecting" /> : null}
         {status === "left" ? <StatusPage action={{ label: "Rejoin", onPress: join }} title="You left the call" /> : null}
         {status === "failed" ? <StatusPage action={{ label: "Try again", onPress: join }} detail={connection.lastError?.message} title="Couldn't join the call" /> : null}
       </View>
-      <View pointerEvents="box-none" style={StyleSheet.absoluteFill} testID="chalk-menus">
+      <View pointerEvents="box-none" style={StyleSheet.absoluteFill} testID="frame.menus">
+        <LeaveMenu anchorRef={leaveRef} onClose={() => setLeaveMenuOpen(false)} onEnd={() => exit("end")} onLeave={() => exit("leave")} open={leaveMenuOpen} />
         <PortalHost layer="menus" />
       </View>
       <ToastStack />

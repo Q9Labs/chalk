@@ -5,6 +5,7 @@ import Animated, { ReduceMotion, runOnJS, useAnimatedKeyboard, useAnimatedStyle,
 import { useBackHandler } from "../frame/back-handler";
 import { useDeviceLayout } from "../frame/device-layout";
 import { Portal } from "../frame/portal";
+import { useMeasuredRef } from "../frame/measurement";
 import { haptics } from "../haptics/haptics";
 import { timings } from "../motion/motion";
 import { useTheme } from "../theme/theme";
@@ -116,25 +117,20 @@ export function BottomSheet({ open, onClose, accessibilityLabel, children, title
   }));
   const scrimStyle = useAnimatedStyle(() => ({ opacity: shown.value }));
 
-  if (!mounted) return null;
-
   const width = layout.arrangement === "pad" ? 440 : layout.arrangement === "landscape" ? 460 : layout.width;
+  const surfaceStyle = [styles.sheet, { backgroundColor: colors.surface, width, left: (layout.width - width) / 2, paddingHorizontal: inset }, heightRatio ? { height: layout.height * heightRatio } : null];
+  const surfaceRef = useMeasuredRef<View>(testID, surfaceStyle);
+
+  if (!mounted) return null;
   return (
     <Portal layer="sheets">
       <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: fixed.scrim }, scrimStyle]}>
-        <Pressable accessible={false} onPress={onClose} style={StyleSheet.absoluteFill} testID={testID ? `${testID}-scrim` : undefined} />
+        <Pressable accessible={false} onPress={onClose} style={StyleSheet.absoluteFill} testID={testID ? `${testID}.scrim` : undefined} />
       </Animated.View>
       <SheetDragContext.Provider value={{ drag, close: onClose }}>
-        <Animated.View
-          accessibilityLabel={accessibilityLabel}
-          accessibilityViewIsModal
-          onAccessibilityEscape={onClose}
-          onLayout={onLayout}
-          style={[styles.sheet, { backgroundColor: colors.surface, width, left: (layout.width - width) / 2, paddingHorizontal: inset }, heightRatio ? { height: layout.height * heightRatio } : null, sheetStyle]}
-          testID={testID}
-        >
+        <Animated.View accessibilityLabel={accessibilityLabel} accessibilityViewIsModal onAccessibilityEscape={onClose} onLayout={onLayout} ref={surfaceRef} style={[surfaceStyle, sheetStyle]} testID={testID}>
           <SheetDragRegion>
-            <View style={styles.grabArea} testID={testID ? `${testID}-grabber` : undefined}>
+            <View style={styles.grabArea} testID={testID ? `${testID}.grabber` : undefined}>
               <View style={[styles.grabber, { backgroundColor: colors.lineStrong }]} />
             </View>
             {title ? (

@@ -5,6 +5,7 @@ import { Icon, type IconName } from "../icons/Icon";
 import { usePressAnimation } from "../motion/press";
 import { useTheme } from "../theme/theme";
 import { fixed, type Palette } from "../theme/tokens";
+import { useMeasuredRef } from "../frame/measurement";
 import { ChalkText } from "./ChalkText";
 
 export type IconButtonProps = {
@@ -39,6 +40,8 @@ export const IconButton = memo(
     const iconColor = selected ? colors.canvas : tone === "danger" ? fixed.onDanger : off ? colors.dangerText : tone === "ghost" ? colors.textMuted : colors.text;
     const ring = onCanvas && elevation.ringOnCanvas && tone !== "danger";
     const { down } = press;
+    const roundStyle = [styles.round, { width: size, height: size, borderRadius: size / 2 }, ring ? { boxShadow: `0px 0px 0px 1px ${colors.line}` } : null, disabled ? styles.disabled : null];
+    const roundRef = useMeasuredRef<ViewType>(testID, [roundStyle, { backgroundColor: base }]);
     const background = useAnimatedStyle(() => ({ backgroundColor: down.value ? pressedColor : base }));
 
     return (
@@ -54,7 +57,7 @@ export const IconButton = memo(
         ref={ref}
         testID={testID}
       >
-        <Animated.View style={[styles.round, { width: size, height: size, borderRadius: size / 2 }, ring ? { boxShadow: `0px 0px 0px 1px ${colors.line}` } : null, disabled ? styles.disabled : null, background, press.scaleStyle]}>
+        <Animated.View ref={roundRef} style={[roundStyle, background, press.scaleStyle]}>
           <Icon color={iconColor} name={icon} size={tone === "ghost" ? 18 : 20} />
         </Animated.View>
         {caption ? (

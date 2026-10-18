@@ -16,7 +16,7 @@ export type LimboProps = {
 export function Limbo({ message }: LimboProps): React.JSX.Element {
   const { colors } = useTheme();
   return (
-    <View accessibilityLiveRegion="polite" style={styles.limbo} testID="chalk-limbo">
+    <View accessibilityLiveRegion="polite" style={styles.limbo} testID="frame.limbo">
       <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
         <View style={styles.row}>
           <Spinner />

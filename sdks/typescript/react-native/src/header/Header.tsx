@@ -1,6 +1,7 @@
 import { forwardRef, memo, useEffect, useState } from "react";
 import { Pressable, StyleSheet, View, type View as ViewType } from "react-native";
 import { useConnection } from "../hooks/space-hooks";
+import { useMeasuredRef } from "../frame/measurement";
 import { Icon } from "../icons/Icon";
 import { ChalkText } from "../primitives/ChalkText";
 import { useTheme } from "../theme/theme";
@@ -20,9 +21,11 @@ export const Header = memo(
   forwardRef<ViewType, HeaderProps>(function Header({ callName, arrangement, onOpenDetails }, ref) {
     const { colors } = useTheme();
     const landscape = arrangement === "landscape";
+    const headerStyle = [styles.header, arrangement === "pad" ? styles.pad : landscape ? styles.landscape : styles.portrait];
+    const headerRef = useMeasuredRef<ViewType>("frame.header", headerStyle);
     return (
-      <View style={[styles.header, arrangement === "pad" ? styles.pad : landscape ? styles.landscape : styles.portrait]} testID="chalk-header">
-        <Pressable accessibilityLabel={`Call details, ${callName}`} accessibilityRole="button" onPress={onOpenDetails} ref={ref} style={[styles.name, landscape ? { backgroundColor: colors.raised, boxShadow: `0px 0px 0px 1px ${colors.lineStrong}` } : null]} testID="chalk-header-name">
+      <View ref={headerRef} style={headerStyle} testID="frame.header">
+        <Pressable accessibilityLabel={`Call details, ${callName}`} accessibilityRole="button" onPress={onOpenDetails} ref={ref} style={[styles.name, landscape ? { backgroundColor: colors.raised, boxShadow: `0px 0px 0px 1px ${colors.lineStrong}` } : null]} testID="header.name">
           <ChalkText numberOfLines={1} variant="bodyStrong">
             {callName}
           </ChalkText>
@@ -46,7 +49,7 @@ function CallTimer(): React.JSX.Element | null {
   }, [startedAt]);
   if (startedAt === null) return null;
   return (
-    <ChalkText accessibilityLabel={`Call time ${formatElapsed(now - startedAt)}`} tabular testID="chalk-header-timer" tone="textMuted" variant="bodyMedium">
+    <ChalkText accessibilityLabel={`Call time ${formatElapsed(now - startedAt)}`} tabular testID="header.timer" tone="textMuted" variant="bodyMedium">
       {formatElapsed(now - startedAt)}
     </ChalkText>
   );

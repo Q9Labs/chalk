@@ -37,7 +37,7 @@ export function ToastStack(): React.JSX.Element {
   const position = atTop ? { top: layout.insets.top + 8, flexDirection: "column-reverse" as const } : { bottom: layout.insets.bottom + offset };
 
   return (
-    <View pointerEvents="box-none" style={[styles.stack, position]} testID="chalk-toasts">
+    <View pointerEvents="box-none" style={[styles.stack, position]} testID="frame.toasts">
       {toasts.map((toast) => (
         <Animated.View entering={reduceMotion ? fadeIn : toastEntering} exiting={reduceMotion ? fadeOut : toastExiting} key={toast.id} style={{ maxWidth: layout.width - 32 }}>
           <Toast onDismiss={() => store.dismiss(toast.id)} toast={toast} />

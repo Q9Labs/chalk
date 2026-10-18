@@ -35,7 +35,7 @@ export const TileShell = memo(function TileShell({ children, speaking = false, c
   return (
     <View style={[styles.tile, { borderRadius: radius, backgroundColor: colors.tile }]} testID={testID}>
       {children}
-      <Animated.View pointerEvents="none" style={[styles.ring, { borderRadius: radius }, ringStyle]} testID={testID ? `${testID}-ring` : undefined}>
+      <Animated.View pointerEvents="none" style={[styles.ring, { borderRadius: radius }, ringStyle]} testID={testID ? `${testID}.ring` : undefined}>
         <View style={[styles.ringShade, { borderRadius: radius - 3 }]} />
       </Animated.View>
     </View>

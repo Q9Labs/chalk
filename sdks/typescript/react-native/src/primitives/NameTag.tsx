@@ -1,5 +1,6 @@
 import { memo } from "react";
 import { StyleSheet, View } from "react-native";
+import { useMeasuredRef } from "../frame/measurement";
 import { Icon } from "../icons/Icon";
 import { fixed, fontFamilies, type } from "../theme/tokens";
 import { ChalkText } from "./ChalkText";
@@ -16,9 +17,10 @@ export type NameTagProps = {
 
 /** The mockup's name tag (`.tag`): bottom-left of a tile, white on the dark overlay in both themes. */
 export const NameTag = memo(function NameTag({ name, muted = false, pinned = false, handRaised = false, handOrder, testID }: NameTagProps): React.JSX.Element {
+  const tagRef = useMeasuredRef<View>(testID, styles.tag);
   return (
     <View pointerEvents="none" style={styles.slot}>
-      <View style={styles.tag} testID={testID}>
+      <View ref={tagRef} style={styles.tag} testID={testID}>
         {pinned ? <Icon color={fixed.overlayText} name="pin" size={14} /> : null}
         <ChalkText color={fixed.overlayText} numberOfLines={1} style={styles.name} variant="label">
           {name}

@@ -5,6 +5,7 @@ import Animated, { useSharedValue, withTiming } from "react-native-reanimated";
 import { FaceAvatar } from "../avatar/FaceAvatar";
 import { tileAvatarSize } from "../avatar/tile-avatar-size";
 import { RtcVideoView } from "../components/RtcVideoView";
+import { useMeasuredRef } from "../frame/measurement";
 import { useMedia, useParticipants, useSelf } from "../hooks/space-hooks";
 import { createNativeMediaStream } from "../media/native-webrtc";
 import { MovingFrame, type Frame } from "../motion/MovingFrame";
@@ -28,9 +29,13 @@ export const Stage = memo(function Stage({ frame }: StageProps): React.JSX.Eleme
   const self = useSelf();
   const media = useMedia();
   const frames = useMemo(() => evenGrid(frame, roster.length), [frame, roster.length]);
+  const stageStyle = [styles.region, { left: frame.x, top: frame.y, width: frame.width, height: frame.height }];
+  const stageRef = useMeasuredRef<View>("frame.stage", stageStyle);
 
   return (
-    <View pointerEvents="box-none" style={StyleSheet.absoluteFill} testID="chalk-stage">
+    <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+      {/* The stage box itself; tiles are placed in screen points so they can move across regions. */}
+      <View pointerEvents="none" ref={stageRef} style={stageStyle} testID="frame.stage" />
       {roster.map((participant, index) => {
         const tileFrame = frames[index];
         if (!tileFrame) return null;
@@ -66,7 +71,7 @@ const ParticipantTile = memo(function ParticipantTile({ participant, avatarSize,
   const name = isSelf ? `${participant.displayName} (You)` : participant.displayName;
 
   return (
-    <TileShell cameraOn={streamURL !== null} level={level} speaking={speaking} testID={`chalk-tile-${id}`}>
+    <TileShell cameraOn={streamURL !== null} level={level} speaking={speaking} testID={`tile.${id}`}>
       {streamURL ? (
         <RtcVideoView mirror={isSelf} objectFit="cover" streamURL={streamURL} style={StyleSheet.absoluteFill} />
       ) : (
@@ -74,12 +79,13 @@ const ParticipantTile = memo(function ParticipantTile({ participant, avatarSize,
           <FaceAvatar level={level} lookAround name={participant.displayName} size={avatarSize} style="bold" />
         </View>
       )}
-      <NameTag handRaised={participant.handRaised} muted={participant.media.microphone !== "active"} name={name} testID={`chalk-nametag-${id}`} />
+      <NameTag handRaised={participant.handRaised} muted={participant.media.microphone !== "active"} name={name} testID={`tile.${id}.name`} />
     </TileShell>
   );
 });
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  region: { position: "absolute" },
   center: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
 });

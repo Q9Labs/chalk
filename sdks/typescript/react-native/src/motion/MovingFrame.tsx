@@ -28,7 +28,7 @@ export type MovingFrameProps = {
  *
  * ```tsx
  * {tiles.map((tile) => (
- *   <MovingFrame frame={tile.frame} key={tile.participantId} testID={`chalk-tile-${tile.participantId}`}>
+ *   <MovingFrame frame={tile.frame} key={tile.participantId} testID={`tile.${tile.participantId}`}>
  *     <TileShell cameraOn={tile.cameraOn} level={tile.level}>
  *       <ParticipantVideo participantId={tile.participantId} />
  *       <NameTag name={tile.name} muted={tile.muted} />

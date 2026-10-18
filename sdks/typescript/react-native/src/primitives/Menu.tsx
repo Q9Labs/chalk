@@ -4,6 +4,7 @@ import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withTimin
 import { useBackHandler } from "../frame/back-handler";
 import { useDeviceLayout } from "../frame/device-layout";
 import { Portal } from "../frame/portal";
+import { useMeasuredRef } from "../frame/measurement";
 import { Icon, type IconName } from "../icons/Icon";
 import { timings } from "../motion/motion";
 import { useTheme } from "../theme/theme";
@@ -88,19 +89,14 @@ export function Menu({ open, onClose, anchorRef, accessibilityLabel, children, m
     [],
   );
 
+  const surfaceStatic = [styles.surface, { minWidth, backgroundColor: colors.popover, borderColor: colors.lineStrong, boxShadow: elevation.popover }, placement ? { left: placement.x, top: placement.y, maxHeight: placement.maxHeight ?? undefined } : styles.measuring];
+  const surfaceRef = useMeasuredRef<View>(testID, surfaceStatic);
+
   if (!open || !trigger) return null;
   return (
     <Portal layer="menus">
-      <Pressable accessible={false} onPress={onClose} style={StyleSheet.absoluteFill} testID={testID ? `${testID}-backdrop` : undefined} />
-      <Animated.View
-        accessibilityLabel={accessibilityLabel}
-        accessibilityRole="menu"
-        accessibilityViewIsModal
-        onAccessibilityEscape={onClose}
-        onLayout={onLayout}
-        style={[styles.surface, { minWidth, backgroundColor: colors.popover, borderColor: colors.lineStrong, boxShadow: elevation.popover }, placement ? { left: placement.x, top: placement.y, maxHeight: placement.maxHeight ?? undefined } : styles.measuring, surfaceStyle]}
-        testID={testID}
-      >
+      <Pressable accessible={false} onPress={onClose} style={StyleSheet.absoluteFill} testID={testID ? `${testID}.backdrop` : undefined} />
+      <Animated.View accessibilityLabel={accessibilityLabel} accessibilityRole="menu" accessibilityViewIsModal onAccessibilityEscape={onClose} onLayout={onLayout} ref={surfaceRef} style={[surfaceStatic, surfaceStyle]} testID={testID}>
         <MenuFocusContext.Provider value={focus}>
           <ScrollView bounces={false} scrollEnabled={placement?.maxHeight != null}>
             {children}

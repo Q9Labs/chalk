@@ -16,7 +16,7 @@ export type StatusPageProps = {
 export function StatusPage({ title, detail, action }: StatusPageProps): React.JSX.Element {
   const { colors } = useTheme();
   return (
-    <View accessibilityViewIsModal style={[styles.page, { backgroundColor: colors.canvas }]} testID="chalk-status">
+    <View accessibilityViewIsModal style={[styles.page, { backgroundColor: colors.canvas }]} testID="frame.status">
       <ChalkText accessibilityRole="header" style={styles.center} variant="statusTitle">
         {title}
       </ChalkText>
@@ -25,7 +25,7 @@ export function StatusPage({ title, detail, action }: StatusPageProps): React.JS
           {detail}
         </ChalkText>
       ) : null}
-      {action ? <PillButton label={action.label} onPress={action.onPress} testID="chalk-status-action" variant="primary" /> : null}
+      {action ? <PillButton label={action.label} onPress={action.onPress} testID="status.action" variant="primary" /> : null}
     </View>
   );
 }
