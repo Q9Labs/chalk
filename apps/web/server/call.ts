@@ -7,12 +7,8 @@ import { homeMutation } from "./home";
 import type { CallAction, CallPageDTO } from "../src/lib/dashboard/contracts";
 export async function callPage(engine: Engine, spaceId: string, cursor?: string): Promise<CallPageDTO> {
   const params = { tenant_id: engine.tenantId, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(spaceId) };
-  const [space, invite, episodes, knocks] = await Promise.all([
-    run(engine.api.spaces.getSpace({ params })),
-    run(engine.api.spaces.getSpacePublicInvite({ params })),
-    run(engine.api.episodes.listEpisodes({ params, query: { page_size: 30, cursor } })),
-    run(engine.api.spaces.listSpacePublicAdmissionRequests({ params, query: {} })),
-  ]);
+  const space = await run(engine.api.spaces.getSpace({ params }));
+  const [invite, episodes, knocks] = await Promise.all([run(engine.api.spaces.getSpacePublicInvite({ params })), run(engine.api.episodes.listEpisodes({ params, query: { page_size: 30, cursor } })), run(engine.api.spaces.listSpacePublicAdmissionRequests({ params, query: {} }))]);
   return {
     call: callDTO(space),
     inviteUrl: invite.canonical_url,
@@ -24,6 +20,7 @@ export async function callPage(engine: Engine, spaceId: string, cursor?: string)
 export async function callMutation(engine: Engine, action: Exclude<CallAction, { action: "join" | "refresh-access" }>) {
   if (action.action === "rename-call" || action.action === "set-admission") return homeMutation(engine, action);
   const params = { tenant_id: engine.tenantId, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(action.spaceId) };
+  await run(engine.api.spaces.getSpace({ params }));
   const headers = { "Idempotency-Key": action.idempotencyKey };
   switch (action.action) {
     case "rotate-link":
