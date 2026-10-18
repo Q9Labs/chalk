@@ -25,6 +25,9 @@ const engine = createServer(async (request, response) => {
   try {
     const upstream = await fetch(new URL(request.url, process.env.DASHBOARD_TEST_API_ORIGIN), { method: request.method, headers: request.headers, body: ["GET", "HEAD"].includes(request.method) ? undefined : body, redirect: "manual" });
     const result = Buffer.from(await upstream.arrayBuffer());
+    if (request.method === "GET" && new URL(request.url, "http://localhost").pathname.endsWith("/transcripts") && upstream.status === 200) {
+      await writeFile(resolve("artifacts/dashboard-engine-transcripts.json"), result);
+    }
     if (upstream.status >= 400) console.error("Engine failure:", request.method, new URL(request.url, "http://localhost").pathname, upstream.status, result.toString().slice(0, 2048));
     response.writeHead(upstream.status, Object.fromEntries(upstream.headers)).end(result);
   } catch {
@@ -251,7 +254,7 @@ try {
   // production HTTP server and PostgreSQL repositories; no vendor is contacted.
   sql(`insert into episodes(id,tenant_id,space_id,status,started_at,ended_at,config_snapshot) values('${foreign.episodeId}','${firstTenant}','${spaceId}','ended',now()-interval '1 hour',now(),'{"roles":{"owner":["subscribe"]},"admission_policy":{"mode":"open"},"default_episode_duration_seconds":3600,"maximum_episode_duration_seconds":86400,"linger_window_seconds":60}');
   insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider) values('${foreign.recordingId}','${firstTenant}','${spaceId}','${foreign.episodeId}','failed','r2');
-  insert into transcriptions(id,tenant_id,space_id,episode_id,recording_id,status,languages) values('${foreign.transcriptId}','${firstTenant}','${spaceId}','${foreign.episodeId}','${foreign.recordingId}','terminal_failure','{}');
+  insert into transcriptions(id,tenant_id,space_id,episode_id,recording_id,status,languages) values('${foreign.transcriptId}','${firstTenant}','${spaceId}','${foreign.episodeId}','${foreign.recordingId}','terminal_failure','{en}');
   insert into participants(id,tenant_id,space_id,episode_id,name,capabilities,generation,status,role,joined_at,first_joined_at) select gen_random_uuid(),'${firstTenant}','${spaceId}','${foreign.episodeId}','Same name',array['subscribe'],1,'active','owner',now()-interval '1 hour',now()-interval '1 hour' from generate_series(1,2);`);
   const past = await ada.request(`/dashboard-api/past-session?spaceId=${spaceId}&episodeId=${foreign.episodeId}`);
   assert.equal(past.status, 200, await past.clone().text());
