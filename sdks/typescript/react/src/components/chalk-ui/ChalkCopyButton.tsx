@@ -25,7 +25,7 @@ export function ChalkCopyButton({ text, label = "Copy link", announcement = "Lin
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
           </svg>
           <svg className="chalk-copy-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m5 12 4 4L19 6" />
+            <path d="M20 6L9 17l-5-5" />
           </svg>
         </span>
       </button>

@@ -42,7 +42,7 @@ export function ChalkMenuItem({ children, checked, disabled, onClick }: ChalkMen
         <span data-part="menu-check" className="chalk-menu-check" aria-hidden="true">
           {checked ? (
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <path d="m5 12 4 4L19 6" />
+              <path d="M20 6L9 17l-5-5" />
             </svg>
           ) : null}
         </span>
