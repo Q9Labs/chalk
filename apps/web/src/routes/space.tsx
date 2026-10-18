@@ -1,4 +1,4 @@
-import { createFileRoute, useMatch } from "@tanstack/react-router";
+import { createFileRoute, useLocation, useMatch } from "@tanstack/react-router";
 import { useCallback } from "react";
 
 import { SpacePage } from "../components/space/SpacePage";
@@ -6,6 +6,8 @@ import { SpacePage } from "../components/space/SpacePage";
 export const Route = createFileRoute("/space")({ component: SpaceRoute });
 
 function SpaceRoute() {
+  const href = useLocation({ select: (location) => location.href });
+  const appArgument = typeof window === "undefined" ? undefined : new URL(href, window.location.origin).href;
   const match = useMatch({ from: "/space/$slug", shouldThrow: false });
   const slug = match?.params.slug;
   const navigate = Route.useNavigate();
@@ -16,5 +18,10 @@ function SpaceRoute() {
     },
     [navigate],
   );
-  return <SpacePage slug={slug} navigatePublicSpace={navigatePublicSpace} />;
+  return (
+    <>
+      {appArgument && <meta name="apple-itunes-app" content={`app-id=6760978704, app-argument=${appArgument}`} />}
+      <SpacePage slug={slug} navigatePublicSpace={navigatePublicSpace} />
+    </>
+  );
 }
