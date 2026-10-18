@@ -92,7 +92,11 @@ it("keeps a pinned person large in Spotlight even while a screen is shared", asy
   await tile.click();
   expect(await tile.getAttribute("aria-pressed")).toBe("true");
   expect(await page.locator('[data-stage-item="stage-2"]').getAttribute("data-stage-role")).toBe("primary");
+  const share = page.locator('[data-stage-item="screen-share:stage-1"]');
+  expect(await share.getAttribute("aria-hidden")).not.toBe("true");
+  expect(await share.getAttribute("data-stage-role")).toBe("strip");
   await page.getByRole("button", { name: "Add participant", exact: true }).click();
+  expect(await share.getAttribute("aria-hidden")).not.toBe("true");
   expect(await page.locator('[data-stage-item="stage-2"]').getAttribute("data-stage-role")).toBe("primary");
 });
 it("shows a live local preview and Stop sharing ends it", async () => {
@@ -142,4 +146,45 @@ it("removes departed cameras even while the remaining call keeps changing layout
   });
   expect(await page.locator('[data-stage-item="stage-5"]').count()).toBe(0);
   await page.emulateMedia({ reducedMotion: "reduce" });
+});
+
+it("numbers raised hands only while multiple people have a hand raised", async () => {
+  await open("stage-grid-6");
+  expect(await page.getByRole("img", { name: "Hand raised", exact: true }).count()).toBe(1);
+  await page.getByRole("button", { name: "Raise second hand", exact: true }).click();
+  expect(await page.getByRole("img", { name: "Hand raised, number 1", exact: true }).count()).toBe(1);
+  expect(await page.getByRole("img", { name: "Hand raised, number 2", exact: true }).count()).toBe(1);
+  await page.getByRole("button", { name: "Lower second hand", exact: true }).click();
+  expect(await page.getByRole("img", { name: "Hand raised", exact: true }).count()).toBe(1);
+});
+
+it("keeps the first share large until another sharer is selected", async () => {
+  await open("stage-share-two");
+  const switcher = page.getByRole("group", { name: "Whose screen is big", exact: true });
+  expect(await switcher.getByRole("button", { name: "Nora", exact: true }).getAttribute("aria-pressed")).toBe("true");
+  await switcher.getByRole("button", { name: "Akash", exact: true }).click();
+  expect(await page.locator('[data-stage-item="screen-share:stage-2"]').getAttribute("data-stage-role")).toBe("primary");
+  expect(await page.locator('[data-stage-item="screen-share:stage-1"]').getAttribute("aria-hidden")).not.toBe("true");
+});
+
+it("uses supplied voice level for the ring and mirrors only the self camera", async () => {
+  await open("stage-grid-6");
+  const ring = page.locator('[data-stage-item="stage-1"] [data-part="speaking-ring"]');
+  await page.getByRole("button", { name: "Change fixture voice level", exact: true }).click();
+  await expect.poll(() => ring.evaluate((element) => Number(getComputedStyle(element).opacity))).toBeCloseTo(0.37);
+  await page.getByRole("button", { name: "Change fixture voice level", exact: true }).click();
+  await expect.poll(() => ring.evaluate((element) => Number(getComputedStyle(element).opacity))).toBeCloseTo(0.93);
+  expect(await page.locator('[data-stage-item="stage-0"] video').evaluate((video) => (video.parentElement ? getComputedStyle(video.parentElement).transform : null))).toBe("matrix(-1, 0, 0, 1, 0, 0)");
+  expect(await page.locator('[data-stage-item="stage-1"] video').evaluate((video) => (video.parentElement ? getComputedStyle(video.parentElement).transform : null))).toBe("none");
+});
+
+it("pins from the phone options row and refits instantly with reduced motion", async () => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open("stage-spotlight");
+  await page.getByRole("button", { name: "Video tile for Akash", exact: true }).click();
+  await page.getByRole("button", { name: "Pin", exact: true }).click();
+  expect(await page.locator('[data-stage-item="stage-2"]').getAttribute("data-stage-role")).toBe("primary");
+  expect(await page.locator('[data-stage-item="stage-2"]').evaluate((element) => element.getAnimations().length)).toBe(0);
+  expect(await page.getByRole("dialog").count()).toBe(0);
+  await page.setViewportSize({ width: 1440, height: 900 });
 });

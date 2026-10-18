@@ -16,7 +16,7 @@ describe("Spotlight primary content", () => {
     expect(choosePrimary([person, board, share], context)).toBe(share);
     expect(choosePrimary([person, board, share], { ...context, pinnedId: board.id })).toBe(board);
   });
-  it("chooses the newest screen share and falls back when it ends", () => {
+  it("keeps the first share large until selected or stopped", () => {
     const newer: StageItem = { ...share, id: "screen-share:newer" };
     expect(
       choosePrimary([person, share, newer], {
@@ -26,7 +26,9 @@ describe("Spotlight primary content", () => {
           [newer.id, 2],
         ]),
       }),
-    ).toBe(newer);
+    ).toBe(share);
+    expect(choosePrimary([person, share, newer], { ...context, pinnedId: newer.id })).toBe(newer);
+    expect(choosePrimary([person, newer], context)).toBe(newer);
     expect(choosePrimary([person, board], { ...context, pinnedId: share.id })).toBe(board);
     expect(choosePrimary([person], { ...context, pinnedId: board.id })).toBe(person);
   });

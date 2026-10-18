@@ -16,6 +16,8 @@ export interface ParticipantTileProps {
     displayName: string;
     isLocal?: boolean;
     isSpeaking?: boolean;
+    /** Normalized voice level (0–1). Activity-only integrations use a neutral speaking level. */
+    audioLevel?: number;
     isMuted?: boolean;
     isVideoEnabled?: boolean;
     isScreenSharing?: boolean;
@@ -111,6 +113,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       pinned={pinned}
       lift={!primary}
       speaking={mediaVisible && participant.isSpeaking && !participant.isMuted}
+      audioLevel={participant.audioLevel}
       onClick={onClick && phone ? openOptions : onClick}
       onDoubleClick={onDoubleClick}
       className={cn(aspectRatioClasses[aspectRatio], className)}
@@ -175,7 +178,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
                     !prefersReducedMotion &&
                     animatedAvatars &&
                     "group-hover/tile:[&_svg>g]:!transform-none [&_svg>g]:transition-[translate] [&_svg>g]:duration-[90ms] [&_svg>g]:ease-linear [&_text]:origin-bottom [&_text]:[transform-box:fill-box] [&_text]:transition-[scale] [&_text]:duration-[90ms] [&_text]:ease-linear",
-                  !phone && !prefersReducedMotion && participant.isSpeaking && !participant.isMuted && "[&_svg>g]:-translate-y-[5px] [&_text]:scale-y-[1.55]",
+                  !phone && !prefersReducedMotion && participant.isSpeaking && !participant.isMuted && "[&_svg>g]:translate-y-[calc(var(--chalk-voice-level)*-5px)] [&_text]:scale-y-[calc(1_+_var(--chalk-voice-level)*.55)]",
                 )}
                 name={participant.displayName || participant.id}
                 size="100%"
@@ -206,13 +209,14 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
           </div>
           <button
             type="button"
-            className="min-h-11 w-full rounded-xl px-4 text-left hover:bg-[var(--chalk-hover)]"
+            className="flex min-h-[52px] w-full items-center gap-3.5 rounded-2xl bg-[var(--chalk-raised)] px-4 text-left text-base hover:bg-[var(--chalk-hover)] active:bg-[var(--chalk-pressed)]"
             onClick={() => {
               onClick();
               closeOptions();
             }}
           >
-            {pinned ? "Unpin" : "Pin"} {participant.displayName}
+            <StageIcon name="pin" size={20} className="text-[var(--chalk-soft-text)]" />
+            <span>{pinned ? "Unpin" : "Pin"}</span>
           </button>
         </ChalkSheet>
       ) : null}

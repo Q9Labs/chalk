@@ -6,6 +6,7 @@ export interface TileShellProps {
   readonly accentColor: string;
   readonly pinned?: boolean;
   readonly speaking?: boolean;
+  readonly audioLevel?: number;
   readonly lift?: boolean;
   readonly onClick?: () => void;
   readonly onDoubleClick?: () => void;
@@ -19,11 +20,12 @@ export interface TileShellProps {
 }
 interface TileVars extends CSSProperties {
   "--chalk-participant-color": string;
+  "--chalk-voice-level": number;
 }
 
 /** One shared frame and bottom-left name tag for camera, screen and board tiles. */
-export function TileShell({ label, accentColor, pinned = false, speaking = false, lift = true, onClick, onDoubleClick, className, style, dataTour, hidden = false, chip, corner, children }: TileShellProps): React.JSX.Element {
-  const vars: TileVars = { ...style, containerType: "size", "--chalk-participant-color": accentColor };
+export function TileShell({ label, accentColor, pinned = false, speaking = false, audioLevel = 0.5, lift = true, onClick, onDoubleClick, className, style, dataTour, hidden = false, chip, corner, children }: TileShellProps): React.JSX.Element {
+  const vars: TileVars = { ...style, containerType: "size", "--chalk-participant-color": accentColor, "--chalk-voice-level": audioLevel };
   return (
     <div
       data-part="stage-tile"
@@ -48,14 +50,14 @@ export function TileShell({ label, accentColor, pinned = false, speaking = false
           tabIndex={hidden ? -1 : 0}
           aria-label={label}
           aria-pressed={pinned}
-          className="absolute inset-0 z-20 rounded-[inherit] outline-none hover:bg-white/[.045] active:bg-white/[.09] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--chalk-focus)]"
+          className="absolute inset-0 z-20 rounded-[inherit] outline-none motion-safe:transition-colors motion-safe:duration-150 motion-safe:ease-[ease-out] hover:bg-white/[.045] active:bg-white/[.09] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--chalk-focus)]"
         />
       ) : null}
       <div
         aria-hidden="true"
         data-part="speaking-ring"
         className="pointer-events-none absolute inset-0 z-30 rounded-[inherit] motion-safe:transition-opacity motion-safe:duration-[90ms] motion-safe:ease-linear"
-        style={{ opacity: speaking ? 1 : 0, boxShadow: "inset 0 0 0 3px rgba(255,255,255,.9), inset 0 0 0 4px rgba(0,0,0,.35)" }}
+        style={{ opacity: speaking ? 0.3 + 0.7 * audioLevel : 0, boxShadow: "inset 0 0 0 3px rgba(255,255,255,.9), inset 0 0 0 4px rgba(0,0,0,.35)" }}
       />
       {corner}
       {chip ? (

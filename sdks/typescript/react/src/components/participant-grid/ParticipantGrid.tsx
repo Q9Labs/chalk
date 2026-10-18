@@ -13,6 +13,8 @@ export interface Participant {
   isLocal?: boolean;
   /** Voice activity for this participant, from sync presence. */
   isSpeaking?: boolean;
+  /** Normalized voice level (0–1); omit when the integration only supplies speaking activity. */
+  audioLevel?: number;
   /** The single loudest participant right now, from sync presence. */
   isActiveSpeaker?: boolean;
   isMuted?: boolean;

@@ -2,6 +2,8 @@
 
 ## 5.0.0 (unreleased)
 
+- React participant tiles accept a normalized `audioLevel` for voice-responsive speaking rings and generated avatars.
+
 - BREAKING: removes Episode diagnostics producers, credentials, backend, CLI and the diagnostics-contracts package.
 - Remove Episode Debugger launch and diagnostic-reference UI props from the React SDK. Local connection diagnostics and recording instrumentation remain.
 

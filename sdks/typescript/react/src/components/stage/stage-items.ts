@@ -51,30 +51,30 @@ export interface PrimaryContext {
   readonly seenAt: ReadonlyMap<string, number>;
 }
 
-function newestScreenShare(items: readonly StageItem[], seenAt: ReadonlyMap<string, number>): StageItem | undefined {
-  let newest: StageItem | undefined;
-  let newestSeen = -1;
+function firstScreenShare(items: readonly StageItem[], seenAt: ReadonlyMap<string, number>): StageItem | undefined {
+  let first: StageItem | undefined;
+  let firstSeen = Infinity;
   for (const item of items) {
     if (item.kind !== "screen-share") continue;
-    const seen = seenAt.get(item.id) ?? -1;
-    if (seen >= newestSeen) {
-      newest = item;
-      newestSeen = seen;
+    const seen = seenAt.get(item.id) ?? Infinity;
+    if (!first || seen < firstSeen) {
+      first = item;
+      firstSeen = seen;
     }
   }
-  return newest;
+  return first;
 }
 
 function participantWhere(items: readonly StageItem[], predicate: (participant: Participant) => boolean): StageItem | undefined {
   return items.find((item) => item.kind === "participant" && predicate(item.participant));
 }
 
-/** A pin wins; otherwise the newest share, board, then active speaker leads Spotlight. */
+/** A pin wins; otherwise the first live share, board, then active speaker leads Spotlight. */
 export function choosePrimary(items: readonly StageItem[], context: PrimaryContext): StageItem | null {
   if (items.length === 0) return null;
   const pinned = context.pinnedId ? items.find((item) => item.id === context.pinnedId) : undefined;
   if (pinned) return pinned;
-  const content = newestScreenShare(items, context.seenAt) ?? items.find((item) => item.kind === "whiteboard");
+  const content = firstScreenShare(items, context.seenAt) ?? items.find((item) => item.kind === "whiteboard");
   if (content) return content;
   return (
     participantWhere(items, (participant) => participant.isActiveSpeaker === true) ??

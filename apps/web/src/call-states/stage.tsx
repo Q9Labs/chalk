@@ -59,6 +59,8 @@ function StageFixture({ count: initialCount = 6, theme = "dark", layout: initial
   const [share, setShare] = useState(initialShare);
   const [people, setPeople] = useState(false);
   const track = useScreenTrack(aspect);
+  const [secondHand, setSecondHand] = useState(false);
+  const [voiceLevel, setVoiceLevel] = useState(0.5);
   const tiles = useMemo<Participant[]>(
     () =>
       Array.from({ length: count }, (_, index) => ({
@@ -69,8 +71,9 @@ function StageFixture({ count: initialCount = 6, theme = "dark", layout: initial
         isVideoEnabled: cameras,
         videoTrack: cameras ? cameraTrack(`stage-${index}`, "#4d5d73") : null,
         isSpeaking: index === 1,
+        audioLevel: index === 1 ? voiceLevel : 0,
         isActiveSpeaker: index === 1,
-        isHandRaised: index === 5,
+        isHandRaised: index === 5 || (secondHand && index === 2),
         handRaiseOrder: index === 5 ? 1 : undefined,
         connectionQuality: index === 4 ? 1 : 4,
         isScreenSharing: share === "local" ? index === 0 : share === "two" ? index === 1 || index === 2 : share === "remote" && index === 1,
@@ -79,7 +82,7 @@ function StageFixture({ count: initialCount = 6, theme = "dark", layout: initial
         screenShareAspect: aspect,
         screenShareState: shareState,
       })),
-    [count, cameras, share, track, aspect, shareState, names],
+    [count, cameras, share, track, aspect, shareState, names, secondHand, voiceLevel],
   );
   return (
     <div className="h-dvh w-full">
@@ -106,6 +109,8 @@ function StageFixture({ count: initialCount = 6, theme = "dark", layout: initial
             <ChalkButton onClick={() => setCount((value) => value + 1)}>Add participant</ChalkButton>
             <ChalkButton onClick={() => setCount((value) => Math.max(1, value - 1))}>Remove participant</ChalkButton>
             <ChalkButton onClick={() => setPeople(!people)}>People</ChalkButton>
+            <ChalkButton onClick={() => setSecondHand(!secondHand)}>{secondHand ? "Lower second hand" : "Raise second hand"}</ChalkButton>
+            <ChalkButton onClick={() => setVoiceLevel(voiceLevel < 0.5 ? 0.9 : 0.1)}>Change fixture voice level</ChalkButton>
           </div>
         }
         sidebar={
@@ -128,10 +133,12 @@ export const STAGE_STATES: readonly CallState[] = [
   { id: "stage-spotlight", title: "Spotlight", render: () => <StageFixture /> },
   { id: "stage-solo", title: "Solo centered Spotlight", render: () => <StageFixture count={1} /> },
   { id: "stage-duo", title: "Two-person phone picture-in-picture", render: () => <StageFixture count={2} /> },
+  { id: "stage-avatars-light", title: "Bold Facehash tiles in Light", render: () => <StageFixture cameras={false} layout="grid" theme="light" /> },
+  { id: "stage-long-names-light", title: "Long and RTL names in Light", render: () => <StageFixture count={6} layout="grid" theme="light" names={["You", "Nora", "Akash", "Sofia Alexandrova-Fitzgerald Lindqvist", "مالك الحداد", "Priya"]} /> },
   { id: "stage-avatars", title: "Bold speaking Facehash tiles", render: () => <StageFixture cameras={false} layout="grid" /> },
   { id: "stage-board", title: "Board in Spotlight", render: () => <StageFixture board /> },
   { id: "stage-board-grid", title: "Double-width board in Grid", render: () => <StageFixture board layout="grid" /> },
-  { id: "stage-long-names", title: "Long and right-to-left tile names", render: () => <StageFixture count={3} layout="grid" cameras={false} names={["You", "نورا عبد الرحمن الحسيني", "Alexander Montgomery-Wellington"]} /> },
+  { id: "stage-long-names", title: "Long and right-to-left tile names", render: () => <StageFixture count={6} layout="grid" names={["You", "Nora", "Akash", "Sofia Alexandrova-Fitzgerald Lindqvist", "مالك الحداد", "Priya"]} /> },
   { id: "stage-share-grid", title: "Double-width screen in Grid", render: () => <StageFixture share="remote" layout="grid" /> },
   ...[9 / 16, 4 / 3, 16 / 9, 21 / 9].map((aspect, index) => ({ id: `stage-share-aspect-${index}`, title: `Content-aware Spotlight ${aspect}`, render: () => <StageFixture share="remote" aspect={aspect} /> })),
   ...(["connecting", "paused", "low-quality"] as const).map((shareState) => ({ id: `stage-share-${shareState}`, title: `Screen ${shareState}`, render: () => <StageFixture share="remote" shareState={shareState} /> })),

@@ -107,7 +107,7 @@ export function Stage({
       return [...items];
     }
     // Departed ids are dropped so long calls don't retain every past guest; the
-    // counter keeps growing so a later share still ranks as the newest.
+    // counter keeps growing so shares keep their arrival order.
     const seenAt = seenAtRef.current;
     const present = new Set(items.map((item) => item.id));
     for (const id of seenAt.keys()) if (!present.has(id)) seenAt.delete(id);
@@ -151,7 +151,7 @@ export function Stage({
     const observedAspect = shareAspects.get(primary.id);
     const aspect = primary.kind === "whiteboard" ? null : (observedAspect ?? (primary.kind === "screen-share" && primary.participant.screenShareAspect ? primary.participant.screenShareAspect : settings?.width && settings.height ? settings.width / settings.height : 16 / 9));
     const remaining = ordered.filter((item) => item.id !== primary.id);
-    const strip = isContentItem(primary) ? [...remaining.filter(isContentItem), ...remaining.filter((item) => !isContentItem(item))] : remaining;
+    const strip = [...remaining.filter(isContentItem), ...remaining.filter((item) => !isContentItem(item))];
     return fitSpotlight(
       box,
       primary.id,
@@ -258,7 +258,7 @@ export function Stage({
                 renderParticipant(item, renderContext)
               ) : (
                 <ParticipantTile
-                  participant={item.participant.isHandRaised && item.participant.handRaiseOrder === undefined ? { ...item.participant, handRaiseOrder: handOrders.get(item.id) } : item.participant}
+                  participant={item.participant.isHandRaised ? { ...item.participant, handRaiseOrder: handOrders.size > 1 ? (item.participant.handRaiseOrder ?? handOrders.get(item.id)) : undefined } : item.participant}
                   videoTrack={frame ? item.participant.videoTrack : null}
                   aspectRatio="fill"
                   primary={frame?.role === "primary"}
