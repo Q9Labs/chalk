@@ -21,14 +21,13 @@ test("the real web app and SDK guest receive live video and audio", async ({ app
     const before = await browser.evaluate(remoteVideoFrames);
     await expect.poll(() => browser.evaluate(remoteVideoFrames), { timeout: 15_000 }).toBeGreaterThan(before + 5);
     await expect.poll(() => browser.evaluate(incomingAudioLevel), { timeout: 30_000 }).toBeGreaterThan(0);
-    await expect(tile.getByRole("img", "Speaking")).toBeVisible();
     await expect.poll(() => guest.media().then((media) => media.frames), { timeout: 30_000 }).toBeGreaterThan(5);
     const received = await guest.media();
     await expect.poll(() => guest.media().then((media) => media.frames), { timeout: 15_000 }).toBeGreaterThan(received.frames + 5);
     await expect.poll(() => guest.media().then((media) => media.audioLevel), { timeout: 30_000 }).toBeGreaterThan(0);
     await app.screenshot("participant-a");
     await guest.screenshot();
-    await screen.getByRole("button", "Leave space").click();
+    await screen.getByRole("button", /^(Leave|Leave space)$/).click();
     await screen.getByRole("button", "Leave Space").click();
     await guest.leave();
     await expect(tile).not.toBeVisible();

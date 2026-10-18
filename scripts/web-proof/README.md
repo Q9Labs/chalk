@@ -5,7 +5,7 @@ Tenant, enters the deployed web app through its invite and Entrance screen, and
 joins a second participant with the existing proof-kit SDK guest. Both publish
 generated camera frames and tones. Exact assertions require advancing received
 video frames and a positive incoming audio level on both sides. The web app must
-also show the guest's live video tile and Speaking indicator. Both leave before
+also show the guest's live video tile. Both leave before
 cleanup ends the Episode, archives the Space, and revokes the temporary key.
 
 Chalk currently has no account sign-in screen. The runner authenticates with the

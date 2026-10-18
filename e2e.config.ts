@@ -2,7 +2,7 @@ import type { E2EConfig } from "e2e";
 import { web } from "@e2e-dev/web";
 import { webMediaFixture } from "./scripts/web-proof/media.mjs";
 
-const engine = web({ viewport: { width: 1440, height: 960 }, initScripts: [webMediaFixture(0)] });
+const engine = web({ viewport: { width: 1440, height: 960 }, initScripts: [webMediaFixture(1)] });
 
 export default {
   tests: ["tests/*.e2e.ts"],
