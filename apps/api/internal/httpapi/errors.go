@@ -28,19 +28,7 @@ var (
 	apiErrorRateLimited             = APIError{Status: http.StatusTooManyRequests, Code: "request.rate_limited", Message: "Too many requests"}
 	apiErrorPayloadTooLarge         = APIError{Status: http.StatusRequestEntityTooLarge, Code: "request.payload_too_large", Message: "Request body is too large"}
 	apiErrorInternal                = APIError{Status: http.StatusInternalServerError, Code: "service.internal_error", Message: "Internal server error"}
-
-	apiErrorInvalidEmail              = APIError{Status: http.StatusBadRequest, Code: "identity.invalid_email", Message: "Invalid email"}
-	apiErrorInvalidPassword           = APIError{Status: http.StatusBadRequest, Code: "access.invalid_password", Message: "Invalid password"}
-	apiErrorInvalidUserID             = APIError{Status: http.StatusBadRequest, Code: "user.invalid_id", Message: "Invalid user id"}
-	apiErrorInvalidUserName           = APIError{Status: http.StatusBadRequest, Code: "user.invalid_name", Message: "Invalid user name"}
-	apiErrorEmailAlreadyRegistered    = APIError{Status: http.StatusConflict, Code: "identity.email_registered", Message: "Email already registered"}
-	apiErrorEmailVerificationRequired = APIError{Status: http.StatusForbidden, Code: "identity.email_verification_required", Message: "Email verification is required"}
-	apiErrorInvalidCredentials        = APIError{Status: http.StatusUnauthorized, Code: "access.invalid_credentials", Message: "Invalid email or password"}
-	apiErrorPasswordResetTokenInvalid = APIError{Status: http.StatusBadRequest, Code: "access.password_reset_token_invalid", Message: "This reset link is expired, used, or unknown. Request a new link."}
-	apiErrorOAuthNotConfigured        = APIError{Status: http.StatusServiceUnavailable, Code: "oauth.not_configured", Message: "OAuth is not configured"}
-	apiErrorInvalidOAuthState         = APIError{Status: http.StatusBadRequest, Code: "oauth.invalid_state", Message: "Invalid OAuth state"}
-	apiErrorOAuthEmailConflict        = APIError{Status: http.StatusConflict, Code: "oauth.email_conflict", Message: "Email is already registered with another sign-in method"}
-	apiErrorOAuthEmailNotVerified     = APIError{Status: http.StatusUnauthorized, Code: "oauth.email_not_verified", Message: "Google email is not verified"}
+	apiErrorInvalidUserID           = APIError{Status: http.StatusBadRequest, Code: "user.invalid_id", Message: "Invalid user id"}
 
 	apiErrorInvalidMembershipID   = APIError{Status: http.StatusBadRequest, Code: "membership.invalid_id", Message: "Invalid membership id"}
 	apiErrorInvalidMembershipRole = APIError{Status: http.StatusBadRequest, Code: "membership.invalid_role", Message: "Invalid membership role"}

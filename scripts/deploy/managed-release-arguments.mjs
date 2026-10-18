@@ -1,6 +1,6 @@
 const DEFAULT_TIMEOUT_SECONDS = 900;
 
-const environmentPattern = /^[a-z][a-z0-9-]{0,31}$/;
+const environmentPattern = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const regionPattern = /^[a-z]{2}(?:-gov)?-[a-z]+-[1-9][0-9]*$/;
 const instancePattern = /^i-[0-9a-f]{8,17}$/;
 const documentNamePattern = /^[A-Za-z0-9_.-]{3,128}$/;
@@ -13,11 +13,13 @@ const optionProperties = {
   document: "documentPath",
   "document-name": "documentName",
   "document-version": "documentVersion",
+  "dispatcher-config-parameter": "dispatcherConfigParameter",
   environment: "environment",
   "instance-id": "instanceId",
   "log-group-name": "logGroupName",
   manifest: "manifestPath",
   "parameter-prefix": "parameterPrefix",
+  "proof-file": "proofPath",
   region: "region",
   "request-id": "requestId",
 };
@@ -25,13 +27,17 @@ const optionProperties = {
 const requiredOptions = ["manifestPath", "environment", "region", "instanceId", "documentName", "parameterPrefix", "requestId", "logGroupName"];
 
 const optionValidationRules = [
-  [(options) => environmentPattern.test(options.environment) && ["staging", "production"].includes(options.environment), "--environment must be staging or production"],
+  [(options) => environmentPattern.test(options.environment) && options.environment.length <= 32, "--environment must be a lowercase name of at most 32 letters, digits or hyphens"],
   [(options) => regionPattern.test(options.region), "--region is invalid"],
   [(options) => instancePattern.test(options.instanceId), "--instance-id is invalid"],
   [(options) => documentNamePattern.test(options.documentName), "--document-name is invalid"],
   [(options) => !options.documentVersion || documentVersionPattern.test(options.documentVersion), "--document-version must be a pinned numeric version"],
   [(options) => parameterPrefixPattern.test(options.parameterPrefix) && !options.parameterPrefix.includes("..") && options.parameterPrefix.length <= 900, "--parameter-prefix is invalid"],
   [(options) => options.parameterPrefix === `/chalk/${options.environment}` || options.parameterPrefix.startsWith(`/chalk/${options.environment}/`), "--parameter-prefix must be scoped to --environment"],
+  [
+    (options) => !options.dispatcherConfigParameter || (options.dispatcherConfigParameter.startsWith(`/chalk/${options.environment}/`) && parameterPrefixPattern.test(options.dispatcherConfigParameter) && !options.dispatcherConfigParameter.includes("..")),
+    "--dispatcher-config-parameter must be scoped to --environment",
+  ],
   [(options) => requestIdPattern.test(options.requestId), "--request-id is invalid"],
   [(options) => /^\/[A-Za-z0-9_./#-]+$/.test(options.logGroupName) && options.logGroupName.length <= 512, "--log-group-name must be an absolute CloudWatch log group name"],
 ];
@@ -41,7 +47,7 @@ export { DEFAULT_TIMEOUT_SECONDS };
 export function usage() {
   return `Usage: pnpm run release:managed:ci -- \\
   --manifest <release-manifest.json> \\
-  --environment <staging|production> \\
+  --environment <environment> \\
   --region <aws-region> \\
   --instance-id <i-...> \\
   --document-name <ssm-document> \\
@@ -49,6 +55,8 @@ export function usage() {
   --parameter-prefix </chalk/environment/path> \\
   --request-id <ci-run-id> \\
   --log-group-name <cloudwatch-log-group> \\
+  [--dispatcher-config-parameter </chalk/environment/release/recorder.json>] \\
+  [--proof-file <deployment-proof.json>] \\
   [--adopt-existing-release] \\
   [--exclude-secret <canonical-id>]... \\
   [--timeout-seconds <60-3600>] \\
@@ -150,7 +158,11 @@ function finishOptions(options) {
     throw usageError("provide exactly one of --document or --document-version");
   }
   validateOptions(options);
-  return options;
+  return { ...options, dispatcherConfigParameter: dispatcherConfiguration(options) };
+}
+
+function dispatcherConfiguration(options) {
+  return options.dispatcherConfigParameter ?? `/chalk/${options.environment}/release/recorder.json`;
 }
 
 function requireOptions(options) {

@@ -3,6 +3,8 @@ defmodule ChalkSync.Operations.ProductionConfigTest do
 
   setup do
     values = %{
+      "CHALK_API_ENV" => "production",
+      "CHALK_API_URL" => "https://example.test",
       "CHALK_SYNC_LOCAL_PROOF" => "false",
       "CHALK_SYNC_LOCAL_PARITY" => "false",
       "CHALK_DATABASE_URL" => "postgresql://localhost/chalk_test",
@@ -45,6 +47,28 @@ defmodule ChalkSync.Operations.ProductionConfigTest do
                      read_config()
                    end
     end
+  end
+
+  test "nightly retains production boot checks and rejects local authentication" do
+    System.put_env("CHALK_API_ENV", "nightly")
+    System.put_env("CHALK_API_URL", "https://nightly-api.chalkmeet.com")
+    System.put_env("CHALK_SYNC_TOKEN_ISSUER", "https://nightly-api.chalkmeet.com")
+    System.put_env("CHALK_SYNC_TOKEN_AUDIENCE", "chalk-sync")
+    System.put_env("CHALK_SYNC_REQUIRE_SYNCHRONOUS_STANDBY", "false")
+    config = read_config()
+    assert config[:enforce_production_boot_checks]
+    assert config[:require_production_auth]
+    assert config[:token_verifier] == ChalkSync.Auth.JWTTokenVerifier
+    refute config[:require_synchronous_standby]
+
+    System.put_env("CHALK_SYNC_TOKEN_ISSUER", "https://api.chalkmeet.com")
+    assert_raise RuntimeError, "CHALK_SYNC_TOKEN_ISSUER must select nightly", &read_config/0
+    System.put_env("CHALK_SYNC_TOKEN_ISSUER", "https://nightly-api.chalkmeet.com")
+    System.put_env("CHALK_SYNC_LOCAL_PROOF", "true")
+
+    assert_raise RuntimeError,
+                 "nightly cannot use local proof or parity authentication",
+                 &read_config/0
   end
 
   defp read_config do

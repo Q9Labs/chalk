@@ -15,39 +15,6 @@ import (
 )
 
 var (
-	authRegisterRateLimit = ratelimit.Policy{
-		Name:   ratelimit.PolicyNameAuthRegister,
-		Limit:  5,
-		Window: time.Minute,
-	}
-	authLoginRateLimit = ratelimit.Policy{
-		Name:   ratelimit.PolicyNameAuthLogin,
-		Limit:  10,
-		Window: time.Minute,
-	}
-	authPasswordResetRateLimit = ratelimit.Policy{
-		Name: ratelimit.PolicyNameAuthPasswordReset, Limit: 5, Window: time.Minute,
-	}
-	authMeRateLimit = ratelimit.Policy{
-		Name:   ratelimit.PolicyNameAuthMe,
-		Limit:  100,
-		Window: time.Minute,
-	}
-	authRecentAuthRateLimit = ratelimit.Policy{
-		Name:   ratelimit.PolicyNameAuthRecentAuth,
-		Limit:  10,
-		Window: time.Minute,
-	}
-	authOAuthStartRateLimit = ratelimit.Policy{
-		Name:   ratelimit.PolicyNameAuthOAuthStart,
-		Limit:  20,
-		Window: time.Minute,
-	}
-	authOAuthCallbackRateLimit = ratelimit.Policy{
-		Name:   ratelimit.PolicyNameAuthOAuthCallback,
-		Limit:  30,
-		Window: time.Minute,
-	}
 	corsPolicyLookupRateLimit = ratelimit.Policy{
 		Name:   ratelimit.PolicyNameCORSPolicyLookup,
 		Limit:  600,

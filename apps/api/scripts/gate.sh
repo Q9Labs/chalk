@@ -131,6 +131,8 @@ if ((internal_database_lane)); then
   exit 0
 fi
 
+node "${script_directory}/check-additive-migrations.mjs"
+
 lane_status_dir="$(mktemp -d "${TMPDIR:-/tmp}/chalk-api-gate.XXXXXX")"
 lane_pids=()
 lane_labels=()
@@ -228,7 +230,7 @@ run "sqlc vet" go tool sqlc vet
 
 start_lane "go vet" run_lane_command "go vet" go vet ./...
 start_lane "Staticcheck" run_lane_command "Staticcheck" go tool staticcheck ./...
-start_lane "Vulnerability check" run_lane_command "Vulnerability check" go tool govulncheck ./...
+start_lane "Vulnerability check" run_lane_command "Vulnerability check" "${repository_root}/scripts/gates/govulncheck.sh"
 
 completed_lanes=0
 while ((completed_lanes < lane_count)); do

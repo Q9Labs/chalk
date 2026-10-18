@@ -9,53 +9,19 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as TermsRouteImport } from './routes/terms'
-import { Route as SpaceRouteImport } from './routes/space'
-import { Route as SignUpRouteImport } from './routes/sign-up'
-import { Route as SignInRouteImport } from './routes/sign-in'
-import { Route as ResetPasswordRouteImport } from './routes/reset-password'
-import { Route as PrivacyRouteImport } from './routes/privacy'
-import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
-import { Route as DocsRouteImport } from './routes/docs'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as SpaceIndexRouteImport } from './routes/space.index'
+import { Route as DocsRouteImport } from './routes/docs'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as SpaceRouteImport } from './routes/space'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as DocsIndexRouteImport } from './routes/docs.index'
-import { Route as SpaceSlugRouteImport } from './routes/space.$slug'
 import { Route as DocsSlugRouteImport } from './routes/docs.$slug'
+import { Route as SpaceIndexRouteImport } from './routes/space.index'
+import { Route as SpaceSlugRouteImport } from './routes/space.$slug'
 
-const TermsRoute = TermsRouteImport.update({
-  id: '/terms',
-  path: '/terms',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SpaceRoute = SpaceRouteImport.update({
-  id: '/space',
-  path: '/space',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SignUpRoute = SignUpRouteImport.update({
-  id: '/sign-up',
-  path: '/sign-up',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SignInRoute = SignInRouteImport.update({
-  id: '/sign-in',
-  path: '/sign-in',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ResetPasswordRoute = ResetPasswordRouteImport.update({
-  id: '/reset-password',
-  path: '/reset-password',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PrivacyRoute = PrivacyRouteImport.update({
-  id: '/privacy',
-  path: '/privacy',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
-  id: '/forgot-password',
-  path: '/forgot-password',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DocsRoute = DocsRouteImport.update({
@@ -63,40 +29,46 @@ const DocsRoute = DocsRouteImport.update({
   path: '/docs',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SpaceIndexRoute = SpaceIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => SpaceRoute,
+const SpaceRoute = SpaceRouteImport.update({
+  id: '/space',
+  path: '/space',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const DocsIndexRoute = DocsIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => DocsRoute,
 } as any)
-const SpaceSlugRoute = SpaceSlugRouteImport.update({
-  id: '/$slug',
-  path: '/$slug',
-  getParentRoute: () => SpaceRoute,
-} as any)
 const DocsSlugRoute = DocsSlugRouteImport.update({
   id: '/$slug',
   path: '/$slug',
   getParentRoute: () => DocsRoute,
 } as any)
+const SpaceIndexRoute = SpaceIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SpaceRoute,
+} as any)
+const SpaceSlugRoute = SpaceSlugRouteImport.update({
+  id: '/$slug',
+  path: '/$slug',
+  getParentRoute: () => SpaceRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/docs': typeof DocsRouteWithChildren
-  '/forgot-password': typeof ForgotPasswordRoute
   '/privacy': typeof PrivacyRoute
-  '/reset-password': typeof ResetPasswordRoute
-  '/sign-in': typeof SignInRoute
-  '/sign-up': typeof SignUpRoute
   '/space': typeof SpaceRouteWithChildren
   '/terms': typeof TermsRoute
   '/docs/$slug': typeof DocsSlugRoute
@@ -106,11 +78,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/forgot-password': typeof ForgotPasswordRoute
   '/privacy': typeof PrivacyRoute
-  '/reset-password': typeof ResetPasswordRoute
-  '/sign-in': typeof SignInRoute
-  '/sign-up': typeof SignUpRoute
   '/terms': typeof TermsRoute
   '/docs/$slug': typeof DocsSlugRoute
   '/space/$slug': typeof SpaceSlugRoute
@@ -121,11 +89,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/docs': typeof DocsRouteWithChildren
-  '/forgot-password': typeof ForgotPasswordRoute
   '/privacy': typeof PrivacyRoute
-  '/reset-password': typeof ResetPasswordRoute
-  '/sign-in': typeof SignInRoute
-  '/sign-up': typeof SignUpRoute
   '/space': typeof SpaceRouteWithChildren
   '/terms': typeof TermsRoute
   '/docs/$slug': typeof DocsSlugRoute
@@ -138,11 +102,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/docs'
-    | '/forgot-password'
     | '/privacy'
-    | '/reset-password'
-    | '/sign-in'
-    | '/sign-up'
     | '/space'
     | '/terms'
     | '/docs/$slug'
@@ -152,11 +112,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/forgot-password'
     | '/privacy'
-    | '/reset-password'
-    | '/sign-in'
-    | '/sign-up'
     | '/terms'
     | '/docs/$slug'
     | '/space/$slug'
@@ -166,11 +122,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/docs'
-    | '/forgot-password'
     | '/privacy'
-    | '/reset-password'
-    | '/sign-in'
-    | '/sign-up'
     | '/space'
     | '/terms'
     | '/docs/$slug'
@@ -182,64 +134,18 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DocsRoute: typeof DocsRouteWithChildren
-  ForgotPasswordRoute: typeof ForgotPasswordRoute
   PrivacyRoute: typeof PrivacyRoute
-  ResetPasswordRoute: typeof ResetPasswordRoute
-  SignInRoute: typeof SignInRoute
-  SignUpRoute: typeof SignUpRoute
   SpaceRoute: typeof SpaceRouteWithChildren
   TermsRoute: typeof TermsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/terms': {
-      id: '/terms'
-      path: '/terms'
-      fullPath: '/terms'
-      preLoaderRoute: typeof TermsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/space': {
-      id: '/space'
-      path: '/space'
-      fullPath: '/space'
-      preLoaderRoute: typeof SpaceRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/sign-up': {
-      id: '/sign-up'
-      path: '/sign-up'
-      fullPath: '/sign-up'
-      preLoaderRoute: typeof SignUpRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/sign-in': {
-      id: '/sign-in'
-      path: '/sign-in'
-      fullPath: '/sign-in'
-      preLoaderRoute: typeof SignInRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/reset-password': {
-      id: '/reset-password'
-      path: '/reset-password'
-      fullPath: '/reset-password'
-      preLoaderRoute: typeof ResetPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/privacy': {
-      id: '/privacy'
-      path: '/privacy'
-      fullPath: '/privacy'
-      preLoaderRoute: typeof PrivacyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/forgot-password': {
-      id: '/forgot-password'
-      path: '/forgot-password'
-      fullPath: '/forgot-password'
-      preLoaderRoute: typeof ForgotPasswordRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/docs': {
@@ -249,19 +155,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/space/': {
-      id: '/space/'
-      path: '/'
-      fullPath: '/space/'
-      preLoaderRoute: typeof SpaceIndexRouteImport
-      parentRoute: typeof SpaceRoute
+    '/space': {
+      id: '/space'
+      path: '/space'
+      fullPath: '/space'
+      preLoaderRoute: typeof SpaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/docs/': {
       id: '/docs/'
@@ -270,19 +183,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocsIndexRouteImport
       parentRoute: typeof DocsRoute
     }
-    '/space/$slug': {
-      id: '/space/$slug'
-      path: '/$slug'
-      fullPath: '/space/$slug'
-      preLoaderRoute: typeof SpaceSlugRouteImport
-      parentRoute: typeof SpaceRoute
-    }
     '/docs/$slug': {
       id: '/docs/$slug'
       path: '/$slug'
       fullPath: '/docs/$slug'
       preLoaderRoute: typeof DocsSlugRouteImport
       parentRoute: typeof DocsRoute
+    }
+    '/space/': {
+      id: '/space/'
+      path: '/'
+      fullPath: '/space/'
+      preLoaderRoute: typeof SpaceIndexRouteImport
+      parentRoute: typeof SpaceRoute
+    }
+    '/space/$slug': {
+      id: '/space/$slug'
+      path: '/$slug'
+      fullPath: '/space/$slug'
+      preLoaderRoute: typeof SpaceSlugRouteImport
+      parentRoute: typeof SpaceRoute
     }
   }
 }
@@ -314,14 +234,19 @@ const SpaceRouteWithChildren = SpaceRoute._addFileChildren(SpaceRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DocsRoute: DocsRouteWithChildren,
-  ForgotPasswordRoute: ForgotPasswordRoute,
   PrivacyRoute: PrivacyRoute,
-  ResetPasswordRoute: ResetPasswordRoute,
-  SignInRoute: SignInRoute,
-  SignUpRoute: SignUpRoute,
   SpaceRoute: SpaceRouteWithChildren,
   TermsRoute: TermsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}

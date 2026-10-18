@@ -4,12 +4,15 @@ set -euo pipefail
 managed_root="$(cd "$(dirname "$0")/.." && pwd)"
 manifest="${1:-}"
 output="${2:-}"
+environment="${3:-production}"
+[[ "$environment" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ && ${#environment} -le 32 ]] || { echo "invalid deployment environment" >&2; exit 2; }
 
 if [[ -z "${manifest}" || -z "${output}" ]]; then
-  echo "usage: render-runtime <release-manifest.json> <empty-output-directory>" >&2
+  echo "usage: render-runtime <release-manifest.json> <empty-output-directory> [environment]" >&2
   exit 2
 fi
 command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
+environment_policy="$(jq -ce --arg environment "$environment" '.[$environment] // .production' "${managed_root}/contracts/environments.json")"
 if [[ ! -f "${manifest}" ]]; then
   echo "release manifest is not a regular file" >&2
   exit 1
@@ -52,6 +55,11 @@ for template in "${managed_root}"/quadlet/*; do
     contents="${contents/PublishPort=127.0.0.1:18080:8080/${recorder_api_bindings}}"
   fi
   contents="${contents//__DATABASE_MIGRATION_TARGET__/${database_migration_target}}"
+  cap="$(jq -r --arg name "$name" '.memory_overrides[$name] // empty' <<<"$environment_policy")"
+  if [[ -n "$cap" ]]; then
+    contents="$(sed -E "s/--memory=[0-9]+[gm]/--memory=$cap/" <<<"$contents")"
+    contents="${contents//Chalk production/Chalk $environment}"
+  fi
   if [[ "${contents}" == *'__'* ]]; then
     echo "unresolved placeholder in ${name}" >&2
     exit 1

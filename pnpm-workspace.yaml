@@ -77,3 +77,6 @@ allowBuilds:
   msgpackr-extract: false
   msw: false
   workerd: false
+
+# Production deploy subsets can omit root-only patched packages; patch failures still fail.
+allowUnusedPatches: true

@@ -4,13 +4,11 @@ import "github.com/go-chi/chi/v5"
 
 func mountV1Routes(r chi.Router, options Options) {
 	r.Route("/v1", func(r chi.Router) {
-		mountPublicAuthRoutes(r, options)
 		mountPublicInviteRoutes(r, options)
-		mountAuthenticatedSessionRoutes(r, options)
 
 		r.Group(func(r chi.Router) {
 			r.Use(rejectTenantAPIKeyOnUnscopedRoute)
-			r.Use(requireTenantAuthentication(options.Authentication, options.APIKeyAuthentication, options.RateLimit.ClientIP))
+			r.Use(requireTenantAuthentication(options.APIKeyAuthentication, options.RateLimit.ClientIP))
 			mountIdentityTenancyRoutes(r, options)
 			mountSpaceEpisodeRoutes(r, options)
 			mountArtifactRoutes(r, options)
@@ -18,20 +16,5 @@ func mountV1Routes(r chi.Router, options Options) {
 		})
 
 		mountLiveParticipantRoutes(r, options)
-	})
-}
-
-func mountPublicAuthRoutes(r chi.Router, options Options) {
-	r.Group(func(r chi.Router) {
-		r.Use(rejectTenantAPIKeyCredential)
-		mountAuthRoutes(r, options.Authentication, options.SessionCookie, options.RateLimit)
-	})
-}
-
-func mountAuthenticatedSessionRoutes(r chi.Router, options Options) {
-	r.Group(func(r chi.Router) {
-		r.Use(requireSessionAuthentication(options.Authentication))
-		mountMeRoutes(r, options.Authentication, options.RecentAuth, options.RateLimit)
-		mountAccountTenantRoutes(r, options.AccountTenants, options.RateLimit)
 	})
 }

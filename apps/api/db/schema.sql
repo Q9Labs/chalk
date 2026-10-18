@@ -3,21 +3,14 @@ create table tenants (
     id uuid primary key,
     name text not null,
     default_region text,
-    -- cf_sfu, cf_rtk, mediasoup
+    -- cf_sfu
     default_media_plane text,
     -- {
     --   "enabled": true,
-    --   "provider": "cf_sfu" | "cf_rtk",
+    --   "provider": "cf_sfu",
     --   "mode": "chalk_managed" | "tenant_managed",
     --   "cloudflare": {
     --     "account_id": "cloudflare-account-id",
-    --     "api_token": string,
-    --     "rtk": {
-    --       "enabled": true,
-    --       "app_id": "realtimekit-app-id",
-    --       "host_preset": "facilitator",
-    --       "participant_preset": "contributor"
-    --     },
     --     "sfu": {
     --       "enabled": true,
     --       "app_id": "realtime-app-id",
@@ -26,19 +19,6 @@ create table tenants (
     --   }
     -- }
     media_plane_provider_config jsonb,
-    -- {
-    --   "enabled": true,
-    --   "provider": "openrouter",
-    --   "mode": "chalk_managed" | "tenant_managed",
-    --   "api_key": string,
-    --   "base_url": "https://openrouter.ai/api/v1",
-    --   "default_model": "openai/gpt-5.4-mini",
-    --   "fallback_model": "anthropic/claude-fable-5",
-    --   "allowed_models": [
-    --     "openai/gpt-5.4-mini",
-    --     "anthropic/claude-fable-5"
-    --   ]
-    -- }
     ai_provider_config jsonb,
     -- {
     --   "enabled": true,
@@ -229,7 +209,7 @@ create table spaces (
     name text not null,
     tenant_id uuid not null references tenants(id),
     slug text not null,
-    -- cf_sfu, cf_rtk, mediasoup
+    -- cf_sfu
     media_plane text not null,
     metadata jsonb,
     -- recurring_policy is null for non-recurring spaces.
@@ -516,6 +496,8 @@ create table participants (
     episode_id uuid not null,
     account_id uuid references users(id) on delete restrict,
     identity_id uuid,
+    media_connection_id text,
+    media_connection_generation bigint,
     generation bigint not null check (generation > 0),
     status text not null check (status in ('joining', 'active', 'leaving', 'left')),
     role text not null,
@@ -971,6 +953,26 @@ create table space_public_arrivals (
 );
 create index space_public_arrivals_expiry_idx on space_public_arrivals(expires_at, state);
 create index space_public_arrivals_space_state_idx on space_public_arrivals(tenant_id, space_id, state, created_at);
+
+create function bind_public_arrival_media_connection() returns trigger
+language plpgsql as $$
+begin
+    if new.state = 'admitted' and new.provider_subject is not null and
+       (TG_OP = 'INSERT' or old.state is distinct from new.state or
+        old.provider_subject is distinct from new.provider_subject or
+        old.participant_generation is distinct from new.participant_generation or
+        old.participant_id is distinct from new.participant_id) then
+        update participants set media_connection_id = new.provider_subject,
+            media_connection_generation = new.participant_generation
+        where tenant_id = new.tenant_id and episode_id = new.episode_id
+          and id = new.participant_id and generation = new.participant_generation;
+    end if;
+    return new;
+end;
+$$;
+create trigger public_arrival_media_connection
+    after insert or update of state, provider_subject, participant_generation, participant_id
+    on space_public_arrivals for each row execute function bind_public_arrival_media_connection();
 
 create table space_public_admission_requests (
     request_handle uuid primary key,
@@ -4205,3 +4207,8 @@ for each row execute function reject_recording_completion_recovery_mutation();
 create trigger recording_completion_recoveries_no_truncate
 before truncate on recording_completion_recoveries
 for each statement execute function reject_recording_completion_recovery_mutation();
+
+-- Participant attendance survives Episode journal retention.
+alter table participants
+    add column first_joined_at timestamptz,
+    add column last_left_reason text check (last_left_reason in ('left', 'episode_ended'));

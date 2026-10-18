@@ -40,3 +40,15 @@ test("fails when alert delivery is rejected or the shared secret is missing", as
   globalThis.fetch = async (input) => new Response(null, { status: String(input) === env.DISCORD_WEBHOOK_URL ? 429 : 503 });
   await assert.rejects(runMonitorCycle(env), /Discord alert delivery failed/);
 });
+
+test("nightly never falls back to production monitor targets", async () => {
+  const urls: string[] = [];
+  globalThis.fetch = async (input) => {
+    urls.push(String(input));
+    return new Response(null, { status: 200 });
+  };
+  await assert.rejects(runMonitorCycle({ ...env, CHALK_ENVIRONMENT: "nightly" }), /explicit nightly/);
+  assert.equal(urls.length, 0);
+  assert.deepEqual(await runMonitorCycle({ ...env, CHALK_ENVIRONMENT: "nightly", API_BASE_URL: "https://nightly-api.chalkmeet.com", SYNC_BASE_URL: "https://nightly-sync.chalkmeet.com" }), { checked: 4, failed: 0 });
+  assert.ok(urls.every((url) => url.startsWith("https://nightly-")));
+});

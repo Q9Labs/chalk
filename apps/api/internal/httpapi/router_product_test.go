@@ -23,8 +23,6 @@ func TestProductRoutesRemainMounted(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, route := range []string{
-		"POST /v1/auth/login",
-		"GET /v1/me",
 		"GET /v1/tenants",
 		"GET /v1/tenants/{tenant_id}/memberships",
 		"GET /v1/tenants/{tenant_id}/spaces",
@@ -38,11 +36,7 @@ func TestProductRoutesRemainMounted(t *testing.T) {
 			t.Errorf("kept product route is unreachable: %s", route)
 		}
 	}
-	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/v1/me", nil))
-	if response.Code != http.StatusServiceUnavailable {
-		t.Fatalf("me route must reach its authentication boundary: status=%d body=%s", response.Code, response.Body.String())
-	}
+
 }
 
 func TestRetiredJourneyTelemetryIsNotAdvertisedOrMounted(t *testing.T) {

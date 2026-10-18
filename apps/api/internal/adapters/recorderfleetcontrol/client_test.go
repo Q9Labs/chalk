@@ -17,7 +17,7 @@ import (
 func TestClientUsesVersionedRoleFencedContracts(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
-	key := recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}
+	key := recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture}
 	identity := recorderfleet.NodeIdentity{
 		ProviderID: "42", WorkerID: "55555555-5555-4555-8555-555555555555",
 		Role: workeridentity.RoleCapture, BootGeneration: 3,
@@ -31,14 +31,14 @@ func TestClientUsesVersionedRoleFencedContracts(t *testing.T) {
 		switch requests {
 		case 1:
 			assertRequest(t, request, http.MethodGet, "/internal/v1/recorder/fleet/demand", "role=capture", false)
-			return jsonResponse(http.StatusOK, `{"schema_version":"recorder_fleet_demand.v1","environment":"staging","role":"capture","revision":"demand-7","desired_nodes":1,"scheduled_prewarms":1,"held_starts":0,"queued_jobs":0,"observed_at":"2026-09-06T12:00:00Z"}`), nil
+			return jsonResponse(http.StatusOK, `{"schema_version":"recorder_fleet_demand.v1","environment":"nightly","role":"capture","revision":"demand-7","desired_nodes":1,"scheduled_prewarms":1,"held_starts":0,"queued_jobs":0,"observed_at":"2026-09-06T12:00:00Z"}`), nil
 		case 2:
 			assertRequest(t, request, http.MethodGet, "/internal/v1/recorder/fleet/nodes", "role=capture", false)
-			return jsonResponse(http.StatusOK, `{"schema_version":"recorder_fleet_nodes.v1","environment":"staging","role":"capture","nodes":[{"identity":{"provider_id":"42","worker_id":"55555555-5555-4555-8555-555555555555","role":"capture","boot_generation":3},"ready":true,"admission_open":true,"ready_capacity":4,"active_leases":0,"observed_at":"2026-09-06T12:00:00Z"}]}`), nil
+			return jsonResponse(http.StatusOK, `{"schema_version":"recorder_fleet_nodes.v1","environment":"nightly","role":"capture","nodes":[{"identity":{"provider_id":"42","worker_id":"55555555-5555-4555-8555-555555555555","role":"capture","boot_generation":3},"ready":true,"admission_open":true,"ready_capacity":4,"active_leases":0,"observed_at":"2026-09-06T12:00:00Z"}]}`), nil
 		case 3:
 			assertRequest(t, request, http.MethodPost, "/internal/v1/recorder/fleet/nodes/42/bootstrap", "", true)
 			assertSchema(t, request, recorderfleet.BootstrapSchemaVersion)
-			return jsonResponse(http.StatusOK, `{"schema_version":"recorder_fleet_bootstrap.v1","environment":"staging","role":"capture","identity":{"provider_id":"42","worker_id":"55555555-5555-4555-8555-555555555555","role":"capture","boot_generation":3}}`), nil
+			return jsonResponse(http.StatusOK, `{"schema_version":"recorder_fleet_bootstrap.v1","environment":"nightly","role":"capture","identity":{"provider_id":"42","worker_id":"55555555-5555-4555-8555-555555555555","role":"capture","boot_generation":3}}`), nil
 		case 4:
 			assertRequest(t, request, http.MethodPost, "/internal/v1/recorder/fleet/nodes/42/admission/close", "", true)
 			assertSchema(t, request, recorderfleet.CommandSchemaVersion)
@@ -95,8 +95,8 @@ func TestClientUsesVersionedRoleFencedContracts(t *testing.T) {
 
 func TestClientRejectsCrossRoleAndMalformedResponses(t *testing.T) {
 	t.Parallel()
-	key := recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}
-	wrongKey := recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleRender}
+	key := recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture}
+	wrongKey := recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleRender}
 	client, err := New(Config{
 		BaseURL: "https://control.example", Key: key,
 		HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
@@ -136,7 +136,7 @@ func TestClientRejectsCrossRoleAndMalformedResponses(t *testing.T) {
 
 func TestClientErrorsDoNotIncludeResponseBodies(t *testing.T) {
 	t.Parallel()
-	key := recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}
+	key := recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture}
 	client, _ := New(Config{
 		BaseURL: "https://control.example", Key: key,
 		HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
@@ -150,11 +150,11 @@ func TestClientErrorsDoNotIncludeResponseBodies(t *testing.T) {
 }
 
 func TestClientWaitForDemandUsesBoundedWait(t *testing.T) {
-	key := recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}
+	key := recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture}
 	client, err := New(Config{BaseURL: "https://control.example", Key: key, HTTPClient: &http.Client{
 		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 			assertRequest(t, request, http.MethodGet, "/internal/v1/recorder/fleet/demand", "role=capture&wait=8", false)
-			return jsonResponse(http.StatusOK, `{"schema_version":"recorder_fleet_demand.v1","environment":"staging","role":"capture","revision":"ready","desired_nodes":1,"scheduled_prewarms":0,"held_starts":1,"queued_jobs":0,"observed_at":"2026-09-06T12:00:00Z"}`), nil
+			return jsonResponse(http.StatusOK, `{"schema_version":"recorder_fleet_demand.v1","environment":"nightly","role":"capture","revision":"ready","desired_nodes":1,"scheduled_prewarms":0,"held_starts":1,"queued_jobs":0,"observed_at":"2026-09-06T12:00:00Z"}`), nil
 		}),
 	}})
 	if err != nil {
@@ -167,7 +167,7 @@ func TestClientWaitForDemandUsesBoundedWait(t *testing.T) {
 
 func TestNewAndDurationRejectInvalidConfiguration(t *testing.T) {
 	t.Parallel()
-	key := recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}
+	key := recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture}
 	for _, rawURL := range []string{"http://control.example", "https://user@control.example", "https://control.example/path", "https://control.example?query=true"} {
 		if _, err := New(Config{BaseURL: rawURL, HTTPClient: &http.Client{}, Key: key}); !errors.Is(err, recorderfleet.ErrInvalidConfig) {
 			t.Fatalf("URL %q error = %v", rawURL, err)

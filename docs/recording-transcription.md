@@ -1,34 +1,10 @@
 # Recording and transcription
 
-Chalk's managed recording path is implemented and has end-to-end evidence from
-a separate qualification environment. The production-placement delta below is
-not yet deployed or cloud-qualified. An
-Episode can move from a durable start command through encrypted capture,
-rendering, download, managed transcription, and deletion of temporary source
-objects. This document records the architecture, the decisions behind it, the
-measured cost model, and the boundary of that qualification.
+Recordings move from a durable start command through encrypted capture,
+rendering, download, transcription, and temporary-source cleanup. This document
+describes the architecture, processing flow, cost model, and release boundaries.
 
-## Production implementation status (2026-09-17)
-
-| Area                                                            | Implemented                                                                                                                                                                              | Remaining evidence and its scope                                                               |
-| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Existing encrypted capture, rendering, verification and cleanup | Preserved; real end-to-end qualification described below                                                                                                                                 | Reuse that evidence; recheck boundaries changed by the selected release                        |
-| Shared backend controls                                         | Separate capture/render fleet processes and direct-TLS issuer; dedicated control image, rootless units, private persistent state, per-state process locks, versioned inputs and rollback | Host headroom, direct peer identity and restart proof in the approved environment              |
-| Capacity                                                        | Zero spare; ten capture and ten render nodes; rendering does not consume live-capture admission                                                                                          | Ten-way measurements substantiate capacity/throughput claims, not baseline correctness         |
-| Startup cadence                                                 | Successful durable transitions fast-follow at 100 ms for at most 32 steps; idle/error polling remains 5 seconds                                                                          | Recheck changed control placement; fast-follow is not a seconds-level provider-ready guarantee |
-| Scheduled Space preparation                                     | Durable revision-fenced prepare/get/cancel; five-minute lead and five-minute no-show grace; atomic consumption on real recording start                                                   | Integration adoption and scheduled smoke                                                       |
-| ASR                                                             | Direct DeepInfra native Whisper turbo; explicit optional Cloudflare fallback, disabled in the cost-first profile                                                                         | Approved provider corpus, privacy acceptance and exact adapter qualification                   |
-| Smaller capture profile                                         | Ordered 1 GiB / 2 GiB shared-CPU candidates, disabled without evidence; `c-2` retained                                                                                                   | Paced cloud comparison required only before enabling a smaller candidate                       |
-
-Earlier automated reviews timed out without a verdict and provide no review
-coverage. The GPT-6 Astra/xhigh review of `79174929` against `c0272cc4` completed
-on 2026-09-17. Its three verified findings are addressed by follow-up fixes:
-cropped ASR timestamps stay chunk-relative, deadline-driven capture completion
-uses the scoped reservation deadline as durable authority, and render-claim
-replay validates the same render deadline as the initial claim. Regression
-coverage includes later audio chunks, deadline/epoch rejection and completion
-replay, and replay of a lost render-claim response. This code review does not
-replace the changed-boundary release evidence listed above.
+## Space recording preparation
 
 Preparation uses the tenant-scoped Space `recording-preparation` resource.
 `PATCH` accepts `starts_at` and `expected_revision` (`0` for the initial intent);
@@ -179,6 +155,7 @@ terms separately:
 - taxes, discounts, and future price changes.
 
 Sources: [DigitalOcean Droplet pricing](https://www.digitalocean.com/pricing/droplets),
+
 [Cloudflare Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/),
 [Cloudflare R2 pricing](https://developers.cloudflare.com/r2/pricing/), and
 [AWS KMS pricing](https://aws.amazon.com/kms/pricing/).
@@ -213,62 +190,16 @@ first-party mobile recording/transcript wiring, every regional load ceiling,
 every possible worker-loss timing, or managed observability and notification
 configuration. Those remain separate product and operational milestones.
 
-## Recorder release command
+## Recorder releases
 
-`pnpm release:recorder` replaces private release wrappers. Set `AWS_PROFILE` and
-`AWS_REGION`; production identifiers are read at launch from the non-secret SSM
-String `/chalk/production/release/recorder.json`. Secrets remain at their existing
-parameter paths. The version-1 configuration contains `do_context`,
-`bootstrap_ca_parameter`, `bootstrap_server_name`, `builder` (region, size, image,
-ttl_seconds, ssh_cidr), `worker` (region, size, disk_gb), `runtime` (instance_id,
-parameter_prefix, document_name, log_group, user_id), and `dispatcher` (state_bucket,
-state_key, function_name, scheduler_name, scheduler_group). Keep its values and all
-release evidence outside Git. Update the SSH CIDR when the operator's address changes.
+Use the [Release, Nightly and Promote workflows](managed-release.md).
+There is no separate recorder publish or deploy command. The pipeline builds
+first-install or changed images, records immutable media members, updates only
+the selected environment's pins, deploys the backend and dispatcher, and runs
+cold signed-boot qualification before accepting the nightly cut.
 
-First run `pnpm release:recorder plan --dry-run --role render`. This covers all
-seven phases using provider reads only. Every subcommand accepts `--dry-run`;
-none sends a remote command, creates compute, writes pins, or deploys. A dry run
-does not claim image qualification, zero OpenTofu drift, or loaded-process proof.
-
-For an authorized release, use one new private directory outside the checkout,
-one exact public `--source` commit, and the same `--role` on every invocation:
-
-```sh
-pnpm release:recorder plan --role render --source "$SOURCE_COMMIT" --state "$RELEASE_STATE"
-pnpm release:recorder build --role render --state "$RELEASE_STATE"
-pnpm release:recorder snapshot --role render --state "$RELEASE_STATE"
-pnpm release:recorder qualify --role render --state "$RELEASE_STATE" --boot-check "$BOOT_CHECK"
-pnpm release:recorder publish-pins --role render --state "$RELEASE_STATE"
-pnpm release:recorder deploy --role render --state "$RELEASE_STATE" --managed-manifest "$MANAGED_MANIFEST"
-pnpm release:recorder verify --role render --state "$RELEASE_STATE"
-```
-
-Snapshot precedes qualification because qualification boots the resulting image.
-The detached build worker and exact-ID deadline guard survive terminal connection
-loss. The uploaded script builds, cleans up and seals itself; never SSH back
-into a sealed builder. Snapshot checks minimum disk, deletes only owned resources,
-confirms Droplet absence, and removes its key files. The guard never scans by tag.
-After interruption, inspect `release.json`, `build-worker.log` and the guard log;
-continue the next phase only after the worker completes. Do not start a second
-builder or cancel its deadline to recover a stalled one.
-
-`BOOT_CHECK` is BOOTDIAG's executable hook, not a RELEASEKIT implementation. It
-receives `--request <json> --receipt <json>` with schema_version, role, source_commit,
-release_id, image_id, image_digest, region and size. It must clean up its resources
-and return those same identities plus `result: "PASS"` and
-`fleet_equivalent_signed_boot: true`. Missing or mismatched evidence blocks pins.
-The executable is `scripts/recorder/boot-check.py`. Run it from a checkout with Go,
-Python 3, AWS CLI, `doctl`, SSH and curl installed. Set
-`CHALK_BOOT_CHECK_AWS_PROFILE`, `CHALK_BOOT_CHECK_AWS_REGION` and
-`CHALK_BOOT_CHECK_DO_CONTEXT`; set `CHALK_BOOT_CHECK_INSTANCE_ID` when the account
-has more than one online managed instance. No controller/issuer private key leaves
-the managed runtime. `CHALK_BOOT_CHECK_PROVIDER` may point to a prebuilt
-`apps/api/cmd/recorder-boot-probe` binary instead of using `go run`.
-
-```sh
-BOOT_CHECK="$PWD/scripts/recorder/boot-check.py"
-pnpm release:recorder qualify --role capture --state "$RELEASE_STATE" --boot-check "$BOOT_CHECK"
-```
+`boot-check.py` remains the pipeline's isolated diagnostic. It receives an exact
+candidate image identity and reads the target environment's fleet configuration.
 
 The hook reads current role settings and uses the fleet's provider adapter and
 controller bootstrap API. It creates a separately named/tagged diagnostic node,
@@ -324,7 +255,7 @@ signature window and consumes the nonce once. The release must equal the loaded
 API component release (`CHALK_API_VERSION`); an old or unapproved release remains
 unauthorized. These checks are unchanged.
 
-Production `scripts/deploy/deploy-managed-release.mjs` now carries the dispatcher
+The Release workflow's `scripts/deploy/deploy-managed-release.mjs` carries the dispatcher
 binding forward after the host controller proves a healthy deployment. It reads
 the recorder release configuration from SSM, verifies the target runtime and the
 Lambda's current digest/binding, and reconstructs the dispatcher OpenTofu root
@@ -343,10 +274,9 @@ For a changed API component, it:
    release readback must pass afterward.
 
 The release fails if binding or verification fails, even if the host deployment
-succeeded. `pnpm release:recorder deploy` keeps the scheduler disabled until its
-loaded-runtime verifier also matches the observed Lambda binding to the running
-API process. Scheduler resume reconstructs fresh state so it cannot restore an
-old binding. If deployment fails, inspect the failure and restore a clean
+succeeded. Preserve any existing scheduler pause until runtime and binding
+verification pass.
+If deployment fails, inspect the failure and restore a clean
 baseline before retrying with the same manifest. A failed Lambda apply after
 the log-tag step can leave that tag ahead of the bound release; restore the tag
 to the currently bound release before retrying. Do not manually enable the
@@ -354,11 +284,12 @@ scheduler before verification passes.
 Requests already running during a release can briefly receive 401; normal fenced
 retries reconcile them after the binding update.
 
-Both managed release `--dry-run` and recorder `deploy --dry-run
---managed-manifest <path>` report `dispatcher_binding` with the previous/target
-release, retained ZIP digest and planned copy action. Dry runs do not copy,
+Managed release `--dry-run` reports `dispatcher_binding` with the selected
+ZIP digest and version, after artifact readback and a read-only state plan.
+Dry runs do not copy,
 apply, invoke SSM commands or verify loaded processes. Production configuration
-is mandatory; other environments explicitly report `not-configured`.
+is mandatory. Other configured environments use their own scoped recorder
+configuration; there is no production configuration fallback.
 
 The deployment identity needs the existing dispatcher module's read/apply
 permissions, remote state and lock access, SSM configuration read, and versioned

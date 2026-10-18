@@ -61,12 +61,12 @@ func TestApplyHTTPMountsProfilerOnlyInLocal(t *testing.T) {
 		t.Fatal("local profiler was nil")
 	}
 
-	stagingDiagnostics := observability.New(observability.Config{
-		Environment: "staging",
+	nightlyDiagnostics := observability.New(observability.Config{
+		Environment: "nightly",
 		Profiler:    true,
 	}, nil)
-	stagingOptions := stagingDiagnostics.HTTPOptions()
-	if stagingOptions.Profiler != nil {
-		t.Fatal("staging profiler was mounted")
+	nightlyOptions := nightlyDiagnostics.HTTPOptions()
+	if nightlyOptions.Profiler != nil {
+		t.Fatal("nightly profiler was mounted")
 	}
 }

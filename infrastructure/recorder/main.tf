@@ -291,7 +291,7 @@ resource "cloudflare_r2_bucket" "recording" {
     prevent_destroy = true
 
     precondition {
-      condition     = var.environment == "staging" || (var.recording_bucket_name != null && var.recording_bucket_import_id != null)
+      condition     = var.environment == "nightly" || (var.recording_bucket_name != null && var.recording_bucket_import_id != null)
       error_message = "production R2 adoption is fail-closed: import the explicitly named existing bucket before any apply."
     }
   }

@@ -1,0 +1,86 @@
+name: Release contracts
+
+# Include the release tools and the source trees their contract checks inspect.
+on:
+  pull_request:
+    paths:
+      - .github/workflows/ci.yml
+      - .github/workflows/nightly.yml
+      - .github/workflows/promote.yml
+      - .github/workflows/real-call-proof.yml
+      - .github/workflows/web-call-proof.yml
+      - .github/workflows/media-cleanup.yml
+      - .github/workflows/release-contracts.yml
+      - .github/actions/setup-opentofu/**
+      - scripts/releases/**
+      - scripts/deploy/**
+      - scripts/prod-proof/**
+      - scripts/web-proof/**
+      - scripts/recorder/**
+      - scripts/transcription-dispatcher/**
+      - infrastructure/managed-episode/**
+      - infrastructure/recorder/**
+      - infrastructure/nightly/**
+      - infrastructure/opentofu/modules/aws-transcription-dispatcher/**
+      - infrastructure/opentofu/modules/cloudflare-r2-transcription-lifecycle/**
+      - apps/api/**
+      - apps/sync/**
+      - apps/recording-renderer/**
+      - apps/transcription-dispatcher/**
+      - packages/**
+      - sdks/typescript/**
+      - .tool-versions
+      - tsconfig.json
+      - .npmrc
+      - .pnpmfile.cjs
+      - go.work
+      - go.work.sum
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - package.json
+      - patches/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chalk-release-contracts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    name: Pre-deploy release contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.8.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+      - uses: ./.github/actions/setup-opentofu
+      - name: Install pinned workflow lint
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ripgrep
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Check every release contract without cloud credentials
+        run: scripts/releases/check-contracts.sh
+      - name: Keep complete contract logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-contract-logs
+          path: ${{ runner.temp }}/chalk-release-contracts
+          retention-days: 7
+          if-no-files-found: ignore

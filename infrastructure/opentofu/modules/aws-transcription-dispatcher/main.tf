@@ -136,11 +136,20 @@ data "aws_iam_policy_document" "dispatcher_permissions" {
         variable = "kms:ViaService"
         values   = ["ssm.${data.aws_region.current.name}.amazonaws.com"]
       }
+      dynamic "condition" {
+        for_each = var.environment_name == "nightly" ? [true] : []
+        content {
+          test     = "StringEquals"
+          variable = "kms:EncryptionContext:PARAMETER_ARN"
+          values   = local.ssm_parameter_arns
+        }
+      }
     }
   }
 }
 
 data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
 
 resource "aws_iam_role_policy" "dispatcher" {
   name   = "${var.function_name}-least-privilege"
@@ -299,6 +308,22 @@ data "aws_iam_policy_document" "scheduler_assume_role" {
       type        = "Service"
       identifiers = ["scheduler.amazonaws.com"]
     }
+    dynamic "condition" {
+      for_each = var.environment_name == "nightly" ? [true] : []
+      content {
+        test     = "StringEquals"
+        variable = "aws:SourceAccount"
+        values   = [data.aws_caller_identity.current.account_id]
+      }
+    }
+    dynamic "condition" {
+      for_each = var.environment_name == "nightly" ? [true] : []
+      content {
+        test     = "ArnEquals"
+        variable = "aws:SourceArn"
+        values   = ["arn:aws:scheduler:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:schedule-group/${var.scheduler_group_name}"]
+      }
+    }
   }
 }
 
@@ -368,6 +393,14 @@ data "aws_iam_policy_document" "scheduler_dlq" {
     principals {
       type        = "Service"
       identifiers = ["scheduler.amazonaws.com"]
+    }
+    dynamic "condition" {
+      for_each = var.environment_name == "nightly" ? [true] : []
+      content {
+        test     = "StringEquals"
+        variable = "aws:SourceAccount"
+        values   = [data.aws_caller_identity.current.account_id]
+      }
     }
 
     condition {

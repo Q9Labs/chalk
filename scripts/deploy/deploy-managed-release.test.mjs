@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { runManagedRelease } from "./deploy-managed-release.mjs";
+import { parseArguments, runManagedRelease } from "./deploy-managed-release.mjs";
 
 const releaseId = "managed-episode-20260818T120000Z-01234567-89abcdef";
 const sourceRevision = "0123456789abcdef0123456789abcdef01234567";
@@ -37,6 +37,7 @@ test("hands a release to the pinned SSM document and returns its controller proo
     allowedSecretIds,
     commandRunner: async (command) => {
       calls.push(command);
+      if (command.command === "python3") return { stdout: JSON.stringify({ action: "already-bound", release_id: releaseId, verified: !command.args.includes("--dry-run") }) };
       if (command.args.includes("send-command")) {
         return { stdout: JSON.stringify({ Command: { CommandId: commandId } }), stderr: "" };
       }
@@ -58,14 +59,57 @@ test("hands a release to the pinned SSM document and returns its controller proo
   });
 
   const sendCommand = calls.find(({ args }) => args.includes("send-command"));
-  assert.deepEqual(result, { ...controllerResult, dispatcher_binding: { action: "not-configured", environment: "staging" } });
+  assert.deepEqual(result, { ...controllerResult, ssm_command_id: commandId, document_version: "7", deployment_phase: "complete", dispatcher_binding: { action: "already-bound", release_id: releaseId, verified: true } });
   assert.equal(calls.filter(({ args }) => args.includes("send-command")).length, 1);
   assert.equal(calls.filter(({ args }) => args.includes("get-command-invocation")).length, 2);
   assert.equal(sendCommand.command, "aws");
+  assert.equal(sendCommand.args[sendCommand.args.indexOf("--comment") + 1], `Chalk ${releaseId} (12345.2)`);
   assert.equal(sendCommand.args[sendCommand.args.indexOf("--document-version") + 1], "7");
   const parameters = JSON.parse(sendCommand.args[sendCommand.args.indexOf("--parameters") + 1]);
   assert.deepEqual(parameters.ExcludedSecrets, ['["sync-env"]']);
   assert.deepEqual(parameters.ControllerVersion, ["2"]);
+});
+
+test("observed and maximum-length identities fit SSM comments without changing deployment identity", async () => {
+  const observed = JSON.parse(await readFile(new URL("./tests/fixtures/ssm-comment-validation.json", import.meta.url), "utf8"));
+  assert.ok(observed.rejected_comment.length > observed.maximum_comment_length);
+  for (const environment of ["nightly", "production"]) {
+    for (const identity of [observed, { release_id: "managed-episode-20261018T095630Z-0123456789ab-01234567", request_id: "q".repeat(128) }]) {
+      const manifestPath = await writeManifest(identity.release_id);
+      const arguments_ = requiredArguments(manifestPath);
+      arguments_[arguments_.indexOf("--environment") + 1] = environment;
+      arguments_[arguments_.indexOf("--parameter-prefix") + 1] = `/chalk/${environment}/managed-episode`;
+      arguments_[arguments_.indexOf("--request-id") + 1] = identity.request_id;
+      const controllerResult = { schema_version: 1, status: "deployed", release_id: identity.release_id, request_id: identity.request_id, previous_release_id: null, health: "passed", rolled_back: false };
+      let sent = false;
+      const result = await runManagedRelease({
+        arguments_,
+        allowedSecretIds,
+        commandRunner: async ({ command, args }) => {
+          if (command === "python3") return { stdout: JSON.stringify({ action: "already-bound" }) };
+          if (args.includes("send-command")) {
+            const comment = args[args.indexOf("--comment") + 1];
+            assert.ok(comment.startsWith("Chalk "));
+            assert.ok(comment.length <= observed.maximum_comment_length, observed.provider_error);
+            const parameters = JSON.parse(args[args.indexOf("--parameters") + 1]);
+            assert.deepEqual(parameters.ReleaseId, [identity.release_id]);
+            assert.deepEqual(parameters.RequestId, [identity.request_id]);
+            assert.deepEqual(parameters.Environment, [environment]);
+            assert.equal(JSON.parse(Buffer.from(parameters.ManifestBase64[0], "base64")).release_id, identity.release_id);
+            sent = true;
+            return { stdout: JSON.stringify({ Command: { CommandId: "01234567-89ab-cdef-0123-456789abcdef" } }) };
+          }
+          assert.ok(args.includes("get-command-invocation"));
+          return { stdout: JSON.stringify({ Status: "Success", StandardOutputContent: `RESULT ${JSON.stringify(controllerResult)}\n` }) };
+        },
+        sleep: async () => {},
+        stdout: { write: () => {} },
+      });
+      assert.equal(sent, true);
+      assert.equal(result.release_id, identity.release_id);
+      assert.equal(result.request_id, identity.request_id);
+    }
+  }
 });
 
 test("passes only the operator-controlled deployment flags through CI", async () => {
@@ -77,7 +121,6 @@ test("passes only the operator-controlled deployment flags through CI", async ()
   assert.match(workflow, /args\+=\(--exclude-secret "\$secret_id"\)/);
   assert.match(workflow, /--parameter-prefix "\$CHALK_MANAGED_PARAMETER_PREFIX"/);
   assert.match(workflow, /group: deploy-managed-\$\{\{ inputs\.managed_environment \}\}/);
-  assert.match(workflow, /if: needs\.plan-managed\.outputs\.should_publish == 'true' && needs\.plan-managed\.outputs\.build_set != '\[\]'/);
   assert.doesNotMatch(workflow, /AWS-RunShellScript/);
 });
 
@@ -86,7 +129,7 @@ function requiredArguments(manifestPath = "/tmp/manifest.json") {
     "--manifest",
     manifestPath,
     "--environment",
-    "staging",
+    "nightly",
     "--region",
     "ap-southeast-1",
     "--instance-id",
@@ -96,16 +139,16 @@ function requiredArguments(manifestPath = "/tmp/manifest.json") {
     "--document-version",
     "7",
     "--parameter-prefix",
-    `/chalk/staging/episode/${releaseId}`,
+    `/chalk/nightly/episode/${releaseId}`,
     "--request-id",
     "12345.2",
     "--log-group-name",
-    "/chalk/staging/deployments",
+    "/chalk/nightly/deployments",
     "--adopt-existing-release",
   ];
 }
 
-async function writeManifest() {
+async function writeManifest(manifestReleaseId = releaseId) {
   const directory = await mkdtemp(join(tmpdir(), "chalk-managed-release-test-"));
   temporaryDirectories.push(directory);
   const path = join(directory, "release-manifest.json");
@@ -113,8 +156,9 @@ async function writeManifest() {
     path,
     `${JSON.stringify({
       schema_version: 2,
-      release_id: releaseId,
+      release_id: manifestReleaseId,
       source_revision: sourceRevision,
+      images: { recorder_control: `example/control@sha256:${"0".repeat(64)}` },
       runtime_artifacts: { "scripts/chalk-runtime-health": "0".repeat(64) },
     })}\n`,
     { mode: 0o600 },
@@ -122,10 +166,10 @@ async function writeManifest() {
   return path;
 }
 
-test("production dry run includes the dispatcher rebind without deploying", async () => {
+async function dispatcherDryRun(environment) {
   const manifestPath = await writeManifest();
   const calls = [];
-  const arguments_ = requiredArguments(manifestPath).map((value) => value.replaceAll("staging", "production"));
+  const arguments_ = requiredArguments(manifestPath).map((value) => value.replaceAll("nightly", environment));
   const proof = await runManagedRelease({
     arguments_: arguments_.concat("--dry-run"),
     allowedSecretIds,
@@ -135,6 +179,35 @@ test("production dry run includes the dispatcher rebind without deploying", asyn
     },
     stdout: { write: () => {} },
   });
+  return { proof, calls };
+}
+
+test("backend-only nightly skips dispatcher preflight and final binding", async () => {
+  const manifestPath = await writeManifest();
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  delete manifest.images.recorder_control;
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  for (const dryRun of [true, false]) {
+    const calls = [];
+    const result = await runManagedRelease({
+      arguments_: requiredArguments(manifestPath).concat(dryRun ? ["--dry-run"] : []),
+      allowedSecretIds,
+      commandRunner: async (command) => {
+        calls.push(command);
+        assert.equal(command.command, "aws");
+        if (command.args.includes("send-command")) return { stdout: JSON.stringify({ Command: { CommandId: "01234567-89ab-cdef-0123-456789abcdef" } }) };
+        return { stdout: JSON.stringify({ Status: "Success", StandardOutputContent: `RESULT ${JSON.stringify({ schema_version: 1, status: "deployed", release_id: releaseId, request_id: "12345.2", previous_release_id: null, health: "passed", rolled_back: false })}` }) };
+      },
+      stdout: { write: () => {} },
+      stderr: { write: () => {} },
+    });
+    assert.deepEqual(result.dispatcher_binding, { action: "not-configured", environment: "nightly" });
+    assert.equal(calls.length, dryRun ? 0 : 2);
+  }
+});
+
+test("production dry run includes the dispatcher rebind without deploying", async () => {
+  const { proof, calls } = await dispatcherDryRun("production");
   assert.equal(proof.dispatcher_binding.action, "rebind");
   assert.equal(calls.length, 1);
   assert.ok(calls[0].args.includes("--dry-run"));
@@ -142,16 +215,22 @@ test("production dry run includes the dispatcher rebind without deploying", asyn
 
 test("production cannot report success when dispatcher binding fails after host deployment", async () => {
   const manifestPath = await writeManifest();
+  const proofPath = join(manifestPath, "..", "deployment-proof.json");
   const calls = [];
   await assert.rejects(
     runManagedRelease({
-      arguments_: requiredArguments(manifestPath).map((value) => value.replaceAll("staging", "production")),
+      arguments_: requiredArguments(manifestPath)
+        .map((value) => value.replaceAll("nightly", "production"))
+        .concat("--proof-file", proofPath),
       allowedSecretIds,
       stdout: { write: () => {} },
       commandRunner: async (command) => {
         calls.push(command);
         if (command.command === "python3") {
-          if (!command.args.includes("--dry-run")) throw new Error("dispatcher runtime release binding mismatch");
+          if (!command.args.includes("--dry-run")) {
+            assert.equal(JSON.parse(await readFile(proofPath, "utf8")).deployment_phase, "host-ready");
+            throw new Error("dispatcher runtime release binding mismatch");
+          }
           return { stdout: JSON.stringify({ action: "rebind", release_id: releaseId }) };
         }
         if (command.args.includes("send-command")) return { stdout: JSON.stringify({ Command: { CommandId: "01234567-89ab-cdef-0123-456789abcdef" } }) };
@@ -175,4 +254,45 @@ test("production cannot report success when dispatcher binding fails after host 
   assert.equal(calls.at(-1).command, "python3");
   assert.equal(calls.at(-1).args.includes("--dry-run"), false);
   assert.ok(calls.some(({ args }) => args.includes("get-command-invocation")));
+  const proof = JSON.parse(await readFile(proofPath, "utf8"));
+  assert.equal(proof.deployment_phase, "dispatcher-failed");
+  assert.equal(proof.status, "deployed");
+  assert.equal(proof.health, "passed");
+  assert.equal(proof.ssm_command_id, "01234567-89ab-cdef-0123-456789abcdef");
+  assert.deepEqual(proof.dispatcher_binding, { action: "failed", verified: false });
+});
+
+test("configured environments use their own dispatcher parameter in the read-only dry run", async () => {
+  const { proof, calls } = await dispatcherDryRun("preview-2");
+  assert.equal(proof.request.environment, "preview-2");
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].args.includes("/chalk/preview-2/release/recorder.json"));
+  assert.ok(calls[0].args.includes("--dry-run"));
+});
+
+test("invalid environments and cross-environment configuration are rejected before provider calls", () => {
+  for (const environment of ["Production", "../production", "preview--2", "preview-", "a".repeat(33)]) {
+    assert.throws(() => parseArguments(requiredArguments().map((value) => value.replaceAll("nightly", environment))), /--environment/);
+  }
+  assert.throws(() => parseArguments(requiredArguments().concat("--dispatcher-config-parameter", "/chalk/production/release/recorder.json")), /must be scoped/);
+});
+
+test("missing dispatcher permission fails preflight without sending a host command", async () => {
+  const manifestPath = await writeManifest();
+  const calls = [];
+  await assert.rejects(
+    runManagedRelease({
+      arguments_: requiredArguments(manifestPath).map((value) => value.replaceAll("nightly", "production")),
+      allowedSecretIds,
+      commandRunner: async (command) => {
+        calls.push(command);
+        throw new Error("ssm:GetParameter implicitDeny for dispatcher configuration");
+      },
+      stdout: { write: () => {} },
+    }),
+    /ssm:GetParameter implicitDeny/,
+  );
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].command, "python3");
+  assert.ok(calls[0].args.includes("--dry-run"));
 });

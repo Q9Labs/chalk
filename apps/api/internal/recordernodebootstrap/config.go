@@ -107,7 +107,7 @@ func loadConfig(bootstrapEnvironmentFile, imageEnvironmentFile string, verifyAtt
 			return Config{}, fmt.Errorf("%w: read bootstrap CA", ErrInvalidConfig)
 		}
 		caDigest := sha256.Sum256(ca)
-		if claims.ServerName != config.BootstrapServerName || claims.CASHA256 != hex.EncodeToString(caDigest[:]) {
+		if claims.ServerName != "" && (claims.ServerName != config.BootstrapServerName || claims.CASHA256 != hex.EncodeToString(caDigest[:])) {
 			return Config{}, fmt.Errorf("%w: installed bootstrap TLS settings differ from image manifest", ErrInvalidConfig)
 		}
 	}
@@ -127,7 +127,7 @@ func (config Config) Validate() error {
 		return fmt.Errorf("%w: bootstrap server name", ErrInvalidConfig)
 	}
 	if !strings.EqualFold(endpoint.Hostname(), config.BootstrapServerName) {
-		return fmt.Errorf("%w: baked bootstrap server name %q differs from endpoint host %q", ErrInvalidConfig, config.BootstrapServerName, endpoint.Hostname())
+		return fmt.Errorf("%w: bootstrap server name %q differs from endpoint host %q", ErrInvalidConfig, config.BootstrapServerName, endpoint.Hostname())
 	}
 	for label, path := range map[string]string{
 		"bootstrap ca": config.BootstrapCAFile, "identity directory": config.IdentityDirectory, "worker environment": config.WorkerEnvironment,

@@ -4,8 +4,6 @@ Disallow: /_internal/
 Disallow: /_shell/
 Disallow: /_serverFn/
 Disallow: /api/
-Disallow: /sign-in
-Disallow: /sign-up
 Disallow: /space
 
 Sitemap: https://chalkmeet.com/sitemap.xml

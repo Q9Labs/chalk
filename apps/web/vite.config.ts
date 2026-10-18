@@ -11,7 +11,6 @@ import { execSync } from "child_process";
 import { fileURLToPath } from "node:url";
 import pkg from "./package.json";
 import sdkReactPkg from "../../sdks/typescript/react/package.json";
-import { accountBoundaryVitePlugin } from "./scripts/account-boundary-vite";
 
 const commitHash = resolveCommitHash(process.env.CHALK_COMMIT_SHA?.trim() || process.env.GITHUB_SHA?.trim());
 const buildTime = new Date().toISOString();
@@ -71,7 +70,6 @@ const config = defineConfig({
     tsconfigPaths: true,
   },
   plugins: [
-    accountBoundaryVitePlugin(localWebOrigin),
     tailwindcss(),
     tanstackStart({
       router: {
