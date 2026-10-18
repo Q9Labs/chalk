@@ -19,3 +19,12 @@ The harness installs `setMeasurementRegistry` before Chalk mounts. SDK refs supp
 Append `dump=http://127.0.0.1:9876/dump&ids=frame.screen,frame.dock,dock.microphone` to upload a dump to the local collector. Only HTTP loopback hosts are accepted. iOS reaches an M4-local endpoint (or an SSH reverse tunnel); Android uses an adb reverse relay. No production endpoint is accepted.
 
 `apps/mobile/scripts/capture-states.py` copies the exact lane source to its own M4 directory, rebuilds SDK JavaScript, leases a device slot, and starts Metro on the supplied port. `--client-cache` requires a matching native-input fingerprint and reuses the shared installed client without a native rebuild. Task-owned processes stop on success, failure, owner loss and the 40-minute session deadline. Persistent pooled devices shut down after a check and keep their installed client. Do not remove shared clients or pooled devices while other lanes need them.
+
+The three iPhone slots (`ios-1`, `ios-2`, `ios-3`) have captured the SDK at 393×852 points and 3×. Use a different Metro port per slot (8181–8183). A busy slot fails immediately. Explicit slots require a shared cache, preventing accidental native rebuilds. The Android slot (`android-1`, Metro 8184, emulator 5582) reports 412×915 at 3×, but parallel-load captures encountered System UI ANRs; it is not validated for unattended parallel proof.
+
+```sh
+python3 apps/mobile/scripts/capture-states.py --worktree /absolute/lane-worktree --name unique-lane-proof --platform ios --slot ios-1 --port 8181 --client-cache /absolute/m4-shared-cache --states D1,P3,A2,V1 'D1,P3,A2,C1,V1?sheet=more' --output /absolute/local-artifacts
+python3 apps/mobile/scripts/capture-states.py --name unique-lane-proof --cleanup
+```
+
+Each output includes native screenshots and per-state measurement JSON. Pass `--flow /absolute/maestro.yaml --maestro /absolute/m4-maestro` to record a journey. Reusing a capture name clears its old remote captures before starting, so a failed rerun cannot silently return an earlier recording.
