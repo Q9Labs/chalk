@@ -536,7 +536,6 @@ wishlist:
     theory: theory.md#product-memory
     code:
       - sdks/typescript/react/src/components/chalk/Chalk.tsx
-      - sdks/typescript/react/src/components/transcript-panel/TranscriptPanel.tsx
   - id: security_and_compliance.chat_retention
     title: Tenant-set chat retention
     area: security_and_compliance
