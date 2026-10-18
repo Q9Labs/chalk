@@ -6,8 +6,7 @@ import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
 // Run after building the client, from a workspace install including apps/mobile.
-const root = fileURLToPath(new URL("../../../../", import.meta.url));
-const mobile = path.join(root, "apps/mobile");
+const mobile = fileURLToPath(new URL("../", import.meta.url));
 const appRequire = createRequire(path.join(mobile, "package.json"));
 const expoRequire = createRequire(appRequire.resolve("expo/package.json"));
 const Metro = expoRequire("metro");
