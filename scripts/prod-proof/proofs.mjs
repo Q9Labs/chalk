@@ -1,26 +1,23 @@
+import { contactSheetFont } from "./contact-sheet.mjs";
+import { recordingRejoinWindow } from "./recording-rejoin.mjs";
 import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { generateVoice } from "./fixture.mjs";
 import { launchGuests, stats, limitCamera, restoreCamera, proveLayers } from "./media.mjs";
-import { check, command, request, save, waitFor } from "./runtime.mjs";
+import { check, command, request, save, saveOwnership, waitFor } from "./runtime.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
 
 export async function prepareIntegration(run, webhooks) {
+  run.signal.throwIfAborted();
   const key = await run.ownerRequest("POST", `${run.tenantPath}/api-keys`, {
-    name: "Production proof",
+    name: run.label,
     scopes: ["spaces:read", "spaces:write", "episodes:read", "episodes:write", "recordings:read", "transcriptions:read", "transcriptions:write"],
-    expires_at: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+    expires_at: new Date(Date.now() + 55 * 60 * 1000).toISOString(),
   });
+  run.ownership = { keyId: key.api_key.id };
   run.apiKey = key.secret;
+  await saveOwnership(run);
   run.apiRequest = (method, path, body) => request(run.config, method, path, body, { Authorization: `Bearer ${run.apiKey}` }, {}, run.signal);
-  run.resources.push({
-    kind: "api-key",
-    dispose: async () => {
-      await run.ownerRequest("DELETE", `${run.tenantPath}/api-keys/${key.api_key.id}`, undefined);
-      const response = await fetch(new URL(`${run.tenantPath}/spaces`, run.config.api_url), { headers: { Authorization: `Bearer ${run.apiKey}` }, signal: AbortSignal.timeout(30_000) });
-      check(response.status === 401, "Revoked proof key was still accepted");
-    },
-  });
   const denied = await fetch(new URL(run.tenantPath, run.config.api_url), {
     headers: { Authorization: `Bearer ${run.apiKey}` },
     signal: AbortSignal.timeout(30_000),
@@ -33,8 +30,9 @@ export async function prepareIntegration(run, webhooks) {
 }
 async function createSpace(run) {
   const space = await run.apiRequest("POST", `${run.tenantPath}/spaces`, {
-    name: "Production proof",
+    name: run.label,
     slug: `prod-proof-${randomUUID()}`,
+    metadata: { proof_run_id: run.runId },
     media_plane: "cf_sfu",
     recording_policy: "manual",
     transcription_policy: "on_demand",
@@ -42,13 +40,6 @@ async function createSpace(run) {
     maximum_episode_duration_seconds: 1800,
     linger_window_seconds: 60,
     admission_policy: { mode: "open" },
-  });
-  run.resources.push({
-    kind: "space",
-    dispose: async () => {
-      const archived = await run.ownerRequest("POST", `${run.tenantPath}/spaces/${space.id}/archive`, {});
-      check(archived.archived, "Proof Space was not archived");
-    },
   });
   check(space.recording_policy === "manual", "Space Recording policy was not applied");
   check(space.transcription_policy === "on_demand", "Space Transcription policy was not applied");
@@ -81,9 +72,8 @@ export function episodeEnd(run, path) {
   };
 }
 async function createEpisode(run, space) {
-  const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, {});
+  const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
   const ending = episodeEnd(run, `${run.tenantPath}/spaces/${space.id}/episodes/${episode.id}`);
-  run.resources.push({ kind: "episode", dispose: ending.end });
   await save(`${run.directory}/episode.json`, episode);
   const policy = episode.config_snapshot.artifact_policy;
   check(policy.transcription.mode === "on_demand", "Episode effective transcription policy is not on_demand");
@@ -104,7 +94,7 @@ async function startCapture(run, pages) {
       check(current.status !== "failed", "Capture failed before readiness");
       return current.recordingId === run.recordingId && current.status === "recording";
     },
-    900_000,
+    180_000,
     3000,
     run.signal,
   );
@@ -207,7 +197,7 @@ async function finalizedSource(run) {
       check(!["failed", "expired"].includes(value.source.status), `Recording source ${value.source.status}`);
       return value.source.status === "available" ? value : false;
     },
-    900_000,
+    180_000,
     5000,
     run.signal,
   );
@@ -220,32 +210,30 @@ function cameraResult(share, baselineError, forceLayerSwitch) {
   if (error) result.error = error;
   return result;
 }
-export async function recordProof(run, receiver, cameraShare, forceLayerSwitch) {
+async function shortRecordingWindow(run, guests, rejoin) {
+  if (rejoin) await recordingRejoinWindow(run, guests);
+  else await run.wait(5000);
+}
+export async function recordProof(run, receiver, cameraShare, forceLayerSwitch, rejoin = false) {
   const space = await createSpace(run);
   const { episode, end, useSDK } = await createEpisode(run, space);
   run.episodeId = episode.id;
   console.log("Joining two synthetic camera/voice guests");
-  const pages = await launchGuests(run, space, episode, await generateVoice(run.directory, run.signal), receiver.origin);
+  const guests = await launchGuests(run, space, episode, rejoin ? null : await generateVoice(run.directory, run.signal), receiver.origin, rejoin);
+  const { pages } = guests;
   useSDK(pages[0]);
   await startCapture(run, pages);
   const sample = statsSampler(run, pages);
   const baselineError = await baselineLayers(run, sample);
   let share = { seconds: 0 };
   if (cameraShare) share = await cameraShareWindow(run, pages, sample, receiver.origin, forceLayerSwitch);
-  else await run.wait(5000);
+  else await shortRecordingWindow(run, guests, rejoin);
   // End the active Episode once; its lifecycle stops Capture and finalizes the Recording.
   console.log("Ending own Episode and its active Recording");
   await end();
   const recording = await finalizedSource(run);
   for (const page of pages) await page.context().close();
   return { recording, camera: cameraResult(share, baselineError, forceLayerSwitch) };
-}
-export function contactSheetFont(fonts, platform = process.platform) {
-  // macOS ImageMagick can have no registered fonts despite system fonts existing.
-  if (platform === "darwin" && !fonts.trim()) return "/System/Library/Fonts/Supplemental/Arial.ttf";
-  const font = fonts.match(/^\s*Font:\s*(\S.*)$/m)?.[1].trim();
-  check(font, "ImageMagick has no installed font for the contact sheet");
-  return font;
 }
 export async function exportProof(run, execute = command) {
   const started = Date.now();
@@ -259,7 +247,7 @@ export async function exportProof(run, execute = command) {
       check(!["failed", "unavailable"].includes(value.export.status), `Export ${value.export.status}: ${value.export.failure_code ?? "unknown"}`);
       return value.export.status === "ready";
     },
-    1200_000,
+    240_000,
     5000,
     run.signal,
   );
@@ -314,13 +302,12 @@ export async function transcriptProof(run) {
       check(!["failed", "expired", "none"].includes(status), `Transcript audio preparation ${status}`);
       return status === "ready";
     },
-    1200_000,
+    240_000,
     5000,
     run.signal,
   );
   const result = await run.apiRequest("POST", `${run.tenantPath}/recordings/${run.recordingId}/transcripts`, { idempotency_key: randomUUID(), language: "en" });
   const transcript = result.transcript;
-  run.resources.push({ kind: "transcript", dispose: () => run.ownerRequest("DELETE", `${run.tenantPath}/transcripts/${transcript.id}`) });
   console.log("Transcript requested");
   await waitFor(
     "Transcript completion",
@@ -330,7 +317,7 @@ export async function transcriptProof(run) {
       check(!["failed", "deleted", "expired"].includes(state.status), `Transcript ${state.status}`);
       return state.status === "complete";
     },
-    1200_000,
+    240_000,
     5000,
     run.signal,
   );

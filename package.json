@@ -67,7 +67,7 @@
     "package:publint": "pnpm --filter './packages/*' --filter './sdks/typescript/*' exec publint",
     "package:attw": "pnpm --filter './packages/*' --filter './sdks/typescript/*' exec attw --pack --ignore-rules cjs-resolves-to-esm internal-resolution-error --exclude-entrypoints './styles.css' './src/styles.css' './dist/styles/*' './styles/*'",
     "package:release": "node scripts/npm-release.mjs",
-    "test": "GOMAXPROCS=1 VITEST_MAX_WORKERS=1 turbo test",
+    "test": "node --test scripts/prod-proof/*.test.mjs && GOMAXPROCS=1 VITEST_MAX_WORKERS=1 turbo test",
     "lint": "turbo lint",
     "check-types": "turbo check-types",
     "clean": "turbo clean && rm -rf node_modules",

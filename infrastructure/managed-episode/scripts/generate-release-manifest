@@ -18,13 +18,14 @@ stable_manifest=""
 affected_components_arg=""
 output=""
 allow_dirty=false
+reuse_envelope=false
 architectures_json='["linux/amd64","linux/arm64"]'
 architectures_set=false
 source_revision="$(git -C "${repo_root}" rev-parse HEAD)"
 release_id_override=""
 
 usage() {
-  echo "usage: generate-release-manifest --output <file> [--api-image <digest-ref>] [--sync-image <digest-ref>] [--stable-manifest <file>] [--affected-components api|sync|api,sync|none] [--architectures linux/arm64|linux/amd64,linux/arm64] [--source-revision <sha>] [--release-id <managed-episode-...>] [--allow-dirty]" >&2
+  echo "usage: generate-release-manifest --output <file> [--api-image <digest-ref>] [--sync-image <digest-ref>] [--stable-manifest <file>] [--affected-components api|sync|api,sync|none] [--architectures linux/arm64|linux/amd64,linux/arm64] [--source-revision <sha>] [--release-id <managed-episode-...>] [--reuse-envelope] [--allow-dirty]" >&2
 }
 
 fail() {
@@ -87,6 +88,10 @@ while (($# > 0)); do
       release_id_override="${2:-}"
       shift 2
       ;;
+    --reuse-envelope)
+      reuse_envelope=true
+      shift
+      ;;
     --allow-dirty)
       allow_dirty=true
       shift
@@ -98,6 +103,9 @@ while (($# > 0)); do
   esac
 done
 
+if [[ "$reuse_envelope" == true ]]; then
+  [[ -n "$stable_manifest" && "$affected_components_arg" == none ]] || fail "--reuse-envelope requires --stable-manifest and --affected-components none"
+fi
 command -v jq >/dev/null || fail "jq is required"
 [[ -n "${output}" ]] || { usage; exit 2; }
 [[ "${source_revision}" =~ ^[0-9a-f]{40}$ ]] || fail "source revision must be a 40-character lowercase Git SHA"
@@ -264,6 +272,10 @@ sha256_file() {
   fi
 }
 
+if [[ "$reuse_envelope" == true ]]; then
+  artifacts_json="$(jq -c .runtime_artifacts "$stable_manifest")"
+  source_tree_state="$(jq -er .source_tree_state "$stable_manifest")"
+else
 artifacts_json="$({
   find "${managed_root}" -type f \
     ! -path '*/generated/*' \
@@ -274,6 +286,7 @@ artifacts_json="$({
   relative="${file#"${managed_root}/"}"
   jq -cn --arg path "${relative}" --arg digest "$(sha256_file "${file}")" '{key:$path,value:$digest}'
 done | jq -s 'from_entries')"
+fi
 
 generated_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -325,6 +338,9 @@ if [[ -n "${stable_manifest}" ]]; then
   fi
   database_compatibility_json="{ \"engine\": \"postgresql\", \"major\": 18, \"minimum_migration\": ${current_migration_version}, \"maximum_migration\": null }"
   protocol_compatibility_json="$(jq -c '.protocol_compatibility' "${stable_manifest}")"
+  if [[ "$reuse_envelope" == true ]]; then
+    database_compatibility_json="$(jq -c '.database_compatibility' "$stable_manifest")"
+  fi
 fi
 
 mkdir -p "$(dirname "${output}")"
