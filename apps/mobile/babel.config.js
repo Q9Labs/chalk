@@ -2,6 +2,8 @@ module.exports = function (api) {
   api.cache(true);
   return {
     presets: ["babel-preset-expo"],
+    // Effect Exit prototypes use accessors after spreads; loose Object.assign evaluates them early.
+    assumptions: { setSpreadProperties: false },
     plugins: [transformEffectImportMeta],
   };
 };
