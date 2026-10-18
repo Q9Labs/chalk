@@ -83,7 +83,6 @@ function PerformanceCall({ count, share = false, board = false }: { readonly cou
           key={generation}
           theme={{ colorScheme: "dark" }}
           client={client}
-          entrance={false}
           displayName={SELF_NAME}
           spaceName={SPACE_NAME}
           layout={count === 24 ? "grid" : "focus"}

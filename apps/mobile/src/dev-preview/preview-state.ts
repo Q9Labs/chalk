@@ -169,8 +169,6 @@ export function normalizePreviewSearch(source: PreviewSearchLike = {}): PreviewS
   };
 }
 
-export const parsePreviewSearch = normalizePreviewSearch;
-
 function differsFromDefault(key: keyof PreviewSearch, value: PreviewSearch[keyof PreviewSearch], search: PreviewSearch): boolean {
   if (key === "state") return value !== defaultState(search.view);
   return value !== DEFAULT_PREVIEW_SEARCH[key];
@@ -200,13 +198,4 @@ export function patchPreviewSearch(current: PreviewSearchLike, updates: PreviewS
     merged[key] = nextValue === undefined ? currentValue : nextValue;
   }
   return normalizePreviewSearch(merged);
-}
-
-/** Return a deterministic `/sdk-preview` URL for a complete or partial search. */
-export function createPreviewHref(search: PreviewSearchLike = {}, base = "/sdk-preview"): string {
-  const hashIndex = base.indexOf("#");
-  const hash = hashIndex >= 0 ? base.slice(hashIndex) : "";
-  const path = (hashIndex >= 0 ? base.slice(0, hashIndex) : base).split("?", 1)[0] ?? "/sdk-preview";
-  const query = serializePreviewSearch(search);
-  return `${path || "/sdk-preview"}${query ? `?${query}` : ""}${hash}`;
 }

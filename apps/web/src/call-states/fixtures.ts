@@ -14,10 +14,9 @@ export type Person = {
 
 const BACKGROUNDS = ["#4d5d73", "#5c6650", "#6b5b4f", "#64576b", "#49645d", "#665d42", "#315f72", "#6d5158"];
 
-export const SELF_ID = "you";
+const SELF_ID = "you";
 export const SELF_NAME = "Hasan";
 export const SPACE_NAME = "Q9 team";
-export const INVITE_LINK = "https://chalkmeet.com/space/q9-team#spaceInviteToken=example";
 
 export const PEOPLE: readonly Person[] = [
   { id: "nora", name: "Nora Patel" },
@@ -34,7 +33,7 @@ export const PEOPLE: readonly Person[] = [
   { id: "omar", name: "Omar Siddiqui" },
 ];
 
-export const GUEST: readonly Capability[] = ["publishAudio", "publishVideo", "publishScreen", "subscribe", "raiseHand", "renameSelf", "sendChat", "sendReaction", "drawWhiteboard", "manageWhiteboard"];
+const GUEST: readonly Capability[] = ["publishAudio", "publishVideo", "publishScreen", "subscribe", "raiseHand", "renameSelf", "sendChat", "sendReaction", "drawWhiteboard", "manageWhiteboard"];
 export const HOST: readonly Capability[] = [...GUEST, "manageAdmission", "assignRoles", "muteOthers", "stopVideoOthers", "stopScreenOthers", "requestMediaOthers", "removeParticipant", "manageRecording", "endEpisode"];
 
 export type LiveOptions = {
