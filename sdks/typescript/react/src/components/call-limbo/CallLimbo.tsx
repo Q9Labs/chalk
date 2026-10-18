@@ -57,7 +57,7 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
     if (blocking) layerRef.current.focus({ preventScroll: true });
     return () => {
       for (const { element, inert, filter } of siblings) {
-        element.inert = inert;
+        if (blocking) element.inert = inert;
         element.style.filter = filter;
       }
       if (blocking && previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
