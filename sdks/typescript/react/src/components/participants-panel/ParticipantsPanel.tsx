@@ -1,3 +1,4 @@
+import { Popover } from "@base-ui/react/popover";
 import React, { useMemo, useState } from "react";
 import { ChalkButton, ChalkPopover } from "../chalk-ui";
 import { CallCardStyles } from "../call-card/CallCardStyles";
@@ -98,6 +99,7 @@ export const ParticipantsPanelSurface = React.memo(
     const [error, setError] = useState<string | null>(null);
     const filtered = participants.filter((person) => person.displayName.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
     const raised = participants.filter((person) => person.isHandRaised);
+    const unmutedCount = participants.filter((person) => !person.isLocal && !person.isMuted).length;
     const muteEveryone = async () => {
       if (!onMuteEveryone || muting) return;
       setMuting(true);
@@ -118,7 +120,7 @@ export const ParticipantsPanelSurface = React.memo(
             <ChalkPopover
               label="Mute everyone"
               trigger={
-                <button type="button" className="call-host-button" disabled={muting || !participants.some((person) => !person.isLocal && !person.isMuted)}>
+                <button type="button" className="call-host-button" disabled={muting || unmutedCount === 0}>
                   <MicrophoneOff01Icon aria-hidden="true" />
                   <span>Mute everyone</span>
                 </button>
@@ -126,10 +128,13 @@ export const ParticipantsPanelSurface = React.memo(
             >
               <div className="call-mute-confirm">
                 <b>Mute everyone?</b>
-                <p>Everyone else’s microphone will turn off. They can unmute themselves.</p>
-                <ChalkButton disabled={muting} onClick={() => void muteEveryone()}>
-                  {muting ? "Muting…" : "Mute everyone"}
-                </ChalkButton>
+                <p>{unmutedCount} {unmutedCount === 1 ? "person" : "people"} will be muted. They can unmute themselves.</p>
+                <div className="call-mute-actions">
+                  <Popover.Close render={<ChalkButton disabled={muting} />}>Cancel</Popover.Close>
+                  <Popover.Close render={<ChalkButton variant="solid" disabled={muting} onClick={() => void muteEveryone()} />}>
+                    {muting ? "Muting…" : "Mute everyone"}
+                  </Popover.Close>
+                </div>
               </div>
             </ChalkPopover>
           </div>

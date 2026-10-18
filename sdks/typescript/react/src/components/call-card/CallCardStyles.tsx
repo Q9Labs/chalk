@@ -132,6 +132,16 @@ const styles = `.call-card-tabs {
   color: var(--chalk-soft-text);
   margin: 4px 0 10px;
 }
+.call-mute-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 4px 6px 0;
+}
+.call-mute-actions .chalk-pill-button {
+  height: 32px;
+  padding: 0 12px;
+}
 .call-people-section {
   font-size: 12px;
   font-weight: 600;

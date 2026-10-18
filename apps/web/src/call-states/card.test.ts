@@ -155,6 +155,31 @@ it(
 );
 
 it(
+  "cancels bulk mute without changing microphones and confirms the supported action",
+  async () =>
+    journey(async (page) => {
+      await openPeople(page);
+      const people = page.getByRole("region", { name: "People", exact: true });
+      const mute = people.getByRole("button", { name: "Mute everyone", exact: true });
+      const muted = people.getByRole("img", { name: "Microphone off", exact: true });
+      expect(await muted.count()).toBe(1);
+      await mute.click();
+      const confirmation = page.getByRole("dialog", { name: "Mute everyone", exact: true });
+      await confirmation.waitFor();
+      await capture(page, "laptop-mute-confirm-dark");
+      await confirmation.getByRole("button", { name: "Cancel", exact: true }).click();
+      await confirmation.waitFor({ state: "hidden" });
+      expect(await muted.count()).toBe(1);
+      await mute.click();
+      await confirmation.getByRole("button", { name: "Mute everyone", exact: true }).click();
+      await confirmation.waitFor({ state: "hidden" });
+      await page.waitForFunction(() => document.querySelectorAll('.call-people [aria-label="Microphone off"]').length === 3);
+      expect(await mute.isDisabled()).toBe(true);
+    }),
+  30_000,
+);
+
+it(
   "keeps phone focus inside its sheet and captures both themes",
   async () =>
     journey(async (page) => {
