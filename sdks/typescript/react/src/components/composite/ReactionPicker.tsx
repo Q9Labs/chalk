@@ -10,6 +10,8 @@ import { type ParticipantGradientPreference } from "../../utils/colorGenerator";
 
 export interface ReactionPickerProps {
   isOpen: boolean;
+  isHandRaised?: boolean;
+  onToggleHandRaise?: () => void;
   onClose: () => void;
   onSelect: (emoji: string) => void;
   recentReactions?: string[];
@@ -21,7 +23,7 @@ export interface ReactionPickerProps {
   size?: "default" | "compact" | "mini";
 }
 
-export const ReactionPicker = React.memo(({ isOpen, onClose, onSelect, recentReactions = [], allowedReactions, position = "top", participantColorSeed, participantGradientPreference, className, size = "default" }: ReactionPickerProps) => {
+export const ReactionPicker = React.memo(({ isHandRaised, onToggleHandRaise, isOpen, onClose, onSelect, recentReactions = [], allowedReactions, position = "top", participantColorSeed, participantGradientPreference, className, size = "default" }: ReactionPickerProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
   const { trigger } = useHaptics();
   const [activeCategory, setActiveCategory] = useState<ReactionCategoryKey>("smileys");
@@ -83,6 +85,8 @@ export const ReactionPicker = React.memo(({ isOpen, onClose, onSelect, recentRea
   if (allowedReactions) {
     return (
       <ReactionTray
+        isHandRaised={isHandRaised}
+        onToggleHandRaise={onToggleHandRaise}
         reactions={allowedReactions}
         position={position}
         className={className}

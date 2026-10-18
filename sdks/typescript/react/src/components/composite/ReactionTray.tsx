@@ -1,10 +1,14 @@
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
+import { HandIcon } from "../../utils/icons";
+import "../control-bar/shell.css";
 import { useHaptics } from "../../internal/useHaptics";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
 
 export interface ReactionTrayProps {
+  readonly isHandRaised?: boolean;
+  readonly onToggleHandRaise?: () => void;
   readonly reactions: readonly string[];
   readonly onSelect: (emoji: string) => void;
   readonly onClose: () => void;
@@ -16,13 +20,19 @@ export interface ReactionTrayProps {
  * One row of large emoji buttons that pops up over the control bar. Arrow keys move between
  * emojis, Home/End jump, Escape and clicking outside close. Focus lands on the first emoji.
  */
-export function ReactionTray({ reactions, onSelect, onClose, position = "top", className }: ReactionTrayProps): React.JSX.Element {
+export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSelect, onClose, position = "top", className }: ReactionTrayProps): React.JSX.Element {
+  const [more, setMore] = useState(false);
+  const returnFocus = useRef<Element | null>(null);
   const prefersReducedMotion = usePrefersReducedMotion();
   const { trigger } = useHaptics();
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    returnFocus.current = document.activeElement;
     listRef.current?.querySelector("button")?.focus();
+    return () => {
+      if (returnFocus.current instanceof HTMLElement && returnFocus.current.isConnected) returnFocus.current.focus();
+    };
   }, []);
 
   useEffect(() => {
@@ -52,18 +62,8 @@ export function ReactionTray({ reactions, onSelect, onClose, position = "top", c
     buttons[target]?.focus();
   };
 
-  const buttons = reactions.map((emoji) => (
-    <button
-      key={emoji}
-      type="button"
-      onClick={() => handleSelect(emoji)}
-      className={cn(
-        "grid h-11 w-11 shrink-0 place-items-center rounded-full text-[26px] leading-none transition-transform duration-150 ease-out focus-visible:outline-none active:scale-95",
-        "hover:bg-[var(--chalk-app-control-hover)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]",
-        !prefersReducedMotion && "hover:-translate-y-1 hover:scale-125 focus-visible:-translate-y-1 focus-visible:scale-125",
-      )}
-      aria-label={`React with ${emoji}`}
-    >
+  const buttons = (more ? reactions : reactions.slice(0, 6)).map((emoji) => (
+    <button key={emoji} type="button" onClick={() => handleSelect(emoji)} className="chalk-shell-emoji" aria-label={`React with ${emoji}`}>
       <span aria-hidden="true">{emoji}</span>
     </button>
   ));
@@ -74,14 +74,19 @@ export function ReactionTray({ reactions, onSelect, onClose, position = "top", c
     <>
       <div className="fixed inset-0 z-20" onClick={onClose} aria-hidden="true" />
       {
-        <div
-          ref={listRef}
-          className={cn(trayClassName, "flex items-center gap-0.5 rounded-full bg-[var(--chalk-app-panel)] p-1.5 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-control)] ring-1 ring-[var(--chalk-app-line)]")}
-          role="toolbar"
-          aria-label="Reactions"
-          onKeyDown={handleKeyDown}
-        >
+        <div ref={listRef} className={cn(trayClassName, "chalk-shell-reactions", more && "chalk-shell-reactions-expanded")} role="toolbar" aria-label="Reactions" onKeyDown={handleKeyDown}>
+          {onToggleHandRaise ? (
+            <button type="button" className="chalk-shell-raise" aria-pressed={isHandRaised} onClick={onToggleHandRaise}>
+              <HandIcon />
+              {isHandRaised ? "Lower hand" : "Raise hand"}
+            </button>
+          ) : null}
           {buttons}
+          {!more && reactions.length > 6 ? (
+            <button type="button" className="chalk-shell-emoji" aria-label="More emoji" onClick={() => setMore(true)}>
+              …
+            </button>
+          ) : null}
         </div>
       }
     </>

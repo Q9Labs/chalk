@@ -25,11 +25,11 @@ describe("compact screen sharing", () => {
       );
       expect(container.querySelector('[data-tour="controls-screenshare"]')).toBeNull();
       await act(async () => client.setSnapshot(createSnapshot(["publishScreen"])));
-      const start = container.querySelector('button[aria-label="Share Screen"]');
+      const start = container.querySelector('button[aria-label="Share screen"]');
       if (!(start instanceof HTMLButtonElement)) throw new Error("Compact screen-share control is missing");
       await act(async () => start.click());
       expect(onCommand).toHaveBeenCalledWith({ type: "setScreenShareEnabled", enabled: true }, expect.anything());
-      const stop = container.querySelector('button[aria-label="Stop Share"]');
+      const stop = container.querySelector('button[aria-label="Stop sharing"]');
       if (!(stop instanceof HTMLButtonElement)) throw new Error("Compact stop-sharing control is missing");
       await act(async () => stop.click());
       expect(onCommand).toHaveBeenCalledWith({ type: "setScreenShareEnabled", enabled: false }, expect.anything());

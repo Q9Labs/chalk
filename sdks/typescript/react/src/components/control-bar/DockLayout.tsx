@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ChalkIconButton, ChalkSegmentedControl, ChalkSheet } from "../chalk-ui";
 
-export function DockLayout({ layout, onLayoutChange }: { readonly layout: "focus" | "grid"; readonly onLayoutChange: (layout: "focus" | "grid") => void }) {
+export function DockLayout({ layout, onLayoutChange, children, microphone, camera }: { readonly children?: ReactNode; readonly microphone?: ReactNode; readonly camera?: ReactNode; readonly layout: "focus" | "grid"; readonly onLayoutChange: (layout: "focus" | "grid") => void }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -12,6 +12,7 @@ export function DockLayout({ layout, onLayoutChange }: { readonly layout: "focus
       </ChalkIconButton>
       <ChalkSheet title="More options" open={open} onOpenChange={setOpen}>
         <div data-part="dock-layout-group" className="chalk-sheet-group">
+          {children}
           <div data-part="dock-layout-row" className="chalk-sheet-row">
             <svg data-part="dock-layout-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <rect x="3" y="3" width="7.5" height="7.5" rx="1.5" />
@@ -31,6 +32,12 @@ export function DockLayout({ layout, onLayoutChange }: { readonly layout: "focus
             />
           </div>
         </div>
+        {microphone || camera ? (
+          <div className="chalk-shell-more-devices">
+            {microphone}
+            {camera}
+          </div>
+        ) : null}
       </ChalkSheet>
     </>
   );

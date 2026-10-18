@@ -56,6 +56,8 @@ export type ChalkProps = SpaceIntegration &
     readonly displayName?: string;
     readonly features?: ChalkFeatures;
     readonly theme?: ChalkTheme;
+    readonly shareUrl?: string;
+    readonly onReportProblem?: import("../space-header/SpaceHeader").SpaceHeaderProps["onReportProblem"];
     readonly onColorSchemeChange?: (colorScheme: ChalkColorScheme) => void;
     readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
     readonly spaceName?: string;
@@ -245,6 +247,8 @@ function SpaceSurface(
   return (
     <SpaceView
       colorScheme={props.resolvedColorScheme}
+      shareUrl={props.shareUrl}
+      onReportProblem={props.onReportProblem}
       onColorSchemeChange={props.onColorSchemeChange}
       spaceName={props.spaceName}
       pickChatFiles={props.pickChatFiles}

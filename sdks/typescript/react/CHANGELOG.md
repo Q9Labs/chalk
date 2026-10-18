@@ -2,6 +2,9 @@
 
 ## 5.0.0
 
+- Add call-link QR sharing, diagnostics copy, keyboard shortcuts, and optional `Chalk`/`SpaceView` `shareUrl` and `onReportProblem` callbacks. Rebuild the call dock with device and screen-source split controls, tab-audio capture, and phone More actions.
+- Add optional diagnostics, people, connection-warning and shortcut inputs to `SpaceHeader`; `ChalkPopover.tooltip` composes a tooltip with its trigger. Call reaction pickers accept raised-hand state and its action.
+
 - Publish and play shared tab audio separately from microphones, with share-audio state and coupled screen-share lifecycle.
 
 - Keep layout changes interactive when `layout` is supplied without `onLayoutChange`; the prop initializes local state in that case. A paired prop and handler remain controlled. Add Spotlight/Grid to the phone dock's More sheet.

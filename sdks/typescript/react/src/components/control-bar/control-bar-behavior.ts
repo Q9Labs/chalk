@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 
-import { useCan, useChat, useMedia, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
+import type { ScreenShareOptions } from "@q9labsai/chalk-client";
+import { useCan, useChat, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 
 export interface MediaDevice {
@@ -19,6 +20,20 @@ export interface ControlBarSurfaceProps {
   density?: "comfortable" | "compact";
   buttons?: ControlBarButtonName[];
 
+  microphoneTrack?: MediaStreamTrack | null;
+  cameraTrack?: MediaStreamTrack | null;
+  microphoneWarning?: boolean;
+  cameraWarning?: boolean;
+  speakingWhileMuted?: boolean;
+  noiseSuppression?: boolean;
+  onNoiseSuppressionChange?: (enabled: boolean) => void;
+  mirrored?: boolean;
+  onMirrorChange?: (mirrored: boolean) => void;
+  onTestSpeaker?: () => void;
+  onStartScreenShare?: (options: ScreenShareOptions) => void;
+  onCopyError?: () => void;
+  onFullscreenError?: () => void;
+  knockCount?: number;
   isMuted?: boolean;
   microphonePending?: boolean;
   cameraPending?: boolean;
@@ -202,6 +217,7 @@ interface ConnectedControlBarBehavior {
 export function useConnectedControlBarBehavior(props: ControlBarProps): ConnectedControlBarBehavior {
   const client = useSpaceClient();
   const self = useSelf();
+  const participants = useParticipants();
   const media = useMedia();
   const chat = useChat();
   const recording = useRecording();
@@ -216,6 +232,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const recordingStatus = recording.current?.status;
   const isRecording = recordingStatus === "recording" || recordingStatus === "stopping";
   const isRecordingPending = recordingStatus === "starting" || recordingStatus === "stopping";
+  const [noiseSuppression, setNoiseSuppression] = useState(true);
   const [commandError, setCommandError] = useState<string | null>(null);
 
   const run = useCallback(
@@ -258,6 +275,23 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const surfaceProps: ControlBarSurfaceProps = {
     ...props,
     buttons,
+    microphoneTrack: media.local.microphone.track,
+    cameraTrack: media.local.camera.track,
+    microphoneWarning: media.local.microphone.state === "failed" || media.local.microphone.state === "unavailable",
+    cameraWarning: media.local.camera.state === "failed" || media.local.camera.state === "unavailable",
+    noiseSuppression,
+    onNoiseSuppressionChange: media.local.microphone.track
+      ? (enabled) =>
+          void run(async () => {
+            await media.local.microphone.track?.applyConstraints({ noiseSuppression: enabled });
+            setNoiseSuppression(enabled);
+          })
+      : undefined,
+    onStartScreenShare: (options) =>
+      void run(async () => {
+        if (screenSharing) await client.media.setScreenShareEnabled(false);
+        await client.media.setScreenShareEnabled(true, options);
+      }),
     isMuted: !microphoneEnabled,
     microphonePending: media.local.microphone.state === "requesting",
     cameraPending: media.local.camera.state === "requesting",
@@ -269,12 +303,41 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     isParticipantsOpen: props.activePanel === "participants",
     isHandRaised: self.handRaised,
     unreadChatCount: chat.unreadCount,
+    knockCount: self.can("manageAdmission") ? participants.admissionQueue.length : 0,
     audioInputDevices,
     audioOutputDevices,
     videoInputDevices,
     selectedAudioInput: media.selection.microphone ?? undefined,
     selectedAudioOutput: media.selection.speaker ?? undefined,
     selectedVideoInput: media.selection.camera ?? undefined,
+    onTestSpeaker: () =>
+      void run(async () => {
+        const context = new AudioContext();
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        const output = context.createMediaStreamDestination();
+        const audio = new Audio();
+        try {
+          if (media.selection.speaker && audio.setSinkId) await audio.setSinkId(media.selection.speaker);
+          audio.srcObject = output.stream;
+          oscillator.connect(gain).connect(output);
+          gain.gain.value = 0.15;
+          oscillator.frequency.value = 440;
+          oscillator.start();
+          await audio.play();
+          await new Promise<void>((resolve) => {
+            oscillator.onended = () => resolve();
+            oscillator.stop(context.currentTime + 0.4);
+          });
+        } finally {
+          audio.pause();
+          audio.srcObject = null;
+          oscillator.disconnect();
+          gain.disconnect();
+          output.stream.getTracks().forEach((track) => track.stop());
+          await context.close();
+        }
+      }),
     onToggleMute: () => void run(() => client.media.setMicrophoneEnabled(!microphoneEnabled)),
     onToggleVideo: () => void run(() => client.media.setCameraEnabled(!cameraEnabled)),
     onAudioInputChange: (deviceId) => void run(() => client.media.selectMicrophone(deviceId)),
