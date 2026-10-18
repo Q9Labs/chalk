@@ -15,7 +15,6 @@ type Querier interface {
 	AcceptTranscriptionChunkResult(ctx context.Context, arg AcceptTranscriptionChunkResultParams) (TranscriptionChunkResult, error)
 	AcquireRecordingTranscriptionSourceLease(ctx context.Context, arg AcquireRecordingTranscriptionSourceLeaseParams) (RecordingTranscriptionSource, error)
 	ActivateRecordingFleetBootstrap(ctx context.Context, arg ActivateRecordingFleetBootstrapParams) (RecordingFleetNode, error)
-	AdoptServiceTenant(ctx context.Context, arg AdoptServiceTenantParams) (int64, error)
 	AdvanceRecordingCaptureCommandSequence(ctx context.Context, arg AdvanceRecordingCaptureCommandSequenceParams) (int64, error)
 	ApplyRecordingCaptureConnectionProjection(ctx context.Context, arg ApplyRecordingCaptureConnectionProjectionParams) (RecordingCaptureConnection, error)
 	ArchiveTenantSpace(ctx context.Context, arg ArchiveTenantSpaceParams) (Space, error)

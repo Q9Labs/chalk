@@ -47,6 +47,15 @@ func TestServiceTenantMigrationUpDownUpPreservesExistingTenant(t *testing.T) {
 			t.Fatalf("migration %s changed existing Tenant: %s, %v", step.name, name, err)
 		}
 	}
+	var auditExists bool
+	if err := tx.QueryRow(ctx, `select exists(select 1 from information_schema.tables where table_schema=$1 and table_name='tenant_service_ownership_audit')`, schema).Scan(&auditExists); err != nil || auditExists {
+		t.Fatalf("takeover audit table remains: %v, %v", auditExists, err)
+	}
+	var hasUnique, hasIndex bool
+	if err := tx.QueryRow(ctx, `select exists(select 1 from pg_constraint where connamespace=(select oid from pg_namespace where nspname=$1) and conname='tenants_service_external_id_key'), exists(select 1 from pg_indexes where schemaname=$1 and indexname='tenants_service_created_at_id_idx')`, schema).Scan(&hasUnique, &hasIndex); err != nil || !hasUnique || !hasIndex {
+		t.Fatalf("service pair/index missing: %v/%v, %v", hasUnique, hasIndex, err)
+	}
+
 	var owner, external *string
 	if err := tx.QueryRow(ctx, `select created_by_service_id,external_id from tenants where id=$1`, uuid(id)).Scan(&owner, &external); err != nil || owner != nil || external != nil {
 		t.Fatalf("old Tenant got service ownership: %v, %v, %v", owner, external, err)

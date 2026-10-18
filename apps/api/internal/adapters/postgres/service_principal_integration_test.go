@@ -76,16 +76,9 @@ func TestServicePrincipalHTTPIsolationAndAtomicTenantCreation(t *testing.T) {
 		for _, query := range []string{
 			`delete from api_key_mutation_requests where tenant_id in (select id from tenants where created_by_service_id = any($1::text[]) or id::text = $2)`,
 			`delete from api_keys where tenant_id in (select id from tenants where created_by_service_id = any($1::text[]) or id::text = $2)`,
-			`delete from tenant_service_ownership_audit where service_id = any($1::text[])`,
 			`delete from tenants where created_by_service_id = any($1::text[]) or id::text = $2`,
 		} {
-			// The audit query has only one argument.
-			var err error
-			if strings.Contains(query, "$2") {
-				_, err = pool.Exec(cleanupCtx, query, []string{firstID, secondID}, systemID)
-			} else {
-				_, err = pool.Exec(cleanupCtx, query, []string{firstID, secondID})
-			}
+			_, err := pool.Exec(cleanupCtx, query, []string{firstID, secondID}, systemID)
 			if err != nil {
 				t.Errorf("cleanup service fixtures: %v", err)
 			}
