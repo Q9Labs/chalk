@@ -1,6 +1,5 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
-import { captureFlip } from "../../internal/call-motion";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
 import type { ParticipantGradientPreference } from "../../utils/colorGenerator";
@@ -9,6 +8,7 @@ import { useResizeObserver } from "../chalk-ui/useResizeObserver";
 import { ParticipantTile } from "../participant-tile/ParticipantTile";
 import { DEFAULT_GRID_OPTIONS, DEFAULT_SPOTLIGHT_OPTIONS, EMPTY_GEOMETRY, fitGrid, fitSpotlight, type StageBox, type StageFrame, type StageGeometry, MORE_TILE_ID } from "./stage-layout";
 import { buildStageItems, choosePrimary, gridOrder, isContentItem, stabilizeOrder, type StageItem, type StageLayout } from "./stage-items";
+import { StageMotion } from "./StageMotion";
 import { StageContentTile, StageContentTileSurface } from "./StageContentTile";
 
 export type { StageItem, StageLayout } from "./stage-items";
@@ -59,7 +59,7 @@ const FALLBACK_BOX: StageBox = { width: 960, height: 540 };
 const TILE_FILL: CSSProperties = { width: "100%", height: "100%" };
 
 function frameStyle(frame: StageFrame): CSSProperties {
-  return { position: "absolute", left: frame.x, top: frame.y, width: frame.width, height: frame.height, zIndex: frame.role === "primary" ? 1 : 2 };
+  return { position: "absolute", left: 0, top: 0, transform: `translate(${frame.x}px, ${frame.y}px)`, width: frame.width, height: frame.height, zIndex: frame.role === "primary" ? 1 : 2 };
 }
 
 /**
@@ -197,27 +197,12 @@ export function Stage({
       root.removeEventListener("resize", updateAspect, true);
     };
   }, [ordered]);
-  const playRef = useRef<(() => void) | null>(null);
-  const mountedRef = useRef(new Set<HTMLElement>());
-  useLayoutEffect(() => {
-    const elements = Array.from(tilesRef.current?.querySelectorAll<HTMLElement>(":scope > [data-stage-item]") ?? []);
-    if (animate) {
-      playRef.current?.();
-      if (mountedRef.current.size)
-        for (const element of elements) {
-          if (!mountedRef.current.has(element) && element.getAttribute("aria-hidden") !== "true")
-            element.animate(
-              [
-                { opacity: 0, transform: "scale(.97)" },
-                { opacity: 1, transform: "none" },
-              ],
-              { duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" },
-            );
-        }
-    }
-    mountedRef.current = new Set(elements);
-    playRef.current = captureFlip(elements);
-  });
+  const motionKey =
+    displayed.tiles.map(({ item, frame, leaving }) => `${item.id}:${frame?.x},${frame?.y},${frame?.width},${frame?.height}:${leaving}`).join(";") +
+    geometry.frames
+      .filter((frame) => frame.id === MORE_TILE_ID)
+      .map((frame) => `${frame.x},${frame.y},${frame.width},${frame.height}`)
+      .join(";");
 
   const togglePin = useCallback(
     (item: StageItem) => {
@@ -256,7 +241,7 @@ export function Stage({
   return (
     <div className={cn("relative h-full w-full", className)} data-tour="video-grid">
       <div ref={boxRef} className="relative h-full w-full outline-none" role="group" aria-label={`Stage with ${participantCount} ${participantCount === 1 ? "participant" : "participants"}`} aria-disabled={interactive ? undefined : true} data-testid="stage">
-        <div ref={tilesRef} className="relative h-full w-full">
+        <StageMotion rootRef={tilesRef} motionKey={motionKey} animate={animate}>
           {displayed.tiles.map(({ item, frame, leaving }) => {
             const onPage = Boolean(frame) && !leaving;
             const style = TILE_FILL;
@@ -294,13 +279,6 @@ export function Stage({
             return (
               <div
                 key={item.id}
-                ref={(element) => {
-                  if (element && !leaving) for (const animation of element.getAnimations()) if (animation.id === "stage-exit") animation.cancel();
-                  if (element && leaving && animate && !element.getAnimations().some((animation) => animation.id === "stage-exit")) {
-                    const exit = element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: "ease-out", fill: "forwards" });
-                    exit.id = "stage-exit";
-                  }
-                }}
                 data-stage-item={item.id}
                 data-stage-role={frame?.role}
                 data-pinned={pinned || undefined}
@@ -329,7 +307,7 @@ export function Stage({
                 +{geometry.overflowCount}
               </button>
             ))}
-        </div>
+        </StageMotion>
       </div>
       <ChalkSheet open={overflowOpen} onOpenChange={setOverflowOpen} title="People">
         {ordered
