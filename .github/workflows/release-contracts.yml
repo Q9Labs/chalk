@@ -18,10 +18,11 @@ on:
       - scripts/transcription-dispatcher/**
       - infrastructure/managed-episode/**
       - infrastructure/recorder/**
-      - infrastructure/nightly/transcription/**
+      - infrastructure/nightly/**
       - infrastructure/opentofu/modules/aws-transcription-dispatcher/**
       - infrastructure/opentofu/modules/cloudflare-r2-transcription-lifecycle/**
       - apps/api/**
+      - apps/sync/**
       - apps/recording-renderer/**
       - apps/transcription-dispatcher/**
       - packages/**
