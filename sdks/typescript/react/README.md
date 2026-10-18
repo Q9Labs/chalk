@@ -117,7 +117,7 @@ consume that entrypoint instead of reaching into this package's `src` tree.
 
 ### Screen sharing
 
-`useScreenShare()` returns the local screen state, optional `capture: { surface, label }`, and `setEnabled(enabled, options?)`. For example, `await share.setEnabled(true, { surface: "browser", audio: true })` opens the browser picker with a tab hint. `surface` is only a hint; read `capture.surface` for what was actually chosen. `audio` requests browser capture only; screen publication is currently video-only. `useMedia().screenShare` exposes the same capture metadata.
+`useScreenShare()` returns the local screen state, optional `capture: { surface, label }`, and `setEnabled(enabled, options?)`. For example, `await share.setEnabled(true, { surface: "browser", audio: true })` opens the browser picker with a tab hint. `surface` is only a hint; read `capture.surface` for what was actually chosen. `audio` publishes a separate `screen_audio` track when the browser returns one. `hasAudio` reports local share audio; `useParticipants()` exposes `media.screenShareHasAudio` for remote shares. `AudioOutput` plays it through the selected call speaker, using the existing participant/global volume controls. Recordings exclude shared tab audio. `useMedia().screenShare` exposes the same capture metadata.
 
 ### Message reactions
 

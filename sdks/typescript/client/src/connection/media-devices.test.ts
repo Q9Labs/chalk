@@ -6,12 +6,12 @@ describe("screen capture picker hints", () => {
     const getDisplayMedia = vi.fn<MediaDevices["getDisplayMedia"]>().mockResolvedValue({} as MediaStream);
     const devices = createBrowserMediaDevices({ getDisplayMedia } as MediaDevices);
     await devices.getDisplayMedia(displayMediaConstraints({ surface }));
-    expect(getDisplayMedia).toHaveBeenCalledWith({ video: { displaySurface: surface }, audio: false, selfBrowserSurface: "exclude", surfaceSwitching: "include" });
+    expect(getDisplayMedia).toHaveBeenCalledWith({ video: { displaySurface: surface }, audio: false, selfBrowserSurface: "exclude", surfaceSwitching: "include", systemAudio: "exclude" });
   });
 
   it("requests audio only when requested", () => {
     expect(displayMediaConstraints()).toMatchObject({ video: true, audio: false });
-    expect(displayMediaConstraints({ surface: "browser", audio: true })).toMatchObject({ audio: true });
+    expect(displayMediaConstraints({ surface: "browser", audio: true })).toMatchObject({ audio: { suppressLocalAudioPlayback: false, echoCancellation: false, noiseSuppression: false, autoGainControl: false }, systemAudio: "exclude" });
   });
 
   it("reports the actual selected surface, even when the hint was ignored", () => {

@@ -1,4 +1,4 @@
-import type { MediaSource } from "./plane";
+import type { MediaPublicationSource } from "./plane";
 import { CloudflareSFUError } from "./types";
 import type { CloudflareSFUPublication, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription } from "./types";
 
@@ -102,7 +102,7 @@ export function comparePublicationCursor(current: PublicationCursor | null, next
   return "same";
 }
 
-export function publicationKey(publication: { readonly participantId: string; readonly source: MediaSource }): string {
+export function publicationKey(publication: { readonly participantId: string; readonly source: MediaPublicationSource }): string {
   return `${publication.participantId}\u0000${publication.source}`;
 }
 

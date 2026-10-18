@@ -151,15 +151,15 @@ describe("SpaceClient media convergence", () => {
     }
   });
 
-  it("gates an attached remote track on the same projection as the muted state", async () => {
+  it.each(["microphone", "screen_audio"] as const)("gates an attached remote %s track on the same projection as the muted state", async (source) => {
     const platform = createCoreTestPlatform();
     const track = mediaTrack();
     const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, platform);
     try {
       await client.join({ microphone: false, camera: false });
-      const publication = { participantId: "participant-2", source: "microphone" as const, enabled: true, publicationId: "publication-2" };
+      const publication = { participantId: "participant-2", source: source === "screen_audio" ? ("screen" as const) : source, enabled: true, publicationId: "publication-2" };
       platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "media-1", sequence: 1, items: [publication] } });
-      platform.media.emit({ ...platform.media.getSnapshot(), remoteTracks: [{ ...publication, track }] });
+      platform.media.emit({ ...platform.media.getSnapshot(), remoteTracks: [{ ...publication, source, track }] });
       expect(track.enabled).toBe(true);
       platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "media-1", sequence: 2, items: [{ ...publication, enabled: false }] } });
       expect(track.enabled).toBe(false);
@@ -241,11 +241,82 @@ describe("SpaceClient media convergence", () => {
     try {
       await client.join({ microphone: false, camera: false });
       await client.media.setScreenShareEnabled(true, { surface, audio: surface === "browser" });
-      expect(getDisplayMedia).toHaveBeenCalledWith({ video: { displaySurface: surface }, audio: surface === "browser", selfBrowserSurface: "exclude", surfaceSwitching: "include" });
+      expect(getDisplayMedia).toHaveBeenCalledWith({
+        video: { displaySurface: surface },
+        audio: surface === "browser" ? { suppressLocalAudioPlayback: false, echoCancellation: false, noiseSuppression: false, autoGainControl: false } : false,
+        selfBrowserSurface: "exclude",
+        surfaceSwitching: "include",
+        systemAudio: "exclude",
+      });
       expect(client.getSnapshot().media.screenShare.capture).toEqual({ surface: "window", label: "Slides" });
       await client.media.setScreenShareEnabled(false);
       expect(client.getSnapshot().media.screenShare.capture).toBeUndefined();
       expect(track.stop).toHaveBeenCalled();
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("reports remote share audio only while both share publications are active", async () => {
+    const platform = createCoreTestPlatform();
+    const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, platform);
+    try {
+      await client.join({ microphone: false, camera: false });
+      const snapshot = platform.sync.getSnapshot();
+      const sharedControl = { ...control, participants: control.participants.flatMap((participant) => [participant, { ...participant, participantId: "participant-2" }]) };
+      const items = [{ participantId: "participant-2", source: "screen" as const, enabled: true, publicationId: "screen" }];
+      platform.emitSync({ ...snapshot, control: sharedControl, media: { projectionId: "media-1", sequence: 1, items } });
+      const track = mediaTrack();
+      platform.media.emit({ ...platform.media.getSnapshot(), remoteTracks: [{ participantId: "participant-2", source: "screen_audio", publicationId: "audio", track }] });
+      expect(client.getSnapshot().participants.roster.find((participant) => participant.participantId === "participant-2")?.media.screenShareHasAudio).toBe(true);
+      platform.emitSync({ ...snapshot, control: sharedControl, media: { projectionId: "media-1", sequence: 2, items: items.map((item) => ({ ...item, enabled: false })) } });
+      expect(client.getSnapshot().participants.roster.find((participant) => participant.participantId === "participant-2")?.media.screenShareHasAudio).toBe(false);
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("retains display audio until the share stops and never captures or stops a microphone", async () => {
+    const platform = createCoreTestPlatform();
+    const video = Object.assign(mediaTrack(), { kind: "video", label: "Tab", getSettings: () => ({ displaySurface: "browser" }), stop: vi.fn() });
+    const audio = Object.assign(mediaTrack(), { kind: "audio", stop: vi.fn() });
+    const stream = Object.assign(mediaStream(video), { getTracks: () => [video, audio], getVideoTracks: () => [video], getAudioTracks: () => [audio] });
+    const prepare = vi.fn();
+    const clear = vi.fn(async () => undefined);
+    const getUserMedia = vi.fn(platform.dependencies.mediaDevices.getUserMedia);
+    const client = createSpaceClientForPlatform(
+      { space: "space-1", getAccess: async () => opaqueAccessGrant("share-audio") },
+      {
+        ...platform,
+        dependencies: {
+          ...platform.dependencies,
+          mediaDevices: { ...platform.dependencies.mediaDevices, getUserMedia, getDisplayMedia: async () => stream },
+          createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), prepareLocalTrack: prepare, clearPreparedLocalTrack: clear }),
+          createSyncClient: () => ({ ...platform.sync, setScreenShareEnabled: async () => ({ operationId: "share", name: "set_screen_share_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" }) }),
+        },
+      },
+    );
+    try {
+      await client.join({ microphone: false, camera: false });
+      await client.media.setScreenShareEnabled(true, { audio: true });
+      expect(prepare).toHaveBeenCalledWith("screen_audio", audio);
+      expect(prepare).toHaveBeenCalledWith("screen", video);
+      expect(audio.stop).not.toHaveBeenCalled();
+      platform.media.emit({
+        ...platform.media.getSnapshot(),
+        localTracks: [
+          { source: "screen", enabled: true, publicationId: "video", track: video },
+          { source: "screen_audio", enabled: true, publicationId: "audio", track: audio },
+        ],
+      });
+      expect(client.getSnapshot().media.screenShare.hasAudio).toBe(true);
+      await client.media.setScreenShareEnabled(false);
+      expect(clear).toHaveBeenCalledWith("screen_audio");
+      expect(clear).toHaveBeenCalledWith("screen");
+      expect(audio.stop).toHaveBeenCalled();
+      expect(video.stop).toHaveBeenCalled();
+      expect(getUserMedia).not.toHaveBeenCalled();
+      expect(client.getSnapshot().media.screenShare.hasAudio).toBe(false);
     } finally {
       client.dispose();
     }

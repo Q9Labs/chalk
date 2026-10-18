@@ -34,16 +34,17 @@ export function requireDisplayVideoTrack(stream: MediaStream): MediaStreamTrack 
     throw new TypeError("Display capture did not return a video track");
   }
   for (const track of stream.getTracks()) {
-    if (track !== video) track.stop();
+    if (track !== video && track.kind !== "audio") track.stop();
   }
   return video;
 }
 
 /** Browser picker hints, not guarantees about the selected source. */
-export function displayMediaConstraints(options: ScreenShareOptions = {}): DisplayMediaStreamOptions & { selfBrowserSurface: "exclude"; surfaceSwitching: "include" } {
+export function displayMediaConstraints(options: ScreenShareOptions = {}): DisplayMediaStreamOptions & { selfBrowserSurface: "exclude"; surfaceSwitching: "include"; systemAudio: "exclude"; audio: boolean | (MediaTrackConstraints & { suppressLocalAudioPlayback: boolean }) } {
   return {
     video: options.surface ? { displaySurface: options.surface } : true,
-    audio: options.audio ?? false,
+    audio: options.audio ? { suppressLocalAudioPlayback: false, echoCancellation: false, noiseSuppression: false, autoGainControl: false } : false,
+    systemAudio: "exclude",
     selfBrowserSurface: "exclude",
     surfaceSwitching: "include",
   };

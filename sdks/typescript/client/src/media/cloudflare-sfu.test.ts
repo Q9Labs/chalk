@@ -240,6 +240,57 @@ async function expectNoAdditionalRemotePull(harness: ReturnType<typeof createHar
 function remotePullCount(harness: ReturnType<typeof createHarness>): number {
   return harness.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "remote")).length;
 }
+describe("shared tab audio publications", () => {
+  it.each([false, true])("couples share lifecycle without touching the microphone (audio=%s)", async (withAudio) => {
+    const harness = createHarness();
+    const microphone = new FakeTrack("microphone", "audio");
+    const video = new FakeTrack("slides", "video");
+    const audio = new FakeTrack("tab-audio", "audio");
+    try {
+      await harness.client.start(fakeStream(microphone));
+      const microphonePublication = harness.client.getSnapshot().localTracks.find((track) => track.source === "microphone")?.publicationId;
+      harness.client.prepareLocalTrack("screen", video as unknown as MediaStreamTrack);
+      if (withAudio) harness.client.prepareLocalTrack("screen_audio", audio as unknown as MediaStreamTrack);
+      await expect(setScreenTarget(harness.client, "share-on", true)).resolves.toMatchObject({ outcome: "confirmed" });
+      expect(
+        harness.client
+          .getSnapshot()
+          .localTracks.filter((track) => track.enabled)
+          .map((track) => track.source)
+          .sort(),
+      ).toEqual(withAudio ? ["microphone", "screen", "screen_audio"] : ["microphone", "screen"]);
+      harness.client.setLocalSourceIntent("screen", false);
+      expect(video.enabled).toBe(false);
+      if (withAudio) expect(audio.enabled).toBe(false);
+      await expect(setScreenTarget(harness.client, "share-off", false)).resolves.toMatchObject({ outcome: "confirmed" });
+      await harness.client.clearPreparedLocalTrack("screen_audio");
+      await harness.client.clearPreparedLocalTrack("screen");
+      expect(harness.client.getSnapshot().localTracks).toMatchObject([{ source: "microphone", enabled: true, publicationId: microphonePublication }]);
+      expect(microphone.enabled).toBe(true);
+      expect(microphone.stopCalls).toBe(0);
+      expect(video.stopCalls).toBe(1);
+      if (withAudio) expect(audio.stopCalls).toBe(1);
+    } finally {
+      harness.client.stop();
+    }
+  });
+  it("creates and releases remote audio independently of the screen video", async () => {
+    const harness = createHarness();
+    try {
+      await harness.client.start(fakeStream());
+      harness.transport.snapshot = { incarnation: 1, sequence: 1, publications: [{ participantId: "participant-2", source: "screen_audio", publicationId: "remote|audio" }] };
+      await harness.client.refreshRemotePublications();
+      const remote = harness.client.getSnapshot().remoteTracks[0];
+      expect(remote).toMatchObject({ source: "screen_audio", track: { kind: "audio" } });
+      harness.transport.snapshot = { incarnation: 1, sequence: 2, publications: [] };
+      await harness.client.refreshRemotePublications();
+      expect(harness.client.getSnapshot().remoteTracks).toEqual([]);
+      expect(remote?.track.readyState).toBe("ended");
+    } finally {
+      harness.client.stop();
+    }
+  });
+});
 function bootstrap(connectionId: string): CloudflareSFUBootstrap {
   return { connectionId, stunServer: "stun:example.test" };
 }
@@ -341,7 +392,7 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
         return code ? [{ connectionId: "remote-connection", trackName: track.trackName, code }] : [];
       });
       if (this.reverseRemoteTracks) tracks.reverse();
-      tracks.forEach((track, index) => this.#peer()?.emitTrack(track.mid, new FakeTrack(`pulled-${track.trackName}-${index}`, track.trackName.includes("microphone") ? "audio" : "video")));
+      tracks.forEach((track, index) => this.#peer()?.emitTrack(track.mid, new FakeTrack(`pulled-${track.trackName}-${index}`, track.trackName.includes("microphone") || track.trackName.includes("audio") ? "audio" : "video")));
       const requiresImmediateRenegotiation = this.immediateRenegotiation || this.#peer()?.connectionState !== "connected";
       return {
         tracks,
