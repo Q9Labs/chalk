@@ -2,6 +2,12 @@
 
 ## 5.0.0
 
+- Default calls to Dark; `ChalkColorScheme` is now `"light" | "dark"`. Add `Chalk.onColorSchemeChange` and `SpaceView.onColorSchemeChange` for controlled appearance.
+- Replace the call theme tokens with role-based mockup palettes, and share the inset-card frame with recordings.
+- Rebuild call buttons, menus, popovers, tooltips, switches, segmented controls, copy feedback, focus-trapped sheets and toasts. Remove the unused `ChalkCheckbox`, `ChalkControlGroup`, `ChalkRadio`, `ChalkSelect`, `ChalkSlider`, and `ChalkTooltipPanel` exports. `ChalkMenu` now accepts a trigger; its items accept checked state.
+- Add `captureFlip` for transform-only, reduced-motion-aware moves that preserve the mounted element.
+- Use synthesized call sounds with a persistent Sounds switch; remove the unused Sonner `toast` re-export from the toast stack.
+
 - Remove unused icon wrappers: `ArrowLeft02Icon`, `ArrowUp01Icon`, `Calendar01Icon`, `Mail01Icon`, `PictureInPictureIcon`, `ZoomInIcon`, `ZoomOutIcon`, `Link01Icon`, `MoreHorizontalIcon`, `Settings01Icon`, `SparklesIcon`, `UserAdd01Icon`.
 
 - Fold Classic implementations into plain component names; remove Classic-prefixed modules and symbols.

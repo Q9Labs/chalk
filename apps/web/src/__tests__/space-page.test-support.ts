@@ -112,3 +112,5 @@ function makeRelease(cleanup: () => Promise<void>): ReturnType<typeof vi.fn> {
     return releasePromise;
   });
 }
+
+vi.mock("../lib/theme-context", () => ({ useTheme: () => ({ mode: "dark", preference: "dark", setPreference: () => undefined }) }));

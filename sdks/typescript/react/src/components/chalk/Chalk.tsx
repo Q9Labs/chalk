@@ -56,6 +56,7 @@ export type ChalkProps = SpaceIntegration &
     readonly displayName?: string;
     readonly features?: ChalkFeatures;
     readonly theme?: ChalkTheme;
+    readonly onColorSchemeChange?: (colorScheme: ChalkColorScheme) => void;
     readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
     readonly spaceName?: string;
     readonly layout?: SpaceLayout;
@@ -66,7 +67,12 @@ export type ChalkProps = SpaceIntegration &
     readonly onHome?: () => void;
   };
 export function Chalk(props: ChalkProps): React.JSX.Element {
-  const colorScheme = useResolvedColorScheme(props.theme?.colorScheme);
+  const [localColorScheme, setLocalColorScheme] = useState<ChalkColorScheme>("dark");
+  const colorScheme = props.theme?.colorScheme ?? localColorScheme;
+  const changeColorScheme = (next: ChalkColorScheme) => {
+    setLocalColorScheme(next);
+    props.onColorSchemeChange?.(next);
+  };
   const suppliedClient = props.client;
   const getAccessRef = useRef(props.getAccess);
   getAccessRef.current = props.getAccess;
@@ -94,7 +100,7 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
     <>
       <div data-chalk data-chalk-theme={colorScheme} className="chalk-root h-full min-h-0 w-full" style={chalkThemeStyle(props.theme, colorScheme)}>
         <ChalkProvider client={client}>
-          <SpaceExperience {...props} resolvedColorScheme={colorScheme} />
+          <SpaceExperience {...props} theme={{ ...props.theme, colorScheme }} onColorSchemeChange={changeColorScheme} resolvedColorScheme={colorScheme} />
         </ChalkProvider>
       </div>
     </>
@@ -102,7 +108,7 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
 }
 function SpaceExperience(
   props: ChalkProps & {
-    readonly resolvedColorScheme: Exclude<ChalkColorScheme, "system">;
+    readonly resolvedColorScheme: ChalkColorScheme;
   },
 ): React.JSX.Element {
   const client = useSpaceClient();
@@ -183,7 +189,7 @@ function SpaceExperience(
 }
 function SpaceSurface(
   props: ChalkProps & {
-    readonly resolvedColorScheme: Exclude<ChalkColorScheme, "system">;
+    readonly resolvedColorScheme: ChalkColorScheme;
     readonly spaceName: string;
   },
 ): React.JSX.Element {
@@ -238,6 +244,7 @@ function SpaceSurface(
   return (
     <SpaceView
       colorScheme={props.resolvedColorScheme}
+      onColorSchemeChange={props.onColorSchemeChange}
       spaceName={props.spaceName}
       pickChatFiles={props.pickChatFiles}
       commandError={commandError ?? undefined}
@@ -268,22 +275,6 @@ function bindWhiteboardPresentation(transport: ChalkWhiteboardV1Transport): ((pr
 function defaultJoinOptions(props: ChalkProps): JoinOptions {
   const displayName = props.displayName?.trim();
   return { ...(displayName ? { displayName } : {}), microphone: props.defaults?.microphone ?? true, camera: props.defaults?.camera ?? true };
-}
-function useResolvedColorScheme(requested: ChalkColorScheme = "light"): Exclude<ChalkColorScheme, "system"> {
-  const [resolved, setResolved] = useState<Exclude<ChalkColorScheme, "system">>(() => (requested === "system" ? readSystemColorScheme() : requested));
-  useEffect(() => {
-    if (requested !== "system") return void setResolved(requested);
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return void setResolved("light");
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const update = () => setResolved(mediaQuery.matches ? "dark" : "light");
-    update();
-    mediaQuery.addEventListener?.("change", update);
-    return () => mediaQuery.removeEventListener?.("change", update);
-  }, [requested]);
-  return requested === "system" ? resolved : requested;
-}
-function readSystemColorScheme(): Exclude<ChalkColorScheme, "system"> {
-  return typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 function useClientEvents(client: SpaceClient, callbacks: SpaceEventCallbacks): void {
   useEffect(() => client.on("participantJoined", (event) => callbacks.onParticipantJoined?.(event)), [callbacks.onParticipantJoined, client]);

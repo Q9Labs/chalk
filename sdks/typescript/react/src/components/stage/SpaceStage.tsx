@@ -8,7 +8,7 @@ import { Stage, type StageLayout, type StageTileRenderContext } from "../stage/S
 import { buildStageItems, type StageItem } from "../stage/stage-items";
 import { StageContentTile, StageContentTileSurface } from "../stage/StageContentTile";
 import { WhiteboardView } from "../whiteboard-view/WhiteboardView";
-import type { SpaceViewWhiteboard } from "./SpaceView";
+import type { SpaceViewWhiteboard } from "../space-view/SpaceView";
 
 export interface SpaceStageProps {
   readonly tiles: readonly Participant[];

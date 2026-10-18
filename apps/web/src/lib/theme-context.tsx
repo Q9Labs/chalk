@@ -2,7 +2,7 @@ import { useRouterState } from "@tanstack/react-router";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from "react";
 import type React from "react";
 
-import { applyThemeMode, persistThemePreference, readThemePreference, resolveThemeMode, systemThemeMode, watchSystemThemeMode, type ThemeMode, type ThemePreference } from "./theme";
+import { applyThemeMode, persistThemePreference, readThemePreference, resolveThemeMode, type ThemeMode, type ThemePreference } from "./theme";
 
 type ThemeContextValue = {
   readonly preference: ThemePreference;
@@ -14,12 +14,9 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: PropsWithChildren): React.JSX.Element {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const [preference, storePreference] = useState<ThemePreference>(() => (typeof document === "undefined" ? "system" : readThemePreference(document.cookie)));
-  const [systemMode, setSystemMode] = useState<ThemeMode>(systemThemeMode);
+  const [preference, storePreference] = useState<ThemePreference>(() => (typeof document === "undefined" ? "dark" : readThemePreference(document.cookie)));
 
-  useEffect(() => watchSystemThemeMode(setSystemMode), []);
-
-  const mode = resolveThemeMode({ preference, pathname, systemMode });
+  const mode = resolveThemeMode({ preference, pathname });
 
   useEffect(() => applyThemeMode(document.documentElement, mode), [mode]);
 

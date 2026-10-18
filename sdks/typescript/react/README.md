@@ -53,8 +53,7 @@ application. Chalk will use it without disposing it.
 
 `theme` controls color scheme, accent and typed token overrides.
 
-`colorScheme` accepts `light`, `dark`, or `system`. With `system`, Chalk follows
-the browser preference while keeping explicit token overrides in place.
+`colorScheme` accepts `light` or `dark` and defaults to dark. Use `onColorSchemeChange` to persist the choice from the call details popover.
 
 ```tsx
 <Chalk

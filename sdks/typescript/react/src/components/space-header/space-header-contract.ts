@@ -1,5 +1,7 @@
 export interface SpaceHeaderProps {
   spaceName: string;
+  colorScheme?: "light" | "dark";
+  onColorSchemeChange?: (colorScheme: "light" | "dark") => void;
   duration?: number;
   isRecording?: boolean;
   isTranscribing?: boolean;
@@ -9,8 +11,5 @@ export interface SpaceHeaderProps {
 }
 
 export function formatDuration(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const remainingSeconds = seconds % 60;
-  return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${remainingSeconds.toString().padStart(2, "0")}`;
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
