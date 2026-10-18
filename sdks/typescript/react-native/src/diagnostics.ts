@@ -1,9 +1,6 @@
 import type { ConnectionSlice } from "@q9labsai/chalk-client";
 import type { DeviceInfo } from "./runtime";
 
-export { setMeasurementRegistry } from "./frame/measurement";
-export type { MeasuredFrame, Measurement, MeasurementRegistry } from "./frame/measurement";
-
 export type ConnectionDiagnosticsSnapshot = Pick<ConnectionSlice, "status" | "lastError">;
 
 export type DevDiagnosticsOutcome = "error" | "observed" | "success";

@@ -1,10 +1,11 @@
 import type { Participant } from "@q9labsai/chalk-client";
-import { memo, useEffect, useMemo } from "react";
+import { memo, useEffect, useMemo, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, { useSharedValue, withTiming } from "react-native-reanimated";
 import { FaceAvatar } from "../avatar/FaceAvatar";
 import { tileAvatarSize } from "../avatar/tile-avatar-size";
 import { RtcVideoView } from "../components/RtcVideoView";
+import { useDevScenario } from "../frame/dev-scenario";
 import { useMeasuredRef } from "../frame/measurement";
 import { useMedia, useParticipants, useSelf } from "../hooks/space-hooks";
 import { createNativeMediaStream } from "../media/native-webrtc";
@@ -69,12 +70,11 @@ const ParticipantTile = memo(function ParticipantTile({ participant, avatarSize,
   }, [level, speaking]);
   const streamURL = useMemo(() => (track ? createNativeMediaStream(track).toURL() : null), [track]);
   const name = isSelf ? `${participant.displayName} (You)` : participant.displayName;
+  const video = tileVideo(useDevScenario().videoSlots?.[id], streamURL, isSelf);
 
   return (
-    <TileShell cameraOn={streamURL !== null} level={level} speaking={speaking} testID={`tile.${id}`}>
-      {streamURL ? (
-        <RtcVideoView mirror={isSelf} objectFit="cover" streamURL={streamURL} style={StyleSheet.absoluteFill} />
-      ) : (
+    <TileShell cameraOn={video !== null} level={level} speaking={speaking} testID={`tile.${id}`}>
+      {video ?? (
         <View style={styles.center}>
           <FaceAvatar level={level} lookAround name={participant.displayName} size={avatarSize} style="bold" />
         </View>
@@ -83,6 +83,13 @@ const ParticipantTile = memo(function ParticipantTile({ participant, avatarSize,
     </TileShell>
   );
 });
+
+/** A harness's fake video slot wins over the camera, so fixtures can show video without media. */
+function tileVideo(slot: ReactNode, streamURL: string | null, isSelf: boolean): React.JSX.Element | null {
+  if (slot !== undefined) return <View style={StyleSheet.absoluteFill}>{slot}</View>;
+  if (streamURL) return <RtcVideoView mirror={isSelf} objectFit="cover" streamURL={streamURL} style={StyleSheet.absoluteFill} />;
+  return null;
+}
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },

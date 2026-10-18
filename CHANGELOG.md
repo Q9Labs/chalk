@@ -7,6 +7,7 @@
 - Added a new React Native `Chalk` call view with `ChalkProps`: header, stage, dock, sheets, menus and toasts, drawn inside the safe area on phone and iPad.
 - Added `colorScheme` and `onColorSchemeChange` to `Chalk`, with the `ColorScheme` and `Palette` types. The call is dark by default.
 - Added call sounds and haptics to `Chalk`, with `soundsEnabled` and `onSoundsEnabledChange`.
+- Added the development-only `@q9labsai/chalk-react-native/dev` entry: `setMeasurementRegistry` reports each call surface's frame and declared style by testID, and `setDevScenario` opens a sheet or menu and draws fake video in tiles. Require it behind `__DEV__` so release bundles leave it out.
 - BREAKING: `@q9labsai/chalk-react-native` now needs `react-native-reanimated`, `react-native-worklets`, `react-native-gesture-handler`, `react-native-safe-area-context`, `expo-audio` and `expo-haptics` as peers, and no longer needs `@hugeicons/core-free-icons` or `@hugeicons/react-native`.
 
 ### Removed (React Native)

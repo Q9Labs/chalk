@@ -18,6 +18,7 @@ import { StatusPage } from "../status/StatusPage";
 import { useTheme } from "../theme/theme";
 import { durations } from "../theme/tokens";
 import { CallEventToasts } from "../toasts/CallEventToasts";
+import { useDevScenario } from "./dev-scenario";
 import { useDeviceLayout } from "./device-layout";
 import { PortalHost, usePortalCount } from "./portal";
 import { useMeasuredRef } from "./measurement";
@@ -94,6 +95,12 @@ export function CallFrame({ displayName, callName = "Call", onLeave }: CallFrame
     if (canEnd) setLeaveMenuOpen((open) => !open);
     else exit("leave");
   }, [canEnd, exit]);
+
+  const devScenario = useDevScenario();
+  useEffect(() => {
+    if (devScenario.sheet) setSheet(devScenario.sheet);
+    if (devScenario.menu === "leave") setLeaveMenuOpen(true);
+  }, [devScenario]);
 
   const chrome = useLandscapeChrome(layout.arrangement === "landscape" && sheet === null && !layered);
   const status = connection.status;
