@@ -1328,8 +1328,6 @@
   background: var(--chalk-surface);
   border-radius: 24px 24px 0 0;
   transition: transform 0.24s var(--chalk-ease-out-expo);
-  max-height: calc(100% - 52px);
-  overflow: auto;
 }
 .chalk-sheet[data-starting-style],
 .chalk-sheet[data-ending-style] {
@@ -1633,7 +1631,7 @@
 .chalk-call-details {
   z-index: 85;
   width: 368px;
-  max-height: calc(100% - 150px);
+  max-height: calc(100vh - 150px);
   overflow: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--chalk-pressed) transparent;
@@ -1721,6 +1719,7 @@
 }
 .chalk-sheet[data-variant="details"] {
   max-height: 88%;
+  overflow: auto;
   padding: 8px 14px 42px;
   background: var(--chalk-popover);
   border: 1px solid var(--chalk-line-strong);
