@@ -5,6 +5,13 @@ import { Icon } from "../site/Icon";
 import type { DocsCalloutProps, DocsFeatureCardProps } from "./docs-types";
 
 const TONE_TITLES = { note: "Note", tip: "Tip", caution: "Caution", failure: "Failure" } as const;
+const LANGUAGE_LABELS = new Map([
+  ["ts", "TypeScript"],
+  ["tsx", "TSX"],
+  ["sh", "Shell"],
+  ["json", "JSON"],
+  ["http", "HTTP"],
+]);
 
 export function Callout({ children, title, tone = "note" }: DocsCalloutProps) {
   const warning = tone === "caution" || tone === "failure";
@@ -16,6 +23,17 @@ export function Callout({ children, title, tone = "note" }: DocsCalloutProps) {
         <div className="callout-body">{children}</div>
       </div>
     </div>
+  );
+}
+
+/** A row of short values, such as the steps of a schedule. */
+export function Chips({ items, label }: { readonly items: readonly string[]; readonly label: string }) {
+  return (
+    <ul className="chips" aria-label={label}>
+      {items.map((item) => (
+        <li key={item}>{item}</li>
+      ))}
+    </ul>
   );
 }
 
@@ -35,12 +53,13 @@ export function FeatureCard({ children, href, title }: DocsFeatureCardProps) {
   );
 }
 
-export function CodeBlock({ children, ...props }: ComponentPropsWithoutRef<"pre">) {
+/** Shiki puts the fence language on `data-language` (see the rehype-shiki transformer in vite.config.ts). */
+export function CodeBlock({ children, "data-language": language, ...props }: ComponentPropsWithoutRef<"pre"> & { readonly "data-language"?: string }) {
   const preRef = useRef<HTMLPreElement>(null);
   return (
     <div className="code">
       <div className="ch">
-        <span className="clang">Code</span>
+        <span className="clang">{LANGUAGE_LABELS.get(language ?? "") ?? "Code"}</span>
         <CopyButton text={() => preRef.current?.textContent ?? ""} label="Copy code" />
       </div>
       <pre ref={preRef} {...props}>

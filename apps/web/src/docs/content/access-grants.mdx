@@ -6,8 +6,11 @@ Your backend receives a server-minted `AccessGrant` and returns it unchanged fro
 const client = createSpaceClient({
   space: "design-review",
   getAccess: async ({ space, reason }) => {
-    const response = await fetch(`/api/chalk/spaces/${space}/access?reason=${reason}`);
-    if (!response.ok) throw new Error(`Access request failed: ${response.status}`);
+    const response = await fetch(
+      `/api/chalk/spaces/${space}/access?reason=${reason}`,
+    );
+    if (!response.ok)
+      throw new Error(`Access request failed: ${response.status}`);
     return response;
   },
 });

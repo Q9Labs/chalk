@@ -308,6 +308,32 @@
     color: var(--chalk-text);
   }
 
+  & .art-body td code {
+    overflow-wrap: normal;
+  }
+
+  & .art-body td:first-child code {
+    white-space: nowrap;
+  }
+
+  & .art-body .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 16px 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  & .art-body .chips li {
+    margin: 0;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: var(--chalk-raised);
+    color: var(--chalk-text);
+    font: 500 13px var(--chalk-font-mono);
+  }
+
   & .dlinks {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -610,28 +636,6 @@
     margin-top: 6px;
     color: var(--chalk-muted-text);
     font-size: 14.5px;
-  }
-
-  /* Shiki writes github-dark colors inline, which the browser keeps as rgb(). These map them onto the site's code colors in both themes. */
-  & .code pre [style*="rgb(249, 117, 131)"] {
-    color: var(--code-keyword) !important;
-  }
-
-  & .code pre :is([style*="rgb(158, 203, 255)"], [style*="rgb(219, 237, 255)"]) {
-    color: var(--code-string) !important;
-  }
-
-  & .code pre [style*="rgb(106, 115, 125)"] {
-    color: var(--code-comment) !important;
-    font-style: italic;
-  }
-
-  & .code pre :is([style*="rgb(121, 184, 255)"], [style*="rgb(133, 232, 157)"]) {
-    color: var(--code-type) !important;
-  }
-
-  & .code pre :is([style*="rgb(225, 228, 232)"], [style*="rgb(179, 146, 240)"], [style*="rgb(255, 171, 112)"]) {
-    color: var(--chalk-text) !important;
   }
 }
 
