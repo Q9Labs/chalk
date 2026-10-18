@@ -346,6 +346,26 @@ describe("remote publication recovery", () => {
       expect(harness.client.getSnapshot().remoteTracks.map((track) => track.publicationId)).toEqual(["live|microphone"]);
     });
   });
+  it("recovers from two independent publish failures in a solo call", async () => {
+    const replaceMediaConnection = vi.fn(async () => bootstrap(`replacement-${replaceMediaConnection.mock.calls.length}`));
+    await withTimedHarness(
+      async (harness) => {
+        harness.transport.failNextStaleLocalPublish = true;
+        await harness.client.start(fakeStream(new FakeTrack("camera", "video")));
+        expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
+        expect(harness.client.getSnapshot().localTracks).toMatchObject([{ source: "camera", enabled: true }]);
+        expect(harness.client.getSnapshot().remoteTracks).toEqual([]);
+
+        harness.client.prepareLocalTrack("microphone", new FakeTrack("microphone", "audio") as unknown as MediaStreamTrack);
+        harness.transport.failNextStaleLocalPublish = true;
+        await expect(harness.client.setLocalPublicationTarget({ operationId: "enable-microphone", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+        expect(replaceMediaConnection).toHaveBeenCalledTimes(2);
+        expect(harness.client.getSnapshot().localTracks).toEqual(expect.arrayContaining([expect.objectContaining({ source: "camera", enabled: true }), expect.objectContaining({ source: "microphone", enabled: true })]));
+        expect(harness.client.getSnapshot().remoteTracks).toEqual([]);
+      },
+      { replaceMediaConnection },
+    );
+  });
   it("does not reset the replacement budget when recovery republishes local tracks", async () => {
     const replaceMediaConnection = vi.fn(async () => bootstrap("replacement"));
     await withTimedHarness(

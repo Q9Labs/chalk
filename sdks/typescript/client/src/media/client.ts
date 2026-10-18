@@ -347,6 +347,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     try {
       await this.#publishPreparedTracks(states, generation);
       this.#requireGeneration(generation);
+      this.#replacementAttemptedGeneration = null;
       this.#started = true;
       this.#setPhase("live", null);
       this.#schedulePoll(0);
@@ -413,6 +414,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const generation = this.#generation;
     try {
       await this.#publishPreparedTracks([state], generation);
+      // A completed local request restores the budget; remote recovery's
+      // intermediate republish must retain it until remote media is healthy.
+      this.#replacementAttemptedGeneration = null;
     } catch (error) {
       state.desiredEnabled = false;
       state.enabled = false;
