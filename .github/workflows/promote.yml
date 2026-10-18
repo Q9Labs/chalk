@@ -1,0 +1,160 @@
+name: Promote newest held nightly
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  deployments: write
+  id-token: write
+concurrency:
+  group: chalk-environment-production
+  cancel-in-progress: false
+jobs:
+  select:
+    runs-on: ubuntu-24.04
+    outputs:
+      selection: ${{ steps.select.outputs.selection }}
+    steps:
+      - name: Refuse non-master dispatch before checkout
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: test "$WORKFLOW_REF" = refs/heads/master
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Choose newest held record and verify that exact choice and rollback source
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/releases/release.py select
+  approve:
+    needs: select
+    runs-on: ubuntu-24.04
+    environment: production
+    outputs:
+      pages_deployment_id: ${{ steps.pages.outputs.pages_deployment_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Recheck exact selection after approval under the production lock
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SELECTION: ${{ needs.select.outputs.selection }}
+        run: python3 scripts/releases/release.py recheck
+      - name: Select the explicit production Pages destination
+        run: |
+          node --input-type=module -e 'import { PRODUCTION_PROJECT } from "./scripts/deploy/deploy-web-release.mjs"; console.log("PAGES_PROJECT=" + PRODUCTION_PROJECT)' >> "$GITHUB_ENV"
+      - name: Save the live production Pages deployment before any upload
+        id: pages
+        env:
+          CLOUDFLARE_ACCOUNT_ID: "5281943bd26d5bdcf4c3915606cd6bfb"
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          python3 scripts/releases/web.py current
+      - name: Retain rollback source and saved Pages identity
+        env:
+          SELECTION: ${{ needs.select.outputs.selection }}
+          PAGES_ID: ${{ steps.pages.outputs.pages_deployment_id }}
+        run: |
+          jq -n --argjson source "$SELECTION" --arg pages "$PAGES_ID" '{source:$source, pages_deployment_id:$pages}' > rollback.json
+          cat rollback.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: promotion-rollback-${{ github.run_attempt }}
+          path: rollback.json
+          retention-days: 90
+  release:
+    needs: [select, approve]
+    uses: ./.github/workflows/ci.yml
+    with:
+      target_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
+      release_managed: false
+      deploy_managed: true
+      managed_environment: production
+      deploy_web: true
+      orchestrated: true
+      manifest_run_id: ${{ fromJSON(needs.select.outputs.selection).selection.run_id }}
+      manifest_artifact_id: ${{ fromJSON(needs.select.outputs.selection).selection.manifest_artifact_id }}
+      manifest_sha256: ${{ fromJSON(needs.select.outputs.selection).selection.manifest_sha256 }}
+      reuse_release_id: ${{ fromJSON(needs.select.outputs.selection).selection.release_id }}
+      web_artifact: ${{ toJSON(fromJSON(needs.select.outputs.selection).selection.web.production) }}
+    secrets: inherit
+  proof:
+    needs: release
+    uses: ./.github/workflows/real-call-proof.yml
+    with:
+      environment: production
+      proofs: smoke transcript
+    secrets: inherit
+  rollback:
+    needs: [select, approve, release, proof]
+    if: >-
+      always() && needs.approve.result == 'success' && needs.release.result != 'skipped' &&
+      (needs.release.result != 'success' || needs.proof.result != 'success' || needs.proof.outputs.result != 'passed')
+    uses: ./.github/workflows/ci.yml
+    with:
+      target_sha: ${{ fromJSON(needs.select.outputs.selection).previous.target_sha }}
+      release_managed: false
+      deploy_managed: true
+      managed_environment: production
+      deploy_web: true
+      orchestrated: true
+      manifest_run_id: ${{ fromJSON(needs.select.outputs.selection).previous.run_id }}
+      manifest_artifact_id: ${{ fromJSON(needs.select.outputs.selection).previous.manifest_artifact_id }}
+      manifest_sha256: ${{ fromJSON(needs.select.outputs.selection).previous.manifest_sha256 }}
+      reuse_release_id: ${{ fromJSON(needs.select.outputs.selection).previous.release_id }}
+      pages_rollback_id: ${{ needs.approve.outputs.pages_deployment_id }}
+    secrets: inherit
+  result:
+    needs: [select, approve, release, proof, rollback]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Failed promotion stays failed; require explicit recovery evidence
+        if: always() && needs.approve.result == 'success' && needs.release.result != 'skipped'
+        env:
+          DEPLOY_RESULT: ${{ needs.release.result }}
+          PROOF_RESULT: ${{ needs.proof.result == 'success' && needs.proof.outputs.result || 'failed' }}
+          ROLLBACK_RESULT: ${{ needs.rollback.result }}
+          SELECTION: ${{ needs.select.outputs.selection }}
+          APPLIED_RELEASE: ${{ needs.release.outputs.applied_release_id }}
+          ROLLBACK: ${{ toJSON(needs.rollback.outputs) }}
+          PAGES_ID: ${{ needs.approve.outputs.pages_deployment_id }}
+        run: |
+          python3 - <<'PYRESULT'
+          import json
+          import os
+          import sys
+
+          selection = json.loads(os.environ['SELECTION'])
+          rollback = json.loads(os.environ.get('ROLLBACK') or '{}')
+          passed = os.environ.get('DEPLOY_RESULT') == 'success' and os.environ.get('PROOF_RESULT') == 'passed'
+          previous = selection['previous']
+          recovered = (os.environ.get('ROLLBACK_RESULT') == 'success'
+                       and rollback.get('restored_source_release_id') == previous['release_id']
+                       and bool(rollback.get('release_id'))
+                       and rollback.get('applied_release_id') == rollback['release_id']
+                       and bool(os.environ.get('PAGES_ID'))
+                       and rollback.get('pages_deployment_id') == os.environ['PAGES_ID'])
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f"Source: {selection['selection']['release_id']}\n\nApplied: {os.environ.get('APPLIED_RELEASE', '')}\n\n")
+              if not passed:
+                  if recovered:
+                      summary.write(f"RECOVERY VERIFIED — backend source {previous['release_id']}, applied envelope "
+                                    f"{rollback['applied_release_id']}, Pages {rollback['pages_deployment_id']}\n\n")
+                  else:
+                      summary.write('RECOVERY NOT RUN — manual recovery required\n\n'
+                                    'Recovery was skipped, cancelled, failed, or lacks explicit restoration evidence.\n\n'
+                                    'Run the Release workflow from master with exactly these manual inputs:\n\n```json\n')
+                      manual = dict(target_sha=previous['target_sha'], release_managed=False, deploy_managed=True,
+                                    managed_environment='production', deploy_web=True, manifest_run_id=previous['run_id'],
+                                    manifest_artifact_id=previous['manifest_artifact_id'], manifest_sha256=previous['manifest_sha256'],
+                                    reuse_release_id=previous['release_id'], pages_rollback_id=os.environ['PAGES_ID'])
+                      summary.write(json.dumps(manual, indent=2) + '\n```\n')
+          if not passed:
+              sys.exit('promotion failed; consult the recovery evidence and manual Release inputs in the summary')
+          PYRESULT
+      - name: Refused or skipped promotion stays red
+        if: always() && (needs.approve.result != 'success' || needs.release.result == 'skipped')
+        run: exit 1
