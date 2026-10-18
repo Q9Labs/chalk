@@ -76,9 +76,27 @@ test("production Pages app associations", { timeout: 180_000 }, async (t) => {
     }
   }
 
+  await t.test("static call HTML has one banner and public pages have none", async () => {
+    for (const path of ["/space/", "/space/app-links-check", "/", "/docs", "/docs/quickstart", "/privacy", "/terms", "/invitations/accept"]) {
+      const response = await fetch(`http://127.0.0.1:8794${path}`);
+      assert.equal(response.status, 200, path);
+      const html = await response.text();
+      const head = html.match(/<head\b[^>]*>([\s\S]*?)<\/head>/i)?.[1] ?? "";
+      const tags = head.match(/<meta\b(?=[^>]*\bname=["']apple-itunes-app["'])[^>]*>/gi) ?? [];
+      assert.equal(tags.length, path.startsWith("/space/") ? 1 : 0, path);
+      if (tags.length) {
+        assert.match(tags[0], /app-id=6760978704, app-argument=https:\/\/chalkmeet\.com\/space/);
+        assert.ok(!tags[0].includes("#"));
+      }
+    }
+    const shell = await readFile(new URL("../dist/client/space/index.html", import.meta.url), "utf8");
+    assert.equal((shell.match(/<meta\b(?=[^>]*\bname=["']apple-itunes-app["'])[^>]*>/gi) ?? []).length, 1);
+  });
+
   await t.test("all Android signing fingerprints are resolved before shipping", async () => {
     const response = await fetch("http://127.0.0.1:8794/.well-known/assetlinks.json");
     const statements = await response.json();
+    assert.deepEqual(statements[0].target.sha256_cert_fingerprints, ["C3:94:F2:86:8C:16:B8:5C:B7:84:52:AF:B9:A5:80:C1:23:4E:06:44:B4:ED:B0:97:EA:F1:DA:06:55:7F:BB:73", manifest.android.certificate_sha256]);
     for (const fingerprint of statements[0].target.sha256_cert_fingerprints) {
       assert.match(fingerprint, fingerprintPattern, "Replace the Play Console app-signing certificate placeholder before deployment");
     }

@@ -1,13 +1,22 @@
 import { createFileRoute, useLocation, useMatch } from "@tanstack/react-router";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 
 import { SpacePage } from "../components/space/SpacePage";
+import { SITE_ORIGIN } from "../lib/site-head";
 
-export const Route = createFileRoute("/space")({ component: SpaceRoute });
+export const Route = createFileRoute("/space")({
+  head: ({ match }) => ({
+    meta: [{ name: "apple-itunes-app", content: `app-id=6760978704, app-argument=${new URL(match.pathname, SITE_ORIGIN).href}` }],
+  }),
+  component: SpaceRoute,
+});
 
 function SpaceRoute() {
   const href = useLocation({ select: (location) => location.href });
-  const appArgument = typeof window === "undefined" ? undefined : new URL(href, window.location.origin).href;
+  useEffect(() => {
+    const banner = document.querySelector<HTMLMetaElement>('head meta[name="apple-itunes-app"]');
+    if (banner) banner.content = `app-id=6760978704, app-argument=${new URL(href, window.location.origin).href}`;
+  }, [href]);
   const match = useMatch({ from: "/space/$slug", shouldThrow: false });
   const slug = match?.params.slug;
   const navigate = Route.useNavigate();
@@ -18,10 +27,5 @@ function SpaceRoute() {
     },
     [navigate],
   );
-  return (
-    <>
-      {appArgument && <meta name="apple-itunes-app" content={`app-id=6760978704, app-argument=${appArgument}`} />}
-      <SpacePage slug={slug} navigatePublicSpace={navigatePublicSpace} />
-    </>
-  );
+  return <SpacePage slug={slug} navigatePublicSpace={navigatePublicSpace} />;
 }
