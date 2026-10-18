@@ -22,7 +22,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: web-call-proof-${{ inputs.environment }}
+  group: real-call-proof-${{ inputs.environment }}
   cancel-in-progress: false
   queue: max
 jobs:
@@ -78,8 +78,8 @@ jobs:
         if: always()
         run: |
           if [ -d .private/prod-proof ]; then
-            mkdir -p .private/web-proof-artifact
-            tar -czf - -C .private prod-proof | age --recipient "$EVIDENCE_RECIPIENT" --output .private/web-proof-artifact/evidence.tar.gz.age
+            mkdir -p .private/web-proof-artifact .private/web-proof
+            tar -czf - -C .private prod-proof web-proof | age --recipient "$EVIDENCE_RECIPIENT" --output .private/web-proof-artifact/evidence.tar.gz.age
           fi
       - name: Upload encrypted evidence
         if: always()

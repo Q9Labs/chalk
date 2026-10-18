@@ -25,7 +25,8 @@ The same test runs on nightly and production without changing selectors.
 Run browser suites on testbox, not a developer laptop. For hosted runs,
 `web-call-proof.yml` accepts an environment and returns `result=passed` only
 when the test, cleanup, and encrypted evidence upload pass. Nightly runs it after
-deploy, alongside the recording/transcript proof. Both must pass to hold a cut;
+deploy and after the recording/transcript proof. Both workflows share the same
+environment lock because existing proof cleanup resets the webhook. Both must pass to hold a cut;
 the deployment record retains `real_call_proof_result` and `web_e2e_result`.
 
 Tests live in `tests/*.e2e.ts` and use TesterArmy `e2e` with `@e2e-dev/web`.
@@ -33,6 +34,8 @@ There are no agent steps, model calls, or replay-cache entries to commit.
 Retries are disabled, so a failing cut stays failed rather than passing on retry.
 
 Private screenshots and cleanup reports are in `.private/prod-proof/<run-id>/`.
+The full e2e result folder, `.private/web-proof/e2e`, is encrypted too, including
+failure screenshots and assertion details.
 The runner always attempts cleanup; the hosted workflow repeats cleanup after
 failure or cancellation with `pnpm prod:proof cleanup <run-id>`. Existing product
 retention keeps archived Space/Episode history. No recording starts in this test.

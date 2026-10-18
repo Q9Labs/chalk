@@ -64,7 +64,7 @@ jobs:
       proofs: smoke transcript
     secrets: inherit
   web-e2e:
-    needs: release
+    needs: [release, proof]
     uses: ./.github/workflows/web-call-proof.yml
     with:
       environment: nightly
