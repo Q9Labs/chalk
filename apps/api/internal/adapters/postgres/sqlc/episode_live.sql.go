@@ -24,7 +24,7 @@ insert into participants (
        and episode_id = $8
        and account_id = $9), 'joining'
 )
-returning id, name, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at
+returning id, name, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at, first_joined_at, last_left_reason
 `
 
 type CreateDashboardLifecycleParticipantParams struct {
@@ -71,6 +71,8 @@ func (q *Queries) CreateDashboardLifecycleParticipant(ctx context.Context, arg C
 		&i.LeftAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.FirstJoinedAt,
+		&i.LastLeftReason,
 	)
 	return i, err
 }
@@ -132,7 +134,7 @@ func (q *Queries) LockDashboardJoinIntentForUpdate(ctx context.Context, arg Lock
 }
 
 const lockDashboardParticipantForUpdate = `-- name: LockDashboardParticipantForUpdate :one
-select id, name, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at
+select id, name, metadata, capabilities, tenant_id, space_id, episode_id, account_id, identity_id, media_connection_id, media_connection_generation, generation, status, role, joined_at, left_at, updated_at, created_at, first_joined_at, last_left_reason
 from participants
 where tenant_id = $1
   and space_id = $2
@@ -176,6 +178,8 @@ func (q *Queries) LockDashboardParticipantForUpdate(ctx context.Context, arg Loc
 		&i.LeftAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.FirstJoinedAt,
+		&i.LastLeftReason,
 	)
 	return i, err
 }
