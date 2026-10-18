@@ -83,6 +83,8 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
     }, [reactionBarOpen]);
     const [photo, setPhoto] = useState<ChatAttachment | null>(null);
     const photos = attachments.filter((file) => file.mimeType.startsWith("image/") && resolvedUrls.has(file.attachmentId));
+    const imageFiles = attachments.filter((file) => file.mimeType.startsWith("image/"));
+    const visibleAttachments = [...imageFiles.slice(0, 4), ...attachments.filter((file) => !file.mimeType.startsWith("image/"))];
     const photoIndex = photos.findIndex((file) => file.attachmentId === photo?.attachmentId);
     const changePhoto = (step: number) => {
       if (photos.length > 1) setPhoto(photos[(photoIndex + step + photos.length) % photos.length]!);
@@ -176,8 +178,8 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
               </div>
             ) : null}
             {attachments.length ? (
-              <div className={cn("call-attachments", attachments.filter((file) => file.mimeType.startsWith("image/")).length > 1 && "has-many")}>
-                {attachments.map((file) => {
+              <div className={cn("call-attachments", `image-${Math.min(imageFiles.length, 4)}`)}>
+                {visibleAttachments.map((file) => {
                   const image = file.mimeType.startsWith("image/");
                   const url = resolvedUrls.get(file.attachmentId);
                   if (failedAttachmentIds.has(file.attachmentId))
@@ -211,11 +213,14 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
                         }}
                       >
                         <img src={url} alt={file.fileName} onError={() => markFailed(file.attachmentId, "render")} />
+                        {imageFiles.length > 4 && imageFiles.indexOf(file) === 3 ? <span className="call-photo-more">+{imageFiles.length - 4}</span> : null}
                       </button>
                     );
                   return (
                     <button type="button" className="call-file" key={file.attachmentId} disabled={!onResolveAttachmentUrl || image} aria-label={`Download ${file.fileName}`} onClick={() => void openFile(file)}>
-                      <span className="call-file-type">{file.fileName.split(".").at(-1)?.toUpperCase()}</span>
+                      <span className="call-file-type" data-extension={file.fileName.split(".").at(-1)?.toLowerCase()}>
+                        {file.fileName.split(".").at(-1)?.toUpperCase()}
+                      </span>
                       <span>
                         <b dir="auto">{file.fileName}</b>
                         <small>{image ? "Loading preview…" : `${Math.max(1, Math.round(file.byteLength / 1024))} KB`}</small>
