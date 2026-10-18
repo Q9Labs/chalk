@@ -25,6 +25,10 @@ export type SheetRowProps = {
   readonly icon?: IconName;
   /** A control or muted text at the end of the row: a switch, a segmented control, a count. */
   readonly end?: ReactNode;
+  /** A mark right after the label, such as the unread dot (`.udot`); the end control stays at the edge. */
+  readonly badge?: ReactNode;
+  /** What a screen reader says for the row, when the badge adds meaning the label lacks. Defaults to the label. */
+  readonly accessibilityLabel?: string;
   /** Makes the whole row a button. Leave it out when the row holds its own control. */
   readonly onPress?: () => void;
   readonly danger?: boolean;
@@ -32,14 +36,15 @@ export type SheetRowProps = {
 };
 
 /** A phone sheet row (`.srow`): 52 pt high, 16 pt text, an optional icon in front and a control at the end. */
-export function SheetRow({ label, icon, end, onPress, danger = false, testID }: SheetRowProps): React.JSX.Element {
+export function SheetRow({ label, icon, end, badge, accessibilityLabel = label, onPress, danger = false, testID }: SheetRowProps): React.JSX.Element {
   const { colors } = useTheme();
   const content = (
     <>
       {icon ? <Icon color={danger ? colors.dangerText : colors.textSoft} name={icon} /> : null}
-      <ChalkText numberOfLines={1} style={styles.label} tone={danger ? "dangerText" : "text"} variant="phoneRow">
+      <ChalkText numberOfLines={1} style={badge ? styles.labelShrink : styles.label} tone={danger ? "dangerText" : "text"} variant="phoneRow">
         {label}
       </ChalkText>
+      {badge ? <View style={styles.badge}>{badge}</View> : null}
       {end}
     </>
   );
@@ -51,7 +56,7 @@ export function SheetRow({ label, icon, end, onPress, danger = false, testID }: 
     );
   }
   return (
-    <Pressable accessibilityLabel={label} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.row, pressed ? { backgroundColor: colors.pressed } : null]} testID={testID}>
+    <Pressable accessibilityLabel={accessibilityLabel} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.row, pressed ? { backgroundColor: colors.pressed } : null]} testID={testID}>
       {content}
     </Pressable>
   );
@@ -62,4 +67,6 @@ const styles = StyleSheet.create({
   divider: { height: 1 },
   row: { flexDirection: "row", alignItems: "center", gap: 14, minHeight: 52, paddingHorizontal: 16 },
   label: { flex: 1 },
+  labelShrink: { flexShrink: 1 },
+  badge: { marginLeft: 2, marginRight: "auto" },
 });

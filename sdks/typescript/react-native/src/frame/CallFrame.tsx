@@ -33,7 +33,7 @@ export type CallFrameProps = {
   readonly onLeave?: () => void;
 };
 
-type OpenSheet = "more" | "people" | "details" | null;
+type OpenSheet = "more" | "people" | "chat" | "details" | null;
 
 /**
  * The call's frame: header, stage and dock regions, then the sheets layer, the limbo and status
@@ -135,7 +135,7 @@ export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave 
       </View>
       <View pointerEvents="box-none" style={StyleSheet.absoluteFill} testID="frame.sheets">
         {/* Focus goes back to More only once no sheet is open, so switching to People keeps it there. */}
-        <MoreSheet inviteLink={inviteLink} onClose={() => setSheet(null)} onOpenPeople={() => setSheet("people")} open={sheet === "more"} returnFocusRef={sheet === null ? moreRef : undefined} />
+        <MoreSheet inviteLink={inviteLink} onClose={() => setSheet(null)} onOpenChat={() => setSheet("chat")} onOpenPeople={() => setSheet("people")} open={sheet === "more"} returnFocusRef={sheet === null ? moreRef : undefined} />
         <CallDetailsSheet callName={callName} inviteLink={inviteLink} onClose={() => setSheet(null)} open={sheet === "details"} returnFocusRef={nameRef} />
         <PeopleSheet onClose={() => setSheet(null)} open={sheet === "people"} returnFocusRef={sheet === null ? moreRef : undefined} />
         <PortalHost layer="sheets" />

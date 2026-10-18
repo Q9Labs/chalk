@@ -6,7 +6,7 @@ import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSpaceClient } from "../context/space-client-context";
 import { usePreferences } from "../frame/preferences";
 import { haptics } from "../haptics/haptics";
-import { useCan, useMedia, useParticipants, useRecording, useSelf } from "../hooks/space-hooks";
+import { useCan, useChat, useMedia, useParticipants, useRecording, useSelf } from "../hooks/space-hooks";
 import { Icon } from "../icons/Icon";
 import { usePressAnimation } from "../motion/press";
 import { announce } from "../primitives/announce";
@@ -22,6 +22,7 @@ export type MoreSheetProps = {
   readonly open: boolean;
   readonly onClose: () => void;
   readonly onOpenPeople: () => void;
+  readonly onOpenChat: () => void;
   /** The call's link; without it the sheet leaves out Copy link and Share link. */
   readonly inviteLink?: string;
   readonly returnFocusRef?: RefObject<View | null>;
@@ -39,9 +40,9 @@ const REACTIONS: readonly (readonly [Reaction, string])[] = [
 
 /**
  * More (`#more`): raise hand and reactions on top, then the call's link, recording for hosts,
- * People and switching camera. Actions that change the call close the sheet; copying keeps it open.
+ * Chat, People and switching camera. Actions that change the call close the sheet; copying keeps it open.
  */
-export function MoreSheet({ open, onClose, onOpenPeople, inviteLink, returnFocusRef }: MoreSheetProps): React.JSX.Element {
+export function MoreSheet({ open, onClose, onOpenPeople, onOpenChat, inviteLink, returnFocusRef }: MoreSheetProps): React.JSX.Element {
   const client = useSpaceClient();
   const self = useSelf();
   const people = useParticipants().roster.length;
@@ -82,6 +83,7 @@ export function MoreSheet({ open, onClose, onOpenPeople, inviteLink, returnFocus
         {inviteLink ? <CopyLinkRow link={inviteLink} /> : null}
         {inviteLink ? <SheetRow icon="iosShare" label="Share link" onPress={() => shareLink(inviteLink)} testID="more.share" /> : null}
         <RecordingRow onDone={onClose} />
+        <ChatRow onPress={onOpenChat} />
         <SheetRow end={<PeopleCount count={people} />} icon="users" label="People" onPress={onOpenPeople} testID="more.people" />
         <SwitchCameraRow onDone={onClose} />
       </SheetGroup>
@@ -144,6 +146,23 @@ function CopyLinkRow({ link }: { readonly link: string }): React.JSX.Element {
     reset.current = setTimeout(() => setCopied(false), durations.copyReset);
   }, [link]);
   return <SheetRow icon={copied ? "check" : "copy"} label="Copy link" onPress={() => void copy()} testID="more.copy" />;
+}
+
+/** Chat, with the accent dot after its name while messages are unread. */
+function ChatRow({ onPress }: { readonly onPress: () => void }): React.JSX.Element {
+  const { colors } = useTheme();
+  const unread = useChat().unreadCount > 0;
+  return (
+    <SheetRow
+      accessibilityLabel={unread ? "Chat, new messages" : "Chat"}
+      badge={unread ? <View style={[styles.unread, { backgroundColor: colors.info }]} testID="more.chat.unread" /> : null}
+      end={<Icon color={colors.textMuted} name="right" />}
+      icon="chat"
+      label="Chat"
+      onPress={onPress}
+      testID="more.chat"
+    />
+  );
 }
 
 function PeopleCount({ count }: { readonly count: number }): React.JSX.Element {
@@ -217,4 +236,5 @@ const styles = StyleSheet.create({
   emoji: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
   emojiText: { fontSize: 22 },
   end: { flexDirection: "row", alignItems: "center", gap: 14 },
+  unread: { width: 8, height: 8, borderRadius: 4 },
 });
