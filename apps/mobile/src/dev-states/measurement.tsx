@@ -1,6 +1,6 @@
 import type { MeasurementRegistry } from "@q9labsai/chalk-react-native/dev";
 import { useCallback, useEffect, useRef, type RefObject } from "react";
-import { Dimensions, KeyboardAvoidingView, PixelRatio, Platform, StyleSheet, View, type KeyboardAvoidingViewProps, type TextStyle, type ViewProps, type ViewStyle } from "react-native";
+import { Dimensions, PixelRatio, Platform, StyleSheet, View, type TextStyle, type ViewProps, type ViewStyle } from "react-native";
 
 type Measurement = { frame: { x: number; y: number; width: number; height: number }; style: ReturnType<typeof StyleSheet.flatten> };
 const registry = new Map<string, () => Promise<Measurement>>();
@@ -57,12 +57,6 @@ export function MeasuredView({ testID, style, ...props }: ViewProps) {
   const ref = useRef<View>(null);
   useMeasurement(testID, ref, StyleSheet.flatten(style) ?? {});
   return <View {...props} testID={testID} style={style} ref={ref} collapsable={false} />;
-}
-
-export function MeasuredKeyboardAvoidingView({ testID, style, ...props }: KeyboardAvoidingViewProps) {
-  const ref = useRef<KeyboardAvoidingView>(null);
-  useMeasurement(testID, ref, StyleSheet.flatten(style) ?? {});
-  return <KeyboardAvoidingView {...props} testID={testID} style={style} ref={ref} />;
 }
 
 async function readMeasurement(id: string) {

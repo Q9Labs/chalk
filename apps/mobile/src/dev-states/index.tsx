@@ -6,6 +6,7 @@ import { callStateForScreen, scenarioForCodes } from "./scenario";
 import { parseCodes, type ScenarioCode } from "./codes";
 import { createFixtureClient } from "./fixtures";
 import { AppStates, hasAppStates } from "./app-states";
+import { supportsCallState } from "./sdk-capabilities";
 import { MeasuredView, sendMeasurements, registerSDKMeasurement } from "./measurement";
 
 const dev: typeof import("@q9labsai/chalk-react-native/dev") | null = __DEV__ ? require("@q9labsai/chalk-react-native/dev") : null;
@@ -66,12 +67,13 @@ export function DevStates({ url }: { url: string }) {
     return () => clearTimeout(timer);
   }, [params, scenario, appSurface]);
   if (scenario.error || error) return <Text accessibilityRole="alert">{scenario.error ?? error}</Text>;
+  if (!supportsCallState && ["knocking", "refused", "hold", "full", "ended", "removed"].includes(state.screen)) return <Text accessibilityRole="alert">This fixture requires the mobile-redesign-states SDK callState seam.</Text>;
   const supported: readonly ScenarioCode[] = ["D1", "D2", "O1", "P1", "P2", "P3", "P4", "U1", "U2", "V1", "V2", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "T1", "T2", "T3", "T4", "T5", "T6", "C1", "F5", "F6"];
   const unsupported = scenario.codes.filter((code) => !supported.includes(code));
   if (unsupported.length) return <Text accessibilityRole="alert">SDK scenario adapter does not support: {unsupported.join(",")}</Text>;
   return (
     <MeasuredView testID="harness.ready" style={{ flex: 1 }}>
-      {appSurface ? <AppStates screen={state.screen} theme={state.theme} ready={params.get("app") === "ready"} /> : <Chalk key={url} client={client} colorScheme={state.theme} soundsEnabled={false} />}
+      {appSurface ? <AppStates screen={state.screen} theme={state.theme} ready={params.get("app") === "ready"} call={<Chalk key={url} client={client} colorScheme={state.theme} soundsEnabled={false} />} /> : <Chalk key={url} client={client} colorScheme={state.theme} soundsEnabled={false} />}
     </MeasuredView>
   );
 }
