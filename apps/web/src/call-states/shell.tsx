@@ -5,11 +5,11 @@ import { Chalk, ChalkProvider, ControlBar, SpaceHeader } from "@q9labsai/chalk-r
 import { createCallStateClient, HOST, PEOPLE, liveSnapshot } from "./fixtures";
 import type { CallState } from "./states";
 
-function ShellCall({ host = false, report = false, blocked = false, initialColorScheme }: { readonly host?: boolean; readonly report?: boolean; readonly blocked?: boolean; readonly initialColorScheme?: ThemePreference }) {
+function ShellCall({ host = false, report = false, blocked = false, paged = false, initialColorScheme }: { readonly host?: boolean; readonly report?: boolean; readonly blocked?: boolean; readonly paged?: boolean; readonly initialColorScheme?: ThemePreference }) {
   const [command, setCommand] = useState("");
   const [colorScheme, setColorScheme] = useState(() => initialColorScheme ?? readThemePreference(document.cookie));
   const [client] = useState(() => {
-    const snapshot = liveSnapshot({ others: PEOPLE.slice(0, 7), capabilities: host ? HOST : undefined });
+    const snapshot = liveSnapshot({ others: paged ? PEOPLE : PEOPLE.slice(0, 7), capabilities: host ? HOST : undefined });
     const instance = createCallStateClient({
       ...snapshot,
       media: {
@@ -116,4 +116,5 @@ export const SHELL_STATES: readonly CallState[] = [
   { id: "shell-report", title: "Shell report callback", render: () => <ShellCall report /> },
   { id: "shell-report-light", title: "Shell report callback, Light", render: () => <ShellCall report initialColorScheme="light" /> },
   { id: "shell-blocked", title: "Shell devices unavailable", render: () => <ShellCall blocked /> },
+  { id: "shell-paged", title: "Shell phone pagination", render: () => <ShellCall paged /> },
 ];

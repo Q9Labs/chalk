@@ -65,7 +65,7 @@ try {
  await page.getByRole('menuitem',{name:'End call for everyone',exact:true}).waitFor();
  await page.getByRole('menuitem',{name:'Leave call',exact:true}).waitFor();
  await page.keyboard.press('Escape');
- await page.setViewportSize({width:390,height:844});await load();
+ await page.setViewportSize({width:390,height:844});await load('shell-paged');
  await page.getByRole('button',{name:'Call details',exact:true}).click();
  const sheet=page.getByRole('dialog',{name:'Call details',exact:true});await sheet.waitFor();
  for(let i=0;i<12;i++){await page.keyboard.press('Tab');assert.equal(await sheet.evaluate(el=>el.contains(document.activeElement)),true)}
@@ -75,6 +75,7 @@ try {
  await page.getByRole('button',{name:'Grid',exact:true}).click();
  await page.keyboard.press('Escape');
  const dots=page.getByRole('button',{name:/^Go to page /});
+ await dots.nth(1).waitFor();
  assert.ok(await dots.count()>1);
  await dots.nth(1).click();
  assert.equal(await dots.nth(1).getAttribute('aria-current'),'page');
