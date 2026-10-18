@@ -31,6 +31,34 @@ inject environment variables before the API starts.
 
 [`internal/config/config.go`](internal/config/config.go) owns supported environment variables, defaults, and startup validation.
 
+### Service principal (optional)
+
+Set all three variables to enable a backend service caller; leave all unset to
+preserve the API-key-only default:
+
+- `CHALK_API_SERVICE_ID`: stable service identity (1–128 characters). Never use a secret here.
+- `CHALK_API_SERVICE_SECRETS`: comma-separated bearer secrets, each at least 32 characters. Add a replacement, deploy callers, then remove the old secret; keep the service ID unchanged.
+- `CHALK_API_SERVICE_SCOPES`: comma-separated explicit scopes from the API-key scope vocabulary, such as `tenants:read,tenants:write,spaces:read`. No wildcard or implicit full access.
+
+The service may create Tenants with optional `external_id` (1–512 characters),
+list only its own Tenants, and use its scopes only within those Tenants.
+`POST /v1/tenants` returns the existing Tenant for a repeated
+`(service ID, external_id)`, without replacing its name, settings, or policies.
+`GET /v1/tenants/by-external-id?external_id=...` looks up only the caller's Tenant.
+Keep this credential server-side. It is never System; the local-only System token
+remains unavailable in non-local environments.
+
+An operator can adopt an existing unowned Tenant using a direct database owner
+connection. The command refuses a Tenant owned by a different service, and records
+actor, reason, prior ownership and external ID in `tenant_service_ownership_audit`
+in the same statement as the update. The audit intentionally survives Tenant deletion.
+Protect owner credentials and restrict runtime database access to the audit table;
+`--actor` is the operator's assertion, not an authenticated OS identity.
+
+```sh
+CHALK_DATABASE_URL='<direct-owner-url>' go -C apps/api run ./cmd/tenant-service-owner --tenant-id '<tenant-id>' --service-id '<stable-service-id>' --external-id '<external-account-id>' --actor '<operator>' --reason '<reason>'
+```
+
 Set `CHALK_API_TRUSTED_PROXY_CIDRS` to the comma-separated CIDR ranges of the
 load balancers or edge proxies allowed to supply `CF-Connecting-IP` or
 `X-Forwarded-For` for public-route rate limiting. Non-local environments use
