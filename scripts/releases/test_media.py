@@ -352,7 +352,7 @@ class MediaIdentities(unittest.TestCase):
                     media.deploy_dispatcher(args)
                 self.assertEqual(provider.command.call_count, 3)
 
-    def test_first_dispatcher_install_lists_state_only_when_it_exists(self):
+    def test_first_dispatcher_install_imports_exactly_the_provisioned_resources_missing_from_state(self):
         from types import SimpleNamespace
         from unittest.mock import Mock
         import contextlib
@@ -360,28 +360,46 @@ class MediaIdentities(unittest.TestCase):
         archive_bytes = b'qualified dispatcher bytes'
         value = members()
         value['dispatcher']['sha256'] = digest(archive_bytes)
-        config = dict(dispatcher=dict(state_bucket='state', state_key='dispatcher.tfstate', function_name='dispatcher',
-                                      scheduler_name='reconcile', scheduler_group='group'))
-        for state, expected in [(False, ['init', 'import', 'import', 'plan', 'show', 'apply']),
-                                (True, ['init', 'state', 'import', 'plan', 'show', 'apply'])]:
-            with self.subTest(state_exists=state):
+        function = 'chalk-nightly-transcription-dispatcher'
+        config = dict(dispatcher=dict(state_bucket='state', state_key='transcription/terraform.tfstate', function_name=function,
+                                      scheduler_name='chalk-nightly-transcription-reconcile', scheduler_group='chalk-nightly'))
+        # `tofu state list` after the 19 Oct 2026 nightly apply stopped on the provisioned log group.
+        retry_state = [
+            'data.aws_caller_identity.current',
+            'module.dispatcher.data.aws_caller_identity.current',
+            'module.dispatcher.data.aws_iam_policy_document.lambda_assume_role',
+            'module.dispatcher.data.aws_iam_policy_document.scheduler_assume_role',
+            'module.dispatcher.data.aws_region.current',
+            'module.dispatcher.aws_cloudwatch_metric_alarm.async_failure_queue_depth',
+            'module.dispatcher.aws_iam_role.dispatcher',
+            'module.dispatcher.aws_iam_role.scheduler',
+            'module.dispatcher.aws_sqs_queue.async_failure',
+            'module.dispatcher.aws_sqs_queue.scheduler_dlq',
+        ]
+        role, scheduler, logs = [('module.dispatcher.aws_iam_role.dispatcher', function + '-execution'),
+                                 ('module.dispatcher.aws_iam_role.scheduler', function + '-scheduler'),
+                                 ('module.dispatcher.aws_cloudwatch_log_group.dispatcher', '/aws/lambda/' + function)]
+        for name, listed, expected_imports in [('empty backend', None, [role, scheduler, logs]), ('19 Oct retry', retry_state, [logs])]:
+            with self.subTest(name):
                 provider = Mock()
                 def aws(*arguments, **kwargs):
                     if arguments[:2] == ('s3api', 'get-object'):
                         Path(arguments[-1]).write_bytes(archive_bytes)
                         return {}
-                    responses = {('s3api', 'list-objects-v2'): dict(Contents=[dict(Key='dispatcher.tfstate')]) if state else {},
+                    responses = {('s3api', 'list-objects-v2'): dict(Contents=[dict(Key=config['dispatcher']['state_key'])]) if listed else {},
                                  ('s3api', 'put-object'): dict(VersionId='v1'), ('scheduler', 'get-schedule'): dict(State='ENABLED')}
                     return responses[arguments[:2]]
                 def command(arguments, **kwargs):
                     if arguments[2:4] == ['state', 'list']:
                         # Real tofu exits 1 with "No state file was found" on an empty backend.
-                        self.assertTrue(state, 'state list ran before the backend held a state object')
-                        return 'module.dispatcher.aws_iam_role.dispatcher\n'
+                        self.assertIsNotNone(listed, 'state list ran before the backend held a state object')
+                        return '\n'.join(listed) + '\n'
                     return json.dumps(dict(resource_changes=[])) if 'show' in arguments else ''
                 provider.aws.side_effect = aws
                 provider.command.side_effect = command
-                provider.state.return_value = dict(resources=[dict(type='aws_iam_role', name='dispatcher', instances=[dict(attributes={})])])
+                provider.state.return_value = dict(resources=[
+                    dict(mode='data' if '.data.' in '.' + address else 'managed', type=address.split('.')[-2], name=address.split('.')[-1], instances=[dict(attributes={})])
+                    for address in listed or []])
                 with tempfile.TemporaryDirectory() as directory:
                     manifest, output = Path(directory) / 'manifest.json', Path(directory) / 'media.json'
                     manifest.write_text(json.dumps(dict(component_releases=dict(api=dict(release_id='managed-episode-first')))))
@@ -390,10 +408,11 @@ class MediaIdentities(unittest.TestCase):
                     with patch.object(media, 'settings', return_value=(provider, config)), patch.object(media, 'verify_dispatcher', return_value={}), \
                             patch.dict(os.environ, CHALK_MEDIA_ARTIFACT_BUCKET='example-artifacts'), contextlib.redirect_stdout(io.StringIO()):
                         media.deploy_dispatcher(args)
-                calls = [call.args[0] for call in provider.command.call_args_list]
-                self.assertEqual([command[2] for command in calls], expected)
-                imported = [command[-1] for command in calls if command[2] == 'import']
-                self.assertEqual(imported, ['dispatcher-scheduler'] if state else ['dispatcher-execution', 'dispatcher-scheduler'])
+                calls = [call.args[0][2:] for call in provider.command.call_args_list]
+                imports = [(command[2], command[3]) for command in calls if command[0] == 'import']
+                self.assertEqual(imports, expected_imports)
+                self.assertEqual([command[0] for command in calls if command[0] != 'import'],
+                                 ['init', 'plan', 'show', 'apply'] if listed is None else ['init', 'state', 'plan', 'show', 'apply'])
 
     def test_mutable_or_incomplete_members_are_refused(self):
         value = members()

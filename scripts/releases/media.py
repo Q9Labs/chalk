@@ -358,10 +358,12 @@ def deploy_dispatcher(args):
                               'artifact_verified': True, 'state_plan_verified': True, 'verified': False}))
             return
         if not installed:
-            # These two roles belong to the dispatcher module but provisioning created them before the first ZIP.
+            # These belong to the dispatcher module but provisioning created them before the first ZIP.
             # `tofu state list` exits 1 until the backend holds a state object.
             present = set(tofu('state', 'list').splitlines()) if dispatcher_state_exists(provider, config) else set()
-            for resource, name in [('aws_iam_role.dispatcher', config['dispatcher']['function_name'] + '-execution'), ('aws_iam_role.scheduler', config['dispatcher']['function_name'] + '-scheduler')]:
+            function = config['dispatcher']['function_name']
+            for resource, name in [('aws_iam_role.dispatcher', function + '-execution'), ('aws_iam_role.scheduler', function + '-scheduler'),
+                                   ('aws_cloudwatch_log_group.dispatcher', '/aws/lambda/' + function)]:
                 address = 'module.dispatcher.' + resource
                 if address not in present:
                     tofu('import', '-input=false', address, name)

@@ -86,7 +86,8 @@ acceptance and a qualified corpus digest before the module can plan.
 
 Release builds and qualifies a dispatcher ZIP when its inputs changed or nightly
 has no complete dispatcher installation. It initializes this caller using the
-nightly state bucket, imports the two provisioned IAM roles if absent from state,
+nightly state bucket, imports the two provisioned IAM roles and the provisioned
+`/aws/lambda/chalk-nightly-transcription-dispatcher` log group if absent from state,
 and applies a non-destructive first-install plan. A retry resumes partial state.
 The module references the provisioned `chalk-nightly` scheduler group.
 
