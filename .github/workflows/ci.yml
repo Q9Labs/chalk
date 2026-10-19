@@ -1007,7 +1007,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           WEB_TARGET: ${{ inputs.managed_environment }}
           ARTIFACT_RUN_ID: ${{ inputs.manifest_run_id || github.run_id }}
-          WEB_ARTIFACT: ${{ inputs.web_artifact || toJSON(fromJSON(needs.prepare-web.outputs.web)[inputs.managed_environment]) }}
+          WEB_ARTIFACT: ${{ inputs.web_artifact || toJSON(fromJSON(needs.prepare-web.outputs.web || '{}')[inputs.managed_environment]) }}
         run: python3 scripts/releases/web.py deploy --target "$WEB_TARGET" --sha "$TARGET_SHA"
       - name: Restore the saved Pages production deployment
         id: restore

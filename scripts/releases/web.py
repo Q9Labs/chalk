@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+import urllib.error
 import urllib.request
 from pathlib import Path
 from urllib.parse import quote
@@ -59,8 +60,11 @@ def pages(project, route='', method='GET'):
     account = os.environ['CLOUDFLARE_ACCOUNT_ID']
     url = f'https://api.cloudflare.com/client/v4/accounts/{account}/pages/projects/{quote(project, safe="")}{route}'
     request = urllib.request.Request(url, method=method, headers={'Authorization': 'Bearer ' + os.environ['CLOUDFLARE_API_TOKEN']})
-    with urllib.request.urlopen(request, timeout=60) as response:
-        result = json.load(response)
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            result = json.load(response)
+    except urllib.error.HTTPError as error:
+        raise ValueError(f'Pages API {method} {route or "/"} returned {error.code}: {error.read(500).decode(errors="replace")}') from error
     require(result['success'], 'Pages API request failed')
     return result['result']
 
