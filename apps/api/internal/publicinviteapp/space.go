@@ -20,6 +20,10 @@ var (
 	ErrInvalidSpacePort     = errors.New("invalid public Space adapter configuration")
 )
 
+// startCallLingerWindowSeconds keeps a Start-a-call Episode open after its last
+// departure, so a host who taps Rejoin within this window continues the same call.
+const startCallLingerWindowSeconds int32 = 30
+
 // SpaceConfig contains the platform-owned defaults for an auto-created public
 // Space. The managed Tenant is resolved before creation so a bad deployment
 // configuration cannot create a Space in another Tenant.
@@ -79,7 +83,7 @@ func (a spacePort) CreatePublicSpace(ctx context.Context, input publicinvites.Cr
 		AdmissionPolicy:               json.RawMessage(`{"mode":"open"}`),
 		DefaultEpisodeDurationSeconds: 3600,
 		MaximumEpisodeDurationSeconds: 3600,
-		LingerWindowSeconds:           0,
+		LingerWindowSeconds:           startCallLingerWindowSeconds,
 		RequestKey:                    input.RequestKey,
 	})
 	if err != nil {

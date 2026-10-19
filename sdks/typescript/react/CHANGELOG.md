@@ -2,6 +2,13 @@
 
 ## 5.0.0
 
+- Keep chat history available to observers and custom read-only roles; gate the composer, attachments, and message reactions on `sendChat`.
+- Use `endEpisode` authority for Host badges and host-transfer notices, including `owner` and custom roles. Add `ParticipantListParticipant.isHost` for presentation-only lists.
+- Play a short, quiet synthesized reaction sound while Sounds is enabled.
+- Restore local ownership, capture details, and Stop/Change actions in the connected `ScreenShareView`.
+- Avoid stopping already-ended screen capture tracks again when publication fails.
+- Remove the unused `ToastStack.position` prop; call toasts use the responsive position defined by the call layout.
+
 - Remove `LeaveDialog`, `PreviewEpisodeEnded`, and `PreviewStatus` from the `/preview` entry point.
 - Change `ControlBar.onCommandError` from a message string callback to `(failure: ClientFailure | null, source?: MediaSource) => void`.
 - Require `ChalkMenu.trigger` and `ChalkMenu.children`; remove its forwarded div ref, `tone`, and inherited HTML attributes other than `className`.

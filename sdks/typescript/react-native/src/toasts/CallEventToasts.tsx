@@ -100,6 +100,7 @@ export function useCallEventToasts({ onOpenSettings, resumedAfterSettings }: Cal
         const id = toasts.show({
           kind: "error",
           leading,
+          wrap: true,
           dismissible: true,
           testID: `toast.${permission}-busy`,
           message: `Another app is using your ${permission}`,

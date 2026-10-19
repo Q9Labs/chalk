@@ -120,7 +120,6 @@ export function SpaceView({
   const connection = useConnection();
   const recording = useRecording();
   const canPublishScreen = useCan("publishScreen");
-  const canSendChat = useCan("sendChat");
   const canSendReaction = useCan("sendReaction");
   const canRaiseHand = useCan("raiseHand");
   const canDrawWhiteboard = useCan("drawWhiteboard");
@@ -159,7 +158,7 @@ export function SpaceView({
     ...(feature("screenShare") && canPublishScreen ? ["screenshare" as const] : []),
     ...(feature("recording") && canManageRecording ? ["record" as const] : []),
     ...(feature("participants") ? ["participants" as const] : []),
-    ...(feature("chat") && canSendChat ? ["chat" as const] : []),
+    ...(feature("chat") ? ["chat" as const] : []),
     ...(feature("handRaise") ? ["handraise" as const] : []),
     ...(feature("reactions") && canSendReaction ? ["reactions" as const] : []),
     ...(feature("whiteboard") && canDrawWhiteboard ? ["whiteboard" as const] : []),
@@ -227,7 +226,7 @@ export function SpaceView({
             onToggleMute: () => void runCommand(() => client.media.setMicrophoneEnabled(media.local.microphone.state !== "enabled")),
             onToggleVideo: () => void runCommand(() => client.media.setCameraEnabled(media.local.camera.state !== "enabled")),
             onToggleHand: feature("handRaise") && canRaiseHand ? () => void runCommand(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())) : undefined,
-            onToggleChat: feature("chat") && canSendChat ? () => setActivePanel((current) => (current === "chat" ? null : "chat")) : undefined,
+            onToggleChat: feature("chat") ? () => setActivePanel((current) => (current === "chat" ? null : "chat")) : undefined,
             onTogglePeople: feature("participants") ? () => setActivePanel((current) => (current === "participants" ? null : "participants")) : undefined,
             onToggleLayout: () => updateLayout(layout === "grid" ? "focus" : "grid"),
             onClosePanel: () => setActivePanel(null),
@@ -292,8 +291,8 @@ export function SpaceView({
           </>
         }
         sidebar={
-          <CallCard state={drawer.state} panel={drawer.panel} onPanelChange={setActivePanel} peopleCount={participantsSlice.roster.length} participantsEnabled={feature("participants")} chatEnabled={feature("chat") && canSendChat} onClose={() => setActivePanel(null)}>
-            {drawer.panel === "chat" && feature("chat") && canSendChat ? <ChatPanel variant="mobile" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} /> : null}
+          <CallCard state={drawer.state} panel={drawer.panel} onPanelChange={setActivePanel} peopleCount={participantsSlice.roster.length} participantsEnabled={feature("participants")} chatEnabled={feature("chat")} onClose={() => setActivePanel(null)}>
+            {drawer.panel === "chat" && feature("chat") ? <ChatPanel variant="mobile" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} /> : null}
             {drawer.panel === "participants" && feature("participants") ? <ParticipantsPanel variant="mobile" admissionEnabled={feature("admission")} generatedAvatars={generatedAvatars} onCommandError={onCommandError} onClose={() => setActivePanel(null)} /> : null}
             {drawer.panel === "admission" && feature("admission") ? <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} /> : null}
           </CallCard>

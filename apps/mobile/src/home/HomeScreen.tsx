@@ -1,6 +1,6 @@
-import { announce, ChalkText, FaceAvatar, fixed, Icon, IconButton, Menu, MenuItem, PillButton, useDeviceLayout, usePressAnimation, useTheme, useToasts } from "@q9labsai/chalk-react-native/ui";
+import { announce, ChalkText, FaceAvatar, fixed, Icon, IconButton, Menu, MenuItem, PillButton, useDeviceLayout, usePressAnimation, useTheme, useToastClearance, useToasts } from "@q9labsai/chalk-react-native/ui";
 import { setStringAsync } from "expo-clipboard";
-import { memo, useCallback, useRef, useState, type RefObject } from "react";
+import { memo, useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { shareLink } from "../lib/share";
@@ -26,11 +26,16 @@ type HomeScreenProps = {
 type OpenSheet = "you" | "join" | null;
 type OpenMenu = { readonly call: RecentCall; readonly anchorRef: RefObject<View | null> };
 
+/** The root's bottom padding under the foot, and the gap a notice keeps above the foot's top edge. */
+const FOOT_BOTTOM = 12;
+const TOAST_GAP = 8;
+
 /** A1 with H1: you, recent calls, then Start a call and Join with a link at the bottom. */
 export function HomeScreen({ name, onSaveName, preferences, recentCalls, onStartCall, onJoin, onJoinRecent, clipboard }: HomeScreenProps): React.JSX.Element {
   const { colors } = useTheme();
   const layout = useDeviceLayout();
   const toasts = useToasts();
+  const setToastBottom = useToastClearance();
   const [sheet, setSheet] = useState<OpenSheet>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const youRef = useRef<View>(null);
@@ -38,6 +43,8 @@ export function HomeScreen({ name, onSaveName, preferences, recentCalls, onStart
   const { insets } = layout;
   // iPad keeps the phone layout in a 440 pt column.
   const side = layout.phone ? 16 : Math.max(16, layout.width / 2 - 220);
+
+  useEffect(() => () => setToastBottom(null), [setToastBottom]);
 
   const saveName = (next: string) => {
     onSaveName(next);
@@ -69,7 +76,7 @@ export function HomeScreen({ name, onSaveName, preferences, recentCalls, onStart
   const openMenu = useCallback((call: RecentCall, anchorRef: RefObject<View | null>) => setMenu({ call, anchorRef }), []);
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.canvas, paddingTop: insets.top + 4, paddingBottom: insets.bottom + 12, paddingLeft: side + insets.left, paddingRight: side + insets.right }]} testID="home.screen">
+    <View style={[styles.root, { backgroundColor: colors.canvas, paddingTop: insets.top + 4, paddingBottom: insets.bottom + FOOT_BOTTOM, paddingLeft: side + insets.left, paddingRight: side + insets.right }]} testID="home.screen">
       <View style={styles.top}>
         <YouButton name={name} onPress={() => setSheet("you")} pressableRef={youRef} />
       </View>
@@ -85,7 +92,7 @@ export function HomeScreen({ name, onSaveName, preferences, recentCalls, onStart
           </ChalkText>
         )}
       </ScrollView>
-      <View style={styles.foot}>
+      <View onLayout={(event) => setToastBottom(FOOT_BOTTOM + event.nativeEvent.layout.height + TOAST_GAP)} style={styles.foot}>
         {clipboard.offer ? <ClipboardCard offer={clipboard.offer} onDismiss={clipboard.dismiss} onJoin={onJoin} onNotALink={() => toasts.show({ kind: "error", dismissible: true, message: "That isn’t a Chalk call link." })} /> : null}
         <PillButton icon="plus" label="Start a call" onPress={onStartCall} size="big" testID="home.start" variant="primary" />
         <PillButton icon="link" label="Join with a link" onPress={() => setSheet("join")} ref={joinRef} size="big" testID="home.join" />

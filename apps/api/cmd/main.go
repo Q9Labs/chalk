@@ -153,6 +153,17 @@ func run() error {
 	apiKeyService := apikeys.NewService(apiKeyRepository, apikeys.Config{Telemetry: launchTelemetry})
 	tenantRepository := postgres.NewTenantRepository(operationQueries)
 	tenantService := tenants.NewService(tenantRepository)
+	publicInviteConfig, err := resolvePublicInviteConfig(context.Background(), cfg, tenantService)
+	if err != nil {
+		return fmt.Errorf("configure public invite defaults: %w", err)
+	}
+	if publicInviteConfig.Enabled {
+		managedTenantID, err := utilities.ParseID(publicInviteConfig.ManagedTenantID)
+		if err != nil {
+			return fmt.Errorf("configure managed public Tenant limits exemption: %w", err)
+		}
+		cfg.TenantLimits.ManagedPublicTenantID = managedTenantID
+	}
 	membershipRepository := postgres.NewMembershipRepository(operationQueries, pool, diagnostics.Queries)
 	membershipService := memberships.NewService(membershipRepository)
 	if cfg.Observability.OperationLogs {
@@ -441,10 +452,6 @@ func run() error {
 			return fmt.Errorf("configure recording render authority: %w", err)
 		}
 		recorderRenderAuthority = renderService
-	}
-	publicInviteConfig, err := resolvePublicInviteConfig(context.Background(), cfg, tenantService)
-	if err != nil {
-		return fmt.Errorf("configure public invite defaults: %w", err)
 	}
 	if publicInviteConfig.Enabled && (syncTokenRefresh == nil || participantMediaIssuer == nil) {
 		if cfg.Observability.Environment != config.DefaultEnvironment {

@@ -20,7 +20,7 @@ func (r EpisodeLifecycleRepository) JoinPublic(ctx context.Context, input episod
 	var episodeCreated bool
 
 	err := r.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
-		if r.tenantLimits.MaxLiveEpisodes > 0 {
+		if r.tenantLimits.AppliesTo(input.TenantID) && r.tenantLimits.MaxLiveEpisodes > 0 {
 			if _, err := queries.LockTenantMediaLimits(ctx, uuid(input.TenantID)); err != nil {
 				return fmt.Errorf("lock tenant media limits: %w", err)
 			}

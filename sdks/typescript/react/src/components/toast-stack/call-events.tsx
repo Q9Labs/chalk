@@ -88,8 +88,9 @@ export function callEventToasts(previous: SpaceSnapshot, next: SpaceSnapshot): O
         ),
       });
   }
-  const departedHost = previous.participants.roster.find((person) => person.role === "host" && !after.has(person.participantId));
-  if (previous.self.role !== "host" && next.self.role === "host")
+  const departedHost = previous.participants.roster.find((person) => person.capabilities.includes("endEpisode") && !after.has(person.participantId));
+  const becameHost = !previous.self.can("endEpisode") && next.self.can("endEpisode");
+  if (becameHost)
     events.push({
       icon: <CallEventIcon kind="host" />,
       message: departedHost ? (
@@ -104,7 +105,7 @@ export function callEventToasts(previous: SpaceSnapshot, next: SpaceSnapshot): O
       ),
     });
   for (const person of previous.participants.roster)
-    if (!after.has(person.participantId) && person.participantId !== next.self.participantId && !(person === departedHost && previous.self.role !== "host" && next.self.role === "host"))
+    if (!after.has(person.participantId) && person.participantId !== next.self.participantId && !(person === departedHost && becameHost))
       events.push({
         icon: <Avatar name={person.displayName} size="xs" style={{ width: 28, height: 28 }} generated animated={false} />,
         message: (
