@@ -28,10 +28,7 @@ describe("public Space entry", () => {
   });
 
   it("requests a fresh admission when rejoining after Leave", async () => {
-    window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
-    render(<SpacePage slug="design-lab" />);
-    await act(async () => enterName("Ada"));
-    await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
+    await enterInvite();
     await leaveCall();
     await screen.findByRole("heading", { name: "You left Design Lab" });
     await waitFor(() => expect(screen.getByRole("button", { name: "Rejoin" }).hasAttribute("disabled")).toBe(false));
@@ -40,10 +37,7 @@ describe("public Space entry", () => {
   });
 
   it("releases a failed media arrival without an error event", async () => {
-    window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
-    const view = render(<SpacePage slug="design-lab" />);
-    await act(async () => enterName("Ada"));
-    await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
+    const view = await enterInvite();
     const snapshot = mocks.client.getSnapshot();
     mocks.client.getSnapshot.mockReturnValue({ ...snapshot, connection: { ...snapshot.connection, status: "failed" } });
     await act(async () => view.rerender(<SpacePage slug="design-lab" />));
@@ -143,10 +137,7 @@ describe("public Space entry", () => {
   });
 
   it("keeps access on page hide and remembers only enabled devices", async () => {
-    window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
-    const view = render(<SpacePage slug="design-lab" />);
-    await act(async () => enterName("Ada"));
-    await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
+    const view = await enterInvite();
 
     window.dispatchEvent(new Event("pagehide"));
     expect(mocks.prepared.finish).not.toHaveBeenCalled();
@@ -154,6 +145,14 @@ describe("public Space entry", () => {
     view.unmount();
   });
 });
+
+async function enterInvite() {
+  window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
+  const view = render(<SpacePage slug="design-lab" />);
+  await act(async () => enterName("Ada"));
+  await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
+  return view;
+}
 
 async function leaveCall(): Promise<void> {
   const onLeft = mocks.holder.chalkProps?.onLeft;
@@ -219,10 +218,7 @@ describe("reload rejoin", () => {
     expect(mocks.resumePublicSpace).toHaveBeenCalledOnce();
   });
   it("clears reload intent after Leave", async () => {
-    window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
-    render(<SpacePage slug="design-lab" />);
-    await act(async () => enterName("Ada"));
-    await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
+    await enterInvite();
     writeReloadRejoin(window.sessionStorage, marker);
     const onLeft = mocks.holder.chalkProps?.onLeft;
     if (typeof onLeft !== "function") throw new Error("Missing Leave callback");

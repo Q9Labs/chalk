@@ -44,6 +44,7 @@
     "apps/web/tests/dashboard-ui/*.mjs",
     "apps/web/functions/**/*.ts",
     "apps/web/tests/dashboard/fixture-entry.ts",
+    "apps/web/vitest.oauth.config.ts",
     "apps/web/tests/dashboard/*.mjs",
     "apps/web/src/lib/dashboard/contracts.ts",
     "apps/mobile/src/space/mobile-space-client.ts",
