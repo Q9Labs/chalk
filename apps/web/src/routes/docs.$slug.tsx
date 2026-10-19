@@ -25,18 +25,12 @@ function DocsSlugRoute() {
 
 function DocsNotFound() {
   return (
-    <div className="docs-article-layout">
-      <article className="docs-article docs-not-found" id="docs-content">
-        <p className="docs-article-group">Chalk docs</p>
-        <h1>Page not found</h1>
-        <p>The docs page you requested does not exist. Start from Why Chalk or open the Quickstart.</p>
-        <nav className="docs-not-found-links" aria-label="Not found navigation">
-          <a className="docs-article-primary-action" href="/docs">
-            Back to Why Chalk <span aria-hidden="true">→</span>
-          </a>
-          <a href="/docs/quickstart">Open Quickstart</a>
-        </nav>
-      </article>
+    <div className="art derr">
+      <h1>Page not found</h1>
+      <p>This docs page doesn’t exist. Start from Why Chalk, or pick a page from the menu.</p>
+      <a className="btn pri" href="/docs">
+        Back to Why Chalk
+      </a>
     </div>
   );
 }

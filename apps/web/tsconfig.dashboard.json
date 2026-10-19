@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["server/**/*.ts", "functions/**/*.ts", "src/lib/dashboard/**/*.ts", "tests/dashboard/**/*.ts"],
+  "compilerOptions": {
+    "paths": { "@q9labsai/chalk-client/effect": ["../../sdks/typescript/client/src/effect.ts"] }
+  }
+}

@@ -18,6 +18,42 @@ afterEach(async () => {
 });
 
 describe("public Space entry", () => {
+  it("does not blame an invite link for a join conflict", async () => {
+    window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
+    mocks.publicClient.arriveBySpacePublicInvite.mockRejectedValue(Object.assign(new Error("Participant is not active"), { status: 409 }));
+    render(<SpacePage slug="design-lab" />);
+    await act(async () => enterName("Ada"));
+    await waitFor(() => expect(screen.getByText("You could not enter this Space. Try entering again.")).toBeDefined());
+    expect(screen.queryByText(/check the invite link/)).toBeNull();
+  });
+
+  it("requests a fresh admission when rejoining after Leave", async () => {
+    await enterInvite();
+    await leaveCall();
+    await screen.findByRole("heading", { name: "You left Design Lab" });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Rejoin" }).hasAttribute("disabled")).toBe(false));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Rejoin" })));
+    await waitFor(() => expect(mocks.publicClient.arriveBySpacePublicInvite).toHaveBeenCalledTimes(2));
+  });
+
+  it("releases a failed media arrival without an error event", async () => {
+    const view = await enterInvite();
+    const snapshot = mocks.client.getSnapshot();
+    mocks.client.getSnapshot.mockReturnValue({ ...snapshot, connection: { ...snapshot.connection, status: "failed" } });
+    await act(async () => view.rerender(<SpacePage slug="design-lab" />));
+    await waitFor(() => expect(mocks.finish).toHaveBeenCalledTimes(1));
+    mocks.client.getSnapshot.mockReturnValue(snapshot);
+  });
+
+  it("does not prepare devices before joining an invite", async () => {
+    window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
+    render(<SpacePage slug="design-lab" />);
+    await act(async () => undefined);
+    expect(mocks.publicClient.prepareSpaceEntrance).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /Camera|Microphone/ })).toBeNull();
+    expect(mocks.publicClient.arriveBySpacePublicInvite).not.toHaveBeenCalled();
+  });
+
   it.each(["episode.ended", "network.failed"])("preserves the terminal phase for %s", async (code) => {
     const original = mocks.client.getSnapshot();
     mocks.client.getSnapshot.mockReturnValue({ ...original, connection: Object.assign({}, original.connection, { status: "failed", lastError: { code, message: "Connection failed" } }) });
@@ -81,9 +117,27 @@ describe("public Space entry", () => {
     }
   });
 
-  it.each(["query", "browser"])("joins directly with a known %s name and both devices off", async (source) => {
+  it("does not replace an edited name when a delayed account lookup resolves", async () => {
+    window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
+    let resolveAccount: ((account: { name: string }) => void) | undefined;
+    mocks.getAccount.mockReturnValue(
+      new Promise((resolve) => {
+        resolveAccount = resolve;
+      }),
+    );
+    render(<SpacePage slug="design-lab" />);
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Bea" } });
+    await act(async () => resolveAccount?.({ name: "Ada" }));
+    expect(mocks.publicClient.arriveBySpacePublicInvite).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Your name").getAttribute("value")).toBe("Bea");
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Join" })));
+    expect(mocks.publicClient.arriveBySpacePublicInvite).toHaveBeenCalledWith(spacePageTestToken, "Bea");
+  });
+
+  it.each(["query", "browser", "account"])("joins directly with a known %s name and both devices off", async (source) => {
     window.history.replaceState({}, "", `/space/design-lab${source === "query" ? "?name=Ada" : ""}#spaceInviteToken=${spacePageTestToken}`);
     if (source === "browser") window.localStorage.setItem("chalk.display-name", "Ada");
+    if (source === "account") mocks.getAccount.mockResolvedValue({ name: "Ada" });
     render(
       <StrictMode>
         <SpacePage slug="design-lab" />
@@ -97,10 +151,7 @@ describe("public Space entry", () => {
   });
 
   it("keeps access on page hide and remembers only enabled devices", async () => {
-    window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
-    const view = render(<SpacePage slug="design-lab" />);
-    await act(async () => enterName("Ada"));
-    await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
+    const view = await enterInvite();
 
     window.dispatchEvent(new Event("pagehide"));
     expect(mocks.prepared.finish).not.toHaveBeenCalled();
@@ -108,6 +159,14 @@ describe("public Space entry", () => {
     view.unmount();
   });
 });
+
+async function enterInvite() {
+  window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
+  const view = render(<SpacePage slug="design-lab" />);
+  await act(async () => enterName("Ada"));
+  await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
+  return view;
+}
 
 async function leaveCall(): Promise<void> {
   const onLeft = mocks.holder.chalkProps?.onLeft;
@@ -173,10 +232,7 @@ describe("reload rejoin", () => {
     expect(mocks.resumePublicSpace).toHaveBeenCalledOnce();
   });
   it("clears reload intent after Leave", async () => {
-    window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
-    render(<SpacePage slug="design-lab" />);
-    await act(async () => enterName("Ada"));
-    await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
+    await enterInvite();
     writeReloadRejoin(window.sessionStorage, marker);
     const onLeft = mocks.holder.chalkProps?.onLeft;
     if (typeof onLeft !== "function") throw new Error("Missing Leave callback");

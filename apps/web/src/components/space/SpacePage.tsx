@@ -3,6 +3,7 @@ import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, type JoinO
 import { Chalk, CallLimbo, ChalkButton, StatusSurface } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
+import { getAccount } from "../../lib/account-api";
 import { canonicalSpaceInviteLink, spaceInviteToken, verifiedSpaceInviteLink } from "../../lib/named-space-route";
 import { createLocalSpaceClient, createLocalSpaceRelease } from "../../lib/local-space-client";
 type WebJoinSettings = Required<Pick<JoinOptions, "displayName" | "microphone" | "camera">>;
@@ -29,7 +30,7 @@ export function SpacePage({
       return null; // Storage may be disabled; manual entry remains available.
     }
   });
-  const [automaticName] = useState(() => {
+  const [automaticName, setAutomaticName] = useState(() => {
     const queryName = new URLSearchParams(globalThis.location?.search ?? "").get("name")?.trim();
     if (queryName) return queryName;
     try {
@@ -42,6 +43,7 @@ export function SpacePage({
   const [entranceSettings, setEntranceSettings] = useState<WebJoinSettings | null>(reloadMarker ? { displayName: reloadMarker.displayName, ...devicesOff } : null);
   const [callName, setCallName] = useState(slug ?? "Call");
   const autoArrivalAttempted = useRef(false);
+  const nameEdited = useRef(false);
   const [spaceAccess, setSpaceAccess] = useState<JoinedSpaceAccess | null>(null);
   const [pending, setPending] = useState<PendingArrival | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -137,6 +139,21 @@ export function SpacePage({
     },
     [client, complete, defaultJoinOptions, navigatePublicSpace, pending, preparing, slug, spaceAccess],
   );
+  useEffect(() => {
+    if (automaticName || reloadMarker) return;
+    let cancelled = false;
+    void getAccount()
+      .then((account) => {
+        if (!cancelled && !nameEdited.current && account.name.trim()) {
+          setDisplayName((current) => current || account.name);
+          setAutomaticName(account.name);
+        }
+      })
+      .catch(() => undefined); // Anonymous visitors supply their own name.
+    return () => {
+      cancelled = true;
+    };
+  }, [automaticName, reloadMarker]);
   useEffect(() => {
     if (!automaticName || reloadMarker || autoArrivalAttempted.current) return;
     autoArrivalAttempted.current = true;
@@ -270,6 +287,7 @@ export function SpacePage({
           spaceName={callName}
           displayName={displayName}
           onDisplayNameChange={(name) => {
+            nameEdited.current = true;
             setDisplayName(name);
           }}
           onJoin={() => start()}
@@ -348,7 +366,7 @@ function neutralMessage(cause: unknown): string {
   }
   if (cause && typeof cause === "object" && "status" in cause) {
     if (cause.status === 404 || cause.status === 410) return neutralSpaceError;
-    if (cause.status === 401) return neutralSpaceError;
+    if (cause.status === 401) return "Sign in again, then enter this Space.";
     if (cause.status === 403) return "You do not have access to this Space. Ask the owner for access.";
     if (cause.status === 429) return "Too many requests. Wait a minute, then enter this Space again.";
     if (cause.status === 409) return "You could not enter this Space. Try entering again.";

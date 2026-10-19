@@ -14,4 +14,8 @@ await client.participants.deny(requestId);
 
 Admission is distinct from identity. A Guest can be admitted to the current Episode without becoming a Member. A Member keeps standing Space access across Episodes.
 
+<Callout tone="note" title="One entry surface">
+  Entrance covers device preparation and waiting for admission in one place. Your product can style it or replace it with a custom panel while keeping the same `join` options.
+</Callout>
+
 Your backend can call `admitEpisodeParticipant` with `admission: "direct"` to admit a Participant and receive access without applying the Space’s `open`, `knock`, or `members_only` admission gate. Omit `admission` (or send `"policy"`) to retain policy-based admission; direct admission still requires `episodes:write` and all normal Tenant, Episode, role, and capacity checks.

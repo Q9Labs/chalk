@@ -1,113 +1,77 @@
-import type { ComponentPropsWithoutRef, ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
-import { Copy01Icon } from "@q9labsai/chalk-react/utils";
+import { useRef, type ComponentPropsWithoutRef, type ReactNode } from "react";
 
-import type { DocsCalloutProps, DocsFeatureCardProps, DocsTone } from "./docs-types";
+import { CopyButton } from "../site/CopyButton";
+import { Icon } from "../site/Icon";
+import type { DocsCalloutProps, DocsFeatureCardProps } from "./docs-types";
 
-const TONE_LABELS: Record<DocsTone, string> = {
-  note: "Note",
-  tip: "Tip",
-  caution: "Caution",
-  failure: "Failure",
-};
+const TONE_TITLES = { note: "Note", tip: "Tip", caution: "Caution", failure: "Failure" } as const;
+const LANGUAGE_LABELS = new Map([
+  ["ts", "TypeScript"],
+  ["tsx", "TSX"],
+  ["sh", "Shell"],
+  ["json", "JSON"],
+  ["http", "HTTP"],
+]);
 
 export function Callout({ children, title, tone = "note" }: DocsCalloutProps) {
+  const warning = tone === "caution" || tone === "failure";
   return (
-    <aside className="docs-callout" data-tone={tone}>
-      <div className="docs-callout-label">{title ?? TONE_LABELS[tone]}</div>
-      <div className="docs-callout-content">{children}</div>
-    </aside>
-  );
-}
-
-export function CardGrid({ children }: { children: ReactNode }) {
-  return <div className="docs-card-grid">{children}</div>;
-}
-
-export function FeatureCard({ children, description, eyebrow, href, icon, title }: DocsFeatureCardProps) {
-  const content = (
-    <>
-      {icon ? (
-        <span className="docs-feature-card-icon" aria-hidden="true">
-          {icon}
-        </span>
-      ) : null}
-      {eyebrow ? <span className="docs-feature-card-eyebrow">{eyebrow}</span> : null}
-      <h3>{title}</h3>
-      {description ? <p>{description}</p> : null}
-      {children ? <div className="docs-feature-card-body">{children}</div> : null}
-    </>
-  );
-
-  if (href) {
-    return (
-      <a className="docs-feature-card" href={href}>
-        {content}
-      </a>
-    );
-  }
-
-  return <article className="docs-feature-card">{content}</article>;
-}
-
-type CodeBlockProps = ComponentPropsWithoutRef<"pre">;
-type CopyState = "idle" | "copied" | "error";
-
-export function CodeBlock({ children, className, ...props }: CodeBlockProps) {
-  const codeRef = useRef<HTMLPreElement>(null);
-  const [copyState, setCopyState] = useState<CopyState>("idle");
-
-  useEffect(() => {
-    if (copyState === "idle") return;
-    const timeout = window.setTimeout(() => setCopyState("idle"), 2200);
-    return () => window.clearTimeout(timeout);
-  }, [copyState]);
-
-  async function copyCode() {
-    const source = codeRef.current?.querySelector("code")?.textContent ?? codeRef.current?.textContent ?? "";
-
-    try {
-      if (!navigator.clipboard?.writeText) throw new Error("Clipboard access is unavailable");
-      await navigator.clipboard.writeText(source);
-      setCopyState("copied");
-    } catch {
-      setCopyState("error");
-    }
-  }
-
-  const copyLabel = copyState === "copied" ? "Copied" : copyState === "error" ? "Copy failed" : "Copy";
-  const stateMessage = copyState === "error" ? "Copy failed. Select the code to copy it manually." : copyState === "copied" ? "Code copied to clipboard." : "";
-
-  return (
-    <div className="docs-code-block">
-      <div className="docs-code-toolbar">
-        <span className="docs-code-label">Code</span>
-        <button className="docs-code-copy" type="button" onClick={() => void copyCode()}>
-          <Copy01Icon size={15} aria-hidden="true" />
-          {copyLabel}
-        </button>
+    <div className={warning ? "callout caution" : "callout"} role="note">
+      <Icon name={warning ? "warn" : "info"} />
+      <div>
+        <b>{title ?? TONE_TITLES[tone]}</b>
+        <div className="callout-body">{children}</div>
       </div>
-      <pre ref={codeRef} className={className ? `docs-code-pre ${className}` : "docs-code-pre"} {...props}>
-        {children}
-      </pre>
-      <p className="docs-code-status" aria-live="polite">
-        {stateMessage}
-      </p>
     </div>
   );
 }
 
-export function InlineCode({ children, className, ...props }: ComponentPropsWithoutRef<"code">) {
+/** A row of short values, such as the steps of a schedule. */
+export function Chips({ items, label }: { readonly items: readonly string[]; readonly label: string }) {
   return (
-    <code className={className ? `docs-inline-code ${className}` : "docs-inline-code"} {...props}>
-      {children}
-    </code>
+    <ul className="chips" aria-label={label}>
+      {items.map((item) => (
+        <li key={item}>{item}</li>
+      ))}
+    </ul>
+  );
+}
+
+export function CardGrid({ children }: { readonly children: ReactNode }) {
+  return <div className="dlinks">{children}</div>;
+}
+
+export function FeatureCard({ children, href, title }: DocsFeatureCardProps) {
+  return (
+    <a href={href}>
+      <b>
+        {title}
+        <Icon name="arrowR" />
+      </b>
+      <div>{children}</div>
+    </a>
+  );
+}
+
+/** Shiki puts the fence language on `data-language` (see the rehype-shiki transformer in vite.config.ts). */
+export function CodeBlock({ children, "data-language": language, ...props }: ComponentPropsWithoutRef<"pre"> & { readonly "data-language"?: string }) {
+  const preRef = useRef<HTMLPreElement>(null);
+  return (
+    <div className="code">
+      <div className="ch">
+        <span className="clang">{LANGUAGE_LABELS.get(language ?? "") ?? "Code"}</span>
+        <CopyButton text={() => preRef.current?.textContent ?? ""} label="Copy code" />
+      </div>
+      <pre ref={preRef} {...props}>
+        {children}
+      </pre>
+    </div>
   );
 }
 
 export function DocsLink({ children, href, ...props }: ComponentPropsWithoutRef<"a">) {
   return (
-    <a href={href} {...props}>
+    <a href={href} className="tl" {...props}>
       {children}
     </a>
   );

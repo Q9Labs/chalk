@@ -10,3 +10,12 @@ CHALK_API_ORIGIN = "https://api.chalkmeet.com"
 CHALK_ENVIRONMENT = "production"
 VITE_API_URL = "https://api.chalkmeet.com"
 VITE_PUBLIC_APP_URL = "https://chalkmeet.com"
+# Non-secret dashboard configuration. Configure each Pages environment separately.
+DASHBOARD_ORIGIN = "https://chalkmeet.com"
+GOOGLE_CLIENT_ID = "configure-in-pages"
+APPLE_SERVICES_ID = "configure-in-pages"
+APPLE_TEAM_ID = "configure-in-pages"
+APPLE_KEY_ID = "configure-in-pages"
+DASHBOARD_IDENTITY_PROVIDER = "oauth"
+# Secret bindings (set with Pages secrets, never VITE_*):
+# GOOGLE_CLIENT_SECRET, APPLE_PRIVATE_KEY, SESSION_SECRET (>=32 random characters), DASHBOARD_SERVICE_TOKEN

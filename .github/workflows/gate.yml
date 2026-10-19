@@ -128,6 +128,8 @@ jobs:
         if: matrix.group == 'browser-tests'
         run: pnpm --dir sdks/typescript/client exec playwright install --with-deps chromium
 
+      # call-performance runs in the root gate for call rendering changes;
+      # GitHub enforces gzip budgets, while testbox enforces timing too.
       # Metro reuses transforms of unchanged modules, so the mobile export takes seconds instead of a minute.
       - name: Restore Metro cache
         if: matrix.group == 'build'

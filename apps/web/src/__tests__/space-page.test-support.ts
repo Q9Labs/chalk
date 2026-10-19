@@ -39,6 +39,9 @@ const spacePageTestMocks = vi.hoisted(() => {
       holder.chalkProps = props;
       return null;
     }),
+    getAccount: vi.fn<() => Promise<{ name: string }>>(async () => {
+      throw new Error("Not signed in");
+    }),
     resumePublicSpace: vi.fn(),
   };
 });
@@ -61,6 +64,7 @@ vi.mock("../lib/chalk-access", () => ({
   createPreparedPublicSpace: getSpacePageTestMocks().createPreparedPublicSpace,
   resumePublicSpace: getSpacePageTestMocks().resumePublicSpace,
 }));
+vi.mock("../lib/account-api", () => ({ getAccount: getSpacePageTestMocks().getAccount }));
 vi.mock("../lib/local-space-client", () => ({
   createLocalSpaceClient: getSpacePageTestMocks().createLocalSpaceClient,
   createLocalSpaceRelease: getSpacePageTestMocks().createLocalSpaceRelease,
@@ -81,6 +85,7 @@ export function resetSpacePageTestMocks(): void {
   window.sessionStorage.clear();
   const names = new Map<string, string>();
   vi.stubGlobal("localStorage", { getItem: (key: string) => names.get(key) ?? null, setItem: (key: string, value: string) => names.set(key, value) });
+  spacePageTestMocks.getAccount.mockReset().mockRejectedValue(new Error("Not signed in"));
   spacePageTestMocks.resumePublicSpace.mockReset().mockResolvedValue(spacePageTestMocks.prepared);
   window.history.replaceState({}, "", "/space");
   spacePageTestMocks.holder.chalkProps = undefined;

@@ -11,7 +11,8 @@ The calling service is responsible for the request-supplied `external_id` and en
 ```ts
 const client = createSpaceClient({
   space: "design-review",
-  getAccess: ({ space, reason }) => fetch(`/api/chalk/spaces/${space}/access?reason=${reason}`),
+  getAccess: ({ space, reason }) =>
+    fetch(`/api/chalk/spaces/${space}/access?reason=${reason}`),
 });
 ```
 

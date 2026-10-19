@@ -5,6 +5,12 @@
   "singleQuote": false,
   "trailingComma": "all",
   "insertFinalNewline": true,
+  "overrides": [
+    {
+      "files": ["apps/web/src/docs/content/*.mdx"],
+      "options": { "embeddedLanguageFormatting": "off" }
+    }
+  ],
   "ignorePatterns": [
     "**/dist/**",
     "**/coverage/**",
