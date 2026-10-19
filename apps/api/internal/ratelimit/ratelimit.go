@@ -27,7 +27,7 @@ type Decision struct {
 type LocalLimiter struct {
 	mu       sync.Mutex
 	buckets  map[string]localBucket
-	prunedAt time.Time
+	prunedAt map[string]time.Time
 }
 
 type localBucket struct {
@@ -37,7 +37,8 @@ type localBucket struct {
 
 func NewLocalLimiter() *LocalLimiter {
 	return &LocalLimiter{
-		buckets: make(map[string]localBucket),
+		buckets:  make(map[string]localBucket),
+		prunedAt: make(map[string]time.Time),
 	}
 }
 
@@ -83,7 +84,7 @@ func (l *LocalLimiter) Allow(ctx context.Context, key string, policy Policy, now
 }
 
 func (l *LocalLimiter) pruneColdBuckets(policy Policy, now time.Time) {
-	if !l.prunedAt.IsZero() && now.Sub(l.prunedAt) < policy.Window {
+	if prunedAt := l.prunedAt[policy.Name]; !prunedAt.IsZero() && now.Sub(prunedAt) < policy.Window {
 		return
 	}
 
@@ -94,7 +95,7 @@ func (l *LocalLimiter) pruneColdBuckets(policy Policy, now time.Time) {
 		}
 	}
 
-	l.prunedAt = now
+	l.prunedAt[policy.Name] = now
 }
 
 func refillBucket(bucket localBucket, policy Policy, now time.Time) float64 {

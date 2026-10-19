@@ -13,7 +13,7 @@ export default defineConfig({
     alias: [
       ...sourceAliases,
       { find: /^@q9labsai\/chalk-whiteboard$/, replacement: fileURLToPath(new URL("../../packages/whiteboard/src/index.ts", import.meta.url)) },
-      { find: /^\.\.\/\.\.\/lib\/(local-space-client|chalk-access|account-api)$/, replacement: fileURLToPath(new URL("./src/call-states/web-space-boundary.ts", import.meta.url)) },
+      { find: /^\.\.\/\.\.\/lib\/(local-space-client|chalk-access)$/, replacement: fileURLToPath(new URL("./src/call-states/web-space-boundary.ts", import.meta.url)) },
     ],
     dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
   },

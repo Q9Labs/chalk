@@ -173,7 +173,7 @@ test("every path that makes q9gate run in full also makes Chalk's plan run in fu
 test("CI runs only the jobs whose lanes the plan selects", () => {
   assert.deepEqual(ciJobs(["docs/contract-codegen.md"]), { api: false, sync: false, rootGroups: ["checks"] });
   assert.deepEqual(ciJobs(["apps/api/internal/server.go"]), { api: true, sync: false, rootGroups: ["checks"] });
-  assert.deepEqual(ciJobs(["apps/web/src/main.tsx"]), { api: false, sync: false, rootGroups: ["checks", "tests", "build"] });
+  assert.deepEqual(ciJobs(["apps/web/src/main.tsx"]), { api: false, sync: false, rootGroups: ["checks", "tests", "browser-tests", "build"] });
   assert.deepEqual(ciJobs(["sdks/typescript/react/src/index.ts"]), { api: false, sync: false, rootGroups: ["checks", "tests", "browser-tests", "build"] });
   assert.deepEqual(ciJobs(["gate.config.ts"]), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "build"] });
   assert.deepEqual(ciJobs([], { full: true }), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "build"] });
@@ -185,6 +185,8 @@ test("every lane runs in exactly one CI lane group", () => {
   assert.deepEqual(groups.flat().toSorted(), lanes.map((lane) => lane.id).toSorted());
   assert.equal(laneGroup("publint"), "build");
   assert.equal(laneGroup("browser-tests"), "browser-tests");
+  assert.equal(laneGroup("call-performance"), "browser-tests");
+  assert.equal(laneGroup("call-leaks"), "browser-tests");
   assert.equal(laneGroup("a-new-lane"), "checks");
   assert.equal(laneGroupLanes(lanes, undefined), lanes);
   assert.throws(

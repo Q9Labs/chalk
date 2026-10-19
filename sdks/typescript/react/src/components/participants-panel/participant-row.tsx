@@ -1,9 +1,9 @@
 import type { ParticipantListParticipant, ParticipantListVariant } from "./ParticipantsPanel";
 import type { ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { useState, useRef, useEffect } from "react";
-import { IconButton } from "@q9labsai/chalk-ui";
-import { MoreVerticalIcon, MicrophoneOff01Icon, Edit02Icon } from "../../utils/icons";
-import { Avatar, AudioIndicator, HandRaiseIndicator } from "../atomic";
+import { Popover } from "@base-ui/react/popover";
+import { MicrophoneOff01Icon, VideoOffIcon, Edit02Icon } from "../../utils/icons";
+import { Avatar } from "../atomic";
 import { cn } from "../../utils/cn";
 import { ParticipantOptionsMenu } from "./participant-options-menu";
 
@@ -11,6 +11,8 @@ export function ParticipantRow({
   participant,
   variant,
   canManageParticipants,
+  onAssignRole,
+  onStopParticipantScreenShare,
   onMuteParticipant,
   onRequestUnmute,
   onStopParticipantCamera,
@@ -29,6 +31,7 @@ export function ParticipantRow({
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(participant.displayName);
   const inputRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const hasVolumeControl = !!participantVolumes && !!onParticipantVolumeChange;
   const showMenuButton = canManageParticipants || hasVolumeControl || (participant.isLocal && !!onUpdateDisplayName);
@@ -59,11 +62,10 @@ export function ParticipantRow({
     variant === "mobile" ? "text-[var(--chalk-app-text-muted)] hover:text-[var(--chalk-app-text)]" : variant === "sidebar" ? "opacity-70 text-[var(--chalk-app-text-muted)] hover:text-[var(--chalk-app-text)] hover:opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100";
 
   return (
-    <div className={cn("group relative flex items-center justify-between rounded-lg p-3 transition-colors hover:bg-[var(--chalk-app-control-hover)]", variant === "sidebar" && "rounded-none px-1 py-3.5 hover:bg-[var(--chalk-app-control-hover)]")}>
-      <div className="flex items-center gap-3 min-w-0 flex-1">
+    <div ref={rootRef} className="call-person-row group">
+      <div className="flex items-center gap-2.5 min-w-0 flex-1">
         <div className="relative">
-          <Avatar name={participant.displayName} src={participant.avatarUrl} size="sm" generated={generatedAvatars} className={cn(variant === "sidebar" && "h-10 w-10")} gradientPreference={participantGradientPreference} />
-          {participant.isHandRaised && <HandRaiseIndicator raised={true} size="sm" className="-right-0.5 -top-0.5" />}
+          <Avatar name={participant.displayName} src={participant.avatarUrl} size="sm" generated={generatedAvatars} className="!h-8 !w-8" gradientPreference={participantGradientPreference} />
         </div>
 
         <div className="flex flex-col min-w-0 flex-1">
@@ -73,6 +75,7 @@ export function ParticipantRow({
                 <input
                   ref={inputRef}
                   type="text"
+                  aria-label="Your name"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
                   onKeyDown={handleKeyDown}
@@ -81,15 +84,16 @@ export function ParticipantRow({
                 />
               </div>
             ) : (
-              <span className="max-w-[140px] truncate text-sm font-semibold text-[var(--chalk-app-text)]" onClick={() => participant.isLocal && onUpdateDisplayName && setIsEditing(true)} title={participant.isLocal && onUpdateDisplayName ? "Click to edit" : undefined}>
-                {participant.displayName}
+              <span className="min-w-0 truncate text-sm font-medium text-[var(--chalk-app-text)]" onClick={() => participant.isLocal && onUpdateDisplayName && setIsEditing(true)} title={participant.isLocal && onUpdateDisplayName ? "Click to edit" : undefined}>
+                <bdi>{participant.displayName}</bdi>
               </span>
             )}
+            {participant.role === "host" && !isEditing ? <span className="shrink-0 text-xs text-[var(--chalk-app-text-muted)]">Host</span> : null}
             {participant.isLocal && !isEditing && (
               <span className="flex shrink-0 items-center gap-1 text-xs text-[var(--chalk-app-text-muted)]">
-                You
+                (You)
                 {onUpdateDisplayName && (
-                  <button type="button" onClick={() => setIsEditing(true)} className="p-0.5 opacity-0 transition-opacity hover:text-[var(--chalk-app-text)] group-hover:opacity-100">
+                  <button type="button" onClick={() => setIsEditing(true)} aria-label="Edit your name" className="call-edit-name">
                     <Edit02Icon className="w-3 h-3" />
                   </button>
                 )}
@@ -101,27 +105,37 @@ export function ParticipantRow({
       </div>
 
       <div className="flex items-center gap-1 shrink-0">
-        {variant === "sidebar" ? (
-          participant.isMuted ? (
-            <MicrophoneOff01Icon className="mr-1 h-4 w-4 text-[var(--chalk-app-danger)]" aria-label="Muted" />
-          ) : null
-        ) : (
-          <AudioIndicator muted={participant.isMuted} level={participant.isMuted ? 0 : 0.5} className={cn(participant.isMuted && "text-[var(--chalk-app-danger)]")} />
-        )}
+        {participant.isMuted ? <MicrophoneOff01Icon className="h-4 w-4 text-[var(--chalk-danger-text)]" aria-label="Microphone off" role="img" /> : null}
 
+        {participant.isHandRaised ? (
+          <span className="call-hand" role="img" aria-label={`Hand raised${participant.handOrder ? `, number ${participant.handOrder}` : ""}`}>
+            ✋{participant.handOrder}
+          </span>
+        ) : null}
+        {!participant.isVideoEnabled ? <VideoOffIcon className="h-4 w-4 text-[var(--chalk-app-text-muted)]" aria-label="Camera off" role="img" /> : null}
         {showMenuButton && !isEditing && (
-          <div className="relative">
-            <IconButton icon={<MoreVerticalIcon className="w-4 h-4" />} size="sm" variant="ghost" className={optionsButtonClassName} onClick={onMenuToggle} aria-label={`Options for ${participant.displayName}`} />
-
-            {menuOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={onMenuClose} />
-                <div className="absolute right-0 top-full z-20 mt-1 w-60 overflow-hidden rounded-[12px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] p-1.5 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-sm)]">
+          <Popover.Root
+            open={menuOpen}
+            onOpenChange={(open) => {
+              if (open) onMenuToggle();
+              else onMenuClose();
+            }}
+          >
+            <Popover.Trigger className={cn("call-person-options", optionsButtonClassName)} aria-label={`Options for ${participant.displayName}`}>
+              <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M5 12h.01M12 12h.01M19 12h.01" />
+              </svg>
+            </Popover.Trigger>
+            <Popover.Portal container={rootRef.current?.closest<HTMLElement>("[data-chalk]") ?? undefined}>
+              <Popover.Positioner side="bottom" align="end" sideOffset={6} collisionPadding={8} className="chalk-popover-positioner">
+                <Popover.Popup aria-label={`Options for ${participant.displayName}`} className="chalk-menu w-60">
                   <ParticipantOptionsMenu
                     participant={participant}
                     variant={variant}
                     canManageParticipants={canManageParticipants}
                     onClose={onMenuClose}
+                    onAssignRole={onAssignRole}
+                    onStopParticipantScreenShare={onStopParticipantScreenShare}
                     onMuteParticipant={onMuteParticipant}
                     onRequestUnmute={onRequestUnmute}
                     onStopParticipantCamera={onStopParticipantCamera}
@@ -139,10 +153,10 @@ export function ParticipantRow({
                     onParticipantVolumeChange={onParticipantVolumeChange}
                     onCommandError={onCommandError}
                   />
-                </div>
-              </>
-            )}
-          </div>
+                </Popover.Popup>
+              </Popover.Positioner>
+            </Popover.Portal>
+          </Popover.Root>
         )}
       </div>
     </div>
@@ -153,6 +167,8 @@ export interface ParticipantRowProps {
   participant: ParticipantListParticipant;
   variant: ParticipantListVariant;
   canManageParticipants: boolean;
+  onAssignRole?: (id: string, role: string) => Promise<unknown>;
+  onStopParticipantScreenShare?: (id: string) => Promise<unknown>;
   onMuteParticipant?: (id: string) => void;
   onRequestUnmute?: (id: string) => void | Promise<unknown>;
   onStopParticipantCamera?: (id: string) => void;

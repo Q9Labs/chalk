@@ -1,25 +1,47 @@
 package ai.q9labs.chalk.reactnative;
 
+import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.IBinder;
+import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 
+/**
+ * Keeps a call's microphone and camera working in the background. Android 11 and later cut off a
+ * background app's audio and video input unless a foreground service of that type runs. Android 14
+ * throws when a type's permission is missing, so the service declares only the types granted.
+ */
 public class ChalkSpaceForegroundService extends Service {
-    static final String ACTION_START = "ai.q9labs.chalk.reactnative.action.START_BACKGROUND_SPACE";
-    static final String ACTION_STOP = "ai.q9labs.chalk.reactnative.action.STOP_BACKGROUND_SPACE";
-    static final String EXTRA_SPACE_NAME = "spaceName";
-    static final String EXTRA_PARTICIPANT_NAME = "participantName";
-    static final String EXTRA_CAMERA_OFF = "cameraOff";
-    private static final String CHANNEL_ID = "chalk_space_background";
+    private static final String TAG = "ChalkCallService";
+    private static final String CHANNEL_ID = "chalk_call_background";
     private static final int NOTIFICATION_ID = 19487;
+
+    /** The foreground types the person has granted: microphone and camera, or 0 when neither is granted. */
+    static int grantedForegroundTypes(Context context) {
+        int types = 0;
+        if (isGranted(context, Manifest.permission.RECORD_AUDIO)) {
+            types |= ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
+        }
+        if (isGranted(context, Manifest.permission.CAMERA)) {
+            types |= ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA;
+        }
+        return types;
+    }
+
+    private static boolean isGranted(Context context, String permission) {
+        return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED;
+    }
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -28,53 +50,56 @@ public class ChalkSpaceForegroundService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        String action = intent != null ? intent.getAction() : null;
-        if (ACTION_STOP.equals(action)) {
-            stopForeground(STOP_FOREGROUND_REMOVE);
+        int foregroundTypes = grantedForegroundTypes(this);
+        if (foregroundTypes == 0) {
             stopSelf();
             return START_NOT_STICKY;
         }
 
         ensureNotificationChannel();
-
-        String spaceName = intent != null ? intent.getStringExtra(EXTRA_SPACE_NAME) : null;
-        String participantName = intent != null ? intent.getStringExtra(EXTRA_PARTICIPANT_NAME) : null;
-        boolean cameraOff = intent != null && intent.getBooleanExtra(EXTRA_CAMERA_OFF, false);
-        Notification notification = buildNotification(spaceName, participantName, cameraOff);
+        Notification notification = buildNotification();
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                int foregroundType = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
-                if (!cameraOff) {
-                    foregroundType |= ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA;
-                }
-                startForeground(NOTIFICATION_ID, notification, foregroundType);
+                startForeground(NOTIFICATION_ID, notification, foregroundTypes);
             } else {
                 startForeground(NOTIFICATION_ID, notification);
             }
         } catch (RuntimeException error) {
+            Log.w(TAG, "Couldn't start the call's foreground service", error);
             stopSelf();
         }
 
-        return START_STICKY;
+        // Not sticky: a call can't resume after the process is killed, so a restart would leave a notification with no call behind it.
+        return START_NOT_STICKY;
     }
 
-    private Notification buildNotification(String spaceName, String participantName, boolean cameraOff) {
-        String title = spaceName != null && !spaceName.trim().isEmpty() ? spaceName.trim() : "Chalk Space in progress";
-        String subtitle = participantName != null && !participantName.trim().isEmpty() ? participantName.trim() : "Your Space stays live in the background";
-        String detail = cameraOff ? "Audio stays live while you multitask." : "Video and audio stay live while you multitask.";
+    @Override
+    public void onDestroy() {
+        stopForeground(STOP_FOREGROUND_REMOVE);
+        super.onDestroy();
+    }
 
+    private Notification buildNotification() {
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setCategory(NotificationCompat.CATEGORY_CALL)
-                .setContentTitle(title)
-                .setContentText(subtitle)
-                .setStyle(new NotificationCompat.BigTextStyle().bigText(detail))
+                .setContentTitle("Chalk call in progress")
+                .setContentText("Tap to return to the call")
+                .setContentIntent(openAppIntent())
                 .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setSmallIcon(android.R.drawable.presence_video_online)
                 .build();
+    }
+
+    private PendingIntent openAppIntent() {
+        Intent launch = getPackageManager().getLaunchIntentForPackage(getPackageName());
+        if (launch == null) {
+            return null;
+        }
+        return PendingIntent.getActivity(this, 0, launch, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 
     private void ensureNotificationChannel() {
@@ -87,8 +112,8 @@ public class ChalkSpaceForegroundService extends Service {
             return;
         }
 
-        NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Chalk background Space", NotificationManager.IMPORTANCE_LOW);
-        channel.setDescription("Keeps Chalk Spaces active while the app is in the background");
+        NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Chalk call", NotificationManager.IMPORTANCE_LOW);
+        channel.setDescription("Keeps the microphone and camera on while Chalk is in the background");
         manager.createNotificationChannel(channel);
     }
 }

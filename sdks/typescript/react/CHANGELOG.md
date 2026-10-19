@@ -2,6 +2,18 @@
 
 ## 5.0.0
 
+- Replace stage paging with justified Grid rows and a +N People tile; make shared screens double-width and Spotlight content-aware. Add participant hand-order, share-audio, share-aspect and share-state presentation fields. Preserve keyed video elements through 220 ms transform-only layout moves and add the two-person phone picture-in-picture.
+- Unify screen and person tile chrome; show speaking rings, bold Facehash avatars, weak signal bars, local share previews and share controls. `Stage` accepts `onOverflowClick`, and content render contexts identify the primary tile.
+
+- Replace phone device choices with Flip camera when two or more cameras are available; audio stays with the operating system.
+
+- Make the desktop layout control a direct Spotlight/Grid toggle. Let `ChalkMenuItem.closeOnClick` keep device choices open, and `ChalkSheet.accessibleLabel` retain a stable accessible name while showing the call name.
+
+- Add call-link QR sharing, diagnostics copy, keyboard shortcuts, and optional `Chalk`/`SpaceView` `shareUrl` and `onReportProblem` callbacks. Rebuild the call dock with device and screen-source split controls, tab-audio capture, and phone More actions.
+- Add optional diagnostics, people, connection-warning and shortcut inputs to `SpaceHeader`; `ChalkPopover.tooltip` composes a tooltip with its trigger. Call reaction pickers accept raised-hand state and its action.
+- Rebuild the call card with People and Chat tabs, message reactions, attachment previews and a dark photo viewer.
+- Unify call status pages, add optional report/terminal-state integration, a share-ready card, recorded joining consent and accessible call-event toasts.
+
 - Publish and play shared tab audio separately from microphones, with share-audio state and coupled screen-share lifecycle.
 
 - Keep layout changes interactive when `layout` is supplied without `onLayoutChange`; the prop initializes local state in that case. A paired prop and handler remain controlled. Add Spotlight/Grid to the phone dock's More sheet.

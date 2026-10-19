@@ -41,42 +41,40 @@ try {
   await page.reload();
   await frame.waitFor();
   assert.equal(await frame.getAttribute("data-chalk-theme"), "light", "Light survives a reload");
-  await page.getByRole("button", { name: "Layout: Spotlight", exact: true }).click();
-  const items = page.getByRole("menuitemradio");
-  await items.first().waitFor();
-  await page.keyboard.press("ArrowDown");
-  assert.equal(await page.getByRole("menu").evaluate((el) => el.contains(document.activeElement)), true, "arrow key moves focus into the menu");
-  await page.keyboard.press("End");
-  assert.equal(await items.last().evaluate((el) => el === document.activeElement), true);
-  await page.keyboard.press("Escape");
-  await page.getByRole("menu").waitFor({ state: "detached" });
-  assert.equal(await page.getByRole("menu").count(), 0);
-  assert.equal(await page.getByRole("button", { name: "Layout: Spotlight", exact: true }).evaluate((el) => el === document.activeElement), true, "Escape restores the trigger");
+  await page.getByRole("button", { name: "Switch to grid", exact: true }).click();
+  await page.getByRole("button", { name: "Switch to spotlight", exact: true }).waitFor();
+  assert.equal(await page.getByRole("menu").count(), 0, "desktop layout changes directly without a menu");
+  assert.equal(await page.getByRole("button", { name: "Switch to spotlight", exact: true }).evaluate((el) => el === document.activeElement), true, "the direct toggle keeps keyboard focus");
+  await page.getByRole("button", { name: "Switch to spotlight", exact: true }).click();
+  await page.getByRole("button", { name: "Switch to grid", exact: true }).waitFor();
   await page.goto(`${origin}/call-states.html?state=perf-grid`);
-  await page.getByRole("button", { name: "Layout: Grid", exact: true }).click();
-  await page.getByRole("menuitemradio", { name: "Spotlight", exact: true }).click();
-  await page.getByRole("button", { name: "Layout: Spotlight", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Layout: Spotlight", exact: true }).click();
-  await page.getByRole("menuitemradio", { name: "Grid", exact: true }).click();
-  await page.getByRole("button", { name: "Layout: Grid", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Switch to spotlight", exact: true }).click();
+  await page.getByRole("button", { name: "Switch to grid", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Switch to grid", exact: true }).click();
+  await page.getByRole("button", { name: "Switch to spotlight", exact: true }).waitFor();
   await page.setViewportSize({ width: 390, height: 844 });
   const gridStage = page.getByTestId("stage");
   await page.waitForTimeout(300);
   assert.equal(await frame.evaluate((element) => getComputedStyle(element).overflow), "clip", "the call clips at its viewport without becoming a scroll container");
-  await page.getByRole("button", { name: "Next page", exact: true }).waitFor();
   assert.equal(await gridStage.evaluate((element) => getComputedStyle(element).overflow), "visible", "the stage does not clip FLIP at its temporary fitted edge");
-  const pageButtons = page.getByRole("button", { name: /^Go to page / });
-  const pageCount = await pageButtons.count();
-  assert.ok(pageCount >= 3, "the phone grid exercises first, middle and last pages");
-  for (const index of [0, 1, pageCount - 1]) {
-    await pageButtons.nth(index).focus();
+  const foldedTiles = gridStage.locator(':scope > div > [aria-hidden="true"]');
+  assert.equal(await foldedTiles.evaluateAll((elements) => elements.every((element) => element.inert && element.getClientRects().length === 0)), true, "folded tiles stay mounted but cannot show or intercept a click");
+  const overflow = page.getByRole("button", { name: /^Show \d+ more participants$/ });
+  if (await overflow.isVisible()) {
+    await overflow.focus();
     await page.keyboard.press("Enter");
-    await page.waitForTimeout(300);
-    const offPage = gridStage.locator(':scope > div > [aria-hidden="true"]');
-    assert.ok((await offPage.count()) > 0);
-    assert.equal(await offPage.evaluateAll((elements) => elements.every((element) => getComputedStyle(element).visibility === "hidden" && getComputedStyle(element).pointerEvents === "none")), true, "off-page tiles stay mounted but cannot show or intercept a click while the stage overflows");
-    assert.equal(await pageButtons.nth(index).getAttribute("aria-current"), "page");
+  } else {
+    await page.getByRole("button", { name: "More options", exact: true }).click();
+    await page.getByRole("button", { name: "People", exact: true }).click();
   }
+  const people = page.getByRole("complementary", { name: "Participants list", exact: true });
+  await people.waitFor();
+  for (const name of ["Camera 1", "Camera 12", "Camera 23"]) {
+    const person = people.getByText(name, { exact: true });
+    await person.scrollIntoViewIfNeeded();
+    assert.equal(await person.isVisible(), true, "People reaches the first, middle and last people without grid paging");
+  }
+  await page.getByRole("button", { name: "Close panel", exact: true }).click();
   await page.goto(`${origin}/call-states.html?state=duo`);
   const phoneStage = page.getByTestId("stage");
   assert.equal(await page.locator('[data-part="dock-more-glyph"]').getAttribute("d"), "M5 12h.01M12 12h.01M19 12h.01");

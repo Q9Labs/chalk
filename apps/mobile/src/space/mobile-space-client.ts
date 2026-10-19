@@ -1,13 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { GetAccess, SpaceClient } from "@q9labsai/chalk-client";
-import { createNativeSpaceClient } from "@q9labsai/chalk-react-native/client";
-
-import type { StoredSpaceArrival } from "../lib/spaces";
-import type { EntranceSettings } from "@q9labsai/chalk-react-native";
+import { createNativeSpaceClient, type NativeSpaceClientOptions } from "@q9labsai/chalk-react-native/client";
 
 type MobileSpaceClientOptions = {
   readonly apiBaseURL: string;
-  readonly defaults: Pick<EntranceSettings, "camera" | "microphone">;
+  readonly defaults: Required<Pick<NativeSpaceClientOptions, "camera" | "microphone">>;
   readonly getAccess: GetAccess;
   readonly space: string;
 };
@@ -26,45 +23,6 @@ export function createMobileSpaceClient({ apiBaseURL, defaults, getAccess, space
 export type MobileSpaceClientOwner = {
   readonly release: () => Promise<void>;
 };
-
-export type MobileSpaceRelease = (credential?: StoredSpaceArrival) => Promise<void>;
-
-type MobileSpaceReleaseOptions = {
-  readonly cleanupCredential: (credential: StoredSpaceArrival) => Promise<void>;
-  readonly onClose: () => Promise<void>;
-  readonly onReleaseFailure?: () => void;
-  readonly onReleaseStart?: () => void;
-};
-
-/** Shares one cleanup/close attempt across leave and Episode-ended callbacks. */
-export function createMobileSpaceRelease({ cleanupCredential, onClose, onReleaseFailure, onReleaseStart }: MobileSpaceReleaseOptions): MobileSpaceRelease {
-  let releasePromise: Promise<void> | undefined;
-
-  return (credential) => {
-    if (releasePromise) return releasePromise;
-
-    onReleaseStart?.();
-    let completion: Promise<void>;
-    const attempt = (async () => {
-      if (credential) await cleanupCredential(credential);
-      await onClose();
-    })();
-    completion = attempt.then(
-      () => {
-        if (releasePromise === completion) releasePromise = undefined;
-      },
-      (cause: unknown) => {
-        if (releasePromise === completion) {
-          releasePromise = undefined;
-          onReleaseFailure?.();
-        }
-        throw cause;
-      },
-    );
-    releasePromise = completion;
-    return completion;
-  };
-}
 
 /** Releases a supplied client exactly once. Chalk only disposes clients it creates itself. */
 export function ownMobileSpaceClient(client: SpaceClient): MobileSpaceClientOwner {

@@ -22,21 +22,6 @@
   "types": "./dist/index.d.ts",
   "typesVersions": {
     "*": {
-      "android": [
-        "./dist/android.d.ts"
-      ],
-      "ios": [
-        "./dist/ios.d.ts"
-      ],
-      "ios-phone": [
-        "./dist/ios-phone.d.ts"
-      ],
-      "ios-pad": [
-        "./dist/ios-pad.d.ts"
-      ],
-      "macos": [
-        "./dist/macos.d.ts"
-      ],
       "runtime": [
         "./dist/runtime.d.ts"
       ],
@@ -49,8 +34,8 @@
       "invites": [
         "./dist/invites.d.ts"
       ],
-      "theme": [
-        "./dist/ui/theme.d.ts"
+      "ui": [
+        "./dist/ui.d.ts"
       ],
       "client": [
         "./dist/client.d.ts"
@@ -68,36 +53,6 @@
       "import": "./dist/index.js",
       "require": "./dist/index.js",
       "default": "./dist/index.js"
-    },
-    "./android": {
-      "types": "./dist/android.d.ts",
-      "react-native": "./dist/android.js",
-      "import": "./dist/android.js",
-      "default": "./dist/android.js"
-    },
-    "./ios": {
-      "types": "./dist/ios.d.ts",
-      "react-native": "./dist/ios.js",
-      "import": "./dist/ios.js",
-      "default": "./dist/ios.js"
-    },
-    "./ios-phone": {
-      "types": "./dist/ios-phone.d.ts",
-      "react-native": "./dist/ios-phone.js",
-      "import": "./dist/ios-phone.js",
-      "default": "./dist/ios-phone.js"
-    },
-    "./ios-pad": {
-      "types": "./dist/ios-pad.d.ts",
-      "react-native": "./dist/ios-pad.js",
-      "import": "./dist/ios-pad.js",
-      "default": "./dist/ios-pad.js"
-    },
-    "./macos": {
-      "types": "./dist/macos.d.ts",
-      "react-native": "./dist/macos.js",
-      "import": "./dist/macos.js",
-      "default": "./dist/macos.js"
     },
     "./runtime": {
       "types": "./dist/runtime.d.ts",
@@ -117,17 +72,23 @@
       "import": "./dist/diagnostics.js",
       "default": "./dist/diagnostics.js"
     },
+    "./dev": {
+      "types": "./dist/dev.d.ts",
+      "react-native": "./dist/dev.js",
+      "import": "./dist/dev.js",
+      "default": "./dist/dev.js"
+    },
+    "./ui": {
+      "types": "./dist/ui.d.ts",
+      "react-native": "./dist/ui.js",
+      "import": "./dist/ui.js",
+      "default": "./dist/ui.js"
+    },
     "./invites": {
       "types": "./dist/invites.d.ts",
       "react-native": "./dist/invites.js",
       "import": "./dist/invites.js",
       "default": "./dist/invites.js"
-    },
-    "./theme": {
-      "types": "./dist/ui/theme.d.ts",
-      "react-native": "./dist/ui/theme.js",
-      "import": "./dist/ui/theme.js",
-      "default": "./dist/ui/theme.js"
     },
     "./client": {
       "types": "./dist/client.d.ts",
@@ -141,35 +102,56 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "rm -rf ./dist && tsup ./src/index.ts ./src/client.ts ./src/android.ts ./src/ios.ts ./src/ios-phone.ts ./src/ios-pad.ts ./src/macos.ts ./src/runtime.ts ./src/clipboard.ts ./src/diagnostics.ts ./src/invites.ts ./src/ui/theme.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external react-native-webview --external @q9labsai/chalk-whiteboard --external @cloudflare/react-native-webrtc && pnpm run build:types && pnpm run sync:whiteboard-assets",
+    "build": "rm -rf ./dist && tsup ./src/index.ts ./src/client.ts ./src/runtime.ts ./src/clipboard.ts ./src/diagnostics.ts ./src/dev.ts ./src/invites.ts ./src/ui.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external react-native-webview --external @q9labsai/chalk-whiteboard --external @cloudflare/react-native-webrtc --external expo-audio --external expo-clipboard --external expo-crypto --external expo-document-picker --external expo-file-system --external expo-haptics --external react-native-gesture-handler --external react-native-reanimated --external react-native-safe-area-context --external react-native-svg --loader .wav=copy && pnpm run build:types && pnpm run sync:whiteboard-assets",
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --build tsconfig.json",
-    "dev": "tsup ./src/index.ts ./src/client.ts ./src/android.ts ./src/ios.ts ./src/ios-phone.ts ./src/ios-pad.ts ./src/macos.ts ./src/runtime.ts ./src/clipboard.ts ./src/diagnostics.ts ./src/invites.ts ./src/ui/theme.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external react-native-webview --external @q9labsai/chalk-whiteboard --external @cloudflare/react-native-webrtc --watch",
+    "dev": "tsup ./src/index.ts ./src/client.ts ./src/runtime.ts ./src/clipboard.ts ./src/diagnostics.ts ./src/dev.ts ./src/invites.ts ./src/ui.ts --format esm --out-dir ./dist --platform browser --external react --external react-native --external react-native-webview --external @q9labsai/chalk-whiteboard --external @cloudflare/react-native-webrtc --external expo-audio --external expo-clipboard --external expo-crypto --external expo-document-picker --external expo-file-system --external expo-haptics --external react-native-gesture-handler --external react-native-reanimated --external react-native-safe-area-context --external react-native-svg --loader .wav=copy --watch",
     "sync:whiteboard-assets": "node ./scripts/sync-whiteboard-assets.mjs",
     "test": "pnpm exec vitest run",
     "check-types": "tsc-rs --project tsconfig.check-types.json --noEmit",
     "check:tokens": "node ./scripts/check-tokenized-styles.mjs",
+    "check:worklets": "node ./scripts/check-worklet-directives.mjs",
     "check:client-package": "node ./scripts/check-client-package.mjs",
-    "lint": "pnpm run check:tokens && pnpm exec oxfmt --check . && tsc --project tsconfig.check-types.json --noEmit",
+    "lint": "pnpm run check:tokens && pnpm run check:worklets && pnpm exec oxfmt --check . && tsc --project tsconfig.check-types.json --noEmit",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "@q9labsai/chalk-client": "workspace:^5.0.0",
     "@q9labsai/chalk-whiteboard": "workspace:^5.0.0",
-    "@q9labsai/facehash": "workspace:^5.0.0"
+    "@q9labsai/facehash": "workspace:^5.0.0",
+    "uqr": "^0.1.3"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
+    "expo-audio": "~55.0.18",
+    "expo-clipboard": "~55.0.9",
+    "expo-crypto": "~55.0.19",
+    "expo-document-picker": "~55.0.15",
+    "expo-file-system": "~55.0.24",
+    "expo-haptics": "~55.0.18",
+    "react-native-gesture-handler": "~2.30.1",
+    "react-native-reanimated": "4.2.1",
+    "react-native-safe-area-context": "~5.6.2",
+    "react-native-svg": "^15.15.3",
     "react-native-webview": "13.16.1",
+    "react-native-worklets": "0.7.2",
     "typescript": "^6.0.3"
   },
   "peerDependencies": {
     "@cloudflare/react-native-webrtc": "~125.0.1 || ~125.0.3",
-    "@hugeicons/core-free-icons": "^4.0.0",
-    "@hugeicons/react-native": "^1.0.13",
+    "expo-audio": "~55.0.18",
+    "expo-clipboard": "~55.0.9",
+    "expo-crypto": "~55.0.19",
+    "expo-document-picker": "~55.0.15",
+    "expo-file-system": "~55.0.24",
+    "expo-haptics": "~55.0.18",
     "react": "^18.0.0 || ^19.0.0",
     "react-native": ">=0.77",
+    "react-native-gesture-handler": "~2.30.1",
+    "react-native-reanimated": "4.2.1",
+    "react-native-safe-area-context": "~5.6.2",
     "react-native-svg": "^15.15.3",
-    "react-native-webview": "^13.16.1"
+    "react-native-webview": "^13.16.1",
+    "react-native-worklets": "0.7.2"
   }
 }

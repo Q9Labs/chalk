@@ -15,7 +15,7 @@ export type Person = {
 const BACKGROUNDS = ["#4d5d73", "#5c6650", "#6b5b4f", "#64576b", "#49645d", "#665d42", "#315f72", "#6d5158"];
 
 const SELF_ID = "you";
-export const SELF_NAME = "Hasan";
+export const SELF_NAME = "Alex";
 export const SPACE_NAME = "Q9 team";
 
 export const PEOPLE: readonly Person[] = [

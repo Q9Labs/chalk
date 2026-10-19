@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useSyncExternalStore } from "react";
 import { useConnection, useOffline, useSpaceClient } from "../../bindings/hooks";
+import { ToastStack } from "../toast-stack/ToastStack";
 import { CallLimbo } from "../call-limbo/CallLimbo";
 /** Most drops recover within a second or two, so the notice waits this long before it appears. */
 export const RECONNECTING_GRACE_MS = 2_000;
@@ -13,6 +14,7 @@ export function offlineNoticeText(pendingCount: number, online: boolean): string
 /** Keep queued actions automatic while preserving the reconnecting notice. */
 export function OfflineActions({ reconnecting: requestedReconnecting = false }: { readonly reconnecting?: boolean } = {}): React.JSX.Element | null {
   const client = useSpaceClient();
+  const [dismissedNotice, setDismissedNotice] = useState<string | null>(null);
   const connection = useConnection();
   const offline = useOffline();
   const online = useSyncExternalStore(subscribeToOnline, readOnline, () => true);
@@ -23,14 +25,12 @@ export function OfflineActions({ reconnecting: requestedReconnecting = false }: 
     void client.offline.setPolicy("send");
   }, [client]);
 
+  const count = offline.pending.length;
+  const messagesOnly = offline.pending.every((action) => action.kind === "chat_message");
+  const pendingDetail = count ? `${count} ${messagesOnly ? (count === 1 ? "message" : "messages") : count === 1 ? "action" : "actions"} will send when you’re back` : undefined;
   // Keep the layer mounted so recovery lifts the blur rather than removing it abruptly.
-  if (reconnecting || (!offline.decisionNeeded && !offline.notice)) return <CallLimbo overlay active={reconnectingNoticeDue} message={offlineNoticeText(offline.pending.length, online)} />;
-  if (offline.notice)
-    return (
-      <p role="status" className="absolute inset-x-0 top-3 z-40 mx-auto w-fit rounded-xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-3.5 py-2 text-sm text-[var(--chalk-app-text)]">
-        {offline.notice}
-      </p>
-    );
+  if (reconnecting || (!offline.decisionNeeded && !offline.notice)) return <CallLimbo overlay blocking={false} active={reconnectingNoticeDue} message={offlineNoticeText(0, online)} detail={pendingDetail} />;
+  if (offline.notice && offline.notice !== dismissedNotice) return <ToastStack toasts={[{ id: "offline-notice", message: offline.notice }]} onDismiss={() => setDismissedNotice(offline.notice ?? null)} />;
   return null;
 }
 

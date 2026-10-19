@@ -1,10 +1,11 @@
-import React, { useId, useMemo, useState, type KeyboardEvent } from "react";
-import { Badge, Button, IconButton, Input } from "@q9labsai/chalk-ui";
+import { Popover } from "@base-ui/react/popover";
+import React, { useMemo, useState } from "react";
+import { ChalkButton, ChalkPopover } from "../chalk-ui";
+import { CallCardStyles } from "../call-card/CallCardStyles";
 import { useCan, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
-import { Cancel01Icon, Search01Icon, UserGroupIcon } from "../../utils/icons";
-import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
+import { MicrophoneOff01Icon, Search01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
-import { getParticipantThemeVariables } from "../../utils/colorGenerator";
+import { Avatar } from "../atomic/Avatar";
 import { AdmissionPanel } from "../admission-panel/AdmissionPanel";
 import { ParticipantRow } from "./participant-row";
 import { useParticipantVolumeContext } from "./participant-volume-context";
@@ -13,10 +14,14 @@ import { type ParticipantGradientPreference } from "../../utils/colorGenerator";
 export interface ParticipantListParticipant {
   id: string;
   displayName: string;
+  role?: string;
+  eligibleRoles?: readonly string[];
+  isScreenSharing?: boolean;
   isLocal?: boolean;
   isMuted?: boolean;
   isVideoEnabled?: boolean;
   isHandRaised?: boolean;
+  handOrder?: number;
   avatarUrl?: string;
 }
 
@@ -48,6 +53,8 @@ export interface ParticipantsPanelProps {
 
 interface ParticipantsPanelSurfaceProps extends ParticipantsPanelProps {
   readonly participants: ParticipantListParticipant[];
+  readonly onAssignRole?: (id: string, role: string) => Promise<unknown>;
+  readonly onStopParticipantScreenShare?: (id: string) => Promise<unknown>;
   readonly onMuteParticipant?: (id: string) => void;
   readonly onRequestUnmute?: (id: string) => void | Promise<unknown>;
   readonly onStopParticipantCamera?: (id: string) => void;
@@ -58,52 +65,22 @@ interface ParticipantsPanelSurfaceProps extends ParticipantsPanelProps {
   readonly canManageParticipants?: boolean;
   readonly canManageAdmission?: boolean;
   readonly admissionCount?: number;
+  readonly onMuteEveryone?: () => Promise<void>;
 }
 
-type PanelTabId = "roster" | "waiting";
-
-interface PanelTabProps {
-  readonly tab: PanelTabId;
-  readonly id: string;
-  readonly controls: string;
-  readonly label: string;
-  readonly count: number;
-  readonly selected: boolean;
-  readonly attention?: boolean;
-  readonly onSelect: (tab: PanelTabId) => void;
-}
-
-function PanelTab({ tab, id, controls, label, count, selected, attention = false, onSelect }: PanelTabProps): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      role="tab"
-      id={id}
-      data-tab={tab}
-      aria-selected={selected}
-      aria-controls={controls}
-      tabIndex={selected ? 0 : -1}
-      onClick={() => onSelect(tab)}
-      className={cn(
-        "-mb-px flex h-10 items-center gap-1.5 border-b-2 px-0.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]",
-        selected ? "border-[var(--chalk-app-text)] text-[var(--chalk-app-text)]" : "border-transparent text-[var(--chalk-app-text-muted)] hover:text-[var(--chalk-app-text)]",
-      )}
-    >
-      {label}
-      <span className={cn("grid min-w-5 place-items-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums", attention ? "bg-[var(--chalk-app-control-active)] text-[var(--chalk-app-control-active-text)]" : "bg-[var(--chalk-app-control-group)] text-[var(--chalk-app-text-muted)]")}>
-        {count}
-      </span>
-    </button>
-  );
-}
-
-function getParticipantIdentity(participant: ParticipantListParticipant): string {
-  return participant.id || participant.displayName || "__unknown-participant__";
-}
-
-const ParticipantsPanelSurface = React.memo(
+export const ParticipantsPanelSurface = React.memo(
   ({
     participants,
+    canManageParticipants = false,
+    canManageAdmission = false,
+    admissionCount = 0,
+    admissionEnabled = true,
+    onMuteEveryone,
+    searchable = true,
+    className,
+    variant = "default",
+    onAssignRole,
+    onStopParticipantScreenShare,
     onMuteParticipant,
     onRequestUnmute,
     onStopParticipantCamera,
@@ -111,60 +88,92 @@ const ParticipantsPanelSurface = React.memo(
     onRemoveParticipant,
     onUpdateDisplayName,
     onCommandError,
-    onAddPeople,
     participantVolumes,
     onParticipantVolumeChange,
-    participantColorSeed,
     participantGradientPreference,
     generatedAvatars = true,
-    admissionEnabled = true,
-    canManageParticipants = false,
-    canManageAdmission = false,
-    admissionCount = 0,
-    searchable = true,
-    onClose,
-    className,
-    variant = "default",
-    title = "Participants",
   }: ParticipantsPanelSurfaceProps) => {
-    const prefersReducedMotion = usePrefersReducedMotion();
-    const [searchQuery, setSearchQuery] = useState("");
-    const [activeTab, setActiveTab] = useState<PanelTabId>(admissionCount > 0 ? "waiting" : "roster");
-    const tabIdBase = useId();
+    const [query, setQuery] = useState("");
     const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
-    const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed, participantGradientPreference), [participantColorSeed, participantGradientPreference]);
-
-    const filteredParticipants = useMemo(() => {
-      const uniqueParticipants = Array.from(new Map(participants.map((participant) => [getParticipantIdentity(participant), participant])).values());
-
-      let sorted = [...uniqueParticipants].sort((a, b) => {
-        if (a.isLocal) return -1;
-        if (b.isLocal) return 1;
-
-        return a.displayName.localeCompare(b.displayName);
-      });
-
-      if (searchQuery) {
-        sorted = sorted.filter((p) => p.displayName.toLowerCase().includes(searchQuery.toLowerCase()));
+    const [muting, setMuting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const filtered = participants.filter((person) => person.displayName.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+    const raised = participants.filter((person) => person.isHandRaised);
+    const unmutedCount = participants.filter((person) => !person.isLocal && !person.isMuted).length;
+    const muteEveryone = async () => {
+      if (!onMuteEveryone || muting) return;
+      setMuting(true);
+      setError(null);
+      try {
+        await onMuteEveryone();
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Couldn’t mute everyone.");
+      } finally {
+        setMuting(false);
       }
-
-      return sorted;
-    }, [participants, searchQuery]);
-
-    const listSpacingClassName = variant === "sidebar" ? "divide-y divide-[var(--chalk-app-line)]" : "space-y-1";
-    const emptyTextClassName = "text-[var(--chalk-app-text-muted)]";
-
-    const rows = (
-      <div className={listSpacingClassName}>
-        {filteredParticipants.length === 0 ? (
-          <div className={cn("p-8 text-center text-sm", emptyTextClassName)}>No participants found</div>
-        ) : (
-          filteredParticipants.map((participant) => (
+    };
+    return (
+      <section className={cn("call-people", className)} aria-label="People">
+        <CallCardStyles />
+        {onMuteEveryone ? (
+          <div className="call-host-controls">
+            <ChalkPopover
+              label="Mute everyone"
+              trigger={
+                <button type="button" className="call-host-button" disabled={muting || unmutedCount === 0}>
+                  <MicrophoneOff01Icon aria-hidden="true" />
+                  <span>Mute everyone</span>
+                </button>
+              }
+            >
+              <div className="call-mute-confirm">
+                <b>Mute everyone?</b>
+                <p>
+                  {unmutedCount} {unmutedCount === 1 ? "person" : "people"} will be muted. They can unmute themselves.
+                </p>
+                <div className="call-mute-actions">
+                  <Popover.Close render={<ChalkButton disabled={muting} />}>Cancel</Popover.Close>
+                  <Popover.Close render={<ChalkButton variant="solid" disabled={muting} onClick={() => void muteEveryone()} />}>{muting ? "Muting…" : "Mute everyone"}</Popover.Close>
+                </div>
+              </div>
+            </ChalkPopover>
+          </div>
+        ) : null}
+        {error ? <p role="alert">{error}</p> : null}
+        {searchable && (participants.length > 8 || query.length > 0) ? (
+          <label className="call-people-search">
+            <Search01Icon aria-hidden="true" />
+            <input aria-label="Search people" placeholder="Search people" value={query} onChange={(event) => setQuery(event.target.value)} />
+          </label>
+        ) : null}
+        {canManageAdmission && admissionEnabled && admissionCount > 0 ? (
+          <>
+            <AdmissionPanel inline />
+            <h3 className="call-people-section">In the call</h3>
+          </>
+        ) : null}
+        {!query && raised.length > 1 ? (
+          <>
+            <h3 className="call-people-section">Raised hands</h3>
+            {raised.map((person) => (
+              <div className="call-raised-row" key={person.id}>
+                {person.handOrder !== undefined ? <span className="call-hand-number">{person.handOrder}</span> : null}
+                <Avatar name={person.displayName} src={person.avatarUrl} size="sm" generated={generatedAvatars} className="!h-8 !w-8" />
+                <bdi className="min-w-0 flex-1 truncate">{person.displayName}</bdi>
+              </div>
+            ))}
+            <h3 className="call-people-section">In the call</h3>
+          </>
+        ) : null}
+        {filtered.length ? (
+          filtered.map((participant) => (
             <ParticipantRow
-              key={getParticipantIdentity(participant)}
+              key={participant.id}
               participant={participant}
               variant={variant}
               canManageParticipants={canManageParticipants}
+              onAssignRole={onAssignRole}
+              onStopParticipantScreenShare={onStopParticipantScreenShare}
               onMuteParticipant={onMuteParticipant}
               onRequestUnmute={onRequestUnmute}
               onStopParticipantCamera={onStopParticipantCamera}
@@ -177,148 +186,14 @@ const ParticipantsPanelSurface = React.memo(
               participantGradientPreference={participant.isLocal ? participantGradientPreference : undefined}
               generatedAvatars={generatedAvatars}
               menuOpen={activeMenuId === participant.id}
-              onMenuToggle={() => setActiveMenuId((prev) => (prev === participant.id ? null : participant.id))}
+              onMenuToggle={() => setActiveMenuId(activeMenuId === participant.id ? null : participant.id)}
               onMenuClose={() => setActiveMenuId(null)}
             />
           ))
+        ) : (
+          <p className="call-no-people">No one in the call matches “{query.trim()}”.</p>
         )}
-      </div>
-    );
-    const showTabs = canManageAdmission && admissionEnabled;
-    const showingWaiting = showTabs && activeTab === "waiting";
-    const rosterTabId = `${tabIdBase}-roster-tab`;
-    const waitingTabId = `${tabIdBase}-waiting-tab`;
-    const panelId = `${tabIdBase}-panel`;
-
-    const handleTabKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-      const next: PanelTabId | null = event.key === "Home" ? "roster" : event.key === "End" ? "waiting" : event.key === "ArrowLeft" || event.key === "ArrowRight" ? (activeTab === "roster" ? "waiting" : "roster") : null;
-      if (next === null) return;
-      event.preventDefault();
-      setActiveTab(next);
-      event.currentTarget.querySelector<HTMLElement>(`[data-tab="${next}"]`)?.focus();
-    };
-
-    const tabs = showTabs ? (
-      <div role="tablist" aria-label="Participant groups" className={cn("flex items-end gap-5 border-b border-[var(--chalk-app-line)]", variant === "sidebar" && "px-5", variant === "default" && "px-4")} onKeyDown={handleTabKeyDown}>
-        <PanelTab tab="roster" id={rosterTabId} controls={panelId} label="In Space" count={participants.length} selected={activeTab === "roster"} onSelect={setActiveTab} />
-        <PanelTab tab="waiting" id={waitingTabId} controls={panelId} label="Waiting" count={admissionCount} selected={activeTab === "waiting"} attention={admissionCount > 0} onSelect={setActiveTab} />
-      </div>
-    ) : null;
-
-    const content = showTabs ? (
-      <div role="tabpanel" id={panelId} aria-labelledby={showingWaiting ? waitingTabId : rosterTabId}>
-        {showingWaiting ? <AdmissionPanel inline /> : rows}
-      </div>
-    ) : (
-      rows
-    );
-
-    // Mobile variant - fills container, no header (the parent provides it)
-    if (variant === "mobile") {
-      return (
-        <div className={cn("relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-app-panel)] font-sans", className)} style={themeVariables as React.CSSProperties} data-tour="participants-panel" role="complementary" aria-label="Participants list">
-          <div className="flex-1 overflow-y-auto px-4 py-4">
-            {onAddPeople && (
-              <Button onClick={onAddPeople} className="mb-4 min-h-[48px] w-full rounded-full bg-[var(--chalk-app-control-primary)] px-4 py-3 !text-white shadow-[var(--chalk-app-shadow-control)] hover:bg-[var(--chalk-app-control-primary-hover)]">
-                <UserGroupIcon className="w-4 h-4" />
-                <span>Invite Participants</span>
-              </Button>
-            )}
-
-            {tabs ? (
-              <div className="mb-3">{tabs}</div>
-            ) : (
-              <div className="mb-3 px-1">
-                <div className="mb-3 flex items-center gap-2 px-1">
-                  <h2 className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--chalk-app-text-muted)]">Participants</h2>
-                  <span className="grid min-w-5 place-items-center rounded-full bg-[var(--chalk-app-control-group)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--chalk-app-text-muted)]">{participants.length}</span>
-                </div>
-              </div>
-            )}
-
-            {content}
-          </div>
-        </div>
-      );
-    }
-
-    if (variant === "sidebar") {
-      return (
-        <div className={cn("relative flex h-full w-full flex-col overflow-hidden bg-[var(--chalk-app-panel)] font-sans", className)} style={themeVariables as React.CSSProperties} data-tour="participants-panel" role="complementary" aria-label="Participants list">
-          <div className="flex items-center justify-between border-b border-[var(--chalk-app-line)] px-5 py-[18px]">
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-semibold tracking-[-0.02em] text-[var(--chalk-app-text)]">{title}</h2>
-              <span className="grid min-w-5 place-items-center rounded-full bg-[var(--chalk-app-control-group)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--chalk-app-text-muted)]">{participants.length}</span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {onAddPeople && (
-                <Button onClick={onAddPeople} className="h-9 gap-1.5 rounded-[7px] border-0 bg-[var(--chalk-app-control-primary)] px-3 text-sm font-semibold !text-white transition-colors hover:bg-[var(--chalk-app-control-primary-hover)]">
-                  <UserGroupIcon className="w-4 h-4" />
-                  <span>Invite</span>
-                </Button>
-              )}
-              {onClose && (
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="grid h-9 w-9 place-items-center rounded-full border border-[var(--chalk-app-line)] text-[var(--chalk-app-text-muted)] transition-colors hover:bg-[var(--chalk-app-control-hover)] hover:text-[var(--chalk-app-text)]"
-                  aria-label="Close participants panel"
-                >
-                  <Cancel01Icon className="w-5 h-5" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {tabs}
-
-          {searchable && !showingWaiting && (
-            <div className="px-5 py-4">
-              <Input
-                aria-label="Search participants"
-                placeholder="Search participants"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                icon={<Search01Icon className="h-4 w-4 text-[var(--chalk-app-text-muted)]" />}
-                iconPosition="left"
-                className="w-full rounded-[7px] border-[var(--chalk-app-line)] bg-[var(--chalk-app-input)] transition-all placeholder:text-[var(--chalk-app-text-muted)] focus:border-[var(--chalk-app-control-active-line)] focus:bg-[var(--chalk-app-panel)]"
-              />
-            </div>
-          )}
-
-          <div className={cn("flex-1 overflow-y-auto px-5 pb-5", showingWaiting && "pt-2")}>{content}</div>
-        </div>
-      );
-    }
-
-    // Default rendering (preserving exact existing structure/classes)
-    return (
-      <div
-        className={cn("flex h-full w-80 flex-col border-l border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] shadow-xl", !prefersReducedMotion && "chalk-animate-slide-right", className)}
-        style={themeVariables as React.CSSProperties}
-        data-tour="participants-panel"
-        role="complementary"
-        aria-label="Participants list"
-      >
-        <div className="flex items-center justify-between border-b border-[var(--chalk-app-line)] p-4">
-          <div className="flex items-center gap-2">
-            <h2 className="text-[var(--chalk-app-text)] text-sm font-semibold">{title}</h2>
-            <Badge variant="default" count={participants.length} />
-          </div>
-          {onClose && <IconButton icon={<Cancel01Icon className="w-4 h-4" />} size="sm" variant="ghost" onClick={onClose} aria-label="Close participants panel" />}
-        </div>
-
-        {tabs}
-
-        {searchable && !showingWaiting && (
-          <div className="p-4 pb-2">
-            <Input aria-label="Search participants" placeholder="Search participants" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} icon={<Search01Icon className="w-4 h-4" />} iconPosition="left" className="w-full rounded-[8px]" />
-          </div>
-        )}
-
-        <div className={cn("flex-1 overflow-y-auto p-2", showingWaiting && "px-4")}>{content}</div>
-      </div>
+      </section>
     );
   },
 );
@@ -327,6 +202,8 @@ export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): Rea
   const client = useSpaceClient();
   const self = useSelf();
   const participantsSlice = useParticipants();
+  const canAssignRoles = useCan("assignRoles");
+  const canStopScreenOthers = useCan("stopScreenOthers");
   const canMuteOthers = useCan("muteOthers");
   const canStopVideoOthers = useCan("stopVideoOthers");
   const canRequestMedia = useCan("requestMediaOthers");
@@ -351,6 +228,9 @@ export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): Rea
       participantsSlice.roster.map((participant) => ({
         id: participant.participantId,
         displayName: participant.displayName,
+        role: participant.role,
+        eligibleRoles: participant.eligibleRoles,
+        isScreenSharing: participant.media.screenShare === "active",
         isLocal: participant.participantId === self.participantId,
         isMuted: participant.media.microphone !== "active",
         isVideoEnabled: participant.media.camera === "active",
@@ -365,14 +245,23 @@ export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): Rea
       participantVolumes={participantVolumes}
       onParticipantVolumeChange={onParticipantVolumeChange}
       participants={participants}
-      canManageParticipants={canMuteOthers || canStopVideoOthers || canRequestMedia || canRemoveParticipants}
+      canManageParticipants={canMuteOthers || canStopVideoOthers || canRequestMedia || canRemoveParticipants || canAssignRoles || canStopScreenOthers}
+      onAssignRole={canAssignRoles ? (id, role) => client.participants.assignRole(id, role) : undefined}
+      onStopParticipantScreenShare={canStopScreenOthers ? (id) => client.participants.stopScreenShare(id) : undefined}
       canManageAdmission={canManageAdmission}
       admissionCount={canManageAdmission ? participantsSlice.admissionQueue.length : 0}
-      onMuteParticipant={canMuteOthers ? (id) => void client.participants.mute(id) : undefined}
+      onMuteEveryone={
+        canMuteOthers
+          ? async () => {
+              await Promise.all(participants.filter((person) => !person.isLocal && !person.isMuted).map((person) => client.participants.mute(person.id)));
+            }
+          : undefined
+      }
+      onMuteParticipant={canMuteOthers ? (id) => client.participants.mute(id) : undefined}
       onRequestUnmute={canRequestMedia ? (props.onRequestUnmute ?? ((id) => client.participants.requestMedia(id, "microphone"))) : undefined}
-      onStopParticipantCamera={canStopVideoOthers ? (id) => void client.participants.stopVideo(id) : undefined}
+      onStopParticipantCamera={canStopVideoOthers ? (id) => client.participants.stopVideo(id) : undefined}
       onRequestStartCamera={canRequestMedia ? (props.onRequestStartCamera ?? ((id) => client.participants.requestMedia(id, "camera"))) : undefined}
-      onRemoveParticipant={canRemoveParticipants ? (id) => void client.participants.remove(id) : undefined}
+      onRemoveParticipant={canRemoveParticipants ? (id) => client.participants.remove(id) : undefined}
       onUpdateDisplayName={(displayName) => void client.participants.renameSelf(displayName)}
       participantColorSeed={props.participantColorSeed ?? self.displayName ?? undefined}
     />

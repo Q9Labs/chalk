@@ -1,7 +1,6 @@
 package ai.q9labs.chalk.mobile
 import expo.modules.splashscreen.SplashScreenManager
 
-import android.os.Build
 import android.os.Bundle
 
 import com.facebook.react.ReactActivity
@@ -45,21 +44,11 @@ class MainActivity : ReactActivity() {
   }
 
   /**
-    * Align the back button behavior with Android S
-    * where moving root activities to background instead of finishing activities.
-    * @see <a href="https://developer.android.com/reference/android/app/Activity#onBackPressed()">onBackPressed</a>
-    */
+   * Back with nothing left to close moves the app to the background on every API level, so a call
+   * keeps going. Android 12+ does this itself only for a task started from the launcher; a task
+   * started from a call link would finish and end the call.
+   */
   override fun invokeDefaultOnBackPressed() {
-      if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
-          if (!moveTaskToBack(false)) {
-              // For non-root activities, use the default implementation to finish them.
-              super.invokeDefaultOnBackPressed()
-          }
-          return
-      }
-
-      // Use the default back button implementation on Android S
-      // because it's doing more than [Activity.moveTaskToBack] in fact.
-      super.invokeDefaultOnBackPressed()
+      moveTaskToBack(true)
   }
 }

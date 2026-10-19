@@ -1,4 +1,4 @@
-export const DEFAULT_QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🎉"] as const;
+export const DEFAULT_QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "🎉", "👏"] as const;
 
 export const CELEBRATION_EMOJIS: readonly string[] = ["🎉", "🎊", "🥳", "🎈", "🏆", "🥇", "⭐", "🌟", "✨", "💫", "🔥", "💥", "💯", "🎆", "🎇"];
 

@@ -33,7 +33,7 @@ const { values } = parseArgs({
 });
 if (values["leaks-only"] && values["timing-only"]) throw new Error("Choose either leaks-only or timing-only");
 if (values.gate && (values.smoke || values["record-baseline"] || values["leak-journey"])) throw new Error("Gate runs cannot narrow journeys or collect an unenforced baseline");
-if (values.gate && !process.env.TESTBOX_SOURCE_COMMIT) values["bundle-only"] = true;
+if (values.gate && !values["leaks-only"] && !process.env.TESTBOX_SOURCE_COMMIT) values["bundle-only"] = true;
 if (values.gate && !values["bundle-only"]) values["self-test"] = true;
 if (values["leak-journey"] && !LEAK_JOURNEYS.includes(values["leak-journey"])) throw new Error("Unknown leak journey");
 const web = resolve(import.meta.dirname, "..");
@@ -168,11 +168,12 @@ try {
 if (report.errors.length || report.selfTest?.detected === false || (!values["record-baseline"] && report.failures.length)) process.exitCode = 1;
 
 function installObservers() {
-  const data = { frames: [], tasks: [], events: [], start: performance.now(), last: null, clicks: 0, trustedInputs: [], layoutShift: 0, layoutShifts: [] };
+  const data = { frames: [], tasks: [], events: [], start: performance.now(), last: null, clicks: 0, trustedInputs: [], layoutShift: 0, layoutShifts: [], navigationWindows: [], navigationVideoQuality: { frames: 0, dropped: 0, resets: 0, samples: 0 } };
+  const measured = (at) => at >= data.start && !data.navigationWindows.some(({ start, end }) => at >= start && at < end);
   window.__callPerf = data;
   new PerformanceObserver((list) => {
     for (const entry of list.getEntries())
-      if (entry.startTime >= data.start) {
+      if (measured(entry.startTime)) {
         data.layoutShift += entry.value;
         data.layoutShifts.push({
           value: entry.value,
@@ -183,22 +184,24 @@ function installObservers() {
       }
   }).observe({ type: "layout-shift", buffered: true });
   const frame = (at) => {
-    if (data.last !== null) data.frames.push(at - data.last);
-    data.last = at;
+    if (measured(at)) {
+      if (data.last !== null) data.frames.push(at - data.last);
+      data.last = at;
+    } else data.last = null;
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
   new PerformanceObserver((list) => {
-    for (const entry of list.getEntries()) if (entry.startTime >= data.start) data.tasks.push(entry.duration);
+    for (const entry of list.getEntries()) if (measured(entry.startTime)) data.tasks.push(entry.duration);
   }).observe({ type: "longtask", buffered: true });
   new PerformanceObserver((list) => {
-    for (const entry of list.getEntries()) if (entry.startTime >= data.start && entry.interactionId) data.events.push({ startTime: entry.startTime, duration: entry.duration, name: entry.name, interactionId: entry.interactionId });
+    for (const entry of list.getEntries()) if (measured(entry.startTime) && entry.interactionId) data.events.push({ startTime: entry.startTime, duration: entry.duration, name: entry.name, interactionId: entry.interactionId });
   }).observe({ type: "event", buffered: true, durationThreshold: 16 });
   for (const name of ["pointerdown", "pointerup", "click"]) {
     document.addEventListener(
       name,
       (event) => {
-        if (!event.isTrusted) return;
+        if (!event.isTrusted || !measured(event.timeStamp)) return;
         data.trustedInputs.push({ name: event.type, at: event.timeStamp });
         if (event.type === "click") data.clicks++;
       },
@@ -284,13 +287,30 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
       await page.waitForTimeout(350);
     };
     if (scenario.id === "panels") {
+      const openPhoneNavigation = async () => {
+        if (!device.touch) return;
+        const before = await page.evaluate(() => {
+          window.__callPerf.navigationWindows.push({ start: performance.now(), end: Infinity });
+          window.__callPerf.last = null;
+          return window.__callVideoQuality.snapshot();
+        });
+        await click("More options");
+        await page.evaluate((before) => {
+          const after = window.__callVideoQuality.snapshot();
+          for (const metric of ["frames", "dropped", "resets", "samples"]) window.__callPerf.navigationVideoQuality[metric] += after[metric] - before[metric];
+          window.__callPerf.navigationWindows.at(-1).end = performance.now();
+          window.__callPerf.last = null;
+        }, before);
+      };
+      await openPhoneNavigation();
       await click("Chat");
       await page.getByRole("complementary", { name: "Chat panel" }).waitFor();
-      await click("Close chat");
+      await click("Close panel");
       await page.getByRole("complementary", { name: "Chat panel" }).waitFor({ state: "hidden" });
-      await click("Participants");
-      await page.getByRole("button", { name: "Close participants panel", exact: true }).waitFor();
-      await click("Close participants panel");
+      await openPhoneNavigation();
+      await click(device.touch ? "People" : /^People, \d+$/);
+      await page.getByRole("button", { name: "Close panel", exact: true }).waitFor();
+      await click("Close panel");
     }
     if (scenario.id === "board") {
       const canvas = page.locator(".excalidraw canvas").first();
@@ -311,14 +331,15 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
       await page.waitForTimeout(350);
       await page.locator("[data-perf-recover]").dispatchEvent("click");
       await page.locator('[data-call-limbo][data-covered="false"][aria-hidden="true"]').waitFor({ state: "attached" });
+      await page.mouse.move(device.viewport.width / 2, device.viewport.height / 2);
       await page.getByRole("button", { name: "Leave call", exact: true }).click({ trial: true });
     }
     await page.waitForTimeout(budgets.sampleMs);
     const data = await page.evaluate(() => ({
       ...window.__callPerf,
-      videoQuality: window.__callVideoQuality.snapshot(),
+      videoQuality: Object.fromEntries(Object.entries(window.__callVideoQuality.snapshot()).map(([metric, value]) => [metric, value - window.__callPerf.navigationVideoQuality[metric]])),
       supported: PerformanceObserver.supportedEntryTypes,
-      durationMs: performance.now() - window.__callPerf.start,
+      durationMs: performance.now() - window.__callPerf.start - window.__callPerf.navigationWindows.reduce((total, { start, end }) => total + end - start, 0),
       videos: [...document.querySelectorAll("video")].map((video) => ({ paused: video.paused, readyState: video.readyState, frames: video.getVideoPlaybackQuality().totalVideoFrames, droppedFrames: video.getVideoPlaybackQuality().droppedVideoFrames })),
     }));
     if (!values["bundle-only"] && (!data.supported.includes("event") || !data.supported.includes("longtask") || data.frames.length < 2)) throw new Error(`Missing performance observations for ${scenario.id}: ${JSON.stringify(data)}`);
@@ -358,6 +379,7 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
       jsGzipKiB,
       cssGzipKiB,
       durationMs: data.durationMs,
+      ...(device.touch && scenario.id === "panels" ? { excludedNavigationWindows: data.navigationWindows } : {}),
       frameSamples: data.frames.length,
       trustedClicks: data.clicks,
       eventEntries: trustedEvents.length,

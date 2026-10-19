@@ -1,10 +1,13 @@
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import { ShellStyles } from "../control-bar/ShellStyles";
 import { useHaptics } from "../../internal/useHaptics";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
 
 export interface ReactionTrayProps {
+  readonly isHandRaised?: boolean;
+  readonly onToggleHandRaise?: () => void;
   readonly reactions: readonly string[];
   readonly onSelect: (emoji: string) => void;
   readonly onClose: () => void;
@@ -16,14 +19,37 @@ export interface ReactionTrayProps {
  * One row of large emoji buttons that pops up over the control bar. Arrow keys move between
  * emojis, Home/End jump, Escape and clicking outside close. Focus lands on the first emoji.
  */
-export function ReactionTray({ reactions, onSelect, onClose, position = "top", className }: ReactionTrayProps): React.JSX.Element {
+export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSelect, onClose, position = "top", className }: ReactionTrayProps): React.JSX.Element {
+  const [more, setMore] = useState(false);
+  const returnFocus = useRef<Element | null>(null);
   const prefersReducedMotion = usePrefersReducedMotion();
   const { trigger } = useHaptics();
   const listRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    returnFocus.current = document.activeElement;
+    const tray = listRef.current;
+    const anchor = tray?.closest("[data-part='call-frame']")?.querySelector("[data-part='dock'] button[aria-label='Reactions']") ?? returnFocus.current;
+    const place = () => {
+      if (!tray || !(anchor instanceof HTMLElement) || !(tray.offsetParent instanceof HTMLElement)) return;
+      const trigger = anchor.getBoundingClientRect();
+      const parent = tray.offsetParent.getBoundingClientRect();
+      const width = tray.offsetWidth;
+      const height = tray.offsetHeight;
+      tray.style.left = `${Math.max(8, Math.min(window.innerWidth - width - 8, trigger.x + trigger.width / 2 - width / 2)) - parent.x}px`;
+      tray.style.top = `${Math.max(8, Math.min(window.innerHeight - height - 8, position === "top" ? trigger.y - height - 10 : trigger.bottom + 10)) - parent.y}px`;
+    };
+    place();
+    const resize = new ResizeObserver(place);
+    if (tray) resize.observe(tray);
+    window.addEventListener("resize", place);
     listRef.current?.querySelector("button")?.focus();
-  }, []);
+    return () => {
+      window.removeEventListener("resize", place);
+      resize.disconnect();
+      if (returnFocus.current instanceof HTMLElement && returnFocus.current.isConnected) returnFocus.current.focus();
+    };
+  }, [position]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -52,36 +78,35 @@ export function ReactionTray({ reactions, onSelect, onClose, position = "top", c
     buttons[target]?.focus();
   };
 
-  const buttons = reactions.map((emoji) => (
-    <button
-      key={emoji}
-      type="button"
-      onClick={() => handleSelect(emoji)}
-      className={cn(
-        "grid h-11 w-11 shrink-0 place-items-center rounded-full text-[26px] leading-none transition-transform duration-150 ease-out focus-visible:outline-none active:scale-95",
-        "hover:bg-[var(--chalk-app-control-hover)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]",
-        !prefersReducedMotion && "hover:-translate-y-1 hover:scale-125 focus-visible:-translate-y-1 focus-visible:scale-125",
-      )}
-      aria-label={`React with ${emoji}`}
-    >
+  const buttons = (more ? reactions : reactions.slice(0, 6)).map((emoji) => (
+    <button key={emoji} type="button" onClick={() => handleSelect(emoji)} className="chalk-shell-emoji" aria-label={`React with ${emoji}`}>
       <span aria-hidden="true">{emoji}</span>
     </button>
   ));
 
-  const trayClassName = cn("absolute left-1/2 z-50 -translate-x-1/2", position === "top" ? "bottom-full mb-3" : "top-full mt-3", !prefersReducedMotion && "animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200", className);
+  const trayClassName = cn("absolute z-50", !prefersReducedMotion && "chalk-shell-reactions-enter", className);
 
   return (
     <>
+      <ShellStyles />
       <div className="fixed inset-0 z-20" onClick={onClose} aria-hidden="true" />
       {
-        <div
-          ref={listRef}
-          className={cn(trayClassName, "flex items-center gap-0.5 rounded-full bg-[var(--chalk-app-panel)] p-1.5 text-[var(--chalk-app-text)] shadow-[var(--chalk-app-shadow-control)] ring-1 ring-[var(--chalk-app-line)]")}
-          role="toolbar"
-          aria-label="Reactions"
-          onKeyDown={handleKeyDown}
-        >
+        <div ref={listRef} className={cn(trayClassName, "chalk-shell-reactions", more && "chalk-shell-reactions-expanded")} role="toolbar" aria-label="Reactions" onKeyDown={handleKeyDown}>
+          {onToggleHandRaise ? (
+            <button type="button" className="chalk-shell-raise" aria-pressed={isHandRaised} onClick={onToggleHandRaise}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8" />
+                <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-6-2.3l-3.6-3.6a2 2 0 0 1 2.8-2.8L7 15" />
+              </svg>
+              Raise hand
+            </button>
+          ) : null}
           {buttons}
+          {!more && reactions.length > 6 ? (
+            <button type="button" className="chalk-shell-emoji" aria-label="More emoji" onClick={() => setMore(true)}>
+              …
+            </button>
+          ) : null}
         </div>
       }
     </>

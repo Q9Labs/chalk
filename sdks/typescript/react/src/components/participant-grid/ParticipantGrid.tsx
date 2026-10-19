@@ -13,6 +13,8 @@ export interface Participant {
   isLocal?: boolean;
   /** Voice activity for this participant, from sync presence. */
   isSpeaking?: boolean;
+  /** Normalized voice level (0–1); omit when the integration only supplies speaking activity. */
+  audioLevel?: number;
   /** The single loudest participant right now, from sync presence. */
   isActiveSpeaker?: boolean;
   isMuted?: boolean;
@@ -20,6 +22,10 @@ export interface Participant {
   isVideoEnabled?: boolean;
   isScreenSharing?: boolean;
   isHandRaised?: boolean;
+  handRaiseOrder?: number;
+  screenShareHasAudio?: boolean;
+  screenShareAspect?: number;
+  screenShareState?: "live" | "connecting" | "paused" | "low-quality";
   connectionQuality?: 0 | 1 | 2 | 3 | 4;
   avatarUrl?: string;
   videoTrack?: MediaStreamTrack | null;
@@ -32,9 +38,10 @@ export interface ParticipantGridProps {
   /** Mobile variant allows narrower tiles; defaults from the viewport. */
   variant?: "desktop" | "mobile";
   pinnedParticipantId?: string;
+  onOverflowClick?: () => void;
   onParticipantClick?: (participantId: string) => void;
   onParticipantDoubleClick?: (participantId: string) => void;
-  /** Upper bound of tiles on a grid page; further participants go to the next page. */
+  /** Upper bound of visible tiles; further participants fold into the +N tile. */
   maxVisibleParticipants?: number;
   className?: string;
   /** Keeps the classic screen-share indicator available to callers; Chalk renders it in the stage tile. */
@@ -43,7 +50,7 @@ export interface ParticipantGridProps {
   screenShareContent?: React.ReactNode;
 }
 
-const MIN_TILE_WIDTH = { desktop: 160, mobile: 140 } as const;
+const MIN_TILE_WIDTH = { desktop: 150, mobile: 88 } as const;
 
 /** Stage of participant tiles for the current Space; screen shares appear as their own tiles. */
 export function ParticipantGrid(props: ParticipantGridProps): React.JSX.Element {
@@ -63,7 +70,7 @@ interface ParticipantGridSurfaceProps extends ParticipantGridProps {
   readonly participants: readonly Participant[];
 }
 
-export const ParticipantGridSurface = React.memo(function ParticipantGridSurface({ participants, layout = "grid", variant, pinnedParticipantId, onParticipantClick, onParticipantDoubleClick, maxVisibleParticipants, className, screenShareContent }: ParticipantGridSurfaceProps) {
+export const ParticipantGridSurface = React.memo(function ParticipantGridSurface({ participants, layout = "grid", variant, pinnedParticipantId, onOverflowClick, onParticipantClick, onParticipantDoubleClick, maxVisibleParticipants, className, screenShareContent }: ParticipantGridSurfaceProps) {
   const isMobile = useIsMobile();
   const effectiveVariant = variant ?? (isMobile ? "mobile" : "desktop");
   const items = useMemo(() => buildStageItems(participants, false), [participants]);
@@ -73,6 +80,7 @@ export const ParticipantGridSurface = React.memo(function ParticipantGridSurface
       items={items}
       layout={layout}
       pinnedId={pinnedParticipantId}
+      onOverflowClick={onOverflowClick}
       onItemClick={onParticipantClick ? (item) => forwardParticipant(item, onParticipantClick) : undefined}
       onItemDoubleClick={onParticipantDoubleClick ? (item) => forwardParticipant(item, onParticipantDoubleClick) : undefined}
       maxPerPage={maxVisibleParticipants}

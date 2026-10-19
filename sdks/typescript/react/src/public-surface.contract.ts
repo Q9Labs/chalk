@@ -45,6 +45,8 @@ type ExpectedTokenKeys =
   | "overlayDanger"
   | "scrim";
 type ExpectedChalkProps =
+  | "shareUrl"
+  | "onReportProblem"
   | "client"
   | "space"
   | "getAccess"
@@ -59,6 +61,8 @@ type ExpectedChalkProps =
   | "onLayoutChange"
   | "onRejoin"
   | "onHome"
+  | "terminalState"
+  | "inviteLink"
   | "onJoined"
   | "onLeft"
   | "onEpisodeEnded"

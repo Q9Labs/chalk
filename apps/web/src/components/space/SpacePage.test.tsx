@@ -27,14 +27,15 @@ describe("public Space entry", () => {
     expect(screen.queryByText(/check the invite link/)).toBeNull();
   });
 
-  it("returns to Entrance and requests a fresh admission after Leave", async () => {
+  it("requests a fresh admission when rejoining after Leave", async () => {
     window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
     render(<SpacePage slug="design-lab" />);
     await act(async () => enterName("Ada"));
     await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
     await leaveCall();
-    await screen.findByLabelText("Your name");
-    await act(async () => enterName("Ada"));
+    await screen.findByRole("heading", { name: "You left Design Lab" });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Rejoin" }).hasAttribute("disabled")).toBe(false));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Rejoin" })));
     await waitFor(() => expect(mocks.publicClient.arriveBySpacePublicInvite).toHaveBeenCalledTimes(2));
   });
 
@@ -206,13 +207,15 @@ describe("reload rejoin", () => {
     expect(mocks.publicClient.arriveBySpacePublicInvite).not.toHaveBeenCalled();
     expect(window.sessionStorage.getItem(reloadRejoinStorageKey)).toBeNull();
   });
-  it("returns to the name form after leaving a recovered call with a remembered name", async () => {
+  it("shows the status page after leaving a recovered call with a remembered name", async () => {
     window.localStorage.setItem("chalk.display-name", "Ada");
     writeReloadRejoin(window.sessionStorage, marker);
     render(<SpacePage slug="design-lab" />);
     await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
     await leaveCall();
-    expect(await screen.findByLabelText("Your name")).toBeDefined();
+    expect(await screen.findByRole("heading", { name: "You left design-lab" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Rejoin" })).toBeDefined();
+    expect(screen.queryByLabelText("Your name")).toBeNull();
     expect(mocks.resumePublicSpace).toHaveBeenCalledOnce();
   });
   it("clears reload intent after Leave", async () => {

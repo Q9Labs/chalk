@@ -1,6 +1,6 @@
 import { useTheme } from "../../lib/theme-context";
 import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
-import { Chalk, CallLimbo, ChalkButton } from "@q9labsai/chalk-react";
+import { Chalk, CallLimbo, ChalkButton, StatusSurface } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
 import { getAccount } from "../../lib/account-api";
@@ -10,6 +10,7 @@ type WebJoinSettings = Required<Pick<JoinOptions, "displayName" | "microphone" |
 const displayNameStorageKey = "chalk.display-name";
 const devicesOff = { microphone: false, camera: false };
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
+type ExitPhase = "left" | "episode-ended" | "failed";
 export function SpacePage({
   slug,
   navigatePublicSpace = replacePublicSpaceHistory,
@@ -17,6 +18,8 @@ export function SpacePage({
   readonly slug?: string;
   readonly navigatePublicSpace?: (canonicalSlug: string, inviteLink: string) => Promise<void>;
 } = {}) {
+  const { mode } = useTheme();
+  const [terminal, setTerminal] = useState<{ readonly phase: ExitPhase; readonly callName: string; readonly reason: string | undefined; readonly cleanup: () => Promise<void> } | null>(null);
   const client = useMemo(() => createPublicInviteClient(), []);
   const [reloadMarker] = useState(() => {
     if (!slug) return null;
@@ -62,11 +65,6 @@ export function SpacePage({
     if (!active.current) {
       void prepared.finish().catch(() => undefined);
       return;
-    }
-    try {
-    } catch (cause) {
-      void prepared.finish().catch(() => undefined);
-      throw cause;
     }
     pendingRef.current = null;
     setPending(null);
@@ -229,6 +227,33 @@ export function SpacePage({
     },
     [spaceAccess],
   );
+  if (terminal)
+    return (
+      <main className="relative h-dvh">
+        <StatusSurface
+          phase={terminal.phase}
+          callName={terminal.callName}
+          reason={terminal.reason}
+          theme={{ colorScheme: mode }}
+          rejoinDisabled={Boolean(spaceAccess) || preparing}
+          onRejoin={() => {
+            setTerminal(null);
+            start(entranceSettings ?? defaultJoinOptions);
+          }}
+          onHome={() => {
+            void terminal
+              .cleanup()
+              .then(() => globalThis.location.assign("/"))
+              .catch(() => setError("Couldn’t leave the call. Try again."));
+          }}
+        />
+        {error ? (
+          <p role="alert" className="absolute inset-x-6 bottom-6 text-center text-sm">
+            {error}
+          </p>
+        ) : null}
+      </main>
+    );
   if (spaceAccess) {
     const settings = entranceSettings ?? defaultJoinOptions;
     return (
@@ -241,6 +266,11 @@ export function SpacePage({
         connectionAccess={spaceAccess.prepared.connectionAccess}
         onFinish={finish}
         spaceName={spaceAccess.spaceName}
+        inviteLink={spaceAccess.inviteLink}
+        onTerminal={(phase, cleanup, reason) => {
+          setTerminal({ phase, cleanup, reason, callName: spaceAccess.spaceName });
+          void cleanup().catch(() => setError("Couldn’t leave the call. Try Home again."));
+        }}
       />
     );
   }
@@ -352,6 +382,8 @@ function LocalSpace({
   connectionAccess,
   onFinish,
   spaceName,
+  inviteLink,
+  onTerminal,
 }: {
   readonly reloadMarker: SpaceEntryAccess["reloadMarker"];
   readonly credential: PublicSpaceCredential;
@@ -365,25 +397,34 @@ function LocalSpace({
   readonly inviteLink?: string;
   readonly onFinish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
   readonly spaceName: string;
+  readonly onTerminal: (phase: ExitPhase, cleanup: () => Promise<void>, reason?: string) => void;
 }) {
   const { mode, setPreference } = useTheme();
   const client = useMemo(() => createLocalSpaceClient({ credential, getAccess, connectionAccess }), [connectionAccess, credential, getAccess]);
   const release = useMemo(() => createLocalSpaceRelease(client, () => onFinish()), [client, onFinish]);
+  const [homeError, setHomeError] = useState<string | null>(null);
   const connection = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection;
   const pendingRelease = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(undefined);
   const intentionallyLeft = useRef(false);
-  const releaseFromLifecycle = useCallback(() => {
-    intentionallyLeft.current = true;
-    try {
-      globalThis.sessionStorage.removeItem(reloadRejoinStorageKey);
-    } catch {
-      /* Storage may be disabled. */
-    }
-    void release().catch(() => undefined);
-  }, [release]);
+  const endObserved = useRef(false);
+  const releaseFromLifecycle = useCallback(
+    (phase: ExitPhase, reason?: string) => {
+      if (endObserved.current) return;
+      endObserved.current = true;
+      intentionallyLeft.current = true;
+      try {
+        globalThis.sessionStorage.removeItem(reloadRejoinStorageKey);
+      } catch {
+        /* Storage may be disabled. */
+      }
+      onTerminal(phase, release, reason);
+    },
+    [onTerminal, release],
+  );
   useEffect(() => {
-    if (connection.status === "failed") releaseFromLifecycle();
-  }, [connection.status, releaseFromLifecycle]);
+    if (connection.status === "failed") releaseFromLifecycle("failed", connection.lastError?.message);
+  }, [connection, releaseFromLifecycle]);
+
   useEffect(() => {
     if (pendingRelease.current !== undefined) {
       globalThis.clearTimeout(pendingRelease.current);
@@ -419,7 +460,26 @@ function LocalSpace({
   }, [client, credential.space, displayName, onFinish, reloadMarker]);
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
-      <Chalk theme={{ colorScheme: mode }} onColorSchemeChange={setPreference} client={client} displayName={displayName} defaults={defaults} spaceName={spaceName} onEpisodeEnded={releaseFromLifecycle} onLeft={releaseFromLifecycle} />
+      {homeError ? <p role="alert">{homeError}</p> : null}
+      <Chalk
+        theme={{ colorScheme: mode }}
+        onColorSchemeChange={setPreference}
+        client={client}
+        displayName={displayName}
+        defaults={defaults}
+        spaceName={spaceName}
+        inviteLink={inviteLink}
+        onEpisodeEnded={() => releaseFromLifecycle("episode-ended")}
+        onLeft={() => releaseFromLifecycle("left")}
+        onJoined={() => {
+          intentionallyLeft.current = false;
+        }}
+        onHome={() => {
+          void release()
+            .then(() => globalThis.location.assign("/"))
+            .catch(() => setHomeError("Couldn’t leave the call. Try Home again."));
+        }}
+      />
     </main>
   );
 }

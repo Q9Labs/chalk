@@ -172,11 +172,11 @@ async function verifyImageAttachment(sender, receiver, fileName = "packed-upload
   const chooser = await chooserReady;
   await chooser.setFiles({ name: fileName, mimeType: "image/png", buffer: await readFile(join(repositoryDirectory, "apps/web/public/brand/chalk/chalk-icon-192.png")) });
   await sender.locator('[aria-label="Attachments"]').waitFor({ state: "visible" });
-  await sender.getByPlaceholder("Type a message...").fill("Image from the packed SDK");
+  await sender.getByRole("textbox", { name: "Message", exact: true }).fill("Image from the packed SDK");
   await sender.getByRole("button", { name: "Send message", exact: true }).click();
   await receiver.getByRole("img", { name: fileName, exact: true }).waitFor({ state: "visible" });
   await receiver.waitForFunction((expected) => [...document.images].some((image) => image.alt === expected && image.complete && image.naturalWidth > 0), fileName);
-  await sender.getByRole("button", { name: "Close chat", exact: true }).click();
+  await sender.getByRole("button", { name: "Close panel", exact: true }).click();
 }
 
 async function verifyPairJoined(alice, bob) {
