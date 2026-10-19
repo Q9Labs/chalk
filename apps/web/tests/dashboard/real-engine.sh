@@ -69,7 +69,7 @@ cleanup() {
   [[ -z "$api_pid" ]] || wait "$api_pid" 2>/dev/null || true
   [[ -z "$redis_container" ]] || docker stop --time 1 "$redis_container" >/dev/null 2>&1 || true
   if [[ -n "$certificate_dir" ]]; then
-    rm -f "$certificate_dir"/{ca.key,ca.pem,ca.srl,server.key,server.csr,server.pem,server.ext}
+    rm -f "$certificate_dir"/{ca.key,ca.pem,ca.srl,server.key,server.csr,server.pem,server.ext,sync.key,sync.csr,sync.pem,sync.ext}
     rmdir "$certificate_dir"
   fi
 }
@@ -89,11 +89,24 @@ CERT
 openssl x509 -req -in "$certificate_dir/server.csr" -CA "$certificate_dir/ca.pem" \
   -CAkey "$certificate_dir/ca.key" -CAcreateserial -days 1 \
   -extfile "$certificate_dir/server.ext" -out "$certificate_dir/server.pem" >> artifacts/dashboard-certificates.log 2>&1
+openssl req -newkey rsa:2048 -nodes -subj /CN=dashboard-proof-sync \
+  -keyout "$certificate_dir/sync.key" -out "$certificate_dir/sync.csr" >> artifacts/dashboard-certificates.log 2>&1
+cat > "$certificate_dir/sync.ext" <<'CERT'
+subjectAltName=URI:spiffe://chalk.local/environment/local/sync/00000000-0000-4000-8000-000000000002
+extendedKeyUsage=clientAuth
+CERT
+openssl x509 -req -in "$certificate_dir/sync.csr" -CA "$certificate_dir/ca.pem" \
+  -CAkey "$certificate_dir/ca.key" -CAcreateserial -days 1 \
+  -extfile "$certificate_dir/sync.ext" -out "$certificate_dir/sync.pem" >> artifacts/dashboard-certificates.log 2>&1
 export CHALK_PROVIDER_BRIDGE_ADDRESS=127.0.0.1:18444
 export CHALK_PROVIDER_BRIDGE_SERVER_CERT_FILE="$certificate_dir/server.pem"
 export CHALK_PROVIDER_BRIDGE_SERVER_KEY_FILE="$certificate_dir/server.key"
 export CHALK_PROVIDER_BRIDGE_CLIENT_CA_FILE="$certificate_dir/ca.pem"
 export CHALK_PROVIDER_BRIDGE_SPIFFE_TRUST_DOMAIN=chalk.local
+export CHALK_SYNC_PROVIDER_BRIDGE_URL=https://localhost:18444
+export CHALK_SYNC_PROVIDER_BRIDGE_CERTFILE="$certificate_dir/sync.pem"
+export CHALK_SYNC_PROVIDER_BRIDGE_KEYFILE="$certificate_dir/sync.key"
+export CHALK_SYNC_PROVIDER_BRIDGE_CAFILE="$certificate_dir/ca.pem"
 redis_container="$(docker run -d --rm -p 127.0.0.1::6379 redis:8.10.0-alpine redis-server --save '' --appendonly no)"
 export CHALK_REDIS_URL="redis://$(docker port "$redis_container" 6379/tcp)/0"
 for attempt in {1..50}; do

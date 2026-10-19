@@ -108,6 +108,11 @@ Application.put_env(:chalk_sync, :stateholder, ChalkSync.Stateholder.Postgres)
 Application.put_env(:chalk_sync, :database_url, System.fetch_env!("CHALK_DATABASE_URL"))
 Application.put_env(:chalk_sync, :instance_id, "dashboard-join-proof")
 Application.put_env(:chalk_sync, :port, 18410)
+Application.put_env(:chalk_sync, :provider_bridge,
+  base_url: System.fetch_env!("CHALK_SYNC_PROVIDER_BRIDGE_URL"),
+  certfile: System.fetch_env!("CHALK_SYNC_PROVIDER_BRIDGE_CERTFILE"),
+  keyfile: System.fetch_env!("CHALK_SYNC_PROVIDER_BRIDGE_KEYFILE"),
+  cacertfile: System.fetch_env!("CHALK_SYNC_PROVIDER_BRIDGE_CAFILE"))
 Application.put_env(:chalk_sync, :token_verifier, ChalkSync.Auth.JWTTokenVerifier)
 Application.put_env(:chalk_sync, :token_issuer, "dashboard-proof")
 Application.put_env(:chalk_sync, :token_audience, "chalk-sync")
