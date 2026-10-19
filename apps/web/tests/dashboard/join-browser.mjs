@@ -211,9 +211,10 @@ Process.sleep(:infinity)
     await page.reload();
     const admitted = await resumedAdmission;
     assert.equal(admitted.status(), 200, await admitted.text());
+    assert.equal((await admitted.json()).access.subject.participant_id, firstSeat, "Reload admission must replay the original owner seat");
+    await page.locator('[data-tour="video-grid"]').first().waitFor({ state: "visible", timeout: 45000 });
     const afterReload = await liveParticipants(1);
     assert.equal(afterReload.participants[0].participant_id, firstSeat, "Same-tab reload must resume the exact owner seat");
-    await page.locator('[data-tour="video-grid"]').first().waitFor({ state: "visible", timeout: 45000 });
     const otherTab = await context.newPage();
     try {
       await otherTab.goto(joinUrl);
