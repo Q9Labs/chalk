@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { choosePrimary, type StageItem, type PrimaryContext } from "./stage-items";
-import { DEFAULT_GRID_OPTIONS, DEFAULT_SPOTLIGHT_OPTIONS, fitGrid, fitSpotlight } from "./stage-layout";
+import { DEFAULT_GRID_OPTIONS, DEFAULT_SPOTLIGHT_OPTIONS, MORE_TILE_ID, fitGrid, fitSpotlight } from "./stage-layout";
 
 const person: StageItem = { kind: "participant", id: "person", participant: { id: "person", displayName: "Nora", isActiveSpeaker: true } };
 const board: StageItem = { kind: "whiteboard", id: "whiteboard" };
@@ -77,4 +77,32 @@ it("lets a phone board fill its allotted area instead of forcing a video aspect"
   const board = geometry.frames[0];
   expect(board?.width).toBe(box.width);
   expect(board?.height).toBe(box.height - Math.round(box.height * 0.3) - 8);
+});
+
+it.each([null, 16 / 9])("bounds the phone content strip and folds the remaining people into overflow (aspect %s)", (primaryAspect) => {
+  const geometry = fitSpotlight({ width: 358, height: 692 }, "content", ["a", "b", "c", "d", "e", "f"], { ...DEFAULT_SPOTLIGHT_OPTIONS, content: true, primaryAspect });
+  expect(geometry.frames.map((frame) => frame.id)).toEqual(["content", "a", MORE_TILE_ID]);
+  expect(geometry.overflowCount).toBe(5);
+});
+
+it("keeps the caller's tighter phone content cap", () => {
+  const geometry = fitSpotlight({ width: 358, height: 692 }, "content", ["a", "b", "c"], { ...DEFAULT_SPOTLIGHT_OPTIONS, content: true, maxPerPage: 1 });
+  expect(geometry.frames.map((frame) => frame.id)).toEqual(["content", MORE_TILE_ID]);
+  expect(geometry.overflowCount).toBe(3);
+});
+
+it("keeps secondary shares and the board accessible when capping phone cameras", () => {
+  const contentIds = ["second-share", "whiteboard"];
+  const geometry = fitSpotlight({ width: 358, height: 692 }, "share", [...contentIds, "a", "b", "c", "d", "e", "f"], { ...DEFAULT_SPOTLIGHT_OPTIONS, content: true, contentIds, wideIds: ["whiteboard"], primaryAspect: 16 / 9 });
+  expect(geometry.frames.map((frame) => frame.id)).toEqual(["share", ...contentIds, "a", MORE_TILE_ID]);
+  expect(geometry.overflowCount).toBe(5);
+});
+
+it.each([
+  { width: 358, content: false },
+  { width: 1408, content: true },
+])("does not cap people-only phone or desktop content layouts (%o)", ({ width, content }) => {
+  const people = ["a", "b", "c", "d", "e", "f"];
+  const geometry = fitSpotlight({ width, height: 692 }, "primary", people, { ...DEFAULT_SPOTLIGHT_OPTIONS, content });
+  expect(geometry.frames.map((frame) => frame.id)).toEqual(["primary", ...people]);
 });

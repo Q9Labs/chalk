@@ -121,6 +121,25 @@ it("uses a 96 by 128 picture-in-picture only for two-person phone Spotlight", as
   await page.setViewportSize({ width: 1440, height: 900 });
 });
 
+it("detaches overflow cameras on the phone board and restores them on a wider stage", async () => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open("perf-board");
+  await page.locator(".excalidraw canvas").first().waitFor({ state: "visible" });
+  await page.getByRole("button", { name: "Show 5 more participants", exact: true }).waitFor();
+  const videos = await page.locator("video").elementHandles();
+  expect(videos).toHaveLength(6);
+  const attachedCameras = () => page.locator("video").evaluateAll((elements) => elements.filter((video) => video instanceof HTMLVideoElement && video.srcObject !== null).length);
+  await expect.poll(attachedCameras).toBe(1);
+  expect(await page.locator('[data-stage-item][aria-hidden="true"] video').evaluateAll((elements) => elements.every((video) => video instanceof HTMLVideoElement && video.srcObject === null))).toBe(true);
+  await page.getByRole("button", { name: "Show 5 more participants", exact: true }).click();
+  await page.getByRole("button", { name: "Close participants panel", exact: true }).waitFor();
+  expect(await page.getByRole("complementary", { name: "Participants list" }).getByText("Camera 5", { exact: true }).isVisible()).toBe(true);
+  await page.getByRole("button", { name: "Close participants panel", exact: true }).click();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect.poll(attachedCameras).toBe(6);
+  for (const video of videos) expect(await video.evaluate((element) => element.isConnected)).toBe(true);
+});
+
 it("cancels a departing tile's fade when the same participant immediately rejoins", async () => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await open("stage-grid-6");
