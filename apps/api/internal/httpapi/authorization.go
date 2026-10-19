@@ -19,7 +19,15 @@ func authorizeTenant(ctx context.Context, authorizer TenantAuthorizer, tenantID 
 		return apiErrorUnauthenticated
 	}
 
-	return authorizer.AuthorizeTenant(ctx, principal, tenantID, permission)
+	err := authorizer.AuthorizeTenant(ctx, principal, tenantID, permission)
+	authorized := tenantID
+	if err != nil {
+		authorized = utilities.ID{}
+	}
+	if limitErr := checkTenantRateLimit(ctx, authorized); limitErr != nil {
+		return limitErr
+	}
+	return err
 }
 
 func authorizationAPIError(err error) APIError {

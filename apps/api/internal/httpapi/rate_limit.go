@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"math"
 	"net"
 	"net/http"
@@ -77,14 +78,40 @@ func rateLimit(options RateLimitOptions, policy ratelimit.Policy) func(http.Hand
 				now = options.Now
 			}
 
-			decision := options.Limiter.Allow(r.Context(), rateLimitKey(r, options.ClientIP), policy, now())
-			writeRateLimitHeaders(w, policy, decision)
-			if decision.Allowed {
-				next.ServeHTTP(w, r)
+			key := rateLimitKey(r, options.ClientIP)
+			allow := func(tenantID utilities.ID) error {
+				tenantKey := key
+				if !tenantID.IsZero() {
+					tenantKey += ":tenant:" + tenantID.String()
+				}
+				decision := options.Limiter.Allow(r.Context(), tenantKey, policy, now())
+				writeRateLimitHeaders(w, policy, decision)
+				if decision.Allowed {
+					return nil
+				}
+				writeRetryAfterHeader(w, decision)
+				return apiErrorRateLimited
+			}
+			principal, _ := authentication.PrincipalFromContext(r.Context())
+			_, participant := accessgrants.SubjectFromContext(r.Context())
+			_, endpoint := next.(RouteEndpoint)
+			tenantID, err := utilities.ParseID(chi.URLParam(r, "tenant_id"))
+			if endpoint && !participant && principal.Kind == authentication.PrincipalService && err == nil &&
+				(policy.Name == ratelimit.PolicyNameAuthenticatedRead || policy.Name == ratelimit.PolicyNameAuthenticatedWrite) {
+				pending := &tenantRateLimit{allow: func(authorized utilities.ID) error {
+					if authorized != tenantID {
+						authorized = utilities.ID{}
+					}
+					return allow(authorized)
+				}}
+				next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), tenantRateLimitContextKey{}, pending)))
 				return
 			}
-
-			writeRateLimited(w, decision)
+			if err := allow(utilities.ID{}); err != nil {
+				writeAPIError(w, apiErrorRateLimited)
+				return
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }
@@ -99,13 +126,7 @@ func rateLimitKey(r *http.Request, options ClientIPOptions) string {
 		return "participant:" + subject.TenantID.String() + ":" + subject.ParticipantID.String()
 	}
 	if principal, ok := authentication.PrincipalFromContext(r.Context()); ok {
-		key := "principal:" + principalRateLimitKey(principal)
-		if principal.Kind == authentication.PrincipalService {
-			if tenantID, err := utilities.ParseID(chi.URLParam(r, "tenant_id")); err == nil {
-				key += ":tenant:" + tenantID.String()
-			}
-		}
-		return key
+		return "principal:" + principalRateLimitKey(principal)
 	}
 
 	return "ip:" + clientIP(r, options)
@@ -191,12 +212,30 @@ func remoteIP(remoteAddr string) string {
 	return remoteAddr
 }
 
-func writeRateLimited(w http.ResponseWriter, decision ratelimit.Decision) {
+func writeRetryAfterHeader(w http.ResponseWriter, decision ratelimit.Decision) {
 	retryAfter := int(math.Ceil(decision.RetryAfter.Seconds()))
 	if retryAfter < 1 {
 		retryAfter = 1
 	}
 
 	w.Header().Set(ratelimit.HeaderRetryAfter, strconv.Itoa(retryAfter))
-	writeAPIError(w, apiErrorRateLimited)
+}
+
+// Tenant routes decide their bucket at the existing authorization boundary, before
+// resource reads or writes. Decode failures and handlers without tenant authority
+// complete the pending check against the shared service bucket instead.
+type tenantRateLimitContextKey struct{}
+
+type tenantRateLimit struct {
+	allow   func(utilities.ID) error
+	checked bool
+}
+
+func checkTenantRateLimit(ctx context.Context, authorized utilities.ID) error {
+	pending, _ := ctx.Value(tenantRateLimitContextKey{}).(*tenantRateLimit)
+	if pending == nil || pending.checked {
+		return nil
+	}
+	pending.checked = true
+	return pending.allow(authorized)
 }
