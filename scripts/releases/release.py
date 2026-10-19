@@ -39,7 +39,7 @@ def manifest_bytes(github, info, trusted=True):
         run = github.request(f"actions/runs/{info['run_id']}")
         require(not trusted or (run['head_branch'] == 'master' and run['head_repository']['full_name'] == github.repository
                 and run['path'].split('@')[0] in ('.github/workflows/ci.yml', '.github/workflows/nightly.yml', '.github/workflows/promote.yml')
-                and run['event'] in ('schedule', 'workflow_dispatch')), 'untrusted artifact-producing run')
+                and run['event'] in ('schedule', 'workflow_dispatch', 'workflow_run')), 'untrusted artifact-producing run')
         data = github.artifact(info['run_id'], info['manifest_artifact_id'], info['release_id'] + '.json', info.get('manifest_sha256') or None)
     value = json.loads(data)
     require(value['release_id'] == info['release_id'] and value['source_revision'] == info['target_sha'], 'manifest identity mismatch')
@@ -133,15 +133,26 @@ def complete_production(github, args):
 
 
 def plan(github, args):
-    target = subprocess.check_output(['git', 'rev-parse', 'origin/master'], text=True).strip()
+    target = (subprocess.check_output(['git', 'rev-parse', 'origin/master'], text=True).strip()
+              if args.manual else env('GATE_SHA'))
+    ancestor(target)
     records = github.deployments('nightly') + github.deployments('nightly', 'nightly-attempt')
     cut, reason = cut_decision(target, records, datetime.now(timezone.utc), args.manual)
-    print(f'Nightly: {reason}; master {target}')
+    print(f'Nightly: {reason}; target {target}')
     result = dict(should_cut=cut, target_sha=target)
     if cut:
         github.gate(target)
         held = held_candidates(records, held=False)
         baseline = payload(held[0]) if held else previous_production(github)
+        if not args.manual:
+            try:
+                ancestor(baseline['target_sha'], target)
+            except subprocess.CalledProcessError as error:
+                if error.returncode != 1:
+                    raise
+                print('Nightly: Gate commit predates or diverges from the release baseline; skipping')
+                outputs(dict(should_cut=False, target_sha=target))
+                return
         # Rebuilding all components is safe when an old baseline cannot be read;
         # do not forward dead artifact IDs and wedge every future cut.
         recorder_control = baseline['recorder_control']

@@ -35,6 +35,35 @@ class ReleasePlan(unittest.TestCase):
                                          PLAN_ROOT=str(root / 'plan'), GITHUB_OUTPUT=str(root / 'output')))
         return result
 
+    def test_gate_cut_keeps_gate_sha_when_master_moves(self):
+        api = MemoryGitHub()
+        gate_sha = SHA
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, GATE_SHA=gate_sha,
+                GITHUB_OUTPUT=str(Path(directory) / 'output')), patch.object(api, 'gate') as gate, \
+                patch.object(release.subprocess, 'check_output', return_value='b' * 40):
+            release.plan(api, SimpleNamespace(manual=False))
+            output = dict(line.split('=', 1) for line in (Path(directory) / 'output').read_text().splitlines())
+        self.assertEqual(output['should_cut'], 'true')
+        self.assertEqual(output['target_sha'], gate_sha)
+        gate.assert_called_once_with(gate_sha)
+        self.assertEqual(api.items[-1]['ref'], gate_sha)
+
+    def test_stale_gate_does_not_reserve_a_cut_or_consume_the_gap(self):
+        api = MemoryGitHub()
+        tree = subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], cwd=ROOT, text=True).strip()
+        with patch.dict(os.environ, GIT_AUTHOR_NAME='Test', GIT_AUTHOR_EMAIL='test@example.invalid',
+                        GIT_COMMITTER_NAME='Test', GIT_COMMITTER_EMAIL='test@example.invalid'):
+            newer = subprocess.check_output(['git', 'commit-tree', tree, '-p', SHA, '-m', 'newer baseline'],
+                                            cwd=ROOT, text=True).strip()
+        baseline = dict(target_sha=newer)
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, GATE_SHA=SHA,
+                GITHUB_OUTPUT=str(Path(directory) / 'output')), patch.object(api, 'gate'), \
+                patch.object(release, 'previous_production', return_value=baseline):
+            release.plan(api, SimpleNamespace(manual=False))
+            output = dict(line.split('=', 1) for line in (Path(directory) / 'output').read_text().splitlines())
+        self.assertEqual(output['should_cut'], 'false')
+        self.assertEqual(api.items, [])
+
     def test_first_install_builds_both_components_and_follows_recording_input(self):
         for enabled in (False, True):
             with self.subTest(enabled=enabled), tempfile.TemporaryDirectory() as directory:

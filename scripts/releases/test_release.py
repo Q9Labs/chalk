@@ -203,13 +203,14 @@ class CutTests(unittest.TestCase):
             release.record(api, None)
         self.assertEqual([item['payload']['release_id'] for item in held_candidates(api.items)], ['A'])
 
-    def test_daily_and_no_change_rules(self):
+    def test_gap_gate_and_no_change_rules(self):
         self.assertTrue(cut_decision(SHA, [], NOW)[0])
         self.assertFalse(cut_decision(SHA, [held()], NOW)[0])
         self.assertTrue(cut_decision('b' * 40, [held()], NOW)[0])
-        today = held(date='2026-10-17T02:00:00Z')
-        self.assertFalse(cut_decision('b' * 40, [today], NOW)[0])
-        self.assertTrue(cut_decision(SHA, [today], NOW, manual=True)[0])
+        recent = held(date='2026-10-16T18:00:01Z')
+        self.assertFalse(cut_decision('b' * 40, [recent], NOW)[0])
+        self.assertTrue(cut_decision(SHA, [recent], NOW, manual=True)[0])
+        self.assertTrue(cut_decision('b' * 40, [held(date='2026-10-16T18:00:00Z')], NOW)[0])
 
     def test_failed_cut_never_advances_baseline_and_next_day_retries(self):
         records = [held(2, 'b' * 40, '2026-10-16T02:00:00Z', status='failure', proof='failed'), held()]

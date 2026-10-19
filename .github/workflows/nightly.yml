@@ -1,7 +1,9 @@
 name: Cut nightly
 on:
-  schedule:
-    - cron: "17 2 * * *"
+  workflow_run:
+    workflows: [Gate]
+    types: [completed]
+    branches: [master]
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,6 +15,10 @@ concurrency:
   cancel-in-progress: false
 jobs:
   plan:
+    # The branch filter also matches pull requests whose source branch is named master.
+    if: >-
+      github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-24.04
     outputs:
       should_cut: ${{ steps.plan.outputs.should_cut }}
@@ -37,6 +43,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
+          GATE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           args=()
           if [[ "$MANUAL" == true ]]; then args+=(--manual); fi
