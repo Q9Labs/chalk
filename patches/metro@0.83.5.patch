@@ -1,0 +1,19 @@
+diff --git a/src/Assets.js b/src/Assets.js
+index ac3302ca43a572b6b750dd6f390401ddfab03f05..75a04a37c9ccea980d45601a032262321bc5f4c0 100644
+--- a/src/Assets.js
++++ b/src/Assets.js
+@@ -171,10 +171,10 @@ async function getAssetData(
+   assetUrlPath = (0, _pathUtils.normalizePathSeparatorsToPosix)(assetUrlPath);
+   const isImage = isAssetTypeAnImage(_path.default.extname(assetPath).slice(1));
+   const assetInfo = await getAbsoluteAssetInfo(assetPath, platform ?? null);
+-  const isImageInput = assetInfo.files[0].includes(".zip/")
+-    ? _fs.default.readFileSync(assetInfo.files[0])
+-    : assetInfo.files[0];
+-  const dimensions = isImage ? (0, _imageSize.default)(isImageInput) : null;
++  // image-size 2 only accepts bytes; the workspace pins it to 2.0.3 for a security fix.
++  const dimensions = isImage
++    ? (0, _imageSize.default)(_fs.default.readFileSync(assetInfo.files[0]))
++    : null;
+   const scale = assetInfo.scales[0];
+   const assetData = {
+     __packager_asset: true,

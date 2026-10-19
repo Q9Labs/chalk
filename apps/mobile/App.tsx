@@ -1,220 +1,164 @@
-import Bug02Icon from "@hugeicons/core-free-icons/dist/esm/Bug02Icon";
-import { HugeiconsIcon } from "@hugeicons/react-native";
-import { recordDevDiagnosticsLifecycleEvent, recordDiagnosticsFailure, resetDevDiagnosticsState, resolveDevDiagnosticsMode, setDevDiagnosticsConnection, setDevDiagnosticsDevice, setDevDiagnosticsEnvironment } from "@q9labsai/chalk-react-native/diagnostics";
-import { Theme } from "@q9labsai/chalk-react-native/theme";
-import { StatusBar } from "expo-status-bar";
-import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
-import { SafeAreaProvider } from "react-native-safe-area-context";
-import { AppBootstrapScreen } from "./src/components/AppBootstrapScreen";
-import { DevDiagnosticsSheet } from "./src/components/DevDiagnosticsSheet";
-import { DevSdkPreviewScreen } from "./src/dev-preview";
-import { canOpenDevPreviewFromRoute, canShowGlobalDiagnostics } from "./src/dev-preview/policy";
-import { DEFAULT_PREVIEW_SEARCH, patchPreviewSearch, type PreviewSearch, type PreviewSearchPatch } from "./src/dev-preview/preview-state";
-import { parsePreviewRoute } from "./src/dev-preview/preview-route";
+import { recordDevDiagnosticsLifecycleEvent, recordDiagnosticsFailure, resolveDevDiagnosticsMode, setDevDiagnosticsConnection, setDevDiagnosticsDevice, setDevDiagnosticsEnvironment } from "@q9labsai/chalk-react-native/diagnostics";
 import { getDeviceInfo } from "@q9labsai/chalk-react-native/runtime";
-import { clearSpaceContext, parseSpaceLink, type MobileRoute, type SpaceOperationObserver } from "./src/lib/spaces";
+import { ChalkUI, useToasts } from "@q9labsai/chalk-react-native/ui";
+import * as SplashScreen from "expo-splash-screen";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Linking } from "react-native";
+import { Splash } from "./src/brand/Splash";
+import { CallScreen } from "./src/call/CallScreen";
+import { useClipboardOffer } from "./src/home/ClipboardCard";
+import { HomeScreen } from "./src/home/HomeScreen";
+import { useRecentCalls, type RecentCall, type RecentCalls } from "./src/home/recent-calls";
+import { JoiningScreen, type ArrivedCall, type JoinTarget } from "./src/join/JoiningScreen";
+import { NameStep } from "./src/join/NameStep";
 import { getApiBaseURL } from "./src/lib/mobile-config";
-import { MobileSpaceScreen } from "./src/space/MobileSpaceScreen";
-import { HomeScreen } from "./src/screens/HomeScreen";
-import { OnboardingScreen } from "./src/screens/OnboardingScreen";
-import { loadOnboardingState, resolveOnboardingLaunchSurface } from "./src/screens/onboarding-store";
-type AppRoute =
-  | MobileRoute
-  | {
-      readonly kind: "sdk-preview";
-      readonly preview: PreviewSearch;
-    };
+import { parseSpaceLink, type SpaceRoute } from "./src/lib/spaces";
+import { useCallPreferences, type StoredCallPreferences } from "./src/preferences/call-preferences";
+import { loadOnboardingState, saveOnboardingState } from "./src/screens/onboarding-store";
+
+void SplashScreen.preventAutoHideAsync();
+
+/** What the app shows: Home, then the name step when there's no name, joining, and the call. */
+type Step = { readonly kind: "home" } | { readonly kind: "name"; readonly target: JoinTarget } | { readonly kind: "joining"; readonly target: JoinTarget; readonly name: string } | { readonly kind: "call"; readonly call: ArrivedCall };
+
 export default function App(): React.JSX.Element {
   const apiBaseURL = useMemo(() => getApiBaseURL(), []);
   const diagnosticsMode = useMemo(() => resolveDevDiagnosticsMode({ isDevRuntime: __DEV__, apiBaseURL }), [apiBaseURL]);
   const diagnosticsEnabled = diagnosticsMode.enabled;
-  const [route, setRoute] = useState<AppRoute>({ kind: "home" });
-  const [isBooting, setIsBooting] = useState(true);
-  const [onboardingStatus, setOnboardingStatus] = useState<"loading" | "required" | "complete">("loading");
-  const [defaultDisplayName, setDefaultDisplayName] = useState<string | null>(null);
-  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
-  const routeRef = useRef<AppRoute>({ kind: "home" });
-  const syncStaticDiagnostics = useCallback(() => {
-    if (diagnosticsEnabled) setDevDiagnosticsDevice(getDeviceInfo());
-  }, [diagnosticsEnabled]);
-  const openDiagnosticsForFailure = useCallback(
-    (source: string, message: string) => {
-      if (!diagnosticsEnabled) return;
-      recordDiagnosticsFailure(source, message);
-      setDiagnosticsOpen(true);
+  const reportError = useCallback(
+    (source: string) => (cause: unknown) => {
+      if (diagnosticsEnabled) recordDiagnosticsFailure(source, cause instanceof Error ? cause.message : String(cause));
     },
     [diagnosticsEnabled],
   );
-  const recordSpaceOperation = useCallback<SpaceOperationObserver>(
-    (operation, state) => {
-      if (diagnosticsEnabled) recordDevDiagnosticsLifecycleEvent(`public-invite-${operation}`, `Public invite ${operation}`, state);
-    },
-    [diagnosticsEnabled],
-  );
-  useEffect(() => {
-    routeRef.current = route;
-  }, [route]);
-  useEffect(() => {
-    if (!diagnosticsEnabled || route.kind === "sdk-preview") return;
-    recordDevDiagnosticsLifecycleEvent("navigation", `App route: ${route.kind}`, route.kind === "space" ? `Space: ${route.space}` : undefined);
-    setDevDiagnosticsEnvironment({
-      apiBaseURL,
-      buildProfile: diagnosticsMode.buildProfile,
-      routeKind: route.kind,
-      routeSource: route.kind === "space" ? route.source : null,
-      routeSpaceId: route.kind === "space" ? route.space : null,
-    });
-    syncStaticDiagnostics();
-  }, [apiBaseURL, diagnosticsEnabled, diagnosticsMode.buildProfile, route, syncStaticDiagnostics]);
-  useEffect(() => {
-    if (route.kind === "home") setDevDiagnosticsConnection(null);
-  }, [route.kind]);
-  useEffect(() => {
-    let mounted = true;
-    const openURL = (url: string | null) => {
-      if (!url || !mounted) return;
-      const nextRoute = parsePreviewRoute(url, { isDevRuntime: __DEV__ }) ?? parseSpaceLink(url);
-      if (!nextRoute) return;
-      if (nextRoute.kind === "sdk-preview" && !canOpenDevPreviewFromRoute(routeRef.current.kind)) return;
-      setRoute(nextRoute);
-    };
-    void Linking.getInitialURL()
-      .then(openURL)
-      .finally(() => {
-        if (mounted) setIsBooting(false);
-      });
-    const subscription = Linking.addEventListener("url", ({ url }) => openURL(url));
-    return () => {
-      mounted = false;
-      subscription.remove();
-    };
-  }, []);
+  const preferences = useCallPreferences(useMemo(() => reportError("load-preferences"), [reportError]));
+  const recentCalls = useRecentCalls(useMemo(() => reportError("recent-calls"), [reportError]));
+  const [name, setName] = useState<string | null | undefined>(undefined);
+  const [openedLink, setOpenedLink] = useState<SpaceRoute | null | undefined>(undefined);
+
   useEffect(() => {
     let mounted = true;
     void loadOnboardingState()
-      .then((state) => {
-        if (!mounted) return;
-        setDefaultDisplayName(state.displayName);
-        setOnboardingStatus(resolveOnboardingLaunchSurface(state) === "home" ? "complete" : "required");
-      })
-      .catch(() => {
-        if (mounted) setOnboardingStatus("required");
+      .then(
+        (state) => state.displayName,
+        (cause: unknown) => {
+          reportError("load-display-name")(cause);
+          return null;
+        },
+      )
+      .then((stored) => {
+        if (mounted) setName(stored);
+      });
+    void Linking.getInitialURL()
+      .then(
+        (url) => (url ? parseSpaceLink(url) : null),
+        (cause: unknown) => {
+          reportError("initial-link")(cause);
+          return null;
+        },
+      )
+      .then((route) => {
+        if (mounted) setOpenedLink(route);
       });
     return () => {
       mounted = false;
     };
-  }, []);
-  const goHome = useCallback(async () => {
-    if (routeRef.current.kind === "space") await clearSpaceContext(routeRef.current);
-    setRoute({ kind: "home" });
-  }, []);
-  const handleClearSpaceContext = useCallback(async () => {
-    if (route.kind === "space") await clearSpaceContext(route);
-    syncStaticDiagnostics();
-  }, [route, syncStaticDiagnostics]);
-  const handleResetDiagnostics = useCallback(async () => {
-    resetDevDiagnosticsState();
-    if (route.kind === "sdk-preview") {
-      syncStaticDiagnostics();
-      return;
-    }
-    setDevDiagnosticsEnvironment({
-      apiBaseURL,
-      buildProfile: diagnosticsMode.buildProfile,
-      routeKind: route.kind,
-      routeSource: route.kind === "space" ? route.source : null,
-      routeSpaceId: route.kind === "space" ? route.space : null,
-    });
-    setDevDiagnosticsConnection(null);
-    syncStaticDiagnostics();
-  }, [apiBaseURL, diagnosticsMode.buildProfile, route, syncStaticDiagnostics]);
-  const handlePreviewSearchChange = useCallback((patch: PreviewSearchPatch) => {
-    setRoute((current) => (current.kind === "sdk-preview" ? { ...current, preview: patchPreviewSearch(current.preview, patch) } : current));
-  }, []);
-  const openSdkPreview = useCallback(() => {
-    setRoute({ kind: "sdk-preview", preview: DEFAULT_PREVIEW_SEARCH });
-  }, []);
-  const showDeveloperControls = __DEV__ && onboardingStatus === "complete";
+  }, [reportError]);
+
+  const ready = preferences && recentCalls && name !== undefined && openedLink !== undefined;
+  // The launch screen stays until the first real screen is ready; the JS splash covers only the gap.
+  useEffect(() => {
+    if (ready) SplashScreen.hideAsync().catch(reportError("hide-splash"));
+  }, [ready, reportError]);
   return (
-    <SafeAreaProvider>
-      <View style={styles.appShell}>
-        <StatusBar backgroundColor={Theme.colors.background} style="dark" />
-        {renderContent({
-          apiBaseURL,
-          defaultDisplayName,
-          isBooting,
-          onClose: goHome,
-          onDiagnosticsConnection: diagnosticsEnabled ? setDevDiagnosticsConnection : undefined,
-          onDiagnosticsFailure: openDiagnosticsForFailure,
-          onOperation: recordSpaceOperation,
-          onNavigate: setRoute,
-          onOnboardingComplete: (displayName) => {
-            setDefaultDisplayName(displayName || null);
-            setOnboardingStatus("complete");
-          },
-          onPreviewSearchChange: handlePreviewSearchChange,
-          route,
-          onboardingStatus,
-        })}
-        {showDeveloperControls ? (
-          <>
-            {route.kind === "home" ? (
-              <Pressable accessibilityLabel="Open SDK preview" accessibilityRole="button" hitSlop={16} onPress={openSdkPreview} style={styles.devPreviewButton}>
-                <Text style={styles.devPreviewButtonText}>SDK</Text>
-              </Pressable>
-            ) : null}
-            {diagnosticsEnabled && canShowGlobalDiagnostics(route.kind) ? (
-              <>
-                <Pressable accessibilityLabel="Open diagnostics" accessibilityRole="button" hitSlop={16} onPress={() => setDiagnosticsOpen(true)} style={styles.devButton}>
-                  <HugeiconsIcon color={Theme.colors.primary} icon={Bug02Icon} size={18} />
-                </Pressable>
-                <DevDiagnosticsSheet onClearSpaceContext={handleClearSpaceContext} onClose={() => setDiagnosticsOpen(false)} onResetDiagnostics={handleResetDiagnostics} visible={diagnosticsOpen} />
-              </>
-            ) : null}
-          </>
-        ) : null}
-      </View>
-    </SafeAreaProvider>
+    <ChalkUI colorScheme={preferences?.colorScheme ?? "dark"}>
+      {ready ? <Shell apiBaseURL={apiBaseURL} diagnosticsEnabled={diagnosticsEnabled} name={name} onNameChange={setName} openedLink={openedLink} preferences={preferences} recentCalls={recentCalls} reportError={reportError} buildProfile={diagnosticsMode.buildProfile} /> : <Splash />}
+      {/* Dev states: the harness lane mounts its route on the next line. */}
+    </ChalkUI>
   );
 }
-function renderContent({
-  apiBaseURL,
-  defaultDisplayName,
-  isBooting,
-  onClose,
-  onDiagnosticsConnection,
-  onDiagnosticsFailure,
-  onOperation,
-  onNavigate,
-  onOnboardingComplete,
-  onPreviewSearchChange,
-  onboardingStatus,
-  route,
-}: {
+
+type ShellProps = {
   readonly apiBaseURL: string;
-  readonly defaultDisplayName: string | null;
-  readonly isBooting: boolean;
-  readonly onClose: () => Promise<void>;
-  readonly onDiagnosticsConnection?: (snapshot: Parameters<typeof setDevDiagnosticsConnection>[0]) => void;
-  readonly onDiagnosticsFailure: (source: string, message: string) => void;
-  readonly onOperation: SpaceOperationObserver;
-  readonly onNavigate: (route: AppRoute) => void;
-  readonly onOnboardingComplete: (displayName: string) => void;
-  readonly onPreviewSearchChange: (patch: PreviewSearchPatch) => void;
-  readonly onboardingStatus: "loading" | "required" | "complete";
-  readonly route: AppRoute;
-}): ReactElement {
-  if (isBooting) return <AppBootstrapScreen label="Starting Chalk…" />;
-  if (route.kind === "sdk-preview") return <DevSdkPreviewScreen onClose={onClose} onSearchChange={onPreviewSearchChange} search={route.preview} />;
-  if (onboardingStatus === "loading") return <AppBootstrapScreen label="Starting Chalk…" />;
-  if (onboardingStatus === "required") return <OnboardingScreen onComplete={onOnboardingComplete} />;
-  if (route.kind === "home") return <HomeScreen apiBaseURL={apiBaseURL} onError={(message) => onDiagnosticsFailure("public-space-create", message)} onNavigate={onNavigate} onOperation={onOperation} />;
-  return <MobileSpaceScreen apiBaseURL={apiBaseURL} defaultDisplayName={defaultDisplayName} onClose={onClose} onDiagnosticsConnection={onDiagnosticsConnection} onDiagnosticsFailure={(error) => onDiagnosticsFailure("space-error", error.message)} onOperation={onOperation} route={route} />;
+  readonly buildProfile: string;
+  readonly diagnosticsEnabled: boolean;
+  readonly name: string | null;
+  readonly onNameChange: (name: string) => void;
+  readonly openedLink: SpaceRoute | null;
+  readonly preferences: StoredCallPreferences;
+  readonly recentCalls: RecentCalls;
+  readonly reportError: (source: string) => (cause: unknown) => void;
+};
+
+function Shell({ apiBaseURL, buildProfile, diagnosticsEnabled, name, onNameChange, openedLink, preferences, recentCalls, reportError }: ShellProps): React.JSX.Element {
+  const toasts = useToasts();
+  const [step, setStep] = useState<Step>(() => (openedLink ? (name ? { kind: "joining", target: { kind: "link", route: openedLink }, name } : { kind: "name", target: { kind: "link", route: openedLink } }) : { kind: "home" }));
+
+  const join = useCallback((target: JoinTarget) => setStep(name ? { kind: "joining", target, name } : { kind: "name", target }), [name]);
+  const goHome = useCallback(() => setStep({ kind: "home" }), []);
+  const saveName = useCallback(
+    (next: string) => {
+      onNameChange(next);
+      saveOnboardingState(next).catch(reportError("save-display-name"));
+    },
+    [onNameChange, reportError],
+  );
+
+  // App links and chalk:// links open straight into joining.
+  useEffect(() => {
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      const route = parseSpaceLink(url);
+      if (route) join({ kind: "link", route });
+    });
+    return () => subscription.remove();
+  }, [join]);
+
+  useEffect(() => {
+    if (!diagnosticsEnabled) return;
+    const route = step.kind === "call" ? step.call.route : step.kind !== "home" && step.target.kind === "link" ? step.target.route : null;
+    recordDevDiagnosticsLifecycleEvent("navigation", `App step: ${step.kind}`, route ? `Space: ${route.space}` : undefined);
+    setDevDiagnosticsEnvironment({ apiBaseURL, buildProfile, routeKind: step.kind === "home" ? "home" : "space", routeSource: route?.source ?? null, routeSpaceId: route?.space ?? null });
+    setDevDiagnosticsDevice(getDeviceInfo());
+    if (step.kind === "home") setDevDiagnosticsConnection(null);
+  }, [apiBaseURL, buildProfile, diagnosticsEnabled, step]);
+
+  const joinFailed = useCallback(
+    (cause: unknown) => {
+      reportError("join")(cause);
+      setStep({ kind: "home" });
+      toasts.show({ kind: "error", dismissible: true, wrap: true, message: cause instanceof Error ? `Couldn’t join the call. ${cause.message}` : "Couldn’t join the call." });
+    },
+    [reportError, toasts],
+  );
+  const joinRecent = useCallback(
+    (call: RecentCall) => {
+      const route = parseSpaceLink(call.link);
+      if (route) join({ kind: "link", route: { ...route, spaceName: call.name } });
+    },
+    [join],
+  );
+
+  switch (step.kind) {
+    case "home":
+      return <Home name={name} onJoin={(route) => join({ kind: "link", route })} onJoinRecent={joinRecent} onSaveName={saveName} onStartCall={() => join({ kind: "start" })} preferences={preferences} recentCalls={recentCalls} />;
+    case "name":
+      return (
+        <NameStep
+          onCancel={goHome}
+          onSubmit={(next) => {
+            saveName(next);
+            setStep({ kind: "joining", target: step.target, name: next });
+          }}
+        />
+      );
+    case "joining":
+      return <JoiningScreen apiBaseURL={apiBaseURL} colorScheme={preferences.colorScheme} displayName={step.name} onArrived={(call) => setStep({ kind: "call", call })} onCancel={goHome} onFailed={joinFailed} target={step.target} />;
+    case "call":
+      return <CallScreen apiBaseURL={apiBaseURL} call={step.call} onClose={goHome} onError={reportError("leave")} onRejoin={() => join({ kind: "link", route: step.call.route })} onRemember={recentCalls.remember} preferences={preferences} />;
+  }
 }
-const styles = StyleSheet.create({
-  appShell: { flex: 1, backgroundColor: Theme.colors.background },
-  devPreviewButton: { alignItems: "center", backgroundColor: Theme.colors.card, borderColor: Theme.colors.border, borderRadius: 18, borderWidth: 1, height: 36, justifyContent: "center", minWidth: 36, paddingHorizontal: 8, position: "absolute", right: 16, top: 64 },
-  devPreviewButtonText: { color: Theme.colors.primary, fontSize: 11, fontWeight: "800", letterSpacing: 0.5 },
-  devButton: { alignItems: "center", backgroundColor: Theme.colors.card, borderColor: Theme.colors.border, borderRadius: 18, borderWidth: 1, height: 36, justifyContent: "center", position: "absolute", right: 16, top: 64, width: 36 },
-});
+
+/** Home watches the clipboard only while it shows, so a call never reads it. */
+function Home(props: Omit<React.ComponentProps<typeof HomeScreen>, "clipboard">): React.JSX.Element {
+  return <HomeScreen {...props} clipboard={useClipboardOffer()} />;
+}

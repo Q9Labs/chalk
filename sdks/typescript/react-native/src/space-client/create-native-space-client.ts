@@ -16,6 +16,8 @@ import { createSpaceClientForPlatform, type SpaceClientPlatform } from "@q9labsa
 import type { SpaceClient } from "@q9labsai/chalk-client";
 import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc";
 import { AppState } from "react-native";
+import { toNativeCaptureError } from "../media/native-capture-error";
+import { ensureRandomUUID } from "./random-uuid";
 type PlatformDependencies = NonNullable<SpaceClientPlatform["dependencies"]>;
 type NativeMediaClient = ReturnType<NonNullable<PlatformDependencies["createMediaClient"]>>;
 type MediaFactoryInput = Parameters<NonNullable<PlatformDependencies["createMediaClient"]>>[0];
@@ -34,6 +36,7 @@ export type NativeSpaceClientOptions = {
   readonly storage?: ReactNativeAsyncStorage;
 };
 export function createNativeSpaceClient(options: NativeSpaceClientOptions): SpaceClient {
+  ensureRandomUUID();
   const { storage } = options;
   const apiBaseURL = options.baseUrl ?? "https://api.chalkmeet.com";
   const syncURL = options.syncUrl ?? defaultSyncURL(apiBaseURL);
@@ -47,7 +50,13 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
       clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>),
     },
     mediaDevices: {
-      getUserMedia: async (constraints) => (await mediaDevices.getUserMedia(constraints)) as unknown as globalThis.MediaStream,
+      getUserMedia: async (constraints) => {
+        try {
+          return (await mediaDevices.getUserMedia(constraints)) as unknown as globalThis.MediaStream;
+        } catch (cause) {
+          throw toNativeCaptureError(cause);
+        }
+      },
       getDisplayMedia: async () => (await mediaDevices.getDisplayMedia()) as unknown as globalThis.MediaStream,
     },
     createMediaClient: (input) => createMediaClient(apiBaseURL, input, fetch),

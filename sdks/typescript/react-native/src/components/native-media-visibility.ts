@@ -1,7 +1,6 @@
-import type { NativeParticipant as Participant } from "../ui/native-types";
 import type { NativeMediaStreamTrack } from "../media/native-webrtc";
 
-export function shouldRenderNativeMediaTrack({ participant, track, mediaKind = "camera" }: { participant: Participant | null; track: MediaStreamTrack | NativeMediaStreamTrack | null | undefined; mediaKind?: "camera" | "screen-share" }): boolean {
+export function shouldRenderNativeMediaTrack({ participant, track, mediaKind = "camera" }: { participant: { readonly videoEnabled: boolean } | null; track: MediaStreamTrack | NativeMediaStreamTrack | null | undefined; mediaKind?: "camera" | "screen-share" }): boolean {
   if (!track) {
     return false;
   }
