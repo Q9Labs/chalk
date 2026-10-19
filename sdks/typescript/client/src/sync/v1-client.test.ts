@@ -486,7 +486,7 @@ describe("V1SyncClient", () => {
       const digest = await computeV1StateDigest(next);
       socket.receive({ type: "event", stream: "control", name: "participant_left", event_id: recoveryId, base_revision: 1, revision: 2, schema_version: 1, resulting_state_digest: digest, payload: { participant_id: peerId, reason: "removed" }, external_operation_id: commandIds[1] });
       await snapshotWhen(client, (snapshot) => snapshot.connection.phase === "terminal");
-      expect(client.getSnapshot().connection).toEqual({ phase: "terminal", terminalReason: "participant_inactive" });
+      expect(client.getSnapshot().connection).toEqual({ phase: "terminal", terminalReason: "participant_removed" });
       expect(socket.sent.some((raw) => JSON.parse(raw).type === "delivery_ack")).toBe(true);
     } finally {
       client.stop();

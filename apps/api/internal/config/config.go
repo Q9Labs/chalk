@@ -15,6 +15,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
+	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
 )
 
 const (
@@ -241,7 +242,8 @@ type DeadlineSchedulerConfig struct {
 }
 
 type Config struct {
-	API APIConfig
+	TenantLimits tenantlimits.Config
+	API          APIConfig
 
 	Capabilities       CapabilityConfig
 	CloudflareRealtime CloudflareRealtimeConfig
@@ -263,7 +265,32 @@ type Config struct {
 	Webhooks      WebhookConfig
 }
 
+const (
+	TenantMaxConcurrentRecordings = "CHALK_TENANT_MAX_CONCURRENT_RECORDINGS"
+	TenantDailyRecordingMinutes   = "CHALK_TENANT_DAILY_RECORDING_MINUTES"
+	TenantMaxLiveEpisodes         = "CHALK_TENANT_MAX_LIVE_EPISODES"
+)
+
 func Load() (Config, error) {
+	var limits tenantlimits.Config
+	for _, setting := range []struct {
+		name   string
+		target *int32
+	}{
+		{TenantMaxConcurrentRecordings, &limits.MaxConcurrentRecordings},
+		{TenantDailyRecordingMinutes, &limits.DailyRecordingMinutes},
+		{TenantMaxLiveEpisodes, &limits.MaxLiveEpisodes},
+	} {
+		value, err := envInt32(setting.name, 0)
+		if err != nil {
+			return Config{}, err
+		}
+		if value < 0 {
+			return Config{}, fmt.Errorf("%s must be non-negative", setting.name)
+		}
+		*setting.target = value
+	}
+
 	maxConns, err := envInt32(DatabaseMaxConns, DefaultDBMaxConns)
 	if err != nil {
 		return Config{}, err
@@ -463,6 +490,7 @@ func Load() (Config, error) {
 	}
 
 	return Config{
+		TenantLimits: limits,
 		API: APIConfig{
 			DisableAuthenticatedRateLimits: rateLimits == "off",
 			Address:                        envOrDefault(APIAddress, DefaultAPIAddress),

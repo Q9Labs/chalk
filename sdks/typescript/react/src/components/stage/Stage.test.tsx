@@ -11,3 +11,11 @@ it("keeps a pinned person visible when shared content fills Grid capacity", () =
   expect(wrapper).toBeDefined();
   expect(wrapper).not.toContain('aria-hidden="true"');
 });
+
+it("uses the primary renderer for focused content when a tile renderer is also supplied", () => {
+  const participant = { id: "person", displayName: "Nora" };
+  const share: StageItem = { kind: "screen-share", id: "screen-share:person", participant };
+  const html = renderToStaticMarkup(<Stage items={[share]} layout="spotlight" pinnedId={share.id} renderContentTile={() => <div>Unfocused content</div>} renderPrimaryContent={() => <div>Focused content</div>} />);
+  expect(html).toContain("Focused content");
+  expect(html).not.toContain("Unfocused content");
+});

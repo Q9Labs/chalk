@@ -103,6 +103,10 @@ jobs:
       - name: Install JavaScript dependencies
         run: pnpm install --frozen-lockfile
 
+      # CocoaPods reads the embedded whiteboard bundle, and the Release archive bundles the workspace SDKs from their built dist.
+      - name: Build workspace SDKs
+        run: pnpm --filter @q9labsai/chalk-mobile run prepare:native-dependencies
+
       - name: Install CocoaPods dependencies
         working-directory: apps/mobile
         run: pod install --project-directory=ios

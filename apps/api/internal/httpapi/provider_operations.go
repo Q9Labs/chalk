@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/providerbridge"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
+	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -141,6 +142,14 @@ func handleProviderOperation(service ProviderBridgeService) http.HandlerFunc {
 		result, err := service.Execute(request.Context(), input)
 		if err != nil {
 			writeProviderBridgeError(w, err)
+			return
+		}
+		if result.Outcome == provideroperations.OutcomeTerminalFailure && result.Reason == tenantlimits.RecordingLimitReason {
+			// Sync decodes the top-level reason on non-2xx bridge responses.
+			writeJSON(w, apiErrorTenantRecordingLimit.Status, map[string]any{
+				"error":  map[string]string{"code": apiErrorTenantRecordingLimit.Code, "message": apiErrorTenantRecordingLimit.Message},
+				"reason": result.Reason,
+			})
 			return
 		}
 		writeJSON(w, http.StatusOK, newProviderOperationResponse(result))

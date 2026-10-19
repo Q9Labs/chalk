@@ -20,6 +20,34 @@ host = load('boot-check-host')
 
 
 class BootCheckTests(unittest.TestCase):
+    def test_host_actions_run_as_the_configured_runtime_user(self):
+        import base64
+        import os
+        import re
+        environment = dict(CHALK_BOOT_CHECK_AWS_REGION='test', CHALK_BOOT_CHECK_DO_CONTEXT='test', DIGITALOCEAN_ACCESS_TOKEN='token',
+                           CHALK_BOOT_CHECK_INSTANCE_ID='i-0123456789abcdef0')
+        with patch.dict(os.environ, environment, clear=True), self.assertRaisesRegex(RuntimeError, 'CHALK_BOOT_CHECK_USER_ID'):
+            boot.Services()
+        with patch.dict(os.environ, {**environment, 'CHALK_BOOT_CHECK_USER_ID': '1000'}, clear=True):
+            services = boot.Services()
+        sent = []
+        def aws(service, operation, *args, **kwargs):
+            if operation == 'send-command':
+                parameters = json.loads(Path(args[args.index('--parameters') + 1].removeprefix('file://')).read_text())
+                sent.append(json.loads(base64.b64decode(re.search(r"b64decode\('([^']+)'\)", parameters['commands'][0]).group(1))))
+                return {'Command': {'CommandId': 'command'}}
+            return {'Status': 'Success', 'StandardOutputContent': '{}'}
+        with tempfile.TemporaryDirectory() as directory, patch.object(services, 'aws', side_effect=aws):
+            services.host({'action': 'summary', 'role': 'capture'}, Path(directory))
+        self.assertEqual(sent, [{'action': 'summary', 'role': 'capture', 'user_id': 1000}])
+        commands = []
+        def check_output(command, text):
+            commands.append(command)
+            return json.dumps([{'Config': {'Env': []}, 'State': {'Pid': 7}}])
+        with patch.object(host.subprocess, 'check_output', side_effect=check_output):
+            host.runtime('chalk-recorder-capture', 1000)
+        self.assertEqual(commands[0][:6], ['sudo', '-u', '#1000', 'env', 'XDG_RUNTIME_DIR=/run/user/1000', 'podman'])
+
     def test_early_upload_is_private_fixed_object_and_does_not_need_ssh(self):
         from datetime import datetime, timezone
         from urllib.parse import urlsplit, parse_qs

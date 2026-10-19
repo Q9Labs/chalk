@@ -82,6 +82,41 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
       return () => document.removeEventListener("pointerdown", dismiss);
     }, [reactionBarOpen]);
     const [photo, setPhoto] = useState<ChatAttachment | null>(null);
+    const [downloading, setDownloading] = useState(false);
+    const [downloadError, setDownloadError] = useState<string | null>(null);
+    const downloadController = useRef<AbortController | null>(null);
+    useEffect(() => () => downloadController.current?.abort(), []);
+    const downloadPhoto = async () => {
+      if (!photo || downloading) return;
+      const url = resolvedUrls.get(photo.attachmentId);
+      if (!url) return;
+      setDownloading(true);
+      setDownloadError(null);
+      const controller = new AbortController();
+      downloadController.current = controller;
+      try {
+        // The preview image may have cached this URL without CORS headers, which would fail this fetch.
+        const response = await fetch(url, { cache: "no-store", signal: controller.signal });
+        if (!response.ok) throw new Error(`Attachment download failed (${response.status})`);
+        const blobUrl = URL.createObjectURL(await response.blob());
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = photo.fileName;
+        document.body.appendChild(link);
+        try {
+          link.click();
+        } finally {
+          link.remove();
+          // Give the browser time to consume the URL before releasing its bytes.
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 30_000);
+        }
+      } catch {
+        if (!controller.signal.aborted) setDownloadError(`Could not download ${photo.fileName}. Try again.`);
+      } finally {
+        if (!controller.signal.aborted) setDownloading(false);
+        downloadController.current = null;
+      }
+    };
     const [photoClosing, setPhotoClosing] = useState(false);
     const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     useEffect(
@@ -325,12 +360,13 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
               </small>
             </span>
             {photo ? (
-              <a className="call-photo-viewer-control" href={resolvedUrls.get(photo.attachmentId)} download={photo.fileName} target="_blank" rel="noopener noreferrer" aria-label={`Download ${photo.fileName}`}>
+              <button type="button" className="call-photo-viewer-control" disabled={downloading} aria-busy={downloading} onClick={() => void downloadPhoto()} aria-label={`Download ${photo.fileName}`}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M12 4v11M7 10.5l5 5 5-5M5 20h14" />
                 </svg>
-              </a>
+              </button>
             ) : null}
+            {downloadError ? <span role="alert">{downloadError}</span> : null}
             <button type="button" className="call-photo-viewer-control" aria-label="Close photo viewer" onClick={closePhotoViewer}>
               <Cancel01Icon />
             </button>

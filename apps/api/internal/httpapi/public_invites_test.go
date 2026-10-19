@@ -3,9 +3,20 @@ package httpapi
 import (
 	"testing"
 
+	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
+
+func TestPublicInviteEndpointMapsEndingEpisodeToConflict(t *testing.T) {
+	got, ok := publicInviteEndpointAPIError(episodes.ErrEpisodeNotActive)
+	if !ok || got != apiErrorEpisodeNotActive {
+		t.Fatalf("mapped error = %#v, %v; want %#v", got, ok, apiErrorEpisodeNotActive)
+	}
+	if got.Status == 500 {
+		t.Fatal("arrival during an Episode's ending mapped to HTTP 500")
+	}
+}
 
 func TestPublicInviteEndpointMapsMediaProofFailures(t *testing.T) {
 	for _, test := range []struct {

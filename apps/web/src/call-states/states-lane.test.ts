@@ -2,6 +2,13 @@
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { startCallHarness } from "./browser-harness";
+import type { CallStateClient } from "./fixtures";
+
+declare global {
+  interface Window {
+    __terminalTestClient: CallStateClient;
+  }
+}
 
 let origin: string;
 let stop: (() => Promise<void>) | undefined;
@@ -164,3 +171,38 @@ it("plays exactly one error cue for join, rejected in-call toggle, and overlappi
     expect(await count.textContent()).toBe(String(index + 1));
   }
 }, 30_000);
+
+it.each([
+  { episodeEnded: false, removedByHost: true, title: "You were removed from Test call", rejoin: false },
+  { episodeEnded: false, removedByHost: false, title: "You left Test call", rejoin: true },
+  { episodeEnded: true, removedByHost: false, title: "The call ended", rejoin: false },
+  { episodeEnded: true, removedByHost: true, title: "The call ended", rejoin: false },
+])(
+  "preserves terminal flags through the real web page: $title",
+  async ({ episodeEnded, removedByHost, title, rejoin }) => {
+    const boundary = "**/src/call-states/web-space-boundary.ts";
+    await page.route(boundary, async (route) => {
+      const response = await route.fetch();
+      const body = await response.text();
+      expect(body).toContain("return createCallStateClient(");
+      await route.fulfill({ response, body: body.replace("return createCallStateClient(", "return window.__terminalTestClient = createCallStateClient(") });
+    });
+    try {
+      await page.goto(`${origin}/web-space-journey.html`);
+      await page.getByTestId("stage").waitFor();
+      await page.evaluate(
+        (flags) => {
+          const client = window.__terminalTestClient;
+          client.updateSnapshot((current) => ({ ...current, connection: { ...current.connection, status: "leaving", ...flags } }));
+          client.updateSnapshot((current) => ({ ...current, connection: { ...current.connection, status: "left", ...flags } }));
+        },
+        { episodeEnded, removedByHost },
+      );
+      await page.getByRole("heading", { name: title, exact: true }).waitFor({ timeout: 5_000 });
+      expect(await page.getByRole("button", { name: "Rejoin", exact: true }).count()).toBe(rejoin ? 1 : 0);
+    } finally {
+      await page.unroute(boundary);
+    }
+  },
+  30_000,
+);

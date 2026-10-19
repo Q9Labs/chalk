@@ -1,5 +1,5 @@
 -- +goose Up
-alter table sync_chat_messages add column reaction_revision bigint not null default 0 check (reaction_revision >= 0);
+alter table sync_chat_messages add column reaction_revision bigint not null default 0;
 
 create table sync_chat_message_reactions (
     tenant_id uuid not null,

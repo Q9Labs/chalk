@@ -54,6 +54,20 @@ describe("public Space entry", () => {
     expect(mocks.publicClient.arriveBySpacePublicInvite).not.toHaveBeenCalled();
   });
 
+  it.each(["episode.ended", "network.failed"])("preserves the terminal phase for %s", async (code) => {
+    const original = mocks.client.getSnapshot();
+    mocks.client.getSnapshot.mockReturnValue({ ...original, connection: Object.assign({}, original.connection, { status: "failed", lastError: { code, message: "Connection failed" } }) });
+    try {
+      window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
+      render(<SpacePage slug="design-lab" />);
+      enterName("Ada");
+      await waitFor(() => expect(screen.getByText(code === "episode.ended" ? "episode-ended" : "failed")).toBeDefined());
+    } finally {
+      cleanup();
+      mocks.client.getSnapshot.mockReturnValue(original);
+    }
+  });
+
   it("does not prepare Capture for an unauthenticated slug-only Entrance", async () => {
     window.history.replaceState({}, "", "/space/design-lab");
     render(<SpacePage slug="design-lab" />);

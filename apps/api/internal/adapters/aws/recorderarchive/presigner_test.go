@@ -27,6 +27,10 @@ func TestPresignCoversStartupWindowAndDownload(t *testing.T) {
 		if err != nil || lifetime != timeout+5*time.Minute {
 			t.Fatalf("presign lifetime = %s, %v", lifetime, err)
 		}
+		// The installer fetches the bare link, so S3 must not expect any header beyond Host.
+		if headers := parsed.Query().Get("X-Amz-SignedHeaders"); headers != "host" {
+			t.Fatalf("presign signed headers = %q", headers)
+		}
 	}
 	for _, timeout := range []time.Duration{0, -time.Second, 7 * 24 * time.Hour} {
 		if _, err := Presign(context.Background(), archive, timeout); err == nil {
