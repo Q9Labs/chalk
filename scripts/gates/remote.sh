@@ -133,7 +133,7 @@ remote.sh dry run (no SSH, no files written)
   queue timeout:   ${queue_timeout}s
   gate timeout:    ${gate_timeout}s
   local log:       ${log_file}
-Steps: preflight and reap, upload bundle, checkout, pnpm install --frozen-lockfile, Playwright Chromium (when requested), run gate, delete checkout.
+Steps: upload bundle, queue, preflight and reap, checkout, pnpm install --frozen-lockfile, Playwright Chromium (when requested), run gate, delete checkout.
 EOF
   exit 0
 fi
@@ -251,21 +251,31 @@ prepare() {
 stop_run() {
   local id="$1" owner pid index alive attempt
   local pids=() starts=()
-  owner="$(cat "/tmp/chalk-owner-${id}.pid" 2>/dev/null)" || return 0
-  [[ "$owner" =~ ^[0-9]+$ ]] || return 0
-  if [[ "$owner" != "$$" ]]; then
-    ps -p "$owner" -o command= | grep -F -- "$id" >/dev/null || return 0
-  fi
+  owner="$(cat "/tmp/chalk-owner-${id}.pid" 2>/dev/null || true)"
   while read -r pid; do
+    [[ "$pid" != "$$" ]] || continue
     pids+=("$pid")
     starts+=("$(ps -p "$pid" -o lstart= || true)")
-  done < <(ps -axo pid=,ppid= | awk -v root="$owner" -v self="$$" '
-    function visit(pid, child) {
-      for (child in parent) if (parent[child] == pid) visit(child)
-      if (pid != self) print pid
-    }
-    { parent[$1] = $2 }
-    END { visit(root) }')
+  done < <({
+    if [[ "$owner" =~ ^[0-9]+$ ]] && { [[ "$owner" == "$$" ]] || ps -p "$owner" -o command= | grep -F -- "$id" >/dev/null; }; then
+      ps -axo pid=,ppid= | awk -v root="$owner" '
+        function visit(pid, child) {
+          for (child in parent) if (parent[child] == pid) visit(child)
+          print pid
+        }
+        { parent[$1] = $2 }
+        END { visit(root) }'
+    fi
+    # Children can outlive their parent (for example after Go's test timeout).
+    # Their exact checkout reference still proves ownership after reparenting.
+    pgrep -f "[/]tmp/chalk-remote-${id}(/|$)" || true
+    { lsof -d cwd -Fpn 2>/dev/null || true; } | awk -v work="/tmp/chalk-remote-${id}" '
+      /^p/ { pid = substr($0, 2) }
+      /^n/ {
+        path = substr($0, 2); sub(/^\/private/, "", path)
+        if (path == work || index(path, work "/") == 1) print pid
+      }'
+  } | sort -nu)
   for pid in "${pids[@]}"; do kill -TERM "$pid" 2>/dev/null || true; done
   for attempt in {1..10}; do
     alive=0
