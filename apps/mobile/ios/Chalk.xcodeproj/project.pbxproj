@@ -525,7 +525,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Chalk/Chalk.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 30;
+				CURRENT_PROJECT_VERSION = 31;
 				DEVELOPMENT_TEAM = 5K9635LZ6F;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -562,8 +562,9 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Chalk/Chalk.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 30;
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Distribution";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 31;
 				DEVELOPMENT_TEAM = 5K9635LZ6F;
 				INFOPLIST_FILE = Chalk/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -580,6 +581,7 @@
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
 				PRODUCT_BUNDLE_IDENTIFIER = ai.q9labs.chalk.mobile;
 				PRODUCT_NAME = Chalk;
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "Chalk App Store ai.q9labs.chalk.mobile 2026-10-18";
 				SWIFT_OBJC_BRIDGING_HEADER = "Chalk/Chalk-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -594,8 +596,9 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = ChalkScreenShare/ChalkScreenShare.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 30;
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Distribution";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 31;
 				DEVELOPMENT_TEAM = 5K9635LZ6F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ChalkScreenShare/Info.plist;
@@ -609,6 +612,7 @@
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
 				PRODUCT_BUNDLE_IDENTIFIER = ai.q9labs.chalk.mobile.screenshare;
 				PRODUCT_NAME = ChalkScreenShare;
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "Chalk App Store ai.q9labs.chalk.mobile.screenshare 2026-10-18";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				SWIFT_VERSION = 5.0;
@@ -747,7 +751,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = ChalkScreenShare/ChalkScreenShare.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 30;
+				CURRENT_PROJECT_VERSION = 31;
 				DEVELOPMENT_TEAM = 5K9635LZ6F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ChalkScreenShare/Info.plist;
