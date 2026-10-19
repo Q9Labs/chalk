@@ -27,6 +27,33 @@ public class ChalkSpaceForegroundService extends Service {
     private static final String CHANNEL_ID = "chalk_call_background";
     private static final int NOTIFICATION_ID = 19487;
 
+    // Main thread only. Android crashes the app when a service started with startForegroundService() is
+    // stopped before it calls startForeground(), so a stop that arrives while a start is pending waits
+    // for that start to promote the service, and the newest request wins across a quick Leave and Rejoin.
+    private static boolean wanted;
+    private static int pendingStarts;
+
+    /** Asks for the service on the main thread. Returns false when Android refuses the start. */
+    static boolean requestStart(Context context) {
+        wanted = true;
+        try {
+            ContextCompat.startForegroundService(context, new Intent(context, ChalkSpaceForegroundService.class));
+            pendingStarts++;
+            return true;
+        } catch (RuntimeException error) {
+            Log.w(TAG, "Couldn't start the call's foreground service", error);
+            return false;
+        }
+    }
+
+    /** Stops the service on the main thread, or after the pending start has promoted it. */
+    static void requestStop(Context context) {
+        wanted = false;
+        if (pendingStarts == 0) {
+            context.stopService(new Intent(context, ChalkSpaceForegroundService.class));
+        }
+    }
+
     /** The foreground types the person has granted: microphone and camera, or 0 when neither is granted. */
     static int grantedForegroundTypes(Context context) {
         int types = 0;
@@ -50,6 +77,7 @@ public class ChalkSpaceForegroundService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        pendingStarts = Math.max(0, pendingStarts - 1);
         int foregroundTypes = grantedForegroundTypes(this);
         if (foregroundTypes == 0) {
             stopSelf();
@@ -68,6 +96,11 @@ public class ChalkSpaceForegroundService extends Service {
         } catch (RuntimeException error) {
             Log.w(TAG, "Couldn't start the call's foreground service", error);
             stopSelf();
+            return START_NOT_STICKY;
+        }
+
+        if (!wanted && pendingStarts == 0) {
+            stopSelf();
         }
 
         // Not sticky: a call can't resume after the process is killed, so a restart would leave a notification with no call behind it.
@@ -76,6 +109,8 @@ public class ChalkSpaceForegroundService extends Service {
 
     @Override
     public void onDestroy() {
+        // A destroyed service delivers no more starts, so none can still be pending.
+        pendingStarts = 0;
         stopForeground(STOP_FOREGROUND_REMOVE);
         super.onDestroy();
     }
