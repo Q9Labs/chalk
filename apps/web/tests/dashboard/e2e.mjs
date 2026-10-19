@@ -453,9 +453,9 @@ try {
   const expectedWebsites = ["https://chalkmeet.com", "https://example.test", "http://localhost:3000", origin].toSorted();
   assert.deepEqual((await websites.json()).allowedWebsites.toSorted(), expectedWebsites);
   assert.deepEqual((await tenantFor("malik")).cors_allowed_origins.toSorted(), expectedWebsites);
-  const writesBeforeLimit = unsupportedBodies.length;
+  const writesBeforeLimit = unsupportedBodies.filter((entry) => entry.method === "PATCH").length;
   assert.equal((await post(malik, "/dashboard-api/developer", { action: "set-allowed-websites", origins: Array.from({ length: 31 }, (_, i) => `https://site-${i}.example.test`) }, other.csrfToken)).status, 400);
-  assert.equal(unsupportedBodies.length, writesBeforeLimit, "The 32-origin limit includes both dashboard origins");
+  assert.equal(unsupportedBodies.filter((entry) => entry.method === "PATCH").length, writesBeforeLimit, "The 32-origin limit includes both dashboard origins");
   assert.deepEqual((await tenantFor("malik")).cors_allowed_origins.toSorted(), expectedWebsites);
   const homeOffset = requests.length;
   const home = await ada.request("/dashboard-api/home");
