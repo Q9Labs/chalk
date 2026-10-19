@@ -399,7 +399,8 @@ def qualify(args):
         path, receipt = args.directory / (role + '-request.json'), args.directory / (role + '-receipt.json')
         private_json(path, request)
         subprocess.run([sys.executable, str(ROOT / 'scripts/recorder/boot-check.py'), '--request', str(path), '--receipt', str(receipt)], check=True,
-                       env={**os.environ, 'CHALK_BOOT_CHECK_INSTANCE_ID': config['runtime']['instance_id'], 'CHALK_BOOT_CHECK_DO_CONTEXT': config['do_context'], 'CHALK_RECORDER_RELEASE_CONFIG_PARAMETER': args.config_parameter})
+                       env={**os.environ, 'CHALK_BOOT_CHECK_INSTANCE_ID': config['runtime']['instance_id'], 'CHALK_BOOT_CHECK_USER_ID': str(config['runtime']['user_id']),
+                            'CHALK_BOOT_CHECK_DO_CONTEXT': config['do_context'], 'CHALK_RECORDER_RELEASE_CONFIG_PARAMETER': args.config_parameter})
 
 
 def main():

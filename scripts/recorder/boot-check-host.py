@@ -8,8 +8,8 @@ import time
 from urllib.parse import urlsplit
 
 
-def runtime(name):
-    command = ["sudo", "-u", "#1001", "env", "XDG_RUNTIME_DIR=/run/user/1001", "podman"]
+def runtime(name, user_id):
+    command = ["sudo", "-u", "#" + str(user_id), "env", "XDG_RUNTIME_DIR=/run/user/" + str(user_id), "podman"]
     container = json.loads(subprocess.check_output(command + ["inspect", name], text=True))[0]
     environment = dict(value.split("=", 1) for value in container["Config"]["Env"] if "=" in value)
     return container, environment, "/proc/" + str(container["State"]["Pid"]) + "/root"
@@ -63,8 +63,8 @@ def duration_seconds(value):
 
 def execute(task):
     role = task["role"]
-    container, environment, root = runtime("chalk-recorder-" + role)
-    _, issuer, issuer_root = runtime("chalk-recorder-issuer")
+    container, environment, root = runtime("chalk-recorder-" + role, task["user_id"])
+    _, issuer, issuer_root = runtime("chalk-recorder-issuer", task["user_id"])
     if task["action"] == "summary":
         keys = ("ENVIRONMENT", "ROLE", "OWNER_TAG", "DIGITALOCEAN_PROJECT_ID", "DIGITALOCEAN_VPC_UUID",
                 "BOOTSTRAP_CA_BASE64", "SSH_KEY_IDS", "REGION", "SIZE", "FIREWALL_ID", "BOOTSTRAP_ENDPOINT", "IMAGE_ID", "IMAGE_DIGEST",
