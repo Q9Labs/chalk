@@ -30,7 +30,7 @@ export function installFakeDevices({ blocked }: { readonly blocked: boolean }): 
   mediaDevices.getUserMedia = async (constraints) => {
     if (blocked) throw new DOMException("Permission denied", "NotAllowedError");
     const stream = new MediaStream();
-    if (constraints?.video) stream.addTrack(cameraTrack("Hasan", "#5d6b78").clone());
+    if (constraints?.video) stream.addTrack(cameraTrack("Alex", "#5d6b78").clone());
     if (constraints?.audio) stream.addTrack(silentAudioTrack());
     return stream;
   };
