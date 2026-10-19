@@ -260,7 +260,7 @@ validate_request() {
     (.adopt_existing_release | type == "boolean") and
     (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and
     (.source_revision | type == "string" and test("^[0-9a-f]{40}$")) and
-    (.environment | type == "string" and (. == "staging" or . == "production")) and
+    (.environment | type == "string" and length <= 32 and test("^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")) and
     (.aws_region | type == "string" and test("^[a-z]{2}(?:-gov)?-[a-z]+-[1-9][0-9]*$")) and
     (.parameter_prefix | type == "string" and length <= 900 and test("^/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$")) and
     (.request_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and
@@ -274,7 +274,6 @@ validate_request() {
   request_region="$(jq -er '.aws_region' "$request_path")"
   request_prefix="$(jq -er '.parameter_prefix' "$request_path")"
   [[ "$request_prefix" != *'//' && "$request_prefix" != *'..'* ]] || fail "parameter_prefix contains an unsafe path component"
-  [[ "$request_environment" == staging || "$request_environment" == production ]] || fail "deployment environment must be staging or production"
   [[ "$request_prefix" == "/chalk/${request_environment}" || "$request_prefix" == "/chalk/${request_environment}/"* ]] || fail "parameter_prefix must be scoped to the deployment environment"
   request_id="$(jq -er '.request_id' "$request_path")"
   requested_at="$(jq -er '.requested_at' "$request_path")"
@@ -461,7 +460,7 @@ inject_runtime_identity() {
     [[ "$sync_instance_id" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+/=-]{0,127}$ ]] || fail "CHALK_SYNC_INSTANCE_ID is not a safe bounded identifier"
     set_env_value "${stage_root}/env/sync.env" CHALK_SYNC_RELEASE_ID "$sync_release_id"
     set_env_value "${stage_root}/env/sync.env" CHALK_SYNC_SOURCE_COMMIT "$sync_source_revision"
-    set_env_value "${stage_root}/env/sync.env" OTEL_RESOURCE_ATTRIBUTES "service.name=chalk-sync,service.version=${sync_release_id},deployment.environment.name=production,service.instance.id=${sync_instance_id}"
+    set_env_value "${stage_root}/env/sync.env" OTEL_RESOURCE_ATTRIBUTES "service.name=chalk-sync,service.version=${sync_release_id},deployment.environment.name=${request_environment},service.instance.id=${sync_instance_id}"
   fi
   inject_recorder_runtime_identity
 }
@@ -469,14 +468,17 @@ inject_runtime_identity() {
 inject_recorder_runtime_identity() {
   jq -e '.images | has("recorder_control")' "$manifest_path" >/dev/null || return 0
   jq -e 'all(.[] | select(.id | startswith("recorder-")); .missing == false)' <<<"$input_records_json" >/dev/null || fail "enabled recorder control inputs cannot be excluded"
-  local role file
+  local role file max_nodes policy_file="${controller_install_dir}/environments.json"
+  [[ -z "$source_root" ]] || policy_file="$source_root/infrastructure/managed-episode/contracts/environments.json"
+  require_regular_file "$policy_file"
+  max_nodes="$(jq -er --arg environment "$request_environment" '(.[$environment] // .production).fleet_max_nodes' "$policy_file")" || fail "unsupported recorder environment"
   for role in capture render; do
     file="${stage_root}/env/recorder-${role}.env"
     require_regular_file "$file"
     set_env_value "$file" CHALK_RECORDER_FLEET_ROLE "$role"
     set_env_value "$file" CHALK_RECORDER_FLEET_ENVIRONMENT "$request_environment"
     set_env_value "$file" CHALK_RECORDER_FLEET_JOURNAL_PATH /var/lib/chalk-recorder/state/journal.json
-    set_env_value "$file" CHALK_RECORDER_FLEET_MAX_NODES 10
+    set_env_value "$file" CHALK_RECORDER_FLEET_MAX_NODES "$max_nodes"
     set_env_value "$file" CHALK_RECORDER_FLEET_SLOTS_PER_NODE 1
     set_env_value "$file" CHALK_RECORDER_FLEET_GPU false
     set_env_value "$file" CHALK_RECORDER_FLEET_CONTROLLER_CERT /run/chalk/controller.crt
@@ -694,6 +696,7 @@ install_controller_runtime() {
   mkdir -p "$controller_install_dir"
   chmod 755 "$controller_install_dir"
   atomic_install 0755 "${managed_root}/scripts/chalk-runtime-health" "${controller_install_dir}/chalk-runtime-health"
+  atomic_install 0644 "${managed_root}/contracts/environments.json" "${controller_install_dir}/environments.json"
   atomic_install 0755 "${managed_root}/controller/chalk-deployment-controller" "${controller_install_dir}/chalk-deployment-controller"
 }
 
@@ -704,6 +707,7 @@ snapshot_installed_runtime() {
   chmod 700 "$snapshot_root"
   snapshot_installed_file "${controller_install_dir}/chalk-runtime-health" "${snapshot_root}/chalk-runtime-health"
   snapshot_installed_file "${controller_install_dir}/chalk-deployment-controller" "${snapshot_root}/chalk-deployment-controller"
+  snapshot_installed_file "${controller_install_dir}/environments.json" "${snapshot_root}/environments.json"
   snapshot_installed_file "${systemd_root}/chalk-runtime-restore.service" "${snapshot_root}/chalk-runtime-restore.service"
   if "$systemctl_bin" is-enabled chalk-runtime-restore.service >/dev/null 2>&1; then
     : >"${snapshot_root}/restore-unit-enabled"
@@ -729,6 +733,7 @@ restore_installed_runtime() {
   fi
   restore_installed_file 0755 "${snapshot_root}/chalk-runtime-health" "${controller_install_dir}/chalk-runtime-health"
   restore_installed_file 0755 "${snapshot_root}/chalk-deployment-controller" "${controller_install_dir}/chalk-deployment-controller"
+  restore_installed_file 0644 "${snapshot_root}/environments.json" "${controller_install_dir}/environments.json"
   restore_installed_file 0644 "${snapshot_root}/chalk-runtime-restore.service" "${systemd_root}/chalk-runtime-restore.service"
   "$systemctl_bin" daemon-reload >/dev/null 2>"${stage_root}/systemd-rollback-error.log" || fail "root systemd daemon reload failed during rollback"
   if [[ -f "${snapshot_root}/restore-unit-enabled" ]]; then
@@ -1035,7 +1040,7 @@ verify_live_runtime_inputs() {
   [[ "$(read_env_value "${run_root}/env/sync.env" CHALK_SYNC_SOURCE_COMMIT)" == "$expected_sync_source_revision" ]] || fail "live Sync telemetry source commit does not match the release manifest"
   sync_instance_id="$(read_env_value "${run_root}/env/sync.env" CHALK_SYNC_INSTANCE_ID)" || fail "live Sync instance identity is invalid"
   [[ "$sync_instance_id" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+/=-]{0,127}$ ]] || fail "live Sync instance identity is unsafe"
-  [[ "$(read_env_value "${run_root}/env/sync.env" OTEL_RESOURCE_ATTRIBUTES)" == "service.name=chalk-sync,service.version=${expected_sync_release_id},deployment.environment.name=production,service.instance.id=${sync_instance_id}" ]] || fail "live Sync telemetry resource identity does not match the release manifest"
+  [[ "$(read_env_value "${run_root}/env/sync.env" OTEL_RESOURCE_ATTRIBUTES)" == "service.name=chalk-sync,service.version=${expected_sync_release_id},deployment.environment.name=${request_environment},service.instance.id=${sync_instance_id}" ]] || fail "live Sync telemetry resource identity does not match the release manifest"
 
   local secret_name
   for secret_name in \
@@ -1182,7 +1187,7 @@ load_active_pointer() {
     (.release_root | type == "string" and startswith("/")) and
     (.manifest_sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
     (.runtime_sha256 | type == "object" and length > 0 and all(.[]; type == "string" and test("^[0-9a-f]{64}$"))) and
-    (.environment == "staging" or .environment == "production") and
+    (.environment | type == "string" and length <= 32 and test("^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")) and
     (.environment as $environment | (.parameter_prefix == ("/chalk/" + $environment) or (.parameter_prefix | startswith("/chalk/" + $environment + "/")))) and
     (.excluded_secrets | type == "array" and (map(. as $id | $allowed | index($id) != null) | all) and (.[0:] == (sort | unique))) and
     (
@@ -1333,12 +1338,13 @@ deploy() {
   mkdir -p "$rendered_root"
   local render_script="${managed_root}/scripts/render-runtime"
   require_regular_file "$render_script"
-  "$render_script" "$manifest_path" "$rendered_root" >"${stage_root}/render.log" 2>&1 || fail "runtime rendering failed"
+  "$render_script" "$manifest_path" "$rendered_root" "$request_environment" >"${stage_root}/render.log" 2>&1 || fail "runtime rendering failed"
   local validate_script="${managed_root}/scripts/validate-runtime"
   require_regular_file "$validate_script"
   local missing_inputs_csv
   missing_inputs_csv="$(jq -r 'sort | join(",")' <<<"${missing_json}")"
   "$validate_script" \
+    --environment "$request_environment" \
     --env-root "${stage_root}/env" \
     --secret-root "${stage_root}/secret-inputs" \
     --manifest "$manifest_path" \

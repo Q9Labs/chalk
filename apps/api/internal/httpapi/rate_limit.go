@@ -15,39 +15,6 @@ import (
 )
 
 var (
-	authRegisterRateLimit = ratelimit.Policy{
-		Name:   ratelimit.PolicyNameAuthRegister,
-		Limit:  5,
-		Window: time.Minute,
-	}
-	authLoginRateLimit = ratelimit.Policy{
-		Name:   ratelimit.PolicyNameAuthLogin,
-		Limit:  10,
-		Window: time.Minute,
-	}
-	authPasswordResetRateLimit = ratelimit.Policy{
-		Name: ratelimit.PolicyNameAuthPasswordReset, Limit: 5, Window: time.Minute,
-	}
-	authMeRateLimit = ratelimit.Policy{
-		Name:   ratelimit.PolicyNameAuthMe,
-		Limit:  100,
-		Window: time.Minute,
-	}
-	authRecentAuthRateLimit = ratelimit.Policy{
-		Name:   ratelimit.PolicyNameAuthRecentAuth,
-		Limit:  10,
-		Window: time.Minute,
-	}
-	authOAuthStartRateLimit = ratelimit.Policy{
-		Name:   ratelimit.PolicyNameAuthOAuthStart,
-		Limit:  20,
-		Window: time.Minute,
-	}
-	authOAuthCallbackRateLimit = ratelimit.Policy{
-		Name:   ratelimit.PolicyNameAuthOAuthCallback,
-		Limit:  30,
-		Window: time.Minute,
-	}
 	corsPolicyLookupRateLimit = ratelimit.Policy{
 		Name:   ratelimit.PolicyNameCORSPolicyLookup,
 		Limit:  600,
@@ -71,9 +38,10 @@ var (
 )
 
 type RateLimitOptions struct {
-	Limiter  ratelimit.Limiter
-	Now      func() time.Time
-	ClientIP ClientIPOptions
+	DisableAuthenticated bool
+	Limiter              ratelimit.Limiter
+	Now                  func() time.Time
+	ClientIP             ClientIPOptions
 }
 
 type ClientIPOptions struct {
@@ -88,6 +56,9 @@ func DefaultRateLimitOptions() RateLimitOptions {
 }
 
 func rateLimit(options RateLimitOptions, policy ratelimit.Policy) func(http.Handler) http.Handler {
+	if options.DisableAuthenticated && (policy.Name == ratelimit.PolicyNameAuthenticatedRead || policy.Name == ratelimit.PolicyNameAuthenticatedWrite) {
+		policy.Limit = 0
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if options.Limiter == nil {
@@ -138,6 +109,8 @@ func principalRateLimitKey(principal authentication.Principal) string {
 		return "user:" + principal.UserID.String()
 	case authentication.PrincipalAPIKey:
 		return "api_key:" + principal.APIKeyID.String()
+	case authentication.PrincipalService:
+		return "service:" + principal.ServiceID
 	case authentication.PrincipalSystem:
 		return "system"
 	default:

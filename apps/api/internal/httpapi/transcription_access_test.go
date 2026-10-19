@@ -29,7 +29,7 @@ func TestTranscriptDocumentRejectsUnauthorizedReadersBeforeLookup(t *testing.T) 
 		t.Run(test.name, func(t *testing.T) {
 			service := &unauthorizedTranscriptService{}
 			objects := &documentObjectServiceStub{}
-			endpoint := transcriptDocumentEndpoint(service, objects, authorization.NewTenantPolicy(nil))
+			endpoint := transcriptDocumentEndpoint(service, objects, authorization.NewTenantPolicy(nil, nil))
 			ctx := accessgrants.WithSubject(context.Background(), accessgrants.Subject{
 				TenantID: tenantID, ParticipantID: credentialID, ParticipantGeneration: 1,
 			})

@@ -26,7 +26,7 @@ type certificateAuthority struct {
 
 func TestVerifierAcceptsSyncSPIFFEIdentityAfterMTLSHandshake(t *testing.T) {
 	ca := newCertificateAuthority(t)
-	clientCertificate := signedCertificate(t, ca, "spiffe://chalkmeet.com/environment/staging/sync/11111111-1111-4111-8111-111111111111", false)
+	clientCertificate := signedCertificate(t, ca, "spiffe://chalkmeet.com/environment/nightly/sync/11111111-1111-4111-8111-111111111111", false)
 	client, server := syncIdentityServer(t, ca, clientCertificate)
 
 	response, err := client.Get(server.URL)
@@ -41,7 +41,7 @@ func TestVerifierAcceptsSyncSPIFFEIdentityAfterMTLSHandshake(t *testing.T) {
 
 func TestVerifierRejectsInvalidSPIFFEIdentityAfterMTLSHandshake(t *testing.T) {
 	ca := newCertificateAuthority(t)
-	clientCertificate := signedCertificate(t, ca, "spiffe://chalkmeet.com/environment/staging/sync/not-an-id", false)
+	clientCertificate := signedCertificate(t, ca, "spiffe://chalkmeet.com/environment/nightly/sync/not-an-id", false)
 	client, server := syncIdentityServer(t, ca, clientCertificate)
 
 	response, err := client.Get(server.URL)
@@ -57,7 +57,7 @@ func TestVerifierRejectsInvalidSPIFFEIdentityAfterMTLSHandshake(t *testing.T) {
 func TestVerifierRejectsUntrustedClientCertificateDuringMTLSHandshake(t *testing.T) {
 	trustedCA := newCertificateAuthority(t)
 	clientCA := newCertificateAuthority(t)
-	clientCertificate := signedCertificate(t, clientCA, "spiffe://chalkmeet.com/environment/staging/sync/11111111-1111-4111-8111-111111111111", false)
+	clientCertificate := signedCertificate(t, clientCA, "spiffe://chalkmeet.com/environment/nightly/sync/11111111-1111-4111-8111-111111111111", false)
 	client, server := syncIdentityServer(t, trustedCA, clientCertificate)
 
 	if _, err := client.Get(server.URL); err == nil {
@@ -67,7 +67,7 @@ func TestVerifierRejectsUntrustedClientCertificateDuringMTLSHandshake(t *testing
 
 func syncIdentityServer(t *testing.T, ca certificateAuthority, clientCertificate tls.Certificate) (*http.Client, *httptest.Server) {
 	t.Helper()
-	verifier, err := syncidentity.NewVerifier("chalkmeet.com", "staging")
+	verifier, err := syncidentity.NewVerifier("chalkmeet.com", "nightly")
 	if err != nil {
 		t.Fatalf("new verifier: %v", err)
 	}

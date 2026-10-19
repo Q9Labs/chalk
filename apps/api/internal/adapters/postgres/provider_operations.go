@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -146,7 +147,15 @@ func (r ProviderOperationRepository) Get(ctx context.Context, operationID string
 	return mapProviderOperationReceipt(row), nil
 }
 
+func (r ProviderOperationRepository) AppendPublicationObservation(ctx context.Context, input provideroperations.ObservationInput, publisher mediapublications.PublicationParticipant) (provideroperations.Observation, error) {
+	return r.appendObservation(ctx, input, &publisher)
+}
+
 func (r ProviderOperationRepository) AppendObservation(ctx context.Context, input provideroperations.ObservationInput) (provideroperations.Observation, error) {
+	return r.appendObservation(ctx, input, nil)
+}
+
+func (r ProviderOperationRepository) appendObservation(ctx context.Context, input provideroperations.ObservationInput, publisher *mediapublications.PublicationParticipant) (provideroperations.Observation, error) {
 	canonical, fingerprint, payload, err := provideroperations.CanonicalizeObservation(input)
 	if err != nil {
 		return provideroperations.Observation{}, err
@@ -156,6 +165,18 @@ func (r ProviderOperationRepository) AppendObservation(ctx context.Context, inpu
 	}
 	var result provideroperations.Observation
 	err = r.transaction(ctx, func(queries providerOperationQuerier) error {
+		if publisher != nil {
+			participant, err := queries.LockPublicationParticipant(ctx, publicationParticipantIdentityParams{TenantID: uuid(canonical.TenantID), EpisodeID: uuid(canonical.EpisodeID), ParticipantID: uuid(publisher.ID)})
+			if errors.Is(err, pgx.ErrNoRows) {
+				return mediapublications.ErrInvalidPublication
+			}
+			if err != nil {
+				return fmt.Errorf("lock publishing participant: %w", err)
+			}
+			if participant.Generation != publisher.Generation || (participant.ConnectionID != "" && participant.ConnectionID != publisher.ConnectionID) {
+				return mediapublications.ErrInvalidPublication
+			}
+		}
 		params := providerObservationIdentityParams{TenantID: uuid(canonical.TenantID), EpisodeID: uuid(canonical.EpisodeID)}
 		if err := queries.EnsureProviderObservationHead(ctx, params); err != nil {
 			return fmt.Errorf("ensure provider observation head: %w", err)

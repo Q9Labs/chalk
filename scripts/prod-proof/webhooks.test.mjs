@@ -1,0 +1,126 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createServer } from "node:net";
+import { createRun } from "./runtime.mjs";
+import { prepareIntegration, transcriptProof } from "./proofs.mjs";
+import { exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
+import { cleanupRun } from "./cleanup.mjs";
+
+test("public integration PATCHes and immediately rotates one endpoint; ownership replacement is atomic and preserves the key", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "proof-webhook-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const portProbe = createServer();
+  await new Promise((resolve) => portProbe.listen(0, "127.0.0.1", resolve));
+  const { port } = portProbe.address();
+  await new Promise((resolve) => portProbe.close(resolve));
+  const calls = [];
+  const state = { revision: 1, enabled: false };
+  const base = "/v1/tenants/tenant";
+  const routes = {
+    [`POST ${base}/api-keys`]: () => Response.json({ api_key: { id: "key" }, secret: "temporary" }),
+    [`GET ${base}`]: () => Response.json({}, { status: 403 }),
+    [`DELETE ${base}/api-keys/key`]: () => new Response(null, { status: 204 }),
+    "POST /token": () => Response.json({ uuid: "catcher" }),
+    "GET /token/catcher/requests": () => Response.json({ data: [] }),
+    "DELETE /token/catcher": () => new Response(null, { status: 204 }),
+    [`POST ${base}/webhook-endpoints/hook/rotate-secret`]: (body) => {
+      assert.deepEqual(body, { revoke_previous_immediately: true });
+      return Response.json({ revision: ++state.revision, secret: "rotated-secret" });
+    },
+    [`PATCH ${base}/webhook-endpoints/hook`]: (body, options) => {
+      assert.equal(options.headers["If-Match"], `"${state.revision}"`);
+      state.enabled = body.enabled;
+      return Response.json({ id: "hook", revision: ++state.revision, enabled: state.enabled });
+    },
+    [`GET ${base}/spaces`]: (_body, options) => (options.headers.Authorization === "Bearer temporary" ? Response.json({}, { status: 401 }) : Response.json({ spaces: [], pagination: {} })),
+  };
+  t.mock.method(globalThis, "fetch", async (url, options = {}) => {
+    const path = new URL(url).pathname;
+    const method = options.method ?? "GET";
+    const body = options.body ? JSON.parse(options.body) : undefined;
+    calls.push({ path, method, body });
+    const respond = routes[`${method} ${path}`];
+    assert.ok(respond, `Unexpected request ${method} ${path}`);
+    return respond(body, options);
+  });
+  const run = await createRun({ api_key: "bootstrap", api_url: "https://api.example.test", tenant_id: "tenant", web_url: "https://web.example.test", proof_origin: `http://127.0.0.1:${port}`, webhook_service_url: "https://catcher.example.test", webhook_endpoint_id: "hook" }, directory);
+  try {
+    const started = Date.now();
+    const receiver = await prepareIntegration(run, false);
+    const keyRequest = calls.find(({ path }) => path.endsWith("/api-keys"));
+    const lifetime = Date.parse(keyRequest.body.expires_at) - started;
+    assert.ok(lifetime > 50 * 60_000, "Run key must outlive the 50-minute job");
+    assert.ok(Date.parse(keyRequest.body.expires_at) - Date.now() <= 55 * 60_000, "Run key must stay within its 55-minute lifetime");
+    assert.equal(JSON.parse(await readFile(`${directory}/ownership.json`)).keyId, "key");
+    // A truncated old file must not erase in-memory key ownership. A symlink
+    // witness distinguishes atomic replacement from a truncating writeFile.
+    await rm(`${directory}/ownership.json`);
+    const witness = `${directory}/truncated.json`;
+    await writeFile(witness, '{"keyId":');
+    await symlink(witness, `${directory}/ownership.json`);
+    await exposeWebhook(run, receiver);
+    assert.equal(await readFile(witness, "utf8"), '{"keyId":');
+    assert.deepEqual(JSON.parse(await readFile(`${directory}/ownership.json`)), { keyId: "key", webhook: { id: "hook", catcherId: "catcher" } });
+    assert.equal(state.enabled, true);
+    assert.equal(
+      calls.some(({ path, method }) => method === "POST" && path.endsWith("/webhook-endpoints")),
+      false,
+    );
+    const patch = calls.find(({ method }) => method === "PATCH");
+    assert.equal(patch.body.url, "https://catcher.example.test/catcher");
+  } finally {
+    await cleanupRun(run);
+  }
+  assert.equal(state.enabled, false);
+  assert.equal(calls.filter(({ path }) => path.endsWith("/rotate-secret")).length, 2);
+  assert.ok(calls.some(({ path, method }) => method === "DELETE" && path === "/token/catcher"));
+});
+
+test("transcript proof waits for the signed completion of its own Transcript", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "proof-transcript-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const receiver = { events: new Map([["other", { event: "transcript.completed", data: { object: { id: "other-transcript" } } }]]) };
+  let documentRead;
+  const reachedDocument = new Promise((resolve) => {
+    documentRead = resolve;
+  });
+  const run = {
+    directory,
+    tenantPath: "/v1/tenants/test",
+    recordingId: "recording",
+    signal: new AbortController().signal,
+    apiRequest: async (method, path) => {
+      if (path.endsWith("/document")) {
+        documentRead();
+        return { cues: [{ text: "Purple lantern quiet river screen sharing transcription" }] };
+      }
+      if (method === "POST") return { transcript: { id: "own-transcript" } };
+      if (path.endsWith("/recordings/recording")) return { transcription_preparation: { status: "ready" } };
+      assert.ok(path.endsWith("/transcripts/own-transcript"));
+      return { status: "complete" };
+    },
+  };
+  let completed = false;
+  const proof = transcriptProof(run, receiver).then((result) => {
+    completed = true;
+    return result;
+  });
+  await reachedDocument;
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(completed, false, "another Transcript's webhook must not pass the proof");
+  receiver.events.set("own", { event: "transcript.completed", data: { object: { id: "own-transcript" } } });
+  const result = await proof;
+  assert.equal(result.transcriptId, "own-transcript");
+  assert.ok(result.signedEvents.includes("transcript.completed"));
+  const evidence = JSON.parse(await readFile(join(directory, "signed-webhooks.json"), "utf8"));
+  assert.ok(evidence.some((event) => event.objectId === "own-transcript" && event.verified));
+});
+
+test("signed webhook wait observes run cancellation", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(proveWebhookEvents({ events: new Map() }, [{ event: "transcript.completed", objectId: "missing" }], controller.signal), { name: "AbortError" });
+});

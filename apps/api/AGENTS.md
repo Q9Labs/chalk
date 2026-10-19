@@ -1,18 +1,17 @@
 # Chalk API
 
 Go control-plane API. Keep `cmd/main.go` thin; put router, response helpers,
-middleware, and domain packages under `internal/*`. Follow
-`docs/redesign/north-star.md`: composable hexagonal boundaries, swappable
-`MediaPlane` / `SyncEngine` ports, provider details in adapters, public REST
-routes under one `/v1` boundary while operational routes like `/healthz` stay
-unversioned. Existing domains include identity, tenancy, Spaces, Episode
-lifecycle, recordings, transcripts, and webhooks.
+middleware, and domain packages under `internal/*`. Keep composable boundaries
+and swappable `MediaPlane` and `SyncEngine` ports. Put provider details in
+adapters. Keep public REST routes under `/v1`; leave operational routes such as
+`/healthz` unversioned. Existing domains include identity, tenancy, Spaces,
+Episode lifecycle, recordings, transcripts, and webhooks.
 
 ## Development
 
 - Consult the relevant sections of `apps/api/docs/code-standards.md` when writing Go here.
 - Read `apps/api/docs/route-workflow.md` before adding a new route.
-- Read `apps/api/docs/database-workflow.md` when doing database work.
+- Read `apps/api/docs/database-workflow.md` when doing database work, including its two-release removal rule and required `chalk:removed-in` marker.
 - Run the gate before committing: `scripts/gate.sh`.
 
 ## Media plane providers

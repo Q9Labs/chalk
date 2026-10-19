@@ -21,23 +21,18 @@ import (
 	recordingkms "github.com/q9labs/chalk/apps/api/internal/adapters/aws/recordingkms"
 	r2adapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/r2"
 	sfuadapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu"
-	googleadapter "github.com/q9labs/chalk/apps/api/internal/adapters/google"
 	mediaplaneprovideradapter "github.com/q9labs/chalk/apps/api/internal/adapters/mediaplaneproviders"
-	passwordadapter "github.com/q9labs/chalk/apps/api/internal/adapters/password"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	postgressqlc "github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	redisadapter "github.com/q9labs/chalk/apps/api/internal/adapters/redis"
-	resendadapter "github.com/q9labs/chalk/apps/api/internal/adapters/resend"
 	"github.com/q9labs/chalk/apps/api/internal/apikeys"
 
-	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
 	"github.com/q9labs/chalk/apps/api/internal/captureproviders"
 	"github.com/q9labs/chalk/apps/api/internal/capturesignaling"
 	"github.com/q9labs/chalk/apps/api/internal/chatattachments"
 	"github.com/q9labs/chalk/apps/api/internal/config"
-	"github.com/q9labs/chalk/apps/api/internal/email"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 
@@ -52,7 +47,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/providerbridgeserver"
 	"github.com/q9labs/chalk/apps/api/internal/publicinviteapp"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
-	"github.com/q9labs/chalk/apps/api/internal/recentauth"
 	"github.com/q9labs/chalk/apps/api/internal/recorderhealth"
 	"github.com/q9labs/chalk/apps/api/internal/recordingkeys"
 	"github.com/q9labs/chalk/apps/api/internal/recordinglifecycle"
@@ -145,12 +139,8 @@ func run() error {
 
 	queries := postgressqlc.New(pool)
 	operationQueries := diagnostics.Queries(queries)
-	authenticationRepository := postgres.NewAuthenticationRepository(operationQueries, pool, diagnostics.Queries)
-	passwords := passwordadapter.NewBcryptHasher()
-	var googleProvider authentication.GoogleProvider
-	var oauthStates authentication.OAuthStateStore
 	var redisClient *goredis.Client
-	needsRedis := cfg.GoogleOAuth.ClientID != "" || cfg.GoogleOAuth.ClientSecret != "" || cfg.Transcription.WorkloadAuthSecret != "" || cfg.Observability.Environment != config.DefaultEnvironment
+	needsRedis := cfg.Transcription.WorkloadAuthSecret != "" || cfg.Observability.Environment != config.DefaultEnvironment
 	if needsRedis {
 		redisClient, err = redisadapter.Open(cfg.Redis.URL)
 		if err != nil {
@@ -159,50 +149,12 @@ func run() error {
 		defer redisClient.Close()
 		logger.Info("redis connected", "event", "redis.connected")
 	}
-	if cfg.GoogleOAuth.ClientID != "" || cfg.GoogleOAuth.ClientSecret != "" {
-		provider, err := googleadapter.NewProvider(googleadapter.Config{
-			ClientID:     cfg.GoogleOAuth.ClientID,
-			ClientSecret: cfg.GoogleOAuth.ClientSecret,
-			RedirectURL:  cfg.GoogleOAuth.RedirectURL,
-		})
-		if err != nil {
-			return fmt.Errorf("configure google oauth: %w", err)
-		}
-
-		googleProvider = provider
-		oauthStates = redisadapter.NewOAuthStateStore(redisClient)
-	}
-	authenticationService := authentication.NewService(authenticationRepository, passwords, googleProvider, oauthStates, authentication.Config{
-		RequireEmailVerification:          cfg.Auth.EmailVerificationRequired,
-		OAuthStateTTL:                     cfg.Auth.OAuthStateTTL,
-		SessionTTL:                        cfg.Auth.SessionTTL,
-		GoogleReauthenticationRedirectURL: cfg.GoogleOAuth.ReauthenticationRedirectURL,
-		PasswordResetURL:                  cfg.Auth.PasswordResetURL,
-		PasswordResetEmailFrom:            cfg.Auth.PasswordResetEmailFrom,
-	})
-	recentAuthService := recentauth.NewService(authenticationService, recentauth.Config{
-		Secret:    cfg.Auth.RecentAuthSecret,
-		Telemetry: launchTelemetry,
-	})
 	apiKeyRepository := postgres.NewAPIKeyRepository(operationQueries, pool, diagnostics.Queries)
 	apiKeyService := apikeys.NewService(apiKeyRepository, apikeys.Config{Telemetry: launchTelemetry})
 	tenantRepository := postgres.NewTenantRepository(operationQueries)
 	tenantService := tenants.NewService(tenantRepository)
-	accountTenantRepository := postgres.NewAccountTenantRepository(operationQueries, pool, diagnostics.Queries)
-	accountTenantService := tenants.NewAccountService(accountTenantRepository)
-
 	membershipRepository := postgres.NewMembershipRepository(operationQueries, pool, diagnostics.Queries)
 	membershipService := memberships.NewService(membershipRepository)
-	var invitationSender email.Sender
-	if strings.TrimSpace(cfg.Resend.APIKey) != "" {
-		sender, err := resendadapter.NewSender(cfg.Resend)
-		if err != nil {
-			return err
-		}
-		invitationSender = email.NewService(sender)
-		authenticationService = authenticationService.WithEmailSender(invitationSender)
-	}
-
 	if cfg.Observability.OperationLogs {
 
 	}
@@ -429,8 +381,9 @@ func run() error {
 	}
 	webhookRepository := postgres.NewWebhookRepository(pool, webhookProtector)
 	webhookService := webhooks.NewService(webhookRepository, webhookProtector)
-	tenantAuthz := authorization.NewTenantPolicy(membershipRepository)
+	tenantAuthz := authorization.NewTenantPolicy(membershipRepository, tenantRepository)
 	rateLimitOptions := httpapi.DefaultRateLimitOptions()
+	rateLimitOptions.DisableAuthenticated = cfg.API.DisableAuthenticatedRateLimits
 	rateLimitOptions.ClientIP.TrustedProxyCIDRs = cfg.API.TrustedProxyCIDRs
 	if cfg.Observability.Environment != config.DefaultEnvironment {
 		rateLimitOptions.Limiter = redisadapter.NewRateLimiter(redisClient)
@@ -578,12 +531,10 @@ func run() error {
 			TenantOrigins:  tenantService,
 		},
 		LocalSystemToken: cfg.API.LocalSystemToken,
+		ServicePrincipal: cfg.API.ServicePrincipal,
 
 		RateLimit:            rateLimitOptions,
 		Readiness:            postgres.Readiness{Pool: pool, RequiredMigration: migrations.LatestVersion},
-		Authentication:       authenticationService,
-		RecentAuth:           recentAuthService,
-		AccountTenants:       accountTenantService,
 		APIKeys:              apiKeyService,
 		APIKeyAuthentication: apiKeyService,
 
@@ -620,11 +571,8 @@ func run() error {
 		Episodes:                   episodeService,
 		SyncTokens:                 syncTokenService,
 		SyncTokenRefresh:           syncTokenRefresh,
-		SessionCookie: httpapi.SessionCookieOptions{
-			Secure: cfg.Observability.Environment != "local",
-		},
-		TenantAuthz: tenantAuthz,
-		Tenants:     tenantService,
+		TenantAuthz:                tenantAuthz,
+		Tenants:                    tenantService,
 		// Synchronous application-node provider calls are intentionally absent.
 		// Transcription work is claimed and fenced through the internal worker
 		// boundary after the request transaction commits.

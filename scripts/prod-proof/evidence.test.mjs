@@ -1,11 +1,12 @@
+import { contactSheetFont } from "./contact-sheet.mjs";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { movingLayers, proveLayers } from "./media.mjs";
-import { cleanupRun } from "./runtime.mjs";
-import { checkShareProgress, episodeEnd, exportProof, contactSheetFont } from "./proofs.mjs";
+import { cleanupRun } from "./cleanup.mjs";
+import { checkShareProgress, episodeEnd, exportProof } from "./proofs.mjs";
 import { proofServer } from "./webhooks.mjs";
 import { createServer } from "node:net";
 import { once } from "node:events";
@@ -70,34 +71,37 @@ test("fixture server preserves a localhost origin for exact-match CORS", async (
     await run.resources[0].dispose();
   }
 });
-test("cleanup continues after a failed resource and reports the failure", async () => {
+test("cleanup continues after a failed local resource and reports the failure", async (t) => {
+  t.mock.method(globalThis, "fetch", async (url) => {
+    const field = url.pathname.endsWith("/api-keys") ? "api_keys" : url.pathname.endsWith("/spaces") ? "spaces" : "webhook_endpoints";
+    return Response.json({ [field]: [], pagination: {} });
+  });
   const directory = await mkdtemp(join(tmpdir(), "chalk-proofkit-test-"));
   const disposed = [];
   const run = {
+    config: { api_url: "https://example.invalid", web_url: "https://example.invalid", api_key: "bootstrap", tenant_id: "tenant" },
+    runId: "local-cleanup",
     directory,
     cleanup: [],
     resources: [
       {
-        kind: "key",
+        kind: "local-server",
         dispose: async () => {
-          disposed.push("key");
+          disposed.push("local-server");
         },
       },
       {
-        kind: "episode",
+        kind: "headless-browser",
         dispose: async () => {
-          disposed.push("episode");
+          disposed.push("headless-browser");
           throw new Error("end failed");
         },
       },
     ],
-    ownerRequest: async () => {
-      disposed.push("logout");
-    },
   };
   try {
     await assert.rejects(cleanupRun(run), /Run cleanup failed/);
-    assert.deepEqual(disposed, ["episode", "key", "logout"]);
+    assert.deepEqual(disposed, ["headless-browser", "local-server"]);
     assert.equal(JSON.parse(await readFile(join(directory, "cleanup.json"), "utf8"))[0].result, "failed");
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -158,5 +162,16 @@ for (const defect of ["URL lifetime", "null headers", "montage font"]) {
 test("macOS montage uses a system font when ImageMagick lists none", () => {
   assert.equal(contactSheetFont("", "darwin"), "/System/Library/Fonts/Supplemental/Arial.ttf");
   assert.equal(contactSheetFont("  Font: DejaVu-Sans\n", "linux"), "DejaVu-Sans");
+  assert.equal(contactSheetFont("  Font: Liberation-Sans\n", "linux"), "Liberation-Sans");
   assert.throws(() => contactSheetFont("", "linux"), /no installed font/);
 });
+
+for (const name of ["export", "transcript"]) {
+  test(`${name} stops a processing wait before five minutes`, { timeout: 1000 }, async (t) => {
+    const { transcriptProof } = await import("./proofs.mjs");
+    let now = 0;
+    t.mock.method(Date, "now", () => (now += 300_000));
+    const run = { tenantPath: "/tenant", recordingId: "recording", apiRequest: async () => ({ export: { id: "export" } }) };
+    await assert.rejects(name === "export" ? exportProof(run) : transcriptProof(run), /timed out after 240s/);
+  });
+}

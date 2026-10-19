@@ -1,9 +1,26 @@
 import copy
 import unittest
-from dispatcher_binding import binding_target, check_binding, check_binding_plan
+from dispatcher_binding import binding_target, check_binding, check_binding_plan, check_output_plan
 
 
 class DispatcherBindingTests(unittest.TestCase):
+    def test_output_plan_allows_only_identity_output_changes(self):
+        check_output_plan({
+            "resource_changes": [{"change": {"actions": ["no-op"]}}],
+            "output_changes": {"artifact_identity": {"actions": ["update"]},
+                               "release_identity": {"actions": ["update"]},
+                               "other": {"actions": ["no-op"]}},
+        })
+
+    def test_output_plan_rejects_resource_changes(self):
+        for actions in (["update"], ["create"], ["delete"], ["delete", "create"], ["read"]):
+            with self.subTest(actions=actions), self.assertRaisesRegex(ValueError, "must not change resources"):
+                check_output_plan({"resource_changes": [{"change": {"actions": actions}}]})
+
+    def test_output_plan_rejects_other_output_changes(self):
+        with self.assertRaisesRegex(ValueError, "output allowlist"):
+            check_output_plan({"output_changes": {"other": {"actions": ["update"]}}})
+
     def test_uses_api_component_identity_not_manifest_identity(self):
         manifest = {"release_id": "managed-new", "component_releases": {"api": {"release_id": "managed-api-retained"}}}
         self.assertEqual(binding_target(manifest), "managed-api-retained")
@@ -80,6 +97,7 @@ class BindingDeploymentTests(unittest.TestCase):
                 "artifact_s3_bucket": "test-bucket", "artifact_s3_key": "old-release.zip", "artifact_s3_object_version": "pinned-version"}}}
         provider = Mock()
         events = []
+        commands = []
 
         def aws(service, operation, *args):
             events.append(operation)
@@ -97,6 +115,7 @@ class BindingDeploymentTests(unittest.TestCase):
 
         def command(args, **kwargs):
             events.append(args[2])
+            commands.append(args[2:])
             return json.dumps({"resource_changes": []}) if args[2] == "show" else ""
 
         provider.aws.side_effect = aws
@@ -107,6 +126,12 @@ class BindingDeploymentTests(unittest.TestCase):
         self.assertTrue(result["verified"])
         self.assertLess(events.index("copy-object"), events.index("apply"))
         self.assertLess(events.index("apply"), events.index("verify"))
+        self.assertEqual(commands[-4:], [
+            ["plan", "-input=false", "-no-color", "-out=outputs.plan"],
+            ["show", "-json", "outputs.plan"],
+            ["apply", "-input=false", "-no-color", "outputs.plan"],
+            ["plan", "-input=false", "-detailed-exitcode", "-no-color"],
+        ])
         self.assertEqual(root["module"]["dispatcher"]["artifact_s3_object_version"], "new-version")
 
     def test_loaded_process_rejects_binding_mismatch(self):

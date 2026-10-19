@@ -8,8 +8,7 @@ import { promisify } from "node:util";
 import { dump } from "js-yaml";
 import { generateTracker } from "./generate-tracker.mjs";
 import { checkReference, groupOutcomes, readTracker, validateTracker } from "./tracker-data.mjs";
-import { renderHtml, renderMarkdown } from "./tracker-render.mjs";
-import { createTrackerServer } from "./tracker-server.mjs";
+import { renderMarkdown } from "./tracker-render.mjs";
 
 const temporary = [];
 const roots = async () => {
@@ -46,9 +45,6 @@ it("keeps wishlist ideas outside active outcomes and validates their identities"
   validateTracker(data);
   assert.equal(groupOutcomes(data).flatMap((group) => group.items).length, 1);
   assert.match(renderMarkdown(data), /## Wishlist/);
-  assert.match(renderHtml(data), /Wishlist · 1 ideas/);
-  assert.equal((renderHtml(data).match(/class="item"/g) ?? []).length, 1);
-  assert.equal((renderHtml(data).match(/class="wish"/g) ?? []).length, 1);
   assert.throws(() => validateTracker({ ...data, wishlist: [outcome()] }), /duplicate outcome ID/);
   assert.throws(() => validateTracker({ ...data, wishlist: {} }), /wishlist: expected a list/);
 });
@@ -82,7 +78,7 @@ it("rejects duplicate IDs and unknown fields, including evidence logs", () => {
   assert.throws(() => validateTracker(tracker(outcome({ status: "complete" }))), /unknown fields/);
   assert.throws(() => validateTracker(tracker(outcome({ evidence: [] }))), /unknown fields/);
 });
-it("shows every outcome once, grouped by area and numbered the same in both views", () => {
+it("shows every outcome once, grouped by area and numbered in the Markdown view", () => {
   const data = tracker(outcome(), outcome({ id: "media.join", area: "media" }), another("conversation.second"));
   const groups = groupOutcomes(data);
   assert.deepEqual(
@@ -91,7 +87,6 @@ it("shows every outcome once, grouped by area and numbered the same in both view
   );
   assert.equal(groups.flatMap((group) => group.items).length, 3);
   assert.ok(renderMarkdown(data).includes("1. **People can retry a message**"));
-  assert.ok(renderHtml(data).includes('<span class="number">1</span>'));
 });
 it("retains next steps beside uncertainty in the human reading view", () => {
   const source = renderMarkdown(
@@ -107,15 +102,12 @@ it("retains next steps beside uncertainty in the human reading view", () => {
   assert.ok(source.includes("- Inspect existing archive cohorts"));
 });
 
-it("shows state, size and an owner-set priority, escaping HTML", () => {
+it("shows state, size and an owner-set priority without raw HTML", () => {
   const data = tracker(outcome({ size: "S", summary: "Add <contact> fields." }), outcome({ id: "conversation.unsized", size: "Unknown", priority: undefined }));
   const markdown = renderMarkdown(data);
   assert.ok(markdown.includes("(Partly working · size S · P0)"));
   assert.ok(markdown.includes("(Partly working · size Unknown)"));
   assert.ok(markdown.includes("Add ‹contact› fields."));
-  const page = renderHtml(data);
-  assert.ok(page.includes("Add &lt;contact&gt; fields."));
-  assert.ok(!page.includes("<contact>"));
 });
 it("keeps the human tracker readable without HTML or implementation metadata", () => {
   const item = outcome({
@@ -138,7 +130,7 @@ it("runs the CLI through a symlink instead of silently doing nothing", async () 
   await writeFile(path.join(root, "tracker.yaml"), dump(tracker(outcome())));
   await symlink(import.meta.dirname, path.join(root, "tools"));
   const { stdout } = await promisify(execFile)(process.execPath, [path.join(root, "tools", "generate-tracker.mjs"), "--root", root]);
-  assert.ok(stdout.includes("Generated tracker views"));
+  assert.ok(stdout.includes("Generated tracker view"));
   assert.ok((await readFile(path.join(root, "tracker-human.md"), "utf8")).includes("People can retry a message"));
 });
 
@@ -154,7 +146,7 @@ it("rejects broken anchors and paths outside the repository, including symlinks"
   await assert.rejects(checkReference(root, "linked/private.md"), /leaves the repository/);
 });
 
-it("generates deterministically, detects drift in either view and never edits the YAML", async () => {
+it("generates deterministically, detects drift in the Markdown view and never edits the YAML", async () => {
   const root = await roots();
   const source = dump(tracker(outcome()));
   await writeFile(path.join(root, "tracker.yaml"), source);
@@ -163,7 +155,7 @@ it("generates deterministically, detects drift in either view and never edits th
   await generateTracker({ root, check: true });
   await generateTracker({ root });
   assert.equal(await readFile(path.join(root, "tracker-human.md"), "utf8"), markdown);
-  for (const file of ["tracker-human.md", "tracker-human.html"]) {
+  for (const file of ["tracker-human.md"]) {
     await writeFile(path.join(root, file), "stale");
     await assert.rejects(generateTracker({ root, check: true }), {
       message: `${file} is stale; run pnpm generate:tracker`,
@@ -171,21 +163,6 @@ it("generates deterministically, detects drift in either view and never edits th
     await generateTracker({ root });
   }
   assert.equal(await readFile(path.join(root, "tracker.yaml"), "utf8"), source);
-});
-
-it("does not turn tracker text into executable HTML", () => {
-  const source = renderHtml(
-    tracker(
-      outcome({
-        title: '<img src=x onerror="alert(1)">',
-        summary: "</script><script>alert(1)</script>",
-      }),
-    ),
-  );
-  assert.ok(!source.includes("<img src=x"));
-  assert.ok(!source.includes("<script>alert(1)</script>"));
-  assert.ok(source.includes("&lt;img"));
-  assert.ok(source.includes('aria-live="polite"'));
 });
 
 it("reads only the declared tracker, not every Markdown file as governing policy", async () => {
@@ -196,35 +173,7 @@ it("reads only the declared tracker, not every Markdown file as governing policy
   assert.equal((await readTracker(root)).outcomes.length, 1);
 });
 
-it("serves a read-only view and does not expose arbitrary local files", async () => {
-  const root = await roots();
-  const source = dump(tracker(outcome()));
-  await writeFile(path.join(root, "tracker.yaml"), source);
-  await writeFile(path.join(root, ".env"), "private");
-  const server = createTrackerServer(root);
-  const handler = server.listeners("request")[0];
-  const request = async (url, method = "GET") => {
-    let status;
-    let body;
-    await handler(
-      { url, method },
-      {
-        writeHead(value) {
-          status = value;
-        },
-        end(value) {
-          body = value;
-        },
-      },
-    );
-    return { status, body };
-  };
-  assert.equal((await request("/")).status, 200);
-  assert.equal((await request("/.env")).status, 404);
-  assert.equal((await request("/api/capability", "POST")).status, 405);
-  assert.equal(await readFile(path.join(root, "tracker.yaml"), "utf8"), source);
-});
-it("keeps uncertainty in both views for every unfinished state", () => {
+it("keeps uncertainty in the Markdown view for every unfinished state", () => {
   for (const state of ["planned", "in_progress", "blocked"]) {
     const item = outcome({
       state,
@@ -233,7 +182,6 @@ it("keeps uncertainty in both views for every unfinished state", () => {
     });
     const data = validateTracker(tracker(item));
     assert.ok(renderMarkdown(data).includes(item.uncertainty));
-    assert.ok(renderHtml(data).includes(item.uncertainty));
   }
 });
 
@@ -249,30 +197,11 @@ it("rejects executable URI schemes even when the reference names a real file", a
   await assert.rejects(checkReference(root, "javascript:alert(1)"), /URI schemes/);
 });
 
-it("rejects outside-repository symlinks even for allowlisted files", async (context) => {
+it("rejects an outside-repository symlink for the tracker source", async () => {
   const root = await roots();
   const outside = await roots();
   const privateFile = path.join(outside, "private.txt");
   await writeFile(privateFile, "private test fixture");
-  await Promise.all(["theory.md", "design.md", "tracker.yaml"].map((file) => symlink(privateFile, path.join(root, file))));
-  context.mock.method(console, "error", () => {});
-  const handler = createTrackerServer(root).listeners("request")[0];
-  for (const url of ["/theory.md", "/design.md", "/tracker.yaml", "/"]) {
-    let status;
-    let body;
-    await handler(
-      { url, method: "GET" },
-      {
-        writeHead(value) {
-          status = value;
-        },
-        end(value) {
-          body = value;
-        },
-      },
-    );
-    assert.equal(status, 500);
-    assert.ok(!body.includes("private test fixture"));
-  }
+  await symlink(privateFile, path.join(root, "tracker.yaml"));
   await assert.rejects(readTracker(root), /path leaves the repository/);
 });

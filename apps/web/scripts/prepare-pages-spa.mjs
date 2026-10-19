@@ -38,16 +38,18 @@ for (const publicPagePath of [indexPath, privacyIndexPath, termsIndexPath]) {
 }
 
 mkdirSync(shellDirectoryPath, { recursive: true });
-cpSync(shellPath, shellIndexPath);
+const spaceShellHtml = readFileSync(shellPath, "utf8");
+// The Space route head belongs in call HTML, not the generic SPA shell reused
+// for invitation links, unknown paths and generated documentation pages.
+const shellHtml = spaceShellHtml.replace(/<meta\b(?=[^>]*\bname=["']apple-itunes-app["'])[^>]*>/gi, "");
+writeFileSync(shellIndexPath, shellHtml);
 rmSync(shellPath);
 
 // Cloudflare Pages: ensure unknown paths and Space deep links load the SPA shell
 // even if a redirect rule is bypassed.
 cpSync(shellIndexPath, fallback404Path);
 mkdirSync(spaceDirPath, { recursive: true });
-cpSync(shellIndexPath, spaceIndexPath);
-
-const shellHtml = readFileSync(shellIndexPath, "utf8");
+writeFileSync(spaceIndexPath, spaceShellHtml);
 
 function escapeHtml(value) {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
@@ -155,7 +157,7 @@ async function readFromCache(request) {
 }
 
 async function writeToCache(request, response) {
-  if (!response || !response.ok) {
+  if (!response || !response.ok || response.headers.get("Cache-Control")?.split(",").some((directive) => directive.trim().toLowerCase() === "no-store")) {
     return response;
   }
 
@@ -207,7 +209,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
+  if (["/api", "/auth", "/dashboard-api", "/dashboard"].some((prefix) => url.pathname === prefix || url.pathname.startsWith(prefix + "/"))) {
     return;
   }
 

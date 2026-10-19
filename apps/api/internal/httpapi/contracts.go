@@ -11,10 +11,6 @@ const (
 	APIAuthParticipantSync  APIAuth = "participant_sync"
 )
 
-func accountRouteAuth() APIAuth {
-	return APIAuthSessionOrBearer
-}
-
 type APISchemaRef struct {
 	Name string
 	Type any
@@ -40,11 +36,14 @@ type APIParameterContract struct {
 	Pattern   string
 	MinLength int
 	MaxLength int
-	ItemsType string
-	Enum      []string
+	// CodePointLength marks a length the server counts in Unicode code points, not bytes.
+	CodePointLength bool
+	ItemsType       string
+	Enum            []string
 }
 
 type APIRouteContract struct {
+	Description    string
 	OperationID    string
 	Method         string
 	Path           string
@@ -60,9 +59,6 @@ type APIRouteContract struct {
 
 func PreviewRouteContracts() []APIRouteContract {
 	endpoints := make([]RouteEndpoint, 0)
-	endpoints = append(endpoints, authEndpoints(nil, SessionCookieOptions{})...)
-	endpoints = append(endpoints, meEndpoints(nil, nil)...)
-	endpoints = append(endpoints, accountTenantEndpoints(nil)...)
 	endpoints = append(endpoints, tenantEndpoints(nil, nil)...)
 
 	endpoints = append(endpoints, membershipEndpoints(nil, nil)...)
@@ -70,12 +66,8 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, spaceEndpoints(nil, nil)...)
 	endpoints = append(endpoints, recordingPreparationEndpoints(nil, nil)...)
 	endpoints = append(endpoints, recordingEntranceEndpoints(nil, nil, nil, nil)...)
-	endpoints = append(endpoints, apiKeyEndpoints(nil, nil, nil)...)
+	endpoints = append(endpoints, apiKeyEndpoints(nil, nil)...)
 	endpoints = append(endpoints, episodeLifecycleEndpoints(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)...)
-	// Account-bound Dashboard Space routes are mounted when the concrete
-	// lifecycle service supports the self-join seam. Include their contracts
-	// here even with nil services so generated previews remain complete.
-	endpoints = append(endpoints, dashboardSpaceSelfEndpoints(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)...)
 	endpoints = append(endpoints, sfuSignalingEndpoints(nil, nil, nil, nil, nil)...)
 	endpoints = append(endpoints, chatAttachmentEndpoints(nil, nil)...)
 	endpoints = append(endpoints, whiteboardFileEndpoints(nil, nil)...)

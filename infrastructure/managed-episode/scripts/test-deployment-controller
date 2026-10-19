@@ -11,7 +11,7 @@ fail() {
 }
 
 usage() {
-  printf 'usage: %s [--group validation|adoption|inputs|healthy|rollback|restore|recording|ssm-contract|all]\n' "$0"
+  printf 'usage: %s [--group validation|adoption|inputs|healthy|rollback|restore|recording|source-reuse|ssm-contract|all]\n' "$0"
 }
 
 test_group="all"
@@ -24,7 +24,7 @@ if [[ $# -gt 0 ]]; then
   test_group="$2"
 fi
 case "${test_group}" in
-  all|validation|adoption|inputs|healthy|rollback|restore|recording|ssm-contract) ;;
+  all|validation|adoption|inputs|healthy|rollback|restore|recording|source-reuse|ssm-contract) ;;
   *) fail "unknown test group: ${test_group}" ;;
 esac
 
@@ -32,7 +32,7 @@ group_enabled() {
   local group="$1"
   case "${test_group}:${group}" in
     all:*) return 0 ;;
-    validation:validation|adoption:adoption|inputs:inputs|healthy:healthy|rollback:rollback|restore:restore|recording:recording|ssm-contract:ssm-contract) return 0 ;;
+    validation:validation|adoption:adoption|inputs:inputs|healthy:healthy|rollback:rollback|restore:restore|recording:recording|ssm-contract:ssm-contract|source-reuse:source-reuse) return 0 ;;
     rollback:healthy|restore:healthy|restore:rollback) return 0 ;;
     *) return 1 ;;
   esac
@@ -95,6 +95,7 @@ cat >"${fixture_root}/source/infrastructure/managed-episode/scripts/render-runti
 #!/usr/bin/env bash
 set -euo pipefail
 output="$2"
+[[ "${3:-production}" == "${FAKE_VALIDATION_ENVIRONMENT:?}" ]] || exit 1
 mkdir -p "$output/quadlet" "$output/systemd"
 image="$(jq -er '.images.api' "$1")"
 target="${FAKE_MIGRATION_TARGET:-}"
@@ -114,6 +115,7 @@ RENDER
 cat >"${fixture_root}/source/infrastructure/managed-episode/scripts/validate-runtime" <<'VALIDATE'
 #!/usr/bin/env bash
 set -euo pipefail
+[[ "$1" == --environment && "$2" == "${FAKE_VALIDATION_ENVIRONMENT:?}" ]] || exit 1
 VALIDATE
 chmod 0755 "${fixture_root}/source/infrastructure/managed-episode/scripts/"{render-runtime,validate-runtime}
 cp "${managed_root}/scripts/chalk-runtime-health" "${fixture_root}/source/infrastructure/managed-episode/scripts/chalk-runtime-health"
@@ -343,7 +345,7 @@ run_controller() {
   sync_release_id="${FAKE_SYNC_RELEASE_ID_OVERRIDE:-$sync_release_id}"
   sync_source_commit="${FAKE_SYNC_SOURCE_COMMIT_OVERRIDE:-$sync_source_commit}"
   FAKE_AWS_LOG="${fixture_root}/aws.log" FAKE_COMMAND_LOG="${fixture_root}/commands.log" FAKE_SECRET_STATE="${fixture_root}/secret-state" FAKE_SYSTEMCTL_FAILURE_STATE="${fixture_root}/systemctl-failed" FAKE_RESTORE_ENABLED_STATE="${fixture_root}/restore-unit-enabled" FAKE_HEALTH_INDEX="${fixture_root}/health-index" FAKE_HEALTH_SEQUENCE="$mode" \
-  FAKE_API_RELEASE_ID="$api_release_id" FAKE_SYNC_RELEASE_ID="$sync_release_id" FAKE_SYNC_SOURCE_COMMIT="$sync_source_commit" \
+  FAKE_API_RELEASE_ID="$api_release_id" FAKE_SYNC_RELEASE_ID="$sync_release_id" FAKE_SYNC_SOURCE_COMMIT="$sync_source_commit" FAKE_VALIDATION_ENVIRONMENT="$(jq -er '.environment' "$request")" \
   CHALK_CONTROLLER_STATE_ROOT="$state" CHALK_CONTROLLER_RUN_ROOT="${fixture_root}/run" CHALK_CONTROLLER_LOCK_FILE="${state}/lock" CHALK_ACTIVE_RELEASE_POINTER="${state}/active-release.json" CHALK_DEPLOYMENT_LEDGER="${state}/ledger.jsonl" \
   CHALK_CONTROLLER_SYSTEMD_ROOT="${fixture_root}/systemd" CHALK_CONTROLLER_INSTALL_DIR="${fixture_root}/install" CHALK_RUNTIME_QUADLET_DIR="${fixture_root}/user-quadlet" CHALK_RUNTIME_SYSTEMD_DIR="${fixture_root}/user-systemd" \
   CHALK_AWS_BIN="${fixture_root}/bin/aws" CHALK_PODMAN_BIN="${fixture_root}/bin/podman" CHALK_SYSTEMCTL_BIN="${fixture_root}/bin/systemctl" CHALK_HEALTH_ATTEMPTS=1 CHALK_HEALTH_INTERVAL_SECONDS=1 CHALK_CONTROLLER_DIRECT_USER_COMMANDS=true \
@@ -366,6 +368,52 @@ invalid_request="${fixture_root}/invalid-request.json"
 manifest="${fixture_root}/manifest.json"
 make_manifest stable >"$manifest"
 make_request stable "${fixture_root}/request.json"
+if group_enabled source-reuse; then
+  # Model SSM's source archive: the old controller, helper and policy differ
+  # from the workflow checkout used by the current manifest generator.
+  old_managed="${fixture_root}/source/infrastructure/managed-episode"
+  printf '\n# older source controller\n' >>"${old_managed}/controller/chalk-deployment-controller"
+  printf '\n# older source health helper\n' >>"${old_managed}/scripts/chalk-runtime-health"
+  printf '\n' >>"${old_managed}/contracts/environments.json"
+  make_manifest source-runtime-base >"${fixture_root}/source-runtime-base.json"
+  python3 - "$old_managed" "${fixture_root}/source-runtime-base.json" <<'PYRUNTIME'
+import hashlib, json, sys
+from pathlib import Path
+root, manifest = map(Path, sys.argv[1:])
+value = json.loads(manifest.read_bytes())
+value['runtime_artifacts'] = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+                              for path in root.rglob('*') if path.is_file()}
+manifest.write_text(json.dumps(value))
+PYRUNTIME
+  "${managed_root}/scripts/generate-release-manifest" \
+    --stable-manifest "${fixture_root}/source-runtime-base.json" \
+    --affected-components none --reuse-envelope --source-revision "$source_revision" \
+    --allow-dirty --output "${fixture_root}/source-runtime-reuse.json" >/dev/null
+  reused_id="$(jq -er .release_id "${fixture_root}/source-runtime-reuse.json")"
+  [[ "$reused_id" != source-runtime-base ]] || fail "source runtime reuse did not create a fresh release ID"
+  make_request "$reused_id" "${fixture_root}/source-runtime-request.json"
+  mkdir -p "${fixture_root}/source-runtime-state" "${fixture_root}/install"
+  # Pretend a newer runtime was installed; rollback must replace all three files.
+  cp "${managed_root}/controller/chalk-deployment-controller" "${fixture_root}/install/"
+  cp "${managed_root}/scripts/chalk-runtime-health" "${fixture_root}/install/"
+  cp "${managed_root}/contracts/environments.json" "${fixture_root}/install/"
+  workflow_controller="$controller"
+  controller="${old_managed}/controller/chalk-deployment-controller"
+  run_controller "${fixture_root}/source-runtime-state" "${fixture_root}/source-runtime-request.json" "${fixture_root}/source-runtime-reuse.json" ok >/dev/null
+  controller="$workflow_controller"
+  for relative in controller/chalk-deployment-controller scripts/chalk-runtime-health contracts/environments.json; do
+    cmp -s "${old_managed}/${relative}" "${fixture_root}/install/${relative##*/}" || fail "rollback installed workflow runtime instead of source runtime: $relative"
+  done
+  jq -e --arg id "$reused_id" '.release_id == $id' "${fixture_root}/source-runtime-state/active-release.json" >/dev/null || fail "source runtime deploy lost fresh envelope identity"
+  cp "${managed_root}/controller/chalk-deployment-controller" "${old_managed}/controller/"
+  cp "${fixture_root}/health" "${old_managed}/scripts/chalk-runtime-health"
+  cp "${managed_root}/contracts/environments.json" "${old_managed}/contracts/"
+  for live_directory in run user-quadlet user-systemd; do
+    find "${fixture_root}/${live_directory}" -mindepth 1 -depth -delete
+  done
+  : >"${fixture_root}/secret-state"
+fi
+
 if group_enabled validation; then
 jq '.unexpected = true' "${fixture_root}/request.json" >"$invalid_request"
 expect_failure "$controller" deploy --request "$invalid_request" --manifest "$manifest" --source-root "${fixture_root}/source"
@@ -523,12 +571,20 @@ if run_controller "$unsafe_release_state" "${fixture_root}/unsafe-release-reques
   fail "path-separating release identifier was accepted"
 fi
 
-staging_state="${fixture_root}/staging-state"
-mkdir -p "$staging_state"
-make_request staging "${fixture_root}/staging-request.json" '[]' staging
-make_manifest staging >"${fixture_root}/staging-manifest.json"
-run_controller "$staging_state" "${fixture_root}/staging-request.json" "${fixture_root}/staging-manifest.json" ok >/dev/null
-jq -e '.environment == "staging" and .parameter_prefix == "/chalk/staging/managed-episode"' "${staging_state}/active-release.json" >/dev/null || fail "staging release was not accepted"
+nightly_state="${fixture_root}/nightly-state"
+mkdir -p "$nightly_state"
+make_request nightly "${fixture_root}/nightly-request.json" '[]' nightly
+make_manifest nightly >"${fixture_root}/nightly-manifest.json"
+run_controller "$nightly_state" "${fixture_root}/nightly-request.json" "${fixture_root}/nightly-manifest.json" ok >/dev/null
+jq -e '.environment == "nightly" and .parameter_prefix == "/chalk/nightly/managed-episode"' "${nightly_state}/active-release.json" >/dev/null || fail "nightly release was not accepted"
+
+preview_state="${fixture_root}/preview-state"
+mkdir -p "$preview_state"
+make_request preview "${fixture_root}/preview-request.json" '[]' preview-2
+make_manifest preview >"${fixture_root}/preview-manifest.json"
+run_controller "$preview_state" "${fixture_root}/preview-request.json" "${fixture_root}/preview-manifest.json" ok >/dev/null
+jq -e '.environment == "preview-2" and .parameter_prefix == "/chalk/preview-2/managed-episode"' "${preview_state}/active-release.json" >/dev/null || fail "configured environment was not accepted"
+grep -Fqx 'OTEL_RESOURCE_ATTRIBUTES=service.name=chalk-sync,service.version=preview,deployment.environment.name=preview-2,service.instance.id=sync-test-instance' "${fixture_root}/run/env/sync.env" || fail "configured environment telemetry was labeled as production"
 fi
 
 stable_state="${fixture_root}/stable-state"
@@ -690,14 +746,17 @@ grep -Fq 'rollback health failed' "${fixture_root}/rollback-failure.log" || fail
 jq -e '.release_id == "stable"' "${stable_state}/active-release.json" >/dev/null || fail "stable pointer was lost after rollback failure"
 
 stable_controller_sha="$(sha256sum "${fixture_root}/install/chalk-deployment-controller" | awk '{print $1}')"
+stable_policy_sha="$(sha256sum "${fixture_root}/install/environments.json" | awk '{print $1}')"
 stable_health_sha="$(sha256sum "${fixture_root}/install/chalk-runtime-health" | awk '{print $1}')"
 stable_restore_unit_sha="$(sha256sum "${fixture_root}/systemd/chalk-runtime-restore.service" | awk '{print $1}')"
 printf '\n# candidate controller\n' >>"${fixture_root}/source/infrastructure/managed-episode/controller/chalk-deployment-controller"
+printf '\n' >>"${fixture_root}/source/infrastructure/managed-episode/contracts/environments.json"
 printf '\n# candidate health\n' >>"${fixture_root}/source/infrastructure/managed-episode/scripts/chalk-runtime-health"
 printf '\n# candidate restore unit\n' >>"${fixture_root}/source/infrastructure/managed-episode/systemd/chalk-runtime-restore.service"
 
 assert_stable_installed_runtime() {
   [[ "$(sha256sum "${fixture_root}/install/chalk-deployment-controller" | awk '{print $1}')" == "$stable_controller_sha" ]] || fail "stable deployment controller was not restored"
+  [[ "$(sha256sum "${fixture_root}/install/environments.json" | awk '{print $1}')" == "$stable_policy_sha" ]] || fail "stable environment policy was not restored"
   [[ "$(sha256sum "${fixture_root}/install/chalk-runtime-health" | awk '{print $1}')" == "$stable_health_sha" ]] || fail "stable health script was not restored"
   [[ "$(sha256sum "${fixture_root}/systemd/chalk-runtime-restore.service" | awk '{print $1}')" == "$stable_restore_unit_sha" ]] || fail "stable restore unit was not restored"
   [[ -e "${fixture_root}/restore-unit-enabled" ]] || fail "stable restore unit enablement was not restored"
@@ -779,6 +838,70 @@ grep -Fqx 'CHALK_RECORDER_FLEET_ROLE=render' "${fixture_root}/run/env/recorder-r
 grep -Fqx 'chalk-recorder-worker-ca-key' "${fixture_root}/secret-state" || fail "issuer signing key was not registered"
 run_restore "$recording_state" ok >/dev/null
 grep -Fqx 'CHALK_RECORDER_FLEET_ISSUER_ENVIRONMENT=production' "${fixture_root}/run/env/recorder-issuer.env" || fail "restore lost the issuer environment"
+test_interrupted_controller_upgrade() (
+  local current_controller="$controller" boundary status
+  local legacy_controller="${fixture_root}/legacy-controller"
+  # Reproduce the pre-policy controller's inline production cap without a Git-history dependency.
+  awk '
+    /^  local role file max_nodes policy_file=/ { print "  local role file max_nodes=10"; policy = 1; next }
+    policy { if (/unsupported recorder environment/) policy = 0; next }
+    { print }
+  ' "$current_controller" >"$legacy_controller"
+  chmod 0755 "$legacy_controller"
+  cat >"${fixture_root}/bin/upgrade-controller" <<'UPGRADE'
+#!/usr/bin/env bash
+set -euo pipefail
+export FAKE_UPGRADE_PID=$$
+exec "${FAKE_UPGRADE_CONTROLLER:?}" "$@"
+UPGRADE
+  cat >"${fixture_root}/bin/mv" <<'MOVE'
+#!/usr/bin/env bash
+set -euo pipefail
+"${FAKE_REAL_MV:?}" "$@"
+if [[ -n "${FAKE_STOP_AFTER_INSTALL:-}" && "${!#}" == "${CHALK_CONTROLLER_INSTALL_DIR}/${FAKE_STOP_AFTER_INSTALL}" ]]; then
+  printf 'stopped after %s\n' "$FAKE_STOP_AFTER_INSTALL" >"${FAKE_INSTALL_BOUNDARY:?}"
+  kill -KILL "$PPID" "${FAKE_UPGRADE_PID:?}"
+fi
+MOVE
+  chmod 0755 "${fixture_root}/bin/"{upgrade-controller,mv}
+  export FAKE_REAL_MV="$(command -v mv)" FAKE_INSTALL_BOUNDARY="${fixture_root}/install-boundary"
+  export PATH="${fixture_root}/bin:${PATH}"
+  make_request recording-upgrade "${fixture_root}/upgrade-request.json"
+  make_manifest recording-upgrade | jq '.images.recorder_control = .images.api' >"${fixture_root}/upgrade-manifest.json"
+  for boundary in chalk-runtime-health environments.json chalk-deployment-controller; do
+    cp "$legacy_controller" "${fixture_root}/install/chalk-deployment-controller"
+    rm -f "${fixture_root}/install/environments.json" "$FAKE_INSTALL_BOUNDARY"
+    controller="${fixture_root}/install/chalk-deployment-controller"
+    run_restore "$recording_state" ok >/dev/null || fail "legacy controller without policy could not restore"
+    controller="${fixture_root}/bin/upgrade-controller"
+    status=0
+    FAKE_UPGRADE_CONTROLLER="$current_controller" FAKE_STOP_AFTER_INSTALL="$boundary" run_controller "$recording_state" "${fixture_root}/upgrade-request.json" "${fixture_root}/upgrade-manifest.json" ok >"${fixture_root}/interrupted-upgrade.log" 2>&1 || status=$?
+    [[ "$status" == 137 && -f "$FAKE_INSTALL_BOUNDARY" ]] || fail "upgrade did not stop after ${boundary}"
+    # macOS uses a directory lock; a reboot releases Linux's flock automatically.
+    if [[ -d "${recording_state}/lock.d" ]]; then rmdir "${recording_state}/lock.d"; fi
+    controller="${fixture_root}/install/chalk-deployment-controller"
+    run_restore "$recording_state" ok >/dev/null || fail "reboot restore failed after installing ${boundary}"
+    grep -Fqx 'CHALK_RECORDER_FLEET_MAX_NODES=10' "${fixture_root}/run/env/recorder-capture.env" || fail "interrupted upgrade changed production cap"
+  done
+  cp "$legacy_controller" "${fixture_root}/install/chalk-deployment-controller"
+  rm "${fixture_root}/install/environments.json"
+  controller="$current_controller"
+  rm -f "${fixture_root}/systemctl-failed"
+  if FAKE_SYSTEMCTL_FAIL_ONCE='enable chalk-runtime-restore.service' run_controller "$recording_state" "${fixture_root}/upgrade-request.json" "${fixture_root}/upgrade-manifest.json" 'ok,ok' >"${fixture_root}/upgrade-rollback.log" 2>&1; then
+    fail "first-upgrade promotion failure was accepted"
+  fi
+  cmp -s "$legacy_controller" "${fixture_root}/install/chalk-deployment-controller" || fail "upgrade rollback lost the legacy controller"
+  [[ ! -e "${fixture_root}/install/environments.json" ]] || fail "upgrade rollback retained an originally absent policy"
+  controller="${fixture_root}/install/chalk-deployment-controller"
+  run_restore "$recording_state" ok >/dev/null || fail "legacy reboot restore failed after upgrade rollback"
+  cp "$current_controller" "$controller"
+  if run_restore "$recording_state" ok >"${fixture_root}/missing-policy.log" 2>&1; then
+    fail "new controller restored without its policy"
+  fi
+  grep -Fq "path is not a regular file: ${fixture_root}/install/environments.json" "${fixture_root}/missing-policy.log" || fail "missing policy failure was not reported"
+  cp "${managed_root}/contracts/environments.json" "${fixture_root}/install/environments.json"
+)
+test_interrupted_controller_upgrade
 make_request recording-disabled "${fixture_root}/recording-disabled-request.json"
 make_manifest recording-disabled >"${fixture_root}/recording-disabled-manifest.json"
 : >"${fixture_root}/commands.log"
@@ -791,6 +914,16 @@ for role in capture render issuer; do
   grep -Fq "systemctl --user stop chalk-recorder-${role}.service" "${fixture_root}/commands.log" || fail "obsolete recorder role was not stopped"
 done
 grep -Fqx 'CHALK_RECORDER_FLEET_ROLE=capture' "${fixture_root}/run/env/recorder-capture.env" || fail "rollback lost recorder configuration"
+nightly_recording_state="${fixture_root}/nightly-recording-state"
+mkdir -p "$nightly_recording_state"
+make_request nightly-recording "${fixture_root}/nightly-recording-request.json" '[]' nightly
+make_manifest nightly-recording | jq '.images.recorder_control = .images.api' >"${fixture_root}/nightly-recording-manifest.json"
+run_controller "$nightly_recording_state" "${fixture_root}/nightly-recording-request.json" "${fixture_root}/nightly-recording-manifest.json" ok >/dev/null
+run_restore "$nightly_recording_state" ok >/dev/null || fail "nightly recorder reboot restore failed"
+for role in capture render; do
+  grep -Fqx 'CHALK_RECORDER_FLEET_MAX_NODES=1' "${fixture_root}/run/env/recorder-${role}.env" || fail "nightly maximum was not one"
+  grep -Fqx 'CHALK_RECORDER_FLEET_ENVIRONMENT=nightly' "${fixture_root}/run/env/recorder-${role}.env" || fail "nightly recorder identity mismatch"
+done
 fi
 
 if group_enabled ssm-contract; then

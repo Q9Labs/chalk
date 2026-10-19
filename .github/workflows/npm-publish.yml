@@ -67,7 +67,7 @@ jobs:
 
       - name: Select release packages
         run: |
-          filters="$(node --input-type=module -e 'import { releasePackages } from "./scripts/npm-release.mjs"; console.log(releasePackages.map(({ name }) => `--filter ${name}`).join(" "));')"
+          filters="$(node --input-type=module -e 'import { releasePackages } from "./scripts/npm-release.mjs"; console.log(releasePackages.map(({ name }) => "--filter " + name).join(" "));')"
           echo "RELEASE_FILTERS=$filters" >> "$GITHUB_ENV"
 
       - name: Build packages

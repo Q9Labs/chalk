@@ -8,13 +8,16 @@
     "dev": "node ../../scripts/dev-log.mjs dev:raw",
     "dev:raw": "node scripts/local-dev.mjs",
     "dev:vite": "vite dev --host 127.0.0.1 --port 3070",
-    "build": "pnpm --filter @q9labsai/chalk-whiteboard run build && pnpm run sync:public && vite build && pnpm exec tsx scripts/prepare-pages-spa.mjs",
+    "build": "pnpm --filter @q9labsai/chalk-whiteboard run build && pnpm run sync:public && vite build && pnpm exec tsx scripts/prepare-pages-spa.mjs && pnpm run build:dashboard-functions",
     "sync:public": "pnpm exec tsx scripts/sync-public-assets.ts",
     "preview": "vite preview",
     "test": "pnpm exec vitest run --config ./vitest.config.ts",
     "check-types": "tsc-rs --project tsconfig.check-types.json --noEmit",
     "perf:call": "node scripts/check-call-performance.mjs",
-    "perf:call:propose": "node scripts/propose-call-budgets.mjs"
+    "perf:call:propose": "node scripts/propose-call-budgets.mjs",
+    "test:dashboard": "node tests/dashboard/e2e.mjs",
+    "check-types:dashboard": "tsc --project tsconfig.dashboard.json --noEmit",
+    "build:dashboard-functions": "wrangler pages functions build --outfile dist/client/_worker.js --output-routes-path dist/client/_routes.json"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.43.0",
@@ -24,6 +27,7 @@
     "@tanstack/react-router": "1.170.41",
     "@tanstack/react-start": "1.168.60",
     "@tanstack/router-plugin": "1.168.18",
+    "@workos-inc/node": "11.0.0",
     "effect": "4.0.0-beta.102",
     "nitro": "latest",
     "react": "19.2.4",

@@ -7,6 +7,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
+	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -20,7 +21,12 @@ type TenantMembershipReader interface {
 	GetTenantMembershipForUser(ctx context.Context, tenantID utilities.ID, userID utilities.ID) (memberships.Membership, error)
 }
 
+type TenantReader interface {
+	GetTenant(context.Context, utilities.ID) (tenants.Tenant, error)
+}
+
 type TenantPolicy struct {
+	tenants     TenantReader
 	memberships TenantMembershipReader
 }
 
@@ -29,8 +35,8 @@ type TenantPermission struct {
 	MinimumRole memberships.Role
 }
 
-func NewTenantPolicy(memberships TenantMembershipReader) TenantPolicy {
-	return TenantPolicy{memberships: memberships}
+func NewTenantPolicy(memberships TenantMembershipReader, tenants TenantReader) TenantPolicy {
+	return TenantPolicy{memberships: memberships, tenants: tenants}
 }
 
 func (p TenantPolicy) AuthorizeTenant(ctx context.Context, principal authentication.Principal, tenantID utilities.ID, permission TenantPermission) error {
@@ -43,6 +49,21 @@ func (p TenantPolicy) AuthorizeTenant(ctx context.Context, principal authenticat
 
 	switch principal.Kind {
 	case authentication.PrincipalSystem:
+		return nil
+	case authentication.PrincipalService:
+		if !principal.HasScope(permission.Scope) || p.tenants == nil {
+			return ErrForbidden
+		}
+		tenant, err := p.tenants.GetTenant(ctx, tenantID)
+		if errors.Is(err, tenants.ErrTenantNotFound) {
+			return ErrForbidden
+		}
+		if err != nil {
+			return fmt.Errorf("get service Tenant ownership: %w", err)
+		}
+		if tenant.CreatedByServiceID == nil || *tenant.CreatedByServiceID != principal.ServiceID {
+			return ErrForbidden
+		}
 		return nil
 	case authentication.PrincipalAPIKey:
 		return authorizeTenantAPIKey(principal, tenantID, permission.Scope)

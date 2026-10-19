@@ -22,11 +22,15 @@ type membershipQuerier interface {
 
 type MembershipRepository struct {
 	queries    membershipQuerier
-	transactor accountTenantTransactor
+	transactor membershipTransactor
 	decorate   func(sqlc.Querier) sqlc.Querier
 }
 
-func NewMembershipRepository(queries membershipQuerier, transactor accountTenantTransactor, decorators ...func(sqlc.Querier) sqlc.Querier) MembershipRepository {
+type membershipTransactor interface {
+	Begin(context.Context) (pgx.Tx, error)
+}
+
+func NewMembershipRepository(queries membershipQuerier, transactor membershipTransactor, decorators ...func(sqlc.Querier) sqlc.Querier) MembershipRepository {
 	repository := MembershipRepository{queries: queries, transactor: transactor}
 	if len(decorators) > 0 {
 		repository.decorate = decorators[0]

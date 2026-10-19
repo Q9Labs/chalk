@@ -23,6 +23,7 @@ export { AsyncStorageV1PendingTargetStore, IndexedDbV1PendingTargetStore, type A
 export { applyV1Event, assertV1ControlSemantics, computeV1StateDigest, optimisticV1Control, restoreV1Snapshot, V1ReplicaError } from "./v1-reducer";
 export type {
   V1AdmissionPolicy,
+  V1AdmissionTarget,
   V1AdmissionRequest,
   V1AssignableRole,
   V1Capability,

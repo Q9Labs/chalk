@@ -168,13 +168,13 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
       drift.
 
 16. **Every public endpoint is in the generated client** (Unclear · size S · P1)
-    OpenAPI and the generated client cover integrations, API keys, status and
-    attachments, but nobody has compared every public route against them.
+    OpenAPI and the generated client cover API keys and attachments, but nobody has
+    compared every public route against them.
     Open question: No full route comparison has been made.
     - Compare router.go against OpenAPI and the generated client, and mark internal
       routes as internal.
-    - Call one Tenant-scoped integration route and one attachment route through the
-      public client.
+    - Call one Tenant-scoped API key route and one attachment route through the public
+      client.
 
 ## Integrations and webhooks
 

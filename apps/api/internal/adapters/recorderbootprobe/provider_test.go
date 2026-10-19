@@ -3,7 +3,9 @@ package recorderbootprobe
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -213,5 +215,17 @@ func TestExpiredCreateCannotReachProvider(t *testing.T) {
 	}
 	if _, err := transport.RoundTrip(request); err == nil {
 		t.Fatal("expired create accepted")
+	}
+}
+
+func TestAuditRedactsBearerURLButPreservesTransmittedHash(t *testing.T) {
+	raw := []byte(`{"name":"owned","user_data":"secret-presigned-url"}`)
+	redacted, digest, err := redactUserData(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash := sha256.Sum256([]byte("secret-presigned-url"))
+	if digest != hex.EncodeToString(hash[:]) || strings.Contains(string(redacted), "secret-presigned-url") || !strings.Contains(string(redacted), "owned") {
+		t.Fatalf("unsafe audit: %s", redacted)
 	}
 }

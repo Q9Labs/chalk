@@ -158,13 +158,11 @@ func TestResolvePreservesContractErrorIdentity(t *testing.T) {
 func TestTenantManagedConfigUsesTenantCredentialsAndDeploymentTransport(t *testing.T) {
 	registry := NewRegistry(Config{ProcessConfig: runtimeconfig.CloudflareRealtimeConfig{
 		AccountID:       "deployment-account",
-		APIToken:        "deployment-token",
 		RealtimeBaseURL: "https://deployment.example.test",
 		RequestTimeout:  3 * time.Second,
 	}})
 	config := providerConfig{Cloudflare: &cloudflareConfig{
 		AccountID: "tenant-account",
-		APIToken:  "tenant-token",
 		SFU:       &cloudflareSFUConfig{AppID: "tenant-app", AppSecret: "tenant-secret"},
 	}}
 
@@ -172,7 +170,7 @@ func TestTenantManagedConfigUsesTenantCredentialsAndDeploymentTransport(t *testi
 	if err != nil {
 		t.Fatalf("resolve tenant config: %v", err)
 	}
-	if resolved.AccountID != "tenant-account" || resolved.APIToken != "tenant-token" || resolved.RealtimeAppID != "tenant-app" || resolved.RealtimeAppSecret != "tenant-secret" {
+	if resolved.AccountID != "tenant-account" || resolved.RealtimeAppID != "tenant-app" || resolved.RealtimeAppSecret != "tenant-secret" {
 		t.Fatalf("tenant credentials were not preserved: %#v", resolved)
 	}
 	if resolved.RealtimeBaseURL != "https://deployment.example.test" || resolved.RequestTimeout != 3*time.Second {

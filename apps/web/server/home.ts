@@ -1,0 +1,62 @@
+import { Schema } from "effect";
+import { SpaceIdSchema } from "@q9labsai/chalk-client/effect";
+import type { Engine } from "./engine";
+import { attendance, live, run } from "./engine";
+import { callDTO } from "./dto";
+import type { HomeAction, HomeDTO } from "../src/lib/dashboard/contracts";
+export async function homePage(engine: Engine, cursor?: string): Promise<HomeDTO> {
+  const result = await run(engine.api.spaces.listSpaces({ params: { tenant_id: engine.tenantId }, query: { page_size: 5, cursor, archived: false } }));
+  return {
+    calls: await Promise.all(
+      result.spaces.map(async (space) => {
+        const params = { tenant_id: engine.tenantId, space_id: space.id };
+        const [invite, episodes] = await Promise.all([run(engine.api.spaces.getSpacePublicInvite({ params })), run(engine.api.episodes.listEpisodes({ params, query: { page_size: 1 } }))]);
+        const latest = episodes.episodes[0];
+        const people = latest ? await attendance(engine, { ...params, episode_id: latest.id }) : null;
+        return {
+          ...callDTO(space),
+          inviteUrl: invite.canonical_url,
+          lastActiveAt: latest ? (latest.ended_at ?? latest.started_at) : null,
+          recentPeople: people
+            ? people.participants
+                .slice()
+                .sort((a, b) => b.firstJoinedAt.localeCompare(a.firstJoinedAt))
+                .slice(0, 5)
+                .map(({ id, name }) => ({ id, name }))
+            : [],
+        };
+      }),
+    ),
+    live: await live(
+      engine,
+      result.spaces.map((s) => s.id),
+    ),
+    nextCursor: result.pagination.next_cursor,
+  };
+}
+export async function homeMutation(engine: Engine, action: HomeAction) {
+  const params = { tenant_id: engine.tenantId };
+  if (action.action === "create-call") {
+    const space = await run(
+      engine.api.spaces.createSpace({
+        params,
+        headers: { "Idempotency-Key": action.idempotencyKey },
+        payload: { name: action.name ?? "New call", slug: `call-${action.idempotencyKey}`, admission_policy: { mode: action.admission === "anyone" ? "open" : "knock" }, default_episode_duration_seconds: 3600, maximum_episode_duration_seconds: 86400, linger_window_seconds: 60 },
+      }),
+    );
+    return { call: callDTO(space) };
+  }
+  const spaceParams = { ...params, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(action.spaceId) };
+  switch (action.action) {
+    case "archive-call":
+      return { call: callDTO(await run(engine.api.spaces.archiveSpace({ params: spaceParams }))) };
+    case "restore-call":
+      return { call: callDTO(await run(engine.api.spaces.restoreSpace({ params: spaceParams }))) };
+    case "rename-call":
+    case "set-admission": {
+      const patch = action.action === "rename-call" ? { name: action.name } : { admission_policy: { mode: action.admission === "anyone" ? "open" : "knock" } };
+      const space = await run(engine.api.spaces.updateSpace({ params: spaceParams, payload: patch }));
+      return { call: callDTO(space) };
+    }
+  }
+}

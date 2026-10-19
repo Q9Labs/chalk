@@ -3,7 +3,7 @@ import {
   CloudflareSFUClient,
   createChalkChatFileHttpTransport,
   createChalkWhiteboardV1Client,
-  createChalkWhiteboardV1FileHttpTransport,
+  createChalkWhiteboardV1FileDownloadTransport,
   createCloudflareSFUHTTPTransport,
   createReactNativeSyncLifecycle,
   createReactNativeWebSocketFactory,
@@ -143,14 +143,9 @@ function createChatFileTransport(apiBaseURL: string, input: ChatFileFactoryInput
   return createChalkChatFileHttpTransport({ baseUrl: apiBaseURL, token: input.token, fetch });
 }
 function createWhiteboardClient(apiBaseURL: string, url: string, input: WhiteboardFactoryInput, fetch: typeof globalThis.fetch, lifecycle: ReturnType<typeof createReactNativeSyncLifecycle>, webSocket: ReturnType<typeof createReactNativeWebSocketFactory>) {
-  let sceneId: string | null = null;
-  const files = createChalkWhiteboardV1FileHttpTransport({
+  const files = createChalkWhiteboardV1FileDownloadTransport({
     baseUrl: apiBaseURL,
     token: input.token,
-    sceneId: () => {
-      if (sceneId === null) throw new TypeError("Whiteboard scene is not ready");
-      return sceneId;
-    },
     fetch,
   });
   return createChalkWhiteboardV1Client({
@@ -161,7 +156,6 @@ function createWhiteboardClient(apiBaseURL: string, url: string, input: Whiteboa
     webSocket,
     onWatchdogReplacement: input.onWatchdogReplacement,
     onSummary: (summary) => {
-      sceneId = summary.sceneId;
       input.onSummary(summary);
     },
   });

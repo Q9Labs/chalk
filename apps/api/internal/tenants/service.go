@@ -2,24 +2,16 @@ package tenants
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"log/slog"
-	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
-	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/metric"
 )
 
 var (
@@ -35,22 +27,11 @@ var (
 	ErrInvalidArtifactPolicy = errors.New("invalid Tenant Artifact policy")
 )
 
-const accountTenantInstrumentationScope = "github.com/q9labs/chalk/apps/api/internal/tenants"
-
-const (
-	defaultOnboardedTenantMediaPlane     = "cf_sfu"
-	defaultOnboardedTenantProviderConfig = `{"enabled":true,"provider":"cf_sfu","mode":"chalk_managed"}`
-)
-
-var (
-	onboardingRequestKeyPattern      = regexp.MustCompile(`^[A-Za-z0-9_-]{16,128}$`)
-	accountTenantTracer              = otel.Tracer(accountTenantInstrumentationScope)
-	accountTenantOperationCounter, _ = otel.Meter(accountTenantInstrumentationScope).Int64Counter("chalk.api.tenant_access.operations", metric.WithUnit("{operation}"))
-)
-
 type Tenant struct {
-	ID   utilities.ID
-	Name string
+	ID                 utilities.ID
+	Name               string
+	CreatedByServiceID *string
+	ExternalID         *string
 
 	DefaultMediaPlane        *string
 	MediaPlaneProviderConfig json.RawMessage
@@ -69,6 +50,8 @@ type TenantRepository interface {
 	ListTenants(ctx context.Context, page pagination.PageRequest) (TenantList, error)
 	UpdateTenant(ctx context.Context, id utilities.ID, input UpdateTenantInput) (Tenant, error)
 	GetTenantCORSAllowedOrigins(ctx context.Context, id utilities.ID) ([]string, error)
+	ListServiceTenants(context.Context, string, pagination.PageRequest) (TenantList, error)
+	FindServiceTenant(context.Context, string, string) (Tenant, error)
 }
 
 type Service struct {
@@ -76,8 +59,10 @@ type Service struct {
 }
 
 type CreateTenantInput struct {
-	ID   utilities.ID
-	Name string
+	ID                 utilities.ID
+	Name               string
+	CreatedByServiceID *string
+	ExternalID         *string
 
 	DefaultMediaPlane        *string
 	MediaPlaneProviderConfig json.RawMessage
@@ -133,133 +118,8 @@ type TenantList struct {
 	Page    pagination.Page
 }
 
-type TenantAccess struct {
-	ID        utilities.ID
-	TenantID  utilities.ID
-	AccountID utilities.ID
-	Role      memberships.Role
-	UpdatedAt time.Time
-	CreatedAt time.Time
-}
-
-type AccountTenant struct {
-	Tenant Tenant
-	Access TenantAccess
-}
-
-type AccountTenantList struct {
-	Tenants []AccountTenant
-	Page    pagination.Page
-}
-
-type AccountTenantRepository interface {
-	ListAccountTenants(context.Context, utilities.ID, pagination.PageRequest) (AccountTenantList, error)
-	OnboardTenant(context.Context, OnboardTenantRecordInput) (OnboardTenantResult, error)
-}
-
-type AccountService struct {
-	repository AccountTenantRepository
-}
-
-type OnboardTenantInput struct {
-	AccountID  utilities.ID
-	RequestKey string
-	Name       string
-}
-
-type OnboardTenantRecordInput struct {
-	AccountID          utilities.ID
-	RequestKey         string
-	RequestFingerprint [32]byte
-	Tenant             CreateTenantInput
-	AccessID           utilities.ID
-}
-
-type OnboardTenantResult struct {
-	AccountTenant AccountTenant
-	Replayed      bool
-}
-
 func NewService(repository TenantRepository) Service {
 	return Service{repository: repository}
-}
-
-func NewAccountService(repository AccountTenantRepository) AccountService {
-	return AccountService{repository: repository}
-}
-
-func (s AccountService) ListAccountTenants(ctx context.Context, accountID utilities.ID, page pagination.PageRequest) (result AccountTenantList, resultErr error) {
-	ctx, finish := startAccountTenantOperation(ctx, "list")
-	defer func() { finish(resultErr, false) }()
-	if accountID.IsZero() {
-		return AccountTenantList{}, ErrInvalidAccountID
-	}
-	return s.repository.ListAccountTenants(ctx, accountID, page)
-}
-
-func (s AccountService) OnboardTenant(ctx context.Context, input OnboardTenantInput) (result OnboardTenantResult, resultErr error) {
-	ctx, finish := startAccountTenantOperation(ctx, "onboard")
-	defer func() { finish(resultErr, result.Replayed) }()
-	if input.AccountID.IsZero() {
-		return OnboardTenantResult{}, ErrInvalidAccountID
-	}
-	if !onboardingRequestKeyPattern.MatchString(input.RequestKey) {
-		return OnboardTenantResult{}, ErrInvalidRequestKey
-	}
-
-	tenantID, err := utilities.NewID()
-	if err != nil {
-		return OnboardTenantResult{}, fmt.Errorf("generate tenant id: %w", err)
-	}
-	accessID, err := utilities.NewID()
-	if err != nil {
-		return OnboardTenantResult{}, fmt.Errorf("generate tenant access id: %w", err)
-	}
-	defaultMediaPlane := defaultOnboardedTenantMediaPlane
-	tenantInput := CreateTenantInput{
-		ID:   tenantID,
-		Name: input.Name,
-
-		DefaultMediaPlane:        &defaultMediaPlane,
-		MediaPlaneProviderConfig: json.RawMessage(defaultOnboardedTenantProviderConfig),
-	}
-	if err := prepareCreateTenantInput(&tenantInput); err != nil {
-		return OnboardTenantResult{}, err
-	}
-	fingerprintPayload, err := json.Marshal(struct {
-		Name string `json:"name"`
-	}{Name: tenantInput.Name})
-	if err != nil {
-		return OnboardTenantResult{}, fmt.Errorf("fingerprint tenant onboarding: %w", err)
-	}
-
-	return s.repository.OnboardTenant(ctx, OnboardTenantRecordInput{
-		AccountID: input.AccountID, RequestKey: input.RequestKey,
-		RequestFingerprint: sha256.Sum256(fingerprintPayload), Tenant: tenantInput, AccessID: accessID,
-	})
-}
-
-func startAccountTenantOperation(ctx context.Context, operation string) (context.Context, func(error, bool)) {
-	startedAt := time.Now()
-	ctx, span := accountTenantTracer.Start(ctx, "tenant_access."+operation)
-	return ctx, func(err error, replayed bool) {
-		outcome := "succeeded"
-		logLevel := slog.LevelInfo
-		if err != nil {
-			outcome = "failed"
-			logLevel = slog.LevelError
-			if errors.Is(err, ErrInvalidAccountID) || errors.Is(err, ErrInvalidRequestKey) || errors.Is(err, ErrIdempotencyConflict) || errors.Is(err, ErrInvalidTenantName) {
-				outcome = "rejected"
-				logLevel = slog.LevelWarn
-			}
-			span.SetStatus(codes.Error, outcome)
-		}
-		attrs := []attribute.KeyValue{attribute.String("operation", operation), attribute.String("outcome", outcome), attribute.Bool("replayed", replayed)}
-		span.SetAttributes(attrs...)
-		accountTenantOperationCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
-		slog.Default().Log(ctx, logLevel, "tenant access operation", "event", "tenant_access.operation", "operation", operation, "outcome", outcome, "replayed", replayed, "duration_ms", float64(time.Since(startedAt).Microseconds())/1000)
-		span.End()
-	}
 }
 
 func (s Service) CreateTenant(ctx context.Context, input CreateTenantInput) (Tenant, error) {
@@ -269,6 +129,12 @@ func (s Service) CreateTenant(ctx context.Context, input CreateTenantInput) (Ten
 	}
 
 	input.ID = id
+	if input.CreatedByServiceID != nil && !ValidServiceID(*input.CreatedByServiceID) {
+		return Tenant{}, ErrInvalidTenantField
+	}
+	if input.ExternalID != nil && (input.CreatedByServiceID == nil || !ValidExternalID(*input.ExternalID)) {
+		return Tenant{}, ErrInvalidTenantField
+	}
 	if err := prepareCreateTenantInput(&input); err != nil {
 		return Tenant{}, err
 	}
@@ -490,4 +356,33 @@ func prepareUpdateNullableFields(input *UpdateTenantInput) error {
 	}
 
 	return nil
+}
+
+func ValidServiceID(id string) bool {
+	return validStoredText(id, 128)
+}
+
+func ValidExternalID(id string) bool {
+	return validStoredText(id, 512)
+}
+
+// The limits count characters, as PostgreSQL length() and the OpenAPI maxLength do.
+// PostgreSQL text cannot hold NUL or invalid UTF-8, so reject them here instead of at the database.
+func validStoredText(value string, maxCharacters int) bool {
+	characters := utf8.RuneCountInString(value)
+	return characters > 0 && characters <= maxCharacters && strings.TrimSpace(value) == value && utf8.ValidString(value) && !strings.ContainsRune(value, 0)
+}
+
+func (s Service) ListServiceTenants(ctx context.Context, serviceID string, page pagination.PageRequest) (TenantList, error) {
+	if !ValidServiceID(serviceID) {
+		return TenantList{}, ErrInvalidTenantField
+	}
+	return s.repository.ListServiceTenants(ctx, serviceID, page)
+}
+
+func (s Service) FindServiceTenant(ctx context.Context, serviceID, externalID string) (Tenant, error) {
+	if !ValidServiceID(serviceID) || !ValidExternalID(externalID) {
+		return Tenant{}, ErrInvalidTenantField
+	}
+	return s.repository.FindServiceTenant(ctx, serviceID, externalID)
 }

@@ -1,19 +1,24 @@
 package authentication
 
-import "github.com/q9labs/chalk/apps/api/internal/utilities"
+import (
+	"errors"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
+)
 
 type PrincipalKind string
 
 const (
-	PrincipalUser   PrincipalKind = "user"
-	PrincipalAPIKey PrincipalKind = "api_key"
-	PrincipalSystem PrincipalKind = "system"
+	PrincipalUser    PrincipalKind = "user"
+	PrincipalAPIKey  PrincipalKind = "api_key"
+	PrincipalSystem  PrincipalKind = "system"
+	PrincipalService PrincipalKind = "service"
 )
 
 // Principal is the authenticated caller accepted at the HTTP edge. It can
 // represent a signed-in user, a tenant-bound API key, or rare internal system work.
 type Principal struct {
 	Kind      PrincipalKind
+	ServiceID string
 	UserID    utilities.ID
 	TenantID  utilities.ID
 	SessionID utilities.ID
@@ -32,5 +37,7 @@ func (p Principal) HasScope(scope Scope) bool {
 }
 
 func (p Principal) IsAuthenticated() bool {
-	return p.Kind == PrincipalUser || p.Kind == PrincipalAPIKey || p.Kind == PrincipalSystem
+	return p.Kind == PrincipalUser || p.Kind == PrincipalAPIKey || p.Kind == PrincipalSystem || p.Kind == PrincipalService && p.ServiceID != ""
 }
+
+var ErrUnauthenticated = errors.New("unauthenticated")

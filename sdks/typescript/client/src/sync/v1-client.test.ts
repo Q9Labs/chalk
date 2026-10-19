@@ -450,12 +450,13 @@ describe("V1SyncClient", () => {
   it("retries a retained remote publication when its paused projection resumes", async () => {
     const { client, socket, mediaPlane } = await liveClient();
     const before = mediaPlane.changed;
-    const item = { participant_id: peerId, source: "camera", enabled: false, publication_id: "remote-connection|camera" } as const;
+    const publicationId = "remote-connection|camera";
+    const item = { participant_id: peerId, source: "camera", enabled: false, publication_id: null } as const;
     socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item });
     await snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 1);
-    socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 2, item: { ...item, enabled: true } });
+    socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 2, item: { ...item, enabled: true, publication_id: publicationId } });
     await snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 2);
-    expect(mediaPlane.resumed).toEqual([item.publication_id]);
+    expect(mediaPlane.resumed).toEqual([publicationId]);
     expect(mediaPlane.changed).toBe(before + 2);
     client.stop();
   });
@@ -465,12 +466,13 @@ describe("V1SyncClient", () => {
     try {
       // The first recovery projection must not be dropped because self is absent.
       expect(mediaPlane.changed).toBe(1);
-      const item = { participant_id: peerId, source: "camera", enabled: false, publication_id: "remote-connection|camera" } as const;
+      const publicationId = "remote-connection|camera";
+      const item = { participant_id: peerId, source: "camera", enabled: false, publication_id: null } as const;
       socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item });
       await snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 1);
-      socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 2, item: { ...item, enabled: true } });
+      socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 2, item: { ...item, enabled: true, publication_id: publicationId } });
       await snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 2);
-      expect(mediaPlane.resumed).toEqual([item.publication_id]);
+      expect(mediaPlane.resumed).toEqual([publicationId]);
       expect(mediaPlane.changed).toBe(3);
       expect(client.getSnapshot().connection.phase).toBe("live");
     } finally {

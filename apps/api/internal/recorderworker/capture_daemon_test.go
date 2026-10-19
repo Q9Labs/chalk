@@ -206,13 +206,20 @@ func TestCaptureCompletionCancelsWhenBoundExpiresOrLeaseIsLost(t *testing.T) {
 	for _, leaseLost := range []bool{false, true} {
 		t.Run(fmt.Sprint("lease_lost=", leaseLost), func(t *testing.T) {
 			finished := make(chan struct{})
+			started := make(chan struct{})
 			control := &captureControlStub{complete: func(ctx context.Context, _ recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+				close(started)
 				defer close(finished)
 				<-ctx.Done()
 				return recordingpipeline.Job{}, ctx.Err()
 			}}
 			if leaseLost {
-				control.heartbeat = func(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+				control.heartbeat = func(ctx context.Context, _ recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+					select {
+					case <-started:
+					case <-ctx.Done():
+						return recordingpipeline.Job{}, ctx.Err()
+					}
 					return recordingpipeline.Job{}, ErrControlPlaneFenced
 				}
 			}
@@ -221,7 +228,9 @@ func TestCaptureCompletionCancelsWhenBoundExpiresOrLeaseIsLost(t *testing.T) {
 			}), nil)
 			daemon.config.HeartbeatInterval = time.Millisecond
 			daemon.config.CompletionTimeout = 20 * time.Millisecond
-			err := daemon.runClaim(context.Background(), captureDaemonClaim(t, 7))
+			claim := captureDaemonClaim(t, 7)
+			claim.Envelope.CompletionOnly = true
+			err := daemon.runClaim(context.Background(), claim)
 			want := context.DeadlineExceeded
 			if leaseLost {
 				want = ErrControlPlaneFenced

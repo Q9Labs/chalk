@@ -19,8 +19,8 @@ afterEach(async () => {
 
 describe("public Space entry", () => {
   it("does not blame an invite link for a join conflict", async () => {
-    window.history.replaceState({}, "", "/space/design-lab?entry=dashboard");
-    mocks.joinDashboardSpace.mockRejectedValue(Object.assign(new Error("Participant is not active"), { status: 409 }));
+    window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
+    mocks.publicClient.arriveBySpacePublicInvite.mockRejectedValue(Object.assign(new Error("Participant is not active"), { status: 409 }));
     render(<SpacePage slug="design-lab" />);
     await act(async () => enterName("Ada"));
     await waitFor(() => expect(screen.getByText("You could not enter this Space. Try entering again.")).toBeDefined());
@@ -28,20 +28,18 @@ describe("public Space entry", () => {
   });
 
   it("returns to Entrance and requests a fresh admission after Leave", async () => {
-    window.history.replaceState({}, "", "/space/design-lab?entry=dashboard");
-    mocks.joinDashboardSpace.mockResolvedValue({ credential: mocks.prepared.credential, getAccess: mocks.prepared.getAccess, leave: mocks.finish });
+    window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
     render(<SpacePage slug="design-lab" />);
     await act(async () => enterName("Ada"));
     await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
     await leaveCall();
     await screen.findByLabelText("Your name");
     await act(async () => enterName("Ada"));
-    await waitFor(() => expect(mocks.joinDashboardSpace).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.publicClient.arriveBySpacePublicInvite).toHaveBeenCalledTimes(2));
   });
 
   it("releases a failed media arrival without an error event", async () => {
-    window.history.replaceState({}, "", "/space/design-lab?entry=dashboard");
-    mocks.joinDashboardSpace.mockResolvedValue({ credential: mocks.prepared.credential, getAccess: mocks.prepared.getAccess, leave: mocks.finish });
+    window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
     const view = render(<SpacePage slug="design-lab" />);
     await act(async () => enterName("Ada"));
     await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
@@ -59,7 +57,6 @@ describe("public Space entry", () => {
     expect(mocks.publicClient.prepareSpaceEntrance).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /Camera|Microphone/ })).toBeNull();
     expect(mocks.publicClient.arriveBySpacePublicInvite).not.toHaveBeenCalled();
-    expect(mocks.joinDashboardSpace).not.toHaveBeenCalled();
   });
 
   it("does not prepare Capture for an unauthenticated slug-only Entrance", async () => {
@@ -67,41 +64,6 @@ describe("public Space entry", () => {
     render(<SpacePage slug="design-lab" />);
     await act(async () => undefined);
     expect(mocks.publicClient.prepareSpaceEntrance).not.toHaveBeenCalled();
-    expect(mocks.prepareDashboardEntrance).not.toHaveBeenCalled();
-  });
-  it("keeps devices off for a dashboard no-device entry until a participant changes them", async () => {
-    window.history.replaceState({}, "", "/space/design-lab?entry=dashboard&devices=off");
-    const getUserMedia = vi.fn();
-    const originalMediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
-    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia } });
-    mocks.joinDashboardSpace.mockResolvedValue({ credential: mocks.prepared.credential, getAccess: mocks.prepared.getAccess, leave: mocks.finish });
-    try {
-      render(<SpacePage slug="design-lab" />);
-      expect(mocks.holder.entranceProps).toBeUndefined();
-      expect(screen.queryByRole("button", { name: /Camera|Microphone/ })).toBeNull();
-      expect(getUserMedia).not.toHaveBeenCalled();
-
-      await act(async () => enterName("Ada"));
-      await waitFor(() => expect(mocks.holder.chalkProps).toMatchObject({ defaults: { microphone: false, camera: false } }));
-    } finally {
-      if (originalMediaDevices) Object.defineProperty(navigator, "mediaDevices", originalMediaDevices);
-      else Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: undefined });
-    }
-  });
-
-  it("ignores a stored Tenant hint the current account cannot access", async () => {
-    window.history.replaceState({}, "", "/space/design-lab?entry=dashboard");
-    const storage = { getItem: vi.fn((key: string) => (key === "chalk.tenant-hint" ? "old-account-tenant" : null)), setItem: vi.fn() };
-    vi.stubGlobal("localStorage", storage);
-    mocks.joinDashboardSpace.mockResolvedValue({ credential: mocks.prepared.credential, getAccess: mocks.prepared.getAccess, leave: mocks.finish });
-    try {
-      render(<SpacePage slug="design-lab" />);
-      await act(async () => enterName("Ada"));
-      expect(mocks.joinDashboardSpace).toHaveBeenCalledWith("tenant-1", "design-lab", "Ada");
-      expect(storage.setItem).toHaveBeenCalledWith("chalk.tenant-hint", "tenant-1");
-    } finally {
-      vi.unstubAllGlobals();
-    }
   });
 
   it("admits a guest through a capability link and renders the canonical Space", async () => {

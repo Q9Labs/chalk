@@ -10,7 +10,6 @@ import { defineConfig } from "vite";
 import { execSync } from "child_process";
 import pkg from "./package.json";
 import sdkReactPkg from "../../sdks/typescript/react/package.json";
-import { accountBoundaryVitePlugin } from "./scripts/account-boundary-vite";
 import { sourceAliases } from "./vite.aliases";
 
 const commitHash = resolveCommitHash(process.env.CHALK_COMMIT_SHA?.trim() || process.env.GITHUB_SHA?.trim());
@@ -82,7 +81,6 @@ const config = defineConfig({
     tsconfigPaths: true,
   },
   plugins: [
-    accountBoundaryVitePlugin(localWebOrigin),
     tailwindcss(),
     tanstackStart({
       router: {

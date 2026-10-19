@@ -4,26 +4,68 @@
 existing checks declared as custom lanes in `gate.config.ts`. `pnpm gate:full`
 runs the same tracker checks followed by `q9gate run --full`. Each gate runs
 with `GOMAXPROCS=1`, `VITEST_MAX_WORKERS=1`, `ERL_FLAGS='+S 1:1'`, and
-q9gate concurrency 1. `gate.report.json` records every selected/skipped lane.
+q9gate concurrency 1. The testbox wrapper invokes the same commit script through
+`pnpm exec` instead of the one-CPU package alias, allowing Go to use the
+allocated CPUs; Vitest and Erlang remain capped at two workers/schedulers.
+`gate.report.json` records every selected/skipped lane.
 
 The pre-commit hook runs `pnpm gate:fast`: tracker check plus the `scope`, `format`,
 `hygiene`, `secrets`, and `generated` lanes on staged files
-(about 10 seconds). The full gate runs in `.github/workflows/gate.yml` on every
-pull request. A run with nothing in scope fails in the `scope` lane; set
+(about 10 seconds). A run with nothing in scope fails in the `scope` lane; set
 `GATE_ALLOW_EMPTY=1` only when that is intended. `GATE_SERVICES=external` drops
 the `services` lane, because CI runs the API and Sync gates as separate jobs.
+
+## The Gate workflow
+
+`.github/workflows/gate.yml` runs on every pull request, every push to `master`,
+every night, and on manual dispatch. `Select gate jobs` runs
+`node scripts/gates/chalk-gate-plan.mjs --ci-jobs <base-ref>`, which uses the
+same plan as the lanes to pick the jobs a pull request needs: the API gate, the
+Sync gate, and the root lane groups. The root lanes run as parallel jobs, one
+per lane group: `checks` (every lane that no other group names, including type
+checks), `tests`, `browser-tests` (workspaces whose tests drive Chromium), and
+`build` (with Publint and Are The Types Wrong, which read the build output).
+Each job sets `GATE_LANE_GROUP`, so q9gate plans only that group's lanes and
+keeps its own selection inside the group. `Root gate` passes only when the
+planner and every selected group passed; a job that the planner skips counts as
+passed. Pushes to `master`, the nightly run, and manual runs select every job and
+run every lane with `--full`, so anything a pull request skips still runs once it merges, and
+every master commit keeps its own run. A full run scans staged files and commits
+for secrets: the pushed range on a push to `master`, otherwise the commits since
+the base, or the last commit.
+
+On a pull request, the workflow sets `GATE_VULN_BASE_REF` to the base branch.
+When OSV-Scanner (`osv` lane) or govulncheck (API gate) finds a vulnerability,
+`osv-scanner.sh` and `govulncheck.sh` run the same scan on the merge base, and
+`new-vulnerabilities.mjs` fails the pull request only for a finding the base
+lacks, that is, a package version the pull request changed. A new advisory
+against a package nobody changed fails the next master push or nightly run
+instead, because those runs leave `GATE_VULN_BASE_REF` empty and fail on every
+finding.
+
+Only pushes to `master` save the Go build caches and the Metro cache, so pull
+requests start from the latest master caches and do not evict each other's.
+The API job sets `-count=1` because a cached Go test result would not see a
+migration or database change. CI calls `scripts/gates/commit.sh` directly with
+`GATE_WORKSPACE_CONCURRENCY=2` and `VITEST_MAX_WORKERS=2` instead of the
+one-CPU `pnpm gate` alias, and installs the pinned Gitleaks and OSV-Scanner
+releases through `.github/actions/setup-scanners` instead of compiling them with
+`go run`.
 
 `pnpm gate:explain <path>` asks q9gate why a path selects lanes. Local hooks
 classify staged files. For branch/CI scope use `pnpm gate -- --base <ref>`;
 q9gate compares `<ref>...HEAD`. Use `pnpm gate -- --files <path>` (repeatable)
 or `GATE_FILES` (comma/newline-separated) for an explicit changed-file list.
 Those worktree files are scanned for secrets in addition to the staged diff.
-Gate-definition or unknown files fail closed to the full plan. The Chalk custom lanes reuse the affected-workspace
+Gate-definition or unknown files fail closed to the full plan. q9gate counts
+every path as source, so Chalk's planner alone decides which paths are unknown;
+a self-test checks that every tracked path that makes q9gate run in full also
+makes Chalk's plan run in full, which keeps the CI job selection exact. The Chalk custom lanes reuse the affected-workspace
 and reverse-dependent planner, including Go, Elixir, Postgres, contracts,
 recorder, publication, static checks, and resource-limited shell scripts.
 
-Documentation-only changes run the four always-on Chalk lanes: routing
-self-test, language ratchet, hygiene, and diff-scoped secrets. They do not
+Documentation-only changes keep routing self-tests, hygiene, diff-scoped secrets,
+generated-output checks, and formatting. They do not
 force unrelated service or workspace checks. The package-boundary check still
 runs its own test and q9gate's built-in Dependency Cruiser lane with Chalk's
 `.dependency-cruiser.cjs` configuration and a TypeScript analysis guard.
@@ -68,14 +110,67 @@ shipment target from branch, release mode, or directory.
   workflows add multi-node partitions, PostgreSQL failover, sustained load,
   process restart, and real-browser proof.
 
-## Running a gate on the M4
+## Running a gate on the M4 (default)
 
-`scripts/gates/remote.sh <root|api|sync|recorder|-- command...>` runs a gate in
-a throwaway checkout on the M4 and always cleans up; `--dry-run` prints the plan.
-It snapshots the local commit plus uncommitted work as `origin/master` and the
-branch tip, so branch scope and Fallow work. Before starting it reaps stale
-`/tmp/chalk-*` checkouts and orphaned `chalk-gate-postgres-*` containers, and it
-refuses to start below `CHALK_REMOTE_MIN_FREE_GIB` free disk. Dependencies come
-from the M4 user's default pnpm, Go, Hex, and Mix caches. The root
-gate fails early when installed packages differ from `pnpm-lock.yaml`
-(`check-install.mjs`), and slow steps run under `with-timeout.sh`.
+`scripts/gates/remote.sh <root|api|sync|recorder|-- command...>` runs on
+`agents-macmini` in a throwaway checkout. `--dry-run` prints the plan without SSH.
+The runner snapshots the local commit plus staged, unstaged, and untracked work;
+ignored files are not shipped. The merge-base tree becomes `origin/master`.
+
+Runs queue behind live processes using `/tmp/chalk-remote-*` checkouts. A macOS
+`shlock` PID lock serializes simultaneous arrivals and is reclaimed after owner
+death. Waiting prints once and checks every 30 seconds. Set
+`CHALK_REMOTE_QUEUE_TIMEOUT_SECONDS` to change the 5400-second wait; expiry exits 76.
+The runner reaps only abandoned checkouts with a generated run name and matching
+ownership marker; logs and unmarked scratch directories survive. It checks disk space,
+shares dependency caches, limits each setup step and the gate runtime, saves logs
+locally, and deletes its checkout on exit.
+
+`root` installs Chromium. Set `CHALK_REMOTE_NEEDS_BROWSER=1` for custom `--`
+commands that need it. `CHALK_REMOTE_REPO` overrides the local repository root.
+See `scripts/gates/remote.sh --help` for the remaining `CHALK_REMOTE_*` settings.
+
+## Dedicated-CPU timing runs (explicit opt-in)
+
+Use `scripts/gates/remote-testbox.sh` only for timing runs that need a dedicated
+c-8 box, including call-performance budgets. Testbox bills every box; ordinary
+gates use the M4. The opt-in runner defaults to `c-8` for every command.
+
+`scripts/gates/remote-testbox.sh <root|api|sync|recorder|-- command...>` runs on a
+disposable Linux Droplet through the testbox skill.
+`--dry-run` prints the exact plan without creating a box.
+
+Testbox ships the real tip and merge-base with `origin/HEAD`, then commits
+tracked working-tree changes on top. Stage new files before running: the wrapper
+rejects non-ignored untracked files rather than silently omitting them. Ignored
+files (including local dependencies and secrets) are not shipped. Custom base
+refs must exist in testbox's limited history; fetch `origin/master` locally first.
+
+The wrapper checks Node, Go, Erlang, Elixir, and OpenTofu against the same
+version sources as Gate CI and installs only mismatches. The shared testbox
+image includes these pins, Gitleaks, Semgrep, prebuilt OSV, and the pinned
+Playwright Chromium revision. Matching Chromium skips OS dependency setup;
+a different revision still installs its dependencies. The existing helpers own PostgreSQL 18.3 and Sync topology.
+Root and custom runs verify the repo's Playwright Chromium revision.
+TTL covers provisioning, setup, and the gate: root/custom 60 minutes, API/Sync
+45 minutes, recorder 20 minutes.
+All runs default to `c-8` (8 dedicated CPU / 16 GB), including custom timing
+commands. The measured region is `blr1`.
+New shared images must be available there before use. This is an
+allocation choice, not a claim that the region is faster.
+
+Each run retains testbox's $0.50 default ceiling and automatic cleanup.
+`CHALK_REMOTE_SIZE`, `CHALK_REMOTE_REGION`, `CHALK_REMOTE_TTL`, and
+`CHALK_REMOTE_BUDGET` override the allocation for a bounded experiment.
+The snapshot must be available in the selected region.
+`CHALK_PHASE` epoch markers and UTC headers time each setup step and the gate;
+testbox imports the markers into receipt phases. The job checks that competing
+OS upgrade and firmware timers/services are masked.
+
+Provisioning prints live. The current testbox CLI saves job output but does not
+stream it; collected step headers and the final 60 lines print at completion.
+`CHALK_REMOTE_VERBOSE=1` prints the complete collected job log.
+`CHALK_REMOTE_TAIL_LINES` and `CHALK_REMOTE_LOG_DIR` control the tail and combined
+local log (default `${TMPDIR:-/tmp}/chalk-remote-logs`). Testbox keeps its receipt,
+launcher log, job log, and artifact archive in `~/.local/state/testbox/<task>/`.
+The wrapper returns testbox's exit status, including setup and provisioning failures.

@@ -54,7 +54,7 @@ func TestBootstrapPersistsExactIdentityCertificateAndRevocation(t *testing.T) {
 		SchemaVersion: recorderbootstrapprotocol.DiagnosticSchemaVersion, ProviderID: node.ProviderID,
 		ReleaseID: registrationRequest.ReleaseID, ImageDigest: registrationRequest.ImageDigest,
 		BootGeneration: registrationRequest.BootGeneration, CSRPEM: csrPEM,
-		Diagnostic: recorderfleet.BootstrapDiagnostic{SchemaVersion: recorderfleet.BootstrapDiagnosticSchemaVersion, Step: "challenge", AttemptCount: 3, LastReasonCode: "bootstrap.challenge_unavailable", LastHTTPStatus: 503},
+		Diagnostic: recorderfleet.BootstrapDiagnostic{SchemaVersion: recorderfleet.BootstrapDiagnosticSchemaVersion, Step: "install", AttemptCount: 1, LastReasonCode: "archive_download_failed", LastHTTPStatus: 0},
 	}
 	diagnosticProof, err := recorderbootstrapprotocol.CanonicalDiagnosticProof(diagnosticRequest)
 	if err != nil {

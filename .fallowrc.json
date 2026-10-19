@@ -11,6 +11,8 @@
     "apps/web/scripts/capture-call-states.mjs",
     "apps/web/scripts/capture-join-sequence.mjs",
     "apps/web/scripts/verify-call-layouts.mjs",
+    "e2e.config.ts",
+    "tests/*.e2e.ts",
     "**/*.test.ts",
     "**/*.test.tsx",
     "**/*.test.mjs",
@@ -40,6 +42,9 @@
     "scripts/transcription-dispatcher/source-state.mjs",
     "scripts/deploy/verify-web-deploy.mjs",
     "apps/web/tests/dashboard-ui/*.mjs",
+    "apps/web/functions/**/*.ts",
+    "apps/web/tests/dashboard/fixture-entry.ts",
+    "apps/web/tests/dashboard/*.mjs",
     "apps/web/src/lib/dashboard/contracts.ts"
   ],
   "publicPackages": ["@q9labsai/chalk-assets", "@q9labsai/chalk-client", "@q9labsai/chalk-react", "@q9labsai/chalk-react-native", "@q9labsai/chalk-ui", "@q9labsai/chalk-whiteboard", "@q9labsai/facehash"],

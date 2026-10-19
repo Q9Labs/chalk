@@ -67,7 +67,7 @@ def execute(task):
     _, issuer, issuer_root = runtime("chalk-recorder-issuer")
     if task["action"] == "summary":
         keys = ("ENVIRONMENT", "ROLE", "OWNER_TAG", "DIGITALOCEAN_PROJECT_ID", "DIGITALOCEAN_VPC_UUID",
-                "SSH_KEY_IDS", "REGION", "SIZE", "FIREWALL_ID", "BOOTSTRAP_ENDPOINT", "IMAGE_ID", "IMAGE_DIGEST",
+                "BOOTSTRAP_CA_BASE64", "SSH_KEY_IDS", "REGION", "SIZE", "FIREWALL_ID", "BOOTSTRAP_ENDPOINT", "IMAGE_ID", "IMAGE_DIGEST",
                 "RELEASE_ID", "JOURNAL_PATH", "RECONCILE_INTERVAL", "CONTROL_PLANE_URL", "SERVER_NAME")
         values = {key: environment.get("CHALK_RECORDER_FLEET_" + key, "") for key in keys}
         journal = json.loads(pathlib.Path(root + environment["CHALK_RECORDER_FLEET_JOURNAL_PATH"]).read_text())

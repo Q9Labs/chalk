@@ -1,4 +1,41 @@
-# Recorder qualification tools
+# Recorder archive releases
+
+Release builds role archives on a GitHub Ubuntu 24.04 runner. Capture contains
+static Go binaries. Render carries pinned Node and relocated native renderer
+modules. FFmpeg, fonts, libraries and service accounts come from the unchanged
+base snapshot. No package installation or compilation runs during node boot.
+
+Archives use `recorder/<role>/<sha256>.tar.gz` keys in the environment's media
+artifact bucket. Conditional upload and S3 SHA256 checks bind immutable bytes.
+Media members retain the base snapshot, archive key and SHA256, installed-file
+manifest digest, source and recorder release ID.
+
+The controller signs a GET using its host role. The URL lasts for the configured
+startup timeout plus five minutes, and signing fails if the host credentials
+expire sooner. Qualification probes sign for their remaining deadline instead.
+Cloud-init stages and checks the archive, renames a new release directory,
+switches `current`, then runs the existing bootstrap. Installed-file verification
+still precedes identity and control-plane contact. No AWS credentials are
+installed on the recorder.
+
+Promote preserves held media JSON unchanged. It verifies and copies exact archives
+to the production artifact bucket and verifies their SHA256 again. It never
+rebuilds recorder payloads. Host roles need `s3:GetObject` on both recorder
+prefixes; CI needs source read and target write. Buckets use SSE-S3.
+
+Base snapshots remain a separately reviewed infrastructure operation. Releases
+cannot create snapshots or builder droplets. The read-only `retain_runtime`
+command preserves the first promotion's legacy rollback pins; it does not create
+a snapshot. Only production rollback can restore those older pins.
+
+Signed-ready and the synthetic call remain the nightly qualification gate.
+
+Before the first archive Release, initialize `CHALK_RECORDER_FLEET_IMAGE_ID` in
+each nightly recorder environment parameter to the approved existing base.
+`build_archives` reads that pin; it never discovers or replaces a base implicitly.
+Set `CHALK_MEDIA_ARTIFACT_BUCKET` in both GitHub deployment environments before
+their first archive Release or Promote. Production's host also needs the same
+two-prefix read policy before its first Promote.
 
 ## Cost-first capture resource probe
 
@@ -144,3 +181,11 @@ A live-provider qualification must:
 Provider sessions, paid compute, buckets, and deployments are separate external
 effects. The qualification flag authorizes only the bounded non-production
 provider-connection case; it does not authorize provisioning or deployment.
+
+## Managed image release
+
+[Release, Nightly and Promote](../../docs/managed-release.md) own builds, pin
+publication, dispatcher deployment and rollback. `release.py` is the pipeline's
+bounded image builder, not a separate deployment command. Its plan works without
+existing image pins, API processes or dispatcher state. The pipeline runs static
+image inspection before deploy and cold signed-boot qualification afterwards.

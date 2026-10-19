@@ -70,7 +70,82 @@ jobs:
       - name: Check mobile types
         run: pnpm --filter @q9labsai/chalk-mobile run check-types
 
+  fingerprint:
+    name: Mobile native fingerprint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      changed: ${{ steps.compare.outputs.changed }}
+    steps:
+      - name: Check out head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 12.8.1
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+
+      - name: Compare native fingerprints
+        id: compare
+        continue-on-error: true
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          # Only a successful comparison may skip builds. Missing history, install
+          # errors and fingerprint errors all keep the fail-open default.
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
+            echo "No base commit; building native apps." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if ! git cat-file -e "$BASE_SHA^{commit}"; then
+            git fetch origin "$BASE_SHA"
+          fi
+          if ! git diff --quiet "$BASE_SHA" HEAD -- .github/workflows/mobile-ci.yml; then
+            echo "Mobile workflow changed; building native apps." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git worktree add --detach "$RUNNER_TEMP/mobile-base" "$BASE_SHA"
+          # Use the exact same Node, pnpm and OS for both dependency trees.
+          for tree in "$RUNNER_TEMP/mobile-base" "$GITHUB_WORKSPACE"; do
+            (
+              cd "$tree"
+              pnpm install --frozen-lockfile --ignore-scripts --filter '@q9labsai/chalk-mobile...'
+              pnpm --filter @q9labsai/chalk-mobile run prepare:native-dependencies
+              cd apps/mobile
+              node <<'NODE' > "$tree/native-fingerprint.txt"
+          const { createFingerprintAsync } = require(require.resolve('@expo/fingerprint', {
+            paths: [require.resolve('expo/package.json')],
+          }));
+          createFingerprintAsync(process.cwd(), { platforms: ['ios', 'android'] })
+            .then(({ hash }) => {
+              if (!hash) throw new Error('Expo returned no fingerprint hash');
+              console.log(hash);
+            })
+            .catch((error) => { console.error(error); process.exitCode = 1; });
+          NODE
+            )
+          done
+          base_hash=$(tail -n 1 "$RUNNER_TEMP/mobile-base/native-fingerprint.txt")
+          head_hash=$(tail -n 1 "$GITHUB_WORKSPACE/native-fingerprint.txt")
+          echo "Base: $base_hash; head: $head_hash" >> "$GITHUB_STEP_SUMMARY"
+          if [[ -n "$base_hash" && "$base_hash" == "$head_hash" ]]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Native fingerprint unchanged; skipping native builds." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   android:
+    needs: fingerprint
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || needs.fingerprint.result != 'success' || needs.fingerprint.outputs.changed != 'false') }}
     name: Unsigned Android release build
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -118,6 +193,8 @@ jobs:
           retention-days: 14
 
   ios:
+    needs: fingerprint
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || needs.fingerprint.result != 'success' || needs.fingerprint.outputs.changed != 'false') }}
     name: Unsigned iOS simulator build
     runs-on: macos-26
     timeout-minutes: 90
