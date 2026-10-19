@@ -13,6 +13,7 @@ function CardState({
   knocks = false,
   gallery = true,
   uploadDelay = 0,
+  photoUrl = photo,
 }: {
   readonly host?: boolean;
   readonly scheme?: "dark" | "light";
@@ -20,6 +21,7 @@ function CardState({
   readonly knocks?: boolean;
   readonly gallery?: boolean;
   readonly uploadDelay?: number;
+  readonly photoUrl?: string;
 }) {
   const [client] = useState(() => {
     const snapshot = liveSnapshot({
@@ -29,7 +31,7 @@ function CardState({
     });
     const preview = createCallStateClient(snapshot);
     const urls = new Map<string, string>([
-      ["a1", photo],
+      ["a1", photoUrl],
       ["a2", photo.replace("315f72", "785342")],
     ]);
     let attachment = 0;
@@ -52,6 +54,7 @@ function CardState({
 }
 
 export const CARD_STATES: readonly CallState[] = [
+  { id: "card-photo-cross-origin", title: "Card: cross-origin photo", render: () => <CardState photoUrl={new URLSearchParams(window.location.search).get("photoUrl") ?? photo} /> },
   { id: "card-chat-upload", title: "Card: delayed upload", render: () => <CardState host uploadDelay={1200} /> },
   { id: "card-chat-upload-light", title: "Card: delayed upload Light", render: () => <CardState host uploadDelay={1200} scheme="light" /> },
   { id: "card-knocks-light", title: "Card: waiting requests Light", render: () => <CardState host knocks scheme="light" /> },

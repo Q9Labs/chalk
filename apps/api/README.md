@@ -117,6 +117,31 @@ When transcription is enabled, startup requires a workload secret of at least 32
 bytes, a dispatcher Lambda function name, and complete R2 credentials. Invalid
 or non-boolean capability flag values are rejected.
 
+### Tenant media limits
+
+These optional non-negative integer settings default to `0` (unlimited), including
+when unset. Limits apply independently to each Tenant; they do not replace the
+engine-wide recording capacity limits.
+
+| Setting                                  | Meaning                                                                                                                                                                                                                                     |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CHALK_TENANT_MAX_CONCURRENT_RECORDINGS` | Maximum outstanding recording reservations per Tenant.                                                                                                                                                                                      |
+| `CHALK_TENANT_DAILY_RECORDING_MINUTES`   | Reject new recordings when capture time for recordings started in the current UTC day reaches this many minutes. Active recordings count up to now; finished recordings count through capture completion, capped by their capture deadline. |
+| `CHALK_TENANT_MAX_LIVE_EPISODES`         | Maximum active or ending Episodes per Tenant, including public-invite Episodes. Ending Episodes retain their slot until ended.                                                                                                              |
+
+Daily recording minutes are an admission check, not a mid-recording stop. An
+admitted recording may exceed the remaining daily allowance, up to the existing
+two-hour per-recording maximum. A recording begun before midnight is charged to
+its start day, not split across days. Concurrent recording admission includes
+reserved/prewarmed recordings so delayed workers cannot overbook a Tenant.
+
+Live Episode rejections use HTTP 409 and `tenant.live_episode_limit_reached`.
+Recording starts are durable Sync commands rather than public REST endpoints;
+the private provider bridge records a terminal outcome and returns HTTP 409 with
+code `tenant.recording_limit_reached` and reason `tenant_recording_limit_reached`, which Sync recognizes without retrying it.
+Transcription operates on existing recordings, so these recording bounds also
+bound the source media available for transcription.
+
 ## Transcription artifacts
 
 Asynchronous transcription is enabled only when the API can mount the complete

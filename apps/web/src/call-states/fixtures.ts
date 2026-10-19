@@ -66,7 +66,7 @@ export function liveSnapshot(options: LiveOptions = {}): SpaceSnapshot {
   ]);
   return {
     ...base,
-    connection: { status: options.status ?? "live", episode: { id: "ep_01JC9Q9TEAM", startedAt, deadline: null }, lastError: options.lastError ?? null },
+    connection: { status: options.status ?? "live", episode: { id: "ep_01JC9Q9TEAM", startedAt, deadline: null }, lastError: options.lastError ?? null, episodeEnded: false, removedByHost: false },
     self: { ...base.self, participantId: SELF_ID, displayName: SELF_NAME, role: capabilities === HOST ? "host" : "guest", handRaised: self.handRaised ?? false },
     participants: {
       roster,

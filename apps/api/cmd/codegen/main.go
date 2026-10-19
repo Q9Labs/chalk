@@ -17,6 +17,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
+	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -120,6 +121,10 @@ func newGenerator(routes []httpapi.APIRouteContract) *generator {
 		},
 	}
 	gen.doc.Components.Schemas["ErrorResponse"] = errorResponseSchema()
+	gen.doc.Components.Schemas["TenantMediaLimitCode"] = map[string]any{
+		"type": "string", "enum": []string{tenantlimits.RecordingLimitCode, tenantlimits.LiveEpisodeLimitCode},
+		"description": "HTTP 409 tenant media admission errors. Recording starts use the private Sync provider bridge; live Episode creation uses the public API.",
+	}
 	for name, schema := range scalarSchemas() {
 		gen.doc.Components.Schemas[name] = schema
 	}

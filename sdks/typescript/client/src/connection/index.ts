@@ -17,6 +17,7 @@ export type ConnectionLifecycleSnapshot = {
   };
   readonly failure: ConnectionFailure | null;
   readonly episodeEnded?: boolean;
+  readonly removedByHost?: boolean;
 };
 export type ConnectionPorts = {
   readonly sync: ConnectionSyncClient;

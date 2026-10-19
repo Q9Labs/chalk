@@ -13,6 +13,10 @@ export function useCallShortcuts(actions: SpaceHeaderProps["shortcuts"], show: (
     };
     const down = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.repeat) return;
+      if (event.key === "Escape") {
+        latest.current?.onClosePanel?.();
+        return;
+      }
       const target = event.target;
       if (target instanceof HTMLElement && target.closest('input,textarea,select,[contenteditable="true"],[role="dialog"]')) return;
       if (event.key === "?" && !event.metaKey && !event.ctrlKey) {
@@ -24,10 +28,6 @@ export function useCallShortcuts(actions: SpaceHeaderProps["shortcuts"], show: (
         event.preventDefault();
         talking = true;
         latest.current.onPushToTalk(true);
-        return;
-      }
-      if (event.key === "Escape") {
-        latest.current?.onClosePanel?.();
         return;
       }
       const modifier = event.metaKey || event.ctrlKey;

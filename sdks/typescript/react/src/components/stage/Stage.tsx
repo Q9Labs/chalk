@@ -271,6 +271,8 @@ export function Stage({
                   gradientPreference={gradientPreference}
                 />
               );
+            } else if (frame?.role === "primary" && renderPrimaryContent) {
+              content = <StageContentTileSurface item={item} {...renderContext} mediaVisible media={renderPrimaryContent(item)} />;
             } else if (renderContentTile) {
               content = renderContentTile(item, renderContext);
             } else if (renderPrimaryContent) {

@@ -6,6 +6,7 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -26,6 +27,39 @@ public class ChalkSpaceForegroundService extends Service {
     private static final String TAG = "ChalkCallService";
     private static final String CHANNEL_ID = "chalk_call_background";
     private static final int NOTIFICATION_ID = 19487;
+
+    // Main thread only, like the service's own callbacks. Android crashes the app when a service started
+    // with startForegroundService() stops before it calls startForeground(), so nothing outside the service
+    // stops it: a stop asks the live service to stop through stopSelfResult(), which does nothing while a
+    // newer start is still on its way, and every delivered start promotes first, then stops if the call is over.
+    private static boolean wanted;
+    private static ChalkSpaceForegroundService live;
+    private int lastStartId = NO_START;
+    private static final int NO_START = -1;
+
+    /** Asks for the service on the main thread. Returns false when nothing is granted or Android refuses the start. */
+    static boolean requestStart(Context context) {
+        if (grantedForegroundTypes(context) == 0) {
+            return false;
+        }
+        wanted = true;
+        Intent intent = new Intent(context, ChalkSpaceForegroundService.class);
+        try {
+            ComponentName started = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ? context.startForegroundService(intent) : context.startService(intent);
+            return started != null;
+        } catch (RuntimeException error) {
+            Log.w(TAG, "Couldn't start the call's foreground service", error);
+            return false;
+        }
+    }
+
+    /** Stops the service on the main thread once its latest start has promoted it. */
+    static void requestStop() {
+        wanted = false;
+        if (live != null && live.lastStartId != NO_START) {
+            live.stopSelfResult(live.lastStartId);
+        }
+    }
 
     /** The foreground types the person has granted: microphone and camera, or 0 when neither is granted. */
     static int grantedForegroundTypes(Context context) {
@@ -49,10 +83,17 @@ public class ChalkSpaceForegroundService extends Service {
     }
 
     @Override
+    public void onCreate() {
+        super.onCreate();
+        live = this;
+    }
+
+    @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        lastStartId = startId;
         int foregroundTypes = grantedForegroundTypes(this);
         if (foregroundTypes == 0) {
-            stopSelf();
+            stopSelfResult(startId);
             return START_NOT_STICKY;
         }
 
@@ -67,7 +108,12 @@ public class ChalkSpaceForegroundService extends Service {
             }
         } catch (RuntimeException error) {
             Log.w(TAG, "Couldn't start the call's foreground service", error);
-            stopSelf();
+            stopSelfResult(startId);
+            return START_NOT_STICKY;
+        }
+
+        if (!wanted) {
+            stopSelfResult(startId);
         }
 
         // Not sticky: a call can't resume after the process is killed, so a restart would leave a notification with no call behind it.
@@ -76,6 +122,9 @@ public class ChalkSpaceForegroundService extends Service {
 
     @Override
     public void onDestroy() {
+        if (live == this) {
+            live = null;
+        }
         stopForeground(STOP_FOREGROUND_REMOVE);
         super.onDestroy();
     }

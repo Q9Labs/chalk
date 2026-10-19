@@ -126,7 +126,7 @@ function EmojiButton({ emoji, name, onPress, testID }: { readonly emoji: Reactio
     return { backgroundColor: down.value ? pressed : fixed.transparent };
   });
   return (
-    <Pressable accessibilityLabel={`Send ${name}`} accessibilityRole="button" onPress={() => onPress(emoji)} onPressIn={press.onPressIn} onPressOut={press.onPressOut} testID={testID}>
+    <Pressable accessibilityLabel={`Send ${name}`} accessibilityRole="button" onPress={() => onPress(emoji)} onPressIn={press.onPressIn} onPressOut={press.onPressOut} style={styles.emojiSlot} testID={testID}>
       <Animated.View style={[styles.emoji, background, press.scaleStyle]}>
         <Text allowFontScaling={false} style={styles.emojiText}>
           {emoji}
@@ -222,9 +222,11 @@ function RecordingRow({ onDone }: { readonly onDone: () => void }): React.JSX.El
 
 const styles = StyleSheet.create({
   // `.rxrow`: wraps onto a second line on narrow phones.
-  reactions: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 2, paddingBottom: 12 },
+  // One line on every phone: the reactions narrow from 44 pt to 32 pt before they would wrap beside the hand.
+  reactions: { flexDirection: "row", alignItems: "center", gap: 2, paddingBottom: 12 },
   hand: { flexDirection: "row", alignItems: "center", gap: 8, height: 44, paddingLeft: 12, paddingRight: 16, marginRight: 6, borderRadius: 999 },
-  emoji: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+  emojiSlot: { flexBasis: 44, flexShrink: 1, minWidth: 32 },
+  emoji: { height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
   emojiText: { fontSize: 22 },
   end: { flexDirection: "row", alignItems: "center", gap: 14 },
   unread: { width: 8, height: 8, borderRadius: 4 },

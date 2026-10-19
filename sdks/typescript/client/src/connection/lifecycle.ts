@@ -103,6 +103,7 @@ type Model = {
     camera: boolean;
   };
   episodeEndConfirmed: boolean;
+  removedByHost: boolean;
   activeScope: Scope.Closeable | null;
   syncBindingCleanup: (() => void) | null;
   mediaBindingCleanup: (() => void) | null;
@@ -189,6 +190,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         initialMediaIntent: null,
         intent: { microphone: options.initialMicrophoneEnabled ?? true, camera: options.initialCameraEnabled ?? true },
         episodeEndConfirmed: false,
+        removedByHost: false,
         activeScope: null,
         syncBindingCleanup: null,
         mediaBindingCleanup: null,
@@ -420,6 +422,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           model.epoch += 1;
           model.failure = null;
           model.episodeEndConfirmed = false;
+          model.removedByHost = false;
           yield* transition("joining");
           const span = diagnostics.startSpan({ step: "join", state: model.state, epoch: model.epoch });
           const scope = yield* Scope.make("sequential");
@@ -818,8 +821,10 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       const settleTerminalSnapshot = (snapshot: V1EpisodeSnapshot): Effect.Effect<boolean> =>
         Effect.gen(function* () {
           const ended = episodeEnded(snapshot);
-          if (ended || snapshot.connection.terminalReason === "participant_inactive") {
+          const removed = snapshot.connection.terminalReason === "participant_removed";
+          if (ended || removed || snapshot.connection.terminalReason === "participant_inactive") {
             if (ended) model.episodeEndConfirmed = true;
+            if (removed) model.removedByHost = true;
             yield* finishTerminalSnapshot();
             return true;
           }
@@ -1024,6 +1029,7 @@ function snapshotFor(model: Model, access: ParsedAccessGrant | null): Connection
     connection: Object.freeze({ sync: model.syncSnapshot?.connection.phase === "live" && model.syncNoticeUnresponsive ? "unresponsive" : syncPhase(model.syncSnapshot?.connection.phase), media: mediaPhase(model.mediaSnapshot?.connection.phase) }),
     failure: model.failure ? Object.freeze({ ...model.failure }) : null,
     episodeEnded: model.episodeEndConfirmed,
+    removedByHost: model.removedByHost,
   });
 }
 function subjectFor(access: ParsedAccessGrant | null): ConnectionLifecycleSnapshot["subject"] {
@@ -1171,6 +1177,6 @@ function mediaPhase(phase: ConnectionMediaSnapshot["connection"]["phase"] | unde
 function syncTerminalFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFailure {
   const reason = snapshot.connection.terminalReason;
   if (reason === "episode_ended") return lifecycleFailure("episode_ended", false, "The Episode has ended");
-  if (reason === "participant_inactive" || reason === "stale_participant_generation") return lifecycleFailure("invalid_access", false, "Participant access is no longer valid");
+  if (reason === "participant_inactive" || reason === "participant_removed" || reason === "stale_participant_generation") return lifecycleFailure("invalid_access", false, "Participant access is no longer valid");
   return lifecycleFailure("sync_start_failed", true, "The Sync transport needs recovery");
 }
