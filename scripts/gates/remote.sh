@@ -18,9 +18,9 @@ Gates:
   --        any command, run from the checkout root
 
 What it does:
-  1. Snapshots the local commit and any staged, unstaged, and untracked work as a tiny two-commit
-     history: origin/master (the merge base tree) and the branch tip, so branch-scoped gates and
-     Fallow see the same diff the pull request will have.
+  1. Snapshots the merge base tree, each branch commit tree, and any staged, unstaged, and
+     untracked work. Branch-scoped gates see the pull request diff, while secret scans also
+     see content added and removed between branch commits.
   2. Refuses to start when the M4 has too little free disk, after deleting stale /tmp/chalk-*
      checkouts and chalk-gate-postgres-* containers that no live process uses.
   3. Checks out the snapshot under /tmp, installs with shared pnpm, Go, Hex, and Mix caches (plus Playwright Chromium for root), and runs
@@ -93,6 +93,10 @@ stale_hours="${CHALK_REMOTE_STALE_HOURS:-4}"
 gate_timeout="${CHALK_REMOTE_GATE_TIMEOUT_SECONDS:-3600}"
 tail_lines="${CHALK_REMOTE_TAIL_LINES:-60}"
 queue_timeout="${CHALK_REMOTE_QUEUE_TIMEOUT_SECONDS:-5400}"
+if [[ ! "$tail_lines" =~ ^[1-9][0-9]*$ ]]; then
+  echo "CHALK_REMOTE_TAIL_LINES must be a positive integer" >&2
+  exit 2
+fi
 if [[ ! "$queue_timeout" =~ ^[0-9]+$ ]]; then
   echo "CHALK_REMOTE_QUEUE_TIMEOUT_SECONDS must be a nonnegative integer" >&2
   exit 2
@@ -336,15 +340,23 @@ run_gate() {
   echo "[remote] checked out $(git rev-parse --short HEAD)"
 
   echo "==> pnpm install (shared store)"
-  if pnpm install --frozen-lockfile --prefer-offline && install_browser "${browser}"; then
+  if pnpm install --frozen-lockfile --prefer-offline; then
+    if install_browser "${browser}"; then
+      status=0
+    else
+      status=$?
+      echo "Chromium installation failed (status ${status})"
+    fi
+  else
+    status=$?
+    echo "pnpm install failed (status ${status})"
+  fi
+  if ((status == 0)); then
     echo "==> gate: $*"
     set +e
     "${checkout}/scripts/gates/with-timeout.sh" "${timeout_seconds}" "remote gate" -- "$@"
     status=$?
     set -e
-  else
-    status=$?
-    echo "pnpm install failed (status ${status})"
   fi
   echo "REMOTE_GATE_EXIT=${status}"
   exit "${status}"
@@ -388,13 +400,17 @@ if ! git rev-parse --verify --quiet "${base_ref}^{commit}" >/dev/null; then
   exit 2
 fi
 
-# A two-commit history keeps the bundle small: the merge base tree stands in for origin/master, and the
-# branch tip (plus any uncommitted work, as a third commit) sits on top, so branch scope sees the real diff.
+# Keep old base history out of the bundle, but preserve every branch tree so secret scans can
+# find content that an intermediate commit added and a later commit removed.
 commit_as_gate() {
   git -c user.name="remote gate" -c user.email="remote-gate@example.invalid" commit-tree "$@"
 }
-base_commit="$(commit_as_gate "$(git rev-parse "$(git merge-base "${base_ref}" HEAD)^{tree}")" -m "origin/master snapshot")"
-head_commit="$(commit_as_gate "$(git rev-parse 'HEAD^{tree}')" -p "${base_commit}" -m "branch tip $(git rev-parse --short HEAD)")"
+merge_base="$(git merge-base "${base_ref}" HEAD)"
+base_commit="$(commit_as_gate "$(git rev-parse "${merge_base}^{tree}")" -m "origin/master snapshot")"
+head_commit="${base_commit}"
+while IFS= read -r branch_commit; do
+  head_commit="$(commit_as_gate "$(git rev-parse "${branch_commit}^{tree}")" -p "${head_commit}" -m "branch tree ${branch_commit}")"
+done < <(git rev-list --reverse --topo-order "${merge_base}..HEAD")
 if ((dirty_count > 0)); then
   export GIT_INDEX_FILE="${scratch}/index"
   git read-tree HEAD
