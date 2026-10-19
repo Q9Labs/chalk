@@ -1,4 +1,4 @@
-export { createChalkWhiteboardV1FileHttpTransport, type ChalkWhiteboardV1FileHttpTransportOptions } from "./file-http-transport";
+export { createChalkWhiteboardV1FileDownloadTransport, type ChalkWhiteboardV1FileDownloadTransportOptions } from "./file-download-transport";
 export * from "./types";
 export { ChalkWhiteboardV1Client } from "./v1-client";
 export { decodeWhiteboardV1ServerFrame, encodeWhiteboardV1ClientFrame } from "./v1-codec";

@@ -167,22 +167,26 @@ type ObservabilityJourneyEvent struct {
 }
 
 type Participant struct {
-	ID           pgtype.UUID        `json:"id"`
-	Name         pgtype.Text        `json:"name"`
-	Metadata     []byte             `json:"metadata"`
-	Capabilities []string           `json:"capabilities"`
-	TenantID     pgtype.UUID        `json:"tenant_id"`
-	SpaceID      pgtype.UUID        `json:"space_id"`
-	EpisodeID    pgtype.UUID        `json:"episode_id"`
-	AccountID    pgtype.UUID        `json:"account_id"`
-	IdentityID   pgtype.UUID        `json:"identity_id"`
-	Generation   int64              `json:"generation"`
-	Status       string             `json:"status"`
-	Role         string             `json:"role"`
-	JoinedAt     pgtype.Timestamptz `json:"joined_at"`
-	LeftAt       pgtype.Timestamptz `json:"left_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	ID                        pgtype.UUID        `json:"id"`
+	Name                      pgtype.Text        `json:"name"`
+	Metadata                  []byte             `json:"metadata"`
+	Capabilities              []string           `json:"capabilities"`
+	TenantID                  pgtype.UUID        `json:"tenant_id"`
+	SpaceID                   pgtype.UUID        `json:"space_id"`
+	EpisodeID                 pgtype.UUID        `json:"episode_id"`
+	AccountID                 pgtype.UUID        `json:"account_id"`
+	IdentityID                pgtype.UUID        `json:"identity_id"`
+	MediaConnectionID         pgtype.Text        `json:"media_connection_id"`
+	MediaConnectionGeneration pgtype.Int8        `json:"media_connection_generation"`
+	Generation                int64              `json:"generation"`
+	Status                    string             `json:"status"`
+	Role                      string             `json:"role"`
+	JoinedAt                  pgtype.Timestamptz `json:"joined_at"`
+	LeftAt                    pgtype.Timestamptz `json:"left_at"`
+	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+	FirstJoinedAt             pgtype.Timestamptz `json:"first_joined_at"`
+	LastLeftReason            pgtype.Text        `json:"last_left_reason"`
 }
 
 type PasswordReset struct {

@@ -12,7 +12,6 @@ export async function bootstrapLocalSpace({ apiOrigin, systemToken, runtimeId, f
       method: "POST",
       body: {
         name: tenantName,
-        default_region: "us",
         default_media_plane: "cf_sfu",
         media_plane_provider_config: { enabled: true, provider: "cf_sfu", mode: "chalk_managed" },
       },

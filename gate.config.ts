@@ -1,7 +1,7 @@
 import { defineGate, lanes } from "@q9labsai/gates";
-import { createGatePlan, emptyScopeResult, gatePlanOptions, laneEnvironment, laneResult } from "./scripts/gates/chalk-gate-plan.mjs";
+import { createGatePlan, emptyScopeResult, gatePlanOptions, laneEnvironment, laneGroupLanes, laneResult } from "./scripts/gates/chalk-gate-plan.mjs";
 
-const taskIds = ["self-test", "hygiene", "secrets", "generated", "format", "fallow", "semgrep", "boundaries", "osv", "services", "contracts", "image-size", "syncpack", "types", "tests", "build", "recorder", "publint", "attw"];
+const taskIds = ["self-test", "hygiene", "secrets", "generated", "format", "fallow", "semgrep", "boundaries", "osv", "services", "contracts", "image-size", "syncpack", "types", "tests", "browser-tests", "build", "recorder", "publint", "attw"];
 // Format is always on so documentation-only changes are still checked.
 const alwaysIds = new Set(["self-test", "hygiene", "secrets", "generated", "format"]);
 const sharedTargetRoots = [
@@ -65,11 +65,14 @@ export default defineGate({
   classifiers: {
     docs: ["*.md", "*.mdx", "*.txt"],
     gateDefinition: [".dependency-cruiser.cjs", ".fallowrc.json"],
-    source: [".go", ".ex", ".exs", ".sql"],
+    // Every path counts as source to q9gate. Chalk's planner maps paths to workspaces and fails closed on unknown
+    // paths itself, so q9gate does not force a full gate for every JSON, CSS, or image change.
+    source: ["*", "**/.*"],
     dependency: ["go.mod", "go.sum", "mix.exs", "mix.lock"],
     infra: ["infrastructure/"],
     contract: ["contract/"],
   },
   concurrency: 1,
-  lanes: [emptyScopeLane, ...chalkLanes, lanes.depcruise({ config: ".dependency-cruiser.cjs", source: "." })],
+  // CI sets GATE_LANE_GROUP to run one lane group per job.
+  lanes: laneGroupLanes([emptyScopeLane, ...chalkLanes, lanes.depcruise({ config: ".dependency-cruiser.cjs", source: "." })], process.env.GATE_LANE_GROUP),
 });

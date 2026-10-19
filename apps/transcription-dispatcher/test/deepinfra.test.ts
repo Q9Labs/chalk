@@ -176,6 +176,15 @@ describe("provider selection", () => {
     expect(loadReleaseConfig(env, { workloadAuth: "test-key", deepInfraToken: "test-token" }).cloudflare).toEqual({ enabled: false });
   });
 
+  it("requires nightly control identity without changing production configuration", () => {
+    const secrets = { workloadAuth: "test-key", deepInfraToken: "test-token" };
+    const nightly = { ...env, CHALK_ENVIRONMENT: "nightly", CONTROL_API_BASE_URL: "https://nightly-api.chalkmeet.com", CONTROL_API_AUDIENCE: "chalk-nightly-control-api" };
+    expect(loadReleaseConfig(nightly, secrets).environment).toBe("nightly");
+    expect(() => loadReleaseConfig({ ...nightly, CONTROL_API_BASE_URL: "https://api.chalkmeet.com" }, secrets)).toThrow(/nightly/);
+    expect(() => loadReleaseConfig({ ...nightly, CONTROL_API_AUDIENCE: "chalk-control-api" }, secrets)).toThrow(/nightly/);
+    expect(loadReleaseConfig({ ...env, CHALK_ENVIRONMENT: "production" }, secrets).controlApiBaseUrl).toBe(env.CONTROL_API_BASE_URL);
+  });
+
   it("requires explicit fallback selection and qualification", () => {
     expect(() => loadReleaseConfig({ ...env, CLOUDFLARE_AI_ENABLED: "true" }, { workloadAuth: "test-key", deepInfraToken: "test-token" })).toThrow(/Cloudflare/);
     expect(() => loadReleaseConfig({ ...env, DEEPINFRA_CORPUS_DIGEST: "" }, { workloadAuth: "test-key", deepInfraToken: "test-token" })).toThrow(/CORPUS_DIGEST/);

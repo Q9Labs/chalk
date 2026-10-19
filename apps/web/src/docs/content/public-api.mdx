@@ -9,7 +9,13 @@ POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/end
 GET /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries
 ```
 
-Customer operations cover Tenant, Space, and Episode records; Participant admission and access; media and file uploads; recordings and transcripts; webhook endpoints and delivery inspection; and the public status document. Most routes use a Tenant id in the path. List routes expose `page_size` and `cursor`; the webhook delivery list also filters by `state` and `event_type`. Mutating routes that create or change durable state require an `Idempotency-Key` where the contract declares it.
+Customer operations cover Tenant, Space, and Episode records; Participant admission and access; media; recordings and transcripts; webhook endpoints and delivery inspection. Most routes use a Tenant id in the path. List routes expose `page_size` and `cursor`; the webhook delivery list also filters by `state` and `event_type`. Mutating routes that create or change durable state require an `Idempotency-Key` where the contract declares it.
+
+For an embed, set `cors_allowed_origins` with `updateTenant`, then use `createSpace` and `createEpisode` to prepare a live Space. Admit each Participant with `admitEpisodeParticipant` and issue an AccessGrant with `issueAccessGrant`. Keep the Tenant API key on your backend; the frontend gets its AccessGrant through your `getAccess` endpoint. See [Authentication](/docs/authentication) for the credential boundary.
+
+For current Participants across multiple Spaces, use `listSpaceLiveEpisodes` (`GET /v1/tenants/{tenant_id}/live-episodes?space_ids=...`) with 1–30 distinct comma-separated Space IDs and `episodes:read`. Each Space returns `live_episode: null` or an Episode ID, Participant count, and current Participant IDs and display names. Unknown or other-Tenant Space IDs return `404` for the entire batch.
+
+Use `getEpisodeAttendance` (`GET /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/attendance`) with `episodes:read` for live or ended Episode attendance. Each admitted Participant seat appears once, ordered by `first_joined_at`, with its display name, identity kind (`user`, `agent`, or `guest`), nullable external ID, first join, and latest leave. Rejoins keep the first join; this is not a list of presence intervals. `last_left_at` and `left_reason` are null while the seat is present. An ended Episode closes seats that never explicitly left at its end time with `left_reason: "episode_ended"`; explicit departures use `"left"`. Attendance remains available after the Episode event journal is cleaned up.
 
 ### Use generated clients carefully
 

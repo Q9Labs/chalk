@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -19,10 +17,6 @@ type WhiteboardFileRepository struct {
 }
 
 type whiteboardFileQuerier interface {
-	ReserveWhiteboardFileUpload(context.Context, sqlc.ReserveWhiteboardFileUploadParams) (int64, error)
-	FailWhiteboardFileUpload(context.Context, pgtype.UUID) (int64, error)
-	ClaimWhiteboardFileUploadFinalize(context.Context, sqlc.ClaimWhiteboardFileUploadFinalizeParams) (sqlc.ClaimWhiteboardFileUploadFinalizeRow, error)
-	CompleteWhiteboardFileUpload(context.Context, sqlc.CompleteWhiteboardFileUploadParams) (int64, error)
 	GetReadyWhiteboardFile(context.Context, sqlc.GetReadyWhiteboardFileParams) (sqlc.GetReadyWhiteboardFileRow, error)
 	ClaimWhiteboardFileCleanup(context.Context, sqlc.ClaimWhiteboardFileCleanupParams) ([]sqlc.ClaimWhiteboardFileCleanupRow, error)
 	CompleteWhiteboardFileCleanup(context.Context, sqlc.CompleteWhiteboardFileCleanupParams) (int64, error)
@@ -30,73 +24,6 @@ type whiteboardFileQuerier interface {
 
 func NewWhiteboardFileRepository(db sqlc.DBTX) WhiteboardFileRepository {
 	return WhiteboardFileRepository{queries: sqlc.New(db)}
-}
-
-func (r WhiteboardFileRepository) Reserve(ctx context.Context, input whiteboardfiles.ReserveInput) error {
-	upload := input.Upload
-	rows, err := r.queries.ReserveWhiteboardFileUpload(ctx, sqlc.ReserveWhiteboardFileUploadParams{
-		UploadID: uuid(upload.UploadID), FileID: upload.FileID, ObjectKey: upload.ObjectKey,
-		MimeType: upload.MIMEType, ByteLength: upload.ByteLength, Sha256: upload.SHA256[:],
-		ExpiresAt: pgtype.Timestamptz{Time: upload.ExpiresAt, Valid: true}, SceneID: uuid(upload.SceneID),
-		TenantID: uuid(upload.Subject.TenantID), SpaceID: uuid(upload.Subject.SpaceID),
-		EpisodeID:             uuid(upload.Subject.EpisodeID),
-		ParticipantID:         uuid(upload.Subject.ParticipantID),
-		ParticipantGeneration: upload.Subject.ParticipantGeneration,
-	})
-	if whiteboardFileUniqueViolation(err) {
-		return whiteboardfiles.ErrFileExists
-	}
-	if err != nil {
-		return fmt.Errorf("reserve whiteboard file upload: %w", err)
-	}
-	if rows != 1 {
-		return whiteboardfiles.ErrPermissionDenied
-	}
-	return nil
-}
-
-func (r WhiteboardFileRepository) Fail(ctx context.Context, uploadID utilities.ID) error {
-	if _, err := r.queries.FailWhiteboardFileUpload(ctx, uuid(uploadID)); err != nil {
-		return fmt.Errorf("fail whiteboard file upload: %w", err)
-	}
-	return nil
-}
-
-func (r WhiteboardFileRepository) ClaimFinalize(ctx context.Context, subject whiteboardfiles.Subject, uploadID utilities.ID, now time.Time) (whiteboardfiles.Upload, error) {
-	row, err := r.queries.ClaimWhiteboardFileUploadFinalize(ctx, sqlc.ClaimWhiteboardFileUploadFinalizeParams{
-		UploadID: uuid(uploadID), TenantID: uuid(subject.TenantID), SpaceID: uuid(subject.SpaceID),
-		EpisodeID: uuid(subject.EpisodeID), ParticipantID: uuid(subject.ParticipantID),
-		ParticipantGeneration: subject.ParticipantGeneration,
-		NowAt:                 pgtype.Timestamptz{Time: now, Valid: true},
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return whiteboardfiles.Upload{}, whiteboardfiles.ErrUploadNotFound
-	}
-	if err != nil {
-		return whiteboardfiles.Upload{}, fmt.Errorf("claim whiteboard upload finalize: %w", err)
-	}
-	return mapWhiteboardUpload(
-		row.UploadID, row.TenantID, row.SpaceID, row.EpisodeID, row.SceneID,
-		row.ParticipantID, row.ParticipantGeneration, row.FileID, row.ObjectKey,
-		row.MimeType, row.ByteLength, row.Sha256, row.ExpiresAt,
-	)
-}
-
-func (r WhiteboardFileRepository) Complete(ctx context.Context, input whiteboardfiles.CompleteInput) error {
-	rows, err := r.queries.CompleteWhiteboardFileUpload(ctx, sqlc.CompleteWhiteboardFileUploadParams{
-		UploadID: uuid(input.UploadID),
-		ImmutableObjectIdentity: pgtype.Text{
-			String: input.ImmutableObjectIdentity,
-			Valid:  true,
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("complete whiteboard file upload: %w", err)
-	}
-	if rows != 1 {
-		return whiteboardfiles.ErrUploadNotReady
-	}
-	return nil
 }
 
 func (r WhiteboardFileRepository) ReadyFile(ctx context.Context, subject whiteboardfiles.Subject, fileID string) (whiteboardfiles.Upload, error) {
@@ -185,11 +112,6 @@ func mapWhiteboardUpload(
 		SceneID: utilities.IDFromBytes(sceneID.Bytes), FileID: fileID, ObjectKey: objectKey,
 		MIMEType: mimeType, ByteLength: byteLength, SHA256: sha256, ExpiresAt: expiresAt.Time,
 	}, nil
-}
-
-func whiteboardFileUniqueViolation(err error) bool {
-	var postgresError *pgconn.PgError
-	return errors.As(err, &postgresError) && postgresError.Code == "23505"
 }
 
 var _ whiteboardfiles.Repository = WhiteboardFileRepository{}

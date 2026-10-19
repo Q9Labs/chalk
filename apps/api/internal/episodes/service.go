@@ -48,7 +48,6 @@ var (
 	ErrEpisodeAlreadyExists               = errors.New("episode already exists")
 	ErrSynchronousCommit                  = errors.New("synchronous commit is not enabled for episode transaction")
 	ErrInvalidAccountID                   = errors.New("invalid dashboard account id")
-	ErrInvalidSpaceSlug                   = errors.New("invalid episode space slug")
 )
 
 const (
@@ -98,6 +97,8 @@ var validCapabilities = func() map[string]struct{} {
 }()
 
 type Repository interface {
+	GetEpisodeAttendance(context.Context, utilities.ID, utilities.ID, utilities.ID) ([]AttendanceParticipant, error)
+	ListSpaceLiveEpisodes(context.Context, utilities.ID, []utilities.ID) ([]SpaceLiveEpisode, error)
 	CreateEpisode(context.Context, CreateEpisodeInput) (Episode, error)
 	GetEpisode(context.Context, utilities.ID, utilities.ID, utilities.ID) (Episode, error)
 	ListEpisodes(context.Context, utilities.ID, utilities.ID, pagination.PageRequest) (EpisodeList, error)
@@ -105,16 +106,6 @@ type Repository interface {
 	RequestParticipantRemoval(context.Context, RequestParticipantRemovalInput) (Removal, error)
 	RequestEpisodeEnd(context.Context, RequestEpisodeEndInput) (EndRequest, error)
 	SetDeadline(context.Context, SetDeadlineInput) (ControlRequest, error)
-}
-
-// SelfJoinRepository owns the Dashboard Account boundary. It deliberately
-// sits beside Repository so legacy lifecycle callers keep their existing
-// seams while the account-bound join can resolve a Space slug, live Episode,
-// and stable account Participant in one transaction.
-type SelfJoinRepository interface {
-	JoinSelf(context.Context, SelfJoinInput) (SelfJoinResult, error)
-	FindSelf(context.Context, SelfAccessInput) (SelfJoinResult, error)
-	LeaveSelf(context.Context, SelfLeaveInput) (SelfLeaveResult, error)
 }
 
 type DeadlineSchedulerRepository interface {
@@ -131,42 +122,6 @@ type CommitObserver interface {
 type Service struct {
 	repository Repository
 	observer   CommitObserver
-}
-
-type SelfJoinInput struct {
-	TenantID    utilities.ID
-	AccountID   utilities.ID
-	SpaceSlug   string
-	DisplayName string
-	Request     Request
-}
-
-type SelfAccessInput struct {
-	TenantID  utilities.ID
-	AccountID utilities.ID
-	SpaceSlug string
-}
-
-type SelfLeaveInput struct {
-	TenantID              utilities.ID
-	AccountID             utilities.ID
-	SpaceSlug             string
-	ParticipantGeneration int64
-	Request               Request
-}
-
-type SelfJoinResult struct {
-	Episode            Episode
-	Participant        Participant
-	Intent             Intent
-	EpisodeCreated     bool
-	ParticipantCreated bool
-}
-
-type SelfLeaveResult struct {
-	Episode     Episode
-	Participant Participant
-	Removed     bool
 }
 
 type EpisodeList struct {
@@ -342,46 +297,6 @@ type ControlRequest struct {
 
 func NewService(repository Repository) Service {
 	return Service{repository: repository}
-}
-
-func (s Service) JoinSelf(ctx context.Context, input SelfJoinInput) (SelfJoinResult, error) {
-	if err := prepareSelfJoinInput(&input); err != nil {
-		return SelfJoinResult{}, err
-	}
-	repository, ok := s.repository.(SelfJoinRepository)
-	if !ok {
-		return SelfJoinResult{}, ErrSynchronousCommit
-	}
-	result, err := repository.JoinSelf(ctx, input)
-	if err != nil {
-		return SelfJoinResult{}, err
-	}
-	if result.EpisodeCreated {
-		s.observeEpisodeCommitted(result.Episode)
-	}
-	return result, nil
-}
-
-func (s Service) FindSelf(ctx context.Context, input SelfAccessInput) (SelfJoinResult, error) {
-	if err := prepareSelfAccessInput(&input); err != nil {
-		return SelfJoinResult{}, err
-	}
-	repository, ok := s.repository.(SelfJoinRepository)
-	if !ok {
-		return SelfJoinResult{}, ErrSynchronousCommit
-	}
-	return repository.FindSelf(ctx, input)
-}
-
-func (s Service) LeaveSelf(ctx context.Context, input SelfLeaveInput) (SelfLeaveResult, error) {
-	if err := prepareSelfLeaveInput(&input); err != nil {
-		return SelfLeaveResult{}, err
-	}
-	repository, ok := s.repository.(SelfJoinRepository)
-	if !ok {
-		return SelfLeaveResult{}, ErrSynchronousCommit
-	}
-	return repository.LeaveSelf(ctx, input)
 }
 
 func (s Service) JoinPublic(ctx context.Context, input PublicJoinInput) (PublicJoinResult, error) {

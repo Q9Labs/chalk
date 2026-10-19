@@ -1,0 +1,186 @@
+name: Real-call proof
+
+on:
+  schedule:
+    # Production otherwise gets a real call only on promote. Scheduled runs have
+    # no inputs, so they take the production and "smoke transcript" fallbacks below.
+    - cron: "41 5 * * *"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment with a permanent proof Tenant
+        type: environment
+        default: production
+        required: true
+      proofs:
+        description: Space-separated proof commands
+        type: string
+        default: smoke transcript
+  workflow_call:
+    inputs:
+      environment:
+        description: Environment with a permanent proof Tenant
+        type: string
+        required: true
+      proofs:
+        description: Space-separated proof commands
+        type: string
+        default: smoke transcript
+    secrets:
+      CHALK_PROOF_API_KEY:
+        description: Bootstrap key for the environment proof Tenant
+        required: true
+      CHALK_ALERTS_DISCORD_WEBHOOK_URL:
+        description: Production alerts Discord webhook; only timer runs use it
+        required: false
+    outputs:
+      result:
+        description: passed or failed; may be absent on cancellation or runner loss
+        value: ${{ jobs.smoke.outputs.result }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-call-proof-${{ inputs.environment || 'production' }}
+  cancel-in-progress: false
+  # The default keeps one pending run, so a timer run would cancel a waiting
+  # Promote proof, and Promote rolls back on any proof that did not pass.
+  queue: max
+
+jobs:
+  smoke:
+    name: Real-call proofs
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.environment || 'production' }}
+    outputs:
+      result: ${{ steps.result.outputs.result }}
+    timeout-minutes: 50
+    steps:
+      - name: Refuse non-master invocation before checkout
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: test "$WORKFLOW_REF" = refs/heads/master
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+      - name: Install proof dependencies
+        run: |
+          pnpm install --frozen-lockfile --filter @q9labsai/chalk-client...
+          pnpm --filter @q9labsai/chalk-client exec playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg imagemagick espeak fonts-dejavu-core age
+          # Ubuntu ships ImageMagick 6, without the ImageMagick 7 entry point.
+          sudo tee /usr/local/bin/magick > /dev/null <<'SH'
+          #!/bin/sh
+          if [ "$1" = montage ]; then
+            shift
+            exec montage "$@"
+          fi
+          exec convert "$@"
+          SH
+          sudo chmod +x /usr/local/bin/magick
+      - name: Validate evidence recipient
+        env:
+          EVIDENCE_RECIPIENT: ${{ vars.CHALK_PROOF_EVIDENCE_RECIPIENT }}
+        run: |
+          if [ -z "$EVIDENCE_RECIPIENT" ]; then
+            echo "Missing required variable CHALK_PROOF_EVIDENCE_RECIPIENT" >&2
+            exit 1
+          fi
+          printf '' | age --recipient "$EVIDENCE_RECIPIENT" --output /dev/null
+      - name: Identify invocation
+        id: invocation
+        run: echo "suffix=$(tr -d '-' < /proc/sys/kernel/random/uuid)" >> "$GITHUB_OUTPUT"
+      - name: Prove a real call
+        timeout-minutes: 40
+        env:
+          CHALK_PROOF_CONFIG_SOURCE: env
+          CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
+          RUN_PREFIX: ${{ steps.invocation.outputs.suffix }}
+          PROOFS: ${{ inputs.proofs || 'smoke transcript' }}
+          CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
+          CHALK_PROOF_API_URL: ${{ vars.CHALK_PROOF_API_URL }}
+          CHALK_PROOF_WEB_URL: ${{ vars.CHALK_PROOF_WEB_URL }}
+          CHALK_PROOF_PROOF_ORIGIN: ${{ vars.CHALK_PROOF_PROOF_ORIGIN }}
+          CHALK_PROOF_WEBHOOK_ENDPOINT_ID: ${{ vars.CHALK_PROOF_WEBHOOK_ENDPOINT_ID }}
+          CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ vars.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
+        run: |
+          read -r -a proofs <<< "$PROOFS"
+          if [ "${#proofs[@]}" -eq 0 ]; then
+            echo "PROOF configuration: failed (empty-proof-list)" >&2
+            exit 1
+          fi
+          for proof in "${proofs[@]}"; do
+            case "$proof" in
+              all|smoke|camera-share|recording-rejoin|export|transcript) ;;
+              *) echo "Unsupported proof command" >&2; exit 1 ;;
+            esac
+          done
+          mkdir -p .private
+          for proof in "${proofs[@]}"; do
+            start=$(date +%s)
+            run_id="${RUN_PREFIX}-${proof}"
+            echo "$run_id" >> .private/proof-run-ids
+            CHALK_PROOF_RUN_ID="$run_id" pnpm prod:proof "$proof"
+            echo "$proof wall seconds: $(( $(date +%s) - start ))" >> "$GITHUB_STEP_SUMMARY"
+          done
+      - name: Clean proof runs
+        if: always()
+        env:
+          CHALK_PROOF_CONFIG_SOURCE: env
+          CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
+          CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
+          CHALK_PROOF_API_URL: ${{ vars.CHALK_PROOF_API_URL }}
+          CHALK_PROOF_WEB_URL: ${{ vars.CHALK_PROOF_WEB_URL }}
+          CHALK_PROOF_PROOF_ORIGIN: ${{ vars.CHALK_PROOF_PROOF_ORIGIN }}
+          CHALK_PROOF_WEBHOOK_ENDPOINT_ID: ${{ vars.CHALK_PROOF_WEBHOOK_ENDPOINT_ID }}
+          CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ vars.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
+        run: |
+          status=0
+          if [ -f .private/proof-run-ids ]; then
+            while IFS= read -r run_id; do
+              pnpm prod:proof cleanup "$run_id" || status=1
+            done < .private/proof-run-ids
+          fi
+          exit "$status"
+      - name: Encrypt private proof evidence
+        if: always()
+        env:
+          EVIDENCE_RECIPIENT: ${{ vars.CHALK_PROOF_EVIDENCE_RECIPIENT }}
+        run: |
+          if [ -d .private/prod-proof ]; then
+            mkdir -p .private/prod-proof-artifact
+            tar -czf - -C .private prod-proof | age --recipient "$EVIDENCE_RECIPIENT" --output .private/prod-proof-artifact/evidence.tar.gz.age
+          fi
+      - name: Upload encrypted proof evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: real-call-proof-${{ inputs.environment || 'production' }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ steps.invocation.outputs.suffix }}
+          path: .private/prod-proof-artifact/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 3
+      - name: Publish proof result
+        id: result
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [ "$JOB_STATUS" = success ]; then
+            echo 'result=passed' >> "$GITHUB_OUTPUT"
+          else
+            echo 'result=failed' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Alert Discord about a failed daily production call
+        if: always() && job.status != 'success' && github.event_name == 'schedule' && (inputs.environment || 'production') == 'production'
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.CHALK_ALERTS_DISCORD_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          jq -n --arg content "Daily production real-call proof failed: $RUN_URL" '{content: $content}' \
+            | curl --fail --silent --show-error -H 'Content-Type: application/json' --data @- "$DISCORD_WEBHOOK_URL"

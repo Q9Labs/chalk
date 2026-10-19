@@ -3,6 +3,9 @@ package digitalocean
 import (
 	"bytes"
 	"context"
+	"crypto/x509"
+	_ "embed"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,30 +28,35 @@ const (
 	dropletsPerPage      = 200
 )
 
+//go:embed recorder_install.py
+var recorderInstaller []byte
+
 type RecorderFleetConfig struct {
-	Token       string
-	BaseURL     string
-	HTTPClient  *http.Client
-	Environment string
-	Role        workeridentity.Role
-	OwnerTag    string
-	ProjectID   string
-	VPCUUID     string
-	GPU         bool
-	SSHKeyIDs   []int64
+	PresignArchive func(context.Context, recorderfleet.ArchiveSpec) (string, error)
+	Token          string
+	BaseURL        string
+	HTTPClient     *http.Client
+	Environment    string
+	Role           workeridentity.Role
+	OwnerTag       string
+	ProjectID      string
+	VPCUUID        string
+	GPU            bool
+	SSHKeyIDs      []int64
 }
 
 type RecorderFleet struct {
-	baseURL     *url.URL
-	client      *http.Client
-	environment string
-	gpu         bool
-	ownerTag    string
-	projectID   string
-	role        workeridentity.Role
-	token       string
-	vpcUUID     string
-	sshKeyIDs   []int64
+	presignArchive func(context.Context, recorderfleet.ArchiveSpec) (string, error)
+	baseURL        *url.URL
+	client         *http.Client
+	environment    string
+	gpu            bool
+	ownerTag       string
+	projectID      string
+	role           workeridentity.Role
+	token          string
+	vpcUUID        string
+	sshKeyIDs      []int64
 }
 
 func NewRecorderFleet(config RecorderFleetConfig) (*RecorderFleet, error) {
@@ -65,7 +73,7 @@ func NewRecorderFleet(config RecorderFleetConfig) (*RecorderFleet, error) {
 		config.HTTPClient = &http.Client{Timeout: 15 * time.Second}
 	}
 	return &RecorderFleet{
-		baseURL: baseURL, client: config.HTTPClient, environment: config.Environment,
+		presignArchive: config.PresignArchive, baseURL: baseURL, client: config.HTTPClient, environment: config.Environment,
 		gpu: config.GPU, ownerTag: config.OwnerTag, projectID: config.ProjectID,
 		role: config.Role, token: config.Token, vpcUUID: config.VPCUUID, sshKeyIDs: append([]int64(nil), config.SSHKeyIDs...),
 	}, nil
@@ -194,7 +202,14 @@ func (a *RecorderFleet) EnsureNode(ctx context.Context, request recorderfleet.En
 		return a.ensureFirewall(ctx, node, request.Release.FirewallID)
 	}
 
-	userData, err := renderRecorderCloudInit(request)
+	if a.presignArchive == nil {
+		return recorderfleet.Node{}, fmt.Errorf("%w: archive signer is unavailable", recorderfleet.ErrProviderUnavailable)
+	}
+	archiveURL, err := a.presignArchive(ctx, request.Release.Archive)
+	if err != nil {
+		return recorderfleet.Node{}, fmt.Errorf("%w: recorder archive signing failed", recorderfleet.ErrProviderUnavailable)
+	}
+	userData, err := renderRecorderCloudInit(request, archiveURL)
 	if err != nil {
 		return recorderfleet.Node{}, err
 	}
@@ -418,10 +433,27 @@ func (a *RecorderFleet) doJSON(ctx context.Context, method, path string, query u
 	return nil
 }
 
-func renderRecorderCloudInit(request recorderfleet.EnsureNodeRequest) (string, error) {
+func renderRecorderCloudInit(request recorderfleet.EnsureNodeRequest, archiveURL string) (string, error) {
 	if err := request.Validate(); err != nil {
 		return "", err
 	}
+	parsed, err := url.Parse(archiveURL)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
+		return "", recorderfleet.ErrInvalidConfig
+	}
+	archiveConfig, err := json.Marshal(struct {
+		URL            string `json:"url"`
+		SHA256         string `json:"sha256"`
+		ReleaseID      string `json:"release_id"`
+		ManifestDigest string `json:"manifest_digest"`
+		Endpoint       string `json:"endpoint"`
+		BootGeneration uint64 `json:"boot_generation"`
+	}{archiveURL, request.Release.Archive.SHA256, request.Release.ReleaseID, request.Release.ImageDigest, request.Release.BootstrapEndpoint, request.BootGeneration})
+	if err != nil {
+		return "", err
+	}
+	installFiles := "  - path: /run/chalk-recorder-install.py\n    permissions: \"0500\"\n    owner: root:root\n    encoding: b64\n    content: " + base64.StdEncoding.EncodeToString(recorderInstaller) + "\n" +
+		"  - path: /etc/chalk-recorder/archive.json\n    permissions: \"0400\"\n    owner: root:root\n    encoding: b64\n    content: " + base64.StdEncoding.EncodeToString(archiveConfig) + "\n"
 	workerUnit := "chalk-recorder-" + string(request.Key.Role) + ".service"
 	values := []string{
 		"CHALK_RECORDER_ENVIRONMENT=" + quoteEnv(request.Key.Environment),
@@ -433,7 +465,19 @@ func renderRecorderCloudInit(request recorderfleet.EnsureNodeRequest) (string, e
 		"CHALK_RECORDER_GPU=" + quoteEnv(strconv.FormatBool(request.Release.GPU)),
 		"CHALK_RECORDER_BOOTSTRAP_ASSERTION_SOURCE=" + quoteEnv("external-reconciler"),
 	}
-	return "#cloud-config\nwrite_files:\n  - path: /etc/chalk-recorder/bootstrap.env\n    permissions: \"0400\"\n    owner: root:root\n    content: |\n      " + strings.Join(values, "\n      ") + "\nruncmd:\n  - set -e\n  - [ \"/usr/local/sbin/chalk-recorder-bootstrap\", \"--one-time\", \"--require-signed-assertion\", \"--require-droplet-inventory-match\", \"--require-boot-generation\", \"--env-file\", \"/etc/chalk-recorder/bootstrap.env\" ]\n  - [ \"/bin/systemctl\", \"enable\", \"--now\", \"" + workerUnit + "\", \"chalk-recorder-renew.timer\" ]\n  - [ \"/usr/bin/rm\", \"-f\", \"/etc/chalk-recorder/bootstrap.env\" ]\n", nil
+	trust := ""
+	configureTrust := ""
+	if request.Release.BootstrapCABase64 != "" {
+		ca, err := base64.StdEncoding.DecodeString(request.Release.BootstrapCABase64)
+		roots := x509.NewCertPool()
+		if err != nil || !roots.AppendCertsFromPEM(ca) {
+			return "", recorderfleet.ErrInvalidConfig
+		}
+		endpoint, _ := url.Parse(request.Release.BootstrapEndpoint)
+		trust = "  - path: /etc/chalk-recorder/bootstrap-ca.pem\n    permissions: \"0444\"\n    owner: root:root\n    encoding: b64\n    content: " + request.Release.BootstrapCABase64 + "\n"
+		configureTrust = "  - [ \"/usr/bin/sed\", \"-i\", \"s/^CHALK_RECORDER_BOOTSTRAP_SERVER_NAME=.*/CHALK_RECORDER_BOOTSTRAP_SERVER_NAME=" + endpoint.Hostname() + "/\", \"/etc/chalk-recorder/image.env\" ]\n"
+	}
+	return "#cloud-config\nwrite_files:\n  - path: /etc/chalk-recorder/bootstrap.env\n    permissions: \"0400\"\n    owner: root:root\n    content: |\n      " + strings.Join(values, "\n      ") + "\n" + trust + installFiles + "runcmd:\n  - set -e\n  - [ \"/usr/bin/python3\", \"/run/chalk-recorder-install.py\", \"/etc/chalk-recorder/archive.json\" ]\n" + configureTrust + "  - [ \"/usr/local/sbin/chalk-recorder-bootstrap\", \"--one-time\", \"--require-signed-assertion\", \"--require-droplet-inventory-match\", \"--require-boot-generation\", \"--env-file\", \"/etc/chalk-recorder/bootstrap.env\" ]\n  - [ \"/bin/systemctl\", \"enable\", \"--now\", \"" + workerUnit + "\", \"chalk-recorder-renew.timer\" ]\n  - [ \"/usr/bin/rm\", \"-f\", \"/etc/chalk-recorder/bootstrap.env\" ]\n", nil
 }
 
 func quoteEnv(value string) string { return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'" }

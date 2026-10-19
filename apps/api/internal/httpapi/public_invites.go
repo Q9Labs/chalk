@@ -186,7 +186,7 @@ type publicInviteLeaveRequest struct {
 func mountPublicInviteRoutes(r chi.Router, options Options) {
 
 	r.Group(func(r chi.Router) {
-		r.Use(requireTenantAuthentication(options.Authentication, options.APIKeyAuthentication, options.RateLimit.ClientIP))
+		r.Use(requireTenantAuthentication(options.APIKeyAuthentication, options.RateLimit.ClientIP))
 		for _, endpoint := range publicInviteManagementEndpoints(options.PublicInvites, options.TenantAuthz, requirePublicOrigin(options.CORS.AllowedOrigins)) {
 			endpoint.Mount(r, options.RateLimit)
 		}
@@ -195,7 +195,6 @@ func mountPublicInviteRoutes(r chi.Router, options Options) {
 	r.Group(func(r chi.Router) {
 		r.Use(rejectTenantAPIKeyCredential)
 		r.Use(rejectNativePublicCookies)
-		r.Use(optionalAuthentication(options.Authentication))
 		publicRecordingEntranceEndpoint(options.RecordingEntrance, options.EntranceInvites, requirePublicOrigin(options.CORS.AllowedOrigins)).Mount(r, options.RateLimit)
 		for _, endpoint := range publicInvitePublicEndpoints(options.PublicInvites, requirePublicOrigin(options.CORS.AllowedOrigins)) {
 			endpoint.Mount(r, options.RateLimit)
@@ -779,29 +778,6 @@ func guestCredentialFromRequest(r *http.Request, arrivalHandle string) string {
 		return ""
 	}
 	return strings.TrimSpace(cookie.Value)
-}
-
-func optionalAuthentication(service AuthenticationService) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if service == nil {
-				next.ServeHTTP(w, r)
-				return
-			}
-			token, ok := sessionTokenFromRequest(r)
-			if !ok {
-				next.ServeHTTP(w, r)
-				return
-			}
-			sessionUser, err := service.AuthenticateSession(r.Context(), token)
-			if err != nil {
-				next.ServeHTTP(w, r)
-				return
-			}
-			ctx := authentication.ContextWithPrincipal(r.Context(), service.PrincipalForSession(sessionUser.Session))
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	}
 }
 
 func rejectNativePublicCookies(next http.Handler) http.Handler {

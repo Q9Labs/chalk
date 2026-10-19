@@ -11,7 +11,7 @@ import { useMeasuredRef } from "../frame/measurement";
 import { Icon } from "../icons/Icon";
 import { createNativeMediaStream } from "../media/native-webrtc";
 import { timings } from "../motion/motion";
-import { NameTag } from "../primitives/NameTag";
+import { NameTag, nameTagZone } from "../primitives/NameTag";
 import { TileShell } from "../primitives/TileShell";
 import { useToasts } from "../primitives/toast/ToastStack";
 import { fixed, pressScale } from "../theme/tokens";
@@ -83,7 +83,7 @@ export const ParticipantTile = memo(function ParticipantTile({ id, width, height
     <TileShell cameraOn={video !== null} level={level} speaking={tile.speaking} testID={`tile.${id}`}>
       {video ?? (
         <View style={styles.center}>
-          <FaceAvatar level={level} lookAround name={tile.name} size={tileAvatarSize(width, height)} style="bold" />
+          <FaceAvatar level={level} lookAround name={tile.name} size={tileAvatarSize(width, height - nameTagZone)} style="bold" />
         </View>
       )}
       <Pressable accessibilityHint="Opens a sheet" accessibilityLabel={label} accessibilityRole="button" onPress={() => onOpen(id)} ref={hitRef} style={StyleSheet.absoluteFill} testID={`tile.${id}.open`} />
@@ -125,7 +125,8 @@ function FlipCameraButton({ back, float, testID }: { readonly back: boolean; rea
 }
 
 const styles = StyleSheet.create({
-  center: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
+  // Centred above the name tag, so a short strip tile never hides the face behind the tag.
+  center: { ...StyleSheet.absoluteFillObject, bottom: nameTagZone, alignItems: "center", justifyContent: "center" },
   mirrored: { transform: [{ scaleX: -1 }] },
   flip: { position: "absolute", top: 2, right: 2, width: 44, height: 44, alignItems: "center", justifyContent: "center", zIndex: 4 },
   flipFloat: { top: 0, right: 0 },

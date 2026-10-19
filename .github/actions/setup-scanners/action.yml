@@ -1,0 +1,28 @@
+name: Set up security scanners
+description: Install the Gitleaks and OSV-Scanner releases that the gate scripts pin, verified against checksums recorded here.
+
+runs:
+  using: composite
+  steps:
+    - name: Install pinned Gitleaks and OSV-Scanner
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Keep these versions equal to the go run fallbacks in scripts/gates/gitleaks.sh and scripts/gates/osv-scanner.sh.
+        # Checksums are pinned in the repo rather than read from the release, so a tampered release cannot vouch for itself.
+        gitleaks_version="8.30.1"
+        gitleaks_sha256="551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+        osv_version="2.6.0"
+        osv_sha256="ca69b3d3cd08f889a49dc0a383122f71cc528b83803671df5fd874d97485b108"
+        bin_dir="${RUNNER_TEMP}/scanner-bin"
+        mkdir -p "${bin_dir}"
+
+        archive="${RUNNER_TEMP}/gitleaks.tar.gz"
+        curl --fail --silent --show-error --location --retry 3 "https://github.com/gitleaks/gitleaks/releases/download/v${gitleaks_version}/gitleaks_${gitleaks_version}_linux_x64.tar.gz" --output "${archive}"
+        echo "${gitleaks_sha256}  ${archive}" | sha256sum --check
+        tar -xzf "${archive}" -C "${bin_dir}" gitleaks
+
+        curl --fail --silent --show-error --location --retry 3 "https://github.com/google/osv-scanner/releases/download/v${osv_version}/osv-scanner_linux_amd64" --output "${bin_dir}/osv-scanner"
+        echo "${osv_sha256}  ${bin_dir}/osv-scanner" | sha256sum --check
+        chmod +x "${bin_dir}/osv-scanner"
+        echo "${bin_dir}" >> "${GITHUB_PATH}"

@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 
 SCRIPTS = Path(__file__).resolve().parent
 ROOT = SCRIPTS.parent.parent
-IDENTITIES = ("schema_version", "role", "source_commit", "release_id", "image_id", "image_digest", "region", "size")
+IDENTITIES = ("schema_version", "role", "source_commit", "release_id", "image_id", "image_digest", "region", "size", "archive")
 _upload_spec = importlib.util.spec_from_file_location("boot_check_upload", SCRIPTS / "boot-check-upload.py")
 upload = importlib.util.module_from_spec(_upload_spec)
 _upload_spec.loader.exec_module(upload)
@@ -64,6 +64,12 @@ def ledger(directory):
 def validate_request(request):
     require(set(request) == set(IDENTITIES), "boot request fields do not match qualification contract")
     require(request["schema_version"] == 1 and request["role"] in ("capture", "render"), "invalid boot request schema/role")
+    archive = request['archive']
+    require(set(archive) == {'bucket', 'key', 'sha256', 'region'}, 'invalid archive fields')
+    require(re.fullmatch(r'[0-9a-f]{64}', archive['sha256']), 'invalid archive digest')
+    require(archive['key'] == f"recorder/{request['role']}/{archive['sha256']}.tar.gz", 'invalid archive key')
+    require(re.fullmatch(r'[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]', archive['bucket']), 'invalid archive bucket')
+    require(re.fullmatch(r'[a-z0-9-]{1,64}', archive['region']), 'invalid archive region')
     require(type(request["image_id"]) is int and request["image_id"] > 0, "invalid image ID")
     require(re.fullmatch(r"[0-9a-f]{40}", request["source_commit"]), "invalid source commit")
     require(re.fullmatch(r"sha256:[0-9a-f]{64}", request["image_digest"]), "invalid image digest")
@@ -104,8 +110,8 @@ class Services:
         self.profile = os.environ.get("CHALK_BOOT_CHECK_AWS_PROFILE", os.environ.get("AWS_PROFILE", ""))
         self.region = os.environ.get("CHALK_BOOT_CHECK_AWS_REGION", os.environ.get("AWS_REGION", ""))
         self.context = os.environ.get("CHALK_BOOT_CHECK_DO_CONTEXT", "")
-        require(self.profile and self.region and self.context, "configure BOOT_CHECK AWS profile/region and DigitalOcean context")
-        self.token = command(["doctl", "--context", self.context, "auth", "token"]).strip()
+        require(self.region and self.context, "configure BOOT_CHECK AWS region and DigitalOcean context")
+        self.token = os.environ.get("DIGITALOCEAN_ACCESS_TOKEN") or command(["doctl", "--context", self.context, "auth", "token"]).strip()
         require(self.token, "DigitalOcean context has no token")
         self.instance = os.environ.get("CHALK_BOOT_CHECK_INSTANCE_ID", "")
         self.http = urllib.request.build_opener(NoRedirect())
@@ -128,7 +134,7 @@ class Services:
             raise RuntimeError(f"DigitalOcean {method} failed HTTP {error.code}; payload suppressed") from None
 
     def aws(self, service, operation, *args, timeout=60):
-        raw = command(["aws", "--profile", self.profile, "--region", self.region, service, operation,
+        raw = command(["aws", *(["--profile", self.profile] if self.profile else []), "--region", self.region, service, operation,
                        *map(str, args), "--output", "json"], timeout=timeout)
         return json.loads(raw) if raw.strip() else {}
 
@@ -379,8 +385,8 @@ def provisioning_receipt(directory, request, inspected, tags):
     payload = creates[0]["body"]
     require(payload["image"] == request["image_id"] and payload["name"] == node["name"], "create payload candidate mismatch")
     return {"create_payload_sha256": creates[0]["body_sha256"],
-            "user_data_sha256": hashlib.sha256(payload["user_data"].encode()).hexdigest(),
-            "fleet_user_data_sha256": hashlib.sha256(creates[0]["original_body"]["user_data"].encode()).hexdigest(),
+            "user_data_sha256": creates[0]["user_data_sha256"],
+            "fleet_user_data_sha256": creates[0]["fleet_user_data_sha256"],
             "vpc_uuid": payload.get("vpc_uuid", "")}
 
 
@@ -457,14 +463,14 @@ def run(request_path, receipt_path):
         evidence_command = None
         bucket = os.environ.get("CHALK_BOOT_CHECK_EVIDENCE_BUCKET")
         if not bucket:
-            config = services.aws("ssm", "get-parameter", "--name", "/chalk/production/release/recorder.json")
+            config = services.aws("ssm", "get-parameter", "--name", os.environ.get("CHALK_RECORDER_RELEASE_CONFIG_PARAMETER") or f"/chalk/{live['ENVIRONMENT']}/release/recorder.json")
             bucket = json.loads(config["Parameter"]["Value"])["dispatcher"]["state_bucket"]
         require(re.fullmatch(r"[a-z0-9][a-z0-9-]{1,61}[a-z0-9]", bucket), "private evidence bucket must be a DNS-compatible name without dots")
         if bucket:
             public = services.aws("s3api", "get-public-access-block", "--bucket", bucket)["PublicAccessBlockConfiguration"]
             require(all(public.get(k) for k in ("BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets")), "guest evidence bucket must block public access")
             services.aws("s3api", "get-bucket-encryption", "--bucket", bucket)
-            credentials = json.loads(command(["aws", "--profile", services.profile, "configure", "export-credentials", "--format", "process"]))
+            credentials = json.loads(command(["aws", *(["--profile", services.profile] if services.profile else []), "configure", "export-credentials", "--format", "process"]))
             if credentials.get("Expiration"):
                 require(datetime.fromisoformat(credentials["Expiration"].replace("Z", "+00:00")).timestamp() > started + hard_seconds, "upload credentials expire before diagnostic deadline")
             key = "bootdiag/" + name + "/guest.json"
@@ -499,9 +505,9 @@ def run(request_path, receipt_path):
                 "evidence_path": str(directory / "provider.jsonl"),
                 "request": {"key": {"environment": live["ENVIRONMENT"], "role": request["role"]}, "name": name,
                             "owner_tag": live["OWNER_TAG"], "boot_generation": generation, "required_tags": tags,
-                            "release": {"release_id": request["release_id"], "image_id": request["image_id"], "image_digest": request["image_digest"],
+                            "release": {"archive": request["archive"], "release_id": request["release_id"], "image_id": request["image_id"], "image_digest": request["image_digest"],
                                         "region": request["region"], "size": request["size"], "firewall_id": created["id"],
-                                        "bootstrap_endpoint": live["BOOTSTRAP_ENDPOINT"], "gpu": False}}}
+                                        "bootstrap_endpoint": live["BOOTSTRAP_ENDPOINT"], "bootstrap_ca_base64": live["BOOTSTRAP_CA_BASE64"], "gpu": False}}}
         if evidence_command:
             base["evidence_boot_command"] = evidence_command
         all_firewalls = services.do("GET", "/firewalls?per_page=200")["firewalls"]

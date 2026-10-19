@@ -15,6 +15,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -91,7 +92,7 @@ func newGenerator(routes []httpapi.APIRouteContract) *generator {
 					"sessionOrBearer": map[string]any{
 						"type":        "http",
 						"scheme":      "bearer",
-						"description": "Preview placeholder for routes accepted by Chalk account auth or bearer/API-key auth.",
+						"description": "Tenant-scoped API key or local system bearer credential. User sessions are not accepted.",
 					},
 					"participantMediaBearer": map[string]any{
 						"type":         "http",
@@ -377,6 +378,10 @@ func (g *generator) schemaFromType(t reflect.Type, request bool, currentName str
 	if isOptionalInt64(t) {
 		return map[string]any{"type": []string{"integer", "null"}}
 	}
+	// The Space service rejects an explicit null for these durations.
+	if isOptionalInt32(t) {
+		return map[string]any{"type": "integer"}
+	}
 	if isOptionalCORSOrigins(t) {
 		return map[string]any{
 			"type":     "array",
@@ -466,6 +471,19 @@ func (g *generator) objectSchema(t reflect.Type, request bool, currentName strin
 
 func (g *generator) fieldSchema(schemaName string, fieldName string, field reflect.StructField, request bool) map[string]any {
 	fieldType := field.Type
+	if schemaName == "EpisodeAttendance" {
+		switch fieldName {
+		case "external_id":
+			return map[string]any{"type": "string"}
+		case "identity_kind":
+			return map[string]any{"type": "string", "enum": []string{"user", "agent", "guest"}}
+		case "left_reason":
+			return map[string]any{"anyOf": []map[string]any{
+				{"type": "string", "enum": []string{"left", "episode_ended"}},
+				{"type": "null"},
+			}}
+		}
+	}
 	if schemaName == "Recording" && fieldName == "source" {
 		return schemaReference("RecordingSource")
 	}
@@ -715,6 +733,7 @@ func isOptionalRequestField(t reflect.Type) bool {
 		isOptionalJSON(t) ||
 		isOptionalStrings(t) ||
 		isOptionalInt64(t) ||
+		isOptionalInt32(t) ||
 		isOptionalCORSOrigins(t) ||
 		isOptionalTimeRequest(t)
 }
@@ -732,7 +751,7 @@ func nullableHelperField(schemaName string, fieldName string, t reflect.Type) bo
 	if isOptionalInt64(t) {
 		return true
 	}
-	if isOptionalCORSOrigins(t) {
+	if isOptionalInt32(t) || isOptionalCORSOrigins(t) {
 		return false
 	}
 	return isOptionalJSON(t) || isOptionalTimeRequest(t)
@@ -764,6 +783,10 @@ func isOptionalStrings(t reflect.Type) bool {
 
 func isOptionalInt64(t reflect.Type) bool {
 	return dereference(t) == reflect.TypeOf(tenants.OptionalInt64{})
+}
+
+func isOptionalInt32(t reflect.Type) bool {
+	return dereference(t) == reflect.TypeOf(spaces.OptionalInt32{})
 }
 
 func isOptionalCORSOrigins(t reflect.Type) bool {

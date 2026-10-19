@@ -65,8 +65,6 @@ function createTransport(startSceneSubscription: () => Promise<void>): ChalkEmbe
     requestSnapshot: async () => undefined,
     clear: async () => ({ operationId: "operation", sceneId: "scene", revision: "revision" }),
     files: {
-      initiateUpload: async () => ({ uploadId: "upload", method: "PUT", uploadUrl: "https://example.com/upload", headers: {} }),
-      finalizeUpload: async () => undefined,
       getDownloadUrl: async () => ({ downloadUrl: "https://example.com/download" }),
     },
   };

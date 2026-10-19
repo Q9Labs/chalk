@@ -1,6 +1,6 @@
 ---
 name: chalk-sdk-web-release
-description: "used when user asks for shipping the SDK packages or the web application"
+description: "Ship SDK packages, the web application, or the managed API and Sync backend through release workflows."
 ---
 
 # Chalk SDK and Web Release
@@ -12,6 +12,18 @@ Ship only the requested targets. Use one pre-push gate, let each release workflo
 - `sdk`: Publish the synchronized public Chalk packages. Do not deploy the web application.
 - `web`: Deploy the web application through staging and then production. Do not publish packages.
 - `sdk+web`: Dispatch both workflows from the same release SHA before waiting for either one.
+- `managed`: Deploy API and Sync through the Release workflow. Follow [managed releases](../../../docs/managed-release.md).
+
+Managed backend changes and recorder input reloads must use `deploy_managed=true`
+and the intended `managed_environment`. Never use a build-only Release followed
+by a local SSM command, `release:recorder deploy`, or a non-dry-run managed
+controller. Local `--dry-run` remains available for read-only diagnosis.
+Use the last healthy manifest run as `stable_manifest_run_id`. To reconcile the
+already-live images through CI, use that manifest's own source SHA and run ID;
+the workflow retains the component images and creates a fresh release envelope.
+Require a successful managed job, its health/dispatcher proof artifact, and the
+environment's real-call proof before declaring the backend released. Never
+interpret a skipped managed job as deployment success.
 
 An SDK release without an explicit version uses the next patch version. A web request means staging first and then production only when the active thread explicitly approves production shipping.
 

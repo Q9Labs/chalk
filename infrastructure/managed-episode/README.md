@@ -7,6 +7,10 @@ PostgreSQL, and ephemeral Redis acceleration. They do not declare cloud
 resources. Host deployment stays off unless a release dispatch sets
 `deploy_managed`.
 
+Use the [managed release workflow](../../docs/managed-release.md) to deploy or
+reload inputs. Local controller dry runs are diagnostic only; never follow a
+build-only Release with a hand-run SSM deployment.
+
 The runtime is fail-closed. Application services publish only on host loopback
 and the private `chalk-runtime` network. `chalk-cloudflared` starts after API and
 Sync readiness, and the remote Tunnel must match

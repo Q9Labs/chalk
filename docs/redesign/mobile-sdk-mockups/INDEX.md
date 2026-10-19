@@ -1,8 +1,8 @@
 # Chalk mobile SDK mockups
 
-This set is an implementation reference for the Chalk React Native mobile flow. It covers Onboarding, Entrance, the default Space stage, and the progressive surfaces that reveal secondary collaboration and management actions.
+These twelve images are concept mockups, not application screenshots. They map a proposed mobile Space flow, from Onboarding and Entrance through the live Space and its secondary actions.
 
-All twelve PNGs were produced with the built-in imagegen mode in `ui-mockup` mode. The generation used the former `chalk-design-system-board.png` reference (removed) as Image 1, the core style reference, and `.private/design/light-mode-ideation-2026-08-03/01-warm-porcelain.png` as Image 2, a supporting style and layout reference. Neither source image was an edit target.
+The gallery shows each state and how it opens from the live Space. The shared prompt contract records the layout and copy constraints used across the set.
 
 ## Flow gallery
 

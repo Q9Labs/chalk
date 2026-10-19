@@ -7,14 +7,30 @@
 - Added a new React Native `Chalk` call view with `ChalkProps`: header, stage, dock, sheets, menus and toasts, drawn inside the safe area on phone and iPad.
 - Added `colorScheme` and `onColorSchemeChange` to `Chalk`, with the `ColorScheme` and `Palette` types. The call is dark by default.
 - Added call sounds and haptics to `Chalk`, with `soundsEnabled` and `onSoundsEnabledChange`.
+- `Chalk` lays out the call itself: Spotlight and Grid with justified rows and a "+N" tile, the active speaker moving into the spotlight, pinning, facehash tiles for cameras that are off, screen shares sized to their shape, and a shared board shown view-only. iPad uses the phone layout in 5.0.0.
+- Added `inviteLink` to `Chalk`. The dock adds an audio output button with route choice. More adds raise hand, reactions, copy and share link, recording for hosts, Chat with an unread dot, and the Layout switch. Tapping the call name opens call details with the link, a QR code, appearance and sounds.
+- `Chalk` adds the People and Chat sheet: waiting room, raised-hands queue, host mute and remove, chat with photos and files, a photo viewer and new-message notices.
+- `Chalk` covers the call while it joins or reconnects, and shows a page when the call is over: you left, the call ended, it couldn't connect, or the host removed you, each with Rejoin or Try again and Home.
+- Added `onOpenSettings` and `resumedAfterSettings` to `Chalk`. When the microphone or camera isn't allowed, the notice offers Open Settings, and after iOS restarts the app the call rejoins and says it can use the device now.
+- Added `ChalkArrival` for the screens before a call lets someone in: asking to join, turned away, and the call is full.
+- Added call notices for people joining and leaving, a host muting you, a request to unmute or turn on your camera, a new host, a share ending, recording starting and stopping, and a camera or microphone another app is using.
+- Added the `@q9labsai/chalk-react-native/ui` entry: `ChalkUI` with the call's theme, icons and primitives, so an app's own screens can match the call.
+- BREAKING: leaving no longer calls `onLeave` straight away. The "You left" page shows first, and its Home button calls `onLeave`.
 - Added the development-only `@q9labsai/chalk-react-native/dev` entry: `setMeasurementRegistry` reports each call surface's frame and declared style by testID, and `setDevScenario` opens a sheet or menu and draws fake video in tiles. Require it behind `__DEV__` so release bundles leave it out.
-- BREAKING: `@q9labsai/chalk-react-native` now needs `react-native-reanimated`, `react-native-worklets`, `react-native-gesture-handler`, `react-native-safe-area-context`, `expo-audio` and `expo-haptics` as peers, and no longer needs `@hugeicons/core-free-icons` or `@hugeicons/react-native`.
+- BREAKING: `@q9labsai/chalk-react-native` now needs `react-native-reanimated`, `react-native-worklets`, `react-native-gesture-handler`, `react-native-safe-area-context`, `expo-audio`, `expo-haptics`, `expo-clipboard`, `expo-document-picker` and `expo-file-system` as peers, and no longer needs `@hugeicons/core-free-icons` or `@hugeicons/react-native`.
+
+### Mobile app
+
+- The app is rebuilt on the new `Chalk` call view, with a new Home (recent calls, Start a call, Join with a link), name step, icon and splash, in Dark and Light.
+- A call that asks the host first shows "Asking to join" and joins once you're let in, with Ask again after a refusal and Try again when the call is full.
+- Pressing back on Android during a call keeps the call going.
+- Status pages and recent calls show the call's name, or the link's code for a call without one.
+- Phones can rotate, so the call works in landscape.
+- Fixed a crash on every join in iOS builds: Expo's Babel object-spread assumption read the Effect library's `Exit` getters too early.
 
 ### Removed (React Native)
 
-- Removed the React Native `Chalk` public export.
 - Removed the React Native `ChalkFeatures` public export.
-- Removed the React Native `ChalkProps` public export.
 - Removed the React Native `ChalkTheme` public export.
 - Removed the React Native `ChalkThemeTokens` public export.
 - Removed the React Native `SpaceLayout` public export.

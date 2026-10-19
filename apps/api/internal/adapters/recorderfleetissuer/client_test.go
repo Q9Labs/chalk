@@ -123,7 +123,7 @@ func TestNewWithHTTPClientRequiresExactHTTPSOrigin(t *testing.T) {
 
 func issuerBootstrapRequest() recorderfleet.BootstrapRequest {
 	return recorderfleet.BootstrapRequest{
-		Key:        recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture},
+		Key:        recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture},
 		ProviderID: "provider-7", NodeName: "capture-7", Region: "fra1", ReleaseID: "release-7",
 		ImageDigest: "sha256:" + strings.Repeat("a", 64), BootGeneration: 7,
 		InventoryDigest: strings.Repeat("b", 64),

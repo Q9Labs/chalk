@@ -2,10 +2,8 @@
 
 Go control-plane API for Chalk.
 
-The architecture follows
-[`../../docs/redesign/north-star.md`](../../docs/redesign/north-star.md):
-thin process wiring in `cmd/main.go`, HTTP as an inbound adapter, domain logic
-behind composable boundaries, and provider-specific details kept in adapters.
+Keep process wiring thin in `cmd/main.go`, HTTP in inbound adapters, domain
+logic behind composable boundaries, and provider-specific details in adapters.
 
 Public REST routes live under one `/v1` boundary. Operational routes stay
 unversioned:
@@ -58,14 +56,6 @@ Realtime app ID and secret.
 The ProviderBridge currently uses the Cloudflare SFU executor independently of
 the deployment default. When the bridge is enabled, its Realtime app ID and
 secret remain required.
-
-### Google OAuth
-
-Google sign-in activates only with a complete
-`CHALK_GOOGLE_OAUTH_CLIENT_ID`, `CHALK_GOOGLE_OAUTH_CLIENT_SECRET`, and
-`CHALK_GOOGLE_OAUTH_REDIRECT_URL` triplet. Generic local development may omit
-the triplet. Managed production requires it and requires the redirect URL to be
-`https://chalkmeet.com/api/auth/google/callback`.
 
 ### Production capabilities
 
@@ -256,18 +246,6 @@ apps/api/scripts/smoke-lifecycle.mjs
 a running API. `smoke-lifecycle.mjs` builds the binary, waits for `/healthz`,
 sends `SIGTERM`, and verifies the process exits cleanly within configurable
 startup/shutdown budgets.
-
-## Execution Trace Harness
-
-The local harness exercises the real router and services with traced test doubles at external boundaries. It explains flows; it does not prove live provider behavior or operational observability.
-
-```bash
-cd apps/api
-go run ./cmd/trace -scenario all -style tree
-go run ./cmd/trace -scenario tenant-create -format json
-```
-
-See [the harness guide](docs/execution-trace-harness.md) for scenarios and output options. Keep raw traces with private data out of Git.
 
 ## Local Observability And Performance
 

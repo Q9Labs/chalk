@@ -9,11 +9,16 @@ import (
 
 // ActiveAuthorizer binds a verified media subject to the authoritative live
 // participant generation already used by Sync token refresh.
-type ActiveAuthorizer struct {
-	repository synctokens.SubjectRepository
+type ActiveRepository interface {
+	synctokens.SubjectRepository
+	SetParticipantMediaConnection(context.Context, synctokens.SubjectKey, int64, string) error
 }
 
-func NewActiveAuthorizer(repository synctokens.SubjectRepository) ActiveAuthorizer {
+type ActiveAuthorizer struct {
+	repository ActiveRepository
+}
+
+func NewActiveAuthorizer(repository ActiveRepository) ActiveAuthorizer {
 	return ActiveAuthorizer{repository: repository}
 }
 
@@ -43,4 +48,15 @@ func (a ActiveAuthorizer) AuthorizeActiveParticipantGeneration(ctx context.Conte
 		current.EpisodeID == key.EpisodeID &&
 		current.ParticipantID == key.ParticipantID &&
 		current.ParticipantGeneration == generation, nil
+}
+
+// BindParticipantMediaConnection records the connection before returning its grant.
+// Old publications must disappear even when the replacement starts muted.
+func (a ActiveAuthorizer) BindParticipantMediaConnection(ctx context.Context, subject Subject) error {
+	if a.repository == nil || !validSubject(subject) {
+		return ErrInvalidSubject
+	}
+	return a.repository.SetParticipantMediaConnection(ctx, synctokens.SubjectKey{
+		TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID,
+	}, subject.ParticipantGeneration, subject.CloudflareConnectionID)
 }

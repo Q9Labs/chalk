@@ -1,16 +1,11 @@
 import { CaptureUpdateAction, MIME_TYPES, newElementWith } from "@excalidraw/excalidraw";
-import { sha256 } from "@noble/hashes/sha2.js";
-import { bytesToHex } from "@noble/hashes/utils.js";
 
-import type { BinaryFileData, BinaryFiles, DataURL, ExcalidrawImperativeAPI, FileId, OrderedExcalidrawElement } from "./types";
-import type { WhiteboardUploadInstructions } from "./wire";
+import type { BinaryFileData, DataURL, ExcalidrawImperativeAPI, FileId, OrderedExcalidrawElement } from "./types";
 
-export type WhiteboardFileSyncPhase = "idle" | "uploading" | "awaiting_remote_upload" | "downloading" | "error";
+export type WhiteboardFileSyncPhase = "idle" | "awaiting_remote_upload" | "downloading" | "error";
 
 export interface WhiteboardFileSyncState {
   phase: WhiteboardFileSyncPhase;
-  uploading: number;
-  uploadQueued: number;
   remotePendingUploads: number;
   downloading: number;
   downloadQueued: number;
@@ -18,33 +13,19 @@ export interface WhiteboardFileSyncState {
 }
 
 export interface WhiteboardFileTransfer {
-  readonly upload: (input: { readonly fileId: string; readonly mimeType: string; readonly byteLength: number; readonly sha256: string; readonly dataURL: string }) => Promise<void>;
   readonly download: (fileId: string) => Promise<{ readonly mimeType: string; readonly dataURL: string }>;
 }
 
 export interface WhiteboardFileTransferOptions {
   fileTransfer?: WhiteboardFileTransfer;
-  initiateUpload?: (input: { fileId: string; mimeType: string; byteLength: number; sha256: string }) => Promise<WhiteboardUploadInstructions>;
-  finalizeUpload?: (uploadId: string) => Promise<void>;
   presignDownload?: (fileId: string) => Promise<{ downloadUrl: string }>;
 }
 
 interface WhiteboardFilesSyncOptions extends WhiteboardFileTransferOptions {
   excalidrawAPI: ExcalidrawImperativeAPI;
-  uploadThrottleMs?: number;
   downloadThrottleMs?: number;
   onStateChange?: (state: WhiteboardFileSyncState) => void;
 }
-
-const dataURLToBlob = (dataURL: string) => {
-  const [header, base64] = dataURL.split(",", 2);
-  if (!header || !base64) throw new Error("invalid dataURL");
-
-  const match = /data:(.+?)(;base64)?$/i.exec(header);
-  const mimeType = match?.[1] ?? "application/octet-stream";
-  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-  return new Blob([bytes], { type: mimeType });
-};
 
 const blobToDataURL = (blob: Blob) =>
   new Promise<string>((resolve, reject) => {
@@ -53,8 +34,6 @@ const blobToDataURL = (blob: Blob) =>
     reader.onload = () => resolve(String(reader.result));
     reader.readAsDataURL(blob);
   });
-
-const sha256Hex = async (blob: Blob) => bytesToHex(sha256(new Uint8Array(await blob.arrayBuffer())));
 
 type OrderedImageElement = Extract<OrderedExcalidrawElement, { type: "image" }>;
 
@@ -95,38 +74,14 @@ const updateImageStatus = (excalidrawAPI: ExcalidrawImperativeAPI, fileId: strin
 };
 
 export class WhiteboardFilesSync {
-  private uploadTimer: ReturnType<typeof setTimeout> | null = null;
   private downloadTimer: ReturnType<typeof setTimeout> | null = null;
-  private uploadQueue: string[] = [];
   private downloadQueue: string[] = [];
-  private uploading = new Set<string>();
   private downloading = new Set<string>();
 
   constructor(private readonly opts: WhiteboardFilesSyncOptions) {}
 
   private remotePendingUploads = 0;
   private lastErrorAtMs: number | null = null;
-
-  handleLocalScene(elementsAll: readonly OrderedExcalidrawElement[], files: BinaryFiles): void {
-    for (const el of elementsAll) {
-      if (!isImageElement(el) || el.isDeleted) continue;
-      if (el.status !== "pending") continue;
-      if (!el.fileId) continue;
-
-      const fileId = String(el.fileId);
-      if (this.uploading.has(fileId)) continue;
-      if (this.uploadQueue.includes(fileId)) continue;
-
-      const file = files[fileId];
-      if (!file?.dataURL || !file?.mimeType) continue;
-
-      this.uploadQueue.push(fileId);
-    }
-
-    this.emitState();
-
-    if (this.uploadQueue.length > 0) this.scheduleUpload();
-  }
 
   handleRemoteScene(elementsAll: readonly OrderedExcalidrawElement[]): void {
     const haveFiles = this.opts.excalidrawAPI.getFiles();
@@ -156,25 +111,13 @@ export class WhiteboardFilesSync {
   }
 
   dispose(): void {
-    if (this.uploadTimer) clearTimeout(this.uploadTimer);
     if (this.downloadTimer) clearTimeout(this.downloadTimer);
-    this.uploadTimer = null;
     this.downloadTimer = null;
-    this.uploadQueue = [];
     this.downloadQueue = [];
-    this.uploading.clear();
     this.downloading.clear();
     this.remotePendingUploads = 0;
     this.lastErrorAtMs = null;
     this.emitState();
-  }
-
-  private scheduleUpload() {
-    if (this.uploadTimer) return;
-    this.uploadTimer = setTimeout(() => {
-      this.uploadTimer = null;
-      void this.processNextUpload();
-    }, this.opts.uploadThrottleMs ?? 300);
   }
 
   private scheduleDownload() {
@@ -183,56 +126,6 @@ export class WhiteboardFilesSync {
       this.downloadTimer = null;
       void this.processNextDownload();
     }, this.opts.downloadThrottleMs ?? 500);
-  }
-
-  private async processNextUpload() {
-    const fileId = this.uploadQueue.shift();
-    if (!fileId) return;
-    if (this.uploading.has(fileId)) return;
-
-    const files = this.opts.excalidrawAPI.getFiles();
-    const file = files[fileId];
-    if (!file?.dataURL || !file?.mimeType) {
-      if (this.uploadQueue.length > 0) this.scheduleUpload();
-      return;
-    }
-
-    this.uploading.add(fileId);
-    this.emitState();
-    try {
-      const blob = dataURLToBlob(file.dataURL);
-      const metadata = {
-        fileId,
-        mimeType: file.mimeType,
-        byteLength: blob.size,
-        sha256: await sha256Hex(blob),
-      };
-
-      if (this.opts.fileTransfer) {
-        await this.opts.fileTransfer.upload({ ...metadata, dataURL: file.dataURL });
-      } else {
-        const initiateUpload = requireOption(this.opts.initiateUpload, "initiateUpload");
-        const finalizeUpload = requireOption(this.opts.finalizeUpload, "finalizeUpload");
-        const instructions = await initiateUpload(metadata);
-
-        const res = await fetch(instructions.uploadUrl, {
-          method: instructions.method,
-          headers: instructions.headers,
-          body: blob,
-        });
-        if (!res.ok) throw new Error(`upload failed: ${res.status}`);
-
-        await finalizeUpload(instructions.uploadId);
-      }
-      updateImageStatus(this.opts.excalidrawAPI, fileId, "saved");
-    } catch {
-      this.lastErrorAtMs = Date.now();
-      updateImageStatus(this.opts.excalidrawAPI, fileId, "error");
-    } finally {
-      this.uploading.delete(fileId);
-      this.emitState();
-      if (this.uploadQueue.length > 0) this.scheduleUpload();
-    }
   }
 
   private async processNextDownload() {
@@ -286,17 +179,13 @@ export class WhiteboardFilesSync {
   }
 
   private emitState() {
-    const uploadQueued = this.uploadQueue.length;
-    const uploading = this.uploading.size;
     const downloadQueued = this.downloadQueue.length;
     const downloading = this.downloading.size;
 
-    const phase: WhiteboardFileSyncPhase = uploading > 0 || uploadQueued > 0 ? "uploading" : this.remotePendingUploads > 0 ? "awaiting_remote_upload" : downloading > 0 || downloadQueued > 0 ? "downloading" : this.lastErrorAtMs && Date.now() - this.lastErrorAtMs < 4_000 ? "error" : "idle";
+    const phase: WhiteboardFileSyncPhase = this.remotePendingUploads > 0 ? "awaiting_remote_upload" : downloading > 0 || downloadQueued > 0 ? "downloading" : this.lastErrorAtMs && Date.now() - this.lastErrorAtMs < 4_000 ? "error" : "idle";
 
     this.opts.onStateChange?.({
       phase,
-      uploading,
-      uploadQueued,
       remotePendingUploads: this.remotePendingUploads,
       downloading,
       downloadQueued,

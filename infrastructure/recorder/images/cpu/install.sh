@@ -2,30 +2,24 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: install.sh --bundle <absolute-tar-path> --bundle-sha256 <sha256> --bootstrap-ca <pem> --bootstrap-server-name <name>" >&2
+  echo "usage: install.sh --bundle <absolute-tar-path> --bundle-sha256 <sha256>" >&2
   exit 2
 }
 
 bundle_path=""
 bundle_sha256=""
-bootstrap_ca=""
-bootstrap_server_name=""
 while (($# > 0)); do
   case "$1" in
     --bundle) bundle_path="${2:-}"; shift 2 ;;
     --bundle-sha256) bundle_sha256="${2:-}"; shift 2 ;;
-    --bootstrap-ca) bootstrap_ca="${2:-}"; shift 2 ;;
-    --bootstrap-server-name) bootstrap_server_name="${2:-}"; shift 2 ;;
     *) usage ;;
   esac
 done
 
 [[ "$(id -u)" == "0" ]] || { echo "install must run as root" >&2; exit 1; }
 [[ "$bundle_path" == /* && -f "$bundle_path" ]] || usage
-[[ "$bootstrap_ca" == /* && -f "$bootstrap_ca" ]] || usage
 bundle_sha256="${bundle_sha256#sha256:}"
 [[ "$bundle_sha256" =~ ^[0-9a-f]{64}$ ]] || usage
-[[ "$bootstrap_server_name" =~ ^[A-Za-z0-9.-]{1,253}$ ]] || usage
 printf '%s  %s\n' "$bundle_sha256" "$bundle_path" | sha256sum --check --strict
 
 script_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -63,7 +57,6 @@ mv "$bundle_root" "$release_root"
 cp -a /opt/chalk-recorder/toolchains/node-22.23.2 "$image_root/opt/chalk-recorder/toolchains/node-22.23.2"
 ln -s "releases/$release_id" "$image_root/opt/chalk-recorder/current"
 ln -s /opt/chalk-recorder/current/bin/chalk-recorder-bootstrap "$image_root/usr/local/sbin/chalk-recorder-bootstrap"
-install -m 0644 "$bootstrap_ca" "$image_root/etc/chalk-recorder/bootstrap-ca.pem"
 for unit in chalk-recorder-capture.service chalk-recorder-render.service chalk-recorder-renew.service chalk-recorder-renew.timer; do
   install -m 0644 "$script_root/systemd/$unit" "$image_root/etc/systemd/system/$unit"
 done
@@ -100,9 +93,7 @@ jq -cS -s \
   --arg release_id "$release_id" \
   --arg source_commit "$source_commit" \
   --arg source_tree_sha256 "$source_tree_sha256" \
-  --arg bootstrap_server_name "$bootstrap_server_name" \
-  --arg bootstrap_ca_sha256 "$(sha256sum "$bootstrap_ca" | cut -d' ' -f1)" \
-  '{schema_version:"chalk_recorder_cpu_image.v1",release_id:$release_id,source_commit:$source_commit,source_tree_sha256:$source_tree_sha256,profile:"cpu-libx264-frame2",bootstrap_server_name:$bootstrap_server_name,bootstrap_ca_sha256:$bootstrap_ca_sha256,files:.}' \
+  '{schema_version:"chalk_recorder_cpu_image.v2",release_id:$release_id,source_commit:$source_commit,source_tree_sha256:$source_tree_sha256,profile:"cpu-libx264-frame2",files:.}' \
   "$file_entries" >"$image_root/opt/chalk-recorder/image-manifest.json"
 image_digest="sha256:$(sha256sum "$image_root/opt/chalk-recorder/image-manifest.json" | cut -d' ' -f1)"
 
@@ -112,7 +103,7 @@ CHALK_RECORDER_INSTALLED_RELEASE_ID=$release_id
 CHALK_RECORDER_INSTALLED_IMAGE_DIGEST=$image_digest
 CHALK_RECORDER_IMAGE_MANIFEST=/opt/chalk-recorder/image-manifest.json
 CHALK_RECORDER_BOOTSTRAP_CA_FILE=/etc/chalk-recorder/bootstrap-ca.pem
-CHALK_RECORDER_BOOTSTRAP_SERVER_NAME=$bootstrap_server_name
+CHALK_RECORDER_BOOTSTRAP_SERVER_NAME=unconfigured.invalid
 CHALK_RECORDER_IDENTITY_DIRECTORY=/etc/chalk-recorder/identity
 CHALK_RECORDER_WORKER_ENV_FILE=/etc/chalk-recorder/worker.env
 CHALK_RECORDER_NODE_ENV_FILE=/etc/chalk-recorder/node.env
@@ -133,4 +124,4 @@ chmod 0755 "/opt/chalk-recorder/releases/$release_id/bin/recorder-capture" "/opt
 
 systemctl daemon-reload
 systemctl disable chalk-recorder-capture.service chalk-recorder-render.service chalk-recorder-renew.timer >/dev/null 2>&1 || true
-printf 'release_id=%s\nsource_commit=%s\nsource_tree_sha256=sha256:%s\nbundle_sha256=sha256:%s\nimage_manifest_digest=%s\nbootstrap_server_name=%s\n' "$release_id" "$source_commit" "$source_tree_sha256" "$bundle_sha256" "$image_digest" "$bootstrap_server_name"
+printf 'release_id=%s\nsource_commit=%s\nsource_tree_sha256=sha256:%s\nbundle_sha256=sha256:%s\nimage_manifest_digest=%s\n' "$release_id" "$source_commit" "$source_tree_sha256" "$bundle_sha256" "$image_digest"

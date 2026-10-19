@@ -294,15 +294,15 @@ outcomes:
     area: sdk_and_embedding
     state: unknown
     summary: >-
-      OpenAPI and the generated client cover integrations, API keys, status and attachments, but
-      nobody has compared every public route against them.
+      OpenAPI and the generated client cover API keys and attachments, but nobody has compared
+      every public route against them.
     priority: P1
     size: S
     remaining:
       - >-
         Compare router.go against OpenAPI and the generated client, and mark internal routes as
         internal.
-      - Call one Tenant-scoped integration route and one attachment route through the public client.
+      - Call one Tenant-scoped API key route and one attachment route through the public client.
     uncertainty: No full route comparison has been made.
     theory: theory.md#product-goals
     code:

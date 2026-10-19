@@ -1,6 +1,8 @@
 {
   "entry": [
     "gate.config.ts",
+    "e2e.config.ts",
+    "tests/*.e2e.ts",
     "**/*.test.ts",
     "**/*.test.tsx",
     "**/*.test.mjs",

@@ -53,6 +53,10 @@ type rawCommandConfig struct {
 	reconcileInterval string
 	releaseID         string
 	imageID           string
+	archiveBucket     string
+	archiveKey        string
+	archiveSHA256     string
+	archiveRegion     string
 	imageDigest       string
 	bakedServerName   string
 	nameImageDigest   string
@@ -60,6 +64,7 @@ type rawCommandConfig struct {
 	size              string
 	firewallID        string
 	bootstrapEndpoint string
+	bootstrapCABase64 string
 	gpu               string
 	sshKeyIDs         string
 }
@@ -93,6 +98,10 @@ func loadCommandConfig(args []string, getenv func(string) string) (commandConfig
 		reconcileInterval: envOrDefault(getenv, "CHALK_RECORDER_FLEET_RECONCILE_INTERVAL", "5s"),
 		releaseID:         getenv("CHALK_RECORDER_FLEET_RELEASE_ID"),
 		imageID:           getenv("CHALK_RECORDER_FLEET_IMAGE_ID"),
+		archiveBucket:     getenv("CHALK_RECORDER_FLEET_ARCHIVE_BUCKET"),
+		archiveKey:        getenv("CHALK_RECORDER_FLEET_ARCHIVE_KEY"),
+		archiveSHA256:     getenv("CHALK_RECORDER_FLEET_ARCHIVE_SHA256"),
+		archiveRegion:     getenv("CHALK_RECORDER_FLEET_ARCHIVE_REGION"),
 		imageDigest:       getenv("CHALK_RECORDER_FLEET_IMAGE_DIGEST"),
 		bakedServerName:   getenv("CHALK_RECORDER_FLEET_BOOTSTRAP_SERVER_NAME"),
 		nameImageDigest:   getenv("CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST"),
@@ -100,6 +109,7 @@ func loadCommandConfig(args []string, getenv func(string) string) (commandConfig
 		size:              getenv("CHALK_RECORDER_FLEET_SIZE"),
 		firewallID:        getenv("CHALK_RECORDER_FLEET_FIREWALL_ID"),
 		bootstrapEndpoint: getenv("CHALK_RECORDER_FLEET_BOOTSTRAP_ENDPOINT"),
+		bootstrapCABase64: getenv("CHALK_RECORDER_FLEET_BOOTSTRAP_CA_BASE64"),
 		gpu:               getenv("CHALK_RECORDER_FLEET_GPU"),
 		sshKeyIDs:         getenv("CHALK_RECORDER_FLEET_SSH_KEY_IDS"),
 	}
@@ -130,6 +140,10 @@ func loadCommandConfig(args []string, getenv func(string) string) (commandConfig
 	flags.StringVar(&raw.releaseID, "release-id", raw.releaseID, "immutable recorder release identifier")
 	flags.StringVar(&raw.imageID, "image-id", raw.imageID, "immutable DigitalOcean image ID")
 	flags.StringVar(&raw.imageDigest, "image-digest", raw.imageDigest, "attested sha256 image digest")
+	flags.StringVar(&raw.archiveBucket, "archive-bucket", raw.archiveBucket, "recorder artifact bucket")
+	flags.StringVar(&raw.archiveKey, "archive-key", raw.archiveKey, "SHA256-addressed recorder archive key")
+	flags.StringVar(&raw.archiveSHA256, "archive-sha256", raw.archiveSHA256, "recorder archive SHA256")
+	flags.StringVar(&raw.archiveRegion, "archive-region", raw.archiveRegion, "artifact bucket AWS region")
 	flags.StringVar(&raw.bakedServerName, "bootstrap-server-name", raw.bakedServerName, "baked bootstrap TLS server name from the image manifest")
 	flags.StringVar(&raw.nameImageDigest, "bootstrap-name-image-digest", raw.nameImageDigest, "image digest paired with the baked bootstrap server name")
 	flags.StringVar(&raw.region, "region", raw.region, "DigitalOcean region")
@@ -211,9 +225,10 @@ func (raw rawCommandConfig) build() (commandConfig, error) {
 		DemandMaxAge: demandMaxAge, ObservationMaxAge: observationMaxAge,
 		StartupTimeout: startupTimeout, DrainTimeout: drainTimeout, HealthRefresh: healthRefresh,
 		Release: recorderfleet.ReleaseSpec{
+			Archive:   recorderfleet.ArchiveSpec{Bucket: trim(raw.archiveBucket), Key: trim(raw.archiveKey), SHA256: trim(raw.archiveSHA256), Region: trim(raw.archiveRegion)},
 			ReleaseID: trim(raw.releaseID), ImageID: imageID, ImageDigest: trim(raw.imageDigest),
 			Region: trim(raw.region), Size: trim(raw.size), FirewallID: trim(raw.firewallID),
-			BootstrapEndpoint: trim(raw.bootstrapEndpoint), GPU: gpu,
+			BootstrapEndpoint: trim(raw.bootstrapEndpoint), BootstrapCABase64: trim(raw.bootstrapCABase64), GPU: gpu,
 		},
 	}
 	if err := fleetConfig.Validate(); err != nil {

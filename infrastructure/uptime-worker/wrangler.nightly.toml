@@ -1,0 +1,13 @@
+name = "chalk-nightly-uptime-worker"
+main = "src/index.ts"
+compatibility_date = "2026-07-05"
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[vars]
+CHALK_ENVIRONMENT = "nightly"
+API_BASE_URL = "https://nightly-api.chalkmeet.com"
+SYNC_BASE_URL = "https://nightly-sync.chalkmeet.com"
+
+# Bind this Worker's own DISCORD_WEBHOOK_URL and optional OPS_MANUAL_RUN_TOKEN.

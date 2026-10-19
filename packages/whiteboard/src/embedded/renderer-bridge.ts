@@ -75,10 +75,6 @@ export class ChalkEmbeddedWhiteboardRendererBridge {
     return this.#request<WhiteboardCommit>("clear", {});
   }
 
-  uploadFile(input: { readonly fileId: string; readonly mimeType: string; readonly byteLength: number; readonly sha256: string; readonly dataURL: string }): Promise<void> {
-    return this.#request<void>("file_write", input);
-  }
-
   downloadFile(fileId: string): Promise<{ readonly mimeType: string; readonly dataURL: string }> {
     return this.#request("file_read", { fileId });
   }

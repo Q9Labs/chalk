@@ -58,6 +58,7 @@ export function CallScreen({ apiBaseURL, call, preferences, onRemember, onClose,
         client={client}
         colorScheme={preferences.colorScheme}
         displayName={arrival.displayName}
+        inviteLink={route.inviteLink}
         onColorSchemeChange={preferences.setColorScheme}
         onLeave={() => {
           remember.current();

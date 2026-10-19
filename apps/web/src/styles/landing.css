@@ -1,3 +1,21 @@
+.eyebrow {
+  margin-bottom: 9px;
+  color: var(--ink-3);
+  font: 500 11px var(--font-mono);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.eyebrow {
+  color: #97a39b;
+}
+
+.eyebrow {
+  margin-bottom: 6px;
+  color: var(--app-ink-3);
+  font-size: 10px;
+}
+
 /* ===========================================================================
    The marketing page: shell, shared primitives, nav, hero, closing, footer.
 
@@ -172,20 +190,6 @@ body:has(.site) {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.nav-sign-in {
-  padding: 9px 18px;
-  border: 1px solid var(--site-line-strong);
-  border-radius: var(--radius-pill);
-  background: var(--site-paper);
-  color: var(--site-ink);
-  font-size: 14.5px;
-  font-weight: 700;
-}
-
-.nav-sign-in:hover {
-  border-color: var(--site-ink-3);
 }
 
 .nav-cta {
@@ -633,7 +637,6 @@ body:has(.site) {
   }
 
   .nav-links,
-  .nav-sign-in,
   .nav-cta {
     display: none;
   }

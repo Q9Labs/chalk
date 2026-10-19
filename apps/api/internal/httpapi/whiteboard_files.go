@@ -9,25 +9,17 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/whiteboardfiles"
 )
 
 var (
 	apiErrorWhiteboardInvalidFile        = APIError{Status: http.StatusBadRequest, Code: "whiteboard.invalid_file", Message: "Invalid whiteboard file request"}
-	apiErrorWhiteboardSceneChanged       = APIError{Status: http.StatusConflict, Code: "whiteboard.scene_changed", Message: "Whiteboard scene changed"}
-	apiErrorWhiteboardFileExists         = APIError{Status: http.StatusConflict, Code: "whiteboard.file_exists", Message: "Whiteboard file already exists"}
-	apiErrorWhiteboardUploadNotFound     = APIError{Status: http.StatusNotFound, Code: "whiteboard.upload_not_found", Message: "Whiteboard upload not found"}
-	apiErrorWhiteboardUploadExpired      = APIError{Status: http.StatusGone, Code: "whiteboard.upload_expired", Message: "Whiteboard upload expired"}
-	apiErrorWhiteboardUploadNotReady     = APIError{Status: http.StatusConflict, Code: "whiteboard.upload_not_ready", Message: "Whiteboard upload is not ready"}
 	apiErrorWhiteboardFileNotFound       = APIError{Status: http.StatusNotFound, Code: "whiteboard.file_not_found", Message: "Whiteboard file not found"}
 	apiErrorWhiteboardFileTransfer       = APIError{Status: http.StatusBadGateway, Code: "whiteboard.file_transfer_failed", Message: "Whiteboard file transfer failed"}
 	apiErrorWhiteboardStorageUnavailable = APIError{Status: http.StatusServiceUnavailable, Code: "whiteboard.storage_unavailable", Message: "Whiteboard file storage unavailable"}
 )
 
 type WhiteboardFileService interface {
-	Initiate(context.Context, whiteboardfiles.InitiateInput) (whiteboardfiles.UploadInstructions, error)
-	Finalize(context.Context, whiteboardfiles.Subject, utilities.ID) error
 	Download(context.Context, whiteboardfiles.Subject, string) (whiteboardfiles.Download, error)
 }
 
@@ -35,32 +27,8 @@ type WhiteboardParticipantVerifier interface {
 	VerifyWhiteboardParticipant(context.Context, string) (whiteboardfiles.Subject, bool, error)
 }
 
-type initiateWhiteboardFileUploadBody struct {
-	SceneID    string `json:"sceneId"`
-	FileID     string `json:"fileId"`
-	MIMEType   string `json:"mimeType"`
-	ByteLength int64  `json:"byteLength"`
-	SHA256     string `json:"sha256"`
-}
-
-type initiateWhiteboardFileUploadRequest struct {
-	Body initiateWhiteboardFileUploadBody
-}
-
-type finalizeWhiteboardFileUploadRequest struct {
-	UploadID utilities.ID
-}
-
 type downloadWhiteboardFileRequest struct {
 	FileID string
-}
-
-type whiteboardFileUploadResponse struct {
-	UploadID  string            `json:"uploadId"`
-	Method    string            `json:"method"`
-	UploadURL string            `json:"uploadUrl"`
-	Headers   map[string]string `json:"headers"`
-	ExpiresAt string            `json:"expiresAt"`
 }
 
 type whiteboardFileDownloadResponse struct {
@@ -79,74 +47,8 @@ func mountWhiteboardFileRoutes(r chi.Router, service WhiteboardFileService, veri
 func whiteboardFileEndpoints(service WhiteboardFileService, verifier WhiteboardParticipantVerifier) []RouteEndpoint {
 	auth := requireWhiteboardParticipant(verifier)
 	return []RouteEndpoint{
-		initiateWhiteboardFileUploadEndpoint(service).Middleware(auth),
-		finalizeWhiteboardFileUploadEndpoint(service).Middleware(auth),
 		downloadWhiteboardFileEndpoint(service).Middleware(auth),
 	}
-}
-
-func initiateWhiteboardFileUploadEndpoint(service WhiteboardFileService) Endpoint[initiateWhiteboardFileUploadRequest, whiteboardFileUploadResponse] {
-	return Post(
-		"/v1/whiteboard/files/uploads",
-		"/whiteboard/files/uploads",
-		"initiateWhiteboardFileUpload",
-		decodeInitiateWhiteboardFileUploadRequest,
-		func(ctx context.Context, request initiateWhiteboardFileUploadRequest) (whiteboardFileUploadResponse, error) {
-			subject, ok := whiteboardSubject(ctx)
-			if !ok {
-				return whiteboardFileUploadResponse{}, apiErrorUnauthenticated
-			}
-			if service == nil {
-				return whiteboardFileUploadResponse{}, apiErrorServiceUnavailable
-			}
-			sceneID, err := utilities.ParseID(request.Body.SceneID)
-			if err != nil {
-				return whiteboardFileUploadResponse{}, apiErrorWhiteboardInvalidFile
-			}
-			result, err := service.Initiate(ctx, whiteboardfiles.InitiateInput{
-				Subject: subject, SceneID: sceneID, FileID: request.Body.FileID,
-				MIMEType: request.Body.MIMEType, ByteLength: request.Body.ByteLength, SHA256: request.Body.SHA256,
-			})
-			if err != nil {
-				return whiteboardFileUploadResponse{}, err
-			}
-			return whiteboardFileUploadResponse{
-				UploadID: result.UploadID.String(), Method: result.Method, UploadURL: result.URL,
-				Headers: result.Headers, ExpiresAt: result.ExpiresAt.UTC().Format(time.RFC3339),
-			}, nil
-		},
-	).
-		Auth(APIAuthParticipantSync).
-		RateLimit(authenticatedWriteRateLimit).
-		RequestBody("InitiateWhiteboardFileUploadRequest", initiateWhiteboardFileUploadBody{}).
-		Responds(http.StatusCreated, "WhiteboardFileUpload", whiteboardFileUploadResponse{}).
-		Errors(whiteboardFileErrors()...).
-		MapErrors(whiteboardFileAPIError)
-}
-
-func finalizeWhiteboardFileUploadEndpoint(service WhiteboardFileService) Endpoint[finalizeWhiteboardFileUploadRequest, noResponse] {
-	return Post(
-		"/v1/whiteboard/files/uploads/{uploadId}/finalize",
-		"/whiteboard/files/uploads/{uploadId}/finalize",
-		"finalizeWhiteboardFileUpload",
-		decodeFinalizeWhiteboardFileUploadRequest,
-		func(ctx context.Context, request finalizeWhiteboardFileUploadRequest) (noResponse, error) {
-			subject, ok := whiteboardSubject(ctx)
-			if !ok {
-				return noResponse{}, apiErrorUnauthenticated
-			}
-			if service == nil {
-				return noResponse{}, apiErrorServiceUnavailable
-			}
-			return noResponse{}, service.Finalize(ctx, subject, request.UploadID)
-		},
-	).
-		Auth(APIAuthParticipantSync).
-		RateLimit(authenticatedWriteRateLimit).
-		Parameters(whiteboardUploadIDParameter()).
-		RespondsNoBody(http.StatusNoContent).
-		Errors(whiteboardFileErrors()...).
-		MapErrors(whiteboardFileAPIError)
 }
 
 func downloadWhiteboardFileEndpoint(service WhiteboardFileService) Endpoint[downloadWhiteboardFileRequest, whiteboardFileDownloadResponse] {
@@ -207,19 +109,6 @@ func requireWhiteboardParticipant(verifier WhiteboardParticipantVerifier) func(h
 	}
 }
 
-func decodeInitiateWhiteboardFileUploadRequest(request *http.Request) (initiateWhiteboardFileUploadRequest, error) {
-	body, err := decodeJSONBody[initiateWhiteboardFileUploadBody](request)
-	return initiateWhiteboardFileUploadRequest{Body: body}, err
-}
-
-func decodeFinalizeWhiteboardFileUploadRequest(request *http.Request) (finalizeWhiteboardFileUploadRequest, error) {
-	uploadID, err := utilities.ParseID(chi.URLParam(request, "uploadId"))
-	if err != nil {
-		return finalizeWhiteboardFileUploadRequest{}, apiErrorWhiteboardInvalidFile
-	}
-	return finalizeWhiteboardFileUploadRequest{UploadID: uploadID}, nil
-}
-
 func decodeDownloadWhiteboardFileRequest(request *http.Request) (downloadWhiteboardFileRequest, error) {
 	fileID := chi.URLParam(request, "fileId")
 	if strings.TrimSpace(fileID) == "" || len(fileID) > 128 {
@@ -233,10 +122,6 @@ func whiteboardSubject(ctx context.Context) (whiteboardfiles.Subject, bool) {
 	return subject, ok
 }
 
-func whiteboardUploadIDParameter() APIParameterContract {
-	return APIParameterContract{Name: "uploadId", In: "path", Type: "string", Required: true}
-}
-
 func whiteboardFileIDParameter() APIParameterContract {
 	return APIParameterContract{Name: "fileId", In: "path", Type: "string", Required: true, MinLength: 1, MaxLength: 128}
 }
@@ -244,9 +129,7 @@ func whiteboardFileIDParameter() APIParameterContract {
 func whiteboardFileErrors() []APIError {
 	return []APIError{
 		apiErrorUnauthenticated, apiErrorForbidden, apiErrorWhiteboardInvalidFile,
-		apiErrorWhiteboardSceneChanged, apiErrorWhiteboardFileExists,
-		apiErrorWhiteboardUploadNotFound, apiErrorWhiteboardUploadExpired,
-		apiErrorWhiteboardUploadNotReady, apiErrorWhiteboardFileNotFound,
+		apiErrorWhiteboardFileNotFound,
 		apiErrorWhiteboardFileTransfer, apiErrorWhiteboardStorageUnavailable,
 		apiErrorRateLimited, apiErrorServiceUnavailable,
 	}
@@ -258,16 +141,6 @@ func whiteboardFileAPIError(err error) (APIError, bool) {
 		return apiErrorWhiteboardInvalidFile, true
 	case errors.Is(err, whiteboardfiles.ErrPermissionDenied):
 		return apiErrorForbidden, true
-	case errors.Is(err, whiteboardfiles.ErrSceneChanged):
-		return apiErrorWhiteboardSceneChanged, true
-	case errors.Is(err, whiteboardfiles.ErrFileExists):
-		return apiErrorWhiteboardFileExists, true
-	case errors.Is(err, whiteboardfiles.ErrUploadNotFound):
-		return apiErrorWhiteboardUploadNotFound, true
-	case errors.Is(err, whiteboardfiles.ErrUploadExpired):
-		return apiErrorWhiteboardUploadExpired, true
-	case errors.Is(err, whiteboardfiles.ErrUploadNotReady):
-		return apiErrorWhiteboardUploadNotReady, true
 	case errors.Is(err, whiteboardfiles.ErrFileNotFound):
 		return apiErrorWhiteboardFileNotFound, true
 	case errors.Is(err, whiteboardfiles.ErrFileTransferFailed), errors.Is(err, objectstorage.ErrObjectNotFound), errors.Is(err, objectstorage.ErrObjectAlreadyExists):

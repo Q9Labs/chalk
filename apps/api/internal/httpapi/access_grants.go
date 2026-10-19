@@ -19,6 +19,7 @@ type ParticipantMediaIssuer interface {
 
 type ParticipantGenerationAuthorizer interface {
 	AuthorizeActiveParticipantGeneration(context.Context, synctokens.SubjectKey, int64) (bool, error)
+	BindParticipantMediaConnection(context.Context, accessgrants.Subject) error
 }
 
 type accessGrantSubjectResponse struct {
@@ -146,6 +147,11 @@ func issueAccessGrantEndpoint(
 			mediaCredential, err := mediaIssuer.Issue(ctx, subject)
 			if err != nil {
 				return accessGrantResponse{}, err
+			}
+			if request.Body.ReplaceMediaConnection {
+				if err := generations.BindParticipantMediaConnection(ctx, subject); err != nil {
+					return accessGrantResponse{}, err
+				}
 			}
 			response := newAccessGrantResponse(subject, syncCredential, mediaCredential, join)
 
