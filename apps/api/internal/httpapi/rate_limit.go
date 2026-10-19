@@ -9,9 +9,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
+)
+
+const (
+	serviceReadCeiling  = 6000
+	serviceWriteCeiling = 1200
 )
 
 var (
@@ -39,6 +46,8 @@ var (
 
 type RateLimitOptions struct {
 	DisableAuthenticated bool
+	ServiceReadCeiling   int
+	ServiceWriteCeiling  int
 	Limiter              ratelimit.Limiter
 	Now                  func() time.Time
 	ClientIP             ClientIPOptions
@@ -75,14 +84,41 @@ func rateLimit(options RateLimitOptions, policy ratelimit.Policy) func(http.Hand
 				now = options.Now
 			}
 
-			decision := options.Limiter.Allow(r.Context(), rateLimitKey(r, options.ClientIP), policy, now())
+			key := rateLimitKey(r, options.ClientIP)
+			principal, _ := authentication.PrincipalFromContext(r.Context())
+			_, participant := accessgrants.SubjectFromContext(r.Context())
+			tenantID, err := utilities.ParseID(chi.URLParam(r, "tenant_id"))
+			if !participant && principal.Kind == authentication.PrincipalService && err == nil &&
+				(policy.Name == ratelimit.PolicyNameAuthenticatedRead || policy.Name == ratelimit.PolicyNameAuthenticatedWrite) {
+				ceiling := policy
+				ceiling.Name += ".service_ceiling"
+				ceiling.Limit = options.ServiceReadCeiling
+				if ceiling.Limit <= 0 {
+					ceiling.Limit = serviceReadCeiling
+				}
+				if policy.Name == ratelimit.PolicyNameAuthenticatedWrite {
+					ceiling.Limit = options.ServiceWriteCeiling
+					if ceiling.Limit <= 0 {
+						ceiling.Limit = serviceWriteCeiling
+					}
+				}
+				if policy.Limit > 0 {
+					decision := options.Limiter.Allow(r.Context(), key, ceiling, now())
+					if !decision.Allowed {
+						writeRateLimitHeaders(w, ceiling, decision)
+						writeRateLimited(w, decision)
+						return
+					}
+				}
+				key += ":tenant:" + tenantID.String()
+			}
+			decision := options.Limiter.Allow(r.Context(), key, policy, now())
 			writeRateLimitHeaders(w, policy, decision)
-			if decision.Allowed {
-				next.ServeHTTP(w, r)
+			if !decision.Allowed {
+				writeRateLimited(w, decision)
 				return
 			}
-
-			writeRateLimited(w, decision)
+			next.ServeHTTP(w, r)
 		})
 	}
 }
