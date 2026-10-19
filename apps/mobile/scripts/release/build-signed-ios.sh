@@ -221,6 +221,11 @@ if [[ "$embedded_screen_share_uuid" != "$expected_screen_share_profile_uuid" || 
   exit 1
 fi
 
+if [[ -z $(find "$app_path" -path '*/ChalkWhiteboard.bundle/chalk-whiteboard/index.html' -print -quit) ]]; then
+  echo "The Chalk IPA does not contain the embedded whiteboard renderer." >&2
+  exit 1
+fi
+
 version_name=$(xcodebuild -workspace "$mobile_root/ios/Chalk.xcworkspace" -scheme Chalk -configuration Release -showBuildSettings 2>/dev/null | sed -n 's/^[[:space:]]*MARKETING_VERSION = //p' | head -n 1)
 build_number=$(xcodebuild -workspace "$mobile_root/ios/Chalk.xcworkspace" -scheme Chalk -configuration Release -showBuildSettings 2>/dev/null | sed -n 's/^[[:space:]]*CURRENT_PROJECT_VERSION = //p' | head -n 1)
 mkdir -p "$output_dir"
