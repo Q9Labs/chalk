@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { spawn, execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, writeFile, rm, readFile } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, readFile, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, relative } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -42,7 +42,8 @@ async function tenantFor(person) {
 function sql(statement) {
   return execFileSync("psql", [process.env.CHALK_DATABASE_URL, "-v", "ON_ERROR_STOP=1", "-Atqc", statement], { encoding: "utf8" }).trim();
 }
-const sandbox = await mkdtemp(resolve(tmpdir(), "chalk-dashboard-pages-"));
+// macOS tmpdir() sits behind the /var symlink; the fixture imports below are relative to the real path.
+const sandbox = await realpath(await mkdtemp(resolve(tmpdir(), "chalk-dashboard-pages-")));
 const web = resolve(import.meta.dirname, "../..");
 let pages;
 let watchdog;
