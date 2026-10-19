@@ -1,0 +1,70 @@
+name: Temporary iOS Release launch probe
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/tmp-ios-release-launch.yml
+
+permissions:
+  contents: read
+
+jobs:
+  launch:
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      CHALK_APP_VARIANT: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 12.8.1
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @q9labsai/chalk-mobile run prepare:native-dependencies
+      - working-directory: apps/mobile
+        run: pod install --project-directory=ios
+      - name: Build Release for the simulator
+        run: >-
+          xcodebuild
+          -workspace apps/mobile/ios/Chalk.xcworkspace
+          -scheme Chalk
+          -configuration Release
+          -sdk iphonesimulator
+          -destination "generic/platform=iOS Simulator"
+          -derivedDataPath "$RUNNER_TEMP/dd"
+          CODE_SIGNING_ALLOWED=NO
+          build | tail -n 40
+      - name: Launch and watch
+        run: |
+          set -x
+          out="$RUNNER_TEMP/probe"; mkdir -p "$out"
+          app=$(find "$RUNNER_TEMP/dd/Build/Products/Release-iphonesimulator" -maxdepth 1 -name 'Chalk.app')
+          find "$app" -path '*ChalkWhiteboard.bundle/chalk-whiteboard/index.html' | tee "$out/whiteboard.txt"
+          head -c 16 "$app/main.jsbundle" | xxd | tee "$out/bundle-magic.txt"
+          ls "$app/Frameworks" | tee "$out/frameworks.txt"
+          runtime=$(xcrun simctl list runtimes -j | jq -r '[.runtimes[] | select(.platform=="iOS" and .isAvailable)] | last | .identifier')
+          type=$(xcrun simctl list devicetypes -j | jq -r '[.devicetypes[] | select(.name|test("^iPhone 1[6-9]( Pro)?$"))] | last | .identifier')
+          udid=$(xcrun simctl create probe "$type" "$runtime")
+          xcrun simctl boot "$udid"; xcrun simctl bootstatus "$udid"
+          xcrun simctl install "$udid" "$app"
+          bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")
+          (xcrun simctl spawn "$udid" log stream --level debug --style compact --predicate 'process == "Chalk" OR subsystem CONTAINS "facebook" OR eventMessage CONTAINS[c] "Chalk"' > "$out/log-stream.txt" 2>&1 &)
+          sleep 3
+          timeout 40 xcrun simctl launch --console-pty "$udid" "$bundle_id" > "$out/console.txt" 2>&1 || echo "launch exit $?"
+          sleep 5
+          xcrun simctl spawn "$udid" launchctl list | grep -i "$bundle_id" | tee "$out/running.txt" || echo "NOT RUNNING" | tee "$out/running.txt"
+          xcrun simctl io "$udid" screenshot "$out/screen.png"
+          xcrun simctl spawn "$udid" log show --last 3m --style compact --predicate 'process == "Chalk"' > "$out/log-show.txt" 2>&1 || true
+          cp -R ~/Library/Logs/DiagnosticReports "$out/diag" 2>/dev/null || true
+          tail -n 80 "$out/console.txt"; grep -iE "fatal|exception|abort|error|terminat" "$out/log-show.txt" | head -60
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ios-release-launch-probe
+          path: ${{ runner.temp }}/probe
+          if-no-files-found: warn
+          retention-days: 3
