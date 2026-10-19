@@ -1,10 +1,11 @@
 import { strict as assert } from "node:assert";
 import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { runInNewContext } from "node:vm";
 
 // Execute the built service worker at its browser API boundary, including the
 // offline path. Cache API deliberately does not honor HTTP no-store by itself.
-const source = await readFile(process.env.DASHBOARD_TEST_SW_PATH ?? new URL("../../dist/client/sw.js", import.meta.url), "utf8");
+const source = await readFile(process.env.DASHBOARD_TEST_SW_PATH ?? resolve(import.meta.dirname, "../../dist/client/sw.js"), "utf8");
 const handlers = new Map();
 const stored = new Map();
 let offline = false;
