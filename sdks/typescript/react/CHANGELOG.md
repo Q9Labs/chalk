@@ -12,6 +12,7 @@
 - Add call-link QR sharing, diagnostics copy, keyboard shortcuts, and optional `Chalk`/`SpaceView` `shareUrl` and `onReportProblem` callbacks. Rebuild the call dock with device and screen-source split controls, tab-audio capture, and phone More actions.
 - Add optional diagnostics, people, connection-warning and shortcut inputs to `SpaceHeader`; `ChalkPopover.tooltip` composes a tooltip with its trigger. Call reaction pickers accept raised-hand state and its action.
 - Rebuild the call card with People and Chat tabs, message reactions, attachment previews and a dark photo viewer.
+- Unify call status pages, add optional report/terminal-state integration, a share-ready card, recorded joining consent and accessible call-event toasts.
 
 - Publish and play shared tab audio separately from microphones, with share-audio state and coupled screen-share lifecycle.
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChalkButton } from "./ChalkButton";
 export interface ChalkToastProps {
-  readonly message: string;
+  readonly message: ReactNode;
   readonly icon?: ReactNode;
   readonly type?: "info" | "success" | "warning" | "error";
   readonly duration?: number;
@@ -23,9 +23,9 @@ export function ChalkToast({ message, type = "info", duration = type === "info" 
     return () => clearTimeout(timer);
   }, [exiting]);
   return (
-    <div data-part="toast" data-exiting={exiting || undefined} className="chalk-toast" role={type === "error" ? "alert" : "status"} aria-live={type === "error" ? "assertive" : "polite"} aria-atomic="true">
+    <div data-part="toast" data-exiting={exiting || undefined} className="chalk-toast" style={type === "error" ? { maxWidth: "min(560px, calc(100% - 32px))" } : undefined} role={type === "error" ? "alert" : "status"} aria-live={type === "error" ? "assertive" : "polite"} aria-atomic="true">
       {icon}
-      <span>{message}</span>
+      <span style={type === "error" ? { whiteSpace: "normal", lineHeight: 1.35, padding: "4px 0" } : undefined}>{message}</span>
       {action ? <ChalkButton onClick={action.onClick}>{action.label}</ChalkButton> : null}
       {type === "error" ? (
         <button type="button" data-part="toast-dismiss" className="chalk-dismiss" aria-label="Dismiss" onClick={() => setExiting(true)}>

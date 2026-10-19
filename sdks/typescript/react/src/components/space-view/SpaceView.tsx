@@ -1,6 +1,6 @@
 "use client";
 import { commandFailure } from "../control-bar/command-failure";
-import type { ClientFailure, Reaction } from "@q9labsai/chalk-client";
+import { SpaceClientError, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
 import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useCan, useConnection, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
@@ -20,6 +20,10 @@ import { ParticipantsPanel } from "../participants-panel/ParticipantsPanel";
 import { ParticipantVolumeProvider } from "../participants-panel/participant-volume-context";
 import { OfflineActions } from "../offline-actions/OfflineActions";
 import { ReconnectingOverlay } from "../reconnecting-overlay/ReconnectingOverlay";
+import { useCallToasts } from "../toast-stack/useCallToasts";
+import { CallReady } from "../call-limbo/CallReady";
+import { useCallLink } from "../call-limbo/useCallLink";
+import { mediaFailureToast } from "../toast-stack/call-events";
 import { ToastStack, type Toast } from "../toast-stack/ToastStack";
 import { CallCard } from "../call-card/CallCard";
 import { SpacePresentation } from "./SpacePresentation";
@@ -57,6 +61,7 @@ export interface SpaceViewProps {
   readonly callLinkOpen?: boolean;
   readonly onCallLinkToggle?: () => void;
   readonly onReportProblem?: import("../space-header/SpaceHeader").SpaceHeaderProps["onReportProblem"];
+  readonly inviteLink?: string;
   readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
   readonly stageBackground?: boolean;
   /** Initial layout without a handler; controlled layout when onLayoutChange is supplied. */
@@ -86,6 +91,7 @@ export function SpaceView({
   callLinkOpen,
   onCallLinkToggle,
   onReportProblem,
+  inviteLink,
   pickChatFiles,
   stageBackground = true,
   layout: controlledLayout,
@@ -103,10 +109,12 @@ export function SpaceView({
   onEndEpisode,
   className,
 }: SpaceViewProps): React.JSX.Element {
+  const callToasts = useCallToasts();
   const [soundsEnabled] = useSoundsSetting();
   const client = useSpaceClient();
   const self = useSelf();
   const participantsSlice = useParticipants();
+  const callLink = useCallLink(participantsSlice.roster.length <= 1);
   const media = useMedia();
   const connection = useConnection();
   const recording = useRecording();
@@ -121,7 +129,14 @@ export function SpaceView({
   const [uncontrolledLayout, setUncontrolledLayout] = useState<"grid" | "focus">(controlledLayout ?? "focus");
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(initialPanel);
   const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
-  const [commandError, setCommandError] = useState<ClientFailure | null>(null);
+  const [commandError, setCommandError] = useState<string | ClientFailure | null>(null);
+  const [commandSource, setCommandSource] = useState<"microphone" | "camera" | "screen">();
+  const onCommandError = (failure: ClientFailure | string | null, source?: "microphone" | "camera" | "screen") => {
+    if (!failure && commandError && typeof commandError === "object") callToasts.dismissFailure(commandError.code);
+    setCommandError(failure);
+    setCommandSource(source);
+    if (failure && typeof failure !== "string") playSound("error", failure);
+  };
   const layout = onLayoutChange ? (controlledLayout ?? uncontrolledLayout) : uncontrolledLayout;
   const feature = (name: keyof SpaceViewFeatures) => features?.[name] !== false;
   const localId = self.participantId ?? "local";
@@ -153,7 +168,7 @@ export function SpaceView({
     setUncontrolledLayout(nextLayout);
     onLayoutChange?.(nextLayout);
   };
-  useSoundCues(feature("sounds") && soundsEnabled);
+  const playSound = useSoundCues(feature("sounds") && soundsEnabled);
   const prefersReducedMotion = usePrefersReducedMotion();
   const drawer = useDrawerPresence(activePanel, prefersReducedMotion ? 0 : DRAWER_EXIT_MS);
   const runCommand = useCallback(async (command: () => Promise<unknown>) => {
@@ -166,9 +181,26 @@ export function SpaceView({
   }, []);
   const leaveCall = onLeft ? () => void runCommand(async () => onLeft()) : undefined;
   const endCallForEveryone = onEndEpisode ? () => void runCommand(async () => onEndEpisode()) : undefined;
-  const displayedCommandError = externalCommandError ?? commandError?.message;
-  const commandToasts: Toast[] = displayedCommandError ? [{ id: "space-command-error", message: displayedCommandError, type: "error" }] : [];
+  const displayedCommandError = externalCommandError ?? commandError;
+  const mappedFailure = mediaFailureToast(typeof displayedCommandError === "object" ? displayedCommandError : null, commandSource);
+  const retryMedia = async () => {
+    try {
+      if (commandSource === "screen") await client.media.setScreenShareEnabled(true);
+      else if (commandSource === "camera") await client.media.setCameraEnabled(true);
+      else if (commandSource === "microphone") await client.media.setMicrophoneEnabled(true);
+      onCommandError(null);
+    } catch (cause) {
+      onCommandError(cause instanceof SpaceClientError ? cause : { code: "client.internal_error", recoverable: true, message: "Your device couldn’t start. Try again." }, commandSource);
+    }
+  };
+  const retryableMedia = commandSource && typeof displayedCommandError === "object" && displayedCommandError?.recoverable && (commandSource === "screen" || displayedCommandError.code === "media.device_busy");
+  const commandToasts: Toast[] = mappedFailure
+    ? [{ id: "space-command-error", ...mappedFailure, action: retryableMedia ? { label: "Try again", onClick: () => void retryMedia() } : undefined }]
+    : typeof displayedCommandError === "string"
+      ? [{ id: "space-command-error", message: displayedCommandError, type: "error" }]
+      : [];
   const dismissCommandError = () => {
+    if (commandError && typeof commandError === "object") callToasts.dismissFailure(commandError.code);
     setCommandError(null);
     onDismissCommandError?.();
   };
@@ -185,8 +217,8 @@ export function SpaceView({
           onTogglePeople: feature("participants") ? () => setActivePanel((current) => (current === "participants" ? null : "participants")) : undefined,
           knockCount: canManageAdmission ? participantsSlice.admissionQueue.length : 0,
           shareUrl,
-          callLinkOpen,
-          onCallLinkToggle,
+          callLinkOpen: callLinkOpen ?? callLink.open,
+          onCallLinkToggle: onCallLinkToggle ?? callLink.toggle,
           onReportProblem,
           diagnostics: callDiagnostics(connection, media),
           shortcuts: {
@@ -228,15 +260,15 @@ export function SpaceView({
             layout={layout}
             onLayoutChange={updateLayout}
             shareUrl={shareUrl}
-            callLinkOpen={callLinkOpen}
-            onCallLinkToggle={onCallLinkToggle}
+            callLinkOpen={callLinkOpen ?? callLink.open}
+            onCallLinkToggle={onCallLinkToggle ?? callLink.toggle}
             buttons={buttons}
             activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
             onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
             onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
             onToggleWhiteboard={onToggleWhiteboard}
             onOpenReactions={() => setReactionPickerOpen((current) => !current)}
-            onCommandError={setCommandError}
+            onCommandError={onCommandError}
             onLeaveRequest={leaveCall}
             onEndForEveryone={endCallForEveryone}
           />
@@ -262,14 +294,24 @@ export function SpaceView({
         sidebar={
           <CallCard state={drawer.state} panel={drawer.panel} onPanelChange={setActivePanel} peopleCount={participantsSlice.roster.length} participantsEnabled={feature("participants")} chatEnabled={feature("chat") && canSendChat} onClose={() => setActivePanel(null)}>
             {drawer.panel === "chat" && feature("chat") && canSendChat ? <ChatPanel variant="mobile" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} /> : null}
-            {drawer.panel === "participants" && feature("participants") ? <ParticipantsPanel variant="mobile" admissionEnabled={feature("admission")} generatedAvatars={generatedAvatars} onCommandError={(message) => setCommandError(message === null ? null : commandFailure(new Error(message)))} onClose={() => setActivePanel(null)} /> : null}
+            {drawer.panel === "participants" && feature("participants") ? <ParticipantsPanel variant="mobile" admissionEnabled={feature("admission")} generatedAvatars={generatedAvatars} onCommandError={onCommandError} onClose={() => setActivePanel(null)} /> : null}
             {drawer.panel === "admission" && feature("admission") ? <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} /> : null}
           </CallCard>
         }
-        toasts={<ToastStack toasts={commandToasts} onDismiss={dismissCommandError} />}
-        mediaOutput={<AudioOutput />}
+        toasts={
+          <ToastStack
+            toasts={[...callToasts.toasts.filter((toast) => !(typeof displayedCommandError === "object" && displayedCommandError && toast.failureCode === displayedCommandError.code)), ...commandToasts]}
+            onDismiss={(id) => (id === "space-command-error" ? dismissCommandError() : callToasts.dismiss(id))}
+          />
+        }
+        mediaOutput={
+          <div className="[&>div]:top-[68px] [&>div>button]:h-11 [&>div>button]:shadow-[0_8px_24px_rgba(0,0,0,.4)]">
+            <AudioOutput resumeAudioLabel="Your browser paused the sound. Click to hear the call" />
+          </div>
+        }
         overlays={
           <>
+            <CallReady open={callLinkOpen ?? callLink.open} onClose={onCallLinkToggle ?? callLink.close} link={inviteLink ?? shareUrl} />
             {overlay}
             {reconnecting && reconnecting.status !== "reconnecting" ? <ReconnectingOverlay {...reconnecting} /> : null}
             <OfflineActions reconnecting={reconnecting?.status === "reconnecting" && reconnecting.isVisible} />
