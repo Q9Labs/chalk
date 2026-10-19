@@ -69,8 +69,7 @@ outcomes:
     theory: theory.md#product-memory
     code:
       - sdks/typescript/react/src/components/chalk/Chalk.tsx
-      - sdks/typescript/react-native/src/components/SpaceView.shared.tsx
-      - sdks/typescript/react-native/src/components/native-space-view/SpaceWhiteboardSurface.tsx
+      - sdks/typescript/react-native/src/components/EmbeddedWhiteboard.tsx
   - id: collaboration.whiteboard_connection_stability
     title: Keep whiteboard connections steady
     area: collaboration
@@ -199,20 +198,18 @@ outcomes:
     area: recording
     state: in_progress
     summary: >-
-      Mobile Participants with manageRecording can start and stop a Recording and see its status.
-      There is no disclosure or consent step and no way to open the finished Recording or
-      Transcript.
+      The headless native SDK exposes Recording state and actions. The mobile call screens have
+      been removed for the redesign, so Participants have no Recording controls or disclosure.
     priority: P2
     size: M
     remaining:
-      - Add recording disclosure and consent.
+      - Restore Recording controls with disclosure and consent in the redesigned mobile call.
       - Let authorized Participants open the finished Recording and Transcript.
       - Check denial, failed start or stop, background return and reconnect.
     theory: theory.md#product-memory
     code:
-      - sdks/typescript/react-native/src/components/native-space-view/SpaceActionMenu.tsx
-      - sdks/typescript/react-native/src/components/native-space-view/useSpaceViewController.ts
-      - apps/mobile/src/space/MobileSpaceScreen.tsx
+      - sdks/typescript/react-native/src/hooks/space-hooks.ts
+      - apps/mobile/App.tsx
   - id: transcription.final_artifact
     title: Recordings produce a Transcript in production
     area: transcription
@@ -277,35 +274,35 @@ outcomes:
       - sdks/typescript/react/package.json
       - sdks/typescript/react-native/package.json
   - id: sdk_and_embedding.native_parity
-    title: Same Chalk props on web and mobile
+    title: Mobile call controls match web
     area: sdk_and_embedding
     state: planned
     summary: >-
-      Native Chalk lacks the recording and sounds features and four web props, and it names its
-      feedback prop differently. The hooks already match.
+      Web has call controls, while mobile retains only the headless native SDK and OS integrations.
+      The redesigned mobile call needs controls built on the shared client and snapshot hooks.
     priority: P1
     size: M
     remaining:
-      - Add the missing native features and props, or document each as an OS or rendering seam.
-      - Unify the feedback prop and add a type check that fails when the two prop types drift.
+      - Build the redesigned mobile controls over the shared client and headless hooks.
+      - Document differences required by native permissions and rendering.
     theory: theory.md#product-goals
     code:
       - sdks/typescript/react/src/components/chalk/Chalk.tsx
-      - sdks/typescript/react-native/src/components/Chalk.tsx
+      - sdks/typescript/react-native/src/index.ts
   - id: sdk_and_embedding.api_contract_parity
     title: Every public endpoint is in the generated client
     area: sdk_and_embedding
     state: unknown
     summary: >-
-      OpenAPI and the generated client cover integrations, API keys, status and attachments, but
-      nobody has compared every public route against them.
+      OpenAPI and the generated client cover API keys and attachments, but nobody has compared
+      every public route against them.
     priority: P1
     size: S
     remaining:
       - >-
         Compare router.go against OpenAPI and the generated client, and mark internal routes as
         internal.
-      - Call one Tenant-scoped integration route and one attachment route through the public client.
+      - Call one Tenant-scoped API key route and one attachment route through the public client.
     uncertainty: No full route comparison has been made.
     theory: theory.md#product-goals
     code:

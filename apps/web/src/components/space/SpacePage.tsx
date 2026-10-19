@@ -2,9 +2,8 @@ import { useTheme } from "../../lib/theme-context";
 import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
 import { Chalk, CallLimbo, ChalkButton, StatusSurface } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { createPreparedPublicSpace, createPublicInviteClient, joinDashboardSpace, resumePublicSpace, type AccountSpaceCredential, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
-import { getAccount, listAllAccountTenants } from "../../lib/account-api";
-import { canonicalSpaceInviteLink, clearDashboardSpaceEntry, hasDashboardSpaceEntry, spaceInviteToken, verifiedSpaceInviteLink } from "../../lib/named-space-route";
+import { createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
+import { canonicalSpaceInviteLink, spaceInviteToken, verifiedSpaceInviteLink } from "../../lib/named-space-route";
 import { createLocalSpaceClient, createLocalSpaceRelease } from "../../lib/local-space-client";
 type WebJoinSettings = Required<Pick<JoinOptions, "displayName" | "microphone" | "camera">>;
 const displayNameStorageKey = "chalk.display-name";
@@ -24,13 +23,13 @@ export function SpacePage({
   const [reloadMarker] = useState(() => {
     if (!slug) return null;
     try {
-      return readReloadRejoin(globalThis.sessionStorage, slug);
+      const marker = readReloadRejoin(globalThis.sessionStorage, slug);
+      return marker?.arrivalHandle ? marker : null;
     } catch {
       return null; // Storage may be disabled; manual entry remains available.
     }
   });
-  const [dashboardEntry] = useState(() => hasDashboardSpaceEntry() || Boolean(reloadMarker?.tenantId));
-  const [automaticName, setAutomaticName] = useState(() => {
+  const [automaticName] = useState(() => {
     const queryName = new URLSearchParams(globalThis.location?.search ?? "").get("name")?.trim();
     if (queryName) return queryName;
     try {
@@ -43,7 +42,6 @@ export function SpacePage({
   const [entranceSettings, setEntranceSettings] = useState<WebJoinSettings | null>(reloadMarker ? { displayName: reloadMarker.displayName, ...devicesOff } : null);
   const [callName, setCallName] = useState(slug ?? "Call");
   const autoArrivalAttempted = useRef(false);
-  const nameEdited = useRef(false);
   const [spaceAccess, setSpaceAccess] = useState<JoinedSpaceAccess | null>(null);
   const [pending, setPending] = useState<PendingArrival | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +75,7 @@ export function SpacePage({
     setDisplayName(marker.displayName);
     setEntranceSettings({ displayName: marker.displayName, ...devicesOff });
     setPreparing(true);
-    const recovery = marker.arrivalHandle ? resumePublicSpace(client, marker).then((prepared) => ({ prepared, spaceName: slug })) : prepareDashboardSpace(slug, marker.displayName, marker).then((result) => ({ prepared: result.access, spaceName: result.spaceName }));
+    const recovery = resumePublicSpace(client, marker).then((prepared) => ({ prepared, spaceName: slug }));
     void recovery
       .then((result) => complete(result.prepared, undefined, result.spaceName))
       .catch(() => {
@@ -99,20 +97,15 @@ export function SpacePage({
       } catch {
         /* Joining works with storage disabled. */
       }
-      const accountEntry = Boolean(slug && !inviteToken && dashboardEntry);
-      if (slug && !inviteToken && !accountEntry) {
+      if (slug && !inviteToken) {
         setError(neutralSpaceError);
         return;
       }
       setError(null);
       setPreparing(true);
-      const preparation = accountEntry ? prepareDashboardSpace(slug!, normalizedDisplayName) : arrive(client, normalizedDisplayName, slug, inviteToken);
+      const preparation = arrive(client, normalizedDisplayName, slug, inviteToken);
       void preparation
         .then(async (result) => {
-          if (result.kind === "dashboard") {
-            complete(result.access, result.inviteLink, result.spaceName);
-            return;
-          }
           try {
             await navigatePublicSpace(result.canonicalSlug, result.inviteLink);
           } catch (cause) {
@@ -142,23 +135,8 @@ export function SpacePage({
           if (active.current) setPreparing(false);
         });
     },
-    [client, complete, dashboardEntry, defaultJoinOptions, navigatePublicSpace, pending, preparing, slug, spaceAccess],
+    [client, complete, defaultJoinOptions, navigatePublicSpace, pending, preparing, slug, spaceAccess],
   );
-  useEffect(() => {
-    if (automaticName || reloadMarker) return;
-    let cancelled = false;
-    void getAccount()
-      .then((account) => {
-        if (!cancelled && !nameEdited.current && account.name.trim()) {
-          setDisplayName((current) => current || account.name);
-          setAutomaticName(account.name);
-        }
-      })
-      .catch(() => undefined); // Anonymous visitors supply their own name.
-    return () => {
-      cancelled = true;
-    };
-  }, [automaticName, reloadMarker]);
   useEffect(() => {
     if (!automaticName || reloadMarker || autoArrivalAttempted.current) return;
     autoArrivalAttempted.current = true;
@@ -292,7 +270,6 @@ export function SpacePage({
           spaceName={callName}
           displayName={displayName}
           onDisplayNameChange={(name) => {
-            nameEdited.current = true;
             setDisplayName(name);
           }}
           onJoin={() => start()}
@@ -324,12 +301,6 @@ type PublicPreparation = {
   readonly spaceName: string;
   readonly prepared?: SpaceEntryAccess;
 };
-type DashboardPreparation = {
-  readonly kind: "dashboard";
-  readonly access: SpaceEntryAccess;
-  readonly inviteLink?: string;
-  readonly spaceName: string;
-};
 async function arrive(client: PublicInviteClient, displayName: string, slug: string | undefined, inviteToken: string | undefined): Promise<PublicPreparation> {
   if (inviteToken) {
     const arrival = await client.arriveBySpacePublicInvite(inviteToken, displayName);
@@ -354,31 +325,6 @@ async function releasePublicPreparation(client: PublicInviteClient, preparation:
 async function replacePublicSpaceHistory(_canonicalSlug: string, inviteLink: string): Promise<void> {
   globalThis.history?.replaceState(globalThis.history.state, "", inviteLink);
 }
-async function prepareDashboardSpace(slug: string, displayName: string, reload?: ReloadRejoinMarker): Promise<DashboardPreparation> {
-  const tenantID = reload?.tenantId ?? (await resolveTenantID());
-  if (!tenantID) throw new Error(neutralSpaceError);
-  const access = await (reload ? joinDashboardSpace(tenantID, slug, displayName, reload) : joinDashboardSpace(tenantID, slug, displayName));
-  clearDashboardSpaceEntry();
-  return { kind: "dashboard", access: { credential: access.credential, getAccess: access.getAccess, reloadMarker: access.reloadMarker, finish: access.leave }, inviteLink: access.inviteLink, spaceName: slug };
-}
-async function resolveTenantID(): Promise<string> {
-  let hint: string | undefined;
-  try {
-    hint = globalThis.localStorage?.getItem("chalk.tenant-hint")?.trim();
-  } catch {
-    // Storage is an optimization; the account list remains authoritative.
-  }
-  const tenants = await listAllAccountTenants();
-  const tenantID = (tenants.find((item) => item.tenant.id === hint) ?? tenants[0])?.tenant.id ?? "";
-  if (tenantID) {
-    try {
-      globalThis.localStorage?.setItem("chalk.tenant-hint", tenantID);
-    } catch {
-      // Storage is an optimization; the current request remains authoritative.
-    }
-  }
-  return tenantID;
-}
 function retryDelay(retryAfter: number | undefined): number {
   if (typeof retryAfter !== "number" || !Number.isFinite(retryAfter) || retryAfter < 0) return 1000;
   return Math.min(Math.max(retryAfter * 1000, 250), 30000);
@@ -402,7 +348,7 @@ function neutralMessage(cause: unknown): string {
   }
   if (cause && typeof cause === "object" && "status" in cause) {
     if (cause.status === 404 || cause.status === 410) return neutralSpaceError;
-    if (cause.status === 401) return "Sign in again, then enter this Space.";
+    if (cause.status === 401) return neutralSpaceError;
     if (cause.status === 403) return "You do not have access to this Space. Ask the owner for access.";
     if (cause.status === 429) return "Too many requests. Wait a minute, then enter this Space again.";
     if (cause.status === 409) return "You could not enter this Space. Try entering again.";
@@ -422,7 +368,7 @@ function LocalSpace({
   onTerminal,
 }: {
   readonly reloadMarker: SpaceEntryAccess["reloadMarker"];
-  readonly credential: PublicSpaceCredential | AccountSpaceCredential;
+  readonly credential: PublicSpaceCredential;
   readonly displayName: string;
   readonly defaults: {
     readonly microphone: boolean;

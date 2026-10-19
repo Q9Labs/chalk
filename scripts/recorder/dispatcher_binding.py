@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 from urllib.parse import quote
 
-from release_core import PREFIX, digest, rebuild_dispatcher, require
+from release_core import digest, rebuild_dispatcher, require, validate_config
 from release_io import Provider, private_json
 
 MODULE = Path(__file__).resolve().parents[2] / "infrastructure/opentofu/modules/aws-transcription-dispatcher"
@@ -66,6 +66,14 @@ def check_binding_plan(plan, release, key, version, config_digest=None):
         require(expected == actual, "binding plan changes more than release identity")
 
 
+def check_output_plan(plan):
+    for item in plan.get("resource_changes", []):
+        require(item["change"]["actions"] == ["no-op"], "output plan must not change resources")
+    for name, change in plan.get("output_changes", {}).items():
+        require(change["actions"] == ["no-op"] or name in ("artifact_identity", "release_identity"),
+                "output plan exceeds output allowlist")
+
+
 def dispatcher_root(provider, config):
     root = rebuild_dispatcher(provider.state(config), MODULE, config, provider.region, provider.profile)
     if not provider.profile:
@@ -73,6 +81,11 @@ def dispatcher_root(provider, config):
         root["terraform"]["backend"]["s3"].pop("profile", None)
     inputs = root["module"]["dispatcher"]
     require(inputs["function_name"] == config["function_name"], "dispatcher state identity mismatch")
+    if config["function_name"] == "chalk-nightly-transcription-dispatcher":
+        require(inputs["environment_name"] == "nightly", "nightly dispatcher state environment mismatch")
+        require(inputs["control_api_url"] == "https://nightly-api.chalkmeet.com", "nightly dispatcher API mismatch")
+        require(inputs["control_api_audience"] == "chalk-nightly-control-api", "nightly dispatcher audience mismatch")
+        require(inputs["scheduler_name"] == "chalk-nightly-transcription-reconcile" and inputs["scheduler_group_name"] == "chalk-nightly", "nightly dispatcher scheduler mismatch")
     return root
 
 
@@ -134,6 +147,9 @@ def bind(provider, config, manifest, dry_run):
                 tofu("plan", "-input=false", "-no-color", "-target=module.dispatcher." + resource, "-out=binding.plan")
                 check_binding_plan(json.loads(tofu("show", "-json", "binding.plan")), release, key, version, config_digest)
                 tofu("apply", "-input=false", "-no-color", "binding.plan")
+            tofu("plan", "-input=false", "-no-color", "-out=outputs.plan")
+            check_output_plan(json.loads(tofu("show", "-json", "outputs.plan")))
+            tofu("apply", "-input=false", "-no-color", "outputs.plan")
             tofu("plan", "-input=false", "-detailed-exitcode", "-no-color")
         proof.update(verify_dispatcher(provider, config, release))
     return proof
@@ -146,10 +162,13 @@ def main():
     parser.add_argument("--region", required=True)
     parser.add_argument("--instance-id", required=True)
     parser.add_argument("--parameter-prefix", required=True)
+    parser.add_argument("--configuration-parameter", required=True)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     provider = Provider(args.region, os.environ.get("AWS_PROFILE"), args.dry_run)
-    config = json.loads(provider.parameter(PREFIX + "recorder.json")["Value"])
+    match = re.fullmatch(r"/chalk/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)/release/[A-Za-z0-9_.-]+", args.configuration_parameter)
+    require(match, "configuration parameter must select a deployment environment")
+    config = validate_config(json.loads(provider.parameter(args.configuration_parameter)["Value"]), match[1])
     require(config["runtime"]["instance_id"] == args.instance_id and config["runtime"]["parameter_prefix"] == args.parameter_prefix,
             "dispatcher configuration does not belong to the target managed runtime")
     print(json.dumps(bind(provider, config["dispatcher"], json.loads(Path(args.manifest).read_text()), args.dry_run)))

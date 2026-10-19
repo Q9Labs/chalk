@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 )
 
@@ -20,6 +21,7 @@ const (
 	APIAddress            = "CHALK_API_ADDR"
 	APICORSAllowedOrigins = "CHALK_API_CORS_ALLOWED_ORIGINS"
 	APIEnvironment        = "CHALK_API_ENV"
+	APIRateLimits         = "CHALK_API_RATE_LIMITS"
 	APITrustedProxyCIDRs  = "CHALK_API_TRUSTED_PROXY_CIDRS"
 	APILogFormat          = "CHALK_API_LOG_FORMAT"
 	APILogLevel           = "CHALK_API_LOG_LEVEL"
@@ -32,15 +34,11 @@ const (
 	APIService            = "CHALK_API_SERVICE"
 	APISlowRequestMS      = "CHALK_API_SLOW_REQUEST_MS"
 	APILocalSystemToken   = "CHALK_API_LOCAL_SYSTEM_TOKEN"
+	APIServiceID          = "CHALK_API_SERVICE_ID"
+	APIServiceSecrets     = "CHALK_API_SERVICE_SECRETS"
+	APIServiceScopes      = "CHALK_API_SERVICE_SCOPES"
 
-	APIVersion = "CHALK_API_VERSION"
-
-	AuthEmailVerificationRequired    = "CHALK_AUTH_EMAIL_VERIFICATION_REQUIRED"
-	AuthRecentAuthSecret             = "CHALK_AUTH_RECENT_AUTH_SECRET"
-	AuthOAuthStateTTLMS              = "CHALK_AUTH_OAUTH_STATE_TTL_MS"
-	AuthSessionTTLMS                 = "CHALK_AUTH_SESSION_TTL_MS"
-	AuthPasswordResetURL             = "CHALK_AUTH_PASSWORD_RESET_URL"
-	AuthPasswordResetEmailFrom       = "CHALK_AUTH_PASSWORD_RESET_EMAIL_FROM"
+	APIVersion                       = "CHALK_API_VERSION"
 	SyncTokenAudience                = "CHALK_SYNC_TOKEN_AUDIENCE"
 	SyncTokenIssuer                  = "CHALK_SYNC_TOKEN_ISSUER"
 	SyncTokenKeyID                   = "CHALK_SYNC_TOKEN_KEY_ID"
@@ -65,15 +63,9 @@ const (
 	// Short aliases keep pool names concise at call sites while preserving the
 	// explicit Database wording in the canonical constants above.
 
-	GoogleOAuthClientID                    = "CHALK_GOOGLE_OAUTH_CLIENT_ID"
-	GoogleOAuthClientSecret                = "CHALK_GOOGLE_OAUTH_CLIENT_SECRET"
-	GoogleOAuthRedirectURL                 = "CHALK_GOOGLE_OAUTH_REDIRECT_URL"
-	GoogleOAuthReauthenticationRedirectURL = "CHALK_GOOGLE_OAUTH_REAUTHENTICATION_REDIRECT_URL"
-
 	RedisURL = "CHALK_REDIS_URL"
 
 	CloudflareAccountID         = "CHALK_CLOUDFLARE_ACCOUNT_ID"
-	CloudflareAPIToken          = "CHALK_CLOUDFLARE_API_TOKEN"
 	CloudflareRealtimeAppID     = "CHALK_CLOUDFLARE_REALTIME_APP_ID"
 	CloudflareRealtimeAppSecret = "CHALK_CLOUDFLARE_REALTIME_APP_SECRET"
 	CloudflareRealtimeBaseURL   = "CHALK_CLOUDFLARE_REALTIME_BASE_URL"
@@ -103,9 +95,6 @@ const (
 	RecordingKMSRequestTimeoutMS    = "CHALK_RECORDING_KMS_REQUEST_TIMEOUT_MS"
 	TranscriptionEnabled            = "CHALK_TRANSCRIPTION_ENABLED"
 	WhiteboardFilesEnabled          = "CHALK_WHITEBOARD_FILES_ENABLED"
-
-	ResendAPIKey                    = "CHALK_RESEND_API_KEY"
-	ResendTimeoutMS                 = "CHALK_RESEND_TIMEOUT_MS"
 	WebhookEncryptionKey            = "CHALK_WEBHOOK_ENCRYPTION_KEY"
 	WebhookEncryptionKeyring        = "CHALK_WEBHOOK_ENCRYPTION_KEYRING"
 	WebhookEncryptionCurrentVersion = "CHALK_WEBHOOK_ENCRYPTION_CURRENT_VERSION"
@@ -121,10 +110,8 @@ const (
 	DefaultPublicInviteAutoLifecycleSeconds = int32(60 * 60)
 
 	DefaultEnvironment                        = "local"
-	DefaultGoogleRedirectURL                  = "http://127.0.0.1:3070/api/auth/google/callback"
 	DefaultLogFormat                          = "json"
 	DefaultLogLevel                           = "info"
-	DefaultOAuthStateTTLMS                    = int64(10 * 60 * 1000)
 	DefaultCloudflareRealtimeRequestTimeoutMS = int64(6000)
 
 	DefaultRequestLogs                  = "off"
@@ -133,25 +120,20 @@ const (
 	DefaultRecordingKMSRequestTimeoutMS = int64(10000)
 	DefaultTranscriptionControlAudience = "chalk-control-api"
 	DefaultRedisURL                     = "redis://127.0.0.1:6379/0"
-	DefaultResendTimeoutMS              = int64(10000)
-	DefaultSessionTTLMS                 = int64(30 * 24 * 60 * 60 * 1000)
-	DefaultRecentAuthSecret             = "chalk-local-recent-auth-key-32!!"
 	DefaultServiceName                  = "chalk-api"
 	DefaultSlowRequestMS                = int64(250)
 	DefaultVersion                      = "dev"
-
-	DefaultOAuthStateTTL             = time.Duration(DefaultOAuthStateTTLMS) * time.Millisecond
-	DefaultCloudflareRealtimeTimeout = time.Duration(DefaultCloudflareRealtimeRequestTimeoutMS) * time.Millisecond
-	DefaultR2Timeout                 = time.Duration(DefaultR2RequestTimeoutMS) * time.Millisecond
-	DefaultRecordingKMSTimeout       = time.Duration(DefaultRecordingKMSRequestTimeoutMS) * time.Millisecond
-	DefaultResendTimeout             = time.Duration(DefaultResendTimeoutMS) * time.Millisecond
-	DefaultSessionTTL                = time.Duration(DefaultSessionTTLMS) * time.Millisecond
+	DefaultCloudflareRealtimeTimeout    = time.Duration(DefaultCloudflareRealtimeRequestTimeoutMS) * time.Millisecond
+	DefaultR2Timeout                    = time.Duration(DefaultR2RequestTimeoutMS) * time.Millisecond
+	DefaultRecordingKMSTimeout          = time.Duration(DefaultRecordingKMSRequestTimeoutMS) * time.Millisecond
 )
 
 type APIConfig struct {
-	Address            string
-	CORSAllowedOrigins []string
-	LocalSystemToken   string
+	DisableAuthenticatedRateLimits bool
+	Address                        string
+	CORSAllowedOrigins             []string
+	LocalSystemToken               string
+	ServicePrincipal               authentication.ServiceCredential
 
 	TrustedProxyCIDRs []string
 }
@@ -174,7 +156,6 @@ type RedisConfig struct {
 
 type CloudflareRealtimeConfig struct {
 	AccountID         string
-	APIToken          string
 	RealtimeAppID     string
 	RealtimeAppSecret string
 	RealtimeBaseURL   string
@@ -212,15 +193,6 @@ type TranscriptionConfig struct {
 	DispatcherFunction string
 }
 
-type AuthConfig struct {
-	EmailVerificationRequired bool
-	OAuthStateTTL             time.Duration
-	RecentAuthSecret          []byte
-	SessionTTL                time.Duration
-	PasswordResetURL          string
-	PasswordResetEmailFrom    string
-}
-
 type SyncTokenConfig struct {
 	Audience         string
 	Issuer           string
@@ -240,18 +212,6 @@ type PublicInviteConfig struct {
 	AutoLifecycleLifetime time.Duration
 	SchedulerInterval     time.Duration
 	SchedulerBatch        int32
-}
-
-type GoogleOAuthConfig struct {
-	ClientID                    string
-	ClientSecret                string
-	RedirectURL                 string
-	ReauthenticationRedirectURL string
-}
-
-type ResendConfig struct {
-	APIKey  string
-	Timeout time.Duration
 }
 
 type ObservabilityConfig struct {
@@ -281,15 +241,14 @@ type DeadlineSchedulerConfig struct {
 }
 
 type Config struct {
-	API                APIConfig
-	Auth               AuthConfig
+	API APIConfig
+
 	Capabilities       CapabilityConfig
 	CloudflareRealtime CloudflareRealtimeConfig
 	DefaultMediaPlane  spaces.MediaPlaneProvider
 	Database           DatabaseConfig
 	DeadlineScheduler  DeadlineSchedulerConfig
 
-	GoogleOAuth              GoogleOAuthConfig
 	Observability            ObservabilityConfig
 	PublicInvite             PublicInviteConfig
 	ProviderBridge           ProviderBridgeConfig
@@ -299,7 +258,6 @@ type Config struct {
 	RecorderFleetIssuer      RecorderFleetIssuerConfig
 	Redis                    RedisConfig
 
-	Resend        ResendConfig
 	SyncToken     SyncTokenConfig
 	Transcription TranscriptionConfig
 	Webhooks      WebhookConfig
@@ -337,6 +295,13 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("deadline scheduler interval and batch must be greater than zero")
 	}
 	environment := envOrDefault(APIEnvironment, DefaultEnvironment)
+	rateLimits, err := envEnum(APIRateLimits, "on", "on", "off")
+	if err != nil {
+		return Config{}, err
+	}
+	if rateLimits == "off" && environment != DefaultEnvironment {
+		return Config{}, fmt.Errorf("%s=off is only allowed when %s=local", APIRateLimits, APIEnvironment)
+	}
 	databaseURL := envOrDefault(DatabaseURL, DefaultDatabaseURL)
 	if err := validateDatabaseURL(environment, databaseURL); err != nil {
 		return Config{}, err
@@ -347,20 +312,6 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	sessionTTL, err := envMilliseconds(AuthSessionTTLMS, DefaultSessionTTLMS)
-	if err != nil {
-		return Config{}, err
-	}
-	if sessionTTL <= 0 {
-		return Config{}, fmt.Errorf("%s must be greater than zero", AuthSessionTTLMS)
-	}
-	oauthStateTTL, err := envMilliseconds(AuthOAuthStateTTLMS, DefaultOAuthStateTTLMS)
-	if err != nil {
-		return Config{}, err
-	}
-	if oauthStateTTL <= 0 {
-		return Config{}, fmt.Errorf("%s must be greater than zero", AuthOAuthStateTTLMS)
-	}
 	logFormat, err := envEnum(APILogFormat, DefaultLogFormat, "json", "text")
 	if err != nil {
 		return Config{}, err
@@ -394,13 +345,6 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("%s must be non-negative", APISlowRequestMS)
 	}
 
-	resendTimeout, err := envMilliseconds(ResendTimeoutMS, DefaultResendTimeoutMS)
-	if err != nil {
-		return Config{}, err
-	}
-	if resendTimeout <= 0 {
-		return Config{}, fmt.Errorf("%s must be greater than zero", ResendTimeoutMS)
-	}
 	r2RequestTimeout, err := envMilliseconds(R2RequestTimeoutMS, DefaultR2RequestTimeoutMS)
 	if err != nil {
 		return Config{}, err
@@ -425,6 +369,10 @@ func Load() (Config, error) {
 	localSystemToken := strings.TrimSpace(envOrDefault(APILocalSystemToken, ""))
 	if environment != DefaultEnvironment && localSystemToken != "" {
 		return Config{}, fmt.Errorf("%s is only supported in local environments", APILocalSystemToken)
+	}
+	servicePrincipal, err := loadServicePrincipal(localSystemToken)
+	if err != nil {
+		return Config{}, err
 	}
 	syncToken, err := loadSyncTokenConfig(environment)
 	if err != nil {
@@ -461,7 +409,6 @@ func Load() (Config, error) {
 	}
 	cloudflareRealtime := CloudflareRealtimeConfig{
 		AccountID:         envOrDefault(CloudflareAccountID, ""),
-		APIToken:          envOrDefault(CloudflareAPIToken, ""),
 		RealtimeAppID:     envOrDefault(CloudflareRealtimeAppID, ""),
 		RealtimeAppSecret: envOrDefault(CloudflareRealtimeAppSecret, ""),
 		RealtimeBaseURL:   realtimeBaseURL,
@@ -514,35 +461,16 @@ func Load() (Config, error) {
 			return Config{}, err
 		}
 	}
-	recentAuthSecret, err := loadRecentAuthSecret(environment)
-	if err != nil {
-		return Config{}, err
-	}
-	googleOAuth := GoogleOAuthConfig{
-		ClientID:                    envOrDefault(GoogleOAuthClientID, ""),
-		ClientSecret:                envOrDefault(GoogleOAuthClientSecret, ""),
-		RedirectURL:                 envOrDefault(GoogleOAuthRedirectURL, DefaultGoogleRedirectURL),
-		ReauthenticationRedirectURL: envOrDefault(GoogleOAuthReauthenticationRedirectURL, ""),
-	}
-	if err := validateGoogleOAuthConfig(environment, googleOAuth); err != nil {
-		return Config{}, err
-	}
 
 	return Config{
 		API: APIConfig{
-			Address:            envOrDefault(APIAddress, DefaultAPIAddress),
-			CORSAllowedOrigins: envList(APICORSAllowedOrigins),
-			LocalSystemToken:   localSystemToken,
+			DisableAuthenticatedRateLimits: rateLimits == "off",
+			Address:                        envOrDefault(APIAddress, DefaultAPIAddress),
+			CORSAllowedOrigins:             envList(APICORSAllowedOrigins),
+			LocalSystemToken:               localSystemToken,
+			ServicePrincipal:               servicePrincipal,
 
 			TrustedProxyCIDRs: envList(APITrustedProxyCIDRs),
-		},
-		Auth: AuthConfig{
-			EmailVerificationRequired: envBool(AuthEmailVerificationRequired),
-			OAuthStateTTL:             oauthStateTTL,
-			RecentAuthSecret:          recentAuthSecret,
-			SessionTTL:                sessionTTL,
-			PasswordResetURL:          strings.TrimSpace(envOrDefault(AuthPasswordResetURL, "")),
-			PasswordResetEmailFrom:    strings.TrimSpace(envOrDefault(AuthPasswordResetEmailFrom, "")),
 		},
 		Capabilities:       capabilities,
 		CloudflareRealtime: cloudflareRealtime,
@@ -553,8 +481,6 @@ func Load() (Config, error) {
 			MinConns: minConns,
 		},
 		DeadlineScheduler: DeadlineSchedulerConfig{Interval: deadlineSchedulerInterval, Batch: deadlineSchedulerBatch},
-
-		GoogleOAuth: googleOAuth,
 		Observability: ObservabilityConfig{
 			Environment:          environment,
 			LogFormat:            logFormat,
@@ -579,22 +505,10 @@ func Load() (Config, error) {
 			URL: envOrDefault(RedisURL, DefaultRedisURL),
 		},
 
-		Resend: ResendConfig{
-			APIKey:  envOrDefault(ResendAPIKey, ""),
-			Timeout: resendTimeout,
-		},
 		SyncToken:     syncToken,
 		Transcription: transcriptionConfig,
 		Webhooks:      webhookConfig,
 	}, nil
-}
-
-func validateGoogleOAuthConfig(environment string, googleOAuth GoogleOAuthConfig) error {
-	googleConfigured := strings.TrimSpace(googleOAuth.ClientID) != "" || strings.TrimSpace(googleOAuth.ClientSecret) != ""
-	if environment != DefaultEnvironment && googleConfigured && strings.TrimSpace(googleOAuth.ReauthenticationRedirectURL) == "" {
-		return fmt.Errorf("%s must be set when Google OAuth is configured outside local environments", GoogleOAuthReauthenticationRedirectURL)
-	}
-	return nil
 }
 
 func loadDefaultMediaPlane() (spaces.MediaPlaneProvider, error) {
@@ -646,20 +560,6 @@ func validateProviderBridgeMediaPlaneProcessConfig(providerBridge ProviderBridge
 		return fmt.Errorf("%s must be set when the ProviderBridge is enabled", CloudflareRealtimeAppSecret)
 	}
 	return nil
-}
-
-func loadRecentAuthSecret(environment string) ([]byte, error) {
-	secret := strings.TrimSpace(envOrDefault(AuthRecentAuthSecret, ""))
-	if secret == "" {
-		if environment == DefaultEnvironment {
-			return []byte(DefaultRecentAuthSecret), nil
-		}
-		return nil, fmt.Errorf("%s must be set outside local environments", AuthRecentAuthSecret)
-	}
-	if len([]byte(secret)) < 32 {
-		return nil, fmt.Errorf("%s must contain at least 32 bytes", AuthRecentAuthSecret)
-	}
-	return []byte(secret), nil
 }
 
 func loadCapabilityConfig(environment string) (CapabilityConfig, error) {
@@ -842,7 +742,7 @@ func loadSyncTokenConfig(environment string) (SyncTokenConfig, error) {
 		KeyID:    strings.TrimSpace(envOrDefault(SyncTokenKeyID, "")),
 	}
 	encodedKey := strings.TrimSpace(envOrDefault(SyncTokenPrivateKey, ""))
-	if config.Audience == "" && config.Issuer == "" && config.KeyID == "" && encodedKey == "" && environment != "production" {
+	if config.Audience == "" && config.Issuer == "" && config.KeyID == "" && encodedKey == "" && environment == DefaultEnvironment {
 		return config, nil
 	}
 	if config.Audience == "" || config.Issuer == "" || config.KeyID == "" || encodedKey == "" {

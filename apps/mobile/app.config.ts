@@ -1,4 +1,10 @@
 const PUBLIC_WEB_HOSTS: readonly string[] = ["chalkmeet.com", "chalk.q9labs.ai"];
+// The call's dark canvas, so the launch screen hands over to the first frame without a flash.
+const SPLASH_BACKGROUND = "#0B0C0E";
+// The icon plate from `src/brand/mark.ts` (`ICON_COLORS.plate`); Expo config files cannot import app source.
+const ICON_PLATE = "#16181c";
+// The call's typeface, embedded at build time so the first frame already uses it.
+const FIGTREE_WEIGHTS = ["Regular", "Medium", "SemiBold", "Bold"] as const;
 
 export type MobileExpoExtra = {
   readonly buildProfile: string;
@@ -16,19 +22,25 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       owner: "q9labs",
       slug: "chalk-mobile",
       scheme: "chalk",
-      version: "2.0.1",
-      orientation: "portrait",
+      version: "3.0.0",
+      // The call turns to landscape; Home stays usable in either.
+      orientation: "default",
       icon: "./assets/icon.png",
       userInterfaceStyle: "automatic",
       assetBundlePatterns: ["**/*"],
       experiments: { tsconfigPaths: false },
-      plugins: ["expo-secure-store"],
-      splash: { image: "./assets/splash-logo.png", resizeMode: "contain", backgroundColor: "#F7F6F2" },
+      plugins: [
+        "expo-secure-store",
+        ["expo-font", { fonts: FIGTREE_WEIGHTS.map((weight) => `./assets/fonts/Figtree-${weight}.ttf`) }],
+        // A8: the mark alone on the call background. `pnpm run brand-assets` renders it and the icons from `src/brand/mark.ts`.
+        ["expo-splash-screen", { image: "./assets/splash-mark.png", imageWidth: 112, resizeMode: "contain", backgroundColor: SPLASH_BACKGROUND }],
+        "./plugins/with-worklets-legacy-output.js",
+      ],
       ios: {
         jsEngine: "jsc",
         supportsTablet: true,
         bundleIdentifier: "ai.q9labs.chalk.mobile",
-        buildNumber: "28",
+        buildNumber: "30",
         associatedDomains: PUBLIC_WEB_HOSTS.map((host) => `applinks:${host}`),
         entitlements: { "com.apple.security.application-groups": ["group.ai.q9labs.chalk.mobile"] },
         infoPlist: {
@@ -41,8 +53,8 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       },
       android: {
         package: "ai.q9labs.chalk.mobile",
-        versionCode: 28,
-        adaptiveIcon: { foregroundImage: "./assets/adaptive-icon.png", backgroundColor: "#030303" },
+        versionCode: 32,
+        adaptiveIcon: { foregroundImage: "./assets/adaptive-icon.png", monochromeImage: "./assets/adaptive-icon-monochrome.png", backgroundColor: ICON_PLATE },
         intentFilters: [
           {
             action: "VIEW",

@@ -4,7 +4,7 @@ The React call joins directly with the supplied display name and device defaults
 
 ### Admission policy
 
-The Space contract has three policies: `open`, `knock`, and `members_only`. A knock request appears in `participants.admissionQueue`; a Participant with `manageAdmission` can admit or deny it.
+Operators can set two Space admission policies: `open` and `knock`. The retired `members_only` policy needs account authentication, which is no longer available. Existing Spaces with that policy stay closed until an operator explicitly changes it to `open` or `knock`; this release does not widen access automatically. A knock request appears in `participants.admissionQueue`; a Participant with `manageAdmission` can admit or deny it.
 
 ```ts
 await client.participants.admit(requestId);
@@ -13,3 +13,5 @@ await client.participants.deny(requestId);
 ```
 
 Admission is distinct from identity. A Guest can be admitted to the current Episode without becoming a Member. A Member keeps standing Space access across Episodes.
+
+Your backend can call `admitEpisodeParticipant` with `admission: "direct"` to admit a Participant and receive access without applying the Space’s `open`, `knock`, or `members_only` admission gate. Omit `admission` (or send `"policy"`) to retain policy-based admission; direct admission still requires `episodes:write` and all normal Tenant, Episode, role, and capacity checks.

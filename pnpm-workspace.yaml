@@ -60,6 +60,8 @@ overrides:
   ws@>=8.0.0 <8.21.0: ^8.21.0
 
 patchedDependencies:
+  metro@0.83.3: patches/metro@0.83.3.patch
+  metro@0.83.5: patches/metro@0.83.5.patch
   minimatch@3.1.5: patches/minimatch@3.1.5.patch
   minimatch@5.1.9: patches/minimatch@5.1.9.patch
 
@@ -75,3 +77,6 @@ allowBuilds:
   msgpackr-extract: false
   msw: false
   workerd: false
+
+# Production deploy subsets can omit root-only patched packages; patch failures still fail.
+allowUnusedPatches: true

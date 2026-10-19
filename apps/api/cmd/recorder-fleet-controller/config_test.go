@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"log/slog"
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -19,7 +21,7 @@ func TestLoadCommandConfigBuildsRoleFencedCapturePool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	if config.Fleet.Key != (recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}) {
+	if config.Fleet.Key != (recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture}) {
 		t.Fatalf("pool key = %+v", config.Fleet.Key)
 	}
 	if config.Fleet.MaxNodes != 11 || config.Fleet.SlotsPerNode != 1 || config.Fleet.Release.GPU {
@@ -43,6 +45,7 @@ func TestLoadCommandConfigFailsClosedWithoutRequiredInputs(t *testing.T) {
 
 	environment = validCommandEnvironment()
 	environment["CHALK_RECORDER_FLEET_ROLE"] = "render"
+	environment["CHALK_RECORDER_FLEET_ARCHIVE_KEY"] = strings.ReplaceAll(environment["CHALK_RECORDER_FLEET_ARCHIVE_KEY"], "/capture/", "/render/")
 	if _, err := loadCommandConfig(nil, func(key string) string { return environment[key] }); !errors.Is(err, recorderfleet.ErrInvalidConfig) {
 		t.Fatalf("render pool with capture limit error = %v", err)
 	}
@@ -58,6 +61,7 @@ func TestLoadCommandConfigBuildsCPURenderPool(t *testing.T) {
 	t.Parallel()
 	environment := validCommandEnvironment()
 	environment["CHALK_RECORDER_FLEET_ROLE"] = "render"
+	environment["CHALK_RECORDER_FLEET_ARCHIVE_KEY"] = strings.ReplaceAll(environment["CHALK_RECORDER_FLEET_ARCHIVE_KEY"], "/capture/", "/render/")
 	environment["CHALK_RECORDER_FLEET_MAX_NODES"] = "10"
 	environment["CHALK_RECORDER_FLEET_SLOTS_PER_NODE"] = "1"
 	environment["CHALK_RECORDER_FLEET_REGION"] = "nyc1"
@@ -123,7 +127,7 @@ func TestBootstrapNameClaimsStartupWarning(t *testing.T) {
 
 func validCommandEnvironment() map[string]string {
 	return map[string]string{
-		"CHALK_RECORDER_FLEET_ENVIRONMENT":                 "staging",
+		"CHALK_RECORDER_FLEET_ENVIRONMENT":                 "nightly",
 		"CHALK_RECORDER_FLEET_ROLE":                        "capture",
 		"CHALK_RECORDER_FLEET_CONTROL_PLANE_URL":           "https://control.example",
 		"CHALK_RECORDER_FLEET_CONTROLLER_CERT":             "/run/secrets/controller.pem",
@@ -138,6 +142,10 @@ func validCommandEnvironment() map[string]string {
 		"CHALK_RECORDER_FLEET_SLOTS_PER_NODE":              "1",
 		"CHALK_RECORDER_FLEET_RELEASE_ID":                  "release-7",
 		"CHALK_RECORDER_FLEET_IMAGE_ID":                    "123456",
+		"CHALK_RECORDER_FLEET_ARCHIVE_BUCKET":              "example-artifacts",
+		"CHALK_RECORDER_FLEET_ARCHIVE_REGION":              "ap-southeast-1",
+		"CHALK_RECORDER_FLEET_ARCHIVE_SHA256":              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"CHALK_RECORDER_FLEET_ARCHIVE_KEY":                 "recorder/capture/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.tar.gz",
 		"CHALK_RECORDER_FLEET_IMAGE_DIGEST":                "sha256:" + strings.Repeat("a", 64),
 		"CHALK_RECORDER_FLEET_BOOTSTRAP_SERVER_NAME":       "control.example",
 		"CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST": "sha256:" + strings.Repeat("a", 64),
@@ -145,5 +153,43 @@ func validCommandEnvironment() map[string]string {
 		"CHALK_RECORDER_FLEET_SIZE":                        "c-2",
 		"CHALK_RECORDER_FLEET_FIREWALL_ID":                 "firewall-7",
 		"CHALK_RECORDER_FLEET_BOOTSTRAP_ENDPOINT":          "https://control.example/internal/v1/recorder/bootstrap",
+	}
+}
+
+func TestNightlyExamplesLoadActualControllerConfig(t *testing.T) {
+	for _, role := range []string{"capture", "render"} {
+		t.Run(role, func(t *testing.T) {
+			contents, err := os.ReadFile("../../../../infrastructure/nightly/env/recorder-" + role + ".env.example")
+			if err != nil {
+				t.Fatal(err)
+			}
+			environment := validCommandEnvironment()
+			delete(environment, "CHALK_RECORDER_FLEET_BOOTSTRAP_SERVER_NAME")
+			delete(environment, "CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST")
+			replacements := strings.NewReplacer(
+				"__NIGHTLY_IMAGE_ID__", "123456",
+				"__NIGHTLY_IMAGE_DIGEST__", "sha256:"+strings.Repeat("a", 64),
+				"__QUALIFIED_BOOTSTRAP_NAME__", "nightly-recording-control.chalkmeet.com",
+				"__WORKER_RELEASE_ID__", "release-7",
+			)
+			placeholders := regexp.MustCompile("__[A-Z0-9_]+__")
+			for _, line := range strings.Split(string(contents), "\n") {
+				key, value, ok := strings.Cut(line, "=")
+				if ok && !strings.HasPrefix(key, "#") {
+					environment[key] = placeholders.ReplaceAllString(replacements.Replace(value), "test-only-value")
+				}
+			}
+			environment["CHALK_RECORDER_FLEET_ROLE"] = role
+			environment["CHALK_RECORDER_FLEET_ARCHIVE_KEY"] = "recorder/" + role + "/" + environment["CHALK_RECORDER_FLEET_ARCHIVE_SHA256"] + ".tar.gz"
+			environment["CHALK_RECORDER_FLEET_MAX_NODES"] = "1"
+			environment["CHALK_RECORDER_FLEET_SLOTS_PER_NODE"] = "1"
+			config, err := loadCommandConfig(nil, func(key string) string { return environment[key] })
+			if err != nil {
+				t.Fatalf("nightly example cannot boot: %v", err)
+			}
+			if !config.BootstrapNameVerified || config.Fleet.Key.Environment != "nightly" {
+				t.Fatal("nightly image bootstrap identity was not verified")
+			}
+		})
 	}
 }

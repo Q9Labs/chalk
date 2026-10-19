@@ -152,13 +152,6 @@ export const WhiteboardV1ProtocolMetadata = {
     durablePayloadContainsContent: false,
   },
   fileTransport: {
-    initiateUploadResult: {
-      method: "PUT",
-      uploadUrl: "string",
-      headers: "exact-string-map",
-      expiresAt: "rfc3339",
-    },
-    finalizeVerifies: ["provider_existence", "byte_length", "sha256", "mime_type", "immutable_object_identity", "active_scene", "file_id_uniqueness", "participant_authorization"],
     download: "participant-bound-short-lived-url",
   },
   persistence: {

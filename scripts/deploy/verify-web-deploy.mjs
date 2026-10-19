@@ -1,20 +1,25 @@
 import { pathToFileURL } from "node:url";
+import { parseArgs } from "node:util";
 
 const DEFAULT_DEADLINE_MS = 90_000;
 const DEFAULT_RETRY_DELAY_MS = 5_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+const APP_LINK_FILES = ["/.well-known/apple-app-site-association", "/.well-known/assetlinks.json"];
+const SMART_APP_BANNER = /<meta\b[^>]*\bname=["']apple-itunes-app["']/i;
 
-export async function verifyWebDeploy({ baseURL, expectedSHA, deadlineMs = DEFAULT_DEADLINE_MS, retryDelayMs = DEFAULT_RETRY_DELAY_MS, requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS }) {
+export async function verifyWebDeploy({ baseURL, expectedSHA, deadlineMs = DEFAULT_DEADLINE_MS, retryDelayMs = DEFAULT_RETRY_DELAY_MS, requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, apiBaseURL = "https://api.chalkmeet.com", expectedEnvironment }) {
   const origin = normalizeBaseURL(baseURL);
+  const apiOrigin = normalizeBaseURL(apiBaseURL);
   const normalizedSHA = normalizeSHA(expectedSHA);
   const deadline = Date.now() + deadlineMs;
+  const deadlineSignal = AbortSignal.timeout(Math.max(1, deadlineMs));
   let attempt = 0;
   let lastError;
 
   while (Date.now() <= deadline) {
     attempt += 1;
     try {
-      await verifyOnce(origin, normalizedSHA, requestTimeoutMs);
+      await verifyOnce(origin, apiOrigin, normalizedSHA, requestTimeoutMs, expectedEnvironment, deadlineSignal);
       console.log(`Web deployment verified at ${origin.origin} on attempt ${attempt}.`);
       return;
     } catch (error) {
@@ -29,24 +34,34 @@ export async function verifyWebDeploy({ baseURL, expectedSHA, deadlineMs = DEFAU
 }
 
 export function parseArguments(arguments_) {
-  const production = arguments_.includes("--production");
-  const positional = arguments_.filter((argument) => argument !== "--production");
-  if (positional.length !== 2 || arguments_.some((argument) => argument.startsWith("--") && argument !== "--production")) {
-    throw new Error("Usage: node scripts/deploy/verify-web-deploy.mjs <base-url> <expected-sha> [--production]");
-  }
-
-  return { baseURL: positional[0], expectedSHA: normalizeSHA(positional[1]), production };
+  const { positionals, values } = parseArgs({
+    args: arguments_,
+    allowPositionals: true,
+    options: { production: { type: "boolean", default: false }, "api-base-url": { type: "string" }, environment: { type: "string" } },
+  });
+  if (positionals.length !== 2) throw new Error("Expected base URL and full commit SHA");
+  if (values.environment && !["nightly", "production"].includes(values.environment)) throw new Error("Invalid target environment");
+  return { baseURL: positionals[0], expectedSHA: normalizeSHA(positionals[1]), production: values.production, apiBaseURL: values["api-base-url"], expectedEnvironment: values.environment };
 }
 
-async function verifyOnce(baseURL, expectedSHA, requestTimeoutMs) {
-  await verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs);
-  await verifyBoundaryHealth(baseURL, requestTimeoutMs);
+async function verifyOnce(baseURL, apiBaseURL, expectedSHA, requestTimeoutMs, expectedEnvironment, deadlineSignal) {
+  await verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs, deadlineSignal);
+  await verifyAPIHealth(apiBaseURL, requestTimeoutMs, deadlineSignal);
+  if (expectedEnvironment) await verifyReleaseMarker(baseURL, expectedSHA, expectedEnvironment, requestTimeoutMs, deadlineSignal);
+  await verifyAppLinks(baseURL, requestTimeoutMs, deadlineSignal);
 }
 
-async function verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs) {
+async function verifyReleaseMarker(baseURL, expectedSHA, expectedEnvironment, requestTimeoutMs, deadlineSignal) {
+  const response = await request(endpointURL(baseURL, "/release.json"), requestTimeoutMs, deadlineSignal);
+  requireStatus(response, 200, "release marker");
+  const marker = await readJSON(response, "release marker");
+  if (!marker || marker.environment !== expectedEnvironment || marker.commit !== expectedSHA) throw new Error("served web release mismatch");
+}
+
+async function verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs, deadlineSignal) {
   const serviceWorkerURL = endpointURL(baseURL, "/sw.js");
   serviceWorkerURL.searchParams.set("cb", expectedSHA);
-  const serviceWorker = await request(serviceWorkerURL, requestTimeoutMs);
+  const serviceWorker = await request(serviceWorkerURL, requestTimeoutMs, deadlineSignal);
   requireStatus(serviceWorker, 200, "service worker");
   const serviceWorkerSource = await serviceWorker.text();
   const deployedSHA = serviceWorkerSource.match(/"commitHash"\s*:\s*"([0-9a-f]{40})"/i)?.[1]?.toLowerCase();
@@ -55,21 +70,34 @@ async function verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs) {
   }
 }
 
-async function verifyBoundaryHealth(baseURL, requestTimeoutMs) {
-  const boundaryHealth = await request(endpointURL(baseURL, "/api/healthz"), requestTimeoutMs);
-  requireStatus(boundaryHealth, 200, "account boundary health");
-  const health = await readJSON(boundaryHealth, "account boundary health");
-  const { status, dependencies = {} } = health ?? {};
-  if (status !== "ok" || dependencies.account_api !== "ok") {
-    throw new Error("account boundary health did not report healthy dependencies");
-  }
+// iOS and Android open call links in the app only after these files verify it.
+async function verifyAppLinks(baseURL, requestTimeoutMs, deadlineSignal) {
+  for (const pathname of APP_LINK_FILES) await verifyJSONFile(endpointURL(baseURL, pathname), requestTimeoutMs, deadlineSignal);
+  const space = await request(endpointURL(baseURL, "/space/"), requestTimeoutMs, deadlineSignal);
+  requireStatus(space, 200, "Space page");
+  if (!SMART_APP_BANNER.test(await space.text())) throw new Error("Space page has no Smart App Banner tag");
 }
 
-async function request(url, timeoutMs, accept = "application/json") {
+async function verifyJSONFile(url, requestTimeoutMs, deadlineSignal) {
+  const response = await request(url, requestTimeoutMs, deadlineSignal);
+  requireStatus(response, 200, url.pathname);
+  const contentType = response.headers.get("content-type") ?? "";
+  if (response.redirected || !contentType.startsWith("application/json")) throw new Error(`${url.pathname} must be served as JSON without a redirect`);
+  await readJSON(response, url.pathname);
+}
+
+async function verifyAPIHealth(baseURL, requestTimeoutMs, deadlineSignal) {
+  const response = await request(endpointURL(baseURL, "/healthz"), requestTimeoutMs, deadlineSignal);
+  requireStatus(response, 200, "API health");
+  const health = await readJSON(response, "API health");
+  if (health?.status !== "ok") throw new Error("API health did not report healthy status");
+}
+
+async function request(url, timeoutMs, deadlineSignal) {
   return fetch(url, {
     cache: "no-store",
-    headers: { Accept: accept },
-    signal: AbortSignal.timeout(timeoutMs),
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.any([deadlineSignal, AbortSignal.timeout(timeoutMs)]),
   });
 }
 

@@ -5,9 +5,13 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
   alias ChalkSync.ExternalOperationConsumer
   alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
+  alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer, as: FinalizerSQL
+  alias ChalkSync.Stateholder.Postgres.SQL.Lifecycle, as: LifecycleSQL
+  alias ChalkSync.Stateholder.Postgres.WebhookObservation
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
   alias ChalkSync.UUID
+  alias ChalkSync.Webhooks.Event
 
   @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
                   System.get_env("CHALK_DATABASE_URL")
@@ -151,6 +155,100 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
                "select status, started_at from episodes where tenant_id = $1 and id = $2",
                []
              )
+  end
+
+  test "attendance writes preserve first admission and advance the latest leave", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = SyncPostgres.seed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.apply_lifecycle_intent(fixture.episode, fixture.lifecycle_intent_id)
+
+    {:ok, leave} = Operation.new("attendance-first-leave", :participant_leave, %{})
+
+    assert {:ok, %{external_operation_id: leave_id}} =
+             Postgres.begin_operation(fixture.identity, leave)
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(
+               fixture.episode,
+               leave_id,
+               leave_outcome(fixture.identity)
+             )
+
+    assert [[first, first_leave, "left"]] =
+             query_rows(
+               fixture,
+               "select first_joined_at, left_at, last_left_reason from participants where tenant_id = $1 and episode_id = $2",
+               []
+             )
+
+    assert %DateTime{} = first
+    assert %DateTime{} = first_leave
+
+    # Re-admission normally creates a new seat. Exercise the write-once guard on the existing seat directly.
+    Postgrex.query!(connection, "update participants set status = 'joining' where id = $1", [
+      UUID.dump!(fixture.identity.participant_id)
+    ])
+
+    params = [
+      UUID.dump!(fixture.episode.tenant_id),
+      UUID.dump!(fixture.episode.space_id),
+      UUID.dump!(fixture.episode.episode_id),
+      UUID.dump!(fixture.identity.participant_id),
+      1
+    ]
+
+    assert %{rows: [row]} =
+             Postgrex.query!(
+               connection,
+               LifecycleSQL.activate_lifecycle_participant(),
+               params
+             )
+
+    object = WebhookObservation.participant_object(row)
+
+    assert is_binary(
+             Event.encode!(
+               UUID.generate(),
+               "participant.joined",
+               fixture.episode.tenant_id,
+               object.joined_at,
+               object
+             )
+           )
+
+    assert [[^first, latest_join, nil]] =
+             query_rows(
+               fixture,
+               "select first_joined_at, joined_at, left_at from participants where tenant_id = $1 and episode_id = $2",
+               []
+             )
+
+    assert DateTime.compare(latest_join, first_leave) == :gt
+
+    Postgrex.query!(connection, "update participants set status = 'leaving' where id = $1", [
+      UUID.dump!(fixture.identity.participant_id)
+    ])
+
+    assert %{num_rows: 1} =
+             Postgrex.query!(
+               connection,
+               FinalizerSQL.complete_external_participant(),
+               params
+             )
+
+    assert [[^first, last_leave, "left"]] =
+             query_rows(
+               fixture,
+               "select first_joined_at, left_at, last_left_reason from participants where tenant_id = $1 and episode_id = $2",
+               []
+             )
+
+    assert DateTime.compare(last_leave, first_leave) == :gt
   end
 
   test "an authoritative Participant join atomically queues one automatic Recording", %{

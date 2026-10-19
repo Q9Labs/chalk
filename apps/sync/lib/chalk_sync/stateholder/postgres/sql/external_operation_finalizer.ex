@@ -55,7 +55,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer do
   def complete_admission_participant do
     """
     update participants
-    set status = 'left', left_at = now(), updated_at = now()
+    set status = 'left', left_at = now(), last_left_reason = 'left', updated_at = now()
     where tenant_id = $1 and space_id = $2 and episode_id = $3
       and id = $4 and status = 'joining'
     """
@@ -74,7 +74,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer do
   def complete_external_participant do
     """
     update participants
-    set status = 'left', left_at = now(), updated_at = now()
+    set status = 'left', left_at = now(), last_left_reason = 'left', updated_at = now()
     where tenant_id = $1 and space_id = $2 and episode_id = $3
       and id = $4 and generation = $5 and status = 'leaving'
     returning id, identity_id, space_id, episode_id, name, status, joined_at, left_at, updated_at

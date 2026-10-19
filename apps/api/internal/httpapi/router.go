@@ -38,6 +38,7 @@ type Options struct {
 	Capabilities         CapabilityStatus
 	CORS                 CORSOptions
 	LocalSystemToken     string
+	ServicePrincipal     authentication.ServiceCredential
 
 	Middleware                 []func(http.Handler) http.Handler
 	Profiler                   http.Handler
@@ -56,11 +57,9 @@ type Options struct {
 	RecorderFleetVerifier      RecorderFleetControllerVerifier
 	RecorderFleetEnvironment   string
 	RecorderWorkerVerifier     RecorderWorkerVerifier
-	Authentication             AuthenticationService
-	RecentAuth                 RecentAuthProvider
-	AccountTenants             AccountTenantService
-	APIKeys                    APIKeyService
-	APIKeyAuthentication       APIKeyAuthenticator
+
+	APIKeys              APIKeyService
+	APIKeyAuthentication APIKeyAuthenticator
 
 	MediaPlane             MediaPlaneResolver
 	MediaPublications      mediapublications.Registry
@@ -80,11 +79,11 @@ type Options struct {
 	RecordingEntrance     RecordingEntrancePreparer
 	EntranceInvites       EntranceInviteResolver
 
-	Spaces                 SpaceService
-	Episodes               EpisodeLifecycleService
-	SyncTokens             SyncTokenIssuer
-	SyncTokenRefresh       SyncTokenRefreshIssuer
-	SessionCookie          SessionCookieOptions
+	Spaces           SpaceService
+	Episodes         EpisodeLifecycleService
+	SyncTokens       SyncTokenIssuer
+	SyncTokenRefresh SyncTokenRefreshIssuer
+
 	TenantAuthz            TenantAuthorizer
 	Tenants                TenantService
 	Transcripts            TranscriptService
@@ -105,10 +104,6 @@ type Options struct {
 	WhiteboardFiles        WhiteboardFileService
 	WhiteboardParticipants WhiteboardParticipantVerifier
 	PublicInvites          PublicInviteService
-
-	// EpisodeDiagnostics owns a diagnostics-only internal boundary. Its zero
-	// value is disabled and therefore does not mount any /_internal route.
-
 }
 
 func NewRouter(options Options) http.Handler {
@@ -119,6 +114,10 @@ func NewRouter(options Options) http.Handler {
 	r.Use(allowCORS(options.CORS, options.RateLimit))
 	if options.LocalSystemToken != "" {
 		r.Use(acceptLocalSystemToken(options.LocalSystemToken))
+	}
+
+	if options.ServicePrincipal.ID != "" {
+		r.Use(acceptServiceCredential(options.ServicePrincipal))
 	}
 
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
@@ -218,12 +217,6 @@ func enabledStatus(enabled bool) string {
 	return "disabled"
 }
 
-func requireSessionAuthentication(service AuthenticationService) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return rejectTenantAPIKeyCredential(requireAuthentication(service)(next))
-	}
-}
-
 func rejectTenantAPIKeyCredential(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if hasTenantAPIKeyCredential(r) {
@@ -252,7 +245,7 @@ func hasTenantAPIKeyCredential(r *http.Request) bool {
 	if principal, ok := authentication.PrincipalFromContext(r.Context()); ok && principal.Kind == authentication.PrincipalAPIKey {
 		return true
 	}
-	credential, ok := sessionTokenFromRequest(r)
+	credential, ok := bearerToken(r.Header.Get("Authorization"))
 	return ok && strings.HasPrefix(credential, "chalk_sk_")
 }
 

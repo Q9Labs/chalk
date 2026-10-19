@@ -73,8 +73,15 @@ func readImageManifest(path, releaseID, expectedDigest string, role workeridenti
 	var manifest imageManifest
 	decoder := json.NewDecoder(strings.NewReader(string(data)))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&manifest) != nil || manifest.SchemaVersion != imageManifestSchemaVersion || manifest.ReleaseID != releaseID || !validClaim(manifest.SourceCommit, 128) || !validHexSHA256(manifest.SourceTreeSHA256) || !validImageProfile(manifest.Profile, role) || !validServerName(manifest.BootstrapServerName) || !validHexSHA256(manifest.BootstrapCASHA256) || len(manifest.Files) == 0 || !slices.IsSortedFunc(manifest.Files, func(left, right imageManifestFile) int { return strings.Compare(left.Path, right.Path) }) {
+	if decoder.Decode(&manifest) != nil || (manifest.SchemaVersion != imageManifestSchemaVersion && manifest.SchemaVersion != "chalk_recorder_cpu_image.v2") || manifest.ReleaseID != releaseID || !validClaim(manifest.SourceCommit, 128) || !validHexSHA256(manifest.SourceTreeSHA256) || !validImageProfile(manifest.Profile, role) || len(manifest.Files) == 0 || !slices.IsSortedFunc(manifest.Files, func(left, right imageManifestFile) int { return strings.Compare(left.Path, right.Path) }) {
 		return imageManifest{}, fmt.Errorf("%w: invalid image manifest", ErrInvalidConfig)
+	}
+	if manifest.SchemaVersion == imageManifestSchemaVersion {
+		if !validServerName(manifest.BootstrapServerName) || !validHexSHA256(manifest.BootstrapCASHA256) {
+			return imageManifest{}, fmt.Errorf("%w: invalid image bootstrap claims", ErrInvalidConfig)
+		}
+	} else if manifest.BootstrapServerName != "" || manifest.BootstrapCASHA256 != "" {
+		return imageManifest{}, fmt.Errorf("%w: portable image contains environment claims", ErrInvalidConfig)
 	}
 	previous := ""
 	for _, file := range manifest.Files {

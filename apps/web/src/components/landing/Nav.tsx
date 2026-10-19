@@ -1,8 +1,5 @@
-import ArrowRight02Icon from "@hugeicons/core-free-icons/ArrowRight02Icon";
 import { Logo } from "@q9labsai/chalk-react";
 import { useState } from "react";
-
-import { Icon } from "./Icon";
 
 const NAV_LINKS = [
   { href: "#product", label: "Product" },
@@ -51,13 +48,6 @@ export function SiteNav() {
         </nav>
 
         <div className="nav-actions">
-          <a className="nav-sign-in" href="/sign-in">
-            Sign in
-          </a>
-          <a href="/sign-up" className="btn btn-primary nav-cta">
-            Create an account
-            <Icon glyph={ArrowRight02Icon} size={15} weight={2.2} />
-          </a>
           <button type="button" className="nav-menu-toggle" aria-expanded={menuOpen} aria-controls="nav-menu" onClick={() => setMenuOpen((open) => !open)}>
             <MenuIcon open={menuOpen} />
             <span className="visually-hidden">{menuOpen ? "Close menu" : "Open menu"}</span>
@@ -78,18 +68,6 @@ export function SiteNav() {
           <a href="/docs/spaces-and-episodes" onClick={closeMenu}>
             Spaces and Episodes
           </a>
-
-          {/* The sign-in and sign-up buttons are hidden at this width, so
-              without these two the small-screen nav offers no way in. */}
-          <div className="nav-menu-actions">
-            <a href="/sign-in" className="btn btn-secondary" onClick={closeMenu}>
-              Sign in
-            </a>
-            <a href="/sign-up" className="btn btn-primary" onClick={closeMenu}>
-              Create an account
-              <Icon glyph={ArrowRight02Icon} size={15} weight={2.2} />
-            </a>
-          </div>
         </div>
       </nav>
     </header>

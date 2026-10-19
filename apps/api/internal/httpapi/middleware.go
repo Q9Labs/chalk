@@ -12,8 +12,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 )
 
-type sessionUserContextKey struct{}
-
 type APIKeyAuthenticator interface {
 	Authenticate(context.Context, apikeys.AuthenticateInput) (authentication.Principal, error)
 }
@@ -40,41 +38,7 @@ func acceptLocalSystemToken(rawToken string) func(http.Handler) http.Handler {
 	}
 }
 
-func requireAuthentication(service AuthenticationService) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if principal, ok := authentication.PrincipalFromContext(r.Context()); ok && principal.IsAuthenticated() {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			if service == nil {
-				writeServiceUnavailable(w)
-				return
-			}
-
-			token, ok := sessionTokenFromRequest(r)
-			if !ok {
-				writeUnauthenticated(w)
-				return
-			}
-
-			sessionUser, err := service.AuthenticateSession(r.Context(), token)
-			if err != nil {
-				writeAuthenticationServiceError(w, err)
-				return
-			}
-
-			principal := service.PrincipalForSession(sessionUser.Session)
-			ctx := authentication.ContextWithPrincipal(r.Context(), principal)
-			ctx = context.WithValue(ctx, sessionUserContextKey{}, sessionUser)
-
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	}
-}
-
-func requireTenantAuthentication(service AuthenticationService, apiKeys APIKeyAuthenticator, clientIPs ClientIPOptions) func(http.Handler) http.Handler {
+func requireTenantAuthentication(apiKeys APIKeyAuthenticator, clientIPs ClientIPOptions) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if principal, ok := authentication.PrincipalFromContext(r.Context()); ok && principal.IsAuthenticated() {
@@ -102,28 +66,9 @@ func requireTenantAuthentication(service AuthenticationService, apiKeys APIKeyAu
 				return
 			}
 
-			requireAuthentication(service)(next).ServeHTTP(w, r)
+			writeUnauthenticated(w)
 		})
 	}
-}
-
-func sessionUserFromContext(ctx context.Context) (authentication.SessionUser, bool) {
-	sessionUser, ok := ctx.Value(sessionUserContextKey{}).(authentication.SessionUser)
-	return sessionUser, ok
-}
-
-func sessionTokenFromRequest(r *http.Request) (string, bool) {
-	if token, ok := bearerToken(r.Header.Get("Authorization")); ok {
-		return token, true
-	}
-
-	cookie, err := r.Cookie(sessionCookieName)
-	if err != nil {
-		return "", false
-	}
-
-	token := strings.TrimSpace(cookie.Value)
-	return token, token != ""
 }
 
 func bearerToken(header string) (string, bool) {
@@ -142,4 +87,23 @@ func writeUnauthenticated(w http.ResponseWriter) {
 
 func writeServiceUnavailable(w http.ResponseWriter) {
 	writeAPIError(w, apiErrorServiceUnavailable)
+}
+
+func acceptServiceCredential(credential authentication.ServiceCredential) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			token, ok := bearerToken(r.Header.Get("Authorization"))
+			matched := 0
+			if ok && credential.ID != "" {
+				for _, secret := range credential.Secrets {
+					matched |= subtle.ConstantTimeCompare([]byte(token), []byte(secret))
+				}
+			}
+			if matched == 1 {
+				principal := authentication.Principal{Kind: authentication.PrincipalService, ServiceID: credential.ID, Scopes: credential.Scopes}
+				r = r.WithContext(authentication.ContextWithPrincipal(r.Context(), principal))
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }

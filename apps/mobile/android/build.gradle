@@ -22,3 +22,26 @@ allprojects {
 
 apply plugin: "expo-root-project"
 apply plugin: "com.facebook.react.rootproject"
+
+// chalk: libworklets.so legacy output
+gradle.projectsEvaluated {
+  def worklets = rootProject.findProject(":react-native-worklets")
+  if (worklets == null) return
+  def buildDir = worklets.layout.buildDirectory.get().asFile
+  [Debug: "debug", RelWithDebInfo: "release"].each { cmakeType, legacyType ->
+    def workletsBuilds = worklets.tasks.matching { it.name.startsWith("buildCMake${cmakeType}") }
+    workletsBuilds.configureEach { task ->
+      task.doLast {
+        worklets.fileTree("${buildDir}/intermediates/cxx/${cmakeType}").include("**/obj/*/libworklets.so").each { so ->
+          // Delete first: the legacy file can share an inode with the AGP output, and copying over it truncates the source.
+          def legacy = new File("${buildDir}/intermediates/cmake/${legacyType}/obj/${so.parentFile.name}/libworklets.so")
+          legacy.delete()
+          worklets.copy { from so; into legacy.parentFile }
+        }
+      }
+    }
+    [":react-native-reanimated", ":expo-modules-core"].each { path ->
+      rootProject.findProject(path)?.tasks?.matching { it.name.startsWith("buildCMake${cmakeType}") }?.configureEach { it.dependsOn(workletsBuilds) }
+    }
+  }
+}

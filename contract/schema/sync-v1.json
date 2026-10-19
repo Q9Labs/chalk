@@ -488,7 +488,7 @@
       "name": "set_admission_policy",
       "capability": "manageAdmission",
       "payload": {
-        "policy": ["open", "knock", "members_only"]
+        "policy": ["open", "knock"]
       }
     },
     {

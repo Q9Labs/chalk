@@ -11,6 +11,8 @@
     "apps/web/scripts/capture-call-states.mjs",
     "apps/web/scripts/capture-join-sequence.mjs",
     "apps/web/scripts/verify-call-layouts.mjs",
+    "e2e.config.ts",
+    "tests/*.e2e.ts",
     "**/*.test.ts",
     "**/*.test.tsx",
     "**/*.test.mjs",
@@ -38,7 +40,11 @@
     "scripts/recorder/source-fingerprint.mjs",
     "scripts/transcription-dispatcher/emit-manifest.mjs",
     "scripts/transcription-dispatcher/source-state.mjs",
-    "scripts/deploy/verify-web-deploy.mjs"
+    "scripts/deploy/verify-web-deploy.mjs",
+    "apps/mobile/src/space/mobile-space-client.ts",
+    "apps/mobile/src/space/mobile-space-features.ts",
+    "apps/mobile/src/preferences/call-preferences.ts",
+    "apps/mobile/plugins/with-worklets-legacy-output.js"
   ],
   "publicPackages": ["@q9labsai/chalk-assets", "@q9labsai/chalk-client", "@q9labsai/chalk-react", "@q9labsai/chalk-react-native", "@q9labsai/chalk-ui", "@q9labsai/chalk-whiteboard", "@q9labsai/facehash"],
   "ignorePatterns": ["scripts/gates/fixtures/package-boundaries/**"],
@@ -61,6 +67,7 @@
     "expo-dev-client",
     "expo-linking",
     "expo-splash-screen",
+    "expo-font",
     "@base-ui/react",
     "@excalidraw/excalidraw",
     "@q9labsai/chalk-whiteboard",
@@ -79,7 +86,10 @@
     "framer-motion",
     "scheduler",
     "@tanstack/devtools-vite",
-    "typescript-7"
+    "typescript-7",
+    "expo-clipboard",
+    "expo-status-bar",
+    "react-native-safe-area-context"
   ],
   "ignoreExports": [
     {

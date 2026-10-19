@@ -28,8 +28,16 @@ const (
 var tracer = otel.Tracer("github.com/q9labs/chalk/apps/api/internal/mediapublications")
 
 type Repository interface {
+	AppendPublicationObservation(context.Context, provideroperations.ObservationInput, PublicationParticipant) (provideroperations.Observation, error)
 	AppendObservation(context.Context, provideroperations.ObservationInput) (provideroperations.Observation, error)
 	ListObservations(context.Context, utilities.ID, utilities.ID, *provideroperations.Cursor, int) (provideroperations.ObservationPage, error)
+	ListPublicationParticipants(context.Context, utilities.ID, utilities.ID) ([]PublicationParticipant, error)
+}
+
+type PublicationParticipant struct {
+	ID           utilities.ID
+	Generation   int64
+	ConnectionID string
 }
 
 type PublishedTrack struct {
@@ -162,14 +170,53 @@ func (s Service) Latest(ctx context.Context, tenantID, episodeID utilities.ID) (
 	if tenantID.IsZero() || episodeID.IsZero() {
 		return Snapshot{}, ErrInvalidPublication
 	}
-	latest, err := s.latest(ctx, tenantID, episodeID)
-	if err != nil {
-		return Snapshot{}, err
+	for attempt := 0; attempt < maxAppendAttempts; attempt++ {
+		latest, err := s.latest(ctx, tenantID, episodeID)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		if latest == nil {
+			return Snapshot{Publications: []provideroperations.Publication{}}, nil
+		}
+		participants, err := s.repository.ListPublicationParticipants(ctx, tenantID, episodeID)
+		if err != nil {
+			return Snapshot{}, fmt.Errorf("list current publication participants: %w", err)
+		}
+		current := make(map[utilities.ID]PublicationParticipant, len(participants))
+		for _, participant := range participants {
+			current[participant.ID] = participant
+		}
+		publications := append([]provideroperations.Publication(nil), latest.Publications...)
+		changed := false
+		for index := range publications {
+			publication := &publications[index]
+			if publication.PublicationID == "" || !publication.Enabled {
+				continue
+			}
+			reference, err := ParseReference(publication.PublicationID)
+			if err != nil {
+				return Snapshot{}, err
+			}
+			participant, active := current[publication.ParticipantID]
+			if active && (!reference.HasParticipantGeneration || reference.ParticipantGeneration == participant.Generation) &&
+				(participant.ConnectionID == "" || reference.ConnectionID == participant.ConnectionID) {
+				continue
+			}
+			publication.Enabled = false
+			changed = true
+		}
+		if !changed {
+			return Snapshot{Incarnation: latest.Incarnation, Sequence: latest.Sequence, Publications: publications}, nil
+		}
+		// Retirement changes the snapshot, so it must advance the cursor too.
+		next := provideroperations.ObservationInput{TenantID: tenantID, EpisodeID: episodeID, Incarnation: latest.Incarnation, Sequence: latest.Sequence + 1, Publications: publications}
+		if _, err := s.repository.AppendObservation(ctx, next); err == nil {
+			return Snapshot{Incarnation: next.Incarnation, Sequence: next.Sequence, Publications: publications}, nil
+		} else if !errors.Is(err, provideroperations.ErrObservationConflict) && !errors.Is(err, provideroperations.ErrObservationStale) {
+			return Snapshot{}, fmt.Errorf("retire media publications: %w", err)
+		}
 	}
-	if latest == nil {
-		return Snapshot{Publications: []provideroperations.Publication{}}, nil
-	}
-	return Snapshot{Incarnation: latest.Incarnation, Sequence: latest.Sequence, Publications: append([]provideroperations.Publication(nil), latest.Publications...)}, nil
+	return Snapshot{}, fmt.Errorf("retire media publications: %w", provideroperations.ErrObservationConflict)
 }
 
 func (s Service) RecordPublishedTracks(ctx context.Context, input RecordInput) (references []PublishedReference, err error) {
@@ -195,7 +242,7 @@ func (s Service) RecordPublishedTracks(ctx context.Context, input RecordInput) (
 			return nil, err
 		}
 		next := merge(latest, input, references)
-		if _, err := s.repository.AppendObservation(ctx, next); err == nil {
+		if _, err := s.repository.AppendPublicationObservation(ctx, next, PublicationParticipant{ID: input.ParticipantID, Generation: input.ParticipantGeneration, ConnectionID: input.ConnectionID}); err == nil {
 			return references, nil
 		} else if !errors.Is(err, provideroperations.ErrObservationConflict) && !errors.Is(err, provideroperations.ErrObservationStale) {
 			return nil, fmt.Errorf("append media publication observation: %w", err)
@@ -298,6 +345,12 @@ func merge(latest *provideroperations.Observation, input RecordInput, references
 		incarnation = latest.Incarnation
 		sequence = latest.Sequence + 1
 		for _, publication := range latest.Publications {
+			if publication.ParticipantID == input.ParticipantID && publication.PublicationID != "" {
+				reference, err := ParseReference(publication.PublicationID)
+				if err != nil || reference.ConnectionID != input.ConnectionID || (reference.HasParticipantGeneration && reference.ParticipantGeneration != input.ParticipantGeneration) {
+					publication.Enabled = false
+				}
+			}
 			publications[publicationKey(publication.ParticipantID, publication.Source)] = publication
 		}
 	}

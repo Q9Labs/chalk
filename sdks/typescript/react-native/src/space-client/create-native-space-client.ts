@@ -3,7 +3,7 @@ import {
   CloudflareSFUClient,
   createChalkChatFileHttpTransport,
   createChalkWhiteboardV1Client,
-  createChalkWhiteboardV1FileHttpTransport,
+  createChalkWhiteboardV1FileDownloadTransport,
   createCloudflareSFUHTTPTransport,
   createReactNativeSyncLifecycle,
   createReactNativeWebSocketFactory,
@@ -16,6 +16,8 @@ import { createSpaceClientForPlatform, type SpaceClientPlatform } from "@q9labsa
 import type { SpaceClient } from "@q9labsai/chalk-client";
 import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc";
 import { AppState } from "react-native";
+import { toNativeCaptureError } from "../media/native-capture-error";
+import { ensureRandomUUID } from "./random-uuid";
 type PlatformDependencies = NonNullable<SpaceClientPlatform["dependencies"]>;
 type NativeMediaClient = ReturnType<NonNullable<PlatformDependencies["createMediaClient"]>>;
 type MediaFactoryInput = Parameters<NonNullable<PlatformDependencies["createMediaClient"]>>[0];
@@ -34,6 +36,7 @@ export type NativeSpaceClientOptions = {
   readonly storage?: ReactNativeAsyncStorage;
 };
 export function createNativeSpaceClient(options: NativeSpaceClientOptions): SpaceClient {
+  ensureRandomUUID();
   const { storage } = options;
   const apiBaseURL = options.baseUrl ?? "https://api.chalkmeet.com";
   const syncURL = options.syncUrl ?? defaultSyncURL(apiBaseURL);
@@ -47,7 +50,13 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
       clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>),
     },
     mediaDevices: {
-      getUserMedia: async (constraints) => (await mediaDevices.getUserMedia(constraints)) as unknown as globalThis.MediaStream,
+      getUserMedia: async (constraints) => {
+        try {
+          return (await mediaDevices.getUserMedia(constraints)) as unknown as globalThis.MediaStream;
+        } catch (cause) {
+          throw toNativeCaptureError(cause);
+        }
+      },
       getDisplayMedia: async () => (await mediaDevices.getDisplayMedia()) as unknown as globalThis.MediaStream,
     },
     createMediaClient: (input) => createMediaClient(apiBaseURL, input, fetch),
@@ -143,14 +152,9 @@ function createChatFileTransport(apiBaseURL: string, input: ChatFileFactoryInput
   return createChalkChatFileHttpTransport({ baseUrl: apiBaseURL, token: input.token, fetch });
 }
 function createWhiteboardClient(apiBaseURL: string, url: string, input: WhiteboardFactoryInput, fetch: typeof globalThis.fetch, lifecycle: ReturnType<typeof createReactNativeSyncLifecycle>, webSocket: ReturnType<typeof createReactNativeWebSocketFactory>) {
-  let sceneId: string | null = null;
-  const files = createChalkWhiteboardV1FileHttpTransport({
+  const files = createChalkWhiteboardV1FileDownloadTransport({
     baseUrl: apiBaseURL,
     token: input.token,
-    sceneId: () => {
-      if (sceneId === null) throw new TypeError("Whiteboard scene is not ready");
-      return sceneId;
-    },
     fetch,
   });
   return createChalkWhiteboardV1Client({
@@ -161,7 +165,6 @@ function createWhiteboardClient(apiBaseURL: string, url: string, input: Whiteboa
     webSocket,
     onWatchdogReplacement: input.onWatchdogReplacement,
     onSummary: (summary) => {
-      sceneId = summary.sceneId;
       input.onSummary(summary);
     },
   });

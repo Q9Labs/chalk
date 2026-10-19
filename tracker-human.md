@@ -119,10 +119,11 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
       no-show and expiry live.
 
 11. **Recordings and Transcripts on mobile** (Partly working · size M · P2)
-    Mobile Participants with manageRecording can start and stop a Recording and see its
-    status. There is no disclosure or consent step and no way to open the finished
-    Recording or Transcript.
-    - Add recording disclosure and consent.
+    The headless native SDK exposes Recording state and actions. The mobile call screens
+    have been removed for the redesign, so Participants have no Recording controls or
+    disclosure.
+    - Restore Recording controls with disclosure and consent in the redesigned mobile
+      call.
     - Let authorized Participants open the finished Recording and Transcript.
     - Check denial, failed start or stop, background return and reconnect.
 
@@ -159,22 +160,21 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
     - Build a React Native release app from the packages and check that server-only
       imports pull in no browser or native code.
 
-15. **Same Chalk props on web and mobile** (Not started · size M · P1)
-    Native Chalk lacks the recording and sounds features and four web props, and it
-    names its feedback prop differently. The hooks already match.
-    - Add the missing native features and props, or document each as an OS or rendering
-      seam.
-    - Unify the feedback prop and add a type check that fails when the two prop types
-      drift.
+15. **Mobile call controls match web** (Not started · size M · P1)
+    Web has call controls, while mobile retains only the headless native SDK and OS
+    integrations. The redesigned mobile call needs controls built on the shared client
+    and snapshot hooks.
+    - Build the redesigned mobile controls over the shared client and headless hooks.
+    - Document differences required by native permissions and rendering.
 
 16. **Every public endpoint is in the generated client** (Unclear · size S · P1)
-    OpenAPI and the generated client cover integrations, API keys, status and
-    attachments, but nobody has compared every public route against them.
+    OpenAPI and the generated client cover API keys and attachments, but nobody has
+    compared every public route against them.
     Open question: No full route comparison has been made.
     - Compare router.go against OpenAPI and the generated client, and mark internal
       routes as internal.
-    - Call one Tenant-scoped integration route and one attachment route through the
-      public client.
+    - Call one Tenant-scoped API key route and one attachment route through the public
+      client.
 
 ## Integrations and webhooks
 

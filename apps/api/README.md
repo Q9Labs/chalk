@@ -2,10 +2,8 @@
 
 Go control-plane API for Chalk.
 
-The architecture follows
-[`../../docs/redesign/north-star.md`](../../docs/redesign/north-star.md):
-thin process wiring in `cmd/main.go`, HTTP as an inbound adapter, domain logic
-behind composable boundaries, and provider-specific details kept in adapters.
+Keep process wiring thin in `cmd/main.go`, HTTP in inbound adapters, domain
+logic behind composable boundaries, and provider-specific details in adapters.
 
 Public REST routes live under one `/v1` boundary. Operational routes stay
 unversioned:
@@ -33,10 +31,41 @@ inject environment variables before the API starts.
 
 [`internal/config/config.go`](internal/config/config.go) owns supported environment variables, defaults, and startup validation.
 
+### Service principal (optional)
+
+Set all three variables to enable a backend service caller; leave all unset to
+preserve the API-key-only default:
+
+- `CHALK_API_SERVICE_ID`: stable service identity (1–128 characters). Never use a secret here.
+- `CHALK_API_SERVICE_SECRETS`: comma-separated bearer secrets, each at least 32 characters. Add a replacement, deploy callers, then remove the old secret; keep the service ID unchanged.
+- `CHALK_API_SERVICE_SCOPES`: comma-separated explicit scopes from the API-key scope vocabulary, such as `tenants:read,tenants:write,spaces:read`. No wildcard or implicit full access.
+
+The service may create Tenants with optional `external_id` (1–512 characters),
+list only its own Tenants, and use its scopes only within those Tenants.
+`POST /v1/tenants` returns the existing Tenant for a repeated
+`(service ID, external_id)`, without replacing its name, settings, or policies.
+`GET /v1/tenants/by-external-id?external_id=...` looks up only the caller's Tenant.
+The calling service is responsible for the request-supplied `external_id` and end-user identity; Tenant ownership is derived only from the authenticated service identity.
+Keep this credential server-side. It is never System; the local-only System token
+remains unavailable in non-local environments.
+
+With `tenants:read`, services can read their own Tenant including
+`cors_allowed_origins`. With `tenants:write`, they can PATCH only
+`cors_allowed_origins` on their own Tenants. Including any other field returns
+forbidden, even when its value is null. System and Tenant API-key permissions
+are unchanged. Services cannot create or rotate API keys containing `tenants:write`, because those keys can change fields beyond CORS. There is no command for adopting existing Tenants.
+
 Set `CHALK_API_TRUSTED_PROXY_CIDRS` to the comma-separated CIDR ranges of the
 load balancers or edge proxies allowed to supply `CF-Connecting-IP` or
 `X-Forwarded-For` for public-route rate limiting. Non-local environments use
 Redis-backed rate limiting through `CHALK_REDIS_URL`.
+
+For local harnesses, set `CHALK_API_RATE_LIMITS=off` with `CHALK_API_ENV=local`
+to disable only the authenticated read and write policies. Public-route and
+webhook policies remain enabled. `on` (the default when unset or empty) keeps
+all policies enabled. Values are case-insensitive and surrounding whitespace
+is ignored. Other values are rejected. Startup rejects `off` in every
+non-local environment. Do not use this switch to test rate-limit handling.
 
 ### Default MediaPlane
 
@@ -58,14 +87,6 @@ Realtime app ID and secret.
 The ProviderBridge currently uses the Cloudflare SFU executor independently of
 the deployment default. When the bridge is enabled, its Realtime app ID and
 secret remain required.
-
-### Google OAuth
-
-Google sign-in activates only with a complete
-`CHALK_GOOGLE_OAUTH_CLIENT_ID`, `CHALK_GOOGLE_OAUTH_CLIENT_SECRET`, and
-`CHALK_GOOGLE_OAUTH_REDIRECT_URL` triplet. Generic local development may omit
-the triplet. Managed production requires it and requires the redirect URL to be
-`https://chalkmeet.com/api/auth/google/callback`.
 
 ### Production capabilities
 
@@ -256,18 +277,6 @@ apps/api/scripts/smoke-lifecycle.mjs
 a running API. `smoke-lifecycle.mjs` builds the binary, waits for `/healthz`,
 sends `SIGTERM`, and verifies the process exits cleanly within configurable
 startup/shutdown budgets.
-
-## Execution Trace Harness
-
-The local harness exercises the real router and services with traced test doubles at external boundaries. It explains flows; it does not prove live provider behavior or operational observability.
-
-```bash
-cd apps/api
-go run ./cmd/trace -scenario all -style tree
-go run ./cmd/trace -scenario tenant-create -format json
-```
-
-See [the harness guide](docs/execution-trace-harness.md) for scenarios and output options. Keep raw traces with private data out of Git.
 
 ## Local Observability And Performance
 

@@ -2,10 +2,11 @@ import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 
 const sourceRoot = join(process.cwd(), "src");
-const tokenSources = new Set(["ui/theme.ts", "ui/theme-tokens.ts"]);
+const tokenSources = new Set(["theme/tokens.ts"]);
 const sourceFilePattern = /\.(?:ts|tsx)$/u;
 const styleLiteralPatterns = [
-  /\b(?:backgroundColor|borderColor|color|fill|placeholderTextColor|shadowColor|stroke)\s*:\s*["'](?:#[0-9a-f]{3,8}|rgba?\([^)]*\)|white|black|transparent)["']/giu,
+  /\b(?:backgroundColor|border\w*Color|color|fill|placeholderTextColor|shadowColor|stroke|stopColor)\s*:\s*["'](?:#[0-9a-f]{3,8}|rgba?\([^)]*\)|white|black|transparent)["']/giu,
+  /\bboxShadow\s*:\s*["'][^"']*(?:#[0-9a-f]{3,8}|rgba?\()/giu,
   /\b(?:color|fill|placeholderTextColor|stroke)\s*=\s*["'](?:#[0-9a-f]{3,8}|rgba?\([^)]*\)|white|black|transparent)["']/giu,
 ];
 
@@ -24,7 +25,7 @@ for (const filePath of await sourceFiles(sourceRoot)) {
 }
 
 if (violations.length > 0) {
-  console.error("Raw colors in active React Native styles are forbidden. Add or reuse a Theme token instead:\n");
+  console.error("Raw colours in React Native styles are forbidden. Add or reuse a token in src/theme/tokens.ts instead:\n");
   console.error(violations.join("\n"));
   process.exitCode = 1;
 }

@@ -22,7 +22,7 @@ import (
 func TestRecorderFleetControllerRouterMatchesClientContract(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
-	key := recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}
+	key := recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture}
 	identity := recorderfleet.NodeIdentity{
 		ProviderID: "42", WorkerID: "55555555-5555-4555-8555-555555555555",
 		Role: workeridentity.RoleCapture, BootGeneration: 3,
@@ -35,7 +35,7 @@ func TestRecorderFleetControllerRouterMatchesClientContract(t *testing.T) {
 	controllerID, _ := utilities.ParseID("66666666-6666-4666-8666-666666666666")
 	router := NewRecorderFleetControllerRouter(service, recorderFleetControllerVerifierStub{
 		identity: recorderfleet.ControllerIdentity{ControllerID: controllerID},
-	}, "staging", nil)
+	}, "nightly", nil)
 	server := httptest.NewTLSServer(router)
 	defer server.Close()
 	client, err := recorderfleetcontrol.New(recorderfleetcontrol.Config{BaseURL: server.URL, HTTPClient: server.Client(), Key: key})
@@ -77,7 +77,7 @@ func TestRecorderFleetControllerRouterMatchesClientContract(t *testing.T) {
 func TestRecorderFleetControllerRouterRequiresControllerAndStrictSchema(t *testing.T) {
 	t.Parallel()
 	service := &recorderFleetControllerServiceStub{}
-	router := NewRecorderFleetControllerRouter(service, recorderFleetControllerVerifierStub{err: recorderfleet.ErrUnverifiedControllerPeer}, "staging", nil)
+	router := NewRecorderFleetControllerRouter(service, recorderFleetControllerVerifierStub{err: recorderfleet.ErrUnverifiedControllerPeer}, "nightly", nil)
 	request := httptest.NewRequest(http.MethodGet, "/internal/v1/recorder/fleet/demand?role=capture", nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
@@ -85,8 +85,8 @@ func TestRecorderFleetControllerRouterRequiresControllerAndStrictSchema(t *testi
 		t.Fatalf("unauthorized status/calls = %d/%d", response.Code, service.demandCalls)
 	}
 
-	router = NewRecorderFleetControllerRouter(service, recorderFleetControllerVerifierStub{}, "staging", nil)
-	request = httptest.NewRequest(http.MethodPut, "/internal/v1/recorder/fleet/pool", strings.NewReader(`{"schema_version":"recorder_fleet_pool.v1","key":{"environment":"staging","role":"capture"},"demand_revision":"7","admission_open":false,"ready_capacity":0,"reason":"no_demand","observed_at":"2026-09-06T12:00:00Z","unknown":true}`))
+	router = NewRecorderFleetControllerRouter(service, recorderFleetControllerVerifierStub{}, "nightly", nil)
+	request = httptest.NewRequest(http.MethodPut, "/internal/v1/recorder/fleet/pool", strings.NewReader(`{"schema_version":"recorder_fleet_pool.v1","key":{"environment":"nightly","role":"capture"},"demand_revision":"7","admission_open":false,"ready_capacity":0,"reason":"no_demand","observed_at":"2026-09-06T12:00:00Z","unknown":true}`))
 	request.Header.Set("Content-Type", "application/json")
 	response = httptest.NewRecorder()
 	router.ServeHTTP(response, request)
@@ -133,7 +133,7 @@ func (s *recorderFleetControllerServiceStub) GetDemand(context.Context, recorder
 }
 
 func TestWaitForRecorderFleetDemandReturnsWhenCaptureDemandAppears(t *testing.T) {
-	key := recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}
+	key := recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture}
 	empty := recorderfleet.Demand{Revision: "empty", ObservedAt: time.Now()}
 	ready := recorderfleet.Demand{Revision: "ready", DesiredNodes: 1, ObservedAt: time.Now()}
 	service := &recorderFleetControllerServiceStub{demandSequence: []recorderfleet.Demand{empty, ready}}
@@ -147,7 +147,7 @@ func TestWaitForRecorderFleetDemandReturnsWhenCaptureDemandAppears(t *testing.T)
 }
 
 func TestWaitForRecorderFleetDemandTimesOutWithLatestSnapshot(t *testing.T) {
-	key := recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}
+	key := recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture}
 	empty := recorderfleet.Demand{Revision: "empty", ObservedAt: time.Now()}
 	service := &recorderFleetControllerServiceStub{demand: empty}
 	got, err := waitForRecorderFleetDemand(t.Context(), service, key, empty, 5*time.Millisecond, time.Millisecond)
@@ -181,7 +181,7 @@ func (s *recorderFleetControllerServiceStub) PublishPool(_ context.Context, proj
 }
 
 func TestBootstrapPendingContractAndUnavailableWarning(t *testing.T) {
-	key := recorderfleet.PoolKey{Environment: "staging", Role: workeridentity.RoleCapture}
+	key := recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture}
 	bootstrap := recorderfleet.BootstrapRequest{Key: key, ProviderID: "42", NodeName: "node-42", Region: "fra1", ReleaseID: "release-1", ImageDigest: "sha256:" + strings.Repeat("a", 64), BootGeneration: 1, InventoryDigest: strings.Repeat("b", 64)}
 	diagnostic := recorderfleet.BootstrapDiagnostic{SchemaVersion: recorderfleet.BootstrapDiagnosticSchemaVersion, Step: "challenge", AttemptCount: 4, LastReasonCode: "http_status", LastHTTPStatus: 503}
 	for _, test := range []struct {
@@ -201,7 +201,7 @@ func TestBootstrapPendingContractAndUnavailableWarning(t *testing.T) {
 			var logs bytes.Buffer
 			logger := slog.New(slog.NewJSONHandler(&logs, nil))
 			service := &recorderFleetControllerServiceStub{bootstrapErr: test.err}
-			router := NewRecorderFleetControllerRouter(service, recorderFleetControllerVerifierStub{}, "staging", logger)
+			router := NewRecorderFleetControllerRouter(service, recorderFleetControllerVerifierStub{}, "nightly", logger)
 			body, err := json.Marshal(recorderFleetBootstrapRequest{SchemaVersion: recorderfleet.BootstrapSchemaVersion, BootstrapRequest: bootstrap})
 			if err != nil {
 				t.Fatal(err)
