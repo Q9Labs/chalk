@@ -97,7 +97,7 @@ try {
     ],
     { stdio: "ignore", detached: true },
   );
-  await command("pnpm", ["--filter", "web", "run", "build"], repository, { VITE_API_URL: apiOrigin, VITE_CHALK_SYNC_URL: syncOrigin });
+  await command("pnpm", ["exec", "turbo", "run", "build", "--filter=web..."], repository, { VITE_API_URL: apiOrigin, VITE_CHALK_SYNC_URL: syncOrigin });
   await command("mix", ["deps.get"], resolve(repository, "apps/sync"), { MIX_ENV: "dev" });
   await command("mix", ["compile"], resolve(repository, "apps/sync"), { MIX_ENV: "dev" });
   const config = resolve(sandbox, "sync.exs");
@@ -144,20 +144,31 @@ Process.sleep(:infinity)
   });
   assert.equal(tenant.status, 201, await tenant.clone().text());
   const identity = { provider: "google", userId, sessionId: crypto.randomUUID(), name: "Synthetic dashboard join", email: "", avatarUrl: null, expiresAt: Date.now() + 3600000 };
-  const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await crypto.subtle.importKey("raw", await crypto.subtle.digest("SHA-256", Buffer.from(bindings.SESSION_SECRET)), "AES-GCM", false, ["encrypt"]);
-  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: Buffer.from("session") }, key, Buffer.from(JSON.stringify(identity)));
-  const cookie = `${Buffer.from(iv).toString("base64url")}.${Buffer.from(ciphertext).toString("base64url")}`;
+  async function seal(value, purpose) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: Buffer.from(purpose) }, key, Buffer.from(JSON.stringify(value)));
+    return `${Buffer.from(iv).toString("base64url")}.${Buffer.from(ciphertext).toString("base64url")}`;
+  }
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
-  await context.addCookies([{ name: "local_chalk_session", value: cookie, url: origin, httpOnly: true, sameSite: "Lax" }]);
+  await context.addCookies(
+    await Promise.all(
+      [
+        ["session", identity],
+        ["binding", { userId, sessionId: identity.sessionId, expiresAt: identity.expiresAt }],
+      ].map(async ([purpose, value]) => ({ name: `local_chalk_${purpose}`, value: await seal(value, purpose), url: origin, httpOnly: true, sameSite: "Lax" })),
+    ),
+  );
+  const session = await context.request.get(`${origin}/auth/session`);
+  assert.equal(session.status(), 200, await session.text());
   const page = await context.newPage();
   const sockets = [];
   page.on("websocket", (socket) => sockets.push(socket.url()));
-  await page.goto(`${origin}/dashboard`);
-  await page.getByRole("button", { name: "Start a call", exact: true }).click();
-  await page.getByRole("link", { name: "Join call", exact: true }).click();
   try {
+    await page.goto(`${origin}/dashboard`);
+    await page.getByRole("button", { name: "Start a call", exact: true }).click();
+    await page.getByRole("link", { name: "Join call", exact: true }).click();
     await page.locator('[data-tour="video-grid"]').waitFor({ state: "visible", timeout: 45000 });
     assert(
       sockets.some((url) => url.startsWith(syncOrigin)),
