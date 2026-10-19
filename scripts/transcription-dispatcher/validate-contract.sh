@@ -34,7 +34,7 @@ require 'CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN' "$MODULE_DIR/main.tf"
 require 'CONTROL_API_AUDIENCE' "$MODULE_DIR/main.tf"
 require 'control_api_invoke_policy_json' "$MODULE_DIR/outputs.tf"
 require 'egress_destinations = toset\(concat\(' "$MODULE_DIR/main.tf"
-if grep -rnE --include='*.tf' 'vpc_config|vpc_subnet_ids|vpc_security_group_ids|vpc_egress_mode|aws_nat_gateway|aws_eip|CHALK_EGRESS_ALLOWLIST' "$MODULE_DIR"; then
+if grep -rnE --include='*.tf' --exclude-dir=.terraform 'vpc_config|vpc_subnet_ids|vpc_security_group_ids|vpc_egress_mode|aws_nat_gateway|aws_eip|CHALK_EGRESS_ALLOWLIST' "$MODULE_DIR"; then
   fail "dispatcher must use default Lambda networking without VPC/NAT resources or a claimed network allowlist"
 fi
 require 'ALLOW_DIRTY_SOURCE' "$ROOT_DIR/scripts/transcription-dispatcher/build-release.sh"
@@ -58,7 +58,7 @@ if [[ -f "$APP_CONFIG" && -f "$APP_INDEX" ]]; then
   done
 fi
 
-if grep -rnE --exclude='.*' 'r2:GetObject|s3:GetObject|r2:PutObject|r2:DeleteObject|rds:|dynamodb:|ec2:|iam:Create|iam:Put|iam:Attach|ssm:GetParametersByPath' "$MODULE_DIR"; then
+if grep -rnE --exclude='.*' --exclude-dir=.terraform 'r2:GetObject|s3:GetObject|r2:PutObject|r2:DeleteObject|rds:|dynamodb:|ec2:|iam:Create|iam:Put|iam:Attach|ssm:GetParametersByPath' "$MODULE_DIR"; then
   fail "broad database, reusable object-storage, or infrastructure-mutation permission found"
 fi
 echo "validated transcription dispatcher infrastructure contract"
