@@ -44,10 +44,16 @@ export const NameTag = memo(function NameTag({ name, muted = false, pinned = fal
   );
 });
 
+const INSET = 8;
+const HEIGHT = 24;
+
+/** The strip at the bottom of a tile that the name tag can cover, so tile content can keep clear of it. */
+export const nameTagZone = INSET + HEIGHT;
+
 const styles = StyleSheet.create({
   // `.tag`: 8 pt from the bottom-left corner and never wider than the tile less 16 pt.
-  slot: { position: "absolute", left: 8, right: 8, bottom: 8, flexDirection: "row", zIndex: 2 },
-  tag: { flexShrink: 1, height: 24, paddingHorizontal: 8, borderRadius: 6, backgroundColor: fixed.overlay, flexDirection: "row", alignItems: "center", gap: 5 },
+  slot: { position: "absolute", left: INSET, right: INSET, bottom: INSET, flexDirection: "row", zIndex: 2 },
+  tag: { flexShrink: 1, height: HEIGHT, paddingHorizontal: 8, borderRadius: 6, backgroundColor: fixed.overlay, flexDirection: "row", alignItems: "center", gap: 5 },
   name: { flexShrink: 1 },
   hand: { flexDirection: "row", alignItems: "center", gap: 2 },
   order: { ...type.caption, fontFamily: fontFamilies[700] },
