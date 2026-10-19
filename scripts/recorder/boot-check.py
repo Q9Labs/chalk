@@ -114,6 +114,10 @@ class Services:
         self.token = os.environ.get("DIGITALOCEAN_ACCESS_TOKEN") or command(["doctl", "--context", self.context, "auth", "token"]).strip()
         require(self.token, "DigitalOcean context has no token")
         self.instance = os.environ.get("CHALK_BOOT_CHECK_INSTANCE_ID", "")
+        # The runtime user differs by host (production 1001, nightly 1000); the release config owns it.
+        user_id = os.environ.get("CHALK_BOOT_CHECK_USER_ID", "")
+        require(user_id.isdigit() and int(user_id) > 0, "configure CHALK_BOOT_CHECK_USER_ID with the managed runtime user id")
+        self.user_id = int(user_id)
         self.http = urllib.request.build_opener(NoRedirect())
         self.mutation_deadline = None
         self.cleanup_marker = None
@@ -144,7 +148,7 @@ class Services:
             online = [item["InstanceId"] for item in instances if item["PingStatus"] == "Online"]
             require(len(online) == 1, "select the exact managed instance with CHALK_BOOT_CHECK_INSTANCE_ID")
             self.instance = online[0]
-        payload = base64.b64encode(json.dumps(task).encode()).decode()
+        payload = base64.b64encode(json.dumps({**task, "user_id": self.user_id}).encode()).decode()
         script = (SCRIPTS / "boot-check-host.py").read_text()
         script += "\nimport base64\nprint(json.dumps(execute(json.loads(base64.b64decode('" + payload + "')))))\n"
         parameters = {"commands": ["python3 - <<'PYBOOTCHECK'\n" + script + "\nPYBOOTCHECK"], "executionTimeout": [str(max(60, timeout))]}
