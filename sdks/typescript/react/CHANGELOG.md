@@ -2,6 +2,19 @@
 
 ## 5.0.0
 
+- Remove `LeaveDialog`, `PreviewEpisodeEnded`, and `PreviewStatus` from the `/preview` entry point.
+- Change `ControlBar.onCommandError` from a message string callback to `(failure: ClientFailure | null, source?: MediaSource) => void`.
+- Require `ChalkMenu.trigger` and `ChalkMenu.children`; remove its forwarded div ref, `tone`, and inherited HTML attributes other than `className`.
+- Require `ChalkMenuItem.children`; remove its forwarded div ref, `tone`, and inherited HTML attributes. Its `onClick` callback no longer receives a DOM event.
+- Remove `ToastStack.participantColorSeed` and `participantGradientPreference`; make its `toasts` array and `Toast` fields readonly, and widen `Toast.message` from `string` to `ReactNode`.
+- Remove `ScreenShareView.onStopShare`; `ScreenShareViewProps` now contains only `className`.
+- Remove `features.settings`, `settingsDialog`, and `onOpenSettings` from the call view contracts, and remove `"settings"` from the `/preview` `SpacePanel` type.
+- Remove the props types for `ChalkCheckbox`, `ChalkControlGroup`, `ChalkRadio`, `ChalkSelect`, `ChalkSlider`, and `ChalkTooltipPanel` along with their components.
+- Require `primary` in the render contexts passed to `Stage.renderParticipant` and `Stage.renderContentTile`.
+- Require the new `ChalkThemeTokens` fields: `raised`, `hover`, `pressed`, `lineStrong`, `dangerHover`, `dangerPressed`, `dangerText`, `warning`, `tile`, `popover`, `textStrong`, `softText`, `wash`, `washStrong`, `overlay`, `overlayStrong`, `overlayHover`, `onOverlay`, `overlayWarning`, `overlayDanger`, and `scrim`. `ChalkTheme.tokens` remains partial.
+- Replace the `/ui` `DEFAULT_QUICK_REACTIONS` tuple's final `😢`, `🎉` entries with `🎉`, `👏`; update consumers of its inferred literal types.
+- Add `"reactToMessage"` to `/preview` `PreviewClientCommand`; exhaustive command handlers must handle the new variant.
+
 - Replace stage paging with justified Grid rows and a +N People tile; make shared screens double-width and Spotlight content-aware. Add participant hand-order, share-audio, share-aspect and share-state presentation fields. Preserve keyed video elements through 220 ms transform-only layout moves and add the two-person phone picture-in-picture.
 - Unify screen and person tile chrome; show speaking rings, bold Facehash avatars, weak signal bars, local share previews and share controls. `Stage` accepts `onOverflowClick`, and content render contexts identify the primary tile.
 
