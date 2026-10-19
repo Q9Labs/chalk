@@ -34,6 +34,37 @@ async function open(state: string) {
   await page.getByTestId("stage").waitFor({ timeout: 20_000 });
 }
 
+it("shares the persistent mirror preference between the local stage camera and its preview", async () => {
+  await open("foundation-dark");
+  const camera = page.getByRole("button", { name: "Select camera", exact: true });
+  const toggle = page.getByRole("menuitemcheckbox", { name: "Mirror my video", exact: true });
+  const local = page.locator('[data-tour="local-video"] video');
+  const remote = page.locator('[data-tour="video-grid"][role="region"] video').first();
+  const check = async (mirrored: boolean) => {
+    expect(await toggle.isEnabled()).toBe(true);
+    expect(await toggle.getAttribute("aria-checked")).toBe(String(mirrored));
+    expect(await local.evaluate((video) => getComputedStyle(video.parentElement!).scale)).toBe(mirrored ? "-1 1" : "none");
+    expect(await remote.evaluate((video) => getComputedStyle(video.parentElement!).scale)).toBe("none");
+    expect(await page.locator(".chalk-device-menu video").evaluate((video) => getComputedStyle(video).transform)).toBe(mirrored ? "matrix(-1, 0, 0, 1, 0, 0)" : "none");
+  };
+  try {
+    await camera.click();
+    await check(true);
+    await toggle.click();
+    await check(false);
+    await page.reload();
+    await camera.click();
+    await check(false);
+    await toggle.click();
+    await check(true);
+    await page.reload();
+    await camera.click();
+    await check(true);
+  } finally {
+    await page.evaluate(() => localStorage.removeItem("chalk_mirror"));
+  }
+});
+
 it("keeps every camera and shared video mounted while switching Spotlight and Grid", async () => {
   await open("stage-share-aspect-2");
   const videos = await page.locator("video").elementHandles();

@@ -14,6 +14,7 @@
 - Require the new `ChalkThemeTokens` fields: `raised`, `hover`, `pressed`, `lineStrong`, `dangerHover`, `dangerPressed`, `dangerText`, `warning`, `tile`, `popover`, `textStrong`, `softText`, `wash`, `washStrong`, `overlay`, `overlayStrong`, `overlayHover`, `onOverlay`, `overlayWarning`, `overlayDanger`, and `scrim`. `ChalkTheme.tokens` remains partial.
 - Replace the `/ui` `DEFAULT_QUICK_REACTIONS` tuple's final `😢`, `🎉` entries with `🎉`, `👏`; update consumers of its inferred literal types.
 - Add `"reactToMessage"` to `/preview` `PreviewClientCommand`; exhaustive command handlers must handle the new variant.
+- Persist the local self-view mirror preference across reloads and share it between camera previews and local participant tiles. Add controlled `ControlBar.mirrored` / `onMirrorChange` props; `ParticipantTile.mirror` still overrides the preference. Photo viewer downloads now save the original filename without opening a tab, while previews remain inline.
 
 - Replace stage paging with justified Grid rows and a +N People tile; make shared screens double-width and Spotlight content-aware. Add participant hand-order, share-audio, share-aspect and share-state presentation fields. Preserve keyed video elements through 220 ms transform-only layout moves and add the two-person phone picture-in-picture.
 - Unify screen and person tile chrome; show speaking rings, bold Facehash avatars, weak signal bars, local share previews and share controls. `Stage` accepts `onOverflowClick`, and content render contexts identify the primary tile.

@@ -2,6 +2,7 @@ import { Facehash } from "@q9labsai/facehash/react";
 import React, { useMemo, useRef, useState } from "react";
 
 import { usePrefersReducedMotion, useMediaQuery } from "../../internal/useMediaQuery";
+import { useMirrorSetting } from "../../internal/useMirrorSetting";
 import { cn } from "../../utils/cn";
 import { getParticipantColor, getParticipantAvatarRecipe, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { StageIcon } from "../stage/StageIcon";
@@ -28,7 +29,7 @@ export interface ParticipantTileProps {
     avatarUrl?: string;
   };
   videoTrack?: MediaStreamTrack | null;
-  /** Mirror the video horizontally. Defaults to true for the local participant's own camera. */
+  /** Mirror the video horizontally. Defaults to the persisted self-view preference for local cameras, false for remote cameras. */
   mirror?: boolean;
   showName?: boolean;
   showStatus?: boolean;
@@ -101,7 +102,8 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
     setOptionsOpen(false);
     queueMicrotask(() => returnFocus.current?.focus());
   };
-  const mirrored = mirror ?? participant.isLocal === true;
+  const [localMirrored] = useMirrorSetting();
+  const mirrored = mirror ?? (participant.isLocal === true && localMirrored);
   const colors = useMemo(() => getParticipantColor(participant.displayName || participant.id, gradientPreference), [gradientPreference, participant.displayName, participant.id]);
   const recipe = useMemo(() => getParticipantAvatarRecipe(participant.displayName || participant.id, gradientPreference), [participant.displayName, participant.id, gradientPreference]);
   const hasPoorConnection = participant.connectionQuality !== undefined && participant.connectionQuality > 0 && participant.connectionQuality <= 2;
