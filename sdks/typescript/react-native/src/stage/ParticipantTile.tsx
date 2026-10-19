@@ -74,7 +74,8 @@ export const ParticipantTile = memo(function ParticipantTile({ id, width, height
 
   const streamURL = useMemo(() => (tile.track ? createNativeMediaStream(tile.track).toURL() : null), [tile.track]);
   const video = tileVideo(slot, streamURL, tile.isSelf && !tile.back && mirror);
-  const name = tile.isSelf ? (float ? "You" : `${tile.name} (You)`) : tile.name;
+  const name = tile.isSelf && float ? "You" : tile.name;
+  const you = tile.isSelf && !float;
   const state = `${tile.muted ? ", microphone off" : ""}${tile.handRaised ? ", hand raised" : ""}`;
   const hitRef = useMeasuredRef<View>(`tile.${id}.open`, StyleSheet.absoluteFill);
   const label = `Options for ${tile.name}${tile.isSelf ? " (you)" : ""}${pinned ? ", pinned" : ""}${state}`;
@@ -87,7 +88,7 @@ export const ParticipantTile = memo(function ParticipantTile({ id, width, height
         </View>
       )}
       <Pressable accessibilityHint="Opens a sheet" accessibilityLabel={label} accessibilityRole="button" onPress={() => onOpen(id)} ref={hitRef} style={StyleSheet.absoluteFill} testID={`tile.${id}.open`} />
-      <NameTag handRaised={tile.handRaised} muted={tile.muted} name={name} pinned={pinned} testID={`tile.${id}.name`} />
+      <NameTag handRaised={tile.handRaised} muted={tile.muted} name={name} pinned={pinned} testID={`tile.${id}.name`} you={you} />
       {tile.isSelf && video !== null ? <FlipCameraButton back={tile.back} float={float} testID={`tile.${id}.flip`} /> : null}
     </TileShell>
   );
