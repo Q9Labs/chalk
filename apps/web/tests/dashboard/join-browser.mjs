@@ -168,7 +168,7 @@ Process.sleep(:infinity)
   try {
     await page.goto(`${origin}/dashboard`);
     await page.getByRole("button", { name: "Start a call", exact: true }).click();
-    await page.getByRole("link", { name: "Join call", exact: true }).click();
+    await page.getByRole("button", { name: "Join call", exact: true }).click();
     await page.locator('[data-tour="video-grid"]').waitFor({ state: "visible", timeout: 45000 });
     assert(
       sockets.some((url) => url.startsWith(syncOrigin)),
