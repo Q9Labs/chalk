@@ -26,3 +26,8 @@ regexTarget = "line"
 # Only the two manifest keys that the default rules flag, each with its exact value format, so a secret
 # under any other key, on the same line, or in another format still fails.
 regexes = ['''^\s*"(?:keystore_sha256": "[0-9a-f]{64}|p12_password_item_id": "[a-z0-9]{26})",?$''']
+
+[[allowlists]]
+description = "Dashboard UI fixtures return these four deterministic, nonfunctional placeholder credentials."
+regexTarget = "secret"
+regexes = ['''^chalk_sk_Rw8f2LqN0vXc4TzJ7hKp1sYd9mBaE3uG$''', '''^chalk_sk_Pq3m8VtL1wXn6RzK2hJc9yBd4sFaG7eU$''', '''^whsec_Rw8f2LqN0vXc4TzJ7hKp1sYd9mBaE3uG$''', '''^whsec_Tn5k2LqN0vXc4TzJ7hKp1sYd9mBaE3uG$''']
