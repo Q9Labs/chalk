@@ -11,7 +11,7 @@ export async function callPage(engine: Engine, spaceId: string, cursor?: string)
   const [invite, episodes, knocks, current] = await Promise.all([
     run(engine.api.spaces.getSpacePublicInvite({ params })),
     run(engine.api.episodes.listEpisodes({ params, query: { page_size: 5, cursor } })),
-    run(engine.api.spaces.listSpacePublicAdmissionRequests({ params, query: {} })),
+    run(engine.api.spaces.listSpacePublicAdmissionRequests({ params, query: { state: "pending" } })),
     live(engine, [spaceId]),
   ]);
   return {

@@ -269,6 +269,8 @@ try {
     const grant = (await joined.json()).access;
     sourceEpisodeId = grant.subject.episode_id;
     assert(grant.sync.token && grant.media.token);
+    // Exercise Sync's real UUID decoder, not a second copy of its regex.
+    assert.equal(execFileSync("elixir", ["-r", resolve(import.meta.dirname, "../../../../apps/sync/lib/chalk_sync/uuid.ex"), "-e", "[id] = System.argv(); ChalkSync.UUID.dump!(id); IO.write(id)", "--", grant.subject.participant_id], { encoding: "utf8" }), grant.subject.participant_id);
     assert.equal(grant.subject.tenant_id, firstTenant);
     const replay = await post(ada, "/dashboard-api/call", join, session.csrfToken);
     assert.equal(replay.status, 200, await replay.clone().text());
@@ -314,6 +316,31 @@ try {
     assert.notEqual((await rejoin.json()).access.subject.participant_id, grant.subject.participant_id);
   }
   console.log("PASS: owner open/knock direct grants, same-key seat replay, pre-Sync refresh rejection, new-key rejoin seat, guest knock still waits");
+  // Completed decisions are history, not new knocks the owner can answer again.
+  const knockingCall = await post(ada, "/dashboard-api/home", { action: "create-call", admission: "knock", idempotencyKey: crypto.randomUUID() }, session.csrfToken);
+  assert.equal(knockingCall.status, 200);
+  const knockingSpace = (await knockingCall.json()).call.id;
+  const invitation = await ada.request(`/dashboard-api/call?spaceId=${knockingSpace}`);
+  const inviteToken = new URLSearchParams(new URL((await invitation.json()).inviteUrl).hash.slice(1)).get("spaceInviteToken");
+  for (const decision of ["approve-knock", "deny-knock"]) {
+    const arrival = await fetch(`${process.env.DASHBOARD_TEST_API_ORIGIN}/v1/public/space-invite-arrivals`, {
+      method: "POST",
+      headers: { Authorization: "Bearer fixture-dashboard-service-token-not-a-secret", "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
+      body: JSON.stringify({ space_invite_token: inviteToken, display_name: "Knocking guest" }),
+    });
+    assert.equal(arrival.status, 201, await arrival.clone().text());
+    const waitingCall = await ada.request(`/dashboard-api/call?spaceId=${knockingSpace}`);
+    const pending = (await waitingCall.json()).knocks;
+    assert.equal(pending.length, 1);
+    assert.equal(pending[0].state, "pending");
+    const decisionKey = crypto.randomUUID();
+    const decided = await post(ada, "/dashboard-api/call", { action: decision, spaceId: knockingSpace, requestHandle: pending[0].handle, idempotencyKey: decisionKey }, session.csrfToken);
+    assert.equal(decided.status, 200, await decided.clone().text());
+    const afterDecision = await ada.request(`/dashboard-api/call?spaceId=${knockingSpace}`);
+    assert.deepEqual((await afterDecision.json()).knocks, []);
+  }
+  console.log("PASS: real public-invite pending knocks disappear after approval and denial");
+
   const keyResponse = await post(ada, "/dashboard-api/developer", { action: "create-key", name: "Test", scopes: ["spaces:read"], expiresAt: "2027-01-01T00:00:00Z", idempotencyKey: crypto.randomUUID() }, session.csrfToken);
   assert.equal(keyResponse.status, 200, await keyResponse.clone().text());
   const keyId = (await keyResponse.json()).id;

@@ -13,9 +13,12 @@ const seatSchema = z.object({ userId: z.string(), sessionId: z.string(), spaceId
 // Domain-separated, Tenant/owner/Episode-bound retry identity. A deliberate new
 // join uses a new idempotency key and therefore gets a new seat.
 async function ownerParticipantId(tenantId: string, userId: string, spaceId: string, episodeId: string, idempotencyKey: string) {
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(["dashboard-owner-seat-v1", tenantId, userId, spaceId, episodeId, idempotencyKey]))));
+  // RFC 9562 UUIDv5 in the URL namespace; Sync accepts UUID versions 1–5.
+  const namespace = Uint8Array.from([0x6b, 0xa7, 0xb8, 0x11, 0x9d, 0xad, 0x11, 0xd1, 0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8]);
+  const name = new TextEncoder().encode(JSON.stringify(["dashboard-owner-seat-v1", tenantId, userId, spaceId, episodeId, idempotencyKey]));
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-1", new Uint8Array([...namespace, ...name])));
   const bytes = new DataView(digest.buffer);
-  bytes.setUint8(6, (bytes.getUint8(6) & 0x0f) | 0x80);
+  bytes.setUint8(6, (bytes.getUint8(6) & 0x0f) | 0x50);
   bytes.setUint8(8, (bytes.getUint8(8) & 0x3f) | 0x80);
   const hex = Array.from(digest.slice(0, 16), (byte) => byte.toString(16).padStart(2, "0")).join("");
   return Schema.decodeUnknownSync(ParticipantIdSchema)(`${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`);

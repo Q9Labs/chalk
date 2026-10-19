@@ -1,4 +1,5 @@
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
+import { HttpClientError } from "effect/unstable/http";
 import { createChalkEffectClient } from "@q9labsai/chalk-client/effect";
 import { z } from "zod";
 import { dashboardWebsiteOrigin } from "../src/lib/dashboard/contracts";
@@ -8,7 +9,20 @@ import type { AttendanceDTO, LiveDTO } from "../src/lib/dashboard/contracts";
 import { DashboardError } from "./http";
 
 function client(env: DashboardEnvironment) {
-  return Effect.runPromise(createChalkEffectClient({ baseUrl: env.CHALK_API_ORIGIN, auth: { type: "bearer", token: env.DASHBOARD_SERVICE_TOKEN }, fetch: (input, init) => fetch(input, { ...init, redirect: "manual", signal: AbortSignal.timeout(15000) }) }));
+  return Effect.runPromise(
+    createChalkEffectClient({
+      baseUrl: env.CHALK_API_ORIGIN,
+      auth: { type: "bearer", token: env.DASHBOARD_SERVICE_TOKEN },
+      fetch: async (input, init) => {
+        const traceId = crypto.randomUUID().replaceAll("-", "");
+        const headers = new Headers(init?.headers);
+        headers.set("traceparent", `00-${traceId}-${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}-01`);
+        const response = await fetch(input, { ...init, headers, redirect: "manual", signal: AbortSignal.timeout(15000) });
+        if (!response.ok) console.warn(JSON.stringify({ event: "dashboard.engine_response_failed", engine_status: response.status, trace_id: traceId }));
+        return response;
+      },
+    }),
+  );
 }
 // This is the only Tenant selection point. No request value can supply its authority.
 export async function resolveTenant(env: DashboardEnvironment, person: Identity, provision = false) {
@@ -35,9 +49,20 @@ export async function run<A, E>(operation: Effect.Effect<A, E>): Promise<A> {
     ),
   );
   if (result.kind === "success") return result.value;
-  const status = z.object({ response: z.object({ status: z.number() }) }).safeParse(result.error);
-  if (status.success && status.data.response.status === 429) throw new DashboardError(429, "engine_rate_limited");
+  const httpError = HttpClientError.isHttpClientError(result.error) ? result.error : undefined;
   const failure = apiFailure.safeParse(result.error);
+  // Generated API errors decode a fixed contract code. Never log their message,
+  // the response, or the request (which contains the service bearer).
+  console.warn(
+    JSON.stringify({
+      event: "dashboard.engine_failed",
+      engine_status: httpError?.response?.status,
+      engine_code: failure.success ? failure.data.error.code : undefined,
+      sdk_error_tag: httpError ? httpError._tag : Schema.isSchemaError(result.error) ? result.error._tag : undefined,
+      sdk_error_reason: httpError?.reason._tag,
+    }),
+  );
+  if (httpError?.response?.status === 429) throw new DashboardError(429, "engine_rate_limited");
   const code = failure.success ? failure.data.error.code : "engine.unavailable";
   if (code.endsWith("not_found") || code === "access.forbidden") throw new DashboardError(404, "resource_not_found");
   if (code.includes("conflict") || code.includes("already_active") || code.includes("already_exists") || code.includes("capacity_exceeded")) throw new DashboardError(409, "engine_conflict");

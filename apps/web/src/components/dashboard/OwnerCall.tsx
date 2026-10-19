@@ -1,7 +1,8 @@
 import type { GetAccess } from "@q9labsai/chalk-client";
+import { createSpaceClientForPlatform } from "@q9labsai/chalk-client/effect";
 import { Chalk } from "@q9labsai/chalk-react";
 import { useNavigate } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 
 import type { OwnerAccessDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage, intentKey } from "../../lib/dashboard/client";
@@ -39,7 +40,16 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
   const { profile, failure, retry } = useSession();
   const { theme, setTheme } = useSiteTheme();
   const navigate = useNavigate();
-  const getAccess = useMemo(() => ownerAccess(spaceId), [spaceId]);
+  const client = useMemo(() => createSpaceClientForPlatform({ space: spaceId, getAccess: ownerAccess(spaceId), baseUrl: import.meta.env.VITE_API_URL?.trim() || undefined }, { syncUrl: import.meta.env.VITE_CHALK_SYNC_URL?.trim() || undefined }), [spaceId]);
+  useEffect(
+    () => () => {
+      void client
+        .leave()
+        .catch(() => undefined)
+        .finally(() => client.dispose());
+    },
+    [client],
+  );
   const leave = () => void navigate({ to: "/dashboard/call/$spaceId", params: { spaceId } });
 
   if (failure)
@@ -55,7 +65,7 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
   if (!profile) return null;
   return (
     <div style={{ position: "fixed", inset: 0 }}>
-      <Chalk space={spaceId} getAccess={getAccess} displayName={profile.name} theme={{ colorScheme: theme }} onColorSchemeChange={setTheme} onLeft={leave} onEpisodeEnded={leave} />
+      <Chalk client={client} displayName={profile.name} theme={{ colorScheme: theme }} onColorSchemeChange={setTheme} onLeft={leave} onEpisodeEnded={leave} />
     </div>
   );
 }
