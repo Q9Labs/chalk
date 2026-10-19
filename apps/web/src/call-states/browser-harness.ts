@@ -1,6 +1,9 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
@@ -12,6 +15,7 @@ export async function startCallHarness(): Promise<{ origin: string; stop: () => 
   await new Promise<void>((resolve, reject) => reservation.close((error) => (error ? reject(error) : resolve())));
   if (address === null || typeof address === "string") throw new Error("Call harness did not allocate a TCP port");
   const origin = `http://127.0.0.1:${address.port}`;
+  const cacheDir = await mkdtemp(join(tmpdir(), "chalk-call-harness-"));
 
   // The stdin lease closes even if the owning worker is killed; the whole process group then exits.
   const runner = String.raw`
@@ -24,7 +28,7 @@ const vite = spawn('pnpm', ['exec', 'vite', '--config', 'vite.call-states.config
 vite.once('error', error => { console.error(error); stop(); });
 vite.once('exit', stop);
 `;
-  const server = spawn(process.execPath, ["--input-type=module", "-e", runner, String(address.port)], { cwd: fileURLToPath(new URL("../..", import.meta.url)), detached: true, stdio: ["pipe", "ignore", "pipe"] });
+  const server = spawn(process.execPath, ["--input-type=module", "-e", runner, String(address.port)], { cwd: fileURLToPath(new URL("../..", import.meta.url)), detached: true, env: { ...process.env, CHALK_CALL_HARNESS_CACHE_DIR: cacheDir }, stdio: ["pipe", "ignore", "pipe"] });
   let stderr = "";
   let spawnError: Error | undefined;
   server.stderr.setEncoding("utf8").on("data", (chunk: string) => {
@@ -45,6 +49,7 @@ vite.once('exit', stop);
         await exited;
       } finally {
         clearTimeout(forceStop);
+        await rm(cacheDir, { recursive: true, force: true });
       }
     })();
     return stopping;
