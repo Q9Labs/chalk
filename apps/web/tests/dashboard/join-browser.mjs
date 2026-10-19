@@ -151,7 +151,7 @@ Process.sleep(:infinity)
     return `${Buffer.from(iv).toString("base64url")}.${Buffer.from(ciphertext).toString("base64url")}`;
   }
   browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
+  const context = await browser.newContext({ permissions: ["clipboard-read", "clipboard-write"], viewport: { width: 1440, height: 960 } });
   await context.addCookies(
     await Promise.all(
       [
@@ -179,7 +179,21 @@ Process.sleep(:infinity)
       "Dashboard contacted a non-local Sync endpoint",
     );
     await page.screenshot({ path: resolve(repository, "artifacts/dashboard-owner-in-call.png") });
-    console.log("PASS: real dashboard create → owner admission → real Sync → in-call video grid (devices denied)");
+    const spaceId = new URL(page.url()).pathname.split("/").at(-2);
+    const callResponse = await context.request.get(`${origin}/dashboard-api/call?spaceId=${encodeURIComponent(spaceId)}`);
+    assert.equal(callResponse.status(), 200, await callResponse.text());
+    const call = await callResponse.json();
+    assert.equal(new URL(call.inviteUrl).origin, apiOrigin, "Fixture must use an engine origin distinct from the dashboard");
+    const readyLink = page.locator('[data-part="ready-link"]');
+    await readyLink.waitFor({ state: "visible" });
+    const displayed = await readyLink.innerText();
+    assert(!displayed.includes("/dashboard/call/"), "In-call sharing exposed the owner-only dashboard join URL");
+    assert(displayed.includes(call.inviteUrl.replace(/^https?:\/\//, "")), "In-call sharing did not display the engine canonical invite URL");
+    await readyLink.getByRole("button", { name: "Copy link", exact: true }).click();
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    assert.equal(copied, call.inviteUrl, "In-call copy must preserve the exact engine canonical invite URL");
+    assert(!copied.includes("/dashboard/call/"));
+    console.log("PASS: real dashboard create → owner admission → real Sync → in-call video grid → engine canonical invite displayed and copied (devices denied)");
   } catch (error) {
     await writeFile(resolve(repository, "artifacts/dashboard-join-failure.log"), JSON.stringify({ body: await page.locator("body").innerText(), sockets, sync: syncLog.join(""), pages: pagesLog.join("") }));
     throw error;

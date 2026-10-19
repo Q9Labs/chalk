@@ -5,9 +5,9 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
 
 import type { OwnerAccessDTO } from "../../lib/dashboard/contracts";
-import { act, errorMessage, intentKey } from "../../lib/dashboard/client";
+import { act, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
 import { SiteRoot, useSiteTheme } from "../site/theme";
-import { useSession } from "./AppShell";
+import { useLoad, useSession } from "./AppShell";
 import { ErrorPanel } from "./kit";
 
 /**
@@ -38,6 +38,7 @@ function ownerAccess(spaceId: string): GetAccess {
 /** The call screen for the call's owner, through the React SDK's own call UI. */
 export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
   const { profile, failure, retry } = useSession();
+  const { state, reload } = useLoad(() => readPage("call", { spaceId }), `call:${spaceId}`);
   const { theme, setTheme } = useSiteTheme();
   const navigate = useNavigate();
   const client = useMemo(() => createSpaceClientForPlatform({ space: spaceId, getAccess: ownerAccess(spaceId), baseUrl: import.meta.env.VITE_API_URL?.trim() || undefined }, { syncUrl: import.meta.env.VITE_CHALK_SYNC_URL?.trim() || undefined }), [spaceId]);
@@ -52,20 +53,30 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
   );
   const leave = () => void navigate({ to: "/dashboard/call/$spaceId", params: { spaceId } });
 
-  if (failure)
+  const error = failure ?? (state.kind === "error" ? state.error : null);
+  if (error)
     return (
       <SiteRoot>
         <div className="dash">
           <div className="wrap">
-            <ErrorPanel title="Couldn’t open the call" detail={errorMessage(failure)} onRetry={retry} />
+            <ErrorPanel title="Couldn’t open the call" detail={errorMessage(error)} onRetry={failure ? retry : reload} />
           </div>
         </div>
       </SiteRoot>
     );
-  if (!profile) return null;
+  if (!profile || state.kind !== "ready")
+    return (
+      <SiteRoot>
+        <div className="dash">
+          <div className="wrap">
+            <p role="status">Opening your call…</p>
+          </div>
+        </div>
+      </SiteRoot>
+    );
   return (
     <div style={{ position: "fixed", inset: 0 }}>
-      <Chalk client={client} displayName={profile.name} theme={{ colorScheme: theme }} onColorSchemeChange={setTheme} onLeft={leave} onEpisodeEnded={leave} />
+      <Chalk client={client} inviteLink={state.data.inviteUrl} spaceName={state.data.call.name} displayName={profile.name} theme={{ colorScheme: theme }} onColorSchemeChange={setTheme} onLeft={leave} onEpisodeEnded={leave} />
     </div>
   );
 }
