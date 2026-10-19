@@ -330,7 +330,7 @@ try {
   assert.equal(past.status, 200, await past.clone().text());
   const pastDTO = await past.json();
   assert.equal(pastDTO.attendance.participants.length, 2);
-  assert(pastDTO.attendance.participants.every((p) => p.name === "Same name" && p.kind === "guest" && p.isYou === false && p.firstJoinedAt && p.lastLeftAt === pastDTO.episode.endedAt));
+  assert(pastDTO.attendance.participants.every((p) => p.name === "Same name" && p.kind === "guest" && p.isYou === false && p.firstJoinedAt && Date.parse(p.lastLeftAt) === Date.parse(pastDTO.episode.endedAt)));
   assert.equal(pastDTO.recordings[0].id, foreign.recordingId);
   const ownTranscripts = await post(ada, "/dashboard-api/past-session", { action: "transcripts", spaceId, episodeId: foreign.episodeId, recordingId: foreign.recordingId }, session.csrfToken);
   assert.equal(ownTranscripts.status, 200, await ownTranscripts.clone().text());
