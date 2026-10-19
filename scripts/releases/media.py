@@ -154,9 +154,13 @@ def materialize_archives(provider, media, bucket):
         recorder_release.verify_object(provider, bucket, key, sha)
 
 
-def installed_dispatcher(provider, config):
+def dispatcher_state_exists(provider, config):
     listing = provider.aws('s3api', 'list-objects-v2', '--bucket', config['dispatcher']['state_bucket'], '--prefix', config['dispatcher']['state_key'])
-    if not any(item['Key'] == config['dispatcher']['state_key'] for item in listing.get('Contents', [])):
+    return any(item['Key'] == config['dispatcher']['state_key'] for item in listing.get('Contents', []))
+
+
+def installed_dispatcher(provider, config):
+    if not dispatcher_state_exists(provider, config):
         return False
     state = provider.state(config['dispatcher'])
     resources = {item['type'] + '.' + item['name']: item for item in state.get('resources', []) if item.get('mode', 'managed') == 'managed'}
@@ -355,7 +359,8 @@ def deploy_dispatcher(args):
             return
         if not installed:
             # These two roles belong to the dispatcher module but provisioning created them before the first ZIP.
-            present = set(tofu('state', 'list').splitlines())
+            # `tofu state list` exits 1 until the backend holds a state object.
+            present = set(tofu('state', 'list').splitlines()) if dispatcher_state_exists(provider, config) else set()
             for resource, name in [('aws_iam_role.dispatcher', config['dispatcher']['function_name'] + '-execution'), ('aws_iam_role.scheduler', config['dispatcher']['function_name'] + '-scheduler')]:
                 address = 'module.dispatcher.' + resource
                 if address not in present:
