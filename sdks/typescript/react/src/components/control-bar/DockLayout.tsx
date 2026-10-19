@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ChalkIconButton, ChalkSegmentedControl, ChalkSheet } from "../chalk-ui";
 
-export function DockLayout({ layout, onLayoutChange }: { readonly layout: "focus" | "grid"; readonly onLayoutChange: (layout: "focus" | "grid") => void }) {
+export function DockLayout({ layout, onLayoutChange, children }: { readonly children?: ReactNode; readonly layout: "focus" | "grid"; readonly onLayoutChange: (layout: "focus" | "grid") => void }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -11,7 +11,14 @@ export function DockLayout({ layout, onLayoutChange }: { readonly layout: "focus
         </svg>
       </ChalkIconButton>
       <ChalkSheet title="More options" open={open} onOpenChange={setOpen}>
-        <div data-part="dock-layout-group" className="chalk-sheet-group">
+        <div
+          data-part="dock-layout-group"
+          className="chalk-sheet-group chalk-shell-more-group"
+          onClick={(event) => {
+            if (event.target instanceof Element && event.target.closest("button.chalk-sheet-row")) setOpen(false);
+          }}
+        >
+          {children}
           <div data-part="dock-layout-row" className="chalk-sheet-row">
             <svg data-part="dock-layout-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <rect x="3" y="3" width="7.5" height="7.5" rx="1.5" />

@@ -135,7 +135,7 @@ export async function checkLeaks({ browser, origin, budgets, directory, boardCss
         } else if (journey === "panels") {
           for (const [open, close] of [
             ["Chat", "Close chat"],
-            ["Participants", "Close participants panel"],
+            [/^People, \d+$/, "Close participants panel"],
           ]) {
             await click(open);
             await page.getByRole("button", { name: close, exact: true }).waitFor();
@@ -156,10 +156,8 @@ export async function checkLeaks({ browser, origin, budgets, directory, boardCss
             await page.getByRole("button", { name: close, exact: true }).waitFor({ state: "hidden" });
           }
         } else if (journey === "layout") {
-          await click("Layout: Spotlight");
-          await page.getByRole("menuitemradio", { name: /Grid/ }).click();
-          await click("Layout: Grid");
-          await page.getByRole("menuitemradio", { name: /Spotlight/ }).click();
+          await click("Switch to grid");
+          await click("Switch to spotlight");
         } else if (journey === "reactions") {
           await fixture("reactions");
           await page.waitForFunction(() => document.body.textContent.includes("🎉"));

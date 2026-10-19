@@ -45,6 +45,8 @@ type ExpectedTokenKeys =
   | "overlayDanger"
   | "scrim";
 type ExpectedChalkProps =
+  | "shareUrl"
+  | "onReportProblem"
   | "client"
   | "space"
   | "getAccess"

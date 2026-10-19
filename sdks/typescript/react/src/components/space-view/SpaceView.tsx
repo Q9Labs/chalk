@@ -1,7 +1,10 @@
 "use client";
-import type { Reaction } from "@q9labsai/chalk-client";
+import { commandFailure } from "../control-bar/command-failure";
+import type { ClientFailure, Reaction } from "@q9labsai/chalk-client";
+import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useCan, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useCan, useConnection, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { callDiagnostics } from "../space-header/call-diagnostics";
 import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { useSoundsSetting } from "../../internal/useSoundsSetting";
@@ -50,6 +53,10 @@ export interface SpaceViewProps {
   readonly colorScheme?: "light" | "dark";
   readonly onColorSchemeChange?: (colorScheme: "light" | "dark") => void;
   readonly spaceName: string;
+  readonly shareUrl?: string;
+  readonly callLinkOpen?: boolean;
+  readonly onCallLinkToggle?: () => void;
+  readonly onReportProblem?: import("../space-header/SpaceHeader").SpaceHeaderProps["onReportProblem"];
   readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
   readonly stageBackground?: boolean;
   /** Initial layout without a handler; controlled layout when onLayoutChange is supplied. */
@@ -71,12 +78,14 @@ export interface SpaceViewProps {
   readonly className?: string;
 }
 
-const DEFAULT_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🎉"] as const;
-
 export function SpaceView({
   colorScheme = "dark",
   onColorSchemeChange,
   spaceName,
+  shareUrl,
+  callLinkOpen,
+  onCallLinkToggle,
+  onReportProblem,
   pickChatFiles,
   stageBackground = true,
   layout: controlledLayout,
@@ -99,10 +108,12 @@ export function SpaceView({
   const self = useSelf();
   const participantsSlice = useParticipants();
   const media = useMedia();
+  const connection = useConnection();
   const recording = useRecording();
   const canPublishScreen = useCan("publishScreen");
   const canSendChat = useCan("sendChat");
   const canSendReaction = useCan("sendReaction");
+  const canRaiseHand = useCan("raiseHand");
   const canDrawWhiteboard = useCan("drawWhiteboard");
   const canManageAdmission = useCan("manageAdmission");
   const canManageRecording = useCan("manageRecording");
@@ -110,7 +121,7 @@ export function SpaceView({
   const [uncontrolledLayout, setUncontrolledLayout] = useState<"grid" | "focus">(controlledLayout ?? "focus");
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(initialPanel);
   const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
-  const [commandError, setCommandError] = useState<string | null>(null);
+  const [commandError, setCommandError] = useState<ClientFailure | null>(null);
   const layout = onLayoutChange ? (controlledLayout ?? uncontrolledLayout) : uncontrolledLayout;
   const feature = (name: keyof SpaceViewFeatures) => features?.[name] !== false;
   const localId = self.participantId ?? "local";
@@ -143,12 +154,12 @@ export function SpaceView({
       await command();
       setCommandError(null);
     } catch (cause) {
-      setCommandError(cause instanceof Error ? cause.message : "This command could not be completed.");
+      setCommandError(commandFailure(cause));
     }
   }, []);
   const leaveCall = onLeft ? () => void runCommand(async () => onLeft()) : undefined;
   const endCallForEveryone = onEndEpisode ? () => void runCommand(async () => onEndEpisode()) : undefined;
-  const displayedCommandError = externalCommandError ?? commandError;
+  const displayedCommandError = externalCommandError ?? commandError?.message;
   const commandToasts: Toast[] = displayedCommandError ? [{ id: "space-command-error", message: displayedCommandError, type: "error" }] : [];
   const dismissCommandError = () => {
     setCommandError(null);
@@ -163,6 +174,25 @@ export function SpaceView({
           colorScheme,
           onColorSchemeChange,
           spaceName,
+          people: participantsSlice.roster,
+          onTogglePeople: feature("participants") ? () => setActivePanel((current) => (current === "participants" ? null : "participants")) : undefined,
+          knockCount: canManageAdmission ? participantsSlice.admissionQueue.length : 0,
+          shareUrl,
+          callLinkOpen,
+          onCallLinkToggle,
+          onReportProblem,
+          diagnostics: callDiagnostics(connection, media),
+          shortcuts: {
+            isMuted: media.local.microphone.state !== "enabled",
+            onToggleMute: () => void runCommand(() => client.media.setMicrophoneEnabled(media.local.microphone.state !== "enabled")),
+            onToggleVideo: () => void runCommand(() => client.media.setCameraEnabled(media.local.camera.state !== "enabled")),
+            onToggleHand: feature("handRaise") && canRaiseHand ? () => void runCommand(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())) : undefined,
+            onToggleChat: feature("chat") && canSendChat ? () => setActivePanel((current) => (current === "chat" ? null : "chat")) : undefined,
+            onTogglePeople: feature("participants") ? () => setActivePanel((current) => (current === "participants" ? null : "participants")) : undefined,
+            onToggleLayout: () => updateLayout(layout === "grid" ? "focus" : "grid"),
+            onClosePanel: () => setActivePanel(null),
+            onPushToTalk: (enabled) => void runCommand(() => client.media.setMicrophoneEnabled(enabled)),
+          },
           duration: episodeDuration,
           isRecording: recording.current?.status === "recording",
           layout,
@@ -172,22 +202,11 @@ export function SpaceView({
         controls={
           <ControlBar
             density="comfortable"
-            buttons={buttons}
-            activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
-            onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
-            onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
-            onToggleWhiteboard={onToggleWhiteboard}
-            onOpenReactions={() => setReactionPickerOpen((current) => !current)}
-            onCommandError={setCommandError}
-            onLeaveRequest={leaveCall}
-            onEndForEveryone={endCallForEveryone}
-          />
-        }
-        compactControls={
-          <ControlBar
-            density="compact"
             layout={layout}
             onLayoutChange={updateLayout}
+            shareUrl={shareUrl}
+            callLinkOpen={callLinkOpen}
+            onCallLinkToggle={onCallLinkToggle}
             buttons={buttons}
             activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
             onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
@@ -205,9 +224,11 @@ export function SpaceView({
             {feature("reactions") && canSendReaction ? (
               <div className="absolute bottom-24 left-1/2 z-50 -translate-x-1/2">
                 <ReactionPicker
+                  isHandRaised={self.handRaised}
+                  onToggleHandRaise={feature("handRaise") && canRaiseHand ? () => void runCommand(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())) : undefined}
                   isOpen={isReactionPickerOpen}
                   onClose={() => setReactionPickerOpen(false)}
-                  allowedReactions={[...DEFAULT_REACTIONS]}
+                  allowedReactions={[...DEFAULT_QUICK_REACTIONS]}
                   onSelect={(reaction) => void runCommand(() => client.reactions.send(reaction as Reaction)).finally(() => setReactionPickerOpen(false))}
                   size="compact"
                 />
@@ -218,7 +239,9 @@ export function SpaceView({
         sidebar={
           <CallCard state={drawer.state} onClose={() => setActivePanel(null)}>
             {drawer.panel === "chat" && feature("chat") && canSendChat ? <ChatPanel variant="sidebar" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} /> : null}
-            {drawer.panel === "participants" && feature("participants") ? <ParticipantsPanel variant="sidebar" admissionEnabled={feature("admission")} generatedAvatars={generatedAvatars} onCommandError={setCommandError} onClose={() => setActivePanel(null)} /> : null}
+            {drawer.panel === "participants" && feature("participants") ? (
+              <ParticipantsPanel variant="sidebar" admissionEnabled={feature("admission")} generatedAvatars={generatedAvatars} onCommandError={(message) => setCommandError(message === null ? null : commandFailure(new Error(message)))} onClose={() => setActivePanel(null)} />
+            ) : null}
             {drawer.panel === "admission" && feature("admission") ? <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} /> : null}
           </CallCard>
         }

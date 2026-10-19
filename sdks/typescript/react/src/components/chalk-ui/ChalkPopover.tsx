@@ -1,7 +1,26 @@
 import { Popover } from "@base-ui/react/popover";
 import { useRef, type ReactElement, type ReactNode } from "react";
+import { ChalkTooltip } from "./ChalkTooltip";
 import { cn } from "../../utils/cn";
-export function ChalkPopover({ trigger, children, label, className, alignOffset = 0 }: { readonly trigger: ReactElement; readonly children: ReactNode; readonly label: string; readonly className?: string; readonly alignOffset?: number }) {
+export function ChalkPopover({
+  trigger,
+  children,
+  label,
+  className,
+  alignOffset = 0,
+  tooltip,
+  open,
+  onOpenChange,
+}: {
+  readonly open?: boolean;
+  readonly onOpenChange?: (open: boolean) => void;
+  readonly trigger: ReactElement;
+  readonly children: ReactNode;
+  readonly label: string;
+  readonly className?: string;
+  readonly tooltip?: string;
+  readonly alignOffset?: number;
+}) {
   const container = useRef<HTMLElement>(null);
   return (
     <span
@@ -10,8 +29,8 @@ export function ChalkPopover({ trigger, children, label, className, alignOffset 
       }}
       style={{ display: "contents" }}
     >
-      <Popover.Root>
-        <Popover.Trigger render={trigger} />
+      <Popover.Root open={open} onOpenChange={onOpenChange}>
+        {tooltip ? <ChalkTooltip trigger={<Popover.Trigger render={trigger} />}>{tooltip}</ChalkTooltip> : <Popover.Trigger render={trigger} />}
         <Popover.Portal container={container}>
           <Popover.Positioner side="bottom" align="start" alignOffset={alignOffset} sideOffset={8} collisionPadding={8} className="chalk-popover-positioner">
             <Popover.Popup aria-label={label} data-part="popover" className={cn("chalk-menu chalk-popover", className)}>
