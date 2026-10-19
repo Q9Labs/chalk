@@ -18,32 +18,72 @@ class GitHubRetry(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
         self.count = root / 'calls'
+        self.pids = root / 'pids'
         gh = root / 'gh'
-        gh.write_text(f'#!{sys.executable}\n' + '''
+        gh.write_text(f'#!{sys.executable}\n' + r'''
 import json
 import os
 from pathlib import Path
 import sys
+import time
 
 count = Path(os.environ['GH_FAKE_COUNT'])
 attempt = int(count.read_text()) + 1 if count.exists() else 1
 count.write_text(str(attempt))
+with open(os.environ['GH_FAKE_PIDS'], 'a') as pids:
+    pids.write(f'{os.getpid()}\n')
+if os.environ.get('GH_FAKE_HANG') == '1':
+    print('partial response', flush=True)
+    time.sleep(2)
 if attempt <= int(os.environ['GH_FAKE_FAILURES']):
+    if os.environ.get('GH_FAKE_PARTIAL') == '1':
+        print(json.dumps([{'jobs': [{'id': 99}]}]))
     print(os.environ['GH_FAKE_ERROR'], file=sys.stderr)
     sys.exit(1)
-print(json.dumps([[{'id': 1}], [{'id': 2}]] if '--paginate' in sys.argv else {'id': 1}))
+pages = [[{'id': 1}], [{'id': 2}]]
+if os.environ.get('GH_FAKE_PARTIAL') == '1':
+    pages = [{'jobs': page} for page in pages]
+print(json.dumps(pages if '--paginate' in sys.argv else {'id': 1}))
 ''')
         gh.chmod(0o755)
         environment = patch.dict(os.environ, {
             'PATH': f'{root}{os.pathsep}{os.environ["PATH"]}',
             'GITHUB_REPOSITORY': 'example/repository',
             'GH_FAKE_COUNT': str(self.count),
+            'GH_FAKE_PIDS': str(self.pids),
             'GH_FAKE_FAILURES': '3',
             'GH_FAKE_ERROR': 'gh: Server Error (HTTP 502)',
         })
         environment.start()
         self.addCleanup(environment.stop)
         self.github = GitHub()
+
+    def test_hanging_calls_are_bounded_and_children_are_reaped(self):
+        self.github = GitHub(timeout=0.3)
+        for method, attempts in (('request', 4), ('pages', 4), ('post', 1)):
+            with self.subTest(method=method), patch.dict(os.environ, GH_FAKE_HANG='1'), patch('time.sleep') as sleep:
+                self.count.unlink(missing_ok=True)
+                self.pids.unlink(missing_ok=True)
+                with self.assertRaises(subprocess.CalledProcessError) as caught:
+                    if method == 'post':
+                        self.github.reserve_cut('a' * 40)
+                    else:
+                        self.call(method)
+                self.assertEqual(caught.exception.returncode, 124)
+                self.assertIn(b'timed out', caught.exception.stderr)
+                self.assertEqual(caught.exception.output, b'partial response\n')
+                self.assertEqual(self.count.read_text(), str(attempts))
+                self.assertEqual(sleep.call_count, attempts - 1)
+                pids = self.pids.read_text().splitlines()
+                self.assertEqual(len(pids), attempts)
+                for pid in pids:
+                    with self.assertRaises(ProcessLookupError):
+                        os.kill(int(pid), 0)
+
+    def test_partial_pagination_output_is_discarded_on_retry(self):
+        with patch.dict(os.environ, GH_FAKE_PARTIAL='1', GH_FAKE_FAILURES='1'), patch('time.sleep'):
+            self.assertEqual(self.github.pages('actions/runs/123/jobs', 'jobs'), [{'id': 1}, {'id': 2}])
+            self.assertEqual(self.count.read_text(), '2')
 
     def call(self, method):
         return getattr(self.github, method)('actions/runs/123/jobs?filter=latest')

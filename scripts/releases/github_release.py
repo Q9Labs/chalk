@@ -57,24 +57,32 @@ def cut_decision(target, deployments, now, manual=False):
 
 
 class GitHub:
-    def __init__(self):
+    def __init__(self, timeout=60):
         self.repository = os.environ['GITHUB_REPOSITORY']
+        self.timeout = timeout
 
     def _call(self, command, route, data=None):
         # Only reads are safe to replay: a failed POST may already have created a deployment.
+        # Four 60-second attempts plus at most 21 seconds of backoff: 261 seconds.
         for attempt in range(1, 5):
             try:
-                return subprocess.check_output(command, input=data, stderr=subprocess.PIPE)
-            except subprocess.CalledProcessError as error:
+                # check_output kills and reaps gh on timeout, including a whole paginated read.
+                return subprocess.check_output(command, input=data, stderr=subprocess.PIPE, timeout=self.timeout)
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+                timed_out = isinstance(error, subprocess.TimeoutExpired)
+                if timed_out:
+                    error = subprocess.CalledProcessError(
+                        124, command, output=error.output,
+                        stderr=(error.stderr or b'') + f'\ngh api timed out after {self.timeout} seconds\n'.encode())
                 message = error.stderr.decode(errors='replace')
                 sys.stderr.write(message)
                 status = re.search(r'HTTP (\d{3})\b', message)
-                transient = (500 <= int(status[1]) < 600 if status else
+                transient = timed_out or (500 <= int(status[1]) < 600 if status else
                              any(text in message.lower() for text in
                                  ('error connecting', 'dial tcp', 'connection reset', 'connection refused',
                                   'timeout', 'timed out', 'deadline exceeded', 'unexpected eof')))
                 if data is not None or not transient or attempt == 4:
-                    raise
+                    raise error
                 print(f'GitHub retry {route}: attempt {attempt + 1}/4', file=sys.stderr)
                 time.sleep(random.uniform(0, 3 * 2 ** (attempt - 1)))
 
