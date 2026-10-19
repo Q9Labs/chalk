@@ -109,6 +109,7 @@ export function SpaceView({
   onEndEpisode,
   className,
 }: SpaceViewProps): React.JSX.Element {
+  const effectiveShareUrl = inviteLink ?? shareUrl;
   const callToasts = useCallToasts();
   const [soundsEnabled] = useSoundsSetting();
   const client = useSpaceClient();
@@ -216,7 +217,7 @@ export function SpaceView({
           people: participantsSlice.roster,
           onTogglePeople: feature("participants") ? () => setActivePanel((current) => (current === "participants" ? null : "participants")) : undefined,
           knockCount: canManageAdmission ? participantsSlice.admissionQueue.length : 0,
-          shareUrl,
+          shareUrl: effectiveShareUrl,
           callLinkOpen: callLinkOpen ?? callLink.open,
           onCallLinkToggle: onCallLinkToggle ?? callLink.toggle,
           onReportProblem,
@@ -259,7 +260,7 @@ export function SpaceView({
             density="comfortable"
             layout={layout}
             onLayoutChange={updateLayout}
-            shareUrl={shareUrl}
+            shareUrl={effectiveShareUrl}
             callLinkOpen={callLinkOpen ?? callLink.open}
             onCallLinkToggle={onCallLinkToggle ?? callLink.toggle}
             buttons={buttons}
@@ -311,7 +312,7 @@ export function SpaceView({
         }
         overlays={
           <>
-            <CallReady open={callLinkOpen ?? callLink.open} onClose={onCallLinkToggle ?? callLink.close} link={inviteLink ?? shareUrl} />
+            <CallReady open={callLinkOpen ?? callLink.open} onClose={onCallLinkToggle ?? callLink.close} link={effectiveShareUrl} />
             {overlay}
             {reconnecting && reconnecting.status !== "reconnecting" ? <ReconnectingOverlay {...reconnecting} /> : null}
             <OfflineActions reconnecting={reconnecting?.status === "reconnecting" && reconnecting.isVisible} />

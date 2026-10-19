@@ -20,10 +20,12 @@ React SDK, UI, whiteboard and dependency changes, and full gates. The PR Gate
 workflow already runs this root gate and installs Chromium.
 The pre-commit fast profile deliberately does not run browser measurements.
 
-`--gate` enforces all limits on testbox (identified by `TESTBOX_SOURCE_COMMIT`).
-Elsewhere, including GitHub Actions, it enforces bundle size only. This is an
+Gate lanes enforce bundle size and lifecycle leaks everywhere, including
+GitHub Actions. Timing limits are enforced only on testbox (identified by
+`TESTBOX_SOURCE_COMMIT`): off-testbox `--gate` runs select bundle-only mode,
+while `--gate --leaks-only` still measures and enforces leaks. This is an
 explicit policy, not an automatic retry or a pass after noisy timing failures.
-Direct runs enforce timing by default; `--bundle-only` selects the CI policy.
+Direct runs enforce timing by default; `--bundle-only` explicitly checks only bundle size.
 `--skip-build` reuses a previously built harness only for diagnosis.
 
 The console prints measured median/budget pairs. JSON defaults to

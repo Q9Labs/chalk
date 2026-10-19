@@ -61,6 +61,13 @@ try {
       const stage = page.getByTestId("stage");
       await stage.waitFor();
       await page.evaluate(() => document.fonts.ready);
+      const detailsTrigger = page.getByRole("button", { name: "Call details", exact: true });
+      await detailsTrigger.click();
+      const details = page.getByRole("dialog", { name: "Call details", exact: true });
+      await details.getByText("example.com/invite/test-call", { exact: true }).waitFor();
+      await details.getByRole("img", { name: "Scan to join this call", exact: true }).waitFor();
+      await details.getByRole("button", { name: "Close", exact: true }).click();
+      await details.waitFor({ state: "hidden" });
       const linkTrigger = device === "phone" ? page.getByRole("button", { name: "Call details", exact: true }) : page.getByRole("button", { name: "Show call link", exact: true });
       if (device === "phone") {
         await linkTrigger.click();
