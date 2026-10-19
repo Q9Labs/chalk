@@ -180,7 +180,7 @@ free_gib() {
 }
 
 reap_stale() {
-  local hours="$1" dir docker_bin cutoff name
+  local hours="$1" dir docker_bin cutoff name owner
   while IFS= read -r dir; do
     if in_use "${dir}"; then
       echo "[remote] keeping ${dir}: a live process uses it"
@@ -192,8 +192,13 @@ reap_stale() {
   if docker_bin="$(docker_binary)"; then
     cutoff="$(date -u -v-"${hours}"H +%Y%m%dT%H%M%SZ)"
     while IFS= read -r name; do
-      [[ "${name}" =~ ^chalk-gate-postgres-([0-9]{8}T[0-9]{6}Z)- ]] || continue
+      [[ "${name}" =~ ^chalk-gate-postgres-([0-9]{8}T[0-9]{6}Z)-([0-9]+)$ ]] || continue
+      owner="${BASH_REMATCH[2]}"
       if [[ "${BASH_REMATCH[1]}" < "${cutoff}" ]]; then
+        if ps -p "${owner}" -o pid= >/dev/null 2>&1; then
+          echo "[remote] keeping container ${name}: its owner PID is alive"
+          continue
+        fi
         echo "[remote] removing orphaned container ${name}"
         "${docker_bin}" rm -f --volumes "${name}" >/dev/null 2>&1 || true
       fi
@@ -241,7 +246,49 @@ prepare() {
   echo "[remote] ${free} GiB free; checkout ${work}"
 }
 
+# Keep a PID receipt outside the checkout so cancellation can stop the remote
+# process tree before removing files. Start times protect against PID reuse.
+stop_run() {
+  local id="$1" owner pid index alive attempt
+  local pids=() starts=()
+  owner="$(cat "/tmp/chalk-owner-${id}.pid" 2>/dev/null)" || return 0
+  [[ "$owner" =~ ^[0-9]+$ ]] || return 0
+  if [[ "$owner" != "$$" ]]; then
+    ps -p "$owner" -o command= | grep -F -- "$id" >/dev/null || return 0
+  fi
+  while read -r pid; do
+    pids+=("$pid")
+    starts+=("$(ps -p "$pid" -o lstart= || true)")
+  done < <(ps -axo pid=,ppid= | awk -v root="$owner" -v self="$$" '
+    function visit(pid, child) {
+      for (child in parent) if (parent[child] == pid) visit(child)
+      if (pid != self) print pid
+    }
+    { parent[$1] = $2 }
+    END { visit(root) }')
+  for pid in "${pids[@]}"; do kill -TERM "$pid" 2>/dev/null || true; done
+  for attempt in {1..10}; do
+    alive=0
+    for ((index=0; index<${#pids[@]}; index++)); do
+      pid="${pids[index]}"
+      if [[ -n "${starts[index]}" && "$(ps -p "$pid" -o lstart=)" == "${starts[index]}" ]]; then
+        alive=1
+      fi
+    done
+    ((alive)) || return 0
+    sleep 1
+  done
+  for ((index=0; index<${#pids[@]}; index++)); do
+    pid="${pids[index]}"
+    if [[ -n "${starts[index]}" && "$(ps -p "$pid" -o lstart=)" == "${starts[index]}" ]]; then
+      kill -KILL "$pid" 2>/dev/null || true
+    fi
+  done
+}
+
 cleanup() {
+  stop_run "$1"
+  rm -f "/tmp/chalk-owner-$1.pid"
   rm -f "/tmp/chalk-upload-$1.bundle"
   safe_delete "/tmp/chalk-remote-$1"
   [[ ! -e "/tmp/chalk-remote-$1" ]] && echo "[remote] cleaned /tmp/chalk-remote-$1"
@@ -261,6 +308,7 @@ run_gate() {
   shift 6
   trap 'cleanup "${id}"; if [[ "$(cat /tmp/chalk-remote-admission.lock 2>/dev/null | tr -d "[:space:]")" == "$$" ]]; then rm -f /tmp/chalk-remote-admission.lock; fi' EXIT
   trap 'exit 143' HUP INT TERM
+  printf '%s\n' "$$" >"/tmp/chalk-owner-${id}.pid"
   exec </dev/null
   wait_for_turn "${queue_timeout}"
   prepare "${id}" "${min_free}" "${hours}"
