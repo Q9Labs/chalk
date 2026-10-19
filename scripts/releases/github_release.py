@@ -10,8 +10,10 @@ import subprocess
 import sys
 import tempfile
 from time import sleep as backoff_sleep
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
+
+CUT_GAP = timedelta(hours=6)
 
 
 def require(condition, message):
@@ -45,9 +47,9 @@ def cut_decision(target, deployments, now, manual=False):
     if manual:
         return True, 'explicit manual cut'
     if any(payload(item).get('channel') in ('nightly-attempt', 'nightly-cut')
-           and datetime.fromisoformat(item['created_at'].replace('Z', '+00:00')).date() >= now.date()
+           and now - datetime.fromisoformat(item['created_at'].replace('Z', '+00:00')) < CUT_GAP
            for item in deployments):
-        return False, 'cut already attempted today (UTC)'
+        return False, 'cut attempted in the last 6 hours'
     completed = held_candidates(deployments, held=False)
     if not completed:
         return True, 'first completed cut'

@@ -19,9 +19,10 @@ requires one for a selected nightly.
 
 ## Nightly cut
 
-`Cut nightly` runs daily at 02:17 UTC on master.
-Scheduled cuts require new commits since the last completed cut and at most
-one cut attempt per UTC day, reserved before builds. Failures do not advance the baseline.
+`Cut nightly` runs on master whenever a master push Gate run passes.
+Gate-started cuts use that Gate's commit, require new commits since the last
+completed cut, and wait at least 6 hours since the last cut attempt, reserved
+before builds. Failures do not advance the baseline.
 An expired or unavailable build baseline triggers a full build of the saved enabled
 component set instead of forwarding dead artifact IDs. Passed cut records preserve
 recorder enablement for this fallback. A pre-upgrade baseline without readable bytes
