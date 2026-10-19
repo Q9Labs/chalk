@@ -13,6 +13,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
+	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
@@ -621,7 +622,7 @@ func publicInviteManagementErrors() []APIError {
 }
 
 func publicInvitePublicErrors() []APIError {
-	return []APIError{apiErrorInvalidRequest, apiErrorInvalidArrivalHandle, apiErrorInvalidRequestKey, apiErrorPublicInviteUnavailable, apiErrorArrivalUnavailable, apiErrorEpisodeCapacityExceeded, apiErrorTenantLiveEpisodeLimit, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorIdempotencyConflict, apiErrorInternal}
+	return []APIError{apiErrorInvalidRequest, apiErrorInvalidArrivalHandle, apiErrorInvalidRequestKey, apiErrorPublicInviteUnavailable, apiErrorArrivalUnavailable, apiErrorEpisodeCapacityExceeded, apiErrorEpisodeNotActive, apiErrorTenantLiveEpisodeLimit, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorIdempotencyConflict, apiErrorInternal}
 }
 
 func publicInviteRefreshErrors() []APIError {
@@ -646,6 +647,8 @@ func publicInviteEndpointAPIError(err error) (APIError, bool) {
 		return apiErrorMediaProofExpired, true
 	case errors.Is(err, publicinvites.ErrMediaProofRejected):
 		return apiErrorMediaProofRejected, true
+	case errors.Is(err, episodes.ErrEpisodeNotActive):
+		return apiErrorEpisodeNotActive, true
 	case errors.Is(err, publicinvites.ErrInvalidIdempotencyKey):
 		return apiErrorInvalidRequestKey, true
 	case errors.Is(err, publicinvites.ErrIdempotencyConflict):

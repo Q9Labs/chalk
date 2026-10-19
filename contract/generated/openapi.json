@@ -541,7 +541,7 @@
               }
             },
             "description": "Conflict",
-            "x-chalk-error-codes": ["episode.capacity_exceeded", "request.idempotency_conflict", "tenant.live_episode_limit_reached"]
+            "x-chalk-error-codes": ["episode.capacity_exceeded", "episode.not_active", "request.idempotency_conflict", "tenant.live_episode_limit_reached"]
           },
           "429": {
             "content": {
@@ -659,7 +659,7 @@
               }
             },
             "description": "Conflict",
-            "x-chalk-error-codes": ["episode.capacity_exceeded", "request.idempotency_conflict", "tenant.live_episode_limit_reached"]
+            "x-chalk-error-codes": ["episode.capacity_exceeded", "episode.not_active", "request.idempotency_conflict", "tenant.live_episode_limit_reached"]
           },
           "429": {
             "content": {
@@ -800,7 +800,7 @@
               }
             },
             "description": "Conflict",
-            "x-chalk-error-codes": ["access.media_proof_expired", "episode.capacity_exceeded", "request.idempotency_conflict", "tenant.live_episode_limit_reached"]
+            "x-chalk-error-codes": ["access.media_proof_expired", "episode.capacity_exceeded", "episode.not_active", "request.idempotency_conflict", "tenant.live_episode_limit_reached"]
           },
           "413": {
             "content": {
@@ -953,7 +953,7 @@
               }
             },
             "description": "Conflict",
-            "x-chalk-error-codes": ["episode.capacity_exceeded", "request.idempotency_conflict", "tenant.live_episode_limit_reached"]
+            "x-chalk-error-codes": ["episode.capacity_exceeded", "episode.not_active", "request.idempotency_conflict", "tenant.live_episode_limit_reached"]
           },
           "413": {
             "content": {
@@ -1219,7 +1219,7 @@
               }
             },
             "description": "Conflict",
-            "x-chalk-error-codes": ["episode.capacity_exceeded", "request.idempotency_conflict", "tenant.live_episode_limit_reached"]
+            "x-chalk-error-codes": ["episode.capacity_exceeded", "episode.not_active", "request.idempotency_conflict", "tenant.live_episode_limit_reached"]
           },
           "413": {
             "content": {
