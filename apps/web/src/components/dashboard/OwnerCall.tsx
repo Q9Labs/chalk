@@ -1,8 +1,8 @@
-import type { GetAccess } from "@q9labsai/chalk-client";
+import type { GetAccess, SpaceClient } from "@q9labsai/chalk-client";
 import { createSpaceClientForPlatform } from "@q9labsai/chalk-client/effect";
 import { Chalk } from "@q9labsai/chalk-react";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { OwnerAccessDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
@@ -41,16 +41,18 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
   const { state, reload } = useLoad(() => readPage("call", { spaceId }), `call:${spaceId}`);
   const { theme, setTheme } = useSiteTheme();
   const navigate = useNavigate();
-  const client = useMemo(() => createSpaceClientForPlatform({ space: spaceId, getAccess: ownerAccess(spaceId), baseUrl: import.meta.env.VITE_API_URL?.trim() || undefined }, { syncUrl: import.meta.env.VITE_CHALK_SYNC_URL?.trim() || undefined }), [spaceId]);
-  useEffect(
-    () => () => {
-      void client
+  const getAccess = useMemo(() => ownerAccess(spaceId), [spaceId]);
+  const [client, setClient] = useState<SpaceClient | null>(null);
+  useEffect(() => {
+    const owned = createSpaceClientForPlatform({ space: spaceId, getAccess, baseUrl: import.meta.env.VITE_API_URL?.trim() || undefined }, { syncUrl: import.meta.env.VITE_CHALK_SYNC_URL?.trim() || undefined });
+    setClient(owned);
+    return () => {
+      void owned
         .leave()
         .catch(() => undefined)
-        .finally(() => client.dispose());
-    },
-    [client],
-  );
+        .finally(() => owned.dispose());
+    };
+  }, [spaceId, getAccess]);
   const leave = () => void navigate({ to: "/dashboard/call/$spaceId", params: { spaceId } });
 
   const error = failure ?? (state.kind === "error" ? state.error : null);
@@ -64,7 +66,7 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
         </div>
       </SiteRoot>
     );
-  if (!profile || state.kind !== "ready")
+  if (!profile || state.kind !== "ready" || !client)
     return (
       <SiteRoot>
         <div className="dash">

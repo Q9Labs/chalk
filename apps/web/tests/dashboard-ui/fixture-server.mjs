@@ -141,6 +141,7 @@ function cookies(request) {
 const csrfFor = (account) => `fixture-csrf-${account}`;
 class RequestBodyTooLarge extends Error {}
 const MAX_BODY_BYTES = 1024 * 1024;
+const MAX_FIXTURE_DELAY_MS = 1000;
 async function readBody(request) {
   const chunks = [];
   let bytes = 0;
@@ -385,8 +386,11 @@ const server = createServer(async (request, response) => {
       if (path === "/__fixture/set") {
         for (const [key, value] of url.searchParams) {
           if (key === "account") state.account = value;
-          else if (key === "delay") state.delay = Number(value);
-          else if (key === "fail" || key === "limit" || key === "freshSignIn") state[key] = new Set(value ? value.split(",") : []);
+          else if (key === "delay") {
+            const delay = Number(value);
+            if (!/^\d+$/.test(value) || !Number.isFinite(delay) || !Number.isInteger(delay) || delay < 0 || delay > MAX_FIXTURE_DELAY_MS) return fail(response, 400, "invalid_delay");
+            state.delay = Math.min(delay, MAX_FIXTURE_DELAY_MS);
+          } else if (key === "fail" || key === "limit" || key === "freshSignIn") state[key] = new Set(value ? value.split(",") : []);
           else if (key === "expire") state.expire = value === "1";
           else if (key === "live") accounts.hasan.live = value === "1";
           else if (key === "transcript") state.transcript = value;

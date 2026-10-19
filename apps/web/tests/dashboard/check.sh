@@ -3,6 +3,7 @@ set -euo pipefail
 mkdir -p artifacts
 pnpm exec turbo run build --filter=web...
 pnpm --filter web run check-types:dashboard
+pnpm --filter web exec tsx tests/dashboard/owner-call-strictmode.mjs
 node apps/web/tests/dashboard/production-bundle.mjs
 node apps/web/tests/dashboard/service-worker.mjs
 pnpm --filter web exec vitest run --config vitest.oauth.config.ts

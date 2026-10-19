@@ -49,6 +49,13 @@ async function dialogCheck(tab, name, openDialog, opener) {
 }
 
 try {
+  for (const value of ["0", "1000", "-1", "1.5", "NaN", "Infinity", "", "1001", "2000000000"]) {
+    const response = await fetch(`${origin}/__fixture/set?delay=${encodeURIComponent(value)}`);
+    await response.arrayBuffer();
+    const valid = value === "0" || value === "1000";
+    check(`fixture delay ${JSON.stringify(value)}`, response.status === (valid ? 200 : 400), `status=${response.status}`);
+  }
+  await fixture("reset");
   const body = { action: "set-allowed-websites", origins: [], padding: "" };
   const overhead = Buffer.byteLength(JSON.stringify(body));
   for (const bytes of [1024 * 1024, 1024 * 1024 + 1]) {
