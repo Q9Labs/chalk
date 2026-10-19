@@ -56,7 +56,7 @@ export const CALL_STATES: readonly CallState[] = [
       </main>
     ),
   },
-  { id: "joining", title: "Joining with devices off", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null } }} /> },
+  { id: "joining", title: "Joining with devices off", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null, episodeEnded: false, removedByHost: false } }} /> },
   { id: "name-needed", title: "Name needed", render: () => <JoinName /> },
   { id: "knocking", title: "Asking the host to join", render: () => <WaitingForHost /> },
   {
@@ -79,7 +79,7 @@ export const CALL_STATES: readonly CallState[] = [
   },
   { id: "joining-complete", title: "Blur lifting on admission", render: () => <JoiningComplete /> },
   { id: "waiting-for-host", title: "Waiting for the host to let you in", render: () => <WaitingForHost /> },
-  { id: "entering", title: "Entering after access is granted", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null } }} /> },
+  { id: "entering", title: "Entering after access is granted", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null, episodeEnded: false, removedByHost: false } }} /> },
 
   { id: "solo", title: "Alone in the call", render: () => <Live snapshot={liveSnapshot()} /> },
   { id: "duo", title: "Two people, default layout", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
@@ -216,7 +216,7 @@ function JoinName() {
 }
 
 function JoiningComplete() {
-  const [client] = useState(() => createCallStateClient({ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null } }));
+  const [client] = useState(() => createCallStateClient({ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null, episodeEnded: false, removedByHost: false } }));
   return (
     <main className="h-dvh">
       <button hidden data-complete-join onClick={() => client.updateSnapshot(() => liveSnapshot({ self: { camera: false, microphone: false } }))}>
