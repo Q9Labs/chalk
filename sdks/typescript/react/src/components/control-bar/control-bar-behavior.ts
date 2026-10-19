@@ -281,6 +281,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const videoInputDevices: MediaDevice[] = media.devices.cameras.map((device) => ({ ...device, kind: "videoinput" }));
   const surfaceProps: ControlBarSurfaceProps = {
     ...props,
+    detectDevices: false,
     buttons,
     microphoneTrack: media.local.microphone.track,
     cameraTrack: media.local.camera.track,
