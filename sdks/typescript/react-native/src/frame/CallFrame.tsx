@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StatusBar, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { useAndroidCallService } from "../components/useAndroidCallService";
 import { useSpaceClient } from "../context/space-client-context";
 import { Dock } from "../dock/Dock";
 import { LeaveMenu } from "../dock/LeaveMenu";
@@ -75,6 +76,7 @@ export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave,
   useEffect(() => {
     if (client.getSnapshot().connection.status === "idle") join();
   }, [client, join]);
+  useAndroidCallService();
 
   const microphoneOn = media.local.microphone.state === "enabled";
   const cameraOn = media.local.camera.state === "enabled";

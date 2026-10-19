@@ -10,6 +10,7 @@ class ChalkAndroidConnectionServicePackage : ReactPackage {
     return listOf(
       ChalkAndroidConnectionServiceModule(reactContext),
       ChalkAudioRouteModule(reactContext),
+      ChalkCallServiceModule(reactContext),
     )
   }
 
