@@ -19,6 +19,7 @@
       android:name=".ChalkSpaceForegroundService"
       android:enabled="true"
       android:exported="false"
-      android:foregroundServiceType="camera|microphone" />
+      android:foregroundServiceType="camera|microphone"
+      android:stopWithTask="true" />
   </application>
 </manifest>
