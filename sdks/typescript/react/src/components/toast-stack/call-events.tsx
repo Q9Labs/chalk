@@ -92,18 +92,15 @@ export function callEventToasts(previous: SpaceSnapshot, next: SpaceSnapshot): O
   if (previous.self.role !== "host" && next.self.role === "host")
     events.push({
       icon: <CallEventIcon kind="host" />,
-      message: (
+      message: departedHost ? (
         <>
-          {departedHost ? (
-            <>
-              <b style={{ fontWeight: 600 }} dir="auto">
-                {departedHost.displayName}
-              </b>{" "}
-              left.{" "}
-            </>
-          ) : null}
-          You’re now the host.
+          <b style={{ fontWeight: 600 }} dir="auto">
+            {departedHost.displayName}
+          </b>
+          {" left. You’re now the host."}
         </>
+      ) : (
+        "You’re now the host."
       ),
     });
   for (const person of previous.participants.roster)
@@ -144,7 +141,8 @@ export function callEventToasts(previous: SpaceSnapshot, next: SpaceSnapshot): O
           icon: <CallEventIcon kind={source === "microphone" ? "microphone-on" : source} />,
           message: (
             <>
-              {disconnected.label || source} disconnected. Switched to <b style={{ fontWeight: 600 }}>{selected.label || source}</b>
+              {`${disconnected.label || source} disconnected. Switched to `}
+              <b style={{ fontWeight: 600 }}>{selected.label || source}</b>
             </>
           ),
         });
