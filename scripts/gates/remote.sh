@@ -62,7 +62,8 @@ needs_browser="${CHALK_REMOTE_NEEDS_BROWSER:-0}"
 case "${gate}" in
   root)
     needs_browser=1
-    gate_command=(pnpm run gate -- --base "${CHALK_REMOTE_BASE_REF:-origin/master}" "$@")
+    # The selected local base is always published as origin/master in the snapshot.
+    gate_command=(pnpm run gate -- --base origin/master "$@")
     ;;
   api) gate_command=(apps/api/scripts/gate.sh "$@") ;;
   sync) gate_command=(scripts/gates/with-postgres.sh -- apps/sync/scripts/gate.sh "$@") ;;
@@ -187,7 +188,7 @@ reap_stale() {
       echo "[remote] reaping stale ${dir}"
       safe_delete "${dir}" || true
     fi
-  done < <(find /tmp -maxdepth 1 -mindepth 1 -type d -name 'chalk-*' -mmin "+$((hours * 60))" 2>/dev/null)
+  done < <(find /tmp/ -maxdepth 1 -mindepth 1 -type d -name 'chalk-*' -mmin "+$((hours * 60))" 2>/dev/null)
   if docker_bin="$(docker_binary)"; then
     cutoff="$(date -u -v-"${hours}"H +%Y%m%dT%H%M%SZ)"
     while IFS= read -r name; do
@@ -202,15 +203,15 @@ reap_stale() {
 
 # macOS shlock reclaims the lock after its owning PID dies; no daemon is needed.
 wait_for_turn() {
-  local timeout="$1" started=$SECONDS announced=0 busy dir remaining
+  local timeout="$1" started=$SECONDS announced=0 remaining
   while :; do
     if shlock -p "$$" -f /tmp/chalk-remote-admission.lock; then
-      busy=0
-      for dir in /tmp/chalk-remote-*; do
-        [[ -d "$dir" ]] || continue
-        if in_use "$dir"; then busy=1; break; fi
-      done
-      if ((busy == 0)); then return 0; fi
+      # Include processes whose checkout has already been unlinked, not just
+      # directories that still exist. Queued runners do not enter a checkout.
+      if ! pgrep -f '[/]tmp/chalk-remote-' >/dev/null 2>&1 &&
+        ! { lsof -d cwd -Fn 2>/dev/null || true; } | grep -E '^n(/private)?/tmp/chalk-remote-' >/dev/null; then
+        return 0
+      fi
       rm -f /tmp/chalk-remote-admission.lock
     fi
     if ((announced == 0)); then
