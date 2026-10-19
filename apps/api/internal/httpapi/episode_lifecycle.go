@@ -18,6 +18,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
+	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -253,7 +254,7 @@ func createEpisodeEndpoint(service EpisodeLifecycleService, authorizer TenantAut
 	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), idempotencyKeyParameter()).
 		RequestBody("CreateEpisodeRequest", createEpisodeRequest{}).Responds(http.StatusCreated, "Episode", episodeResponse{}).
-		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidRequestKey, apiErrorSpaceNotFound, apiErrorEpisodeNotFound, apiErrorIdempotencyConflict, apiErrorEpisodeCapacityExceeded, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
+		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidRequestKey, apiErrorSpaceNotFound, apiErrorEpisodeNotFound, apiErrorIdempotencyConflict, apiErrorEpisodeCapacityExceeded, apiErrorTenantLiveEpisodeLimit, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
 }
 
 func listEpisodesEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[listEpisodesRequest, episodeListResponse] {
@@ -535,6 +536,9 @@ func lifecycleReadErrors(extra ...APIError) []APIError {
 }
 
 func episodeLifecycleEndpointAPIError(err error) (APIError, bool) {
+	if errors.Is(err, tenantlimits.ErrLiveEpisodeLimitReached) {
+		return apiErrorTenantLiveEpisodeLimit, true
+	}
 	switch {
 	case errors.Is(err, mediaplane.ErrConnectionNotFound):
 		return apiErrorMediaConnectionNotFound, true

@@ -47,6 +47,10 @@ func (r EpisodeLifecycleRepository) CreateEpisode(ctx context.Context, input epi
 			return fmt.Errorf("reserve episode create request: %w", err)
 		}
 
+		if err := r.checkLiveEpisodeLimit(ctx, queries, input.TenantID); err != nil {
+			return err
+		}
+
 		space, err := queries.LockTenantSpaceForUpdate(ctx, sqlc.LockTenantSpaceForUpdateParams{TenantID: uuid(input.TenantID), ID: uuid(input.SpaceID)})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return episodes.ErrSpaceNotFound

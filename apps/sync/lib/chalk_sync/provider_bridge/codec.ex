@@ -25,6 +25,7 @@ defmodule ChalkSync.ProviderBridge.Codec do
     "provider_unavailable" => :provider_unavailable,
     "rate_limited" => :rate_limited,
     "recording_capacity_unavailable" => :recording_capacity_unavailable,
+    "tenant_recording_limit_reached" => :tenant_recording_limit_reached,
     "recording_controller_unavailable" => :recording_controller_unavailable,
     "recording_id_required" => :recording_id_required,
     "recording_invalid_envelope" => :recording_invalid_envelope,
