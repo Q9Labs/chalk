@@ -122,7 +122,7 @@ export function ParticipantRow({
             }}
           >
             <Popover.Trigger className={cn("call-person-options", optionsButtonClassName)} aria-label={`Options for ${participant.displayName}`}>
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M5 12h.01M12 12h.01M19 12h.01" />
               </svg>
             </Popover.Trigger>
