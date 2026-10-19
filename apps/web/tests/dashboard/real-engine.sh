@@ -11,6 +11,8 @@ if [[ ! "$deadline_seconds" =~ ^[1-9][0-9]*$ ]]; then
 fi
 mkdir -p artifacts
 export CHALK_API_ENV=local
+# The suite drives one service principal far past the per-account production budget.
+export CHALK_API_RATE_LIMITS=off
 export CHALK_API_ADDR=127.0.0.1:18080
 export CHALK_API_LOCAL_SYSTEM_TOKEN=fixture-local-system-not-a-secret
 export CHALK_API_SERVICE_ID=dashboard-runtime-proof
