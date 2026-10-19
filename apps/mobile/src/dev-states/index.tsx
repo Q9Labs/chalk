@@ -59,7 +59,13 @@ export function DevStates({ url }: { url: string }) {
         routes: [{ id: "earpiece", kind: "earpiece", name: "Phone" }, { id: "speaker", kind: "speaker", name: "Speaker" }, ...(scenario.codes.includes("K3") ? [{ id: "bluetooth", kind: "bluetooth" as const, name: "AirPods Pro" }] : [])],
         selected: scenario.codes.includes("K3") ? "bluetooth" : "speaker",
       },
-      videoSlots: Object.fromEntries(client.getSnapshot().participants.roster.map((person, index) => [person.participantId, <View key={person.participantId} style={{ flex: 1, backgroundColor: index % 2 ? "#49645D" : "#4D5D73" }} />])),
+      // Only person-2 has fake video. Everyone else has the camera off, so their Facehash draws.
+      videoSlots: Object.fromEntries(
+        client
+          .getSnapshot()
+          .participants.roster.filter((_, index) => index === 2)
+          .map((person) => [person.participantId, <View key={person.participantId} style={{ flex: 1, backgroundColor: "#4D5D73" }} />]),
+      ),
     };
     dev?.setDevScenario(forced);
     const timer = setTimeout(() => {
