@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MODULE_DIR="$ROOT_DIR/infrastructure/opentofu/modules/aws-transcription-dispatcher"
 LIFECYCLE_DIR="$ROOT_DIR/infrastructure/opentofu/modules/cloudflare-r2-transcription-lifecycle"
 fail() { echo "transcription dispatcher contract: $*" >&2; exit 1; }
-require() { rg -q -- "$1" "$2" || fail "missing '$1' in $2"; }
+require() { grep -qE -- "$1" "$2" || fail "missing '$1' in $2"; }
 
 require 'required_version = "= 1\.12\.3"' "$MODULE_DIR/versions.tf"
 require 'version = "= 5\.90\.0"' "$MODULE_DIR/versions.tf"
@@ -34,7 +34,7 @@ require 'CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN' "$MODULE_DIR/main.tf"
 require 'CONTROL_API_AUDIENCE' "$MODULE_DIR/main.tf"
 require 'control_api_invoke_policy_json' "$MODULE_DIR/outputs.tf"
 require 'egress_destinations = toset\(concat\(' "$MODULE_DIR/main.tf"
-if rg -n 'vpc_config|vpc_subnet_ids|vpc_security_group_ids|vpc_egress_mode|aws_nat_gateway|aws_eip|CHALK_EGRESS_ALLOWLIST' "$MODULE_DIR" --glob '*.tf'; then
+if grep -rnE --include='*.tf' 'vpc_config|vpc_subnet_ids|vpc_security_group_ids|vpc_egress_mode|aws_nat_gateway|aws_eip|CHALK_EGRESS_ALLOWLIST' "$MODULE_DIR"; then
   fail "dispatcher must use default Lambda networking without VPC/NAT resources or a claimed network allowlist"
 fi
 require 'ALLOW_DIRTY_SOURCE' "$ROOT_DIR/scripts/transcription-dispatcher/build-release.sh"
@@ -51,14 +51,14 @@ APP_CONFIG="$ROOT_DIR/apps/transcription-dispatcher/src/config.ts"
 APP_INDEX="$ROOT_DIR/apps/transcription-dispatcher/src/index.ts"
 if [[ -f "$APP_CONFIG" && -f "$APP_INDEX" ]]; then
   for key in CONTROL_API_BASE_URL CONTROL_API_AUDIENCE TRANSCRIPTION_MAX_BATCH TRANSCRIPTION_CONCURRENCY TRANSCRIPTION_TIMEOUT_RESERVE_MS TRANSCRIPTION_PRIVACY_GATE_ACCEPTED DEEPINFRA_ENABLED DEEPINFRA_ADAPTER_CONTRACT_VERSION DEEPINFRA_CORPUS_DIGEST CLOUDFLARE_AI_ENABLED CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_MODEL_SLUG CLOUDFLARE_ADAPTER_CONTRACT_VERSION CLOUDFLARE_CORPUS_DIGEST TRANSCRIPTION_PROVIDER_TIMEOUT_MS TRANSCRIPTION_MAX_AUDIO_BYTES TRANSCRIPTION_MAX_AUDIO_SECONDS TRANSCRIPTION_MAX_RESPONSE_BYTES TRANSCRIPTION_MAX_TEXT_CHARS TRANSCRIPTION_MAX_SEGMENTS TRANSCRIPTION_MAX_WORDS TRANSCRIPTION_MAX_RETRIES TRANSCRIPTION_RETRY_BASE_DELAY_MS TRANSCRIPTION_RETRY_MAX_DELAY_MS TRANSCRIPTION_CIRCUIT_FAILURE_THRESHOLD TRANSCRIPTION_CIRCUIT_COOLDOWN_MS; do
-    rg -q -- "\\\"$key\\\"" "$APP_CONFIG" || fail "dispatcher config does not consume $key"
+    grep -qF -- "\"$key\"" "$APP_CONFIG" || fail "dispatcher config does not consume $key"
   done
   for key in DEEPINFRA_TOKEN_PARAMETER_ARN CLOUDFLARE_AI_TOKEN_PARAMETER_ARN CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN; do
-    rg -q -- "\\\"$key\\\"" "$APP_INDEX" || fail "dispatcher SSM loader does not consume $key"
+    grep -qF -- "\"$key\"" "$APP_INDEX" || fail "dispatcher SSM loader does not consume $key"
   done
 fi
 
-if rg -n 'r2:GetObject|s3:GetObject|r2:PutObject|r2:DeleteObject|rds:|dynamodb:|ec2:|iam:Create|iam:Put|iam:Attach|ssm:GetParametersByPath' "$MODULE_DIR"; then
+if grep -rnE --exclude='.*' 'r2:GetObject|s3:GetObject|r2:PutObject|r2:DeleteObject|rds:|dynamodb:|ec2:|iam:Create|iam:Put|iam:Attach|ssm:GetParametersByPath' "$MODULE_DIR"; then
   fail "broad database, reusable object-storage, or infrastructure-mutation permission found"
 fi
 echo "validated transcription dispatcher infrastructure contract"
