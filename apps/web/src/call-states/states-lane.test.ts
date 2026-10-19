@@ -1,38 +1,24 @@
 // @vitest-environment node
-import { spawn, type ChildProcess } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, expect, it } from "vitest";
+import { startCallHarness } from "./browser-harness";
 
-let server: ChildProcess;
+let origin: string;
+let stop: (() => Promise<void>) | undefined;
 let browser: Browser;
 let page: Page;
-let watchdog: ReturnType<typeof setTimeout>;
-const origin = "http://127.0.0.1:3098";
 beforeAll(async () => {
-  server = spawn("pnpm", ["exec", "vite", "--config", "vite.call-states.config.ts", "--port", "3098", "--strictPort"], { cwd: fileURLToPath(new URL("../..", import.meta.url)), detached: true, stdio: "ignore" });
-  for (let attempt = 0; attempt < 100; attempt++) {
-    if (server.exitCode !== null) throw new Error(`States harness exited ${server.exitCode}`);
-    if (
-      await fetch(`${origin}/call-states.html`).then(
-        (r) => r.ok,
-        () => false,
-      )
-    )
-      break;
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  watchdog = setTimeout(() => {
-    if (server.pid && server.exitCode === null) process.kill(-server.pid, "SIGTERM");
-  }, 240_000);
+  ({ origin, stop } = await startCallHarness());
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ permissions: ["clipboard-read", "clipboard-write"] });
   page = await context.newPage();
 }, 40_000);
 afterAll(async () => {
-  clearTimeout(watchdog);
-  await browser?.close();
-  if (server?.pid && server.exitCode === null) process.kill(-server.pid, "SIGTERM");
+  try {
+    await browser?.close();
+  } finally {
+    await stop?.();
+  }
 });
 
 it("joining exposes consent; the ready card copies the link and announces Copied", async () => {

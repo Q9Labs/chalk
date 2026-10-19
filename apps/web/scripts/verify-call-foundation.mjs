@@ -1,31 +1,13 @@
 import { strict as assert } from "node:assert";
-import { spawn } from "node:child_process";
+import { startCallHarness } from "../src/call-states/browser-harness.ts";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { chromium } from "playwright";
 
-const web = resolve(import.meta.dirname, "..");
-const origin = "http://127.0.0.1:3097";
 const out = process.env.FOUNDATION_ARTIFACTS;
-const occupied = await fetch(origin, { signal: AbortSignal.timeout(1000) }).then(
-  () => true,
-  () => false,
-);
-if (occupied) throw new Error(`Foundation harness port is already in use: ${origin}`);
-const server = spawn("pnpm", ["exec", "vite", "--config", "vite.call-states.config.ts", "--port", "3097", "--strictPort"], { cwd: web, detached: true, stdio: "ignore" });
-const deadline = setTimeout(() => {
-  process.kill(-server.pid, "SIGTERM");
-  process.exitCode = 124;
-}, 100_000);
+const { origin, stop } = await startCallHarness();
 let browser;
 try {
-  for (let attempt = 0; attempt < 100; attempt++) {
-    if (server.exitCode !== null) throw new Error(`Harness exited ${server.exitCode}`);
-    try {
-      if ((await fetch(`${origin}/call-states.html`)).ok) break;
-    } catch {}
-    await new Promise((done) => setTimeout(done, 200));
-  }
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, permissions: ["clipboard-read", "clipboard-write"] });
   const page = await context.newPage();
@@ -174,16 +156,9 @@ try {
   if (out) await writeFile(resolve(out, "journeys.json"), JSON.stringify({ passed: true, errors }, null, 2));
   await context.close();
 } finally {
-  clearTimeout(deadline);
-  await browser?.close();
   try {
-    process.kill(-server.pid, "SIGTERM");
-  } catch (error) {
-    if (error.code !== "ESRCH") throw error;
+    await browser?.close();
+  } finally {
+    await stop();
   }
-  if (server.exitCode === null)
-    await new Promise((done) => {
-      server.once("exit", done);
-      setTimeout(done, 2000).unref();
-    });
 }

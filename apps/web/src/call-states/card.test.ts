@@ -1,39 +1,23 @@
-import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { assertHarnessPortAvailable } from "./browser-harness";
+import { startCallHarness } from "./browser-harness";
 
-const origin = "http://127.0.0.1:3098";
-let server: ChildProcess;
+let origin: string;
+let stop: (() => Promise<void>) | undefined;
 let browser: Browser;
-let deadline: ReturnType<typeof setTimeout>;
 
 beforeAll(async () => {
-  await assertHarnessPortAvailable(origin, "Card");
-  server = spawn("pnpm", ["exec", "vite", "--config", "vite.call-states.config.ts", "--port", "3098", "--strictPort"], { cwd: fileURLToPath(new URL("../..", import.meta.url)), detached: true, stdio: "ignore" });
-  deadline = setTimeout(() => {
-    if (server.pid) process.kill(-server.pid, "SIGTERM");
-  }, 180_000);
-  let ready = false;
-  for (let attempt = 0; attempt < 150; attempt++) {
-    if (server.exitCode !== null) throw new Error(`Card harness exited: ${server.exitCode}`);
-    ready = await fetch(`${origin}/call-states.html`).then(
-      (response) => response.ok,
-      () => false,
-    );
-    if (ready) break;
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  if (!ready) throw new Error("Card harness did not become ready");
+  ({ origin, stop } = await startCallHarness());
   browser = await chromium.launch({ headless: true });
 }, 60_000);
 
 afterAll(async () => {
-  clearTimeout(deadline);
-  await browser?.close();
-  if (server?.pid && server.exitCode === null) process.kill(-server.pid, "SIGTERM");
+  try {
+    await browser?.close();
+  } finally {
+    await stop?.();
+  }
 });
 
 async function journey(run: (page: Page) => Promise<void>, phone = false) {

@@ -4,17 +4,12 @@ import { expect, it } from "vitest";
 
 const journey = String.raw`
 import { strict as assert } from 'node:assert';
-import { spawn } from 'node:child_process';
+import { startCallHarness } from './src/call-states/browser-harness.ts';
 import { chromium } from 'playwright';
 import { mkdir } from 'node:fs/promises';
-const origin='http://127.0.0.1:3098';
-const existing=await fetch(origin,{signal:AbortSignal.timeout(1000)}).then(()=>true,()=>false);
-if(existing) throw Error('Shell harness port 3098 occupied');
-const server=spawn('pnpm',['exec','vite','--config','vite.call-states.config.ts','--port','3098','--strictPort'],{detached:true,stdio:'ignore'});
-const watchdog=setTimeout(()=>{process.kill(-server.pid,'SIGTERM');process.exit(124)},110000);
+const {origin,stop}=await startCallHarness();
 let browser;
 try {
- for(let i=0;i<100;i++){if(server.exitCode!==null)throw Error('Harness exited');if(await fetch(origin+'/call-states.html').then(r=>r.ok,()=>false))break;await new Promise(r=>setTimeout(r,200));}
  browser=await chromium.launch({headless:true});
  const context=await browser.newContext({viewport:{width:1440,height:900},permissions:['clipboard-read','clipboard-write']});
  const page=await context.newPage();
@@ -146,7 +141,7 @@ try {
  if(process.env.SHELL_ARTIFACTS)await page.screenshot({path:process.env.SHELL_ARTIFACTS+'/phone-grid.png'});
  assert.deepEqual(errors,[]);
  console.log('PASS: shell details, devices, share source, leave, phone focus and fitted-grid journeys');
-} finally {clearTimeout(watchdog);await browser?.close();try{process.kill(-server.pid,'SIGTERM')}catch{}}
+} finally {try {await browser?.close()} finally {await stop()}}
 `;
 it("keeps the shell journeys usable in the real call harness", async () => {
   const { stdout } = await promisify(execFile)(process.execPath, ["--input-type=module", "-e", journey], { timeout: 120_000, maxBuffer: 1024 * 1024 });
