@@ -42,18 +42,41 @@ class BootCheckTests(unittest.TestCase):
         self.assertNotIn('SECRET', json.dumps(diagnosis))
         self.assertEqual(boot.boot_diagnosis(None, evidence)['issuer_archive_failure'], 'archive_download_failed')
 
-    def test_only_script_diagnostics_expose_messages(self):
+    def test_script_messages_survive_and_http_payloads_do_not(self):
         import urllib.error
 
         secret = 'fake-private-data-sentinel'
-        errors = [RuntimeError(secret), ValueError(secret), OSError(secret),
-                  subprocess.SubprocessError(secret), urllib.error.URLError(secret),
-                  urllib.error.HTTPError('https://example.test', 403, secret, None, None),
-                  json.JSONDecodeError(secret, secret, 0)]
-        for error in errors:
-            with self.subTest(error=type(error).__name__):
-                self.assertEqual(boot.safe_error(error), type(error).__name__)
-        self.assertEqual(boot.safe_error(boot.DiagnosticError('audited message')), 'audited message')
+        self.assertEqual(boot.safe_error(RuntimeError('audited message')), 'audited message')
+        self.assertEqual(boot.safe_error(urllib.error.URLError(secret)), 'HTTP transport failed; payload suppressed')
+        self.assertEqual(boot.safe_error(urllib.error.HTTPError('https://example.test/' + secret, 403, secret, None, None)),
+                         'HTTP request failed HTTP 403; payload suppressed')
+
+    def test_external_value_errors_redact_only_the_input(self):
+        import ipaddress
+        import urllib.parse
+        from datetime import datetime
+
+        secret = 'fake-private-value-sentinel'
+        cases = [
+            (lambda: datetime.fromisoformat(secret), "Invalid isoformat string: [redacted]"),
+            (lambda: int(secret), 'invalid literal for int() with base 10: [redacted]'),
+            (lambda: urllib.parse.urlsplit('https://example.test:' + secret).port,
+             'Port could not be cast to integer value as [redacted]'),
+            (lambda: ipaddress.ip_address(secret), '[redacted] does not appear to be an IPv4 or IPv6 address'),
+        ]
+        for parse, expected in cases:
+            with self.subTest(expected=expected), self.assertRaises(ValueError) as caught:
+                parse()
+            self.assertEqual(boot.safe_error(caught.exception), expected)
+            self.assertNotIn(secret, boot.safe_error(caught.exception))
+        self.assertEqual(boot.safe_error(FileNotFoundError(2, 'No such file or directory', secret)),
+                         '[Errno 2] No such file or directory; path suppressed')
+        self.assertEqual(boot.safe_error(UnicodeDecodeError('utf-8', secret.encode(), 0, 1, secret)),
+                         'text decoding failed; payload suppressed')
+        # JSONDecodeError's text contains location and category, never its doc.
+        with self.assertRaises(json.JSONDecodeError) as caught:
+            json.loads(secret)
+        self.assertEqual(boot.safe_error(caught.exception), str(caught.exception))
 
     def test_run_receipt_preserves_trusted_failure_even_when_cleanup_times_out(self):
         import os
@@ -95,6 +118,79 @@ class BootCheckTests(unittest.TestCase):
                 self.assertEqual(receipt['reason'], 'guest evidence bucket must block public access')
                 self.assertEqual(receipt['cleanup_confirmed'], not timeout)
                 self.assertEqual(receipt['result'], 'FAIL')
+                self.assertNotIn('archive', receipt)
+                self.assertNotIn('evidence_directory', receipt)
+                self.assertNotIn(request['archive']['bucket'], json.dumps(receipt))
+                self.assertNotIn(request['archive']['key'], json.dumps(receipt))
+
+    def test_s3_cleanup_explanations_survive_watchdog_and_public_receipt(self):
+        from unittest.mock import Mock
+
+        key = 'bootdiag/owned/guest.json'
+        cases = [
+            ('wrong-key', [], 'guest evidence object ownership mismatch'),
+            (key, [dict(Versions=[dict(Key=key + '-extra')])], 'ambiguous guest evidence object prefix'),
+            (key, [{}, {}, dict(DeleteMarkers=[dict(Key=key + '-extra')])],
+             'ambiguous guest evidence deletion marker'),
+            (key, [{}, {}, {}, dict(Versions=[dict(Key=key)])], 'guest evidence object cleanup unproved'),
+        ]
+        for evidence_key, responses, message in cases:
+            with self.subTest(message=message), tempfile.TemporaryDirectory() as temp:
+                directory = Path(temp)
+                boot.append(directory, dict(name='owned', deadline=0, evidence_bucket='fake-private-bucket',
+                                            evidence_key=evidence_key))
+                services = Mock()
+                services.aws.side_effect = responses * 3
+                with patch.object(boot, 'Services', return_value=services):
+                    with self.assertRaisesRegex(RuntimeError, 'cleanup unproved'):
+                        boot.watchdog(directory)
+                history = [json.loads(line)['cleanup_error']
+                           for line in (directory / 'ledger.jsonl').read_text().splitlines()
+                           if 'cleanup_error' in json.loads(line)]
+                self.assertEqual(history, [message] * 3)
+                self.assertEqual(json.loads((directory / 'cleanup-failed.json').read_text())['errors'], history)
+                receipt = boot.cleanup_receipt(directory, 1)
+                self.assertEqual(receipt['cleanup_errors'], history)
+                self.assertFalse(receipt['cleanup_confirmed'])
+                self.assertNotIn('fake-private-bucket', json.dumps(receipt))
+                self.assertNotIn(evidence_key, json.dumps(receipt))
+
+    def test_http_and_managed_host_failures_keep_safe_status_distinctions(self):
+        import io
+        import urllib.error
+        from unittest.mock import Mock
+
+        secret = 'fake-private-payload-sentinel'
+        for method in ('GET', 'POST', 'DELETE'):
+            for code in (401, 429, 500):
+                with self.subTest(method=method, code=code):
+                    services = object.__new__(boot.Services)
+                    services.token, services.mutation_deadline = secret, None
+                    services.http = Mock()
+                    services.http.open.side_effect = urllib.error.HTTPError(
+                        'https://example.test/' + secret, code, secret, None, io.BytesIO(secret.encode()))
+                    with self.assertRaises(RuntimeError) as caught:
+                        services.do(method, '/private-resource')
+                    message = boot.safe_error(caught.exception)
+                    self.assertEqual(message, f'DigitalOcean {method} failed HTTP {code}; payload suppressed')
+                    self.assertNotIn(secret, message)
+                    self.assertNotIn('https://', message)
+        for status in ('Pending', 'InProgress', 'Delayed', 'Failed', 'TimedOut', 'Cancelled', 'Cancelling', secret):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as temp:
+                services = object.__new__(boot.Services)
+                services.instance, services.user_id = 'fake-instance', 1000
+                responses = [dict(Command=dict(CommandId='fake-command'))]
+                if status in ('Pending', 'InProgress', 'Delayed'):
+                    responses += [dict(Status=status), dict(Status='Failed')]
+                    expected = 'Failed'
+                else:
+                    responses += [dict(Status=status, StandardErrorContent=secret, StandardOutputContent=secret)]
+                    expected = 'Unknown' if status == secret else status
+                services.aws = Mock(side_effect=responses)
+                with patch.object(boot.time, 'sleep'), self.assertRaises(RuntimeError) as caught:
+                    services.host(dict(action='abandon'), Path(temp))
+                self.assertEqual(boot.safe_error(caught.exception), 'managed host action failed: ' + expected)
+                self.assertNotIn(secret, str(caught.exception))
 
     def test_cleanup_denial_survives_watchdog_in_public_receipt(self):
         import sys
@@ -112,8 +208,7 @@ class BootCheckTests(unittest.TestCase):
                 boot.watchdog(directory)
             failure = json.loads((directory / 'cleanup-failed.json').read_text())
             self.assertEqual(len(failure['errors']), 3)
-            self.assertIn('evidence objects', failure['errors'][0])
-            self.assertIn('CommandError: exit=1', failure['errors'][0])
+            self.assertIn('failed with exit 1; payload suppressed', failure['errors'][0])
             self.assertNotIn('PRIVATE', json.dumps(failure))
             receipt = boot.cleanup_receipt(directory, 1)
             self.assertFalse(receipt['cleanup_confirmed'])
@@ -148,8 +243,8 @@ class BootCheckTests(unittest.TestCase):
                     self.assertNotIn(private_args, value)
                     self.assertNotIn(str(command), value)
                 self.assertIn('evidence objects', serialized)
-                self.assertIn(type(error).__name__, serialized)
-                self.assertIn('timeout=60' if isinstance(error, subprocess.TimeoutExpired) else 'exit=23', serialized)
+                self.assertIn('evidence objects timed out after 60 s' if isinstance(error, subprocess.TimeoutExpired)
+                              else 'evidence objects failed with exit 23; payload suppressed', serialized)
 
     def test_watchdog_timeout_preserves_original_boot_reason(self):
         from unittest.mock import Mock
@@ -382,7 +477,7 @@ class BootCheckTests(unittest.TestCase):
             boot.append(directory, {'bootstrap': {'provider_id': '1'}})
             (directory / 'ssh-key').write_text('task secret')
             provider = Provider()
-            with self.assertRaisesRegex(RuntimeError, 'registration revocation: RuntimeError'):
+            with self.assertRaisesRegex(RuntimeError, 'issuer unavailable'):
                 boot.cleanup(provider, directory)
             self.assertTrue(provider.deleted)
             self.assertFalse((directory / 'ssh-key').exists())
@@ -416,7 +511,7 @@ class BootCheckTests(unittest.TestCase):
             boot.append(directory, dict(node_id=1, name='owned', tags=['owned'], started_at=0, firewall_intent=True))
             (directory / 'ssh-key').write_text('task secret')
             provider = Provider()
-            with self.assertRaisesRegex(RuntimeError, 'recover firewall_id: RuntimeError'):
+            with self.assertRaisesRegex(RuntimeError, 'recover firewall_id: firewall listing unavailable'):
                 boot.cleanup(provider, directory)
             self.assertTrue(provider.deleted)
             self.assertFalse((directory / 'ssh-key').exists())
