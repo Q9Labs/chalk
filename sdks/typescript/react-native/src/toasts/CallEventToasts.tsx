@@ -81,7 +81,7 @@ export function useCallEventToasts({ onOpenSettings, resumedAfterSettings }: Cal
           wrap: true,
           dismissible: true,
           testID: `toast.${permission}-denied`,
-          message: [{ strong: `Chalk can’t use your ${permission}.` }, Platform.OS === "ios" ? " Allow it in Settings. iOS restarts Chalk, and you rejoin the call." : " Allow it in Settings."],
+          message: [{ strong: `Chalk can’t use your ${permission}.` }, Platform.OS === "ios" ? ` Allow it in Settings, then turn your ${permission} back on.` : " Allow it in Settings."],
           actions: [
             {
               label: "Open Settings",

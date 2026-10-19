@@ -200,6 +200,14 @@ export async function cleanupSpaceArrival({ apiBaseURL, credential, onOperation 
   await clearArrival(credential);
 }
 
+/**
+ * Gives back an arrival whose participant has left or whose call has ended, and forgets it here, so the
+ * next arrival is a new participant. A refused leave still forgets it: the old participant is already gone.
+ */
+export async function retireSpaceArrival({ apiBaseURL, credential }: { readonly apiBaseURL: string; readonly credential: StoredSpaceArrival }): Promise<void> {
+  await cleanupSpaceArrival({ apiBaseURL, credential }).catch(() => clearArrival(credential));
+}
+
 function publicClient(apiBaseURL: string, guestCredential?: string) {
   return createChalkPublicClient({ baseUrl: apiBaseURL, guestCredential, runtime: "react-native" });
 }

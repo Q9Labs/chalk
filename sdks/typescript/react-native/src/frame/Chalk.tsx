@@ -40,6 +40,11 @@ export type ChalkProps = {
   readonly onOpenSettings?: (permission: Permission) => void;
   /** Set when the app reopens the call after Open Settings; the call says "Rejoining" and then that it can use the device now. */
   readonly resumedAfterSettings?: Permission;
+  /**
+   * Called when the person chooses Rejoin or Try again on the page that shows after they leave, the call
+   * ends, or it fails. That client can't join again: give the arrival back, then render `Chalk` with a new client.
+   */
+  readonly onRejoin: () => void;
 };
 
 /**
