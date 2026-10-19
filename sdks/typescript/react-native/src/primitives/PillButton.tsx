@@ -32,13 +32,14 @@ export const PillButton = memo(
   forwardRef<ViewType, PillButtonProps>(function PillButton({ label, onPress, variant = "secondary", size = "md", icon, accessibilityLabel, disabled = false, testID }, ref) {
     const { colors } = useTheme();
     const press = usePressAnimation(size === "big" ? "big" : "pill");
-    const background = variant === "primary" ? colors.text : variant === "danger" ? colors.danger : size === "big" ? colors.raised : colors.hover;
-    const foreground = variant === "primary" ? colors.canvas : variant === "danger" ? fixed.onDanger : colors.text;
+    // Disabled swaps the fill and label colours instead of fading the pill, so the label keeps 3:1 against its fill in both themes.
+    const background = disabled ? colors.hover : variant === "primary" ? colors.text : variant === "danger" ? colors.danger : size === "big" ? colors.raised : colors.hover;
+    const foreground = disabled ? colors.textMuted : variant === "primary" ? colors.canvas : variant === "danger" ? fixed.onDanger : colors.text;
     const full = size === "wide" || size === "big" || size === "card";
 
     return (
       <Pressable accessibilityLabel={accessibilityLabel} accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} onPressIn={press.onPressIn} onPressOut={press.onPressOut} ref={ref} style={full ? styles.full : null} testID={testID}>
-        <Animated.View style={[styles.pill, { height: HEIGHT[size], paddingHorizontal: PADDING[size], backgroundColor: background }, disabled ? styles.disabled : null, press.scaleStyle]}>
+        <Animated.View style={[styles.pill, { height: HEIGHT[size], paddingHorizontal: PADDING[size], backgroundColor: background }, press.scaleStyle]}>
           {icon ? <Icon color={foreground} name={icon} size={ICON[size]} /> : null}
           <ChalkText color={foreground} numberOfLines={1} variant={TEXT[size]}>
             {label}
@@ -52,5 +53,4 @@ export const PillButton = memo(
 const styles = StyleSheet.create({
   pill: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 999 },
   full: { alignSelf: "stretch" },
-  disabled: { opacity: 0.4 },
 });
