@@ -162,7 +162,7 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
 
 export function createSnapshot(capabilities: readonly Capability[] = ["sendChat"]): SpaceSnapshot {
   return {
-    connection: { status: "idle", episode: null, lastError: null },
+    connection: { status: "idle", episode: null, lastError: null, episodeEnded: false, removedByHost: false },
     self: { participantId: null, displayName: null, role: null, capabilities, handRaised: false, can: (capability) => capabilities.includes(capability) },
     participants: { roster: [], admissionQueue: [] },
     media: {

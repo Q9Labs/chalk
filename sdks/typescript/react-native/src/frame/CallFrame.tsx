@@ -100,9 +100,8 @@ export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave,
       setSheet(null);
       setLeaveMenuOpen(false);
       setLeftByChoice(true);
-      // The status page (A3, A4) follows; its Home button calls `onLeave`.
+      // The status page (A3, A4) follows; its Home button calls `onLeave`. A failed leave is still the person's choice.
       (how === "end" ? client.endEpisode() : client.leave()).catch(() => {
-        setLeftByChoice(false);
         toasts.show({ kind: "error", dismissible: true, message: how === "end" ? "Couldn’t end the call." : "Couldn’t leave the call." });
       });
     },
@@ -122,7 +121,7 @@ export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave,
 
   const chrome = useLandscapeChrome(layout.arrangement === "landscape" && sheet === null && !layered);
   const forced = devScenario.callState;
-  const screen = forced === "hold" ? { kind: "call" as const } : forced === "left" || forced === "ended" || forced === "failed" || forced === "removed" ? { kind: "status" as const, outcome: forced } : callScreen(connection, leftByChoice);
+  const screen = forced === "hold" ? { kind: "call" as const } : forced === "left" || forced === "ended" || forced === "failed" || forced === "removed" || forced === "exited" ? { kind: "status" as const, outcome: forced } : callScreen(connection, leftByChoice);
 
   return (
     <View ref={screenRef} style={screenStyle} testID="frame.screen">

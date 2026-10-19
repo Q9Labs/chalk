@@ -9,7 +9,7 @@ import { useTheme } from "../theme/theme";
 import { fontFamilies } from "../theme/tokens";
 
 /** The ways a call ends for you (A3 to A7). */
-export type CallOutcome = "left" | "ended" | "failed" | "removed" | "full";
+export type CallOutcome = "left" | "ended" | "failed" | "removed" | "exited" | "full";
 
 export type StatusPageProps = {
   readonly outcome: CallOutcome;
@@ -33,6 +33,8 @@ function pageFor(outcome: CallOutcome, callName: string): Page {
       return { title: `Couldn’t connect to ${callName}`, detail: "Check your internet connection, then try again.", actions: ["rejoin", "home"], rejoinLabel: "Try again" };
     case "removed":
       return { title: `You were removed from ${callName}`, detail: "The host removed you from this call.", actions: ["home"] };
+    case "exited":
+      return { title: `You’re no longer in ${callName}`, actions: ["rejoin", "home"] };
     case "full":
       return { title: "This call is full", detail: `${callName} has reached 100 people. Ask the host to make room, then try again.`, actions: ["rejoin", "home"], rejoinLabel: "Try again" };
   }

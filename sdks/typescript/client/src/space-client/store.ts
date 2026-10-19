@@ -6,7 +6,7 @@ const INTERRUPTED_CONNECTION_PHASES = new Set<ConnectionLifecycleSnapshot["conne
 
 const empty = <T>(value: T): T => Object.freeze(value);
 const EMPTY = empty({
-  connection: empty({ status: "idle", episode: null, lastError: null }),
+  connection: empty({ status: "idle", episode: null, lastError: null, episodeEnded: false, removedByHost: false }),
   self: empty({ participantId: null, displayName: null, role: null, capabilities: empty([]), handRaised: false, can: () => false }),
   participants: empty({ roster: empty([]), admissionQueue: empty([]) }),
   media: empty({
@@ -50,8 +50,10 @@ export class SpaceStore {
     const current = this.getSnapshot().connection;
     const error = snapshot.failure ? empty({ code: publicCode(snapshot.failure.code), recoverable: snapshot.failure.recoverable, message: snapshot.failure.message }) : null;
     const status = snapshot.state === "live" && (INTERRUPTED_CONNECTION_PHASES.has(snapshot.connection.sync) || INTERRUPTED_CONNECTION_PHASES.has(snapshot.connection.media)) ? "reconnecting" : snapshot.state;
-    if (current.status === status && sameEpisode(current.episode, snapshot.episode) && sameError(current.lastError, error)) return;
-    this.#replace("connection", empty({ status, episode: snapshot.episode, lastError: sameError(current.lastError, error) ? current.lastError : error }));
+    const episodeEnded = snapshot.episodeEnded ?? false;
+    const removedByHost = snapshot.removedByHost ?? false;
+    if (current.status === status && sameEpisode(current.episode, snapshot.episode) && sameError(current.lastError, error) && current.episodeEnded === episodeEnded && current.removedByHost === removedByHost) return;
+    this.#replace("connection", empty({ status, episode: snapshot.episode, lastError: sameError(current.lastError, error) ? current.lastError : error, episodeEnded, removedByHost }));
   }
   updateSelf(value: SelfSlice): void {
     this.#replace("self", value);

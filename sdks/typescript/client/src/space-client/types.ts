@@ -90,6 +90,10 @@ export type ConnectionSlice = {
   readonly status: ConnectionStatus;
   readonly episode: EpisodeSummary | null;
   readonly lastError: ClientFailure | null;
+  /** The Episode ended while this person was in it. */
+  readonly episodeEnded: boolean;
+  /** The server removed this person from the call; a person's own leave never sets this. */
+  readonly removedByHost: boolean;
 };
 export type SelfSlice = {
   readonly participantId: string | null;

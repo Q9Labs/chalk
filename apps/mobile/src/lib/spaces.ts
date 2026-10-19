@@ -104,7 +104,7 @@ export async function prepareSpaceArrival({ apiBaseURL, route, displayName, onOp
   }
 
   try {
-    const arrived = await publicClient(apiBaseURL).arriveBySpacePublicInvite({ displayName, spaceInviteToken: route.spaceInviteToken }, { idempotencyKey: idempotencyKey() });
+    const arrived = await arriveRetryingEndingEpisode(() => publicClient(apiBaseURL).arriveBySpacePublicInvite({ displayName, spaceInviteToken: route.spaceInviteToken }, { idempotencyKey: idempotencyKey() }));
     const arrival = storedArrival(arrived, { slug: route.space, spaceInviteToken: route.spaceInviteToken });
     await persistArrival(arrival);
     return arrivalStep(arrived, { route, displayName, credential: arrival, onOperation });
@@ -136,7 +136,9 @@ export async function waitForAdmission({
 }
 
 async function resumeArrival({ apiBaseURL, route, displayName, credential, onOperation }: { readonly apiBaseURL: string; readonly route: SpaceRoute; readonly displayName: string; readonly credential: StoredSpaceArrival; readonly onOperation?: SpaceOperationObserver }): Promise<SpaceArrivalStep> {
-  const resumed = await publicClient(apiBaseURL, credential.guestCredential).arriveBySpacePublicInvite({ displayName, spaceInviteToken: route.spaceInviteToken }, { arrivalHandle: credential.arrivalHandle, guestCredential: credential.guestCredential, idempotencyKey: idempotencyKey() });
+  const resumed = await arriveRetryingEndingEpisode(() =>
+    publicClient(apiBaseURL, credential.guestCredential).arriveBySpacePublicInvite({ displayName, spaceInviteToken: route.spaceInviteToken }, { arrivalHandle: credential.arrivalHandle, guestCredential: credential.guestCredential, idempotencyKey: idempotencyKey() }),
+  );
   const arrival = storedArrival(resumed, { slug: route.space, spaceInviteToken: route.spaceInviteToken }, credential.guestCredential);
   await persistArrival(arrival);
   return arrivalStep(resumed, { route, displayName, credential: arrival, onOperation });
@@ -165,6 +167,25 @@ function callName(name: string | undefined, route: Pick<SpaceRoute, "space" | "s
 function retryDelay(retryAfter: number | undefined): number {
   if (typeof retryAfter !== "number" || !Number.isFinite(retryAfter) || retryAfter < 0) return 1000;
   return Math.min(Math.max(retryAfter * 1000, 250), 30000);
+}
+
+/** Waits before each retry, about 5.5 s in all. */
+const ENDING_EPISODE_RETRY_DELAYS_MS = [500, 1000, 1500, 2500];
+
+/**
+ * A Rejoin can land while the server is ending the old Episode, which answers `episode.not_active`.
+ * Once that Episode has ended, the next arrival starts a fresh one, so retry for a few seconds first.
+ */
+async function arriveRetryingEndingEpisode<T>(arrive: () => Promise<T>): Promise<T> {
+  for (const delayMs of ENDING_EPISODE_RETRY_DELAYS_MS) {
+    try {
+      return await arrive();
+    } catch (cause) {
+      if (arrivalErrorCode(cause) !== "episode.not_active") throw cause;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  return arrive();
 }
 
 export function createGuestAccessGetter({ apiBaseURL, credential, initialAccess, onOperation }: { readonly apiBaseURL: string; readonly credential: StoredSpaceArrival; readonly initialAccess: AccessGrant; readonly onOperation?: SpaceOperationObserver }): GetAccess {
