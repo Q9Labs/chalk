@@ -359,7 +359,7 @@ run_gate() {
     status=$?
     set -e
   fi
-  echo "REMOTE_GATE_EXIT=${status}"
+  printf '\nREMOTE_GATE_EXIT=%s\n' "${status}"
   exit "${status}"
 }
 
