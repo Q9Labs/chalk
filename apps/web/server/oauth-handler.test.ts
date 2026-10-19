@@ -14,6 +14,7 @@ let publicKey: JsonWebKey;
 let serverOrigin: string;
 let appleKey: string;
 const exchanges: URLSearchParams[] = [];
+let tokenResponse: { body: string; status: number } | undefined;
 const codes = new Map<string, { provider: Provider; nonce: string; claims: object }>();
 async function idToken(provider: Provider, nonce: string, claims: object): Promise<string> {
   const header = base64url(encoder.encode(JSON.stringify({ alg: "RS256", kid: "handler-key" })));
@@ -35,6 +36,12 @@ const server = createServer(async (request, response) => {
     for await (const part of request) body += part;
     const params = new URLSearchParams(body);
     exchanges.push(params);
+    if (tokenResponse) {
+      response.writeHead(tokenResponse.status);
+      response.write(tokenResponse.body.slice(0, 32768));
+      response.end(tokenResponse.body.slice(32768));
+      return;
+    }
     const code = params.get("code") ?? "";
     const login = codes.get(code);
     codes.delete(code);
@@ -90,6 +97,7 @@ afterAll(async () => {
 beforeEach(() => {
   exchanges.length = 0;
   codes.clear();
+  tokenResponse = undefined;
   // Only external HTTP is redirected. The handler, OAuth adapter, crypto, cookies,
   // and generated engine client all run unchanged against real local HTTP servers.
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -172,4 +180,17 @@ it.each([
   const session = await handleDashboard(new Request(`${env().DASHBOARD_ORIGIN}/auth/session`, { headers: { Cookie: cookies } }), env(), oauthProvider);
   expect(session.status).toBe(200);
   expect(await session.json()).toMatchObject({ profile: { email } });
+});
+
+it.each(["google", "apple"] as const)("bounds %s token responses on success and error without setting a session", async (provider) => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  for (const status of [200, 400]) {
+    const login = await start(provider);
+    tokenResponse = { body: " ".repeat(65537), status };
+    const response = await callback(login);
+    expect(response.headers.get("Location")).toBe(`/dashboard/sign-in?failed=${provider}`);
+    expect(response.headers.getSetCookie().some((cookie) => cookie.startsWith("local_chalk_session="))).toBe(false);
+  }
+  expect(exchanges).toHaveLength(2);
+  expect(warn.mock.calls.map((call) => JSON.parse(call[0]).code)).toEqual(["identity_response_too_large", "identity_response_too_large"]);
 });
