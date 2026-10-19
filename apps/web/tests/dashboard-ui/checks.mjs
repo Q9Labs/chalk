@@ -183,7 +183,11 @@ try {
     const log = await fixture("log");
     const refreshes = log.filter((entry) => entry.path === "/auth/refresh").length;
     const reads = log.filter((entry) => entry.path === "/dashboard-api/home").length;
-    check("expired session returns to sign-in without refresh or retry", refreshes === 0 && reads <= 1 && new URL(tab.url()).pathname === "/dashboard/sign-in" && (await tab.getByRole("button", { name: "Continue with Google" }).count()) === 1, `refreshes=${refreshes} reads=${reads} path=${new URL(tab.url()).pathname}`);
+    check(
+      "expired session returns to sign-in without refresh or retry",
+      refreshes === 0 && reads <= 1 && new URL(tab.url()).pathname === "/dashboard/sign-in" && (await tab.getByRole("button", { name: "Continue with Google" }).count()) === 1,
+      `refreshes=${refreshes} reads=${reads} path=${new URL(tab.url()).pathname}`,
+    );
     await context.close();
   }
   // Error and rate-limit messages.
