@@ -33,7 +33,7 @@ const { values } = parseArgs({
 });
 if (values["leaks-only"] && values["timing-only"]) throw new Error("Choose either leaks-only or timing-only");
 if (values.gate && (values.smoke || values["record-baseline"] || values["leak-journey"])) throw new Error("Gate runs cannot narrow journeys or collect an unenforced baseline");
-if (values.gate && !process.env.TESTBOX_SOURCE_COMMIT) values["bundle-only"] = true;
+if (values.gate && !values["leaks-only"] && !process.env.TESTBOX_SOURCE_COMMIT) values["bundle-only"] = true;
 if (values.gate && !values["bundle-only"]) values["self-test"] = true;
 if (values["leak-journey"] && !LEAK_JOURNEYS.includes(values["leak-journey"])) throw new Error("Unknown leak journey");
 const web = resolve(import.meta.dirname, "..");
