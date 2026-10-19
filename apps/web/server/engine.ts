@@ -13,7 +13,7 @@ function client(env: DashboardEnvironment) {
 // This is the only Tenant selection point. No request value can supply its authority.
 export async function resolveTenant(env: DashboardEnvironment, person: Identity, provision = false) {
   const api = await client(env);
-  const externalId = `workos:${env.CHALK_ENVIRONMENT}:${person.userId}`;
+  const externalId = `${person.provider}:${env.CHALK_ENVIRONMENT}:${person.userId}`;
   const tenant = await run(api.tenants.findTenantByExternalID({ query: { external_id: externalId } }).pipe(Effect.catchTag("TenantNotFoundError", () => Effect.succeed(null))));
   if (tenant) return tenant.id;
   if (!provision) throw new DashboardError(409, "account_not_provisioned");

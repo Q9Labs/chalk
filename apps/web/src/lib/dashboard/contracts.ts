@@ -123,5 +123,3 @@ export type ArtifactURLDTO = { url: string; expiresAt: string; method: string; h
 export type DashboardErrorDTO = { error: { code: string; retryable?: true; retryAfterSeconds?: number } };
 
 export type OwnerAccessDTO = { access: AccessGrant };
-
-export type RefreshRequiredDTO = { error: { code: "refresh_or_sign_in_required" }; csrfToken: string };

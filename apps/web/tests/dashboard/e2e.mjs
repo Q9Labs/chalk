@@ -34,8 +34,8 @@ const engine = createServer(async (request, response) => {
     response.writeHead(503).end();
   }
 });
-async function tenantFor(person) {
-  const response = await fetch(`${process.env.DASHBOARD_TEST_API_ORIGIN}/v1/tenants/by-external-id?external_id=workos:test:fixture_${person}`, { headers: { Authorization: "Bearer fixture-dashboard-service-token-not-a-secret" } });
+async function tenantFor(person, provider = "google") {
+  const response = await fetch(`${process.env.DASHBOARD_TEST_API_ORIGIN}/v1/tenants/by-external-id?external_id=${provider}:test:fixture_${person}`, { headers: { Authorization: "Bearer fixture-dashboard-service-token-not-a-secret" } });
   assert.equal(response.status, 200);
   return response.json();
 }
@@ -59,12 +59,13 @@ try {
   await writeFile(resolve(sandbox, "public/index.html"), "fixture boundary");
   // Run the real named Pages route graph with a test-only composition root.
   for (const group of ["auth", "dashboard-api"]) {
-    const names = group === "auth" ? ["start", "callback", "session", "refresh", "sign-out"] : ["home", "call", "past-session", "developer"];
+    const names = group === "auth" ? ["start", "callback/google", "callback/apple", "session", "sign-out"] : ["home", "call", "past-session", "developer"];
     await mkdir(resolve(sandbox, "functions", group));
     for (const name of names) {
+      await mkdir(resolve(sandbox, "functions", group, name, ".."), { recursive: true });
       const original = await readFile(resolve(web, "functions", group, `${name}.ts`), "utf8");
-      const entry = relative(resolve(sandbox, "functions", group), resolve(import.meta.dirname, "fixture-entry.ts"));
-      await writeFile(resolve(sandbox, "functions", group, `${name}.ts`), original.replace("../../server/production", entry));
+      const entry = relative(resolve(sandbox, "functions", group, name, ".."), resolve(import.meta.dirname, "fixture-entry.ts"));
+      await writeFile(resolve(sandbox, "functions", group, `${name}.ts`), original.replace(/(?:\.\.\/)+server\/production/, entry));
     }
   }
   await mkdir(resolve(sandbox, "functions/fixture"));
@@ -81,10 +82,13 @@ try {
     CHALK_ENVIRONMENT: "test",
     CHALK_API_ORIGIN: `http://127.0.0.1:${engine.address().port}`,
     DASHBOARD_ORIGIN: origin,
-    WORKOS_REDIRECT_URI: `${origin}/auth/callback`,
-    WORKOS_CLIENT_ID: "fixture-client",
-    WORKOS_API_KEY: "fixture-workos-not-a-secret",
-    WORKOS_COOKIE_PASSWORD: "fixture-only-cookie-password-32-characters",
+    GOOGLE_CLIENT_ID: "fixture-client",
+    GOOGLE_CLIENT_SECRET: "fixture-google-not-a-secret",
+    APPLE_SERVICES_ID: "fixture-apple",
+    APPLE_TEAM_ID: "fixture-team",
+    APPLE_KEY_ID: "fixture-key",
+    APPLE_PRIVATE_KEY: "fixture-private-key",
+    SESSION_SECRET: "fixture-only-cookie-password-32-characters",
     DASHBOARD_SERVICE_TOKEN: "fixture-dashboard-service-token-not-a-secret",
     DASHBOARD_IDENTITY_PROVIDER: "fixture",
   };
@@ -127,8 +131,7 @@ try {
           else cookies.delete(key);
         }
         const exposed = (await response.clone().text()) + JSON.stringify([...response.headers]);
-        for (const secret of ["fixture-dashboard-service-token-not-a-secret", "fixture-workos-access-token-not-for-browser", "fixture-workos-refresh-token-not-for-browser", "fixture-workos-not-a-secret", "fixture-local-system-not-a-secret", "fixture-only-cookie-password-32-characters"])
-          assert(!exposed.includes(secret), `Browser exposed ${secret}`);
+        for (const secret of ["fixture-dashboard-service-token-not-a-secret", "fixture-google-not-a-secret", "fixture-private-key", "fixture-local-system-not-a-secret", "fixture-only-cookie-password-32-characters"]) assert(!exposed.includes(secret), `Browser exposed ${secret}`);
         assert.equal(response.headers.get("cache-control"), "no-store");
         return response;
       },
@@ -142,30 +145,66 @@ try {
     const authorized = await client.request(authorize);
     assert.equal(authorized.status, 303);
     const callback = authorized.headers.get("location");
-    const loginCookie = client.cookies.get("local_chalk_login");
+    const loginCookie = client.cookies.get("local_chalk_login_google");
     const finished = await client.request(callback);
     assert.equal(finished.status, 303, `Callback ${await finished.text()}; engine paths ${JSON.stringify(requests)}`);
     assert.equal(finished.headers.get("location"), "/dashboard");
     assert.equal((await client.request(callback)).headers.get("location"), "/dashboard/sign-in?failed=google");
-    client.cookies.set("local_chalk_login", loginCookie);
+    client.cookies.set("local_chalk_login_google", loginCookie);
     assert.equal((await client.request(callback)).headers.get("location"), "/dashboard/sign-in?failed=google");
     const response = await client.request("/auth/session");
     assert.equal(response.status, 200);
     const dto = await response.json();
     assert.deepEqual(Object.keys(dto).sort(), ["csrfToken", "profile"]);
     assert(!JSON.stringify(dto).includes("fixture-dashboard-service-token-not-a-secret"));
-    assert(!JSON.stringify(dto).includes("fixture-workos-not-a-secret"));
+    assert(!JSON.stringify(dto).includes("fixture-google-not-a-secret"));
     return dto;
   }
   async function post(client, path, value, token, extra = {}) {
     return client.request(path, { method: "POST", headers: { Origin: origin, "Content-Type": "application/json", "X-CSRF-Token": token, ...extra }, body: JSON.stringify(value) });
   }
+  for (const provider of ["google", "apple"]) {
+    for (const mismatch of provider === "google" ? ["state", "nonce", "challenge"] : ["state", "nonce"]) {
+      const client = browser();
+      const start = await client.request(`/auth/start?provider=${provider}`);
+      const authorize = new URL(start.headers.get("location"));
+      authorize.searchParams.set("person", "ada");
+      authorize.searchParams.set(mismatch, "mismatch");
+      const issued = await client.request(authorize);
+      const callback = new URL(issued.headers.get("location"));
+      const result = provider === "google" ? await client.request(callback) : await client.request(callback.pathname, { method: "POST", headers: { Origin: "https://appleid.apple.com", "Content-Type": "application/x-www-form-urlencoded" }, body: callback.searchParams.toString() });
+      assert.equal(result.headers.get("location"), `/dashboard/sign-in?failed=${provider}`);
+      assert.equal((await client.request("/auth/session")).status, 401);
+    }
+  }
+  const appleSuccess = browser();
+  const appleStart = await appleSuccess.request("/auth/start?provider=apple");
+  const appleAuthorize = new URL(appleStart.headers.get("location"));
+  appleAuthorize.searchParams.set("person", "ada");
+  const appleIssued = await appleSuccess.request(appleAuthorize);
+  const appleCallback = new URL(appleIssued.headers.get("location"));
+  assert.equal((await appleSuccess.request(appleCallback.pathname)).status, 405);
+  const appleFinished = await appleSuccess.request(appleCallback.pathname, { method: "POST", headers: { Origin: "https://appleid.apple.com", "Content-Type": "application/x-www-form-urlencoded" }, body: appleCallback.searchParams.toString() });
+  assert.equal(appleFinished.headers.get("location"), "/dashboard");
+  const appleSession = await (await appleSuccess.request("/auth/session")).json();
+  assert.equal(appleSession.profile.name, "Ada Fixture");
+  assert.equal((await post(appleSuccess, "/dashboard-api/home", { action: "create", name: "Untrusted" }, appleSession.csrfToken, { Origin: "https://appleid.apple.com" })).status, 403);
+  assert.equal((await post(appleSuccess, "/auth/sign-out", {}, appleSession.csrfToken, { Origin: "https://appleid.apple.com" })).status, 403);
+  const wrongApple = browser();
+  const wrongStart = await wrongApple.request("/auth/start?provider=apple");
+  const wrongAuthorize = new URL(wrongStart.headers.get("location"));
+  wrongAuthorize.searchParams.set("person", "ada");
+  const wrongIssued = new URL((await wrongApple.request(wrongAuthorize)).headers.get("location"));
+  assert.equal((await wrongApple.request(wrongIssued.pathname, { method: "POST", headers: { Origin: "https://evil.example", "Content-Type": "application/x-www-form-urlencoded" }, body: wrongIssued.searchParams.toString() })).headers.get("location"), "/dashboard/sign-in?failed=apple");
+  assert.equal((await wrongApple.request("/auth/session")).status, 401);
+  console.log("PASS: Google/Apple state and nonce, Google PKCE mismatches rejected; Apple form_post restricted to callback");
   const ada = browser();
   let session = await signIn(ada, "ada");
   const firstTenant = (await tenantFor("ada")).id;
+  assert.notEqual((await tenantFor("ada", "apple")).id, firstTenant, "Provider subjects must resolve to separate accounts");
   await signIn(ada, "ada");
   assert.equal((await tenantFor("ada")).id, firstTenant);
-  assert.equal(sql("select count(*) from tenants where external_id = 'workos:test:fixture_ada'"), "1");
+  assert.equal(sql("select count(*) from tenants where external_id = 'google:test:fixture_ada'"), "1");
   session = await (await ada.request("/auth/session")).json();
   const malik = browser();
   const other = await signIn(malik, "malik");
@@ -180,7 +219,7 @@ try {
   assert.equal(requests.length, count);
   const apple = browser();
   await apple.request("/auth/start?provider=apple");
-  const failedApple = await apple.request("/auth/callback?error=access_denied");
+  const failedApple = await apple.request("/auth/callback/apple", { method: "POST", headers: { Origin: "https://appleid.apple.com", "Content-Type": "application/x-www-form-urlencoded" }, body: "error=access_denied" });
   assert.equal(failedApple.status, 303);
   assert.equal(failedApple.headers.get("location"), "/dashboard/sign-in?failed=apple");
   assert(failedApple.headers.get("X-Request-ID"));
@@ -490,41 +529,16 @@ try {
   await fetch(`${origin}/fixture/control`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ person: "ada", expire: true }) });
   const expired = await ada.request("/auth/session");
   assert.equal(expired.status, 401);
-  const bootstrap = await expired.json();
-  assert.equal(bootstrap.error.code, "refresh_or_sign_in_required");
-  assert.equal(typeof bootstrap.csrfToken, "string");
-  session = { csrfToken: bootstrap.csrfToken };
-  const before = ada.cookies.get("local_chalk_session");
-  assert.equal((await post(ada, "/auth/refresh", {}, session.csrfToken)).status, 200);
-  assert.notEqual(ada.cookies.get("local_chalk_session"), before);
-  await fetch(`${origin}/fixture/control`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ person: "ada", refresh: "transient", online: false }) });
-  const preserved = ada.cookies.get("local_chalk_session");
-  assert.equal((await post(ada, "/auth/refresh", {}, session.csrfToken)).status, 503);
-  assert.equal(ada.cookies.get("local_chalk_session"), preserved);
-  const sensitive = [
-    { action: "set-allowed-websites", origins: ["https://example.test"] },
-    { action: "update-webhook", webhookId: crypto.randomUUID(), name: "Test", url: "https://example.test/hook", enabled: true, eventTypes: ["episode.ended"], revision: 1, idempotencyKey: crypto.randomUUID() },
-    { action: "create-key", name: "Test", scopes: ["spaces:read"], expiresAt: "2027-01-01T00:00:00Z", idempotencyKey: crypto.randomUUID() },
-    { action: "create-webhook", name: "Test", url: "https://example.test/hook", enabled: true, eventTypes: ["episode.ended"], idempotencyKey: crypto.randomUUID() },
-    { action: "rotate-key", keyId, expiresAt: "2027-01-01T00:00:00Z", idempotencyKey: crypto.randomUUID() },
-    { action: "rotate-webhook-secret", webhookId, revokePreviousImmediately: true, idempotencyKey: crypto.randomUUID() },
-  ];
+  assert.equal((await expired.json()).error.code, "sign_in_required");
   const sensitiveOffset = requests.length;
-  const sensitiveBodyOffset = unsupportedBodies.length;
-  for (const action of sensitive) assert.equal((await post(ada, "/dashboard-api/developer", action, session.csrfToken)).status, 401);
-  assert.equal(unsupportedBodies.slice(sensitiveBodyOffset).filter((r) => r.method !== "GET").length, 0);
-  assert(!requests.slice(sensitiveOffset).some((path) => /api-keys|webhook-endpoints/.test(path)));
+  assert.equal((await post(ada, "/dashboard-api/developer", { action: "create-key", name: "Test", scopes: ["spaces:read"], expiresAt: "2027-01-01T00:00:00Z", idempotencyKey: crypto.randomUUID() }, session.csrfToken)).status, 401);
+  assert.equal(requests.length, sensitiveOffset);
   assert.equal((await post(ada, "/auth/sign-out", {}, session.csrfToken)).status, 200);
   assert.equal((await ada.request("/auth/session")).status, 401);
-  await fetch(`${origin}/fixture/control`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ person: "malik", refresh: "terminal" }) });
-  const terminal = await post(malik, "/auth/refresh", {}, other.csrfToken);
-  assert.equal(terminal.status, 401);
-  const terminalRequestId = terminal.headers.get("X-Request-ID");
-  assert(terminalRequestId);
-  await delay(100);
-  assert(pagesOutput.includes(terminalRequestId), "terminal refresh must log its returned request ID");
+  assert.equal(ada.cookies.has("local_chalk_session"), false);
+  assert.equal((await post(malik, "/auth/sign-out", {}, other.csrfToken)).status, 200);
   assert.equal(malik.cookies.size, 0);
-  console.log("PASS: real Pages auth, two identities, idempotent Tenant bootstrap, callback replay, return URLs, exact Origin, CSRF, refresh success/transient/terminal, online-gated secrets, sign-out");
+  console.log("PASS: real Pages OAuth, two identities, idempotent Tenant bootstrap, callback replay, return URLs, exact Origin, CSRF, absolute expiry, sign-out");
   console.log("PASS: real API/PostgreSQL A/B isolation across every named resource action, persisted rename/admission/websites, seat attendance, and bounded retryable 429s without provisioning");
 } catch (error) {
   await delay(200);

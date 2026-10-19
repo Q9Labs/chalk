@@ -1,7 +1,7 @@
 import type { AllowedWebsitesDTO, ArtifactURLDTO, CallAction, CallDTO, CallPageDTO, CueDTO, DeliveryDTO, DeveloperAction, DeveloperDTO, HomeAction, HomeDTO, OwnerAccessDTO, PastSessionAction, PastSessionDTO, RecordingDTO, SecretDTO, SessionDTO, TranscriptDTO, WebhookDTO } from "./contracts";
 
 // The browser half of the dashboard. It holds only the session-bound CSRF token, never a secret:
-// the WorkOS session and every engine credential stay in HttpOnly cookies and the Pages Functions.
+// the sealed session and every engine credential stay in HttpOnly cookies and the Pages Functions.
 
 export type Provider = "google" | "apple";
 
@@ -72,9 +72,8 @@ export function signInURL(provider: Provider, returnTo = "/dashboard"): string {
 }
 
 let csrfToken: string | undefined;
-let refreshing: Promise<SessionDTO> | undefined;
 
-/** The signed-in person, or a `sign_in_required` error. Refreshes an expired session once. */
+/** The signed-in person, or a `sign_in_required` error. Expired sessions require a new sign-in. */
 export async function loadSession(): Promise<SessionDTO> {
   const response = await fetch("/auth/session", { headers: { Accept: "application/json" }, cache: "no-store" });
   const body: unknown = await readJSON(response);
@@ -82,27 +81,7 @@ export async function loadSession(): Promise<SessionDTO> {
     csrfToken = body.csrfToken;
     return body;
   }
-  if (response.status === 401 && isRefreshRequired(body)) {
-    csrfToken = body.csrfToken;
-    return refreshSession();
-  }
   throw toError(response, body);
-}
-
-/** One refresh at a time, so parallel requests that all see an expired session share it. */
-function refreshSession(): Promise<SessionDTO> {
-  refreshing ??= (async () => {
-    try {
-      const response = await post("/auth/refresh", {});
-      const body: unknown = await readJSON(response);
-      if (!response.ok || !isSession(body)) throw toError(response, body);
-      csrfToken = body.csrfToken;
-      return body;
-    } finally {
-      refreshing = undefined;
-    }
-  })();
-  return refreshing;
 }
 
 export async function signOut(): Promise<void> {
@@ -124,14 +103,7 @@ export async function act<P extends DashboardPage, A extends Pages[P]["action"]>
 }
 
 async function send<T>(request: () => Promise<Response>): Promise<T> {
-  let response = await request();
-  const expired: unknown = response.status === 401 ? await readJSON(response.clone()) : null;
-  if (errorCode(expired) === "refresh_or_sign_in_required") {
-    if (isRefreshRequired(expired)) csrfToken = expired.csrfToken;
-    // Refresh needs the CSRF token; a fresh tab gets it from the session check, which refreshes too.
-    await (csrfToken ? refreshSession() : loadSession());
-    response = await request();
-  }
+  const response = await request();
   if (!response.ok) throw toError(response, await readJSON(response));
   // The server's handlers build these shapes from the contract types, on this same origin.
   return response.json();
@@ -171,13 +143,9 @@ function isSession(body: unknown): body is SessionDTO {
   return Boolean(body && typeof body === "object" && "csrfToken" in body && typeof body.csrfToken === "string" && "profile" in body && body.profile && typeof body.profile === "object");
 }
 
-function isRefreshRequired(body: unknown): body is { csrfToken: string } {
-  return errorCode(body) === "refresh_or_sign_in_required" && Boolean(body && typeof body === "object" && "csrfToken" in body && typeof body.csrfToken === "string");
-}
-
 /** Whether the person has to sign in again before anything else works. */
 export function needsSignIn(error: unknown): boolean {
-  return error instanceof DashboardRequestError && error.status === 401 && ["sign_in_required", "refresh_or_sign_in_required", "session_binding_mismatch"].includes(error.code);
+  return error instanceof DashboardRequestError && error.status === 401 && ["sign_in_required", "session_binding_mismatch"].includes(error.code);
 }
 
 /** Plain words for a failed request, with the wait when the engine is rate limiting. */

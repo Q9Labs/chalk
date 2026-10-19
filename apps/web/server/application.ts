@@ -1,17 +1,18 @@
 import { z } from "zod";
 import type { DashboardBindings, DashboardEnvironment } from "./config";
 import { configuration } from "./config";
-import type { Identity, IdentityProvider } from "./identity";
+import type { Authentication, Identity, IdentityProvider } from "./identity";
 import { binding, checkCsrf, clearSession, csrfToken, readCookie, seal, setSession, unseal, writeCookie } from "./cookies";
-import { body, DashboardError, exactOrigin, json, redirect } from "./http";
+import { sealSession } from "./session";
+import { body, form, DashboardError, exactOrigin, json, redirect } from "./http";
 import { engine, resolveTenant } from "./engine";
 import { homeMutation, homePage } from "./home";
 import { ownerAccess, viewerSeat } from "./owner-access";
 import { callMutation, callPage } from "./call";
 import { pastMutation, pastSessionPage } from "./past-session";
-import { developerMutation, developerPage, requiresOnline } from "./developer";
+import { developerMutation, developerPage } from "./developer";
 import { callAction, callQuery, developerAction, developerQuery, homeAction, pageQuery, pastAction, pastQuery } from "../src/lib/dashboard/contracts";
-import type { RefreshRequiredDTO, SessionDTO } from "../src/lib/dashboard/contracts";
+import type { SessionDTO } from "../src/lib/dashboard/contracts";
 
 const startQuery = z.strictObject({
   provider: z.enum(["google", "apple"]),
@@ -20,8 +21,8 @@ const startQuery = z.strictObject({
     .regex(/^\/dashboard(?:\/[a-zA-Z0-9/_-]*)?$/)
     .default("/dashboard"),
 });
-const callbackQuery = z.strictObject({ code: z.string().min(1).max(4096), state: z.string().min(1).max(1024) });
-const transaction = z.object({ state: z.string(), codeVerifier: z.string(), returnTo: z.string(), provider: z.enum(["google", "apple"]), expiresAt: z.number() });
+const callbackQuery = z.object({ code: z.string().min(1).max(4096), state: z.string().min(1).max(1024), user: z.string().max(4096).optional() });
+const transaction = z.object({ state: z.string(), codeVerifier: z.string(), nonce: z.string(), previous: z.object({ userId: z.string(), name: z.string() }).optional(), returnTo: z.string(), provider: z.enum(["google", "apple"]), expiresAt: z.number() });
 const emptyBody = z.strictObject({});
 function query(request: Request): Record<string, string> {
   const values: Record<string, string> = {};
@@ -35,13 +36,10 @@ async function current(request: Request, env: DashboardEnvironment, provider: Id
   const sealed = readCookie(request, env, "session");
   if (!sealed) throw new DashboardError(401, "sign_in_required");
   const result = await provider.authenticate(sealed);
-  if (result.kind !== "authenticated") throw new DashboardError(401, "refresh_or_sign_in_required");
+  if (result.kind !== "authenticated") throw new DashboardError(401, "sign_in_required");
   const bound = await binding(request, env);
   if (bound.userId !== result.identity.userId || bound.sessionId !== result.identity.sessionId) throw new DashboardError(401, "session_binding_mismatch");
   return result.identity;
-}
-async function online(provider: IdentityProvider, person: Identity): Promise<void> {
-  if (!(await provider.online(person))) throw new DashboardError(401, "fresh_sign_in_required");
 }
 async function sessionDTO(person: Identity, env: DashboardEnvironment): Promise<SessionDTO> {
   return { profile: { name: person.name, email: person.email, avatarUrl: person.avatarUrl }, csrfToken: await csrfToken(person, env) };
@@ -51,62 +49,47 @@ async function auth(request: Request, env: DashboardEnvironment, provider: Ident
     const input = startQuery.parse(query(request));
     const login = await provider.start(input.provider);
     const response = redirect(login.url);
-    writeCookie(response, env, "login", await seal({ state: login.state, codeVerifier: login.codeVerifier, returnTo: input.returnTo, provider: input.provider, expiresAt: Date.now() + 600000 }, env.WORKOS_COOKIE_PASSWORD, "login"), 600);
+    const existing = readCookie(request, env, "session");
+    const authenticated: Authentication = existing ? await provider.authenticate(existing) : { kind: "unauthenticated" };
+    const previous = authenticated.kind === "authenticated" && authenticated.identity.provider === input.provider ? { userId: authenticated.identity.userId, name: authenticated.identity.name } : undefined;
+    writeCookie(response, env, `login_${input.provider}`, await seal({ state: login.state, codeVerifier: login.codeVerifier, nonce: login.nonce, previous, returnTo: input.returnTo, provider: input.provider, expiresAt: Date.now() + 600000 }, env.SESSION_SECRET, `login_${input.provider}`), 600);
     return response;
   }
-  if (request.method === "GET" && path === "/auth/callback") {
+  const providerName = path === "/auth/callback/apple" ? "apple" : "google";
+  if ((request.method === "GET" && path === "/auth/callback/google") || (request.method === "POST" && path === "/auth/callback/apple")) {
     let response: Response;
-    let providerName: "google" | "apple" = "google";
     try {
-      const loginCookie = readCookie(request, env, "login");
+      if (providerName === "apple" && request.headers.get("Origin") !== "https://appleid.apple.com") throw new DashboardError(403, "origin_rejected");
+      const loginCookie = readCookie(request, env, `login_${providerName}`);
       if (!loginCookie) throw new DashboardError(400, "login_state_missing");
-      const login = transaction.parse(await unseal(loginCookie, env.WORKOS_COOKIE_PASSWORD, "login"));
-      providerName = login.provider;
-      const input = callbackQuery.parse(query(request));
-      if (login.expiresAt <= Date.now() || login.state !== input.state) throw new DashboardError(400, "login_state_rejected");
-      const result = await provider.exchange(input.code, login.codeVerifier);
-      await resolveTenant(env, result.identity, true);
+      const login = transaction.parse(await unseal(loginCookie, env.SESSION_SECRET, `login_${providerName}`));
+      const values = providerName === "apple" ? await form(request) : query(request);
+      const input = callbackQuery.parse(values);
+      if (login.expiresAt <= Date.now() || login.state !== input.state || login.provider !== providerName) throw new DashboardError(400, "login_state_rejected");
+      const identity = await provider.exchange({ ...input, provider: providerName, codeVerifier: login.codeVerifier, nonce: login.nonce });
+      if (!identity.name && login.previous?.userId === identity.userId) identity.name = login.previous.name;
+      if (!identity.name) identity.name = identity.email;
+      await resolveTenant(env, identity, true);
       response = redirect(startQuery.shape.returnTo.parse(login.returnTo));
-      await setSession(response, env, result.sealedSession, result.identity);
+      await setSession(response, env, await sealSession(identity, env.SESSION_SECRET), identity);
     } catch (error) {
       const failed = failure(error);
       response = redirect(`/dashboard/sign-in?failed=${providerName}`);
       response.headers.set("X-Request-ID", failed.headers.get("X-Request-ID") ?? "");
     }
-    writeCookie(response, env, "login", "", 0);
+    writeCookie(response, env, `login_${providerName}`, "", 0);
     return response;
   }
   if (request.method === "GET" && path === "/auth/session") {
-    try {
-      return json(await sessionDTO(await current(request, env, provider), env));
-    } catch (error) {
-      if (!(error instanceof DashboardError) || error.code !== "refresh_or_sign_in_required") throw error;
-      const bound = await binding(request, env);
-      return json({ error: { code: "refresh_or_sign_in_required" }, csrfToken: await csrfToken(bound, env) } satisfies RefreshRequiredDTO, 401);
-    }
+    return json(await sessionDTO(await current(request, env, provider), env));
   }
-  if (request.method === "POST" && (path === "/auth/refresh" || path === "/auth/sign-out")) {
+  if (request.method === "POST" && path === "/auth/sign-out") {
     exactOrigin(request, env.DASHBOARD_ORIGIN);
     emptyBody.parse(await body(request));
     const bound = await binding(request, env);
     await checkCsrf(request, bound, env);
-    const sealed = readCookie(request, env, "session");
-    if (!sealed) throw new DashboardError(401, "sign_in_required");
-    if (path === "/auth/sign-out") {
-      await provider.revoke({ ...bound, name: "", email: "", avatarUrl: null });
-      const response = json({ ok: true, clearLocalBookmarks: true });
-      clearSession(response, env);
-      return response;
-    }
-    const refreshed = await provider.refresh(sealed);
-    if (refreshed.kind === "transient") return json({ error: { code: "identity_temporarily_unavailable" } }, 503);
-    if (refreshed.kind === "terminal" || refreshed.identity.userId !== bound.userId || refreshed.identity.sessionId !== bound.sessionId) {
-      const response = failure(new DashboardError(401, refreshed.kind === "terminal" ? "sign_in_required" : "session_binding_mismatch"));
-      clearSession(response, env);
-      return response;
-    }
-    const response = json(await sessionDTO(refreshed.identity, env));
-    await setSession(response, env, refreshed.sealedSession, refreshed.identity);
+    const response = json({ ok: true, clearLocalBookmarks: true });
+    clearSession(response, env);
     return response;
   }
   throw new DashboardError(405, "method_not_allowed");
@@ -139,23 +122,19 @@ async function dashboard(request: Request, env: DashboardEnvironment, provider: 
   switch (path) {
     case "/dashboard-api/home": {
       const action = homeAction.parse(input);
-      if (requiresOnline(action)) await online(provider, person);
       return json(await homeMutation(client, action));
     }
     case "/dashboard-api/call": {
       const action = callAction.parse(input);
-      if (requiresOnline(action)) await online(provider, person);
       if (action.action === "join" || action.action === "refresh-access") return ownerAccess(request, env, client, person, action);
       return json(await callMutation(client, action));
     }
     case "/dashboard-api/past-session": {
       const action = pastAction.parse(input);
-      if (requiresOnline(action)) await online(provider, person);
       return json(await pastMutation(client, action));
     }
     case "/dashboard-api/developer": {
       const action = developerAction.parse(input);
-      if (requiresOnline(action)) await online(provider, person);
       return json(await developerMutation(client, action));
     }
     default:

@@ -1,66 +1,42 @@
 import { z } from "zod";
 import type { DashboardEnvironment } from "../../server/config";
-import type { Identity, IdentityProvider } from "../../server/identity";
-import { seal, unseal } from "../../server/cookies";
+import type { IdentityProvider, Provider } from "../../server/identity";
+import { authenticate, SESSION_SECONDS } from "../../server/session";
+import { challenge } from "../../server/oauth";
 import { DashboardError, json, redirect } from "../../server/http";
 
 const people = {
   ada: { userId: "fixture_ada", name: "Ada Fixture", email: "ada@example.test", avatarUrl: null },
   malik: { userId: "fixture_malik", name: "Malik Fixture", email: "malik@example.test", avatarUrl: null },
 };
-const codes = new Map<string, { person: keyof typeof people; challenge: string; expiresAt: number }>();
-const sessions = new Map<string, { revoked: boolean; refresh: "success" | "transient" | "terminal"; online: boolean; accessExpiresAt: number }>();
-const sessionSchema = z.object({ identity: z.object({ userId: z.string(), sessionId: z.string(), name: z.string(), email: z.string(), avatarUrl: z.null() }), expiresAt: z.number() });
-const authorizeSchema = z.object({ state: z.string().min(1), challenge: z.string().min(1), person: z.enum(["ada", "malik"]).optional() });
-async function challenge(verifier: string): Promise<string> {
-  return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))), (b) => b.toString(16).padStart(2, "0")).join("");
-}
+const codes = new Map<string, { person: keyof typeof people; challenge: string; nonce: string; provider: Provider; expiresAt: number }>();
+const expired = new Set<string>();
+const issuedSessions = new Map<string, string>();
+const authorizeSchema = z.object({ state: z.string().min(1), challenge: z.string().min(1), nonce: z.string().min(1), provider: z.enum(["google", "apple"]), person: z.enum(["ada", "malik"]).optional() });
 function assertLocal(env: DashboardEnvironment): void {
   if (!["local", "test"].includes(env.CHALK_ENVIRONMENT) || env.DASHBOARD_IDENTITY_PROVIDER !== "fixture") throw new Error("Fixture identity is local/test only");
 }
 export function fixtureProvider(env: DashboardEnvironment): IdentityProvider {
   assertLocal(env);
-  const load = async (sealed: string) => sessionSchema.parse(await unseal(sealed, env.WORKOS_COOKIE_PASSWORD, "fixture-identity"));
-  const makeSession = async (identity: Identity) => seal({ identity, accessToken: "fixture-workos-access-token-not-for-browser", refreshToken: "fixture-workos-refresh-token-not-for-browser", expiresAt: Date.now() + 300000 }, env.WORKOS_COOKIE_PASSWORD, "fixture-identity");
   return {
-    async start() {
-      const state = crypto.randomUUID();
-      const codeVerifier = crypto.randomUUID();
-      return { state, codeVerifier, url: `${env.DASHBOARD_ORIGIN}/fixture/authorize?${new URLSearchParams({ state, challenge: await challenge(codeVerifier) })}` };
+    async start(provider) {
+      const state = crypto.randomUUID(),
+        codeVerifier = crypto.randomUUID(),
+        nonce = crypto.randomUUID();
+      return { state, codeVerifier, nonce, url: `${env.DASHBOARD_ORIGIN}/fixture/authorize?${new URLSearchParams({ state, nonce, provider, challenge: await challenge(codeVerifier) })}` };
     },
-    async exchange(code, codeVerifier) {
-      const issued = codes.get(code);
-      codes.delete(code);
-      if (!issued || issued.expiresAt < Date.now() || issued.challenge !== (await challenge(codeVerifier))) throw new DashboardError(401, "fixture_code_rejected");
-      const identity = { ...people[issued.person], sessionId: crypto.randomUUID() };
-      fixtureSessionPeople.set(identity.sessionId, issued.person);
-      sessions.set(identity.sessionId, { revoked: false, online: true, accessExpiresAt: Date.now() + 300000, refresh: "success" });
-      return { identity, sealedSession: await makeSession(identity) };
+    async exchange(input) {
+      const issued = codes.get(input.code);
+      codes.delete(input.code);
+      if (!issued || issued.expiresAt < Date.now() || issued.provider !== input.provider || issued.nonce !== input.nonce || (input.provider === "google" && issued.challenge !== (await challenge(input.codeVerifier)))) throw new DashboardError(401, "fixture_code_rejected");
+      const identity = { ...people[issued.person], provider: input.provider, sessionId: crypto.randomUUID(), expiresAt: Date.now() + SESSION_SECONDS * 1000 };
+      issuedSessions.set(identity.sessionId, issued.person);
+      return identity;
     },
     async authenticate(sealed) {
-      try {
-        const result = await load(sealed);
-        if (result.expiresAt <= Date.now() || (sessions.get(result.identity.sessionId)?.accessExpiresAt ?? 0) <= Date.now()) return { kind: "unauthenticated" };
-        return { kind: "authenticated", identity: result.identity };
-      } catch {
-        return { kind: "unauthenticated" };
-      }
-    },
-    async refresh(sealed) {
-      const result = await load(sealed);
-      const session = sessions.get(result.identity.sessionId);
-      if (!session || session.revoked || session.refresh === "terminal") return { kind: "terminal" };
-      if (session.refresh === "transient") return { kind: "transient" };
-      session.accessExpiresAt = Date.now() + 300000;
-      return { kind: "refreshed", identity: result.identity, sealedSession: await makeSession(result.identity) };
-    },
-    async online(identity) {
-      const session = sessions.get(identity.sessionId);
-      return !!session && !session.revoked && session.online;
-    },
-    async revoke(identity) {
-      const session = sessions.get(identity.sessionId);
-      if (session) session.revoked = true;
+      const result = await authenticate(sealed, env.SESSION_SECRET);
+      if (result.kind === "authenticated" && expired.has(result.identity.sessionId)) return { kind: "unauthenticated" };
+      return result;
     },
   };
 }
@@ -85,22 +61,14 @@ export async function fixtureRoute(request: Request, env: DashboardEnvironment):
       return new Response(`<a href="?${new URLSearchParams({ ...input, person: "ada" })}">Ada</a><a href="?${new URLSearchParams({ ...input, person: "malik" })}">Malik</a>`, { headers: { "Content-Type": "text/html", "Cache-Control": "no-store" } });
     }
     const code = crypto.randomUUID();
-    codes.set(code, { person: input.person, challenge: input.challenge, expiresAt: Date.now() + 60000 });
-    return redirect(`${env.WORKOS_REDIRECT_URI}?${new URLSearchParams({ code, state: input.state })}`);
+    codes.set(code, { person: input.person, challenge: input.challenge, nonce: input.nonce, provider: input.provider, expiresAt: Date.now() + 60000 });
+    // The harness submits Apple's returned fields as a cross-site form POST.
+    return redirect(`${env.DASHBOARD_ORIGIN}/auth/callback/${input.provider}?${new URLSearchParams({ code, state: input.state })}`);
   }
   if (request.method === "POST" && url.pathname === "/fixture/control") {
-    const input = z.strictObject({ person: z.enum(["ada", "malik"]), online: z.boolean().optional(), expire: z.boolean().optional(), refresh: z.enum(["success", "transient", "terminal"]).optional() }).parse(await request.json());
-    // Fixture identities are deterministic; controls apply only to sessions this local isolate issued.
-    for (const [id, session] of sessions) {
-      const target = fixtureSessionPeople.get(id);
-      if (target === input.person) {
-        if (input.online !== undefined) session.online = input.online;
-        if (input.expire) session.accessExpiresAt = 0;
-        if (input.refresh) session.refresh = input.refresh;
-      }
-    }
+    const input = z.strictObject({ person: z.enum(["ada", "malik"]), expire: z.literal(true) }).parse(await request.json());
+    for (const [sessionId, person] of issuedSessions) if (person === input.person) expired.add(sessionId);
     return json({ ok: true });
   }
   return json({ error: { code: "route_not_found" } }, 404);
 }
-const fixtureSessionPeople = new Map<string, keyof typeof people>();

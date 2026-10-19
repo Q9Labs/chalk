@@ -5,10 +5,13 @@ const local = {
   CHALK_ENVIRONMENT: "local",
   CHALK_API_ORIGIN: "http://127.0.0.1:8788",
   DASHBOARD_ORIGIN: "http://localhost:8789",
-  WORKOS_REDIRECT_URI: "http://localhost:8789/auth/callback",
-  WORKOS_CLIENT_ID: "fixture-client",
-  WORKOS_API_KEY: "fixture-key",
-  WORKOS_COOKIE_PASSWORD: "fixture-cookie-password-at-least-32-characters",
+  GOOGLE_CLIENT_ID: "fixture-client",
+  GOOGLE_CLIENT_SECRET: "fixture-secret",
+  APPLE_SERVICES_ID: "fixture-apple",
+  APPLE_TEAM_ID: "fixture-team",
+  APPLE_KEY_ID: "fixture-key",
+  APPLE_PRIVATE_KEY: "fixture-private-key",
+  SESSION_SECRET: "fixture-cookie-password-at-least-32-characters",
   DASHBOARD_SERVICE_TOKEN: "fixture-service",
   DASHBOARD_IDENTITY_PROVIDER: "fixture",
 };
@@ -17,13 +20,13 @@ describe("dashboard deployment boundary", () => {
     expect(configuration(local).DASHBOARD_IDENTITY_PROVIDER).toBe("fixture");
   });
   it.each(["staging", "production"])("rejects fixture mode in %s", (environment) => {
-    expect(() => configuration({ ...local, CHALK_ENVIRONMENT: environment, CHALK_API_ORIGIN: "https://api.example.test", DASHBOARD_ORIGIN: "https://chalk.example.test", WORKOS_REDIRECT_URI: "https://chalk.example.test/auth/callback" })).toThrow("Fixture identity is local/test only");
+    expect(() => configuration({ ...local, CHALK_ENVIRONMENT: environment, CHALK_API_ORIGIN: "https://api.example.test", DASHBOARD_ORIGIN: "https://chalk.example.test" })).toThrow("Fixture identity is local/test only");
   });
   it("rejects non-loopback insecure local origins", () => {
-    expect(() => configuration({ ...local, DASHBOARD_ORIGIN: "http://shared.example.test", WORKOS_REDIRECT_URI: "http://shared.example.test/auth/callback" })).toThrow("Local HTTP must use loopback");
+    expect(() => configuration({ ...local, DASHBOARD_ORIGIN: "http://shared.example.test" })).toThrow("Local HTTP must use loopback");
   });
-  it("rejects an external callback", () => {
-    expect(() => configuration({ ...local, WORKOS_REDIRECT_URI: "https://evil.example/auth/callback" })).toThrow("fixed dashboard callback");
+  it("rejects a short session key", () => {
+    expect(() => configuration({ ...local, SESSION_SECRET: "short" })).toThrow();
   });
 });
 

@@ -5,7 +5,7 @@ type Call = { readonly url: string; readonly method: string; readonly csrf: stri
 const json = (status: number, body: object, headers: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...headers } });
 const profile = { name: "June Park", email: "june@example.com", avatarUrl: null };
 
-/** A fresh client module per test, so its CSRF token and refresh state start empty. */
+/** A fresh client module per test, so its CSRF token starts empty. */
 async function client(replies: readonly Response[]) {
   vi.resetModules();
   const calls: Call[] = [];
@@ -41,10 +41,11 @@ describe("dashboard client", () => {
     ]);
   });
 
-  it("refreshes an expired session once, then retries the read", async () => {
-    const { module, calls } = await client([json(401, { error: { code: "refresh_or_sign_in_required" } }), json(401, { error: { code: "refresh_or_sign_in_required" }, csrfToken: "bound" }), json(200, { profile, csrfToken: "fresh" }), json(200, { calls: [], live: [], nextCursor: null })]);
-    await expect(module.readPage("home", {})).resolves.toEqual({ calls: [], live: [], nextCursor: null });
-    expect(calls.map((call) => `${call.method} ${call.url} ${call.csrf ?? ""}`.trim())).toEqual(["GET /dashboard-api/home", "GET /auth/session", "POST /auth/refresh bound", "GET /dashboard-api/home"]);
+  it("requires sign-in for an expired session without refreshing or retrying", async () => {
+    const { module, calls } = await client([json(401, { error: { code: "sign_in_required" } })]);
+    const failure = await module.readPage("home", {}).catch((error: unknown) => error);
+    expect(module.needsSignIn(failure)).toBe(true);
+    expect(calls).toEqual([{ url: "/dashboard-api/home", method: "GET", csrf: null }]);
   });
 
   it("sends a signed-out person to sign in", async () => {
