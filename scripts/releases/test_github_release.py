@@ -77,7 +77,7 @@ print(json.dumps(pages if '--paginate' in sys.argv else {'id': 1}))
                 for method, attempts in (('request', 4), ('pages', 4), ('post', 1))
                 for ignore_term in ('0', '1')):
             with self.subTest(method=method, ignore_term=ignore_term), patch.dict(
-                    os.environ, GH_FAKE_HANG='1', GH_FAKE_IGNORE_TERM=ignore_term), patch('time.sleep') as sleep:
+                    os.environ, GH_FAKE_HANG='1', GH_FAKE_IGNORE_TERM=ignore_term), patch('github_release.backoff_sleep') as sleep:
                 self.count.unlink(missing_ok=True)
                 self.pids.unlink(missing_ok=True)
                 with self.assertRaises(subprocess.CalledProcessError) as caught:
@@ -129,7 +129,7 @@ print(json.dumps(pages if '--paginate' in sys.argv else {'id': 1}))
                 owner.stderr.close()
 
     def test_partial_pagination_output_is_discarded_on_retry(self):
-        with patch.dict(os.environ, GH_FAKE_PARTIAL='1', GH_FAKE_FAILURES='1'), patch('time.sleep'):
+        with patch.dict(os.environ, GH_FAKE_PARTIAL='1', GH_FAKE_FAILURES='1'), patch('github_release.backoff_sleep'):
             self.assertEqual(self.github.pages('actions/runs/123/jobs', 'jobs'), [{'id': 1}, {'id': 2}])
             self.assertEqual(self.count.read_text(), '2')
 
@@ -138,7 +138,7 @@ print(json.dumps(pages if '--paginate' in sys.argv else {'id': 1}))
 
     def test_reads_recover_on_fourth_attempt(self):
         for method in ('request', 'pages'):
-            with self.subTest(method=method), patch('time.sleep') as sleep, patch('sys.stderr', new_callable=io.StringIO) as stderr:
+            with self.subTest(method=method), patch('github_release.backoff_sleep') as sleep, patch('sys.stderr', new_callable=io.StringIO) as stderr:
                 self.count.unlink(missing_ok=True)
                 self.assertEqual(self.call(method), {'id': 1} if method == 'request' else [{'id': 1}, {'id': 2}])
                 self.assertEqual(self.count.read_text(), '4')
@@ -150,7 +150,7 @@ print(json.dumps(pages if '--paginate' in sys.argv else {'id': 1}))
     def test_reads_give_up_after_four_attempts(self):
         with patch.dict(os.environ, GH_FAKE_FAILURES='10'):
             for method in ('request', 'pages'):
-                with self.subTest(method=method), patch('time.sleep') as sleep:
+                with self.subTest(method=method), patch('github_release.backoff_sleep') as sleep:
                     self.count.unlink(missing_ok=True)
                     with self.assertRaises(subprocess.CalledProcessError) as caught:
                         self.call(method)
@@ -161,7 +161,7 @@ print(json.dumps(pages if '--paginate' in sys.argv else {'id': 1}))
     def test_client_errors_are_not_retried(self):
         for error in ('gh: Not Found (HTTP 404)', 'gh: Forbidden (HTTP 403)', 'gh: Too Many Requests (HTTP 429)'):
             for method in ('request', 'pages'):
-                with self.subTest(error=error, method=method), patch.dict(os.environ, GH_FAKE_ERROR=error), patch('time.sleep') as sleep:
+                with self.subTest(error=error, method=method), patch.dict(os.environ, GH_FAKE_ERROR=error), patch('github_release.backoff_sleep') as sleep:
                     self.count.unlink(missing_ok=True)
                     with self.assertRaises(subprocess.CalledProcessError):
                         self.call(method)
@@ -172,13 +172,13 @@ print(json.dumps(pages if '--paginate' in sys.argv else {'id': 1}))
         for error in ('error connecting to api.github.com', 'dial tcp: connection reset by peer',
                       'net/http: TLS handshake timeout', 'context deadline exceeded', 'unexpected EOF'):
             for method in ('request', 'pages'):
-                with self.subTest(error=error, method=method), patch.dict(os.environ, GH_FAKE_ERROR=error), patch('time.sleep'):
+                with self.subTest(error=error, method=method), patch.dict(os.environ, GH_FAKE_ERROR=error), patch('github_release.backoff_sleep'):
                     self.count.unlink(missing_ok=True)
                     self.call(method)
                     self.assertEqual(self.count.read_text(), '4')
 
     def test_deployment_posts_are_not_retried(self):
-        with patch('time.sleep') as sleep:
+        with patch('github_release.backoff_sleep') as sleep:
             with self.assertRaises(subprocess.CalledProcessError):
                 self.github.reserve_cut('a' * 40)
             self.assertEqual(self.count.read_text(), '1')
