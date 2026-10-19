@@ -24,7 +24,19 @@ let keyPair: CryptoKeyPair;
 let wrongKey: CryptoKeyPair;
 let jwksUrl: string;
 let publicKey: JsonWebKey;
-const server = createServer((_request, response) => response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ keys: [{ ...publicKey, kid: "fixture-key", alg: "RS256", use: "sig" }] })));
+const jwksRequests = new Map<string, number>();
+const fixtures = new Map<string, { body: string; cacheControl: string; age?: number; status?: number }>();
+const server = createServer((request, response) => {
+  const path = request.url ?? "/jwks";
+  jwksRequests.set(path, (jwksRequests.get(path) ?? 0) + 1);
+  const fixture = fixtures.get(path);
+  if (fixture?.age !== undefined) response.setHeader("Age", fixture.age);
+  response.writeHead(fixture?.status ?? 200, { "Content-Type": "application/json", "Cache-Control": fixture?.cacheControl ?? "max-age=300" });
+  const body = fixture?.body ?? JSON.stringify({ keys: [{ ...publicKey, kid: "fixture-key", alg: "RS256", use: "sig" }] });
+  // Chunked responses exercise the stream limit without Content-Length.
+  response.write(body.slice(0, 32768));
+  response.end(body.slice(32768));
+});
 beforeAll(async () => {
   const algorithm = { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" };
   keyPair = await crypto.subtle.generateKey(algorithm, true, ["sign", "verify"]);
@@ -40,9 +52,9 @@ afterAll(async () => {
   server.close();
   await once(server, "close");
 });
-async function token(issuer: string, changes = {}, key = keyPair.privateKey): Promise<string> {
-  const header = base64url(encoder.encode(JSON.stringify({ alg: "RS256", kid: "fixture-key" })));
-  const payload = base64url(encoder.encode(JSON.stringify({ iss: issuer, aud: "client", sub: "subject", nonce: "nonce", exp: Math.floor(Date.now() / 1000) + 300, email: "person@example.test", ...changes })));
+async function token(issuer: string, changes = {}, key = keyPair.privateKey, kid = "fixture-key"): Promise<string> {
+  const header = base64url(encoder.encode(JSON.stringify({ alg: "RS256", kid })));
+  const payload = base64url(encoder.encode(JSON.stringify({ iss: issuer, aud: "client", sub: "subject", nonce: "nonce", iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 300, email: "person@example.test", ...changes })));
   const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, encoder.encode(`${header}.${payload}`));
   return `${header}.${payload}.${base64url(new Uint8Array(signature))}`;
 }
@@ -51,10 +63,32 @@ describe.each(["https://accounts.google.com", "https://appleid.apple.com"])("ID 
   it("verifies a real signature through the local JWKS HTTP fixture", async () => {
     expect((await verify(await token(issuer))).sub).toBe("subject");
   });
+  it("allows at most sixty seconds of issuance clock skew", async () => {
+    const now = Math.floor(Date.now() / 1000) * 1000;
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    try {
+      expect((await verify(await token(issuer, { iat: now / 1000 + 60 }))).sub).toBe("subject");
+      await expect(verify(await token(issuer, { iat: now / 1000 + 61 }))).rejects.toThrow("id_token_rejected");
+    } finally {
+      clock.mockRestore();
+    }
+  });
   it("rejects a bad signature", async () => {
     await expect(verify(await token(issuer, {}, wrongKey.privateKey))).rejects.toThrow();
   });
-  it.each([{ aud: "wrong" }, { iss: "https://evil.example" }, { exp: 1 }, { nonce: "wrong" }, { aud: ["client", "other"] }, { azp: "other" }])("rejects altered claims %j", async (changes) => {
+  it.each([
+    { aud: "wrong" },
+    { iss: "https://evil.example" },
+    { exp: 1 },
+    { exp: "later" },
+    { iat: undefined },
+    { iat: "now" },
+    { iat: Math.floor(Date.now() / 1000) + 3600 },
+    { iat: Math.floor(Date.now() / 1000) + 30, exp: Math.floor(Date.now() / 1000) + 10 },
+    { nonce: "wrong" },
+    { aud: ["client", "other"] },
+    { azp: "other" },
+  ])("rejects altered claims %j", async (changes) => {
     await expect(verify(await token(issuer, changes))).rejects.toThrow();
   });
 });
@@ -103,4 +137,68 @@ it("retains bounded provider rejection evidence without exposing arbitrary respo
       vi.unstubAllGlobals();
     }
   }
+});
+
+it.each(["max-age=2", "max-age=7200", "no-store", "no-cache", "max-age=0"])("honors bounded JWKS caching for %s", async (control) => {
+  const path = `/cache-${crypto.randomUUID()}`;
+  const jwks = new URL(path, jwksUrl).href;
+  fixtures.set(path, { body: JSON.stringify({ keys: [{ ...publicKey, kid: "fixture-key" }] }), cacheControl: control });
+  const now = Date.now();
+  const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+  const verify = (value: string) => verifyIdToken({ token: value, clientId: "client", nonce: "nonce", issuers: ["issuer"], jwks });
+  try {
+    const value = await token("issuer");
+    await Promise.all([verify(value), verify(value), verify(value)]);
+    expect(jwksRequests.get(path)).toBe(1); // Concurrent cold loads share one fetch.
+    await verify(value);
+    const cacheable = control.startsWith("max-age=") && control !== "max-age=0";
+    expect(jwksRequests.get(path)).toBe(cacheable ? 1 : 2);
+    if (cacheable) {
+      clock.mockReturnValue(now + (control === "max-age=2" ? 2001 : 3600001));
+      await verify(await token("issuer"));
+      expect(jwksRequests.get(path)).toBe(2);
+    }
+  } finally {
+    clock.mockRestore();
+  }
+});
+it("caps the remaining JWKS freshness after deducting Age", async () => {
+  const path = `/aged-${crypto.randomUUID()}`;
+  const jwks = new URL(path, jwksUrl).href;
+  fixtures.set(path, { body: JSON.stringify({ keys: [{ ...publicKey, kid: "fixture-key" }] }), cacheControl: "max-age=7200", age: 3600 });
+  const now = Date.now();
+  const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+  const verify = () => token("issuer").then((value) => verifyIdToken({ token: value, clientId: "client", nonce: "nonce", issuers: ["issuer"], jwks }));
+  try {
+    await verify();
+    await verify();
+    expect(jwksRequests.get(path)).toBe(1);
+    clock.mockReturnValue(now + 3599000);
+    await verify();
+    expect(jwksRequests.get(path)).toBe(1);
+    clock.mockReturnValue(now + 3600001);
+    await verify();
+    expect(jwksRequests.get(path)).toBe(2);
+  } finally {
+    clock.mockRestore();
+  }
+});
+it("refreshes unknown kids once for rotation and rate-bounds subsequent unknown-kid refreshes", async () => {
+  const path = `/rotation-${crypto.randomUUID()}`;
+  const jwks = new URL(path, jwksUrl).href;
+  const verify = (value: string) => verifyIdToken({ token: value, clientId: "client", nonce: "nonce", issuers: ["issuer"], jwks });
+  fixtures.set(path, { body: JSON.stringify({ keys: [{ ...publicKey, kid: "fixture-key" }] }), cacheControl: "max-age=300" });
+  await verify(await token("issuer"));
+  const rotated = await crypto.subtle.exportKey("jwk", wrongKey.publicKey);
+  fixtures.set(path, { body: JSON.stringify({ keys: [{ ...rotated, kid: "rotated-key" }] }), cacheControl: "max-age=300" });
+  await verify(await token("issuer", {}, wrongKey.privateKey, "rotated-key"));
+  expect(jwksRequests.get(path)).toBe(2);
+  await expect(verify(await token("issuer", {}, keyPair.privateKey, "unknown-a"))).rejects.toThrow("id_token_rejected");
+  await expect(verify(await token("issuer", {}, keyPair.privateKey, "unknown-b"))).rejects.toThrow("id_token_rejected");
+  expect(jwksRequests.get(path)).toBe(2);
+});
+it.each([200, 400])("bounds streamed JWKS bodies, including HTTP %s responses", async (status) => {
+  const path = `/oversized-${status}`;
+  fixtures.set(path, { body: " ".repeat(65537), cacheControl: "max-age=300", status });
+  await expect(verifyIdToken({ token: await token("issuer"), clientId: "client", nonce: "nonce", issuers: ["issuer"], jwks: new URL(path, jwksUrl).href })).rejects.toThrow("identity_response_too_large");
 });

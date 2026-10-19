@@ -145,7 +145,7 @@ function failure(error: unknown): Response {
   const status = error instanceof DashboardError ? error.status : error instanceof z.ZodError ? 400 : 503;
   const code = error instanceof DashboardError ? error.code : error instanceof z.ZodError ? "invalid_request" : "service_unavailable";
   const requestId = crypto.randomUUID();
-  console.warn(JSON.stringify({ event: "dashboard.request_failed", request_id: requestId, status, code, error_type: error instanceof Error ? error.name : typeof error, source: error instanceof Error ? error.stack?.split("\n")[1]?.trim().slice(0, 180) : undefined }));
+  console.warn(JSON.stringify({ event: "dashboard.request_failed", request_id: requestId, status, code, error_type: error instanceof Error ? error.name : typeof error }));
   const response = json({ error: status === 429 ? { code, retryable: true, retryAfterSeconds: 60 } : { code } }, status);
   if (status === 429) response.headers.set("Retry-After", "60");
   response.headers.set("X-Request-ID", requestId);
