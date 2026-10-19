@@ -135,6 +135,32 @@ state for a new-seat check is a database fixture, not a Sync handshake.
 Real Google/Apple WorkOS setup, live Sync and vendor media remain separate
 operator smoke checks.
 
+## Real WorkOS smoke check
+
+Runs the real named Pages Functions and local engine against **WorkOS Staging**
+(Google and Apple), not the fixture identity provider. Build the web assets first.
+From the repository root:
+
+```sh
+DASHBOARD_ENGINE_DEADLINE_SECONDS=1800 DASHBOARD_WORKOS_SMOKE_SECONDS=1800 bash apps/web/tests/dashboard/real-engine.sh bash apps/web/tests/dashboard/workos-smoke.sh
+```
+
+Open `http://localhost:8788`. Only `q9labs.ai@gmail.com` can use Google while the
+consent screen is in Testing. The script injects the Staging API key with
+`2password run`, writes secret bindings only into a private temporary directory
+outside the repo, and generates a fresh cookie password per run. Ctrl-C or the
+30-minute deadline stops Pages and the harness's API, vendor fixture, Redis and
+Postgres. Never use production credentials. The engine remains disposable local
+state; this does not prove live Sync or vendor media. Shell checks prove the
+signed-out 401 and Google/Apple authorization redirects; completing sign-in and
+dashboard actions requires a browser operator.
+
+`real-engine.sh` accepts an optional final command (arguments are preserved); no
+arguments still runs exactly `pnpm --filter web run test:dashboard`. Its watchdog
+uses `DASHBOARD_ENGINE_DEADLINE_SECONDS` (default 240 seconds). The smoke server
+uses `DASHBOARD_WORKOS_SMOKE_SECONDS` (default 1800 seconds); set both for a longer
+operator session.
+
 ## Failure evidence
 
 Pages failures emit a bounded JSON `dashboard.request_failed` event to Cloudflare

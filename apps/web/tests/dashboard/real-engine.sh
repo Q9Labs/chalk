@@ -2,7 +2,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/../../../.."
 if [[ "${CHALK_GATE_POSTGRES_READY:-0}" != 1 ]]; then
-  exec bash scripts/gates/with-postgres.sh -- bash apps/web/tests/dashboard/real-engine.sh
+  exec bash scripts/gates/with-postgres.sh -- bash apps/web/tests/dashboard/real-engine.sh "$@"
+fi
+deadline_seconds="${DASHBOARD_ENGINE_DEADLINE_SECONDS:-240}"
+if [[ ! "$deadline_seconds" =~ ^[1-9][0-9]*$ ]]; then
+  echo "DASHBOARD_ENGINE_DEADLINE_SECONDS must be a positive integer" >&2
+  exit 2
 fi
 mkdir -p artifacts
 export CHALK_API_ENV=local
@@ -46,12 +51,15 @@ export AWS_EC2_METADATA_DISABLED=true
 export AWS_ENDPOINT_URL=http://127.0.0.1:18081
 export GOFLAGS=-buildvcs=false
 (cd apps/api && go build -o ../../artifacts/dashboard-api ./cmd)
+final_pid=""
 api_pid=""
 vendor_pid=""
 watchdog_pid=""
 redis_container=""
 certificate_dir=""
 cleanup() {
+  [[ -z "$final_pid" ]] || kill "$final_pid" 2>/dev/null || true
+  [[ -z "$final_pid" ]] || wait "$final_pid" 2>/dev/null || true
   [[ -z "$vendor_pid" ]] || kill "$vendor_pid" 2>/dev/null || true
   [[ -z "$api_pid" ]] || kill "$api_pid" 2>/dev/null || true
   [[ -z "$watchdog_pid" ]] || kill "$watchdog_pid" 2>/dev/null || true
@@ -63,7 +71,9 @@ cleanup() {
     rmdir "$certificate_dir"
   fi
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 certificate_dir="$(mktemp -d /tmp/dashboard-capability-identity.XXXXXX)"
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=dashboard-proof-ca \
   -addext basicConstraints=critical,CA:TRUE \
@@ -100,13 +110,15 @@ kill -0 "$vendor_pid"
 artifacts/dashboard-api > artifacts/dashboard-api.log 2>&1 &
 api_pid=$!
 # Owner loss and a hard deadline also reap the server if the driver is killed.
-python3 - "$BASHPID" "$api_pid" "$redis_container" <<'PY' &
+python3 - "$BASHPID" "$api_pid" "$redis_container" "$deadline_seconds" <<'PY' &
 import os, signal, subprocess, sys, time
 owner, child = map(int, sys.argv[1:3])
-for _ in range(240):
+for _ in range(int(sys.argv[4])):
     try: os.kill(owner, 0)
     except ProcessLookupError: break
     time.sleep(1)
+try: os.kill(owner, signal.SIGTERM)
+except ProcessLookupError: pass
 try: os.kill(child, signal.SIGTERM)
 except ProcessLookupError: pass
 subprocess.run(["docker", "stop", "--time", "1", sys.argv[3]], timeout=15, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -117,4 +129,10 @@ for attempt in {1..100}; do
   if ! kill -0 "$api_pid" 2>/dev/null; then cat artifacts/dashboard-api.log; exit 1; fi
   sleep 0.1
 done
-pnpm --filter web run test:dashboard
+if (($# == 0)); then
+  pnpm --filter web run test:dashboard
+else
+  "$@" &
+  final_pid=$!
+  wait "$final_pid"
+fi
