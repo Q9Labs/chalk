@@ -132,7 +132,7 @@ See `scripts/gates/remote.sh --help` for the remaining `CHALK_REMOTE_*` settings
 
 Use `scripts/gates/remote-testbox.sh` only for timing runs that need a dedicated
 c-8 box, including call-performance budgets. Testbox bills every box; ordinary
-gates use the M4. For custom timing commands, set `CHALK_REMOTE_SIZE=c-8`.
+gates use the M4. The opt-in runner defaults to `c-8` for every command.
 
 `scripts/gates/remote-testbox.sh <root|api|sync|recorder|-- command...>` runs on a
 disposable Linux Droplet through the testbox skill.
@@ -151,11 +151,10 @@ Playwright Chromium revision. Matching Chromium skips OS dependency setup;
 a different revision still installs its dependencies. The existing helpers own PostgreSQL 18.3 and Sync topology.
 Root and custom runs verify the repo's Playwright Chromium revision.
 TTL covers provisioning, setup, and the gate: root/custom 60 minutes, API/Sync
-45 minutes, recorder 20 minutes (2 CPU / 4 GB).
-Root defaults to `c-8` (8 dedicated CPU / 16 GB). API and Sync use
-`c-8`, recorder uses `s-2vcpu-4gb`, and custom commands keep
-`s-4vcpu-8gb`. The measured region is `blr1`, which offers both root trial
-sizes. New shared images must be available there before use. This is an
+45 minutes, recorder 20 minutes.
+All runs default to `c-8` (8 dedicated CPU / 16 GB), including custom timing
+commands. The measured region is `blr1`.
+New shared images must be available there before use. This is an
 allocation choice, not a claim that the region is faster.
 
 Each run retains testbox's $0.50 default ceiling and automatic cleanup.

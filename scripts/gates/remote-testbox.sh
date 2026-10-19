@@ -19,7 +19,7 @@ Full logs and receipts remain in ~/.local/state/testbox/<task>/.
 
 Environment:
   CHALK_REMOTE_REGION      testbox region (default blr1; snapshot must be available)
-  CHALK_REMOTE_SIZE        override the measured per-gate Droplet size
+  CHALK_REMOTE_SIZE        override the dedicated-CPU size (default c-8)
   CHALK_REMOTE_TTL         override the setup-inclusive lifetime in seconds
   CHALK_REMOTE_BUDGET      compute reservation ceiling in USD (default 0.50)
   CHALK_REMOTE_BASE_REF    root base (default origin/master; only testbox's
@@ -40,16 +40,16 @@ if (($# == 0)); then usage >&2; exit 2; fi
 gate="$1"
 shift
 case "$gate" in
-  root) ttl=3600; size=c-8 ;;
-  api | sync) ttl=2700; size=c-8 ;;
-  recorder) ttl=1200; size=s-2vcpu-4gb ;;
+  root) ttl=3600 ;;
+  api | sync) ttl=2700 ;;
+  recorder) ttl=1200 ;;
   --)
     if (($# == 0)); then echo 'remote-testbox.sh -- requires a command' >&2; exit 2; fi
-    ttl=3600; size=s-4vcpu-8gb ;;
+    ttl=3600 ;;
   help | -h | --help) usage; exit 0 ;;
   *) echo "Unknown gate: $gate" >&2; usage >&2; exit 2 ;;
 esac
-size="${CHALK_REMOTE_SIZE:-$size}"
+size="${CHALK_REMOTE_SIZE:-c-8}"
 ttl="${CHALK_REMOTE_TTL:-$ttl}"
 repository_root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$repository_root"
