@@ -50,7 +50,7 @@ describe("Chalk terminal callbacks with a real SpaceClient", () => {
       expect(onEpisodeEnded).not.toHaveBeenCalled();
       expect(onJoined).not.toHaveBeenCalled();
       expect(onLeft).not.toHaveBeenCalled();
-      expect(container.textContent).toContain("The Episode has ended");
+      expect(container.textContent).toContain("The call ended");
       expect(container.textContent).not.toContain("Joining");
     } finally {
       await act(async () => root.unmount());
