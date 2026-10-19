@@ -102,7 +102,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
         const link = document.createElement("a");
         link.href = blobUrl;
         link.download = photo.fileName;
-        document.body.append(link);
+        document.body.appendChild(link);
         try {
           link.click();
         } finally {
