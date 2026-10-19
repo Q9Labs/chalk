@@ -21,7 +21,7 @@ export function ChalkSheet({ open, onOpenChange, title, accessibleLabel, childre
       <Dialog.Root open={open} onOpenChange={onOpenChange}>
         <Dialog.Portal container={container}>
           <Dialog.Backdrop data-part="sheet-scrim" className="chalk-sheet-scrim" />
-          <Dialog.Popup aria-label={accessibleLabel} data-part={variant === "panel" ? "panel-card" : "sheet"} data-variant={variant} className="chalk-sheet">
+          <Dialog.Popup {...(accessibleLabel ? { "aria-label": accessibleLabel, "aria-labelledby": undefined } : {})} data-part={variant === "panel" ? "panel-card" : "sheet"} data-variant={variant} className="chalk-sheet">
             <div data-part="sheet-handle" className="chalk-sheet-handle" />
             {variant !== "details" ? (
               <Dialog.Title className="sr-only">{title}</Dialog.Title>

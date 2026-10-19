@@ -111,7 +111,7 @@ try {
  await page.getByRole('button',{name:'More options',exact:true}).click();
  const flip=page.getByRole('button',{name:'Flip camera',exact:true});
  assert.ok((await flip.boundingBox()).height>=44);
- assert.equal(await page.locator('.chalk-shell-more-devices').count(),0);
+ assert.equal(await page.getByRole('dialog',{name:'More options',exact:true}).getByRole('button',{name:/Select (microphone|camera)|Test speaker/}).count(),0);
  await flip.click();
  await page.getByLabel('Last shell command').filter({hasText:'Selected camera: cam-2'}).waitFor({state:'attached'});
  await page.getByRole('dialog',{name:'More options',exact:true}).waitFor({state:'detached'});
