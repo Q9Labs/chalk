@@ -109,7 +109,7 @@ export type DeliveryDTO = { id: string; state: string; createdAt: string; eventT
 export type HomeDTO = { calls: HomeCallDTO[]; live: LiveDTO[]; nextCursor: string | null };
 export type CallPageDTO = {
   call: CallDTO;
-  inviteUrl: string | null;
+  inviteUrl: string;
   episodes: (EpisodeDTO & { participantCount: number; recordings: RecordingDTO[]; recordingsNextCursor: string | null })[];
   live: LiveDTO["episode"];
   nextCursor: string | null;

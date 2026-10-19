@@ -152,11 +152,11 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
           <h2>Call link</h2>
           <div className="linkrow">
             <div className="linkbox">
-              <span>{inviteUrl ? displayLink(inviteUrl) : "The link isn’t available"}</span>
+              <span>{displayLink(inviteUrl)}</span>
             </div>
-            {inviteUrl ? <CopyAction text={inviteUrl} pill /> : null}
+            <CopyAction text={inviteUrl} pill />
           </div>
-          <p className="help">{inviteUrl ? "This link never changes. Share it once and use it every time." : "Chalk couldn’t make a link for this call. A name with letters outside A to Z can cause this, so try renaming it."}</p>
+          <p className="help">This link never changes. Share it once and use it every time.</p>
         </div>
         <div>
           <h2 id="who-can-join">Who can join</h2>
@@ -184,23 +184,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
           {nextCursor ? <MoreButton label="Show older sessions" cursor={nextCursor} load={(cursor) => readPage("call", { spaceId, cursor })} onLoaded={(page) => update((data) => ({ ...data, episodes: [...data.episodes, ...page.episodes], nextCursor: page.nextCursor }))} /> : null}
         </>
       )}
-      {renaming ? (
-        <RenameDialog
-          call={call}
-          page="call"
-          link={inviteUrl ?? undefined}
-          onClose={() => setRenaming(false)}
-          onRenamed={(renamed) => {
-            update((data) => ({ ...data, call: renamed }));
-            // A new name can make a link possible where the old one couldn't.
-            if (!inviteUrl)
-              readPage("call", { spaceId }).then(
-                (page) => update((data) => ({ ...data, inviteUrl: page.inviteUrl })),
-                (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
-              );
-          }}
-        />
-      ) : null}
+      {renaming ? <RenameDialog call={call} page="call" link={inviteUrl} onClose={() => setRenaming(false)} onRenamed={(renamed) => update((data) => ({ ...data, call: renamed }))} /> : null}
     </div>
   );
 }
