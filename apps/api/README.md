@@ -120,14 +120,16 @@ or non-boolean capability flag values are rejected.
 ### Tenant media limits
 
 These optional non-negative integer settings default to `0` (unlimited), including
-when unset. Limits apply independently to each Tenant; they do not replace the
-engine-wide recording capacity limits.
+when unset. Limits apply independently to every Tenant except the managed public Tenant
+(`CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID`, or the Tenant created for local public
+invites). They do not replace the engine-wide recording capacity limits, which
+still apply to the managed public Tenant.
 
 | Setting                                  | Meaning                                                                                                                                                                                                                                     |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `CHALK_TENANT_MAX_CONCURRENT_RECORDINGS` | Maximum outstanding recording reservations per Tenant.                                                                                                                                                                                      |
 | `CHALK_TENANT_DAILY_RECORDING_MINUTES`   | Reject new recordings when capture time for recordings started in the current UTC day reaches this many minutes. Active recordings count up to now; finished recordings count through capture completion, capped by their capture deadline. |
-| `CHALK_TENANT_MAX_LIVE_EPISODES`         | Maximum active or ending Episodes per Tenant, including public-invite Episodes. Ending Episodes retain their slot until ended.                                                                                                              |
+| `CHALK_TENANT_MAX_LIVE_EPISODES`         | Maximum active or ending Episodes per Tenant, including public-invite Episodes outside the managed public Tenant. Ending Episodes retain their slot until ended.                                                                            |
 
 Daily recording minutes are an admission check, not a mid-recording stop. An
 admitted recording may exceed the remaining daily allowance, up to the existing

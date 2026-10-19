@@ -3,6 +3,7 @@ package postgres
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -92,7 +93,7 @@ func TestTenantRecordingLimitsHTTP(t *testing.T) {
 		recording, operation := accountTenantIntegrationID(t), accountTenantIntegrationID(t).String()
 		return request(router, fixture.tenant, space, episode, recording, operation), recording, operation
 	}
-	assertOutcome := func(w *httptest.ResponseRecorder, want string) {
+	assertOutcome := func(t *testing.T, w *httptest.ResponseRecorder, want string) {
 		t.Helper()
 		var body struct {
 			Outcome string `json:"outcome"`
@@ -108,15 +109,15 @@ func TestTenantRecordingLimitsHTTP(t *testing.T) {
 	// Disabled settings preserve admission and bridge responses for multiple recordings.
 	unlimited := makeRouter(tenantlimits.Config{})
 	a, firstRecording, firstOperation := start(unlimited, f, space, episode)
-	assertOutcome(a, "confirmed")
+	assertOutcome(t, a, "confirmed")
 	b, _, _ := start(unlimited, f, space, episode)
-	assertOutcome(b, "confirmed")
-	limited := makeRouter(tenantlimits.Config{MaxConcurrentRecordings: 1})
-	assertOutcome(request(limited, f.tenant, space, episode, firstRecording, firstOperation), "confirmed")
+	assertOutcome(t, b, "confirmed")
+	limited := makeRouter(tenantlimits.Config{ManagedPublicTenantID: other.tenant, MaxConcurrentRecordings: 1})
+	assertOutcome(t, request(limited, f.tenant, space, episode, firstRecording, firstOperation), "confirmed")
 	rejected, rejectedID, rejectedOp := start(limited, f, space, episode)
-	assertOutcome(rejected, "tenant.recording_limit_reached")
+	assertOutcome(t, rejected, "tenant.recording_limit_reached")
 	isolated, _, _ := start(limited, other, otherSpace, otherEpisode)
-	assertOutcome(isolated, "confirmed")
+	assertOutcome(t, isolated, "confirmed")
 	// A rejected command has a durable terminal receipt, but creates no recording work.
 	for _, table := range []string{"recordings", "recording_reservations", "recording_pipelines", "recording_jobs"} {
 		column := "recording_id"
@@ -128,7 +129,7 @@ func TestTenantRecordingLimitsHTTP(t *testing.T) {
 			t.Fatalf("partial %s rows=%d err=%v", table, count, err)
 		}
 	}
-	assertOutcome(request(limited, f.tenant, space, episode, rejectedID, rejectedOp), "tenant.recording_limit_reached")
+	assertOutcome(t, request(limited, f.tenant, space, episode, rejectedID, rejectedOp), "tenant.recording_limit_reached")
 	// Release reserved fixture work to leave shared global capacity unchanged.
 	release := func(tenant utilities.ID) {
 		rows, err := pool.Query(ctx, `select id from recording_reservations where tenant_id=$1 and state='reserved'`, uuid(tenant))
@@ -197,20 +198,36 @@ func TestTenantRecordingLimitsHTTP(t *testing.T) {
 	if _, err := pool.Exec(ctx, `update recording_reservations set created_at=$2,ends_at=$3 where tenant_id=$1 and state='reserved'`, uuid(f.tenant), now.Add(-2*time.Minute), now.Add(2*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	activeDaily := makeRouter(tenantlimits.Config{DailyRecordingMinutes: 1})
+	activeDaily := makeRouter(tenantlimits.Config{ManagedPublicTenantID: other.tenant, DailyRecordingMinutes: 1})
 	activeRejected, _, _ := start(activeDaily, f, space, episode)
-	assertOutcome(activeRejected, "tenant.recording_limit_reached")
+	assertOutcome(t, activeRejected, "tenant.recording_limit_reached")
+
+	for _, tc := range []struct {
+		name   string
+		limits tenantlimits.Config
+	}{
+		{"managed public concurrent recordings", tenantlimits.Config{ManagedPublicTenantID: f.tenant, MaxConcurrentRecordings: 1}},
+		{"managed public daily minutes", tenantlimits.Config{ManagedPublicTenantID: f.tenant, DailyRecordingMinutes: 1}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			router := makeRouter(tc.limits)
+			for i := 0; i < 2; i++ {
+				accepted, _, _ := start(router, f, space, episode)
+				assertOutcome(t, accepted, "confirmed")
+			}
+		})
+	}
 	release(f.tenant)
 	// Charge a finished capture that started today, not time spent rendering/transcribing.
 	if _, err := pool.Exec(ctx, `update recording_reservations set created_at=$2,updated_at=$3,ends_at=$3 where tenant_id=$1`, uuid(f.tenant), now.Add(-10*time.Minute), now); err != nil {
 		t.Fatal(err)
 	}
-	daily := makeRouter(tenantlimits.Config{DailyRecordingMinutes: 1})
+	daily := makeRouter(tenantlimits.Config{ManagedPublicTenantID: other.tenant, DailyRecordingMinutes: 1})
 	w, _, _ := start(daily, f, space, episode)
-	assertOutcome(w, "tenant.recording_limit_reached")
+	assertOutcome(t, w, "tenant.recording_limit_reached")
 	now = now.Add(24 * time.Hour)
 	w, _, _ = start(daily, f, space, episode)
-	assertOutcome(w, "confirmed")
+	assertOutcome(t, w, "confirmed")
 	release(f.tenant)
 }
 
@@ -282,5 +299,36 @@ func TestTenantLiveEpisodeLimitsHTTP(t *testing.T) {
 	}
 	if successes != 1 || rejections != 1 {
 		t.Fatalf("race successes=%d rejections=%d", successes, rejections)
+	}
+}
+
+func TestManagedPublicTenantLiveEpisodeLimitsPublicJoin(t *testing.T) {
+	pool := accountTenantIntegrationPool(t)
+	managed := newTenantLimitFixture(t, pool)
+	normal := newTenantLimitFixture(t, pool)
+	service := episodes.NewService(NewEpisodeLifecycleRepository(pool).WithTenantLimits(tenantlimits.Config{
+		ManagedPublicTenantID: managed.tenant, MaxLiveEpisodes: 1,
+	}))
+	for _, tc := range []struct {
+		name    string
+		fixture tenantLimitFixture
+		limited bool
+	}{{"normal", normal, true}, {"managed public", managed, false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			for i := 0; i < 3; i++ {
+				result, err := service.JoinPublic(t.Context(), episodes.PublicJoinInput{
+					TenantID: tc.fixture.tenant, SpaceID: tc.fixture.space(t),
+					IdentityMode: "guest", DisplayName: "Guest", Role: "collaborator",
+					Request: episodes.Request{Key: accountTenantIntegrationID(t).String()},
+				})
+				if tc.limited && i > 0 {
+					if !errors.Is(err, tenantlimits.ErrLiveEpisodeLimitReached) {
+						t.Fatalf("join %d: want live Episode limit, got %v", i, err)
+					}
+				} else if err != nil || !result.EpisodeCreated {
+					t.Fatalf("join %d: created=%v err=%v", i, result.EpisodeCreated, err)
+				}
+			}
+		})
 	}
 }
