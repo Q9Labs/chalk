@@ -63,9 +63,11 @@ try {
  for(const name of ['Select microphone','Select camera']){
   await page.getByRole('button',{name,exact:true}).filter({visible:true}).click();
   assert.equal(await page.getByRole('menuitemcheckbox').evaluateAll(items=>items.every(item=>{
-   const track=item.querySelector('.chalk-switch')?.getBoundingClientRect();
+   const track=item.querySelector('.chalk-switch');
+   if(!(track instanceof HTMLElement))return false;
+   const bounds=track.getBoundingClientRect();
    const row=item.getBoundingClientRect();
-   return track&&track.width===36&&track.height===22&&track.left>=row.left&&track.right<=row.right;
+   return track.offsetWidth===36&&track.offsetHeight===22&&bounds.left>=row.left&&bounds.right<=row.right;
   })),true);
   await page.keyboard.press('ArrowDown');
   await page.waitForFunction(()=>document.querySelector('[role=menu]')?.contains(document.activeElement));

@@ -15,6 +15,8 @@ export interface ParticipantListParticipant {
   id: string;
   displayName: string;
   role?: string;
+  /** Whether the participant has the endEpisode capability. */
+  isHost?: boolean;
   eligibleRoles?: readonly string[];
   isScreenSharing?: boolean;
   isLocal?: boolean;
@@ -229,6 +231,7 @@ export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): Rea
         id: participant.participantId,
         displayName: participant.displayName,
         role: participant.role,
+        isHost: participant.capabilities.includes("endEpisode"),
         eligibleRoles: participant.eligibleRoles,
         isScreenSharing: participant.media.screenShare === "active",
         isLocal: participant.participantId === self.participantId,

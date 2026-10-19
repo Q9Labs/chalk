@@ -7,7 +7,6 @@ export interface Toast extends Omit<ChalkToastProps, "onDismiss"> {
 export interface ToastStackProps {
   readonly toasts: readonly Toast[];
   readonly onDismiss: (id: string) => void;
-  readonly position?: "top-right" | "top-left" | "bottom-right" | "bottom-left";
   readonly maxVisible?: number;
   readonly className?: string;
 }

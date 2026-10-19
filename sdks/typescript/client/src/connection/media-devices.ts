@@ -20,7 +20,9 @@ export function createBrowserMediaDevices(mediaDevices: MediaDevices | undefined
 }
 
 export function stopStream(stream: MediaStream | null | undefined): void {
-  for (const track of stream?.getTracks() ?? []) track.stop();
+  for (const track of stream?.getTracks() ?? []) {
+    if (track.readyState !== "ended") track.stop();
+  }
 }
 
 export function streamFromTracks(tracks: readonly MediaStreamTrack[]): MediaStream {

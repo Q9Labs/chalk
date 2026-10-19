@@ -8,14 +8,32 @@ function live(): SpaceSnapshot {
   const base = createSnapshot();
   return { ...base, connection: { ...base.connection, status: "live" }, self: { ...base.self, participantId: "self", role: "guest" } };
 }
-const host: Participant = { participantId: "host", displayName: "Nora", role: "host", eligibleRoles: ["host"], capabilities: [], handRaised: false, media: { microphone: "active", camera: "active", screenShare: "inactive" }, presence: { state: "connected", speaking: false, activeSpeaker: false } };
-it("announces a departed host only when you become host, without a second leave notice", () => {
+const host: Participant = {
+  participantId: "host",
+  displayName: "Nora",
+  role: "owner",
+  eligibleRoles: ["owner"],
+  capabilities: ["endEpisode"],
+  handRaised: false,
+  media: { microphone: "active", camera: "active", screenShare: "inactive" },
+  presence: { state: "connected", speaking: false, activeSpeaker: false },
+};
+it.each(["owner", "custom-moderator"])("announces a departed %s only when you gain host authority, without a second leave notice", (role) => {
+  const base = live();
+  const before = { ...base, participants: { ...base.participants, roster: [{ ...host, role }] } };
+  const authority = createSnapshot(["endEpisode"]).self;
+  const events = callEventToasts(before, { ...base, self: { ...base.self, role, capabilities: authority.capabilities, can: authority.can } });
+  expect(events).toHaveLength(1);
+  expect(renderToStaticMarkup(<>{events[0]?.message}</>)).toContain("Nora</b> left. You’re now the host.");
+  expect(callEventToasts(before, { ...before, participants: { ...before.participants, roster: [{ ...host, role: "guest" }] } })).toHaveLength(0);
+});
+it("does not announce host transfer for a role name change without authority", () => {
   const base = live();
   const before = { ...base, participants: { ...base.participants, roster: [host] } };
   const events = callEventToasts(before, { ...base, self: { ...base.self, role: "host" } });
   expect(events).toHaveLength(1);
-  expect(renderToStaticMarkup(<>{events[0]?.message}</>)).toContain("Nora</b> left. You’re now the host.");
-  expect(callEventToasts(before, { ...before, participants: { ...before.participants, roster: [{ ...host, role: "guest" }] } })).toHaveLength(0);
+  expect(renderToStaticMarkup(<>{events[0]?.message}</>)).toContain("Nora</b> left");
+  expect(renderToStaticMarkup(<>{events[0]?.message}</>)).not.toContain("now the host");
 });
 it("does not announce manual device selection, but explains an unplugged device fallback", () => {
   const base = live();

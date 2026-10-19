@@ -1,7 +1,7 @@
 import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES } from "@q9labsai/chalk-client";
 import type { ChatAttachment, ChatReadReceipt, ChatSendInput, ChatUploadFile, ChatReactionInput, SpaceSnapshot } from "@q9labsai/chalk-client";
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useChat, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useCan, useChat, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
 import { Cancel01Icon } from "../../utils/icons";
 import { Button } from "@q9labsai/chalk-ui";
@@ -444,6 +444,7 @@ export const ChatPanelSurface = React.memo(
 
 export const ChatPanel = React.memo((props: ChatPanelProps): React.JSX.Element => {
   const client = useSpaceClient();
+  const canSendChat = useCan("sendChat");
   const chat = useChat();
   const participants = useParticipants();
   const self = useSelf();
@@ -452,15 +453,16 @@ export const ChatPanel = React.memo((props: ChatPanelProps): React.JSX.Element =
   return (
     <ChatPanelSurface
       {...props}
+      disabled={props.disabled || !canSendChat}
       messages={chat.messages}
-      onReact={chat.react}
+      onReact={canSendChat ? chat.react : undefined}
       pendingMessages={chat.pendingSends}
       readReceipts={chat.readReceipts}
       participantNames={participantNames}
       localParticipantId={localParticipantId}
       hasOlder={chat.pagination.hasOlder}
-      onSendMessage={(input) => client.chat.send(input).then(() => undefined)}
-      onUploadAttachment={(file) => uploadChatAttachment(file, client.chat.files)}
+      onSendMessage={canSendChat ? (input) => client.chat.send(input).then(() => undefined) : undefined}
+      onUploadAttachment={canSendChat ? (file) => uploadChatAttachment(file, client.chat.files) : undefined}
       onResolveAttachmentUrl={async (attachmentId) => {
         const attachment = [...chat.messages, ...chat.pendingSends].flatMap((message) => message.attachments).find((candidate) => candidate.attachmentId === attachmentId);
         if (!attachment) throw new Error("The chat attachment is no longer available.");

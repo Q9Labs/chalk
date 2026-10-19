@@ -1,6 +1,6 @@
 import type { ScreenShareCapture, ScreenShareOptions } from "@q9labsai/chalk-client";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useMedia, useParticipants, useSelf } from "../../bindings/hooks";
+import { useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
 import { StageIcon } from "../stage/StageIcon";
 import { toVideoParticipants } from "../../selectors/space-selectors";
@@ -226,6 +226,7 @@ export function ScreenShareViewSurface({ screenShareTrack, ...props }: ScreenSha
   return <ScreenSharePresentation {...props} state={props.state ?? (status === "muted" ? "paused" : undefined)} media={<video ref={videoRef} autoPlay playsInline muted />} mediaVisible={status === "playing" || status === "muted"} />;
 }
 export function ScreenShareView(props: ScreenShareViewProps): React.JSX.Element {
+  const client = useSpaceClient();
   const self = useSelf();
   const participantsSlice = useParticipants();
   const media = useMedia();
@@ -238,5 +239,16 @@ export function ScreenShareView(props: ScreenShareViewProps): React.JSX.Element 
         No active screen share
       </div>
     );
-  return <ScreenShareViewSurface {...props} screenShareTrack={active.screenShareTrack} sharedByName={active.displayName} hasAudio={participantsSlice.roster.find((person) => person.participantId === active.id)?.media.screenShareHasAudio} />;
+  return (
+    <ScreenShareViewSurface
+      {...props}
+      screenShareTrack={active.screenShareTrack}
+      sharedByName={active.displayName}
+      isLocal={active.isLocal}
+      hasAudio={active.isLocal ? media.screenShare.hasAudio : participantsSlice.roster.find((person) => person.participantId === active.id)?.media.screenShareHasAudio}
+      capture={active.isLocal ? media.screenShare.capture : undefined}
+      onStopSharing={active.isLocal ? () => client.media.setScreenShareEnabled(false) : undefined}
+      onChangeShare={active.isLocal ? (options) => client.media.setScreenShareEnabled(true, options) : undefined}
+    />
+  );
 }
