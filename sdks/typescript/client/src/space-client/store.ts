@@ -48,12 +48,16 @@ export class SpaceStore {
   };
   updateConnection(snapshot: ConnectionLifecycleSnapshot): void {
     const current = this.getSnapshot().connection;
-    const error = snapshot.failure ? empty({ code: publicCode(snapshot.failure.code), recoverable: snapshot.failure.recoverable, message: snapshot.failure.message }) : null;
-    const status = snapshot.state === "live" && (INTERRUPTED_CONNECTION_PHASES.has(snapshot.connection.sync) || INTERRUPTED_CONNECTION_PHASES.has(snapshot.connection.media)) ? "reconnecting" : snapshot.state;
-    const episodeEnded = snapshot.episodeEnded ?? false;
-    const removedByHost = snapshot.removedByHost ?? false;
-    if (current.status === status && sameEpisode(current.episode, snapshot.episode) && sameError(current.lastError, error) && current.episodeEnded === episodeEnded && current.removedByHost === removedByHost) return;
-    this.#replace("connection", empty({ status, episode: snapshot.episode, lastError: sameError(current.lastError, error) ? current.lastError : error, episodeEnded, removedByHost }));
+    const error = connectionError(snapshot.failure);
+    const next: ConnectionSlice = {
+      status: connectionStatus(snapshot),
+      episode: snapshot.episode,
+      lastError: sameError(current.lastError, error) ? current.lastError : error,
+      episodeEnded: snapshot.episodeEnded ?? false,
+      removedByHost: snapshot.removedByHost ?? false,
+    };
+    if (sameConnection(current, next)) return;
+    this.#replace("connection", empty(next));
   }
   updateSelf(value: SelfSlice): void {
     this.#replace("self", value);
@@ -116,6 +120,19 @@ function mapCode(code: string): ConnectionSlice["lastError"] extends infer T ? (
     command_rejected: "command.rejected",
   }[code] ?? "client.internal_error") as never;
 }
+function connectionError(failure: ConnectionLifecycleSnapshot["failure"]): ConnectionSlice["lastError"] {
+  return failure ? empty({ code: publicCode(failure.code), recoverable: failure.recoverable, message: failure.message }) : null;
+}
+
+function connectionStatus(snapshot: ConnectionLifecycleSnapshot): ConnectionSlice["status"] {
+  const interrupted = INTERRUPTED_CONNECTION_PHASES.has(snapshot.connection.sync) || INTERRUPTED_CONNECTION_PHASES.has(snapshot.connection.media);
+  return snapshot.state === "live" && interrupted ? "reconnecting" : snapshot.state;
+}
+
+function sameConnection(left: ConnectionSlice, right: ConnectionSlice): boolean {
+  return left.status === right.status && sameEpisode(left.episode, right.episode) && left.lastError === right.lastError && left.episodeEnded === right.episodeEnded && left.removedByHost === right.removedByHost;
+}
+
 function sameEpisode(left: ConnectionSlice["episode"], right: ConnectionSlice["episode"]): boolean {
   if (left === right) return true;
   if (!left || !right) return false;
