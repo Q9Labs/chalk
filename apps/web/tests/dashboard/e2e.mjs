@@ -301,8 +301,11 @@ try {
   const testDelivery = await post(ada, "/dashboard-api/developer", { action: "test-webhook", webhookId, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
   assert.equal(testDelivery.status, 200, await testDelivery.clone().text());
   const testDeliveryId = (await testDelivery.json()).deliveryId;
-  sql(`update webhook_deliveries set attempt_count=1, state='succeeded', next_attempt_at=null, terminal_at=now() where id='${testDeliveryId}';
-  insert into webhook_delivery_attempts(id,tenant_id,delivery_id,attempt_number,started_at,finished_at,latency_milliseconds,outcome,http_status) values(gen_random_uuid(),'${firstTenant}','${testDeliveryId}',1,now(),now(),1,'succeeded',204);
+  // The API's dispatcher may already hold this delivery's lease and its started attempt row.
+  // Taking the lease away makes the dispatcher's lease-guarded completion a no-op.
+  sql(`update webhook_deliveries set attempt_count=1, state='succeeded', next_attempt_at=null, terminal_at=now(), lease_token=null, lease_owner=null, lease_expires_at=null where id='${testDeliveryId}';
+  insert into webhook_delivery_attempts(id,tenant_id,delivery_id,attempt_number,started_at,finished_at,latency_milliseconds,outcome,http_status) values(gen_random_uuid(),'${firstTenant}','${testDeliveryId}',1,now(),now(),1,'succeeded',204)
+  on conflict (tenant_id,delivery_id,attempt_number) do update set finished_at=excluded.finished_at, latency_milliseconds=excluded.latency_milliseconds, outcome=excluded.outcome, http_status=excluded.http_status;
   update api_keys set last_used_at='2026-10-18T00:00:00Z' where id='${keyId}'`);
   const developer = await ada.request("/dashboard-api/developer");
   assert.equal(developer.status, 200, await developer.clone().text());
