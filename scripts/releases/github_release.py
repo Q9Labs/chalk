@@ -3,8 +3,12 @@
 import hashlib
 import json
 import os
+import random
+import re
 import subprocess
+import sys
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -56,16 +60,34 @@ class GitHub:
     def __init__(self):
         self.repository = os.environ['GITHUB_REPOSITORY']
 
+    def _call(self, command, route, data=None):
+        # Only reads are safe to replay: a failed POST may already have created a deployment.
+        for attempt in range(1, 5):
+            try:
+                return subprocess.check_output(command, input=data, stderr=subprocess.PIPE)
+            except subprocess.CalledProcessError as error:
+                message = error.stderr.decode(errors='replace')
+                sys.stderr.write(message)
+                status = re.search(r'HTTP (\d{3})\b', message)
+                transient = (500 <= int(status[1]) < 600 if status else
+                             any(text in message.lower() for text in
+                                 ('error connecting', 'dial tcp', 'connection reset', 'connection refused',
+                                  'timeout', 'timed out', 'deadline exceeded', 'unexpected eof')))
+                if data is not None or not transient or attempt == 4:
+                    raise
+                print(f'GitHub retry {route}: attempt {attempt + 1}/4', file=sys.stderr)
+                time.sleep(random.uniform(0, 3 * 2 ** (attempt - 1)))
+
     def request(self, route, data=None):
         command = ['gh', 'api', f'repos/{self.repository}/{route}']
         if data is not None:
             command += ['--method', 'POST', '--input', '-']
-        return json.loads(subprocess.check_output(command, input=None if data is None else json.dumps(data).encode()))
+        return json.loads(self._call(command, route, None if data is None else json.dumps(data).encode()))
 
     def pages(self, route, key=None):
         separator = '&' if '?' in route else '?'
-        data = subprocess.check_output(['gh', 'api', '--paginate', '--slurp',
-                                       f'repos/{self.repository}/{route}{separator}per_page=100'])
+        data = self._call(['gh', 'api', '--paginate', '--slurp',
+                           f'repos/{self.repository}/{route}{separator}per_page=100'], route)
         return [item for page in json.loads(data) for item in (page[key] if key else page)]
 
     def deployments(self, environment, task='nightly-cut', sha=None, manifest_sha256=None):
