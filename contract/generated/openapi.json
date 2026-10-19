@@ -13971,7 +13971,6 @@
               "minLength": 1,
               "type": "string"
             },
-            "minItems": 1,
             "type": "array"
           },
           "model": {

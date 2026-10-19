@@ -1315,7 +1315,10 @@ func validatePublicSpace(space PublicSpace) error {
 	if space.TenantID.IsZero() || space.SpaceID.IsZero() || !space.AdmissionMode.valid() {
 		return ErrInvalidInvite
 	}
-	if strings.TrimSpace(space.Name) == "" || strings.TrimSpace(space.Slug) == "" || !isASCII(space.Name) || !isASCII(space.Slug) {
+	// The name only appears in JSON, so any name a Space accepts is valid. The
+	// slug is a path segment of the invite link, which mobile clients parse as
+	// ASCII, so it stays ASCII.
+	if strings.TrimSpace(space.Name) == "" || strings.TrimSpace(space.Slug) == "" || !isASCII(space.Slug) {
 		return ErrInvalidInvite
 	}
 	return nil

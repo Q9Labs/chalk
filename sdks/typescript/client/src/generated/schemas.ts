@@ -895,7 +895,7 @@ export const TranscriptSchema = Schema.Struct({
   episode_id: EpisodeIdSchema,
   generation: Schema.Number,
   id: TranscriptIdSchema,
-  languages: Schema.Array(Schema.String.check(Schema.isMinLength(1))).check(Schema.isMinLength(1)),
+  languages: Schema.Array(Schema.String.check(Schema.isMinLength(1))),
   model: Schema.optional(Schema.String),
   provider: Schema.optional(Schema.String),
   recording_id: RecordingIdSchema,

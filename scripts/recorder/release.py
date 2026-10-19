@@ -24,10 +24,14 @@ def build(role, directory):
         script = ROOT / 'infrastructure/recorder/images' / ('capture' if role == 'capture' else 'cpu') / 'build-release.sh'
         if not bundle.exists():
             command = ['bash', str(script), '--source', str(ROOT), '--release-id', release_id, '--output', str(bundle)]
-            if role == 'render' and os.geteuid() != 0:
+            sudo = role == 'render' and os.geteuid() != 0
+            if sudo:
                 command = ['sudo', 'env', 'GIT_CONFIG_COUNT=1', 'GIT_CONFIG_KEY_0=safe.directory',
                            'GIT_CONFIG_VALUE_0=' + str(ROOT), *command]
             subprocess.run(command, check=True)
+            if sudo:
+                # The root build installs and builds inside the checkout, and later steps install there again as the runner.
+                subprocess.run(['sudo', 'chown', '-R', f'{os.getuid()}:{os.getgid()}', str(ROOT)], check=True)
         result = package(role, bundle, output, Path('/opt/chalk-recorder/toolchains/node-22.23.2'))
         (directory / f'{role}-archive.json').write_text(json.dumps(result, indent=2) + '\n')
     result = json.loads((directory / f'{role}-archive.json').read_text())

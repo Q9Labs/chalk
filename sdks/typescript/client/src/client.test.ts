@@ -43,6 +43,25 @@ describe("generated Transcript contract", () => {
     expect(result).toEqual(response);
   });
 
+  // Omitting languages asks the provider to detect them, so the engine accepts
+  // the request and returns the new Transcript with an empty list.
+  it("decodes the accepted response for a Transcript requested without languages", async () => {
+    const accepted = { transcript: { ...transcript, status: "preparing", languages: [] }, job_id: "66666666-6666-4666-8666-666666666666", status: "pending" };
+    const client = await Effect.runPromise(
+      createChalkEffectClient({
+        baseUrl: "https://chalk.test",
+        fetch: async () => Response.json(accepted, { status: 202 }),
+      }),
+    );
+    const result = await Effect.runPromise(
+      client.transcripts.requestTranscript({
+        params: { tenant_id: Schema.decodeUnknownSync(TenantIdSchema)(transcript.tenant_id), recording_id: Schema.decodeUnknownSync(RecordingIdSchema)(transcript.recording_id) },
+        payload: { idempotency_key: "languages-omitted-0001" },
+      }),
+    );
+    expect(result).toEqual(accepted);
+  });
+
   it.each(transcriptStatuses)("accepts the supported Transcript state %s", (status) => {
     expect(Schema.decodeUnknownSync(TranscriptSchema)({ ...transcript, status }).status).toBe(status);
   });

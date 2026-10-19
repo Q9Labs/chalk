@@ -639,9 +639,8 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 		schema["minLength"] = 1
 	}
 	if fieldName == "languages" && schemaTypeIs(schema, "array") {
-		if !requestFieldAllowsEmpty(schemaName, fieldName) {
-			schema["minItems"] = 1
-		}
+		// An empty list means the provider detects the language, so neither a
+		// request nor the Transcript it creates may require a minimum length.
 		if items, ok := schema["items"].(map[string]any); ok {
 			items["minLength"] = 1
 		}
@@ -668,7 +667,7 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 }
 
 func requestFieldAllowsEmpty(schemaName string, fieldName string) bool {
-	return schemaName == "RequestTranscriptRequest" && (fieldName == "language" || fieldName == "languages")
+	return schemaName == "RequestTranscriptRequest" && fieldName == "language"
 }
 
 func fieldEnum(schemaName string, fieldName string) []string {
