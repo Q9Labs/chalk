@@ -189,7 +189,7 @@ jobs:
         run: |
           pkg=$(ls -d ../../../node_modules/.pnpm/react-native-worklets@*/node_modules/react-native-worklets | head -1)
           echo "package: $pkg"
-          find "$pkg/android/build" "$pkg/android/.cxx" -name 'libworklets.so' -exec ls -la {} + 2>&1 || true
+          find "$pkg/android/build" "$pkg/android/.cxx" -name 'libworklets.so' -exec stat -c '%i links=%h bytes=%s %n' {} + 2>&1 || true
           for so in $(find "$pkg/android/build" -name libworklets.so 2>/dev/null); do
             echo "== $so"
             sha256sum "$so"
