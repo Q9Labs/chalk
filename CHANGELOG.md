@@ -7,6 +7,7 @@
 - Added a new React Native `Chalk` call view with `ChalkProps`: header, stage, dock, sheets, menus and toasts, drawn inside the safe area on phone and iPad.
 - Added `colorScheme` and `onColorSchemeChange` to `Chalk`, with the `ColorScheme` and `Palette` types. The call is dark by default.
 - Added call sounds and haptics to `Chalk`, with `soundsEnabled` and `onSoundsEnabledChange`.
+- Added `onRejoin` to `Chalk`, which Rejoin and Try again on the status page call. The app gives the arrival back and renders `Chalk` with a new client, because the client that left or ended can't join again.
 - `Chalk` lays out the call itself: Spotlight and Grid with justified rows and a "+N" tile, the active speaker moving into the spotlight, pinning, facehash tiles for cameras that are off, screen shares sized to their shape, and a shared board shown view-only. iPad uses the phone layout in 5.0.0.
 - Added `inviteLink` to `Chalk`. The dock adds an audio output button with route choice. More adds raise hand, reactions, copy and share link, recording for hosts, Chat with an unread dot, and the Layout switch. Tapping the call name opens call details with the link, a QR code, appearance and sounds.
 - `Chalk` adds the People and Chat sheet: waiting room, raised-hands queue, host mute and remove, chat with photos and files, a photo viewer and new-message notices.

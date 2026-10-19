@@ -2,7 +2,7 @@ import { Chalk } from "@q9labsai/chalk-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { RecentCall } from "../home/recent-calls";
 import type { ArrivedCall } from "../join/JoiningScreen";
-import { cleanupSpaceArrival, createGuestAccessGetter } from "../lib/spaces";
+import { cleanupSpaceArrival, createGuestAccessGetter, retireSpaceArrival } from "../lib/spaces";
 import type { StoredCallPreferences } from "../preferences/call-preferences";
 import { createMobileSpaceClient, ownMobileSpaceClient } from "../space/mobile-space-client";
 import { ReadySheet } from "./ReadySheet";
@@ -13,11 +13,13 @@ type CallScreenProps = {
   readonly preferences: StoredCallPreferences;
   readonly onRemember: (call: RecentCall) => void;
   readonly onClose: () => void;
+  /** Rejoin after this person left or the call ended: the app arrives again, with a new client. */
+  readonly onRejoin: () => void;
   readonly onError: (cause: unknown) => void;
 };
 
 /** The call itself is `Chalk`. The app adds the link sheet after Start a call and keeps the call in recent calls. */
-export function CallScreen({ apiBaseURL, call, preferences, onRemember, onClose, onError }: CallScreenProps): React.JSX.Element {
+export function CallScreen({ apiBaseURL, call, preferences, onRemember, onClose, onRejoin, onError }: CallScreenProps): React.JSX.Element {
   const { arrival, route } = call;
   const [readyOpen, setReadyOpen] = useState(false);
   const client = useMemo(() => {
@@ -60,6 +62,10 @@ export function CallScreen({ apiBaseURL, call, preferences, onRemember, onClose,
         displayName={arrival.displayName}
         inviteLink={route.inviteLink}
         onColorSchemeChange={preferences.setColorScheme}
+        onRejoin={() => {
+          // This arrival's participant is done, so give it back before arriving again: resuming it would reuse that participant.
+          retireSpaceArrival({ apiBaseURL, credential: arrival.credential }).then(onRejoin, onError);
+        }}
         onLeave={() => {
           remember.current();
           // Home comes back at once; giving the arrival back finishes, or fails, on its own.

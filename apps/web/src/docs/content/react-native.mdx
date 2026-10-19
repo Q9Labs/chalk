@@ -31,32 +31,35 @@ import type { SpaceClient } from "@q9labsai/chalk-client";
 import { Chalk, type ColorScheme } from "@q9labsai/chalk-react-native";
 import { useState } from "react";
 
-export function DesignReview({ client, onLeave }: { readonly client: SpaceClient; readonly onLeave: () => void }) {
+export function DesignReview({ client, onLeave, onRejoin }: { readonly client: SpaceClient; readonly onLeave: () => void; readonly onRejoin: () => void }) {
   const [colorScheme, setColorScheme] = useState<ColorScheme>("dark");
   const [soundsEnabled, setSoundsEnabled] = useState(true);
-  return <Chalk callName="Design review" client={client} colorScheme={colorScheme} inviteLink="https://chalk.example/design-review" onColorSchemeChange={setColorScheme} onLeave={onLeave} onSoundsEnabledChange={setSoundsEnabled} soundsEnabled={soundsEnabled} />;
+  return <Chalk callName="Design review" client={client} colorScheme={colorScheme} inviteLink="https://chalk.example/design-review" onColorSchemeChange={setColorScheme} onLeave={onLeave} onRejoin={onRejoin} onSoundsEnabledChange={setSoundsEnabled} soundsEnabled={soundsEnabled} />;
 }
 ```
 
 `Chalk` lays out the call itself, so the stage needs no props. It switches between Spotlight and Grid, moves the active speaker into the spotlight, and sizes screen shares to their shape. iPad uses the phone layout in 5.0.0.
 
-| Prop                    | Type                                 | What it does                                                                                                                                           |
-| ----------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `client`                | `SpaceClient`                        | The call's client. The app creates it with `createNativeSpaceClient` and disposes it. `Chalk` joins it.                                                |
-| `displayName`           | `string`                             | The name others see. Without it, the server's stored name is used.                                                                                     |
-| `callName`              | `string`                             | The call's name in the header, such as "Q9 team". Tapping it opens the call details.                                                                   |
-| `inviteLink`            | `string`                             | The call's link. More offers to copy and share it, and the call details show it with copy, share and a QR code. Without it, they leave those rows out. |
-| `colorScheme`           | `"dark" \| "light"`                  | The call's look. Dark by default.                                                                                                                      |
-| `onColorSchemeChange`   | `(colorScheme: ColorScheme) => void` | Called when the person changes the look in the call details.                                                                                           |
-| `soundsEnabled`         | `boolean`                            | Call sounds. On by default.                                                                                                                            |
-| `onSoundsEnabledChange` | `(enabled: boolean) => void`         | Called when the person turns call sounds on or off.                                                                                                    |
-| `onLeave`               | `() => void`                         | Called when the person is done with the call: from Home on the page that shows after they leave, the call ends, it fails, or they were removed.        |
-| `onOpenSettings`        | `(permission: Permission) => void`   | Called just before Open Settings takes the person to the system settings to allow the microphone or camera.                                            |
-| `resumedAfterSettings`  | `Permission`                         | Set when the app opens the call again after Open Settings. The call says "Rejoining" and then that it can use the device now.                          |
+| Prop                    | Type                                 | What it does                                                                                                                                                                                                          |
+| ----------------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `client`                | `SpaceClient`                        | The call's client. The app creates it with `createNativeSpaceClient` and disposes it. `Chalk` joins it.                                                                                                               |
+| `displayName`           | `string`                             | The name others see. Without it, the server's stored name is used.                                                                                                                                                    |
+| `callName`              | `string`                             | The call's name in the header, such as "Q9 team". Tapping it opens the call details.                                                                                                                                  |
+| `inviteLink`            | `string`                             | The call's link. More offers to copy and share it, and the call details show it with copy, share and a QR code. Without it, they leave those rows out.                                                                |
+| `colorScheme`           | `"dark" \| "light"`                  | The call's look. Dark by default.                                                                                                                                                                                     |
+| `onColorSchemeChange`   | `(colorScheme: ColorScheme) => void` | Called when the person changes the look in the call details.                                                                                                                                                          |
+| `soundsEnabled`         | `boolean`                            | Call sounds. On by default.                                                                                                                                                                                           |
+| `onSoundsEnabledChange` | `(enabled: boolean) => void`         | Called when the person turns call sounds on or off.                                                                                                                                                                   |
+| `onLeave`               | `() => void`                         | Called when the person is done with the call: from Home on the page that shows after they leave, the call ends, it fails, or they were removed.                                                                       |
+| `onRejoin`              | `() => void`                         | Called when the person chooses Rejoin or Try again on a page that shows after they leave, the call ends, or it fails. Give the arrival back and render `Chalk` again with a new client, since the old one can't join. |
+| `onOpenSettings`        | `(permission: Permission) => void`   | Called just before Open Settings takes the person to the system settings to allow the microphone or camera.                                                                                                           |
+| `resumedAfterSettings`  | `Permission`                         | Set when the app opens the call again after Open Settings. The call says "Rejoining" and then that it can use the device now.                                                                                         |
 
 `Permission` is `"microphone" | "camera"`.
 
 Leaving no longer calls `onLeave` straight away. The "You left" page shows first, with Rejoin and Home, and only Home calls `onLeave`. This is a breaking change from 4.x.
+
+Rejoin and Try again call `onRejoin`, not `onLeave`. Give the arrival back there, then render `Chalk` again with a new client. The client that left or ended can't join the call a second time.
 
 The person can switch the look and call sounds from the call details. The example keeps both in state. To keep the person's choice, store both through the change callbacks and pass them back on the next launch. Load them before you render `Chalk`, so the first frame already has the right theme.
 
@@ -73,10 +76,11 @@ type ResumableCallProps = {
   readonly resumed?: Permission;
   readonly saveResume: (permission: Permission) => void;
   readonly onLeave: () => void;
+  readonly onRejoin: () => void;
 };
 
-export function ResumableCall({ client, resumed, saveResume, onLeave }: ResumableCallProps) {
-  return <Chalk callName="Design review" client={client} onLeave={onLeave} onOpenSettings={saveResume} resumedAfterSettings={resumed} />;
+export function ResumableCall({ client, resumed, saveResume, onLeave, onRejoin }: ResumableCallProps) {
+  return <Chalk callName="Design review" client={client} onLeave={onLeave} onOpenSettings={saveResume} onRejoin={onRejoin} resumedAfterSettings={resumed} />;
 }
 ```
 

@@ -154,7 +154,7 @@ function Shell({ apiBaseURL, buildProfile, diagnosticsEnabled, name, onNameChang
     case "joining":
       return <JoiningScreen apiBaseURL={apiBaseURL} colorScheme={preferences.colorScheme} displayName={step.name} onArrived={(call) => setStep({ kind: "call", call })} onCancel={goHome} onFailed={joinFailed} target={step.target} />;
     case "call":
-      return <CallScreen apiBaseURL={apiBaseURL} call={step.call} onClose={goHome} onError={reportError("leave")} onRemember={recentCalls.remember} preferences={preferences} />;
+      return <CallScreen apiBaseURL={apiBaseURL} call={step.call} onClose={goHome} onError={reportError("leave")} onRejoin={() => join({ kind: "link", route: step.call.route })} onRemember={recentCalls.remember} preferences={preferences} />;
   }
 }
 

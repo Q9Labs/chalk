@@ -35,6 +35,7 @@ export type CallFrameProps = {
   readonly onLeave?: () => void;
   readonly onOpenSettings?: (permission: Permission) => void;
   readonly resumedAfterSettings?: Permission;
+  readonly onRejoin: () => void;
 };
 
 type OpenSheet = "more" | "people" | "chat" | "details" | null;
@@ -44,7 +45,7 @@ type OpenSheet = "more" | "people" | "chat" | "details" | null;
  * overlays, the menus layer and the toasts layer, each inside the safe area for the current
  * arrangement. Each region lives in its own folder so the part lanes can work in parallel.
  */
-export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave, onOpenSettings, resumedAfterSettings }: CallFrameProps): React.JSX.Element {
+export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave, onOpenSettings, onRejoin, resumedAfterSettings }: CallFrameProps): React.JSX.Element {
   const client = useSpaceClient();
   const connection = useConnection();
   const media = useMedia();
@@ -157,7 +158,7 @@ export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave,
         {forced === "knocking" || forced === "refused" || forced === "full" ? (
           <ArrivalScreen callName={callName} onCancel={() => onLeave?.()} onRetry={join} state={forced} />
         ) : (
-          <CallOverlays callName={callName} onHold={forced === "hold"} onHome={() => onLeave?.()} onRejoin={join} rejoining={resumedAfterSettings !== undefined} screen={screen} />
+          <CallOverlays callName={callName} onHold={forced === "hold"} onHome={() => onLeave?.()} onRejoin={onRejoin} rejoining={resumedAfterSettings !== undefined} screen={screen} />
         )}
       </View>
       <View pointerEvents="box-none" style={StyleSheet.absoluteFill} testID="frame.menus">
