@@ -290,20 +290,42 @@ export function bindFixtureSyncClient(client: FixtureSyncClient) {
   };
 }
 
+// Direct calls keep protocol dispatch statically allowlisted and narrow each message variant.
+// fallow-ignore-next-line complexity
 function dispatchServerMessage(handlers: ServerMessageHandlers, message: ServerMessage): void {
-  const allowedHandlers = new Map<string, ServerMessageHandlers[ServerMessage["type"]]>([
-    ["state", handlers.state],
-    ["ack", handlers.ack],
-    ["collaboration_event", handlers.collaboration_event],
-    ["collaboration_result", handlers.collaboration_result],
-    ["directed_request", handlers.directed_request],
-    ["directed_request_result", handlers.directed_request_result],
-    ["peers", handlers.peers],
-    ["signal", handlers.signal],
-    ["force_failure", handlers.force_failure],
-  ]);
-  const handler = allowedHandlers.get(message.type) as ((value: ServerMessage) => void) | undefined;
-  handler?.(message);
+  switch (message.type) {
+    case "state":
+      handlers.state(message);
+      return;
+    case "ack":
+      handlers.ack(message);
+      return;
+    case "collaboration_event":
+      handlers.collaboration_event(message);
+      return;
+    case "collaboration_result":
+      handlers.collaboration_result(message);
+      return;
+    case "directed_request":
+      handlers.directed_request(message);
+      return;
+    case "directed_request_result":
+      handlers.directed_request_result(message);
+      return;
+    case "peers":
+      handlers.peers(message);
+      return;
+    case "signal":
+      handlers.signal(message);
+      return;
+    case "force_failure":
+      handlers.force_failure(message);
+      return;
+    default: {
+      const unhandled: never = message;
+      throw new TypeError(`Unhandled server message: ${unhandled}`);
+    }
+  }
 }
 
 function resolvePending<T>(pendingRequests: Map<string, PendingRequest<T>>, id: string, value: T): void {

@@ -136,14 +136,16 @@ try {
  await page.getByRole('button',{name:'More options',exact:true}).click();
  await page.getByRole('button',{name:'Grid',exact:true}).click();
  await page.keyboard.press('Escape');
- const dots=page.getByRole('button',{name:/^Go to page /});
- await dots.nth(1).waitFor();
- assert.ok(await dots.count()>1);
- await dots.nth(1).click();
- assert.equal(await dots.nth(1).getAttribute('aria-current'),'page');
+ const stage=page.getByRole('group',{name:'Stage with 13 participants',exact:true});
+ await stage.getByText('Omar Siddiqui',{exact:true}).waitFor();
+ const tiles=stage.locator('[data-stage-item]');
+ assert.equal(await tiles.count(),13);
+ assert.ok((await Promise.all((await tiles.all()).map(tile=>tile.isVisible()))).every(Boolean));
+ assert.equal(await page.getByRole('button',{name:/^Go to page /}).count(),0);
+ assert.equal(await stage.getByRole('button',{name:/^Show \d+ more participants$/}).count(),0);
  if(process.env.SHELL_ARTIFACTS)await page.screenshot({path:process.env.SHELL_ARTIFACTS+'/phone-grid.png'});
  assert.deepEqual(errors,[]);
- console.log('PASS: shell details, devices, share source, leave, phone focus and page-dot pointer journeys');
+ console.log('PASS: shell details, devices, share source, leave, phone focus and fitted-grid journeys');
 } finally {clearTimeout(watchdog);await browser?.close();try{process.kill(-server.pid,'SIGTERM')}catch{}}
 `;
 it("keeps the shell journeys usable in the real call harness", async () => {
