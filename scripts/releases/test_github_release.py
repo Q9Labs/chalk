@@ -2,6 +2,8 @@
 
 import io
 import os
+import signal
+import time
 from pathlib import Path
 import subprocess
 import sys
@@ -26,6 +28,7 @@ import os
 from pathlib import Path
 import sys
 import time
+import signal
 
 count = Path(os.environ['GH_FAKE_COUNT'])
 attempt = int(count.read_text()) + 1 if count.exists() else 1
@@ -33,8 +36,18 @@ count.write_text(str(attempt))
 with open(os.environ['GH_FAKE_PIDS'], 'a') as pids:
     pids.write(f'{os.getpid()}\n')
 if os.environ.get('GH_FAKE_HANG') == '1':
-    print('partial response', flush=True)
-    time.sleep(2)
+    child = os.fork()
+    if child == 0:
+        if os.environ.get('GH_FAKE_IGNORE_TERM') == '1':
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        signal.alarm(5)
+        with open(os.environ['GH_FAKE_PIDS'], 'a') as pids:
+            pids.write(f'{os.getpid()}\n')
+        print('partial response', flush=True)
+        time.sleep(5)
+        os._exit(0)
+    signal.alarm(5)
+    time.sleep(5)
 if attempt <= int(os.environ['GH_FAKE_FAILURES']):
     if os.environ.get('GH_FAKE_PARTIAL') == '1':
         print(json.dumps([{'jobs': [{'id': 99}]}]))
@@ -58,10 +71,13 @@ print(json.dumps(pages if '--paginate' in sys.argv else {'id': 1}))
         self.addCleanup(environment.stop)
         self.github = GitHub()
 
-    def test_hanging_calls_are_bounded_and_children_are_reaped(self):
+    def test_hanging_calls_terminate_the_process_tree(self):
         self.github = GitHub(timeout=0.3)
-        for method, attempts in (('request', 4), ('pages', 4), ('post', 1)):
-            with self.subTest(method=method), patch.dict(os.environ, GH_FAKE_HANG='1'), patch('time.sleep') as sleep:
+        for method, attempts, ignore_term in ((method, attempts, ignore_term)
+                for method, attempts in (('request', 4), ('pages', 4), ('post', 1))
+                for ignore_term in ('0', '1')):
+            with self.subTest(method=method, ignore_term=ignore_term), patch.dict(
+                    os.environ, GH_FAKE_HANG='1', GH_FAKE_IGNORE_TERM=ignore_term), patch('time.sleep') as sleep:
                 self.count.unlink(missing_ok=True)
                 self.pids.unlink(missing_ok=True)
                 with self.assertRaises(subprocess.CalledProcessError) as caught:
@@ -75,10 +91,42 @@ print(json.dumps(pages if '--paginate' in sys.argv else {'id': 1}))
                 self.assertEqual(self.count.read_text(), str(attempts))
                 self.assertEqual(sleep.call_count, attempts - 1)
                 pids = self.pids.read_text().splitlines()
-                self.assertEqual(len(pids), attempts)
+                self.assertEqual(len(pids), attempts * 2)
                 for pid in pids:
-                    with self.assertRaises(ProcessLookupError):
-                        os.kill(int(pid), 0)
+                    # An orphan zombie has exited; only its init-owned bookkeeping remains.
+                    state = subprocess.run(['ps', '-o', 'stat=', '-p', pid],
+                                           capture_output=True, text=True, timeout=1).stdout.strip()
+                    self.assertTrue(not state or state.startswith('Z'), (pid, state))
+
+    def test_interrupt_terminates_the_process_tree(self):
+        with patch.dict(os.environ, GH_FAKE_HANG='1', GH_FAKE_IGNORE_TERM='1'):
+            owner = subprocess.Popen([sys.executable, '-B', '-c',
+                "import signal; signal.alarm(5); from github_release import GitHub; "
+                "GitHub().request('actions/runs/123/jobs')"],
+                cwd=Path(__file__).parent, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                deadline = time.monotonic() + 2
+                while time.monotonic() < deadline:
+                    if self.pids.exists() and len(self.pids.read_text().splitlines()) == 2:
+                        break
+                    time.sleep(0.01)
+                self.assertTrue(self.pids.exists())
+                pids = self.pids.read_text().splitlines()
+                self.assertEqual(len(pids), 2)
+                owner.send_signal(signal.SIGINT)
+                _, stderr = owner.communicate(timeout=2)
+                self.assertNotEqual(owner.returncode, 0)
+                self.assertIn(b'KeyboardInterrupt', stderr)
+                for pid in pids:
+                    state = subprocess.run(['ps', '-o', 'stat=', '-p', pid],
+                                           capture_output=True, text=True, timeout=1).stdout.strip()
+                    self.assertTrue(not state or state.startswith('Z'), (pid, state))
+            finally:
+                if owner.poll() is None:
+                    owner.kill()
+                    owner.wait(timeout=1)
+                owner.stdout.close()
+                owner.stderr.close()
 
     def test_partial_pagination_output_is_discarded_on_retry(self):
         with patch.dict(os.environ, GH_FAKE_PARTIAL='1', GH_FAKE_FAILURES='1'), patch('time.sleep'):

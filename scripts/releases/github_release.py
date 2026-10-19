@@ -5,6 +5,7 @@ import json
 import os
 import random
 import re
+import signal
 import subprocess
 import sys
 import tempfile
@@ -63,11 +64,44 @@ class GitHub:
 
     def _call(self, command, route, data=None):
         # Only reads are safe to replay: a failed POST may already have created a deployment.
-        # Four 60-second attempts plus at most 21 seconds of backoff: 261 seconds.
+        # Four 60-second attempts plus at most 21 seconds of backoff: 261 seconds,
+        # plus bounded process-group cleanup on each timeout.
         for attempt in range(1, 5):
             try:
-                # check_output kills and reaps gh on timeout, including a whole paginated read.
-                return subprocess.check_output(command, input=data, stderr=subprocess.PIPE, timeout=self.timeout)
+                process = subprocess.Popen(command, stdin=subprocess.PIPE if data is not None else None,
+                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                           start_new_session=True)
+                try:
+                    output, stderr = process.communicate(input=data, timeout=self.timeout)
+                except BaseException:
+                    # Cancellation must clean up the isolated session too.
+                    # Descendants may hold the pipes open even after gh exits.
+                    try:
+                        os.killpg(process.pid, signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
+                    try:
+                        process.communicate(timeout=0.2)
+                    except subprocess.TimeoutExpired:
+                        pass
+                    finally:
+                        # Always escalate: a descendant may have closed its pipes but stayed alive.
+                        try:
+                            os.killpg(process.pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                        try:
+                            process.wait(timeout=1)
+                        except subprocess.TimeoutExpired:
+                            pass  # Do not let an uninterruptible child remove the call's bound.
+                        process.stdout.close()
+                        process.stderr.close()
+                        if process.stdin is not None:
+                            process.stdin.close()
+                    raise
+                if process.returncode:
+                    raise subprocess.CalledProcessError(process.returncode, command, output=output, stderr=stderr)
+                return output
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
                 timed_out = isinstance(error, subprocess.TimeoutExpired)
                 if timed_out:
