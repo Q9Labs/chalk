@@ -152,6 +152,7 @@ export function createSoundPlayer({ outputDeviceId }: { readonly outputDeviceId?
           tone(311, 0.13, 0.24, 0.05, "triangle");
           break;
         case "reaction":
+          tone(880, 0, 0.12, 0.035, "triangle");
           break;
       }
     },

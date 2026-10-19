@@ -263,6 +263,12 @@ describe("SpaceClient media convergence", () => {
     const oldAudio = Object.assign(mediaTrack(), { kind: "audio", stop: vi.fn() });
     const newVideo = Object.assign(mediaTrack(), { kind: "video", label: "Replacement", stop: vi.fn(), getSettings: () => ({ displaySurface: "browser" }) });
     const newAudio = Object.assign(mediaTrack(), { kind: "audio", stop: vi.fn() });
+    newVideo.stop.mockImplementation(() => {
+      Object.assign(newVideo, { readyState: "ended" });
+    });
+    newAudio.stop.mockImplementation(() => {
+      Object.assign(newAudio, { readyState: "ended" });
+    });
     const stream = (video: MediaStreamTrack, audio: MediaStreamTrack[]) => Object.assign(mediaStream(video), { getVideoTracks: () => [video], getAudioTracks: () => audio, getTracks: () => [video, ...audio] });
     let complete!: (stream: MediaStream) => void;
     let fail!: (error: Error) => void;
@@ -313,8 +319,13 @@ describe("SpaceClient media convergence", () => {
         const rejected = expect(replacement).rejects.toBeDefined();
         complete(stream(newVideo, [newAudio]));
         await rejected;
-        expect(newVideo.stop).toHaveBeenCalled();
-        expect(newAudio.stop).toHaveBeenCalled();
+        expect(newVideo.stop).toHaveBeenCalledOnce();
+        expect(newAudio.stop).toHaveBeenCalledOnce();
+        expect(newVideo.readyState).toBe("ended");
+        expect(newAudio.readyState).toBe("ended");
+        client.dispose();
+        expect(newVideo.stop).toHaveBeenCalledOnce();
+        expect(newAudio.stop).toHaveBeenCalledOnce();
       } else {
         const rejected = outcome === "deny" ? expect(replacement).rejects.toMatchObject({ code: "media.permission_denied" }) : expect(replacement).rejects.toBeDefined();
         fail(new DOMException("Picker failed", outcome === "cancel" ? "AbortError" : "NotAllowedError"));

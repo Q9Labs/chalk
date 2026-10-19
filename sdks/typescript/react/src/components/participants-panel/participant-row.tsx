@@ -88,7 +88,7 @@ export function ParticipantRow({
                 <bdi>{participant.displayName}</bdi>
               </span>
             )}
-            {participant.role === "host" && !isEditing ? <span className="shrink-0 text-xs text-[var(--chalk-app-text-muted)]">Host</span> : null}
+            {participant.isHost && !isEditing ? <span className="shrink-0 text-xs text-[var(--chalk-app-text-muted)]">Host</span> : null}
             {participant.isLocal && !isEditing && (
               <span className="flex shrink-0 items-center gap-1 text-xs text-[var(--chalk-app-text-muted)]">
                 (You)
