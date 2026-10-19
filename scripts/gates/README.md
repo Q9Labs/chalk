@@ -121,7 +121,8 @@ Runs queue behind live processes using `/tmp/chalk-remote-*` checkouts. A macOS
 `shlock` PID lock serializes simultaneous arrivals and is reclaimed after owner
 death. Waiting prints once and checks every 30 seconds. Set
 `CHALK_REMOTE_QUEUE_TIMEOUT_SECONDS` to change the 5400-second wait; expiry exits 76.
-The runner reaps only abandoned `/tmp/chalk-remote-*` checkouts, checks disk space,
+The runner reaps only abandoned checkouts with a generated run name and matching
+ownership marker; logs and unmarked scratch directories survive. It checks disk space,
 shares dependency caches, limits each setup step and the gate runtime, saves logs
 locally, and deletes its checkout on exit.
 

@@ -154,13 +154,17 @@ remote() {
 read -r -d '' remote_library <<'REMOTE' || true
 set -euo pipefail
 
+owned_checkout() {
+  local dir="$1" name="${1##*/}" marker="$1/.chalk-remote-owner"
+  [[ "$dir" == "/tmp/${name}" && "$name" =~ ^chalk-remote-[0-9]{8}T[0-9]{6}Z-[A-Za-z0-9-]{1,24}-[0-9]+-[0-9a-f]{16}$ ]] || return 1
+  [[ -d "$dir" && ! -L "$dir" && -f "$marker" && ! -L "$marker" ]] || return 1
+  [[ "$(cat "$marker")" == "${name#chalk-remote-}" ]]
+}
+
 safe_delete() {
   local dir="$1"
-  case "${dir}" in
-    /tmp/chalk-remote-*) ;;
-    *) echo "refusing to delete ${dir}: not a /tmp/chalk-remote-* path" >&2; return 1 ;;
-  esac
-  [[ -d "${dir}" && ! -L "${dir}" ]] || return 0
+  [[ -e "$dir" || -L "$dir" ]] || return 0
+  owned_checkout "$dir" || { echo "refusing to delete ${dir}: not a marked runner checkout" >&2; return 1; }
   [[ "$(dirname "$(cd "${dir}" && pwd -P)")" == "/private/tmp" ]] || { echo "refusing to delete ${dir}: not a direct child of /tmp" >&2; return 1; }
   find "${dir}" -depth -delete
 }
@@ -187,6 +191,7 @@ free_gib() {
 reap_stale() {
   local hours="$1" dir docker_bin cutoff name owner
   while IFS= read -r dir; do
+    owned_checkout "${dir}" || continue
     if in_use "${dir}"; then
       echo "[remote] keeping ${dir}: a live process uses it"
     else
@@ -248,6 +253,7 @@ prepare() {
     exit 75
   fi
   mkdir "${work}"
+  printf '%s\n' "${id}" >"${work}/.chalk-remote-owner"
   echo "[remote] ${free} GiB free; checkout ${work}"
 }
 
