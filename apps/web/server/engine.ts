@@ -53,9 +53,3 @@ export async function attendance(engine: Engine, params: Parameters<Engine["api"
   const result = await run(engine.api.episodes.getEpisodeAttendance({ params }));
   return { kind: "available", participants: result.participants.map((p) => ({ id: p.participant_id, name: p.display_name, kind: p.identity_kind, externalId: p.external_id, firstJoinedAt: p.first_joined_at, isYou: false, lastLeftAt: p.last_left_at })) };
 }
-
-export async function publicInvite(engine: Engine, params: Parameters<Engine["api"]["spaces"]["getSpacePublicInvite"]>[0]["params"]) {
-  // The engine accepts Unicode Space names but rejects them on invite reads.
-  // This typed 400 means the optional link is unavailable, not the owned call.
-  return run(engine.api.spaces.getSpacePublicInvite({ params }).pipe(Effect.catchTag("RequestInvalidError", () => Effect.succeed(null))));
-}

@@ -158,10 +158,8 @@ contains a redacted URL and must never be submitted as the real destination.
 
 ## Dashboard summaries and limits
 
-Home returns five calls per page with nullable canonical invite URLs. The engine
-accepts Unicode Space names but rejects their invite reads with request.invalid.
-That specific typed error produces a null link on Home and Call. Other errors
-still propagate, including rate limits. `lastActiveAt`
+Home returns five calls per page, each with its canonical invite URL, and Call
+returns the same URL. Invite read errors propagate, including rate limits. `lastActiveAt`
 is the latest Episode's end time, or its start time while active. `recentPeople`
 contains at most five seats from that Episode, ordered by first join descending.
 These are names, not avatar URLs. Empty history returns `null` and an empty list.

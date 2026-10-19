@@ -191,13 +191,14 @@ try {
   assert.equal(unicode.status, 200, await unicode.clone().text());
   const unicodeId = (await unicode.json()).call.id;
   const rawInvite = await fetch(`${process.env.DASHBOARD_TEST_API_ORIGIN}/v1/tenants/${firstTenant}/spaces/${unicodeId}/public-invite`, { headers: { Authorization: "Bearer fixture-dashboard-service-token-not-a-secret" } });
-  assert.equal(rawInvite.status, 400, "Reproduce engine Unicode invite rejection");
+  assert.equal(rawInvite.status, 200, await rawInvite.clone().text());
+  const unicodeLink = (await rawInvite.json()).canonical_url;
   const unicodeHome = await ada.request("/dashboard-api/home");
   assert.equal(unicodeHome.status, 200, await unicodeHome.clone().text());
-  assert.equal((await unicodeHome.json()).calls.find((call) => call.id === unicodeId).inviteUrl, null);
+  assert.equal((await unicodeHome.json()).calls.find((call) => call.id === unicodeId).inviteUrl, unicodeLink);
   const unicodeCall = await ada.request(`/dashboard-api/call?spaceId=${unicodeId}`);
   assert.equal(unicodeCall.status, 200, await unicodeCall.clone().text());
-  assert.equal((await unicodeCall.json()).inviteUrl, null);
+  assert.equal((await unicodeCall.json()).inviteUrl, unicodeLink);
   // Remove the regression fixture from later Home pagination assertions.
   assert.equal((await post(ada, "/dashboard-api/home", { action: "archive-call", spaceId: unicodeId }, session.csrfToken)).status, 200);
   const malikTenant = secondTenant;

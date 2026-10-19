@@ -1,17 +1,22 @@
 import { Schema } from "effect";
 import { EpisodeIdSchema, SpaceIdSchema } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
-import { attendance, live, publicInvite, run } from "./engine";
+import { attendance, live, run } from "./engine";
 import { callDTO, episodeDTO, recordingDTO, transcriptDTO } from "./dto";
 import { homeMutation } from "./home";
 import type { CallAction, CallPageDTO } from "../src/lib/dashboard/contracts";
 export async function callPage(engine: Engine, spaceId: string, cursor?: string): Promise<CallPageDTO> {
   const params = { tenant_id: engine.tenantId, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(spaceId) };
   const space = await run(engine.api.spaces.getSpace({ params }));
-  const [invite, episodes, knocks, current] = await Promise.all([publicInvite(engine, params), run(engine.api.episodes.listEpisodes({ params, query: { page_size: 5, cursor } })), run(engine.api.spaces.listSpacePublicAdmissionRequests({ params, query: {} })), live(engine, [spaceId])]);
+  const [invite, episodes, knocks, current] = await Promise.all([
+    run(engine.api.spaces.getSpacePublicInvite({ params })),
+    run(engine.api.episodes.listEpisodes({ params, query: { page_size: 5, cursor } })),
+    run(engine.api.spaces.listSpacePublicAdmissionRequests({ params, query: {} })),
+    live(engine, [spaceId]),
+  ]);
   return {
     call: callDTO(space),
-    inviteUrl: invite?.canonical_url ?? null,
+    inviteUrl: invite.canonical_url,
     live: current[0]?.episode ?? null,
     episodes: await Promise.all(
       episodes.episodes.map(async (episode) => {
