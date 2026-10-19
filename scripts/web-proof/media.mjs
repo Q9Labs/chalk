@@ -58,7 +58,7 @@ export async function audioEvidence() {
 }
 
 export function remoteVideoFrames() {
-  const tile = document.querySelector('[aria-label="Video tile for Proof guest 1"]');
+  const tile = document.querySelector('[aria-label="Video tile for Proof guest 1"]')?.closest('[data-part="stage-tile"]');
   const video = tile?.querySelector("video");
   return video && video.readyState >= 2 && video.videoWidth > 0 ? video.getVideoPlaybackQuality().totalVideoFrames : 0;
 }
