@@ -598,9 +598,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #pauseForcedSource(ports: ConnectionPorts, source: MediaSource): void {
     const pendingEnable = this.#hasPendingEnable(source);
     if (!pendingEnable) {
-      this.#intentRevisions.set(source, (this.#intentRevisions.get(source) ?? 0) + 1);
-      if (source !== "screen") this.#intent[source] = false;
-      else if (this.#screenAudioTrack) this.#screenAudioTrack.enabled = false;
+      this.#clearForcedIntent(source);
     }
     const track = this.#tracks.get(source);
     if (track) track.enabled = false;
@@ -608,6 +606,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (ports.media.closeForcedLocalPublication) void ports.media.closeForcedLocalPublication(source).catch(() => undefined);
     if (pendingEnable) ports.media.setLocalSourceIntent?.(source, true);
     this.#publish();
+  }
+  #clearForcedIntent(source: MediaSource): void {
+    this.#intentRevisions.set(source, (this.#intentRevisions.get(source) ?? 0) + 1);
+    if (source !== "screen") this.#intent[source] = false;
+    else if (this.#screenAudioTrack) this.#screenAudioTrack.enabled = false;
   }
   #hasPendingEnable(source: MediaSource): boolean {
     const revision = this.#pendingEnables.get(source);
