@@ -257,6 +257,67 @@ describe("SpaceClient media convergence", () => {
     }
   });
 
+  it.each(["cancel", "deny", "replace"] as const)("keeps the original capture until replacement succeeds: %s", async (outcome) => {
+    const platform = createCoreTestPlatform();
+    const oldVideo = Object.assign(mediaTrack(), { kind: "video", label: "Original", stop: vi.fn(), getSettings: () => ({ displaySurface: "window" }) });
+    const oldAudio = Object.assign(mediaTrack(), { kind: "audio", stop: vi.fn() });
+    const newVideo = Object.assign(mediaTrack(), { kind: "video", label: "Replacement", stop: vi.fn(), getSettings: () => ({ displaySurface: "browser" }) });
+    const stream = (video: MediaStreamTrack, audio: MediaStreamTrack[]) => Object.assign(mediaStream(video), { getVideoTracks: () => [video], getAudioTracks: () => audio, getTracks: () => [video, ...audio] });
+    let complete!: (stream: MediaStream) => void;
+    let fail!: (error: Error) => void;
+    const picker = new Promise<MediaStream>((resolve, reject) => {
+      complete = resolve;
+      fail = reject;
+    });
+    const getDisplayMedia = vi
+      .fn()
+      .mockResolvedValueOnce(stream(oldVideo, [oldAudio]))
+      .mockReturnValueOnce(picker);
+    const prepare = vi.fn();
+    const clear = vi.fn(async () => undefined);
+    const share = vi.fn(async () => ({ operationId: "share", name: "set_screen_share_enabled" as const, serverOutcome: "satisfied" as const, mediaPlaneOutcome: "satisfied" as const }));
+    const client = createSpaceClientForPlatform(
+      { space: "space-1", getAccess: async () => opaqueAccessGrant("replace-share") },
+      {
+        ...platform,
+        dependencies: {
+          ...platform.dependencies,
+          mediaDevices: { ...platform.dependencies.mediaDevices, getDisplayMedia },
+          createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), prepareLocalTrack: prepare, clearPreparedLocalTrack: clear }),
+          createSyncClient: () => ({ ...platform.sync, setScreenShareEnabled: share }),
+        },
+      },
+    );
+    try {
+      await client.join({ microphone: false, camera: false });
+      await client.media.setScreenShareEnabled(true, { audio: true });
+      const replacement = client.media.setScreenShareEnabled(true, { surface: "browser" });
+      await vi.waitFor(() => expect(getDisplayMedia).toHaveBeenCalledTimes(2));
+      expect(clear).not.toHaveBeenCalled();
+      expect(oldVideo.stop).not.toHaveBeenCalled();
+      expect(oldAudio.stop).not.toHaveBeenCalled();
+      if (outcome === "replace") {
+        complete(stream(newVideo, []));
+        await replacement;
+        expect(prepare).toHaveBeenCalledWith("screen", newVideo);
+        expect(oldVideo.stop).toHaveBeenCalledOnce();
+        expect(oldAudio.stop).toHaveBeenCalledOnce();
+        expect(client.getSnapshot().media.screenShare.capture?.label).toBe("Replacement");
+      } else {
+        const rejected = expect(replacement).rejects.toBeDefined();
+        fail(new DOMException("Picker failed", outcome === "cancel" ? "AbortError" : "NotAllowedError"));
+        await rejected;
+        expect(clear).not.toHaveBeenCalled();
+        expect(oldVideo.stop).not.toHaveBeenCalled();
+        expect(oldAudio.stop).not.toHaveBeenCalled();
+        expect(client.getSnapshot().media.screenShare.capture?.label).toBe("Original");
+        expect(share).toHaveBeenCalledTimes(1);
+      }
+    } finally {
+      client.dispose();
+    }
+  });
+
   it("reports remote share audio only while both share publications are active", async () => {
     const platform = createCoreTestPlatform();
     const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, platform);

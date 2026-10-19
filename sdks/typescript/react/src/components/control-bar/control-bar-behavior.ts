@@ -304,7 +304,6 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
       : undefined,
     onStartScreenShare: (options) =>
       void run(async () => {
-        if (screenSharing) await client.media.setScreenShareEnabled(false);
         await client.media.setScreenShareEnabled(true, options);
       }, "screen"),
     shareUrl: props.shareUrl,

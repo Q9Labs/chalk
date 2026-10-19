@@ -25,6 +25,10 @@ const (
 	maxAppendAttempts   = 4
 )
 
+var publicationSources = map[string]struct{}{
+	"microphone": {}, "camera": {}, "screen": {}, "screen_audio": {},
+}
+
 var tracer = otel.Tracer("github.com/q9labs/chalk/apps/api/internal/mediapublications")
 
 type Repository interface {
@@ -441,7 +445,7 @@ func sortedPublications(publications map[string]provideroperations.Publication) 
 
 func validateInput(input *RecordInput) error {
 	input.ConnectionID = strings.TrimSpace(input.ConnectionID)
-	if input.TenantID.IsZero() || input.EpisodeID.IsZero() || input.ParticipantID.IsZero() || input.ParticipantGeneration <= 0 || input.ConnectionID == "" || strings.Contains(input.ConnectionID, "|") || len(input.Tracks) == 0 || len(input.Tracks) > 3 {
+	if input.TenantID.IsZero() || input.EpisodeID.IsZero() || input.ParticipantID.IsZero() || input.ParticipantGeneration <= 0 || input.ConnectionID == "" || strings.Contains(input.ConnectionID, "|") || len(input.Tracks) == 0 || len(input.Tracks) > len(publicationSources) {
 		return ErrInvalidPublication
 	}
 	seen := make(map[string]struct{}, len(input.Tracks))
@@ -450,7 +454,7 @@ func validateInput(input *RecordInput) error {
 		track.Source = strings.TrimSpace(track.Source)
 		track.MID = strings.TrimSpace(track.MID)
 		track.TrackName = strings.TrimSpace(track.TrackName)
-		if (track.Source != "microphone" && track.Source != "camera" && track.Source != "screen" && track.Source != "screen_audio") || track.MID == "" || track.TrackName == "" || strings.Contains(track.TrackName, "|") {
+		if _, validSource := publicationSources[track.Source]; !validSource || track.MID == "" || track.TrackName == "" || strings.Contains(track.TrackName, "|") {
 			return ErrInvalidPublication
 		}
 		if _, exists := seen[track.Source]; exists {
@@ -469,7 +473,7 @@ func validateCloseInput(input *CloseInput) error {
 	if input.TenantID.IsZero() || input.EpisodeID.IsZero() || input.ParticipantID.IsZero() || input.ParticipantGeneration <= 0 || input.ConnectionID == "" || strings.Contains(input.ConnectionID, "|") {
 		return ErrInvalidPublication
 	}
-	if input.Source != "microphone" && input.Source != "camera" && input.Source != "screen" && input.Source != "screen_audio" {
+	if _, validSource := publicationSources[input.Source]; !validSource {
 		return ErrInvalidPublication
 	}
 	reference, err := ParseReference(input.PublicationID)

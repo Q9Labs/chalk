@@ -249,7 +249,6 @@ export function SpaceView({
             shareCapture={media.screenShare.capture}
             onStopSharing={() => client.media.setScreenShareEnabled(false)}
             onChangeShare={async (options) => {
-              await client.media.setScreenShareEnabled(false);
               await client.media.setScreenShareEnabled(true, options);
             }}
             className="h-full"

@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ChalkProvider } from "../../bindings/context";
 import { createPreviewClient, createSnapshot } from "../../test-support/preview-client";
 import { ControlBar } from "./ControlBar";
+import { useConnectedControlBarBehavior } from "./control-bar-behavior";
 
 describe("compact screen sharing", () => {
   it("starts and stops screen sharing", async () => {
@@ -88,4 +89,34 @@ describe("media command failures", () => {
       preview.dispose();
     }
   });
+});
+
+it("requests a replacement without first disabling an active screen share", async () => {
+  const onCommand = vi.fn();
+  const client = createPreviewClient(undefined, { onCommand });
+  await client.media.setScreenShareEnabled(true);
+  onCommand.mockClear();
+  function ChangeShare() {
+    const { surfaceProps } = useConnectedControlBarBehavior({});
+    return <button onClick={() => surfaceProps.onStartScreenShare?.({ surface: "browser" })}>Change share</button>;
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <ChangeShare />
+        </ChalkProvider>,
+      ),
+    );
+    await act(async () => container.querySelector("button")?.click());
+    expect(onCommand).toHaveBeenCalledTimes(1);
+    expect(onCommand).toHaveBeenCalledWith({ type: "setScreenShareEnabled", enabled: true }, expect.anything());
+  } finally {
+    await act(async () => root.unmount());
+    client.dispose();
+    container.remove();
+  }
 });

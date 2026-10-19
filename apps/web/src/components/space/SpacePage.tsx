@@ -404,7 +404,7 @@ function LocalSpace({
     [onTerminal, release],
   );
   useEffect(() => {
-    if (connection.status === "failed") releaseFromLifecycle("failed", connection.lastError?.message);
+    if (connection.status === "failed") releaseFromLifecycle(connection.lastError?.code === "episode.ended" ? "episode-ended" : "failed", connection.lastError?.message);
   }, [connection, releaseFromLifecycle]);
 
   useEffect(() => {

@@ -341,26 +341,44 @@ class MediaControllerRuntime implements MediaControllerEffects {
               let track: MediaStreamTrack | null = null;
               let prepared = false;
               return Effect.suspend(() => {
-                if (this.#tracks.has("screen")) {
+                if (this.#tracks.has("screen") && options === undefined) {
                   return Effect.void;
                 }
                 return foreign(() => this.#selection.getDisplayMedia(displayMediaConstraints(options))).pipe(
-                  Effect.tap((captured) =>
+                  Effect.map((captured) => {
+                    stream = captured;
+                    this.#assertActivePorts(ports, "startScreenShare");
+                    track = requireDisplayVideoTrack(captured);
+                    return { stream: captured, track };
+                  }),
+                  Effect.tap(() => {
+                    const previous = this.#tracks.get("screen");
+                    if (!previous) return Effect.void;
+                    return foreign(() => ports.sync.setScreenShareEnabled(false)).pipe(
+                      Effect.andThen(this.#clearScreenAudio(ports.media)),
+                      Effect.andThen(foreign(() => ports.media.clearPreparedLocalTrack("screen"))),
+                      Effect.tap(() =>
+                        Effect.sync(() => {
+                          this.#assertActivePorts(ports, "startScreenShare");
+                          this.#tracks.delete("screen");
+                          previous.stop();
+                        }),
+                      ),
+                    );
+                  }),
+                  Effect.tap(({ stream: captured, track: screenTrack }) =>
                     Effect.sync(() => {
-                      stream = captured;
-                      this.#assertActivePorts(ports, "startScreenShare");
-                      track = requireDisplayVideoTrack(captured);
                       const audio = captured.getAudioTracks()[0];
                       for (const extra of captured.getAudioTracks().slice(1)) extra.stop();
+                      ports.media.prepareLocalTrack("screen", screenTrack);
+                      prepared = true;
+                      this.#tracks.set("screen", screenTrack);
                       this.#screenAudioTrack = audio ?? null;
                       if (audio) {
                         ports.media.prepareLocalTrack("screen_audio", audio);
                         audio.addEventListener("ended", () => this.#handleScreenAudioEnded(audio, ports));
                       }
-                      this.#tracks.set("screen", track);
-                      ports.media.prepareLocalTrack("screen", track);
-                      prepared = true;
-                      track.addEventListener("ended", () => this.#handleScreenEnded(track!));
+                      screenTrack.addEventListener("ended", () => this.#handleScreenEnded(screenTrack));
                       this.#screenEndedPending = false;
                       this.#publish();
                     }),
@@ -371,9 +389,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
 
                   Effect.asVoid,
                   Effect.catch((cause) =>
-                    this.#clearScreenAudio(ports.media).pipe(
+                    (prepared ? this.#clearScreenAudio(ports.media) : Effect.void).pipe(
                       Effect.ignore,
                       Effect.andThen(this.#rollbackCapture({ action: "startScreenShare", cause, fallback: Effect.sync(() => stopStream(stream)), media: ports.media, permissionMessage: "Screen sharing permission was denied", prepared, source: "screen", track })),
+                      Effect.ensuring(Effect.sync(() => stopStream(stream))),
                     ),
                   ),
                 );
