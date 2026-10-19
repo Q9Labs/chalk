@@ -20,7 +20,12 @@ const source = (await readFile(process.argv[2] ?? resolve(web, "src/components/d
 const prefix = `
 import React, {useMemo, useEffect, useState, useRef} from ${JSON.stringify(require.resolve("react"))};
 import {createSpaceClientForPlatform as createReal} from ${JSON.stringify(resolve(web, "../../sdks/typescript/client/src/space-client/space-client.ts"))};
+import {readReloadRejoin, reloadRejoinAccess, reloadRejoinStorageKey, writeReloadRejoin} from ${JSON.stringify(resolve(web, "../../sdks/typescript/client/src/space-client/reload-rejoin.ts"))};
+import {z} from ${JSON.stringify(require.resolve("zod"))};
 export const clients=[], admissions=[], failures=[], joins=[];
+export {ownerAccess};
+export let liveEpisodeId='episode-test';
+export const setLiveEpisode=(id)=>{liveEpisodeId=id;};
 export let current;
 let ready=false;
 export const load=()=>{ready=true;};
@@ -35,7 +40,7 @@ function createSpaceClientForPlatform(...args) {
 }
 const intentKey=()=>crypto.randomUUID();
 const act=(_route,input)=>{admissions.push(input);return new Promise(()=>{});};
-const readPage=()=>{};
+const readPage=async()=>({live:liveEpisodeId?{id:liveEpisodeId}:null});
 const useSession=()=>({profile:{name:'Synthetic owner'}});
 const useLoad=()=>({state:ready?{kind:'ready',data:{inviteUrl:'http://engine.local/space/call-test',call:{name:'Call'}}}:{kind:'loading'}});
 const useSiteTheme=()=>({theme:'dark'});
@@ -86,7 +91,34 @@ try {
     }
   }
   assert.notEqual(test.admissions[0].idempotencyKey, test.admissions[1].idempotencyKey, "A deliberate remount is a new join intent");
+  const { writeReloadRejoin, reloadRejoinStorageKey } = await import(resolve(web, "../../sdks/typescript/client/src/space-client/reload-rejoin.ts"));
+  for (const scenario of ["same-episode", "different-episode", "ended", "expired", "different-space"]) {
+    const savedKey = crypto.randomUUID();
+    writeReloadRejoin(
+      window.sessionStorage,
+      {
+        space: scenario === "different-space" ? "another-call" : "call-test",
+        episodeId: "episode-test",
+        participantId: "participant-test",
+        participantGeneration: 1,
+        tenantId: "tenant-test",
+        mediaProof: "synthetic-proof-not-a-credential",
+        displayName: "Synthetic owner",
+        microphone: false,
+        camera: false,
+        ownerJoinKey: savedKey,
+      },
+      scenario === "expired" ? Date.now() - 120001 : Date.now(),
+    );
+    test.setLiveEpisode(scenario === "ended" ? null : scenario === "different-episode" ? "another-episode" : "episode-test");
+    void test.ownerAccess("call-test").getAccess({ reason: "join", replaceMediaConnection: false });
+    await new Promise((done) => setImmediate(done));
+    const key = test.admissions.at(-1).idempotencyKey;
+    assert.equal(key === savedKey, scenario === "same-episode", `Reload intent binding: ${scenario}`);
+    assert.equal(window.sessionStorage.getItem(reloadRejoinStorageKey), null, "Reload marker is consumed even when rejected");
+  }
   console.log("PASS: delayed OwnerCall StrictMode replay → one usable join → unmount/remount; every SDK client leaves and disposes");
+  console.log("PASS: owner reload intent is single-use, short-lived and bound to the current Space/Episode");
 } finally {
   if (root) await React.act(async () => root.unmount());
   for (const entry of test?.clients ?? []) {

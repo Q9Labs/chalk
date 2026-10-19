@@ -143,6 +143,7 @@ Process.sleep(:infinity)
     body: JSON.stringify({ name: "Synthetic dashboard join", external_id: `google:test:${userId}`, cors_allowed_origins: [origin] }),
   });
   assert.equal(tenant.status, 201, await tenant.clone().text());
+  const tenantId = (await tenant.json()).id;
   const identity = { provider: "google", userId, sessionId: crypto.randomUUID(), name: "Synthetic dashboard join", email: "", avatarUrl: null, expiresAt: Date.now() + 3600000 };
   const key = await crypto.subtle.importKey("raw", await crypto.subtle.digest("SHA-256", Buffer.from(bindings.SESSION_SECRET)), "AES-GCM", false, ["encrypt"]);
   async function seal(value, purpose) {
@@ -169,7 +170,7 @@ Process.sleep(:infinity)
     await page.goto(`${origin}/dashboard`);
     await page.getByRole("button", { name: "Start a call", exact: true }).click();
     await page.getByRole("button", { name: "Join call", exact: true }).click();
-    await page.locator('[data-tour="video-grid"]').waitFor({ state: "visible", timeout: 45000 });
+    await page.locator('[data-tour="video-grid"]').first().waitFor({ state: "visible", timeout: 45000 });
     assert(
       sockets.some((url) => url.startsWith(syncOrigin)),
       "Dashboard ignored its configured Sync endpoint",
@@ -180,6 +181,19 @@ Process.sleep(:infinity)
     );
     await page.screenshot({ path: resolve(repository, "artifacts/dashboard-owner-in-call.png") });
     const spaceId = new URL(page.url()).pathname.split("/").at(-2);
+    const joinUrl = page.url();
+    async function liveParticipants(expected) {
+      let live;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const response = await fetch(`${apiOrigin}/v1/tenants/${tenantId}/live-episodes?space_ids=${spaceId}`, { headers: { Authorization: `Bearer ${bindings.DASHBOARD_SERVICE_TOKEN}` } });
+        assert.equal(response.status, 200, await response.clone().text());
+        live = (await response.json()).spaces[0]?.live_episode;
+        if ((live?.participants.length ?? 0) === expected) return live;
+        await delay(100);
+      }
+      assert.fail(`Expected ${expected} live seats, found ${live?.participants.length ?? 0}`);
+    }
+    const firstSeat = (await liveParticipants(1)).participants[0].participant_id;
     const callResponse = await context.request.get(`${origin}/dashboard-api/call?spaceId=${encodeURIComponent(spaceId)}`);
     assert.equal(callResponse.status(), 200, await callResponse.text());
     const call = await callResponse.json();
@@ -193,7 +207,41 @@ Process.sleep(:infinity)
     const copied = await page.evaluate(() => navigator.clipboard.readText());
     assert.equal(copied, call.inviteUrl, "In-call copy must preserve the exact engine canonical invite URL");
     assert(!copied.includes("/dashboard/call/"));
-    console.log("PASS: real dashboard create → owner admission → real Sync → in-call video grid → engine canonical invite displayed and copied (devices denied)");
+    const resumedAdmission = page.waitForResponse((response) => response.url() === `${origin}/dashboard-api/call` && response.request().method() === "POST" && response.request().postDataJSON()?.action === "join");
+    await page.reload();
+    const admitted = await resumedAdmission;
+    assert.equal(admitted.status(), 200, await admitted.text());
+    const afterReload = await liveParticipants(1);
+    assert.equal(afterReload.participants[0].participant_id, firstSeat, "Same-tab reload must resume the exact owner seat");
+    await page.locator('[data-tour="video-grid"]').first().waitFor({ state: "visible", timeout: 45000 });
+    const otherTab = await context.newPage();
+    try {
+      await otherTab.goto(joinUrl);
+      await otherTab.locator('[data-tour="video-grid"]').first().waitFor({ state: "visible", timeout: 45000 });
+      const independent = await liveParticipants(2);
+      assert(
+        independent.participants.some((participant) => participant.participant_id !== firstSeat),
+        "A separate tab must get its own seat",
+      );
+      await otherTab.getByRole("button", { name: "Leave call", exact: true }).click();
+      await liveParticipants(1);
+    } finally {
+      await otherTab.close();
+    }
+    // An already-written reload marker must not survive an intentional leave.
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
+    assert(await page.evaluate(() => sessionStorage.getItem("chalk.reload-rejoin")), "Pagehide must synchronously save the reload marker");
+    await page.getByRole("button", { name: "Leave call", exact: true }).click();
+    await page.waitForURL(`${origin}/dashboard/call/${spaceId}`);
+    assert.equal(await page.evaluate(() => sessionStorage.getItem("chalk.reload-rejoin")), null, "Intentional leave clears the reload marker");
+    await liveParticipants(0);
+    await page.goto(joinUrl);
+    await page.locator('[data-tour="video-grid"]').first().waitFor({ state: "visible", timeout: 45000 });
+    const afterRejoin = await liveParticipants(1);
+    assert.notEqual(afterRejoin.participants[0].participant_id, firstSeat, "Deliberate leave then rejoin must create a new owner seat");
+    await page.getByRole("button", { name: "Leave call", exact: true }).click();
+    await liveParticipants(0);
+    console.log("PASS: real dashboard create → real Sync → canonical invite displayed/copied → reload resumes one exact owner seat → independent tab gets separate seat → leave clears roster → deliberate rejoin gets new seat → no orphan (devices denied)");
   } catch (error) {
     await writeFile(resolve(repository, "artifacts/dashboard-join-failure.log"), JSON.stringify({ body: await page.locator("body").innerText(), sockets, sync: syncLog.join(""), pages: pagesLog.join("") }));
     throw error;
