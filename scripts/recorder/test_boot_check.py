@@ -42,6 +42,60 @@ class BootCheckTests(unittest.TestCase):
         self.assertNotIn('SECRET', json.dumps(diagnosis))
         self.assertEqual(boot.boot_diagnosis(None, evidence)['issuer_archive_failure'], 'archive_download_failed')
 
+    def test_only_script_diagnostics_expose_messages(self):
+        import urllib.error
+
+        secret = 'fake-private-data-sentinel'
+        errors = [RuntimeError(secret), ValueError(secret), OSError(secret),
+                  subprocess.SubprocessError(secret), urllib.error.URLError(secret),
+                  urllib.error.HTTPError('https://example.test', 403, secret, None, None),
+                  json.JSONDecodeError(secret, secret, 0)]
+        for error in errors:
+            with self.subTest(error=type(error).__name__):
+                self.assertEqual(boot.safe_error(error), type(error).__name__)
+        self.assertEqual(boot.safe_error(boot.DiagnosticError('audited message')), 'audited message')
+
+    def test_run_receipt_preserves_trusted_failure_even_when_cleanup_times_out(self):
+        import os
+        from unittest.mock import Mock
+
+        request = dict(schema_version=1, role='capture', source_commit='a' * 40, release_id='candidate',
+                       image_id=1, image_digest='sha256:' + 'a' * 64, region='region', size='size',
+                       archive=dict(bucket='example-artifacts', key='recorder/capture/' + 'a' * 64 + '.tar.gz',
+                                    sha256='a' * 64, region='region'))
+        for timeout in (False, True):
+            with self.subTest(cleanup_timeout=timeout), tempfile.TemporaryDirectory() as temp:
+                directory = Path(temp)
+                request_path, receipt_path = directory / 'request.json', directory / 'receipt.json'
+                request_path.write_text(json.dumps(request))
+                services = Mock()
+                services.host.return_value = dict(
+                    env=dict(REGION='region', SIZE='size', ENVIRONMENT='test', OWNER_TAG='test'),
+                    issuer_control_plane_url='https://example.test:8443', journal=dict(journal=dict(nodes={})))
+                services.do.side_effect = [dict(sizes=[dict(slug='size', regions=['region'], price_hourly=0.01)]),
+                                           dict(droplets=[])]
+                services.aws.return_value = dict(PublicAccessBlockConfiguration={})
+
+                def start_guard(*args, **kwargs):
+                    work = next(directory.glob('boot-check-*'))
+                    boot.private_json(work / 'watchdog-started.json', {})
+                    guard = Mock(pid=123, returncode=None if timeout else 0)
+                    if timeout:
+                        guard.wait.side_effect = subprocess.TimeoutExpired('fake-watchdog', 150)
+                    else:
+                        boot.private_json(work / 'cleanup.json', dict(result='PASS'))
+                    return guard
+
+                with patch.object(boot, 'Services', return_value=services), \
+                        patch.object(boot.subprocess, 'Popen', side_effect=start_guard), \
+                        patch.dict(os.environ, dict(CHALK_BOOT_CHECK_EVIDENCE_BUCKET='example-evidence'), clear=True), \
+                        patch('builtins.print'):
+                    self.assertEqual(boot.run(request_path, receipt_path), 1)
+                receipt = json.loads(receipt_path.read_text())
+                self.assertEqual(receipt['reason'], 'guest evidence bucket must block public access')
+                self.assertEqual(receipt['cleanup_confirmed'], not timeout)
+                self.assertEqual(receipt['result'], 'FAIL')
+
     def test_cleanup_denial_survives_watchdog_in_public_receipt(self):
         import sys
 
