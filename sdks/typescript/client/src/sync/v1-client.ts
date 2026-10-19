@@ -420,7 +420,7 @@ export class V1SyncClient implements V1CollaborationClient {
           this.#send({ type: "delivery_ack", stream: "control", revision: control.revision, state_digest: control.stateDigest });
         }
         if (frame.name === "participant_left" && frame.payload.participant_id === this.#participantId) {
-          this.#phase = { phase: "terminal", terminalReason: "participant_inactive" };
+          this.#phase = { phase: "terminal", terminalReason: frame.payload.reason === "removed" ? "participant_removed" : "participant_inactive" };
           this.#socket?.close(1000, "participant inactive");
         }
         this.#emit();

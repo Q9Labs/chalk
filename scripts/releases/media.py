@@ -358,10 +358,12 @@ def deploy_dispatcher(args):
                               'artifact_verified': True, 'state_plan_verified': True, 'verified': False}))
             return
         if not installed:
-            # These two roles belong to the dispatcher module but provisioning created them before the first ZIP.
+            # These belong to the dispatcher module but provisioning created them before the first ZIP.
             # `tofu state list` exits 1 until the backend holds a state object.
             present = set(tofu('state', 'list').splitlines()) if dispatcher_state_exists(provider, config) else set()
-            for resource, name in [('aws_iam_role.dispatcher', config['dispatcher']['function_name'] + '-execution'), ('aws_iam_role.scheduler', config['dispatcher']['function_name'] + '-scheduler')]:
+            function = config['dispatcher']['function_name']
+            for resource, name in [('aws_iam_role.dispatcher', function + '-execution'), ('aws_iam_role.scheduler', function + '-scheduler'),
+                                   ('aws_cloudwatch_log_group.dispatcher', '/aws/lambda/' + function)]:
                 address = 'module.dispatcher.' + resource
                 if address not in present:
                     tofu('import', '-input=false', address, name)
@@ -397,7 +399,8 @@ def qualify(args):
         path, receipt = args.directory / (role + '-request.json'), args.directory / (role + '-receipt.json')
         private_json(path, request)
         subprocess.run([sys.executable, str(ROOT / 'scripts/recorder/boot-check.py'), '--request', str(path), '--receipt', str(receipt)], check=True,
-                       env={**os.environ, 'CHALK_BOOT_CHECK_INSTANCE_ID': config['runtime']['instance_id'], 'CHALK_BOOT_CHECK_DO_CONTEXT': config['do_context'], 'CHALK_RECORDER_RELEASE_CONFIG_PARAMETER': args.config_parameter})
+                       env={**os.environ, 'CHALK_BOOT_CHECK_INSTANCE_ID': config['runtime']['instance_id'], 'CHALK_BOOT_CHECK_USER_ID': str(config['runtime']['user_id']),
+                            'CHALK_BOOT_CHECK_DO_CONTEXT': config['do_context'], 'CHALK_RECORDER_RELEASE_CONFIG_PARAMETER': args.config_parameter})
 
 
 def main():

@@ -15,6 +15,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
+	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -140,6 +141,7 @@ type recordingPipelineTransactor interface {
 }
 
 type RecordingPipelineRepository struct {
+	tenantLimits             tenantlimits.Config
 	queries                  recordingPipelineQuerier
 	transactor               recordingPipelineTransactor
 	decorate                 func(sqlc.Querier) sqlc.Querier
@@ -280,6 +282,22 @@ func (r RecordingPipelineRepository) Reserve(ctx context.Context, input recordin
 	err := r.transaction(ctx, func(tx pgx.Tx, queries recordingPipelineQuerier) error {
 		if _, err := queries.LockRecordingCapacity(ctx); err != nil {
 			return fmt.Errorf("lock recording capacity: %w", err)
+		}
+		if r.tenantLimits.MaxConcurrentRecordings > 0 || r.tenantLimits.DailyRecordingMinutes > 0 {
+			// Replays remain successful even when the tenant has used its last slot.
+			_, err := queries.GetRecordingReservationFingerprint(ctx, sqlc.GetRecordingReservationFingerprintParams{TenantID: uuid(input.TenantID), IdempotencyKey: input.IdempotencyKey})
+			if errors.Is(err, pgx.ErrNoRows) {
+				now := r.now().UTC()
+				usage, err := sqlc.New(tx).GetTenantRecordingUsage(ctx, sqlc.GetTenantRecordingUsageParams{TenantID: uuid(input.TenantID), ObservedAt: timestamptzValue(now), DayStart: timestamptzValue(now.Truncate(24 * time.Hour))})
+				if err != nil {
+					return fmt.Errorf("read tenant recording usage: %w", err)
+				}
+				if (r.tenantLimits.MaxConcurrentRecordings > 0 && usage.ActiveCount >= int64(r.tenantLimits.MaxConcurrentRecordings)) || (r.tenantLimits.DailyRecordingMinutes > 0 && usage.RecordingSeconds >= float64(r.tenantLimits.DailyRecordingMinutes)*60) {
+					return tenantlimits.ErrRecordingLimitReached
+				}
+			} else if err != nil {
+				return fmt.Errorf("check tenant recording replay: %w", err)
+			}
 		}
 		var err error
 		row, err = queries.CreateRecordingReservation(ctx, params)
@@ -1521,4 +1539,9 @@ func captureBundleSchemaVersion(enabled bool, previous *recordingpipeline.Record
 		return recordingpipeline.RecordingBundleSchema
 	}
 	return recordingpipeline.LegacyRecordingBundleSchema
+}
+
+func (r RecordingPipelineRepository) WithTenantLimits(limits tenantlimits.Config) RecordingPipelineRepository {
+	r.tenantLimits = limits
+	return r
 }

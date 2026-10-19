@@ -20,6 +20,11 @@ func (r EpisodeLifecycleRepository) JoinPublic(ctx context.Context, input episod
 	var episodeCreated bool
 
 	err := r.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
+		if r.tenantLimits.MaxLiveEpisodes > 0 {
+			if _, err := queries.LockTenantMediaLimits(ctx, uuid(input.TenantID)); err != nil {
+				return fmt.Errorf("lock tenant media limits: %w", err)
+			}
+		}
 		space, err := queries.LockTenantSpaceForUpdate(ctx, sqlc.LockTenantSpaceForUpdateParams{TenantID: uuid(input.TenantID), ID: uuid(input.SpaceID)})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return episodes.ErrSpaceNotFound
@@ -301,6 +306,9 @@ func (r EpisodeLifecycleRepository) ensurePublicLiveEpisode(ctx context.Context,
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return sqlc.Episode{}, false, webhookCommitMetric{}, fmt.Errorf("lock public live Episode: %w", err)
+	}
+	if err := r.checkLiveEpisodeLimit(ctx, queries, tenantID); err != nil {
+		return sqlc.Episode{}, false, webhookCommitMetric{}, err
 	}
 	id, err := utilities.NewID()
 	if err != nil {

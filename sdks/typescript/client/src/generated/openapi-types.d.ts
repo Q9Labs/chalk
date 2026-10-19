@@ -1791,6 +1791,11 @@ export interface components {
       pagination: components["schemas"]["Pagination"];
       tenants: components["schemas"]["Tenant"][];
     };
+    /**
+     * @description HTTP 409 tenant media admission errors. Recording starts use the private Sync provider bridge; live Episode creation uses the public API.
+     * @enum {string}
+     */
+    TenantMediaLimitCode: "tenant.recording_limit_reached" | "tenant.live_episode_limit_reached";
     Transcript: {
       artifact_content_type?: string | null;
       artifact_size?: number | null;

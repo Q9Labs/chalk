@@ -5,12 +5,12 @@ import type { CallOutcome } from "./StatusPage";
 export type CallScreen = { readonly kind: "call" } | { readonly kind: "joining" } | { readonly kind: "reconnecting" } | { readonly kind: "status"; readonly outcome: CallOutcome };
 
 /**
- * Reads the screen from the connection. `leftByChoice` is true once the person pressed Leave or
- * End: the server ends a removed person's connection the same way, so a leave nobody asked for
- * means the host removed them.
+ * Reads the screen from the connection. `leftByChoice` is true from the moment the person presses
+ * Leave or End until they join again, so a leave whose call failed still reads as their choice.
+ * Only the server's own removal signal shows "removed"; any other exit nobody chose is `exited`.
  */
 export function callScreen(connection: ConnectionSlice, leftByChoice: boolean): CallScreen {
-  if (connection.lastError?.code === "episode.ended") return { kind: "status", outcome: "ended" };
+  if (connection.episodeEnded || connection.lastError?.code === "episode.ended") return { kind: "status", outcome: "ended" };
   switch (connection.status) {
     case "idle":
     case "joining":
@@ -21,7 +21,8 @@ export function callScreen(connection: ConnectionSlice, leftByChoice: boolean): 
     case "leaving":
       return { kind: "call" };
     case "left":
-      return { kind: "status", outcome: leftByChoice ? "left" : "removed" };
+      if (leftByChoice) return { kind: "status", outcome: "left" };
+      return { kind: "status", outcome: connection.removedByHost ? "removed" : "exited" };
     case "failed":
       return { kind: "status", outcome: "failed" };
   }

@@ -31,7 +31,10 @@ func Presign(ctx context.Context, archive recorderfleet.ArchiveSpec, startupTime
 	if credentials.CanExpire && time.Until(credentials.Expires) < lifetime {
 		return "", fmt.Errorf("recorder archive signing identity expires before startup deadline")
 	}
-	client := s3.NewPresignClient(s3.NewFromConfig(config))
+	// The default checksum mode becomes a signed header, which the bare link cannot carry; the installer checks SHA256 itself.
+	client := s3.NewPresignClient(s3.NewFromConfig(config, func(options *s3.Options) {
+		options.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
+	}))
 	request, err := client.PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(archive.Bucket), Key: aws.String(archive.Key),
 	}, s3.WithPresignExpires(lifetime))

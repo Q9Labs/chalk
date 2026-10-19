@@ -5,7 +5,7 @@
   "android": {
     "package_name": "ai.q9labs.chalk.mobile",
     "version_name": "3.0.0",
-    "version_code": 32,
+    "version_code": 34,
     "signing_item_id": "lf5l4ocenblm3n6swnbxjcsfya",
     "keystore_sha256": "5fc23399a308b8960236c13c046dd64f43569df04742e5fd0b0e82210cd622ef",
     "certificate_sha256": "70:57:9D:12:D1:8E:8E:4C:82:44:BA:6C:28:C1:05:10:64:4B:EA:83:9F:E1:06:3F:85:E6:46:15:16:05:BD:EE"

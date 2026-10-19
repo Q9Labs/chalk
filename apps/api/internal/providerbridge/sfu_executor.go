@@ -10,6 +10,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
+	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
 )
 
 type TrackCloser interface {
@@ -217,6 +218,8 @@ func providerExecutionFailure(err error) ExecutionResult {
 
 func recordingExecutionFailure(err error) ExecutionResult {
 	switch {
+	case errors.Is(err, tenantlimits.ErrRecordingLimitReached):
+		return ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: tenantlimits.RecordingLimitReason}
 	case errors.Is(err, provideroperations.ErrInvalidRecordingReservation),
 		errors.Is(err, provideroperations.ErrInvalidOperationID):
 		return ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "recording_invalid_envelope"}
