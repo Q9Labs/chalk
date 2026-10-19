@@ -40,6 +40,9 @@ type TileModel = {
   readonly back: boolean;
 };
 
+/** Below this width your own tile reads "You", because "<name> (You)" leaves no room for the name. */
+const SELF_NAME_MIN_WIDTH = 120;
+
 function selectTile(id: string) {
   return (snapshot: SpaceSnapshot): TileModel => {
     const participant = snapshot.participants.roster.find((person) => person.participantId === id);
@@ -74,8 +77,9 @@ export const ParticipantTile = memo(function ParticipantTile({ id, width, height
 
   const streamURL = useMemo(() => (tile.track ? createNativeMediaStream(tile.track).toURL() : null), [tile.track]);
   const video = tileVideo(slot, streamURL, tile.isSelf && !tile.back && mirror);
-  const name = tile.isSelf && float ? "You" : tile.name;
-  const you = tile.isSelf && !float;
+  const youOnly = tile.isSelf && (float || width < SELF_NAME_MIN_WIDTH);
+  const name = youOnly ? "You" : tile.name;
+  const you = tile.isSelf && !youOnly;
   const state = `${tile.muted ? ", microphone off" : ""}${tile.handRaised ? ", hand raised" : ""}`;
   const hitRef = useMeasuredRef<View>(`tile.${id}.open`, StyleSheet.absoluteFill);
   const label = `Options for ${tile.name}${tile.isSelf ? " (you)" : ""}${pinned ? ", pinned" : ""}${state}`;
