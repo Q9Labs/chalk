@@ -54,8 +54,12 @@ jobs:
           bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")
           (xcrun simctl spawn "$udid" log stream --level debug --style compact --predicate 'process == "Chalk" OR subsystem CONTAINS "facebook" OR eventMessage CONTAINS[c] "Chalk"' > "$out/log-stream.txt" 2>&1 &)
           sleep 3
-          timeout 40 xcrun simctl launch --console-pty "$udid" "$bundle_id" > "$out/console.txt" 2>&1 || echo "launch exit $?"
-          sleep 5
+          xcrun simctl launch "$udid" "$bundle_id" | tee "$out/console.txt"
+          pid=$(awk '{print $NF}' "$out/console.txt")
+          sleep 10
+          xcrun simctl io "$udid" screenshot "$out/screen-10s.png"
+          sleep 30
+          if kill -0 "$pid" 2>/dev/null; then echo "ALIVE pid $pid after 40 s" | tee "$out/alive.txt"; else echo "DEAD pid $pid" | tee "$out/alive.txt"; fi
           xcrun simctl spawn "$udid" launchctl list | grep -i "$bundle_id" | tee "$out/running.txt" || echo "NOT RUNNING" | tee "$out/running.txt"
           xcrun simctl io "$udid" screenshot "$out/screen.png"
           xcrun simctl spawn "$udid" log show --last 3m --style compact --predicate 'process == "Chalk"' > "$out/log-show.txt" 2>&1 || true
