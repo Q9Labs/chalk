@@ -311,6 +311,7 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
       await page.waitForTimeout(350);
       await page.locator("[data-perf-recover]").dispatchEvent("click");
       await page.locator('[data-call-limbo][data-covered="false"][aria-hidden="true"]').waitFor({ state: "attached" });
+      await page.mouse.move(device.viewport.width / 2, device.viewport.height / 2);
       await page.getByRole("button", { name: "Leave call", exact: true }).click({ trial: true });
     }
     await page.waitForTimeout(budgets.sampleMs);
