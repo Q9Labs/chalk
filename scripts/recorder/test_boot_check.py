@@ -2,6 +2,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
 import tempfile
 import unittest
@@ -58,12 +59,59 @@ class BootCheckTests(unittest.TestCase):
             failure = json.loads((directory / 'cleanup-failed.json').read_text())
             self.assertEqual(len(failure['errors']), 3)
             self.assertIn('evidence objects', failure['errors'][0])
-            self.assertIn('ListObjectVersions: AccessDenied', failure['errors'][0])
+            self.assertIn('CommandError: exit=1', failure['errors'][0])
             self.assertNotIn('PRIVATE', json.dumps(failure))
             receipt = boot.cleanup_receipt(directory, 1)
             self.assertFalse(receipt['cleanup_confirmed'])
             self.assertEqual(receipt['cleanup_errors'], failure['errors'])
             self.assertIn('cleanup failed', receipt['reason'])
+
+    def test_subprocess_errors_never_leak_into_receipt_or_watchdog_history(self):
+        from unittest.mock import Mock
+
+        private_bucket = 'fake-private-bucket-sentinel'
+        private_args = 'fake-private-aws-args-sentinel'
+        command = ['aws', 's3api', 'list-object-versions', '--bucket', private_bucket, private_args]
+        failures = [subprocess.TimeoutExpired(command, 60, output=private_bucket, stderr=private_args),
+                    subprocess.CalledProcessError(23, command, output=private_bucket, stderr=private_args)]
+        for error in failures:
+            with self.subTest(error=type(error).__name__), tempfile.TemporaryDirectory() as directory:
+                directory = Path(directory)
+                boot.append(directory, dict(name='owned', deadline=0, evidence_bucket=private_bucket,
+                                            evidence_key='bootdiag/owned/guest.json'))
+                provider = Mock()
+                provider.aws.side_effect = error
+                with patch.object(boot, 'Services', return_value=provider):
+                    with self.assertRaisesRegex(RuntimeError, 'cleanup unproved'):
+                        boot.watchdog(directory)
+                receipt = boot.cleanup_receipt(directory, 1)
+                serialized = json.dumps(receipt)
+                history = [json.loads(line)['cleanup_error']
+                           for line in (directory / 'ledger.jsonl').read_text().splitlines()
+                           if 'cleanup_error' in json.loads(line)]
+                for value in (serialized, json.dumps(history), (directory / 'cleanup-failed.json').read_text()):
+                    self.assertNotIn(private_bucket, value)
+                    self.assertNotIn(private_args, value)
+                    self.assertNotIn(str(command), value)
+                self.assertIn('evidence objects', serialized)
+                self.assertIn(type(error).__name__, serialized)
+                self.assertIn('timeout=60' if isinstance(error, subprocess.TimeoutExpired) else 'exit=23', serialized)
+
+    def test_watchdog_timeout_preserves_original_boot_reason(self):
+        from unittest.mock import Mock
+
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            guard = Mock(returncode=None)
+            guard.wait.side_effect = subprocess.TimeoutExpired(['private-watchdog-command'], 150)
+            for original in ({'reason': 'original boot failure'}, {}):
+                with self.subTest(original=original):
+                    result = dict(original)
+                    boot.finish_cleanup(directory, guard, result)
+                    self.assertFalse(result['cleanup_confirmed'])
+                    self.assertEqual(result['cleanup_errors'], [])
+                    self.assertEqual(result['reason'], original.get('reason',
+                        'cleanup watchdog has not completed; retains resource ownership'))
 
     def test_cleanup_receipt_never_confirms_missing_or_failed_watchdog(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -280,7 +328,7 @@ class BootCheckTests(unittest.TestCase):
             boot.append(directory, {'bootstrap': {'provider_id': '1'}})
             (directory / 'ssh-key').write_text('task secret')
             provider = Provider()
-            with self.assertRaisesRegex(RuntimeError, 'issuer unavailable'):
+            with self.assertRaisesRegex(RuntimeError, 'registration revocation: RuntimeError'):
                 boot.cleanup(provider, directory)
             self.assertTrue(provider.deleted)
             self.assertFalse((directory / 'ssh-key').exists())
@@ -314,7 +362,7 @@ class BootCheckTests(unittest.TestCase):
             boot.append(directory, dict(node_id=1, name='owned', tags=['owned'], started_at=0, firewall_intent=True))
             (directory / 'ssh-key').write_text('task secret')
             provider = Provider()
-            with self.assertRaisesRegex(RuntimeError, 'firewall listing unavailable'):
+            with self.assertRaisesRegex(RuntimeError, 'recover firewall_id: RuntimeError'):
                 boot.cleanup(provider, directory)
             self.assertTrue(provider.deleted)
             self.assertFalse((directory / 'ssh-key').exists())
