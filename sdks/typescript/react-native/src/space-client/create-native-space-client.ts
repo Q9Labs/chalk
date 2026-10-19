@@ -17,6 +17,7 @@ import type { SpaceClient } from "@q9labsai/chalk-client";
 import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc";
 import { AppState } from "react-native";
 import { toNativeCaptureError } from "../media/native-capture-error";
+import { ensureRandomUUID } from "./random-uuid";
 type PlatformDependencies = NonNullable<SpaceClientPlatform["dependencies"]>;
 type NativeMediaClient = ReturnType<NonNullable<PlatformDependencies["createMediaClient"]>>;
 type MediaFactoryInput = Parameters<NonNullable<PlatformDependencies["createMediaClient"]>>[0];
@@ -35,6 +36,7 @@ export type NativeSpaceClientOptions = {
   readonly storage?: ReactNativeAsyncStorage;
 };
 export function createNativeSpaceClient(options: NativeSpaceClientOptions): SpaceClient {
+  ensureRandomUUID();
   const { storage } = options;
   const apiBaseURL = options.baseUrl ?? "https://api.chalkmeet.com";
   const syncURL = options.syncUrl ?? defaultSyncURL(apiBaseURL);
