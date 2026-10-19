@@ -314,7 +314,7 @@ export async function transcriptProof(run, receiver) {
     async () => {
       const state = await run.apiRequest("GET", `${run.tenantPath}/transcripts/${transcript.id}`);
       await save(`${run.directory}/transcript-state.json`, state);
-      check(!["failed", "deleted", "expired"].includes(state.status), `Transcript ${state.status}`);
+      check(!["failed", "terminal_failure", "deleted", "expired"].includes(state.status), `Transcript ${state.status}`);
       return state.status === "complete";
     },
     240_000,

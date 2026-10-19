@@ -99,7 +99,7 @@ function optionalFinite(value: unknown, label: string): number | undefined {
 }
 
 function parseSegments(value: unknown, max: number, maxTextChars: number, maxAudioSeconds: number, onTimingRepair: ProviderRequest["onTimingRepair"]): ProviderSegment[] {
-  if (!Array.isArray(value) || value.length === 0 || value.length > max) throw providerSchemaError("provider timings are required", "segments", "nonempty bounded array", value);
+  if (!Array.isArray(value) || value.length > max) throw providerSchemaError("provider timings are required", "segments", "bounded array", value);
   const segments: ProviderSegment[] = [];
   for (const [index, item] of value.entries()) {
     const row = object(item, `segments[${index}]`);
@@ -179,6 +179,9 @@ export function parseProviderResult(
   const text = string(row.text, "text", options.maxTextChars);
   const segments = parseSegments(row.segments, options.maxSegments, options.maxTextChars, options.maxAudioSeconds, options.onTimingRepair);
   const words = parseWords(row.words, options.maxWords, options.maxTextChars);
+  if (segments.length === 0 && (text.trim().length > 0 || (words?.length ?? 0) > 0)) {
+    throw providerSchemaError("provider content requires segment timings", "segments", "nonempty array when transcript content is present", row.segments);
+  }
   const durationSeconds = optionalFinite(row.duration, "duration");
   if (durationSeconds !== undefined && durationSeconds > options.maxAudioSeconds) throw providerSchemaError("provider duration exceeded bound", "duration", "bounded audio seconds", row.duration);
   for (const [index, word] of (words ?? []).entries()) {
