@@ -291,8 +291,19 @@ export function bindFixtureSyncClient(client: FixtureSyncClient) {
 }
 
 function dispatchServerMessage(handlers: ServerMessageHandlers, message: ServerMessage): void {
-  const handler = handlers[message.type] as (value: ServerMessage) => void;
-  handler(message);
+  const allowedHandlers = new Map<string, ServerMessageHandlers[ServerMessage["type"]]>([
+    ["state", handlers.state],
+    ["ack", handlers.ack],
+    ["collaboration_event", handlers.collaboration_event],
+    ["collaboration_result", handlers.collaboration_result],
+    ["directed_request", handlers.directed_request],
+    ["directed_request_result", handlers.directed_request_result],
+    ["peers", handlers.peers],
+    ["signal", handlers.signal],
+    ["force_failure", handlers.force_failure],
+  ]);
+  const handler = allowedHandlers.get(message.type) as ((value: ServerMessage) => void) | undefined;
+  handler?.(message);
 }
 
 function resolvePending<T>(pendingRequests: Map<string, PendingRequest<T>>, id: string, value: T): void {

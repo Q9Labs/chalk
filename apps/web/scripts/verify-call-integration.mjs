@@ -73,10 +73,11 @@ try {
         await linkTrigger.click();
         await page.getByRole("dialog", { name: "Call details", exact: true }).getByRole("button", { name: "Show call link", exact: true }).click();
       } else await linkTrigger.click();
-      await page.getByRole("heading", { name: "Your call is ready", exact: true }).waitFor();
+      const readyTitle = page.getByRole("region", { name: "Your call is ready", exact: true }).getByRole("heading", { name: "Your call is ready", exact: true });
+      await readyTitle.waitFor();
       assert.equal(await page.locator('[data-part="ready-link"]').innerText(), "example.com/invite/test-call");
       await page.getByRole("button", { name: "Close call link", exact: true }).click();
-      await page.getByRole("heading", { name: "Your call is ready", exact: true }).waitFor({ state: "hidden" });
+      await readyTitle.waitFor({ state: "hidden" });
       const returned = device === "phone" ? linkTrigger : page.getByRole("button", { name: "Show call link", exact: true });
       assert.equal(await returned.evaluate((element) => element === document.activeElement), true, `${device}: closing the call link returns focus`);
       await page.mouse.move(40, 100);
@@ -97,7 +98,7 @@ try {
       assert.equal(await video.evaluate((element) => element.isConnected), true, "card refits preserve the video element");
       if (out) await page.screenshot({ path: resolve(out, `${device}-after.png`) });
       await page.getByRole("tab", { name: "Chat", exact: true }).click();
-      assert.equal(await page.getByRole("tab", { name: "Chat", exact: true }).getAttribute("aria-selected"), "true");
+      await page.waitForFunction(() => document.querySelector('[data-card-tab="chat"]')?.getAttribute("aria-selected") === "true");
       await page.getByRole("button", { name: "Close panel", exact: true }).click();
       await people.waitFor({ state: "hidden" });
       await page.getByRole("button", { name: "Turn on camera", exact: true }).click();

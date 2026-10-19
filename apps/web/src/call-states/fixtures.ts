@@ -177,8 +177,6 @@ function boardTransport(present: (presenting: boolean) => void): ChalkWhiteboard
     setDrawPermission: async () => undefined,
     setPresentation: async (presenting) => present(presenting),
     files: {
-      initiateUpload: async () => ({ uploadId: "u1", method: "PUT", uploadUrl: "about:blank", headers: {}, expiresAt: new Date(Date.now() + 60_000).toISOString() }),
-      finalizeUpload: async () => undefined,
       getDownloadUrl: async () => ({ downloadUrl: "about:blank", expiresAt: new Date(Date.now() + 60_000).toISOString() }),
     },
   };

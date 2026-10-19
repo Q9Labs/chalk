@@ -6,7 +6,8 @@ export default mergeConfig(
   defineConfig({
     test: {
       exclude: configDefaults.exclude,
-      maxWorkers: 2,
+      // Call journeys each own the same strict-port browser harness.
+      maxWorkers: 1,
     },
   }),
 );

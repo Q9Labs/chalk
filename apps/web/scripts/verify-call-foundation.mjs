@@ -67,7 +67,7 @@ try {
     await page.getByRole("button", { name: "More options", exact: true }).click();
     await page.getByRole("button", { name: "People", exact: true }).click();
   }
-  const people = page.getByRole("complementary", { name: "Participants list", exact: true });
+  const people = page.getByRole("region", { name: "People", exact: true });
   await people.waitFor();
   for (const name of ["Camera 1", "Camera 12", "Camera 23"]) {
     const person = people.getByText(name, { exact: true });

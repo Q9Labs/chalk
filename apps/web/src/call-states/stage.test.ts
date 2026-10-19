@@ -3,6 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
+import { assertHarnessPortAvailable } from "./browser-harness";
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -15,11 +16,7 @@ const stopServer = () => {
   if (server?.pid && server.exitCode === null) process.kill(-server.pid, "SIGTERM");
 };
 beforeAll(async () => {
-  const occupied = await fetch(origin, { signal: AbortSignal.timeout(1000) }).then(
-    () => true,
-    () => false,
-  );
-  if (occupied) throw new Error(`Stage harness port occupied: ${origin}`);
+  await assertHarnessPortAvailable(origin, "Stage");
   server = spawn("pnpm", ["exec", "vite", "--config", "vite.call-states.config.ts", "--port", "3098", "--strictPort"], { cwd: resolve(import.meta.dirname, "../.."), detached: true, stdio: "ignore" });
   deadline = setTimeout(stopServer, 360_000);
   for (let attempt = 0; attempt < 150; attempt += 1) {

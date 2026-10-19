@@ -18,7 +18,7 @@ const gateDefinitionNames = new Set([".dependency-cruiser.cjs", ".fallowrc.json"
 const gateDefinitionDirectories = [".github/workflows/", "scripts/gates/"];
 const dependencyFields = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
 // Their tests drive a real browser, so CI runs them in their own job with the browser installed.
-const browserTestWorkspaceNames = new Set(["@chalk/sdk-web-consumer-e2e"]);
+const browserTestWorkspaceNames = new Set(["web", "@chalk/sdk-web-consumer-e2e"]);
 const targetRoots = {
   web: ["web", "@q9labsai/chalk-react", "@chalk/sdk-web-consumer-e2e"],
   mobile: ["@q9labsai/chalk-mobile", "@q9labsai/chalk-react-native"],
