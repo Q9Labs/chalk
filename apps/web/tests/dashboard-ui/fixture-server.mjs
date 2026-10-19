@@ -1,5 +1,5 @@
 // Dev-only stand-in for the dashboard's Pages Functions, so the browser half can be driven
-// without WorkOS or the engine. It answers /auth/* and /dashboard-api/* with the contract's DTO
+// without external identity providers or the engine. It answers /auth/* and /dashboard-api/* with the contract's DTO
 // shapes, proxies everything else (and Vite's HMR socket) to the Vite dev server, and records
 // every request for the browser checks. It lives outside src/, so no build can bundle it.
 //
@@ -180,17 +180,13 @@ async function auth(request, response, path, url) {
   const account = cookies(request).fx_session;
   if (path === "/auth/session") {
     if (!account) return fail(response, 401, "sign_in_required");
-    if (state.expire) return send(response, 401, { error: { code: "refresh_or_sign_in_required" }, csrfToken: csrfFor(account) });
+    if (state.expire) return fail(response, 401, "sign_in_required");
     return send(response, 200, { profile: PROFILES[account], csrfToken: csrfFor(account) });
   }
   if (request.method !== "POST") return fail(response, 405, "method_not_allowed");
   if (request.headers.origin !== ORIGIN) return fail(response, 403, "origin_rejected");
   if (!account) return fail(response, 401, "sign_in_required");
   if (request.headers["x-csrf-token"] !== csrfFor(account)) return fail(response, 403, "csrf_rejected");
-  if (path === "/auth/refresh") {
-    state.expire = false;
-    return send(response, 200, { profile: PROFILES[account], csrfToken: csrfFor(account) });
-  }
   if (path === "/auth/sign-out") {
     response.writeHead(200, { "Content-Type": "application/json", "Set-Cookie": "fx_session=; Path=/; Max-Age=0" });
     response.end(JSON.stringify({ ok: true, clearLocalBookmarks: true }));
@@ -203,7 +199,7 @@ async function dashboard(request, response, page, url, entry) {
   const account = cookies(request).fx_session;
   if (request.method === "POST" && request.headers.origin !== ORIGIN) return fail(response, 403, "origin_rejected");
   if (!account) return fail(response, 401, "sign_in_required");
-  if (state.expire) return fail(response, 401, "refresh_or_sign_in_required");
+  if (state.expire) return fail(response, 401, "sign_in_required");
   if (request.method === "POST" && request.headers["x-csrf-token"] !== csrfFor(account)) return fail(response, 403, "csrf_rejected");
   const data = accounts[account];
   if (request.method === "GET") {

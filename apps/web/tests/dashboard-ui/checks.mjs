@@ -177,12 +177,13 @@ try {
     check("every POST carries the CSRF token and Origin", posts.length >= 2 && posts.every((entry) => entry.csrf === "fixture-csrf-hasan" && entry.origin === origin), posts.map((entry) => `${entry.path}:${entry.csrf}`).join(", "));
     await context.close();
   }
-  // Refresh and retry: an expired session refreshes once, then the page loads.
+  // An expired sealed session requires a fresh sign-in, without refresh or read retries.
   {
     const { tab, context } = await open("/dashboard", { set: "expire=1" });
     const log = await fixture("log");
     const refreshes = log.filter((entry) => entry.path === "/auth/refresh").length;
-    check("expired session refreshes once and the page loads", refreshes === 1 && (await tab.getByText("Q9 team").count()) >= 1, `refreshes=${refreshes}`);
+    const reads = log.filter((entry) => entry.path === "/dashboard-api/home").length;
+    check("expired session returns to sign-in without refresh or retry", refreshes === 0 && reads <= 1 && new URL(tab.url()).pathname === "/dashboard/sign-in" && (await tab.getByRole("button", { name: "Continue with Google" }).count()) === 1, `refreshes=${refreshes} reads=${reads} path=${new URL(tab.url()).pathname}`);
     await context.close();
   }
   // Error and rate-limit messages.
