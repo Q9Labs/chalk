@@ -182,6 +182,11 @@ Process.sleep(:infinity)
     await page.screenshot({ path: resolve(repository, "artifacts/dashboard-owner-in-call.png") });
     const spaceId = new URL(page.url()).pathname.split("/").at(-2);
     const joinUrl = page.url();
+    async function leaveCall(tab) {
+      await tab.getByRole("button", { name: "Leave call", exact: true }).click();
+      await tab.getByRole("menuitem", { name: "Leave call", exact: true }).click();
+      await tab.waitForURL(`${origin}/dashboard/call/${spaceId}`);
+    }
     async function liveParticipants(expected) {
       let live;
       for (let attempt = 0; attempt < 100; attempt++) {
@@ -224,7 +229,7 @@ Process.sleep(:infinity)
         independent.participants.some((participant) => participant.participant_id !== firstSeat),
         "A separate tab must get its own seat",
       );
-      await otherTab.getByRole("button", { name: "Leave call", exact: true }).click();
+      await leaveCall(otherTab);
       await liveParticipants(1);
     } finally {
       await otherTab.close();
@@ -232,23 +237,20 @@ Process.sleep(:infinity)
     // An already-written reload marker must not survive an intentional leave.
     await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
     assert(await page.evaluate(() => sessionStorage.getItem("chalk.reload-rejoin")), "Pagehide must synchronously save the reload marker");
-    await page.getByRole("button", { name: "Leave call", exact: true }).click();
-    await page.waitForURL(`${origin}/dashboard/call/${spaceId}`);
+    await leaveCall(page);
     assert.equal(await page.evaluate(() => sessionStorage.getItem("chalk.reload-rejoin")), null, "Intentional leave clears the reload marker");
     await liveParticipants(0);
     await page.goto(joinUrl);
     await page.locator('[data-tour="video-grid"]').first().waitFor({ state: "visible", timeout: 45000 });
     const afterRejoin = await liveParticipants(1);
     assert.notEqual(afterRejoin.participants[0].participant_id, firstSeat, "Deliberate leave then rejoin must create a new owner seat");
-    await page.getByRole("button", { name: "Leave call", exact: true }).click();
+    await leaveCall(page);
     await liveParticipants(0);
     console.log("PASS: real dashboard create → real Sync → canonical invite displayed/copied → reload resumes one exact owner seat → independent tab gets separate seat → leave clears roster → deliberate rejoin gets new seat → no orphan (devices denied)");
   } catch (error) {
     await writeFile(resolve(repository, "artifacts/dashboard-join-failure.log"), JSON.stringify({ body: await page.locator("body").innerText(), sockets, sync: syncLog.join(""), pages: pagesLog.join("") }));
     throw error;
   }
-  const leave = page.getByRole("button", { name: "Leave call", exact: true });
-  if (await leave.isVisible()) await leave.click();
 } finally {
   await cleanup();
 }
