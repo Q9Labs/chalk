@@ -2,6 +2,7 @@
 """Install a verified recorder archive before identity bootstrap. No build tools."""
 import base64
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path
@@ -15,10 +16,61 @@ import tempfile
 import time
 import urllib.request
 import urllib.parse
+import urllib.error
 
 
 class ArchiveInstallError(Exception):
     pass
+
+
+def download_archive(url, bundle):
+    started = time.monotonic()
+    deadline = started + 240
+    for attempt in range(1, 4):
+        digest = hashlib.sha256()
+        size = 0
+        status = 0
+        retry = True
+        reason = 'deadline'
+        try:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError()
+            with urllib.request.urlopen(url, timeout=min(30, remaining)) as response, bundle.open('wb') as output:
+                while chunk := response.read(1024 * 1024):
+                    size += len(chunk)
+                    if size > 2 * 1024**3:
+                        reason, retry = 'size_limit', False
+                        break
+                    if time.monotonic() >= deadline:
+                        reason, retry = 'deadline', False
+                        break
+                    digest.update(chunk)
+                    output.write(chunk)
+                else:
+                    length = response.headers.get('Content-Length')
+                    reason = 'completed' if length is None or size == int(length) else 'incomplete'
+        except urllib.error.HTTPError as error:
+            status, reason = error.code, 'http_error'
+            retry = status in (408, 429, 500, 502, 503, 504)
+            error.close()
+        except TimeoutError:
+            reason = 'timeout'
+        except http.client.IncompleteRead:
+            reason = 'incomplete'
+        except (urllib.error.URLError, ConnectionError):
+            reason = 'transport_error'
+        print(json.dumps(dict(event='recorder_archive_download', attempt=attempt, reason_code=reason,
+                              http_status=status, bytes_received=size,
+                              elapsed_seconds=round(time.monotonic() - started, 3))), flush=True)
+        if reason == 'completed':
+            return digest.hexdigest()
+        remaining = deadline - time.monotonic()
+        if not retry or attempt == 3 or remaining <= 0:
+            break
+        time.sleep(min(attempt, remaining))
+    # Never include the bearer URL or exception text in logs or diagnostics.
+    raise ArchiveInstallError('archive_download_failed')
 
 
 def select_release(release, target, digest):
@@ -116,21 +168,8 @@ def install(config, root=Path('/opt/chalk-recorder')):
     with tempfile.TemporaryDirectory(prefix='.archive-', dir=releases) as temporary:
         stage = Path(temporary)
         bundle = stage / 'archive.tar.gz'
-        digest = hashlib.sha256()
-        deadline = time.monotonic() + 240
-        size = 0
-        # Keep the bearer URL out of exception messages and cloud-init logs.
-        try:
-            with urllib.request.urlopen(config['url'], timeout=30) as response, bundle.open('xb') as output:
-                while chunk := response.read(1024 * 1024):
-                    size += len(chunk)
-                    if size > 2 * 1024**3 or time.monotonic() > deadline:
-                        raise ValueError('archive download exceeded its limit')
-                    digest.update(chunk)
-                    output.write(chunk)
-        except Exception:
-            raise ArchiveInstallError('archive_download_failed') from None
-        if digest.hexdigest() != config['sha256']:
+        digest = download_archive(config['url'], bundle)
+        if digest != config['sha256']:
             raise ArchiveInstallError('archive_verification_failed')
         try:
             with tarfile.open(bundle) as archive:

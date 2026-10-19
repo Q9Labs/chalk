@@ -356,6 +356,47 @@ def installed_boot(installed):
             and all(path in files for path in ("/etc/chalk-recorder/worker.env", "/etc/chalk-recorder/node.env")))
 
 
+def boot_diagnosis(installed, evidence):
+    # Guest logs and issuer fields can contain credentials: emit only known codes and bounded numbers.
+    installed, evidence = installed or {}, evidence or {}
+    cloud = installed.get("commands", {}).get("cloud_init", {})
+    status = next((line[8:] for line in cloud.get("stdout", "").splitlines()
+                   if line in ("status: done", "status: running", "status: error", "status: disabled")), "unavailable")
+    exit_status = cloud.get("status")
+    diagnosis = {"cloud_init_status": status,
+                 "cloud_init_exit_status": exit_status if exit_status in (0, 1, 2, "TIMEOUT", "UNAVAILABLE") else "UNKNOWN",
+                 "missing_files": [path for path in ("/etc/chalk-recorder/worker.env", "/etc/chalk-recorder/node.env")
+                                   if path not in installed.get("files", {})]}
+    output = installed.get("files", {}).get("/var/log/cloud-init-output.log", {}).get("content", "")
+    reasons = ("archive_download_failed", "archive_verification_failed", "archive_extraction_failed", "archive_install_failed")
+    failures = re.findall(r"recorder archive installation failed: (archive_[a-z_]+)", output)
+    if failures and failures[-1] in reasons:
+        diagnosis["archive_failure"] = failures[-1]
+    cloud_log = installed.get("files", {}).get("/var/log/cloud-init.log", {}).get("content", "")
+    diagnosis["failed_modules"] = [module for module in ("scripts_user", "write_files", "package_update_upgrade_install")
+                                   if "Failed to run module " + module + " " in cloud_log]
+    diagnostic = (evidence.get("record") or {}).get("bootstrap_diagnostic") or {}
+    if diagnostic.get("step") == "install" and diagnostic.get("last_reason_code") in reasons:
+        diagnosis["issuer_archive_failure"] = diagnostic["last_reason_code"]
+    downloads = []
+    for line in output.splitlines():
+        if not line.startswith('{'):
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict) or event.get("event") != "recorder_archive_download":
+            continue
+        if event.get("reason_code") not in ("completed", "http_error", "timeout", "transport_error", "incomplete", "deadline", "size_limit"):
+            continue
+        limits = {"attempt": 3, "http_status": 599, "bytes_received": 2 * 1024**3 + 1024**2, "elapsed_seconds": 2700}
+        if all(type(event.get(key)) in (int, float) and 0 <= event[key] <= limit for key, limit in limits.items()):
+            downloads.append({key: event[key] for key in ("reason_code", *limits)})
+    diagnosis["archive_downloads"] = downloads[-3:]
+    return diagnosis
+
+
 def assert_certificate_binding(request, bootstrap, evidence, installed):
     require(installed_boot(installed), "cold cloud-init/bootstrap installation did not complete")
     require(evidence.get("controller_response", {}).get("status") == 200, "controller did not confirm certificate delivery")
@@ -463,6 +504,7 @@ def run(request_path, receipt_path):
     else:
         raise RuntimeError("cleanup watchdog did not confirm liveness")
     result = {**request, "result": "FAIL", "fleet_equivalent_signed_boot": False, "evidence_directory": str(directory)}
+    installed = evidence = None
     try:
         evidence_command = None
         bucket = os.environ.get("CHALK_BOOT_CHECK_EVIDENCE_BUCKET")
@@ -574,6 +616,7 @@ def run(request_path, receipt_path):
     except Exception as error:
         result["reason"] = str(error)
     finally:
+        result["boot_diagnosis"] = boot_diagnosis(installed, evidence)
         (directory / "cleanup-requested").touch()
         try:
             guard.wait(timeout=150)

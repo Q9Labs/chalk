@@ -20,6 +20,27 @@ host = load('boot-check-host')
 
 
 class BootCheckTests(unittest.TestCase):
+    def test_failure_diagnosis_retains_cloud_init_and_archive_codes_not_log_secrets(self):
+        installed = {'commands': {'cloud_init': {'status': 1, 'stdout': 'status: error\nerrors: [SECRET]'}},
+                     'files': {'/var/log/cloud-init.log': {'content': 'Failed to run module scripts_user (SECRET)'},
+                               '/var/log/cloud-init-output.log': {'content': '\n'.join([
+                                   'SECRET https://example.test/?token=SECRET',
+                                   'recorder archive installation failed: archive_download_failed',
+                                   json.dumps(dict(event='recorder_archive_download', attempt=3, reason_code='timeout',
+                                                   http_status=0, bytes_received=42, elapsed_seconds=91, url='SECRET'))])}}}
+        evidence = {'record': {'bootstrap_diagnostic': {'step': 'install', 'last_reason_code': 'archive_download_failed',
+                                                       'detail': 'SECRET'}}}
+        diagnosis = boot.boot_diagnosis(installed, evidence)
+        self.assertEqual(diagnosis['cloud_init_status'], 'error')
+        self.assertEqual(diagnosis['cloud_init_exit_status'], 1)
+        self.assertEqual(diagnosis['failed_modules'], ['scripts_user'])
+        self.assertEqual(diagnosis['issuer_archive_failure'], 'archive_download_failed')
+        self.assertEqual(diagnosis['archive_failure'], 'archive_download_failed')
+        self.assertEqual(diagnosis['missing_files'], ['/etc/chalk-recorder/worker.env', '/etc/chalk-recorder/node.env'])
+        self.assertEqual(diagnosis['archive_downloads'][0]['bytes_received'], 42)
+        self.assertNotIn('SECRET', json.dumps(diagnosis))
+        self.assertEqual(boot.boot_diagnosis(None, evidence)['issuer_archive_failure'], 'archive_download_failed')
+
     def test_host_actions_run_as_the_configured_runtime_user(self):
         import base64
         import os
