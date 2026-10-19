@@ -25,11 +25,12 @@ let wrongKey: CryptoKeyPair;
 let jwksUrl: string;
 let publicKey: JsonWebKey;
 const jwksRequests = new Map<string, number>();
-const fixtures = new Map<string, { body: string; cacheControl: string; status?: number }>();
+const fixtures = new Map<string, { body: string; cacheControl: string; age?: number; status?: number }>();
 const server = createServer((request, response) => {
   const path = request.url ?? "/jwks";
   jwksRequests.set(path, (jwksRequests.get(path) ?? 0) + 1);
   const fixture = fixtures.get(path);
+  if (fixture?.age !== undefined) response.setHeader("Age", fixture.age);
   response.writeHead(fixture?.status ?? 200, { "Content-Type": "application/json", "Cache-Control": fixture?.cacheControl ?? "max-age=300" });
   const body = fixture?.body ?? JSON.stringify({ keys: [{ ...publicKey, kid: "fixture-key", alg: "RS256", use: "sig" }] });
   // Chunked responses exercise the stream limit without Content-Length.
@@ -157,6 +158,27 @@ it.each(["max-age=2", "max-age=7200", "no-store", "no-cache", "max-age=0"])("hon
       await verify(await token("issuer"));
       expect(jwksRequests.get(path)).toBe(2);
     }
+  } finally {
+    clock.mockRestore();
+  }
+});
+it("caps the remaining JWKS freshness after deducting Age", async () => {
+  const path = `/aged-${crypto.randomUUID()}`;
+  const jwks = new URL(path, jwksUrl).href;
+  fixtures.set(path, { body: JSON.stringify({ keys: [{ ...publicKey, kid: "fixture-key" }] }), cacheControl: "max-age=7200", age: 3600 });
+  const now = Date.now();
+  const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+  const verify = () => token("issuer").then((value) => verifyIdToken({ token: value, clientId: "client", nonce: "nonce", issuers: ["issuer"], jwks }));
+  try {
+    await verify();
+    await verify();
+    expect(jwksRequests.get(path)).toBe(1);
+    clock.mockReturnValue(now + 3599000);
+    await verify();
+    expect(jwksRequests.get(path)).toBe(1);
+    clock.mockReturnValue(now + 3600001);
+    await verify();
+    expect(jwksRequests.get(path)).toBe(2);
   } finally {
     clock.mockRestore();
   }

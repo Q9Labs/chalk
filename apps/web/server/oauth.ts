@@ -46,7 +46,7 @@ function cacheSeconds(headers: Headers): number {
   if (/(?:^|,)\s*(?:no-store|no-cache)(?:\s|=|,|$)/i.test(control)) return 0;
   const maxAge = /(?:^|,)\s*max-age\s*=\s*"?(\d+)"?/i.exec(control)?.[1];
   const age = Number(headers.get("Age") ?? 0);
-  return Math.max(0, Math.min(3600, maxAge === undefined ? 300 : Number(maxAge)) - (Number.isFinite(age) ? Math.max(0, age) : 0));
+  return Math.max(0, Math.min(3600, (maxAge === undefined ? 300 : Number(maxAge)) - (Number.isFinite(age) ? Math.max(0, age) : 0)));
 }
 async function providerText(response: Response): Promise<string> {
   if (!response.body) return "";
