@@ -136,6 +136,8 @@ build_dir=$(mktemp -d "$output_dir/.chalk-xcodebuild.XXXXXX")
 chmod 700 "$build_dir"
 archive_path="$build_dir/Chalk.xcarchive"
 archive_log="$build_dir/archive.log"
+# The Release archive bundles the JavaScript, and Metro resolves the workspace SDKs from their built dist.
+(cd "$repo_root" && pnpm --filter @q9labsai/chalk-mobile run prepare:native-dependencies)
 echo "Building Chalk's signed iOS archive."
 if ! xcodebuild \
   -workspace "$mobile_root/ios/Chalk.xcworkspace" \
