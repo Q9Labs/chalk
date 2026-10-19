@@ -60,6 +60,13 @@ load balancers or edge proxies allowed to supply `CF-Connecting-IP` or
 `X-Forwarded-For` for public-route rate limiting. Non-local environments use
 Redis-backed rate limiting through `CHALK_REDIS_URL`.
 
+For local harnesses, set `CHALK_API_RATE_LIMITS=off` with `CHALK_API_ENV=local`
+to disable only the authenticated read and write policies. Public-route and
+webhook policies remain enabled. `on` (the default when unset or empty) keeps
+all policies enabled. Values are case-insensitive and surrounding whitespace
+is ignored. Other values are rejected. Startup rejects `off` in every
+non-local environment. Do not use this switch to test rate-limit handling.
+
 ### Default MediaPlane
 
 `CHALK_DEFAULT_MEDIA_PLANE` selects the deployment-owned MediaPlane used when

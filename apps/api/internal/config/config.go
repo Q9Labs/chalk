@@ -21,6 +21,7 @@ const (
 	APIAddress            = "CHALK_API_ADDR"
 	APICORSAllowedOrigins = "CHALK_API_CORS_ALLOWED_ORIGINS"
 	APIEnvironment        = "CHALK_API_ENV"
+	APIRateLimits         = "CHALK_API_RATE_LIMITS"
 	APITrustedProxyCIDRs  = "CHALK_API_TRUSTED_PROXY_CIDRS"
 	APILogFormat          = "CHALK_API_LOG_FORMAT"
 	APILogLevel           = "CHALK_API_LOG_LEVEL"
@@ -128,10 +129,11 @@ const (
 )
 
 type APIConfig struct {
-	Address            string
-	CORSAllowedOrigins []string
-	LocalSystemToken   string
-	ServicePrincipal   authentication.ServiceCredential
+	DisableAuthenticatedRateLimits bool
+	Address                        string
+	CORSAllowedOrigins             []string
+	LocalSystemToken               string
+	ServicePrincipal               authentication.ServiceCredential
 
 	TrustedProxyCIDRs []string
 }
@@ -293,6 +295,13 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("deadline scheduler interval and batch must be greater than zero")
 	}
 	environment := envOrDefault(APIEnvironment, DefaultEnvironment)
+	rateLimits, err := envEnum(APIRateLimits, "on", "on", "off")
+	if err != nil {
+		return Config{}, err
+	}
+	if rateLimits == "off" && environment != DefaultEnvironment {
+		return Config{}, fmt.Errorf("%s=off is only allowed when %s=local", APIRateLimits, APIEnvironment)
+	}
 	databaseURL := envOrDefault(DatabaseURL, DefaultDatabaseURL)
 	if err := validateDatabaseURL(environment, databaseURL); err != nil {
 		return Config{}, err
@@ -455,10 +464,11 @@ func Load() (Config, error) {
 
 	return Config{
 		API: APIConfig{
-			Address:            envOrDefault(APIAddress, DefaultAPIAddress),
-			CORSAllowedOrigins: envList(APICORSAllowedOrigins),
-			LocalSystemToken:   localSystemToken,
-			ServicePrincipal:   servicePrincipal,
+			DisableAuthenticatedRateLimits: rateLimits == "off",
+			Address:                        envOrDefault(APIAddress, DefaultAPIAddress),
+			CORSAllowedOrigins:             envList(APICORSAllowedOrigins),
+			LocalSystemToken:               localSystemToken,
+			ServicePrincipal:               servicePrincipal,
 
 			TrustedProxyCIDRs: envList(APITrustedProxyCIDRs),
 		},

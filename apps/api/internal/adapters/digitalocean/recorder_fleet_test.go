@@ -79,7 +79,7 @@ func TestRecorderCloudInitStopsBeforeWorkerAndCleanupOnInstallOrBootstrapFailure
 				if args[0] == failureCommand {
 					args[0] = bootstrap
 				} else if args[0] == "/usr/bin/python3" || args[0] == "/usr/local/sbin/chalk-recorder-bootstrap" {
-					args[0] = "/bin/true"
+					args[0] = "true"
 				} else {
 					args[0] = next
 				}

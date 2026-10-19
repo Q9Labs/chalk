@@ -110,10 +110,34 @@ shipment target from branch, release mode, or directory.
   workflows add multi-node partitions, PostgreSQL failover, sustained load,
   process restart, and real-browser proof.
 
-## Running a gate on testbox
+## Running a gate on the M4 (default)
 
-`scripts/gates/remote.sh <root|api|sync|recorder|-- command...>` runs on a
-disposable Linux Droplet through the testbox skill, never on the M4.
+`scripts/gates/remote.sh <root|api|sync|recorder|-- command...>` runs on
+`agents-macmini` in a throwaway checkout. `--dry-run` prints the plan without SSH.
+The runner snapshots the local commit plus staged, unstaged, and untracked work;
+ignored files are not shipped. The merge-base tree becomes `origin/master`.
+
+Runs queue behind live processes using `/tmp/chalk-remote-*` checkouts. A macOS
+`shlock` PID lock serializes simultaneous arrivals and is reclaimed after owner
+death. Waiting prints once and checks every 30 seconds. Set
+`CHALK_REMOTE_QUEUE_TIMEOUT_SECONDS` to change the 5400-second wait; expiry exits 76.
+The runner reaps only abandoned checkouts with a generated run name and matching
+ownership marker; logs and unmarked scratch directories survive. It checks disk space,
+shares dependency caches, limits each setup step and the gate runtime, saves logs
+locally, and deletes its checkout on exit.
+
+`root` installs Chromium. Set `CHALK_REMOTE_NEEDS_BROWSER=1` for custom `--`
+commands that need it. `CHALK_REMOTE_REPO` overrides the local repository root.
+See `scripts/gates/remote.sh --help` for the remaining `CHALK_REMOTE_*` settings.
+
+## Dedicated-CPU timing runs (explicit opt-in)
+
+Use `scripts/gates/remote-testbox.sh` only for timing runs that need a dedicated
+c-8 box, including call-performance budgets. Testbox bills every box; ordinary
+gates use the M4. The opt-in runner defaults to `c-8` for every command.
+
+`scripts/gates/remote-testbox.sh <root|api|sync|recorder|-- command...>` runs on a
+disposable Linux Droplet through the testbox skill.
 `--dry-run` prints the exact plan without creating a box.
 
 Testbox ships the real tip and merge-base with `origin/HEAD`, then commits
@@ -129,11 +153,10 @@ Playwright Chromium revision. Matching Chromium skips OS dependency setup;
 a different revision still installs its dependencies. The existing helpers own PostgreSQL 18.3 and Sync topology.
 Root and custom runs verify the repo's Playwright Chromium revision.
 TTL covers provisioning, setup, and the gate: root/custom 60 minutes, API/Sync
-45 minutes, recorder 20 minutes (2 CPU / 4 GB).
-Root defaults to `c-8` (8 dedicated CPU / 16 GB). API and Sync use
-`c-8`, recorder uses `s-2vcpu-4gb`, and custom commands keep
-`s-4vcpu-8gb`. The measured region is `blr1`, which offers both root trial
-sizes. New shared images must be available there before use. This is an
+45 minutes, recorder 20 minutes.
+All runs default to `c-8` (8 dedicated CPU / 16 GB), including custom timing
+commands. The measured region is `blr1`.
+New shared images must be available there before use. This is an
 allocation choice, not a claim that the region is faster.
 
 Each run retains testbox's $0.50 default ceiling and automatic cleanup.

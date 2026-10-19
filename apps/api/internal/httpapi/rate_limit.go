@@ -38,9 +38,10 @@ var (
 )
 
 type RateLimitOptions struct {
-	Limiter  ratelimit.Limiter
-	Now      func() time.Time
-	ClientIP ClientIPOptions
+	DisableAuthenticated bool
+	Limiter              ratelimit.Limiter
+	Now                  func() time.Time
+	ClientIP             ClientIPOptions
 }
 
 type ClientIPOptions struct {
@@ -55,6 +56,9 @@ func DefaultRateLimitOptions() RateLimitOptions {
 }
 
 func rateLimit(options RateLimitOptions, policy ratelimit.Policy) func(http.Handler) http.Handler {
+	if options.DisableAuthenticated && (policy.Name == ratelimit.PolicyNameAuthenticatedRead || policy.Name == ratelimit.PolicyNameAuthenticatedWrite) {
+		policy.Limit = 0
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if options.Limiter == nil {
