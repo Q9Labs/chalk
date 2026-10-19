@@ -3,8 +3,13 @@
 import hashlib
 import json
 import os
+import random
+import re
+import signal
 import subprocess
+import sys
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -53,19 +58,78 @@ def cut_decision(target, deployments, now, manual=False):
 
 
 class GitHub:
-    def __init__(self):
+    def __init__(self, timeout=60):
         self.repository = os.environ['GITHUB_REPOSITORY']
+        self.timeout = timeout
+
+    def _call(self, command, route, data=None):
+        # Only reads are safe to replay: a failed POST may already have created a deployment.
+        # Four 60-second attempts plus at most 21 seconds of backoff: 261 seconds,
+        # plus bounded process-group cleanup on each timeout.
+        for attempt in range(1, 5):
+            try:
+                process = subprocess.Popen(command, stdin=subprocess.PIPE if data is not None else None,
+                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                           start_new_session=True)
+                try:
+                    output, stderr = process.communicate(input=data, timeout=self.timeout)
+                except BaseException:
+                    # Cancellation must clean up the isolated session too.
+                    # Descendants may hold the pipes open even after gh exits.
+                    try:
+                        os.killpg(process.pid, signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
+                    try:
+                        process.communicate(timeout=0.2)
+                    except subprocess.TimeoutExpired:
+                        pass
+                    finally:
+                        # Always escalate: a descendant may have closed its pipes but stayed alive.
+                        try:
+                            os.killpg(process.pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                        try:
+                            process.wait(timeout=1)
+                        except subprocess.TimeoutExpired:
+                            pass  # Do not let an uninterruptible child remove the call's bound.
+                        process.stdout.close()
+                        process.stderr.close()
+                        if process.stdin is not None:
+                            process.stdin.close()
+                    raise
+                if process.returncode:
+                    raise subprocess.CalledProcessError(process.returncode, command, output=output, stderr=stderr)
+                return output
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+                timed_out = isinstance(error, subprocess.TimeoutExpired)
+                if timed_out:
+                    error = subprocess.CalledProcessError(
+                        124, command, output=error.output,
+                        stderr=(error.stderr or b'') + f'\ngh api timed out after {self.timeout} seconds\n'.encode())
+                message = error.stderr.decode(errors='replace')
+                sys.stderr.write(message)
+                status = re.search(r'HTTP (\d{3})\b', message)
+                transient = timed_out or (500 <= int(status[1]) < 600 if status else
+                             any(text in message.lower() for text in
+                                 ('error connecting', 'dial tcp', 'connection reset', 'connection refused',
+                                  'timeout', 'timed out', 'deadline exceeded', 'unexpected eof')))
+                if data is not None or not transient or attempt == 4:
+                    raise error
+                print(f'GitHub retry {route}: attempt {attempt + 1}/4', file=sys.stderr)
+                time.sleep(random.uniform(0, 3 * 2 ** (attempt - 1)))
 
     def request(self, route, data=None):
         command = ['gh', 'api', f'repos/{self.repository}/{route}']
         if data is not None:
             command += ['--method', 'POST', '--input', '-']
-        return json.loads(subprocess.check_output(command, input=None if data is None else json.dumps(data).encode()))
+        return json.loads(self._call(command, route, None if data is None else json.dumps(data).encode()))
 
     def pages(self, route, key=None):
         separator = '&' if '?' in route else '?'
-        data = subprocess.check_output(['gh', 'api', '--paginate', '--slurp',
-                                       f'repos/{self.repository}/{route}{separator}per_page=100'])
+        data = self._call(['gh', 'api', '--paginate', '--slurp',
+                           f'repos/{self.repository}/{route}{separator}per_page=100'], route)
         return [item for page in json.loads(data) for item in (page[key] if key else page)]
 
     def deployments(self, environment, task='nightly-cut', sha=None, manifest_sha256=None):
