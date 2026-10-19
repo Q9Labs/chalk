@@ -362,8 +362,8 @@ class MediaIdentities(unittest.TestCase):
         value['dispatcher']['sha256'] = digest(archive_bytes)
         config = dict(dispatcher=dict(state_bucket='state', state_key='dispatcher.tfstate', function_name='dispatcher',
                                       scheduler_name='reconcile', scheduler_group='group'))
-        for state, expected in [(False, ['init', 'import', 'import', 'plan', 'show', 'apply']),
-                                (True, ['init', 'state', 'import', 'plan', 'show', 'apply'])]:
+        for state, expected in [(False, ['init', 'import', 'import', 'import', 'plan', 'show', 'apply']),
+                                (True, ['init', 'state', 'import', 'import', 'plan', 'show', 'apply'])]:
             with self.subTest(state_exists=state):
                 provider = Mock()
                 def aws(*arguments, **kwargs):
@@ -393,7 +393,8 @@ class MediaIdentities(unittest.TestCase):
                 calls = [call.args[0] for call in provider.command.call_args_list]
                 self.assertEqual([command[2] for command in calls], expected)
                 imported = [command[-1] for command in calls if command[2] == 'import']
-                self.assertEqual(imported, ['dispatcher-scheduler'] if state else ['dispatcher-execution', 'dispatcher-scheduler'])
+                expected_imports = ['dispatcher-execution', 'dispatcher-scheduler', '/aws/lambda/dispatcher']
+                self.assertEqual(imported, expected_imports[1:] if state else expected_imports)
 
     def test_mutable_or_incomplete_members_are_refused(self):
         value = members()
