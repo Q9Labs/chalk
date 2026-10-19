@@ -383,6 +383,7 @@ func run() error {
 	webhookService := webhooks.NewService(webhookRepository, webhookProtector)
 	tenantAuthz := authorization.NewTenantPolicy(membershipRepository, tenantRepository)
 	rateLimitOptions := httpapi.DefaultRateLimitOptions()
+	rateLimitOptions.DisableAuthenticated = cfg.API.DisableAuthenticatedRateLimits
 	rateLimitOptions.ClientIP.TrustedProxyCIDRs = cfg.API.TrustedProxyCIDRs
 	if cfg.Observability.Environment != config.DefaultEnvironment {
 		rateLimitOptions.Limiter = redisadapter.NewRateLimiter(redisClient)
