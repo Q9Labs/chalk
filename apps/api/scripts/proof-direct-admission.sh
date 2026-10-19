@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run through scripts/gates/remote.sh -- bash apps/api/scripts/proof-direct-admission.sh.
-# This restores the policy-only repository only inside the disposable testbox.
+# This restores the policy-only repository only inside the throwaway checkout.
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
 export GATE_BASE_REF=168596701
