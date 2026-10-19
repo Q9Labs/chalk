@@ -579,6 +579,25 @@ where (lifecycle.state = 'active' or reclaimed.tenant_id is not null)
                  and active_participant.episode_id = creator_arrival.episode_id
                  and active_participant.status in ('joining', 'active', 'leaving')
            )
+           -- The creator's departure waits the Episode's linger window after the
+           -- last departure, so a quick Rejoin continues the same call.
+           and greatest(
+               creator_arrival.terminal_at,
+               (
+                   select max(p.left_at)
+                   from participants p
+                   where p.tenant_id = creator_arrival.tenant_id
+                     and p.space_id = creator_arrival.space_id
+                     and p.episode_id = creator_arrival.episode_id
+                     and p.joined_at is not null
+               )
+           ) + make_interval(secs => coalesce((
+               select (e.config_snapshot->>'linger_window_seconds')::integer
+               from episodes e
+               where e.tenant_id = creator_arrival.tenant_id
+                 and e.space_id = creator_arrival.space_id
+                 and e.id = creator_arrival.episode_id
+           ), 0)) <= $1
        ))
   and (lifecycle.next_retry_at is null or lifecycle.next_retry_at <= $1)
 order by lifecycle.deadline_at, lifecycle.tenant_id, lifecycle.space_id
