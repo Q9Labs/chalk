@@ -10,7 +10,7 @@ import (
 )
 
 func (r EpisodeLifecycleRepository) checkLiveEpisodeLimit(ctx context.Context, queries *sqlc.Queries, tenantID utilities.ID) error {
-	if r.tenantLimits.MaxLiveEpisodes == 0 {
+	if !r.tenantLimits.AppliesTo(tenantID) || r.tenantLimits.MaxLiveEpisodes == 0 {
 		return nil
 	}
 	if _, err := queries.LockTenantMediaLimits(ctx, uuid(tenantID)); err != nil {

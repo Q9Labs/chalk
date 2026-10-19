@@ -283,7 +283,7 @@ func (r RecordingPipelineRepository) Reserve(ctx context.Context, input recordin
 		if _, err := queries.LockRecordingCapacity(ctx); err != nil {
 			return fmt.Errorf("lock recording capacity: %w", err)
 		}
-		if r.tenantLimits.MaxConcurrentRecordings > 0 || r.tenantLimits.DailyRecordingMinutes > 0 {
+		if r.tenantLimits.AppliesTo(input.TenantID) && (r.tenantLimits.MaxConcurrentRecordings > 0 || r.tenantLimits.DailyRecordingMinutes > 0) {
 			// Replays remain successful even when the tenant has used its last slot.
 			_, err := queries.GetRecordingReservationFingerprint(ctx, sqlc.GetRecordingReservationFingerprintParams{TenantID: uuid(input.TenantID), IdempotencyKey: input.IdempotencyKey})
 			if errors.Is(err, pgx.ErrNoRows) {

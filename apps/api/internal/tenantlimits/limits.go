@@ -1,6 +1,10 @@
 package tenantlimits
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
+)
 
 var (
 	ErrRecordingLimitReached   = errors.New("tenant recording limit reached")
@@ -8,9 +12,14 @@ var (
 )
 
 type Config struct {
+	ManagedPublicTenantID   utilities.ID
 	MaxConcurrentRecordings int32
 	DailyRecordingMinutes   int32
 	MaxLiveEpisodes         int32
+}
+
+func (c Config) AppliesTo(tenantID utilities.ID) bool {
+	return c.ManagedPublicTenantID.IsZero() || tenantID != c.ManagedPublicTenantID
 }
 
 const (
