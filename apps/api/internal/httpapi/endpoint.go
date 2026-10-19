@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 type RouteEndpoint interface {
@@ -156,13 +155,12 @@ func (e Endpoint[Request, Response]) RouteContract() APIRouteContract {
 
 func (e Endpoint[Request, Response]) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	request, err := e.decode(r)
-	var response Response
-	if err == nil {
-		response, err = e.handle(r.Context(), request)
+	if err != nil {
+		e.writeFailure(w, r, err)
+		return
 	}
-	if limitErr := checkTenantRateLimit(r.Context(), utilities.ID{}); limitErr != nil {
-		err = limitErr
-	}
+
+	response, err := e.handle(r.Context(), request)
 	if err != nil {
 		e.writeFailure(w, r, err)
 		return
