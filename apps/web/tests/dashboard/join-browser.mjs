@@ -99,6 +99,7 @@ try {
   );
   await command("pnpm", ["--filter", "web", "run", "build"], repository, { VITE_API_URL: apiOrigin, VITE_CHALK_SYNC_URL: syncOrigin });
   await command("mix", ["deps.get"], resolve(repository, "apps/sync"), { MIX_ENV: "dev" });
+  await command("mix", ["compile"], resolve(repository, "apps/sync"), { MIX_ENV: "dev" });
   const config = resolve(sandbox, "sync.exs");
   await writeFile(
     config,

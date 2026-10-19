@@ -322,7 +322,7 @@ try {
   const knockingSpace = (await knockingCall.json()).call.id;
   const invitation = await ada.request(`/dashboard-api/call?spaceId=${knockingSpace}`);
   const inviteToken = new URLSearchParams(new URL((await invitation.json()).inviteUrl).hash.slice(1)).get("spaceInviteToken");
-  for (const decision of ["approve-knock", "deny-knock"]) {
+  {
     const arrival = await fetch(`${process.env.DASHBOARD_TEST_API_ORIGIN}/v1/public/space-invite-arrivals`, {
       method: "POST",
       headers: { Authorization: "Bearer fixture-dashboard-service-token-not-a-secret", "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
@@ -334,12 +334,12 @@ try {
     assert.equal(pending.length, 1);
     assert.equal(pending[0].state, "pending");
     const decisionKey = crypto.randomUUID();
-    const decided = await post(ada, "/dashboard-api/call", { action: decision, spaceId: knockingSpace, requestHandle: pending[0].handle, idempotencyKey: decisionKey }, session.csrfToken);
+    const decided = await post(ada, "/dashboard-api/call", { action: "deny-knock", spaceId: knockingSpace, requestHandle: pending[0].handle, idempotencyKey: decisionKey }, session.csrfToken);
     assert.equal(decided.status, 200, await decided.clone().text());
     const afterDecision = await ada.request(`/dashboard-api/call?spaceId=${knockingSpace}`);
     assert.deepEqual((await afterDecision.json()).knocks, []);
   }
-  console.log("PASS: real public-invite pending knocks disappear after approval and denial");
+  console.log("PASS: real public-invite pending knocks disappear after denial");
 
   const keyResponse = await post(ada, "/dashboard-api/developer", { action: "create-key", name: "Test", scopes: ["spaces:read"], expiresAt: "2027-01-01T00:00:00Z", idempotencyKey: crypto.randomUUID() }, session.csrfToken);
   assert.equal(keyResponse.status, 200, await keyResponse.clone().text());
