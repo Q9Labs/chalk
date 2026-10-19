@@ -18,7 +18,7 @@ export { Switch } from "./primitives/Switch";
 export { SegmentedControl } from "./primitives/SegmentedControl";
 export { CopyButton } from "./primitives/CopyButton";
 export { FaceAvatar } from "./avatar/FaceAvatar";
-export { useToasts } from "./primitives/toast/ToastStack";
+export { useToastClearance, useToasts } from "./primitives/toast/ToastStack";
 export { announce } from "./primitives/announce";
 export { usePressAnimation } from "./motion/press";
 export { Limbo } from "./limbo/Limbo";
