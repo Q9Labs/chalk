@@ -16,10 +16,6 @@ class ChalkCallServiceModule(
   /** Resolves false when the person hasn't granted the microphone or camera, or when Android refuses the start. The call continues either way. */
   @ReactMethod
   fun start(promise: Promise) {
-    if (ChalkSpaceForegroundService.grantedForegroundTypes(reactContext) == 0) {
-      promise.resolve(false)
-      return
-    }
     // The service keeps its start and stop state on the main thread, where its own callbacks run.
     mainThread.post { promise.resolve(ChalkSpaceForegroundService.requestStart(reactContext)) }
   }
@@ -27,7 +23,7 @@ class ChalkCallServiceModule(
   @ReactMethod
   fun stop(promise: Promise) {
     mainThread.post {
-      ChalkSpaceForegroundService.requestStop(reactContext)
+      ChalkSpaceForegroundService.requestStop()
       promise.resolve(null)
     }
   }
