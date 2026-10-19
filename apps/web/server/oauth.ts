@@ -71,7 +71,11 @@ async function providerText(response: Response): Promise<string> {
   }
 }
 async function fetchJson(url: string, init?: RequestInit, provider: Provider | "jwks" = "jwks"): Promise<{ value: unknown; cacheSeconds: number }> {
-  const response = await fetch(url, { ...init, redirect: "error", signal: AbortSignal.timeout(10000) });
+  const response = await fetch(url, { ...init, redirect: "manual", signal: AbortSignal.timeout(10000) });
+  if (response.status >= 300 && response.status < 400) {
+    await response.body?.cancel();
+    throw new DashboardError(502, `identity_${provider}_redirect`);
+  }
   const text = await providerText(response);
   if (!response.ok) {
     let reason = "unrecognized_error_response";
@@ -94,7 +98,7 @@ async function loadKeys(url: string, rotating = false): Promise<CachedKeys> {
   const pending = keyLoads.get(url);
   if (pending) return pending;
   const load = (async () => {
-    const response = await fetchJson(url);
+    const response = await fetchJson(url, undefined, url === providers.google.jwks ? "google" : url === providers.apple.jwks ? "apple" : "jwks");
     const keys = jwksSchema.parse(response.value).keys;
     const now = Date.now();
     const entry = { keys, expiresAt: now + response.cacheSeconds * 1000, refreshAfter: rotating ? now + 30000 : 0 };

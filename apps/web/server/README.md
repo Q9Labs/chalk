@@ -147,7 +147,9 @@ no shared transaction store or dashboard database: Google and Apple authorizatio
 codes are single-use. Replaying an original transaction cookie can reach the token
 endpoint again until expiry, but the provider rejects its consumed code, so that
 replay cannot create a second session. Real-adapter tests exercise this boundary;
-fixture identity remains only for the real Pages/engine e2e journeys.
+fixture identity remains only for the real Pages/engine e2e journeys. The
+production-adapter callback suite runs through `wrangler pages dev` in workerd,
+not Node; only its token/JWKS endpoint addresses point at local HTTP fixtures.
 
 JWKS are cached per isolate according to response Cache-Control, capped at one
 hour (five minutes when max-age is absent), with Age deducted. No-cache/no-store
@@ -156,7 +158,13 @@ kid triggers one refetch, with a 30-second refresh cooldown to bound repeated
 unknown-key requests. A failed refresh fails authentication; stale keys are not
 used after expiry. Token and JWKS response bodies, including errors, are limited
 to 64 KiB while streaming; HTTP calls have a ten-second deadline and reject
-redirects. Logs retain fixed error codes, request IDs and error types, never raw
+redirects with `redirect: "manual"` and fixed `identity_<provider>_redirect`
+errors. `redirect: "error"` is unsupported by Workers even though Node accepts
+it. Server fetches do not set `cache`; the engine wrapper also uses manual
+redirects. The workerd suite exercises `AbortSignal.timeout`, PKCS#8 P-256
+ES256 signing, RS256 verification, AES-GCM, HMAC and SHA-256. Production server
+code uses no Buffer API. The Node test driver uses Buffer only outside Workers.
+Logs retain fixed error codes, request IDs and error types, never raw
 request input, provider response text, tokens, cookies or stack lines.
 
 See [Google's OIDC verification guidance](https://developers.google.com/identity/openid-connect/openid-connect)
@@ -306,3 +314,10 @@ the generated response schema. There is no silent English default. The dashboard
 rejects omitted languages before sending the mutation. The engine rejects requests when any transcript already
 exists for that recording. A failed-transcript retry therefore still needs an
 engine endpoint. Deleting a transcript does not remove that restriction.
+
+To reproduce the unsupported-redirect regression without editing production
+source, run `node apps/web/tests/dashboard/oauth-runtime.mjs --redirect-error`
+after building the client SDK. It deliberately changes only the copied test
+worker's redirect mode and must fail its first successful Google callback with
+zero token exchanges. Run without the flag for the passing workerd suite. Both
+runs own and clean up their Pages process, local HTTP server and sandbox.
