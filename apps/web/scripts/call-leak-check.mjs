@@ -178,18 +178,27 @@ export async function checkLeaks({ browser, origin, budgets, directory, boardCss
         await page.getByRole("button", { name: "Leave call", exact: true }).waitFor({ state: "hidden" });
       }
       await cycle();
-      const samples = [await sample(page, cdp, budgets.settleMs)];
+      const cold = await sample(page, cdp, budgets.settleMs);
+      // Mounting once leaves V8 compiling hot render paths throughout the measured
+      // tail. Exercise the same journey before measuring steady-state heap growth.
+      const warmupCycles = injection ? 1 : budgets.cycles;
+      for (let index = 1; index < warmupCycles; index++) await cycle();
+      const baseline = warmupCycles === 1 ? cold : await sample(page, cdp, budgets.settleMs);
+      // Warm-up must not hide retained resources, even if their growth later stops.
+      const warmupFailures = Object.entries(budgets.metrics).flatMap(([metric, limit]) => (metric !== "heapMiB" && baseline[metric] - cold[metric] > limit.allowance ? [`${metric}: warm-up excess ${(baseline[metric] - cold[metric]).toFixed(4)} > ${limit.allowance}`] : []));
+      const samples = [baseline];
       for (let index = 0; index < cycles; index++) {
         await cycle();
         samples.push(await sample(page, cdp, budgets.settleMs));
       }
       if (errors.length) throw new Error(`${journey}: ${errors.join("; ")}`);
-      const failures = leakFailures(samples, budgets, { left: journey === "leave" });
+      const failures = [...warmupFailures, ...leakFailures(samples, budgets, { left: journey === "leave" })];
       const result = {
         journey,
         repeat,
         injection,
         cycles,
+        warmup: { cycles: warmupCycles, before: cold, after: baseline, failures: warmupFailures },
         samples,
         heapTailGrowth: samples.length >= 11 ? growth(samples.slice(-10).map((sample) => sample.heapMiB)) : null,
         growth: Object.fromEntries(Object.keys(budgets.metrics).map((metric) => [metric, growth(samples.map((value) => value[metric]))])),
