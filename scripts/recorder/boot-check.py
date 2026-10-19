@@ -36,7 +36,11 @@ class GuestEvidenceUnavailable(RuntimeError):
 def command(args, *, text=None, timeout=60, env=None):
     result = subprocess.run(args, input=text, text=True, capture_output=True, timeout=timeout,
                             env={**os.environ, "AWS_PAGER": "", "AWS_CLI_AUTO_PROMPT": "off", **(env or {})})
-    require(result.returncode == 0, f"{Path(args[0]).name} failed with exit {result.returncode}; payload suppressed")
+    if result.returncode:
+        # Retain AWS operation/error identifiers, never its message or command arguments.
+        aws_error = re.search(r"An error occurred \(([A-Za-z0-9]+)\) when calling the ([A-Za-z0-9]+) operation", result.stderr)
+        detail = f" ({aws_error[2]}: {aws_error[1]})" if aws_error else ""
+        raise RuntimeError(f"{Path(args[0]).name} failed with exit {result.returncode}{detail}; payload suppressed")
     return result.stdout
 
 
@@ -288,12 +292,12 @@ def cleanup(services, directory):
             if not (directory / "revocation.json").exists():
                 private_json(directory / "revocation.json", revoked)
         except Exception as error:
-            errors.append(str(error))
+            errors.append("registration revocation: " + str(error))
     # Revocation failure must not prevent compute deletion or key cleanup.
     try:
         delete_node(services, state)
     except Exception as error:
-        errors.append(str(error))
+        errors.append("Droplet deletion: " + str(error))
     for kind, path in (("firewall_id", "/firewalls/"), ("key_id", "/account/keys/")):
         try:
             if state.get(kind):
@@ -307,20 +311,20 @@ def cleanup(services, directory):
                     services.do("DELETE", resource)
                 confirm_absent(services, resource)
         except Exception as error:
-            errors.append(str(error))
+            errors.append(kind + " deletion: " + str(error))
     try:
         if state.get("tag_intent") or state.get("tag_created"):
             services.do("DELETE", "/tags/" + state["unique_tag"])
             confirm_absent(services, "/tags/" + state["unique_tag"])
     except Exception as error:
-        errors.append(str(error))
+        errors.append("unique tag deletion: " + str(error))
     for name in ("ssh-key", "ssh-key.pub", "known-hosts"):
         (directory / name).unlink(missing_ok=True)
     if state.get("evidence_bucket"):
         try:
             upload.clean_objects(services, state)
         except Exception as error:
-            errors.append(str(error))
+            errors.append("evidence objects: " + str(error))
     require(not errors, "; ".join(errors))
     private_json(directory / "cleanup.json", {"result": "PASS", "cleaned_at": time.time(), "node_id": state.get("node_id")})
 
@@ -333,14 +337,25 @@ def watchdog(directory):
         time.sleep(1)
     (directory / "cleanup-requested").touch()
     # No dependency on the main process, SSH connection, or successful boot.
+    errors = []
     for attempt in range(3):
         try:
             cleanup(services, directory)
             return
         except Exception as error:
-            append(directory, {"cleanup_error": str(error), "cleanup_attempt": attempt + 1})
-    private_json(directory / "cleanup-failed.json", {"result": "FAIL", "pid": os.getpid()})
+            errors.append(str(error))
+            append(directory, {"cleanup_error": errors[-1], "cleanup_attempt": attempt + 1})
+    private_json(directory / "cleanup-failed.json", {"result": "FAIL", "pid": os.getpid(), "errors": errors})
     raise RuntimeError("cleanup unproved; see private watchdog ledger")
+
+
+def cleanup_receipt(directory, returncode):
+    if (directory / "cleanup.json").exists() and returncode == 0:
+        return {"cleanup_confirmed": True}
+    failed = directory / "cleanup-failed.json"
+    errors = json.loads(failed.read_text())["errors"] if failed.exists() else []
+    reason = "cleanup failed" if errors else "cleanup watchdog did not confirm completion"
+    return {"cleanup_confirmed": False, "cleanup_errors": errors, "reason": reason}
 
 
 def certificate_der(pem):
@@ -622,8 +637,10 @@ def run(request_path, receipt_path):
             guard.wait(timeout=150)
         except subprocess.TimeoutExpired:
             result["reason"] = "cleanup watchdog has not completed; retains resource ownership"
-        cleaned = (directory / "cleanup.json").exists()
-        result["cleanup_confirmed"] = cleaned and guard.returncode == 0
+        cleanup_status = cleanup_receipt(directory, guard.returncode)
+        if "reason" in result:
+            cleanup_status.pop("reason", None)
+        result.update(cleanup_status)
         if result["cleanup_confirmed"] and "reason" not in result and result.get("certificate_sha256"):
             result.update(result="PASS", fleet_equivalent_signed_boot=True)
         private_json(receipt_path, result)

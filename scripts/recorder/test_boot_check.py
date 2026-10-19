@@ -41,6 +41,39 @@ class BootCheckTests(unittest.TestCase):
         self.assertNotIn('SECRET', json.dumps(diagnosis))
         self.assertEqual(boot.boot_diagnosis(None, evidence)['issuer_archive_failure'], 'archive_download_failed')
 
+    def test_cleanup_denial_survives_watchdog_in_public_receipt(self):
+        import sys
+
+        class Provider:
+            def aws(self, *args):
+                return boot.command([sys.executable, '-c',
+                    'import sys; sys.stderr.write("An error occurred (AccessDenied) when calling the ListObjectVersions operation: PRIVATE\\n"); sys.exit(1)'])
+
+        with tempfile.TemporaryDirectory() as directory, patch.object(boot, 'Services', return_value=Provider()):
+            directory = Path(directory)
+            boot.append(directory, dict(name='owned', deadline=0, evidence_bucket='private',
+                                        evidence_key='bootdiag/owned/guest.json'))
+            with self.assertRaisesRegex(RuntimeError, 'cleanup unproved'):
+                boot.watchdog(directory)
+            failure = json.loads((directory / 'cleanup-failed.json').read_text())
+            self.assertEqual(len(failure['errors']), 3)
+            self.assertIn('evidence objects', failure['errors'][0])
+            self.assertIn('ListObjectVersions: AccessDenied', failure['errors'][0])
+            self.assertNotIn('PRIVATE', json.dumps(failure))
+            receipt = boot.cleanup_receipt(directory, 1)
+            self.assertFalse(receipt['cleanup_confirmed'])
+            self.assertEqual(receipt['cleanup_errors'], failure['errors'])
+            self.assertIn('cleanup failed', receipt['reason'])
+
+    def test_cleanup_receipt_never_confirms_missing_or_failed_watchdog(self):
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            self.assertFalse(boot.cleanup_receipt(directory, 0)['cleanup_confirmed'])
+            boot.private_json(directory / 'cleanup.json', {'result': 'PASS'})
+            self.assertFalse(boot.cleanup_receipt(directory, None)['cleanup_confirmed'])
+            self.assertFalse(boot.cleanup_receipt(directory, 1)['cleanup_confirmed'])
+            self.assertEqual(boot.cleanup_receipt(directory, 0), {'cleanup_confirmed': True})
+
     def test_host_actions_run_as_the_configured_runtime_user(self):
         import base64
         import os
