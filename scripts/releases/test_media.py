@@ -352,6 +352,49 @@ class MediaIdentities(unittest.TestCase):
                     media.deploy_dispatcher(args)
                 self.assertEqual(provider.command.call_count, 3)
 
+    def test_first_dispatcher_install_lists_state_only_when_it_exists(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        import contextlib
+        import io
+        archive_bytes = b'qualified dispatcher bytes'
+        value = members()
+        value['dispatcher']['sha256'] = digest(archive_bytes)
+        config = dict(dispatcher=dict(state_bucket='state', state_key='dispatcher.tfstate', function_name='dispatcher',
+                                      scheduler_name='reconcile', scheduler_group='group'))
+        for state, expected in [(False, ['init', 'import', 'import', 'plan', 'show', 'apply']),
+                                (True, ['init', 'state', 'import', 'plan', 'show', 'apply'])]:
+            with self.subTest(state_exists=state):
+                provider = Mock()
+                def aws(*arguments, **kwargs):
+                    if arguments[:2] == ('s3api', 'get-object'):
+                        Path(arguments[-1]).write_bytes(archive_bytes)
+                        return {}
+                    responses = {('s3api', 'list-objects-v2'): dict(Contents=[dict(Key='dispatcher.tfstate')]) if state else {},
+                                 ('s3api', 'put-object'): dict(VersionId='v1'), ('scheduler', 'get-schedule'): dict(State='ENABLED')}
+                    return responses[arguments[:2]]
+                def command(arguments, **kwargs):
+                    if arguments[2:4] == ['state', 'list']:
+                        # Real tofu exits 1 with "No state file was found" on an empty backend.
+                        self.assertTrue(state, 'state list ran before the backend held a state object')
+                        return 'module.dispatcher.aws_iam_role.dispatcher\n'
+                    return json.dumps(dict(resource_changes=[])) if 'show' in arguments else ''
+                provider.aws.side_effect = aws
+                provider.command.side_effect = command
+                provider.state.return_value = dict(resources=[dict(type='aws_iam_role', name='dispatcher', instances=[dict(attributes={})])])
+                with tempfile.TemporaryDirectory() as directory:
+                    manifest, output = Path(directory) / 'manifest.json', Path(directory) / 'media.json'
+                    manifest.write_text(json.dumps(dict(component_releases=dict(api=dict(release_id='managed-episode-first')))))
+                    output.write_text(json.dumps(value))
+                    args = SimpleNamespace(manifest=manifest, output=output, dry_run=False, environment='nightly', region='test-region')
+                    with patch.object(media, 'settings', return_value=(provider, config)), patch.object(media, 'verify_dispatcher', return_value={}), \
+                            patch.dict(os.environ, CHALK_MEDIA_ARTIFACT_BUCKET='example-artifacts'), contextlib.redirect_stdout(io.StringIO()):
+                        media.deploy_dispatcher(args)
+                calls = [call.args[0] for call in provider.command.call_args_list]
+                self.assertEqual([command[2] for command in calls], expected)
+                imported = [command[-1] for command in calls if command[2] == 'import']
+                self.assertEqual(imported, ['dispatcher-scheduler'] if state else ['dispatcher-execution', 'dispatcher-scheduler'])
+
     def test_mutable_or_incomplete_members_are_refused(self):
         value = members()
         self.assertEqual(media.validate_members(value), value)
