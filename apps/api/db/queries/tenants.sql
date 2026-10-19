@@ -2,6 +2,8 @@
 select
     tenants.id::uuid as id,
     tenants.name,
+    tenants.created_by_service_id,
+    tenants.external_id,
     tenants.default_media_plane,
     tenants.media_plane_provider_config,
     tenants.storage_provider_config,
@@ -24,6 +26,8 @@ where tenants.id = $1;
 select
     tenants.id::uuid as id,
     tenants.name,
+    tenants.created_by_service_id,
+    tenants.external_id,
     tenants.default_media_plane,
     tenants.media_plane_provider_config,
     tenants.storage_provider_config,
@@ -41,7 +45,8 @@ select
 from tenants
 join tenant_artifact_policies on tenant_artifact_policies.tenant_id = tenants.id
 where
-    (
+    (sqlc.narg(service_id)::text IS NULL OR tenants.created_by_service_id = sqlc.narg(service_id))
+    AND (
         not sqlc.arg(cursor_set)::boolean
         or (tenants.created_at, tenants.id) < (
             sqlc.arg(cursor_created_at)::timestamptz,
@@ -56,6 +61,8 @@ with inserted as (
 insert into tenants (
     id,
     name,
+    created_by_service_id,
+    external_id,
     default_media_plane,
     media_plane_provider_config,
     storage_provider_config,
@@ -65,6 +72,8 @@ insert into tenants (
 ) values (
     sqlc.arg(id),
     sqlc.arg(name),
+    sqlc.narg(created_by_service_id),
+    sqlc.narg(external_id),
     sqlc.narg(default_media_plane),
     sqlc.narg(media_plane_provider_config),
     sqlc.narg(storage_provider_config),
@@ -72,12 +81,15 @@ insert into tenants (
     sqlc.narg(logo_key),
     sqlc.narg(website)
 )
-returning id, name, default_media_plane, media_plane_provider_config, storage_provider_config,
+ON CONFLICT (created_by_service_id, external_id) DO UPDATE
+    SET external_id = tenants.external_id
+returning id, name, created_by_service_id, external_id, default_media_plane, media_plane_provider_config, storage_provider_config,
     cors_allowed_origins, logo_key, website, updated_at, created_at
 ), seeded as (
     insert into tenant_artifact_policies (tenant_id)
     select id
     from inserted
+    ON CONFLICT (tenant_id) DO UPDATE SET tenant_id = EXCLUDED.tenant_id
     returning
         tenant_id,
         transcription_ceiling,
@@ -90,6 +102,8 @@ returning id, name, default_media_plane, media_plane_provider_config, storage_pr
 select
     inserted.id::uuid as id,
     inserted.name,
+    inserted.created_by_service_id,
+    inserted.external_id,
     inserted.default_media_plane,
     inserted.media_plane_provider_config,
     inserted.storage_provider_config,
@@ -141,7 +155,7 @@ set
     end,
     updated_at = now()
 where id = sqlc.arg(id)
-returning id, name, default_media_plane, media_plane_provider_config, storage_provider_config,
+returning id, name, created_by_service_id, external_id, default_media_plane, media_plane_provider_config, storage_provider_config,
     cors_allowed_origins, logo_key, website, updated_at, created_at
 ), updated_policy as (
 update tenant_artifact_policies
@@ -177,6 +191,8 @@ returning *
 select
     updated_tenant.id::uuid as id,
     updated_tenant.name,
+    updated_tenant.created_by_service_id,
+    updated_tenant.external_id,
     updated_tenant.default_media_plane,
     updated_tenant.media_plane_provider_config,
     updated_tenant.storage_provider_config,
@@ -198,3 +214,7 @@ join updated_policy on updated_policy.tenant_id = updated_tenant.id;
 select cors_allowed_origins
 from tenants
 where id = sqlc.arg(id);
+
+-- name: FindServiceTenantID :one
+SELECT id FROM tenants
+WHERE created_by_service_id = sqlc.arg(service_id) AND external_id = sqlc.arg(external_id);

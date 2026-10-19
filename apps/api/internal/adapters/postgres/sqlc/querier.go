@@ -113,6 +113,7 @@ type Querier interface {
 	FinalizeRecordingBundleAllocation(ctx context.Context, arg FinalizeRecordingBundleAllocationParams) (RecordingBundleAllocation, error)
 	FinalizeRecordingRenderObject(ctx context.Context, arg FinalizeRecordingRenderObjectParams) (RecordingRenderObjectAllocation, error)
 	FinalizeTranscription(ctx context.Context, arg FinalizeTranscriptionParams) (Transcription, error)
+	FindServiceTenantID(ctx context.Context, arg FindServiceTenantIDParams) (pgtype.UUID, error)
 	FinishTranscriptionAttempt(ctx context.Context, arg FinishTranscriptionAttemptParams) (TranscriptionAttempt, error)
 	GetAPIKeyMutation(ctx context.Context, arg GetAPIKeyMutationParams) (ApiKeyMutationRequest, error)
 	GetActiveAPIKeyByPrefix(ctx context.Context, keyPrefix string) (GetActiveAPIKeyByPrefixRow, error)

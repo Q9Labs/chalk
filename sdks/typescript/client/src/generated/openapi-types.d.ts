@@ -159,6 +159,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/tenants/by-external-id": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Find tenant by external i d
+     * @description The calling service is responsible for the request-supplied external_id and end-user identity; Tenant ownership is derived only from the authenticated service identity.
+     */
+    get: operations["findTenantByExternalID"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}": {
     parameters: {
       query?: never;
@@ -1072,6 +1092,8 @@ export interface components {
       };
     };
     AdmitEpisodeParticipantRequest: {
+      /** @enum {string} */
+      admission?: "policy" | "direct";
       identity_id?: components["schemas"]["UUID"];
       metadata?:
         | {
@@ -1269,6 +1291,7 @@ export interface components {
     CreateTenantRequest: {
       cors_allowed_origins?: string[];
       default_media_plane?: string | null;
+      external_id?: string | null;
       logo_key?: string | null;
       media_plane_provider_config?: components["schemas"]["MediaPlaneProviderConfig"] | null;
       name: string;
@@ -1747,6 +1770,7 @@ export interface components {
       cors_allowed_origins: string[];
       created_at: components["schemas"]["DateTimeString"];
       default_media_plane: string | null;
+      external_id: string | null;
       id: components["schemas"]["TenantId"];
       logo_key: string | null;
       media_plane_provider_config: components["schemas"]["MediaPlaneProviderConfig"] | null;
@@ -2944,6 +2968,18 @@ export interface operations {
           "application/json": components["schemas"]["ErrorResponse"];
         };
       };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
       /** @description Internal Server Error */
       500: {
         headers: {
@@ -3054,6 +3090,94 @@ export interface operations {
       };
     };
   };
+  findTenantByExternalID: {
+    parameters: {
+      query: {
+        external_id: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Tenant"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
   getTenant: {
     parameters: {
       query?: never;
@@ -3104,6 +3228,18 @@ export interface operations {
       /** @description Not Found */
       404: {
         headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
           [name: string]: unknown;
         };
         content: {

@@ -16,6 +16,8 @@ with inserted as (
 insert into tenants (
     id,
     name,
+    created_by_service_id,
+    external_id,
     default_media_plane,
     media_plane_provider_config,
     storage_provider_config,
@@ -30,14 +32,19 @@ insert into tenants (
     $5,
     $6,
     $7,
-    $8
+    $8,
+    $9,
+    $10
 )
-returning id, name, default_media_plane, media_plane_provider_config, storage_provider_config,
+ON CONFLICT (created_by_service_id, external_id) DO UPDATE
+    SET external_id = tenants.external_id
+returning id, name, created_by_service_id, external_id, default_media_plane, media_plane_provider_config, storage_provider_config,
     cors_allowed_origins, logo_key, website, updated_at, created_at
 ), seeded as (
     insert into tenant_artifact_policies (tenant_id)
     select id
     from inserted
+    ON CONFLICT (tenant_id) DO UPDATE SET tenant_id = EXCLUDED.tenant_id
     returning
         tenant_id,
         transcription_ceiling,
@@ -50,6 +57,8 @@ returning id, name, default_media_plane, media_plane_provider_config, storage_pr
 select
     inserted.id::uuid as id,
     inserted.name,
+    inserted.created_by_service_id,
+    inserted.external_id,
     inserted.default_media_plane,
     inserted.media_plane_provider_config,
     inserted.storage_provider_config,
@@ -71,6 +80,8 @@ join seeded on seeded.tenant_id = inserted.id
 type CreateTenantParams struct {
 	ID                       pgtype.UUID `json:"id"`
 	Name                     string      `json:"name"`
+	CreatedByServiceID       pgtype.Text `json:"created_by_service_id"`
+	ExternalID               pgtype.Text `json:"external_id"`
 	DefaultMediaPlane        pgtype.Text `json:"default_media_plane"`
 	MediaPlaneProviderConfig []byte      `json:"media_plane_provider_config"`
 	StorageProviderConfig    []byte      `json:"storage_provider_config"`
@@ -82,6 +93,8 @@ type CreateTenantParams struct {
 type CreateTenantRow struct {
 	ID                         pgtype.UUID        `json:"id"`
 	Name                       string             `json:"name"`
+	CreatedByServiceID         pgtype.Text        `json:"created_by_service_id"`
+	ExternalID                 pgtype.Text        `json:"external_id"`
 	DefaultMediaPlane          pgtype.Text        `json:"default_media_plane"`
 	MediaPlaneProviderConfig   []byte             `json:"media_plane_provider_config"`
 	StorageProviderConfig      []byte             `json:"storage_provider_config"`
@@ -102,6 +115,8 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Cre
 	row := q.db.QueryRow(ctx, createTenant,
 		arg.ID,
 		arg.Name,
+		arg.CreatedByServiceID,
+		arg.ExternalID,
 		arg.DefaultMediaPlane,
 		arg.MediaPlaneProviderConfig,
 		arg.StorageProviderConfig,
@@ -113,6 +128,8 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Cre
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
+		&i.CreatedByServiceID,
+		&i.ExternalID,
 		&i.DefaultMediaPlane,
 		&i.MediaPlaneProviderConfig,
 		&i.StorageProviderConfig,
@@ -131,10 +148,29 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Cre
 	return i, err
 }
 
+const findServiceTenantID = `-- name: FindServiceTenantID :one
+SELECT id FROM tenants
+WHERE created_by_service_id = $1 AND external_id = $2
+`
+
+type FindServiceTenantIDParams struct {
+	ServiceID  pgtype.Text `json:"service_id"`
+	ExternalID pgtype.Text `json:"external_id"`
+}
+
+func (q *Queries) FindServiceTenantID(ctx context.Context, arg FindServiceTenantIDParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, findServiceTenantID, arg.ServiceID, arg.ExternalID)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getTenant = `-- name: GetTenant :one
 select
     tenants.id::uuid as id,
     tenants.name,
+    tenants.created_by_service_id,
+    tenants.external_id,
     tenants.default_media_plane,
     tenants.media_plane_provider_config,
     tenants.storage_provider_config,
@@ -157,6 +193,8 @@ where tenants.id = $1
 type GetTenantRow struct {
 	ID                         pgtype.UUID        `json:"id"`
 	Name                       string             `json:"name"`
+	CreatedByServiceID         pgtype.Text        `json:"created_by_service_id"`
+	ExternalID                 pgtype.Text        `json:"external_id"`
 	DefaultMediaPlane          pgtype.Text        `json:"default_media_plane"`
 	MediaPlaneProviderConfig   []byte             `json:"media_plane_provider_config"`
 	StorageProviderConfig      []byte             `json:"storage_provider_config"`
@@ -179,6 +217,8 @@ func (q *Queries) GetTenant(ctx context.Context, id pgtype.UUID) (GetTenantRow, 
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
+		&i.CreatedByServiceID,
+		&i.ExternalID,
 		&i.DefaultMediaPlane,
 		&i.MediaPlaneProviderConfig,
 		&i.StorageProviderConfig,
@@ -214,6 +254,8 @@ const listTenants = `-- name: ListTenants :many
 select
     tenants.id::uuid as id,
     tenants.name,
+    tenants.created_by_service_id,
+    tenants.external_id,
     tenants.default_media_plane,
     tenants.media_plane_provider_config,
     tenants.storage_provider_config,
@@ -231,18 +273,20 @@ select
 from tenants
 join tenant_artifact_policies on tenant_artifact_policies.tenant_id = tenants.id
 where
-    (
-        not $1::boolean
+    ($1::text IS NULL OR tenants.created_by_service_id = $1)
+    AND (
+        not $2::boolean
         or (tenants.created_at, tenants.id) < (
-            $2::timestamptz,
-            $3::uuid
+            $3::timestamptz,
+            $4::uuid
         )
     )
 order by tenants.created_at desc, tenants.id desc
-limit $4::integer
+limit $5::integer
 `
 
 type ListTenantsParams struct {
+	ServiceID       pgtype.Text        `json:"service_id"`
 	CursorSet       bool               `json:"cursor_set"`
 	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
 	CursorID        pgtype.UUID        `json:"cursor_id"`
@@ -252,6 +296,8 @@ type ListTenantsParams struct {
 type ListTenantsRow struct {
 	ID                         pgtype.UUID        `json:"id"`
 	Name                       string             `json:"name"`
+	CreatedByServiceID         pgtype.Text        `json:"created_by_service_id"`
+	ExternalID                 pgtype.Text        `json:"external_id"`
 	DefaultMediaPlane          pgtype.Text        `json:"default_media_plane"`
 	MediaPlaneProviderConfig   []byte             `json:"media_plane_provider_config"`
 	StorageProviderConfig      []byte             `json:"storage_provider_config"`
@@ -270,6 +316,7 @@ type ListTenantsRow struct {
 
 func (q *Queries) ListTenants(ctx context.Context, arg ListTenantsParams) ([]ListTenantsRow, error) {
 	rows, err := q.db.Query(ctx, listTenants,
+		arg.ServiceID,
 		arg.CursorSet,
 		arg.CursorCreatedAt,
 		arg.CursorID,
@@ -285,6 +332,8 @@ func (q *Queries) ListTenants(ctx context.Context, arg ListTenantsParams) ([]Lis
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
+			&i.CreatedByServiceID,
+			&i.ExternalID,
 			&i.DefaultMediaPlane,
 			&i.MediaPlaneProviderConfig,
 			&i.StorageProviderConfig,
@@ -344,7 +393,7 @@ set
     end,
     updated_at = now()
 where id = $15
-returning id, name, default_media_plane, media_plane_provider_config, storage_provider_config,
+returning id, name, created_by_service_id, external_id, default_media_plane, media_plane_provider_config, storage_provider_config,
     cors_allowed_origins, logo_key, website, updated_at, created_at
 ), updated_policy as (
 update tenant_artifact_policies
@@ -380,6 +429,8 @@ returning tenant_id, transcription_ceiling, transcription_default_mode, provider
 select
     updated_tenant.id::uuid as id,
     updated_tenant.name,
+    updated_tenant.created_by_service_id,
+    updated_tenant.external_id,
     updated_tenant.default_media_plane,
     updated_tenant.media_plane_provider_config,
     updated_tenant.storage_provider_config,
@@ -431,6 +482,8 @@ type UpdateTenantParams struct {
 type UpdateTenantRow struct {
 	ID                         pgtype.UUID        `json:"id"`
 	Name                       string             `json:"name"`
+	CreatedByServiceID         pgtype.Text        `json:"created_by_service_id"`
+	ExternalID                 pgtype.Text        `json:"external_id"`
 	DefaultMediaPlane          pgtype.Text        `json:"default_media_plane"`
 	MediaPlaneProviderConfig   []byte             `json:"media_plane_provider_config"`
 	StorageProviderConfig      []byte             `json:"storage_provider_config"`
@@ -481,6 +534,8 @@ func (q *Queries) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Upd
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
+		&i.CreatedByServiceID,
+		&i.ExternalID,
 		&i.DefaultMediaPlane,
 		&i.MediaPlaneProviderConfig,
 		&i.StorageProviderConfig,

@@ -83,6 +83,13 @@ func prepareAdmissionInput(input *AdmitParticipantInput) error {
 		return ErrInvalidParticipantID
 	}
 
+	if input.Admission == "" {
+		input.Admission = AdmissionPolicy
+	}
+	if input.Admission != AdmissionPolicy && input.Admission != AdmissionDirect {
+		return ErrInvalidAdmissionPolicy
+	}
+
 	name, err := utilities.RequiredString(input.Name)
 	if err != nil || !utf8.ValidString(name) || len(name) > MaximumParticipantNameBytes {
 		return ErrInvalidParticipantName
@@ -105,7 +112,13 @@ func prepareAdmissionInput(input *AdmitParticipantInput) error {
 	if err := prepareRequest(&input.Request, payload); err != nil {
 		return err
 	}
+	// Keep policy retries compatible with fingerprints written before this option.
+	fingerprintAdmission := input.Admission
+	if fingerprintAdmission == AdmissionPolicy {
+		fingerprintAdmission = ""
+	}
 	input.Request.Fingerprint = lifecycleFingerprint(struct {
+		Admission     AdmissionMode   `json:"admission,omitempty"`
 		TenantID      string          `json:"tenant_id"`
 		SpaceID       string          `json:"space_id"`
 		EpisodeID     string          `json:"episode_id"`
@@ -117,7 +130,8 @@ func prepareAdmissionInput(input *AdmitParticipantInput) error {
 		IdentityID    string          `json:"identity_id"`
 		Payload       json.RawMessage `json:"payload"`
 	}{
-		TenantID: input.TenantID.String(), SpaceID: input.SpaceID.String(), EpisodeID: input.EpisodeID.String(),
+		Admission: fingerprintAdmission,
+		TenantID:  input.TenantID.String(), SpaceID: input.SpaceID.String(), EpisodeID: input.EpisodeID.String(),
 		ParticipantID: input.ParticipantID.String(), IntentName: IntentParticipantJoined, Name: input.Name,
 		Metadata: input.Metadata, Role: input.Role, IdentityID: input.IdentityID.String(), Payload: payload,
 	})

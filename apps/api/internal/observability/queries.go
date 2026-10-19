@@ -448,3 +448,10 @@ func (q operationQuerier) RecoverExpiredTranscriptionCleanupJobs(ctx context.Con
 }
 
 var _ sqlc.Querier = operationQuerier{}
+
+func (q operationQuerier) FindServiceTenantID(ctx context.Context, arg sqlc.FindServiceTenantIDParams) (pgtype.UUID, error) {
+	startedAt := time.Now()
+	id, err := q.next.FindServiceTenantID(ctx, arg)
+	LogOperation(ctx, q.logger, "db.query", "FindServiceTenantID", startedAt, err)
+	return id, err
+}

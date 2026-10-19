@@ -36,11 +36,14 @@ type APIParameterContract struct {
 	Pattern   string
 	MinLength int
 	MaxLength int
-	ItemsType string
-	Enum      []string
+	// CodePointLength marks a length the server counts in Unicode code points, not bytes.
+	CodePointLength bool
+	ItemsType       string
+	Enum            []string
 }
 
 type APIRouteContract struct {
+	Description    string
 	OperationID    string
 	Method         string
 	Path           string

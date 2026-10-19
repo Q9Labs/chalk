@@ -21,6 +21,7 @@ type TenantRepository struct {
 }
 
 type tenantQuerier interface {
+	FindServiceTenantID(context.Context, sqlc.FindServiceTenantIDParams) (pgtype.UUID, error)
 	CreateTenant(ctx context.Context, arg sqlc.CreateTenantParams) (sqlc.CreateTenantRow, error)
 	GetTenant(ctx context.Context, id pgtype.UUID) (sqlc.GetTenantRow, error)
 	GetTenantCORSAllowedOrigins(ctx context.Context, id pgtype.UUID) ([]string, error)
@@ -34,8 +35,10 @@ func NewTenantRepository(queries tenantQuerier) TenantRepository {
 
 func (s TenantRepository) CreateTenant(ctx context.Context, input tenants.CreateTenantInput) (tenants.Tenant, error) {
 	tenant, err := s.queries.CreateTenant(ctx, sqlc.CreateTenantParams{
-		ID:   pgtype.UUID{Bytes: input.ID.Bytes(), Valid: true},
-		Name: input.Name,
+		ID:                 pgtype.UUID{Bytes: input.ID.Bytes(), Valid: true},
+		Name:               input.Name,
+		CreatedByServiceID: text(input.CreatedByServiceID),
+		ExternalID:         text(input.ExternalID),
 
 		DefaultMediaPlane:        text(input.DefaultMediaPlane),
 		MediaPlaneProviderConfig: jsonBytes(input.MediaPlaneProviderConfig),
@@ -75,7 +78,17 @@ func (s TenantRepository) GetTenantCORSAllowedOrigins(ctx context.Context, id ut
 }
 
 func (s TenantRepository) ListTenants(ctx context.Context, page pagination.PageRequest) (tenants.TenantList, error) {
-	rows, err := s.queries.ListTenants(ctx, listTenantsParams(page))
+	return s.listTenants(ctx, page, nil)
+}
+
+func (s TenantRepository) ListServiceTenants(ctx context.Context, serviceID string, page pagination.PageRequest) (tenants.TenantList, error) {
+	return s.listTenants(ctx, page, &serviceID)
+}
+
+func (s TenantRepository) listTenants(ctx context.Context, page pagination.PageRequest, serviceID *string) (tenants.TenantList, error) {
+	params := listTenantsParams(page)
+	params.ServiceID = text(serviceID)
+	rows, err := s.queries.ListTenants(ctx, params)
 	if err != nil {
 		return tenants.TenantList{}, fmt.Errorf("list tenants: %w", err)
 	}
@@ -170,8 +183,10 @@ func listTenantsParams(page pagination.PageRequest) sqlc.ListTenantsParams {
 func mapTenant(tenant tenantRecord) tenants.Tenant {
 	policy := tenantArtifactPolicy(tenant)
 	return tenants.Tenant{
-		ID:   utilities.IDFromBytes(tenant.ID.Bytes),
-		Name: tenant.Name,
+		ID:                 utilities.IDFromBytes(tenant.ID.Bytes),
+		Name:               tenant.Name,
+		CreatedByServiceID: nullableText(tenant.CreatedByServiceID),
+		ExternalID:         nullableText(tenant.ExternalID),
 
 		DefaultMediaPlane:        nullableText(tenant.DefaultMediaPlane),
 		MediaPlaneProviderConfig: jsonRaw(tenant.MediaPlaneProviderConfig),
@@ -186,8 +201,10 @@ func mapTenant(tenant tenantRecord) tenants.Tenant {
 }
 
 type tenantRecord struct {
-	ID   pgtype.UUID
-	Name string
+	ID                 pgtype.UUID
+	Name               string
+	CreatedByServiceID pgtype.Text
+	ExternalID         pgtype.Text
 
 	DefaultMediaPlane          pgtype.Text
 	MediaPlaneProviderConfig   []byte
@@ -226,8 +243,10 @@ func tenantArtifactPolicy(tenant tenantRecord) artifactpolicy.TenantPolicy {
 
 func createTenantRecord(row sqlc.CreateTenantRow) tenantRecord {
 	return tenantRecord{
-		ID:   row.ID,
-		Name: row.Name,
+		ID:                 row.ID,
+		Name:               row.Name,
+		CreatedByServiceID: row.CreatedByServiceID,
+		ExternalID:         row.ExternalID,
 
 		DefaultMediaPlane:          row.DefaultMediaPlane,
 		MediaPlaneProviderConfig:   row.MediaPlaneProviderConfig,
@@ -248,8 +267,10 @@ func createTenantRecord(row sqlc.CreateTenantRow) tenantRecord {
 
 func getTenantRecord(row sqlc.GetTenantRow) tenantRecord {
 	return tenantRecord{
-		ID:   row.ID,
-		Name: row.Name,
+		ID:                 row.ID,
+		Name:               row.Name,
+		CreatedByServiceID: row.CreatedByServiceID,
+		ExternalID:         row.ExternalID,
 
 		DefaultMediaPlane:          row.DefaultMediaPlane,
 		MediaPlaneProviderConfig:   row.MediaPlaneProviderConfig,
@@ -270,8 +291,10 @@ func getTenantRecord(row sqlc.GetTenantRow) tenantRecord {
 
 func listTenantRecord(row sqlc.ListTenantsRow) tenantRecord {
 	return tenantRecord{
-		ID:   row.ID,
-		Name: row.Name,
+		ID:                 row.ID,
+		Name:               row.Name,
+		CreatedByServiceID: row.CreatedByServiceID,
+		ExternalID:         row.ExternalID,
 
 		DefaultMediaPlane:          row.DefaultMediaPlane,
 		MediaPlaneProviderConfig:   row.MediaPlaneProviderConfig,
@@ -292,8 +315,10 @@ func listTenantRecord(row sqlc.ListTenantsRow) tenantRecord {
 
 func updateTenantRecord(row sqlc.UpdateTenantRow) tenantRecord {
 	return tenantRecord{
-		ID:   row.ID,
-		Name: row.Name,
+		ID:                 row.ID,
+		Name:               row.Name,
+		CreatedByServiceID: row.CreatedByServiceID,
+		ExternalID:         row.ExternalID,
 
 		DefaultMediaPlane:          row.DefaultMediaPlane,
 		MediaPlaneProviderConfig:   row.MediaPlaneProviderConfig,
@@ -341,3 +366,14 @@ func artifactPolicyMutationError(err error) error {
 }
 
 var _ tenants.TenantRepository = TenantRepository{}
+
+func (s TenantRepository) FindServiceTenant(ctx context.Context, serviceID, externalID string) (tenants.Tenant, error) {
+	id, err := s.queries.FindServiceTenantID(ctx, sqlc.FindServiceTenantIDParams{ServiceID: pgtype.Text{String: serviceID, Valid: true}, ExternalID: pgtype.Text{String: externalID, Valid: true}})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return tenants.Tenant{}, tenants.ErrTenantNotFound
+	}
+	if err != nil {
+		return tenants.Tenant{}, fmt.Errorf("find service Tenant: %w", err)
+	}
+	return s.GetTenant(ctx, utilities.IDFromBytes(id.Bytes))
+}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
@@ -27,8 +28,10 @@ var (
 )
 
 type Tenant struct {
-	ID   utilities.ID
-	Name string
+	ID                 utilities.ID
+	Name               string
+	CreatedByServiceID *string
+	ExternalID         *string
 
 	DefaultMediaPlane        *string
 	MediaPlaneProviderConfig json.RawMessage
@@ -47,6 +50,8 @@ type TenantRepository interface {
 	ListTenants(ctx context.Context, page pagination.PageRequest) (TenantList, error)
 	UpdateTenant(ctx context.Context, id utilities.ID, input UpdateTenantInput) (Tenant, error)
 	GetTenantCORSAllowedOrigins(ctx context.Context, id utilities.ID) ([]string, error)
+	ListServiceTenants(context.Context, string, pagination.PageRequest) (TenantList, error)
+	FindServiceTenant(context.Context, string, string) (Tenant, error)
 }
 
 type Service struct {
@@ -54,8 +59,10 @@ type Service struct {
 }
 
 type CreateTenantInput struct {
-	ID   utilities.ID
-	Name string
+	ID                 utilities.ID
+	Name               string
+	CreatedByServiceID *string
+	ExternalID         *string
 
 	DefaultMediaPlane        *string
 	MediaPlaneProviderConfig json.RawMessage
@@ -122,6 +129,12 @@ func (s Service) CreateTenant(ctx context.Context, input CreateTenantInput) (Ten
 	}
 
 	input.ID = id
+	if input.CreatedByServiceID != nil && !ValidServiceID(*input.CreatedByServiceID) {
+		return Tenant{}, ErrInvalidTenantField
+	}
+	if input.ExternalID != nil && (input.CreatedByServiceID == nil || !ValidExternalID(*input.ExternalID)) {
+		return Tenant{}, ErrInvalidTenantField
+	}
 	if err := prepareCreateTenantInput(&input); err != nil {
 		return Tenant{}, err
 	}
@@ -343,4 +356,33 @@ func prepareUpdateNullableFields(input *UpdateTenantInput) error {
 	}
 
 	return nil
+}
+
+func ValidServiceID(id string) bool {
+	return validStoredText(id, 128)
+}
+
+func ValidExternalID(id string) bool {
+	return validStoredText(id, 512)
+}
+
+// The limits count characters, as PostgreSQL length() and the OpenAPI maxLength do.
+// PostgreSQL text cannot hold NUL or invalid UTF-8, so reject them here instead of at the database.
+func validStoredText(value string, maxCharacters int) bool {
+	characters := utf8.RuneCountInString(value)
+	return characters > 0 && characters <= maxCharacters && strings.TrimSpace(value) == value && utf8.ValidString(value) && !strings.ContainsRune(value, 0)
+}
+
+func (s Service) ListServiceTenants(ctx context.Context, serviceID string, page pagination.PageRequest) (TenantList, error) {
+	if !ValidServiceID(serviceID) {
+		return TenantList{}, ErrInvalidTenantField
+	}
+	return s.repository.ListServiceTenants(ctx, serviceID, page)
+}
+
+func (s Service) FindServiceTenant(ctx context.Context, serviceID, externalID string) (Tenant, error) {
+	if !ValidServiceID(serviceID) || !ValidExternalID(externalID) {
+		return Tenant{}, ErrInvalidTenantField
+	}
+	return s.repository.FindServiceTenant(ctx, serviceID, externalID)
 }

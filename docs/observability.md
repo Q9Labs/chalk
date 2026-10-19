@@ -23,6 +23,11 @@ participant or trace ID where those attributes are present. API/Sync exporters
 remain enabled through their managed OTLP configuration; dataset names and tokens
 are private deployment inputs, not repository constants.
 
+When a Participant joined without a knock, check the journey root named
+`participant.admission_requested` in `observability_journey_events`. A backend
+that asked for direct admission leaves `"admission": "direct"` in its
+attributes. Policy admissions carry no `admission` attribute.
+
 ## Alerts
 
 Three Axiom monitors cover API errors and abnormal Sync drops, failed/overdue

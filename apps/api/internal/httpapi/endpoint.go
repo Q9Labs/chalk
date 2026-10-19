@@ -62,6 +62,11 @@ func newEndpoint[Request any, Response any](method string, path string, mountPat
 	}
 }
 
+func (e Endpoint[Request, Response]) Description(description string) Endpoint[Request, Response] {
+	e.contract.Description = description
+	return e
+}
+
 func (e Endpoint[Request, Response]) Auth(auth APIAuth) Endpoint[Request, Response] {
 	e.contract.Auth = auth
 	return e
