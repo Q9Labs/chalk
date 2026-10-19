@@ -163,7 +163,7 @@ safe_delete() {
 in_use() {
   local name="${1##*/}"
   pgrep -f -- "${name}" >/dev/null 2>&1 && return 0
-  lsof -d cwd -Fn 2>/dev/null | grep -F -- "${name}" >/dev/null && return 0
+  { lsof -d cwd -Fn 2>/dev/null || true; } | grep -F -- "${name}" >/dev/null && return 0
   return 1
 }
 
