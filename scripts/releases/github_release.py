@@ -9,7 +9,7 @@ import signal
 import subprocess
 import sys
 import tempfile
-import time
+from time import sleep as backoff_sleep
 from datetime import datetime
 from pathlib import Path
 
@@ -118,7 +118,7 @@ class GitHub:
                 if data is not None or not transient or attempt == 4:
                     raise error
                 print(f'GitHub retry {route}: attempt {attempt + 1}/4', file=sys.stderr)
-                time.sleep(random.uniform(0, 3 * 2 ** (attempt - 1)))
+                backoff_sleep(random.uniform(0, 3 * 2 ** (attempt - 1)))
 
     def request(self, route, data=None):
         command = ['gh', 'api', f'repos/{self.repository}/{route}']
