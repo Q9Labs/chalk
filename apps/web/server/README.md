@@ -65,8 +65,11 @@ service bearer, storage keys, webhook events or raw engine responses.
 ## Identity and session
 
 Both providers' ID tokens are verified with WebCrypto against their HTTPS JWKS,
-including RS256 signature, issuer, audience (and authorized party), expiry and
-nonce. Keys are fetched on exchange, not on dashboard reads. Google's `sub` and
+including RS256 signature, issuer, audience (and authorized party), numeric
+issuance/expiry times and nonce. Issuance allows at most 60 seconds of future
+clock skew and cannot be later than expiry; expiry is checked without skew.
+Google email is profile data only when `email_verified` is boolean `true`.
+Keys are loaded on exchange, not on dashboard reads. Google's `sub` and
 Apple's `sub` are the identities; email is profile data, not an account key.
 Apple's client secret is an ES256 JWT signed from the PKCS#8 key with a five-minute
 expiry, `iss=APPLE_TEAM_ID`, `sub=APPLE_SERVICES_ID`, and
@@ -130,6 +133,34 @@ screen for real users. Register Apple's web domains and HTTPS return URLs on the
 Services ID. Apple rejects HTTP/localhost return URLs: the local Apple URL above
 is only for fixture coverage; real Apple smoke must use staging or production
 HTTPS. Apple's cross-site login cookie also requires HTTPS.
+
+## Security boundaries
+
+The login transaction cookie has a ten-minute Max-Age and an absolute expiry
+inside its AES-GCM sealed payload. The handler checks that expiry, state and
+provider before exchange. Tampering with its nonce invalidates the seal. A
+nonce mismatch inside a signed ID token is only observable after exchange; it
+is rejected before Tenant resolution or session creation.
+
+Clearing the cookie is not atomic transaction consumption. There is deliberately
+no shared transaction store or dashboard database: Google and Apple authorization
+codes are single-use. Replaying an original transaction cookie can reach the token
+endpoint again until expiry, but the provider rejects its consumed code, so that
+replay cannot create a second session. Real-adapter tests exercise this boundary;
+fixture identity remains only for the real Pages/engine e2e journeys.
+
+JWKS are cached per isolate according to response Cache-Control, capped at one
+hour (five minutes when max-age is absent), with Age deducted. No-cache/no-store
+and zero max-age disable reuse. Concurrent loads share one request. An unknown
+kid triggers one refetch, with a 30-second refresh cooldown to bound repeated
+unknown-key requests. A failed refresh fails authentication; stale keys are not
+used after expiry. Token and JWKS response bodies, including errors, are limited
+to 64 KiB while streaming; HTTP calls have a ten-second deadline and reject
+redirects. Logs retain fixed error codes, request IDs and error types, never raw
+request input, provider response text, tokens, cookies or stack lines.
+
+See [Google's OIDC verification guidance](https://developers.google.com/identity/openid-connect/openid-connect)
+and [Apple's verification guidance](https://developer.apple.com/documentation/signinwithapple/verifying-a-user).
 
 ## Engine integration
 

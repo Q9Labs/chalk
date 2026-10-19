@@ -62,6 +62,16 @@ describe.each(["https://accounts.google.com", "https://appleid.apple.com"])("ID 
   it("verifies a real signature through the local JWKS HTTP fixture", async () => {
     expect((await verify(await token(issuer))).sub).toBe("subject");
   });
+  it("allows at most sixty seconds of issuance clock skew", async () => {
+    const now = Math.floor(Date.now() / 1000) * 1000;
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    try {
+      expect((await verify(await token(issuer, { iat: now / 1000 + 60 }))).sub).toBe("subject");
+      await expect(verify(await token(issuer, { iat: now / 1000 + 61 }))).rejects.toThrow("id_token_rejected");
+    } finally {
+      clock.mockRestore();
+    }
+  });
   it("rejects a bad signature", async () => {
     await expect(verify(await token(issuer, {}, wrongKey.privateKey))).rejects.toThrow();
   });

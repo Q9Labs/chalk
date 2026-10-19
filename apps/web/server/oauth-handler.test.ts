@@ -1,26 +1,29 @@
 /// <reference types="node" />
-import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { handleDashboard } from "./application";
 import { configuration } from "./config";
-import { base64url, oauthProvider } from "./oauth";
+import { base64url, challenge, oauthProvider } from "./oauth";
 import type { Provider } from "./identity";
+import { z } from "zod";
+import { unseal } from "./cookies";
 
 const encoder = new TextEncoder();
 const nativeFetch = globalThis.fetch;
 let signingKey: CryptoKey;
+let wrongSigningKey: CryptoKey;
 let publicKey: JsonWebKey;
 let serverOrigin: string;
 let appleKey: string;
 const exchanges: URLSearchParams[] = [];
 let tokenResponse: { body: string; status: number } | undefined;
-const codes = new Map<string, { provider: Provider; nonce: string; claims: object }>();
-async function idToken(provider: Provider, nonce: string, claims: object): Promise<string> {
+const codes = new Map<string, { provider: Provider; nonce: string; claims: object; challenge: string | null; signingKey?: CryptoKey }>();
+async function idToken(provider: Provider, nonce: string, claims: object, signWith = signingKey): Promise<string> {
   const header = base64url(encoder.encode(JSON.stringify({ alg: "RS256", kid: "handler-key" })));
   const now = Math.floor(Date.now() / 1000);
   const payload = base64url(encoder.encode(JSON.stringify({ iss: provider === "google" ? "https://accounts.google.com" : "https://appleid.apple.com", aud: `${provider}-client`, sub: "subject", nonce, iat: now, exp: now + 300, email: "person@example.test", email_verified: true, ...claims })));
-  const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", signingKey, encoder.encode(`${header}.${payload}`));
+  const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", signWith, encoder.encode(`${header}.${payload}`));
   return `${header}.${payload}.${base64url(new Uint8Array(signature))}`;
 }
 const server = createServer(async (request, response) => {
@@ -49,7 +52,11 @@ const server = createServer(async (request, response) => {
       response.writeHead(400).end(JSON.stringify({ error: "invalid_grant" }));
       return;
     }
-    response.end(JSON.stringify({ id_token: await idToken(login.provider, login.nonce, login.claims) }));
+    if (login.provider === "google" && (await challenge(params.get("code_verifier") ?? "")) !== login.challenge) {
+      response.writeHead(400).end(JSON.stringify({ error: "invalid_grant" }));
+      return;
+    }
+    response.end(JSON.stringify({ id_token: await idToken(login.provider, login.nonce, login.claims, login.signingKey) }));
     return;
   }
   if (url.pathname === "/v1/tenants/by-external-id") {
@@ -81,6 +88,7 @@ const server = createServer(async (request, response) => {
 beforeAll(async () => {
   const keys = await crypto.subtle.generateKey({ name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" }, true, ["sign", "verify"]);
   signingKey = keys.privateKey;
+  wrongSigningKey = (await crypto.subtle.generateKey({ name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" }, true, ["sign", "verify"])).privateKey;
   publicKey = await crypto.subtle.exportKey("jwk", keys.publicKey);
   const apple = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
   appleKey = `-----BEGIN PRIVATE KEY-----\n${btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.exportKey("pkcs8", apple.privateKey))))}\n-----END PRIVATE KEY-----`;
@@ -98,6 +106,7 @@ beforeEach(() => {
   exchanges.length = 0;
   codes.clear();
   tokenResponse = undefined;
+  vi.spyOn(console, "warn").mockImplementation(() => {});
   // Only external HTTP is redirected. The handler, OAuth adapter, crypto, cookies,
   // and generated engine client all run unchanged against real local HTTP servers.
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -136,10 +145,11 @@ function env() {
 async function start(provider: Provider) {
   const response = await handleDashboard(new Request(`${env().DASHBOARD_ORIGIN}/auth/start?provider=${provider}`), env(), oauthProvider);
   const url = new URL(response.headers.get("Location") ?? "");
+  expect(response.headers.getSetCookie()[0]).toContain("Max-Age=600");
   const cookie = response.headers.getSetCookie()[0]?.split(";")[0];
   if (!cookie) throw new Error("Missing transaction cookie");
   const code = crypto.randomUUID();
-  codes.set(code, { provider, nonce: url.searchParams.get("nonce") ?? "", claims: {} });
+  codes.set(code, { provider, nonce: url.searchParams.get("nonce") ?? "", claims: {}, challenge: url.searchParams.get("code_challenge") });
   return { provider, url, cookie, code };
 }
 function callback(login: Awaited<ReturnType<typeof start>>, user?: string) {
@@ -193,4 +203,93 @@ it.each(["google", "apple"] as const)("bounds %s token responses on success and 
   }
   expect(exchanges).toHaveLength(2);
   expect(warn.mock.calls.map((call) => JSON.parse(call[0]).code)).toEqual(["identity_response_too_large", "identity_response_too_large"]);
+});
+
+function expectNoSession(response: Response, provider: Provider) {
+  expect(response.headers.get("Location")).toBe(`/dashboard/sign-in?failed=${provider}`);
+  expect(response.headers.getSetCookie().some((cookie) => cookie.startsWith("local_chalk_session=") || cookie.startsWith("local_chalk_binding="))).toBe(false);
+  expect(response.headers.getSetCookie()).toContainEqual(expect.stringContaining(`local_chalk_login_${provider}=;`));
+  expect(response.headers.get("X-Request-ID")).toMatch(/^[0-9a-f-]{36}$/);
+}
+describe.each(["google", "apple"] as const)("real %s handler and OAuth adapter", (provider) => {
+  it("forwards the original verifier, creates a session, and rejects replay of a consumed code", async () => {
+    const login = await start(provider);
+    const response = await callback(login);
+    expect(response.headers.get("Location")).toBe("/dashboard");
+    expect(response.headers.getSetCookie()).toContainEqual(expect.stringContaining("local_chalk_session="));
+    expect(exchanges).toHaveLength(1);
+    const sent = exchanges[0];
+    expect(sent?.get("redirect_uri")).toBe(`${env().DASHBOARD_ORIGIN}/auth/callback/${provider}`);
+    if (provider === "google") {
+      expect(await challenge(sent?.get("code_verifier") ?? "")).toBe(login.url.searchParams.get("code_challenge"));
+    } else expect(sent?.has("code_verifier")).toBe(false);
+    // Resubmit the original cookie, not the deletion cookie from the response.
+    expectNoSession(await callback(login), provider);
+    expect(exchanges).toHaveLength(2);
+    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).toContain(`identity_${provider}_400_invalid_grant`);
+  });
+  it("does not exchange a code for bad state", async () => {
+    const login = await start(provider);
+    login.url.searchParams.set("state", "wrong-state");
+    expectNoSession(await callback(login), provider);
+    expect(exchanges).toHaveLength(0);
+  });
+  it("does not exchange a code when the sealed transaction nonce is tampered", async () => {
+    const login = await start(provider);
+    const [name, value] = login.cookie.split("=");
+    if (!value) throw new Error("Missing cookie value");
+    const plaintext = JSON.stringify(await unseal(value, env().SESSION_SECRET, `login_${provider}`));
+    const offset = plaintext.indexOf('"nonce":"') + '"nonce":"'.length;
+    expect(offset).toBeGreaterThan('"nonce":"'.length);
+    const [iv, ciphertext] = value.split(".");
+    if (!ciphertext) throw new Error("Missing ciphertext");
+    const bytes = Buffer.from(ciphertext, "base64url");
+    bytes[offset] = (bytes[offset] ?? 0) ^ 1; // Alters nonce ciphertext without a new authentication tag.
+    login.cookie = `${name}=${iv}.${bytes.toString("base64url")}`;
+    expectNoSession(await callback(login), provider);
+    expect(exchanges).toHaveLength(0);
+  });
+  it("enforces the sealed payload's ten-minute expiry even if the browser retains its cookie", async () => {
+    const login = await start(provider);
+    const value = login.cookie.slice(login.cookie.indexOf("=") + 1);
+    const transaction = z.object({ expiresAt: z.number() }).parse(await unseal(value, env().SESSION_SECRET, `login_${provider}`));
+    expect(transaction.expiresAt).toBeGreaterThan(Date.now());
+    expect(transaction.expiresAt).toBeLessThanOrEqual(Date.now() + 600000);
+    const clock = vi.spyOn(Date, "now").mockReturnValue(transaction.expiresAt + 1);
+    try {
+      expectNoSession(await callback(login), provider);
+      expect(exchanges).toHaveLength(0);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+  it("never sets a session for a bad signature", async () => {
+    const login = await start(provider);
+    const code = codes.get(login.code);
+    if (!code) throw new Error("Missing authorization code");
+    code.signingKey = wrongSigningKey;
+    expectNoSession(await callback(login), provider);
+    expect(exchanges).toHaveLength(1);
+  });
+  it.each([
+    { label: "wrong issuer", claims: { iss: "https://evil.example" } },
+    { label: "wrong audience", claims: { aud: "wrong-client" } },
+    { label: "expired", claims: { exp: 1 } },
+    { label: "missing expiry", claims: { exp: undefined } },
+    { label: "string expiry", claims: { exp: "later" } },
+    { label: "missing issuance", claims: { iat: undefined } },
+    { label: "string issuance", claims: { iat: "now" } },
+    { label: "future issuance", claims: { iat: Math.floor(Date.now() / 1000) + 3600 } },
+    { label: "issuance after expiry", claims: { iat: Math.floor(Date.now() / 1000) + 30, exp: Math.floor(Date.now() / 1000) + 10 } },
+    { label: "wrong signed nonce", claims: { nonce: "wrong-nonce" } },
+  ])("never sets a session for $label", async ({ claims }) => {
+    const login = await start(provider);
+    const code = codes.get(login.code);
+    if (!code) throw new Error("Missing authorization code");
+    code.claims = claims;
+    expectNoSession(await callback(login), provider);
+    // A nonce inside a signed token is only observable after exchange. It is
+    // verified by the real adapter before Tenant resolution or session creation.
+    expect(exchanges).toHaveLength(1);
+  });
 });
