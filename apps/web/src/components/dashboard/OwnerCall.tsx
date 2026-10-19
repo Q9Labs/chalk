@@ -28,6 +28,7 @@ function readOwnerReload(spaceId: string) {
 function ownerAccess(spaceId: string) {
   let joinKey = intentKey();
   let current: OwnerAccessDTO["access"] | undefined;
+  let recovery: ReturnType<typeof readOwnerReload> | undefined;
   let restoring: Promise<void> | undefined;
   const clearReload = () => {
     try {
@@ -37,13 +38,17 @@ function ownerAccess(spaceId: string) {
     }
   };
   const restore = async () => {
-    const saved = readOwnerReload(spaceId);
+    if (recovery === undefined) recovery = readOwnerReload(spaceId);
+    const saved = recovery;
     if (!saved) return;
     const page = await readPage("call", { spaceId });
     if (page.live?.id === saved.episodeId) joinKey = saved.joinKey;
   };
   const getAccess: GetAccess = async ({ reason, replaceMediaConnection }) => {
-    if (reason === "join") await (restoring ??= restore());
+    await (restoring ??= restore().catch((error) => {
+      restoring = undefined;
+      throw error;
+    }));
     const { access } =
       reason === "join"
         ? await act("call", { action: "join", spaceId, idempotencyKey: joinKey })
