@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import { once } from "node:events";
 import { appleClientSecret, base64url, challenge, oauthProvider, verifyIdToken } from "./oauth";
 import { configuration } from "./config";
+import { invalidIdentityClaims } from "../tests/dashboard/oauth-test-support.mjs";
 
 const encoder = new TextEncoder();
 const env = configuration({
@@ -76,19 +77,7 @@ describe.each(["https://accounts.google.com", "https://appleid.apple.com"])("ID 
   it("rejects a bad signature", async () => {
     await expect(verify(await token(issuer, {}, wrongKey.privateKey))).rejects.toThrow();
   });
-  it.each([
-    { aud: "wrong" },
-    { iss: "https://evil.example" },
-    { exp: 1 },
-    { exp: "later" },
-    { iat: undefined },
-    { iat: "now" },
-    { iat: Math.floor(Date.now() / 1000) + 3600 },
-    { iat: Math.floor(Date.now() / 1000) + 30, exp: Math.floor(Date.now() / 1000) + 10 },
-    { nonce: "wrong" },
-    { aud: ["client", "other"] },
-    { azp: "other" },
-  ])("rejects altered claims %j", async (changes) => {
+  it.each([...invalidIdentityClaims(), { aud: ["client", "other"] }, { azp: "other" }])("rejects altered claims %j", async (changes) => {
     await expect(verify(await token(issuer, changes))).rejects.toThrow();
   });
 });

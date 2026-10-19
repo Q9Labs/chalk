@@ -1,3 +1,4 @@
+import { stopFixturePages } from "./oauth-test-support.mjs";
 import { strict as assert } from "node:assert";
 import { createServer } from "node:http";
 import { once } from "node:events";
@@ -545,17 +546,7 @@ try {
   console.error(pagesOutput.slice(-8000));
   throw error;
 } finally {
-  clearTimeout(deadline);
-  watchdog?.kill("SIGTERM");
-  if (pages?.pid) {
-    try {
-      process.kill(-pages.pid, "SIGTERM");
-    } catch {}
-    await Promise.race([once(pages, "exit"), delay(3000)]);
-    try {
-      process.kill(-pages.pid, "SIGKILL");
-    } catch {}
-  }
+  await stopFixturePages(pages, watchdog, deadline);
   await new Promise((resolve) => engine.close(resolve));
   await rm(sandbox, { recursive: true, force: true });
 }

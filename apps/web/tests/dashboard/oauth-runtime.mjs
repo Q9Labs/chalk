@@ -1,3 +1,4 @@
+import { invalidIdentityClaims, stopFixturePages } from "./oauth-test-support.mjs";
 import { strict as assert } from "node:assert";
 import { createServer } from "node:http";
 import { once } from "node:events";
@@ -269,18 +270,7 @@ try {
       noSession(await callback(login), provider);
       assert.equal(exchanges.length, before, `${invalid} transaction must not exchange`);
     }
-    for (const claims of [
-      { iss: "https://evil.example" },
-      { aud: "wrong" },
-      { exp: 1 },
-      { exp: undefined },
-      { exp: "later" },
-      { iat: undefined },
-      { iat: "now" },
-      { iat: Math.floor(Date.now() / 1000) + 3600 },
-      { iat: Math.floor(Date.now() / 1000) + 30, exp: Math.floor(Date.now() / 1000) + 10 },
-      { nonce: "wrong-nonce" },
-    ]) {
+    for (const claims of invalidIdentityClaims()) {
       login = await start(provider);
       codes.get(login.code).claims = claims;
       const before = exchanges.length;
@@ -340,17 +330,7 @@ try {
   console.error(output.slice(-10000));
   throw error;
 } finally {
-  clearTimeout(deadline);
-  watchdog?.kill("SIGTERM");
-  if (pages?.pid) {
-    try {
-      process.kill(-pages.pid, "SIGTERM");
-    } catch {}
-    await Promise.race([once(pages, "exit"), delay(3000)]);
-    try {
-      process.kill(-pages.pid, "SIGKILL");
-    } catch {}
-  }
+  await stopFixturePages(pages, watchdog, deadline);
   upstream.closeAllConnections();
   await new Promise((done) => upstream.close(done));
   await rm(sandbox, { recursive: true, force: true });
