@@ -1,20 +1,22 @@
 const SPACE_PATH = /^\/space\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+const CHALK_HOSTS = new Set(["chalkmeet.com", "www.chalkmeet.com"]);
 
-/** Returns a safe Space URL without moving invite credentials into a query string. */
-export function resolveSpaceInviteLink(value: string, origin: string): string | undefined {
+/**
+ * Returns the path and hash of a pasted call link on this site, or undefined when it isn't one.
+ * The hash carries the invite, so it stays out of the query string and the server logs.
+ */
+export function callPathFromLink(value: string, origin: string): string | undefined {
   const input = value.trim();
-  if (!input || input.startsWith("//") || (!input.startsWith("/") && !/^https?:\/\//i.test(input))) return undefined;
+  if (!input || input.startsWith("//")) return undefined;
 
   let url: URL;
   try {
-    url = new URL(input, origin);
+    url = input.startsWith("/") ? new URL(input, origin) : new URL(/^https?:\/\//i.test(input) ? input : `https://${input}`);
   } catch {
     return undefined;
   }
 
-  if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
-  if (url.search || url.username || url.password) return undefined;
-  if (!SPACE_PATH.test(url.pathname)) return undefined;
-
-  return url.toString();
+  if (url.host !== new URL(origin).host && !CHALK_HOSTS.has(url.host)) return undefined;
+  if (url.search || url.username || url.password || !SPACE_PATH.test(url.pathname)) return undefined;
+  return url.pathname + url.hash;
 }

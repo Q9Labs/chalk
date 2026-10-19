@@ -4,7 +4,13 @@
 
 ```tsx
 import type { SpaceClient } from "@q9labsai/chalk-client";
-import { ChalkButton, ChalkProvider, useCan, useParticipants, useSpaceClient } from "@q9labsai/chalk-react";
+import {
+  ChalkButton,
+  ChalkProvider,
+  useCan,
+  useParticipants,
+  useSpaceClient,
+} from "@q9labsai/chalk-react";
 
 function ParticipantPanel() {
   const client = useSpaceClient();
@@ -14,7 +20,11 @@ function ParticipantPanel() {
   return (
     <>
       <p>{roster.length} participants</p>
-      {canRaiseHand ? <ChalkButton onClick={() => void client.participants.raiseHand()}>Raise hand</ChalkButton> : null}
+      {canRaiseHand ? (
+        <ChalkButton onClick={() => void client.participants.raiseHand()}>
+          Raise hand
+        </ChalkButton>
+      ) : null}
     </>
   );
 }

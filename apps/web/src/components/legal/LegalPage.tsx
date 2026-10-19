@@ -118,12 +118,10 @@ function PrivacyPolicy() {
 
       <h2>What we collect</h2>
       <p>
-        <strong>Account data.</strong> When you create an account we store your name, email address, and either a hash of your password or, if you sign in with Google, the identity Google returns to us (your Google account ID, verified email, and name). We never see or store your Google password. We
-        also store your tenant memberships and roles.
+        <strong>Account data.</strong> Account creation and sign-in are currently unavailable. Existing account records, including names, email addresses, password hashes or Google identity details, tenant memberships, and roles, remain stored.
       </p>
       <p>
-        <strong>Sign-in and security data.</strong> When you sign in we record your IP address, browser user agent, and device name against that sign-in, and we keep the same details for API keys. We use this to secure your account, to let you review and revoke active sign-ins, and to rate-limit
-        abusive traffic.
+        <strong>Sign-in and security data.</strong> We retain previously recorded sign-in security data, including IP addresses, browser user agents, and device names. We record the same details for API keys to secure access and rate-limit abusive traffic.
       </p>
       <p>
         <strong>Spaces, Episodes, and participation.</strong> Chalk stores the Spaces you create (names, settings, admission rules), the Episodes that run in them (timing and configuration), and participant records for each Episode: display name, role, capabilities, and join and leave times.
@@ -157,27 +155,6 @@ function PrivacyPolicy() {
         <tbody>
           <tr>
             <td>
-              <code>__Host-chalk_account</code>
-            </td>
-            <td>Keeps you signed in (HttpOnly, Secure)</td>
-            <td>Until you close your browser</td>
-          </tr>
-          <tr>
-            <td>
-              <code>__Host-chalk_csrf</code>
-            </td>
-            <td>Protects against cross-site request forgery</td>
-            <td>Until you close your browser</td>
-          </tr>
-          <tr>
-            <td>
-              <code>__Host-chalk_oauth_return</code>
-            </td>
-            <td>Returns you to the right page after Google sign-in</td>
-            <td>10 minutes</td>
-          </tr>
-          <tr>
-            <td>
               <code>{"__Host-chalk_space_guest_{arrival_handle}"}</code>
             </td>
             <td>Keeps your public Space arrival available in this browser (HttpOnly, Secure)</td>
@@ -191,9 +168,6 @@ function PrivacyPolicy() {
       <ul>
         <li>
           <strong>Cloudflare</strong> hosts the web app, routes API traffic, carries real-time audio and video (Realtime SFU), and stores files, recordings, and transcripts (R2). Cloudflare Workers AI performs speech-to-text when transcription is enabled.
-        </li>
-        <li>
-          <strong>Google</strong> processes your sign-in only if you choose "Continue with Google".
         </li>
         <li>
           <strong>Amazon Web Services</strong> runs the transcription pipeline (job scheduling and secret storage) when transcription is enabled.

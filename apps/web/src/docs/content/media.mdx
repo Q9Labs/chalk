@@ -17,7 +17,10 @@ The three media sources are `microphone`, `camera`, and `screen`. The browser or
 A Participant with the right capability can ask another Participant to enable a microphone or camera. The target sees an incoming request in the media slice and can accept or decline it.
 
 ```ts
-const result = await client.participants.requestMedia(participantId, "microphone");
+const result = await client.participants.requestMedia(
+  participantId,
+  "microphone",
+);
 await client.media.acceptRequest(result.requestId);
 ```
 

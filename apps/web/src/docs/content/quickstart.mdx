@@ -11,7 +11,8 @@ import { createSpaceClient } from "@q9labsai/chalk-client";
 
 const client = createSpaceClient({
   space: "design-review",
-  getAccess: ({ space, reason }) => fetch(`/api/chalk/spaces/${space}/access?reason=${reason}`),
+  getAccess: ({ space, reason }) =>
+    fetch(`/api/chalk/spaces/${space}/access?reason=${reason}`),
 });
 
 await client.join({

@@ -1,18 +1,18 @@
 ---
 name: Chalk
 colors:
-  surface: "#F7F6F2"
-  surface-container: "#F1F0EB"
-  surface-container-high: "#FFFFFF"
-  on-surface: "#0C0E12"
-  on-surface-variant: "#555B65"
-  primary: "#0C0E12"
-  on-primary: "#FFFFFF"
+  surface: "#0B0C0E"
+  surface-container: "#151619"
+  surface-container-high: "#1D1F23"
+  on-surface: "#ECECEE"
+  on-surface-variant: "#9A9CA3"
+  primary: "#ECECEE"
+  on-primary: "#0B0C0E"
   secondary: "#55AAC9"
-  on-secondary: "#0C0E12"
-  outline: "#C9C8C2"
-  outline-variant: "#DEDDD7"
-  error: "#B94C4C"
+  on-secondary: "#0B0C0E"
+  outline: "rgba(255,255,255,0.4)"
+  outline-variant: "rgba(255,255,255,0.08)"
+  error: "#FF6B6B"
 call-dark:
   canvas: "#0B0C0E"
   surface: "#151619"
@@ -107,7 +107,6 @@ board-person:
   p11: "#B5512C"
   p12: "#297F65"
 typography:
-  display: "Bricolage Grotesque"
   interface: "Figtree"
   mono: "Spline Sans Mono"
 rounded:
@@ -121,11 +120,11 @@ rounded:
 # Design System: Chalk
 
 Source-derived using [Google Stitch's DESIGN.md guidance](https://github.com/google-labs-code/stitch-skills/blob/main/plugins/stitch-design/skills/extract-design-md/SKILL.md).
-Tokens and composed themes live in [shared UI styles](packages/ui/src/styles/index.css), [web theme](apps/web/src/lib/theme.ts), and SDK theme modules. The frontmatter holds three palettes: the warm marketing palette under `colors`, and the call's dark and light palettes under `call-dark` and `call-light`. This file owns visual direction, not delivery status. All sizes are CSS pixels, measured on a 1440 by 900 laptop unless a phone is named.
+Tokens and composed themes live in [shared UI styles](packages/ui/src/styles/index.css), [web theme](apps/web/src/lib/theme.ts), and SDK theme modules. The frontmatter holds the call's dark and light palettes under `call-dark` and `call-light`; `colors` repeats the dark one in Stitch's roles, because the site, the docs and the dashboard open dark too. This file owns visual direction, not delivery status. All sizes are CSS pixels, measured on a 1440 by 900 laptop unless a phone is named.
 
 ## 1. Visual Theme & Atmosphere
 
-Chalk has two surfaces with two moods. The call is dark, calm, and sparse. The marketing site and the dashboard are warm, light, and quietly confident. X Calls (call.x.com) is the reference for the call's calm: Chalk takes its restraint, not its pixels.
+Chalk has one look. The call is dark, calm, and sparse, and the marketing site, the docs and the dashboard wear the call's own design: its themes, components, radii, icons, avatars, motion and copy rules. X Calls (call.x.com) is the reference for the call's calm: Chalk takes its restraint, not its pixels.
 
 Six principles govern the call:
 
@@ -136,7 +135,7 @@ Six principles govern the call:
 5. **Color carries meaning.** Red means leave or off, green means healthy, yellow means attention, and blue means unread or yours. Nothing else gets color.
 6. **Small life, no noise.** Faces react, tiles lift two pixels, buttons press, and tiles glide to new places. Each effect confirms something, and each moves only transform and opacity.
 
-The marketing site and the dashboard stay warm and light. Their structure comes from spacing and one-pixel lines, near-black marks the decisive action, and Chalk colors appear as quiet washes. They have no dark theme, no named palettes, and no textures.
+The marketing site, the docs and the dashboard open dark like the call and switch to light with the same saved preference. Their structure comes from spacing and one-pixel lines, the inverted pill marks the decisive action, and color keeps the call's meanings. They have no named palettes and no textures.
 
 ## 2. Color Palette & Roles
 
@@ -187,55 +186,33 @@ Color rules for the call:
 - Muted text reaches 4.5:1 on the canvas and on every surface up to `hover` in both themes. State colors reach 3:1 on the canvas and on every surface up to `hover` in both themes.
 - In the light theme, controls that sit on the canvas (dock buttons, people pill, corner buttons) carry a one-pixel `line` ring, and menus, toasts, and cards add `0 12px 32px rgba(0,0,0,0.12)`. In the dark theme they need neither.
 
-### The marketing site and the dashboard
+### The marketing site, the docs and the dashboard
 
-The product uses warm neutrals as its base. Pure white is reserved for contained surfaces, while the page stays slightly warm.
+They use the call's two themes with the same roles, dark first. One `chalk_theme` preference drives the call and the site, so a switch on either changes both. A page opens the call's token scope (`data-chalk`) on its root, and the theme button in the top bar (the Appearance control in the dashboard's account menu) switches it.
 
-| Token             | Value     | Use                                     |
-| ----------------- | --------- | --------------------------------------- |
-| `--paper`         | `#F7F6F2` | Page canvas                             |
-| `--paper-2`       | `#F1F0EB` | Recessed or grouped control background  |
-| `--surface`       | `#FFFFFF` | Cards, inputs, panels, dialogs          |
-| `--surface-muted` | `#FBFAF7` | Headers, soft panels, app chrome        |
-| `--ink`           | `#0C0E12` | Primary text, primary actions           |
-| `--ink-2`         | `#555B65` | Supporting text and icons               |
-| `--ink-3`         | `#858A92` | Metadata, placeholders, inactive labels |
-| `--line`          | `#DEDDD7` | Default dividers and borders            |
-| `--line-strong`   | `#C9C8C2` | Outer frames and emphasized boundaries  |
+Three tokens exist only on these pages, because they hold forms and long reading that the call does not have:
 
-The Chalk colors retain the light character of the logo.
+| Token            | Dark                    | Light              | Use                                                                                                       |
+| ---------------- | ----------------------- | ------------------ | --------------------------------------------------------------------------------------------------------- |
+| `--edge`         | `rgba(255,255,255,0.4)` | `rgba(0,0,0,0.46)` | Field borders and link underlines, so a boundary holds `3:1` on every surface                             |
+| `--redbtn`       | `#C93D42`               | `#D93A3F`          | Fill of a destructive button, which keeps white text at `4.5:1`; it is the call's pressed red in the dark |
+| `--redbtn-hover` | `#D13438`               | `#C4373C`          | Hover state of a destructive button                                                                       |
 
-| Token            | Value     | Soft companion           | Use                                  |
-| ---------------- | --------- | ------------------------ | ------------------------------------ |
-| `--chalk-green`  | `#80B879` | `--wash-green: #EDF6EB`  | Success, connected, available        |
-| `--chalk-yellow` | `#D9B641` | `--wash-yellow: #FFF8E5` | Attention, hand raise, pending       |
-| `--chalk-blue`   | `#55AAC9` | `--wash-blue: #EAF7FB`   | Selection, information, active tools |
-| `--chalk-pink`   | `#D67B7B` | `--wash-pink: #FDF0F0`   | Destructive context, recording       |
+Rules for the site, the docs and the dashboard:
 
-Semantic colors use darker values where text or icons need contrast:
-
-| State       | Foreground | Background |
-| ----------- | ---------- | ---------- |
-| Success     | `#4F8C4A`  | `#E8F1E4`  |
-| Information | `#315F72`  | `#E6F3F8`  |
-| Warning     | `#9A7314`  | `#FDF2CF`  |
-| Danger      | `#B94C4C`  | `#F8E4E4`  |
-
-Rules for the site and the dashboard:
-
-- Keep large page regions neutral. A tinted wash may identify one bounded section or status surface.
-- Do not put two bright Chalk colors in competition inside one component.
-- Do not use gradients on avatars, controls, cards, or panels. A soft cross-color wash is allowed only as a quiet environmental background.
+- Raised cards (`surface`) carry a one-pixel `line` border in the dark theme. In the light theme they drop the border and take the call's light card shadow, `0 0 0 1px line, 0 12px 32px rgba(0,0,0,0.12)`.
+- Code samples sit on `surface` with a `line-strong` border and a `raised` header, in four colors: keyword `#F0997D` or `#A1442A`, string `#9CD39A` or `#2B7A4B`, comment `#9A9CA3` or `#5C5D65` in italic, and type `#7CC7E8` or `#1B6A8E` (dark or light).
+- The hero's one highlight is the blue chalk stroke behind "inside your product." No other gradient, glow or wash.
+- A product picture is drawn from the call itself, a still drawing in the call's proportions and tokens, so it follows the theme. Recordings keep the dark call's colors in both themes, because they are video.
 
 ## 3. Typography Rules
 
-Chalk uses three type families, each with a narrow job. The call uses Figtree alone.
+Chalk uses two type families. Figtree sets everything, in the call and on the site, the docs and the dashboard, headlines included; Spline Sans Mono sets numbers and technical text.
 
-| Role      | Family                | Weight         | Use                                                                                            |
-| --------- | --------------------- | -------------- | ---------------------------------------------------------------------------------------------- |
-| Display   | `Bricolage Grotesque` | `660` to `680` | Marketing headlines                                                                            |
-| Interface | `Figtree`             | `400` to `700` | The whole call; headings, body text, buttons, inputs, and labels on the site and the dashboard |
-| Mono      | `Spline Sans Mono`    | `400` to `600` | Marketing performance numbers and technical metadata                                           |
+| Role      | Family             | Weight         | Use                                                                                                       |
+| --------- | ------------------ | -------------- | --------------------------------------------------------------------------------------------------------- |
+| Interface | `Figtree`          | `400` to `700` | The whole call; headlines, headings, body text, buttons, inputs, and labels on the site and the dashboard |
+| Mono      | `Spline Sans Mono` | `400` to `600` | Marketing performance numbers and technical metadata                                                      |
 
 Call type scale. Text is Figtree with a line height of `1.4`, in sentence case.
 
@@ -251,20 +228,20 @@ Call type scale. Text is Figtree with a line height of `1.4`, in sentence case.
 
 The timer, counts, diagnostics, and file sizes use tabular figures so digits do not jitter. Names carry `dir="auto"` so right-to-left names set correctly. The avatar initial is drawn by the Facehash package.
 
-Marketing type scale:
+Site type scale. Everything is Figtree at `600` for headings, except the speed numbers in Spline Sans Mono. Sizes step down at a 1280 laptop and on a phone.
 
-| Style         | Desktop                   | Mobile           | Line height | Typical use                    |
-| ------------- | ------------------------- | ---------------- | ----------- | ------------------------------ |
-| Display XL    | `clamp(58px, 7vw, 100px)` | `50px` to `72px` | `1.02`      | Marketing hero                 |
-| Display L     | `38px` to `68px`          | `36px` to `50px` | `1.02`      | Marketing section title        |
-| Product title | `28px` to `40px`          | `28px` to `36px` | `1.08`      | Empty-state title              |
-| Panel title   | `20px` to `24px`          | `20px`           | `1.2`       | Dialog and side-panel title    |
-| UI heading    | `16px`                    | `16px`           | `1.35`      | Card headings                  |
-| Body          | `15px` to `16px`          | `15px` to `16px` | `1.5`       | Product and marketing copy     |
-| Label         | `13px` to `14px`          | `13px` to `14px` | `1.35`      | Form and control labels        |
-| Meta          | `11px` to `12px`          | `11px` to `12px` | `1.4`       | Time, counts, secondary status |
+| Style          | Desktop                                                  | Laptop | Phone  | Line height             | Typical use                       |
+| -------------- | -------------------------------------------------------- | ------ | ------ | ----------------------- | --------------------------------- |
+| Hero           | `92px`                                                   | `80px` | `46px` | `1` (`1.04` on a phone) | The landing headline              |
+| Section title  | `56px`                                                   | `50px` | `34px` | `1.04`                  | Landing section headlines         |
+| Speed number   | `68px`                                                   | `60px` | `52px` | `1`                     | Mono, `500`, the three budgets    |
+| Docs title     | `44px`                                                   | `44px` | `38px` | `1.08`                  | Article title                     |
+| Docs heading   | `23px` and `18px`                                        | same   | same   | `1.25`                  | Article sections and subsections  |
+| Lede           | `19px`                                                   | `19px` | `16px` | `1.55`                  | The line under the hero           |
+| Body           | `16px` in the docs, `14px` to `17px` on the landing page |        |        | `1.45` to `1.65`        | Copy                              |
+| Label and meta | `12px` to `13.5px`                                       |        |        | `1.4`                   | Sidebar groups, times, fine print |
 
-Display text uses tight tracking between `-0.035em` and `-0.055em`. Interface text uses normal tracking. Uppercase is limited to short external conventions, never routine navigation.
+Hero and section titles use tight tracking between `-0.035em` and `-0.045em`. Interface text uses normal tracking. Uppercase is limited to short external conventions, never routine navigation.
 
 ## 4. Component Stylings
 
@@ -501,24 +478,14 @@ Updates arrive about 15 times a second, and not at an even pace. The shown curso
 
 ### The site and the dashboard
 
-These components serve the warm light surfaces only.
+These pages are built from the call kit above, not from a kit of their own: pill buttons (`36px`, `44px` large, `32px` small; `40px`, `48px` and `36px` on a phone), the inverted primary pill, the ghost pill for a quiet action, `36px` round icon buttons (`44px` on a phone), the call's tooltip, menu, dialog card on the scrim, toast and copy control, and Facehash avatars with the subtle style (the bold style inside drawn call tiles). The shell lives in `apps/web/src/components/site`.
 
-| Variant     | Appearance                                        | Use                                  |
-| ----------- | ------------------------------------------------- | ------------------------------------ |
-| Primary     | Ink background, white text, `6px` to `8px` radius | Save, confirm, main marketing action |
-| Secondary   | White background, strong line border, ink text    | Alternate action                     |
-| Ghost       | Transparent background, ink or secondary ink      | Toolbar, panel, row action           |
-| Active      | Pale blue surface, blue border or ink icon        | Selected tool or panel               |
-| Destructive | `#C94343` background, white text                  | Remove, irreversible action          |
-
-- Standard buttons are `40px` to `44px` high and marketing buttons are `50px` high. Icon-only buttons have at least a `36px` target on desktop and `44px` on touch. A primary button may lift one pixel on hover. Nothing bounces, springs, or glows.
-- Inputs use a white surface, a one-pixel `#C9C8C2` border, an `8px` radius, and a minimum height of `40px`. Hover darkens the border slightly. Focus shows one crisp treatment, either a `#74B7CF` border or a two-pixel ink outline with an offset. Error shows a danger border with concise copy. Labels sit above fields and stay visible after input.
-- Menus are white panels with a strong-line border, a `10px` to `12px` radius, and `--shadow-md`. Selected items show a check or a blue-tinted row. Tabs use text with a two-pixel ink underline. Segmented controls sit on `--paper-2` with `4px` padding, and the selected segment is white with a tiny shadow.
-- Dialogs center on a `rgba(12, 14, 18, 0.20)` backdrop with a `14px` to `16px` radius. A confirmation is `420px` to `500px` wide, and a larger task dialog is up to `720px`. Close sits at the top right, and initial focus moves inside.
-- Icons reinforce clear labels and do not replace unfamiliar concepts. Decorative icons stay out of headings and marketing copy.
-- Corners follow three tokens: `--radius-sm` `6px` for buttons, tags, and tabs, `--radius-md` `10px` for cards and panels, and `--radius-lg` `16px` for large dialogs. Circles are for avatars and round controls only.
-- Elevation has two shadows. `--shadow-sm: 0 1px 2px rgba(12, 14, 18, 0.04), 0 6px 18px rgba(12, 14, 18, 0.05)` serves a compact floating control. `--shadow-md: 0 2px 4px rgba(12, 14, 18, 0.05), 0 20px 50px rgba(12, 14, 18, 0.09)` serves a modal or a hero product image. Elements in normal flow take no shadow.
-- The full-color Chalk mark appears on paper, a muted surface, or white. Keep its proportions and clear space. Do not stretch it, recolor a stick, put it in a pill, or add a glow. The call carries no logo.
+- **Fields** are the call's `44px` pill on `raised`, with a one-pixel `--edge` border. Focus turns the border to `text` with a one-pixel `text` ring; an error turns it to `danger-text` and adds an error line with an alert icon under the field.
+- **Top bars** are sticky on the canvas. The site bar is `72px` (`64px` on a phone): the lockup, Product, Docs and GitHub as `36px` ghost pills, then the theme button, a ghost "Sign in" and the inverted "Start a call". On a phone the links and Sign in move into a menu sheet. The docs bar is `64px` with a bottom hairline: the lockup, a divider, "Docs", a `300px` search pill with `⌘K`, then GitHub, the theme button and Sign in. The dashboard bar carries the lockup, its tabs and the account menu, whose Appearance control replaces the theme button.
+- **The theme button** shows a sun in the dark theme and a moon in the light one, and its name says what it switches to.
+- **Docs.** A `264px` sidebar with group labels at `12.5px`, `600` and `36px` rows on a `9px` radius; the current page sits on `hover` at `600`. The article is at most `720px` wide, and a `220px` "On this page" column marks the section being read with a two-pixel `text` rule. Callouts are `surface` cards with an `info` icon (`warning` for cautions). Previous and next are `surface` cards. Below `1080px` the outline folds into a disclosure under the title; on a phone the sidebar opens from a "Menu" bar as a sheet from the left.
+- **Search** is a `620px` dialog card `72px` from the top (full screen on a phone): a `58px` field row, results as `9px` rows with a file icon and the matched words marked in yellow, and a footer with the arrow, Enter and Esc keys. ⌘K, Ctrl+K and `/` open it.
+- **The lockup** is the B2 chalk stick beside the wordmark in Figtree `700`, drawn in `text`, `24px` high (`22px` on a phone, `26px` in the footer). The call carries no logo.
 
 ## 5. Layout Principles
 
@@ -543,9 +510,9 @@ Spacing describes relationships. Use less space inside a component, more space b
 
 ### Marketing
 
-Marketing pages use a centered container up to `1320px`, with responsive side padding from `22px` to `56px`. The navigation is `74px` high. Major sections use at least `88px` vertical space and one clear boundary. On mobile the page moves to one column and uses full-width actions where needed.
+Marketing pages use a centered container up to `1320px`, with `56px` side padding (`40px` on a laptop, `20px` on a phone). The top bar is `72px` high. Sections are separated by space alone, `120px` above and below (`100px` on a laptop, `64px` on a phone), never by rules or boxes. On a phone the page moves to one column and actions take the full width.
 
-The hero pairs a large display headline with a realistic product surface. Use the blue chalk stroke as a single highlight behind one phrase. Technology proof uses logos alone. Supporting sections use rows, ruled grids, and gentle washes rather than stacks of generic floating cards.
+The hero is the headline, a lede, and both front doors with equal weight: "Hold a call" with Start a call and a call-link field, and "Build with Chalk" with Read the docs and the install command. Under them sits the call itself in a raised `surface` frame with an `8px` inset and a `20px` radius. Later sections pair a text column (`5fr`) with a product fragment (`7fr`), or set three columns. Technology proof uses logos alone.
 
 ### The call stage
 
