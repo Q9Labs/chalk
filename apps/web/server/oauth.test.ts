@@ -42,7 +42,7 @@ afterAll(async () => {
 });
 async function token(issuer: string, changes = {}, key = keyPair.privateKey): Promise<string> {
   const header = base64url(encoder.encode(JSON.stringify({ alg: "RS256", kid: "fixture-key" })));
-  const payload = base64url(encoder.encode(JSON.stringify({ iss: issuer, aud: "client", sub: "subject", nonce: "nonce", exp: Math.floor(Date.now() / 1000) + 300, email: "person@example.test", ...changes })));
+  const payload = base64url(encoder.encode(JSON.stringify({ iss: issuer, aud: "client", sub: "subject", nonce: "nonce", iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 300, email: "person@example.test", ...changes })));
   const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, encoder.encode(`${header}.${payload}`));
   return `${header}.${payload}.${base64url(new Uint8Array(signature))}`;
 }
@@ -54,7 +54,19 @@ describe.each(["https://accounts.google.com", "https://appleid.apple.com"])("ID 
   it("rejects a bad signature", async () => {
     await expect(verify(await token(issuer, {}, wrongKey.privateKey))).rejects.toThrow();
   });
-  it.each([{ aud: "wrong" }, { iss: "https://evil.example" }, { exp: 1 }, { nonce: "wrong" }, { aud: ["client", "other"] }, { azp: "other" }])("rejects altered claims %j", async (changes) => {
+  it.each([
+    { aud: "wrong" },
+    { iss: "https://evil.example" },
+    { exp: 1 },
+    { exp: "later" },
+    { iat: undefined },
+    { iat: "now" },
+    { iat: Math.floor(Date.now() / 1000) + 3600 },
+    { iat: Math.floor(Date.now() / 1000) + 30, exp: Math.floor(Date.now() / 1000) + 10 },
+    { nonce: "wrong" },
+    { aud: ["client", "other"] },
+    { azp: "other" },
+  ])("rejects altered claims %j", async (changes) => {
     await expect(verify(await token(issuer, changes))).rejects.toThrow();
   });
 });

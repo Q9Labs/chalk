@@ -30,9 +30,11 @@ const claimsSchema = z.object({
   aud: z.union([z.string(), z.array(z.string()).min(1)]),
   azp: z.string().optional(),
   sub: z.string().min(1).max(255),
+  iat: z.number(),
   exp: z.number(),
   nonce: z.string(),
   email: z.string().max(320).optional(),
+  email_verified: z.union([z.boolean(), z.enum(["true", "false"])]).optional(),
   name: z.string().max(512).optional(),
   picture: z.url().optional(),
 });
@@ -63,7 +65,16 @@ export async function verifyIdToken(input: { token: string; clientId: string; no
   if (!(await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, decode(signature), encoder.encode(`${headerPart}.${payload}`)))) throw new DashboardError(401, "id_token_rejected");
   const claims = claimsSchema.parse(JSON.parse(new TextDecoder().decode(decode(payload))));
   const audiences = typeof claims.aud === "string" ? [claims.aud] : claims.aud;
-  if (!input.issuers.includes(claims.iss) || !audiences.includes(input.clientId) || (audiences.length > 1 && claims.azp !== input.clientId) || (claims.azp !== undefined && claims.azp !== input.clientId) || claims.exp <= Date.now() / 1000 || claims.nonce !== input.nonce)
+  if (
+    !input.issuers.includes(claims.iss) ||
+    !audiences.includes(input.clientId) ||
+    (audiences.length > 1 && claims.azp !== input.clientId) ||
+    (claims.azp !== undefined && claims.azp !== input.clientId) ||
+    claims.exp <= Date.now() / 1000 ||
+    claims.iat > Date.now() / 1000 + 60 ||
+    claims.iat > claims.exp ||
+    claims.nonce !== input.nonce
+  )
     throw new DashboardError(401, "id_token_rejected");
   return claims;
 }
@@ -107,7 +118,7 @@ export function oauthProvider(env: DashboardEnvironment): IdentityProvider {
         userId: claims.sub,
         sessionId: crypto.randomUUID(),
         name: name ? [name.firstName, name.lastName].filter(Boolean).join(" ") : (claims.name ?? ""),
-        email: claims.email ?? "",
+        email: input.provider === "google" && claims.email_verified !== true ? "" : (claims.email ?? ""),
         avatarUrl: input.provider === "google" ? (claims.picture ?? null) : null,
         expiresAt: Date.now() + SESSION_SECONDS * 1000,
       };

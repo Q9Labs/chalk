@@ -14,11 +14,11 @@ let publicKey: JsonWebKey;
 let serverOrigin: string;
 let appleKey: string;
 const exchanges: URLSearchParams[] = [];
-const codes = new Map<string, { provider: Provider; nonce: string }>();
-async function idToken(provider: Provider, nonce: string): Promise<string> {
+const codes = new Map<string, { provider: Provider; nonce: string; claims: object }>();
+async function idToken(provider: Provider, nonce: string, claims: object): Promise<string> {
   const header = base64url(encoder.encode(JSON.stringify({ alg: "RS256", kid: "handler-key" })));
   const now = Math.floor(Date.now() / 1000);
-  const payload = base64url(encoder.encode(JSON.stringify({ iss: provider === "google" ? "https://accounts.google.com" : "https://appleid.apple.com", aud: `${provider}-client`, sub: "subject", nonce, iat: now, exp: now + 300, email: "person@example.test", email_verified: true })));
+  const payload = base64url(encoder.encode(JSON.stringify({ iss: provider === "google" ? "https://accounts.google.com" : "https://appleid.apple.com", aud: `${provider}-client`, sub: "subject", nonce, iat: now, exp: now + 300, email: "person@example.test", email_verified: true, ...claims })));
   const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", signingKey, encoder.encode(`${header}.${payload}`));
   return `${header}.${payload}.${base64url(new Uint8Array(signature))}`;
 }
@@ -42,7 +42,7 @@ const server = createServer(async (request, response) => {
       response.writeHead(400).end(JSON.stringify({ error: "invalid_grant" }));
       return;
     }
-    response.end(JSON.stringify({ id_token: await idToken(login.provider, login.nonce) }));
+    response.end(JSON.stringify({ id_token: await idToken(login.provider, login.nonce, login.claims) }));
     return;
   }
   if (url.pathname === "/v1/tenants/by-external-id") {
@@ -131,7 +131,7 @@ async function start(provider: Provider) {
   const cookie = response.headers.getSetCookie()[0]?.split(";")[0];
   if (!cookie) throw new Error("Missing transaction cookie");
   const code = crypto.randomUUID();
-  codes.set(code, { provider, nonce: url.searchParams.get("nonce") ?? "" });
+  codes.set(code, { provider, nonce: url.searchParams.get("nonce") ?? "", claims: {} });
   return { provider, url, cookie, code };
 }
 function callback(login: Awaited<ReturnType<typeof start>>, user?: string) {
@@ -150,4 +150,26 @@ it("never logs raw Apple user input after verifying a signed ID token", async ()
   expect(warn).toHaveBeenCalledOnce();
   expect(JSON.stringify(warn.mock.calls)).not.toContain("MARKER");
   expect(JSON.parse(warn.mock.calls[0]?.[0])).toMatchObject({ event: "dashboard.request_failed", code: "service_unavailable", request_id: expect.any(String), error_type: "SyntaxError" });
+});
+
+it.each([
+  ["google", true, "person@example.test"],
+  ["google", false, ""],
+  ["google", undefined, ""],
+  ["google", "true", ""],
+  ["apple", "true", "person@example.test"],
+] as const)("keeps %s email only with the appropriate verification metadata %s", async (provider, verified, email) => {
+  const login = await start(provider);
+  const code = codes.get(login.code);
+  if (!code) throw new Error("Missing authorization code");
+  code.claims = { email_verified: verified };
+  const response = await callback(login);
+  expect(response.headers.get("Location")).toBe("/dashboard");
+  const cookies = response.headers
+    .getSetCookie()
+    .map((cookie) => cookie.split(";")[0])
+    .join("; ");
+  const session = await handleDashboard(new Request(`${env().DASHBOARD_ORIGIN}/auth/session`, { headers: { Cookie: cookies } }), env(), oauthProvider);
+  expect(session.status).toBe(200);
+  expect(await session.json()).toMatchObject({ profile: { email } });
 });
