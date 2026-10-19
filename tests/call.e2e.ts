@@ -13,7 +13,9 @@ test("the real web app and SDK guest receive live video and audio", async ({ app
   try {
     await app.open(invite);
     await screen.getByLabel("Your name").fill("Web proof A");
-    await screen.getByRole("button", "Enter Space").click();
+    await screen.getByRole("button", "Join", { exact: true }).click();
+    await screen.getByRole("button", "Unmute microphone", { exact: true }).click();
+    await screen.getByRole("button", "Turn on camera", { exact: true }).click();
     await guest.ready;
     const tile = screen.getByLabel("Video tile for Proof guest 1");
     await expect(tile).toBeVisible();
@@ -29,8 +31,8 @@ test("the real web app and SDK guest receive live video and audio", async ({ app
     await guest.screenshot();
     await expect.poll(() => guest.media().then((media) => media.audioLevel), { timeout: 30_000 }).toBeGreaterThan(0);
     await guest.evidence(await browser.evaluate(audioEvidence));
-    await screen.getByRole("button", /^(Leave|Leave space)$/).click();
-    await screen.getByRole("button", "Leave Space").click();
+    await screen.getByRole("region", "Space stage", { exact: true }).hover();
+    await screen.getByRole("button", "Leave call", { exact: true }).click();
     await guest.leave();
     await expect(tile).not.toBeVisible();
   } finally {
