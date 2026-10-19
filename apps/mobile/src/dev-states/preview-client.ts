@@ -1,5 +1,6 @@
 import type { ActiveReaction, Capability, ChatAttachment, ChatMessage, ChatSendInput, ChatUploadFile, ClientEventHandler, ClientEventName, IncomingMediaRequest, MediaRequestKind, OfflineActionsPolicy, Reaction, SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
 import { createPreviewMediaDevices } from "./preview-devices";
+import { previewPhotoUri } from "./preview-photo";
 
 export type PreviewClientCommand =
   | { readonly type: "join" }
@@ -87,8 +88,8 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
           const attachment: ChatAttachment = { attachmentId: `preview-attachment-${++attachmentSequence}`, fileName, mimeType: "text/plain", byteLength };
           return attachment;
         },
-        url: (attachment: ChatAttachment) => `preview://attachment/${attachment.attachmentId}`,
-        resolveUrl: async (attachment: ChatAttachment) => `preview://attachment/${attachment.attachmentId}`,
+        url: () => previewPhotoUri,
+        resolveUrl: async () => previewPhotoUri,
       },
       send: async (input: ChatSendInput) => {
         const message = createPreviewChatMessage(snapshot, input);

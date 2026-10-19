@@ -136,16 +136,18 @@ def remote(args):
         if args.platform == 'ios':
             runtimes = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'runtimes', '-j']))['runtimes']
             runtime = next(r['identifier'] for r in runtimes if r['isAvailable'] and r['name'].startswith('iOS'))
-            pool_name = 'chalk-mobile-slot-' + slot if args.client_cache else path.name
+            pool_name = 'chalk-mobile-slot-' + slot if args.client_cache else path.name + args.device_label
             inventory = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', '-j']))
             existing = next((entry for entries in inventory['devices'].values() for entry in entries if entry['name'] == pool_name), None)
             device = existing['udid'] if existing else None
             if not device:
-                device = subprocess.check_output(['xcrun', 'simctl', 'create', pool_name, 'com.apple.CoreSimulator.SimDeviceType.iPhone-16', runtime], text=True).strip()
+                device = subprocess.check_output(['xcrun', 'simctl', 'create', pool_name, args.device_type, runtime], text=True).strip()
             remember()
             if not existing or existing['state'] == 'Shutdown':
                 run(['xcrun', 'simctl', 'boot', device])
             run(['xcrun', 'simctl', 'bootstatus', device, '-b'])
+            if args.clean_status_bar:
+                run(['xcrun', 'simctl', 'status_bar', device, 'override', '--time', '9:41', '--dataNetwork', 'wifi', '--wifiMode', 'active', '--wifiBars', '3', '--cellularMode', 'active', '--cellularBars', '4', '--batteryState', 'charged', '--batteryLevel', '100'])
             built = cache / 'native-build/Build/Products/Debug-iphonesimulator/Chalk.app'
             if args.client_cache and not built.exists():
                 raise RuntimeError('Shared iOS client missing')
@@ -202,8 +204,14 @@ def remote(args):
                 if emulator.poll() is not None or time.monotonic() > deadline:
                     raise RuntimeError('Emulator failed to boot')
                 time.sleep(1)
-            run([adb, '-s', serial, 'shell', 'wm', 'size', '1236x2745'])
-            run([adb, '-s', serial, 'shell', 'wm', 'density', '480'])
+            run([adb, '-s', serial, 'shell', 'wm', 'size', args.android_size])
+            run([adb, '-s', serial, 'shell', 'wm', 'density', str(args.android_density)])
+            if args.clean_status_bar:
+                # SystemUI demo mode: fixed clock, full battery, full signal, no notifications.
+                demo = [['enter'], ['clock', '-e', 'hhmm', '0941'], ['battery', '-e', 'level', '100', '-e', 'plugged', 'false'], ['network', '-e', 'wifi', 'show', '-e', 'level', '4'], ['network', '-e', 'mobile', 'show', '-e', 'datatype', 'none', '-e', 'level', '4'], ['notifications', '-e', 'visible', 'false']]
+                run([adb, '-s', serial, 'shell', 'settings', 'put', 'global', 'sysui_demo_allowed', '1'])
+                for command in demo:
+                    run([adb, '-s', serial, 'shell', 'am', 'broadcast', '-a', 'com.android.systemui.demo', '-e', 'command', *command])
             start([adb, '-s', serial, 'logcat', '-v', 'threadtime', 'ReactNativeJS:V', 'AndroidRuntime:V', '*:S'], 'app-console.log')
             apk = cache / 'apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk'
             if args.client_cache and not apk.exists():
@@ -267,6 +275,13 @@ def remote(args):
         else:
             start(['xcrun', 'simctl', 'spawn', device, 'log', 'stream', '--style', 'compact', '--predicate', 'process == "Chalk"'], 'app-console.log')
         orientation = 'portrait'
+        dismiss = out / 'dismiss-open.yaml'
+        dismiss.write_text('appId: ' + bundle + '\n---\n- tapOn:\n    text: "Open"\n    optional: true\n')
+
+        def open_url(url):
+            # iOS asks "Open in Chalk?" before simctl openurl reaches the app, and every URL queues its own prompt.
+            run(['xcrun', 'simctl', 'openurl', device, url])
+            run([args.maestro, '--device', device, 'test', '--driver-host-port', str(driver_port), str(dismiss)], timeout=240)
         failures = []
         payload = {}
         actual = None
@@ -296,7 +311,7 @@ def remote(args):
                         flow.write_text('appId: ' + bundle + '\n---\n- setOrientation: ' + ('LANDSCAPE_LEFT' if next_orientation == 'landscape' else 'PORTRAIT') + '\n')
                         run([args.maestro, '--device', device, 'test', '--driver-host-port', str(driver_port), str(flow)], timeout=300)
                         orientation = next_orientation
-                    run(['xcrun', 'simctl', 'openurl', device, url])
+                    open_url(url)
                 else:
                     run([adb, '-s', serial, 'reverse', f'tcp:{args.port}', f'tcp:{args.port}'])
                     run([adb, '-s', serial, 'shell', 'cmd', 'uimode', 'night', 'no' if light else 'yes'])
@@ -311,18 +326,21 @@ def remote(args):
                     receiver.handle_request()
                     if state not in received and warm_deliveries and time.monotonic() >= warm_deliveries[0]:
                         # A cold native launch may deliver the URL before JS installs its Linking listener.
-                        run(['xcrun', 'simctl', 'openurl', device, url])
+                        open_url(url)
                         warm_deliveries.pop(0)
                 payload = received.pop(state)
                 (out / f'{index}-measurements.json').write_text(json.dumps(payload, indent=2))
                 if payload.get('platform') != args.platform or not payload.get('root', {}).get('frame') or not payload.get('measurements', {}).get('frame.screen', {}).get('frame'):
                     raise RuntimeError(f'Native {payload.get("surface", "sdk")} root is not mounted for {state}: {payload}; inspect unsupported-state errors and native startup logs')
-                expected = [393, 852] if args.platform == 'ios' else [412, 915]
+                if args.platform == 'ios':
+                    expected, expected_scale = [int(value) for value in args.expect_size.split('x')], args.expect_scale
+                else:
+                    expected, expected_scale = [412, 915], 3
                 if 'O2' in codes.split(','):
                     expected.reverse()
                 actual = [payload.get('screen', {}).get('width'), payload.get('screen', {}).get('height')]
-                if actual != expected or payload.get('scale') != 3:
-                    raise RuntimeError(f'Wrong native device: expected {expected} at 3x, received {actual} at {payload.get("scale")}x')
+                if not args.skip_size_check and (actual != expected or payload.get('scale') != expected_scale):
+                    raise RuntimeError(f'Wrong native device: expected {expected} at {expected_scale}x, received {actual} at {payload.get("scale")}x')
                 print(f'Native SDK ready: {state}', flush=True)
                 if args.dump:
                     request = urllib.request.Request(args.dump, data=json.dumps(payload).encode(), headers={'Content-Type': 'application/json'}, method='POST')
@@ -416,6 +434,14 @@ def main():
     p.add_argument('--client-cache', help='M4 prepared copy containing the shared native build and fingerprint')
     p.add_argument('--ios-proof-overlay', help='Local proof-only Python overlay applied to the M4 iOS copy, never the checkout')
     p.add_argument('--settle', type=float, default=4)
+    p.add_argument('--device-type', default='com.apple.CoreSimulator.SimDeviceType.iPhone-16', help='CoreSimulator device type for a new iOS simulator')
+    p.add_argument('--device-label', default='', help='Suffix for the simulator or emulator name, e.g. -ipad')
+    p.add_argument('--expect-size', default='393x852', help='Expected iOS screen size in points, WxH portrait')
+    p.add_argument('--expect-scale', type=int, default=3, help='Expected iOS pixel ratio')
+    p.add_argument('--clean-status-bar', action='store_true', help='Fixed 9:41 status bar on the leased simulator or emulator')
+    p.add_argument('--skip-size-check', action='store_true', help='Accept any native screen size, for store shots on other devices')
+    p.add_argument('--android-size', default='1236x2745', help='Android wm size, WxH pixels')
+    p.add_argument('--android-density', type=int, default=480, help='Android wm density in dpi')
     p.add_argument('--dump')
     p.add_argument('--ids', default='')
     p.add_argument('--maestro', default='maestro', help='Maestro executable path on the M4')
@@ -440,7 +466,7 @@ def main():
     for state in args.states:
         _, _, options = state.partition('?')
         for key, value in parse_qsl(options, strict_parsing=True):
-            if (key == 'sheet' and value in ['more', 'people', 'chat', 'details', 'route']) or (key == 'menu' and value in ['leave', 'route']) or (key == 'app' and value == 'ready') or (key == 'pinned' and value.startswith('person-') and value[7:].isdigit()):
+            if (key == 'sheet' and value in ['more', 'people', 'chat', 'details', 'route']) or (key == 'menu' and value in ['leave', 'route']) or (key == 'app' and value == 'ready') or (key == 'video' and value == 'off') or (key == 'pinned' and value.startswith('person-') and value[7:].isdigit()):
                 continue
             p.error('Unsupported capture state query option')
     if args.remote:
@@ -479,6 +505,12 @@ def perform_copy(args, dest, host):
     command = ['python3', dest + '/apps/mobile/scripts/capture-states.py', '--remote', dest, '--platform', args.platform, '--port', str(args.port), '--settle', str(args.settle), '--maestro', args.maestro, '--states', *args.states]
     command += ['--emulator-port', str(args.emulator_port)]
     command += ['--android-gpu', args.android_gpu]
+    command += ['--device-type', args.device_type, '--device-label', args.device_label, '--expect-size', args.expect_size, '--expect-scale', str(args.expect_scale)]
+    if args.clean_status_bar:
+        command.append('--clean-status-bar')
+    command += ['--android-size', args.android_size, '--android-density', str(args.android_density)]
+    if args.skip_size_check:
+        command.append('--skip-size-check')
     if args.ios_proof_overlay:
         overlay = dest + '/apps/mobile/scripts/proof-ios-overlay.py'
         run([*SCP, args.ios_proof_overlay, host + ':' + overlay])

@@ -60,12 +60,15 @@ export function DevStates({ url }: { url: string }) {
         selected: scenario.codes.includes("K3") ? "bluetooth" : "speaker",
       },
       // Only person-2 has fake video. Everyone else has the camera off, so their Facehash draws.
-      videoSlots: Object.fromEntries(
-        client
-          .getSnapshot()
-          .participants.roster.filter((_, index) => index === 2)
-          .map((person) => [person.participantId, <View key={person.participantId} style={{ flex: 1, backgroundColor: "#4D5D73" }} />]),
-      ),
+      // video=off gives every person a Facehash, for store shots.
+      videoSlots: params.get("video") === "off"
+        ? {}
+        : Object.fromEntries(
+            client
+              .getSnapshot()
+              .participants.roster.filter((_, index) => index === 2)
+              .map((person) => [person.participantId, <View key={person.participantId} style={{ flex: 1, backgroundColor: "#4D5D73" }} />]),
+          ),
     };
     dev?.setDevScenario(forced);
     const timer = setTimeout(() => {
@@ -74,7 +77,7 @@ export function DevStates({ url }: { url: string }) {
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : String(cause));
       }
-    }, 100);
+    }, 1500);
     return () => {
       clearTimeout(timer);
       dev?.setDevScenario(null);
@@ -90,12 +93,12 @@ export function DevStates({ url }: { url: string }) {
   }, [params, scenario, appSurface]);
   if (scenario.error || error) return <Text accessibilityRole="alert">{scenario.error ?? error}</Text>;
   if (!supportsCallState && ["knocking", "refused", "hold", "full", "ended", "removed"].includes(state.screen)) return <Text accessibilityRole="alert">This fixture requires the mobile-redesign-states SDK callState seam.</Text>;
-  const supported: readonly ScenarioCode[] = ["D1", "D2", "O1", "O2", "P1", "P2", "P3", "P4", "U1", "U2", "V1", "V2", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "T1", "T2", "T3", "T4", "T5", "T6", "C1", "C2", "C3", "G1", "G2", "S1", "S2", "S3", "S4", "W1", "K3", "K8", "F4", "F5", "F6"];
+  const supported: readonly ScenarioCode[] = ["D1", "D2", "O1", "O2", "P1", "P2", "P3", "P4", "U1", "U2", "V1", "V2", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "T1", "T2", "T3", "T4", "T5", "T6", "C1", "C2", "C3", "G1", "G2", "S1", "S2", "S3", "S4", "W1", "W2", "K1", "K2", "K3", "K4", "K5", "K8", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12", "F14", "F15"];
   const unsupported = scenario.codes.filter((code) => !supported.includes(code));
   if (unsupported.length) return <Text accessibilityRole="alert">SDK scenario adapter does not support: {unsupported.join(",")}</Text>;
   return (
     <MeasuredView testID="harness.ready" style={{ flex: 1 }}>
-      {appSurface ? <AppStates screen={state.screen} theme={state.theme} ready={params.get("app") === "ready"} call={<Chalk key={url} client={client} colorScheme={state.theme} soundsEnabled={false} />} /> : <Chalk key={url} client={client} colorScheme={state.theme} soundsEnabled={false} />}
+      {appSurface ? <AppStates screen={state.screen} theme={state.theme} ready={params.get("app") === "ready"} call={<Chalk key={url} client={client} colorScheme={state.theme} soundsEnabled={false} />} /> : <Chalk key={url} client={client} colorScheme={state.theme} inviteLink={params.get("sheet") === "details" ? "https://chalk.q9labs.ai/join/q9-team" : undefined} soundsEnabled={false} />}
     </MeasuredView>
   );
 }

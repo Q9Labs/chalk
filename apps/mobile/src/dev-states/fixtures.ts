@@ -18,7 +18,7 @@ export function snapshotForCodes(codes: readonly ScenarioCode[]): SpaceSnapshot 
     displayName: names[index % names.length] ?? `Person ${index + 1}`,
     role: index === 0 && has("U2") ? "host" : "guest",
     eligibleRoles: ["guest", "host"],
-    capabilities: base.self.capabilities,
+    capabilities: index === 0 ? base.self.capabilities : guestCapabilities,
     handRaised: false,
     media: { microphone: has("K1") ? "inactive" : "active", camera: has("K2") ? "inactive" : "active", screenShare: has("C2") && index === (has("W2") ? 0 : 1) ? "active" : "inactive" },
     presence: { state: "connected", speaking: index === 1, activeSpeaker: index === 1 },
@@ -51,6 +51,21 @@ export function snapshotForCodes(codes: readonly ScenarioCode[]): SpaceSnapshot 
   };
 }
 
+// A device that refuses a turn-on rejects the call, which is how the SDK learns to show its permission and busy toasts.
+function refuseTurnOn(codes: readonly ScenarioCode[], device: "microphone" | "camera"): SpaceClientError | null {
+  if (device === "microphone" && codes.includes("K1")) return new SpaceClientError({ code: "media.permission_denied", recoverable: true, message: "Microphone access is denied" });
+  if (device === "camera" && codes.includes("K2")) return new SpaceClientError({ code: "media.permission_denied", recoverable: true, message: "Camera access is denied" });
+  if (device === "camera" && codes.includes("F1")) return new SpaceClientError({ code: "media.device_busy", recoverable: true, message: "Another app is using your camera" });
+  return null;
+}
+
+function guardTurnOn<T>(codes: readonly ScenarioCode[], device: "microphone" | "camera", turnOn: (enabled: boolean) => Promise<T>): (enabled: boolean) => Promise<T> {
+  return (enabled: boolean) => {
+    const refusal = enabled ? refuseTurnOn(codes, device) : null;
+    return refusal ? Promise.reject(refusal) : turnOn(enabled);
+  };
+}
+
 export function createFixtureClient(codes: readonly ScenarioCode[]) {
   const client = createPreviewClient(snapshotForCodes(codes));
   const dispose = client.dispose;
@@ -59,6 +74,11 @@ export function createFixtureClient(codes: readonly ScenarioCode[]) {
   return Object.assign(client, {
     on: events.on,
     emit: events.emit,
+    media: {
+      ...client.media,
+      setMicrophoneEnabled: guardTurnOn(codes, "microphone", client.media.setMicrophoneEnabled),
+      setCameraEnabled: guardTurnOn(codes, "camera", client.media.setCameraEnabled),
+    },
     fire(code: ScenarioCode): string {
       const snapshot = client.getSnapshot();
       const self = snapshot.participants.roster[0];
