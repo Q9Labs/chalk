@@ -121,8 +121,9 @@ Runs queue behind live processes using `/tmp/chalk-remote-*` checkouts. A macOS
 `shlock` PID lock serializes simultaneous arrivals and is reclaimed after owner
 death. Waiting prints once and checks every 30 seconds. Set
 `CHALK_REMOTE_QUEUE_TIMEOUT_SECONDS` to change the 5400-second wait; expiry exits 76.
-The runner reaps abandoned checkouts, checks disk space, shares dependency caches,
-limits gate runtime, saves logs locally, and deletes its checkout on exit.
+The runner reaps only abandoned `/tmp/chalk-remote-*` checkouts, checks disk space,
+shares dependency caches, limits each setup step and the gate runtime, saves logs
+locally, and deletes its checkout on exit.
 
 `root` installs Chromium. Set `CHALK_REMOTE_NEEDS_BROWSER=1` for custom `--`
 commands that need it. `CHALK_REMOTE_REPO` overrides the local repository root.

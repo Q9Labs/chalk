@@ -22,7 +22,7 @@ What it does:
      untracked work. Branch-scoped gates see the pull request diff, while secret scans also
      see content added and removed between branch commits.
   2. Refuses to start when the M4 has too little free disk, after deleting stale /tmp/chalk-*
-     checkouts and chalk-gate-postgres-* containers that no live process uses.
+     runner-owned checkouts and chalk-gate-postgres-* containers that no live process uses.
   3. Checks out the snapshot under /tmp, installs with shared pnpm, Go, Hex, and Mix caches (plus Playwright Chromium for root), and runs
      the gate under a time limit with GOFLAGS=-buildvcs=false.
   4. Prints step headers live and the last lines at the end, saves the full log locally, and always
@@ -36,7 +36,7 @@ Environment:
   CHALK_REMOTE_BASE_REF              base ref for branch scope (default origin/master)
   CHALK_REMOTE_MIN_FREE_GIB          refuse to start below this much free disk (default 8)
   CHALK_REMOTE_STALE_HOURS           reap /tmp/chalk-* older than this (default 4)
-  CHALK_REMOTE_GATE_TIMEOUT_SECONDS  limit for the gate itself (default 3600)
+  CHALK_REMOTE_GATE_TIMEOUT_SECONDS  limit for each setup step and the gate (default 3600)
   CHALK_REMOTE_TAIL_LINES            lines printed at the end (default 60)
   CHALK_REMOTE_VERBOSE=1             stream the whole log instead of step headers
   CHALK_REMOTE_LOG_DIR               local log directory (default ${TMPDIR:-/tmp}/chalk-remote-logs)
@@ -106,7 +106,8 @@ log_dir="${CHALK_REMOTE_LOG_DIR:-${TMPDIR:-/tmp}/chalk-remote-logs}"
 repository_root="${CHALK_REMOTE_REPO:-$(cd "$(dirname "$0")/../.." && pwd)}"
 cd "${repository_root}"
 branch_slug="$(git rev-parse --abbrev-ref HEAD | tr -c 'A-Za-z0-9\n' '-' | cut -c1-24)"
-run_id="$(date -u +%Y%m%dT%H%M%SZ)-${branch_slug}-$$"
+run_nonce="$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+run_id="$(date -u +%Y%m%dT%H%M%SZ)-${branch_slug}-$$-${run_nonce}"
 log_file="${log_dir}/${run_id}.log"
 remote_work="/tmp/chalk-remote-${run_id}"
 
@@ -156,8 +157,8 @@ set -euo pipefail
 safe_delete() {
   local dir="$1"
   case "${dir}" in
-    /tmp/chalk-*) ;;
-    *) echo "refusing to delete ${dir}: not a /tmp/chalk-* path" >&2; return 1 ;;
+    /tmp/chalk-remote-*) ;;
+    *) echo "refusing to delete ${dir}: not a /tmp/chalk-remote-* path" >&2; return 1 ;;
   esac
   [[ -d "${dir}" && ! -L "${dir}" ]] || return 0
   [[ "$(dirname "$(cd "${dir}" && pwd -P)")" == "/private/tmp" ]] || { echo "refusing to delete ${dir}: not a direct child of /tmp" >&2; return 1; }
@@ -192,7 +193,7 @@ reap_stale() {
       echo "[remote] reaping stale ${dir}"
       safe_delete "${dir}" || true
     fi
-  done < <(find /tmp/ -maxdepth 1 -mindepth 1 -type d -name 'chalk-*' -mmin "+$((hours * 60))" 2>/dev/null)
+  done < <(find /tmp/ -maxdepth 1 -mindepth 1 -type d -name 'chalk-remote-*' -mmin "+$((hours * 60))" 2>/dev/null)
   if docker_bin="$(docker_binary)"; then
     cutoff="$(date -u -v-"${hours}"H +%Y%m%dT%H%M%SZ)"
     while IFS= read -r name; do
@@ -313,7 +314,7 @@ cleanup() {
 install_browser() {
   [[ "$1" == "1" ]] || return 0
   echo "==> playwright install chromium (shared cache)"
-  pnpm --dir sdks/typescript/client exec playwright install chromium
+  scripts/gates/with-timeout.sh "$2" "Chromium setup" -- pnpm --dir sdks/typescript/client exec playwright install chromium
 }
 
 run_gate() {
@@ -340,8 +341,8 @@ run_gate() {
   echo "[remote] checked out $(git rev-parse --short HEAD)"
 
   echo "==> pnpm install (shared store)"
-  if pnpm install --frozen-lockfile --prefer-offline; then
-    if install_browser "${browser}"; then
+  if scripts/gates/with-timeout.sh "${timeout_seconds}" "dependency setup" -- pnpm install --frozen-lockfile --prefer-offline; then
+    if install_browser "${browser}" "${timeout_seconds}"; then
       status=0
     else
       status=$?

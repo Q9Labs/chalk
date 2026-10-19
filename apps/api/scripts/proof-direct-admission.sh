@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run through scripts/gates/remote.sh -- bash apps/api/scripts/proof-direct-admission.sh.
+# Run in a disposable full-history checkout on the M4; this proof needs its historical baseline.
 # This restores the policy-only repository only inside the throwaway checkout.
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
