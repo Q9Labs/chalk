@@ -1,0 +1,33 @@
+import { ChalkUI, useTheme } from "@q9labsai/chalk-react-native/ui";
+import { useState, type ReactNode } from "react";
+import { HomeScreen } from "../home/HomeScreen";
+import { NameStep } from "../join/NameStep";
+import { Joining } from "../join/JoiningScreen";
+import { ReadySheet } from "../call/ReadySheet";
+import type { RecentCalls } from "../home/recent-calls";
+import { MeasuredView } from "./measurement";
+export const hasAppStates = true;
+
+const ignore = () => {};
+const calls: RecentCalls["calls"] = [{ link: "https://chalk.example/fixture-call", name: "Q9 team", joinedAt: Date.parse("2026-10-18T10:00:00Z"), people: ["Nora", "Akash"] }];
+
+function AppFrame({ ready, children }: { ready: boolean; children: ReactNode }) {
+  const { colors } = useTheme();
+  return <MeasuredView testID={ready ? "app.screen" : "frame.screen"} style={{ flex: 1, backgroundColor: colors.canvas }}>{children}</MeasuredView>;
+}
+
+/** Plain props only: no API calls, clipboard reads, persistence, or join effects. */
+export function AppStates({ screen, theme, ready, call }: { screen: string; theme: "dark" | "light"; ready: boolean; call: ReactNode }) {
+  const [name, setName] = useState<string | null>("Hasan");
+  const [recent, setRecent] = useState(calls);
+  const [readyOpen, setReadyOpen] = useState(ready);
+  const [soundsEnabled, setSoundsEnabled] = useState(false);
+  const [colorScheme, setColorScheme] = useState(theme);
+  const recentCalls: RecentCalls = { calls: recent, remember: call => setRecent(current => [call, ...current]), remove: link => { const previous = recent; setRecent(current => current.filter(call => call.link !== link)); return () => setRecent(previous); } };
+  return <ChalkUI colorScheme={colorScheme}>
+    <AppFrame ready={ready}>
+      {ready ? call : screen === "name" ? <NameStep onSubmit={setName} onCancel={ignore} /> : screen === "joining" ? <Joining callName="Q9 team" /> : <HomeScreen name={name} onSaveName={setName} preferences={{ colorScheme, setColorScheme, soundsEnabled, setSoundsEnabled }} recentCalls={recentCalls} onStartCall={() => setReadyOpen(true)} onJoin={ignore} onJoinRecent={ignore} clipboard={{ offer: null, dismiss: ignore }} />}
+      <ReadySheet open={readyOpen} onClose={() => setReadyOpen(false)} link="https://chalk.example/fixture-call" />
+    </AppFrame>
+  </ChalkUI>;
+}

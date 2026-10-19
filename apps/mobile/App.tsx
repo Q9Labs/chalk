@@ -21,6 +21,9 @@ void SplashScreen.preventAutoHideAsync();
 /** What the app shows: Home, then the name step when there's no name, joining, and the call. */
 type Step = { readonly kind: "home" } | { readonly kind: "name"; readonly target: JoinTarget } | { readonly kind: "joining"; readonly target: JoinTarget; readonly name: string } | { readonly kind: "call"; readonly call: ArrivedCall };
 
+// Metro removes this branch before collecting release dependencies.
+const DevStates: typeof import("./src/dev-states").DevStates | null = __DEV__ ? require("./src/dev-states").DevStates : null;
+
 export default function App(): React.JSX.Element {
   const apiBaseURL = useMemo(() => getApiBaseURL(), []);
   const diagnosticsMode = useMemo(() => resolveDevDiagnosticsMode({ isDevRuntime: __DEV__, apiBaseURL }), [apiBaseURL]);
@@ -35,6 +38,20 @@ export default function App(): React.JSX.Element {
   const recentCalls = useRecentCalls(useMemo(() => reportError("recent-calls"), [reportError]));
   const [name, setName] = useState<string | null | undefined>(undefined);
   const [openedLink, setOpenedLink] = useState<SpaceRoute | null | undefined>(undefined);
+  const [devStateURL, setDevStateURL] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const open = (url: string | null) => {
+      if (mounted && url) setDevStateURL(__DEV__ && url.startsWith("chalk://dev/states") ? url : null);
+    };
+    void Linking.getInitialURL().then(open).catch(reportError("initial-dev-link"));
+    const subscription = Linking.addEventListener("url", ({ url }) => open(url));
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, [reportError]);
 
   useEffect(() => {
     let mounted = true;
@@ -68,8 +85,9 @@ export default function App(): React.JSX.Element {
   const ready = preferences && recentCalls && name !== undefined && openedLink !== undefined;
   // The launch screen stays until the first real screen is ready; the JS splash covers only the gap.
   useEffect(() => {
-    if (ready) SplashScreen.hideAsync().catch(reportError("hide-splash"));
-  }, [ready, reportError]);
+    if (ready || devStateURL) SplashScreen.hideAsync().catch(reportError("hide-splash"));
+  }, [ready, devStateURL, reportError]);
+  if (DevStates && devStateURL) return <DevStates key={devStateURL} url={devStateURL} />;
   return (
     <ChalkUI colorScheme={preferences?.colorScheme ?? "dark"}>
       {ready ? <Shell apiBaseURL={apiBaseURL} diagnosticsEnabled={diagnosticsEnabled} name={name} onNameChange={setName} openedLink={openedLink} preferences={preferences} recentCalls={recentCalls} reportError={reportError} buildProfile={diagnosticsMode.buildProfile} /> : <Splash />}

@@ -1,0 +1,26 @@
+import { useEffect, useState } from "react";
+import { Linking, Text } from "react-native";
+import ProductApp from "./App.product";
+
+const DevStates: typeof import("./src/dev-states").DevStates | null = __DEV__ ? require("./src/dev-states").DevStates : null;
+
+export default function CaptureApp() {
+  const [url, setURL] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let mounted = true;
+    const open = (value: string | null) => {
+      if (mounted && value) setURL(value.startsWith("chalk://dev/states") ? value : null);
+    };
+    void Linking.getInitialURL().then(open).catch((cause: unknown) => {
+      if (mounted) setError(cause instanceof Error ? cause.message : String(cause));
+    });
+    const subscription = Linking.addEventListener("url", ({ url: value }) => open(value));
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, []);
+  if (error) return <Text accessibilityRole="alert">{error}</Text>;
+  return DevStates && url ? <DevStates key={url} url={url} /> : <ProductApp />;
+}
