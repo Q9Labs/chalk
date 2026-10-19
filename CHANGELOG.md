@@ -2,6 +2,8 @@
 
 ## 5.0.0 (unreleased)
 
+- React participant tiles accept a normalized `audioLevel` for voice-responsive speaking rings and generated avatars.
+
 - Align quick reactions with the call design: 👍 ❤️ 😂 😮 🎉 👏.
 - React: ChalkCopyButton supports an optional visible label for diagnostics; icon-only defaults are unchanged.
 - React: Export ControlBar and SpaceHeader at the package root. ControlBar command errors retain public `ClientFailure` codes and the originating media source; optional `callLinkOpen` and `onCallLinkToggle` props let the call-link card own its toggle.

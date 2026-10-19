@@ -2,6 +2,9 @@
 
 ## 5.0.0
 
+- Replace stage paging with justified Grid rows and a +N People tile; make shared screens double-width and Spotlight content-aware. Add participant hand-order, share-audio, share-aspect and share-state presentation fields. Preserve keyed video elements through 220 ms transform-only layout moves and add the two-person phone picture-in-picture.
+- Unify screen and person tile chrome; show speaking rings, bold Facehash avatars, weak signal bars, local share previews and share controls. `Stage` accepts `onOverflowClick`, and content render contexts identify the primary tile.
+
 - Replace phone device choices with Flip camera when two or more cameras are available; audio stays with the operating system.
 
 - Make the desktop layout control a direct Spotlight/Grid toggle. Let `ChalkMenuItem.closeOnClick` keep device choices open, and `ChalkSheet.accessibleLabel` retain a stable accessible name while showing the call name.
