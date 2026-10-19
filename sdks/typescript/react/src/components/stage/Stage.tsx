@@ -136,12 +136,12 @@ export function Stage({
     if (!ordered.length) return EMPTY_GEOMETRY;
     const wideIds = ordered.filter(isContentItem).map((item) => item.id);
     if (layout === "grid" || !primary) {
-      const sorted = gridOrder(ordered, activePinnedId);
-      const content = sorted.filter(isContentItem);
-      const people = sorted.filter((item) => !isContentItem(item));
+      const content = ordered.filter(isContentItem);
+      const people = ordered.filter((item) => !isContentItem(item));
+      const sorted = gridOrder([...content, ...people], activePinnedId);
       return fitGrid(
         box,
-        [...content, ...people].map((item) => item.id),
+        sorted.map((item) => item.id),
         { ...DEFAULT_GRID_OPTIONS, maxPerPage, minTileWidth: box.width <= 640 ? 88 : minTileWidth, minTileHeight: box.width <= 640 ? 72 : 96 },
         wideIds,
       );
