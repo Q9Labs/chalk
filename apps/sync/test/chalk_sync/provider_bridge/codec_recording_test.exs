@@ -29,4 +29,18 @@ defmodule ChalkSync.ProviderBridge.CodecRecordingTest do
     assert {:error, {:retryable_failure, :malformed_response}} =
              Codec.decode_operation_response(payload, @operation_id, @request_payload)
   end
+
+  test "tenant recording quota HTTP rejection is terminal" do
+    body =
+      JSON.encode!(%{
+        "error" => %{
+          "code" => "tenant.recording_limit_reached",
+          "message" => "Tenant recording limit reached"
+        },
+        "reason" => "tenant_recording_limit_reached"
+      })
+
+    assert {:error, {:terminal_failure, :tenant_recording_limit_reached}} =
+             Codec.normalize_response(409, body, 4096)
+  end
 end

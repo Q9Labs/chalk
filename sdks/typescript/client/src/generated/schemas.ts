@@ -883,6 +883,9 @@ export const TenantListSchema = Schema.Struct({
 });
 export type TenantList = typeof TenantListSchema.Type;
 
+export const TenantMediaLimitCodeSchema = Schema.Literals(["tenant.recording_limit_reached", "tenant.live_episode_limit_reached"]);
+export type TenantMediaLimitCode = typeof TenantMediaLimitCodeSchema.Type;
+
 export const TranscriptIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("TranscriptId"));
 export type TranscriptId = typeof TranscriptIdSchema.Type;
 
@@ -3804,6 +3807,25 @@ export const TenantInvalidNameErrorSchema = TenantInvalidNameErrorWireSchema.pip
   }),
 );
 
+export class TenantLiveEpisodeLimitReachedError extends Schema.TaggedErrorClass<TenantLiveEpisodeLimitReachedError>()("TenantLiveEpisodeLimitReachedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("tenant.live_episode_limit_reached"),
+    message: Schema.String,
+  }),
+}) {}
+export const TenantLiveEpisodeLimitReachedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("tenant.live_episode_limit_reached"),
+    message: Schema.String,
+  }),
+});
+export const TenantLiveEpisodeLimitReachedErrorSchema = TenantLiveEpisodeLimitReachedErrorWireSchema.pipe(
+  Schema.decodeTo(TenantLiveEpisodeLimitReachedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "TenantLiveEpisodeLimitReachedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class TenantNotFoundError extends Schema.TaggedErrorClass<TenantNotFoundError>()("TenantNotFoundError", {
   error: Schema.Struct({
     code: Schema.Literal("tenant.not_found"),
@@ -4426,6 +4448,7 @@ export const ArriveBySpacePublicInviteErrorSchema = Schema.Union([
   ServiceInternalErrorSchema,
   ServiceUnavailableErrorSchema,
   SpacePublicInviteUnavailableErrorSchema,
+  TenantLiveEpisodeLimitReachedErrorSchema,
 ]);
 export type ArriveBySpacePublicInviteError = typeof ArriveBySpacePublicInviteErrorSchema.Type;
 
@@ -4492,6 +4515,7 @@ export const CreateEpisodeErrorSchema = Schema.Union([
   SpaceInvalidIdErrorSchema,
   SpaceNotFoundErrorSchema,
   TenantInvalidIdErrorSchema,
+  TenantLiveEpisodeLimitReachedErrorSchema,
 ]);
 export type CreateEpisodeError = typeof CreateEpisodeErrorSchema.Type;
 
@@ -4521,6 +4545,7 @@ export const CreatePublicSpaceErrorSchema = Schema.Union([
   ServiceInternalErrorSchema,
   ServiceUnavailableErrorSchema,
   SpacePublicInviteUnavailableErrorSchema,
+  TenantLiveEpisodeLimitReachedErrorSchema,
 ]);
 export type CreatePublicSpaceError = typeof CreatePublicSpaceErrorSchema.Type;
 
@@ -4772,6 +4797,7 @@ export const GetSpacePublicInviteArrivalErrorSchema = Schema.Union([
   ServiceInternalErrorSchema,
   ServiceUnavailableErrorSchema,
   SpacePublicInviteUnavailableErrorSchema,
+  TenantLiveEpisodeLimitReachedErrorSchema,
 ]);
 export type GetSpacePublicInviteArrivalError = typeof GetSpacePublicInviteArrivalErrorSchema.Type;
 
@@ -4929,6 +4955,7 @@ export const LeaveSpacePublicInviteArrivalErrorSchema = Schema.Union([
   ServiceInternalErrorSchema,
   ServiceUnavailableErrorSchema,
   SpacePublicInviteUnavailableErrorSchema,
+  TenantLiveEpisodeLimitReachedErrorSchema,
 ]);
 export type LeaveSpacePublicInviteArrivalError = typeof LeaveSpacePublicInviteArrivalErrorSchema.Type;
 
@@ -5135,6 +5162,7 @@ export const RefreshSpacePublicInviteAccessErrorSchema = Schema.Union([
   ServiceInternalErrorSchema,
   ServiceUnavailableErrorSchema,
   SpacePublicInviteUnavailableErrorSchema,
+  TenantLiveEpisodeLimitReachedErrorSchema,
 ]);
 export type RefreshSpacePublicInviteAccessError = typeof RefreshSpacePublicInviteAccessErrorSchema.Type;
 

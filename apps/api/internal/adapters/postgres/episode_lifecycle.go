@@ -15,6 +15,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
+	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"go.opentelemetry.io/otel/trace"
@@ -25,6 +26,7 @@ type episodeLifecycleTransactor interface {
 }
 
 type EpisodeLifecycleRepository struct {
+	tenantLimits         tenantlimits.Config
 	transactor           episodeLifecycleTransactor
 	mediaBindingResolver episodeMediaBindingResolver
 }
@@ -278,3 +280,8 @@ func persistLifecycleJourneyRootWith(ctx context.Context, tx pgx.Tx, journey lif
 }
 
 var _ episodes.Repository = EpisodeLifecycleRepository{}
+
+func (r EpisodeLifecycleRepository) WithTenantLimits(limits tenantlimits.Config) EpisodeLifecycleRepository {
+	r.tenantLimits = limits
+	return r
+}
